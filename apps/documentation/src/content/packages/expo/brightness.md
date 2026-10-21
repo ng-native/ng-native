@@ -27,10 +27,12 @@ import { Brightness } from '@ng-native/expo/brightness';
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Brightness } from '@ng-native/expo/brightness';
 
 @Component({
   selector: 'app-boarding-pass',
+  imports: [Text],
   template: `<text>Show this at the gate</text>`,
 })
 export class BoardingPass {
@@ -53,8 +55,12 @@ export class BoardingPass {
   rather than calling `restore()` separately: an app that leaves the screen at full brightness
   after showing a boarding pass is one the user experiences as a battery fault, not a bug they
   can name.
-- **`restore()`** - puts the system's brightness back at once, whatever is still set. Available
-  directly if a screen needs to put the brightness back without waiting for teardown.
+- **`restore()`** - puts back at once every level this app still has set: the system's
+  brightness, or the level of another app the runtime mounts that still has one. Available directly
+  if a screen needs to put the brightness back without waiting for teardown.
+
+Levels stack across every app the runtime mounts, and an app that is destroyed puts back its own.
+On Android, an activity that comes to the front is given the level again.
 
 ## Without the module
 

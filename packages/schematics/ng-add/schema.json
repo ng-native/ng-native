@@ -18,6 +18,12 @@
       "type": "string",
       "description": "The iOS bundle identifier and Android package: com.acme.mobile. Defaults to com.<workspace scope>.<name>."
     },
+    "linter": {
+      "type": "string",
+      "description": "eslint adds an eslint.config.mjs with @ng-native/eslint-plugin's recommended rules, its dependencies and a lint target.",
+      "enum": ["eslint", "none"],
+      "default": "none"
+    },
     "skipInstall": {
       "type": "boolean",
       "description": "Write the files and package.json without installing.",

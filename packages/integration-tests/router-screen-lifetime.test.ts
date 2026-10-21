@@ -46,7 +46,7 @@ function watch(node: EngineNode, into: WeakRef<object>[]): void {
   into.push(new WeakRef(node));
   const handle = node.committed?.handle;
   if (handle) into.push(new WeakRef(handle));
-  for (const child of node.children) watch(child, into);
+  for (const child of node.childList) watch(child, into);
 }
 
 const alive = (refs: readonly WeakRef<object>[]) => refs.filter((ref) => ref.deref()).length;
@@ -173,7 +173,7 @@ describe('a subtree out of the tree', () => {
     Object.assign(s, { screen: null, frame: null, header: null });
     await collect();
     assert.equal(alive(refs), 0);
-    assert.equal(engine.root.children[0], stack, 'the engine itself is still in use');
+    assert.equal(engine.root.childList[0], stack, 'the engine itself is still in use');
   });
 
   it('stops an endless animation on a node that left, and starts it again if it returns', async () => {

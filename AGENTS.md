@@ -57,6 +57,17 @@ pnpm export                       # release bundles of every example, after CSS 
 - **Every cache needs an invalidation path, for a change and for a removal.** Stale derived state
   (a dirty flag not set, a registry that only adds, an inherited value read once) is the most
   common bug review finds here. Test the input changing and the input going away.
+- **A fix covers every way into the state it fixes.** Review most often finds the one path a fix
+  missed: creating a node and updating it, global, component and host sheets, a sheet and a value set
+  on an element, a first load and a hot reload. List the ways in before writing the fix.
+- **`null` removes a committed prop; `undefined` does not.** JSI drops `undefined` keys, so the old
+  native value stays. And `??` treats an intentional `null` (a paint of `none`) as missing.
+- **Inline logical sides follow the direction.** `Start` and `End` map to left or right by the box's
+  direction, while block sides stay top and bottom, and Yoga reads aliases such as `marginHorizontal`
+  too. Test right to left, and a physical and a logical side set together.
+- **A version plan is `patch` unless the change breaks something.** Under `0.x`, `minor` is the
+  breaking bump. Its sentences are checked against the code like docs: no "every" the code does not
+  cover, and a platform or OS qualifier wherever the behaviour has one.
 - **A native module can be absent, and so can one of its methods.** Expo Go, the web host and Node
   tests run without it: call methods with `?.()`, never `getEnforcing` at import, and give a
   stand-in every method its callers use. Gate anything newer than iOS 16.4 or Android API 24.

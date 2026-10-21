@@ -31,10 +31,12 @@ import { DeviceOrientation } from '@ng-native/expo/orientation';
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { DeviceOrientation } from '@ng-native/expo/orientation';
 
 @Component({
   selector: 'app-player',
+  imports: [Text],
   template: `<text>Playing in {{ orientation.orientation() }}</text>`,
 })
 export class Player {
@@ -57,6 +59,8 @@ export class Player {
   straight to `DestroyRef.onDestroy` so a screen that wants landscape while it is up does not have
   to think about it again. Locks stack: releasing one puts back the lock an earlier `lock()` still
   holds, such as the screen underneath a pushed one, and the screen unlocks once none is held.
+  Locks stack across every app the runtime mounts, and an app that is destroyed releases its own.
+  On Android, an activity that comes to the front is locked again.
 
 ## Without the module
 

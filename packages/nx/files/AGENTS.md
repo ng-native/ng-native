@@ -59,10 +59,10 @@ change; both are fast.
   (`{ padding: 16, backgroundColor: '#fff' }`).
 - A component's `styles` is real CSS, compiled at build time: type, class, id and attribute
   selectors, combinators, `:host`, `@media`, custom properties, transitions and `@keyframes`.
-  Grid, float, `::before`/`::after`, `:hover` and `:focus-visible` are dropped with a build
-  warning naming the file, line and reason - lay out with flexbox, and drive a hover or focus look
-  from a bound attribute. Everything is `display: flex`
-  with `flex-direction: column` by default, as in React Native.
+  Float, `::before`/`::after`, `:hover` and `:focus-visible` are dropped with a build warning
+  naming the file, line and reason - lay out with flexbox, grid or a block, and drive a hover or
+  focus look from a bound attribute. Everything is `display: flex` with `flex-direction: column`
+  by default, as in React Native.
 - Tailwind v4 works through `@ng-native/tailwind`, with `ios:`, `android:` and `dark:` variants.
 
 ## Lists, navigation, forms

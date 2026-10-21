@@ -58,6 +58,13 @@ intuition. Check:
 - shorthands: a duplicate part invalidates the declaration, an omitted part resets to its initial
   value, a later longhand still wins, and `!important` beats a normal declaration;
 - out-of-range values clamped the way CSS clamps them;
+- inline logical sides (`Start`/`End`, `inline-start`/`inline-end`) resolved by the box's direction,
+  while block sides stay top and bottom, with a right-to-left case and a physical and logical side set together, and aliases Yoga reads (`marginHorizontal`,
+  `paddingStart`) counted as Yoga counts them;
+- every alternative of a selector the change supports (`:is()` and `:where()`, each branch of a list,
+  `>` as well as a descendant combinator);
+- a value removed on an update sent as `null`, since JSI drops `undefined` and the old native value stays,
+  and no `??` that turns an intentional `null` (a paint of `none`) into `undefined`;
 - a refusal is a warning, never a silent drop. Test-first is required here: the test pinning the
   behaviour must exist and fail without the change, with a Chrome oracle row where one applies.
 
@@ -67,6 +74,14 @@ the input changes, and the input goes away. Past cases: a text prop not marked d
 came and went, keyframes and global sheets never removed on HMR, scroll tracks keeping an old
 inherited colour, a font face added after a text resolved, an angle kept after its hinge vanished,
 a list warning not rechecked when `items` changed. Tests should add then remove.
+
+Then list every way into the state the change touches, and check the change on each. The fix that
+handles one path and misses its sibling is the most common finding after stale state: host sheets
+not watched where global and component sheets were, a guard on clone but not on create, a sheet
+replaced but not rescanned, an assertion run on the build but not on a hot reload, the first of two
+duplicate font faces kept where Expo registers the last. A long-lived map keyed by something that comes and
+goes (rows, cells, names) needs eviction, or it grows for the life of the app; one discarded with its owner
+does not.
 
 **Native modules and devices (`packages/expo`, `packages/device`).**
 
@@ -109,7 +124,10 @@ head SHA. Concurrency groups must not let one event cancel another's run.
 
 **Docs.** Every claim is checked against the code: docs that overstate (say "every" when the code
 covers some), drift from what the code does, or leave out a platform qualifier were the most common
-documentation findings. Docs describe present behaviour, in [CONTEXT.md](../../../docs/CONTEXT.md)'s
+documentation findings. A version plan is docs too and draws the same findings, more than any other
+file in a PR: an overstated claim, a missing iOS or Android version, a sentence that is hard to parse.
+A code sample leaves state right when a call fails (a flag reset in `finally`) and has its imports.
+Docs describe present behaviour, in [CONTEXT.md](../../../docs/CONTEXT.md)'s
 words. A code sample in docs is covered by `docs-samples.test.ts`.
 
 ## 4. Check the cross-cutting rules
@@ -122,7 +140,17 @@ that reason. Reject tests that cannot fail:
 - the test bypasses the default path it claims to cover (calls a helper the default would call);
 - the title promises a case the body never exercises;
 - tests sharing mutable state that only pass in file order;
-- an implementation detail is asserted where the committed props or rendered output would do.
+- an implementation detail is asserted where the committed props or rendered output would do;
+- only a warning is asserted, so code that warns and still applies the rule passes;
+- the case runs in one mode only: left to right, streaming off, the first render but not an update;
+- the fixture lacks what makes the case (an image with no intrinsic size, a match that only comes
+  through another alternative);
+- a wall-clock threshold (a 250 ms cutoff) that a busy CI worker misses;
+- a comment or title describing a different binding or case than the body.
+
+Then mutate the change one line at a time (negate a condition, delete a side effect or guard, move a
+boundary) and rerun its test file; a mutation that survives is an assertion missing, or a line that is
+not needed.
 
 Tests that change globals, temp directories, CDP sessions or registered names restore them in
 `finally`. Run `pnpm coverage` (95% floor) when product code changed.
@@ -133,7 +161,9 @@ fixture or snapshot change in the diff: every changed line is a behaviour change
 
 **Performance.** The engine runs per commit and the CSS engine per node, so look for work added on
 those paths: allocation per commit, a walk of the whole tree, a style resolve that no longer
-short-circuits, a commit when nothing changed (at most one per change-detection pass). Run
+short-circuits, a commit when nothing changed (at most one per change-detection pass). Check the cost
+against input size too: a walk to the root for each of several nodes (quadratic in depth), each item
+rescanning the ones before it, a streamed chunk that re-reads everything that came before. Run
 `pnpm --filter @ng-native/integration-tests bench` (or `bench:tailwind`, `bench:screens`) on main and
 on the branch when the engine, CSS or components changed, and report both numbers. A new runtime
 dependency, or dev-only code not behind `ngDevMode`, is bundle size on every app.
@@ -141,7 +171,8 @@ dependency, or dev-only code not behind `ngDevMode`, is bundle size on every app
 **Breaking changes.** A change someone using the packages would notice needs a version plan: removed
 or renamed exports, inputs, outputs or element names, a changed default, different CSS output,
 different generated files, different announcements or query results. Under `0.x` a breaking change is
-`minor`, and the plan says plainly what breaks and what to do. When the change an app must make is
+`minor`, and the plan says plainly what breaks and what to do. Anything else, an addition included, is
+`patch`; a `minor` plan for an addition is a finding. When the change an app must make is
 mechanical (a moved import, a renamed member, a method that became a property), it needs a migration
 in `packages/migrate`, registered in all three `migrations.json` files at the release version and
 tested with `acrossAdapters`; the plan names it and links Updating an app. When it cannot be
@@ -179,7 +210,8 @@ A finding is reported only when it names a concrete input and the wrong result. 
   line of the reference source (Chrome's result, React Native's or Expo's source in `node_modules`)
   that contradicts the change.
 - **Plausible:** the reasoning holds but could not be reproduced here (device-only, needs a release
-  build). Say what would confirm it.
+  build). Say what would confirm it. A device-only finding can often be confirmed on a simulator or
+  emulator of your own; [fix-issue's devices.md](../fix-issue/devices.md) has the commands.
 
 Drop anything that is neither. Before reporting, try to argue each finding away: is the case
 reachable from public API, is it already handled elsewhere, does the repo deliberately diverge

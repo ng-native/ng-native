@@ -101,6 +101,8 @@ providers: [{ provide: OS_VERSION, useValue: 26 }];
 **System**
 
 - [Status bar](/packages/device/status-bar) - a stack of claims on style, visibility and color.
+- [Navigation bar](/packages/device/navigation-bar) - a stack of claims on Android's navigation
+  bar, its button colour and whether it shows.
 - [Keyboard](/packages/device/keyboard) - height, position and animation timing.
 - [Hardware back](/packages/device/hardware-back) - claiming Android's hardware back button.
 - [App state](/packages/device/app-state) - whether the app is in front of the user.

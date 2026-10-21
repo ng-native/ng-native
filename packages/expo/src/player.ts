@@ -5,7 +5,7 @@
  * ```ts
  * protected readonly player = videoPlayer(this.source, { timeUpdate: 0.5 });
  *
- * // <expo-video [player]="player.native" />
+ * // <expo-video [player]="player.id" />
  * // {{ player.state().currentTime }}
  * ```
  *
@@ -175,8 +175,15 @@ export function watchAudioPlayer(player: NativePlayer | null): {
 }
 
 export interface Player<T> {
-  /** The module's own player, for `play()`, `seekBy()`, and to hand to its view. */
+  /** The module's own player, for `play()`, `seekBy()` and the rest. */
   readonly native: T;
+  /**
+   * What `<expo-video [player]>` takes: the player's shared-object id. The view's `player` prop is
+   * a number on the native side, and `expo-video`'s own `VideoView` passes this id rather than the
+   * player; given the player itself, the view has no player and draws nothing, while the video
+   * keeps playing with nothing on screen.
+   */
+  readonly id: number | undefined;
   readonly state: Signal<PlayerState>;
 }
 
@@ -192,5 +199,6 @@ export function ownPlayer<T extends NativePlayer>(
 ): Player<T> {
   const { state, stop } = watch();
   inject(DestroyRef).onDestroy(stop);
-  return { native, state };
+  const id = (native as { __expo_shared_object_id__?: number }).__expo_shared_object_id__;
+  return { native, id, state };
 }

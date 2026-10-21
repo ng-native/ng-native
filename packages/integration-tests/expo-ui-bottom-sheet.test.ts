@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { InjectionToken, Type } from '@angular/core';
-import { registerPlatformComponents } from '@ng-native/fabric';
+import { Engine, registerPlatformComponents } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 import { registerExpoUiViews } from '@ng-native/expo';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -23,6 +23,7 @@ interface Fixture {
   readonly grabber: Writable<boolean>;
   readonly detents: Writable<readonly unknown[] | undefined>;
   readonly second: Writable<string>;
+  readonly background: Writable<string | undefined>;
   dismissed(): number;
   heard(): number;
 }
@@ -36,12 +37,21 @@ let Sheet: Type<Fixture>;
 /** The component as the fixture compiled it: the class whose token its sheets inject. */
 let UiBottomSheet: { readonly SOURCE: InjectionToken<unknown> };
 let Defaults: Type<{ readonly open: Writable<boolean> }>;
+let Styled: Type<StyledFixture>;
+
+interface StyledFixture {
+  readonly open: Writable<boolean>;
+  readonly classes: Writable<string>;
+  readonly inline: Writable<string | undefined>;
+  readonly background: Writable<string | undefined>;
+}
 
 before(async () => {
   const mod = await compileFixture('fixtures/expo-ui-bottom-sheet.ts');
   Sheet = mod['ExpoUiBottomSheetFixture'] as Type<Fixture>;
   UiBottomSheet = mod['UiBottomSheet'] as typeof UiBottomSheet;
   Defaults = mod['ExpoUiBottomSheetDefaultsFixture'] as typeof Defaults;
+  Styled = mod['ExpoUiBottomSheetStyledFixture'] as typeof Styled;
 });
 
 after(() => {
@@ -78,6 +88,8 @@ async function boot<T = Fixture>(
     providers: [
       { provide: UiBottomSheet.SOURCE, useValue: 'functions' in options ? options.functions : {} },
     ],
+    // Marks what went through the engine's colour conversion, which is RN's `processColor`.
+    processColor: (value) => `processed ${String(value)}`,
   });
   await settled();
   const every = (pattern: RegExp) => all(fabric.committed).filter((n) => pattern.test(n.viewName));
@@ -279,6 +291,8 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     });
     const filling = named(/ExpoUI_RNHostView$/)!;
     assert.ok(!filling.props['matchContents'], 'it fills the height SwiftUI gives it');
+    assert.ok(!filling.props['matchContentsHorizontal']);
+    assert.ok(!filling.props['matchContentsVertical']);
     assert.ok(!filling.props['expoInternalSizeFromChildren']);
     assert.equal(filling.children[0]!.props['flexGrow'], 1);
     assert.equal(filling.children[0]!.props['height'], 0);
@@ -304,6 +318,8 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     assert.equal(modifiers['presentationSizing']?.['sizing'], 'fitted', 'for an iPad');
     const fitted = named(/ExpoUI_RNHostView$/)!;
     assert.equal(fitted.props['matchContents'], true);
+    assert.equal(fitted.props['matchContentsHorizontal'], true);
+    assert.equal(fitted.props['matchContentsVertical'], true);
     assert.equal(fitted.props['expoInternalSizeFromChildren'], true);
     assert.equal(fitted.children[0]!.props['width'], 390, 'as wide as the window');
     assert.ok(!fitted.children[0]!.props['flexGrow']);
@@ -453,6 +469,50 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     const sheet = named(/ExpoUI_BottomSheetView$/)!;
     assert.equal('showDragHandle' in sheet.props, false);
     assert.equal('skipPartiallyExpanded' in sheet.props, false);
+  });
+
+  it('gives the sheet its background colour as a presentation background, converted as any colour', async () => {
+    // Below the large detent iOS 26 draws a sheet as glass; an app wanting it opaque needs this.
+    const { named, every, instance, pass } = await boot('ios');
+    instance.background.set('#1c1c1e');
+    instance.open.set(true);
+    await pass();
+    const [group] = every(/ExpoUI_GroupView$/);
+    assert.deepEqual(modifiersOf(group!)['presentationBackground'], {
+      $type: 'presentationBackground',
+      style: { type: 'color', color: 'processed #1c1c1e' },
+      // The shape `@expo/ui` before 57.0.17 reads, Expo Go's among them.
+      color: 'processed #1c1c1e',
+    });
+    assert.equal(
+      'containerColor' in named(/ExpoUI_BottomSheetView$/)!.props,
+      false,
+      'Compose only',
+    );
+  });
+
+  it('follows a background colour changed while it is open, and drops it once it is cleared', async () => {
+    const { every, instance, pass } = await boot('ios');
+    instance.background.set('#1c1c1e');
+    instance.open.set(true);
+    await pass();
+    instance.background.set('rebeccapurple');
+    await pass();
+    const background = () => modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationBackground'];
+    assert.deepEqual(background()?.['style'], { type: 'color', color: 'processed rebeccapurple' });
+
+    instance.background.set(undefined);
+    await pass();
+    assert.equal(background(), undefined, 'the sheet is drawn as the system draws it again');
+    assert.ok(
+      modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationDetents'],
+      'and kept the rest',
+    );
+
+    // An attribute written with no value: no colour, rather than one native cannot read.
+    instance.background.set('');
+    await pass();
+    assert.equal(background(), undefined, 'an empty colour is none');
   });
 });
 
@@ -686,6 +746,28 @@ describe('a bottom sheet on Android, which Compose shows while it is in the tree
     await pass();
     assert.equal(named(/ExpoUI_ModalBottomSheetView$/)!.props['showDragHandle'], false);
   });
+
+  it("gives the sheet its background colour as Compose's container colour, and drops it once cleared", async () => {
+    const { named, instance, pass } = await boot('android');
+    instance.background.set('#1c1c1e');
+    instance.open.set(true);
+    await pass();
+    const sheet = () => named(/ExpoUI_ModalBottomSheetView$/)!;
+    assert.equal(sheet().props['containerColor'], 'processed #1c1c1e');
+    assert.equal('modifiers' in sheet().props, false, 'no SwiftUI modifier on Compose');
+
+    instance.background.set('red');
+    await pass();
+    assert.equal(sheet().props['containerColor'], 'processed red');
+
+    instance.background.set(undefined);
+    await pass();
+    assert.equal(
+      sheet().props['containerColor'] ?? undefined,
+      undefined,
+      'Material colours it again',
+    );
+  });
 });
 
 describe('a bottom sheet with its options left alone', () => {
@@ -742,5 +824,103 @@ describe('a bottom sheet where @expo/ui is not installed', () => {
       [],
     );
     assert.equal(instance.dismissed(), 1);
+  });
+});
+
+describe('a bottom sheet coloured by CSS, a background-color on the element', () => {
+  /** The scheme the app is in, as a theme switch sets it. */
+  function scheme(app: { componentRef: { injector: { get(token: unknown): unknown } } }) {
+    return (colorScheme: 'light' | 'dark') =>
+      (app.componentRef.injector.get(Engine) as Engine).updateConditions({
+        width: 390,
+        height: 844,
+        colorScheme,
+      });
+  }
+
+  it('is the presentation background on iOS, following a token through a theme change', async () => {
+    const { app, every, instance, pass } = await boot('ios', { fixture: Styled });
+    await pass();
+    const background = () => modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationBackground'];
+    assert.deepEqual(background(), {
+      $type: 'presentationBackground',
+      style: { type: 'color', color: 'processed rgb(255, 255, 255)' },
+      color: 'processed rgb(255, 255, 255)',
+    });
+
+    scheme(app)('dark');
+    await pass();
+    assert.deepEqual(background()?.['style'], {
+      type: 'color',
+      color: 'processed rgb(28, 28, 30)',
+    });
+
+    instance.classes.set('warning');
+    await pass();
+    assert.deepEqual(background()?.['style'], {
+      type: 'color',
+      color: 'processed rgb(255, 165, 0)',
+    });
+
+    instance.classes.set('');
+    await pass();
+    assert.equal(background(), undefined, 'the class gone, the system draws the sheet again');
+    assert.ok(modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationDetents']);
+  });
+
+  it('is taken from an inline style, and the input wins over both', async () => {
+    const { every, instance, pass } = await boot('ios', { fixture: Styled });
+    const background = () =>
+      modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationBackground']?.['style'];
+    instance.inline.set('rebeccapurple');
+    await pass();
+    assert.deepEqual(background(), { type: 'color', color: 'processed rebeccapurple' });
+
+    instance.background.set('#ff0000');
+    await pass();
+    assert.deepEqual(background(), { type: 'color', color: 'processed #ff0000' });
+
+    instance.background.set(undefined);
+    await pass();
+    assert.deepEqual(background(), { type: 'color', color: 'processed rebeccapurple' });
+
+    instance.inline.set(undefined);
+    await pass();
+    assert.deepEqual(background(), { type: 'color', color: 'processed rgb(255, 255, 255)' });
+  });
+
+  it('paints nothing on the element itself, which the sheet draws instead', async () => {
+    const { fabric, pass } = await boot('ios', { fixture: Styled });
+    await pass();
+    const painted = all(fabric.committed).filter(
+      (n) =>
+        n.props['backgroundColor'] != null ||
+        (n.props['style'] != null &&
+          (n.props['style'] as Record<string, unknown>)['backgroundColor'] != null),
+    );
+    assert.deepEqual(
+      painted.map((n) => n.viewName),
+      [],
+    );
+  });
+
+  it("is Compose's container colour on Android, following a theme change and going with the class", async () => {
+    const { app, named, instance, pass } = await boot('android', { fixture: Styled });
+    await pass();
+    const sheet = () => named(/ExpoUI_ModalBottomSheetView$/)!;
+    assert.equal(sheet().props['containerColor'], 'processed rgb(255, 255, 255)');
+
+    scheme(app)('dark');
+    await pass();
+    assert.equal(sheet().props['containerColor'], 'processed rgb(28, 28, 30)');
+
+    instance.background.set('red');
+    await pass();
+    assert.equal(sheet().props['containerColor'], 'processed red', 'the input wins');
+
+    instance.background.set(undefined);
+    instance.classes.set('');
+    await pass();
+    assert.equal(sheet().props['containerColor'] ?? undefined, undefined);
   });
 });

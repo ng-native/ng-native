@@ -25,3 +25,12 @@ examples/*/.angular-native/
 .all-contributorsrc
 # Written by nx release changelog, which leaves a double blank line between sections.
 CHANGELOG.md
+
+# Vendored layout fixtures, kept as upstream wrote them, and the boxes Chrome recorded for them.
+packages/layout/fixtures/taffy
+packages/layout/oracle
+
+# Web Platform Tests as web-compat's fetch script checks them out, in a cache git ignores.
+packages/web-compat/wpt/.cache
+# Written by the Web Platform Tests runner, a line a file, and compared whole.
+packages/web-compat/wpt/expectations.json

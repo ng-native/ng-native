@@ -26,10 +26,12 @@ import { AppInfo } from '@ng-native/expo/app-info';
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { AppInfo } from '@ng-native/expo/app-info';
 
 @Component({
   selector: 'app-about',
+  imports: [Text],
   template: `<text>{{ info.version }} ({{ info.build }}) on {{ info.device.model }}</text>`,
 })
 export class About {

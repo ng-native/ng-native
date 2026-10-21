@@ -44,7 +44,7 @@ import { ViewBase } from './view-base.ts';
 
 /** The characters under a node, in order. */
 const textOf = (node: EngineNode): string =>
-  node.kind === 'text' ? node.text : node.children.map(textOf).join('');
+  node.nodeKind === 'text' ? node.nodeText : node.childList.map(textOf).join('');
 
 let registered = false;
 

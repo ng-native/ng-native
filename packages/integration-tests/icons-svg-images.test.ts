@@ -20,8 +20,10 @@ afterEach(() => {
   registerPlatformComponents('ios');
 });
 
+/** Change detection run and committed, and a frame after it, which native is asked in. */
 async function idle(): Promise<void> {
   for (let turn = 0; turn < 5; turn++) await settle();
+  await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
 const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
@@ -40,7 +42,15 @@ interface Host {
 
 const HOUSE = '<svg viewBox="0 0 24 24"><path d="M3 10l9-7 9 7v11H3z"/></svg>';
 
-async function start(native: boolean, platform: 'ios' | 'android' = 'ios') {
+type Done = (base64?: string) => void;
+
+/** react-native-svg's module, as a test gives it. */
+interface Native {
+  readonly scale: number;
+  toDataURL(tag: number, options: Asked['options'], callback: Done): void;
+}
+
+async function start(native: boolean | Native, platform: 'ios' | 'android' = 'ios') {
   registerPlatformComponents(platform);
   const asked: Asked[] = [];
   const Images = mod['SvgImages'] as { NATIVE: unknown };
@@ -48,13 +58,14 @@ async function start(native: boolean, platform: 'ios' | 'android' = 'ios') {
     providers: [
       {
         provide: Images.NATIVE,
-        useValue: native
-          ? {
-              scale: 3,
-              toDataURL: (tag: number, options: Asked['options'], callback: (b?: string) => void) =>
-                asked.push({ tag, options, answer: (base64) => callback(base64) }),
-            }
-          : null,
+        useValue:
+          native === true
+            ? {
+                scale: 3,
+                toDataURL: (tag: number, options: Asked['options'], callback: Done) =>
+                  asked.push({ tag, options, answer: (base64) => callback(base64) }),
+              }
+            : native || null,
       },
     ],
   });
@@ -108,6 +119,64 @@ describe('drawing SVG markup as an image', () => {
     void host.images.render(HOUSE, 24, host.at);
     await idle();
     assert.deepEqual(asked[0]?.options, { width: 72, height: 72 });
+  });
+
+  it('waits for the view to be mounted before asking native for it', async () => {
+    // Fabric mounts a commit on the main thread once the JavaScript task that made it is over, and
+    // iOS asked for a view before then finds none: it logs an error and never calls back.
+    const mounted = new Set<number>();
+    const missing: number[] = [];
+    const { host, fabric } = await start({
+      scale: 3,
+      toDataURL: (tag, _options, callback) => {
+        if (mounted.has(tag)) callback('iVBOR');
+        else missing.push(tag);
+      },
+    });
+    const commit = fabric.completeRoot;
+    fabric.completeRoot = (rootTag, set) => {
+      commit.call(fabric, rootTag, set);
+      setTimeout(() => {
+        for (const node of flatten(set as FakeFabricNode[])) mounted.add(node.reactTag);
+      });
+    };
+    try {
+      const image = host.images.render(HOUSE, 25, host.at);
+      await idle();
+      assert.deepEqual(missing, [], 'native is not asked for a view it does not have yet');
+      assert.deepEqual(await image, {
+        uri: 'data:image/png;base64,iVBOR',
+        scale: 3,
+        width: 25,
+        height: 25,
+      });
+    } finally {
+      fabric.completeRoot = commit;
+    }
+  });
+
+  it('asks native nothing for a drawing taken away before the frame it waits for', async () => {
+    const scope = globalThis as { requestAnimationFrame?: unknown };
+    const real = scope.requestAnimationFrame;
+    const frames: (() => void)[] = [];
+    scope.requestAnimationFrame = (callback: () => void) => frames.push(callback);
+    const Images = mod['SvgImages'] as { answerWithinMs: number };
+    const within = Images.answerWithinMs;
+    Images.answerWithinMs = 20;
+    try {
+      const { host, asked } = await start(true);
+      const image = host.images.render(HOUSE, 25, host.at);
+      for (let turn = 0; turn < 5; turn++) await settle();
+      assert.ok(frames.length > 0, 'it waits for a frame before asking');
+      host.at.clear();
+      for (const frame of frames.splice(0)) frame();
+      await settle();
+      assert.deepEqual(asked, [], 'native is not asked for a view that is gone');
+      assert.equal(await image, null);
+    } finally {
+      scope.requestAnimationFrame = real;
+      Images.answerWithinMs = within;
+    }
   });
 
   it('answers null when native draws nothing', async () => {

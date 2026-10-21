@@ -14,8 +14,8 @@
  * No decorators and no Angular here on purpose: this is a registration, and the components it
  * registers are ordinary elements in a template.
  */
-import { registerViewName, type ViewNameOptions } from '@ng-native/fabric';
-import { optional } from './native.ts';
+import { registerViewName, type PlatformViewName, type ViewNameOptions } from '@ng-native/fabric';
+import { currentPlatform, optional } from './native.ts';
 
 /**
  * What Expo installs on the global when the app starts. Only the app identifier matters here;
@@ -45,8 +45,12 @@ export function expoViewName(moduleName: string, viewName?: string): string {
 }
 
 export interface ExpoViewOptions {
-  /** A named view on a module that has several. Omit for the module's default view. */
-  readonly viewName?: string;
+  /**
+   * A named view on a module that has several. Omit for the module's default view. A module whose
+   * view is named differently on each platform names both: `expo-video`'s is `VideoView` on iOS
+   * and `SurfaceVideoView` on Android.
+   */
+  readonly viewName?: string | PlatformViewName;
   /**
    * Props the module's React component would have applied before native saw them. Expo's
    * wrappers do less of this than React Native's, but they do some: `expo-image` resolves a
@@ -76,9 +80,15 @@ export function registerExpoView(
   moduleName: string,
   options?: ExpoViewOptions,
 ): void {
+  const viewName = options?.viewName;
   registerViewName(
     elementName,
-    expoViewName(moduleName, options?.viewName),
+    typeof viewName === 'object'
+      ? {
+          ios: expoViewName(moduleName, viewName.ios),
+          android: expoViewName(moduleName, viewName.android),
+        }
+      : expoViewName(moduleName, viewName),
     options?.defaultProps,
     {
       textContent: options?.textContent,
@@ -89,7 +99,14 @@ export function registerExpoView(
   optional(() =>
     (
       require('expo') as { requireNativeView(module: string, view?: string): unknown }
-    ).requireNativeView(moduleName, options?.viewName),
+    ).requireNativeView(
+      moduleName,
+      typeof viewName === 'object'
+        ? currentPlatform() === 'android'
+          ? viewName.android
+          : viewName.ios
+        : viewName,
+    ),
   );
 }
 
@@ -107,10 +124,20 @@ export function registerExpoView(
 export const EXPO_VIEWS: Readonly<Record<string, [string, ExpoViewOptions?]>> = {
   /** `expo-image`. Takes `source` as a list, so a single `{uri}` is wrapped by the caller. */
   'expo-image': ['ExpoImage', { defaultProps: { contentFit: 'cover' } }],
-  /** `expo-blur`. The one thing CSS cannot express: a blur of what is *behind* a view. */
-  'expo-blur': ['ExpoBlurView', { defaultProps: { intensity: 50, tint: 'default' } }],
-  /** `expo-video`. The player itself is a shared object the module hands out; this is its view. */
-  'expo-video': ['ExpoVideo', { viewName: 'VideoView' }],
+  /**
+   * `expo-blur`. The one thing CSS cannot express: a blur of what is *behind* a view. The view is
+   * `ExpoBlurView` on the `ExpoBlur` module, as `expo-blur`'s own `NativeBlurModule` asks for it.
+   */
+  'expo-blur': [
+    'ExpoBlur',
+    { viewName: 'ExpoBlurView', defaultProps: { intensity: 50, tint: 'default' } },
+  ],
+  /**
+   * `expo-video`. The player itself is a shared object the module hands out; this is its view,
+   * which has another name on Android, as `expo-video`'s own `NativeVideoView` asks for it. Bind
+   * `player` to the player's `id` (`videoPlayer`'s), not to the player.
+   */
+  'expo-video': ['ExpoVideo', { viewName: { ios: 'VideoView', android: 'SurfaceVideoView' } }],
   /**
    * `expo-camera`. Its module's first view, so its default: `ExpoCamera_CameraView` exists only on
    * iOS, after the Swift class, and commits as nothing on Android. `Camera` takes its pictures.

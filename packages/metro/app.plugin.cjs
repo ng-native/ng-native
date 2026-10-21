@@ -81,7 +81,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     appDelegate?.applicationDidEnterBackground(app)
   }
 }
+`;
 
+const STATUS_BAR = `
 // iOS 27 makes UIApplication's status bar setters no-ops for an app built with its SDK, and React
 // Native's status bar module, where every status bar call in JavaScript ends up, calls nothing else.
 // So the bar is left to view controllers: the module's two setters are answered here, and each view
@@ -227,25 +229,43 @@ const SCENE_MANIFEST = {
   },
 };
 
+// The line Expo's AppDelegate ends launching with. From SDK 58 its template starts React Native
+// from a scene delegate of its own, so nothing before this line opens a window.
+const FINISH_LAUNCHING =
+  /^([ \t]*)return super\.application\(application, didFinishLaunchingWithOptions: launchOptions\)[ \t]*\r?\n/m;
+
 function adoptScenes(contents) {
+  if (contents.includes('enum AngularNativeStatusBar')) return contents;
   if (contents.includes('class SceneDelegate')) return contents;
-  if (!OPEN_WINDOW.test(contents) || !START_REACT_NATIVE.test(contents)) {
-    throw new Error(
-      "[angular-native] AppDelegate.swift does not start React Native the way Expo's template does, so the scene life cycle was not adopted. Start it from a UIWindowSceneDelegate by hand.",
+  if (OPEN_WINDOW.test(contents) && START_REACT_NATIVE.test(contents)) {
+    return (
+      contents
+        .replace(OPEN_WINDOW, '')
+        .replace(START_REACT_NATIVE, '')
+        .replace(EMPTY_PLATFORM_CHECK, '') +
+      SCENE_DELEGATE +
+      STATUS_BAR
     );
   }
-  return (
-    contents
-      .replace(OPEN_WINDOW, '')
-      .replace(START_REACT_NATIVE, '')
-      .replace(EMPTY_PLATFORM_CHECK, '') + SCENE_DELEGATE
+  // SDK 58: scenes are Expo's, and the bar is still ours, answered before any scene connects.
+  if (!contents.includes('startReactNative(') && FINISH_LAUNCHING.test(contents)) {
+    return (
+      contents.replace(
+        FINISH_LAUNCHING,
+        (line, indent) => `${indent}AngularNativeStatusBar.install()\n${line}`,
+      ) + STATUS_BAR
+    );
+  }
+  throw new Error(
+    "[angular-native] AppDelegate.swift does not start React Native the way Expo's template does, so the scene life cycle was not adopted. Start it from a UIWindowSceneDelegate by hand.",
   );
 }
 
 function adoptInfoPlist(plist) {
   return {
     ...plist,
-    UIApplicationSceneManifest: SCENE_MANIFEST,
+    // Expo's own from SDK 58, which names the configuration its scene delegate is made for.
+    UIApplicationSceneManifest: plist.UIApplicationSceneManifest ?? SCENE_MANIFEST,
     // What iOS and react-native-screens need to ask view controllers about the bar.
     UIViewControllerBasedStatusBarAppearance: true,
   };

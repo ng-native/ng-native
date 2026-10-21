@@ -55,7 +55,9 @@ break the text there.
 | An image                 | `<image>` lifted out of its paragraph, labelled by its alt text   |
 
 An ordered list starts at the number its first item has. An image is drawn at the full width
-with a 200-point height until it loads, then at its own shape.
+with a 200-point height until it loads, then at its own size and shape, as a browser draws it, and
+no wider than the document: one wider is narrowed to the document's width and keeps its shape. A
+class of the app's own for `img` sets the width instead.
 
 ## Nothing is interpreted
 

@@ -10,7 +10,13 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
+import {
+  Engine,
+  getFabricUIManager,
+  registerPlatformComponents,
+  type EngineNode,
+  type StyleSheet,
+} from '@ng-native/fabric';
 import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 const CSS = `
@@ -23,12 +29,14 @@ const CSS = `
   .b.red { background-color: red }
 `;
 
-function scene() {
+function scene({ native = true } = {}) {
   const fabric = createFakeFabric();
   const asked: { duration: number; update: { type: string } }[] = [];
-  Object.assign(fabric, {
-    configureNextLayoutAnimation: (config: (typeof asked)[number]) => void asked.push(config),
-  });
+  if (native) {
+    Object.assign(fabric, {
+      configureNextLayoutAnimation: (config: (typeof asked)[number]) => void asked.push(config),
+    });
+  }
   let now = 0;
   const engine = new Engine(fabric, 1, {
     globalStyles: compileCss(CSS) as StyleSheet,
@@ -170,11 +178,82 @@ describe('a transition of a width', () => {
     assert.equal(s.asked.length, 3);
     assert.equal(s.width(), 50);
   });
+});
 
-  it('is eased from JavaScript on a host with no layout animation', () => {
+describe('a transition of a width on a host with no layout animation', () => {
+  // Android unless the app turns layout animations on: JavaScript eases it, a commit a frame.
+  it('is eased from JavaScript, a commit a frame, when it starts on its own', () => {
+    const s = scene({ native: false });
+    s.engine.setClasses(s.a, 'a straight on');
+    s.engine.commit();
+    assert.equal(s.width(), 10);
+    assert.equal(s.engine.animating, true);
+    s.later(100);
+    assert.equal(s.width(), 20);
+    s.later(100);
+    assert.equal(s.width(), 30);
+    assert.equal(s.engine.animating, false);
+    assert.deepEqual(s.events, ['start', 'end']);
+  });
+
+  it('is committed where it ends once it is sent on again and again, as native has it', () => {
+    // A progress bar that steps every 50ms and eases each step over 200 would keep JavaScript
+    // committing every frame for as long as the bar moves.
+    const s = scene({ native: false });
+    const widths: number[] = [];
+    for (const [step, classes] of ['a on', 'a far', 'a on', 'a far', 'a on'].entries()) {
+      if (step) s.later(50);
+      s.engine.setClasses(s.a, classes);
+      s.engine.commit();
+      widths.push(s.width());
+    }
+    // The first two are eased from where the bar is drawn; the rest are where they end.
+    assert.equal(widths[0], 10);
+    assert.ok(widths[1]! > 10 && widths[1]! < 30, `eased from where it is drawn: ${widths[1]}`);
+    assert.deepEqual(widths.slice(2), [30, 50, 30]);
+    assert.equal(s.engine.animating, false);
+    assert.equal(s.events.filter((each) => each === 'end').length, 3);
+  });
+
+  it('is eased from JavaScript again once it has been left alone for as long as it lasts', () => {
+    const s = scene({ native: false });
+    for (const [step, classes] of ['a on', 'a far', 'a on'].entries()) {
+      if (step) s.later(50);
+      s.engine.setClasses(s.a, classes);
+      s.engine.commit();
+    }
+    s.later(250);
+    s.engine.setClasses(s.a, 'a straight far');
+    s.engine.commit();
+    assert.equal(s.engine.animating, true);
+    s.later(100);
+    assert.equal(s.width(), 40);
+  });
+});
+
+describe('a transition of a width on a device whose layout animations are off', () => {
+  // React Native turns Fabric's layout animations off on Android unless the app turns them on
+  // (`enableLayoutAnimationsOnAndroid`). There, `configureNextLayoutAnimation` is still there to
+  // call and does nothing, so a size committed where it ends would be drawn there at once.
+  type Flags = Record<string, () => boolean>;
+
+  function onDevice(platform: string, flags: Flags | null, through: 'bridgeless' | 'bridge') {
     const fabric = createFakeFabric();
+    const asked: unknown[] = [];
+    Object.assign(fabric, {
+      configureNextLayoutAnimation: (config: unknown) => asked.push(config),
+    });
+    const host = globalThis as Record<string, unknown>;
+    host['nativeFabricUIManager'] = fabric;
+    if (through === 'bridgeless') {
+      host['nativeModuleProxy'] = flags ? { NativeReactNativeFeatureFlagsCxx: flags } : {};
+    } else {
+      host['__turboModuleProxy'] = (name: string) =>
+        name === 'NativeReactNativeFeatureFlagsCxx' ? flags : null;
+    }
+    registerPlatformComponents(platform);
     let now = 0;
-    const engine = new Engine(fabric, 1, {
+    const engine = new Engine(getFabricUIManager(), 1, {
       globalStyles: compileCss(CSS) as StyleSheet,
       now: () => now,
     });
@@ -185,11 +264,72 @@ describe('a transition of a width', () => {
     engine.advanceAnimations();
     engine.setClasses(view, 'a straight on');
     engine.commit();
-    assert.equal(engine.animating, true);
     now += 100;
     engine.advanceAnimations();
     engine.commit();
-    assert.equal(fabric.committed[0]!.props['width'], 20);
+    return { asked, width: fabric.committed[0]!.props['width'] };
+  }
+
+  function restore(): void {
+    const host = globalThis as Record<string, unknown>;
+    for (const name of ['nativeFabricUIManager', 'nativeModuleProxy', '__turboModuleProxy']) {
+      delete host[name];
+    }
+    registerPlatformComponents('ios');
+  }
+
+  const off = (name: string): Flags => ({ [name]: () => false });
+
+  for (const through of ['bridgeless', 'bridge'] as const) {
+    it(`is eased from JavaScript on Android (${through})`, () => {
+      try {
+        const s = onDevice('android', off('enableLayoutAnimationsOnAndroid'), through);
+        assert.deepEqual(s.asked, []);
+        assert.equal(s.width, 20, 'half way, where a commit at its end would be 30');
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  it('is eased from JavaScript on iOS where they are turned off there', () => {
+    try {
+      const s = onDevice('ios', off('enableLayoutAnimationsOnIOS'), 'bridgeless');
+      assert.deepEqual(s.asked, []);
+      assert.equal(s.width, 20);
+    } finally {
+      restore();
+    }
+  });
+
+  it('is laid out by native where the platform it runs on has them on', () => {
+    // The flag of the other platform is not this one's.
+    try {
+      const s = onDevice('ios', off('enableLayoutAnimationsOnAndroid'), 'bridgeless');
+      assert.equal(s.asked.length, 1);
+      assert.equal(s.width, 30);
+    } finally {
+      restore();
+    }
+  });
+
+  it('is laid out by native where the app turned them on for Android', () => {
+    try {
+      const s = onDevice('android', { enableLayoutAnimationsOnAndroid: () => true }, 'bridgeless');
+      assert.equal(s.asked.length, 1);
+      assert.equal(s.width, 30);
+    } finally {
+      restore();
+    }
+  });
+
+  it('is laid out by native where there is no flag to read', () => {
+    try {
+      const s = onDevice('android', null, 'bridgeless');
+      assert.equal(s.asked.length, 1);
+    } finally {
+      restore();
+    }
   });
 });
 
@@ -290,7 +430,7 @@ describe('a @keyframes animation of a height', () => {
     assert.deepEqual(s.asked, [{ duration: 200, update: { type: 'easeInEaseOut' } }]);
     assert.equal(s.height(), 40);
     assert.equal(s.engine.animating, true, 'the bar, from JavaScript');
-    assert.equal(s.engine.root.children[2]!.committed!.props['width'], 10);
+    assert.equal(s.engine.root.childList[2]!.committed!.props['width'], 10);
   });
 
   it('is played from JavaScript where another box is resized in the commit', () => {

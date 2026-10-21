@@ -43,7 +43,7 @@ describe('CSS compilation', () => {
   it('rejects what native cannot express, naming it', () => {
     // A style that silently does nothing is the failure mode this project keeps hitting.
     assert.throws(() => compileCss('.a { float: left }'), /float.*no React Native equivalent/s);
-    assert.throws(() => compileCss('.a { display: grid }'), /display: grid does not exist/);
+    assert.throws(() => compileCss('.a { display: table }'), /display: table does not exist/);
     assert.throws(() => compileCss('.a { width: 3ex }'), /unit 'ex'/);
     assert.throws(() => compileCss('.a:hover { color: red }'), /':hover' is not supported/);
     assert.throws(() => compileCss('@supports (a: b) { .a { color: red } }'), /@supports/);

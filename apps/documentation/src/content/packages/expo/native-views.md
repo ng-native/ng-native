@@ -54,8 +54,9 @@ have the module installed so the native side registers the component; this only 
 JavaScript half.
 
 `options.viewName` names one of several views a module has (the _default_ view, the module's
-first, takes no name); `options.defaultProps` are props the module's React component would have
-applied before native saw them - `expo-image` resolving a `contentFit` string, for instance.
+first, takes no name), or `{ ios, android }` for a view named differently on each platform;
+`options.defaultProps` are props the module's React component would have applied before native
+saw them - `expo-image` resolving a `contentFit` string, for instance.
 
 **`registerExpoViews(...elements)`** registers several known views at once, by element name:
 
@@ -69,8 +70,8 @@ have to look each one up:
 | Element                                | Module view                             | Notes                                                                  |
 | -------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
 | `expo-image`                           | `ExpoImage`                             | Takes `source` as a list; a single `{ uri }` is wrapped by the caller. |
-| `expo-blur`                            | `ExpoBlurView`                          | A blur of what is _behind_ a view - the one thing CSS cannot express.  |
-| `expo-video`                           | `ExpoVideo` (`VideoView`)               | The player is a shared object the module hands out; this is its view.  |
+| `expo-blur`                            | `ExpoBlur` (`ExpoBlurView`)             | A blur of what is _behind_ a view - the one thing CSS cannot express.  |
+| `expo-video`                           | `ExpoVideo` (`VideoView`)               | `SurfaceVideoView` on Android. Bind `player` to the player's `id`.     |
 | `expo-camera`                          | `ExpoCamera`                            | The module's default view. See [Camera](/packages/expo/camera).        |
 | `apple-sign-in-button`                 | `ExpoAppleAuthentication`               | See [Sign in with Apple](/packages/expo/apple-sign-in). iOS only.      |
 | `expo-symbol`                          | `SymbolModule`                          | SF Symbols, iOS only.                                                  |
@@ -80,6 +81,11 @@ have to look each one up:
 | `expo-mesh-gradient`                   | `ExpoMeshGradient` (`MeshGradientView`) | The one gradient with no CSS spelling.                                 |
 | `expo-live-photo`                      | `ExpoLivePhoto` (`LivePhotoView`)       | iOS only.                                                              |
 | `expo-maps-google` / `expo-maps-apple` | `ExpoGoogleMaps` / `ExpoAppleMaps`      | Two modules, one view each. Typed as one: [Maps](/packages/expo/maps). |
+
+On Android, `<expo-blur>` on its own draws its tint, not a blur. `expo-blur` blurs there only the
+content of a `BlurTargetView` it is given, through its `blurMethod` and `blurTargetId` props; see
+[`expo-blur`'s documentation](https://docs.expo.dev/versions/latest/sdk/blur-view/). This table
+registers the blur view only, not the target.
 
 Registering one you have not installed does not error at registration time; it produces an element
 that commits as nothing (`UnimplementedNativeView`), which is why elements are named one at a time

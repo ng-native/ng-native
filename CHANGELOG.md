@@ -1,3 +1,564 @@
+## 0.17.1 (2026-10-20)
+
+### 🩹 Fixes
+
+- The packages run on Expo SDK 58 (React Native 0.88, gesture-handler 3, Reanimated 4.7) as well as SDK 57, and the template stays on SDK 57. ([#1039](https://github.com/ng-native/ng-native/pull/1039))
+
+  - `@ng-native/expo` and `@ng-native/web-compat` accept the SDK 58 versions of the Expo modules they peer on, and `@ng-native/components` gesture-handler 3, so npm installs them beside an SDK 58 app.
+  - The `@ng-native/metro` config plugin no longer stops `expo prebuild` on SDK 58, whose template has a scene delegate of its own: it keeps Expo's, and installs the iOS 27 status bar fix from the app delegate instead. On SDK 57 it writes what it did before.
+  - `FileSystem.write` has written by the time it returns on SDK 58, where `File.write` answers a promise, by calling `writeSync`.
+  - `StatusBar`'s `backgroundColor` and `translucent` do nothing and warn once on React Native 0.88, which removed both setters, where they threw a `TypeError` on Android.
+  - Gestures attach with gesture-handler 3, which installs its bindings itself.
+  - The Metro preset resolves React Native's `NativeAnimatedHelper`, which sticky headers move through, by its file, so an app bundles on React Native 0.88 without a warning about that package's exports.
+
+- `ByRole` in `@ng-native/testing` takes `disabled`, `selected`, `checked`, `busy` and `expanded`, as React Native Testing Library's does, so `findByRole('button', { name, disabled: false })` waits for the button to be enabled. ([#1024](https://github.com/ng-native/ng-native/pull/1024))
+
+  A state is read from the node's `accessibilityState`, which the components and the `aria-*` attributes write. When nothing sets a state, its value is false for `disabled`, `selected` and `busy`, and unset for `checked` and `expanded`; `checked` counts only on a `checkbox`, `radio` or `switch`. A `<text-input>` with `editable` false is disabled.
+
+- An Angular CLI workspace's native project gets a `typecheck` target, `ng run native:typecheck`, which runs `ngc` on its code and templates, and `ng generate component` writes into the project's `src/app`. ([#1038](https://github.com/ng-native/ng-native/pull/1038), [#1033](https://github.com/ng-native/ng-native/issues/1033))
+
+  `ng add @ng-native/schematics` and `ng generate @ng-native/schematics:application` write the target, run by the new `@ng-native/schematics:typecheck` builder: it loads the project's `metro.config.js`, so a Tailwind sheet `src/main.ts` imports exists, then runs `ngc -p tsconfig.json --noEmit`. The `native-typecheck-target` migration, which `ng update @ng-native/schematics` runs, adds it to each existing native project in `angular.json` that has no `typecheck` target. An `angular.json` with comments or trailing commas is left as it is, with a note saying what to add. A component generated from the project's own directory, the workspace root or outside the project now goes in `src/app/<name>`, beside `app.ts`, rather than at the project's root. Run from a directory inside `src`, it still goes there.
+
+- `nx typecheck` passes on a library `@ng-native/nx:library` generates in Nx's TypeScript preset, whose `tsconfig.base.json` turns on `declarationMap`, where it failed with TS5069. ([#1034](https://github.com/ng-native/ng-native/pull/1034), [#1031](https://github.com/ng-native/ng-native/issues/1031))
+
+  The generated `tsconfig.typecheck.json` now sets `"declarationMap": false` beside `"composite": false`. The `library-typecheck-declaration-map` migration, which `nx migrate` runs, adds the same line to the `tsconfig.typecheck.json` of a library generated before, or notes a config with comments, which it leaves as it is. See [Updating an app](https://ng-native.com/guide/updating).
+
+- The Metro transformer wraps the Babel transformer of the app's own `expo`, where in a pnpm workspace it could wrap a newer SDK's `@expo/metro-config` that pnpm had installed beside `@ng-native/metro`. ([#1035](https://github.com/ng-native/ng-native/pull/1035), [#1030](https://github.com/ng-native/ng-native/issues/1030))
+
+  pnpm resolves `@ng-native/metro`'s optional `@expo/metro-config` peer to the newest release, so an SDK 57 app in an Nx workspace was transformed by SDK 58's transformer. The copy beside `@ng-native/metro` is now used only when `expo` cannot be found from Metro's working directory, and an `expo` that cannot be read is reported rather than passed over.
+
+### ❤️ Thank You
+
+- Ashley Hunter
+- Emanuel Hosu @Emanuel-Hosu
+
+## 0.17.0 (2026-10-20)
+
+### 🚀 Features
+
+- An engine node's fields with names a DOM element also uses are renamed: `children` is now `childList`, `text` is `nodeText`, `kind` is `nodeKind`, `host` is `engine` and `sheet` is `templateSheet`, on `EngineNode`, `HostNode`, `StyleTarget` and `ViewNameNode` from `@ng-native/fabric` and `BrowserNode` from `@ng-native/web`, so read the new name where you read the old one, or let the `engine-node-fields` migration do it (`nx migrate @ng-native/nx@latest`, `ng update @ng-native/schematics` or `npx @ng-native/migrate@latest`, as [Updating an app](https://ng-native.com/guide/updating) describes). ([#946](https://github.com/ng-native/ng-native/pull/946))
+
+  A node read as an element by code written for the web no longer has a field of the engine's hiding the DOM member of the same name. The migration rewrites a read only where the code shows it is read from one of those types, and prints a note with the file and line for each it cannot place in a file that imports one of them, for each read of a `nativeElement`, and for each read from a node cast to another type. A node's `props` keep their names: `props['text']`, a text input's value, is read as it was, and the migration leaves it alone.
+
+- `display: block`, `flow-root` and `inline-block` are laid out as block containers, and an element that relied on them being read as `flex` needs `flex` instead. ([#957](https://github.com/ng-native/ng-native/pull/957))
+
+  Adjoining vertical margins collapse between a block's children, between a block and its first or last child, and through an empty block; the flex properties on a block and on the boxes in its flow are ignored, as a browser ignores them; and a block whose children are all `inline-block` lays them out in lines that wrap. Before, each was read as `flex`, so margins added and `flex-direction: row` on a `block` made a row. `mount()` also takes `layoutConformance: 'strict'`, which lays the app out without Yoga's legacy quirks: a percentage inset or size of a `position: absolute` box is of its container's padding box, as CSS has it.
+
+  An inline-block or inline-flex box among blocks, alone or with others, is on a line as tall as the font's line height, as in a browser: the box sits on the baseline, the room under it is kept below the line as a margin of the box, and a line it wraps onto starts under that room. A `box-sizing: content-box` block holding only inline-level boxes is as tall as its lines: one line tall when they fit on one line. A percentage height of a box on a line is of the block it is in. A box beside text sits on the baseline of that text, and a box `vertical-align` sets to the top, the middle or the bottom of its line has no room under the baseline added under it. A line taller than its block with a height of its own reaches down out of it from the top. A clipped flex box or span on a line keeps the baseline of its text, and only an inline-block that clips sits on the baseline by its bottom edge.
+
+
+### 🩹 Fixes
+
+- `margin: auto` on a `position: absolute` or `fixed` box between two insets takes the room left over, as in a browser, when the box has a size of its own on that axis. ([#959](https://github.com/ng-native/ng-native/pull/959))
+
+  With no size there, the box fills the room between the insets and its automatic margins are 0, unless a min or max size clamps it, and then they share what is left.
+
+  `inset: 0; margin: auto` centres a box of a set size, where it stayed at the top left.
+
+- A `position: absolute` or `fixed` box with both insets on an axis, an `auto` margin on it and no size of its own there takes the room the insets leave, clamped by its min and max sizes, where it shrank to its content or to nothing. ([#995](https://github.com/ng-native/ng-native/pull/995))
+- `@ng-native/fabric` exports `isNamedColor`, `parseColor`, `tokenFromValue` and `boundDeclaration`, the engine's own readers of a colour, a token and a bound declaration, for a package that reads CSS values outside a sheet. ([#982](https://github.com/ng-native/ng-native/pull/982))
+- `pod install` no longer fails with "Unable to find a specification for `ExpoUI`" for an app that does not depend on `@expo/ui` in a workspace where another package or the root has it: `@ng-native/expo` builds its `@expo/ui` modifiers only where the app's own `package.json` lists `@expo/ui`. ([#1023](https://github.com/ng-native/ng-native/pull/1023))
+- `@ng-native/expo` takes `expo-local-llm` 0.8.1, whose Android side uses ML Kit's published Prompt API, so an Android build with the module in it resolves again. ([#933](https://github.com/ng-native/ng-native/pull/933), [#824](https://github.com/ng-native/ng-native/issues/824))
+
+  `LanguageModel` treats the module as available on Android as well as iOS: a build without its native half there reports `notInstalled`, as on iOS.
+
+  On Android the module needs `minSdkVersion` 26; the language model page says how to raise it with `expo-build-properties`, or how to keep the module out of the Android build instead. `generateObject()` rejects on Android, where `expo-local-llm` 0.7 and later refuse a schema, and `maxTokens` is no longer capped at 256 there.
+
+- `Engine.conditions` is what the engine was last given by `updateConditions`, the window size, colour scheme, motion preference and text size, for a package that answers a media query from a script. ([#987](https://github.com/ng-native/ng-native/pull/987))
+- `Engine.conditions` answers the conditions an engine was made with, as an app's engine is, where it was undefined until the first `updateConditions`. ([#991](https://github.com/ng-native/ng-native/pull/991))
+- `DeepLinks` from `@ng-native/device` has `follow(path)`, which hands a path of the app's own to its listeners as a link that arrived from outside is handed, so the router navigates to it. ([#1004](https://github.com/ng-native/ng-native/pull/1004))
+
+  In an app with no listener, such as one without `provideNativeRouter()`, the path goes nowhere.
+
+  `NATIVE_HISTORY` from `@ng-native/device` is the `PlatformLocation` that `provideNativeRouter()` provides; a fallback `PlatformLocation`, such as web-compat's, yields to it when both are present.
+
+- `configure({ asyncUtilTimeout })` and `resetToDefaults()` from `@ng-native/testing` set how long `waitFor`, every `findBy*` query and `waitForElementToBeRemoved` keep trying when a call passes no `timeout`, as in React Native Testing Library. ([#1025](https://github.com/ng-native/ng-native/pull/1025))
+
+  The default is still 1000 milliseconds, and a `timeout` a call passes still wins.
+
+- The engine does less work per element as it commits and restyles: a style set is no longer copied to look for a transition, a node's own style is read without a copy where no rule on it is `!important`, and a node keeps the shape it is made with. ([#997](https://github.com/ng-native/ng-native/pull/997))
+- A commit hands native each cloned view its children in one call, and matches the sheets of components rendered for the first time against the tree in one walk. ([#972](https://github.com/ng-native/ng-native/pull/972))
+
+  The children go as an array, where a commit made one call per child, and the sheets are matched at the next commit rather than one walk per sheet. What is rendered does not change. `createFakeFabric` from `@ng-native/testing` takes a clone's children as React Native does, as the second argument of `cloneNodeWithNewChildren` and of `cloneNodeWithNewChildrenAndProps`; a test that wraps those methods passes the children on.
+
+- A `calc()` that adds a token to a percentage, `calc(100% - var(--handle))`, sizes, places and spaces a box, where it was dropped. ([#992](https://github.com/ng-native/ng-native/pull/992))
+
+  The sum is settled where the box is, in every app's CSS, and follows the token changing.
+
+- `calc()` of a percentage and a length is supported for a box's size, insets, margins, padding and `translate`, where it was dropped with a warning. ([#957](https://github.com/ng-native/ng-native/pull/957))
+
+  `width: calc(100% - 2rem)` and Tailwind's `max-w-[calc(100%-2rem)]` work. The engine reads the box the percentage is of back from native and commits the box at what the sum comes to.
+
+  A sum of a share of a height and a length, in a height, a least height or a basis down a column, is of the height a column gives the box it is in once that box is as tall as its content, as in a browser, where it was set aside. A sum that moves or sizes a box in such a box makes it taller first.
+
+- The Metro transformer can be told which libraries, and which of the app's own directories, are written for a browser, which `withWebCompat()` from `@ng-native/web-compat/metro` does. ([#964](https://github.com/ng-native/ng-native/pull/964))
+
+  Their flex containers are laid out as rows, a rule in such a directory that does not parse is dropped rather than failing the build, and the app is told which elements their selectors name. Without it, apps see no change.
+
+- A `StatusBar` or `NavigationBar` claim with a property set to `undefined` leaves whatever the claim underneath said for that property, as a claim that leaves the property out does. ([#941](https://github.com/ng-native/ng-native/pull/941))
+
+  Before, `bar.push({ style: maybeStyle, hidden: true })` with `maybeStyle` undefined put the bar back to the platform's own style while the claim lasted, and `navigationBar.push({ hidden: undefined })` showed a bar the claim underneath hid. `state()` no longer holds a property set to `undefined`, and `forScreens()`, which the router hands each screen on Android, carries the value underneath.
+
+- `min-width: auto` and `min-height: auto` keep a flex item that shrinks at the size of its content, as a browser does. ([#957](https://github.com/ng-native/ng-native/pull/957))
+
+  An icon in a crowded row keeps its width, and a box in a column that is too short keeps its height. The engine applies it down a column, and along a row when no text in the item can wrap. Yoga reads them as no minimum, so they are not passed to it. An item that relied on shrinking below its content sets `min-height: 0` in a column, or `min-width: 0` in a row.
+
+- `provideNativeKeyboard()` from `@ng-native/expo/keyboard` follows the keyboard on Android as it moves, from a native module of the package's own. ([#935](https://github.com/ng-native/ng-native/pull/935), [#832](https://github.com/ng-native/ng-native/issues/832))
+
+  A `<keyboard-dock>` and the content its `[keyboardLift]` moves are moved on the native side at every frame, by how far the keyboard covers the dock on screen, so a dock that is not at the bottom of the window, or is in a form sheet react-native-screens raises with the keyboard, rises only as far as it must, and one in a `<modal>` follows the modal's keyboard. A `<keyboard-avoiding-view>` follows the keyboard frame by frame from the new `Keyboard.position`, where it jumped to its resting place before, since Android animates no layout alongside the keyboard by default; `Keyboard.metrics` carries the motion's duration there, with `'easeOut'`. The module applies no inset, so the app keeps its edge-to-edge layout, in landscape too. Off Android, and in a build without the module, it provides nothing.
+
+  `Keyboard.followsMotion` and `Keyboard.position` from `@ng-native/device` are new, as are `KeyboardSource.subscribeMotion` and the `KEYBOARD_MOTION` token.
+
+- On Android, a horizontal `<scroll-view>` or `<virtual-list>` commits as React Native's `AndroidHorizontalScrollView`, with its content in an `AndroidHorizontalScrollContentView`, and is made again when `horizontal` changes, so one turned horizontal after it mounted scrolls sideways. ([#939](https://github.com/ng-native/ng-native/pull/939))
+
+  Android chooses between its vertical and horizontal scroll view once, when the view is created, and the vertical one ignores `horizontal`. A scroll view whose `horizontal` changed was cloned, so it kept the axis it was created with. It is now created again, as React Native remounts it, which starts its scroll position and the native state of everything in it over. The same holds for an element of an app's own registered as `ScrollView`, and for a scroll view inside a `<refresh-control>`'s swipe layout. `viewNameOf` answers `AndroidHorizontalScrollView` for such an element on Android. iOS is unchanged: one scroll view, which takes `horizontal` as a prop.
+
+- A `position: absolute` box with no vertical inset in a block sits under the bottom margin of the box before it, as in a browser, and a percentage `margin-top` or `margin-bottom` on an absolute box is a share of its container's width. ([#959](https://github.com/ng-native/ng-native/pull/959))
+- `@ng-native/web-compat` gives a library the CSSOM. ([#983](https://github.com/ng-native/ng-native/pull/983))
+
+  `document.styleSheets`, a `<style>`'s `sheet`, `CSSStyleSheet` with `insertRule`, `deleteRule`, `replace` and `replaceSync`, a sheet a script makes and adopts with `document.adoptedStyleSheets`, and the CSSOM's rule classes are there. A `<style>` a library puts in the page while the app runs is read and applied as it comes in, as its text changes and as it leaves, with what holds it too: the layout properties, colours, custom properties and transitions it declares, `@media` by the window's width (one `min-width` or `max-width`; any other query is passed over with a warning) and `@supports`. `element.style` is a `CSSStyleDeclaration`, with `cssText`, `setProperty`, `getPropertyValue`, `removeProperty`, shorthands written as their longhands and the `style` attribute as its text, and a style a library binds is set as what a native view reads. `getComputedStyle` answers what the element, a rule or the element's name gives it, a `hidden` element is drawn as `display: none`, and `CSS.escape` and `CSS.supports` are there.
+
+- `@ng-native/web-compat` is a new, experimental, opt-in package for rendering a component library written for the browser, and this first release is partial. ([#976](https://github.com/ng-native/ng-native/pull/976))
+
+  `provideWebCompat()` gives the engine's nodes the core DOM members such a library calls (`nodeName`, attributes, `classList`, the nodes around one, `appendChild`, `insertBefore`, `removeChild`, `textContent`, `addEventListener` and `dispatchEvent`), provides a `document` that creates engine nodes and whose `body` draws over the screen for overlays, defines the basic `window` globals, and delivers a `click` listener from a press. `withWebCompat()` from `@ng-native/web-compat/metro` names the libraries and directories written for a browser to the build. Nothing changes in an app that does not add the provider, and everything it adds is taken away when the app is destroyed. Selectors, `element.style`, geometry, observers, forms and the rest of the DOM come in later releases.
+
+- `@ng-native/web-compat` draws a library's `<canvas>`, whose 2D context draws with react-native-svg's native views, the ones an `<svg>` is drawn by. ([#1002](https://github.com/ng-native/ng-native/pull/1002))
+
+  It draws paths, rectangles, arcs and rounded corners, strokes with their caps, joins and dashes, text, gradients, patterns, clips, transforms and `globalAlpha`. A canvas drawn again each frame moves the shapes it has rather than making new ones. The shapes drawn, not the text, can be read back with `getImageData`, drawn onto another canvas with `drawImage`, and written as a PNG by `toDataURL` and `toBlob`, and pixels can be put with `putImageData`. On React Native, `toBlob` hands its callback null, and `toDataURL` has the PNG. `isPointInPath`, `isPointInStroke`, `measureText` and `globalCompositeOperation` are there too, and so are `ImageData`, `CanvasRenderingContext2D`, `CanvasGradient` and `CanvasPattern` where the runtime has none. A canvas's `width` and `height` set the grid it draws on. Drawing an `<img>` on a canvas draws nothing. There is no bitmap: a clear of part of a canvas, and the ways of laying a drawing over what is there other than `source-over` (and `copy` where nothing clips it), change only the pixels read back.
+
+- A canvas stroke drawn under a transform that stretches one way more than another, or skews, is shown as wide along each way as a browser draws it, where it was one width all round. ([#1015](https://github.com/ng-native/ng-native/pull/1015))
+
+  A text stroked under a transform is as wide as the line, where the transform scaled it twice, and a gradient or pattern a text is painted with runs from where the canvas has it, where it ran from the text's place.
+
+  A shape drawn again without the transform it had is drawn with none on iOS, where it kept the old one.
+
+- With `@ng-native/web-compat`, what a template or a script writes inside a `<canvas>` is fallback content that stays in the document and is never drawn, whatever its styles say and its text included, as in a browser. Taken out of the canvas, it is drawn where it is put. ([#1013](https://github.com/ng-native/ng-native/pull/1013))
+
+  `registerHoist` in `@ng-native/fabric` answers a function that takes the registration away again.
+
+- A Vitest run with `ngNative()` from `@ng-native/testing/vitest` no longer leaves a directory in the system temp directory. ([#975](https://github.com/ng-native/ng-native/pull/975))
+
+  Vitest copies each module it runs there and, when the config has no `projects`, never removed it; the plugin now removes it as Vitest closes.
+
+- A `virtual-list` with `estimatedItemHeight` measures an item handed a recycled row view at the same place and size as the view's last item, so its separator is drawn and the separators below it line up with their rows after `items` changes. ([#1000](https://github.com/ng-native/ng-native/pull/1000), [#990](https://github.com/ng-native/ng-native/issues/990))
+
+  React Native reports a layout only when a view's frame differs from the last one it reported, so such an item was never measured: it had no separator, and every separator below it was offset by the difference between the estimate and its real size.
+
+- A `matrix()` transform bound to a view after a native transition or animation of its transform is drawn where the matrix puts it, set on native as the move, turn, skew and scale it is. ([#971](https://github.com/ng-native/ng-native/pull/971))
+
+  It stayed where the animation left the view, since no commit changes a transform native has set.
+
+- `NativeTabsOutlet` stays on the tab a cold-start deep link opens, where native's late answer to the outlet's request for the first tab could send the app back to it, on Android and less often on iOS. ([#1010](https://github.com/ng-native/ng-native/pull/1010), [#1005](https://github.com/ng-native/ng-native/issues/1005))
+
+  The outlet no longer navigates on a `tabSelected` that native reports for a request the outlet made itself (`actionOrigin: 'programmatic-js'`). Taps, and selections native makes on its own, still navigate.
+
+- On iOS, `SvgImages.render()` no longer asks react-native-svg for a view that is not mounted yet, which showed a red box in development (`Invalid svg returned from registry, expecting RNSVGSvgView, got: (null)`) and left a release build's tab icon missing after three seconds. ([#999](https://github.com/ng-native/ng-native/pull/999), [#986](https://github.com/ng-native/ng-native/issues/986))
+
+  Fabric mounts a commit on the main thread after the JavaScript task that made it, and `render()` asked for the view from inside that task. iOS finds no view then, and react-native-svg logs an error and never calls back rather than retrying. `render()` now asks a frame after the commit, once the view is mounted. Android already waited for the view, and is asked a frame later too. Fixes #986.
+
+- A renderer extension can answer `named(name, namespace)` for what an element written inside an `<svg>` stands for, groundwork for drawing a library's inline `<svg>` natively with react-native-svg. ([#970](https://github.com/ng-native/ng-native/pull/970))
+
+  The shapes it creates are drawn as a browser draws them, painted by the library's stylesheet: paint handed down from a group, `currentColor`, no box on a shape, and a text's size and weight sent in its font on Android. `registerViewName` takes `spacedText` for a span that keeps its spaces, and `Engine.setTouchTarget` lets a package say which shape a touch is on. `@ng-native/web-compat` builds on these; `@ng-native/icons` icons and every other view render as before.
+
+- With `@ng-native/web-compat`, an `<svg>` and its shapes are matched by attribute selectors on the attributes they are given, as `svg[width="16"]` and `path[fill="none"]` are in a browser, and a style a script sets on a shape is no attribute of it, to `getAttribute()`, a selector or a copy. ([#1014](https://github.com/ng-native/ng-native/pull/1014))
+- An `inline-block` or `inline-flex` box in a `display: block` container is as wide as its content where that content includes a row with a percentage width or `flex-1` cells: a calendar written as `inline-flex` around a `w-full` header is as wide as its days, where it filled its container. ([#957](https://github.com/ng-native/ng-native/pull/957))
+- Less of a long child list is styled again as it changes, where a stylesheet asks about places in one. ([#953](https://github.com/ng-native/ng-native/pull/953))
+
+  - Rows added or removed one at a time mark each row before or after the change once a commit, not once for each change: a chart appending or removing thousands of points no longer takes quadratic time.
+  - A rule that reads an element's place from under it (`text:nth-child(odd) .label`) restyles under elements of its own name only.
+  - A class change is weighed against `[class^=...]` and `[class$=...]` by the whole attribute before and after, rather than restyling everything under the element for any class.
+  - A style bound to a token again as it was (`fill="var(--ink)"` written again) changes nothing.
+  - A sibling test nested in the element's own compound (`.a ~ .x:is(.peer ~ *)`) no longer restyles everything under any element whose place changes: a chart shown again after a label beside its series came and went restyled every point.
+
+- `extendNodes()` lets a package replace `tagName`, a getter the engine only reads out for Angular, as it may replace `classList`; every field the engine writes on a node is still refused. ([#974](https://github.com/ng-native/ng-native/pull/974))
+- `extendRenderer()` in `@ng-native/platform` and `extendNodes()` in `@ng-native/fabric` let a package outside core take over listeners, attributes, properties and bound styles, and give engine nodes members of its own. ([#963](https://github.com/ng-native/ng-native/pull/963))
+
+  They also tell the package as elements are created, inserted and removed. `registerViewName()` now returns a function that restores what the element name was before, and `registeredViewName()` is exported. They are what an opt-in web-compatibility package is built on.
+
+- Content projected into an `@if` or another control-flow block of a component keeps its event listeners, and an element that hoists keeps hoisting, when the block closes and opens again. ([#938](https://github.com/ng-native/ng-native/pull/938))
+
+  When such a block closes, Angular destroys the nodes an `<ng-content>` at its top projects, though they belong to the component that declared them, and when it opens it puts the same nodes back without listening to them again. The engine dropped their listeners there, so a projected `(layout)` handler or a `<pressable>`'s hover stopped firing, and it stopped hoisting an element such as `<native-header>` or `<native-toolbar>` into its screen. Listeners now go when the view or directive that added them tears them down.
+
+- `position: fixed` and `position: sticky` are supported, where both were dropped with a warning. ([#959](https://github.com/ng-native/ng-native/pull/959))
+
+  A fixed box is positioned against the page it is on, the screen or modal it is inside or else the whole app, wherever in the page it is written. Inside a scroll view or a box that clips it is committed under the page instead, so it neither scrolls nor is clipped, while it is still styled and bubbles events as its parent's child. A sticky box sticks `top` from its scroll view's top edge (or `left`, in a horizontal one) at any depth inside it, and stops at the end of its parent. A sticky box with a `transform` of its own is drawn with both, as in a browser. In a grid, a fixed box is placed against its page and a sticky item stays in its area. A `position: absolute` child of a grid is placed against the lines its `grid-column` and `grid-row` name, or at the grid's padding edge with no inset, moved by its `justify-self` and `align-self`.
+
+- A percentage gap down a flex container as tall as its content is no gap, as in a browser, where it was a share of the room on offer. ([#957](https://github.com/ng-native/ng-native/pull/957))
+- A `height`, `min-height` or column `flex-basis` that is a percentage of a box as tall as its content is that share of the content's height, as a browser lays out a flex item: `height: 50%` beside a 40px box is 20px, where it was no height at all, and `min-height: 50%` there is 20px, where it was half the screen. ([#957](https://github.com/ng-native/ng-native/pull/957))
+- A percentage `flex-basis` on an item of an `inline-flex` row that is itself an item of a flex container is a share of the row again, and a column that wraps around a percentage height keeps content that just fits on one line instead of breaking it onto a second. ([#996](https://github.com/ng-native/ng-native/pull/996))
+- The engine can commit an element whose CSS says `overflow: auto` or `overflow: scroll` as a scroll view around one content view. ([#969](https://github.com/ng-native/ng-native/pull/969))
+
+  What overflows it scrolls as it does in a browser. The box, its size, border and background, is the scroll view's; its padding, gap and flex layout are the content view's. It applies only to an element a package marks with the new `scrollsOverflow` export from `@ng-native/fabric`, which nothing on its own calls yet, so an app's views are committed as they were and `overflow` stays layout alone for them.
+
+- `order` is supported on the children of a flex container, where it was dropped with a warning. ([#957](https://github.com/ng-native/ng-native/pull/957))
+
+  The engine commits them in that order. `inline-flex` is kept as a box that sits in a line, as `inline-block` is: in a `display: block` container it is as wide as its content rather than stretched, a block holding only such boxes lays them out in lines, and a run of them among blocks shares a line. In a flex container it is laid out as before.
+
+- A renderer extension's `named(name, namespace, engine)` is given the engine the element is created in, as its other hooks are, and only an element it answers for, with another name or its own, is a library's drawing. ([#989](https://github.com/ng-native/ng-native/pull/989))
+
+  An extension can now answer for the apps that asked for it and leave another app in the process alone.
+
+- An app's stylesheet compiles `:is()`, `:where()` and `:not()` of any selector, and `:has()` of any relative selector, where each was dropped with a warning. ([#950](https://github.com/ng-native/ng-native/pull/950))
+
+  `:is(.a + .b)` and `:not(.list > *)` are among the first, `:has(+ .next)`, `:has(~ .panel .mark)` and `:has(.row > .badge)` among the second. A `:has()` on a box before the styled element, `.card:has(.action) + .title`, is matched too, and so are Tailwind's `group-has-*` and `peer-has-*` variants. Each is as specific as in a browser, and a list that mixes such a selector with a compound keeps both.
+
+- The Metro preset has Expo build a lazy route's chunk URL from the dev server in a development build on iOS and Android, as Expo does where there is no global `location`. ([#1004](https://github.com/ng-native/ng-native/pull/1004))
+
+  Expo's native chunk URL is built from `location.origin` where there is one, and `@ng-native/web-compat` gives the page an `exp://` address React Native cannot fetch from. A release build is left as Expo builds it.
+
+- The Tailwind `browser` option names the classes that components written for a browser sit under, and a flex container with no direction under one is a row. ([#967](https://github.com/ng-native/ng-native/pull/967))
+
+  With the option set, the whole sheet also reads `::before` and `::after` as boxes of their own, `visibility`, a clip to nothing, `overflow-x` and `overflow-y`, and `:checked`, `:indeterminate` and `:enabled` as a browser does.
+
+- A package that keeps an element's attributes apart from its props can hand each one to `engine.keepAttribute()`, so that attribute selectors, `:has()` included, match it and restyle as it changes. ([#1014](https://github.com/ng-native/ng-native/pull/1014))
+- A shorthand set in an element's inline style or bound on it (`padding`, `margin`, `inset`, `gap`, `border-width`, `border-color` or `border-radius`, or an axis form such as `padding-inline` or `paddingHorizontal`) now wins over a stylesheet's longhand on each side or corner it covers, as it does in a browser. ([#944](https://github.com/ng-native/ng-native/pull/944))
+
+  Before, `[style.padding.px]="10"` on an element whose class set `padding-top: 4px` kept a top padding of 4, since Yoga and React Native read the more specific side first; the same held for a logical side such as `margin-inline-start`. The covered longhand is now committed with the shorthand's value, so a transition on it eases to that value, and it takes the stylesheet's value again once the shorthand is removed. A longhand the stylesheet marks `!important`, and a longhand the element sets itself beside the shorthand, still win over it.
+
+- A numeric `flex` set in an element's inline style or bound on it now wins over a stylesheet's `flex-grow`, `flex-shrink` or `flex-basis`, so `[style.flex]="1"` grows under a class such as Tailwind's `grow-0`. ([#954](https://github.com/ng-native/ng-native/pull/954))
+
+  Yoga reads each of those longhands over `flex`, so before, the class's value was kept. Each covered longhand now takes the value Yoga gives `flex` alone: for `flex: 1`, a grow of 1, a shrink of 0 and a basis of 0, which is React Native's `flex: 1` and not CSS's (CSS shrinks it as well). A longhand the element sets itself, or that the stylesheet marks `!important`, still wins, and a `flex` that is not a finite number covers nothing.
+
+- A line of inline-blocks in a `display: block` box sized by `aspect-ratio` sits at the top of the box, as in a browser, where it sat on the bottom of the box and moved up or down with its height. ([#994](https://github.com/ng-native/ng-native/pull/994))
+- A component named `Map`, `WeakMap`, `Object`, `Reflect` or `JSON` renders and hot-reloads in a development build. ([#937](https://github.com/ng-native/ng-native/pull/937))
+
+  The code Metro adds to a component's file for hot reloading called those globals by name, and a class of the same name in the file is what it found, so the app failed as the file loaded, with `NG0203` for a component named `Map`.
+
+- A component's host is matched again when a class its own `:has()` names comes or goes, and a `:has()` rule is asked only of a box with the classes and element it names. ([#952](https://github.com/ng-native/ng-native/pull/952))
+
+  `:where(.group)` and `tr` are among the elements it names, and `:has(> )` is asked only of the box right above the change. An element keeps no record of the rules it matched once no sheet in play asks for one.
+
+- `display: grid` is laid out, following CSS Grid Level 1, and Tailwind's grid utilities compile where they were dropped with a warning. ([#958](https://github.com/ng-native/ng-native/pull/958))
+
+  Track lists take lengths, percentages, `fr`, `auto`, `min-content`, `max-content`, `minmax()`, `fit-content()` and `repeat()`. Items are placed by line number, by `span`, and by the names of lines and of `grid-template-areas`, in the order `order` gives. Gaps, alignment (baselines included) and `aspect-ratio` on a grid or an item are supported. A percentage `margin-top` or `margin-bottom` is a share of the item's area width. A grid keeps its own width, honours `min-width`, `max-width`, `min-height` and `max-height` on its tracks, and shrinks and stretches in a flex container as a box does. `inline-grid` sits in a line as `inline-block` does. A grid item's size or margin that is a `calc()` of a percentage and a length is of its area. Yoga has no grid, so the engine reads sizes back from native and places the items itself, in the commit that changed the grid. `subgrid` and the `grid` and `grid-template` shorthands are still dropped with a warning.
+
+- The engine draws `::before` and `::after` boxes for a library or directory the build names as written for a browser. ([#966](https://github.com/ng-native/ng-native/pull/966))
+
+  Each is a view first or last in the element a rule gives a `content`, styled by the rules for it, with the words a string `content` writes as its text. Any other CSS in an app still drops pseudo-elements with a warning.
+
+- Smaller layout fixes come with block containers: `justify-self`, `vertical-align` lengths, `max-content`, the default width of text fields and relative offsets in wrapping rows. ([#957](https://github.com/ng-native/ng-native/pull/957))
+
+  `justify-self` places a block of a set width along its line in a block, where it was dropped with a warning, and a block with no width keeps no `auto` margins. `vertical-align` takes a length for a box on a line, how far over the baseline it sits. `max-content` is read as `fit-content` on a width or a height, and as a cap at the content on `max-width` and `max-height`, where it was dropped. A text field with no width is as wide as its `size` in characters, and a text area as its `cols`. A relatively positioned box in a wrapping row moves by its offset on every line.
+
+- `StatusBar`, `NavigationBar`, `KeepAwake`, `DeviceOrientation`, `Brightness` and `ScreenCapture` keep one stack of claims for every app the runtime mounts, and an app's claims leave it when the app is destroyed, so an app destroyed after another app has claimed leaves what that app claimed. ([#1020](https://github.com/ng-native/ng-native/pull/1020))
+
+  On Android, each of them also gives an activity that comes to the front, a recreated one included, what is claimed again, so after a font size or display size change the screen still stays awake and out of screen capture where an app holds it. `ScreenCapture.prevent()` holds its key until `allow()` or until the app is destroyed. `@ng-native/device` exports `WindowClaims`, `TopClaim`, `sharedBySource` and `onWindowFront`, which these services are built on.
+
+- With `@ng-native/web-compat`, a `touchmove` listener that is not passive and calls `preventDefault()` stops the page scrolling under the finger until the touch ends or is canceled, as a slider or a carousel asks a browser to. ([#1016](https://github.com/ng-native/ng-native/pull/1016))
+
+  A passive listener on the window, the document or the body that calls `preventDefault()` does not prevent the event's default, as in a browser.
+
+  A drag kept from the page, by a `touchmove` listener or by `touch-action`, holds every scroll view it is in, so a slider in a carousel in a scrolling page moves neither.
+
+- `@ng-native/web-compat` draws a library's SVG with react-native-svg's native views, the ones `@ng-native/icons` draws with. ([#1001](https://github.com/ng-native/ng-native/pull/1001))
+
+  An `<svg>` a template writes, markup builds or a script makes with `createElementNS` is drawn: shapes, groups, texts and their spans, a text along a path, gradients and their stops, clips, masks, markers, patterns, a drop shadow and HTML in a `foreignObject`. Its elements have SVG's names and namespace, `className` with `baseVal`, `getBBox`, `getComputedTextLength`, `ownerSVGElement` and `createSVGRect`. A style a script sets on a shape is its paint or its font, a paint that names a token is that token's colour, and a `light-dark()` paint is the side for the app's colour scheme. A `<template>` an icon's markup is bound to holds an empty box. `@ng-native/icons` is a peer dependency of the package. react-native-svg's JavaScript is never imported: without its native views a drawing shows nothing, as an icon does. An app that does not ask for the package draws its `<svg>` as it did, and icons drawn by `@ng-native/icons` commit what they did in either.
+
+- `@ng-native/web-compat` finds elements by a selector: `querySelector` and `querySelectorAll` on an element, a fragment, the document and a document a script made, and `matches`, `webkitMatchesSelector` and `closest`. ([#981](https://github.com/ng-native/ng-native/pull/981))
+
+  A selector is read as Selectors Level 4 has it, combinators, attribute operators and their case flags, `:is()`, `:where()`, `:not()`, `:has()`, `:nth-child(an+b of S)` and the rest, and one that cannot be read throws a `SyntaxError` as a browser throws. The pseudo-classes of where an element is, of its attributes, of its language and direction, and of the focus and a press match; one of a state nothing here reads, `:hover` or `:checked`, matches nothing.
+
+- A `<style>` or constructed stylesheet made while the app runs draws `border`, its sides and parts, `outline`, `outline-offset` and each corner of `border-radius`, where it drew no border at all. ([#1019](https://github.com/ng-native/ng-native/pull/1019))
+
+  A token in a border or outline, `border: 1px solid var(--c)`, is filled in where the rule applies, and `CSS.supports` answers true for one.
+
+  A token and a plain declaration in one rule are applied in the order they are written, so `padding: var(--p); padding-top: 2px` pads the top by 2.
+
+  A box whose display is `table` counts its border in its `clientWidth` and `clientHeight`, as Chrome does where its borders are not collapsed. A `<table>` scrolls nothing whatever its overflow says, and an `IntersectionObserver` sees a table clip what is in it, inside its border, only where its overflow is `hidden` or `clip`, as Chrome does.
+
+- `@ng-native/web-compat` gives the page an address, read by `document.URL`, `baseURI` and `window.location`, and draws an `<iframe>` as a native web view. ([#1004](https://github.com/ng-native/ng-native/pull/1004))
+
+  The address is the app's own URL with the route it is on: the one Expo opens the app with, `exp://` in Expo Go or the app config's `scheme` in a build, or the one `provideWebCompat({ url })` is given. A `<base href>` in the head changes what it resolves against. A relative link, an image's `src`, a form's `action` and the other URLs an element's attributes say resolve against it, an `<a>` and an `<area>` have the parts of their URL (`protocol`, `host`, `pathname`, `search`, `hash` and the rest), and `:target` matches the element the address's fragment names. `location.assign()` to a page of the app goes there through the router, as does a path outside Expo Go's `/--` on its own host, and opens any other URL with `Linking`. Angular's `Location` has a platform to stand on in an app with no router, and is the native router's in an app with one, in whichever order the two are provided.
+
+  An `<iframe>` is a native web view from `react-native-webview`, an optional peer dependency, which runs and draws the page in it as a browser does. `src` and `srcdoc` say what it shows, it is 300 by 150 points unless its `width`, `height` or a stylesheet say otherwise, and `load` fires as its page finishes loading. `contentDocument` is `null`, as for a frame of another origin, and the app and the page talk with `postMessage` both ways. A `sandbox` without `allow-same-origin` gives the page the origin `null` in the messages the app sends and hears, and shows `srcdoc` with no base. The web view cannot give a page no origin, so a `src` page in such a sandbox still loads at its own origin, with its storage and cookies, and development says so. Where `react-native-webview` is not installed, and in Node, the frame is an emulated document of the app's own, which a script reads and writes, and `provideWebCompat({ frames: 'emulated' })` asks for that document in any app. `window.frames` and `window.postMessage` are there.
+
+- `@ng-native/web-compat` reads and writes markup (`innerHTML`, `outerHTML`, `DOMParser`, `XMLSerializer`) and gives elements their names, namespaces, attributes and reflected properties. ([#979](https://github.com/ng-native/ng-native/pull/979))
+
+  It also reads and writes `insertAdjacentHTML`, `setHTML` and its kin, and a `<template>`'s `content`, parsed by parse5 as a browser parses HTML, and an XML type as XML. Elements have their names and namespaces (`createElementNS`, `namespaceURI`, `prefix`, `localName`, `lookupNamespaceURI` and the rest, `getElementsByTagNameNS`), attribute names in a browser's case, `getAttributeNames`, attributes as `Attr` nodes, `dataset`, `innerText`, and the properties HTML reflects attributes as (`hidden`, `title`, `dir`, `tabIndex`, `type`, ARIA's and the rest), and `instanceof HTMLInputElement` and the other element interfaces answer. `document.implementation` makes HTML and XML documents that are never drawn, with doctypes, CDATA sections and processing instructions. A `<button>` and an `<a>` have their roles, a table's and a form's elements are views, and an element with an id is a global by it.
+
+- `@ng-native/web-compat` finds an element in a `document.head` a script puts in the page once, so a global named by its id is the element and a query of the document counts it once. ([#1006](https://github.com/ng-native/ng-native/pull/1006))
+- `@ng-native/web-compat` gives a library geometry and the observers. ([#984](https://github.com/ng-native/ng-native/pull/984))
+
+  `getBoundingClientRect` and `getClientRects` answer `DOMRect`s, and `offsetParent` and the `offset`, `client` and `scroll` sizes and positions are read from where native last laid an element out, with what is pending committed first. An element whose style says `overflow: auto` or `scroll` scrolls what overflows it, with `scrollTop` and `scrollLeft`, `scroll`, `scrollTo`, `scrollBy` and `scrollIntoView`. `window.screen`, `visualViewport`, `matchMedia`, `ResizeObserver` and `IntersectionObserver` are there, and an app that observes nothing pays nothing for them. A `<style>` read while the app runs takes `@media` by the window's height, which way up it is and the colour scheme and motion the user asked for, as well as its width, and `getComputedStyle` answers a `width` or `height` an element has none of its own of as it is drawn.
+
+- `@ng-native/web-compat` gives a library the DOM's forms. ([#988](https://github.com/ng-native/ng-native/pull/988))
+
+  An `<input>` and a `<textarea>` are the platform's text field, as wide as a browser's, with `value` read as it is typed and `defaultValue` as written, `input` as it is typed and `change` once the edit ends, each key as a `keydown` and `keyup` with its `key` and `keyCode`, and return in a field of one line as Enter, which submits its form. Its `type`, `inputmode`, `autocomplete` and `maxlength` are the keyboard and entry native has for them, and `readOnly`, `disabled` or a disabled `<fieldset>` around it make it one that cannot be typed into. A `<select>` shows its chosen `<option>`, has `value`, `selectedIndex`, `options` and `add()`, and opens a list of its options when it or its label is pressed. `checked` is the state a click, a script or a binding sets, and a radio checked unchecks the rest of its group. A control has `validity`, `willValidate`, `validationMessage`, `checkValidity()`, `reportValidity()` and `setCustomValidity()`, and `:valid`, `:invalid`, `:in-range`, `:out-of-range`, `:placeholder-shown`, `:checked`, `:indeterminate` and `:default` match. A field has `selectionStart`, `selectionEnd`, `setSelectionRange()` and `select()`, a `<textarea>` says how tall its text is as `scrollHeight`, and a file input's `click()` opens the system's file picker, where `@ng-native/expo` and `expo-document-picker` are installed. A form has `elements`, `requestSubmit()` and `reset()`, is submitted only once its controls pass their constraints, and `document.forms` lists them. A plain app's `<text-input>` is unchanged.
+
+- `@ng-native/web-compat` takes the focus off an element a script moves to another parent, or off the one in it that has it, as a browser does, and `moveBefore` keeps it. ([#1007](https://github.com/ng-native/ng-native/pull/1007))
+- An app using `@ng-native/web-compat` can open a file picker of its own for a file input by providing `FILE_PICKER`, now exported with its `FilePicker` type. ([#1013](https://github.com/ng-native/ng-native/pull/1013))
+- `@ng-native/web-compat` gives a library the DOM's events. ([#985](https://github.com/ng-native/ng-native/pull/985))
+
+  `MouseEvent`, `PointerEvent`, `KeyboardEvent`, `FocusEvent`, `TouchEvent`, `Touch` and the other kinds are there with the members their init dictionaries give, `document.createEvent` makes each with its `init*Event`, `window.event` is the event a listener is being told, and an element has its handler properties, `onclick` to `onload`. A press reaches a listener as a `PointerEvent`, a touch is the mouse going down and up as a phone's browser tells it, and a finger held still is a `contextmenu`. A click does what it does in a browser, from a press, a script or `element.click()`: a checkbox or a radio is checked and says `input` and `change`, a button submits or resets its form, and a label clicks or focuses its control. `focus()` and `blur()` take effect at once, on a button, a link or what has a `tabindex` as on a text field, with `document.activeElement`, `:focus`, and `focusin` and `focusout` heard on the document. A button and a link take a press with no listener, and are `:active` while held, `data-hover` while a pointer is over them, and announced as disabled while they are.
+
+- A web library's HTML elements start with a browser's default box sizing and display in an app that uses `@ng-native/web-compat`. ([#1017](https://github.com/ng-native/ng-native/pull/1017))
+
+  A library's HTML elements are now sized `content-box` and its blocks are blocks, as in a browser: padding and border add to an element's width and height, and a `div`, a `p`, a `section`, a list and the other block elements lay out as `display: block`, while a `button`, a `select` and a `table` stay `border-box`. This changes layout for apps using web-compat; an author style or a stylesheet still wins over each default, and an app that does not call `provideWebCompat()` lays out as before.
+
+- `@ng-native/web-compat` gives nodes the rest of the DOM tree a browser library walks and changes. ([#978](https://github.com/ng-native/ng-native/pull/978))
+
+  That is live `childNodes` and `children`, `append`, `prepend`, `replaceChildren`, `replaceChild`, `before`, `after`, `replaceWith`, `insertAdjacentElement`, `moveBefore`, `cloneNode`, `getRootNode`, `compareDocumentPosition`, `isEqualNode`, `normalize`, the words of a text or a comment (`data`, `splitText` and the rest), and live `getElementsByTagName`, `getElementsByClassName` and `getElementsByName`, each checked as a browser checks an insertion first. `document.createDocumentFragment`, `createTreeWalker` and `createNodeIterator` are there, the document holds its doctype and its element as a browser's does, and `MutationObserver`, `NodeList`, `HTMLCollection`, `Text`, `Comment` and `DocumentFragment` are globals while an app that asked for the package is up.
+
+- With `@ng-native/web-compat`, `window.devicePixelRatio` answers the screen's pixel ratio, so a canvas or a chart sized by it is drawn sharp, and the engine's conditions carry it as `pixelRatio`, read again when the window is resized. ([#1016](https://github.com/ng-native/ng-native/pull/1016))
+
+### ❤️ Thank You
+
+- Ashley Hunter
+- Emanuel Hosu @Emanuel-Hosu
+- erKam @erkamyaman
+- Gabriel Silva @GabeSilvaDev
+- Wassim Aarab @WassimAarab08
+
+## 0.16.0 (2026-10-17)
+
+### 🩹 Fixes
+
+- On Android, `ui-date-picker`'s `range` now limits the dates that can be picked, and its `accessibilityLabel` is what TalkBack reads, with `@expo/ui` 57.0.21 or later. ([#928](https://github.com/ng-native/ng-native/pull/928), [#924](https://github.com/ng-native/ng-native/issues/924))
+
+  Compose's date picker reads the range as `selectableDates`, in milliseconds, and the label as the `semantics` modifier's `contentDescription`, so a picker's committed `modifiers` on Android now include it. The typed components also stop sending Compose the SwiftUI props it never reads: an image's and a menu's props and added modifiers, a button's `label`, `systemImage` and `role` (the label is still drawn as text inside it), a toggle's `label`, a date picker's `title`, a host's `ignoreSafeArea` and a slot's `extraProps`.
+
+- `UiContextMenu` and `UiViewHost` are exported from the main `@ng-native/expo` entry, beside the other typed `@expo/ui` components. ([#919](https://github.com/ng-native/ng-native/pull/919), [#911](https://github.com/ng-native/ng-native/issues/911))
+
+  They were exported only from `@ng-native/expo/expo-ui-components`, so `import { UiContextMenu, UiViewHost } from '@ng-native/expo'` failed. That entry still exports them too.
+
+- `ui-view-host`'s `matchContents` sizes it to the element it holds again with `@expo/ui` 57.0.23 and later, on iOS and Android, which a `ui-context-menu` trigger and a `ui-bottom-sheet` with `fitToContents` rely on. ([#923](https://github.com/ng-native/ng-native/pull/923), [#910](https://github.com/ng-native/ng-native/issues/910))
+
+  From 57.0.23 the native view reads `matchContentsHorizontal` and `matchContentsVertical` in place of `matchContents`, so the host filled what SwiftUI or Compose offered it instead: a sheet with `fitToContents` opened taller than its content. `ui-view-host` now sends both forms, so it sizes to its element on either side of the change.
+
+- When a component's template does not compile, the error for its `templateUrl` or `styleUrl` file now names the component and says its template did not compile, instead of a Babel `Unexpected token` at the top of the stylesheet or template file. ([#918](https://github.com/ng-native/ng-native/pull/918), [#917](https://github.com/ng-native/ng-native/issues/917))
+
+  The Metro transformer retries a file whose Angular stage failed through Babel, so a TypeScript mistake is reported at its line and column. A stylesheet or a template file is not JavaScript, so Babel always failed on it, and its syntax error replaced the component's. Only a JavaScript or TypeScript file is retried now. A dev server may report the resource file's failure before the component's own, so this was the error a developer could see first.
+
+- A `<markdown>` image is drawn at its own size once it loads, as a browser draws it, and is narrowed to the document's width, keeping its shape, only when it is wider, instead of being scaled to the document's width. ([#922](https://github.com/ng-native/ng-native/pull/922), [#906](https://github.com/ng-native/ng-native/issues/906))
+
+  The size comes from the image's load event on iOS and Android, so a small picture such as an icon keeps its size. An image is still drawn at the document's width with a 200-point height until it loads. A class of the app's own given for `img` in `classes` sets the width instead. On the web host the load event carries no size, so an image there keeps the document's width.
+
+- A `ui-host` with `matchContents` in a `native-header-item` of type `title` or `center` now sizes to its content on iOS, instead of measuring 0 by 0 and hiding the header's title. ([#927](https://github.com/ng-native/ng-native/pull/927), [#909](https://github.com/ng-native/ng-native/issues/909))
+
+  react-native-screens makes a title item the bar's title view at its Yoga size, and UIKit lays out no title view of 0 by 0, while a host sized to its SwiftUI content has no size until it is laid out. On iOS a title item now has a least size of one point each way, under any size the app gives it, so its content is laid out and measured.
+
+- On iOS, a `<ui-picker>` with no `label` is drawn, where it drew nothing. ([#930](https://github.com/ng-native/ng-native/pull/930), [#908](https://github.com/ng-native/ng-native/issues/908))
+
+  SwiftUI's picker view in `@expo/ui` draws nothing without a label, so `UiPicker` now sends an empty one when `label` is not set. A segmented picker never shows its label anyway.
+
+- On iOS, `ui-image`'s `size` and `color`, `ui-gauge`'s `type` and its three labels, `ui-label`'s `color`, and the `accessibilityLabel` of `ui-date-picker` and `ui-menu` now take effect in the app, where SwiftUI ignored them before. ([#926](https://github.com/ng-native/ng-native/pull/926))
+
+  SwiftUI's views read none of these as props, so each is now sent as `@expo/ui`'s own components send it. A `ui-image`'s `size` is a `font` modifier of that size (a `font` modifier in `modifiers` wins over it) and its `color` a `foregroundStyle` modifier. A `ui-gauge`'s `type` is a `gaugeStyle` modifier, and each label is a `ui-text` in the slot SwiftUI reads it from. A `ui-label`'s `color` draws its symbol as the label's icon in that colour. An `accessibilityLabel` is the `accessibilityLabel` modifier. Each is added after the `modifiers` given, so a committed `modifiers` list now includes them.
+
+  `ui-button` no longer sends `target` to native, which no `@expo/ui` button reads: a widget or Live Activity layout still compiles it as before. `ui-view-host` sends `modifiers` on Android only, as SwiftUI's view host has none.
+
+### ❤️ Thank You
+
+- Ashley Hunter
+
+## 0.15.0 (2026-10-16)
+
+### 🩹 Fixes
+
+- A colour bound as a style and made of tokens, `color-mix(in srgb, var(--brand), white 20%)` or a relative colour such as `color(from var(--brand) srgb r g b)`, is worked out from the tokens where it is used, where it reached native as text and painted nothing. ([#866](https://github.com/ng-native/ng-native/pull/866))
+
+  The channels of a relative colour set on an element can use `min()`, `max()` and `clamp()`, and a relative colour in `color()`'s `srgb` is worked out there too.
+
+- `ui-bottom-sheet` takes a `backgroundColor` input, and a `background-color` on the element from CSS, as the colour of the sheet: SwiftUI's `presentationBackground` on iOS and the container colour of Compose's sheet on Android. ([#875](https://github.com/ng-native/ng-native/pull/875), [#852](https://github.com/ng-native/ng-native/issues/852))
+
+  On iOS 26 a sheet below its full height is drawn as glass, and there was no way to make it opaque. The colour can come from a class, a stylesheet, a Tailwind utility or `[style]`, follows a `var()` and a theme change, and is dropped when it is removed. The input wins over CSS. `Engine` gains `takePaint`, which hands a node's resolved background colour to a listener instead of painting it.
+
+- A `<ui-slot name="header">` or `<ui-slot name="footer">` in a `ui-section` is now the section's header or footer on iOS, where it was drawn as one of its rows. ([#912](https://github.com/ng-native/ng-native/pull/912), [#899](https://github.com/ng-native/ng-native/issues/899))
+
+  `@expo/ui`'s `SectionView` reads them as slots of its own beside its `content`, and `ui-section` put everything it held inside `content`. A header slot lets a section's heading be any view, with its own font, where `title` is plain text. A `title` still wins when both are set: `@expo/ui`'s `SectionView` draws a non-empty `title` and drops the header slot, and an empty `title=""` counts as unset.
+
+- `<text-input>` takes `rows` as an input, so a multiline field sized by `rows` no longer logs "has no prop 'rows'" in development, and `rows` is no longer sent to the native field on iOS or Android. ([#901](https://github.com/ng-native/ng-native/pull/901), [#895](https://github.com/ng-native/ng-native/issues/895))
+
+  `rows` can be bound as well as written as an attribute: `[rows]="lines()"`. The engine reads it for the field's height as before, and neither platform's native field has a prop of that name.
+
+- `(scroll)` and `(keyPress)` on a `<text-input>`, and `(contentSizeChange)` on a multiline one, fire on Android, where the native field was never asked to send them. ([#903](https://github.com/ng-native/ng-native/pull/903), [#858](https://github.com/ng-native/ng-native/issues/858))
+
+  Android's text field sends each only when the `onContentSizeChange`, `onScroll` or `onKeyPress` prop is set, as React Native's `TextInput` sets it when a handler is passed. A field that listens for one of them now commits that prop on Android. iOS is unchanged: its field reports content size when the field itself changes size, as React Native's does, and the input docs now say so.
+
+- An SVG shape whose `fill` or `stroke` contains a colour React Native cannot read, such as a custom property set to a typo, is drawn with no paint of its own instead of stopping the app. ([#864](https://github.com/ng-native/ng-native/pull/864))
+- On Android, an `<ng-icon>` that loses a `pointer-events` it had, such as one inherited from a `<virtual-list>` row that was parked and then reused, no longer stops the app with a NullPointerException in react-native-svg. ([#891](https://github.com/ng-native/ng-native/pull/891), [#884](https://github.com/ng-native/ng-native/issues/884))
+
+  A `pointerEvents` that goes away is now committed as `auto` rather than `null`, on every view and on both platforms. React Native's own views already read a `null` as `auto`, so they behave as before; react-native-svg's Android root view called `toUpperCase` on the `null`.
+
+- On Android, a native stack screen now keeps a `statusBarStyle` or `statusBarHidden` that its page's host binding sets to the same value the app's `StatusBar` claim carries onto it, when that claim changes or is dropped. Such a value was taken off with the claim, so the bar followed the new claim, or went back to light text and shown. The router tells a screen's own status bar props from the claim's by whether its presentation or a host binding wrote them, as it already did for `navigationBarHidden`. ([#916](https://github.com/ng-native/ng-native/pull/916), [#913](https://github.com/ng-native/ng-native/issues/913))
+- A CSS transition of a size or a place (`width`, `height`, the insets, the margins, `flex-basis`), and a `@keyframes` animation of a size, now animate on Android where layout animations are off, which is React Native's default there and always so in Expo Go, instead of jumping to where they end. ([#902](https://github.com/ng-native/ng-native/pull/902), [#883](https://github.com/ng-native/ng-native/issues/883), [#859](https://github.com/ng-native/ng-native/issues/859))
+
+  `getFabricUIManager()` reads React Native's `enableLayoutAnimationsOnAndroid` or `enableLayoutAnimationsOnIOS` feature flag for the platform given to `registerPlatformComponents()`, and where it is off, leaves out `configureNextLayoutAnimation`, so the engine eases them from JavaScript, a commit on every frame, as it does on any host with no layout animation. Eased that way, it stalls while JavaScript is busy. An Android app that turns layout animations on, with the `@ng-native/metro` plugin's `android.layoutAnimations` option, still has them played by native.
+
+- `<search-field>` draws its text in the `font-family`, `font-size`, `font-weight` and `font-style` its CSS resolves to, on iOS and Android, so a field matches the text around it, including in an app with its own `@font-face` faces. ([#893](https://github.com/ng-native/ng-native/pull/893), [#890](https://github.com/ng-native/ng-native/issues/890))
+
+  The font comes from a class on the field, its own style, or what it inherits. A face the app declares is matched by weight and style, as a `<text>`'s is, and the system font or a family no `@font-face` declares is drawn at that weight, and slanted for `italic`, as a `<text>` is. The size scales with the system text size setting. A field whose CSS sets none of them keeps the system font at its own size, as before; one inside a page that sets a font now takes it. On iOS a field in the system font larger than about 21px is taller than its 56-point default height, and needs a height to match.
+
+- A CSS transition of a size or a place that is started again before it ends, twice in a row, such as a progress bar stepping its `width`, is now committed where it ends from that third start on where it is eased from JavaScript, as it already was where native plays it as a layout animation. On a host with no layout animation, which includes Android unless the app turns them on, such a bar no longer keeps JavaScript committing on every frame for as long as it moves. Each step is drawn at once, which departs from CSS, where every step would ease. Once the size is left alone for as long as its transition lasts, the next change eases again. ([#904](https://github.com/ng-native/ng-native/pull/904))
+- A prop that no rule asks of an element before another (`[data-on] ~ .x`, `#lead + .x`) no longer restyles every element after the one it changed on, and neither does a style bound to a token (`[style.color]="'var(--ink)'"`), where a stylesheet has sibling rules. ([#888](https://github.com/ng-native/ng-native/pull/888))
+
+  A long list whose rows set props as they change, such as a chart's points under a finger, styles the changed row alone. A global sheet that asks about a prop that way starts restyling the rows after it as it is added, and stops once it is removed or replaced.
+
+- When a `<native-stack-outlet>` or `<native-tabs-outlet>` is destroyed, it clears its route's context only while that context is still its own, as Angular's `RouterOutlet` does. A sheet presented over the tab bar, with a stack of its own and swiped away, cleared the tab bar's place in the page under it as that page came back, so the next tab chosen opened inside the first tab's stack, or left the screen blank, while the bar showed the new tab selected. ([#892](https://github.com/ng-native/ng-native/pull/892), [#886](https://github.com/ng-native/ng-native/issues/886))
+- An ICU plural or select, or an element inside an `i18n` message, renders on iOS and Android in a development build, where it threw `ASSERTION ERROR: The provided value must be an instance of a DOM Node` and drew nothing. ([#885](https://github.com/ng-native/ng-native/pull/885), [#882](https://github.com/ng-native/ng-native/issues/882))
+
+  Angular's development checks test each node with `instanceof Node`. The Metro preset's polyfill defines a `Node` that recognises the engine's nodes, but React Native's `InitializeCore` runs after the polyfills and replaces the global with its own `Node`, which does not. `mount()` now makes whichever `Node` is on the global then answer `true` for engine nodes, and answer as before for every other value, as it already does for `Element`.
+
+- A class added to a view before a frame has drawn it no longer starts a transition, as in a browser: Spartan's sheet, committed once before its directive's `effect` adds `bg-popover`, appeared with a 200ms fade from transparent, and now appears at once. A change made once the view has been drawn eases as before. ([#876](https://github.com/ng-native/ng-native/pull/876))
+- `@ng-native/device` adds `NavigationBar`, a stack of claims on Android's navigation bar like `StatusBar`'s, with `set()`, `push()` and a `state` signal: `style` picks light or dark buttons for three-button navigation on Android 8 and later, or `'auto'` to follow `ColorScheme`, an in-app `ColorScheme.set()` included, and `hidden` hides the bar until a swipe shows it for a moment. ([#907](https://github.com/ng-native/ng-native/pull/907), [#831](https://github.com/ng-native/ng-native/issues/831))
+
+  It drives `expo-navigation-bar`'s native module, reached by name: Expo Go has it, and a development build needs `npx expo install expo-navigation-bar`. Without the module, and on iOS, the web and in Node, claims are kept in `state` and change nothing. A fixed style is sent again on a scheme change, which resets the buttons on Android. On Android with the module, the native stack outlet from `@ng-native/router` puts a `hidden` claim on every screen without a `navigationBarHidden` of its own, as it does the status bar claim, since `react-native-screens` sets the bar's visibility from the screen in front each time one appears.
+
+  `@ng-native/fabric`'s `EngineNode` gains an optional `writes` set: a node that has one records which props have been written to it, which is how the outlet keeps a page's own `navigationBarHidden` that equals the carried claim.
+
+- A `<markdown>` table scrolls sideways when it is wider than the page, with each column as wide as its widest cell (up to 280pt), instead of squeezing every column into the page's width. ([#865](https://github.com/ng-native/ng-native/pull/865), [#850](https://github.com/ng-native/ng-native/issues/850))
+
+  A table is now a horizontal `scroll-view`, and each cell is a `view` that holds its text, so a custom `th` or `td` class styles the text inside a cell rather than the cell. A narrow table is drawn at its content's width.
+
+- `<markdown>` takes a `streaming` input for a source that arrives a chunk at a time, keeping the blocks before the last one and holding back what has not closed yet: a code span, emphasis, a link, an image, a table row or a code fence's opening line. A fenced block's code streams in once its opening line ends. ([#867](https://github.com/ng-native/ng-native/pull/867), [#851](https://github.com/ng-native/ng-native/issues/851))
+
+  While `streaming` is set, only the last block is lexed again on a change, so the cost of a chunk does not grow with the length of the document, except for a chunk that defines or changes a link reference, which lexes the whole source again since it can change an earlier block. Clearing `streaming` draws the whole source as written. Streaming or not, a block that did not change keeps its native views, where before every block was drawn again on any change to the source. A paragraph or heading no longer carries the whitespace at its end, which it never drew.
+
+- `<markdown>` draws an image written into the document as a base64 `data:` url of a raster picture, PNG, JPEG, GIF or WebP, as a web editor writes a pasted screenshot. It drew its alt text. Any other `data:` url, an SVG or HTML among them, is still drawn as its alt text, as is every scheme but `http` and `https`. ([#905](https://github.com/ng-native/ng-native/pull/905))
+- A dev bundle for iOS or Android no longer fails, and an edit hot-swaps instead of reloading the app, when a component whose `styleUrl` or `templateUrl` is shared has an aliased `@if (x; as y)` or a `@switch` in its template. ([#900](https://github.com/ng-native/ng-native/pull/900), [#894](https://github.com/ng-native/ng-native/issues/894))
+
+  `compileForHmrSync` reports a warning about these blocks beside an update that is complete, and the Metro transform took any report for a template that did not compile. A stylesheet or template module then threw, which failed the dev bundle with a syntax error on that file, and an edit to an inline template with these blocks reloaded the app instead of swapping. Only an error from the compiler stops a hot update now; a template that does not compile still fails the build, naming the component.
+
+- A `:has()` whose argument is a list with an ancestor test in it, such as `.card:has(.x:is(.p *, .y))` or Tailwind's `has-*` with a custom variant written as `:where([data-theme=midnight], [data-theme=midnight] *)`, matches either alternative, as a browser does, instead of needing both. A `:has()` inside another `:has()` is dropped with a warning, as a browser drops it as invalid. ([#863](https://github.com/ng-native/ng-native/pull/863))
+- A change under many `:has()` rules walks each box's subtree once for all the rules that box asks, and not again under a box above it already walked, where it walked it once for each rule, so an app with many such rules, as Tailwind's `has-[...]` variants and component libraries write them, opens a screen much faster. ([#877](https://github.com/ng-native/ng-native/pull/877))
+- A change beneath a box, such as a child added or a class changed on one, checks the box's `:has()` rules again without matching everything else under the box again. ([#881](https://github.com/ng-native/ng-native/pull/881))
+
+  The elements a rule asking `:has()` of the box is for are still matched again on their own. Opening a dialog under the root, with a class on the root changing in the same commit, no longer matches every element of the screen again.
+
+- `deepLinkSource()` is exported from `@ng-native/device`. It was written and used by `DeepLinks`, and its type `DeepLinkSource` was exported, but the function was not, so an app that needs the whole address of a link, which `DeepLinks.subscribe` strips to a path, had to listen to React Native's `Linking` itself. ([#869](https://github.com/ng-native/ng-native/pull/869))
+- `registerExpoViews('expo-video')` registers `SurfaceVideoView` on Android, which is what `expo-video` names its view there, and `registerExpoViews('expo-blur')` registers the `ExpoBlur` module's `ExpoBlurView`. Before, Android stopped with "Can't find ViewManager 'ViewManagerAdapter_ExpoVideo_VideoView'" the first time a video showed, and there is no `ExpoBlurView` module to find. `registerExpoView`'s `viewName` takes `{ ios, android }` for a view named differently on each platform. ([#878](https://github.com/ng-native/ng-native/pull/878))
+
+  `videoPlayer()` gives the player's shared-object `id`, which is what `<expo-video [player]>` takes: bound to `player.native`, the view had no player and drew nothing, while the video kept playing with nothing on screen. Bind `[player]="player.id"`.
+
+- A font or an image a DOM component's stylesheet names in a relative `url()` now loads in development, where a font fell back to another and an image did not draw. ([#898](https://github.com/ng-native/ng-native/pull/898), [#897](https://github.com/ng-native/ng-native/issues/897))
+
+  The dev server serves a page from `/_expo/@dom/`, so a `url()` left relative was asked for there and failed. Each one that names a file Metro takes as an asset is now pointed at the file on Metro's dev server, `/assets?unstable_path=...`, which serves a file outside the project too, such as a package in a pnpm store at the workspace root. A `url()` to any other file, or to one that is not there, is left as written, with Expo's warning that it is not supported.
+
+- A class changing restyles only what a test of the class attribute, such as `[class^="p-"]`, or a `:has()` naming it can reach, where any class change under such a test restyled the element and everything under it. ([#880](https://github.com/ng-native/ng-native/pull/880))
+
+  A test of the class attribute now reaches what a class written in its place would: the element, or the elements a rule is for under it. A class or class test named only inside `:has()` asks the boxes above the element again and matches nothing under it again. A `:has()` such as `.p-floatlabel:has([class^='p-'][class$='-fluid'])` no longer has a class added to the root restyle the whole screen. One named only in `:has(> )` asks just the box right above the element.
+
+  A `:has()` rule in a component's own styles, such as `:host:has(.on)`, now follows a change beneath the host, where it kept what it matched before.
+
+- `Camera` records video: `record(options)` resolves with `{ uri }` once the recording stops, and `stopRecording()` stops it. Like `takePicture()`, they call the functions `expo-camera` defines on the view, with the view's tag, so no React ref is needed. The view needs `mode="video"`. ([#879](https://github.com/ng-native/ng-native/pull/879))
+
+### ❤️ Thank You
+
+- Ashley Hunter
+- Emanuel Hosu @Emanuel-Hosu
+- Shahar Kazaz @shaharkazaz
+- Wassim Aarab @WassimAarab08
+
+## 0.14.0 (2026-10-15)
+
+### 🚀 Features
+
+- A push to a page of the tab bar from a screen over the bar, pushed on the app's own stack or presented, goes back to the bar: to that tab where it was left, with the page pushed onto it. It built a second tab bar over the screen, which took the first bar's pages, so a tab in it could show a page no longer told it was in front, and going back could leave a blank tab. A page of the tab in front presented over such a screen goes to the presented outlet, as a page of another tab does. A second tab bar is no longer built this way; an app that wants a screen over the bar opens a route outside it. ([#801](https://github.com/ng-native/ng-native/pull/801))
+- A `<native-tab>` icon can be SVG markup, `[icon]="{ svg: lucideHeart }"`, drawn once into a tinted template image by the renderer `withSvgIcons(SvgImages)` provides, with `SvgImages` from `@ng-native/icons`. Neither platform's tab bar draws SVG, so `SvgImages` draws the markup as an `ng-icon` beside the tab bar for a frame, asks react-native-svg for it as a PNG at the screen's scale, and removes it. The icon is 25 points square on iOS and 24 on Android unless it gives a `size`, and the tab has no icon until it has been drawn. `SvgImages.render(svg, size, at)` is public for any other place that takes an image rather than a view. `native-toolbar-item` still takes only `systemImageName`. ([#818](https://github.com/ng-native/ng-native/pull/818), [#814](https://github.com/ng-native/ng-native/issues/814))
+- A `line-height` with no unit written in a `style`, `style="line-height: 1.5"`, `[style.line-height]="'1.5'"` or `[style.line-height]="1.5"`, is now a multiple of the font size, as it is in a stylesheet, where it was 1.5 points. Text inside it multiplies its own font size by the number, as in a stylesheet. A style that meant points this way, `style="line-height: 20"` or `[style.line-height]="20"`, needs its unit: `line-height: 20px`. A number in a style object, `{ lineHeight: 24 }`, is still points. A negative `line-height` in a style is dropped with a warning, as a browser drops it. ([#803](https://github.com/ng-native/ng-native/pull/803))
+
+  A `padding`, `margin`, `inset` or `gap` with a value for each side, `style="padding: 4px 8px"`, sets each side, where native dropped the text and the element had none. One with more values than it takes, `padding: 1px 2px 3px 4px 5px`, is dropped with a warning. `!important` in a `style` attribute is read as it is in a bound style, where the value was dropped.
+
+- An engine node's element tag is now `tag` rather than `name`, on `EngineNode`, `StyleTarget`, `ViewNameNode` and `NamedHostNode` from `@ng-native/fabric` and `BrowserNode` from `@ng-native/web`, so read `node.tag` where you read `node.name`, or let the `engine-node-tag` migration do it (`nx migrate @ng-native/nx@latest`, `ng update @ng-native/schematics` or `npx @ng-native/migrate@latest`, as [Updating an app](https://ng-native.com/guide/updating) describes). ([#809](https://github.com/ng-native/ng-native/pull/809))
+
+  `name` is the DOM's attribute, and a web library that set `input.name = 'email'` on a node renamed the element. The migration rewrites a `.name` only where the code shows it is read from one of those types, and prints a note with the file and line for each `nativeElement.name`, which an `ElementRef` without a type hides from the compiler, for each `name` read from a node cast to another type, such as `node as { name?: string }`, which still compiles after the rename, and for each other `.name` it cannot place in a file that imports one of them.
+
+- `<ui-picker>` works on Android. Compose has no `Picker`, so the same element draws its options with Compose's controls: `pickerStyle="segmented"` as a row of segmented buttons, and any other style as an exposed dropdown menu under the chosen option. It committed as nothing there, and logged an error for its options. The Compose pieces are exported as components too: `UiSingleChoiceSegmentedButtonRow`, `UiSegmentedButton`, `UiExposedDropdownMenuBox`, `UiExposedDropdownMenu` and `UiDropdownMenuItem`. ([#807](https://github.com/ng-native/ng-native/pull/807))
+- `<native-tab>` takes `role="search"` and `automaticallyActivatesSearch`, which make a tab the tab bar's search tab on iOS 26.1 and later: a `UISearchTab`, drawn as a circular button at the trailing end of the bar. An app built with the iOS 27 SDK needs both for that button on iOS 27, where `systemItem="search"` alone, or the role without `automaticallyActivatesSearch`, draws an ordinary item. Both need react-native-screens 4.29 or later; with an older one they do nothing. ([#823](https://github.com/ng-native/ng-native/pull/823))
+- `<search-field>` from `@ng-native/expo/search-field` is the system search field outside a navigation bar, such as in a bottom sheet: UIKit's `UISearchBar` on iOS and AndroidX's `SearchView` on Android, with `<native-search-bar>`'s `placeholder`, `(search)`, `(cancel)`, `(searchFocus)`, `(searchBlur)` and `focus()`, `blur()` and `clear()`. Its text is a two-way `value`, and with `disabled` and `touch` it is a Signal Forms control: `[formField]` binds it as it binds a `<text-input>`. It is native code of `@ng-native/expo`, so a development build has to be rebuilt to pick it up, and Expo Go draws nothing for it. `@ng-native/expo` now depends on `androidx.appcompat` on Android, which React Native already brings. ([#821](https://github.com/ng-native/ng-native/pull/821), [#813](https://github.com/ng-native/ng-native/issues/813))
+
+### 🩹 Fixes
+
+- `StatusBar`'s `backgroundColor` and `translucent`, and the `statusBarColor`, `statusBarTranslucent`, `navigationBarColor` and `navigationBarTranslucent` screen presentation options, are deprecated: they do nothing under Android edge-to-edge, which is always on with Expo SDK 57. They still compile. On iOS `StatusBar` no longer sends `backgroundColor` or `translucent`, so React Native's "only available on Android" warning is gone, and on Android it warns once in development when one is set. `<modal>` no longer warns that `navigationBarTranslucent` needs `statusBarTranslucent`, since React Native turns both on under edge-to-edge. ([#835](https://github.com/ng-native/ng-native/pull/835))
+- A border given its width or style after its colour is drawn in that colour on Android. A box made without a border and given one later, as a class or state changes, was drawn with a black border. ([#819](https://github.com/ng-native/ng-native/pull/819))
+- A node that leaves the tree focused or pressed is not styled that way when it comes back, and leaves nothing pressed behind it. A field removed with the keyboard up came back matching `:focus`, and a card whose pressed button was removed mid-press stayed `:active` until the next press. A child with `inherit` follows a parent's bound `[style.x]` when it changes too, where it kept the first value. ([#802](https://github.com/ng-native/ng-native/pull/802))
+- A focused field that a rule hides, `.field:focus { display: none }` or a box it is in, is shown again once hiding it has taken its focus away. It stayed hidden and unfocused, because the blur came in the middle of the commit that hid it. ([#802](https://github.com/ng-native/ng-native/pull/802))
+- A commit asks nothing about transitions and animations until a stylesheet, an inline style or a prop the app gives declares one. Restyling and mounting are faster in an app that animates nothing, and unchanged in one that does. ([#836](https://github.com/ng-native/ng-native/pull/836))
+- `DeepLinks` reads `/--/` as Expo Go's launch prefix only in a url's path. One in a query or a fragment cut the link there, so `https://example.com/search?q=/--/x` reached the router as `/x` and `myapp://notes?q=a/--/b` as `/b`. ([#804](https://github.com/ng-native/ng-native/pull/804))
+- `<ui-date-picker [displayedComponents]>` works on Android. Compose takes one word for what the picker shows, `date`, `hourAndMinute` or `dateAndTime`, where SwiftUI takes a list, and the list was passed to both, so Android refused the prop with an error. ([#807](https://github.com/ng-native/ng-native/pull/807))
+- A shorthand the build drops is dropped whole. `padding: 8px calc(50% - 10px)` warned that `padding` was dropped and still set the top padding, and an `inset` with a viewport unit before the value it could not take left an object where a number belongs. ([#805](https://github.com/ng-native/ng-native/pull/805))
+- A commit steps over each unchanged child of a view that changed before asking anything else of it. A frame of a fade among the rows of a screen takes about half the time it did, and a commit that changes one row of a long list about a tenth less. ([#839](https://github.com/ng-native/ng-native/pull/839))
+- A class list is split at the spaces HTML names (a space, a tab, a line feed, a form feed or a carriage return), and so is the list `~=` reads. A no-break space or a vertical tab split it into two classes, where a browser keeps either as part of one class's name. ([#845](https://github.com/ng-native/ng-native/pull/845))
+- A bound style in `em`, `rem` or a viewport unit (`vw`, `vh`, `vmin`, `vmax`) is now measured as the same value in a stylesheet is. `[style.width]="'2em'"` is measured against the font size in scope and follows it when it changes, `'2rem'` is 32 points, and `'50vw'` follows the viewport. A bound `line-height` in `em` gives a line height in points, as a stylesheet's does. Each used to reach native as text, which native drops. So `<ng-icon size="2em" />` is now twice the font size around it, where it was drawn at `1em`. ([#786](https://github.com/ng-native/ng-native/pull/786), [#784](https://github.com/ng-native/ng-native/issues/784))
+- A view with an `aspect-ratio` that stretches across its flex line is as wide as its column, or as tall as its row, as in a browser, where the ratio was taken over the stretch. In a column, a height given leaves the ratio nothing to work out; in a row, the height the ratio gives a width in points is the view's least height. An image keeps its picture's proportions. ([#842](https://github.com/ng-native/ng-native/pull/842))
+- `aria-checked` written as an attribute reaches native as a boolean. `<view aria-checked="false">` was announced as checked, because the text `false` was passed on as it was. ([#803](https://github.com/ng-native/ng-native/pull/803))
+- Text in a CSS system colour shows on Android. `CanvasText`, `FieldText`, `ButtonText` and `GrayText` (and the deprecated names for them) drew nothing there: they now take Android's `colorForeground`. `GrayText` is the text colour on Android, which has no grey of its own that follows light and dark. ([#820](https://github.com/ng-native/ng-native/pull/820))
+- On Android, the app's `StatusBar` claim stays on after a push or a pop. A screen with its own `statusBarStyle` or `statusBarHidden` no longer leaves white icons, or a shown bar, on every screen after it: the stack outlet now puts the claim's style and visibility on each screen that has none of its own, and `StatusBar` has a new `forScreens` signal for it. ([#834](https://github.com/ng-native/ng-native/pull/834))
+- A push into another tab now resolves `false` and shows nothing when a guard on the way redirects elsewhere: on the first screen of a tab nobody has opened, or on the page a tab covered by another screen was left on. Before, it resolved `true` and showed the page anyway. ([#825](https://github.com/ng-native/ng-native/pull/825))
+- A `nativeRouterLink` inside a page presented over another tab now leaves that page, as `push()` from it does: the link goes to its url's own tab and the page is dismissed. An absolute link from the page no longer lands on the page's own url. ([#793](https://github.com/ng-native/ng-native/pull/793))
+- A `nativeRouterLink` to a page of a tab nobody has opened now puts the tab's first screen under the page, as `push()` does, so Back lands on it. The same goes for a link or a `push()` with a relative url, such as `../library/7`. A query written into the link's url, such as `/library/7?from=home`, is now read as a query instead of being encoded into the path. ([#827](https://github.com/ng-native/ng-native/pull/827))
+- A root guard's redirect at launch, such as one that sends the app to sign in, now lands before anything that arrives while it is still running: a screen pushed or presented, a deep link (with or without `withLinkParent`), or a page restored after a reload in development. Before, each of these cancelled the redirect and opened alone, past the guard. ([#789](https://github.com/ng-native/ng-native/pull/789))
+- A transition of a size or a place that is started again before it ends, and again after that, is committed where it ends instead of as another native layout animation, so a progress bar that steps every few frames no longer keeps native laying the screen out on every frame. ([#799](https://github.com/ng-native/ng-native/pull/799))
+- A page of another tab shown with `present()` puts the tab under it behind, so `SCREEN_IN_FRONT` is `false` for that tab's page while the sheet is up and `true` again once it is gone. Before, it stayed `true`, so a `<keyboard-dock>` on that page kept the keyboard under the sheet. ([#791](https://github.com/ng-native/ng-native/pull/791))
+- `present()` of another tab's page, asked for while the app's first screen is still loading, shows the page over the first tab, as the same call made a moment later does. ([#792](https://github.com/ng-native/ng-native/pull/792))
+
+  Asked at launch, with a lazily loaded tab bar not up yet, the page opened inside its own tab instead: the tab was selected and the page became the first screen of its stack. `present()` now waits for the first screen, as `push()` already did.
+
+- `@oxc-angular/vite` is updated to 0.0.41, which fixes the compiler bugs the Metro transform guarded against, so those guards are removed: ([#798](https://github.com/ng-native/ng-native/pull/798))
+
+  - A template arrow function that reads its own parameter, such as `open.update((was) => !was)`, compiles correctly and no longer fails the build.
+  - A component's `host` and `styles` can use a spread, a concatenation, a constant or a `function` declaration in the same file. A value imported from another file now fails the build with the compiler's own error, which names the import.
+  - An unclosed control-flow block such as `@if (on() {` is reported by the compiler; Angular's parser still places the error in the template.
+  - A hot update no longer patches the compiler's update module, which now writes the template's fields itself.
+
+  A capitalized element name such as `<View>` still fails the build, with a new message: `element <View> is capitalized`.
+
+- `nx g @ng-native/nx:tailwind` keeps a leading `@charset` first when it adds Tailwind to an existing stylesheet, adds it to one that only mentions Tailwind in a comment, and writes a Tailwind 3 config that loads for a library in a directory named `require`, `module` or `exports`. ([#806](https://github.com/ng-native/ng-native/pull/806))
+- `nx g @ng-native/nx:tailwind` run again for a second library keeps the first after a formatter has given the config double quotes, and writes a Tailwind 3 config that parses for a library in a directory named for a reserved word, such as `ui/switch`. ([#806](https://github.com/ng-native/ng-native/pull/806))
+- `nx g @ng-native/nx:tailwind` puts Tailwind into a `src/styles.css` the app already has. It pointed Metro at the file and left it as it was, so every Tailwind class drew unstyled on a build that passed. ([#806](https://github.com/ng-native/ng-native/pull/806))
+- An app that injects `Notifications` starts in Expo Go on Android, where it stopped on a red screen. ([#788](https://github.com/ng-native/ng-native/pull/788))
+
+  `expo-notifications` cannot be imported there: it subscribes to push tokens as it loads, and that throws in Expo Go on Android, which has had no push since Expo SDK 53. The service now runs with no module behind it there, as it does on the web: nothing is scheduled or received, the permission is never granted, and a warning in the console says so. Expo Go on iOS and a development build are as before.
+
+- A module missing from the build, in Expo Go say, is reported when the service is used, not when it is injected, so every page that uses it says what to install. A service threw as it was made, which left Angular's record of it marked as being made, and every page after the first failed with NG0200, "Circular dependency": `<expo-map>`, `<expo-camera>`, `Haptics` and the rest. The service is made inert, with `available` false and `available()` resolving to false where it has one, and a call on it, or a read of a value only the module knows, throws the `MissingModuleError`. A player, a database, `assets()` and the splash screen still throw when they are called. `AppInfo`'s `version`, `build`, `id`, `name` and `device` are read when asked. ([#807](https://github.com/ng-native/ng-native/pull/807))
+- A `templateUrl` or `styleUrl` is read from the project when Metro is started from another directory, as `npx expo export apps/mobile` starts it. It was read from the directory the command ran in, and the build failed with a file not found. ([#805](https://github.com/ng-native/ng-native/pull/805))
+- A dev server started again shows a template or stylesheet edited while it was stopped. A component with both a `templateUrl` and a `styleUrl` kept the old one until its other file was saved or the cache was cleared, because the cached module of the one put back what it was compiled with. ([#805](https://github.com/ng-native/ng-native/pull/805))
+- A component whose template is only a comment builds, where it failed with "compiled to nothing". ([#805](https://github.com/ng-native/ng-native/pull/805))
+- A media query list with a type a device is not, `@media screen and (min-width: 500px), print`, keeps its other queries. The whole rule was dropped with a warning, where only the `print` query never matches. ([#805](https://github.com/ng-native/ng-native/pull/805))
+
+  The same holds with `only`: `@media only print, (min-width: 500px)` keeps the width query.
+
+- A `min-height` or `min-width` over a `max-height` or `max-width` wins, as in a browser, and so do a box's padding and border over a `max-height` or `max-width` under them. React Native held the box, and the box around it, to the maximum. ([#840](https://github.com/ng-native/ng-native/pull/840))
+- A number input with a default keeps it when bound to `undefined`. `<pressable [delayLongPress]="delay()">` with no delay waits the usual 500 ms, where the long press fired at once, and a `<virtual-list>` with `[rowGap]` or `[overscan]` unset lays out, where its height was `NaN`. The same goes for `delayPressIn`, `delayPressOut`, `minPressDuration`, `activeOpacity`, `keyboardVerticalOffset`, `endReachedThreshold` and `itemVisiblePercentThreshold`. ([#803](https://github.com/ng-native/ng-native/pull/803))
+- An `@ng-icons` import shown as a code sample inside a template literal is left as text. It was rewritten as the build rewrites a real import, which broke the string and failed the build. ([#805](https://github.com/ng-native/ng-native/pull/805))
+- A `<native-header-item type="title">` no longer crashes a screen on Android. It is committed as `center`: react-native-screens lists `title`, and iOS draws both as the title view, but Android's header throws `Unknown type title` while mounting the item, so a page with a custom title worked on iOS and crashed on Android as it opened. ([#800](https://github.com/ng-native/ng-native/pull/800))
+- A `<native-header-item>` written inside a component of the header now shows in the bar. It reached the header inside the component's view, which iOS dropped with an error and Android crashed on. ([#830](https://github.com/ng-native/ng-native/pull/830))
+- A `@font-face` url with a query or a fragment, `url('./Inter.ttf?v=2')`, bundles the file it names, and a remote or `data:` url is dropped with a warning that names the face. Each was passed to the bundler as it was written, which failed to resolve it. ([#805](https://github.com/ng-native/ng-native/pull/805))
+
+  A face that lists a remote url before a file in the app, `src: url(https://x.com/a.ttf), url(./a.ttf)`, bundles the file in the app instead of refusing the face.
+
+- Five cases where the engine kept showing an old state now follow the change. An element put back in the tree after a class changed above it, `.dark .title`, is styled by the class as it is now. A change inside a `display: none` element reaches the next commit, so a panel hidden by `:has()` shows again once the `:has()` no longer holds. An endless `@keyframes` animation stops while its element, or one it is in, is `display: none`, with an `animationcancel` as a browser sends, where it kept a frame loop running, and plays again when shown. A scroll-driven animation drives its view again after the view or its scroll view was hidden and shown, where it froze on its first frame. A custom property bound with a `calc()`, `min()` or `max()` of lengths, a `rem`, an `em` or viewport length, a unitless line height or two to four lengths in `px` is read as the same text in a stylesheet, where it set nothing. ([#802](https://github.com/ng-native/ng-native/pull/802))
+- The lines of a wrapping flex container that says nothing of `align-content` stretch across it, as in a browser. They started at `flex-start`, as tall (or as wide) as what was in them, so an item that stretches across its line, a box with no width in a column that wraps, came out with no size at all. ([#841](https://github.com/ng-native/ng-native/pull/841))
+- `ngNativeWeb()` registered twice, as the Storybook recipe does in the app's `vite.config.ts` and again in `viteFinal`, applies once. With `@oxc-angular/vite` 0.0.41 the second copy compiled each component again and failed the build with "Unsupported call to the input function". ([#853](https://github.com/ng-native/ng-native/pull/853))
+- Text written straight into a view is truncated as the view says, as a browser truncates a block's own text. `<view class="truncate">` or `line-clamp-2` around its own words, or a `numberOfLines` bound on it, left the words untruncated, because the paragraph they are drawn in never took the view's `numberOfLines` or `ellipsizeMode`. ([#843](https://github.com/ng-native/ng-native/pull/843))
+- A class change that brings in a `transition` together with the value it eases animates from the old value, as in a browser, which takes the transition from the style after the change. Such a change, out of `transition: none` or out of no transition at all, jumped to the new value before. ([#846](https://github.com/ng-native/ng-native/pull/846))
+- A `<native-toolbar>` written ahead of a page's scroll view no longer stops the large title from collapsing as the page scrolls. The toolbar now commits after the page's content, as the header does. ([#826](https://github.com/ng-native/ng-native/pull/826))
+- `@ng-native/testing`'s Node hook runs on Node 22 and early Node 24 releases, where every test file that compiled a component failed with `ERR_METHOD_NOT_IMPLEMENTED: The resolveSync() method is not implemented`. ([#795](https://github.com/ng-native/ng-native/pull/795))
+
+  The compiler the hook runs is CommonJS, and it `require`s two ES modules, `@oxc-angular/vite` and `@angular/compiler`. Those versions of Node cannot `require` an ES module that imports anything on the thread that runs `module.register`'s hooks, so `node --import @ng-native/testing/register --test`, and a suite that registers `@ng-native/testing/loader` itself, failed there. The hook now imports both before it is registered. Recent Node 24 releases and the Vitest plugin are unchanged.
+
+- A `<native-header>` in a tab's page that has no stack of its own no longer configures the stack screen that holds the whole tab bar. On Android it showed its bar above the tab bar, on every tab, even when the tabs page hid its own. ([#828](https://github.com/ng-native/ng-native/pull/828))
+- A SwiftUI `font` modifier on an `@expo/ui` view can name one of the app's `@font-face` faces by the name it is registered under, such as `Nunito Sans-700`, and draws that face on iOS instead of the system font. ([#855](https://github.com/ng-native/ng-native/pull/855), [#849](https://github.com/ng-native/ng-native/issues/849))
+
+  The build reads each face's PostScript name from its `.ttf`, `.otf`, `.ttc` or `.woff` file, and adds it to the face in the compiled sheet as `postScriptName`. A face file in a format the name cannot be read from, such as `.woff2`, is reported in the build. A font loaded by hand with `inject(Fonts).load(map)` is still named by its PostScript name in a modifier, and in development a modifier that names it by the name it was loaded under logs a warning. `registerViewName` and `registerExpoView` take a `fontNames` option, through which a view rewrites the font names its own props carry.
+
+- An icon or drawing whose shape has an `opacity` or `clip-rule` attribute no longer stops the app on Android: a shape's `propList` now names only the fill and stroke paint react-native-svg inherits, which Android reads each name of by reflection. ([#817](https://github.com/ng-native/ng-native/pull/817))
+- A text element that is a flex column of text elements, `<label class="flex flex-col"><span>Name</span><span>Hint</span></label>`, stacks them one under the other, as in a browser. They ran on as one line of a paragraph. ([#844](https://github.com/ng-native/ng-native/pull/844))
+- Presses in a `ui-bottom-sheet`'s content keep working on iOS when a `ui-toolbar-item` is added to or removed from an open sheet that is not sized to its content. ([#862](https://github.com/ng-native/ng-native/pull/862), [#848](https://github.com/ng-native/ng-native/issues/848))
+
+  The sheet's content now stays in place as items come and go: where the build has SwiftUI's toolbar, a sheet not sized to its content keeps its navigation stack with no item in it, which draws no bar, and the toolbar sits beside the content rather than around it. A sheet sized to its content is still made again as its first item arrives or its last goes, and is not covered by this fix.
+
+- A `ui-bottom-sheet` with `ui-toolbar-item`s starts its content right under its bar on iOS, without the empty band of about 50pt SwiftUI left there for a large title. `@ng-native/expo` now registers a SwiftUI modifier of its own with `@expo/ui`, so a dev build has to be rebuilt to pick it up. Expo Go cannot load native code of its own, so a sheet there keeps the band. ([#815](https://github.com/ng-native/ng-native/pull/815), [#810](https://github.com/ng-native/ng-native/issues/810))
+- A change to a view's opacity or transform after a native animation of it has ended is now drawn. Once a CSS transition, a `@keyframes` animation or a scroll-driven animation played on native had set either on a view, React Native drew no later commit of it: a keyframes fade that does not fill stayed at its last frame, and a later change of class or bound style left the view where the animation had put it. Each later change is now set on native as well as committed, except a transform written as a matrix, which native cannot set and which stays where the animation left it. ([#838](https://github.com/ng-native/ng-native/pull/838))
+- A `font` modifier on a `ui-picker` with the segmented style draws its segments in that font on iOS, which SwiftUI's segmented picker otherwise ignores. `ui-picker` sends each `font` of a segmented picker again as a modifier `@ng-native/expo` registers with `@expo/ui`, which sets the title font on the picker's own `UISegmentedControl`, so a development build has to be rebuilt to pick it up. Expo Go cannot load it, and its segments stay in the system font. ([#816](https://github.com/ng-native/ng-native/pull/816), [#812](https://github.com/ng-native/ng-native/issues/812))
+
+### ❤️ Thank You
+
+- Ashley Hunter
+- Emanuel Hosu @Emanuel-Hosu
+- erKam
+- Wassim Aarab @WassimAarab08
+
 ## 0.13.0 (2026-10-12)
 
 ### 🩹 Fixes

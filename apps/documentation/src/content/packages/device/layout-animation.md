@@ -11,9 +11,10 @@ feel deliberate.
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { LayoutAnimation } from '@ng-native/device';
 
-@Component({ selector: 'app-todo-list', template: `<view />` })
+@Component({ selector: 'app-todo-list', imports: [View], template: `<view />` })
 export class TodoList {
   private readonly layout = inject(LayoutAnimation);
   private rows: string[] = [];

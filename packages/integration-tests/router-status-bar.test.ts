@@ -197,6 +197,72 @@ describe("the app's status bar claim on each screen", () => {
         'the claim moves, the page keeps its own',
       );
     });
+
+    describe("a page's own values that it binds while they match the claim", () => {
+      let style: WritableSignal<string | null | undefined>;
+      let hidden: WritableSignal<boolean | null | undefined>;
+      beforeEach(async () => {
+        style = mod['ownStatusBarStyle'] as WritableSignal<string | null | undefined>;
+        hidden = mod['ownStatusBarHidden'] as WritableSignal<boolean | null | undefined>;
+        bar.set({ style: 'light', hidden: true });
+        await nav.push('/own-status-bar');
+        await idle();
+        assert.deepEqual(
+          screens(),
+          [
+            { style: 'light', hidden: true },
+            { style: 'light', hidden: true },
+          ],
+          'the page has none of its own yet',
+        );
+        style.set('light');
+        hidden.set(true);
+        await idle();
+      });
+      afterEach(() => {
+        style.set(undefined);
+        hidden.set(undefined);
+      });
+
+      it('stay when the claim drops', async () => {
+        bar.set({});
+        await idle();
+        assert.deepEqual(screens(), [
+          { style: undefined, hidden: undefined },
+          { style: 'light', hidden: true },
+        ]);
+      });
+
+      it('stay when the claim changes, and give way to it once the page lets go', async () => {
+        bar.set({ style: 'dark', hidden: false });
+        await idle();
+        assert.deepEqual(screens(), [
+          { style: 'dark', hidden: false },
+          { style: 'light', hidden: true },
+        ]);
+
+        style.set(undefined);
+        hidden.set(undefined);
+        await idle();
+        assert.deepEqual(
+          screens().at(-1),
+          { style: 'dark', hidden: false },
+          'a page that lets go carries the claim',
+        );
+      });
+
+      it('give way to the claim once the page binds null', async () => {
+        bar.set({ style: 'dark', hidden: false });
+        await idle();
+        style.set(null);
+        hidden.set(null);
+        await idle();
+        assert.deepEqual(screens(), [
+          { style: 'dark', hidden: false },
+          { style: 'dark', hidden: false },
+        ]);
+      });
+    });
   });
 
   it("follows the claim on another tab's page presented over the tab bar", async () => {

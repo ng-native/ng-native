@@ -30,6 +30,11 @@ function fontScale(): number {
   return reactNative()?.PixelRatio.getFontScale() ?? 1;
 }
 
+/** The screen's pixels in a point. One off a device. */
+function pixelRatio(): number {
+  return reactNative()?.PixelRatio.get() ?? 1;
+}
+
 export interface WatchOptions {
   /**
    * Keep a `dark` class on the root in step with the system scheme, which is what
@@ -50,6 +55,8 @@ export function currentConditions(): Conditions {
     // already on screen, so nothing is lost by learning it a tick late.
     reducedMotion: false,
     fontScale: fontScale(),
+    // Read again when the window is resized, which it is when it moves to a screen of another density.
+    pixelRatio: pixelRatio(),
     // Settled while the native side starts up, and fixed until the app restarts.
     direction: directionSource().current(),
   };
@@ -64,8 +71,9 @@ export function currentConditions(): Conditions {
  * out from the pixel ratio; off a device there is no answer, and inventing one would be a line of
  * the wrong weight in every test that draws one.
  *
- * Not watched, unlike the conditions: the pixel density of a screen does not change while an app
- * is open. The safe-area insets are the opposite case and arrive through `updateTokens`.
+ * Not watched, unlike the conditions: React Native works the hairline out once and keeps it, so
+ * a window moved to a screen of another density keeps the first screen's, as a React Native app's
+ * `StyleSheet.hairlineWidth` does. The safe-area insets arrive through `updateTokens`.
  */
 export function deviceTokens(): Record<string, TokenValue> {
   const native = reactNative();
@@ -110,7 +118,7 @@ export function watchConditions<Node>(
   };
 
   const sizes = screen.subscribe(({ window }) =>
-    resize({ width: window.width, height: window.height }, fontScale()),
+    resize({ width: window.width, height: window.height, pixelRatio: pixelRatio() }, fontScale()),
   );
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
   const settings = accessibility.subscribe((change) => {

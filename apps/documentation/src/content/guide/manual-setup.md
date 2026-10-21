@@ -18,13 +18,19 @@ Angular CLI and Nx generators perform this setup and integrate workspace command
 **Create a blank project:**
 
 ```sh
-npx create-expo-app my-app --template blank-typescript
+npx create-expo-app my-app --template blank-typescript@sdk-57
 cd my-app
-rm App.tsx
+rm App.tsx index.ts
+npm pkg set main=src/main.ts
 ```
 
-**For an existing app:** remove its entry point, `App.tsx` or `index.js`. The `src/main.ts` below
-replaces it. Keep the dependencies, native configuration and assets.
+The packages support Expo SDK 57 and 58. `@sdk-57` starts the app on SDK 57, the SDK the template
+is on; without it, `create-expo-app` takes the newest SDK.
+
+**For an existing app:** it has to be on SDK 57 or 58. An app on an older SDK moves with
+`npx expo install expo@^57.0.0`, then `npx expo install --fix`. Remove its entry point, `App.tsx`
+and `index.ts` or `index.js`, and run `npm pkg set main=src/main.ts`, so Expo starts from the
+`src/main.ts` below. Keep the dependencies, native configuration and assets.
 
 For either route, install the framework, configure Metro and write the two app files below.
 

@@ -10,9 +10,14 @@ Android, where the system bars are separate), and the orientation, and it update
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Screen } from '@ng-native/device';
 
-@Component({ selector: 'app-frame', template: `<text>{{ screen.window().width }}pt wide</text>` })
+@Component({
+  selector: 'app-frame',
+  imports: [Text],
+  template: `<text>{{ screen.window().width }}pt wide</text>`,
+})
 export class Frame {
   protected readonly screen = inject(Screen);
 }
@@ -38,9 +43,12 @@ your app can actually draw in.
 ```ts
 import { Component, inject } from '@angular/core';
 import { Screen } from '@ng-native/device';
+import { SidebarLayout } from './sidebar-layout.ts';
+import { TabBarLayout } from './tab-bar-layout.ts';
 
 @Component({
   selector: 'app-shell',
+  imports: [SidebarLayout, TabBarLayout],
   template: `
     @if (screen.compact()) {
       <app-tab-bar-layout />

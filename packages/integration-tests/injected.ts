@@ -30,3 +30,16 @@ export function servicesWith<T>(
   const providers = sources.map(([provide, useValue]) => ({ provide, useValue }));
   return runInInjectionContext(Injector.create({ providers: providers as never }), make);
 }
+
+/**
+ * A service in an app of its own, and the function that destroys the app: for a service that
+ * outlives one app, or is shared by several on one platform source.
+ */
+export function inAppWith<S, T>(
+  token: InjectionToken<S>,
+  source: NoInfer<S>,
+  make: () => T,
+): { service: T; destroy: () => void } {
+  const injector = Injector.create({ providers: [{ provide: token, useValue: source }] });
+  return { service: runInInjectionContext(injector, make), destroy: () => injector.destroy() };
+}

@@ -199,6 +199,11 @@ It stands in for the animation entry points too: `@ng-native/components/reanimat
 changes, and a `[workletScroll]` runs for each scroll event, so a test reads the style an
 animation lands on. Every animation (`withTiming`, `withSpring` and the rest) finishes the moment
 it is assigned and calls its callback with `true`, and `scheduleOnRN` calls its function at once.
+`@ng-native/components/animations` is stood in for as well: `Animated` and `AnimatedStyle` load, and
+`Animated.timing`, `Animated.spring` and `Animated.delay` finish as soon as they start, with the
+element's style at the value the animation ends on and the callback called with
+`{ finished: true }`. `Animated.sequence` and `Animated.parallel` compose them as they do on a
+device, so a test sees where an animation lands, not the frames between.
 Another library that reaches React Native source needs a `vi.mock` of its own.
 
 ### `NG0201: No provider found for TouchableBase`

@@ -59,10 +59,12 @@ Registering the task is the part the app does, from anywhere an injector is:
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { BackgroundTask, BackgroundTaskStatus } from '@ng-native/expo/background-task';
 
 @Component({
   selector: 'app-sync-settings',
+  imports: [Pressable, Text],
   template: `<pressable (press)="enable()"><text>Sync in the background</text></pressable>`,
 })
 export class SyncSettings {

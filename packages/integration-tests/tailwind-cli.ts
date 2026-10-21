@@ -110,7 +110,7 @@ export function resolvedClasses(sheet: StyleSheet, classes: string): Record<stri
     parent,
     classes: new Set(own.split(/\s+/).filter(Boolean)),
     props: {},
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,

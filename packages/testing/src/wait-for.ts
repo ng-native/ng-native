@@ -9,9 +9,11 @@
  * ponytail: real timers only. Under a fake clock the interval never elapses; advance the clock
  * yourself, or use `settle()`, until someone needs the Jest/Vitest timer integration.
  */
+import { config } from './configure.ts';
+
 /** How long `waitFor`, and every `findBy` query, keeps trying. */
 export interface WaitForOptions {
-  /** How long to keep trying, in milliseconds. Default 1000. */
+  /** How long to keep trying, in milliseconds. Default 1000, or what `configure` set. */
   timeout?: number;
   /** How long between attempts, in milliseconds. Default 50. */
   interval?: number;
@@ -27,7 +29,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  */
 export async function waitFor<T>(
   callback: () => T | Promise<T>,
-  { timeout = 1000, interval = 50 }: WaitForOptions = {},
+  { timeout = config().asyncUtilTimeout, interval = 50 }: WaitForOptions = {},
 ): Promise<T> {
   const deadline = Date.now() + timeout;
   for (;;) {

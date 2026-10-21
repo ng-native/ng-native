@@ -31,10 +31,12 @@ given. The plugin also adds Android's `AD_ID` permission, which the advertising 
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { Tracking } from '@ng-native/expo/tracking';
 
 @Component({
   selector: 'app-consent',
+  imports: [Pressable, Text],
   template: `<pressable (press)="allow()"><text>Personalise ads</text></pressable>`,
 })
 export class Consent {

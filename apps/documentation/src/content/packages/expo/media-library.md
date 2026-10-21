@@ -30,10 +30,12 @@ import { MediaLibrary, AssetField, MediaType } from '@ng-native/expo/media-libra
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { MediaLibrary } from '@ng-native/expo/media-library';
 
 @Component({
   selector: 'app-save-photo',
+  imports: [Pressable, Text],
   template: `<pressable (press)="save()"><text>Save to Photos</text></pressable>`,
 })
 export class SavePhoto {

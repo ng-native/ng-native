@@ -227,8 +227,8 @@ function hmrBlock(src, filename, components, resources, options, warn) {
 if (typeof ngDevMode === "undefined" || ngDevMode) {
 ${applies.join('\n')}
 (function () {
-  var registry = (globalThis.__angularNativeHmr ||= new Map());
-  var pending = (globalThis.__angularNativeHmrPending ||= new Map());
+  var registry = (globalThis.__angularNativeHmr ||= new globalThis.Map());
+  var pending = (globalThis.__angularNativeHmrPending ||= new globalThis.Map());
   var file = ${JSON.stringify(filename)};
   var shape = ${JSON.stringify(hash(shapeSource))};
   var source = ${JSON.stringify(hash(src))};
@@ -248,13 +248,13 @@ ${SWAP}${PATCH}
     var entry = {
       shape: shape,
       source: source,
-      types: new Map(defs.map(function (d) { return [d.id, d.type]; })),
-      templates: new Map(defs.map(function (d) { return [d.id, d.template]; })),
-      styles: new Map(defs.map(function (d) { return [d.id, d.styles]; })),
-      metas: new Map(defs.map(function (d) { return [d.id, d.meta]; })),
-      bodies: new Map(defs.map(function (d) { return [d.id, d.body]; })),
-      hooks: new Map(defs.map(function (d) { return [d.id, hooks(d.type)]; })),
-      members: new Map(),
+      types: new globalThis.Map(defs.map(function (d) { return [d.id, d.type]; })),
+      templates: new globalThis.Map(defs.map(function (d) { return [d.id, d.template]; })),
+      styles: new globalThis.Map(defs.map(function (d) { return [d.id, d.styles]; })),
+      metas: new globalThis.Map(defs.map(function (d) { return [d.id, d.meta]; })),
+      bodies: new globalThis.Map(defs.map(function (d) { return [d.id, d.body]; })),
+      hooks: new globalThis.Map(defs.map(function (d) { return [d.id, hooks(d.type)]; })),
+      members: new globalThis.Map(),
       init: init,
       // The exports every module that imported this file holds, which stay the file's exports.
       exports: null,
@@ -494,8 +494,8 @@ const SWAP = `
 const DUPLICATE_WITHIN = 2000;
 
 const PATCH = `
-  var lives = (globalThis.__angularNativeHmrLive ||= new WeakMap());
-  var makers = (globalThis.__angularNativeHmrMakers ||= new WeakMap());
+  var lives = (globalThis.__angularNativeHmrLive ||= new globalThis.WeakMap());
+  var makers = (globalThis.__angularNativeHmrMakers ||= new globalThis.WeakMap());
   // Whether this run is the last one over again. Metro sends an edit once for each bundle the
   // file is in, the app's and every lazy route's that has loaded, so a file two routes share runs
   // twice for one save, the second time with the source it has just applied. A dependency's edit
@@ -526,9 +526,9 @@ const PATCH = `
   // the one its importers read.
   function kept(exports) {
     var own = {};
-    Object.getOwnPropertyNames(exports).forEach(function (key) {
-      Object.defineProperty(own, key, {
-        enumerable: Object.getOwnPropertyDescriptor(exports, key).enumerable,
+    globalThis.Object.getOwnPropertyNames(exports).forEach(function (key) {
+      globalThis.Object.defineProperty(own, key, {
+        enumerable: globalThis.Object.getOwnPropertyDescriptor(exports, key).enumerable,
         configurable: true,
         get: function () { return exports[key]; },
       });
@@ -547,12 +547,12 @@ const PATCH = `
       cell.stays ||= function () {
         read();
         return new.target
-          ? Reflect.construct(cell.latest, arguments, new.target)
+          ? globalThis.Reflect.construct(cell.latest, arguments, new.target)
           : cell.latest.apply(this, arguments);
       };
       if (fn.write) fn.write(cell.stays);
       if (entry.exports) fn.exported.forEach(function (name) {
-        Object.defineProperty(entry.exports, name, {
+        globalThis.Object.defineProperty(entry.exports, name, {
           enumerable: true, configurable: true, writable: true, value: cell.stays,
         });
       });
@@ -579,37 +579,37 @@ const PATCH = `
   // Give a live prototype the members of the class the file defines now: its own, the first time.
   // A library's class is not watched and takes them as they are, by the thousand calls a frame.
   function members(entry, id, from, to) {
-    var cells = entry.members.get(id) || entry.members.set(id, new Map()).get(id);
-    Reflect.ownKeys(to).forEach(function (key) {
-      if (key === "constructor" || Object.prototype.hasOwnProperty.call(from, key)) return;
+    var cells = entry.members.get(id) || entry.members.set(id, new globalThis.Map()).get(id);
+    globalThis.Reflect.ownKeys(to).forEach(function (key) {
+      if (key === "constructor" || globalThis.Object.prototype.hasOwnProperty.call(from, key)) return;
       delete to[key];
       cells.delete(key);
     });
-    Reflect.ownKeys(from).forEach(function (key) {
+    globalThis.Reflect.ownKeys(from).forEach(function (key) {
       if (key === "constructor") return;
-      var now = Object.getOwnPropertyDescriptor(from, key);
+      var now = globalThis.Object.getOwnPropertyDescriptor(from, key);
       var kind = now.get || now.set ? "accessor" : typeof now.value === "function" ? "method" : "value";
       var cell = cells.get(key);
       if (cell && cell.kind === kind) return void (cell.latest = now);
       cells.delete(key);
-      if (kind === "value" || !watched) return void Object.defineProperty(to, key, now);
+      if (kind === "value" || !watched) return void globalThis.Object.defineProperty(to, key, now);
       cell = { kind: kind, latest: now };
       cells.set(key, cell);
-      Object.defineProperty(to, key, staying(cell, kind, now.enumerable));
+      globalThis.Object.defineProperty(to, key, staying(cell, kind, now.enumerable));
     });
   }
   // Statics are only ever added to: Angular keeps its own on the live class, and the id a class
   // is injected by is one of them. Its definitions stay the ones other modules read.
   function statics(from, to) {
     var kept = ["prototype", "length", "name", "ɵcmp", "ɵdir", "ɵprov", "ɵfac", "__NG_ELEMENT_ID__"];
-    Reflect.ownKeys(from).forEach(function (key) {
-      if (kept.indexOf(key) < 0) Object.defineProperty(to, key, Object.getOwnPropertyDescriptor(from, key));
+    globalThis.Reflect.ownKeys(from).forEach(function (key) {
+      if (kept.indexOf(key) < 0) globalThis.Object.defineProperty(to, key, globalThis.Object.getOwnPropertyDescriptor(from, key));
     });
   }
   // The lifecycle hooks a class has. Angular notes which ones when it first renders a view the
   // class is in, so one added or taken away later would never be called, or go on being.
   function hooks(type) {
-    return Reflect.ownKeys(type.prototype).filter(function (key) {
+    return globalThis.Reflect.ownKeys(type.prototype).filter(function (key) {
       return typeof key === "string" && /^ng[A-Z]/.test(key);
     }).sort().join();
   }
@@ -629,7 +629,7 @@ const PATCH = `
     var was = live["ɵcmp"] || live["ɵdir"];
     // What a template using the class read when it first rendered, and will not read again. A
     // directive's decorator is all of that: its host bindings are made once, with its host.
-    var shape = function (d) { return JSON.stringify([d.selectors, d.inputs, d.outputs]); };
+    var shape = function (d) { return globalThis.JSON.stringify([d.selectors, d.inputs, d.outputs]); };
     if (now && (!was || shape(now) !== shape(was))) return false;
     if (hooks(def.type) !== entry.hooks.get(def.id)) return false;
     // Nor a component with an outlet in it, which rendering again would make again.
@@ -650,7 +650,7 @@ const PATCH = `
       if (make) makers.set(live, function (asked) {
         // A subclass asking for its parent's factory is made as itself.
         if (asked && asked !== live) return make(asked);
-        return Object.setPrototypeOf(make(), live.prototype);
+        return globalThis.Object.setPrototypeOf(make(), live.prototype);
       });
       if (cmp && rendersAgain(entry, def)) i0.ɵɵreplaceMetadata(live, function () {
         var uses = cmp.directiveDefs;
@@ -754,7 +754,12 @@ function collisionQuiet(filename, components) {
   );
 }
 
-/** The update-metadata function for one component's template, named for it. */
+/**
+ * The update-metadata function for one component's template, named for it.
+ *
+ * `errors` holds warnings too, and an aliased `@if` or a `@switch` gets one beside an update that
+ * is complete, so only an error means the template did not compile.
+ */
 function hotUpdate(template, component, filename, options) {
   const result = compileForHmrSync(
     template,
@@ -763,7 +768,7 @@ function hotUpdate(template, component, filename, options) {
     component.styles ?? null,
     options,
   );
-  if (result.errors.length) return null;
+  if (result.errors.some((error) => error.severity === 'Error')) return null;
   const name = `${component.className}_ApplyMetadata`;
   return {
     id: result.componentId,
@@ -1084,7 +1089,8 @@ function buildWarnings() {
  * draws is dropped with a warning in the build for the other; with none, as under a test, the
  * sheet has to suit both. CSS that does not parse fails the build, unless `recover` is set, as
  * it is for a library's: then the rule is dropped and reported like the rest. `module` is the one
- * the sheet is emitted in, which a font's `require` is resolved from.
+ * the sheet is emitted in, which a font's `require` is resolved from. `generated` draws the
+ * sheet's `::before` and `::after` boxes, for a library's the build names as a browser's.
  */
 function componentSheet(
   css,
@@ -1095,24 +1101,42 @@ function componentSheet(
   warn,
   recover = false,
   module = filename,
+  generated = false,
 ) {
   if (!css.trim()) return null;
 
+  // A component of the app's own in a directory named as written for a browser: read as a named
+  // library's is, with its rows, and what native has nothing for dropped under a warning where
+  // an app's own CSS fails the build.
+  const copied = isBrowserSource(filename, sourceRoot);
   const context = `${filename} (${className})`;
   const options = {
     platform,
-    ...(parts ? { locate: locator(parts, className), asset: assetFrom(parts, module) } : {}),
+    ...locating(parts, className, module),
     onUnsupported: warn,
-    recover,
+    recover: recover || copied,
+    generated,
   };
 
   const sheet = compileCss(css, context, options);
-  if (sheet.fonts) {
-    const from = path.dirname(path.resolve(transformRoot, module));
-    nameFaces(sheet, from, (file) => noteRead(module, file), warn);
-  }
-  return sheet.rules.length || sheet.fonts ? sheet : null;
+  if (sheet.fonts) nameModuleFaces(sheet, module, warn);
+  if (!sheet.rules.length && !sheet.fonts) return null;
+  return copied ? withRows(sheet) : sheet;
 }
+
+/** Where a sheet's rules and assets are read from, where the transform says. */
+function locating(parts, className, module) {
+  return parts ? { locate: locator(parts, className), asset: assetFrom(parts, module) } : {};
+}
+
+/** Name each face a sheet declares by its file, read from where `module` is. */
+function nameModuleFaces(sheet, module, warn) {
+  const from = path.dirname(path.resolve(transformRoot, module));
+  nameFaces(sheet, from, (file) => noteRead(module, file), warn);
+}
+
+/** The project the file being transformed is in, which Metro names its files from. */
+let sourceRoot;
 
 /**
  * A compiled sheet as source, with its font files as `require`s.
@@ -1173,8 +1197,9 @@ function link(src, filename, options) {
   const listed =
     owner !== null &&
     (owner.name.startsWith('@ng-native/') || styles(options.libraryStyles, owner.name));
+  const sheeted = listed ? withLibrarySheets(src, filename, owner, options.platform) : src;
   const { code } = linkAngularPackageSync(
-    listed ? withLibrarySheets(src, filename, owner, options.platform) : src,
+    owner !== null && isBrowsers(owner.name) ? withBrowserElements(sheeted) : sheeted,
     filename,
   );
   const strip = options.dev !== true && options.platform !== 'web';
@@ -1184,6 +1209,61 @@ function link(src, filename, options) {
 /** Whether a library's styles are compiled: every library's, or the ones the app narrowed to. */
 const styles = (libraryStyles, name) =>
   libraryStyles === undefined || (Array.isArray(libraryStyles) && libraryStyles.includes(name));
+
+/** Whether `@ng-native/web-compat` was given a library as one written for a browser. */
+function isBrowsers(library) {
+  const named = process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+  return named ? named.split(',').includes(library) : false;
+}
+
+/**
+ * A file of a library written for a browser, telling the app as it loads which elements are
+ * the library's: the element each of its components' and directives' selectors names, as
+ * `mat-card-title` is of `mat-card-title, [mat-card-title]`. `@ng-native/web-compat` lays those
+ * out as a browser lays a custom element out, and leaves every other the native view it is. An
+ * attribute selector names no element: what it is on is an HTML element, or somebody else's.
+ *
+ * Added after the file's last line, so nothing in it moves.
+ *
+ * ponytail: every `selector: "..."` in the file is read, not only a declaration's own. One
+ * that is something else names an element nothing creates.
+ */
+function withBrowserElements(src) {
+  return src + browserElements(src);
+}
+
+/** Whether a file of the app's own is in a directory `@ng-native/web-compat` was given as `sources`. */
+function isBrowserSource(filename, root = process.cwd()) {
+  const named = process.env['ANGULAR_NATIVE_SOURCE_BROWSER'];
+  if (!named) return false;
+  // Metro names a file from the project, and a test by where it is.
+  const absolute = path.resolve(root, filename);
+  // An empty entry, from a separator doubled or left at the end, names no directory.
+  return named
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map((directory) => path.normalize(directory))
+    .some((directory) =>
+      absolute.startsWith(directory.endsWith(path.sep) ? directory : directory + path.sep),
+    );
+}
+
+/** What a file's selectors add to the elements the app lays out as a browser's, to end it with. */
+function browserElements(src) {
+  const names = new Set();
+  for (const [, , selector] of src.matchAll(/\bselector:\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+    // Each alternative's own element: no comma is inside the brackets of one before its name.
+    for (const part of selector.split(/,(?![^[(]*[\])])/)) {
+      const element = /^\s*([A-Za-z][\w-]*)/.exec(part);
+      if (element) names.add(element[1].toLowerCase());
+    }
+  }
+  if (!names.size) return '';
+  return (
+    `\n;(globalThis.ɵngNativeBrowserElements ??= new Set());` +
+    `${JSON.stringify([...names])}.forEach((name) => globalThis.ɵngNativeBrowserElements.add(name));\n`
+  );
+}
 
 /**
  * The npm package a file belongs to, `{ name, file }` with the file's path inside the package, or
@@ -1277,7 +1357,7 @@ function withLibrarySheets(src, filename, owner, platform) {
     .sort((a, b) => a.start - b.start)
     .map((declared) => ({
       declared,
-      sheet: declaredSheet(declared, filename, platform, report.warn),
+      sheet: declaredSheet(declared, filename, platform, report.warn, owner.name),
     }))
     .filter(({ sheet }) => sheet);
   report.done(compiled.length);
@@ -1293,7 +1373,7 @@ function withLibrarySheets(src, filename, owner, platform) {
 }
 
 /** The sheet one declaration's CSS compiles to, or null, saying why when it cannot be read. */
-function declaredSheet(declared, filename, platform, warn) {
+function declaredSheet(declared, filename, platform, warn, library) {
   const { type, styles } = declared;
   if (!styles) return null;
   if (!styles.entries) {
@@ -1308,7 +1388,41 @@ function declaredSheet(declared, filename, platform, warn) {
     .map((entry) => ({ text: entry.value, file: filename, line: entry.line, exact: entry.exact }));
   if (!parts.length) return null;
   const css = parts.map((part) => part.text).join('\n');
-  return componentSheet(css, filename, type ?? 'a component', platform, parts, warn, true);
+  // Asked for by `@ng-native/web-compat`, for the libraries it names: the sheet is read as the
+  // browser it was written for reads it, with its flex containers as rows and its `::before` and
+  // `::after` boxes. A library written for native is listed for its styles and not named there.
+  const browser = isBrowsers(library);
+  const name = type ?? 'a component';
+  const sheet = componentSheet(css, filename, name, platform, parts, warn, true, filename, browser);
+  return sheet && browser ? withRows(sheet) : sheet;
+}
+
+const FLEX = new Set(['flex', 'inline-flex']);
+const names = (rule, prop) =>
+  prop in rule.declarations ||
+  prop in (rule.important ?? {}) ||
+  (rule.deferred ?? []).some((deferred) => deferred.props.includes(prop));
+
+/**
+ * A library's sheet with its flex containers rows, as the browser it was written for lays them
+ * out, in an app that asked for that (`@ng-native/web-compat` does, for the packages it is
+ * given as `libraries`). Everywhere else a flex container is a column, and stays one.
+ *
+ * Each rule that makes a flex container and names no direction gets a rule ahead of it for the
+ * same elements with no specificity at all, so a direction named by any rule still wins, as the
+ * initial value it stands in for would lose to any.
+ */
+function withRows(sheet) {
+  const rules = [];
+  for (const rule of sheet.rules) {
+    const flex = FLEX.has(rule.declarations.display) || FLEX.has(rule.important?.display);
+    if (flex && !names(rule, 'flexDirection')) {
+      const { tokens: _tokens, deferred: _deferred, important: _important, ...matched } = rule;
+      rules.push({ ...matched, specificity: 0, declarations: { flexDirection: 'row' } });
+    }
+    rules.push(rule);
+  }
+  return { ...sheet, rules };
 }
 
 /**
@@ -1364,6 +1478,7 @@ function reasonOf(message) {
  * @returns {{ code: string, dependencies: string[], map?: string, mapLineOffset?: number }}
  */
 function transformAngular(src, filename, options = {}) {
+  sourceRoot = options.projectRoot;
   resourcesRead.delete(filename);
   transformRoot = projectRootOf(options);
   // A template or stylesheet is only in the graph to carry its component's edits: empty in a
@@ -1419,12 +1534,14 @@ function transformAngular(src, filename, options = {}) {
     const warn = buildWarnings();
     const styles = styleBlock(src, filename, components, resources, platform, warn);
     const { quiet, hmr } = hotParts(src, filename, components, resources, options, warn);
+    // Components copied into the app from a library written for a browser: see `browserElements`.
+    const named = isBrowserSource(filename, options.projectRoot) ? browserElements(src) : '';
     // Dev keeps the emitted CSS: the bundle size does not matter there, and the HMR path is
     // easier to reason about when the compiler's output is untouched.
     const compiled =
       options.dev === true ? result.code : stripComponentStyles(result.code, filename);
     return {
-      code: edges + quiet + compiled + styles + hmr,
+      code: edges + quiet + compiled + styles + hmr + named,
       dependencies,
       map: result.map,
       // The resource imports are prepended, so everything the map describes has moved down by

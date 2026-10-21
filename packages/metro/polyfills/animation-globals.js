@@ -38,6 +38,10 @@ global.document ??= { documentElement: { getAnimations: () => [] } };
 // `instanceof` an object throws. Every node that reaches that assertion is the engine's, and the
 // engine brands its nodes with this symbol. Nothing else is one: the global is visible to an app's
 // own code and to its test runner, and Vitest's `toContain` treats a `Node` as a DOM element.
+//
+// Only until React Native's `InitializeCore`: from 0.8x its `setUpDOM` replaces this global with
+// its own `Node`, which no engine node is an instance of. `mount()` patches whichever `Node` is
+// there then, in `installNodeGlobal`.
 const ENGINE_NODE = Symbol.for('ng-native.node');
 global.Node ??= Object.assign(
   class Node {

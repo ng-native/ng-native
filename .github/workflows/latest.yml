@@ -37,12 +37,17 @@ jobs:
           - nx-angular-npm
           - nx-angular-pnpm
           - nx-ts-npm
+          # Not a workspace: each prop a typed ui-* component sends, checked against the native
+          # views of the newest @expo/ui the peer range allows. A native view ignores a prop it
+          # doesn't declare, so a rename there fails nothing else.
+          - expo-ui-native-props
     steps:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup
 
       - name: Start a local registry
+        if: matrix.scenario != 'expo-ui-native-props'
         run: |
           npx --yes verdaccio@6.10.5 --config verdaccio.yaml --listen 4873 > verdaccio.log 2>&1 &
           for _ in $(seq 1 60); do curl -sf localhost:4873/-/ping > /dev/null && break; sleep 1; done
@@ -54,9 +59,13 @@ jobs:
 
       # Prints the Angular, Expo, React Native, Nx, Vitest and TypeScript it resolved into the job
       # summary, pass or fail.
-      - run: node scripts/verify-publish.mjs --scenario=${{ matrix.scenario }}
+      - if: matrix.scenario != 'expo-ui-native-props'
+        run: node scripts/verify-publish.mjs --scenario=${{ matrix.scenario }}
 
-      - if: failure()
+      - if: matrix.scenario == 'expo-ui-native-props'
+        run: node scripts/expo-ui-native-props.mjs --latest
+
+      - if: failure() && matrix.scenario != 'expo-ui-native-props'
         run: cat verdaccio.log
 
       # One open issue per scenario, found by its title: a new one the first week it fails, and a

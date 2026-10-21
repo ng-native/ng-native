@@ -76,10 +76,18 @@ describe('feed', () => {
   test('likes at once, and rolls a like back when the server refuses it', async () => {
     const { store, backend } = await boot();
     const post = store.posts()[0]!;
-    backend.latency = 30;
     backend.failNext = true;
+    // The server answers when the test says so. On a timer, a tap that took longer to settle than
+    // the latency, as one does on a busy machine, found the like already rolled back.
+    const setLiked = backend.setLiked.bind(backend);
+    let answer = (): void => undefined;
+    backend.setLiked = (id, liked) =>
+      new Promise((resolve, reject) => {
+        answer = () => void setLiked(id, liked).then(resolve, reject);
+      });
     await userEvent.press(screen.getByRole('button', { name: `Like, ${post.likes} likes` }));
     expect(store.posts()[0]!.liked).toBe(true);
+    answer();
     await waitFor(() => expect(store.posts()[0]!.liked).toBe(false));
     expect(store.posts()[0]!.likes).toBe(post.likes);
     expect(screen.getByText('Could not like the post')).toBeTruthy();

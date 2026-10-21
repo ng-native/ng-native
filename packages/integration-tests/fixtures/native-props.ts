@@ -47,6 +47,7 @@ export class Tooltip {
       </pressable>
       <switch [checked]="true" thumbColor="#fff" ios_backgroundColor="#eee" />
       <text-input placeholder="Name" keyboardType="email-address" [maxLength]="20" />
+      <text-input multiline rows="3" />
     </view>
   `,
 })

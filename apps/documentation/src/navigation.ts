@@ -51,7 +51,10 @@ export const STANDALONE_PAGES: readonly NavItem[] = [{ path: 'sponsor', title: '
 
 /** Every page in a section, parents and children alike, in reading order. */
 export function flattenItems(items: readonly NavItem[]): NavItem[] {
-  return items.flatMap((item) => [item, ...flattenItems(item.children ?? [])]);
+  return items.flatMap((item) => {
+    const children = flattenItems(item.children ?? []);
+    return children.some((child) => child.path === item.path) ? children : [item, ...children];
+  });
 }
 
 /**
@@ -76,7 +79,14 @@ export const GUIDE: NavSection = {
     { path: 'guide/theming', title: 'Theming and Tailwind' },
     { path: 'guide/forms', title: 'Build a form' },
     { path: 'guide/offline', title: 'Working offline' },
-    { path: 'guide/native-modules', title: 'Write a native module' },
+    {
+      path: 'guide/native-modules',
+      title: 'Write native code',
+      children: [
+        { path: 'guide/native-modules', title: 'Create Expo Module' },
+        { path: 'guide/native-modules/nativescript', title: 'Use NativeScript' },
+      ],
+    },
     {
       path: 'guide/localization',
       title: 'Localization',
@@ -167,6 +177,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/device/accessibility', title: 'Accessibility' },
         { path: 'packages/device/direction', title: 'Direction' },
         { path: 'packages/device/status-bar', title: 'Status bar', group: 'System' },
+        { path: 'packages/device/navigation-bar', title: 'Navigation bar' },
         { path: 'packages/device/keyboard', title: 'Keyboard' },
         { path: 'packages/device/hardware-back', title: 'Hardware back' },
         { path: 'packages/device/app-state', title: 'App state' },
@@ -194,6 +205,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/locale', title: 'Locale' },
         { path: 'packages/expo/sensors', title: 'Sensors' },
         { path: 'packages/expo/keep-awake', title: 'Keep awake' },
+        { path: 'packages/expo/keyboard', title: 'Keyboard motion' },
         { path: 'packages/expo/app-info', title: 'App info' },
         { path: 'packages/expo/haptics', title: 'Haptics', group: 'Feedback' },
         { path: 'packages/expo/clipboard', title: 'Clipboard' },
@@ -250,6 +262,11 @@ export const PACKAGES: NavSection = {
       ],
     },
     {
+      path: 'packages/eslint-plugin',
+      title: 'ESLint',
+      summary: 'What compiles and does nothing on a device',
+    },
+    {
       path: 'packages/tailwind',
       title: 'Tailwind',
       summary: 'The presets, and the variants a touch device needs',
@@ -272,6 +289,16 @@ export const PACKAGES: NavSection = {
         { path: 'packages/web/islands', title: 'Islands' },
         { path: 'packages/web/storybook', title: 'Storybook' },
         { path: 'packages/web/limits', title: 'Web limits' },
+      ],
+    },
+    {
+      path: 'packages/web-compat',
+      title: 'Web compatibility',
+      summary: 'Component libraries written for a browser, on native views',
+      children: [
+        { path: 'packages/web-compat/supported-api', title: 'Supported API' },
+        { path: 'packages/web-compat/address-and-frames', title: 'Address and frames' },
+        { path: 'packages/web-compat/web-platform-tests', title: 'Web Platform Tests' },
       ],
     },
     {
@@ -337,22 +364,22 @@ export interface Breadcrumb {
 export function breadcrumbsFor(path: string): Breadcrumb[] {
   for (const section of SECTIONS) {
     for (const item of section.items) {
+      for (const child of item.children ?? []) {
+        if (child.path === path) {
+          return [
+            { title: 'Home', path: '/' },
+            { title: section.title },
+            { title: item.title, ...(item.path === child.path ? {} : { path: `/${item.path}` }) },
+            { title: child.title, path: `/${child.path}` },
+          ];
+        }
+      }
       if (item.path === path) {
         return [
           { title: 'Home', path: '/' },
           { title: section.title },
           { title: item.title, path: `/${item.path}` },
         ];
-      }
-      for (const child of item.children ?? []) {
-        if (child.path === path) {
-          return [
-            { title: 'Home', path: '/' },
-            { title: section.title },
-            { title: item.title, path: `/${item.path}` },
-            { title: child.title, path: `/${child.path}` },
-          ];
-        }
       }
     }
   }

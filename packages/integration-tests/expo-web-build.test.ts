@@ -29,6 +29,7 @@ import { build, optimizeDeps, resolveConfig } from 'vite';
 const require = createRequire(import.meta.url);
 const packageDir = (name: string) => path.dirname(require.resolve(`${name}/package.json`));
 const expoSource = fileURLToPath(new URL('../expo/', import.meta.url));
+const deviceSource = fileURLToPath(new URL('../device/', import.meta.url));
 const manifest = JSON.parse(readFileSync(path.join(expoSource, 'package.json'), 'utf8'));
 const entryPoints = Object.keys(manifest.exports as Record<string, unknown>)
   .filter((key) => key !== './package.json')
@@ -43,7 +44,8 @@ interface WithBattery {
 
 /**
  * Writes an app into `root` whose `main.js` imports every entry point of `@ng-native/expo`, compiled with `ngc` as
- * the package publishes it, beside a React Native that throws when it is evaluated.
+ * the package publishes it, with `@ng-native/device` beside it the same way, and a React Native
+ * that throws when it is evaluated.
  */
 function app(root: string, withExpo: boolean): void {
   const write = (file: string, text: string) => {
@@ -55,17 +57,24 @@ function app(root: string, withExpo: boolean): void {
     symlinkSync(realpathSync(packageDir(name)), path.join(root, 'node_modules', name), 'dir');
   };
 
-  // The package's own build, into the app rather than into `packages/expo/dist`.
+  // A package's own build, into the app rather than into its `dist`. `@ng-native/device` is
+  // built too: its source has Angular's decorators, which the dev server's pre-bundle does not
+  // compile, and an app installs it built.
   const ngc = path.join(packageDir('@angular/compiler-cli'), 'bundles/src/bin/ngc.js');
-  const outDir = path.join(root, 'node_modules/@ng-native/expo/dist');
-  execFileSync(process.execPath, [ngc, '-p', 'tsconfig.build.json', '--outDir', outDir], {
-    cwd: expoSource,
-    stdio: 'pipe',
-  });
-  write(
-    'node_modules/@ng-native/expo/package.json',
-    JSON.stringify({ name: manifest.name, type: 'module', ...manifest.publishConfig }),
-  );
+  const publish = (source: string) => {
+    const own = JSON.parse(readFileSync(path.join(source, 'package.json'), 'utf8'));
+    const outDir = path.join(root, 'node_modules', own.name, 'dist');
+    execFileSync(process.execPath, [ngc, '-p', 'tsconfig.build.json', '--outDir', outDir], {
+      cwd: source,
+      stdio: 'pipe',
+    });
+    write(
+      `node_modules/${own.name}/package.json`,
+      JSON.stringify({ name: own.name, type: 'module', ...own.publishConfig }),
+    );
+  };
+  publish(expoSource);
+  publish(deviceSource);
   link('@angular/core');
   link('@ng-native/fabric');
   if (withExpo) for (const name of ['expo', 'expo-battery']) link(name);

@@ -136,7 +136,7 @@ const SERVICES: readonly [string, () => unknown, string, (readonly Platform[])?]
   ['ImageEditor', factoryOf(ImageEditor.SOURCE), 'expo-image-manipulator'],
   ['ImagePicker', factoryOf(ImagePicker.SOURCE), 'expo-image-picker'],
   ['KeepAwake', factoryOf(KeepAwake.SOURCE), 'expo-keep-awake'],
-  ['LanguageModel', factoryOf(LanguageModel.SOURCE), 'expo-local-llm', ['ios']],
+  ['LanguageModel', factoryOf(LanguageModel.SOURCE), 'expo-local-llm'],
   ['Locale', factoryOf(Locale.SOURCE), 'expo-localization'],
   ['Location', factoryOf(Location.SOURCE), 'expo-location'],
   ['MapView', factoryOf(MapView.SOURCE), 'expo-maps'],

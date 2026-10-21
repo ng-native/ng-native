@@ -200,13 +200,19 @@ const TYPECHECK_CONFIG = 'tsconfig.typecheck.json';
  * infers a `typecheck` that runs `tsc`, which reads no template: a misspelled input passes.
  *
  * `tsconfig.lib.json` itself will not do: `ngc` refuses `emitDeclarationOnly`, and a project that
- * is `composite` has to emit. The Angular options are the generated app's: a native view has no
- * DOM to check a host binding or an event against.
+ * is `composite` has to emit. Without `composite`, a `declarationMap` the preset's base sets is an
+ * error (TS5069), since nothing emits declarations. The Angular options are the generated app's: a
+ * native view has no DOM to check a host binding or an event against.
  */
 function writeTypecheckConfig(tree, root) {
   writeJson(tree, joinPathFragments(root, TYPECHECK_CONFIG), {
     extends: './tsconfig.lib.json',
-    compilerOptions: { noEmit: true, composite: false, emitDeclarationOnly: false },
+    compilerOptions: {
+      noEmit: true,
+      composite: false,
+      emitDeclarationOnly: false,
+      declarationMap: false,
+    },
     angularCompilerOptions: {
       strictTemplates: true,
       typeCheckHostBindings: false,

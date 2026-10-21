@@ -21,6 +21,7 @@ import {
   Keyboard,
   SafeArea,
   Screen,
+  type KeyboardMetrics,
   currentConditions,
   deviceTokens,
   pathOf,
@@ -81,6 +82,52 @@ describe('the keyboard', () => {
 
     emit({ height: 0 });
     assert.equal(keyboard.visible(), false);
+  });
+
+  it('is where the platform said, where the source reports no motion', () => {
+    let emit: (metrics: { height: number; screenY?: number }) => void = () => {};
+    const keyboard = build(Keyboard, [
+      {
+        provide: Keyboard.SOURCE,
+        useValue: { subscribe: (fn: typeof emit) => ((emit = fn), () => {}), dismiss: () => {} },
+      },
+    ]);
+    assert.equal(keyboard.followsMotion, false);
+    emit({ height: 300, screenY: 500 });
+    assert.deepEqual(keyboard.position(), { height: 300, screenY: 500 });
+  });
+
+  it('follows every frame of the motion where the source reports one, and lands where it said', () => {
+    let emit: (metrics: KeyboardMetrics) => void = () => {};
+    let move: (frame: KeyboardMetrics | null) => void = () => {};
+    let stopped = false;
+    const injector = Injector.create({
+      providers: [
+        {
+          provide: Keyboard.SOURCE,
+          useValue: {
+            subscribe: (fn: typeof emit) => ((emit = fn), () => {}),
+            subscribeMotion: (fn: typeof move) => ((move = fn), () => (stopped = true)),
+            dismiss: () => {},
+          },
+        },
+        { provide: Keyboard, useClass: Keyboard, deps: [] },
+      ],
+    });
+    const keyboard = injector.get(Keyboard);
+    assert.equal(keyboard.followsMotion, true);
+
+    move({ height: 0 });
+    emit({ height: 300, screenY: 500, duration: 250 });
+    assert.equal(keyboard.height(), 300, 'the metrics are where it is going');
+    assert.equal(keyboard.position().height, 0, 'the position is where it is');
+    move({ height: 120, screenY: 680 });
+    assert.deepEqual(keyboard.position(), { height: 120, screenY: 680 });
+    move(null);
+    assert.deepEqual(keyboard.position(), { height: 300, screenY: 500, duration: 250 });
+
+    (injector as Injector & { destroy(): void }).destroy();
+    assert.equal(stopped, true, 'and the motion is let go with the service');
   });
 
   /*
@@ -212,6 +259,15 @@ describe('deep links', () => {
       },
     };
   };
+
+  it('exports the platform source from the package entry, for a url that is not stripped to a path', async () => {
+    // DeepLinks.subscribe hands over paths. An app that needs the whole address, scheme and query
+    // included, reads the source itself, so the source has to be reachable from '@ng-native/device'.
+    assert.equal(typeof device.deepLinkSource, 'function');
+    const links = device.deepLinkSource();
+    assert.equal(await links.launchUrl(), null);
+    assert.doesNotThrow(() => links.subscribe(() => {})());
+  });
 
   it("opens the app's own page in the system settings", () => {
     let opened = 0;
@@ -650,6 +706,7 @@ describe('the engine conditions', () => {
       colorScheme: 'light',
       reducedMotion: false,
       fontScale: 1,
+      pixelRatio: 1,
       direction: 'ltr',
     });
 

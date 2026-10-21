@@ -14,17 +14,18 @@ const { componentSource, testSource } = require('./sources.cjs');
 
 /**
  * The directory the component goes in: the one `ng generate` was run from if that is inside the
- * project, the project's root otherwise.
+ * project's `src`, and `src/app` otherwise, beside `app.ts`, as Angular's own schematic and
+ * `@ng-native/nx:component` put it. From the project's own directory that is `src/app` too.
  */
 function directoryFor(workspace, options) {
   const project = workspace.projects?.[options.project];
   if (!project) {
     throw new SchematicsException(`angular.json has no project called "${options.project}".`);
   }
-  const root = project.sourceRoot ?? project.root;
+  const src = path.join(project.root, 'src');
   const cwd = path.normalize(options.path ?? '');
-  const inside = cwd === root || cwd.startsWith(root + '/');
-  return { directory: inside ? cwd : root, prefix: project.prefix };
+  const inside = cwd === src || cwd.startsWith(src + '/');
+  return { directory: inside ? cwd : path.join(src, 'app'), prefix: project.prefix };
 }
 
 /**

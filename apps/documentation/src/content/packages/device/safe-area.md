@@ -10,10 +10,12 @@ indicator, a rounded corner, and on Android the display cutout and the navigatio
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable } from '@ng-native/components';
 import { SafeArea } from '@ng-native/device';
 
 @Component({
   selector: 'app-floating-button',
+  imports: [Pressable],
   template: `<pressable
     [style.marginBottom]="safeArea.insets().bottom + 16"
     (press)="onPress()"

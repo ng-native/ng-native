@@ -175,6 +175,20 @@ describe('a picker in a form', () => {
   });
 });
 
+describe('a picker with no label', () => {
+  // SwiftUI's picker view draws nothing at all without a label, as text or a slot.
+  it('sends an empty one, so SwiftUI draws the picker', async () => {
+    await render(mod['UiPickerFont'] as Type<unknown>);
+    assert.equal(screen.getByTestId('by-input').props['label'], '');
+    assert.equal(screen.getByTestId('wheel').props['label'], '');
+  });
+
+  it('sends the label it is given', async () => {
+    await boot();
+    assert.equal(screen.getByTestId('board').props['label'], 'Board');
+  });
+});
+
 describe('a segmented picker given a font', () => {
   const sent = (id: string) =>
     (screen.getByTestId(id).props['modifiers'] as { $type: string }[]).filter(
@@ -306,6 +320,7 @@ describe('a picker on Android', () => {
     await bootAndroid();
     const room = screen.getByTestId('room');
     assert.equal(room.props['selection'], undefined);
+    assert.equal(room.props['label'], undefined);
     assert.equal(inside('room', 'PickerView').length, 0);
     assert.equal(
       flatten([room]).some(

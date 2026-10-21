@@ -27,10 +27,12 @@ import { StoreReview } from '@ng-native/expo/store-review';
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { StoreReview } from '@ng-native/expo/store-review';
 
 @Component({
   selector: 'app-workout-done',
+  imports: [Pressable, Text],
   template: `<pressable (press)="finish()"><text>Done</text></pressable>`,
 })
 export class WorkoutDone {

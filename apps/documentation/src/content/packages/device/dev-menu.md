@@ -11,9 +11,10 @@ can stay where they are.
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { DevMenu } from '@ng-native/device';
 
-@Component({ selector: 'app-root', template: `<view />` })
+@Component({ selector: 'app-root', imports: [View], template: `<view />` })
 export class Root {
   constructor() {
     const devMenu = inject(DevMenu);

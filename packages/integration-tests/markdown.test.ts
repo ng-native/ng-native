@@ -8,14 +8,24 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { DeepLinks, type DeepLinkSource } from '@ng-native/device';
-import { cleanup, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
-import { lexer, type Token } from 'marked';
+import { cleanup, compileCss, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
+import {
+  getDefaults,
+  Lexer,
+  lexer,
+  setOptions,
+  use,
+  type Token,
+  type TokenizerAndRendererExtension,
+} from 'marked';
+import { MarkdownStream } from '../components/src/markdown-stream.ts';
 import { compileFixture } from './compile.ts';
 
 interface Screen {
   source: { set(value: string | undefined): void };
   tokens: { set(value: readonly Token[] | undefined): void };
   classes: { set(value: Record<string, string>): void };
+  streaming: { set(value: boolean): void };
   presses: { href: string; title: string | null }[];
   prevent: boolean;
 }
@@ -34,7 +44,10 @@ before(async () => {
 });
 after(cleanup);
 
-async function show(source: string) {
+async function show(
+  source: string,
+  options: { globalStyles?: ReturnType<typeof compileCss> } = {},
+) {
   const opened: string[] = [];
   const links: DeepLinkSource = {
     launchUrl: () => Promise.resolve(null),
@@ -43,6 +56,7 @@ async function show(source: string) {
   };
   const app = await render(mod['MarkdownScreen'] as Type<unknown>, {
     providers: [{ provide: DeepLinks.SOURCE, useValue: links }],
+    ...options,
   });
   const screen = app.instance as Screen;
   screen.source.set(source);
@@ -282,12 +296,85 @@ describe('images', () => {
     assert.equal(blocks()[0]!.props['height'], 200, 'the ratio went with the image');
   });
 
-  it('loads only http and https, and draws anything else as its alt text', async () => {
+  it('draws an image at its own size once it loads, no wider than the document', async () => {
+    const { blocks } = await show('![icon](https://example.com/icon-64.png)');
+    assert.equal(blocks()[0]!.props['width'], '100%', 'the document width until it loads');
+    await fireEvent(blocks()[0]!, 'load', {
+      source: { uri: 'https://example.com/icon-64.png', width: 64, height: 64 },
+    });
+    const image = blocks()[0]!;
+    assert.equal(image.props['width'], 64, 'its own width, as a browser draws it');
+    assert.equal(image.props['maxWidth'], '100%', 'shrunk to the document when wider');
+    assert.equal(image.props['aspectRatio'], 1);
+    assert.equal(image.props['height'], 'auto');
+  });
+
+  it('keeps the shape of an image narrowed to the document, from the width it is laid out at', async () => {
+    // Yoga takes the height from the width before max-width narrows it, where CSS takes it after.
+    const { blocks } = await show('![wide](https://example.com/wide.png)');
+    await fireEvent(blocks()[0]!, 'load', {
+      source: { uri: 'https://example.com/wide.png', width: 1000, height: 250 },
+    });
+    assert.equal(blocks()[0]!.props['height'], 'auto');
+    await fireEvent(blocks()[0]!, 'layout', { layout: { x: 0, y: 0, width: 362, height: 250 } });
+    assert.equal(blocks()[0]!.props['height'], 90.5, 'its width over its ratio');
+    await fireEvent(blocks()[0]!, 'layout', { layout: { x: 0, y: 0, width: 1000, height: 90.5 } });
+    assert.equal(blocks()[0]!.props['height'], 'auto', 'its own size again once it fits');
+  });
+
+  it('leaves an image laid out at its own width to its ratio', async () => {
+    const { blocks } = await show('![icon](https://example.com/icon-64.png)');
+    await fireEvent(blocks()[0]!, 'load', {
+      source: { uri: 'https://example.com/icon-64.png', width: 64, height: 64 },
+    });
+    await fireEvent(blocks()[0]!, 'layout', { layout: { x: 0, y: 0, width: 64, height: 64 } });
+    assert.equal(blocks()[0]!.props['height'], 'auto');
+  });
+
+  it("leaves the width to the app's own class for an image, once it loads too", async () => {
+    const globalStyles = compileCss('.x-img { width: 50%; height: 120px }', 'global');
+    const { blocks, screen, app } = await show('![icon](https://example.com/icon-64.png)', {
+      globalStyles,
+    });
+    screen.classes.set({ img: 'x-img' });
+    await app.detectChanges();
+    await fireEvent(blocks()[0]!, 'load', {
+      source: { uri: 'https://example.com/icon-64.png', width: 64, height: 64 },
+    });
+    assert.equal(blocks()[0]!.props['width'], '50%');
+  });
+
+  it('draws a file or a relative path as its alt text', async () => {
+    const { blocks, named } = await show('![local](file:///x.png) ![rel](cat.png)');
+    assert.equal(named('Image').length, 0);
+    assert.equal(textOf(blocks()[0]!), 'local rel');
+  });
+
+  it('loads a raster picture written into the document as a data url', async () => {
+    const urls = ['png', 'jpeg', 'jpg', 'gif', 'webp'].map(
+      (type) => `data:image/${type};base64,iVBORw0KGgo=`,
+    );
+    const { named } = await show(urls.map((url) => `![pasted](${url})`).join(' '));
+    assert.deepEqual(
+      named('Image').map((image) => image.props['source']),
+      urls.map((uri) => [{ uri, scale: 1 }]),
+    );
+  });
+
+  it('joins a data url wrapped across whitespace, so the native loader gets no space', async () => {
+    const { named } = await show('![wrapped](<data:image/png;base64,iVBO RW0K Ggo=>)');
+    assert.deepEqual(
+      named('Image').map((image) => image.props['source']),
+      [[{ uri: 'data:image/png;base64,iVBORW0KGgo=', scale: 1 }]],
+    );
+  });
+
+  it('draws any other data url as its alt text', async () => {
     const { blocks, named } = await show(
-      '![local](file:///x.png) ![inline](data:image/png;base64,AAAA) ![rel](cat.png)',
+      '![vector](data:image/svg+xml;base64,PHN2Zz4=) ![page](data:text/html;base64,PGI+) ![plain](data:image/png,raw)',
     );
     assert.equal(named('Image').length, 0);
-    assert.equal(textOf(blocks()[0]!), 'local inline rel');
+    assert.equal(textOf(blocks()[0]!), 'vector page plain');
   });
 
   it('reads an image scheme after the leading Unicode whitespace a trim strips', async () => {
@@ -360,3 +447,530 @@ describe('inputs', () => {
     assert.equal(blocks()[0]!.props['fontSize'], null, 'md-h1 no longer applies');
   });
 });
+
+describe('a block that did not change', () => {
+  it('keeps its native view when a block is added before it', async () => {
+    const { blocks, app, screen } = await show('First\n\nSecond');
+    const [first, second] = blocks();
+    screen.source.set('# Added\n\nFirst\n\nSecond');
+    await app.detectChanges();
+    assert.deepEqual(
+      blocks().map((node) => textOf(node)),
+      ['Added', 'First', 'Second'],
+    );
+    assert.equal(blocks()[1]!.reactTag, first!.reactTag, 'First is the same view, moved');
+    assert.equal(blocks()[2]!.reactTag, second!.reactTag, 'Second is the same view, moved');
+  });
+});
+
+describe('streaming', () => {
+  /** A document on screen with streaming set, fed its chunks one at a time. */
+  async function stream(...chunks: string[]) {
+    const shown = await show('');
+    shown.screen.streaming.set(true);
+    let source = '';
+    for (const chunk of chunks) {
+      source += chunk;
+      shown.screen.source.set(source);
+      await shown.app.detectChanges();
+    }
+    const feed = async (chunk: string) => {
+      source += chunk;
+      shown.screen.source.set(source);
+      await shown.app.detectChanges();
+    };
+    return { ...shown, feed };
+  }
+  const texts = (nodes: FakeFabricNode[]) => nodes.map((node) => textOf(node));
+  const json = (tokens: readonly Token[]) => JSON.parse(JSON.stringify(tokens)) as unknown;
+  const blocksOf = (tokens: readonly Token[]) => tokens.filter((one) => one.type !== 'space');
+
+  it('holds back an unclosed code span until it closes', async () => {
+    const { blocks, feed } = await stream('Run ', '`cx5');
+    assert.deepEqual(texts(blocks()), ['Run']);
+    await feed('81` now');
+    const paragraph = blocks()[0]!;
+    assert.equal(textOf(paragraph), 'Run cx581 now');
+    assert.equal(paragraph.children[1]!.props['fontFamily'], 'Menlo');
+  });
+
+  it('holds back unclosed emphasis, and draws the text before it again once it closes', async () => {
+    const { blocks, feed } = await stream('Done.\n\nThis is **very imp');
+    assert.deepEqual(texts(blocks()), ['Done.', 'This is']);
+    await feed('ortant** to');
+    const paragraph = blocks()[1]!;
+    assert.equal(textOf(paragraph), 'This is very important to');
+    assert.equal(paragraph.children[1]!.props['fontWeight'], '700');
+    await feed(' _kn');
+    assert.equal(textOf(blocks()[1]!), 'This is very important to');
+    await feed('ow_');
+    assert.equal(blocks()[1]!.children.at(-1)!.props['fontStyle'], 'italic');
+  });
+
+  it('leaves a lone asterisk, an underscore inside a word and a list bullet alone', async () => {
+    const { blocks } = await stream('* one\n* 2 * 3 is snake_case');
+    assert.deepEqual(texts(blocks()), ['\u2022one\u20222 * 3 is snake_case']);
+  });
+
+  it('holds back a table row until its line ends', async () => {
+    const { blocks, feed } = await stream('| a | b |\n');
+    assert.equal(blocks().length, 0, 'a header row with no delimiter row yet');
+    await feed('|---|---|\n| 1 | 2');
+    const table = () => blocks()[0]!;
+    const isRow = (node: FakeFabricNode) => node.props['flexDirection'] === 'row';
+    const rows = () =>
+      flatten([table()]).filter((node) => isRow(node) && !flatten(node.children).some(isRow));
+    assert.equal(rows().length, 1, 'the header row alone');
+    assert.equal(textOf(table()), 'ab');
+    await feed(' |\n');
+    assert.equal(rows().length, 2);
+    assert.equal(textOf(table()), 'ab12');
+  });
+
+  it('holds back a code fence until its opening line ends, then streams the code', async () => {
+    const { blocks, named, feed } = await stream('Code:\n\n', '\u0060\u0060\u0060t');
+    assert.deepEqual(texts(blocks()), ['Code:']);
+    await feed('s\nconst a = 1;\n\u0060\u0060');
+    assert.equal(named('ScrollView').length, 1);
+    assert.equal(textOf(named('ScrollView')[0]!), 'const a = 1;');
+    await feed('\u0060\n\nAfter');
+    assert.deepEqual(texts(blocks()), ['Code:', 'const a = 1;', 'After']);
+  });
+
+  it('redraws an earlier block a later chunk changes', async () => {
+    const { blocks, named, feed } = await stream('See [the docs][d].\n\nMore.\n\n');
+    assert.deepEqual(texts(blocks()), ['See [the docs][d].', 'More.']);
+    assert.equal(named('VirtualText').length, 0);
+    await feed('[d]: https://example.com\n');
+    assert.deepEqual(texts(blocks()), ['See the docs.', 'More.']);
+    assert.deepEqual(texts(named('VirtualText')), ['the docs'], 'drawn as a link');
+  });
+
+  it('turns the last paragraph into a heading when its underline arrives', async () => {
+    const { blocks, feed } = await stream('Intro\n\nTitle\n');
+    assert.equal(blocks()[1]!.props['accessibilityRole'], undefined);
+    await feed('===');
+    assert.deepEqual(texts(blocks()), ['Intro', 'Title']);
+    assert.equal(blocks()[1]!.props['accessibilityRole'], 'header');
+  });
+
+  it('keeps the native views of the blocks before a block that arrives', async () => {
+    const { blocks, feed } = await stream('First\n\nSecond');
+    const [first, second] = blocks();
+    await feed('\n\nThird');
+    assert.deepEqual(texts(blocks()), ['First', 'Second', 'Third']);
+    assert.equal(blocks()[0]!.reactTag, first!.reactTag, 'First is the same view');
+    assert.equal(blocks()[1]!.reactTag, second!.reactTag, 'Second is the same view');
+  });
+
+  it('draws a delimiter that cannot open emphasis, before punctuation inside a word', async () => {
+    const { blocks } = await stream('Use foo*.bar or foo_.bar now');
+    assert.deepEqual(texts(blocks()), ['Use foo*.bar or foo_.bar now']);
+  });
+
+  it('holds back a tilde before punctuation that starts a word, which can open', async () => {
+    const { blocks } = await stream('See ~/.config');
+    assert.deepEqual(texts(blocks()), ['See']);
+  });
+
+  it('draws a line after a header row that cannot be a delimiter row', async () => {
+    const { blocks, feed } = await stream('| a | b |\n|-');
+    assert.equal(blocks().length, 0, 'the start of a delimiter row');
+    await feed('x');
+    assert.equal(blocks().length, 1);
+    assert.match(textOf(blocks()[0]!), /\|-x$/);
+    const other = await stream('| a | b |\n|---|\n');
+    assert.equal(other.blocks().length, 1, 'a whole second line that did not make a table');
+  });
+
+  it('draws a fence line that cannot close the fence it is in', async () => {
+    const { named, feed } = await stream('\u0060\u0060\u0060\u0060\ncode\n~~~');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~', 'a tilde line in a backtick fence');
+    await feed('\n\u0060\u0060\u0060');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~', 'three backticks may yet be four');
+    await feed('\u0060\n\nAfter');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~');
+  });
+
+  it('draws a fence line too short to close the fence once a space follows it', async () => {
+    const { named } = await stream('\u0060\u0060\u0060\ncode\n\u0060\u0060 ');
+    assert.match(textOf(named('ScrollView')[0]!), /^code\n\u0060\u0060/);
+  });
+
+  it('converts only the last block again, however many blocks are kept before it', async () => {
+    const reads = new Map<string, number>();
+    const lex = Lexer.prototype.lex;
+    Lexer.prototype.lex = function (this: Lexer, source: string) {
+      const tokens = lex.call(this, source);
+      for (const token of tokens) {
+        if (token.type !== 'paragraph') continue;
+        const inline = token.tokens;
+        Object.defineProperty(token, 'tokens', {
+          get: () => {
+            reads.set(token.raw, (reads.get(token.raw) ?? 0) + 1);
+            return inline;
+          },
+        });
+      }
+      return tokens;
+    };
+    try {
+      const kept = Array.from({ length: 50 }, (_, i) => 'Kept ' + i + '\n\n').join('');
+      const { blocks, feed } = await stream(kept, 'Tail');
+      reads.clear();
+      await feed(' more');
+      assert.equal(blocks().length, 51);
+      assert.equal(textOf(blocks()[50]!), 'Tail more');
+      const settled = [...reads].filter(([raw]) => raw.startsWith('Kept'));
+      assert.deepEqual(settled, [], 'no kept paragraph is converted again');
+    } finally {
+      Lexer.prototype.lex = lex;
+    }
+  });
+
+  it('holds back a closing fence half written inside a quote', async () => {
+    const { named, feed } = await stream('> \u0060\u0060\u0060\n> code\n> \u0060\u0060');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code');
+    await feed('\u0060\n\nAfter');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code');
+  });
+
+  it('lexes only the last block again after a quote that defines a link reference', async () => {
+    const lexed: string[] = [];
+    const lex = Lexer.prototype.lex;
+    Lexer.prototype.lex = function (this: Lexer, source: string) {
+      lexed.push(source);
+      return lex.call(this, source);
+    };
+    try {
+      const { blocks, feed } = await stream('> [d]: https://example.com\n\nSee [d].\n\n', 'One');
+      lexed.length = 0;
+      await feed('\n\nTwo');
+      assert.deepEqual(texts(blocks()), ['', 'See d.', 'One', 'Two']);
+      assert.deepEqual(lexed, ['One\n\nTwo']);
+    } finally {
+      Lexer.prototype.lex = lex;
+    }
+  });
+
+  it('draws indented code that starts like a fence', async () => {
+    const { blocks, named } = await stream('Text\n\n    \u0060\u0060\u0060');
+    assert.equal(blocks().length, 2);
+    assert.equal(textOf(named('ScrollView')[0]!), '\u0060\u0060\u0060');
+  });
+
+  it('draws a finished paragraph when the one after it is held back whole', async () => {
+    const { blocks } = await stream('*one\n\n*two');
+    assert.deepEqual(texts(blocks()), ['*one']);
+    const quoted = await stream('> *one\n>\n> *two');
+    assert.deepEqual(texts(quoted.blocks()), ['*one'], 'in a quote');
+    const listed = await stream('- a\n\n  *one\n\n  *two');
+    assert.deepEqual(texts(listed.blocks()), ['\u2022a*one'], 'in a list item');
+  });
+
+  it('holds back an unfinished link or image until it closes', async () => {
+    const { blocks, named, feed } = await stream('See [the **docs**](http');
+    assert.deepEqual(texts(blocks()), ['See']);
+    await feed('s://example.com)');
+    assert.deepEqual(texts(blocks()), ['See the docs']);
+    assert.deepEqual(texts(named('VirtualText')).slice(0, 1), ['the docs'], 'drawn as a link');
+    await feed(' and ![a logo](https://exa');
+    assert.deepEqual(texts(blocks()), ['See the docs and']);
+    const brackets = await stream('Keep [this] note and [x');
+    assert.deepEqual(texts(brackets.blocks()), ['Keep [this] note and']);
+  });
+
+  it('holds back a header row with no leading pipe until its delimiter row ends', async () => {
+    const { blocks, feed } = await stream('a | b\n--- | -');
+    assert.equal(blocks().length, 0, 'a header row and the start of a delimiter row');
+    await feed('--\n1 | 2\n');
+    assert.equal(textOf(blocks()[0]!), 'ab12');
+  });
+
+  it('hides nothing but the end of the last block, streamed a character at a time', () => {
+    const documents = [
+      '*one\n\n*two\n\n**three**\n',
+      'See [the **docs**](https://example.com "Docs") and ![a logo](https://example.com/a.png).\n\n[x] note, `[y` and [z][d].\n\n[d]: https://example.com\n',
+      'a | b\n--- | ---\n1 | *2*\n\nAfter `code` and _em_.\n',
+      '| a | b |\n|:-|-:|\n| `1` | [2](https://example.com) |\n\nDone ~~gone~~.\n',
+      '# Title\n\n- *one*\n- two `x`\n  - nested **b**\n\n> quote *em*\n> more\n\n1. a\n2. [b](c)\n',
+      'Text\n\n```ts\nconst a = `b`;\n```\n\n~~~\ncode\n~~~\n\nSetext\n---\n',
+      '*x\n*x y\n\nEnd *a *b _c [d] [e](f) `g *h* and **i\n\n> *q\n> *q _r\n',
+      'Intro\n- `cx` and *em*\n- [l](u)\n\nNext\n> - *a*\n',
+    ];
+    for (const document of documents) {
+      const markdown = new MarkdownStream();
+      for (let end = 1; end <= document.length; end++) {
+        const prefix = document.slice(0, end);
+        const whole = blocksOf(lexer(prefix)).map((one) => one.raw);
+        const before = whole.slice(0, -1);
+        // A character at a time, and the whole prefix in one chunk.
+        for (const lexed of [markdown.lex(prefix), new MarkdownStream().lex(prefix)]) {
+          const shown = blocksOf(lexed).map((one) => one.raw);
+          assert.deepEqual(shown.slice(0, before.length), before, JSON.stringify(prefix));
+          assert.ok(shown.length <= whole.length, JSON.stringify(prefix));
+          const last = shown[before.length];
+          if (last !== undefined) {
+            assert.ok(whole.at(-1)!.startsWith(last.trimEnd()), JSON.stringify(prefix));
+          }
+        }
+      }
+      assert.deepEqual(json(markdown.lex(document)), json(lexer(document)), document);
+    }
+  });
+
+  it('applies a marked extension while streaming, one registered after the stream began too', async () => {
+    const shout: TokenizerAndRendererExtension = {
+      name: 'shout',
+      level: 'inline',
+      start: (source) => source.indexOf('!!'),
+      tokenizer(source) {
+        const match = /^!!(\w+)!!/.exec(source);
+        return match ? { type: 'shout', raw: match[0], text: match[1]! } : undefined;
+      },
+    };
+    const markdown = new MarkdownStream();
+    markdown.lex('Say');
+    try {
+      use({ extensions: [shout] });
+      assert.deepEqual(
+        json(markdown.lex('Say !!hi!! now')),
+        json(lexer('Say !!hi!! now')),
+        'lexed as marked.lexer does',
+      );
+      assert.ok(JSON.stringify(markdown.lex('Say !!hi!! now')).includes('"type":"shout"'));
+    } finally {
+      setOptions(getDefaults());
+    }
+  });
+
+  it('lexes a paragraph a bounded number of times, however many delimiters never close', () => {
+    let lexes = 0;
+    const lex = Lexer.prototype.lex;
+    Lexer.prototype.lex = function (this: Lexer, source: string) {
+      lexes++;
+      return lex.call(this, source);
+    };
+    try {
+      const runs = Array.from({ length: 200 }, (_, i) => (i % 2 ? '*a' : '_a') + i).join(' ');
+      for (const source of ['Text ' + runs, '> Text ' + runs, '- Text ' + runs]) {
+        lexes = 0;
+        assert.deepEqual(blocksOf(new MarkdownStream().lex(source)).length, 1, source.slice(0, 9));
+        assert.ok(lexes <= 3, lexes + ' lexes for ' + JSON.stringify(source.slice(0, 9)));
+      }
+    } finally {
+      Lexer.prototype.lex = lex;
+    }
+  });
+
+  it('holds back from an opener in the first line of a paragraph whose later line repeats it', async () => {
+    const { blocks } = await stream('Intro\n\n*x\n*x');
+    assert.deepEqual(texts(blocks()), ['Intro']);
+  });
+
+  it('holds back the marker of a list item it holds back whole, which would join the paragraph before', async () => {
+    const { blocks } = await stream('Intro\n- \u0060cx');
+    assert.deepEqual(texts(blocks()), ['Intro']);
+    const quoted = await stream('Intro\n> - *a');
+    assert.deepEqual(texts(quoted.blocks()), ['Intro']);
+  });
+
+  it('draws everything held back once streaming ends', async () => {
+    const { blocks, app, screen } = await stream('Run `cx5');
+    assert.deepEqual(texts(blocks()), ['Run']);
+    screen.streaming.set(false);
+    await app.detectChanges();
+    assert.deepEqual(texts(blocks()), ['Run `cx5']);
+  });
+});
+
+describe('tables', () => {
+  const TABLE = [
+    '| Rank | Pattern | Example context |',
+    '| --- | --- | --- |',
+    '| 1 | `request completed` | PUT /api/search returned 201 |',
+    '| 22 | miss | GET /a |',
+  ].join('\n');
+
+  /** The table's cells, row by row, each the text a cell is drawn in. */
+  const cellsOf = (table: FakeFabricNode): FakeFabricNode[][] => {
+    const isRow = (node: FakeFabricNode) => node.props['flexDirection'] === 'row';
+    return flatten([table])
+      .filter((node) => isRow(node) && !flatten(node.children).some(isRow))
+      .map((row) => flatten(row.children).filter((node) => node.viewName === 'Paragraph'));
+  };
+  /** The node that holds `node`, found by walking down from `root`. */
+  const parentOf = (root: FakeFabricNode, node: FakeFabricNode): FakeFabricNode =>
+    flatten([root]).find((one) => one.children.includes(node))!;
+  const measure = async (cells: FakeFabricNode[][], widths: number[][]) => {
+    for (const [r, row] of cells.entries()) {
+      for (const [c, cell] of row.entries()) {
+        await fireEvent(cell, 'layout', { layout: { width: widths[r]![c]! } });
+      }
+    }
+  };
+  /** Each cell's least width, which lines its column up. */
+  const columnWidths = (table: FakeFabricNode) =>
+    cellsOf(table).map((row) => row.map((cell) => parentOf(table, cell).props['minWidth']));
+
+  it('scrolls sideways, rather than squeezing its columns into the width of the page', async () => {
+    const { blocks } = await show(TABLE);
+    const scroll = blocks()[0]!;
+    assert.equal(scroll.viewName, 'ScrollView');
+    assert.equal(scroll.props['horizontal'], true);
+    const cells = cellsOf(scroll);
+    assert.deepEqual(
+      cells.map((row) => row.map(textOf)),
+      [
+        ['Rank', 'Pattern', 'Example context'],
+        ['1', 'request completed', 'PUT /api/search returned 201'],
+        ['22', 'miss', 'GET /a'],
+      ],
+    );
+    for (const node of flatten(scroll.children)) {
+      assert.notEqual(node.props['flexGrow'], 1, 'no cell is stretched to share out the page');
+      assert.notEqual(node.props['flex'], 1, 'no cell is stretched to share out the page');
+    }
+    assert.equal(cells[0]![0]!.props['fontWeight'], '600', 'a header cell is bold');
+  });
+
+  it('lines each column up at the width of its widest cell', async () => {
+    const { blocks } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 50],
+    ]);
+    assert.deepEqual(columnWidths(blocks()[0]!), [
+      [40, 150, 230],
+      [40, 150, 230],
+      [40, 150, 230],
+    ]);
+  });
+
+  it('narrows a column again when its widest cell shrinks, or its row goes', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 300],
+    ]);
+    await fireEvent(cellsOf(blocks()[0]!)[1]![1]!, 'layout', { layout: { width: 50 } });
+    assert.deepEqual(columnWidths(blocks()[0]!)[0], [40, 60, 300]);
+
+    screen.source.set(TABLE.split('\n').slice(0, 3).join('\n'));
+    await app.detectChanges();
+    assert.deepEqual(
+      columnWidths(blocks()[0]!),
+      [
+        [40, 60, 230],
+        [40, 60, 230],
+      ],
+      'the row that went no longer counts',
+    );
+    screen.source.set(['| Rank | Pattern |', '| --- | --- |', '| 1 | a |'].join('\n'));
+    await app.detectChanges();
+    assert.deepEqual(columnWidths(blocks()[0]!)[0], [40, 60], 'nor does the column that went');
+  });
+
+  it('forgets a width when its row or column goes, so one that comes back starts unmeasured', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 300],
+    ]);
+    screen.source.set(['| Rank | Pattern |', '| --- | --- |', '| 1 | a |'].join('\n'));
+    await app.detectChanges();
+    screen.source.set(TABLE);
+    await app.detectChanges();
+    assert.deepEqual(
+      columnWidths(blocks()[0]!)[0]!.map((width) => width ?? null),
+      [40, 150, null],
+      'neither the last row nor the last column kept its width while they were gone',
+    );
+  });
+
+  it('keeps the text in a cell its own width when the app replaces the th and td classes', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    screen.classes.set({ th: 'x-th', td: 'x-td' });
+    await app.detectChanges();
+    const table = blocks()[0]!;
+    for (const cell of cellsOf(table).flat()) {
+      const wrapper = parentOf(table, cell);
+      const hugs =
+        cell.props['alignSelf'] === 'flex-start' ||
+        (cell.props['alignSelf'] == null && wrapper.props['alignItems'] === 'flex-start');
+      assert.ok(hugs, 'the text is not stretched to its column, so it can report a narrower width');
+    }
+  });
+
+  it('takes each measurement without going over the rest of the table again', async () => {
+    const app = await render(mod['MarkdownColumnsScreen'] as Type<unknown>);
+    const screen = app.instance as {
+      table: { set(value: unknown): void };
+      columns: () => {
+        measure(row: number, column: number, event: unknown): void;
+        width(column: number): number | null;
+      };
+    };
+    const ROWS = 3000;
+    screen.table.set({
+      kind: 'table',
+      header: [[], [], []],
+      rows: Array.from({ length: ROWS }, () => [[], [], []]),
+    });
+    await app.detectChanges();
+    const columns = screen.columns();
+    const visited = countVisits();
+    try {
+      for (let row = 0; row <= ROWS; row++) {
+        for (let column = 0; column < 3; column++) {
+          columns.measure(row, column, { nativeEvent: { layout: { width: (row * 7) % 200 } } });
+          columns.width(column);
+        }
+      }
+    } finally {
+      visited.restore();
+    }
+    assert.equal(columns.width(0), 199);
+    const measurements = (ROWS + 1) * 3;
+    assert.ok(
+      visited.count < measurements * 10,
+      `${measurements} measurements went over ${visited.count} elements`,
+    );
+  });
+});
+
+/**
+ * Counts the elements the array and map methods a measurement could go over the table with visit,
+ * so the cost of a measurement is checked by the work it does rather than by the clock.
+ */
+function countVisits(): { readonly count: number; restore(): void } {
+  const state = { count: 0 };
+  const patched: [object, PropertyKey, unknown][] = [];
+  const patch = (target: object, key: PropertyKey, size: (self: never) => number): void => {
+    const original = Reflect.get(target, key) as (...args: unknown[]) => unknown;
+    patched.push([target, key, original]);
+    Reflect.set(target, key, function (this: never, ...args: unknown[]) {
+      state.count += size(this);
+      return original.apply(this, args);
+    });
+  };
+  const length = (self: { length: number }): number => self.length;
+  const size = (self: { size: number }): number => self.size;
+  for (const key of ['reduce', 'map', 'slice', 'forEach', 'filter', Symbol.iterator] as const) {
+    patch(Array.prototype, key, length);
+  }
+  for (const key of ['forEach', 'entries', 'values', 'keys', Symbol.iterator] as const) {
+    patch(Map.prototype, key, size);
+  }
+  return {
+    get count() {
+      return state.count;
+    },
+    restore() {
+      for (const [target, key, original] of patched.reverse()) Reflect.set(target, key, original);
+    },
+  };
+}

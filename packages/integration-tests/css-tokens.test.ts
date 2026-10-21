@@ -30,7 +30,7 @@ function resolvedStyle(css: string, classes: string[]): Record<string, unknown> 
     parent,
     classes: new Set(own),
     props: {},
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,
@@ -643,10 +643,12 @@ describe('tokens', () => {
         '.a { background-color: hsl(var(--c) / var(--strength-4)) }';
       assert.equal(resolvedStyle(css, ['a'])['backgroundColor'], 'rgba(37, 38, 39, 0.04)');
       const refused: string[] = [];
-      compileCss(':root { --s: 4px } .b { padding-top: calc(var(--s) + 3%) }', 'length', {
+      // Of a box it is that share and the length, which the engine adds once the box is laid
+      // out: see css-calc-percent.test.ts. Anywhere else there is nothing it is a share of.
+      compileCss(':root { --s: 4px } .b { letter-spacing: calc(var(--s) + 3%) }', 'length', {
         onUnsupported: (message: string) => refused.push(message),
       });
-      assert.equal(refused.length, 1, "a length's percentage needs layout, and stays refused");
+      assert.equal(refused.length, 1, 'a percentage of no box stays refused');
     });
 
     it('takes the larger or smaller of two values that are both tokens', () => {

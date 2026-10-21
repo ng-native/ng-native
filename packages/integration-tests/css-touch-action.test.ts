@@ -6,16 +6,18 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Engine, registerViewName, type EngineNode } from '@ng-native/fabric';
+import { Engine, registerViewName, scrollsOverflow, type EngineNode } from '@ng-native/fabric';
 import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 registerViewName('rns-screen', 'RNSScreen');
 
 const CSS =
   '.slider { touch-action: pan-y } .map { touch-action: none } .row { touch-action: pan-x }' +
-  ' .plain { touch-action: manipulation } .both { touch-action: pan-x pan-y }';
+  ' .plain { touch-action: manipulation } .both { touch-action: pan-x pan-y }' +
+  ' .scroller { overflow: auto }';
 
-function scene() {
+/** A screen with a page that scrolls: a scroll view, or an element that scrolls its overflow. */
+function scene(kind: 'scroll-view' | 'overflow' = 'scroll-view') {
   const reports: string[] = [];
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, {
@@ -31,7 +33,11 @@ function scene() {
     return node;
   };
   const screen = add('rns-screen', '', engine.root);
-  const page = add('scroll-view', 'page', screen);
+  const page = add(kind === 'scroll-view' ? 'scroll-view' : 'view', 'page', screen);
+  if (kind === 'overflow') {
+    scrollsOverflow(page);
+    engine.setClasses(page, 'page scroller');
+  }
   const nodes: Record<string, EngineNode> = { screen, page };
   for (const name of ['slider', 'map', 'row', 'plain', 'both', 'button']) {
     nodes[name] = add('view', name, page);
@@ -179,6 +185,22 @@ describe('touch-action', () => {
     assert.equal(scrolls(), true);
   });
 
+  it('keeps a drag that set off sideways from an element under it that scrolls its overflow', () => {
+    // The page is a scroll view only by its CSS: the same drag holds that one off.
+    const s = scene('overflow');
+    const scrolls = () => s.props('page')['scrollEnabled'] !== false;
+    s.finger('slider', 'Start', 100, 100);
+    s.finger('slider', 'Move', 101, 108);
+    assert.equal(scrolls(), true, 'set off down the page: the page may scroll');
+    s.finger('slider', 'End', 101, 108);
+
+    s.finger('slider', 'Start', 100, 100);
+    s.finger('slider', 'Move', 108, 101);
+    assert.equal(scrolls(), false, 'set off across: the page it is in does not scroll');
+    s.finger('slider', 'End', 108, 101);
+    assert.equal(scrolls(), true, 'given back with the touch');
+  });
+
   it('keeps every drag from a scroll view where the element takes them all', () => {
     const s = scene();
     s.finger('map', 'Start', 100, 100);
@@ -193,5 +215,78 @@ describe('touch-action', () => {
       false,
       'nothing said: as before',
     );
+  });
+});
+
+describe('a drag a package keeps from the page', () => {
+  // What `@ng-native/web-compat` asks for a `touchmove` a listener prevented the default of: the
+  // button says nothing of `touch-action`, so only the ask keeps its drag.
+  const kept = () => {
+    const s = scene();
+    const scrolls = () => s.props('page')['scrollEnabled'] !== false;
+    /** A move on the button, with this many fingers down. */
+    const fingers = (phase: 'Start' | 'Move' | 'End' | 'Cancel', down: number) =>
+      s.engine.dispatchEvent(s.nodes['button']!, `topTouch${phase}`, {
+        pageX: 100,
+        pageY: 100,
+        touches: Array.from({ length: down }, () => ({ pageX: 100, pageY: 100 })),
+      });
+    const keep = () => s.engine.keepDrag(s.nodes['button']!);
+    return { ...s, scrolls, fingers, keep };
+  };
+
+  it('holds native off the touch and the page still, until the last finger lifts', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.fingers('Move', 1);
+    assert.deepEqual(s.told.at(-1), [true, false], 'nothing asked yet');
+    s.keep();
+    assert.deepEqual(s.told.at(-1), [true, true], 'whoever holds the touch keeps it');
+    assert.equal(s.scrolls(), false);
+    s.fingers('End', 0);
+    assert.equal(s.scrolls(), true, 'given back with the touch');
+  });
+
+  it('leaves the next drag, that no listener keeps, to the page', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.keep();
+    s.fingers('End', 0);
+    s.told.length = 0;
+    s.fingers('Start', 1);
+    s.fingers('Move', 1);
+    assert.deepEqual(s.told, [[true, false]]);
+    assert.equal(s.scrolls(), true);
+    s.keep();
+    assert.equal(s.scrolls(), false, 'and keeps it when it is asked again');
+  });
+
+  it('lets go of a kept drag whose end never came, when the next touch starts', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.keep();
+    s.fingers('Start', 1);
+    assert.equal(s.scrolls(), true);
+  });
+
+  it('keeps it while a second finger is down after the first lifts', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.keep();
+    s.fingers('Start', 2);
+    s.fingers('End', 1);
+    assert.equal(s.scrolls(), false, 'a finger is still on');
+    s.fingers('End', 0);
+    assert.equal(s.scrolls(), true);
+  });
+
+  it('gives it back for a touch native cancelled', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.keep();
+    s.fingers('Cancel', 0);
+    assert.equal(s.scrolls(), true);
+    s.fingers('Start', 1);
+    assert.deepEqual(s.told.at(-1), [true, false]);
   });
 });

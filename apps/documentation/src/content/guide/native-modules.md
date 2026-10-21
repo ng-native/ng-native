@@ -1,15 +1,17 @@
 ---
-title: Write a native module
+title: Create Expo Module
 summary: Write Swift and Kotlin for a missing capability, and inject it as an Angular service.
 ---
 
-# Write a native module
+# Create Expo Module
 
 [`@ng-native/expo`](/packages/expo) covers Expo's own modules, and any other Expo module can be
-[used directly](/packages/expo/using-a-module). When no package does what the app needs, write
-the native code yourself. An Angular app's native module is an ordinary Expo module: the Swift
-and Kotlin are the same as for any Expo app. Only the JavaScript side is different, because the
-module is reached through an injected service rather than a React hook.
+[used directly](/packages/expo/using-a-module). When no package does what the app needs, you can
+either write a local Expo module in Swift and Kotlin (this guide) or
+[use NativeScript](/guide/native-modules/nativescript) to call iOS and Android platform APIs
+directly from TypeScript. An Angular app's native module is an ordinary Expo module: the Swift and
+Kotlin are the same as for any Expo app. Only the JavaScript side is different, because the module
+is reached through an injected service rather than a React hook.
 
 This guide builds a module that reports the device's thermal state, so an app can do less work
 when the phone is hot. It has one of each thing a module can expose to JavaScript:

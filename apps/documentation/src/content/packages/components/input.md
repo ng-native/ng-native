@@ -87,9 +87,10 @@ default centres it, so there a multiline field commits `textAlignVertical: 'top'
 `textAlignVertical` input or a CSS `vertical-align` says otherwise. Both are Android-only: iOS
 always starts a multiline field at the top and centres a single-line one.
 
-A `rows` attribute on a multiline field with a `line-height` and no height of its own is its
-height: `rows="3"` is three lines, with the field's padding and border, as a browser sizes a
+A `rows` attribute or binding on a multiline field with a `line-height` and no height of its own
+is its height: `rows="3"` is three lines, with the field's padding and border, as a browser sizes a
 `<textarea rows="3">`. A height written for the field wins, and a single-line field ignores `rows`.
+The engine reads it and does not send it on to the native field.
 
 `<text-input>` exposes `focus()`, `blur()`, `clear()`, `setSelection(start, end?)` and
 `isFocused()` as methods, reachable through a template reference or `nativeRef`. `(changeText)`
@@ -101,6 +102,28 @@ device and in a browser alike. iOS reports no `Enter` from a single-line field, 
 `(submitEditing)` for the return key there. `(selectionChange)` carries
 `$event.nativeEvent.selection`, a `{ start, end }` that changes as the caret moves or a range is
 selected.
+
+`(contentSizeChange)` fires for a multiline field only, as React Native's does, and carries
+`$event.nativeEvent.contentSize`, the `{ width, height }` of the text. Android reports it as the
+text changes. iOS reports it when the field itself changes size, as React
+Native's field does there: on the first layout, and as a field with no height of its own grows or
+shrinks with its text. A field held at a fixed height on iOS reports nothing while its text scrolls
+inside it, so a field that should grow with its text there leaves its height unset rather than
+setting it from this event.
+
+To follow the field's own height as it grows, leave the height unset, cap it with `max-height`, and
+read `(layout)`. It fires on both platforms whenever the field resizes, including when it reaches
+the cap. `(contentSizeChange)` is the size of the text, which leaves out the padding and goes on
+past the cap on Android.
+
+```html
+<text-input
+  multiline
+  style="max-height: 160px"
+  [(value)]="draft"
+  (layout)="fieldHeight.set($event.nativeEvent.layout.height)"
+/>
+```
 
 <!-- api: TextInput -->
 

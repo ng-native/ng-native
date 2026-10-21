@@ -1,5 +1,6 @@
 import { withComponentInputBinding } from '@angular/router';
 import { provideKeyboardController } from '@ng-native/components';
+import { provideNativeKeyboard } from '@ng-native/expo/keyboard';
 import {
   provideNativeRouter,
   withHeaderDefaults,
@@ -15,6 +16,9 @@ export const appConfig = {
     // react-native-keyboard-controller is installed: the chat's composer follows the keyboard on
     // the native side, a drag through the transcript included.
     provideKeyboardController(),
+    // And on Android, @ng-native/expo's own view of the keyboard's motion: the composer follows
+    // the keyboard there too, and a keyboard-avoiding-view moves with it rather than jumping.
+    provideNativeKeyboard(),
     // `withComponentInputBinding` is what binds a route param to a component input, as on the
     // web: without it both outlets leave a page's inputs alone.
     // The bars are props, so they take the palette from palette.ts and follow the scheme the

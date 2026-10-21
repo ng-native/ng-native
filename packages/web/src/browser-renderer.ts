@@ -71,7 +71,7 @@ export class BrowserRenderer implements Renderer2 {
   appendChild(parent: BrowserNode, child: BrowserNode): void {
     this.detach(child);
     child.parent = parent;
-    parent.children.push(child);
+    parent.childList.push(child);
     (parent.el as Element).appendChild(child.el);
   }
 
@@ -79,9 +79,9 @@ export class BrowserRenderer implements Renderer2 {
     if (!parent) return;
     this.detach(child);
     child.parent = parent;
-    const at = refChild ? parent.children.indexOf(refChild) : -1;
-    if (at === -1) parent.children.push(child);
-    else parent.children.splice(at, 0, child);
+    const at = refChild ? parent.childList.indexOf(refChild) : -1;
+    if (at === -1) parent.childList.push(child);
+    else parent.childList.splice(at, 0, child);
     (parent.el as Element).insertBefore(child.el, refChild?.el ?? null);
   }
 
@@ -91,15 +91,15 @@ export class BrowserRenderer implements Renderer2 {
     // in a host app's template - and it is not this app's to take out of the page. What was
     // rendered into it goes; the element stays, empty, for its owner.
     if (this.engine.isRoot(child)) {
-      for (const node of [...child.children]) this.removeChild(child, node);
+      for (const node of [...child.childList]) this.removeChild(child, node);
       // A root is always an element: `wrapRoot` only ever wraps one.
       (child.el as Element).replaceChildren();
       return;
     }
     const actualParent = parent ?? child.parent;
     if (actualParent) {
-      const at = actualParent.children.indexOf(child);
-      if (at !== -1) actualParent.children.splice(at, 1);
+      const at = actualParent.childList.indexOf(child);
+      if (at !== -1) actualParent.childList.splice(at, 1);
     }
     child.el.parentNode?.removeChild(child.el);
     child.parent = null;
@@ -122,7 +122,7 @@ export class BrowserRenderer implements Renderer2 {
   }
 
   nextSibling(node: BrowserNode): BrowserNode | null {
-    const siblings = node.parent?.children;
+    const siblings = node.parent?.childList;
     if (!siblings) return null;
     return siblings[siblings.indexOf(node) + 1] ?? null;
   }
@@ -211,7 +211,7 @@ export class BrowserRenderer implements Renderer2 {
   }
 
   setValue(node: BrowserNode, value: string): void {
-    node.text = value;
+    node.nodeText = value;
     (node.el as Text).data = value;
   }
 
@@ -243,7 +243,7 @@ class EmulatedRenderer extends BrowserRenderer {
   }
 
   applyToHost(host: BrowserNode): void {
-    if (host.kind === 'element') (host.el as Element).setAttribute(this.hostAttr, '');
+    if (host.nodeKind === 'element') (host.el as Element).setAttribute(this.hostAttr, '');
   }
 
   override createElement(name: string): BrowserNode {
