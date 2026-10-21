@@ -140,6 +140,8 @@ export function svgInserted(node: EngineNode, parent: EngineNode, engine: Engine
   if (node.tag === 'defs') return defined(node, parent, engine);
   if (node.tag === SVG_UNDRAWN) return engine.setDefaultStyle(node, UNDRAWN);
   if (node.tag === 'feDropShadow') drawAgain(node, engine);
+  // One with no attribute is never drawn by one being set, and is the whole drawing.
+  if (node.tag === 'foreignObject') drawLater(node, engine);
   startFilled(node, engine);
 }
 

@@ -316,6 +316,17 @@ describe('@ng-native/web-compat svg attributes in a selector', () => {
 })
 class ForeignLabel {}
 
+@Component({
+  selector: 'x-foreign-bare',
+  template: `
+    <svg viewBox="0 0 200 100">
+      <foreignObject testID="bare"><p>Germany</p></foreignObject>
+      <foreignObject testID="partial" x="10" width="50%"><p>Spain</p></foreignObject>
+    </svg>
+  `,
+})
+class ForeignBare {}
+
 describe('@ng-native/web-compat svg foreignObject', () => {
   it('draws the HTML it holds where it says in the drawing, as a card label is', async () => {
     await render(ForeignLabel, { providers: [provideWebCompat()] });
@@ -325,6 +336,25 @@ describe('@ng-native/web-compat svg foreignObject', () => {
     const { x, y, width, height } = foreign.props;
     assert.deepEqual([x, y, width, height].map(String), ['10', '20', '120', '40']);
     assert.ok(screen.getByText('Germany'));
+  });
+});
+
+describe('@ng-native/web-compat svg foreignObject area', () => {
+  it('is the whole drawing where the markup says none, and each side it does not say', async () => {
+    await render(ForeignBare, { providers: [provideWebCompat()] });
+    await settle();
+    const area = (id: string) => {
+      const { x, y, width, height } = screen.getByTestId(id).props;
+      return [x, y, width, height].map(String);
+    };
+    assert.deepEqual(area('bare'), ['0%', '0%', '100%', '100%']);
+    assert.deepEqual(area('partial'), ['10', '0%', '50%', '100%']);
+  });
+
+  it('is nothing the package gave it in an app that did not ask for the package', async () => {
+    await render(ForeignBare);
+    await settle();
+    assert.equal(screen.getByTestId('bare').props['width'], undefined);
   });
 });
 
