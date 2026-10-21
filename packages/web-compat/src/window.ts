@@ -140,6 +140,44 @@ const visualViewport = {
   dispatchEvent: (event: unknown) => dispatch(event, [visualViewport]),
 };
 
+/**
+ * A browser's storage, for as long as the app is up: there is no disk behind it, and the next
+ * app starts with none of what this one kept.
+ */
+class MemoryStorage {
+  private readonly kept = new Map<string, string>();
+  get length(): number {
+    return this.kept.size;
+  }
+  key(at: number): string | null {
+    return [...this.kept.keys()][at] ?? null;
+  }
+  getItem(name: string): string | null {
+    return this.kept.get(name) ?? null;
+  }
+  setItem(name: string, value: unknown): void {
+    this.kept.set(name, String(value));
+  }
+  removeItem(name: string): void {
+    this.kept.delete(name);
+  }
+  clear(): void {
+    this.kept.clear();
+  }
+}
+
+/** A selection with nothing in it, as a library asks of one before it reads or clears it. */
+const NOTHING_SELECTED = Object.freeze({
+  rangeCount: 0,
+  isCollapsed: true,
+  anchorNode: null,
+  focusNode: null,
+  toString: () => '',
+  removeAllRanges: noop,
+  empty: noop,
+  addRange: noop,
+});
+
 /** What a library reads from `window`, some of it as it loads. */
 const GLOBALS: Readonly<Record<string, unknown>> = {
   // The window's own listeners, which hear what a script sends it or anything under it, and a
@@ -156,6 +194,12 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   ...EVENT_CLASSES,
   // There for a device that takes touches, which is how a library asks.
   ontouchstart: null,
+  // Nothing is selected: an answer a library reads the text of, and clears before a drag.
+  getSelection: () => NOTHING_SELECTED,
+  // A window an app cannot open is none: a link is the app's to follow, with `Linking`.
+  open: () => null,
+  // No element is in a shadow tree. A library asks whether what it is in is one.
+  ShadowRoot: class ShadowRoot {},
   // The page's window is the top one, in no frame, and its `frames` the window of each iframe
   // in it by its place: see `frame.ts`. Read as the window is put in, after every module.
   self: globalThis,
@@ -261,8 +305,14 @@ export function installWindow(): () => void {
   // see `before-modules.js`. The window's own go in over them, are handed what they kept, and
   // give them back after.
   const standIns = takeStandIns(target);
-  const added = Object.keys(GLOBALS).filter((name) => typeof target[name] === 'undefined');
-  for (const name of added) target[name] = GLOBALS[name];
+  // The storages are made for this window, so that what one app kept is not in the next.
+  const globals: Record<string, unknown> = {
+    ...GLOBALS,
+    localStorage: new MemoryStorage(),
+    sessionStorage: new MemoryStorage(),
+  };
+  const added = Object.keys(globals).filter((name) => typeof target[name] === 'undefined');
+  for (const name of added) target[name] = globals[name];
   handOver(standIns, target);
   // Over the one the Metro preset's polyfill has, which answers nothing: an animation library
   // asks it for a custom property, and a component library for what it just wrote.
@@ -299,7 +349,9 @@ export function installWindow(): () => void {
       target['IntersectionObserver'] = intersecting;
     }
     watchOthersWith(undefined);
-    for (const name of added) if (target[name] === GLOBALS[name]) delete target[name];
+    for (const name of added) {
+      if (target[name] === globals[name]) delete target[name];
+    }
     giveBack(standIns, target);
     for (const name of sized) delete target[name];
     // What was added with them goes with them, as a page's listeners go with its window.

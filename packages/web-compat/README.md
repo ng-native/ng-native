@@ -46,6 +46,9 @@ Experimental and partial. It has:
   observes nothing pays nothing for them.
 - `navigator.userAgent` naming a phone of the platform the app runs on, and `maxTouchPoints`, where
   the runtime's own `navigator` says no browser: a library picks touch handling from them.
+- Stand-ins for what a library asks of the window: `localStorage` and `sessionStorage` held in
+  memory for as long as the app is up, `getSelection()` with nothing selected, `open()` returning
+  `null`, and a `ShadowRoot` that nothing is an instance of.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a

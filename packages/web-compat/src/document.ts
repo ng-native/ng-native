@@ -567,6 +567,8 @@ export function documentFor(engine: Engine): CompatDocument {
     // An event to be given its type before it is sent: see `events.ts`.
     createEvent,
     hasFocus: () => true,
+    // The window's, which nothing is selected in: see `window.ts`.
+    getSelection: () => (globalThis as { getSelection?: () => unknown }).getSelection?.() ?? null,
   };
   Object.assign(created, anywhere(engine, created));
   Object.assign(created, documentNodeMembers(created as never, false));

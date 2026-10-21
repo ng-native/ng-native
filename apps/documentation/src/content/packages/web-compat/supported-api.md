@@ -124,6 +124,10 @@ Gaps:
   phone on Android) and `navigator.maxTouchPoints` is 5, so a library that picks touch handling
   from them does. A user agent that already names a browser, and a touch count the runtime has, are
   left alone.
+- Stand-ins for what a library asks of the window: `localStorage` and `sessionStorage` held in
+  memory for as long as the app is up and empty at the start of the next, `getSelection()` on the
+  window and the document with nothing selected, `open()` returning `null`, and a `ShadowRoot`
+  that nothing is an instance of. A global the runtime already has is left alone.
 
 Gaps: `ResizeObserver` has no `device-pixel-content-box`, `matchMedia` does not read
 `resolution` or `-webkit-device-pixel-ratio`, and `scrollIntoView` reads no `scroll-margin` or
@@ -131,7 +135,7 @@ Gaps: `ResizeObserver` has no `device-pixel-content-box`, `matchMedia` does not 
 with no margins and no heading sizes. A table's columns are worked out again when a row or a
 cell is put in or taken out or a span changes, and not when what a cell holds changes;
 `border-collapse`, `border-spacing` and `caption-side` are not read. The window does not
-scroll.
+scroll. Nothing kept in `localStorage` outlives the app, and nothing can be selected.
 An inline element over two lines is one box around both, where a browser has two.
 A table's `clientTop` and `clientLeft` are its border's width with `border-collapse: collapse`
 too, where Chrome answers half of it. A table whose overflow is `scroll` or `auto` scrolls, where
