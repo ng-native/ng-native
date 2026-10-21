@@ -16,7 +16,7 @@ import {
   setField,
   wasRefused,
 } from './field.ts';
-import { fenceUnder, legendInserted } from './fieldset.ts';
+import { fenceUnder, legendInserted, legendRemoved } from './fieldset.ts';
 import { implicitSubmit } from './form.ts';
 import { setChecked } from './form-controls.ts';
 import { buildAs, holdIconBox, setMarkup } from './html.ts';
@@ -207,6 +207,7 @@ export const webListen: RendererExtension = {
     optionRemoved(node, engine);
     // The table a row or a cell was in: see `table.ts`.
     tableRemoved(node, engine);
+    legendRemoved(node, engine);
   },
   set(node, name, value, engine) {
     // By the name HTML has it, as a template may write it in capitals.
