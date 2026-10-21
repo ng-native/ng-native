@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import ts from 'typescript';
 import { NgtscProgram } from '@angular/compiler-cli';
 import { extractDocSamples, type DocSample } from './docs-samples.ts';
@@ -159,6 +159,29 @@ it('installs the Storybook version the Storybook page states', () => {
     [manifest.devDependencies['storybook'], manifest.devDependencies['@storybook/html-vite']],
     [stated, stated],
   );
+});
+
+it('names a sample from its file with forward slashes, as a Windows checkout writes it', () => {
+  // `path.relative` separates with `\` on Windows. Make that the case on every platform, so the
+  // name a Windows checkout builds a fixture from is the one checked here.
+  const relative = path.relative;
+  const windows = mock.method(path, 'relative', (from: string, to: string) =>
+    relative(from, to).split(path.sep).join('\\'),
+  );
+  try {
+    const samples = extractDocSamples();
+    assert.ok(samples.length > 0);
+    assert.deepEqual(
+      samples.filter((sample) => sample.file.includes('\\')).map((sample) => sample.file),
+      [],
+    );
+    assert.ok(
+      samples.some((sample) => sample.file.includes('/')),
+      'a nested page keeps its directory',
+    );
+  } finally {
+    windows.mock.restore();
+  }
 });
 
 describe('docs code samples typecheck against the real packages', () => {

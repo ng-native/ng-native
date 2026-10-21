@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { afterEach, describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { Component, DOCUMENT, inject, signal } from '@angular/core';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 import { FILE_PICKER, provideWebCompat, type FilePicker } from './index.ts';
@@ -264,7 +265,7 @@ describe('a file input', () => {
       from = createRequire(from.resolve(`${step}/package.json`));
     }
     const collect = from('metro/private/ModuleGraph/worker/collectDependencies').default;
-    const file = new URL('./file-input.ts', import.meta.url).pathname;
+    const file = fileURLToPath(new URL('./file-input.ts', import.meta.url));
     // Its types taken off first, as Metro's transform takes them off before it collects.
     const ast = from('@babel/core').parseSync(stripTypeScriptTypes(readFileSync(file, 'utf8')), {
       filename: file,
