@@ -1,0 +1,32 @@
+// Expo's runtime: its fetch, whose response streams a body, and URL, TextDecoderStream and
+// structuredClone. Metro runs it before this file only when something imports it, and nothing
+// else does in a release build, which would then get React Native's fetch, with no body.
+import 'expo';
+import { AppRegistry, Image, Platform, processColor } from 'react-native';
+import { mount } from '@ng-native/platform';
+import { currentConditions, deviceTokens, watchConditions } from '@ng-native/device';
+import { getFabricUIManager, registerPlatformComponents } from '@ng-native/fabric';
+import { loadFonts } from '@ng-native/expo/fonts';
+import { App } from './app/app.ts';
+import { appConfig } from './app/app.config.ts';
+// The generated stylesheet. The Tailwind CLI writes CSS; the Metro config compiles it into this
+// module, because Expo's transform worker turns a `.css` import into an empty module on native.
+import tailwind from '../.angular-native/app.tailwind.js';
+
+registerPlatformComponents(Platform.OS);
+
+AppRegistry.registerRunnable('main', ({ rootTag }: { rootTag: number | string }) => {
+  // Material's icon font, declared in the theme: `mat-icon` draws an icon's name in it.
+  void loadFonts(tailwind);
+  const app = mount(Number(rootTag), App, getFabricUIManager(), {
+    processColor,
+    globalStyles: tailwind,
+    conditions: currentConditions(),
+    tokens: deviceTokens(),
+    resolveAssetSource: (value) => Image.resolveAssetSource(value as never),
+    ...appConfig,
+  });
+
+  // A theme switch changes what `dark:` matches, and nothing in the app is dirty when it happens.
+  watchConditions(app.engine);
+});

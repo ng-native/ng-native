@@ -1,0 +1,79 @@
+.screen {
+  flex: 1;
+  background-color: var(--mat-sys-surface);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: auto;
+  padding-bottom: 96px;
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+}
+
+.check {
+  flex: 1;
+  min-width: 0;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.title {
+  font-size: var(--mat-sys-body-large-size);
+  line-height: var(--mat-sys-body-large-line-height);
+  color: var(--mat-sys-on-surface);
+}
+
+.detail {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--mat-sys-body-medium-size);
+  line-height: var(--mat-sys-body-medium-line-height);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.add {
+  position: absolute;
+  right: 16px;
+  bottom: 32px;
+}
+
+.flag {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  color: var(--mat-sys-error);
+}
