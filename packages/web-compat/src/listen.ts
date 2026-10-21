@@ -20,6 +20,7 @@ import { fenceUnder, legendInserted, legendRemoved } from './fieldset.ts';
 import { implicitSubmit } from './form.ts';
 import { setChecked } from './form-controls.ts';
 import { buildAs, holdIconBox, setMarkup } from './html.ts';
+import { imageCreated, setImage } from './image.ts';
 import { inlineStyle } from './inline-style.ts';
 import { labelPress, setLabel } from './label.ts';
 import { MOUSE_OF_TOUCH, TOUCH_EVENTS, asMouse, heardTouch } from './mouse-after-touch.ts';
@@ -186,6 +187,8 @@ export const webListen: RendererExtension = {
     if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
     // A canvas is given the group what it draws goes in: see `canvas.ts`.
     if (documentOf(engine)) canvasCreated(node, engine);
+    // An image is the platform's image view: see `image.ts`.
+    imageCreated(node, engine);
     // A web view, or a document of its own: see `frame-view.ts` and `frame.ts`.
     frameCreated(node, engine);
   },
@@ -222,6 +225,11 @@ export const webListen: RendererExtension = {
     if (!documentOf(engine)) return false;
     // A range's bounds keep its value within them: see `range.ts`.
     if (setRange(node, attribute, value, engine)) return true;
+    // An image's `src`, `alt` and size, kept as written as well: see `image.ts`.
+    if (setImage(node, attribute, value, engine)) {
+      keepTaken(node, attribute, value);
+      return true;
+    }
     // A checkbox, a radio or a button an input is takes a press, and a label's `for` its
     // control's: both are kept as written as well.
     checkControl(node, name, value, engine);
@@ -310,7 +318,8 @@ function listenOn(
   if (field === KEY_PRESS) return listenToKeys(engine, target, eventName, callback);
   if (field) return listenToNative(engine, target, eventName, field, callback);
   if (POINTER_EVENTS.has(eventName)) return onTouch(engine, target, eventName, callback);
-  const native = NATIVE_NAMES[eventName];
+  const native =
+    (target.tag === 'img' ? IMAGE_EVENTS[eventName] : undefined) ?? NATIVE_NAMES[eventName];
   if (native) return listenToNative(engine, target, eventName, native, callback);
   if (eventName !== 'click' || PRESSABLES.has(target.tag)) return undefined;
   return onTouch(engine, target, 'click', callback);
@@ -500,6 +509,9 @@ const NATIVE_NAMES: Readonly<Record<string, string>> = {
   focus: 'topFocus',
   blur: 'topBlur',
 };
+
+/** What native says of an image's picture: see `image.ts`. */
+const IMAGE_EVENTS: Readonly<Record<string, string>> = { load: 'topLoad', error: 'topError' };
 
 /** The events a touch is delivered as, beside the `click` its release is. */
 const POINTER_EVENTS = new Set([

@@ -11,7 +11,7 @@ html/canvas/element                                                            1
 css/cssom                                                                      250        158 (63.2%)  43             1761             1972   89.3%
 uievents                                                                       15         10 (66.7%)   104            44               56     78.6%
 dom/traversal                                                                  18         16 (88.9%)   10             1602             1608   99.6%
-html/dom                                                                       209        56 (26.8%)   168            63898            64451  99.1%
+html/dom                                                                       209        56 (26.8%)   168            63914            64451  99.2%
 html/editing/the-hidden-attribute                                              10         2 (20.0%)    15             20               42     47.6%
 html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute  3          1 (33.3%)    4              8                10     80.0%
 css/cssom-view                                                                 220        48 (21.8%)   27             693              1713   40.5%

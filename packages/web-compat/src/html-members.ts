@@ -1,5 +1,6 @@
 import type { EngineNode } from '@ng-native/fabric';
 import { CANVAS_MEMBERS } from './canvas.ts';
+import { IMAGE_MEMBERS } from './image.ts';
 import { datasetOf } from './dataset.ts';
 import { nameOf } from './document.ts';
 import { isFragment } from './document-fragment.ts';
@@ -122,6 +123,7 @@ export function withHtmlMembers(base: PropertyDescriptorMap): PropertyDescriptor
     ELEMENT_TEXT,
     STYLE_SHEETS,
     CANVAS_MEMBERS,
+    IMAGE_MEMBERS,
     BY_ELEMENT,
   ];
   const names = new Set([...Object.keys(GLOBAL), ...namesOf(...tables)]);

@@ -12,6 +12,7 @@ import { byClassName, byTagName, byTagNameNS } from './elements-by.ts';
 import { insertedByScript, removedByScript } from './html-tree.ts';
 import { descendants, inDocument } from './in-document.ts';
 import { copyCanvas } from './canvas.ts';
+import { copyImage } from './image.ts';
 import { copyShape, svgInserted } from './svg.ts';
 import { liveCollection, liveNodeList, type HTMLCollection, type NodeList } from './live-list.ts';
 import { adopt, adoptFirst, together, whenAdopting } from './mutation-observer.ts';
@@ -175,6 +176,8 @@ function cloned(engine: Engine, node: EngineNode, deep: boolean): EngineNode {
   copyShape(node, copy, engine);
   // And a canvas's size, which is the grid it draws on.
   copyCanvas(node, copy, engine);
+  // And what an image shows, which it loads again: see `image.ts`.
+  copyImage(node, copy, engine);
   copyDeclarations(node, copy);
   if (copy.tag === 'style') styleMade(copy, engine);
   if (deep) {

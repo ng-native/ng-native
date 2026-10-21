@@ -84,7 +84,12 @@ Experimental and partial. It has:
   `toBlob` hands its callback null, as its `Blob` holds no bytes; `toDataURL` has the PNG there.
   There is no bitmap: a clear of part of it, and a way of laying a drawing over what is there
   other than `source-over` (and `copy` where nothing clips it), change only the pixels read
-  back. An `<img>` drawn on one draws nothing.
+  back. An `<img>` draws on one once its picture has loaded, and is not in the pixels read back.
+- `<img>` as the platform's image view, from its `src` resolved against the page's address, with
+  its `alt` said to a screen reader, its `width` and `height` as its size, the size of its
+  picture where nothing else sizes it, `naturalWidth`, `naturalHeight`, `complete`, `load` and
+  `error`, and `object-fit` as how the picture fits its box. A picture that is an SVG is fetched
+  and drawn as an `<svg>`.
 - A `<button>` and an `<a>` with their roles, each taking a press with no listener (`:active`
   while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
   disabled, and a table's and a form's elements as views.

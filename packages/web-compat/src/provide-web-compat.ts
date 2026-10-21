@@ -19,6 +19,7 @@ import { StillLocation } from './location.ts';
 import { detectedRoot, installLocation, openPage } from './page-address.ts';
 import { webListen } from './listen.ts';
 import { registerCanvas } from './canvas.ts';
+import { registerImage } from './image.ts';
 import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
 import { forgetCommits } from './commit-watch.ts';
@@ -79,6 +80,8 @@ function install(engine: Engine): void {
     // A canvas, drawn by the same views, and the globals its drawing is asked about by: see
     // `canvas.ts`.
     registerCanvas(),
+    // An image, as the platform's image view: see `image.ts`.
+    registerImage(),
     // An iframe's native web view, and Angular's `Location` where no router gives one: see
     // `frame-view.ts` and `page-address.ts`.
     registerFrameViews(),

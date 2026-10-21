@@ -238,6 +238,26 @@ from a style. A filter draws its drop shadow and its blur; each other step passe
 is given. A paint written as `var()` is not followed to its token. `getBBox` does not follow a
 rotation or a skew, and a curve's box includes its handles.
 
+## Images
+
+- An `<img>` is the platform's image view, shown from its `src`, which resolves against the page's
+  address when it is set. Its `alt` is what a screen reader says, and an
+  image with an empty one is passed over.
+- Its `width` and `height` attributes are its size, in points or as a share of what it is in,
+  under any size a stylesheet gives it. Where nothing sizes it, it is the size of its picture once
+  that has loaded, and given one side it keeps the picture's shape.
+- `naturalWidth`, `naturalHeight` and `complete` say what has loaded, `load` and `error` are told
+  as native says them, and `width` and `height` read the attribute or the picture's size.
+- Its picture fills its box, as `object-fit: fill` has it, and a stylesheet's `object-fit` is how
+  the picture fits; what is past the box is clipped.
+- A picture that is an SVG, by its name, is fetched and drawn as an `<svg>` a template writes, at
+  the drawing's own size, with no element of it in the page.
+
+Gaps: `srcset`, `sizes`, `loading` and `decoding` are kept as attributes, and the picture is the
+one `src` names. `width` and `height` read the attribute or the picture, not the size the image is
+laid out at. There is no `Image` constructor. A `src` is resolved when it is set, and not again
+when the page's address changes.
+
 ## Canvas
 
 - A `<canvas>`'s 2D context draws with the same native views as an `<svg>`: paths, rectangles,
@@ -257,7 +277,8 @@ Gaps:
 - There is no bitmap. A clear of part of a canvas, and the ways of laying a drawing over what is
   there other than `source-over` (and `copy` where nothing clips it), change only the pixels read
   back.
-- Drawing an `<img>` on a canvas draws nothing.
+- An `<img>` drawn on a canvas is drawn once its picture has loaded, and is not in the pixels read
+  back, where it is transparent. One whose picture is an SVG draws nothing.
 - Every shape drawn since the canvas was last cleared is a view, which suits a chart of some tens
   of shapes redrawn each frame and not one of thousands.
 - `isPointInPath` takes no `Path2D` of its own.
