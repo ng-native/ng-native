@@ -55,6 +55,7 @@ export {
   fontsRegistered,
   fontsSettled,
   markComponentHost,
+  markPage,
   scrollsOverflow,
   nativePlatform,
   onFontsRegistered,

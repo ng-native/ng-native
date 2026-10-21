@@ -621,6 +621,8 @@ export interface EngineNode extends HostNode {
    * on, or the root. Unset on every node that is not fixed.
    */
   fixedTo?: EngineNode;
+  /** Set by `markPage`: a `position: fixed` box inside this node is placed against it. */
+  page?: true;
   /**
    * Set once a child of this node has had an `order`: its children are then committed in that
    * order, which Yoga has no property for. Left set, since sorting children with none is nothing.
@@ -867,6 +869,16 @@ export function declareNativeProps(elementName: string, props: Iterable<string>)
  */
 export function claimHost(node: HostNode): void {
   node.claimed = true;
+}
+
+/**
+ * Make a view the page of what is inside it: a `position: fixed` box there is placed against this
+ * view and not the screen, as it is against a screen of a stack, and follows it as it is given
+ * another size. For a layer that is the window to what it holds and need not be the size of the
+ * screen. Marked before anything fixed is put in it: it is for as long as the view is.
+ */
+export function markPage(node: EngineNode): void {
+  node.page = true;
 }
 
 /**
@@ -5768,6 +5780,7 @@ const ENGINE_NODE_FIELDS = {
   resolved: true,
   sticky: true,
   fixedTo: true,
+  page: true,
   ordered: true,
   fit: true,
   fitMin: true,
@@ -8940,7 +8953,7 @@ export class Engine implements HostEngine {
   /** The page a box is on: the nearest view that holds one, or the root. */
   private pageOf(node: EngineNode): EngineNode | null {
     let page = node.parent;
-    while (page?.parent && !FIXED_BOUNDARIES.has(viewNameOf(page))) {
+    while (page?.parent && !page.page && !FIXED_BOUNDARIES.has(viewNameOf(page))) {
       page = page.parent;
     }
     return page;
