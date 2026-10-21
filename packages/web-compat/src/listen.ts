@@ -23,6 +23,7 @@ import { buildAs, holdIconBox, setMarkup } from './html.ts';
 import { inlineStyle } from './inline-style.ts';
 import { labelPress, setLabel } from './label.ts';
 import { MOUSE_OF_TOUCH, TOUCH_EVENTS, asMouse, heardTouch } from './mouse-after-touch.ts';
+import { setRange, slideRange } from './range.ts';
 import { styleMade } from './runtime-style.ts';
 import {
   createSelect,
@@ -219,6 +220,8 @@ export const webListen: RendererExtension = {
       return true;
     }
     if (!documentOf(engine)) return false;
+    // A range's bounds keep its value within them: see `range.ts`.
+    if (setRange(node, attribute, value, engine)) return true;
     // A checkbox, a radio or a button an input is takes a press, and a label's `for` its
     // control's: both are kept as written as well.
     checkControl(node, name, value, engine);
@@ -314,9 +317,10 @@ function listenOn(
 }
 
 /**
- * `change` on an input: the end of editing for a text field, and a press for a checkbox or a
- * radio. Which it is goes by its type, which a binding sets after the listener is added, so both
- * are listened for and the one that is the input's own at the time is told.
+ * `input` and `change` on an input: an edit and the end of editing for a text field, and for a
+ * checkbox, a radio or a range what a press or a finger changed. Which it is goes by its type,
+ * which a binding sets after the listener is added, so both are listened for and the one that is
+ * the input's own at the time is told.
  */
 function listenToChange(
   engine: Engine,
@@ -324,14 +328,14 @@ function listenToChange(
   eventName: string,
   callback: Heard,
 ): (() => void) | undefined {
-  if (target.tag !== 'input' || eventName !== 'change') return undefined;
+  if (target.tag !== 'input' || (eventName !== 'change' && eventName !== 'input')) return undefined;
   const tell = (field: boolean) => (event: unknown) => {
-    if (isField(target) !== field) return;
-    deliverAs(event, () => callback(dom('change', target, event)));
+    if (isField(target) !== field || wasRefused(event)) return;
+    deliverAs(event, () => callback(dom(eventName, target, event)));
   };
   const stops = [
-    engine.setEventListener(target, FIELD_EVENTS['change']!, tell(true)),
-    engine.setEventListener(target, 'topChange', tell(false)),
+    engine.setEventListener(target, FIELD_EVENTS[eventName]!, tell(true)),
+    engine.setEventListener(target, topLevel(eventName), tell(false)),
   ];
   return () => stops.forEach((stop) => stop());
 }
@@ -584,6 +588,8 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
       menu = false;
       down = pointOf(event);
       tell('pointerdown', event);
+      // After the pointer event, as a browser moves a range input and says so: see `range.ts`.
+      slideRange(node, 'down', down.x);
       if (listeners.get('contextmenu')?.size) hold(event);
     },
     onResponderMove: (event) => {
@@ -593,16 +599,21 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
         dragged = true;
       }
       tell('pointermove', event);
+      slideRange(node, 'move', at.x);
     },
     onResponderRelease: (event) => {
       over('pointerup', event);
+      slideRange(node, 'up', 0);
       // A hold that opened a menu is not a press as well, nor is a drag: a list moved under a
       // finger is not the option it was lifted from.
       const at = pointOf(event);
       dragged ||= Math.hypot(at.x - down.x, at.y - down.y) > SLOP;
       if (!disabled(node) && !menu && !dragged) tell('click', event);
     },
-    onResponderTerminate: (event) => over('pointercancel', event),
+    onResponderTerminate: (event) => {
+      over('pointercancel', event);
+      slideRange(node, 'up', 0);
+    },
   });
   touched.set(node, (entry = { listeners, stop }));
   return entry;
@@ -640,17 +651,20 @@ function bubble(from: EngineNode, event: Bubbling, type: string): void {
   }
 }
 
-/** The inputs a press does something on: see `activation.ts`. */
-const PRESSED_INPUTS = new Set(['checkbox', 'radio', 'submit', 'image', 'reset']);
+/**
+ * The inputs a press does something on: see `activation.ts`. And a range, which a finger moves:
+ * see `range.ts`.
+ */
+const PRESSED_INPUTS = new Set(['checkbox', 'radio', 'submit', 'image', 'reset', 'range']);
 
 /**
- * A checkbox, a radio or a button an input is, which a library keeps out of sight under one it
- * draws: it takes the touch, and what a press on it does is in `activation.ts`. Of any other
- * type, or of none, it lets the touch go again.
+ * A checkbox, a radio, a range or a button an input is, which a library keeps out of sight under
+ * one it draws: it takes the touch, and what a press on it does is in `activation.ts`. Of any
+ * other type, or of none, it lets the touch go again.
  */
 function checkControl(node: EngineNode, name: string, value: unknown, engine: Engine): void {
   if (name !== 'type' || node.tag !== 'input') return;
-  if (PRESSED_INPUTS.has(String(value))) takesPress(engine, node);
+  if (PRESSED_INPUTS.has(String(value).toLowerCase())) takesPress(engine, node);
   else letGoOfPress(node);
 }
 

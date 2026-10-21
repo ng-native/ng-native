@@ -184,6 +184,11 @@ before a listener hears of it.
 - Its `type`, `inputmode`, `autocomplete` and `maxlength` are the keyboard and entry native has for
   them, and `readOnly`, `disabled` or a disabled `<fieldset>` around it make it a field that cannot
   be typed into.
+- An `<input type="range">` is no text field. Its value is kept within its `min` and `max`, 0 to
+  100 with none written, on its `step`, and is the middle with none set, as HTML has it. It has
+  `valueAsNumber`, `stepUp()` and `stepDown()`, as a number input does, and a finger dragged across
+  it moves the value to where the finger is, with `input` as it moves and `change` as the finger
+  lifts. Material's slider is built on one.
 - A `<select>` shows its chosen `<option>`, has `value`, `selectedIndex`, `options` and `add()`,
   and opens a list of its options when it or its label is pressed.
 - `checked` is the state a click, a script or a binding sets, and a radio checked unchecks the rest
@@ -210,7 +215,9 @@ A plain app's `<text-input>` is unchanged.
 Gaps: a `<select>` has one option chosen at a time, with no `multiple`, and no keyboard. A
 submitted form goes nowhere, there being no page to leave, and its `submit` event has no
 `submitter`. `form.submit()` does nothing. A key's `keyCode` is there for letters, digits, a comma
-and the named keys, not for other punctuation.
+and the named keys, not for other punctuation. A range input draws nothing of its own, where a
+browser draws a track and a thumb: a library draws those over it. Its value runs left to right in
+a page written right to left too, and a date's or a time's `valueAsNumber` is `NaN`.
 
 ## SVG
 

@@ -99,7 +99,10 @@ Experimental and partial. It has:
 - A `click` listener that hears a press.
 - Forms: an `<input>` and a `<textarea>` are the platform's text field, with `value` and
   `defaultValue`, its keys, `change` once an edit ends, the keyboard its `type` and `inputmode`
-  ask for, and `readOnly` and `disabled` making it one that cannot be typed into. A `<select>`
+  ask for, and `readOnly` and `disabled` making it one that cannot be typed into. An
+  `<input type="range">` keeps its value within its `min` and `max` on its `step`, has
+  `valueAsNumber`, `stepUp()` and `stepDown()`, and moves under a finger dragged across it,
+  saying `input` as it moves and `change` as the finger lifts. A `<select>`
   shows its chosen `<option>` and opens a list of them when it or its label is pressed. A control
   has `checked`, `validity` with `checkValidity()`, `reportValidity()` and `setCustomValidity()`,
   `selectionStart` and `setSelectionRange()`, `select()` followed by `document.execCommand('copy')`

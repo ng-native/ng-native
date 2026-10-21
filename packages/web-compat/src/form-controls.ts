@@ -3,7 +3,15 @@ import { documentOf } from './document.ts';
 import { elementsUnder } from './element-tree.ts';
 import { isEdited, resetField, setValue, valueOf } from './field.ts';
 import { liveCollection } from './live-list.ts';
-import { own, type Reflecting, type Reflection } from './reflect.ts';
+import {
+  forgetRangeValue,
+  rangeValue,
+  setRangeValue,
+  setValueAsNumber,
+  stepBy,
+  valueAsNumber,
+} from './range.ts';
+import { method, own, type Reflecting, type Reflection } from './reflect.ts';
 import {
   chosen,
   optionsOf,
@@ -36,12 +44,13 @@ const DEFAULT_ON = new Set(['checkbox', 'radio']);
 const values = new WeakMap<EngineNode, string>();
 
 /**
- * `input.value`: a text field's text as typed, the attribute for a button, a hidden input, a
- * checkbox and a radio, which say `on` with none, and what was set on any other.
+ * `input.value`: a text field's text as typed, a range's number within its bounds (see
+ * `range.ts`), the attribute for a button, a hidden input, a checkbox and a radio, which say `on`
+ * with none, and what was set on any other.
  */
 const inputValue: Reflection = own(
   (node) => {
-    const typed = valueOf(node);
+    const typed = valueOf(node) ?? rangeValue(node);
     if (typed !== undefined) return typed;
     const type = typeOf(node);
     if (DEFAULT_VALUE.has(type) || DEFAULT_ON.has(type)) {
@@ -52,7 +61,7 @@ const inputValue: Reflection = own(
   },
   (node, value) => {
     const text = value == null ? '' : String(value);
-    if (setValue(node, text, engineOf(node))) return;
+    if (setValue(node, text, engineOf(node)) || setRangeValue(node, text)) return;
     const type = typeOf(node);
     if (DEFAULT_VALUE.has(type) || DEFAULT_ON.has(type)) node.setAttribute('value', text);
     else if (type !== 'file') values.set(node, text);
@@ -251,6 +260,13 @@ export const CONTROLS: Readonly<Record<string, Readonly<Record<string, Reflectio
     checked,
     indeterminate,
     form,
+    valueAsNumber: own(valueAsNumber, setValueAsNumber),
+    stepUp: method(function (this: EngineNode, n?: unknown) {
+      stepBy(this, n, 1);
+    }),
+    stepDown: method(function (this: EngineNode, n?: unknown) {
+      stepBy(this, n, -1);
+    }),
   },
   textarea: {
     value: textareaValue,
@@ -273,6 +289,7 @@ export function resetControl(node: EngineNode): void {
   checkedness.delete(node);
   indeterminates.delete(node);
   values.delete(node);
+  forgetRangeValue(node);
   const text = node.tag === 'textarea' ? textOf(node) : (node as Reflecting).getAttribute('value');
   resetField(node, text ?? '', engineOf(node));
 }
