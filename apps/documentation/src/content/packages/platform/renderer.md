@@ -99,6 +99,53 @@ and the root is always the window.
 }
 ```
 
+## Extending the renderer
+
+Three functions let a package other than `@ng-native/platform` and `@ng-native/fabric` change how a
+template is rendered, for every app in the process. A compatibility layer for templates written for
+another host is built on them, and none of them puts that host's API in the engine or the renderer.
+
+**`extendRenderer(extension)`**, from `@ng-native/platform`, adds hooks the renderer calls. Each
+is optional, and the extensions are asked in the order they were added:
+
+- `named(name, namespace, engine)` answers the element a name stands for in a namespace: another
+  name, or its own to keep it. Angular creates what is written inside an `<svg>` in the `svg`
+  namespace, where a `<text>` is the drawing's text, not the app's. An element an extension
+  answers for is a drawing to the engine, whose react-native-svg shapes are painted by a
+  stylesheet as a browser paints them, and a type selector still matches it by the name it was
+  written as. Answering nothing leaves the element the app's own. The hook is asked for every app
+  in the process, with the engine the element is created in, so an extension that should draw
+  only for the apps that asked for it checks the engine and answers nothing for any other. An
+  icon's shapes are created by name alone, and render as they always have.
+- `listen(target, eventName, callback, engine)` takes a listener over: it answers what removes the
+  listener, or nothing to leave it to the renderer. The target is a node, or the name Angular gives
+  a global one: `'window'`, `'document'` or `'body'`.
+- `created(node, engine)` is told of each element a template creates, before it has attributes
+  or children.
+- `inserted(node, parent, engine)` is told each time a node is put under a parent, and
+  `removed(node, engine)` each time the renderer takes one out.
+- `set(node, name, value, engine)` takes an attribute or a property over, `null` for one being
+  removed, and answers `true` once it has set the props the view reads.
+- `style(node, name, value, engine)` takes a bound style over and answers the declarations it is
+  set as, by the keys the view reads, each `null` to remove it.
+
+An app with no extension added pays one length check for each of these calls.
+
+**`extendNodes(members)`**, from `@ng-native/fabric`, gives every node the property descriptors
+it is passed, a getter or a method, on the prototype the nodes share. The engine reads none of
+them. A field the engine keeps on a node, such as `nodeKind` or `props`, is refused. A member a
+node already has on that prototype, such as `classList`, is replaced and put back when the
+extension is taken away, so what replaces it has to keep doing what Angular relied on. Two
+extensions of the same member can be taken away in either order.
+
+**`registerViewName()`** returns a function that takes the registration away again, so a package
+can register names only for as long as it is in use. Two registrations of one name can be taken
+away in either order: the newest still there names the element, and the original comes back after
+the last.
+
+Each returns a function that takes the extension away again, which is what a test calls when it
+is done.
+
 ## Reading commit stats
 
 `engine.stats` tracks commit counts and timings - worst commit, worst render span, slow-commit

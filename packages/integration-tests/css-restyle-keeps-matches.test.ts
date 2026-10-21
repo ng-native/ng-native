@@ -220,7 +220,7 @@ describe('a class changed on an element while it is out of the tree', () => {
       '.detail { opacity: 0.5 } .faint { opacity: 0.25 } .faint .mark { opacity: 0 }',
     );
     const row = s.rows[4]!;
-    const detail = row.children[1] as EngineNode;
+    const detail = row.childList[1] as EngineNode;
     const mark = s.engine.createElement('view');
     s.engine.setClasses(mark, 'mark');
     s.engine.setProp(mark, 'nativeID', 'mark');
@@ -231,7 +231,7 @@ describe('a class changed on an element while it is out of the tree', () => {
     // Styled before, so not an element still being built: its classes are asked about.
     s.engine.removeChild(row, detail);
     s.engine.addClass(detail, 'faint');
-    s.engine.insertBefore(row, detail, row.children[1] ?? null);
+    s.engine.insertBefore(row, detail, row.childList[1] ?? null);
     s.engine.commit();
     assert.equal(s.props('detail4')['opacity'], 0.25);
     assert.equal(s.props('mark')['opacity'], 0);

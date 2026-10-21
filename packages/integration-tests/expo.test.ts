@@ -9,8 +9,8 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { ErrorHandler, InjectionToken, type Type } from '@angular/core';
-import { Engine } from '@ng-native/fabric';
+import { ErrorHandler, InjectionToken, type Type, type WritableSignal } from '@angular/core';
+import { Engine, registerPlatformComponents } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 import { compileFixture } from './compile.ts';
 import {
@@ -304,6 +304,21 @@ describe('the file system', () => {
     assert.deepEqual(await missing.file.bytes(), pdf);
   });
 
+  it('writes before it returns on SDK 58, whose File.write is async and writeSync is not', () => {
+    const sdk58 = fakeFile(true);
+    const later: (() => void)[] = [];
+    const file = {
+      ...sdk58.file,
+      write: (content: string | Uint8Array) =>
+        new Promise<void>((resolve) => later.push(() => (sdk58.written.push(content), resolve()))),
+      writeSync: (content: string | Uint8Array) => void sdk58.written.push(content),
+    };
+    const system = serviceWith(FileSystem.SOURCE, files(file), () => new FileSystem());
+    system.write(file, 'hello');
+    assert.equal(file.textSync(), 'hello', 'the content is there as soon as write returns');
+    assert.equal(later.length, 0, 'the async write is never started');
+  });
+
   it('writes an existing file without creating it again', () => {
     const present = fakeFile(true);
     const system = serviceWith(FileSystem.SOURCE, files(present.file), () => new FileSystem());
@@ -331,6 +346,40 @@ describe('the views worth knowing the names of', () => {
     const view = fabric.committed[0]!;
     assert.match(view.viewName, /ExpoBlurView/, 'committed as the module its name says');
     assert.equal(view.props['intensity'], 50, 'with the defaults the React component applies');
+  });
+
+  it("names expo-blur's view as expo-blur asks for it", () => {
+    // expo-blur's NativeBlurModule asks for requireNativeViewManager('ExpoBlur', 'ExpoBlurView').
+    // There is no module called ExpoBlurView: Android's registry lists ExpoBlur_ExpoBlurView only.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { processColor: (value) => value });
+    registerExpoViews('expo-blur');
+
+    engine.appendChild(engine.root, engine.createElement('expo-blur'));
+    engine.commit();
+
+    assert.equal(fabric.committed[0]!.viewName, 'ViewManagerAdapter_ExpoBlur_ExpoBlurView');
+  });
+
+  it("names expo-video's view for each platform, as expo-video does", () => {
+    // On Android the view is SurfaceVideoView: VideoView is iOS's name, and Android has no view
+    // manager by it ("Can't find ViewManager 'ViewManagerAdapter_ExpoVideo_VideoView'").
+    registerExpoViews('expo-video');
+    const committed = () => {
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, { processColor: (value) => value });
+      engine.appendChild(engine.root, engine.createElement('expo-video'));
+      engine.commit();
+      return fabric.committed[0]!.viewName;
+    };
+
+    assert.equal(committed(), 'ViewManagerAdapter_ExpoVideo_VideoView');
+    registerPlatformComponents('android');
+    try {
+      assert.equal(committed(), 'ViewManagerAdapter_ExpoVideo_SurfaceVideoView');
+    } finally {
+      registerPlatformComponents('ios');
+    }
   });
 
   it('names SF Symbols by the module expo-symbols registers', () => {
@@ -465,6 +514,29 @@ describe('the SwiftUI and Compose views', () => {
     ]);
   });
 
+  it("asks Expo for the current platform's view of one named for each", () => {
+    const asked: [string, string | undefined][] = [];
+    const global = globalThis as { require?: (name: string) => unknown };
+    for (const OS of ['ios', 'android']) {
+      global.require = (name: string) => {
+        if (name === 'react-native') return { Platform: { OS } };
+        if (name !== 'expo') throw new Error(`no ${name}`);
+        return {
+          requireNativeView: (module: string, view?: string) => asked.push([module, view]),
+        };
+      };
+      try {
+        registerExpoViews('expo-video');
+      } finally {
+        delete global.require;
+      }
+    }
+    assert.deepEqual(asked, [
+      ['ExpoVideo', 'VideoView'],
+      ['ExpoVideo', 'SurfaceVideoView'],
+    ]);
+  });
+
   it('hosts the controls in the view each platform draws them in', () => {
     for (const platform of ['ios', 'android'] as const) {
       const fabric = createFakeFabric();
@@ -548,14 +620,16 @@ describe('the typed SwiftUI and segmented-control components', () => {
     await settle();
   });
 
-  it('passes each input to the native view as the prop of the same name', () => {
+  it('passes each input to the native view as the prop it reads, a modifier or a slot', () => {
     assert.equal(named(/HostView/).props['ignoreSafeArea'], 'container');
     // Except `matchContents`, which native reads as a flag per axis; see `UiHost`.
     assert.equal(named(/HostView/).props['matchContentsVertical'], true);
     assert.equal(named(/HostView/).props['matchContentsHorizontal'], true);
-    assert.equal(named(/ExpoUI_MenuView/).props['accessibilityLabel'], 'More');
+    // SwiftUI's menu reads its label as a modifier, after the app's own.
+    assert.equal('accessibilityLabel' in named(/ExpoUI_MenuView/).props, false);
     assert.deepEqual(named(/ExpoUI_MenuView/).props['modifiers'], [
       { $type: 'opacity', value: 0.5 },
+      { $type: 'accessibilityLabel', label: 'More' },
     ]);
     assert.equal(named(/ExpoUI_Button$/).props['role'], 'destructive');
     assert.deepEqual(named(/DatePicker/).props['displayedComponents'], ['date']);
@@ -569,8 +643,16 @@ describe('the typed SwiftUI and segmented-control components', () => {
     assert.equal(named(/ExpoUI_TextView/).props['text'], 'More');
     assert.equal(named(/ExpoUI_DividerView/) !== undefined, true, 'committed, even with no props');
     assert.equal(named(/ExpoUI_ImageView/).props['systemName'], 'star');
-    assert.equal(named(/ExpoUI_ImageView/).props['size'], 24);
-    assert.equal(named(/ExpoUI_ImageView/).props['color'], '#ff0000');
+    // SwiftUI's image reads its size and colour as modifiers, not props.
+    assert.equal('size' in named(/ExpoUI_ImageView/).props, false);
+    assert.equal('color' in named(/ExpoUI_ImageView/).props, false);
+    const [font, foreground] = named(/ExpoUI_ImageView/).props['modifiers'] as Record<
+      string,
+      unknown
+    >[];
+    assert.deepEqual(font, { $type: 'font', size: 24 });
+    assert.equal(foreground!['$type'], 'foregroundStyle');
+    assert.equal(foreground!['color'], '#ff0000');
   });
 
   it('hands the native events to the outputs', async () => {
@@ -599,7 +681,9 @@ describe('the typed SwiftUI and segmented-control components', () => {
     // The trigger is a row of the app's own, hosted back inside the SwiftUI content.
     const hosted = menu.children[0]!.children[0]!;
     assert.match(hosted.viewName, /ExpoUI_RNHostView$/);
-    assert.equal(hosted.props['matchContents'], true);
+    assert.equal(hosted.props['matchContents'], true, 'as @expo/ui to 57.0.22 reads it');
+    assert.equal(hosted.props['matchContentsHorizontal'], true, 'as @expo/ui from 57.0.23 does');
+    assert.equal(hosted.props['matchContentsVertical'], true);
     assert.equal(hosted.props['expoInternalSizeFromChildren'], true, 'what sizes it natively');
     assert.equal('layoutRoot' in hosted.props, false);
     assert.equal(hosted.children.length, 1);
@@ -671,11 +755,49 @@ describe('the typed SwiftUI list', () => {
   });
 });
 
+describe('a SwiftUI section', () => {
+  const all = (n: readonly FakeFabricNode[]): FakeFabricNode[] =>
+    n.flatMap((x) => [x, ...all(x.children)]);
+  /** The section's own slots, by name, and the texts each draws. */
+  const slots = (fabric: FakeFabric) => {
+    const section = all(fabric.committed).find((n) => /ExpoUI_SectionView$/.test(n.viewName))!;
+    return section.children.map((slot) => [
+      slot.props['name'],
+      all(slot.children)
+        .filter((n) => /ExpoUI_TextView$/.test(n.viewName))
+        .map((n) => n.props['text']),
+    ]);
+  };
+
+  it('takes a header and a footer slot as its own, not as rows of its content', async () => {
+    const mod = await compileFixture('fixtures/expo-ui.ts');
+    registerExpoUiViews('ios');
+    const fabric = createFakeFabric();
+    const app = mount(1, mod['ExpoUiSectionSlotsFixture'] as Type<unknown>, fabric);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // `SectionView` reads each by name among its children, as `@expo/ui`'s `Section` puts them.
+    assert.deepEqual(slots(fabric), [
+      ['header', ['Notifications']],
+      ['content', ['On']],
+      ['footer', ['Turn them on in Settings.']],
+    ]);
+
+    (app.componentRef.instance as { footer: WritableSignal<boolean> }).footer.set(false);
+    app.applicationRef.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(slots(fabric), [
+      ['header', ['Notifications']],
+      ['content', ['On']],
+    ]);
+  });
+});
+
 describe('the typed SwiftUI controls and expo-image', () => {
   const all = (n: readonly FakeFabricNode[]): FakeFabricNode[] =>
     n.flatMap((x) => [x, ...all(x.children)]);
 
-  it('passes each input through as the prop of the same name, and events to the outputs', async () => {
+  it('passes each input through as the prop, modifier or slot native reads, and events to the outputs', async () => {
     const mod = await compileFixture('fixtures/expo-ui.ts');
     registerExpoUiViews('ios');
     registerExpoViews('expo-image');
@@ -691,7 +813,11 @@ describe('the typed SwiftUI controls and expo-image', () => {
     assert.equal(named(/ExpoUI_ColorPickerView$/).props['selection'], '#ff0000');
     assert.equal(named(/ExpoUI_SectionView$/).props['title'], 'Network');
     assert.equal(named(/ExpoUI_HStackView$/).props['spacing'], 4);
-    assert.equal(named(/ExpoUI_GaugeView$/).props['currentValueLabel'], '40%');
+    // SwiftUI's gauge reads its labels from slots, as Expo's own Gauge puts them.
+    const gauge = named(/ExpoUI_GaugeView$/);
+    assert.equal('currentValueLabel' in gauge.props, false);
+    const slot = gauge.children.find((child) => child.props['name'] === 'currentValue')!;
+    assert.equal(slot.children[0]!.props['text'], '40%');
     assert.equal(named(/ExpoUI_ProgressView$/).props['value'], 0.5);
     const chart = named(/ExpoUI_ChartView$/).props;
     assert.equal(chart['type'], 'pie');

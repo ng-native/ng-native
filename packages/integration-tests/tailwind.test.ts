@@ -608,14 +608,14 @@ describe('real Tailwind output, end to end', () => {
     // them. Each one is dropped with a warning, as in a component's own stylesheet.
     const refused: string[] = [];
     const sheet = compileCss(
-      '.a { color: red } .b:has(+ .c) { color: blue } .d { color: green }',
+      '.a { color: red } .b:checked { color: blue } .d { color: green }',
       'tw',
       {
         onUnsupported: (message: string) => refused.push(message),
       },
     );
     assert.equal(sheet.rules.length, 2, 'the two it could express');
-    assert.match(refused.join(''), /:has/);
+    assert.match(refused.join(''), /:checked/);
   });
 
   it('compiles the whole sheet without the compiler refusing any of it', () => {

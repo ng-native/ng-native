@@ -221,13 +221,13 @@ function build(spec: CaseNode, parent: StyleTarget | null): StyleTarget[] {
     parent,
     classes: new Set(spec.classes ?? []),
     props: { ...(spec.id ? { nativeID: spec.id } : {}), ...(spec.attrs ?? {}) },
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,
   };
   const children = (spec.children ?? []).flatMap((child) => build(child, node));
-  (node as { children?: StyleTarget[] }).children = children.filter((c) => c.parent === node);
+  (node as { childList?: StyleTarget[] }).childList = children.filter((c) => c.parent === node);
   return [node, ...children];
 }
 
@@ -365,10 +365,6 @@ function agrees(property: CorpusProperty, browser: string, value: unknown): bool
  * by design does not, match the browser. A difference not listed here fails; so does a listed one
  * that has gone away, so this list cannot rot.
  */
-const FLEX_ONLY =
-  'Yoga lays out flex boxes and nothing else. Every native view is a flex item, which a browser ' +
-  'lays out as a block, so inline-block and inline-flex are read as flex, and grid is refused ' +
-  "(ADR 0001). The box keeps native's flex.";
 const BODY_LINE_HEIGHT =
   'Inherited from `body`, which native has no element for, and as a ratio: CSS inherits ' +
   "`line-height: 1.5` as a multiple of each descendant's own font size, native's lineHeight is " +
@@ -386,7 +382,6 @@ const TWO_VARS =
   '`calc(var(--a) - var(--b))`: arithmetic between two tokens needs evaluating on device.';
 
 const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
-  'bootstrap .btn.btn-primary': { display: FLEX_ONLY },
   'bootstrap .alert.alert-success': {
     'border-top-color': SHORTHAND_TOKEN,
     'border-left-color': SHORTHAND_TOKEN,
@@ -402,11 +397,9 @@ const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
     'padding-right': TWO_VARS,
     'padding-bottom': TWO_VARS,
     'padding-left': TWO_VARS,
-    display: FLEX_ONLY,
   },
   'bulma .is-size-3': { 'line-height': BODY_LINE_HEIGHT },
-  'bulma .tag': { 'background-color': HSL_TOKENS, display: FLEX_ONLY },
-  'pico .grid': { display: FLEX_ONLY },
+  'bulma .tag': { 'background-color': HSL_TOKENS },
 };
 
 describe('what a browser does with the corpus', () => {

@@ -7,8 +7,15 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
 import type { Type } from '@angular/core';
-import { Engine } from '@ng-native/fabric';
-import { cleanup, createFakeFabric, render, screen, settle } from '@ng-native/testing';
+import { Engine, registerHoist, type EngineNode } from '@ng-native/fabric';
+import {
+  cleanup,
+  createFakeFabric,
+  render,
+  screen,
+  settle,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
 afterEach(cleanup);
@@ -55,4 +62,204 @@ it('creates what a destroyed node holds again when the node comes back', () => {
   // The fake throws here where a view is handed to a second parent, as native aborts.
   engine.commit();
   assert.notEqual(engine.tagOf(line), before, 'a new view under the new caret');
+});
+
+/** The views committed for a host holding a frame holding a config, as names. */
+function hoistedTree(host: string, config: string): unknown[] {
+  const fabric = createFakeFabric();
+  const engine = new Engine(fabric, 1, {});
+  const add = (name: string, id: string, parent: EngineNode) => {
+    const node = engine.createElement(name);
+    engine.setProp(node, 'nativeID', id);
+    engine.appendChild(parent, node);
+    return node;
+  };
+  const frame = add('undo-frame', 'frame', add(host, 'host', engine.root));
+  add('view', 'item', frame);
+  add(config, 'config', frame);
+  engine.commit();
+  const walk = (all: readonly FakeFabricNode[]): unknown[] =>
+    all.map((node) => [node.props['nativeID'], ...walk(node.children)]);
+  return walk(fabric.committed);
+}
+
+it('commits a hoisted element where it is once its registration is taken away', () => {
+  const undo = registerHoist('undo-config', 'undo-host', { only: true });
+  try {
+    assert.deepEqual(hoistedTree('undo-host', 'undo-config'), [['host', ['config']]]);
+  } finally {
+    undo();
+  }
+  assert.deepEqual(hoistedTree('undo-host', 'undo-config'), [
+    ['host', ['frame', ['item'], ['config']]],
+  ]);
+});
+
+it('leaves the ancestor a registration made again replaces an ordinary view', () => {
+  const undos = [registerHoist('again-config', 'again-host', { only: true })];
+  try {
+    undos.push(registerHoist('again-config', 'undo-frame'));
+    // The host commits what is written in it again, the frame no longer being in it alone.
+    assert.deepEqual(hoistedTree('again-host', 'again-config'), [
+      ['host', ['frame', ['item'], ['config']]],
+    ]);
+  } finally {
+    for (const undo of undos.reverse()) undo();
+  }
+});
+
+it('restores what a registration replaced when it is taken away, and only that one', () => {
+  const undos: (() => void)[] = [];
+  try {
+    undos.push(registerHoist('stack-config', 'stack-host'));
+    const later = registerHoist('stack-config', 'undo-frame');
+    undos.push(later);
+    later();
+    // The earlier registration counts again.
+    assert.deepEqual(hoistedTree('stack-host', 'stack-config'), [
+      ['host', ['frame', ['item']], ['config']],
+    ]);
+    // Two of the same: taking the first away leaves the second, and the second the one before.
+    const first = registerHoist('stack-config', 'stack-host', { only: true });
+    const second = registerHoist('stack-config', 'stack-host', { only: true });
+    undos.push(first, second);
+    first();
+    assert.deepEqual(hoistedTree('stack-host', 'stack-config'), [['host', ['config']]]);
+    second();
+    assert.deepEqual(hoistedTree('stack-host', 'stack-config'), [
+      ['host', ['frame', ['item']], ['config']],
+    ]);
+  } finally {
+    for (const undo of undos.reverse()) undo();
+  }
+  assert.deepEqual(hoistedTree('stack-host', 'stack-config'), [
+    ['host', ['frame', ['item'], ['config']]],
+  ]);
+});
+
+it('hoists a destroyed element again when it comes back', () => {
+  // A header projected into an `@if` is destroyed when the `@if` closes and put back when it opens.
+  registerHoist('reparent-config', 'reparent-host');
+  const fabric = createFakeFabric();
+  const engine = new Engine(fabric, 1, {});
+  const add = (name: string, id: string, parent: EngineNode) => {
+    const node = engine.createElement(name);
+    engine.setProp(node, 'nativeID', id);
+    engine.appendChild(parent, node);
+    return node;
+  };
+  const tree = () => {
+    engine.commit();
+    const walk = (all: readonly FakeFabricNode[]): unknown[] =>
+      all.map((node) => [node.props['nativeID'], ...walk(node.children)]);
+    return walk(fabric.committed);
+  };
+  const host = add('reparent-host', 'host', engine.root);
+  const frame = add('view', 'frame', host);
+  const config = add('reparent-config', 'config', frame);
+  assert.deepEqual(tree(), [['host', ['frame'], ['config']]]);
+
+  engine.removeChild(frame, config);
+  engine.destroyNode(config);
+  assert.deepEqual(tree(), [['host', ['frame']]]);
+  engine.appendChild(frame, config);
+  assert.deepEqual(tree(), [['host', ['frame'], ['config']]], 'into its host, not where it is');
+
+  // Destroyed in a subtree that left, it is the subtree's to bring back.
+  engine.removeChild(host, frame);
+  engine.destroyNode(config);
+  assert.deepEqual(tree(), [['host']]);
+  engine.appendChild(host, frame);
+  assert.deepEqual(tree(), [['host', ['frame'], ['config']]], 'hoisted when the subtree is back');
+
+  // Destroyed where it is, it is still in the tree, and still hoisted.
+  engine.destroyNode(config);
+  engine.setProp(config, 'nativeID', 'still');
+  assert.deepEqual(tree(), [['host', ['frame'], ['still']]]);
+
+  // Moved out of a subtree that left, it takes its hoisting along, and leaves the subtree its own.
+  const wrap = add('view', 'wrap', frame);
+  const other = add('reparent-config', 'other', wrap);
+  engine.appendChild(wrap, config);
+  engine.removeChild(frame, wrap);
+  assert.deepEqual(tree(), [['host', ['frame']]]);
+  engine.insertBefore(frame, config, null);
+  assert.deepEqual(tree(), [['host', ['frame'], ['still']]], 'hoisted where it went');
+  engine.appendChild(frame, wrap);
+  assert.deepEqual(tree(), [['host', ['frame', ['wrap']], ['still'], ['other']]]);
+  assert.equal(other.parent, wrap);
+  // And taken out first, then put in by a call of its own, with a commit between.
+  engine.appendChild(wrap, config);
+  engine.removeChild(frame, wrap);
+  assert.deepEqual(tree(), [['host', ['frame']]]);
+  engine.removeChild(wrap, config);
+  assert.deepEqual(tree(), [['host', ['frame']]]);
+  engine.appendChild(frame, config);
+  assert.deepEqual(tree(), [['host', ['frame'], ['still']]], 'hoisted after a separate removal');
+
+  // And one destroyed before it was ever put in is not held: no removal comes to let it go.
+  const hoisted = (engine as unknown as { hoisted: Set<EngineNode> }).hoisted;
+  const never = engine.createElement('reparent-config');
+  engine.destroyNode(never);
+  engine.commit();
+  assert.equal(hoisted.has(never), false, 'the engine lets go of it');
+  // Nor is an element that does not hoist made to, by being destroyed and put back.
+  const plain = engine.createElement('view');
+  engine.destroyNode(plain);
+  engine.appendChild(engine.root, plain);
+  assert.equal(hoisted.has(plain), false);
+});
+
+it('keeps the listeners of content projected into an @if when the @if opens again', async () => {
+  // Angular runs its destroy action on the nodes an <ng-content> at the top of a closing view
+  // projects, though they belong to the declaring view, which is alive, and it puts the same nodes
+  // back without listening again. A listener goes when the view that owns it goes.
+  const { fabric, instance } = await render(
+    mod['Folded'] as Type<{
+      hits(): number;
+      fold(): { open: { set(value: boolean): void } };
+      pressable(): { hovered(): boolean };
+    }>,
+  );
+  const layout = (height: number) => ({ layout: { x: 0, y: 0, width: 1, height } });
+  fabric.emit(screen.getByTestId('row'), 'topLayout', layout(1));
+  await settle();
+  assert.equal(instance.hits(), 1);
+  const before = screen.getByTestId('inner').reactTag;
+
+  instance.fold().open.set(false);
+  await settle();
+  assert.equal(screen.queryByTestId('row'), null, 'the content left with the block');
+  // The fake throws here where a view is handed to a second parent, as native aborts.
+  instance.fold().open.set(true);
+  await settle();
+  assert.notEqual(screen.getByTestId('inner').reactTag, before, 'created again, not re-parented');
+
+  fabric.emit(screen.getByTestId('row'), 'topLayout', layout(2));
+  await settle();
+  assert.equal(instance.hits(), 2, 'the listener outlived the block it was projected into');
+  // And one a directive added on the engine itself, which it takes off when it is destroyed.
+  fabric.emit(screen.getByTestId('press'), 'topPointerEnter', {});
+  await settle();
+  assert.equal(instance.pressable().hovered(), true, 'the pressable still hears the pointer');
+});
+
+it('hoists content projected inside an element of an @if when the @if opens again', async () => {
+  // The element is made again and the content moved into the new one, out of the old one, which
+  // left with the block: what hoists in it must hoist from the new one.
+  registerHoist('reparent-config', 'reparent-host');
+  const { fabric, instance } = await render(
+    mod['WrappedHoist'] as Type<{ fold(): { open: { set(value: boolean): void } } }>,
+  );
+  const walk = (all: readonly FakeFabricNode[]): unknown[] =>
+    all.map((node) => [node.props['nativeID'] ?? node.viewName, ...walk(node.children)]);
+  const open = walk(fabric.committed);
+  assert.deepEqual(open, [['View', ['host', ['View', ['box', ['wrap']]], ['config']]]]);
+
+  instance.fold().open.set(false);
+  await settle();
+  assert.deepEqual(walk(fabric.committed), [['View', ['host', ['View', ['box']]]]]);
+  instance.fold().open.set(true);
+  await settle();
+  assert.deepEqual(walk(fabric.committed), open, 'into its host, not inside the new element');
 });

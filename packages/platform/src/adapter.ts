@@ -39,6 +39,7 @@ import {
   firstFamily,
   HostEngine,
   installDeferTriggers,
+  installNodeGlobal,
   markComponentHost,
   nativePlatform,
   onFontsRegistered,
@@ -215,8 +216,20 @@ class NativeRenderer implements Renderer2 {
 
   destroy(): void {}
 
-  createElement(name: string): EngineNode {
-    return this.engine.createElement(name, this.sheet);
+  createElement(name: string, namespace?: string | null): EngineNode {
+    const claimed = namespace && namers ? nameIn(name, namespace, this.engine) : undefined;
+    const named = claimed ?? name;
+    const node = this.engine.createElement(named, this.sheet);
+    if (namespace && claimed !== undefined) {
+      // Drawn as a library's drawing: see `EngineNode.namespace`.
+      node.namespace = namespace;
+      // Still the element it was written as to a stylesheet: a drawing's `text` is kept as another.
+      if (named !== name) node.typeName = name;
+    }
+    if (extensions.length) {
+      for (const extension of extensions) extension.created?.(node, this.engine);
+    }
+    return node;
   }
 
   createComment(): EngineNode {
@@ -229,18 +242,29 @@ class NativeRenderer implements Renderer2 {
 
   appendChild(parent: EngineNode, newChild: EngineNode): void {
     this.engine.appendChild(parent, newChild);
+    if (extensions.length) this.inserted(parent, newChild);
   }
 
   insertBefore(parent: EngineNode, newChild: EngineNode, refChild: EngineNode | null): void {
     if (!parent) return;
     this.engine.insertBefore(parent, newChild, refChild);
+    if (extensions.length) this.inserted(parent, newChild);
+  }
+
+  /** Tell the extensions a node was put under a parent. */
+  private inserted(parent: EngineNode, child: EngineNode): void {
+    for (const extension of extensions) extension.inserted?.(child, parent, this.engine);
   }
 
   removeChild(_parent: EngineNode | null, oldChild: EngineNode): void {
     // From the parent it has, as Angular's DOM renderer takes a node out: the parent it is
     // handed is whatever the caller had, and a library's may be no parent of it at all. One in
     // no parent is out already.
-    if (oldChild.parent) this.engine.removeChild(oldChild.parent, oldChild);
+    if (!oldChild.parent) return;
+    this.engine.removeChild(oldChild.parent, oldChild);
+    if (extensions.length) {
+      for (const extension of extensions) extension.removed?.(oldChild, this.engine);
+    }
   }
 
   selectRootElement(selectorOrNode: string | EngineNode): EngineNode {
@@ -276,7 +300,7 @@ class NativeRenderer implements Renderer2 {
       attributeStyles.set(el, Object.keys(declared));
       return;
     }
-    this.engine.setProp(el, name, value);
+    this.set(el, name, value);
   }
 
   removeAttribute(el: EngineNode, name: string): void {
@@ -287,7 +311,16 @@ class NativeRenderer implements Renderer2 {
       attributeStyles.delete(el);
       return;
     }
-    this.engine.setProp(el, name, null);
+    this.set(el, name, null);
+  }
+
+  /** Set a prop, unless an extension takes the attribute or property it was written as. */
+  private set(el: EngineNode, name: string, value: unknown): void {
+    if (!extensions.length) return this.engine.setProp(el, name, value);
+    for (const extension of extensions) {
+      if (extension.set?.(el, name, value, this.engine)) return;
+    }
+    this.engine.setProp(el, name, value);
   }
 
   /** Takes out what an element's `style` attribute declared and `kept` does not. */
@@ -310,11 +343,33 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), value);
       return;
     }
+    if (extensions.length && this.restyled(el, style, value)) return;
     // A number bound to the CSS name is a CSS number, a multiple of the font size, as a browser's
     // `style.setProperty` reads it. A style object's `lineHeight: 24` stays React Native's points.
     if (style === 'line-height' && typeof value === 'number') value = String(value);
     const key = styleKey(style);
     if (this.setShorthand(el, key, value)) return;
+    // `setDeclaration`, written out: Angular calls this for every declaration of every bound
+    // style, where the call more measured slower in `pnpm bench`. The two change together.
+    if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
+    const next = declaredValue(key, value);
+    const current = el.props['style'] as Record<string, unknown> | undefined;
+    if (current && current === el.ownStyle) {
+      if (current[key] === next) return;
+      current[key] = next;
+      this.engine.styleChanged(el, key);
+      return;
+    }
+    const owned = { ...(current ?? {}), [key]: next };
+    el.ownStyle = owned;
+    this.engine.setProp(el, 'style', owned);
+  }
+
+  /**
+   * Set one declaration of an element's inline style, by the key the view reads, as an extension
+   * restyles it. `setStyle` does the same for the declaration Angular sets.
+   */
+  private setDeclaration(el: EngineNode, key: string, value: unknown): void {
     // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
     if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
     const next = declaredValue(key, value);
@@ -322,7 +377,7 @@ class NativeRenderer implements Renderer2 {
     if (current && current === el.ownStyle) {
       if (current[key] === next) return;
       current[key] = next;
-      this.engine.styleChanged(el);
+      this.engine.styleChanged(el, key);
       return;
     }
     const owned = { ...(current ?? {}), [key]: next };
@@ -359,10 +414,32 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), null);
       return;
     }
+    if (extensions.length && this.restyled(el, style, null)) return;
     const key = styleKey(style);
     if (SHORTHANDS.has(key)) this.dropLonghands(el, key, null);
+    this.dropDeclaration(el, key);
+  }
+
+  private dropDeclaration(el: EngineNode, key: string): void {
     this.engine.setBoundStyle(el, key, null);
     this.dropStyle(el, key);
+  }
+
+  /**
+   * Ask the extensions what a declaration is set as: the first to answer has each of its
+   * declarations set, or removed for a `null`, in place of the one written.
+   */
+  private restyled(el: EngineNode, style: string, value: unknown): boolean {
+    for (const extension of extensions) {
+      const declarations = extension.style?.(el, style, value, this.engine);
+      if (!declarations) continue;
+      for (const [key, next] of Object.entries(declarations)) {
+        if (next == null) this.dropDeclaration(el, key);
+        else this.setDeclaration(el, key, next);
+      }
+      return true;
+    }
+    return false;
   }
 
   /** Takes out the longhands `key` was written as, but for the ones it is about to be again. */
@@ -392,7 +469,7 @@ class NativeRenderer implements Renderer2 {
 
   setProperty(el: EngineNode, name: string, value: unknown): void {
     if (this.engine.dev) reportUnboundFormsInput(this.engine, el, name);
-    this.engine.setProp(el, name, value);
+    this.set(el, name, value);
   }
 
   setValue(node: EngineNode, value: string): void {
@@ -404,10 +481,114 @@ class NativeRenderer implements Renderer2 {
     eventName: string,
     callback: (event: unknown) => boolean | void,
   ): () => void {
+    for (const extension of extensions) {
+      const unlisten = extension.listen?.(target, eventName, callback, this.engine);
+      if (unlisten) return unlisten;
+    }
     // Angular's names for a global target, 'window', 'document' and 'body': there is none here.
     if (typeof target === 'string') return () => {};
     return this.engine.setEventListener(target, topLevelType(eventName), callback);
   }
+}
+
+/** What a package outside core changes about how a template is rendered. */
+export interface RendererExtension {
+  /**
+   * Answer the element a name stands for in a namespace, where it is another than the name
+   * alone is: Angular creates an element written inside an `<svg>` in the `svg` namespace, and
+   * a `<text>` there is the drawing's text, not the app's. An element an extension answers for,
+   * with another name or its own, is a library's drawing to the engine, painted and given its
+   * font as a browser does: see `EngineNode.namespace`. Undefined leaves it the app's own element.
+   * Asked with the engine the element is created in, as every other member is, so an extension
+   * answers for the apps that asked for it and leaves another app in the process alone.
+   */
+  named?(name: string, namespace: string, engine: Engine): string | undefined;
+  /**
+   * Take a listener over: answer what removes it, or nothing to leave it to the renderer. The
+   * target is a node, or the name Angular gives a global one: `'window'`, `'document'`, `'body'`.
+   */
+  listen?(
+    target: EngineNode | string,
+    eventName: string,
+    callback: (event: unknown) => boolean | void,
+    engine: Engine,
+  ): (() => void) | undefined;
+  /**
+   * Told of each element a template creates, before it has attributes or children: where an
+   * element gets what it has for its name alone, as a `button` has its role.
+   */
+  created?(node: EngineNode, engine: Engine): void;
+  /**
+   * Told of each node put under a parent, the first time and each time it is moved: where an
+   * element gets what depends on what holds it.
+   */
+  inserted?(node: EngineNode, parent: EngineNode, engine: Engine): void;
+  /** Told of each node taken out of its parent by the renderer, once it is out. */
+  removed?(node: EngineNode, engine: Engine): void;
+  /**
+   * Take an attribute or a property over, `null` for one being removed: answer true once it is
+   * set as the props the element's view reads, as an `<input>`'s `value` is a text field's text.
+   */
+  set?(node: EngineNode, name: string, value: unknown, engine: Engine): boolean;
+  /**
+   * Take a bound style over, `null` for one being removed: answer the declarations it is set as,
+   * by the keys the view reads, each `null` to remove it. As CSS's `inset-inline: 4px 8px` is a
+   * `start` and an `end`.
+   */
+  style?(
+    node: EngineNode,
+    name: string,
+    value: unknown,
+    engine: Engine,
+  ): Record<string, unknown> | undefined;
+}
+
+/**
+ * Asked for their length before each is called: an app with none pays nothing an element. A new
+ * array on each change, so an extension that takes itself away during a hook skips no other.
+ */
+let extensions: readonly RendererExtension[] = [];
+
+/** How many of the extensions name elements in a namespace: see `RendererExtension.named`. */
+let namers = 0;
+
+/**
+ * The element a name in a namespace stands for: the first extension's answer, or undefined where
+ * none answers, which leaves it the app's own element.
+ */
+function nameIn(name: string, namespace: string, engine: Engine): string | undefined {
+  for (const extension of extensions) {
+    const named = extension.named?.(name, namespace, engine);
+    if (named) return named;
+  }
+  return undefined;
+}
+
+/**
+ * Add to what the renderer does, for every app in the process. Returns what takes it away again.
+ *
+ * For a package that renders templates written for another host, as a web-compatibility layer
+ * delivers a `click` from a press and gives `(document:keydown)` something to listen on. The
+ * extensions are asked in the order they were added, and the first to answer takes the listener.
+ */
+export function extendRenderer(extension: RendererExtension): () => void {
+  // An entry of this call's own: the same extension added twice is removed once by each.
+  const entry: RendererExtension = {
+    named: extension.named && ((...args) => extension.named?.(...args)),
+    listen: (...args) => extension.listen?.(...args),
+    created: (...args) => extension.created?.(...args),
+    inserted: (...args) => extension.inserted?.(...args),
+    removed: (...args) => extension.removed?.(...args),
+    set: (...args) => extension.set?.(...args) ?? false,
+    style: (...args) => extension.style?.(...args),
+  };
+  extensions = [...extensions, entry];
+  if (entry.named) namers++;
+  return () => {
+    if (!extensions.includes(entry)) return;
+    if (entry.named) namers--;
+    extensions = extensions.filter((each) => each !== entry);
+  };
 }
 
 /**
@@ -606,11 +787,13 @@ export class NativeRendererFactory implements RendererFactory2 {
    */
   private readonly pump = (): void => {
     this.frame = 0;
+    // A frame has been drawn since, so every view committed before it has been seen.
+    this.unseenSince = null;
     this.engine.advanceAnimations();
     // Also the commit for anything changed outside change detection. Angular's `animate.enter`
     // and `animate.leave` add their classes from an animation queue that runs after the render
     // pass, so without a frame behind it the class would sit on the node and never reach native.
-    this.engine.commit();
+    this.commit();
     // `pending` as well as `transitioning`: a transition's end listener runs after the commit
     // that finished it, and removing a leaving element is exactly what it tends to do.
     if (this.engine.animating || this.engine.pending) this.schedule();
@@ -636,8 +819,28 @@ export class NativeRendererFactory implements RendererFactory2 {
   };
 
   private rendering = false;
-  /** How many commits there had been before the first one of this turn, while one is unsettled. */
+  /** How many commits there had been before the first that created a view no frame has drawn. */
   private unseenSince: number | null = null;
+  private settling = false;
+
+  /**
+   * Commit, with the views created since the last frame was drawn taken as unseen: what this gives
+   * them is where they start, and no transition runs toward it. A browser computes no style for an
+   * element before the frame after it was inserted, so a class added before then, in the same
+   * task or in another, starts nothing either. A view this commit creates is unseen until the next
+   * frame, which is asked for here.
+   */
+  private commit(): boolean {
+    const before = this.engine.stats.commits;
+    const created = this.engine.stats.createdNodes;
+    const since = this.unseenSince;
+    const committed = since === null ? this.engine.commit() : this.engine.commitUnseen(since);
+    if (since === null && this.engine.stats.createdNodes !== created) {
+      this.unseenSince = before;
+      this.schedule();
+    }
+    return committed;
+  }
 
   /**
    * Commit what the rest of this turn changes before a frame is drawn, rather than a frame later.
@@ -646,14 +849,13 @@ export class NativeRendererFactory implements RendererFactory2 {
    * element has been committed once without it. Committed again in the same turn, the class is on
    * the view's first frame, and the engine starts the view there instead of easing to it.
    */
-  private settleUnseen(before: number): void {
-    if (this.unseenSince !== null) return;
-    this.unseenSince = before;
+  private settleTurn(): void {
+    if (this.settling) return;
+    this.settling = true;
     queueMicrotask(() => {
-      const since = this.unseenSince!;
-      this.unseenSince = null;
+      this.settling = false;
       if (!this.engine.pending) return;
-      this.engine.commitUnseen(since);
+      this.commit();
       if (this.engine.animating) this.schedule();
     });
   }
@@ -676,8 +878,7 @@ export class NativeRendererFactory implements RendererFactory2 {
   end(): void {
     if (this.passes > 0 && --this.passes > 0) return;
     this.rendering = false;
-    const before = this.engine.stats.commits;
-    if (this.engine.commit()) this.settleUnseen(before);
+    if (this.commit()) this.settleTurn();
 
     // A commit is what starts a transition, because it is where the cascade is recomputed.
     if (this.engine.animating) this.schedule();
@@ -949,6 +1150,7 @@ export function mount(
     calmDevBanner();
   }
   installDeferTriggers();
+  installNodeGlobal();
   const { providers: extraProviders = [], inputs = {}, bindings, ...engineOptions } = options;
   // The factory needs the engine and the engine needs the factory's dirty hook, so the hook is
   // handed over once both exist rather than through the constructor.
@@ -1035,9 +1237,9 @@ export function mount(
   const host = componentRef.location.nativeElement as EngineNode;
   // The full height of the surface, as the web's mount point is given, so a template's `flex: 1`
   // still fills the screen. A height rather than `flex: 1`, which a `:host` height would lose to.
-  // The app's own `:host` overrides it.
-  engine.setDefaultStyle(host, ROOT_HOST_STYLE);
+  // The app's own `:host` overrides it. Given under the root, which it is a share of.
   engine.appendChild(engine.root, host);
+  engine.setDefaultStyle(host, ROOT_HOST_STYLE);
   hideWhileRestoring((hidden) => {
     engine.setDefaultStyle(host, hidden ? { ...ROOT_HOST_STYLE, opacity: 0 } : ROOT_HOST_STYLE);
     factory.commitSoon();

@@ -210,7 +210,9 @@ the web view.
 A font or an image a page's stylesheet names in a `url()`, relative to the sheet, ships with the
 page: `@font-face { src: url('./files/inter.woff2') }` from a package's stylesheet, or a
 `background: url('./paper.png')` of your own. In a release build each such file is written into the
-page's folder under a name with a hash of its contents, and the `url()` is pointed at it. It has to
+page's folder under a name with a hash of its contents, and the `url()` is pointed at it. In
+development the `url()` is pointed at the file on Metro's dev server, which serves one outside the
+project too, such as a package in a pnpm store at the workspace root. It has to
 be a kind of file Metro takes as an asset (`config.resolver.assetExts`, to which `withAngularNative`
 adds `woff` and `woff2`); a `url()` to any other file, or to one that is not there, is left as
 written, with Expo's warning that it is not supported.

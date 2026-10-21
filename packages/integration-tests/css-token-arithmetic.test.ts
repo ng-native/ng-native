@@ -350,10 +350,28 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       'rgb(from var(--word) r g)',
       'hsl(from var(--word) 10% s l)',
       'hsl(from var(--word) 10px s l)',
-      'color(from var(--word) srgb r g b)',
     ]) {
       assert.throws(() => written(TOKENS, value, color), /relative|cannot express/, value);
       assert.equal(set(TOKENS, value, color)['color'], undefined, `${value} set on it`);
+    }
+    // A relative colour in color()'s srgb is refused by a stylesheet still, and worked out set
+    // on an element, as a browser works it out: a chart library picks a label's colour with one.
+    const srgb = 'color(from var(--word) srgb r g b)';
+    assert.throws(() => written(TOKENS, srgb, color), /relative|cannot express/, srgb);
+    assert.equal(set(TOKENS, srgb, color)['color'], 'rgb(255, 0, 0)');
+  });
+
+  it('works out min(), max() and clamp() in the channels of a relative colour set on an element', () => {
+    const color = 'color: var(--x, rgb(1, 2, 3))';
+    const cases: readonly [string, string | undefined][] = [
+      ['rgb(from var(--word) min(r, 100) max(g, 50, 60) b)', 'rgb(100, 60, 0)'],
+      ['rgb(from var(--word) clamp(10, r, 200) clamp(10, g, 200) b)', 'rgb(200, 10, 0)'],
+      ['rgb(from var(--word) calc(min(r, 100) / 2) g b)', 'rgb(50, 0, 0)'],
+      ['rgb(from var(--word) clamp(0, r) g b)', undefined],
+      ['rgb(from var(--word) abs(r) g b)', undefined],
+    ];
+    for (const [value, expected] of cases) {
+      assert.equal(set(TOKENS, value, color)['color'], expected, value);
     }
   });
 

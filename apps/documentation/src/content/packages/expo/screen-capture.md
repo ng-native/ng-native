@@ -27,10 +27,12 @@ import { ScreenCapture } from '@ng-native/expo/screen-capture';
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { ScreenCapture } from '@ng-native/expo/screen-capture';
 
 @Component({
   selector: 'app-card-details',
+  imports: [Text],
   template: `
     <text>4242 4242 4242 4242</text>
     @if (capture.screenshots() > 0) {
@@ -53,7 +55,10 @@ export class CardDetails {
 - **`screenshots`** - a signal: how many screenshots the user has taken while the app was in
   front. The event carries nothing else, so a count is all there is to hold.
 - **`prevent(key?)`** - keeps the app out of screenshots and screen recordings until `allow()` is
-  called with the same key, or the app restarts. Without a key, one shared default key is used.
+  called with the same key, or the app is destroyed. Without a key, one shared default key is used.
+  Keys are counted across every app the runtime mounts, so an app allowing a key leaves it held
+  for another app that prevents it too. On Android, an activity that comes to the front while a
+  key is held is kept out of capture again.
 - **`allow(key?)`** - releases the key. Capture is allowed again once no key is held.
 - **`available()`** - whether the platform can prevent capture.
 - **`protectAppSwitcher(blurIntensity?)`** and **`unprotectAppSwitcher()`** - iOS: blurs the app

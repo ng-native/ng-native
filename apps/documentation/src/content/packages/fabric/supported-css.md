@@ -15,11 +15,12 @@ parse fails the build.
 
 Type, class and id selectors. Attribute selectors: `[name]`, `[name="value"]`, `[name^="value"]`,
 `[name$="value"]`, `[name*="value"]`, `[name~="value"]` and `[name|="value"]`. `:is()`, `:where()`
-and `:not()` (each compound argument only - a combinator inside one of these is dropped). `:is()`
-and `:where()`, and not `:not()`, also take three forms Tailwind writes: `<compound> *`, the
-ancestor test its `group-*` variants compile to, `<compound> > *`, the parent test its `*:` variant
-compiles to, and `<compound> ~ *` or `<compound> + *`, the sibling test its `peer-*` variants
-compile to, which is read as the sibling combinator it means. `:host`
+and `:not()`, of compounds or of any selector, `:is(.a + .b)` and `:not(.list > *)` among them,
+each as specific as in a browser. `:is()` and `:where()` read three forms Tailwind writes as a test
+of one compound: `<compound> *`, the ancestor test its `group-*` variants compile to,
+`<compound> > *`, the parent test its `*:` variant compiles to, and `<compound> ~ *` or
+`<compound> + *`, the sibling test its `peer-*` variants compile to, which is read as the sibling
+combinator it means. `:host`
 and `:host(<compound>)`. `:host-context(<compound>)`. `:first-child`, `:last-child`, `:only-child`,
 `:nth-child()` and `:nth-last-child()` (the `of <selector>` form is not supported).
 `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()` and `:nth-last-of-type()`,
@@ -41,10 +42,12 @@ native, and a stylesheet written for the web puts its tokens there.
 
 A rule with one of these selectors is dropped with a warning.
 
-`::before`, `::after` and every other pseudo-element are permanently unsupported, not a "not yet".
-Rendering one would mean synthesizing a node no template declared, which would make the style
-engine responsible for view hierarchy a template never wrote - so the fix, when a design wants one,
-is to write the element.
+In an app's own sheet, `::before`, `::after` and every other pseudo-element are unsupported, not a
+"not yet". Rendering one would mean synthesizing a node no template declared, which would make the
+style engine responsible for view hierarchy a template never wrote - so the fix, when a design
+wants one, is to write the element. A
+[sheet read as a browser reads it](#a-sheet-read-as-a-browser-reads-it), for components written for
+one, is the exception for `::before` and `::after`.
 
 `::placeholder` is the exception, because it needs no node: a text input draws its own placeholder,
 and its `placeholderTextColor` is the colour. `.field::placeholder { color: #8b8b96 }`, or
@@ -67,22 +70,24 @@ already point at them for you.
 `:checked`, `:indeterminate`, `:valid`, `:invalid`, `:placeholder-shown` and the other form-state
 pseudo-classes are unsupported too: a native control keeps that state in its component's inputs,
 where no selector can see it. Bind an attribute from the same signal (`[attr.data-checked]`) and
-select on that.
+select on that. A [sheet read as a browser reads it](#a-sheet-read-as-a-browser-reads-it) reads
+`:checked`, `:indeterminate` and `:enabled` from the element's own props.
 
-`:has()` styles a node by what is beneath it. Its argument is one compound selector, for a
-descendant (`.card:has(.action)`), or one after `>`, for a child (`.card:has(> img)`), and a list of
-either. It is read on the node the rule styles and on a box that node is in:
-`.card:has(.action) .title` styles the titles in a card that has an action, and
-`.field:has(.input:focus) > .label` a field's own label. On a node beside the one styled, or beside
-a box it is in, it is dropped with a warning (`.card:has(.action) + .title`), and so is a longer
-selector or a sibling one inside it (`:has(.a .b)`, `:has(+ .next)`). Tailwind's `has-[...]` and
-`has-data-[...]` variants are supported. `group-has-*` and `peer-has-*` are dropped with a warning:
-they ask it inside `:is()`, and of a sibling.
+`:has()` styles a node by what is beneath it, or after it. Its argument is any relative
+selector: a descendant (`.card:has(.action)`), a child (`.card:has(> img)`), a longer selector
+(`.card:has(.row > .badge)`), or what follows the node (`.label:has(+ .input)`,
+`.item:has(~ .panel .mark)`), and a list of any of these. It is read on the node the rule styles,
+on a box that node is in, and on one before either: `.card:has(.action) .title` styles the titles
+in a card that has an action, `.field:has(.input:focus) > .label` a field's own label, and
+`.card:has(.action) + .title` the title after such a card. A `:has()` inside another
+(`:has(.a:has(.b))`) is dropped with a warning, as a browser drops it as invalid. Tailwind's
+`has-[...]`, `has-data-[...]`, `group-has-*` and `peer-has-*` variants are supported.
 
 A sheet that uses `:has()` has the engine match a changed node's ancestors again on each change,
 and restyle one only where the rules it matches came out different. Where a rule asks it of a box
 the styled node is in, the nodes under that box that such a rule is for are matched again too,
-once for a commit. A sheet that does not use it costs nothing.
+once for a commit, and where it asks what follows a node, the elements before a change are
+matched again too. A sheet that does not use it costs nothing.
 
 ## Everything else CSS can paint
 
@@ -220,36 +225,161 @@ line-clamp idiom compiles; `-webkit-box-orient` without it is ignored, as a brow
 which keep spaces and line breaks, are dropped. `font-variant-numeric` takes `tabular-nums`,
 `proportional-nums`, `lining-nums` and `oldstyle-nums`, as `fontVariant`.
 
-`display` takes `flex`, `none`, `block` and `contents`. An element that is `display: none` has no
-native view, nor has anything inside it: its views are made when it is displayed and go when it is
-not, so what a view holds of its own, a scroll offset, is not kept across a spell of
-`display: none`. To keep a view while it is out of sight, take it out of the flow and give it no
-opacity. Every native view is already a flex
-container stacking its children in a column, which is what a block does with its own, so `block` is
-read as `flex`: that is what lets `.d-none` followed by `.d-md-block` show an element again at a
-breakpoint. `inline-flex` is read as `flex` for the same reason. `inline` and `inline-block` are
-read as `flex` too, because every native view sits in a flex container, and a browser lays out a
-flex container's inline children as blocks. `flow-root` is read as `flex` as well: it is a block
-that contains its floats, which a flex item already does. `contents` is Yoga's own: the element
-draws no box of its own (no background, border or padding) and its children are laid out as if they
-were its parent's. `grid` and the table values are dropped, because a column of flex children
-cannot pretend to lay them out in a grid. `display: var(--d)` reads the token on device the same
-way, in a stylesheet or set on the element, and reads the two-keyword form, `inline flex` or
-`block flow`, as the one-word value it stands for. A token of any other value, such as `grid` or a
-table value, unsets `display`, and the element is laid out as a flex column. In development the
-engine logs a warning naming the token and its value, since the compiler only sees the token's
-name. A written fallback is read the same way, `var(--d, inline flex)` included. One native has no
-layout for, such as `var(--d, grid)`, is dropped with a build warning, and the token is still read
-where it is set.
+`display` takes `flex`, `none`, `contents`, the block containers `block`, `flow-root` and
+`inline-block`, `inline-flex`, and `grid` and `inline-grid`. An element that is `display: none` has
+no native view, nor has anything inside it: its views are made when it is displayed and go when it
+is not, so what a view holds of its own, a scroll offset, is not kept across a spell of `display:
+none`. To keep a view while it is out of sight, take it out of the flow and give it no opacity. Yoga
+lays out flex boxes and nothing else, so a block container is committed as a flex column, which
+stacks its children as a block does, and the engine settles what a column does differently before
+layout:
+
+- Adjoining vertical margins collapse, as CSS has them: between two children of a block, through
+  an empty block, and between a block and its first or last child where the block is itself a
+  child of a block and no padding or border separates them. A margin of `20px` above one of
+  `10px` leaves 20, where a flex column leaves 30.
+- The flex properties on a block container (`flex-direction`, `justify-content`, `align-items`,
+  `gap`) and on the boxes in its flow (`flex`, `flex-grow`, `flex-shrink`, `flex-basis`,
+  `align-self`) are ignored, as a browser ignores them. `justify-self` places a block of a set
+  width along its line, and `margin: 0 auto` centres one.
+- An `inline-block`, `inline-flex` or `inline-grid` box sits in a line. Where a block container
+  holds nothing else in its flow, they are laid out in lines, a row that wraps, each on the baseline
+  of its line. Among blocks, each run of them shares a line of its own, wrapping when it is full:
+  each box as wide as its content, with margins that do not collapse. The engine commits a view
+  around a run of two or more, which no element of the template stands for; a box that joins such a
+  run or leaves it is created again natively, so a scroll position or a focus inside it is lost.
+  `vertical-align` takes `top`, `middle` and `bottom` for a box on a line, and a length, how far
+  over the baseline it sits.
+
+A box in a line is as wide as its content, and that includes content Yoga would size from the
+room on offer: a row with a percentage width, as a `w-full` header is, and cells that share a row
+from a basis of nothing, as `flex-1` cells do. The engine commits such a box with those set aside,
+reads its width back, and commits it at that width, which the percentage and the shares are then
+of. It costs the box two more commits when something in it changes.
+
+Only margins in points collapse. Beside a percentage margin in the same container every margin stays
+as written, because a percentage is of a width nothing knows before layout. In a flex container or a
+grid an inline-level box is an item like any other, as a browser has it. `.d-none` followed by
+`.d-md-block` shows an element again at a breakpoint. `inline` is read as `flex`, because every
+native view is a box, and a browser lays out a flex container's inline children as blocks.
+`contents` is Yoga's own: the element draws no box of its own (no background, border or padding) and
+its children are laid out as if they were its parent's. The table values are dropped. `display:
+var(--d)` reads the token on device the same way, in a stylesheet or set on the element, and reads
+the two-keyword form, `inline flex` or `block flow`, as the one-word value it stands for. A token of
+any other value, such as a table value, unsets `display`, and the element is laid out as a flex
+column. In development the engine logs a warning naming the token and its value, since the compiler
+only sees the token's name. A written fallback is read the same way, `var(--d, inline flex)`
+included. One native has no layout for, such as `var(--d, table)`, is dropped with a build warning,
+and the token is still read where it is set.
+
+### Grid
+
+`display: grid` is laid out by the engine, since Yoga has no grid, and so is what an `inline-grid`
+holds. It follows CSS Grid Level 1:
+
+- `grid-template-columns` and `grid-template-rows` take lengths, percentages, `fr`, `auto`,
+  `min-content`, `max-content`, `minmax()`, `fit-content()` and `repeat()`, with `auto-fill` and
+  `auto-fit`, which repeat only tracks with a length on one side at least, as in a browser, and
+  each a point wide at the least. `grid-auto-columns`, `grid-auto-rows` and `grid-auto-flow` size
+  and fill the tracks the template does not name.
+- `grid-column`, `grid-row`, their `-start` and `-end`, and `grid-area` place an item by line
+  number, by `span`, or by name. An item with no placement takes the next free cell.
+- A `position: absolute` child of a grid that is itself positioned is placed against the lines
+  its `grid-column` and `grid-row` name: its insets are from the edges of that area and its
+  percentages are of it. A side with no line, or `auto`, is the grid's padding edge. With no
+  inset on an axis it sits at the start of the area, moved along it by its `justify-self` or
+  `align-self`, or by the grid's `justify-items` or `align-items` where its own is `auto`.
+- `grid-template-areas` names areas, which `grid-area: head` places an item in, and whose edges
+  are the lines `head-start` and `head-end`. A track list names its own lines,
+  `[content-start] 1fr [content-end]`, and `grid-column: content` is the two of them. A name
+  given to several lines is counted: `col 2`.
+- `gap`, `justify-content`, `align-content`, `justify-items`, `align-items`, `justify-self`,
+  `align-self`, `place-items` and `place-self` space and align, `safe` included.
+
+A grid needs to read sizes back from native to place its items: its own width, the width each
+item's content wants, and each item's height at its column's width. It commits, reads, and
+commits again, in the one task, so only the placed grid is drawn. That costs a few times what a
+flex container costs, and a grid changed inside is laid out again. Some limits follow from it:
+
+- A grid with no width of its own, and none from its container, is as wide as its tracks come
+  to, up to the room it is in: a centred dialog whose content is a grid. Its items are measured
+  at the width that room allows.
+- The narrowest an item's content can be is read where a track asks for it, a `min-content` or
+  `fit-content()` track or an item that is not stretched: its text is committed one word to a
+  line, and the widest is that width. A script that breaks anywhere, or a hyphenated word, is
+  measured as the whole word.
+- Text written straight into a grid is not an item. Put it in a `<text>`.
+- `subgrid`, the `grid` and `grid-template` shorthands, and a span counted in named lines,
+  `span col 2`, are dropped with a warning.
+- `align-items: baseline` and `align-self: baseline` line up the items that start in one row by
+  their first baselines, read from native. `last baseline` is read as `start`, and an item that
+  is itself a grid has its bottom edge for a baseline.
+- An item with an `aspect-ratio` and no height is as tall as its width makes it, where an item
+  without one is stretched over its row.
+
+On a host with no layout to read, such as a test's fake Fabric, a grid is a flex column.
+
+### Order
+
+`order` moves a child of a flex container among its siblings, as in a browser: Tailwind's
+`order-first`, `order-last` and `order-2`. Yoga has no such property, so the engine commits the
+children in that order. A block lays its children out as written, whatever their `order`.
+
+### Position
+
+`position` takes `relative`, `absolute` and `static`, which Yoga lays out, and `fixed` and
+`sticky`, which the engine does.
+
+A `position: fixed` box is positioned against the page it is on: the screen of a native stack or
+a modal it is inside, and otherwise the whole app. Its insets and percentage sizes are of the page,
+wherever in the page it is written. It stays where it is written in every other way, so it draws
+in the order it is written in and takes an ancestor's `opacity`, as in a browser. The engine reads
+the page's place back from native to work its insets out, as it does a grid's sizes.
+
+Where something between a fixed box and its page scrolls or clips, a scroll view or an
+`overflow: hidden` box, the fixed box is committed under the page instead, so it neither scrolls
+nor is clipped. There it draws over the page's other content, and an ancestor's `opacity` or
+`transform` no longer reaches it; it is still styled by rules that match through its parent, its
+events still bubble to its parent, and it is not shown while anything it is inside is
+`display: none`. A transformed ancestor does not become what a fixed box is fixed to, as one does
+in a browser.
+
+Two things Yoga leaves undone for a `position: absolute` or `fixed` box are put right from its
+laid-out size, read back from native as a grid's sizes are. `margin: auto` between two insets
+takes the room left over, so `inset: 0; margin: auto` centres a box of a set size in its
+container, and one `auto` margin pushes it to the far side. And a box with no `top` or `bottom` in
+a block container sits under the sibling before it, where it would have been in the flow. In a
+flex container such a box is placed by the container's alignment, as Yoga and a browser both do.
+
+A `position: sticky` box is laid out where it is written, and moves with its scroll view once the
+scroll passes it: `top` is how far from the scroll view's top edge it sticks, and it goes no
+further than the end of its parent. In a horizontal scroll view `left` does the same. It sticks
+at any depth inside the scroll view, and native moves it on each frame the scroll view moves.
+Sticking to the bottom or the right edge is not supported, and neither is a box with a
+`transform` of its own that also sticks, whose transform the engine writes. It needs layout read
+back from native, so on a host with none it stays where it is written.
 
 `width: fit-content` and `height: fit-content` keep a box at the size of its content. Along its
 container's main axis a box is that size already. Across it, where a box stretches, it stops
 stretching and sits at the start, as in a browser, unless the container's `align-items` or its own
-`align-self` already places it. `max-content` and `min-content` are dropped with a warning, as is
-`fit-content` on `min-width`, `max-width` and the two heights.
+`align-self` already places it. `max-content` is read as `fit-content` on a width or a height,
+and on `max-width` or `max-height` caps a box that would fill its container at its content.
+`min-content` is dropped with a warning, as is `fit-content` on `min-width`, `max-width`,
+`min-height` and `max-height`.
+
+`min-width: auto` and `min-height: auto` keep a flex item that shrinks from shrinking under its
+content, as a browser keeps every flex item: Tailwind's `min-w-auto` and `min-h-auto`. Yoga's
+minimum is nothing, so the engine stops the item shrinking where its content cannot get smaller:
+down a column, and along a row when no text in it has a space to wrap at. An item holding text
+that wraps still shrinks, under its longest word if the row is that crowded, and so does one with
+a `width`, a `flex-basis`, a `flex` or an `aspect-ratio` of its own. An item with `overflow` other
+than `visible` shrinks as it does in a browser. A native view has no minimum unless it is given
+one, so nothing changes for an item that does not say `auto`.
 
 `overflow` is one value for both axes - Yoga has no separate `overflow-x`/`overflow-y` - so a rule
-that gives them different values is dropped with a warning rather than silently picking one.
+that gives them different values is dropped with a warning rather than silently picking one, and
+so is `overflow-x` or `overflow-y` on its own, outside a
+[sheet read as a browser reads it](#a-sheet-read-as-a-browser-reads-it).
 `overflow: auto` is read as `scroll`, which is how Yoga lays out a scroll container, and `clip` as
 `hidden`. `cursor` takes `auto` and `pointer`, the two a pointer on an iPad draws, with `default`
 read as `auto`; any other cursor is dropped with a warning. So is a `mix-blend-mode` native does not
@@ -354,7 +484,21 @@ every argument is absolute. A `calc()` may have any number of tokens in it, with
 absolute lengths, `+ - * /` and brackets: `calc((var(--end) - var(--start)) * 1px)` is worked
 out on device, where a token that is a length counts in points and a bare number multiplies. A
 percentage, an em or a viewport unit beside a token is dropped, since it needs layout the device
-does not do there.
+does not do there, except a percentage added to a token for the properties below.
+
+`calc()` may also add a length to a percentage, `calc(100% - 2rem)`, for a box's `width` and
+`height`, their minimums and maximums, its insets, its margins and its padding: Tailwind's
+`max-w-[calc(100%-2rem)]`. And for `translate`, where the percentage is of the box's own size:
+`translate-x-[calc(100%-2px)]`, which is how a switch's thumb slides over. The length is in
+points or rem, or a token, `calc(100% - var(--handle))`, which is settled where the box is and
+follows the token changing. Yoga takes a number or a percentage
+and not their sum, so the engine commits the box with the declaration set aside, reads the box
+the percentage is of, and commits it at what the sum comes to, all in the one task. That is two
+more commits when the box or anything in it changes, and one read on every commit after. A
+percentage of a height is of a parent that was given a height; under an `auto` height the
+declaration is set aside, as a browser sets it aside. In a grid item the percentage is of the
+item's area. On a host with no layout to read the declaration is set aside too. Anywhere else,
+`font-size` or `gap` say, the sum is dropped with a warning.
 
 The keywords that switch a property off - `max-width: none`, `z-index: auto`,
 `letter-spacing: normal`, `filter: none`, `box-shadow: none` - clear it back to native's default.
@@ -393,12 +537,39 @@ Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are t
 `tint-color` is native's own, with no counterpart on the web: the color an image is drawn in, and
 the color of an SF Symbol. It takes a token as any color does.
 
+## A sheet read as a browser reads it
+
+A sheet compiled for components written for a browser, as the Tailwind sheet is when its
+[`browser` option](/packages/tailwind) is set, reads a few things an app's own sheet is told to
+write another way:
+
+- `::before` and `::after` are boxes of their own, as in a browser: the engine keeps a view first
+  in the element for `::before` and last for `::after`, styled by the rules written for it,
+  wherever a rule gives it a `content`. A string `content` is the text the box holds, and
+  `content: ""` an empty box; `none`, no `content`, or an `attr()` or counter draws no box. The box
+  is no child to a selector that counts children, `:first-child` or `:empty`. Any other
+  pseudo-element is dropped with a warning, as in an app's own sheet.
+
+- `visibility: hidden` (and `collapse`) draws the box with no opacity and takes no touch, and the
+  box keeps its room. `visible` from a later rule shows it again. Unlike in a browser, a hidden box
+  hides all that is in it: a box inside it with `visibility: visible` is not seen either, as the
+  opacity of a view is the opacity of everything in it.
+- `clip: rect()` with nothing in it, and `clip-path: inset(50%)`, draw nothing of the box over
+  any rule that draws it - no background, shadow, border, outline or minimum size - and leave it
+  there for a screen reader. Any other clip is dropped with a warning, as everywhere.
+- `overflow-x` or `overflow-y` of `hidden` or `clip` clips both axes, since a view clips on both or
+  on neither. `overflow-y: auto` or `scroll` is `overflow: scroll`, which also clips both axes: the
+  box scrolls only where the element is a `<scroll-view>`, and a plain view does not. Any other
+  value on one axis is no clip.
+- `:checked` and `:indeterminate` match an element whose prop of that name is set, and `:enabled`
+  one with no `disabled` prop.
+
 ## What has nothing to map onto
 
 These are dropped with a warning that says so, not declarations that quietly do nothing:
 
 - `float`
-- `grid` and its whole family
+- `subgrid`, and the `grid` and `grid-template` shorthands
 - `list-style`
 - Table layout: `table-layout`, `border-collapse`, `caption-side`, `empty-cells`
 - Multi-column layout

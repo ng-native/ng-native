@@ -91,7 +91,7 @@ describe('truncation written in CSS', () => {
     // Tailwind's line-clamp-none writes `-webkit-box-orient: horizontal` beside `display: block`,
     // and a row there would lay a view's children out side by side where the web does not.
     assert.deepEqual(declarationsOf('display: block; -webkit-box-orient: horizontal'), {
-      display: 'flex',
+      display: 'block',
     });
     assert.equal(compileCss('text { -webkit-box-orient: vertical }', 'test').rules.length, 0);
   });
@@ -189,10 +189,46 @@ describe('truncation written in CSS', () => {
     });
     assert.deepEqual(of('line-clamp-none'), {
       overflow: 'visible',
-      display: 'flex',
+      display: 'block',
       numberOfLines: null,
     });
     assert.deepEqual(of('tabular-nums'), { fontVariant: ['tabular-nums'] });
+  });
+});
+
+describe('truncation on a view, for the words written straight into it', () => {
+  // A button that is one line with an ellipsis: the words are a paragraph the engine makes, and
+  // a paragraph is what native truncates. On the view alone the words wrap and are cut off.
+  const CSS =
+    '.t { white-space: nowrap; text-overflow: clip } .t.free { white-space: normal } ' +
+    '.t.dots { text-overflow: ellipsis }';
+
+  const scene = () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(CSS, 'app.css') as never });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 't');
+    engine.appendChild(engine.root, view);
+    engine.appendChild(view, engine.createText('Quarterly revenue projections'));
+    const paragraph = () => {
+      engine.commit();
+      const { numberOfLines, ellipsizeMode } = fabric.committed[0]!.children[0]!.props;
+      return [numberOfLines ?? null, ellipsizeMode];
+    };
+    return { engine, view, paragraph };
+  };
+
+  it("is the paragraph's, with the ellipsis the view says", () => {
+    assert.deepEqual(scene().paragraph(), [1, 'clip']);
+  });
+
+  it('follows the view, to another ellipsis and to no limit', () => {
+    const s = scene();
+    s.paragraph();
+    s.engine.setClasses(s.view, 't dots');
+    assert.deepEqual(s.paragraph(), [1, 'tail']);
+    s.engine.setClasses(s.view, 't free');
+    assert.deepEqual(s.paragraph(), [null, 'clip']);
   });
 });
 

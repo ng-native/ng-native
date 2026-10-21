@@ -21,8 +21,10 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/*.generated.ts',
-      // Scratch apps the tailwind tests make and delete while lint may be walking the same folder.
+      // Scratch apps and modules the tailwind and library-styles tests make and delete while lint
+      // may be walking the same folder.
       '**/.tailwind-*',
+      '**/.library-styles-*',
       '**/dist/**',
       '.claude/**',
       'examples/*/.expo/**',
@@ -37,6 +39,9 @@ export default tseslint.config(
       'packages/nx/files/**',
       // A library as ng-packagr builds it, kept byte for byte: the tests read what it really emits.
       'packages/integration-tests/fixtures/ng-packagr/**',
+      // Web Platform Tests as `packages/web-compat/wpt/fetch.mjs` checks them out: another
+      // project's files, in a cache git ignores.
+      'packages/web-compat/wpt/.cache/**',
     ],
   },
   {
@@ -99,6 +104,21 @@ export default tseslint.config(
               bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
             },
             {
+              // A package that presents the engine to code written for another host. It sits on
+              // the platform as well as the engine, to extend the renderer, on the icons for the
+              // props react-native-svg's views read, which a library's drawing is drawn by, and on
+              // the device for the links the page's address follows. Nothing that ships depends
+              // on it.
+              sourceTag: 'layer:compat',
+              onlyDependOnLibsWithTags: [
+                'layer:runtime',
+                'scope:platform',
+                'scope:icons',
+                'layer:device',
+              ],
+              bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
+            },
+            {
               // A test harness for apps, run by Node and never bundled. The fake Fabric needs the
               // engine's node shapes; `render()` mounts through the platform, the way an app
               // boots; and the runner hooks compile through Metro's transform, so a test runs
@@ -154,8 +174,10 @@ export default tseslint.config(
       // Tests of internals the package entry points do not export, which have no other way in.
       'packages/integration-tests/css-ancestor-filter.test.ts',
       'packages/integration-tests/css-attribute-reach.test.ts',
+      'packages/integration-tests/css-class-restyle.test.ts',
       'packages/integration-tests/css-cost.test.ts',
       'packages/integration-tests/css-global-sheet-added.test.ts',
+      'packages/integration-tests/css-has.test.ts',
       'packages/integration-tests/css-oracle.test.ts',
       'packages/integration-tests/css-restyle-keeps-matches.test.ts',
       'packages/integration-tests/dev-loading-view.test.ts',
@@ -164,6 +186,7 @@ export default tseslint.config(
       'packages/integration-tests/engine-commit.test.ts',
       'packages/integration-tests/expo.test.ts',
       'packages/integration-tests/markdown-files.test.ts',
+      'packages/integration-tests/markdown.test.ts',
       'packages/integration-tests/fabric-facade.test.ts',
       'packages/integration-tests/host-primitives.test.ts',
       'packages/integration-tests/layout-animation.test.ts',
@@ -191,6 +214,11 @@ export default tseslint.config(
       // The Vite preset an app's build config imports, for the same reason: it is build tooling
       // shipped beside the package, and no file under `src` imports it.
       'packages/web/vite.mjs',
+      // `@ng-native/web-compat`'s tests mount real components through the test harness, for the
+      // same reason: its source imports neither.
+      'packages/web-compat/src/*.test.ts',
+      // And the process its Web Platform Tests runner brings an app up in, the same way.
+      'packages/web-compat/wpt/worker.mjs',
       // The other way round: `@ng-native/testing`'s own tests import the package by its name,
       // not by relative path, because they stand in for an app's tests and an app has no other
       // way in. A relative import would bypass the `exports` map those tests exist to prove.

@@ -8,12 +8,7 @@ import 'expo';
 import { AppRegistry, Image, Platform, processColor } from 'react-native';
 import { mount } from '@ng-native/platform';
 import { currentConditions, deviceTokens, watchConditions } from '@ng-native/device';
-import {
-  getFabricUIManager,
-  registerPlatformComponents,
-  styleSheetOf,
-  type StyleSheet,
-} from '@ng-native/fabric';
+import { getFabricUIManager, registerPlatformComponents, styleSheetOf } from '@ng-native/fabric';
 import { registerExpoUiViews, registerExpoView, registerExpoViews } from '@ng-native/expo';
 import { registerExpoMap } from '@ng-native/expo/map-view';
 import { App } from './app/app.ts';
@@ -74,7 +69,7 @@ if (bench === 'react') {
   AppRegistry.registerRunnable('main', ({ rootTag }) => {
     const app = mount(Number(rootTag), App, getFabricUIManager(), {
       processColor,
-      globalStyles: alongside(styleSheetOf(GlobalStyles), tailwind),
+      globalStyles: styleSheetOf(GlobalStyles),
       conditions: currentConditions(),
       tokens: deviceTokens(),
       // require()d images compile to an asset id; only this turns one into a usable source.
@@ -86,6 +81,8 @@ if (bench === 'react') {
     // component or a binding, so nothing would be dirty and nothing would re-render; the engine
     // re-resolves and commits on its own.
     watchConditions(app.engine);
+    // The Tailwind screen's utilities after the canary's own sheet, where its entry would put them.
+    app.engine.addGlobalSheet(tailwind);
   });
 }
 
@@ -106,19 +103,4 @@ if (__DEV__) {
   module.hot?.accept(() => {
     (globalThis as { __angularNativeReload?: () => void }).__angularNativeReload?.();
   });
-}
-
-/**
- * The canary's own sheet with Tailwind's after it, as one global sheet: an app that is all
- * Tailwind writes its own rules in the Tailwind entry instead. Tailwind's rules come later in the
- * cascade, which is where the entry would have put them.
- */
-function alongside(own: StyleSheet | null, after: StyleSheet): StyleSheet {
-  const rules = own?.rules ?? [];
-  const offset = rules.reduce((last, rule) => Math.max(last, rule.order + 1), 0);
-  return {
-    rules: [...rules, ...after.rules.map((rule) => ({ ...rule, order: rule.order + offset }))],
-    keyframes: { ...own?.keyframes, ...after.keyframes },
-    ...(own?.structural || after.structural ? { structural: true as const } : {}),
-  };
 }

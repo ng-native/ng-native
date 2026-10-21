@@ -37,13 +37,14 @@ const DEFAULT_OUTPUT = '.angular-native/app.tailwind.js';
 
 /**
  * @param {object} config a Metro config, after `withAngularNative`
- * @param {{ input: string, output?: string, watch?: boolean }} options
+ * @param {{ input: string, output?: string, watch?: boolean, browser?: string[] }} options
  *   `input` is the app's Tailwind entry - the file with the `@import`s. `output` is the module the
  *   app imports, and must be JavaScript: Expo's own transform worker claims every `.css` file
  *   before ours is asked, and hands back an empty module on any platform but web, so a stylesheet
  *   that arrived as CSS would silently contain nothing. `watch` is what makes a newly written
  *   class appear without restarting the dev server; it defaults to on for a dev server and off
- *   for a one-off build (see `watchesByDefault`).
+ *   for a one-off build (see `watchesByDefault`). `browser` names the classes that components
+ *   written for a browser sit under, where the app styles them from this sheet: see `asABrowsers`.
  */
 function withTailwind(config, options) {
   const projectRoot = config.projectRoot ?? process.cwd();
@@ -60,7 +61,7 @@ function withTailwind(config, options) {
 
   mkdirSync(path.dirname(output), { recursive: true });
   run([cliPath(projectRoot), '-i', input, '-o', css], projectRoot);
-  generate(css, output, input);
+  generate(css, output, input, options.browser);
   // Without it TypeScript infers the sheet from its literal, which is not assignable to the type
   // `globalStyles` takes. `.js` -> `.d.ts`, `.mjs` -> `.d.mts`, `.cjs` -> `.d.cts`. A type import,
   // not an `import()` type, which typescript-eslint's `consistent-type-imports` forbids in an app.
@@ -68,7 +69,7 @@ function withTailwind(config, options) {
     output.replace(/\.([cm]?)js$/, '.d.$1ts'),
     "import type { StyleSheet } from '@ng-native/fabric';\n\ndeclare const sheet: StyleSheet;\nexport default sheet;\n",
   );
-  if (options.watch ?? watchesByDefault()) watch(input, css, output, projectRoot);
+  if (options.watch ?? watchesByDefault()) watch(input, css, output, projectRoot, options.browser);
 
   return config;
 }
@@ -93,8 +94,68 @@ function watchesByDefault(argv = process.argv, env = process.env) {
 }
 
 /** The CLI's CSS, compiled into the module the app imports. */
-function generate(css, output, input) {
-  writeFileSync(output, compileSheetModule(readFileSync(css, 'utf8'), css, { input, output }));
+function generate(css, output, input, browser) {
+  const paths = { input, output };
+  writeFileSync(output, compileSheetModule(readFileSync(css, 'utf8'), css, paths, browser));
+}
+
+const FLEX = new Set(['flex', 'inline-flex']);
+const names = (rule, prop) =>
+  prop in rule.declarations ||
+  prop in (rule.important ?? {}) ||
+  (rule.deferred ?? []).some((deferred) => deferred.props.includes(prop));
+
+/**
+ * The classes of a `browser` option, without their dots: each is one class and nothing more.
+ * Nothing where the app gave none.
+ */
+function scopeOf(browser) {
+  if (browser === undefined) return undefined;
+  const classes = Array.isArray(browser)
+    ? browser.map((each) => /^\.([\w-]+)$/.exec(each)?.[1])
+    : [];
+  if (!classes.length || classes.some((each) => each === undefined)) {
+    throw new Error(
+      '[angular-native] the Tailwind `browser` option is the classes that components written ' +
+        `for a browser sit under, such as [".ui"]; got ${JSON.stringify(browser)}.`,
+    );
+  }
+  return classes;
+}
+
+/**
+ * A sheet with its flex containers rows under the classes named, as the browser those
+ * components were written for lays them out. A library copied into the app, as Spartan UI's
+ * styled layer is, is styled by the app's own Tailwind sheet, where a flex container is a
+ * column: under an element with one of these classes it is a row unless a rule names a
+ * direction. Everywhere else in the app it stays a column.
+ *
+ * Each rule that makes a flex container and names no direction gets a rule ahead of it for the
+ * same elements under the scope, with no specificity at all, so a direction named by any rule
+ * still wins, as the initial value it stands in for would lose to any.
+ */
+function asABrowsers(sheet, classes) {
+  if (!classes) return sheet;
+  const under = { classes: [], is: [classes.map((name) => ({ classes: [name] }))] };
+  const rules = [];
+  for (const rule of sheet.rules) {
+    const flex = FLEX.has(rule.declarations.display) || FLEX.has(rule.important?.display);
+    if (flex && !names(rule, 'flexDirection')) {
+      const { tokens: _tokens, deferred: _deferred, important: _important, ...matched } = rule;
+      // Under the scope wherever it is above the element: asked of the element itself, since
+      // the rule's own first compound may be the very box that carries the scope's class.
+      const subject = rule.compounds.at(-1);
+      const scoped = { ...subject, ancestors: [...(subject.ancestors ?? []), under] };
+      rules.push({
+        ...matched,
+        compounds: [...rule.compounds.slice(0, -1), scoped],
+        specificity: 0,
+        declarations: { flexDirection: 'row' },
+      });
+    }
+    rules.push(rule);
+  }
+  return { ...sheet, rules };
 }
 
 const warnedSettled = new Set();
@@ -149,7 +210,8 @@ function selectorAt(lines, index) {
  * `paths` is the entry and the module written from it. A relative `url()` in an `@font-face` is
  * relative to the entry, and the module lives elsewhere, so its `require` is re-pointed from there.
  */
-function compileSheetModule(css, context = 'tailwind', paths) {
+function compileSheetModule(css, context = 'tailwind', paths, browser) {
+  const scope = scopeOf(browser);
   const dropped = [];
   const settled = new Set();
   const flat = flattenTailwind(css, { onSettled: (declaration) => settled.add(declaration) });
@@ -165,13 +227,16 @@ function compileSheetModule(css, context = 'tailwind', paths) {
   // A refusal names the rule's selector, which is what to search the app for, rather than a line
   // of this generated sheet, which moves as classes are added.
   const lines = flat.split('\n');
-  const sheet = compileCss(flat, context, {
+  const compiled = compileCss(flat, context, {
+    // Read as a browser reads it, where the app named what the browser's components sit under.
+    generated: scope !== undefined,
     onUnsupported: (message) => dropped.push(message),
     locate: (line) => {
       const selector = selectorAt(lines, line - 1);
       return selector && `${selector} (Tailwind)`;
     },
   });
+  const sheet = asABrowsers(compiled, scope);
   for (const message of dropped) {
     // A leftover custom property was already substituted; anything else is a utility the app used
     // and native cannot express, which is worth saying while it is still being written.
@@ -282,7 +347,7 @@ function run(args, cwd) {
  * Metro watches the module, so a class written in a template reaches the device the way an edited
  * template does: the CLI notices the source, rewrites the CSS, this rewrites the module.
  */
-function watch(input, css, output, cwd) {
+function watch(input, css, output, cwd, browser) {
   let stopping = false;
   const child = spawn(process.execPath, [cliPath(cwd), '-i', input, '-o', css, '--watch'], {
     cwd,
@@ -322,7 +387,7 @@ function watch(input, css, output, cwd) {
     // Off a file event, where a throw would take Metro down: the sheet on disk stays the last good
     // one, and the next change tries again.
     try {
-      generate(css, output, input);
+      generate(css, output, input, browser);
     } catch (error) {
       console.error(`[angular-native] could not rebuild the Tailwind sheet: ${error.message}`);
     }

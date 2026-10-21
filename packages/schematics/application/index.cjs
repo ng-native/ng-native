@@ -27,7 +27,7 @@ function writeJson(tree, file, value) {
  * The project's targets. Each is an Expo command run in the project's directory, which is where
  * Expo reads `app.json` and `metro.config.js` from.
  */
-function targets(root, name) {
+function targets(root, name, lint = false) {
   const expo = (command, args) => ({
     builder: '@ng-native/schematics:expo',
     options: args ? { command, args } : { command },
@@ -40,6 +40,19 @@ function targets(root, name) {
     'run-ios': expo('run:ios'),
     'run-android': expo('run:android'),
     test: { builder: '@ng-native/schematics:vitest', options: {} },
+    typecheck: { builder: '@ng-native/schematics:typecheck', options: {} },
+    // With `--linter=eslint`, angular-eslint's builder, which `ng lint` runs, with the project's
+    // own config: the rules that know a device from a browser, which a workspace's config for its
+    // web apps does not.
+    ...(lint && {
+      lint: {
+        builder: '@angular-eslint/builder:lint',
+        options: {
+          eslintConfig: path.join(root, 'eslint.config.mjs'),
+          lintFilePatterns: [path.join(root, '**/*.ts'), path.join(root, '**/*.html')],
+        },
+      },
+    }),
   };
 }
 
@@ -58,7 +71,7 @@ const WEB_SPECS = [
   'service',
 ];
 
-function project(root, name, prefix) {
+function project(root, name, prefix, lint) {
   return {
     projectType: 'application',
     root,
@@ -72,17 +85,19 @@ function project(root, name, prefix) {
     schematics: Object.fromEntries(
       WEB_SPECS.map((schematic) => [`@schematics/angular:${schematic}`, { skipTests: true }]),
     ),
-    architect: targets(root, name),
+    architect: targets(root, name, lint),
   };
 }
 
 /** The Commands section of the app's `AGENTS.md`, as this workspace runs them. */
-function commands(name) {
+function commands(name, lint) {
   const rows = [
     [`ng serve ${name}`, 'Metro; press i or a for a simulator, or scan the QR code with Expo Go'],
     [`ng run ${name}:run-ios`, 'the iOS simulator'],
     [`ng run ${name}:run-android`, 'the Android emulator'],
     [`ng test ${name}`, 'Vitest, in Node against a fake native layer: no simulator needed'],
+    [`ng run ${name}:typecheck`, 'ngc, which checks the templates as well as the code'],
+    ...(lint ? [[`ng lint ${name}`, 'ESLint: what compiles but does nothing on a device']] : []),
     [`ng build ${name}`, 'an exported bundle'],
   ];
   const width = Math.max(...rows.map(([command]) => command.length)) + 2;
@@ -92,16 +107,19 @@ function commands(name) {
     '```',
     '',
     '`src/main.ts` mounts the root component, `src/app/app.ts`. ' +
-      `Run \`ng test ${name}\` after a change; it is fast.`,
+      (lint
+        ? `Run \`ng test ${name}\` and \`ng lint ${name}\` after a change; both are fast.`
+        : `Run \`ng test ${name}\` after a change; it is fast.`),
   ].join('\n');
 }
 
-function writeFiles(tree, root, name, bundleIdentifier) {
+function writeFiles(tree, root, name, bundleIdentifier, lint) {
   for (const file of native.SOURCE_FILES) {
     tree.create(path.join(root, file), native.sourceFile(file));
   }
   tree.create(path.join(root, 'app.json'), native.appJson(name, bundleIdentifier));
-  tree.create(path.join(root, 'AGENTS.md'), native.agentsFile(commands(name)));
+  tree.create(path.join(root, 'AGENTS.md'), native.agentsFile(commands(name, lint)));
+  if (lint) tree.create(path.join(root, 'eslint.config.mjs'), native.ESLINT_CONFIG);
   tree.create(path.join(root, 'CLAUDE.md'), '@AGENTS.md\n');
   tree.create(path.join(root, '.gitignore'), native.GITIGNORE);
   const manifest = native.projectManifest(name, readJson(tree, 'package.json'));
@@ -109,12 +127,19 @@ function writeFiles(tree, root, name, bundleIdentifier) {
 }
 
 /** Adds what is missing and leaves every version the workspace already chose alone. */
-function addDependencies(tree, context) {
+function addDependencies(tree, context, lint) {
   const manifest = readJson(tree, 'package.json');
-  for (const problem of native.conflicts(manifest)) context.logger.warn(problem);
+  const linter = lint ? 'eslint' : 'none';
+  for (const problem of native.conflicts(manifest, { linter })) context.logger.warn(problem);
+  const wanted = {
+    dependencies: native.dependencies,
+    devDependencies: lint
+      ? { ...native.devDependencies, ...native.lintDevDependencies }
+      : native.devDependencies,
+  };
   for (const field of ['dependencies', 'devDependencies']) {
     const existing = { ...manifest.dependencies, ...manifest.devDependencies };
-    const added = Object.entries(native[field]).filter(([name]) => !(name in existing));
+    const added = Object.entries(wanted[field]).filter(([name]) => !(name in existing));
     manifest[field] = Object.fromEntries(
       [...Object.entries(manifest[field] ?? {}), ...added].sort(([a], [b]) => (a < b ? -1 : 1)),
     );
@@ -131,7 +156,7 @@ function ignoreExpo(tree) {
 }
 
 /**
- * @param {{ name: string, directory?: string, prefix?: string, bundleIdentifier?: string, skipInstall?: boolean }} options
+ * @param {{ name: string, directory?: string, prefix?: string, bundleIdentifier?: string, linter?: 'eslint' | 'none', skipInstall?: boolean }} options
  */
 function application(options) {
   return (tree, context) => {
@@ -152,16 +177,20 @@ function application(options) {
     const problem = native.bundleIdentifierProblem(bundleIdentifier);
     if (problem) throw new SchematicsException(problem);
 
-    addDependencies(tree, context);
-    writeFiles(tree, root, name, bundleIdentifier);
-    workspace.projects = { ...workspace.projects, [name]: project(root, name, options.prefix) };
+    const lint = options.linter === 'eslint';
+    addDependencies(tree, context, lint);
+    writeFiles(tree, root, name, bundleIdentifier, lint);
+    const added = project(root, name, options.prefix, lint);
+    workspace.projects = { ...workspace.projects, [name]: added };
     writeJson(tree, 'angular.json', workspace);
     ignoreExpo(tree);
 
     if (!options.skipInstall) context.addTask(new NodePackageInstallTask());
     context.logger.info(
       `Created ${root}. Run it with: ng serve ${name} (Metro), ng run ${name}:run-ios, ` +
-        `ng test ${name}, ng build ${name}.`,
+        `ng test ${name}, ng run ${name}:typecheck, ` +
+        (lint ? `ng lint ${name}, ` : '') +
+        `ng build ${name}.`,
     );
   };
 }

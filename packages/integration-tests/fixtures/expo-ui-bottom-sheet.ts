@@ -27,6 +27,7 @@ export class SheetRow {
         [fitToContents]="fit()"
         [detents]="detents()"
         [showDragIndicator]="grabber()"
+        [backgroundColor]="background()"
         (dismissed)="dismissed.set(dismissed() + 1)"
       >
         <sheet-row testID="first" label="One" />
@@ -41,6 +42,7 @@ export class ExpoUiBottomSheetFixture {
   readonly grabber = signal(true);
   readonly detents = signal<readonly UiPresentationDetent[] | undefined>(undefined);
   readonly second = signal('Two');
+  readonly background = signal<string | undefined>(undefined);
   readonly dismissed = signal(0);
   /** The sheet's native events, as a listener around it hears them. */
   readonly heard = signal(0);
@@ -54,4 +56,35 @@ export class ExpoUiBottomSheetFixture {
 })
 export class ExpoUiBottomSheetDefaultsFixture {
   readonly open = signal(true);
+}
+
+/** A sheet coloured by CSS: a class, a token that follows the colour scheme, and inline style. */
+@Component({
+  selector: 'expo-ui-bottom-sheet-styled',
+  imports: [UiBottomSheet],
+  template: `
+    <ui-bottom-sheet
+      [(open)]="open"
+      [class]="classes()"
+      [style.background-color]="inline()"
+      [backgroundColor]="background()"
+    >
+      <text>Body</text>
+    </ui-bottom-sheet>
+  `,
+  styles: `
+    .surface {
+      --surface: light-dark(#ffffff, #1c1c1e);
+      background-color: var(--surface);
+    }
+    .warning {
+      background-color: orange;
+    }
+  `,
+})
+export class ExpoUiBottomSheetStyledFixture {
+  readonly open = signal(true);
+  readonly classes = signal('surface');
+  readonly inline = signal<string | undefined>(undefined);
+  readonly background = signal<string | undefined>(undefined);
 }

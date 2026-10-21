@@ -11,7 +11,7 @@ import { describe, it } from 'node:test';
 import { registerPlatformComponents, viewNameOf } from '@ng-native/fabric';
 import { provideNativeRouter } from '@ng-native/router';
 
-const element = (tag: string) => ({ kind: 'element' as const, tag, parent: null });
+const element = (tag: string) => ({ nodeKind: 'element' as const, tag, parent: null });
 
 describe('a view name registered before the platform is known', () => {
   it('is the Android one once Android is reported, as main.ts reports it after its imports', () => {

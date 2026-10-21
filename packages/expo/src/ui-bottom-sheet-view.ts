@@ -23,6 +23,7 @@ export type UiBottomSheetPresentedEvent = NativeSyntheticEvent<{ readonly isPres
     '[isPresented]': 'isPresented()',
     '[fitToContents]': 'fitToContents()',
     '[showDragHandle]': 'showDragHandle()',
+    '[containerColor]': 'containerColor()',
     '[skipPartiallyExpanded]': 'skipPartiallyExpanded()',
   },
 })
@@ -33,6 +34,8 @@ export class UiBottomSheetView {
   readonly fitToContents = input<boolean>();
   /** Compose: whether the drag handle is drawn. */
   readonly showDragHandle = input<boolean>();
+  /** Compose: the sheet's colour behind its content. A colour prop, so the engine converts it. */
+  readonly containerColor = input<unknown>();
   /** Compose: the sheet opens at its full height rather than resting at half the screen's. */
   readonly skipPartiallyExpanded = input<boolean>();
   /** SwiftUI: the user dismissed the sheet, or it was presented by something other than the prop. */

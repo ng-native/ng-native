@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -360,5 +361,43 @@ describe('a stand-in module', () => {
     ) as { include: string[]; compilerOptions: { rootDir: string; outDir: string } };
     assert.deepEqual(build.include, ['src']);
     assert.deepEqual(build.compilerOptions, { rootDir: 'src', outDir: 'dist' });
+  });
+});
+
+/**
+ * Vitest copies every module it runs into a directory of its own in the system temp directory, for
+ * the forks pool, and with no `projects` in the config it never removed it: a hundred megabytes
+ * left by each run of an app's suite.
+ */
+describe('a Vitest run', () => {
+  let root: string;
+  before(() => {
+    root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ngn-vitest-run-')));
+    writeFileSync(
+      path.join(root, 'sum.test.ts'),
+      "import { expect, it } from 'vitest';\nit('adds', () => expect(1 + 1).toBe(2));\n",
+    );
+  });
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  it('leaves no copy of the modules it ran in the temp directory', async () => {
+    const { createVitest } = await import('vitest/node');
+    const vitest = await createVitest(
+      'test',
+      { root, config: false, watch: false, pool: 'forks', reporters: [] },
+      { plugins: [ngNative()] },
+    );
+    const copies = (vitest as unknown as { _tmpDir: string })._tmpDir;
+    try {
+      await vitest.start();
+      assert.equal(vitest.state.getCountOfFailedTests(), 0);
+      // The run did copy modules there, so the check below is not of a directory never made.
+      assert.ok(existsSync(path.join(copies, 'ssr')), copies);
+      await vitest.close();
+      assert.equal(existsSync(copies), false, copies);
+    } finally {
+      await vitest.close();
+      rmSync(copies, { recursive: true, force: true });
+    }
   });
 });

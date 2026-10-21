@@ -140,7 +140,7 @@ describe('animate.enter', () => {
     await time.tick(240);
     assert.equal(opacity(), 1, 'and settles on its resting style');
 
-    const node = componentRef.injector.get(Engine).root.children[0]!.children[0]!;
+    const node = componentRef.injector.get(Engine).root.childList[0]!.childList[0]!;
     assert.equal(node.classes?.has('arriving'), false, 'with the enter class taken off again');
     cleanup();
   });
@@ -180,7 +180,7 @@ describe('animate.enter on a transition', () => {
       seen.length = 0;
 
       // Angular takes the class off in the next frame, having found nothing running.
-      const node = engine.root.children[0]!.children[0]!;
+      const node = engine.root.childList[0]!.childList[0]!;
       for (let waited = 0; node.classes?.has('entering') && waited < 100; waited++) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
@@ -219,6 +219,8 @@ describe('a bound transform under a transition', () => {
     const x = (id: string) =>
       (app.getByTestId(id).props['transform'] as [{ translateX: number }])[0].translateX;
     try {
+      // Changed once the screen has been drawn: a view no frame has shown yet starts nothing.
+      await new Promise((resolve) => setTimeout(resolve, 20));
       app.instance.on.set(true);
       await settle();
       await time.tick(150);

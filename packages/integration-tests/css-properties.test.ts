@@ -186,7 +186,7 @@ describe('a shorthand beats a longhand from a weaker rule', () => {
       parent,
       classes: new Set(own),
       props: {},
-      sheet: null,
+      templateSheet: null,
       hostSheet: null,
       styleCache: null,
       styleDirty: true,
@@ -596,28 +596,23 @@ describe('what it refuses, and how it says so', () => {
 
   it('names the display value that was written, not the one lightningcss reads it as', () => {
     // `display: inline-block` is `inline flow-root` to the parser, and the message named that.
-    assert.throws(() => declarationsOf('display: inline-grid'), /display: inline-grid\b/);
-    assert.throws(() => declarationsOf('display: grid'), /display: grid\b/);
+    assert.throws(() => declarationsOf('display: inline-table'), /display: inline-table\b/);
+    assert.throws(() => declarationsOf('display: table'), /display: table\b/);
   });
 
-  it('reads display: inline and inline-block as flex, which Chrome makes of a flex item', () => {
-    // Every native view sits in a flex container, and Chrome computes an inline or inline-block
-    // flex item as block. Tailwind writes .inline for the word anywhere in a scanned file, so the
-    // refusal warned about a class nobody wrote, and hidden md:inline never showed the element.
+  it('reads display: inline as flex, which Chrome makes of a flex item', () => {
+    // Every native view is a box, and Chrome computes an inline flex item as a block. Tailwind
+    // writes .inline for the word anywhere in a scanned file, so the refusal warned about a class
+    // nobody wrote, and hidden md:inline never showed the element.
     assert.deepEqual(declarationsOf('display: inline'), { display: 'flex' });
-    assert.deepEqual(declarationsOf('display: inline-block'), { display: 'flex' });
   });
 
-  it('reads display: flow-root as flex, as it reads block', () => {
-    // A flow-root box is a block that contains its floats. A flex item already does, so a browser
-    // lays one out as it lays out a block: Bootstrap's .d-flow-root, Tailwind's .flow-root.
-    assert.deepEqual(declarationsOf('display: flow-root'), { display: 'flex' });
-  });
-
-  it('reads display: block as flex, which is what every native view already is', () => {
-    // A native view stacks its children in a column, as a block does. Refusing it broke every
-    // stylesheet that shows a hidden element again with block.
-    assert.deepEqual(declarationsOf('display: block'), { display: 'flex' });
+  it('keeps a block container as one, for the engine to lay out', () => {
+    // The engine commits each as flex, so `.d-none` then `.d-md-block` shows an element again,
+    // and lays its children out as a block does: collapsed margins, lines of inline-blocks.
+    assert.deepEqual(declarationsOf('display: block'), { display: 'block' });
+    assert.deepEqual(declarationsOf('display: flow-root'), { display: 'flow-root' });
+    assert.deepEqual(declarationsOf('display: inline-block'), { display: 'inline-block' });
   });
 
   it('passes display: contents through, which Yoga lays out as no box at all', () => {
@@ -626,9 +621,12 @@ describe('what it refuses, and how it says so', () => {
     assert.deepEqual(declarationsOf('display: contents'), { display: 'contents' });
   });
 
-  it('gives a prefixed sticky the same explanation as sticky', () => {
+  it('reads a prefixed sticky as sticky', () => {
     // `position: -webkit-sticky` reported "expected a keyword, got {...}".
-    assert.throws(() => declarationsOf('position: -webkit-sticky'), /sticky is not supported/);
+    assert.deepEqual(declarationsOf('position: -webkit-sticky; top: 0'), {
+      position: 'sticky',
+      top: 0,
+    });
   });
 
   it('refuses a relative font weight, which native would ignore without a word', () => {
@@ -648,7 +646,7 @@ describe('what it refuses, and how it says so', () => {
   it('does not claim there is no cascade, which there is', () => {
     // Every "no React Native equivalent" message ended "Native styling is a subset of CSS: there
     // is no cascade, no floats and no grid", which contradicts the engine this compiler feeds.
-    for (const css of ['visibility: hidden', 'order: 1', 'float: left']) {
+    for (const css of ['visibility: hidden', 'float: left']) {
       assert.throws(
         () => declarationsOf(css),
         (error: Error) => {
@@ -663,7 +661,6 @@ describe('what it refuses, and how it says so', () => {
 
   it('says what to write instead, where there is something', () => {
     assert.throws(() => declarationsOf('visibility: hidden'), /opacity: 0.*display: none/);
-    assert.throws(() => declarationsOf('order: 1'), /order in the template/);
   });
 
   it('names the place a dropped declaration was once, not twice', () => {
@@ -694,7 +691,7 @@ describe('what it refuses, and how it says so', () => {
     // `group-hover:` beside `data-[state=on]:` of the same colour arrives as one rule, and
     // refusing the whole list silently took the variant that was fine with it.
     const dropped: string[] = [];
-    const sheet = compileCss('.a:hover, .b, .c:has(+ .d) { color: red }', 'list.css', {
+    const sheet = compileCss('.a:hover, .b, .c:checked { color: red }', 'list.css', {
       onUnsupported: (message: string) => dropped.push(message),
     });
     assert.deepEqual(
@@ -706,17 +703,17 @@ describe('what it refuses, and how it says so', () => {
     assert.equal((sheet.rules[0] as { order: number }).order, 1, 'ordered as it was in the list');
     assert.equal(dropped.length, 2);
     assert.match(dropped[0]!, /^list\.css:1: dropped a selector: ':hover'/);
-    assert.match(dropped[1]!, /^list\.css:1: dropped a selector: ':has\(\)'/);
+    assert.match(dropped[1]!, /^list\.css:1: dropped a selector: ':checked'/);
   });
 
   it('names the line of a dropped rule before saying it was dropped', () => {
     // `app.tailwind.css: dropped a rule: app.tailwind.css:430: ...`, the line in the middle.
     const dropped: string[] = [];
-    compileCss('.a { color: red }\n.b:has(+ .c) { color: blue }', 'app.tailwind.css', {
+    compileCss('.a { color: red }\n.b:checked { color: blue }', 'app.tailwind.css', {
       onUnsupported: (message: string) => dropped.push(message),
     });
     assert.equal(dropped.length, 1);
-    assert.match(dropped[0]!, /^app\.tailwind\.css:2: dropped a rule: ':has\(\)'/);
+    assert.match(dropped[0]!, /^app\.tailwind\.css:2: dropped a rule: ':checked'/);
     assert.equal(dropped[0]!.split('app.tailwind.css').length, 2, 'named once');
   });
 
@@ -783,7 +780,7 @@ describe('a colour token made of channel tokens', () => {
       parent,
       classes: new Set(own),
       props: {},
-      sheet: null,
+      templateSheet: null,
       hostSheet: null,
       styleCache: null,
       styleDirty: true,
@@ -899,16 +896,13 @@ describe('unsupported CSS, through the build', () => {
   it('drops a rule it cannot select with a warning, and keeps the others', () => {
     const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
     const { result, warnings } = warned(() =>
-      transformAngular(
-        component('  .a:has(+ .b) { color: blue }\n  .c { color: red }'),
-        '/tmp/r.ts',
-      ),
+      transformAngular(component('  .a:checked { color: blue }\n  .c { color: red }'), '/tmp/r.ts'),
     );
     const sheet = result.code.slice(result.code.indexOf('ɵnativeStyles'));
     assert.match(sheet, /rgb\(255, 0, 0\)/);
     assert.doesNotMatch(sheet, /rgb\(0, 0, 255\)/);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /\/tmp\/r\.ts:3 \(E\): dropped a rule: .*:has/);
+    assert.match(warnings[0]!, /\/tmp\/r\.ts:3 \(E\): dropped a rule: .*:checked/);
   });
 
   it('accepts a native-ignore-unsupported comment and warns the same way', () => {
@@ -1014,12 +1008,7 @@ describe('messages for things that are refused', () => {
 
   it('says native has no equivalent of the layout and text properties it has none of', () => {
     // These said "not mapped yet. React Native may well support it", which sends someone to look.
-    for (const css of [
-      'order: 1',
-      'text-wrap: balance',
-      'appearance: none',
-      'word-break: keep-all',
-    ]) {
+    for (const css of ['text-wrap: balance', 'appearance: none', 'word-break: keep-all']) {
       assert.throws(() => declarationsOf(css), /no React Native equivalent/, css);
     }
   });

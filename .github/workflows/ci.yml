@@ -40,7 +40,7 @@ jobs:
       # and it takes under a second.
       - run: pnpm run format:check
 
-      - uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5.0.1
+      - uses: nrwl/nx-set-shas@e602fada7ad5987b0f7b1905e7a99ea1c661514c # v5.1.0
 
       # Through Nx, always: `@nx/enforce-module-boundaries` needs the project graph and skips
       # itself with only a warning when there is none, which is silent enforcement of nothing.
@@ -71,7 +71,7 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5.0.1
+      - uses: nrwl/nx-set-shas@e602fada7ad5987b0f7b1905e7a99ea1c661514c # v5.1.0
 
       # Coverage runs the integration and web suites. The remaining test targets include the
       # generators, docs, examples, template, and testing's own Vitest runner checks.

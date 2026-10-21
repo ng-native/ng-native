@@ -21,7 +21,7 @@ const makeRows = (count: number, prefix = 'row') =>
   Array.from({ length: count }, (_, i) => ({ id: i, label: `${prefix} ${i}` }));
 
 function walk(node: EngineNode): EngineNode[] {
-  return [node, ...node.children.flatMap(walk)];
+  return [node, ...node.childList.flatMap(walk)];
 }
 
 describe('engine at scale', () => {

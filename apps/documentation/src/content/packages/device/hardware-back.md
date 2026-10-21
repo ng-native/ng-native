@@ -13,9 +13,10 @@ watching it close.
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { HardwareBack } from '@ng-native/device';
 
-@Component({ selector: 'app-unsaved-form', template: `<view />` })
+@Component({ selector: 'app-unsaved-form', imports: [View], template: `<view />` })
 export class UnsavedForm {
   private dirty = false;
 

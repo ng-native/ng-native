@@ -3,15 +3,15 @@
  * `HostEngine` method actually operates on.
  *
  * `packages/fabric/src/engine.ts`'s `EngineNode` is not reusable here (its constructor-free shape
- * still carries Fabric-only bookkeeping - `committed`, `styleCache`, `sheet`...), but the shared
+ * still carries Fabric-only bookkeeping - `committed`, `styleCache`, `templateSheet`...), but the shared
  * packages never ask for that: they ask for `HostNode`'s five fields, plus whatever a component
  * reads directly off `this.node` after `inject(ElementRef).nativeElement as EngineNode` casts it
  * back. Grepping every such read (`view-base.ts`, `pressable.ts`'s `TouchableBase`, `scroll-view.ts`,
- * `select.ts`'s `textOf`) turns up exactly `kind`, `props`, `text`, `children` and `parent` - so a
+ * `select.ts`'s `textOf`) turns up exactly `nodeKind`, `props`, `nodeText`, `childList` and `parent` - so a
  * class that implements `HostNode` honestly, backed by a real DOM node, satisfies every one of
  * them without a cast.
  *
- * `children`/`parent` are maintained by hand rather than read live off the DOM (`el.parentElement`,
+ * `childList`/`parent` are maintained by hand rather than read live off the DOM (`el.parentElement`,
  * `el.childNodes`) for the same reason `Engine` keeps its own tree: a live DOM walk would have to
  * filter out nodes this package did not create (there are none today, but a consumer's own
  * `document.createElement` inside a projected template is not this package's to assume against),
@@ -22,7 +22,7 @@ import type { HostNode } from '@ng-native/fabric';
 export type BrowserNodeKind = 'element' | 'text' | 'anchor';
 
 export interface BrowserNode extends HostNode {
-  readonly kind: BrowserNodeKind;
+  readonly nodeKind: BrowserNodeKind;
   /** The real DOM node this wraps. An `Element` for `element`, a `Text` for `text`. */
   readonly el: Element | Text | Comment;
   /** Lowercase template spelling, e.g. `view`. Mirrors `EngineNode.tag`; never the DOM tag. */
@@ -38,8 +38,8 @@ export interface BrowserNode extends HostNode {
   readonly hasAttribute?: (this: BrowserNode, name: string) => boolean;
   readonly getAttribute?: (this: BrowserNode, name: string) => string | null;
   props: Record<string, unknown>;
-  text: string;
-  children: BrowserNode[];
+  nodeText: string;
+  childList: BrowserNode[];
   parent: BrowserNode | null;
   /**
    * Registered listeners, by top-level type (`topTouchStart`, `topChange`, ...). `null` until
@@ -126,15 +126,15 @@ export function makeElementNode(name: string, el: Element): BrowserNode {
     props['stroke'] = undefined;
   }
   const node: BrowserNode = {
-    kind: 'element',
+    nodeKind: 'element',
     el,
     tag: name,
     tagName: name,
     hasAttribute,
     getAttribute,
     props,
-    text: '',
-    children: [],
+    nodeText: '',
+    childList: [],
     parent: null,
     listeners: null,
     optedIn: null,
@@ -147,12 +147,12 @@ export function makeElementNode(name: string, el: Element): BrowserNode {
 
 export function makeTextNode(text: Text): BrowserNode {
   const node: BrowserNode = {
-    kind: 'text',
+    nodeKind: 'text',
     el: text,
     tag: '#text',
     props: {},
-    text: text.data,
-    children: [],
+    nodeText: text.data,
+    childList: [],
     parent: null,
     listeners: null,
     optedIn: null,
@@ -165,12 +165,12 @@ export function makeTextNode(text: Text): BrowserNode {
 /** Angular's `@if`/`@for`/`ViewContainerRef` markers, backed by a real `Comment`. */
 export function makeAnchorNode(comment: Comment): BrowserNode {
   const node: BrowserNode = {
-    kind: 'anchor',
+    nodeKind: 'anchor',
     el: comment,
     tag: '#anchor',
     props: {},
-    text: '',
-    children: [],
+    nodeText: '',
+    childList: [],
     parent: null,
     listeners: null,
     optedIn: null,

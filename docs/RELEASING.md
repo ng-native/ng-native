@@ -22,7 +22,7 @@ one interactively, or write it by hand:
 
 ```md
 ---
-__default__: minor
+__default__: patch
 ---
 
 A virtual list recycles its rows when a template tracks them by slot.
@@ -112,11 +112,15 @@ typecheck the page's code on every pull request. `docs-samples.test.ts` fails wh
 This repository pins its dependencies, and a user's new workspace installs the newest versions our
 ranges allow, so the two drift apart between releases: Angular 22.2 crashed every new app on Hermes
 while the tests here still ran 22.1.5. `.github/workflows/latest.yml` runs every Monday, and by hand
-from the Actions tab, to catch that within a week. Each job runs one scenario of
+from the Actions tab, to catch that within a week. Each workspace job runs one scenario of
 `node scripts/verify-publish.mjs --scenario=<name>`: the template with npm and with pnpm, `ng new`
 with `ng add`, Nx's `angular-monorepo` preset with npm and with pnpm, and its TypeScript preset
 with npm. Each Nx one also generates a library the app renders and tests, and every scenario runs
 its install a second time and bundles for iOS and Android. The job summary lists the Angular, Expo,
-React Native, Nx, Vitest and TypeScript each scenario resolved. A scheduled failure opens an issue
+React Native, Nx, Vitest and TypeScript each scenario resolved. One more job,
+`expo-ui-native-props`, runs `node scripts/expo-ui-native-props.mjs --latest`: it checks each prop a
+typed `ui-*` component sends against the native views of the newest `@expo/ui` that
+`@ng-native/expo`'s peer range allows, since a native view ignores a prop it doesn't declare and a
+rename there fails nothing else. A scheduled failure opens an issue
 titled `Latest versions: <scenario> fails`, or comments on the one already open; close it once
 the fix is in.

@@ -367,7 +367,7 @@ describe('a gradient stop token that is set but of the wrong kind', () => {
       parent: null,
       classes: new Set(['g']),
       props: {},
-      sheet: null,
+      templateSheet: null,
       hostSheet: null,
       styleCache: null,
       styleDirty: true,

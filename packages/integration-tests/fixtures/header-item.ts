@@ -43,3 +43,11 @@ export class HeaderItemInComponent {
   readonly shown = signal(true);
   readonly label = signal('Share');
 }
+
+/** A title item an app sizes with a class of its own. */
+@Component({
+  selector: 'x-header-item-styled',
+  imports: [NativeHeaderItem],
+  template: `<native-header-item type="title" class="wide"><text>Ada</text></native-header-item>`,
+})
+export class HeaderItemStyled {}

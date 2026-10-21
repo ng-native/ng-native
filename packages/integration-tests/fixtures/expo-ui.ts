@@ -185,3 +185,24 @@ export class ExpoUiListFixture {
 export class ExpoUiControlsFixture {
   readonly on = signal(false);
 }
+
+@Component({
+  selector: 'expo-ui-section-slots-fixture',
+  imports: [UiForm, UiHost, UiLabeledContent, UiSection, UiSlot, UiText],
+  template: `
+    <ui-host [style]="{ flex: 1 }">
+      <ui-form>
+        <ui-section>
+          <ui-slot name="header"><ui-text text="Notifications" /></ui-slot>
+          <ui-labeled-content label="Pages"><ui-text text="On" /></ui-labeled-content>
+          @if (footer()) {
+            <ui-slot name="footer"><ui-text text="Turn them on in Settings." /></ui-slot>
+          }
+        </ui-section>
+      </ui-form>
+    </ui-host>
+  `,
+})
+export class ExpoUiSectionSlotsFixture {
+  readonly footer = signal(true);
+}

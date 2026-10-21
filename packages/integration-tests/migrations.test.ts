@@ -539,6 +539,118 @@ describe('engine-node-tag, through nx migrate, ng update and ng-native-migrate',
   });
 });
 
+describe('engine-node-fields, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/walk.ts': [
+      "import { ElementRef, inject } from '@angular/core';",
+      "import type { EngineNode, HostNode } from '@ng-native/fabric';",
+      "import type { BrowserNode } from '@ng-native/web';",
+      '',
+      'export function words(node: EngineNode): string {',
+      "  if (node.kind === 'text') return node.text;",
+      "  return node.children.map((child) => words(child)).join('');",
+      '}',
+      '',
+      'export function first(node: HostNode | null, page: BrowserNode): unknown[] {',
+      '  const { kind, children } = node!;',
+      "  return [kind, children[0]?.text, page['children'], node?.host, page.parent?.kind];",
+      '}',
+      '',
+      'export class Probe {',
+      '  private readonly ref = inject<ElementRef<EngineNode>>(ElementRef);',
+      '  sheet() {',
+      '    return this.ref.nativeElement.sheet;',
+      '  }',
+      '}',
+      '',
+      "export const made: HostNode = { kind: 'element', props: {}, text: '', children: [], parent: null };",
+      '',
+    ].join('\n'),
+    'src/app/unsure.ts': [
+      "import type { EngineNode } from '@ng-native/fabric';",
+      '',
+      'export function described(lookup: () => EngineNode | undefined, message: { text: string }) {',
+      '  return [lookup()?.text, message.text];',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/plain.ts': [
+      'export function plain(item: { kind: string; children: unknown[]; text: string }) {',
+      '  return [item.kind, item.children, item.text];',
+      '}',
+      '',
+    ].join('\n'),
+  };
+
+  it("reads a node's renamed fields by their new names where it is a node's", async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'engine-node-fields', '0.13.0');
+    assert.equal(
+      nx.files['src/app/walk.ts'],
+      files['src/app/walk.ts']
+        .replace(
+          "node.kind === 'text') return node.text;",
+          "node.nodeKind === 'text') return node.nodeText;",
+        )
+        .replace('node.children.map', 'node.childList.map')
+        .replace(
+          'const { kind, children } = node!;',
+          'const { nodeKind: kind, childList: children } = node!;',
+        )
+        .replace(
+          "children[0]?.text, page['children'], node?.host, page.parent?.kind",
+          "children[0]?.text, page['childList'], node?.engine, page.parent?.nodeKind",
+        )
+        .replace('nativeElement.sheet;', 'nativeElement.templateSheet;')
+        .replace(
+          "{ kind: 'element', props: {}, text: '', children: [], parent: null }",
+          "{ nodeKind: 'element', props: {}, nodeText: '', childList: [], parent: null }",
+        ),
+    );
+    assert.equal(nx.files['src/app/unsure.ts'], files['src/app/unsure.ts']);
+    assert.equal(nx.files['src/app/plain.ts'], files['src/app/plain.ts']);
+    assert.deepEqual(nx.notes, [
+      "src/app/unsure.ts:4: lookup()?.text may be an engine node's text, which is now nodeText. If it is, read lookup()?.nodeText instead.",
+      "src/app/walk.ts:12: children[0]?.text may be an engine node's text, which is now nodeText. If it is, read children[0]?.nodeText instead.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it("leaves a node's props alone, and says nothing of them", async () => {
+    // A prop is read by the name the native view gives it, which no rename touches: a text
+    // input's `props['text']` is its value, from before 0.17.0 and after it.
+    const props = {
+      'src/app/field.ts': [
+        "import { ElementRef, inject } from '@angular/core';",
+        "import type { EngineNode } from '@ng-native/fabric';",
+        '',
+        'export function value(node: EngineNode, found: () => EngineNode) {',
+        "  return [node.props['text'], node.props.text, found().props['text'], node['props'].kind];",
+        '}',
+        '',
+        'export class Field {',
+        '  private readonly ref = inject(ElementRef);',
+        '  value() {',
+        "    return this.ref.nativeElement.props['text'];",
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    };
+    const { nx, angular, cli } = await acrossAdapters(props, 'engine-node-fields', '0.13.0');
+    assert.equal(nx.files['src/app/field.ts'], props['src/app/field.ts']);
+    assert.deepEqual(nx.notes, []);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('changes nothing the second time', async () => {
+    const first = await viaNx(files, 'engine-node-fields');
+    const again = await viaNx(first.files as Record<string, string>, 'engine-node-fields');
+    assert.deepEqual(again.files, first.files);
+  });
+});
+
 describe('ng-native-migrate', () => {
   const app = {
     'package.json': JSON.stringify({ dependencies: { '@ng-native/components': '^0.1.3' } }),
@@ -613,5 +725,181 @@ describe('ng-native-migrate', () => {
     assert.equal(status, 0);
     assert.match(stdout, /Nothing to migrate/);
     assert.equal(manifest, app['package.json']);
+  });
+});
+
+describe('library-typecheck-declaration-map, through nx migrate, ng update and ng-native-migrate', () => {
+  const generated = {
+    extends: './tsconfig.lib.json',
+    compilerOptions: { noEmit: true, composite: false, emitDeclarationOnly: false },
+    angularCompilerOptions: {
+      strictTemplates: true,
+      typeCheckHostBindings: false,
+      strictDomEventTypes: false,
+    },
+  };
+  const app = {
+    extends: './tsconfig.json',
+    compilerOptions: { paths: { '@ng-native/*': ['./node_modules/@ng-native/*'] } },
+  };
+  const chosen = {
+    ...generated,
+    compilerOptions: { ...generated.compilerOptions, declarationMap: true, declaration: true },
+  };
+  const json = (value: object) => JSON.stringify(value, null, 2) + '\n';
+  const files = {
+    'packages/ui/tsconfig.typecheck.json': json(generated),
+    'packages/forms/tsconfig.typecheck.json': json(chosen),
+    'apps/mobile/tsconfig.typecheck.json': json(app),
+    'packages/ui/tsconfig.lib.json': json(generated),
+    'packages/tool/tsconfig.typecheck.json': json({
+      extends: './tsconfig.lib.json',
+      compilerOptions: { composite: false },
+    }),
+    'apps/web/tsconfig.typecheck.json': json({ angularCompilerOptions: { strictTemplates: true } }),
+    // An app's own, of the same shape: only a library's extends its tsconfig.lib.json.
+    'apps/admin/tsconfig.typecheck.json': json({ ...generated, extends: './tsconfig.json' }),
+  };
+
+  it("turns off declaration maps in each library's typecheck config, and leaves the rest", async () => {
+    const { nx, angular, cli } = await acrossAdapters(
+      files,
+      'library-typecheck-declaration-map',
+      '0.17.0',
+    );
+    assert.deepEqual(JSON.parse(nx.files['packages/ui/tsconfig.typecheck.json']!), {
+      ...generated,
+      compilerOptions: { ...generated.compilerOptions, declarationMap: false },
+    });
+    for (const file of [
+      'packages/forms/tsconfig.typecheck.json',
+      'apps/mobile/tsconfig.typecheck.json',
+      'packages/ui/tsconfig.lib.json',
+      'packages/tool/tsconfig.typecheck.json',
+      'apps/web/tsconfig.typecheck.json',
+      'apps/admin/tsconfig.typecheck.json',
+    ] as const) {
+      assert.equal(nx.files[file], files[file], `${file} is left as it was`);
+    }
+    assert.deepEqual(nx.notes, []);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('leaves a config with comments as it is, with a note', async () => {
+    const commented = { 'packages/ui/tsconfig.typecheck.json': '{\n  // ngc\n}\n' };
+    const { nx } = await acrossAdapters(commented, 'library-typecheck-declaration-map', '0.17.0');
+    assert.deepEqual(nx.files, commented);
+    assert.deepEqual(nx.notes, [
+      'packages/ui/tsconfig.typecheck.json: not plain JSON, so it was left as it is. If ngc ' +
+        'reports TS5069 for it, add "declarationMap": false to its compilerOptions.',
+    ]);
+  });
+
+  it('changes nothing the second time', async () => {
+    const first = await viaNx(files, 'library-typecheck-declaration-map');
+    const again = await viaNx(
+      first.files as Record<string, string>,
+      'library-typecheck-declaration-map',
+    );
+    assert.deepEqual(again.files, first.files);
+  });
+});
+
+describe('native-typecheck-target, through nx migrate, ng update and ng-native-migrate', () => {
+  const native = (extra: object = {}) => ({
+    projectType: 'application',
+    root: 'projects/native',
+    architect: {
+      serve: { builder: '@ng-native/schematics:expo', options: { command: 'start' } },
+      test: { builder: '@ng-native/schematics:vitest', options: {} },
+      ...extra,
+    },
+  });
+  const web = {
+    projectType: 'application',
+    root: '',
+    architect: { build: { builder: '@angular/build:application', options: {} } },
+  };
+  const own = { builder: '@angular/build:unit-test', options: {} };
+  const files = {
+    'angular.json':
+      JSON.stringify(
+        {
+          version: 1,
+          projects: { web, native: native(), mobile: native({ typecheck: own }) },
+        },
+        null,
+        2,
+      ) + '\n',
+  };
+
+  it('adds a typecheck target to each native project that has none, and leaves the rest', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'native-typecheck-target', '0.17.0');
+    const workspace = JSON.parse(nx.files['angular.json']!);
+    assert.deepEqual(workspace.projects.native.architect.typecheck, {
+      builder: '@ng-native/schematics:typecheck',
+      options: {},
+    });
+    assert.deepEqual(workspace.projects.mobile.architect.typecheck, own, 'its own target stays');
+    assert.deepEqual(workspace.projects.web, web);
+    assert.match(nx.files['angular.json']!, /^ {2}"version": 1,$/m, 'written as it was indented');
+    assert.deepEqual(nx.notes, []);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('skips a project or a target that is not an object, rather than stopping the update', async () => {
+    const odd = {
+      'angular.json':
+        JSON.stringify(
+          {
+            version: 1,
+            projects: {
+              broken: null,
+              // First, so the check for a native builder reaches it before one that is.
+              native: { ...native(), architect: { lint: null, ...native().architect } },
+            },
+          },
+          null,
+          2,
+        ) + '\n',
+    };
+    const { nx } = await acrossAdapters(odd, 'native-typecheck-target', '0.17.0');
+    const workspace = JSON.parse(nx.files['angular.json']!);
+    assert.equal(workspace.projects.broken, null);
+    assert.deepEqual(workspace.projects.native.architect.typecheck, {
+      builder: '@ng-native/schematics:typecheck',
+      options: {},
+    });
+  });
+
+  it('leaves an angular.json with comments as it is, with a note saying what to add', async () => {
+    const commented = {
+      'angular.json': '{\n  // The workspace.\n  "version": 1,\n  "projects": {}\n}\n',
+    };
+    const { nx, angular, cli } = await acrossAdapters(
+      commented,
+      'native-typecheck-target',
+      '0.17.0',
+    );
+    assert.deepEqual(nx.files, commented);
+    assert.deepEqual(nx.notes, [
+      'angular.json: not plain JSON, so no typecheck target was added. Give each Angular Native ' +
+        'project one by hand: "typecheck": { "builder": "@ng-native/schematics:typecheck" } in its ' +
+        'architect.',
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('changes nothing the second time, without a native project, or with no angular.json', async () => {
+    const first = await viaNx(files, 'native-typecheck-target');
+    const again = await viaNx(first.files as Record<string, string>, 'native-typecheck-target');
+    assert.deepEqual(again.files, first.files);
+    const webOnly = { 'angular.json': '{ "version": 1, "projects": { "web": { "root": "" } } }\n' };
+    assert.deepEqual((await viaNx(webOnly, 'native-typecheck-target')).files, webOnly);
+    const plain = { 'package.json': '{ "name": "app" }\n' };
+    assert.deepEqual((await viaNx(plain, 'native-typecheck-target')).files, plain);
   });
 });

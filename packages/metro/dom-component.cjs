@@ -117,9 +117,17 @@ require(${JSON.stringify(relativeImport)});
 `;
 }
 
-/** A `url()`, quoted either way or bare. A quoted one can have a bracket in it. */
-const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^"')\s]+))\s*\)/g;
-const urlIn = (double, single, bare) => double ?? single ?? bare;
+/**
+ * A `url()`, quoted either way or bare, in any case, as CSS reads a function's name. A quoted one
+ * can have a bracket in it.
+ *
+ * A comment or a string is matched first and kept whole, so a `url()` in its text, as in
+ * `content: "url('./a.png')"`, is not taken for one: rewritten, its quotes would end the string.
+ */
+const CSS_URL =
+  /(\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*')|url\(\s*(?:"([^"]*)"|'([^']*)'|([^"')\s]+))\s*\)/gi;
+/** The url a match names, or null for a comment or a string. */
+const urlIn = (kept, double, single, bare) => (kept ? null : (double ?? single ?? bare));
 /** A url that is not a file beside the sheet: inline data, a fragment, a rooted path, a scheme. */
 const NOT_BESIDE = /^(data:|[#/]|[a-z][a-z0-9+.-]*:)/i;
 
@@ -153,8 +161,9 @@ async function withExportedUrls(result, options) {
   css.code = css.code.replace(CSS_URL, (whole, ...quoted) => {
     const url = urlIn(...quoted);
     const asset = exported.get(fileOf(url));
+    if (!asset) return whole;
     const rest = url.slice(url.search(/[?#]|$/));
-    return asset ? `url("${TO_BUNDLE_ROOT}${encodeURI(asset.path)}${rest}")` : whole;
+    return `url("${TO_BUNDLE_ROOT}${encodeURI(asset.path)}${rest}")`;
   });
   const dependencies = [...exported.keys()].map(dependencyOn);
   return {
@@ -188,6 +197,43 @@ async function exportedFiles(code, { filename, projectRoot, assetExts, assetData
   return { exported, left };
 }
 
+/**
+ * A page's stylesheet in development, with each file its `url()`s name pointed at Metro.
+ *
+ * The page is served from `/_expo/@dom/`, so a url left relative is asked for there, where nothing
+ * answers it. Metro serves an asset at `/assets`, a file outside the project too, so a font from a
+ * package in a pnpm store at the workspace root loads as well. The sheet is rewritten before Expo
+ * transforms it, since in development Expo puts the sheet into the module's code as a string.
+ *
+ * Only a file Metro takes as an asset, by `assetExts`, as for a release build. A url left alone
+ * keeps Expo's warning that it is not supported.
+ *
+ * Answers with the files it pointed at as well: a cached transform of the sheet is stale once one
+ * of them goes (see `resource-cache.cjs`).
+ */
+function withServedUrls(css, { filename, projectRoot, assetExts }) {
+  const beside = path.dirname(path.resolve(projectRoot, filename));
+  const read = new Set();
+  const code = css.replace(CSS_URL, (whole, ...quoted) => {
+    const url = urlIn(...quoted);
+    const file = fileOf(url);
+    const target = file === null ? null : path.resolve(beside, file);
+    if (target === null || !isAsset(target, assetExts)) return whole;
+    read.add(target);
+    const rest = url.slice(url.search(/[?#]|$/));
+    // The url's own query after Metro's, which names the file in its own query.
+    return `url("${servedAt(path.relative(projectRoot, target))}${rest.replace(/^\?/, '&')}")`;
+  });
+  return { code, read: [...read] };
+}
+
+/**
+ * Where Metro's dev server serves `file`, named from the project. A path in `unstable_path` can
+ * leave the project, as one after `/assets/` cannot. MUST MATCH `metro`'s `Server`, which reads it.
+ */
+const servedAt = (file) =>
+  `/assets?unstable_path=${encodeURIComponent(file.split(path.sep).join('/'))}`;
+
 const isAsset = (file, assetExts) =>
   assetExts.includes(path.extname(file).slice(1).toLowerCase()) && existsSync(file);
 
@@ -202,7 +248,7 @@ function dependencyOn(file) {
 
 /** The file a `url()` names beside its sheet, without its query or fragment, or null. */
 function fileOf(url) {
-  if (NOT_BESIDE.test(url)) return null;
+  if (url === null || NOT_BESIDE.test(url)) return null;
   try {
     return decodeURI(url.split(/[?#]/, 1)[0]);
   } catch {
@@ -215,4 +261,5 @@ module.exports = {
   domComponentReference,
   domComponentEntry,
   withExportedUrls,
+  withServedUrls,
 };

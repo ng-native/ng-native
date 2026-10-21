@@ -2,7 +2,15 @@
  * The builders: which CLI they find, what they hand it, and what they report back to `ng`.
  */
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -12,6 +20,9 @@ const require = createRequire(import.meta.url);
 const { expoArgs } = require('./expo.cjs');
 const { vitestArgs } = require('./vitest.cjs');
 const { resolveBin, spawnBin } = require('./spawn-bin.cjs');
+const typecheck = require('./typecheck.cjs') as {
+  runTypecheck(context: object): Promise<{ success: boolean; error?: string }>;
+};
 
 describe('expo', () => {
   it('passes the command and its arguments through as they are', () => {
@@ -142,5 +153,64 @@ describe('the CLI a builder runs', () => {
       spawnBin('fake-cli', [], { ...context(root), target: undefined }),
       /project target/,
     );
+  });
+});
+
+describe('typecheck', () => {
+  /**
+   * A project with a fake `ngc` and a Metro config, each recording that it ran, in order, to
+   * `ran.log` in the project.
+   */
+  function typecheckProject(config: string, ngc: string) {
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ng-native-builder-')));
+    const cli = path.join(root, 'node_modules', '@angular', 'compiler-cli');
+    mkdirSync(path.join(cli, 'bundles'), { recursive: true });
+    writeFileSync(
+      path.join(cli, 'package.json'),
+      JSON.stringify({ name: '@angular/compiler-cli', bin: { ngc: './bundles/ngc.js' } }),
+    );
+    const record = (name: string) =>
+      `require('node:fs').appendFileSync('ran.log', ${JSON.stringify(name)} + ' ' + process.argv.slice(2).join(' ') + '\\n');`;
+    writeFileSync(path.join(cli, 'bundles', 'ngc.js'), record('ngc') + ngc);
+    writeFileSync(path.join(root, 'metro.config.js'), record('metro.config.js') + config);
+    return root;
+  }
+  const ran = (root: string) =>
+    existsSync(path.join(root, 'ran.log'))
+      ? readFileSync(path.join(root, 'ran.log'), 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => line.trim())
+      : [];
+
+  it("loads the Metro config, so a Tailwind sheet main.ts imports exists, then runs ngc on the project's tsconfig", async () => {
+    const root = typecheckProject('', '');
+    const ctx = context(root);
+    assert.deepEqual(await typecheck.runTypecheck(ctx), { success: true });
+    assert.deepEqual(ran(root), ['metro.config.js', 'ngc -p tsconfig.json --noEmit']);
+    assert.match(ctx.logged[0]!, /^node metro\.config\.js {2}\(in /);
+    assert.match(ctx.logged[1]!, /^ngc -p tsconfig\.json --noEmit {2}\(in /);
+  });
+
+  it('runs ngc alone in a project with no Metro config', async () => {
+    const root = typecheckProject('', '');
+    rmSync(path.join(root, 'metro.config.js'));
+    assert.deepEqual(await typecheck.runTypecheck(context(root)), { success: true });
+    assert.deepEqual(ran(root), ['ngc -p tsconfig.json --noEmit']);
+  });
+
+  it('fails when ngc finds an error', async () => {
+    const root = typecheckProject('', 'process.exit(2);');
+    assert.deepEqual(await typecheck.runTypecheck(context(root)), {
+      success: false,
+      error: 'ngc exited with code 2',
+    });
+  });
+
+  it('stops at a Metro config that fails, before ngc', async () => {
+    const root = typecheckProject('process.exit(1);', '');
+    const result = await typecheck.runTypecheck(context(root));
+    assert.equal(result.success, false);
+    assert.deepEqual(ran(root), ['metro.config.js']);
   });
 });

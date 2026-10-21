@@ -4,7 +4,7 @@
  * ```ts
  * protected readonly player = videoPlayer(this.source, { timeUpdate: 0.5 });
  *
- * // <expo-video [player]="player.native" />
+ * // <expo-video [player]="player.id" />
  * // {{ player.state().currentTime }}
  * ```
  */
