@@ -344,6 +344,9 @@ const engines: Engine[] = [];
 /** The engine of the newest app up, which the window speaks for. */
 export const currentEngine = (): Engine | undefined => engines.at(-1);
 
+/** Whether an app that asked for the package is up, and not destroyed. */
+export const isUp = (engine: Engine): boolean => engines.includes(engine);
+
 /** An app that asked for the package has started: its window is the one read, until it goes. */
 export function windowOf(engine: Engine): () => void {
   engines.push(engine);

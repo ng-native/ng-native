@@ -2690,7 +2690,7 @@
     "intersection-observer/root-vertical-rl.html": {"status":"OK","pass":1,"fail":2,"total":3,"passed":"7239affd5e","names":"c33609fb13","failed":["118772ef","b0307e7b"]},
     "intersection-observer/rtl-clipped-root.html": {"status":"ERROR","pass":1,"fail":1,"total":2,"passed":"68e77c3354","names":"932d973997","failed":["c41112d9"]},
     "intersection-observer/same-document-no-root.html": {"status":"OK","pass":1,"fail":3,"total":4,"passed":"b88bced395","names":"1bb2ac3a1a","failed":["118772ef","55048179","afdbaa5b"]},
-    "intersection-observer/same-document-root.html": {"status":"OK","pass":1,"fail":6,"total":7,"passed":"0bff3dfe23","names":"ce9e25a2c4","failed":["256ca65e","7bc779c7","8484c890","84ab2d74","c41112d9","cef2e495"]},
+    "intersection-observer/same-document-root.html": {"status":"OK","pass":2,"fail":5,"total":7,"passed":"ee0f80d84e","names":"ce9e25a2c4","failed":["256ca65e","7bc779c7","8484c890","c41112d9","cef2e495"]},
     "intersection-observer/same-document-with-document-root.html": {"status":"OK","pass":1,"fail":2,"total":3,"passed":"3eda16ee2c","names":"36e892f246","failed":["118772ef","55048179"]},
     "intersection-observer/same-document-zero-size-target.html": {"status":"OK","pass":1,"fail":3,"total":4,"passed":"a7f83c7b40","names":"9f14c6b808","failed":["55048179","afdbaa5b","c41112d9"]},
     "intersection-observer/scroll-and-root-margin.html": {"status":"OK","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"5b90f524d6","failed":["5b90f524"]},

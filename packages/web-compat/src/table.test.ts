@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, ElementRef, inject, signal } from '@angular/core';
+import { Engine } from '@ng-native/fabric';
 import { cleanup, compileCss, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
@@ -294,6 +295,30 @@ describe('a table in an app that asked for web-compat', () => {
       children: readonly unknown[];
     }): boolean => 'tableLayout' in view.props || (view.children as (typeof view)[]).some(sent);
     assert.equal(app.fabric.committed.some(sent), false);
+  });
+});
+
+describe('a table whose app is destroyed before its columns are counted', () => {
+  it('lays nothing out once the app is gone', async () => {
+    const app = await render(Table, { providers: [provideWebCompat()] });
+    await settle();
+    const engine = app.componentRef.injector.get(Engine);
+    const document = (globalThis as { document?: Dom }).document!;
+    // A row put in by a script: its table is laid out once what is being built is built.
+    const row = document.createElement('tr');
+    row.appendChild(document.createElement('td'));
+    document.querySelector('table').appendChild(row);
+    // What a table's layout does: give its cells their columns' styles.
+    let laid = 0;
+    const give = engine.setDefaultStyle.bind(engine);
+    engine.setDefaultStyle = (...args: Parameters<Engine['setDefaultStyle']>) => {
+      laid++;
+      return give(...args);
+    };
+    cleanup();
+    const destroyed = laid;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(laid, destroyed);
   });
 });
 

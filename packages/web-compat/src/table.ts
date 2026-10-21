@@ -1,5 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { CELL, ROW } from './elements.ts';
+import { isUp } from './window.ts';
 
 /**
  * A table's columns. A row is a flex row of its cells, and a table's cells line up down it: each
@@ -57,6 +58,8 @@ function layOutLater(node: EngineNode, engine: Engine): void {
   queueMicrotask(() => {
     const nodes = changed.get(engine) ?? [];
     changed.delete(engine);
+    // An app destroyed since is committed to no more.
+    if (!isUp(engine)) return;
     for (const table of new Set([...nodes].map(tableOf))) layOut(table, engine);
     engine.commit();
   });
