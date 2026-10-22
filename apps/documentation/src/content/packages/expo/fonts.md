@@ -115,7 +115,11 @@ reported in the build, but the platform does not pick an instance from it by the
 - **Android** draws the font's default instance below 700, and its system font at 700 and above.
 
 Many variable fonts ship their static weights beside the variable file. For one that does not,
-fontTools cuts one: `fonttools varLib.instancer Inter-VariableFont_wght.ttf wght=600 -o Inter-SemiBold.ttf`.
+fontTools cuts one:
+
+```sh
+fonttools varLib.instancer Inter-VariableFont_wght.ttf wght=600 -o Inter-SemiBold.ttf
+```
 
 ## In a SwiftUI `font` modifier
 
