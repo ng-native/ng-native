@@ -7,7 +7,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component } from '@angular/core';
-import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
+import { Engine } from '@ng-native/fabric';
+import { cleanup, render, screen, settle, type FakeFabricNode } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 afterEach(cleanup);
@@ -200,5 +201,50 @@ describe('@ng-native/web-compat, an element moved while a finger is on it', () =
     assert.equal(engine.heldMoves.size, 1, 'held while the app is up');
     cleanup();
     assert.equal(engine.heldMoves.size, 0);
+  });
+});
+
+/** A list in a page that scrolls. */
+@Component({
+  template: `<div testID="page" style="overflow: auto">
+    <div id="list"><div id="item" testID="item"></div></div>
+  </div>`,
+})
+class Scrolling {}
+
+describe('@ng-native/web-compat, a drag kept from the page by an element moved as it is kept', () => {
+  it('holds the page the element was in still, until the finger lifts', async () => {
+    const app = await render(Scrolling, { providers: [provideWebCompat()] });
+    await settle();
+    const engine = app.componentRef.injector.get(Engine);
+    const document = (globalThis as Dom).document;
+    const item = document.getElementById('item');
+    const view = screen.getByTestId('item');
+    // What CDK's drag and drop does in the move that starts a drag: it puts the item on the
+    // body, reads where things are, which commits, and prevents the move's default.
+    item.addEventListener('touchmove', (event: Dom) => {
+      if (item.parentNode !== document.body) document.body.appendChild(item);
+      item.getBoundingClientRect();
+      event.preventDefault();
+    });
+    const send = (phase: 'Start' | 'Move' | 'End', pageY: number) => {
+      const touch = { identifier: 0, target: view.reactTag, pageX: 10, pageY };
+      app.fabric.emit(view, `topTouch${phase}`, {
+        ...touch,
+        touches: phase === 'End' ? [] : [touch],
+        changedTouches: [touch],
+      });
+    };
+    const scrolls = () => {
+      engine.commit();
+      return screen.getByTestId('page').props['scrollEnabled'] !== false;
+    };
+    send('Start', 10);
+    send('Move', 40);
+    assert.equal(scrolls(), false, 'held still');
+    send('Move', 80);
+    assert.equal(scrolls(), false, 'for every move');
+    send('End', 80);
+    assert.equal(scrolls(), true, 'and given back once the finger lifts');
   });
 });

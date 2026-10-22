@@ -5086,6 +5086,16 @@ const oneRun = (child: EngineNode): boolean =>
   child.nodeKind === 'text' || (child.nodeKind === 'element' && TEXT_ELEMENTS.has(child.tag));
 
 /**
+ * The node whose view native has a node's view in, through a line box it is committed in, or
+ * the node it is in where it is not committed.
+ */
+function drawnIn(node: EngineNode): EngineNode | null {
+  const under = node.committedUnder;
+  if (!under) return node.parent;
+  return 'nodeKind' in under ? under : under.in;
+}
+
+/**
  * The view a node is committed as: `viewNameOf`, but for a text element that aligns its text, and
  * for the content view of a horizontal scroll view on Android, which RN commits as a view of its
  * own. That one is a plain view in every other respect, so only the commit names it: a scroll
@@ -14738,10 +14748,16 @@ export class Engine implements HostEngine {
    * Stop every scroll view a node is in from scrolling, until the touch ends: one held off hands
    * the drag to the one around it. Telling native who holds the touch does this on Android. On
    * iOS a scroll view is held off only by a responder that is over it, never one inside it, so
-   * each is told not to scroll.
+   * each is told not to scroll. The scroll views are the ones native has the node's view in,
+   * which is where the finger is: an element moved with a finger on it stays there until the
+   * finger lifts (see `holdMove`), and CDK's drag and drop moves the item it drags to the body in
+   * the move whose default it prevents.
    */
   private holdScroll(node: EngineNode): void {
-    for (let up = node.parent; up; up = up.parent) {
+    // Each once: a view's parent native has it in and one it is in since are both followed.
+    const seen = new Set<EngineNode>();
+    for (let up = drawnIn(node); up && !seen.has(up); up = drawnIn(up)) {
+      seen.add(up);
       if (up.nodeKind !== 'element' || !SCROLL_VIEWS.has(committedViewName(up))) continue;
       this.scrollHeld.add(up);
       this.tellScreen(up);
