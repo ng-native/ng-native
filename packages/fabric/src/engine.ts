@@ -7470,6 +7470,7 @@ export class Engine implements HostEngine {
     const at = target.childList.indexOf(child);
     if (at < 0) return;
     this.carryHoists(child);
+    if (this.holdsMoves) this.holdMove(target, child, at);
     target.childList.splice(at, 1);
     child.parent = null;
     this.outSince.set(child, this.classesAbove);
@@ -7622,6 +7623,8 @@ export class Engine implements HostEngine {
   /** Forget the committed views of each node removed since the last commit that is still out. */
   private forgetDetached(): void {
     for (const node of this.removedSinceCommit) {
+      // One a finger is on goes once the finger lifts: see `holdMove`.
+      if (this.heldMoves.has(node)) continue;
       if (node.committed && this.topOf(node) !== this.root) this.forgetCommitted(node);
     }
     this.removedSinceCommit.clear();
@@ -7647,6 +7650,8 @@ export class Engine implements HostEngine {
     // an `@if` is, and its children's views would then be handed to the view it is made again
     // as. Native gives a view one parent for its life, and aborts on a second.
     if (node.committed) this.forgetCommitted(node);
+    // Destroyed, it is held no longer: it is gone from native with its parent's next commit.
+    this.heldMoves.delete(node);
     this.stopEased(node);
     node.transitions = undefined;
     if (node.playing) this.stopNative(node, node.playing);
@@ -8460,6 +8465,7 @@ export class Engine implements HostEngine {
     this.placesMarked.clear();
     this.placesMarkedAfter.clear();
     if (!this.root.structureDirty && !this.root.subtreeDirty) return false;
+    if (this.heldMoves.size) this.markHolders();
 
     const started = now();
     // Faces registered before the walk, the global sheet's among them, reach every node in it.
@@ -8937,6 +8943,93 @@ export class Engine implements HostEngine {
   /** Boxes that became fixed or absolute with the finger on them, left under their parents. */
   private readonly fixedUnderFinger = new Set<EngineNode>();
 
+  /** Whether a node moved with a finger on it waits for the finger to lift: `holdMovesUnderFinger`. */
+  private holdsMoves = false;
+  /**
+   * The nodes taken out of the parent they are committed under with a finger on them, each with
+   * that parent and the element that came after it there, which it stays before.
+   */
+  private readonly heldMoves = new Map<
+    EngineNode,
+    { readonly under: EngineNode; readonly before: EngineNode | null }
+  >();
+
+  /**
+   * Have a node that is moved to another parent, or taken out, while the first finger down is on
+   * it or on something in it stay committed where it was until the last finger lifts, and then
+   * go where it is. A native view moved to another parent is a view made again, which loses the
+   * touch on it: a web library that drags an element moves it as the drag begins, out of its list
+   * and on to the body, and its drag stopped there. The tree is moved at once, so what reads it
+   * finds the node where it was put, and only what native is told waits. Off, what is held goes
+   * where it is with the next commit.
+   */
+  holdMovesUnderFinger(on: boolean): void {
+    this.holdsMoves = on;
+    if (!on && this.heldMoves.size) this.releaseMoves();
+  }
+
+  /** A node is taken out of `parent` from `at`: held there, where a finger is on it. */
+  private holdMove(parent: EngineNode, child: EngineNode, at: number): void {
+    if (this.heldMoves.has(child) || child.committed === null) return;
+    // Under the root it is one of the root's handles, which hold no node from elsewhere.
+    if (child.committedUnder !== parent || parent === this.root) return;
+    if (!isWithin(this.fingerOn, child)) return;
+    const before = parent.childList.slice(at + 1).find((next) => next.nodeKind === 'element');
+    this.heldMoves.set(child, { under: parent, before: before ?? null });
+  }
+
+  /** Whether a node is held under a parent other than the one it is in now. */
+  private heldElsewhere(child: EngineNode): boolean {
+    const held = this.heldMoves.get(child);
+    return held !== undefined && held.under !== child.parent;
+  }
+
+  /**
+   * Add to a node's child handles each node held under it that has gone from it, before the
+   * element it came before where that is still there: reconciled where it is in the tree, so it
+   * is drawn as it is styled, and as it was last committed once it is out of the tree.
+   */
+  private heldHandles(node: EngineNode, handles: FabricNode[]): void {
+    for (const [child, held] of this.heldMoves) {
+      if (held.under !== node || child.parent === node) continue;
+      const handle = child.parent ? this.reconcileUnder(node, child) : child.committed?.handle;
+      if (!handle) continue;
+      const next = held.before?.committedUnder === node ? held.before.committed : null;
+      const at = next ? handles.indexOf(next.handle) : -1;
+      if (at < 0) handles.push(handle);
+      else handles.splice(at, 0, handle);
+    }
+  }
+
+  /**
+   * Have each parent a node is held under committed with its children again: a change to the node
+   * marks the way up from where it is in the tree, and not from where it is committed.
+   */
+  private markHolders(): void {
+    for (const { under } of this.heldMoves.values()) {
+      for (let at: EngineNode | null = under; at && !at.subtreeDirty; at = at.parent) {
+        at.subtreeDirty = true;
+      }
+    }
+  }
+
+  /** The last finger is up: each node held goes where it is with the next commit. */
+  private releaseMoves(): void {
+    const held = [...this.heldMoves];
+    this.heldMoves.clear();
+    for (const [node, { under }] of held) {
+      under.structureDirty = true;
+      this.markPath(under);
+      if (node.parent) {
+        node.parent.structureDirty = true;
+        this.markPath(node.parent);
+      } else {
+        // Out of the tree, it is let go of as any node taken out is: see `forgetDetached`.
+        this.removedSinceCommit.add(node);
+      }
+    }
+  }
+
   /** Note what a finger comes down on, and once the last has lifted move what waited for it. */
   private trackFinger(target: EngineNode | null, type: string, nativeEvent: unknown): void {
     const fingers = (nativeEvent as { touches?: readonly unknown[] } | null)?.touches?.length ?? 0;
@@ -8944,6 +9037,7 @@ export class Engine implements HostEngine {
     if (type === TOUCH_START && fingers <= 1) this.fingerOn = target;
     if ((type !== 'topTouchEnd' && type !== 'topTouchCancel') || fingers > 0) return;
     this.fingerOn = null;
+    if (this.heldMoves.size) this.releaseMoves();
     for (const node of this.fixedUnderFinger) {
       if (!isWithin(node, this.root)) continue;
       this.refix(node, readStyle(node, 'position'));
@@ -13075,6 +13169,7 @@ export class Engine implements HostEngine {
     this.noteBaselineFields(node);
     this.freshBaselines(node);
     const childHandles = this.reconcileChildren(node, viewName, style);
+    if (this.heldMoves.size) this.heldHandles(node, childHandles);
     if (this.fixedIn.size) this.fixedHandles(node, childHandles);
     this.raise(node, viewName);
     noteTouches(node, style);
@@ -13611,6 +13706,8 @@ export class Engine implements HostEngine {
    * when it is shown again, as Modal.js creates it afresh. Committed again, it ignores every touch.
    */
   private withheld(child: EngineNode): boolean {
+    // Moved with a finger on it, it is committed where it was: see `heldHandles`.
+    if (this.heldMoves.size && this.heldElsewhere(child)) return true;
     // A box drawn and then hidden is `display: none`, as any element is.
     if (this.generated !== null && isGenerated(child.tag)) {
       return this.undrawn(child) || this.undisplayed(child);

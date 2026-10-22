@@ -180,13 +180,20 @@ in a stack: with two stacks side by side it is the header of whichever pushed a 
   or the body is passive unless it says `passive: false`, as in a browser. Preventing a
   `pointermove`'s default does not, as in a browser: `touch-action` keeps a pointer's drag from
   the page.
+- An element moved to another parent, or taken out, while a finger is on it or on something in it
+  keeps the touch, as in a browser: a native view moved to another parent loses it. The document
+  has the element where it was put at once, and native is told when the last finger lifts or the
+  touch is canceled; until then it is drawn where it was, as it is styled. CDK's drag and drop
+  puts the element it drags on the body as the drag begins.
 
 Gaps: `DragEvent`, `ClipboardEvent` and the other kinds not named here are not there. A handler
 written as an attribute's text is not compiled, and the window and the document have no handler
 properties. A field native refuses the focus to, a read-only one, is taken to have it until the
 next focus or blur. A move whose default is prevented after the page has started to scroll
 stops the scroll where it is, where a browser lets it go on: native has the touch a frame or so
-before a listener hears of it.
+before a listener hears of it. An element moved with a finger on it is drawn where it was until
+the finger lifts, so a library that moves one in sight while a finger is on it, and not out of
+sight as a drag does, shows the move late. One in a line of inline boxes moves at once.
 
 ## Forms
 

@@ -225,7 +225,10 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       });
       // Where a file input's click finds the system's file picker: see `file-input.ts`.
       const forgetPicker = pickWith(engine, injector);
+      // An element a library moves while a finger is on it keeps its touch: see `Engine`.
+      engine.holdMovesUnderFinger(true);
       inject(DestroyRef).onDestroy(() => {
+        engine.holdMovesUnderFinger(false);
         forgetPicker();
         closePage();
         forgetFrameMode();

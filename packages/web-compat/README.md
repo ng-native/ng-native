@@ -65,7 +65,10 @@ Experimental and partial. It has:
 - Events: `MouseEvent`, `PointerEvent`, `KeyboardEvent`, `FocusEvent`, `TouchEvent` and the
   other kinds, `document.createEvent` with each kind's `init*Event`, `window.event`, and handler
   properties, `onclick` to `onload`. A press is a `PointerEvent`, and a touch is the mouse going
-  down and up as a phone's browser has it. A held finger is a `contextmenu`.
+  down and up as a phone's browser has it. A held finger is a `contextmenu`. An element moved to
+  another parent, or taken out, while a finger is on it is moved in the document at once and
+  stays where native has it until the finger lifts, so the touch goes on, as a drag that puts its
+  element on the body as it begins needs.
 - What a click does: a checkbox or a radio is checked and says `input` and `change`, a button
   submits or resets its form, and a label clicks or focuses its control, for a press, a click a
   script sends and `element.click()`.
