@@ -158,6 +158,40 @@ describe('elementFromPoint', () => {
     same(document.elementFromPoint(10, 10), under);
   });
 
+  it('finds what takes touches again inside a box that a style says takes none', async () => {
+    const { document, place, div } = await page();
+    const over = div(undefined, 'pointer-events: none');
+    const opened = div(over, 'pointer-events: auto');
+    await settle();
+    place(over, { x: 0, y: 0, width: 50, height: 50 });
+    place(opened, { x: 10, y: 10, width: 10, height: 10 });
+    same(document.elementFromPoint(15, 15), opened);
+    same(document.elementFromPoint(40, 40), document.documentElement, 'the box itself is not hit');
+    assert.equal(document.elementsFromPoint(15, 15).includes(over), false);
+  });
+
+  it('passes over what is outside a box that clips what overflows it', async () => {
+    const { document, place, div } = await page();
+    const clipping = div(undefined, 'overflow: hidden');
+    const out = div(clipping);
+    const open = div();
+    const past = div(open);
+    await settle();
+    place(clipping, { x: 0, y: 0, width: 50, height: 50 });
+    place(out, { x: 60, y: 0, width: 20, height: 20 });
+    place(open, { x: 0, y: 100, width: 50, height: 50 });
+    place(past, { x: 60, y: 100, width: 20, height: 20 });
+    same(document.elementFromPoint(70, 10), document.documentElement, 'clipped away');
+    same(document.elementFromPoint(70, 110), past, 'drawn past a box that does not clip');
+  });
+
+  it('lists no body that is not drawn', async () => {
+    const { document } = await page();
+    document.body.style.setProperty('display', 'none');
+    await settle();
+    assert.equal(document.elementsFromPoint(10, 10).includes(document.body), false);
+  });
+
   it('is on the document only while an app that asked for the package is up', async () => {
     const { document } = await page();
     assert.equal(typeof document.elementFromPoint, 'function');

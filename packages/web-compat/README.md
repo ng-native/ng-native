@@ -38,8 +38,8 @@ Experimental and partial. It has:
 - Geometry: `getBoundingClientRect` and `getClientRects` as `DOMRect`s, `offsetParent` and the
   `offset`, `client` and `scroll` sizes and positions, each read from where native last laid the
   element out with what is pending committed first. `document.elementFromPoint` and
-  `elementsFromPoint` answer the element drawn at a point, passing over `pointer-events: none` and
-  `display: none`.
+  `elementsFromPoint` answer the element drawn at a point, passing over `pointer-events: none`,
+  `display: none` and what a box that clips its overflow does not draw.
 - Scrolling: an element whose style says `overflow: auto` or `scroll` scrolls what overflows it,
   with `scrollTop` and `scrollLeft` to read and write, `scroll`, `scrollTo`, `scrollBy` and
   `scrollIntoView`. The window does not scroll, and `document.scrollingElement` is its root.

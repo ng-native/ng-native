@@ -104,7 +104,8 @@ Gaps:
   out, with what is pending committed first.
 - `document.elementFromPoint` and `elementsFromPoint` answer the element drawn at a point of the
   window, the deepest and the last of those beside each other first. They pass over an element
-  with `pointer-events: none` or `display: none`, and read no `z-index`.
+  with `pointer-events: none` (but not what inside it takes touches again) or `display: none`,
+  and what a box that clips its overflow does not draw, and read no `z-index`.
 - `getComputedStyle` answers a `width` or `height` an element has none of its own of as it is
   drawn.
 - An HTML element starts as a browser's own stylesheet has it, under every style an app or a
