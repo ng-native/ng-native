@@ -153,11 +153,16 @@ export function svgInserted(node: EngineNode, parent: EngineNode, engine: Engine
   // One with no attribute is never drawn by one being set, and is the whole drawing.
   if (node.tag === 'foreignObject') drawLater(node, engine);
   startFilled(node, engine);
-  // Where it is put changes the scale a long path is drawn across.
+  longPathsMoved(node, engine);
+}
+
+/** Where a long path, or a group of them, is put changes the scale it is drawn across. */
+function longPathsMoved(node: EngineNode, engine: Engine): void {
   if (node.tag === 'path' && (attributesOf(node).attrs['d']?.length ?? 0) >= LONG_PATH) {
     drawLater(node, engine);
-  } else if (node.tag === 'g')
+  } else if (node.tag === 'g') {
     redrawLongPathsUnder(node, engine, (path) => drawLater(path, engine));
+  }
 }
 
 /** What a text is drawn by beside its words, put in it: a path it is set along, a copy as its outline. */
