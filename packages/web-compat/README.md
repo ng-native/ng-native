@@ -89,7 +89,7 @@ Experimental and partial. It has:
   its `alt` said to a screen reader, its `width` and `height` as its size, the size of its
   picture where nothing else sizes it, `naturalWidth`, `naturalHeight`, `complete`, `load` and
   `error`, and `object-fit` as how the picture fits its box. A picture that is an SVG is fetched
-  and drawn as an `<svg>`.
+  and drawn as an `<svg>` of its shapes alone.
 - A `<button>` and an `<a>` with their roles, each taking a press with no listener (`:active`
   while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
   disabled, and a table's and a form's elements as views.

@@ -232,6 +232,65 @@ describe('an image', () => {
     }
   });
 
+  it('draws only the shapes of an SVG picture, and loads nothing it names', async () => {
+    // As a browser draws an SVG as an image: nothing in it fetches, frames or runs.
+    const DRAWING =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">' +
+      '<path d="M0 0h10v10H0z"/>' +
+      '<foreignObject width="10" height="10"><iframe src="https://evil.test/frame"></iframe>' +
+      '<img src="https://evil.test/inner.svg"/></foreignObject>' +
+      '<img src="https://evil.test/out.svg"/></svg>';
+    const asked: string[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = ((url: string) => {
+      asked.push(String(url));
+      return url === 'https://example.test/trap.svg'
+        ? Promise.resolve({ ok: true, text: () => Promise.resolve(DRAWING) })
+        : new Promise(() => {});
+    }) as never;
+    try {
+      const { app } = await pictures();
+      app.instance.src.set('https://example.test/trap.svg');
+      await settle();
+      await new Promise((done) => setTimeout(done, 5));
+      await settle();
+      assert.deepEqual(asked, ['https://example.test/trap.svg']);
+      const [drawing] = screen.getByTestId('pic').children;
+      assert.deepEqual(
+        drawing!.children.map((child) => child.viewName),
+        ['RNSVGPath'],
+      );
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
+  it('is as big as its drawing says in points, not a percentage or a box it cannot read', async () => {
+    const svg = (attributes: string) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" ${attributes}><path d="M0 0h1v1H0z"/></svg>`;
+    const answers: Record<string, string> = {
+      'https://example.test/wide.svg': svg('width="100%" height="50%" viewBox="0 0 48 24"'),
+      'https://example.test/bad.svg': svg('viewBox="0 0 wide tall"'),
+    };
+    const real = globalThis.fetch;
+    globalThis.fetch = ((url: string) =>
+      Promise.resolve({ ok: true, text: () => Promise.resolve(answers[url] ?? '') })) as never;
+    try {
+      const { app, element } = await pictures();
+      const natural = async (uri: string) => {
+        app.instance.src.set(uri);
+        await settle();
+        await new Promise((done) => setTimeout(done, 5));
+        await settle();
+        return [element('pic').naturalWidth, element('pic').naturalHeight];
+      };
+      assert.deepEqual(await natural('https://example.test/wide.svg'), [48, 24], 'its view box');
+      assert.deepEqual(await natural('https://example.test/bad.svg'), [0, 0], 'and no NaN');
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
   it('is copied with what it shows, which the copy loads for itself', async () => {
     const { element } = await pictures();
     await loaded('sized', 400, 200);

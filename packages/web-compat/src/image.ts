@@ -4,6 +4,7 @@ import {
   type Engine,
   type EngineNode,
 } from '@ng-native/fabric';
+import { parseFragment, serializeOuter, type DefaultTreeAdapterMap } from 'parse5';
 import { documentOf } from './document.ts';
 import { setMarkup } from './html.ts';
 import { keptOwn } from './in-document.ts';
@@ -132,11 +133,48 @@ function draw(node: EngineNode, uri: string, engine: Engine): void {
     });
 }
 
+type Parsed = DefaultTreeAdapterMap['parentNode'];
+
+const SVG = 'http://www.w3.org/2000/svg';
+/** What draws no shape, and would fetch, frame or run something: never built from a picture. */
+const NOT_DRAWN = new Set(['foreignObject', 'script']);
+
+/** Take out of a parsed element each one that is not a shape of the drawing, all the way down. */
+function prune(parent: Parsed): void {
+  parent.childNodes = parent.childNodes.filter(
+    (child) =>
+      !('namespaceURI' in child) || (child.namespaceURI === SVG && !NOT_DRAWN.has(child.nodeName)),
+  );
+  for (const child of parent.childNodes) if ('childNodes' in child) prune(child as Parsed);
+}
+
+/**
+ * The first `<svg>` of a picture's markup, with only what it draws: a browser draws an SVG as an
+ * image with nothing in it fetched, framed or run, and here what markup builds is a live element
+ * from the moment it is parsed. Parsed apart first, so no element of it is built until then.
+ */
+function shapesOf(markup: string): string | undefined {
+  const find = (parent: Parsed): Parsed | undefined => {
+    for (const child of parent.childNodes) {
+      if (child.nodeName === 'svg' && 'namespaceURI' in child && child.namespaceURI === SVG) {
+        return child as Parsed;
+      }
+      const found = 'childNodes' in child ? find(child as Parsed) : undefined;
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const drawing = find(parseFragment(markup));
+  if (!drawing) return undefined;
+  prune(drawing);
+  return serializeOuter(drawing as DefaultTreeAdapterMap['element']);
+}
+
 /** Build the `<svg>` an image's markup has in its box, and nothing else of it. */
 function drawnFrom(node: EngineNode, markup: string, engine: Engine): EngineNode | undefined {
-  const at = markup.indexOf('<svg');
-  if (at === -1) return undefined;
-  setMarkup(node, markup.slice(at), engine);
+  const shapes = shapesOf(markup);
+  if (shapes === undefined) return undefined;
+  setMarkup(node, shapes, engine);
   const drawing = node.childList.find((child) => child.tag === 'svg');
   for (const child of [...node.childList]) if (child !== drawing) engine.removeChild(node, child);
   if (!drawing) return undefined;
@@ -153,8 +191,12 @@ function sizeOf(drawing: Reflecting): { width: number; height: number } {
     .trim()
     .split(/[\s,]+/)
     .map(Number);
-  const side = (name: 'width' | 'height', fallback: number | undefined) =>
-    parseFloatingPoint(drawing.getAttribute(name) ?? '') ?? fallback ?? 0;
+  // A percentage is of a box the picture has none of, and a box that is no numbers is none.
+  const side = (name: 'width' | 'height', fallback: number | undefined) => {
+    const written = drawing.getAttribute(name) ?? '';
+    const given = written.includes('%') ? undefined : parseFloatingPoint(written);
+    return given ?? (Number.isFinite(fallback) ? fallback! : 0);
+  };
   return { width: side('width', box[2]), height: side('height', box[3]) };
 }
 

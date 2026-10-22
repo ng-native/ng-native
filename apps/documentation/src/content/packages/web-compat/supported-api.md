@@ -251,7 +251,9 @@ rotation or a skew, and a curve's box includes its handles.
 - Its picture fills its box, as `object-fit: fill` has it, and a stylesheet's `object-fit` is how
   the picture fits; what is past the box is clipped.
 - A picture that is an SVG, by its name, is fetched and drawn as an `<svg>` a template writes, at
-  the drawing's own size, with no element of it in the page.
+  the drawing's own size, with no element of it in the page. As a browser draws an SVG as an
+  image, only its shapes are drawn: a `foreignObject` or a `script` in it, and any HTML, is left
+  out, so nothing in it is fetched or framed.
 
 Gaps: `srcset`, `sizes`, `loading` and `decoding` are kept as attributes, and the picture is the
 one `src` names. `width` and `height` read the attribute or the picture, not the size the image is
