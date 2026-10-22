@@ -888,7 +888,7 @@ function domFields(type: string, target: EngineNode, event: unknown): Record<str
   // What native said, which every element the event goes up through is told of.
   const native = (event as { nativeEvent?: object } | undefined)?.nativeEvent;
   // Before a listener is told of a touch and measures: see `touch-place.ts`.
-  noteTouch(engineOf(target), event);
+  noteTouch(engineOf(target), type, event);
   return {
     ...touchFields(native, windowTop(engineOf(target))),
     // The key a field says was pressed: see `field.ts`.

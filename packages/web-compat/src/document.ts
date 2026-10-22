@@ -247,7 +247,7 @@ export function listenAnywhere(
     if (event === during) return;
     if (type === 'click' && (heldForMenu.has(engine) || wasDrag(engine, event))) return;
     // Before a listener is told of a touch and measures: see `touch-place.ts`.
-    noteTouch(engine, event);
+    noteTouch(engine, type, event);
     const target = (event as { target: EngineNode | null }).target;
     const path: EngineNode[] = [];
     for (let node = target; node; node = node.parent) path.push(node);

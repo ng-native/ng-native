@@ -20,10 +20,14 @@ import { windowTop } from './window-size.ts';
 
 /** What touches have said of each app: whether a view in a screen is measured short. */
 const short = new WeakMap<Engine, boolean>();
-/** The apps with a finger down, whose touch has been asked already. */
-const down = new WeakSet<Engine>();
-/** The apps whose fingers are heard lifting. */
-const heard = new WeakSet<Engine>();
+/**
+ * The touches already asked, by what native said: one start is told to each element it goes up
+ * through, as a `touchstart` and a `pointerdown`.
+ */
+const asked = new WeakSet<object>();
+
+/** The DOM events a finger coming down is sent as. */
+const STARTS = new Set(['touchstart', 'pointerdown', 'mousedown']);
 
 interface Touch {
   readonly pageY?: number;
@@ -39,9 +43,15 @@ interface Landed {
   readonly target?: EngineNode | null;
 }
 
-/** Whether a node is in a screen of a stack, which is what is under a navigation header. */
-function inScreen(node: EngineNode): boolean {
-  for (let up: EngineNode | null = node; up; up = up.parent) if (up.tag === 'screen') return true;
+/**
+ * Whether a node is drawn in a screen of a stack, which is what is under a navigation header: not
+ * one fixed to the page outside it, which native commits beside the app.
+ */
+function inScreen(node: EngineNode, engine: Engine): boolean {
+  for (let up: EngineNode | null = node; up; up = up.parent) {
+    if (up.fixedTo === engine.root) return false;
+    if (up.tag === 'screen') return true;
+  }
   return false;
 }
 
@@ -51,11 +61,11 @@ function inScreen(node: EngineNode): boolean {
  * where it is in its view, or one whose view is further out than the header (a view moved by a
  * transform, say).
  */
-export function noteTouch(engine: Engine, event: unknown): void {
+export function noteTouch(engine: Engine, type: string, event: unknown): void {
   const { nativeEvent, target } = (event ?? {}) as Landed;
-  if (!startsATouch(engine, nativeEvent)) return;
+  if (!startsATouch(type, nativeEvent)) return;
   const header = windowTop(engine);
-  if (!target || !header || !inScreen(target)) return;
+  if (!target || !header || !inScreen(target, engine)) return;
   const by = drawnBelow(engine, target, nativeEvent.changedTouches?.[0] ?? nativeEvent);
   if (by === undefined) return;
   // Within a point either way: the rounding of either.
@@ -63,14 +73,17 @@ export function noteTouch(engine: Engine, event: unknown): void {
   else if (Math.abs(by) < 1) short.set(engine, false);
 }
 
-/** Whether an event is the first of a touch on Android, which is noted as down until it lifts. */
-function startsATouch(
-  engine: Engine,
-  said: Landed['nativeEvent'],
-): said is NonNullable<typeof said> {
-  if (nativePlatform() !== 'android' || down.has(engine) || !said?.touches?.length) return false;
-  down.add(engine);
-  hearLifts(engine);
+/**
+ * Whether an event is the first finger of a touch coming down on Android, not asked already. Known
+ * from the start itself, not by hearing the last finger lift, which a listener can stop before it
+ * is heard.
+ */
+function startsATouch(type: string, said: Landed['nativeEvent']): said is NonNullable<typeof said> {
+  if (nativePlatform() !== 'android' || !STARTS.has(type) || said?.touches?.length !== 1) {
+    return false;
+  }
+  if (asked.has(said)) return false;
+  asked.add(said);
   return true;
 }
 
@@ -82,19 +95,8 @@ function drawnBelow(engine: Engine, target: EngineNode, touch: Touch): number | 
   return measured === undefined ? undefined : touch.pageY - touch.locationY - measured;
 }
 
-/** Hear an app's last finger lift, after which its next touch is asked again. */
-function hearLifts(engine: Engine): void {
-  if (heard.has(engine)) return;
-  heard.add(engine);
-  for (const end of ['topTouchEnd', 'topTouchCancel']) {
-    engine.setEventListener(engine.root, end, (event) => {
-      if (!(event as Landed).nativeEvent?.touches?.length) down.delete(engine);
-    });
-  }
-}
-
 /** How much further down the screen a node is drawn than native measures it to be. */
 export function furtherDown(engine: Engine, node: EngineNode): number {
   if (nativePlatform() !== 'android' || short.get(engine) === false) return 0;
-  return inScreen(node) ? windowTop(engine) : 0;
+  return inScreen(node, engine) ? windowTop(engine) : 0;
 }

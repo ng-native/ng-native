@@ -355,6 +355,45 @@ describe('a view in a screen under a header on Android', () => {
     }
   });
 
+  it('is found out again by the next touch, where a listener stopped the last one ending', async () => {
+    registerPlatformComponents('android');
+    const s = await scene();
+    s.card.addEventListener('touchend', (event: Dom) => event.stopPropagation());
+    try {
+      s.app.fabric.frames.set('in-screen', { x: 0, y: 150, width: 300, height: 40 });
+      await s.finger('Start', 160);
+      await s.finger('End', 160);
+      // Measured short now: the next touch finds it, though nothing above the card heard the end.
+      s.app.fabric.frames.set('in-screen', { x: 0, y: 50, width: 300, height: 40 });
+      await s.finger('Start', 160);
+      assert.deepEqual(s.heard, [
+        [60, 50],
+        [60, 50],
+      ]);
+    } finally {
+      s.stopListening();
+      registerPlatformComponents('ios');
+    }
+  });
+
+  it('is where native measures it once it is fixed to the page outside the screen', async () => {
+    registerPlatformComponents('android');
+    const s = await scene();
+    try {
+      const pinned = s.document.createElement('div');
+      pinned.setAttribute('nativeID', 'pinned');
+      pinned.style.setProperty('position', 'fixed');
+      s.app.instance.renderer.appendChild(s.node, pinned);
+      await settle();
+      s.app.fabric.frames.set('pinned', { x: 0, y: 300, width: 300, height: 40 });
+      // Committed beside the app, where a view is measured where it is, as one in the body is.
+      assert.equal(pinned.getBoundingClientRect().top, 200);
+    } finally {
+      s.stopListening();
+      registerPlatformComponents('ios');
+    }
+  });
+
   it('is found out by a touch only the document hears', async () => {
     registerPlatformComponents('android');
     const s = await scene();
