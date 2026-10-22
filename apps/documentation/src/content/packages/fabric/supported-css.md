@@ -535,7 +535,9 @@ Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are t
 [Animation](/packages/fabric/animation).
 
 `tint-color` is native's own, with no counterpart on the web: the color an image is drawn in, and
-the color of an SF Symbol. It takes a token as any color does.
+the color of an SF Symbol. It takes the values `color` takes: a token, `platform-color()`, a
+relative color or a `color-mix()`, `light-dark()`, and `currentColor`, which is the element's text
+color. `shadow-color` takes the same.
 
 ## A sheet read as a browser reads it
 
