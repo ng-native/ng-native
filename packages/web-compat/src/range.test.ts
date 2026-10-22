@@ -68,6 +68,12 @@ const page = async () => {
   return { app, document, make, slider: document.getElementById('slider') as Dom };
 };
 
+/**
+ * A frame and the timers waiting at its end: a range a script puts over the app is seen and
+ * touched from then on, as a browser first paints it. See `inserted-unseen.ts`.
+ */
+const aFrame = () => new Promise((resolve) => setTimeout(resolve, 40));
+
 /** A finger at a place across the screen, down or lifted. */
 const finger = (pageX: number, down = true) => {
   const point = { identifier: 0, pageX, pageY: 5, locationX: 0, locationY: 0 };
@@ -276,6 +282,7 @@ describe('a range input', () => {
     app.fabric.frames.set('View', { x: 0, y: 0, width: 100, height: 20 });
     const range = make({ testID: 'made' });
     await settle();
+    await aFrame();
     await drag(viewOf(range), 20, 30);
     assert.equal(range.value, '30');
     const heard: string[] = [];
@@ -317,6 +324,7 @@ describe('a range input', () => {
     range.type = 'range';
     assert.equal(range.value, '10');
     await settle();
+    await aFrame();
     await drag(viewOf(range), 20);
     assert.equal(range.value, '2');
     range.type = 'text';
