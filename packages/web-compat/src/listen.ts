@@ -797,6 +797,8 @@ function onTouch(engine: Engine, node: EngineNode, type: string, listener: Liste
 
 interface Touch {
   identifier?: number;
+  /** The view the finger came down on, by its tag. */
+  target?: unknown;
   pageX?: number;
   pageY?: number;
 }
@@ -818,12 +820,13 @@ const touchList = (touches: readonly Touch[] | undefined, top: number): object[]
 
 /**
  * Where a touch is, as a DOM event says it: the finger that changed at the page and the client,
- * and the fingers down as `touches`. Native says where on the screen, and the window starts `top`
- * down it, under a navigation header: see `windowTop`.
+ * the fingers down as `touches`, and as `targetTouches` those of them that came down on the view
+ * the changed one did, which is where the event is sent. CDK's drag and drop reads where a drag
+ * starts from `targetTouches`. Native says where on the screen, and the window starts `top` down
+ * it, under a navigation header: see `windowTop`.
  */
 export function touchFields(native: unknown, top: number): Record<string, unknown> {
-  const said = native as
-    { pageX?: number; pageY?: number; touches?: Touch[]; changedTouches?: Touch[] } | undefined;
+  const said = native as (Touch & { touches?: Touch[]; changedTouches?: Touch[] }) | undefined;
   if (!said) return {};
   const x = said.pageX ?? 0;
   const y = (said.pageY ?? 0) - top;
@@ -833,6 +836,10 @@ export function touchFields(native: unknown, top: number): Record<string, unknow
     pageX: x,
     pageY: y,
     touches: touchList(said.touches, top),
+    targetTouches: touchList(
+      said.touches?.filter((touch) => touch.target === said.target),
+      top,
+    ),
     changedTouches: touchList(said.changedTouches, top),
   };
 }
