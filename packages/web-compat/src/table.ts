@@ -17,8 +17,8 @@ import { watchCommits } from './commit-watch.ts';
  * columns in those proportions, which is how a browser lays out a table with no widths given:
  * a narrow column of numbers beside a wide one of names. See `contentShares`.
  *
- * ponytail: worked out when a cell or a row is put in or a span changes, and not when one is
- * taken out or what a cell holds changes: a table keeps its columns until something is added.
+ * ponytail: worked out when a cell or a row is put in or taken out or a span changes, and not
+ * when what a cell holds changes: a table keeps its columns until its rows or cells do.
  * A table with a cell that has a width of its own, or with nothing to measure, has columns of
  * one width, which is `table-layout: fixed` with no widths given. So has one that says so.
  */
@@ -63,9 +63,24 @@ export function spanRows(node: EngineNode, rows: number, engine: Engine): void {
   layOutLater(node, engine);
 }
 
+/** The table each row and cell was last put in: what is laid out again when it is taken out. */
+const homes = new WeakMap<EngineNode, EngineNode>();
+
 /** A row or a cell was put in a table. */
 export function tableInserted(node: EngineNode, engine: Engine): void {
-  if (CELLS.has(node.tag) || node.tag === 'tr') layOutLater(node, engine);
+  if (!CELLS.has(node.tag) && node.tag !== 'tr') return;
+  homes.set(node, tableOf(node));
+  layOutLater(node, engine);
+}
+
+/**
+ * A row or a cell was taken out: the table it was in has one fewer, and its columns are counted
+ * again. Read from where it was put, since it is in nothing once it is out.
+ */
+export function tableRemoved(node: EngineNode, engine: Engine): void {
+  const table = homes.get(node);
+  homes.delete(node);
+  if (table?.parent) layOutLater(table, engine);
 }
 
 /** Lay the tables out once what is being built is built: a cell is made before its row is in. */
@@ -166,9 +181,12 @@ function layOut(table: EngineNode, engine: Engine): void {
   const rows = table.tag === 'tr' ? [table] : rowsOf(table);
   const places = placed(rows);
   const columns = Math.max(0, ...places.flat().map((place) => place.column + place.span));
-  if (!columns) return;
+  // A table laid out any other way has no cell down several rows: none is measured.
+  if (!columns) return measureDown(table, new Map(), engine);
   const shared = isFixed(table, engine) ? null : contentShares(places, columns, engine);
-  if (!shared && layOutByOwn(table, places, engine)) return;
+  if (!shared && layOutByOwn(table, places, engine)) {
+    return measureDown(table, new Map(), engine);
+  }
   const widths =
     shared ?? ownShares(places, engine) ?? new Array<number>(columns).fill(100 / columns);
   // To a thousandth, so that tables of like columns are given one style between them.

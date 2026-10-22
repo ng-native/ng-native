@@ -399,6 +399,56 @@ describe('a cell down several rows', () => {
   });
 });
 
+/** A cell down two rows in a table whose columns say their widths. */
+@Component({
+  template: `
+    <table>
+      <tr id="w1">
+        <td testID="wide-tall" style="width: 80px" [attr.rowspan]="down()">Tall</td>
+        <td style="width: 120px">A</td>
+      </tr>
+      <tr id="w2">
+        <td>B</td>
+      </tr>
+    </table>
+  `,
+})
+class SizedTall {
+  readonly down = signal<string | null>('2');
+}
+
+describe('a cell down several rows, measured', () => {
+  it('lets the height go once it spans one row, in a table whose columns say their widths', async () => {
+    const app = await render(SizedTall, { providers: [provideWebCompat()] });
+    app.fabric.frames.set('w1', { x: 0, y: 0, width: 300, height: 40 });
+    app.fabric.frames.set('w2', { x: 0, y: 40, width: 300, height: 60 });
+    // A cell down several rows is placed by shares, which a table of widths is laid out by too.
+    app.instance.down.set('3');
+    await settle();
+    app.instance.down.set(null);
+    await settle();
+    (app.fabric.frames as Map<string, unknown>).set('w2', { x: 0, y: 40, width: 300, height: 90 });
+    await settle();
+    assert.equal(screen.getByTestId('wide-tall').props['height'] ?? null, null);
+  });
+});
+
+describe('a row or a cell taken out of a table', () => {
+  it('lays the table out again, with the columns of what is left', async () => {
+    await render(Table, { providers: [provideWebCompat()] });
+    await settle();
+    // Seven columns, from the row of one, four and two.
+    assert.deepEqual(share('short'), [14.29, 0]);
+    const document = (globalThis as { document?: Dom }).document!;
+    const cells: Dom[] = [...document.querySelectorAll('td')];
+    const fixed = cells.find((cell) => cell.textContent.trim() === 'Fixed');
+    fixed.parentNode.removeChild(fixed);
+    await settle();
+    // Five columns once the cell across two has gone.
+    assert.deepEqual(share('short'), [20, 0]);
+  });
+});
+
 describe('a table whose app is destroyed before its columns are counted', () => {
   it('lays nothing out once the app is gone', async () => {
     const app = await render(Table, { providers: [provideWebCompat()] });

@@ -39,7 +39,14 @@ import { setFrameView } from './frame-view.ts';
 import { keepTaken } from './node-members.ts';
 import { setSvg, stopChanged, svgInserted, svgNamed, wordsInSpans } from './svg.ts';
 import { styleShape } from './svg-box.ts';
-import { columnsSpanned, rowsSpanned, spanColumns, spanRows, tableInserted } from './table.ts';
+import {
+  columnsSpanned,
+  rowsSpanned,
+  spanColumns,
+  spanRows,
+  tableInserted,
+  tableRemoved,
+} from './table.ts';
 
 /** Markup that is an icon's drawing, as `@ng-icons/core` binds it to a `<template>`. */
 const ICON_MARKUP = /^\s*<svg[\s>]/i;
@@ -197,6 +204,8 @@ export const webListen: RendererExtension = {
   },
   removed(node, engine) {
     optionRemoved(node, engine);
+    // The table a row or a cell was in: see `table.ts`.
+    tableRemoved(node, engine);
   },
   set(node, name, value, engine) {
     // By the name HTML has it, as a template may write it in capitals.

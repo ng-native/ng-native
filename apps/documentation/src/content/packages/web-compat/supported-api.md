@@ -125,7 +125,7 @@ Gaps: `ResizeObserver` has no `device-pixel-content-box`, `matchMedia` does not 
 `resolution` or `-webkit-device-pixel-ratio`, and `scrollIntoView` reads no `scroll-margin` or
 `scroll-padding`. An element's browser defaults are its box sizing and whether it is a block,
 with no margins and no heading sizes. A table's columns are worked out again when a row or a
-cell is put in or a span changes, and not when one is taken out or what a cell holds changes;
+cell is put in or taken out or a span changes, and not when what a cell holds changes;
 `border-collapse`, `border-spacing` and `caption-side` are not read. The window does not
 scroll.
 An inline element over two lines is one box around both, where a browser has two.
