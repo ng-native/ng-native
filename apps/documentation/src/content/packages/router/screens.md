@@ -140,7 +140,10 @@ first render, from a typo in its template or a constructor that fails, fails the
 promise from `push()` or `Router.navigate()` rejects, the router emits a `NavigationError`, and the
 url stays where it was. Nothing of the page stays behind. Its component is destroyed, its screen
 comes off the stack, the screen it was pushed from carries on as the one showing, and a replace or
-a reset that failed leaves the screens it would have removed. When the page is the first screen of
+a reset that failed leaves the screens it would have removed. A navigation back to a screen further
+down the stack that fails, on a page under that screen, puts back the screens above it, the same
+native screens with their state. History keeps no entry for the navigation that failed, so Back
+goes on from the screen showing. When the page is the first screen of
 a stack of its own, that stack goes too, and a tab's page that throws leaves the tab that was
 showing in front. The error reaches the app's `ErrorHandler` as well as the navigation's promise.
 

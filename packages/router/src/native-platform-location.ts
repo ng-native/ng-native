@@ -102,6 +102,16 @@ export class NativePlatformLocation implements PlatformLocation {
     this.cursor -= steps;
   }
 
+  /**
+   * Take out the entry showing, with no popstate: the one before it shows again, and none is left
+   * ahead. For a navigation that wrote its entry and then failed.
+   */
+  ɵdiscard(): void {
+    if (this.cursor === 0) return;
+    this.entries.splice(this.cursor, 1);
+    this.cursor--;
+  }
+
   private get current(): HistoryEntry {
     return this.entries[this.cursor]!;
   }

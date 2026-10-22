@@ -49,6 +49,7 @@ import {
   ROUTER_CONFIGURATION,
   Router,
   createUrlTreeFromSnapshot,
+  type ActivatedRouteSnapshot,
   type Data,
   type RouterOutletContract,
 } from '@angular/router';
@@ -85,6 +86,16 @@ interface StackEntry {
   activatedIn?: number;
   /** The navigation that covered this screen, until that navigation ends. */
   detachedIn?: number;
+  /**
+   * The router's context for this outlet, and the route's snapshot, as the last navigation to cover
+   * this screen found them. One that fails puts them back: the router changes both on the way, and
+   * puts back only its own state.
+   */
+  covered?: {
+    navigation: number;
+    children: ChildrenOutletContexts;
+    snapshot: ActivatedRouteSnapshot;
+  };
   /** Whether this screen is the one in front, for what it holds: see `SCREEN_IN_FRONT`. */
   inFront: WritableSignal<boolean>;
 }
@@ -196,6 +207,17 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * succeeds: one that fails leaves the stack as it was.
    */
   private superseded: { entries: StackEntry[]; navigation: number } | null = null;
+  /**
+   * The screens a navigation back to `kept`, further down, took off the stack, kept until it
+   * succeeds as superseded ones are: one that fails puts them back, and `kept` as it was.
+   */
+  private popped: {
+    navigation: number;
+    entries: StackEntry[];
+    kept: StackEntry;
+    snapshot: ActivatedRouteSnapshot;
+    detachedIn: number | undefined;
+  } | null = null;
 
   protected readonly fill = { flex: 1 };
 
@@ -229,8 +251,10 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     });
     // Optional for the same reason as the router: the outlet's own tests stand one in without it.
     const navigations = this.router?.events?.subscribe((event) => {
-      if (event instanceof NavigationEnd) this.settle(event.id);
-      else if (event instanceof NavigationError) this.rollBack(event.id);
+      // A cancel after activation is one the router does not undo: a page it created navigated.
+      if (event instanceof NavigationEnd || event instanceof NavigationCancel) {
+        this.settle(event.id);
+      } else if (event instanceof NavigationError) this.rollBack(event.id);
     });
 
     const carryAll = (claim: SystemBarClaim) => {
@@ -255,11 +279,12 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       unsubscribeBack();
       unsubscribeStack();
       navigations?.unsubscribe();
-      for (const entry of this.entries) {
+      for (const entry of [...this.entries, ...(this.popped?.entries ?? [])]) {
         entry.unbind();
         entry.ref.destroy();
       }
       this.entries.length = 0;
+      this.popped = null;
       // Only while it is this outlet's: a page kept by the reuse strategy takes its outlets'
       // registrations with it, and gets them back as it is attached, before what was over it goes.
       if (this.parentContexts.getContext(this.name)?.outlet === this) {
@@ -543,6 +568,15 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     if (!entry) throw new Error('[angular-native] outlet is not activated, nothing to detach');
     entry.detached = true;
     entry.detachedIn = this.navigationId();
+    const context = this.parentContexts.getContext(this.name);
+    entry.covered =
+      context && entry.detachedIn !== undefined
+        ? {
+            navigation: entry.detachedIn,
+            children: context.children,
+            snapshot: entry.route.snapshot,
+          }
+        : undefined;
     entry.inFront.set(false);
     // `ChangeDetectorRef.detach`, not `ApplicationRef.detachView`. The latter calls
     // `renderDetachView` and pulls the view's nodes out of the tree, which is exactly what we
@@ -576,13 +610,12 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       });
       this.applicationRef.attachView(ref.hostView);
     } else {
+      const entry = this.entries[index]!;
       const above = this.entries.splice(index + 1);
-      for (const entry of above) this.drop(entry);
-      if (above.length) this.rewindAfter(above);
+      if (above.length) this.pop(entry, above);
       if (this.currentIntent()?.stack === 'reset') {
         this.supersede(this.entries.slice(0, index), this.navigationId());
       }
-      const entry = this.entries[index]!;
       entry.detached = false;
       entry.inFront.set(true);
       entry.route = route;
@@ -702,6 +735,44 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     this.superseded = { entries, navigation };
   }
 
+  /**
+   * Take `above` off the stack for a navigation back to `kept`: at once when there is no navigation
+   * to wait for, and otherwise once it has succeeded. They stay on the native stack until then, and
+   * the navigation ends before anything commits, so native sees one change or none.
+   */
+  private pop(kept: StackEntry, above: StackEntry[]): void {
+    this.rewindAfter(above);
+    const navigation = this.navigationId();
+    if (navigation === undefined) {
+      for (const entry of above) this.drop(entry);
+      return;
+    }
+    // The router has moved the route on to the navigation's snapshot already.
+    const snapshot = kept.covered?.snapshot ?? kept.route.snapshot;
+    this.popped = { navigation, entries: above, kept, snapshot, detachedIn: kept.detachedIn };
+  }
+
+  /** Take out for good what a navigation that succeeded popped. */
+  private dropPopped(navigation: number): void {
+    if (this.popped?.navigation !== navigation) return;
+    for (const entry of this.popped.entries) this.drop(entry);
+    this.popped = null;
+  }
+
+  /** Put back what a navigation that failed popped, and the screen it went back to as it was. */
+  private unpop(navigation: number): void {
+    const popped = this.popped;
+    if (popped?.navigation !== navigation) return;
+    this.popped = null;
+    const { kept } = popped;
+    kept.route.snapshot = popped.snapshot;
+    kept.detached = true;
+    kept.detachedIn = popped.detachedIn;
+    kept.inFront.set(false);
+    kept.ref.hostView.detach();
+    this.entries.push(...popped.entries);
+  }
+
   /** The history entries the navigation in flight adds: none where it skips or replaces one. */
   private entriesAdded(): 0 | 1 {
     const extras = this.router?.getCurrentNavigation()?.extras;
@@ -756,6 +827,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       for (const entry of this.superseded.entries) this.remove(entry);
       this.superseded = null;
     }
+    this.dropPopped(navigation);
     for (const entry of this.entries) {
       if (entry.activatedIn === navigation) entry.activatedIn = undefined;
       if (entry.detachedIn === navigation) entry.detachedIn = undefined;
@@ -770,11 +842,27 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * stack inside it. That one goes, with everything in it, and the screen it covered carries on.
    */
   private rollBack(navigation: number): void {
+    if (this.router && rewinds.get(this.router)?.navigation === navigation) {
+      rewinds.delete(this.router);
+    }
     if (this.superseded?.navigation === navigation) this.superseded = null;
+    this.unpop(navigation);
     for (const entry of this.entries.filter((candidate) => candidate.activatedIn === navigation)) {
       this.remove(entry);
     }
     this.uncover(navigation);
+    this.recover(navigation);
+  }
+
+  /**
+   * Give the router's context for this outlet back the outlet contexts of the top screen, which the
+   * navigation took when it covered that screen: the next navigation finds the outlets inside the
+   * screen through them.
+   */
+  private recover(navigation: number): void {
+    const covered = this.top?.covered;
+    const context = this.parentContexts.getContext(this.name);
+    if (context && covered?.navigation === navigation) context.children = covered.children;
   }
 
   /**

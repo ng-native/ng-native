@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import { ErrorHandler, type Type } from '@angular/core';
-import { Router, withComponentInputBinding, type Routes } from '@angular/router';
+import { PlatformLocation } from '@angular/common';
+import { Router, withComponentInputBinding, withRouterConfig, type Routes } from '@angular/router';
 import {
   cleanup,
   fireEvent,
@@ -15,6 +16,7 @@ import {
   type FakeFabricNode,
 } from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
+import { NativePlatformLocation } from '../router/src/native-platform-location.ts';
 import { provideNativeRouter, withLinkParent } from '../router/src/provide-native-router.ts';
 import { DeepLinks } from '@ng-native/device';
 import { followLink } from '../router/src/native-links.ts';
@@ -53,6 +55,9 @@ describe('a native stack driven by the router', () => {
   let created: Record<string, number>;
   /** What reached the app's ErrorHandler. */
   let reported: unknown[];
+  let history: NativePlatformLocation;
+  /** The history up to the page showing, oldest first. */
+  const historyOf = () => history.ɵpages().map((page) => page.url);
 
   before(async () => {
     mod = await compileFixture('fixtures/stack-app.ts');
@@ -75,6 +80,7 @@ describe('a native stack driven by the router', () => {
     fabric = app.fabric;
     router = app.componentRef.injector.get(Router);
     nav = app.componentRef.injector.get(NativeNavigation);
+    history = app.componentRef.injector.get(PlatformLocation) as NativePlatformLocation;
     await settle();
   });
 
@@ -641,6 +647,12 @@ describe('a native stack driven by the router', () => {
       assert.deepEqual(stack(fabric), ['home', 'user 1'], 'no half-made screen on the stack');
       assert.equal(live['Broken'], 0, 'and no component left running');
       assert.deepEqual(reported, [error]);
+      assert.deepEqual(historyOf(), ['/', '/user/1'], 'and no entry for it in history');
+
+      nav.back();
+      await idle();
+      assert.equal(router.url, '/', 'and Back goes on from the screen it was pushed from');
+      assert.deepEqual(stack(fabric), ['home']);
     });
 
     it('leaves the screen it was pushed from running, and the stack still works', async () => {
@@ -648,6 +660,7 @@ describe('a native stack driven by the router', () => {
       for (let attempt = 0; attempt < 3; attempt++) await failed('/broken');
       await idle();
       assert.equal(live['Broken'], 0);
+      assert.deepEqual(historyOf(), ['/', '/user/1']);
 
       await nav.push('/user/2');
       await idle();
@@ -679,6 +692,7 @@ describe('a native stack driven by the router', () => {
       assert.equal(router.url, '/user/1');
       assert.deepEqual(stack(fabric), ['home', 'user 1']);
       assert.equal(live['User'], 1);
+      assert.deepEqual(historyOf(), ['/', '/user/1']);
     });
 
     it('takes down the stack around it when it is the first screen of one', async () => {
@@ -706,6 +720,45 @@ describe('a native stack driven by the router', () => {
       assert.deepEqual(paragraphs, [['home'], ['fine']], 'no empty page left in the broken tab');
       assert.deepEqual(reported, [error]);
     });
+  });
+});
+
+describe('a navigation that writes its url before it is refused', () => {
+  afterEach(() => cleanup());
+
+  it('leaves no entry for it in history', async () => {
+    const mod = await compileFixture('fixtures/stack-app.ts');
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(
+          mod['routes'] as Routes,
+          withComponentInputBinding(),
+          withRouterConfig({ urlUpdateStrategy: 'eager' }),
+        ),
+      ],
+    });
+    const router = app.componentRef.injector.get(Router);
+    const nav = app.componentRef.injector.get(NativeNavigation);
+    const history = app.componentRef.injector.get(PlatformLocation) as NativePlatformLocation;
+    await nav.push('/user/1');
+    await idle();
+
+    assert.equal(await nav.push('/refused'), false);
+    await idle();
+    assert.equal(router.url, '/user/1');
+    assert.deepEqual(
+      history.ɵpages().map((page) => page.url),
+      ['/', '/user/1'],
+    );
+
+    await nav.push('/moved');
+    await idle();
+    assert.equal(router.url, '/user/5');
+    assert.deepEqual(
+      history.ɵpages().map((page) => page.url),
+      ['/', '/user/1', '/user/5'],
+      'and one a guard sends elsewhere is replaced by where it went',
+    );
   });
 });
 

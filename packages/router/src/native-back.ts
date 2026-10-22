@@ -12,7 +12,7 @@
  * its outlet is showing what the router is showing.
  */
 import { Service, inject } from '@angular/core';
-import type { ActivatedRoute, Router } from '@angular/router';
+import type { ActivatedRoute, ActivatedRouteSnapshot, Router } from '@angular/router';
 import { HardwareBack } from '@ng-native/device';
 
 /** What a stack offers `NativeNavigation` beyond a back: going down it several screens at once. */
@@ -177,9 +177,14 @@ export type BackAnswer = (from: 'button' | 'app') => boolean;
 /**
  * Whether a route is part of what the router shows now, rather than a subtree the reuse strategy
  * detached and is keeping for later: a tab behind, or a screen covered by one pushed over it.
+ *
+ * Read from the snapshots: the root route is the same object in every state, and after a failed
+ * navigation its children are still the ones that navigation would have shown.
  */
 export function isShowing(router: Router, route: ActivatedRoute | null): boolean {
   if (!route) return false;
-  const visit = (node: ActivatedRoute): boolean => node === route || node.children.some(visit);
-  return visit(router.routerState.root);
+  const showing = route.snapshot;
+  const visit = (node: ActivatedRouteSnapshot): boolean =>
+    node === showing || node.children.some(visit);
+  return visit(router.routerState.snapshot.root);
 }

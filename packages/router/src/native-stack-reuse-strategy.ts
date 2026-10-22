@@ -12,6 +12,9 @@ import { PlatformLocation } from '@angular/common';
 import { Injector, inject, type ComponentRef } from '@angular/core';
 import {
   BaseRouteReuseStrategy,
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
   type ActivatedRouteSnapshot,
   type DetachedRouteHandle,
   Router,
@@ -42,6 +45,14 @@ const REUSE_SCREEN = 'ɵreuseScreen';
 export function reuseScreen<T extends Route>(route: T): T {
   return { ...route, data: { ...route.data, [REUSE_SCREEN]: true } };
 }
+
+/** Whether `event` is the last a navigation reports. */
+const isNavigationEnding = (
+  event: unknown,
+): event is NavigationEnd | NavigationCancel | NavigationError =>
+  event instanceof NavigationEnd ||
+  event instanceof NavigationCancel ||
+  event instanceof NavigationError;
 
 /** What the router actually stores: `DetachedRouteHandle` is typed as an opaque object. */
 interface StoredHandle {
@@ -107,6 +118,7 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
   }
 
   override store(route: ActivatedRouteSnapshot, handle: DetachedRouteHandle | null): void {
+    this.keepForRollBack();
     const key = keyOf(route);
     const kept = this.handles.get(key) ?? [];
     if (handle) {
@@ -156,6 +168,44 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
     if (!(history instanceof NativePlatformLocation)) return [...(ids ?? [])];
     const held = history.ɵnavigationIds();
     return (ids ?? []).filter((id) => id !== undefined && held.has(id));
+  }
+
+  /**
+   * The screens kept before the navigation in flight first stored or took one, to put back if it
+   * fails: the router leaves the screens it detached and attached as they were then, and a screen
+   * a stack takes off to go back to one kept below is back on top.
+   */
+  private beforeNavigation: {
+    navigation: number;
+    handles: Map<string, DetachedRouteHandle[]>;
+  } | null = null;
+  private rollsBack = false;
+
+  private keepForRollBack(): void {
+    const router = this.injector?.get(Router);
+    const navigation = router?.currentNavigation()?.id;
+    if (navigation === undefined || this.beforeNavigation?.navigation === navigation) return;
+    const handles = new Map([...this.handles].map(([key, kept]) => [key, [...kept]]));
+    this.beforeNavigation = { navigation, handles };
+    if (this.rollsBack) return;
+    // Subscribed on first use: the router is built with this strategy, so not yet there before.
+    this.rollsBack = true;
+    router!.events.subscribe((event) => {
+      const before = this.beforeNavigation;
+      if (!isNavigationEnding(event) || before?.navigation !== event.id) return;
+      this.beforeNavigation = null;
+      if (event instanceof NavigationError) this.rollBack(before.handles);
+    });
+  }
+
+  private rollBack(handles: Map<string, DetachedRouteHandle[]>): void {
+    this.handles.clear();
+    for (const [key, kept] of handles) {
+      const live = kept.filter(
+        (handle) => !(handle as StoredHandle).componentRef?.hostView.destroyed,
+      );
+      if (live.length) this.handles.set(key, live);
+    }
   }
 
   private readonly watched = new WeakSet<ComponentRef<unknown>>();
