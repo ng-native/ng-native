@@ -163,6 +163,37 @@ function inherited(from: object, name: string): PropertyDescriptor | undefined {
   return undefined;
 }
 
+/** A listener a library gave the stand-in document before any app was up. */
+interface Early {
+  readonly type: string;
+  readonly listener: unknown;
+  readonly options: unknown;
+}
+
+/** The stand-in document's own listening, as `before-modules.js` keeps it. */
+interface StandIns {
+  readonly listeners: readonly Early[];
+  /** The app documents it was handed to, told of what it is given and has taken off after. */
+  readonly handedTo: Set<unknown>;
+}
+
+/**
+ * Give an app's document what the stand-in document was given before any app was up, and what it
+ * is given or has taken off while the app is up: a library keeps the document it listened on.
+ * Answers what stops it, as the app goes.
+ */
+function handEarlyListeners(document: unknown): () => void {
+  const standIns = (original?.value as { addEventListener?: { standIns?: StandIns } } | undefined)
+    ?.addEventListener?.standIns;
+  if (!standIns) return () => {};
+  const listen = (document as { addEventListener(...args: unknown[]): void }).addEventListener;
+  for (const { type, listener, options } of standIns.listeners) {
+    listen.call(document, type, listener, options);
+  }
+  standIns.handedTo.add(document);
+  return () => void standIns.handedTo.delete(document);
+}
+
 /** How `provideWebCompat` is set up. */
 export interface WebCompatOptions {
   /**
@@ -254,6 +285,8 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       const document = documentFor(engine);
       documents.push(document);
       setGlobalDocument(document);
+      // What a library listened for on the document as its module loaded: see `before-modules.js`.
+      const unhand = handEarlyListeners(document);
       const forgetRenderer = setAttributesWith(
         engine,
         inject(RendererFactory2).createRenderer(null, null),
@@ -298,6 +331,7 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
         cancelAnimations(engine);
         // What an observer still watching in it heard of its commits: see `commit-watch.ts`.
         forgetCommits(engine);
+        unhand();
         forgetLooks();
         forgetBands(engine);
         forgetRenderer();

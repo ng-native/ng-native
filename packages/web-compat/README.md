@@ -200,10 +200,12 @@ module.exports = withWebCompat(config, {
 `libraries` are npm packages. `sources` are directories of the app's own sources, relative to the
 project. Every other component in the app stays the native view it is.
 
-`withWebCompat` also gives the window its `addEventListener`, `removeEventListener` and
-`dispatchEvent` before any module runs, for a library that adds a listener as it loads, as the
-CDK does to learn whether one can be passive. What they are given is handed to the window once an
-app is up, so such a library can be imported anywhere in the app, not only on a lazy route.
+`withWebCompat` also gives the window and the document their `addEventListener`,
+`removeEventListener` and `dispatchEvent` before any module runs, for a library that adds a
+listener as it loads: the CDK does so on the window to learn whether one can be passive, and a
+library noting the last touch does so on the document. What the window is given is handed to the
+window once an app is up, and what the document is given to each app's document, so such a library
+can be imported anywhere in the app, not only on a lazy route.
 
 ## A library that asks whether it is in a browser
 
