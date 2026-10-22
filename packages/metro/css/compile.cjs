@@ -2038,6 +2038,11 @@ function tokenWords(tokens) {
  * same token list: a colour settles here, a var() is looked up on device. False when it is neither.
  */
 function addCustomColor(name, parts, out, deferred, context) {
+  const platform = asPlatformColor({ propertyId: { property: name }, value: parts }, context);
+  if (platform) {
+    for (const prop of platform.props) out[prop] = platform.value;
+    return true;
+  }
   const value = tokenValue(parts, context);
   if (value?.color !== undefined) {
     out[camel(name)] = value.color;
@@ -2054,6 +2059,9 @@ const LINE_CLAMP = new Set(['line-clamp', '-webkit-line-clamp']);
 /** Lengths CSS gives no percentage to, which lightningcss does not know and so cannot refuse. */
 const NO_PERCENT = new Set(['outline-offset']);
 
+/** React Native's names for both sides of an axis, `padding-horizontal` and the rest. */
+const AXIS = /^(padding|margin)-(horizontal|vertical)$/;
+
 /**
  * A length lightningcss does not know: an older spelling, `grid-column-gap` for `column-gap`, or
  * a property it has no parser for, `outline-offset`. It arrives as raw tokens, and is read as a
@@ -2064,6 +2072,24 @@ function addAliased(name, parts, out, deferred, context) {
   if (value?.alias) {
     deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
     return;
+  }
+  // `calc(var(--x) * 2)` or `max(1rem, env(...))`: read as a longhand with a var() in it is.
+  const computed = parts?.some((part) => part?.type === 'env' || part?.type === 'function');
+  if (!value && computed && AXIS.test(name)) {
+    addUnparsed(
+      { value: { propertyId: { property: name }, value: parts } },
+      out,
+      deferred,
+      context,
+    );
+    return;
+  }
+  if (value?.keyword === 'auto' && name.startsWith('margin-')) {
+    for (const prop of propsFor(name)) out[prop] = 'auto';
+    return;
+  }
+  if (value?.length === undefined && AXIS.test(name)) {
+    throw new CssUnsupported(`${context}: '${name}' takes one length, for both sides`);
   }
   if (value?.length === undefined) throw unsupported(name, context);
   if (typeof value.length === 'string' && value.length.endsWith('%') && NO_PERCENT.has(name)) {

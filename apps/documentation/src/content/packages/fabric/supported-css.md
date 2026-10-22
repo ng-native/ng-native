@@ -535,7 +535,11 @@ Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are t
 [Animation](/packages/fabric/animation).
 
 `tint-color` is native's own, with no counterpart on the web: the color an image is drawn in, and
-the color of an SF Symbol. It takes a token as any color does.
+the color of an SF Symbol. It takes a token as any color does, and a `platform-color()`.
+
+`padding-horizontal`, `padding-vertical`, `margin-horizontal` and `margin-vertical` are React
+Native's own too, with no counterpart on the web. Each takes one length for both sides of its axis:
+`padding-horizontal: 12px` is `padding-left: 12px; padding-right: 12px`.
 
 ## A sheet read as a browser reads it
 

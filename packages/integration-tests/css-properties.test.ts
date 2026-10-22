@@ -489,6 +489,10 @@ describe('logical properties', () => {
     'paddingBlock',
     'paddingBlockStart',
     'paddingBlockEnd',
+    'marginHorizontal',
+    'marginVertical',
+    'paddingHorizontal',
+    'paddingVertical',
   ];
 
   /** Every prop a rule would write, settled now or on device. */
@@ -526,18 +530,59 @@ describe('logical properties', () => {
     assert.deepEqual(writes('padding-block: var(--x) 2px'), ['paddingBottom', 'paddingTop']);
   });
 
-  it('never writes one of the names only some views read', () => {
-    const properties = ['inset', 'margin', 'padding'].flatMap((box) =>
-      ['inline', 'block'].flatMap((axis) => [
-        `${box}-${axis}`,
-        `${box}-${axis}-start`,
-        `${box}-${axis}-end`,
-      ]),
+  it("reads React Native's horizontal and vertical as the two sides of that axis", () => {
+    assert.deepEqual(
+      declarationsOf('padding-horizontal: 12px'),
+      declarationsOf('padding-left: 12px; padding-right: 12px'),
     );
+    assert.deepEqual(
+      declarationsOf('padding-vertical: 1rem'),
+      declarationsOf('padding-top: 1rem; padding-bottom: 1rem'),
+    );
+    assert.deepEqual(
+      declarationsOf('margin-horizontal: 10%'),
+      declarationsOf('margin-left: 10%; margin-right: 10%'),
+    );
+    assert.deepEqual(
+      declarationsOf('margin-vertical: auto'),
+      declarationsOf('margin-top: auto; margin-bottom: auto'),
+    );
+    assert.deepEqual(writes('padding-horizontal: var(--x)'), ['paddingLeft', 'paddingRight']);
+    assert.deepEqual(writes('margin-vertical: var(--x)'), ['marginTop', 'marginBottom']);
+    const deferredOf = (css: string) => compileCss(`view { ${css} }`).rules[0].deferred;
+    const values = [
+      'calc(var(--x) * 2)',
+      'env(safe-area-inset-left)',
+      'max(1rem, env(safe-area-inset-left))',
+    ];
+    for (const value of values) {
+      const [one] = deferredOf(`padding-horizontal: ${value}`);
+      const [left] = deferredOf(`padding-left: ${value}`);
+      assert.deepEqual(one, { ...left, props: ['paddingLeft', 'paddingRight'] }, value);
+    }
+  });
+
+  it('refuses two values for one of them, which React Native gives one', () => {
+    assert.throws(() => compileCss('view { padding-horizontal: 1px 2px }'), /takes one length/);
+    assert.throws(() => compileCss('view { margin-vertical: 1px 2px }'), /takes one length/);
+    assert.throws(() => compileCss('view { padding-vertical: auto }'), /takes one length/);
+  });
+
+  it('never writes one of the names only some views read', () => {
+    const properties = [
+      ...['inset', 'margin', 'padding'].flatMap((box) =>
+        ['inline', 'block'].flatMap((axis) => [
+          `${box}-${axis}`,
+          `${box}-${axis}-start`,
+          `${box}-${axis}-end`,
+        ]),
+      ),
+      ...['margin', 'padding'].flatMap((box) => [`${box}-horizontal`, `${box}-vertical`]),
+    ];
     const values = ['4px', '4px 8px', 'var(--x)', 'var(--x) var(--y)', 'calc(var(--x) * 2)'];
     for (const property of properties) {
       for (const value of values) {
-        if (property.endsWith('-start') || property.endsWith('-end')) {
+        if (/-(start|end|horizontal|vertical)$/.test(property)) {
           if (value.includes(' ') && !value.startsWith('calc')) continue;
         }
         const written = writes(`${property}: ${value}`);
