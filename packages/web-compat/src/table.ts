@@ -1,5 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { CELL, ROW } from './elements.ts';
+import { parseInteger } from './reflect.ts';
 import { isUp } from './window.ts';
 
 /**
@@ -30,6 +31,22 @@ const tall = new WeakMap<EngineNode, number>();
 const changed = new Map<Engine, Set<EngineNode>>();
 /** One style a share, so a cell given the share it has is given the object it has. */
 const shares = new Map<string, Readonly<Record<string, unknown>>>();
+
+/** HTML's `colspan`: an integer, as its rules for integers read one, from 1 to 1000. */
+export function columnsSpanned(value: unknown): number {
+  const columns = parseInteger(String(value ?? ''));
+  return columns === undefined || columns < 1 ? 1 : Math.min(columns, 1000);
+}
+
+/**
+ * HTML's `rowspan`: an integer up to 65534, where 0 is down to the end of the cell's group of
+ * rows. None, or one under 0, is 1.
+ */
+export function rowsSpanned(value: unknown): number {
+  const rows = parseInteger(String(value ?? ''));
+  if (rows === undefined || rows < 0) return 1;
+  return rows === 0 ? Number.POSITIVE_INFINITY : Math.min(rows, 65534);
+}
 
 /** `colspan` on a cell: the columns it is across. */
 export function spanColumns(node: EngineNode, columns: number, engine: Engine): void {
@@ -111,7 +128,15 @@ interface Place {
  * Where each cell of each row is. A cell is in the first column that no cell down from a row
  * above is in, which is why a row under a tall cell has a cell fewer than the table has columns.
  */
-function placed(rows: EngineNode[][]): Place[][] {
+function placed(rowNodes: EngineNode[]): Place[][] {
+  const rows = rowNodes.map(cellsOf);
+  // How many rows from each are in its group, `thead`, `tbody` or `tfoot`: a cell goes down no
+  // further than the end of its group.
+  const left = rowNodes.map((row, index) => {
+    let end = index;
+    while (end + 1 < rowNodes.length && rowNodes[end + 1]!.parent === row.parent) end++;
+    return end - index + 1;
+  });
   // The rows each column is still taken for, by a cell down from above.
   const held: number[] = [];
   return rows.map((cells, index) => {
@@ -122,8 +147,8 @@ function placed(rows: EngineNode[][]): Place[][] {
         cell,
         column: at,
         span: spans.get(cell) ?? 1,
-        // No further down than the table goes.
-        rows: Math.min(tall.get(cell) ?? 1, rows.length - index),
+        // No further down than its group of rows goes.
+        rows: Math.min(tall.get(cell) ?? 1, left[index]!),
       };
       for (let over = 0; over < place.span; over++) held[at++] = place.rows;
       return place;
@@ -138,7 +163,7 @@ const OVER = { ...ROW, position: 'relative', zIndex: 1 };
 
 function layOut(table: EngineNode, engine: Engine): void {
   const rows = table.tag === 'tr' ? [table] : rowsOf(table);
-  const places = placed(rows.map(cellsOf));
+  const places = placed(rows);
   const columns = Math.max(0, ...places.flat().map((place) => place.column + place.span));
   if (!columns) return;
   const shared = isFixed(table, engine) ? null : contentShares(places, columns, engine);

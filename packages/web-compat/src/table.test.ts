@@ -298,6 +298,66 @@ describe('a table in an app that asked for web-compat', () => {
   });
 });
 
+/** Spans written as HTML reads them, and a cell down the rows of its group. */
+@Component({
+  template: `
+    <table>
+      <thead>
+        <tr>
+          <th testID="head" [attr.rowspan]="down()">H</th>
+          <th>I</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td testID="first" [attr.colspan]="across()">A</td>
+          <td testID="second">B</td>
+        </tr>
+        <tr>
+          <td testID="third">C</td>
+          <td>D</td>
+          <td>E</td>
+        </tr>
+      </tbody>
+    </table>
+  `,
+})
+class Spans {
+  readonly across = signal<string | null>(null);
+  readonly down = signal<string | null>(null);
+}
+
+describe('spans in a table', () => {
+  it('reads colspan as HTML reads it: an integer, at least 1', async () => {
+    const app = await render(Spans, { providers: [provideWebCompat()] });
+    await settle();
+    // Three columns. 2.5 is 2 and 2px is 2, where Number() reads 2.5 and nothing.
+    for (const written of ['2.5', '2px', ' 2']) {
+      app.instance.across.set(written);
+      await settle();
+      assert.deepEqual(share('first'), [66.67, 0], written);
+    }
+    // 0, -1 and none of a number are 1.
+    for (const written of ['0', '-1', 'x']) {
+      app.instance.across.set(written);
+      await settle();
+      assert.deepEqual(share('first'), [33.33, 0], written);
+    }
+  });
+
+  it('keeps a rowspan within its group of rows, 0 included, which is to its end', async () => {
+    const app = await render(Spans, { providers: [provideWebCompat()] });
+    await settle();
+    // A heading down three rows is down only the one row of its head.
+    for (const written of ['3', '0']) {
+      app.instance.down.set(written);
+      await settle();
+      assert.equal(screen.getByTestId('head').props['position'] ?? null, null, written);
+      assert.equal(screen.getByTestId('first').props['marginLeft'] ?? null, null, written);
+    }
+  });
+});
+
 describe('a table whose app is destroyed before its columns are counted', () => {
   it('lays nothing out once the app is gone', async () => {
     const app = await render(Table, { providers: [provideWebCompat()] });

@@ -39,7 +39,7 @@ import { setFrameView } from './frame-view.ts';
 import { keepTaken } from './node-members.ts';
 import { setSvg, stopChanged, svgInserted, svgNamed, wordsInSpans } from './svg.ts';
 import { styleShape } from './svg-box.ts';
-import { spanColumns, spanRows, tableInserted } from './table.ts';
+import { columnsSpanned, rowsSpanned, spanColumns, spanRows, tableInserted } from './table.ts';
 
 /** Markup that is an icon's drawing, as `@ng-icons/core` binds it to a `<template>`. */
 const ICON_MARKUP = /^\s*<svg[\s>]/i;
@@ -96,11 +96,11 @@ const SETTERS: Readonly<
   // A table cell across several columns, and one down several rows: see `table.ts`. Kept as
   // the attribute too, which a library reads back.
   colspan(node, value, engine) {
-    spanColumns(node, Number(value) || 1, engine);
+    spanColumns(node, columnsSpanned(value), engine);
     return false;
   },
   rowspan(node, value, engine) {
-    spanRows(node, Number(value) || 1, engine);
+    spanRows(node, rowsSpanned(value), engine);
     return false;
   },
   hidden(node, value, engine) {
