@@ -2690,7 +2690,7 @@
     "intersection-observer/root-vertical-rl.html": {"status":"OK","pass":1,"fail":2,"total":3,"passed":"7239affd5e","names":"c33609fb13","failed":["118772ef","b0307e7b"]},
     "intersection-observer/rtl-clipped-root.html": {"status":"ERROR","pass":1,"fail":1,"total":2,"passed":"68e77c3354","names":"932d973997","failed":["c41112d9"]},
     "intersection-observer/same-document-no-root.html": {"status":"OK","pass":1,"fail":3,"total":4,"passed":"b88bced395","names":"1bb2ac3a1a","failed":["118772ef","55048179","afdbaa5b"]},
-    "intersection-observer/same-document-root.html": {"status":"OK","pass":2,"fail":5,"total":7,"passed":"ee0f80d84e","names":"ce9e25a2c4","failed":["256ca65e","7bc779c7","8484c890","c41112d9","cef2e495"]},
+    "intersection-observer/same-document-root.html": {"status":"OK","pass":2,"fail":5,"total":7,"passed":"2ab260749e","names":"ce9e25a2c4","failed":["256ca65e","7bc779c7","84ab2d74","c41112d9","cef2e495"]},
     "intersection-observer/same-document-with-document-root.html": {"status":"OK","pass":1,"fail":2,"total":3,"passed":"3eda16ee2c","names":"36e892f246","failed":["118772ef","55048179"]},
     "intersection-observer/same-document-zero-size-target.html": {"status":"OK","pass":1,"fail":3,"total":4,"passed":"a7f83c7b40","names":"9f14c6b808","failed":["55048179","afdbaa5b","c41112d9"]},
     "intersection-observer/scroll-and-root-margin.html": {"status":"OK","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"5b90f524d6","failed":["5b90f524"]},
@@ -2723,7 +2723,7 @@
     "intersection-observer/svg-transformed-rect-target.html": {"status":"OK","pass":1,"fail":3,"total":4,"passed":"cc44ee2a19","names":"2a13faeb43","failed":["118772ef","251ef787","de892631"]},
     "intersection-observer/svg-viewbox.html": {"status":"OK","pass":1,"fail":2,"total":3,"passed":"cc44ee2a19","names":"710700cfb2","failed":["02faa1bb","118772ef"]},
     "intersection-observer/target-in-detached-document.html": {"status":"OK","pass":1,"fail":1,"total":2,"passed":"b88bced395","names":"3816a842e7","failed":["118772ef"]},
-    "intersection-observer/target-in-different-window.html": {"status":"OK","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"b609ae1a8c","failed":["b609ae1a"]},
+    "intersection-observer/target-in-different-window.html": {"status":"ERROR","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"b609ae1a8c","failed":["b609ae1a"]},
     "intersection-observer/target-is-root.html": {"status":"OK","pass":1,"fail":0,"total":1,"passed":"f46219a337","names":"f46219a337","failed":[]},
     "intersection-observer/text-target.html": {"status":"OK","pass":1,"fail":3,"total":4,"passed":"483b1d6c00","names":"96ddcc37e9","failed":["118772ef","55048179","afdbaa5b"]},
     "intersection-observer/thresholds-frozen-array.html": {"status":"OK","pass":1,"fail":0,"total":1,"passed":"3b527bc90f","names":"3b527bc90f","failed":[]},
@@ -2818,7 +2818,7 @@
     "uievents/legacy-domevents-tests/submissions/Microsoft/converted/EventListener.dispatch.new.event.html": {"status":"OK","pass":1,"fail":0,"total":1,"passed":"303010d8b1","names":"303010d8b1","failed":[]},
     "uievents/legacy/Event-subclasses-init.html": {"status":"OK","pass":4,"fail":0,"total":4,"passed":"cba4e6ed4b","names":"cba4e6ed4b","failed":[]},
     "uievents/order-of-events/focus-events/focus-automated-blink-webkit.html": {"status":"OK","pass":0,"fail":2,"total":2,"passed":"da39a3ee5e","names":"b9cf00cb62","failed":["813e400f","eed6977f"]},
-    "uievents/textInput/api.html": {"status":"OK","pass":4,"fail":5,"total":9,"passed":"9e7f52b4ee","names":"4c75a396ee","failed":["048c8d17","1b8abd57","55b15cd4","daad6900","ff922d5c"]},
+    "uievents/textInput/api.html": {"status":"TIMEOUT","pass":4,"fail":5,"total":9,"passed":"9e7f52b4ee","names":"4c75a396ee","failed":["048c8d17","1b8abd57","55b15cd4","daad6900","ff922d5c"]},
     "uievents/ui_event_pseudo_target.html": {"status":"OK","pass":0,"fail":2,"total":2,"passed":"da39a3ee5e","names":"3172c3cd69","failed":["5cdf101e","efcb4461"]}
   }
 }

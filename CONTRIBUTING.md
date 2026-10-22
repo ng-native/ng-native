@@ -104,12 +104,13 @@ that passes more, so a change that makes a test pass records it with `--update` 
 request. How a file ended (OK or TIMEOUT) is recorded but not compared, since a file that
 passes nothing lands either side of its time limit from one run to the next.
 
-The Web Platform Tests workflow runs `--check` on the DOM, selector, CSSOM, `html/dom` and
-`domparsing` suites, in about four minutes on a laptop, when what they run on changes: the package,
+The Web Platform Tests workflow runs `--check` on the DOM, selector, CSSOM, `html/dom`,
+`domparsing` and `intersection-observer` suites, in about five minutes on a laptop, when what they
+run on changes: the package,
 `packages/fabric` and `packages/platform`, the layout fixtures in `packages/integration-tests`,
 `packages/testing`, the lockfile, or the workflow and its setup (the paths are in
 `.github/workflows/wpt.yml`). The full run takes over eight, one process at a time, so a change to
-the other suites (events, geometry, the observers, canvas, parsing) runs `node wpt/run.mjs --check`
+the other suites (events, geometry, the other observers, canvas, parsing) runs `node wpt/run.mjs --check`
 locally before its pull request opens, and records with `--update` from a full run so `summary.txt`
 stays whole.
 

@@ -24,6 +24,7 @@ import { registerImage } from './image.ts';
 import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
 import { forgetCommits } from './commit-watch.ts';
+import { forgetLooks } from './intersection-observer.ts';
 import { forgetBands } from './image-band.ts';
 import { eventHandlerMembers } from './event-handlers.ts';
 import { pickWith } from './file-input.ts';
@@ -243,6 +244,7 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
         cancelAnimations(engine);
         // What an observer still watching in it heard of its commits: see `commit-watch.ts`.
         forgetCommits(engine);
+        forgetLooks();
         forgetBands(engine);
         forgetRenderer();
         leaveWindow();

@@ -296,8 +296,14 @@ const lookNextFrame = oncePerFrame(() => {
 });
 
 function schedule(): void {
-  if (live.size) lookNextFrame();
+  if (live.size) lookNextFrame.ask();
 }
+
+/**
+ * An app went away: a look it asked for may be on a timer that went with it, and the next app's
+ * first is asked for at once rather than passed over as already asked.
+ */
+export const forgetLooks = (): void => lookNextFrame.forget();
 
 /**
  * What can move an element: its own layout, a scroll of anything it is in, a commit of its app

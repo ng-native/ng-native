@@ -756,6 +756,34 @@ describe('IntersectionObserver', () => {
     assert.throws(() => plain.observe('foo'), TypeError);
   });
 
+  it("looks at the next app's elements at once, where the app before went with a look still owed", async () => {
+    // A host that runs one page after another clears the timers the page before left, so a look
+    // it asked for never comes. The next page's first was passed over as already asked for, and
+    // its observers heard nothing for a second.
+    const before = await page();
+    const gone = before.div();
+    await settle();
+    const lost = () => 0;
+    const own = { frame: globals.requestAnimationFrame, timer: globals.setTimeout };
+    globals.requestAnimationFrame = lost;
+    globals.setTimeout = lost;
+    try {
+      new globals.IntersectionObserver(() => {}).observe(gone);
+    } finally {
+      globals.requestAnimationFrame = own.frame;
+      globals.setTimeout = own.timer;
+    }
+    cleanup();
+    const { place, div } = await page();
+    const target = div();
+    await settle();
+    place(target, { x: 10, y: 10, width: 20, height: 20 });
+    const calls: Dom[][] = [];
+    new globals.IntersectionObserver((entries: Dom[]) => calls.push(entries)).observe(target);
+    await nextFrame();
+    assert.equal(calls.length, 1);
+  });
+
   it('tells of each element the first time it is looked at, in sight or not', async () => {
     const { place, div } = await page();
     const near = div();
