@@ -212,7 +212,7 @@ export const webListen: RendererExtension = {
     // control's: both are kept as written as well.
     checkControl(node, name, value, engine);
     setLabel(node, name, value, engine);
-    const own = SETTERS[name];
+    const own = SETTERS[name] ?? SETTERS[attribute];
     // A canvas's size is the grid it draws on, and an attribute of a shape in a drawing is what
     // it draws: see `setCanvasSize` and `setSvg`.
     const took = own

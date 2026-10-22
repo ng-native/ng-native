@@ -2,6 +2,7 @@ import type { Engine, EngineNode } from '@ng-native/fabric';
 import { CELL, ROW } from './elements.ts';
 import { parseInteger } from './reflect.ts';
 import { isUp } from './window.ts';
+import { watchCommits } from './commit-watch.ts';
 
 /**
  * A table's columns. A row is a flex row of its cells, and a table's cells line up down it: each
@@ -9,8 +10,8 @@ import { isUp } from './window.ts';
  * row of two cells in a table of seven, a calendar's last week, is two sevenths of it and not
  * all of it, and a cell across four columns is four sevenths with its padding inside that.
  *
- * A cell down several rows is out of its row's flow, as tall as that many of its row, and the
- * cells after it in those rows start past it. See `placed`.
+ * A cell down several rows is out of its row's flow, as tall as the rows it is down come to
+ * (see `measured`), and the cells after it in those rows start past it. See `placed`.
  *
  * A column is as wide as its widest cell asks, and the table's width is shared between the
  * columns in those proportions, which is how a browser lays out a table with no widths given:
@@ -132,11 +133,11 @@ function placed(rowNodes: EngineNode[]): Place[][] {
   const rows = rowNodes.map(cellsOf);
   // How many rows from each are in its group, `thead`, `tbody` or `tfoot`: a cell goes down no
   // further than the end of its group.
-  const left = rowNodes.map((row, index) => {
-    let end = index;
-    while (end + 1 < rowNodes.length && rowNodes[end + 1]!.parent === row.parent) end++;
-    return end - index + 1;
-  });
+  const left = new Array<number>(rowNodes.length);
+  for (let index = rowNodes.length - 1; index >= 0; index--) {
+    const next = rowNodes[index + 1];
+    left[index] = next?.parent === rowNodes[index]!.parent ? left[index + 1]! + 1 : 1;
+  }
   // The rows each column is still taken for, by a cell down from above.
   const held: number[] = [];
   return rows.map((cells, index) => {
@@ -173,6 +174,14 @@ function layOut(table: EngineNode, engine: Engine): void {
   // To a thousandth, so that tables of like columns are given one style between them.
   const across = (from: number, to: number) =>
     Math.round(widths.slice(from, to).reduce((sum, width) => sum + width, 0) * 1000) / 1000;
+  // Each cell down several rows, with those rows: it is made as tall as they come to.
+  const downs = new Map<EngineNode, readonly EngineNode[]>();
+  places.forEach((row, index) => {
+    for (const place of row) {
+      if (place.rows > 1) downs.set(place.cell, rows.slice(index, index + place.rows));
+    }
+  });
+  measureDown(table, downs, engine);
   places.forEach((row, index) => {
     // Where the cells in the row's flow have reached: a cell starts past what is not in it.
     let flowed = 0;
@@ -359,10 +368,8 @@ function sharing(columns: number, least?: unknown): Readonly<Record<string, unkn
 /**
  * A cell as wide as a share of its row. One that starts past where the cell before it ends has
  * that gap before it. One down several rows is out of its row's flow, where its row would be as
- * tall as it is otherwise: placed in the row, and as tall as that many of it.
- *
- * ponytail: the rows a cell is down are taken to be as tall as its own, which the rows of a
- * heading and of a group are. Measure them if a table is seen whose rows are not.
+ * tall as it is otherwise: placed in the row, and as tall as that many of it until the rows it is
+ * down have been measured (see `measured`).
  */
 function shareOf(percent: number, before = 0, down = 1): Readonly<Record<string, unknown>> {
   const key = `${percent} ${before} ${down}`;
@@ -379,4 +386,86 @@ function shareOf(percent: number, before = 0, down = 1): Readonly<Record<string,
     shares.set(key, (style = { ...sized, ...where }));
   }
   return style;
+}
+
+/**
+ * The cells down several rows of each table, by app, with the rows each is down. Such a cell is
+ * placed in its first row and out of the flow, and is made as tall as its rows come to as
+ * native lays them out: measured after each commit, since a row is as tall as what is in it,
+ * and set again where that changed.
+ */
+const tallCells = new WeakMap<Engine, Map<EngineNode, Map<EngineNode, readonly EngineNode[]>>>();
+/** What stops hearing an app's commits, while it has a cell down several rows. */
+const watching = new WeakMap<Engine, () => void>();
+
+/** Note a table's cells down several rows, and let go of one that is down several no more. */
+function measureDown(
+  table: EngineNode,
+  downs: Map<EngineNode, readonly EngineNode[]>,
+  engine: Engine,
+): void {
+  let tables = tallCells.get(engine);
+  for (const cell of tables?.get(table)?.keys() ?? []) {
+    if (!downs.has(cell)) heightOf(cell, undefined, engine);
+  }
+  if (downs.size) {
+    if (!tables) tallCells.set(engine, (tables = new Map()));
+    tables.set(table, downs);
+    if (!watching.has(engine))
+      watching.set(
+        engine,
+        watchCommits(engine, () => measured(engine)),
+      );
+    return;
+  }
+  tables?.delete(table);
+  if (tables && !tables.size) stopMeasuring(engine);
+}
+
+function stopMeasuring(engine: Engine): void {
+  watching.get(engine)?.();
+  watching.delete(engine);
+  tallCells.delete(engine);
+}
+
+/** Whether the cells are being set to their rows' height, which is a commit of its own. */
+let measuring = false;
+
+/** After a commit: each cell down several rows as tall as its rows are now. */
+function measured(engine: Engine): void {
+  if (measuring) return;
+  measuring = true;
+  try {
+    let changed = false;
+    const tables = tallCells.get(engine) ?? new Map();
+    for (const [table, downs] of tables) {
+      // A table taken out of the page has nothing to measure, and is forgotten.
+      if (!table.parent) {
+        tables.delete(table);
+        continue;
+      }
+      for (const [cell, rows] of downs) {
+        let height = 0;
+        for (const row of rows) engine.measure(row, (frame) => (height += frame.height));
+        if (height > 0) changed = heightOf(cell, height, engine) || changed;
+      }
+    }
+    if (!tables.size) stopMeasuring(engine);
+    if (changed) engine.commit();
+  } finally {
+    measuring = false;
+  }
+}
+
+/**
+ * Give a cell a height in points, over the share of its first row it is placed with, or take
+ * it away with none. Answers whether that changed anything.
+ */
+function heightOf(cell: EngineNode, height: number | undefined, engine: Engine): boolean {
+  const over = (cell.props['styleOverride'] ?? {}) as Record<string, unknown>;
+  if (over['height'] === height) return false;
+  const { height: _, ...rest } = over;
+  const next = height === undefined ? rest : { ...rest, height };
+  engine.setProp(cell, 'styleOverride', Object.keys(next).length ? next : null);
+  return true;
 }

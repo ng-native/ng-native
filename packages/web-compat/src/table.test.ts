@@ -310,7 +310,7 @@ describe('a table in an app that asked for web-compat', () => {
       </thead>
       <tbody>
         <tr>
-          <td testID="first" [attr.colspan]="across()">A</td>
+          <td testID="first" [attr.colSpan]="across()">A</td>
           <td testID="second">B</td>
         </tr>
         <tr>
@@ -328,7 +328,7 @@ class Spans {
 }
 
 describe('spans in a table', () => {
-  it('reads colspan as HTML reads it: an integer, at least 1', async () => {
+  it('reads colspan as HTML reads it: an integer, at least 1, by a name in any case', async () => {
     const app = await render(Spans, { providers: [provideWebCompat()] });
     await settle();
     // Three columns. 2.5 is 2 and 2px is 2, where Number() reads 2.5 and nothing.
@@ -355,6 +355,47 @@ describe('spans in a table', () => {
       assert.equal(screen.getByTestId('head').props['position'] ?? null, null, written);
       assert.equal(screen.getByTestId('first').props['marginLeft'] ?? null, null, written);
     }
+  });
+});
+
+/** A cell down two rows of different heights. */
+@Component({
+  template: `
+    <table>
+      <tr id="r1">
+        <td id="tall" testID="tall" [attr.rowspan]="down()">Tall</td>
+        <td>A</td>
+      </tr>
+      <tr id="r2">
+        <td>B</td>
+      </tr>
+    </table>
+  `,
+})
+class Tall {
+  readonly down = signal<string | null>('2');
+  readonly host: Dom = inject(ElementRef).nativeElement;
+}
+
+describe('a cell down several rows', () => {
+  it('is as tall as the rows it is down, whatever height each is', async () => {
+    const app = await render(Tall, { providers: [provideWebCompat()] });
+    app.fabric.frames.set('r1', { x: 0, y: 0, width: 300, height: 40 });
+    app.fabric.frames.set('r2', { x: 0, y: 40, width: 300, height: 60 });
+    // Laid out again as a row is put in, which is when it is measured.
+    const table = app.instance.host.querySelector('table');
+    table.appendChild(table.ownerDocument.createElement('tr'));
+    await settle();
+    assert.equal(screen.getByTestId('tall').props['height'], 100);
+    // And again when a row it is down changes height, after any commit.
+    app.fabric.frames.set('r2', { x: 0, y: 40, width: 300, height: 30 });
+    table.setAttribute('data-seen', 'yes');
+    await settle();
+    assert.equal(screen.getByTestId('tall').props['height'], 70);
+    // A cell down one row again has no height of its own.
+    app.instance.down.set(null);
+    await settle();
+    assert.equal(screen.getByTestId('tall').props['height'] ?? null, null);
   });
 });
 
