@@ -310,7 +310,8 @@ elements.
 
 Gaps: `srcset`, `sizes`, `loading` and `decoding` are kept as attributes, and the picture is the
 one `src` names. An image whose picture is an SVG is drawn whole, and a band of a `<style>` made
-while the app runs is not read. `width` and `height` read the attribute or the picture, not the size the image is
+while the app runs is not read. `width` and `height` read the attribute or the picture, not the size
+the image is
 laid out at. There is no `Image` constructor. A `src` is resolved when it is set, and not again
 when the page's address changes.
 
