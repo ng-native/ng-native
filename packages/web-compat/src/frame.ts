@@ -79,6 +79,8 @@ interface Frame {
   live: boolean;
   /** Told when the element is given another `width` or `height`: its `matchMedia` lists. */
   readonly resized: Set<() => void>;
+  /** What its `matchMedia` listeners are told by, each ended as the frame closes. */
+  readonly watching: Set<() => void>;
 }
 
 const frames = new WeakMap<EngineNode, Frame>();
@@ -262,6 +264,7 @@ function open(element: EngineNode, engine: Engine): void {
     navigation: 0,
     live: true,
     resized: new Set(),
+    watching: new Set(),
   } as unknown as Frame;
   (frame as { window: Members }).window = windowFor(frame);
   frame.document = blankDocument(frame);
@@ -274,6 +277,7 @@ function close(frame: Frame): void {
   frame.live = false;
   frame.navigation++;
   frames.delete(frame.element);
+  for (const unwatch of [...frame.watching]) unwatch();
   closeFramesIn(frame.document);
 }
 
@@ -471,11 +475,14 @@ function windowFor(frame: Frame): Members {
         // its viewport's watchers of.
         watch: (changed) => {
           frame.resized.add(changed);
-          const unwatch = frame.engine.watchViewport(changed);
-          return () => {
+          const unwatchViewport = frame.engine.watchViewport(changed);
+          const unwatch = () => {
             frame.resized.delete(changed);
-            unwatch();
+            unwatchViewport();
+            frame.watching.delete(unwatch);
           };
+          frame.watching.add(unwatch);
+          return unwatch;
         },
       });
     },

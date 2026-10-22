@@ -527,6 +527,11 @@ describe('iframe', () => {
     await settle();
     assert.equal(dark.matches, true);
     assert.deepEqual(heard, [true]);
+    // And no more once the frame is closed: the engine keeps nothing of it to tell.
+    iframe.remove();
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'light' });
+    await settle();
+    assert.deepEqual(heard, [true], 'not told once the frame is closed');
   });
 
   it('closes a frame inside a frame that is taken out', async () => {
