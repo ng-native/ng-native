@@ -216,6 +216,80 @@ it('goes back to the lower of two screens at one url after a query changed it in
   assert.deepEqual(texts(), [first], 'the A the query was set on');
 });
 
+it("goes back to the older of a screen's two entries when the other screen at its url is newer", async () => {
+  const app = await render(mod['RepeatShell'] as Type<unknown>, {
+    providers: [provideNativeRouter(mod['repeatRoutes'] as Routes)],
+  });
+  const nav = app.componentRef.injector.get(NativeNavigation);
+  const router = app.componentRef.injector.get(Router);
+  const location = app.componentRef.injector.get(PlatformLocation);
+  const turns = async () => {
+    for (let turn = 0; turn < 6; turn++) await settle();
+  };
+  const screens = () =>
+    flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen').length;
+  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
+
+  for (const url of ['/a?tab=1', '/b', '/a', '/c']) {
+    await nav.push(url);
+    await turns();
+  }
+  assert.deepEqual(historyOf(app), ['/a', '/a?tab=1', '/b', '/a', '/c']);
+  assert.equal(screens(), 4, 'A, with its query in place, B, a second A and C');
+
+  location.historyGo!(-4);
+  await turns();
+  assert.equal(router.url, '/a');
+  assert.deepEqual(historyOf(app), ['/a']);
+  assert.equal(screens(), 1);
+  assert.deepEqual(texts(), [first], "the A of the first entry, the query's own screen");
+
+  location.historyGo!(1);
+  await turns();
+  assert.equal(router.url, '/a?tab=1', 'and forward again to the query on the same screen');
+  assert.deepEqual(texts(), [first]);
+});
+
+for (const [offset, url] of [
+  [-4, '/a'],
+  [-3, '/a?tab=1'],
+] as const) {
+  it(`goes back to either of a screen's two entries after a back to the newer one, ${url}`, async () => {
+    const app = await render(mod['RepeatShell'] as Type<unknown>, {
+      providers: [provideNativeRouter(mod['repeatRoutes'] as Routes)],
+    });
+    const nav = app.componentRef.injector.get(NativeNavigation);
+    const location = app.componentRef.injector.get(PlatformLocation);
+    const turns = async () => {
+      for (let turn = 0; turn < 6; turn++) await settle();
+    };
+    const screens = () =>
+      flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen').length;
+    const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+    const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
+
+    await nav.push('/a?tab=1');
+    await nav.push('/b');
+    await turns();
+    nav.back();
+    await turns();
+    assert.deepEqual(texts(), [first], 'back on the first A, at its query');
+    for (const url of ['/b', '/a', '/c']) {
+      await nav.push(url);
+      await turns();
+    }
+    assert.deepEqual(historyOf(app), ['/a', '/a?tab=1', '/b', '/a', '/c']);
+    assert.equal(screens(), 4);
+
+    location.historyGo!(offset);
+    await turns();
+    assert.equal(app.componentRef.injector.get(Router).url, url);
+    assert.equal(screens(), 1);
+    assert.deepEqual(texts(), [first], 'the A whose entry it is, the back to it included');
+  });
+}
+
 it('goes back to the lower of two screens at one url after a query changed it without an entry', async () => {
   const app = await render(mod['RepeatShell'] as Type<unknown>, {
     providers: [provideNativeRouter(mod['repeatRoutes'] as Routes)],
