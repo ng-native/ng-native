@@ -9,7 +9,7 @@ import { inXmlDocument, madeDocumentOf } from './created-document.ts';
 import { documentOf, eventPath, nameOf } from './document.ts';
 import { isFragment } from './document-fragment.ts';
 import { documentOfRoot, topOf } from './document-roots.ts';
-import { required } from './dom-error.ts';
+import { domError, required } from './dom-error.ts';
 import { marksHover } from './elements.ts';
 import { dispatch, listen, unlisten, type Heard } from './events.ts';
 import { isField } from './field.ts';
@@ -32,7 +32,7 @@ import {
 import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { setStyleAttribute, styleOf } from './style-declaration.ts';
 import { isKeptOnShape, isShape, writtenAttributes } from './svg.ts';
-import { boxOf } from './svg-box.ts';
+import { boxOf, fontFamilyOf, fontSizeOf, fontWeightOf, widthOf } from './svg-box.ts';
 import { heldAnimation, webAnimation, type CoreAnimation } from './web-animation.ts';
 import { engineOf } from './window.ts';
 
@@ -494,6 +494,19 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   }),
   getComputedTextLength: method(function () {
     return boxOf(this).width;
+  }),
+  // A text's characters, and how wide a run of them is drawn: what a chart cuts a label short by.
+  getNumberOfChars: method(function () {
+    return textOf(this).length;
+  }),
+  getSubStringLength: method(function (from: unknown, count: unknown) {
+    const text = textOf(this);
+    const start = Math.trunc(Number(from));
+    if (!(start >= 0 && start < text.length)) {
+      throw domError('The index is not in the range of the text.', 'IndexSizeError');
+    }
+    const run = text.slice(start, start + Math.max(0, Math.trunc(Number(count))));
+    return widthOf(run, fontSizeOf(this), fontWeightOf(this), fontFamilyOf(this));
   }),
   // The drawing a shape is in: the nearest `<svg>` above it, and none for the drawing itself.
   ownerSVGElement: get(function () {

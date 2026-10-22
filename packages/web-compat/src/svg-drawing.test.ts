@@ -894,6 +894,28 @@ describe('@ng-native/web-compat svg definitions', () => {
     assert.ok(Math.abs(middle.y - 91) < 0.5, JSON.stringify(middle));
   });
 
+  it("counts a text's characters, and measures a run of them as its whole is measured", async () => {
+    // Highcharts cuts a label short with an ellipsis by these, a character at a time.
+    await render(Clipped, { providers: [provideWebCompat()] });
+    await settle();
+    const title: Dom = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    title.setAttribute('font-size', '19.2');
+    title.setAttribute('font-weight', 'bold');
+    title.textContent = 'Where time goes';
+    document.querySelector('svg')!.append(title);
+    await settle();
+    assert.equal(title.getNumberOfChars(), 15);
+    const whole = title.getComputedTextLength();
+    assert.equal(title.getSubStringLength(0, 15), whole);
+    // Chrome's, on a Mac, where the font is the one iOS draws in.
+    assert.ok(Math.abs(whole / 153.64 - 1) < 0.01, `${whole} is not near 153.64`);
+    const [start, rest] = [title.getSubStringLength(0, 5), title.getSubStringLength(5, 10)];
+    assert.ok(start > 0 && start < whole && Math.abs(start + rest - whole) < 0.01);
+    // A run past the end is cut at the end, and one starting past it is no run at all.
+    assert.equal(title.getSubStringLength(10, 99), title.getSubStringLength(10, 5));
+    assert.throws(() => title.getSubStringLength(15, 1), { name: 'IndexSizeError' });
+  });
+
   it('measures each span of a text by its own font, and its lines by where they are set', async () => {
     // A Highcharts tooltip: a small first line, then a bullet, words and a bold value. Measured
     // all at the text's size and weight, the box was narrower and taller than its words.

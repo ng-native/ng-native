@@ -284,7 +284,8 @@ a page written right to left too, and a date's or a time's `valueAsNumber` is `N
   their stops, clips, masks, markers, patterns, a drop shadow and HTML in a `foreignObject`, which
   is the whole drawing for each of `x`, `y`, `width` and `height` it does not say.
 - Its elements have SVG's names and namespace, `className` as an object with `baseVal`,
-  `getBBox`, `getComputedTextLength`, `ownerSVGElement` and `createSVGRect`.
+  `getBBox`, `getComputedTextLength`, a text's `getNumberOfChars` and `getSubStringLength`,
+  `ownerSVGElement` and `createSVGRect`.
 - A style a script sets on a shape is its paint or its font, a paint that names a token is that
   token's colour, and a `light-dark()` paint is the side for the app's colour scheme, drawn again
   as the scheme changes.
