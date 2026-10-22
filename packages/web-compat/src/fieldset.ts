@@ -45,6 +45,9 @@ const placed = new WeakSet<EngineNode>();
 /** The fieldset each legend has put its margin on, to take it back from. */
 const marginOn = new WeakMap<EngineNode, EngineNode>();
 
+/** The fieldset each legend is in, as its parent is gone by the time it is told it left. */
+const inFieldset = new WeakMap<EngineNode, EngineNode>();
+
 /** How tall each legend was last laid out, to set it again in a fieldset it is moved to. */
 const heights = new WeakMap<EngineNode, number>();
 
@@ -113,7 +116,8 @@ function place(legend: EngineNode, height: number, engine: Engine): void {
 export function legendInserted(node: EngineNode, parent: EngineNode, engine: Engine): void {
   if (node.tag !== 'legend') return;
   if (marginOn.get(node) !== parent) release(node, engine);
-  if (parent.tag !== 'fieldset') return;
+  if (parent.tag !== 'fieldset') return void inFieldset.delete(node);
+  inFieldset.set(node, parent);
   // One put in before the legend on the border takes the border from it.
   if (firstLegend(parent) === node) {
     for (const other of parent.childList) {
@@ -140,7 +144,8 @@ export function legendInserted(node: EngineNode, parent: EngineNode, engine: Eng
  */
 export function legendRemoved(node: EngineNode, engine: Engine): void {
   if (node.tag !== 'legend') return;
-  const fieldset = marginOn.get(node);
+  const fieldset = inFieldset.get(node);
+  inFieldset.delete(node);
   release(node, engine);
   const next = fieldset && firstLegend(fieldset);
   const known = next && heights.get(next);

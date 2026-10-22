@@ -117,6 +117,19 @@ describe("a fieldset's legend", () => {
     assert.equal(second.props['styleOverride'] ?? null, null);
   });
 
+  it('is the next legend, laid out first, once the first goes before it is laid out', async () => {
+    const app = await render(TwoLegends, { providers: [provideWebCompat()] });
+    await settle();
+    const { document } = app.instance;
+    const second = document.querySelectorAll('legend')[1];
+    await fireEvent(screen.getByTestId('second'), 'layout', { layout: { height: 24 } });
+    await settle();
+    document.querySelector('legend').remove();
+    await settle();
+    assert.equal(second.props['styleOverride']?.marginTop, -31);
+    assert.equal(fieldsetMargin(), 12);
+  });
+
   it('is not moved in an app without provideWebCompat()', async () => {
     await render(Details);
     await settle();
