@@ -55,13 +55,13 @@ const page = async () => {
   };
   const viewOf = (element: unknown) => committed().views.get(element);
   /** A finger coming down on, or lifting from, the element whose test id is given. */
-  const finger = (testID: string, phase: 'Start' | 'End' | 'Cancel') => {
+  const finger = (testID: string, phase: 'Start' | 'Move' | 'End' | 'Cancel') => {
     // Found among the views native has: one taken out of the document is still drawn.
     const view = [...committed().views.values()].find((each) => each.props['testID'] === testID)!;
     const point = { identifier: 0, target: view.reactTag, pageX: 10, pageY: 10 };
     app.fabric.emit(view, `topTouch${phase}`, {
       ...point,
-      touches: phase === 'Start' ? [point] : [],
+      touches: phase === 'Start' || phase === 'Move' ? [point] : [],
       changedTouches: [point],
     });
   };
@@ -150,6 +150,35 @@ describe('@ng-native/web-compat, an element moved while a finger is on it', () =
     assert.equal(await committedUnder(item), 'list');
     assert.equal(viewOf(item)!.reactTag, view.reactTag);
     assert.ok(!viewOf(placeholder));
+  });
+
+  it('is still told of the finger taken out of the document, until it lifts', async () => {
+    // As a browser sends a touch's events to where it began, in the document or not.
+    const { document, item, finger, drag } = await page();
+    const heard: string[] = [];
+    for (const type of ['touchmove', 'touchend']) {
+      item.addEventListener(type, () => heard.push(type));
+    }
+    finger('item', 'Start');
+    drag();
+    document.body.removeChild(item);
+    await settle();
+    finger('item', 'Move');
+    finger('item', 'End');
+    await settle();
+    assert.deepEqual(heard, ['touchmove', 'touchend']);
+  });
+
+  it('is drawn where it is once the parent it was held under leaves the page', async () => {
+    const { document, list, item, elsewhere, finger, committedUnder } = await page();
+    finger('item', 'Start');
+    elsewhere.appendChild(item);
+    assert.equal(await committedUnder(item), 'list', 'held while the finger is down');
+    list.remove();
+    assert.equal(await committedUnder(item), 'elsewhere', 'not lost with the list');
+    finger('item', 'End');
+    assert.equal(await committedUnder(item), 'elsewhere');
+    void document;
   });
 
   it('goes once the finger lifts, where it is taken out of the document', async () => {

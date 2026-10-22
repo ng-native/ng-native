@@ -183,8 +183,10 @@ in a stack: with two stacks side by side it is the header of whichever pushed a 
 - An element moved to another parent, or taken out, while a finger is on it or on something in it
   keeps the touch, as in a browser: a native view moved to another parent loses it. The document
   has the element where it was put at once, and native is told when the last finger lifts or the
-  touch is canceled; until then it is drawn where it was, as it is styled. CDK's drag and drop
-  puts the element it drags on the body as the drag begins.
+  touch is canceled; until then it is drawn where it was, as it is styled while it is still in
+  the page and as it was last drawn once it is taken out. Where the parent it was in leaves the
+  page first, it is drawn where it is from then on. CDK's drag and drop puts the element it drags
+  on the body as the drag begins.
 
 Gaps: `DragEvent`, `ClipboardEvent` and the other kinds not named here are not there. A handler
 written as an attribute's text is not compiled, and the window and the document have no handler

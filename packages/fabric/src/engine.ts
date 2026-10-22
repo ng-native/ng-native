@@ -7481,6 +7481,7 @@ export class Engine implements HostEngine {
     if (at < 0) return;
     this.carryHoists(child);
     if (this.holdsMoves) this.holdMove(target, child, at);
+    if (this.heldMoves.size) this.releaseHeldUnder(child);
     target.childList.splice(at, 1);
     child.parent = null;
     this.outSince.set(child, this.classesAbove);
@@ -9020,6 +9021,21 @@ export class Engine implements HostEngine {
       for (let at: EngineNode | null = under; at && !at.subtreeDirty; at = at.parent) {
         at.subtreeDirty = true;
       }
+    }
+  }
+
+  /**
+   * A node is taken out of the page: each node held under it, or under what it holds, is let go,
+   * as there is nowhere left to draw it where it was. One moved elsewhere is drawn there.
+   */
+  private releaseHeldUnder(removed: EngineNode): void {
+    for (const [node, { under }] of [...this.heldMoves]) {
+      if (node === removed || !isWithin(under, removed)) continue;
+      this.heldMoves.delete(node);
+      if (node.parent) {
+        node.parent.structureDirty = true;
+        this.markPath(node.parent);
+      } else this.removedSinceCommit.add(node);
     }
   }
 
