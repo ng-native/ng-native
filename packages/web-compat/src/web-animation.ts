@@ -35,6 +35,17 @@ const fillsBackwards = (fill: Fill): boolean => fill === 'backwards' || fill ===
 const owed = new Map<Engine, Set<WebAnimation>>();
 
 /** Each engine record, by the animation a script holds of it: asked twice, it is the same one. */
+/**
+ * Which run of an animation a record is: given to a record the first time a script is given it,
+ * and kept on the copies the engine makes of it as it plays on (it copies one with a spread,
+ * which keeps this), but not on a new run, which a removed and added animation is, at any time.
+ */
+const RUN = Symbol('run');
+type Run = RunningAnimation & { [RUN]?: object };
+
+/** The run a record is, given one where it has none. */
+const runOf = (record: Run): object => (record[RUN] ??= {});
+
 /** The `@keyframes` animation a script was last given of each element. */
 const playingOn = new WeakMap<EngineNode, WebAnimation>();
 const animations = new WeakMap<RunningAnimation | Transition, WebAnimation>();
@@ -94,7 +105,7 @@ export class WebAnimation {
     const { run } = this;
     if (run) return 'to' in record && record.start === run.start && record.to === run.to;
     if (record === this.record || 'to' in record) return record === this.record;
-    return record.spec.name === this.animationName && record.start === this.record.start;
+    return runOf(record) === runOf(this.record as Run);
   }
 
   get playState(): PlayState {
@@ -178,8 +189,8 @@ export class WebAnimation {
   private playing(): RunningAnimation | undefined {
     if (this.animationName === undefined || !this.onScreen()) return undefined;
     const playing = this.node.playing;
-    // The engine copies one it plays on along other frames, from the same start.
-    const copy = playing?.spec.name === this.animationName && playing.start === this.record.start;
+    // The engine copies one it plays on along other frames: the same run, by its token.
+    const copy = playing !== undefined && runOf(playing as Run) === runOf(this.record as Run);
     if (!playing || (playing !== this.record && !copy)) return undefined;
     this.record = playing;
     return playing.done ? undefined : playing;
@@ -309,8 +320,11 @@ export function webAnimation(core: CoreAnimation, node: EngineNode): WebAnimatio
   const kept = core.animationName !== undefined ? playingOn.get(node) : animations.get(record);
   if (kept?.isOf(record)) return kept;
   const animation = new WebAnimation(core, node, record);
-  if (core.animationName !== undefined) playingOn.set(node, animation);
-  else animations.set(record, animation);
+  if (core.animationName !== undefined) {
+    // Given now, so the copies the engine makes from here on are known as this run.
+    runOf(record as Run);
+    playingOn.set(node, animation);
+  } else animations.set(record, animation);
   return animation;
 }
 

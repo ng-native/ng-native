@@ -144,6 +144,20 @@ describe('getAnimations', () => {
     assert.equal(s.row.getAnimations()[0] === animation, true, "and still the element's");
   });
 
+  it('is another animation once it is started again, at the same time as the last', async () => {
+    // The clock stands still: what tells two runs apart is that the second is a new one.
+    const s = await pane();
+    s.row.classList.add('out');
+    await settle();
+    const [first] = s.row.getAnimations();
+    s.row.classList.remove('out');
+    await settle();
+    s.row.classList.add('out');
+    await settle();
+    const [second] = s.row.getAnimations();
+    assert.equal(second !== undefined && second !== first, true, 'a new animation');
+  });
+
   it('is the same animation once the engine plays it on from a copy of its record', async () => {
     // As it does where native laid an animation out and it goes on in JavaScript.
     const s = await pane();
