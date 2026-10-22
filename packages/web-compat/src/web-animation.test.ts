@@ -169,7 +169,8 @@ describe('getAnimations', () => {
     s.row.classList.add('out');
     await settle();
     const [second] = s.row.getAnimations();
-    assert.equal(second !== undefined && second !== first, true, 'a new animation');
+    assert.equal(first !== undefined && second !== undefined, true, 'both runs are there');
+    assert.equal(second !== first, true, 'a new animation');
   });
 
   it('is the same animation once the engine plays it on from a copy of its record', async () => {
