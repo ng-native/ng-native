@@ -53,8 +53,9 @@ function scene(css?: string, drawing = true) {
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, {
     ...(css && { globalStyles: generated(css) as never }),
-    // As React Native's: a keyword of CSS's alone is no colour it reads.
-    processColor: (value) => (String(value).toLowerCase() === 'currentcolor' ? null : value),
+    // As React Native's: a keyword of CSS's alone is no colour it reads, nor a word that is none.
+    processColor: (value) =>
+      ['currentcolor', 'contrast'].includes(String(value).toLowerCase()) ? null : value,
   });
   const add = (name: string, parent = engine.root, classes = '') => {
     const node = engine.createElement(name);
@@ -384,6 +385,22 @@ describe('a paint written in a style', () => {
 
   it("is dropped on an icon's shape, as a colour the host cannot read is", () => {
     assert.deepEqual(painted(false), { fill: undefined, stroke: undefined });
+  });
+
+  it("is the text's colour for a fill no colour native reads in a drawing, and no stroke", () => {
+    // Highcharts styles a label's fill as 'contrast', which only it can work out. Native's own
+    // black is lost on a dark slice; the text's colour is seen. A stroke a browser cannot read is
+    // drawn as none, and so is one here. And so on an icon's shape, which keeps its own rule.
+    const paint = (drawing: boolean, written: string) =>
+      withViews(SHAPES, () => {
+        const { fabric, engine, add } = scene(undefined, drawing);
+        engine.setProp(add('x-path'), 'style', { fill: written, stroke: written });
+        engine.commit();
+        const { fill, stroke } = fabric.committed[0]!.props;
+        return { fill, stroke };
+      });
+    assert.deepEqual(paint(true, 'contrast'), { fill: { type: 2 }, stroke: undefined });
+    assert.deepEqual(paint(false, 'contrast'), { fill: undefined, stroke: undefined });
   });
 });
 

@@ -11264,6 +11264,7 @@ export class Engine implements HostEngine {
     // Asked of the namespace first: it is asked of every node merged.
     if (node.namespace !== undefined && viewName.startsWith('RNSVG')) {
       drawnAsShape(node, viewName, merged);
+      this.fillUnread(merged);
     }
     if (node.raised !== undefined) merged['zIndex'] ??= node.raised;
     keptForNative(node, merged);
@@ -14484,6 +14485,17 @@ export class Engine implements HostEngine {
   /** The host's `resolveAssetSource`, for a component that needs an asset's size up front. */
   resolveAsset(value: unknown): unknown {
     return this.resolveAssetSource(value);
+  }
+
+  /**
+   * A drawing's fill that is no colour the host reads, `contrast` as Highcharts writes one for a
+   * label, as the text's colour: native's own black is lost on a dark shape, and the text's is
+   * seen. A stroke native cannot read is left to be dropped, as a browser drops it.
+   */
+  private fillUnread(merged: Record<string, unknown>): void {
+    const fill = merged['fill'];
+    if (typeof fill !== 'string' || fill === 'none' || this.color(fill) != null) return;
+    merged['fill'] = CURRENT_BRUSH;
   }
 
   /** A colour prop as `processed` sends it: one dropped as unreadable is null on an update. */
