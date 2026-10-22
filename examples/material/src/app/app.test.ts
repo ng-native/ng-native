@@ -115,12 +115,12 @@ test('a task due on a day picked from the calendar says so under its title', asy
     day: 'numeric',
   });
   await press(await screen.findByLabelText(label));
+  const day = today
+    .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    .replace(',', '');
+  // A sample task is due today too, and says so the same way where it has no notes.
+  const before = screen.queryAllByText(day).length;
   await press(screen.getByText('Add'));
-  const day = today.toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
-  await vi.waitFor(() => expect(screen.getByText(day.replace(',', ''))).toBeTruthy());
+  await vi.waitFor(() => expect(screen.queryAllByText(day)).toHaveLength(before + 1));
   await vi.waitFor(() => expect(screen.getByText('Task added')).toBeTruthy());
 });
