@@ -43,6 +43,15 @@ that platform logs a warning naming the tab's path. The fuller inputs also take 
 image drawn either as-authored or as a tinted template mask; `icon` and `selectedIcon` must be the
 same kind of image, since native carries one icon type for both states.
 
+On Android, a tab can be added after start behind an `@if`, but not taken away again: its item
+stays in the bottom navigation bar, still tappable, and opens a blank page, and adding the tab back
+then shows its item twice. The router takes the tab out of the bar it commits, but React Native
+drops that removal before it reaches react-native-screens' Android tab bar. The fix is an open
+pull request,
+[react-native-screens#4812](https://github.com/software-mansion/react-native-screens/pull/4812).
+Until a release has it, keep a tab a user can lose declared on Android, and have its page say why
+there is nothing there.
+
 Neither platform's tab bar draws SVG, so an icon written as SVG markup, such as an `@ng-icons` icon,
 is drawn once into an image by a renderer the app provides. `SvgImages` from `@ng-native/icons` is
 one:
