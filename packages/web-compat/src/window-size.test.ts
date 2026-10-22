@@ -62,8 +62,12 @@ async function page(providers: unknown[] = [provideWebCompat()]) {
   };
   const header = (height: number) =>
     app.fabric.emit(screenView(), 'topHeaderHeightChange', { headerHeight: height });
-  const screenView = (): FakeFabricNode =>
-    screen.getByTestId('screen', { includeHiddenElements: true });
+  // Committed first: a screen a test puts in with the renderer is put on screen by the next
+  // commit, which `settle()` stops waiting for after a few frames on a busy machine.
+  const screenView = (): FakeFabricNode => {
+    engine.commit();
+    return screen.getByTestId('screen', { includeHiddenElements: true });
+  };
   /** How many times a resize listener on the window, and one on the visual viewport, is told. */
   const told = { window: 0, viewport: 0 };
   const onWindow = () => void told.window++;
