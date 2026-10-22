@@ -5,8 +5,10 @@
  * outline of every stroke it draws, which for a line that crosses itself thousands of times is
  * seconds of the main thread for each drawing. Chrome draws every point, at the screen's pixels.
  *
- * Only runs of straight segments that go one way across, as a series of a chart does, are thinned:
- * a curve, an arc, or a run that turns back is drawn as it is written.
+ * Runs of straight segments that go one way across, as a series of a chart does, are thinned, a
+ * path split where it turns back and each run thinned on its own: a curve or an arc is drawn as it
+ * is written, and so is a path that turns back so often that no run is long, which is not made
+ * much shorter.
  */
 
 /** Fewer characters than this is a path too short to be worth reading. */
@@ -52,6 +54,8 @@ function opened(command: string, out: (Vertex | 'M' | 'Z')[]): boolean {
     return true;
   }
   if (command === 'M') out.push('M');
+  // A line after a close, or before any point, starts from a point a thinned path cannot write.
+  if (command === 'L' && typeof out.at(-1) !== 'object') return false;
   return command === 'M' || command === 'L';
 }
 
@@ -150,11 +154,7 @@ class Thinned {
 }
 
 /** Whether a path is too short, or has too few points for its reach, to be worth reading. */
-const tooFew = (d: string, scale: number, across: number): boolean =>
-  d.length < LONG ||
-  !(scale > 0) ||
-  // Fewer points than two to each column of what it can reach across is never made half as long.
-  (Number.isFinite(across) && d.split('L').length < 2 * across * scale);
+const tooShort = (d: string, scale: number): boolean => d.length < LONG || !(scale > 0);
 
 /**
  * A path's `d` thinned to columns `1 / scale` of its units wide, or as it is where it is short,
@@ -162,13 +162,16 @@ const tooFew = (d: string, scale: number, across: number): boolean =>
  * can reach in its units, where that is known, which tells a path of too few points unread.
  */
 export function thinnedPath(d: string, scale: number, across = Infinity): string {
-  if (tooFew(d, scale, across)) return d;
+  if (tooShort(d, scale)) return d;
   const parts = vertices(d);
   if (!parts) return d;
+  // Counted as parsed: the pairs after a move are lines with no `L` of their own.
+  const all = parts.filter((part) => typeof part !== 'string').length;
+  // Fewer points than two to each column of what it can reach across is never made half as long.
+  if (Number.isFinite(across) && all < 2 * across * scale) return d;
   const thinned = new Thinned(scale);
   for (const part of parts) thinned.add(part);
   thinned.flush();
   // Thinned by less than half, it is drawn as written.
-  const all = parts.filter((part) => typeof part !== 'string').length;
   return thinned.count * 2 > all ? d : thinned.written.join(' ');
 }

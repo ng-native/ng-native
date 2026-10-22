@@ -78,4 +78,19 @@ describe('a dense path thinned for the native drawing', () => {
     const sparse = written(line(400, 3000));
     assert.equal(thinnedPath(sparse, 1), sparse);
   });
+  it('draws as written a line from where a closed run started, which it cannot write', () => {
+    const d = `${written(line(3000, 300))} Z L 5 5`;
+    assert.equal(thinnedPath(d, 1), d);
+    assert.equal(
+      thinnedPath(`L 1 1 ${written(line(3000, 300)).slice(1)}`, 1),
+      `L 1 1 ${written(line(3000, 300)).slice(1)}`,
+    );
+  });
+
+  it('thins a line whose points after its move are lines with no L of their own', () => {
+    const points = line(3000, 300);
+    const d = `M ${points.map(([x, y]) => `${x} ${y}`).join(' ')}`;
+    const thinned = thinnedPath(d, 1, 300);
+    assert.ok(thinned.length < d.length / 2, `thinned to ${thinned.length} of ${d.length}`);
+  });
 });

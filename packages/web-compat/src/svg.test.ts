@@ -212,6 +212,18 @@ describe('@ng-native/web-compat, a long line a script draws', () => {
     assert.ok(pointsIn(view(path)!.props['d'] as string) > plain * 1.5);
   });
 
+  it('is drawn as written in a drawing whose width is no count of points', async () => {
+    // `100%` of a box not known here: not a hundred points, which would thin it far too much.
+    const { document, svg, view } = await drawing();
+    svg.setAttribute('viewBox', '0 0 300 100');
+    svg.setAttribute('width', '100%');
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', LONG);
+    svg.appendChild(path);
+    await settle();
+    assert.equal(view(path)!.props['d'], LONG);
+  });
+
   it('is thinned to the width its drawing is given, and again where that changes', async () => {
     const { document, svg, view } = await drawing();
     svg.setAttribute('viewBox', '0 0 300 100');

@@ -54,6 +54,29 @@ describe('@ng-native/web-compat canvas', () => {
   // In the one group the drawing holds: see the next test.
   const shapes = () => screen.getByTestId('chart').children[0]!.children;
 
+  it('draws a long line thinned, and again each time the canvas is drawn again', async () => {
+    // As a chart animates its line: two thousand points across a canvas a hundred wide.
+    const { context } = await canvas();
+    const line = (lift: number) => {
+      context.clearRect(0, 0, 100, 50);
+      context.beginPath();
+      context.moveTo(0, 25);
+      for (let at = 1; at < 2000; at++) context.lineTo(at / 20, 25 + Math.sin(at) * 10 - lift);
+      context.stroke();
+    };
+    const drawn = () =>
+      String(shapes().find((shape) => shape.viewName === 'RNSVGPath')?.props['d']);
+    line(0);
+    await settle();
+    const first = drawn();
+    assert.ok(first.length < 4000, `thinned to ${first.length}`);
+    line(5);
+    await settle();
+    const again = drawn();
+    assert.notEqual(again, first, 'the line moved');
+    assert.ok(again.length < 4000, `thinned again to ${again.length}`);
+  });
+
   it('is a drawing of the shapes its context was given, on the grid it is the size of', async () => {
     const { node, context } = await canvas();
     assert.equal(context.canvas, node);

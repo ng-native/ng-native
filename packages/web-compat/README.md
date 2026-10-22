@@ -82,8 +82,9 @@ Experimental and partial. It has:
   an icon does. A `<path>` of thousands of straight segments that go one way across, a chart's
   line series, is drawn thinned to the lowest and highest point of each point-wide column, as
   react-native-svg on iOS takes seconds over a stroke that long; `getAttribute('d')` and
-  `getBBox` read the whole path. A curve, a relative command, a path that turns back or one under
-  a rotation is drawn as written.
+  `getBBox` read the whole path, and a canvas's long line is thinned too. A curve, a relative
+  command, a path that turns back so often that no run is long, or one under a rotation is drawn
+  as written.
 - Canvas: a `<canvas>`'s 2D context draws with the same native views, so it too shows nothing
   where the app has not installed `react-native-svg`. Its `width` and `height` are the grid it
   draws on, and the shapes drawn, not its text, read back by `getImageData`, draw on another

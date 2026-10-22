@@ -242,8 +242,9 @@ a page written right to left too, and a date's or a time's `valueAsNumber` is `N
 - A `<path>` of thousands of straight segments that go one way across, a chart's line series, is
   drawn thinned to the lowest and highest point of each point-wide column: react-native-svg on
   iOS takes seconds over a stroke that long. `getAttribute('d')` and `getBBox` read the whole
-  path. A curve, a relative command, a path that turns back, or one under a rotation or a skew is
-  drawn as written.
+  path. A curve, a relative command, a path that turns back so often that no run is long, or one
+  under a rotation or a skew, or in a drawing whose width is not in points, is drawn as written.
+  A long line a `<canvas>` draws is thinned the same way, each time it is drawn again.
 
 Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A
 stylesheet's attribute selector does not match a drawing's attributes: `svg[width="16"]` matches

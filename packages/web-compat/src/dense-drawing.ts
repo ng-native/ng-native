@@ -43,7 +43,10 @@ function scaleOf(
     if (at.tag === 'svg') {
       // A drawing as wide as its view box, as a chart's is, draws a unit to a point.
       const box = read.props(at)['vbWidth'] as number | undefined;
-      const width = Number.parseFloat(read.attrs(at)['width'] ?? '');
+      // Only a plain number or `px` is a count of points: `100%`, `em` and `vw` are of a box not
+      // known here, and a path in such a drawing is drawn as written.
+      const written = (read.attrs(at)['width'] ?? '').trim();
+      const width = /^\d*\.?\d+(?:px)?$/.test(written) ? Number.parseFloat(written) : NaN;
       if (box) scale *= width > 0 ? width / box : NaN;
       if (Number.isNaN(scale)) return undefined;
       return { scale, across: (width > 0 ? width : Infinity) / scale };

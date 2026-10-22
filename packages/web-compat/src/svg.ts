@@ -498,6 +498,19 @@ export function shapeOf(
 }
 
 /**
+ * A shape a canvas has put in its drawing, or drawn again: a long path is drawn thinned at the
+ * scale it is drawn at, as one a template writes is. A canvas puts its shapes in itself, where
+ * `svgInserted` does not hear of them.
+ */
+export function thinPlaced(node: EngineNode, engine: Engine): void {
+  if (node.tag !== 'path') return;
+  const d = attributesOf(node).props['d'];
+  if (typeof d !== 'string' || d.length < LONG_PATH) return;
+  const drawn = drawnPathData(node, d, READER, engine);
+  if (drawn !== node.props['d']) engine.setProp(node, 'd', drawn);
+}
+
+/**
  * The same shape with other attributes: what the native view reads of them now, set where it
  * is another than it was. A canvas drawn again is mostly the shapes it was, each a little moved.
  */
