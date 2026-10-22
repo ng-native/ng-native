@@ -23,5 +23,9 @@ export interface WebCompatOptions {
 export function webCompat(options: WebCompatOptions): {
   name: string;
   enforce: 'pre';
-  resolveId(source: string, importer: string | undefined, options: object): Promise<unknown>;
+  resolveId(
+    source: string,
+    importer: string | undefined,
+    options: object,
+  ): Promise<{ id: string } | null>;
 };
