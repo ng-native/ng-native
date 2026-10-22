@@ -310,6 +310,14 @@ describe('a box clipped to a band in a stylesheet read as a browser reads it', (
       assert.equal(clipBand(), band('0', '50'));
     });
 
+    it('takes a token past the left edge, and an explicit border-box', () => {
+      // A slider dragged past the start sets its token below zero: the picture is cut off whole.
+      assert.equal(banded(TOKENED, '; --x: -10%').band(), band('0', '-10'));
+      assert.equal(banded(`${TOKENED} border-box`).band(), band('0', '50'));
+      const { clipBand, reports } = compiled(`${TOKENED} content-box`);
+      assert.deepEqual([clipBand, reports.length], [undefined, 1], 'and refuses any other box');
+    });
+
     it('takes a token for either edge, each the same at the top and the bottom', () => {
       const both =
         'clip-path: polygon(var(--a) 0, var(--b, 80%) 0, var(--b, 80%) 100%, var(--a) 100%)';

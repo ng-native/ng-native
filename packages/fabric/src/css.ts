@@ -5732,10 +5732,10 @@ function settledBand(
   return `polygon(${from}% 0%, ${to}% 0%, ${to}% 100%, ${from}% 100%)`;
 }
 
-/** A length as a percentage, 0 included, or undefined for any other. */
+/** A length as a percentage, 0 and one below it included, or undefined for any other. */
 function percentOf(length: unknown): string | undefined {
   if (length === 0) return '0';
-  const share = typeof length === 'string' ? /^(\d*\.?\d+)%$/.exec(length) : null;
+  const share = typeof length === 'string' ? /^(-?\d*\.?\d+)%$/.exec(length) : null;
   return share ? String(Number(share[1])) : undefined;
 }
 

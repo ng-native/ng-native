@@ -1277,7 +1277,10 @@ function bandEdges(points) {
 /** The terms of each point of a value that is one `polygon()`, as the parser left it; or none. */
 function polygonPoints(parts) {
   const [polygon, ...rest] = meaningful(parts);
-  if (rest.length || polygon?.type !== 'function' || polygon.value.name !== 'polygon') return [];
+  // The box it is a band of, where it is named: the border box alone, as for a band with no token.
+  const box = rest.length === 1 && rest[0].type === 'token' ? rest[0].value : undefined;
+  const boxed = !rest.length || (box?.type === 'ident' && box.value === 'border-box');
+  if (!boxed || polygon?.type !== 'function' || polygon.value.name !== 'polygon') return [];
   /** @type {unknown[][]} */
   const points = [[]];
   for (const part of polygon.value.arguments) {
