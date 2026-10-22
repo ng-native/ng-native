@@ -51,11 +51,16 @@ function touch(node: FakeFabricNode, phase: 'start' | 'end'): Record<string, unk
 /**
  * Whether a finger could reach the node, by RNTL's reading of `pointerEvents` on the node as last
  * committed: not when it is `none` or `box-none` itself, nor under a `none` or `box-only` view.
+ *
+ * The walk stops at a view committed with `layoutRoot`: `@expo/ui`'s view host for content
+ * presented in its own window, a sheet's or a popover's, which takes its content's touches itself,
+ * so what is around it, such as the sheet's `pointerEvents: 'none'` host, has no say.
  */
 function touchable(node: FakeFabricNode): boolean {
   withParents(ownerOf(node).fabric.committed);
   let blocking = 'box-none';
   for (let at: FakeFabricNode | null = currentOf(node) ?? node; at; at = at.parent ?? null) {
+    if (at.props['layoutRoot'] === true) return true;
     const pointerEvents = at.props['pointerEvents'];
     if (pointerEvents === 'none' || pointerEvents === blocking) return false;
     blocking = 'box-only';

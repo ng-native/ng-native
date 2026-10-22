@@ -80,6 +80,22 @@ interface Mounted {
 }
 
 const mounted: Mounted[] = [];
+
+/** Expo's runtime global, as far as a render answers for it. */
+const scope = globalThis as { expo?: object };
+/** The `expo` global a render put in place, removed once nothing is rendered. */
+let expoStandIn: object | undefined;
+
+/**
+ * The fake commits any view, so it stands for a build that has every one, and answers Expo's
+ * `getViewConfig` for each as that build would: a component that asks the build whether it has a
+ * view, as `ui-bottom-sheet` does for SwiftUI's toolbar, draws what a development build draws.
+ * Only where there is no `expo` global already, so a test's own stays as the test set it.
+ */
+function standInForExpo(): void {
+  if (scope.expo) return;
+  scope.expo = expoStandIn = { getViewConfig: () => ({}) };
+}
 /** Which render a node a query returned belongs to, so an event on it reaches the right fake. */
 const owners = new WeakMap<FakeFabricNode, Mounted>();
 
@@ -218,6 +234,7 @@ export async function render<T>(
   const type = isTemplate ? await hostFor(component, options) : component;
   const fabric = createFakeFabric();
   if (!isTemplate) refuseUnknownInputs(type, inputs);
+  standInForExpo();
   const app = mount(1, type, fabric, {
     ...engine,
     providers,
@@ -279,6 +296,10 @@ function unmount(target: Mounted): void {
   if (at === -1) return;
   mounted.splice(at, 1);
   target.applicationRef.destroy();
+  if (mounted.length === 0 && expoStandIn && scope.expo === expoStandIn) {
+    delete scope.expo;
+    expoStandIn = undefined;
+  }
 }
 
 /**
