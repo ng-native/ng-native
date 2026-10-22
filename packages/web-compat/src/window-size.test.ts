@@ -362,22 +362,28 @@ describe('a view in a screen under a header on Android', () => {
     const hear = () => heard.push(s.card.getBoundingClientRect().top);
     s.document.addEventListener('touchstart', hear);
     try {
+      // A touch on the card finds it measured where it is drawn.
+      s.app.fabric.frames.set('in-screen', { x: 0, y: 150, width: 300, height: 40 });
+      await s.finger('Start', 160);
+      await s.finger('End', 160);
+      // Then measured short, which a touch on a view no listener of its own hears finds out.
       const quiet = s.document.createElement('div');
       quiet.setAttribute('testID', 'quiet');
       quiet.setAttribute('nativeID', 'quiet');
       s.app.instance.renderer.appendChild(s.node, quiet);
       await settle();
-      s.app.fabric.frames.set('in-screen', { x: 0, y: 150, width: 300, height: 40 });
+      s.app.fabric.frames.set('in-screen', { x: 0, y: 50, width: 300, height: 40 });
+      s.app.fabric.frames.set('quiet', { x: 0, y: 100, width: 300, height: 40 });
+      s.engine.commit();
       const view = screen.getByTestId('quiet', { includeHiddenElements: true });
       const point = { identifier: 0, target: view.reactTag, pageX: 20, pageY: 210, locationY: 10 };
-      s.app.fabric.frames.set('quiet', { x: 0, y: 200, width: 300, height: 40 });
       s.app.fabric.emit(view, 'topTouchStart', {
         ...point,
         touches: [point],
         changedTouches: [point],
       });
       await settle();
-      assert.deepEqual(heard, [50]);
+      assert.deepEqual(heard, [50, 50], 'where it is drawn, both times');
     } finally {
       s.document.removeEventListener('touchstart', hear);
       s.stopListening();
