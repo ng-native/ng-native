@@ -875,7 +875,9 @@ export function claimHost(node: HostNode): void {
  * Make a view the page of what is inside it: a `position: fixed` box there is placed against this
  * view and not the screen, as it is against a screen of a stack, and follows it as it is given
  * another size. For a layer that is the window to what it holds and need not be the size of the
- * screen. Marked before anything fixed is put in it: it is for as long as the view is.
+ * screen. Marked before anything fixed is put in it: it is for as long as the view is. Not for
+ * a view that scrolls its overflow: what is fixed in it is committed in what scrolls, and would
+ * scroll with it.
  */
 export function markPage(node: EngineNode): void {
   node.page = true;

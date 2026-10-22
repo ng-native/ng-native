@@ -40,10 +40,21 @@ export function windowSize(engine: Engine): { width: number; height: number } {
  */
 export function windowTop(engine: Engine): number {
   let top = 0;
+  let apart = false;
   for (const [screen, height] of headers.get(engine) ?? []) {
     if (isWithin(screen, engine.root)) top = height;
+    else apart = true;
   }
+  outside.set(engine, apart);
   return top;
+}
+
+/** Whether a screen an app has made is not in its page yet, to look again once it is put in. */
+const outside = new WeakMap<Engine, boolean>();
+
+/** Something was put in the page: where the window starts moves if a screen made apart is in it. */
+export function putInPage(engine: Engine): void {
+  if (outside.get(engine)) topMoved(engine);
 }
 
 const isWithin = (node: EngineNode, root: EngineNode): boolean => {
@@ -109,6 +120,8 @@ export function windowHeight(engine: Engine): number {
 /** The keyboard came up, moved or went: `undefined` for gone. A `resize` listener is told. */
 export function keyboardMoved(engine: Engine, top: number | undefined): void {
   if (keyboards.get(engine) === top) return;
+  // Measured before the keyboard ends the body, where it has not been: the window's own height.
+  if (top !== undefined && !keyboards.has(engine)) windowHeight(engine);
   if (top === undefined) keyboards.delete(engine);
   else keyboards.set(engine, top);
   resized(engine);

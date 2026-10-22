@@ -176,6 +176,24 @@ describe('the window and the navigation header', () => {
     }
   });
 
+  it('starts at the top under a screen with no header put in over one with a header', async () => {
+    const s = await page();
+    try {
+      await s.stackScreen();
+      s.header(100);
+      assert.deepEqual(s.bodyStyle(), { top: 100, bottom: 0 });
+      // Made apart and put in after, as a component that holds a screen is.
+      const { renderer } = s.app.instance;
+      const next: EngineNode = renderer.createElement('screen');
+      assert.deepEqual(s.bodyStyle(), { top: 100, bottom: 0 }, 'not in the page yet');
+      renderer.appendChild(s.engine.root, next);
+      await settle();
+      assert.deepEqual(s.bodyStyle(), { top: 0, bottom: 0 });
+    } finally {
+      s.stopListening();
+    }
+  });
+
   it('starts at the top again when a screen goes with what it is in', async () => {
     const s = await page();
     try {
@@ -225,6 +243,20 @@ describe('the window and the navigation header', () => {
 });
 
 describe('the window on Android, drawn edge to edge', () => {
+  it('is as tall as the body is drawn when the keyboard first comes up, unread until then', async () => {
+    const s = await page();
+    try {
+      s.document.body.id = 'body';
+      await settle();
+      s.app.fabric.frames.set('body', { x: 0, y: 0, width: 390, height: 900 });
+      await s.keyboard({ height: 200, screenY: 700 });
+      assert.equal(globals.innerHeight, 700);
+      assert.deepEqual(s.bodyStyle(), { top: 0, bottom: 200 }, 'from the foot of the body');
+    } finally {
+      s.stopListening();
+    }
+  });
+
   it('is as tall as the body is drawn, where that is taller than the app was told', async () => {
     // Android tells the app of the height between the status bar and the gesture bar, and draws
     // it under both.

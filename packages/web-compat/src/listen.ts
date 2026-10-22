@@ -36,7 +36,7 @@ import {
   setSelect,
 } from './select.ts';
 import { engineOf } from './window.ts';
-import { headerMoved, topMoved, windowTop } from './window-size.ts';
+import { headerMoved, putInPage, topMoved, windowTop } from './window-size.ts';
 import { together } from './mutation-observer.ts';
 import { frameAttributeSet, frameCreated } from './frame.ts';
 import { setFrameView } from './frame-view.ts';
@@ -210,6 +210,8 @@ export const webListen: RendererExtension = {
     svgInserted(node, parent, engine);
     // A row or a cell: its table's columns are counted again. See `table.ts`.
     tableInserted(node, engine);
+    // A screen made apart, or what holds one: the window starts under its header.
+    putInPage(engine);
   },
   removed(node, engine) {
     optionRemoved(node, engine);
