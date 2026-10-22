@@ -77,6 +77,27 @@ describe('declaring a face', () => {
     assert.equal(face('400 400').weightRange, undefined);
   });
 
+  it('says in the build that a face with a weight range draws one weight on a device', () => {
+    const warned = (weight: string) => {
+      const warnings: string[] = [];
+      compileCss(
+        `@font-face { font-family: Inter; src: url('./Inter.ttf'); font-weight: ${weight} }`,
+        'styles.css',
+        { onUnsupported: (message: string) => warnings.push(message) },
+      );
+      return warnings;
+    };
+    const [warning, ...more] = warned('200 800');
+    assert.deepEqual(more, [], 'once');
+    assert.match(
+      warning ?? '',
+      /^styles\.css:1: @font-face 'Inter' declares the weight range 200 800/,
+    );
+    assert.match(warning ?? '', /one file per weight/);
+    assert.deepEqual(warned('700'), [], 'a face of one weight');
+    assert.deepEqual(warned('400 400'), [], 'a range of one weight is that weight');
+  });
+
   it('reads bold in a face as 700, and normal as no weight', () => {
     // Dropped, a bold face was registered as the regular one and matched as weight 400.
     const weight = (value: string) =>

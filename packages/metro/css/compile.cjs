@@ -3450,7 +3450,9 @@ function compileCss(source, context = 'styles', options = {}) {
 
   function compileRule(rule) {
     if (rule.type === 'font-face') {
-      fonts.push(locatedFace(fontFace(rule.value, context), rule));
+      const face = fontFace(rule.value, context);
+      if (face.weightRange) onUnsupported?.(rangeWarning(face, locationOf(rule)));
+      fonts.push(locatedFace(face, rule));
       return [];
     }
     if (rule.type === 'keyframes') {
@@ -3581,6 +3583,22 @@ function fontFace(value, context) {
     ...(Array.isArray(weight) ? { weightRange: weight } : {}),
     ...(style && style !== 'normal' ? { style } : {}),
   };
+}
+
+/**
+ * What a face declared with a weight range draws, which is not what a browser draws: neither
+ * platform picks a variable font's instance by the text's weight. iOS draws its default instance;
+ * Android draws it below 700, and its system font from 700, as React Native registers the file
+ * under one style and asks for its bold one at 700.
+ */
+function rangeWarning(face, location) {
+  const [low, high] = face.weightRange;
+  return (
+    `${location}: @font-face '${face.family}' declares the weight range ${low} ${high}, and a ` +
+    `device does not pick a variable font's weight: iOS draws the font's default instance at ` +
+    `every weight, and Android draws it below 700 and its system font from 700. Declare one ` +
+    `file per weight instead.`
+  );
 }
 
 /**

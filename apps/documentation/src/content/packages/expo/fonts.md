@@ -90,19 +90,32 @@ stylesheet, or in the component whose styles use them.
 
 ### A variable font
 
-A variable font is one file that covers a range of weights, declared as CSS declares it:
+A variable font is one file that covers a range of weights. A device draws one weight from it, so
+declare one file per weight instead, each with the weight it draws:
 
 ```css
 @font-face {
   font-family: 'Inter';
-  src: url('./fonts/Inter-VariableFont_wght.ttf');
-  font-weight: 100 900;
+  src: url('./fonts/Inter-Regular.ttf');
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-SemiBold.ttf');
+  font-weight: 600;
 }
 ```
 
-A weight inside the range is covered by that face, and the text keeps its `font-weight`, since the
-weight is what native picks the instance by. The face is registered as `Inter-100to900`. Two files
-that split a family, `100 400` and `500 900`, are picked between by the range each covers.
+A face declared with a range, `font-weight: 100 900`, is kept, registered as `Inter-100to900`, and
+reported in the build, but the platform does not pick an instance from it by the text's
+`font-weight`:
+
+- **iOS** draws the font's default instance at every weight.
+- **Android** draws the font's default instance below 700, and its system font at 700 and above.
+
+Many variable fonts ship their static weights beside the variable file. For one that does not,
+fontTools cuts one: `fonttools varLib.instancer Inter-VariableFont_wght.ttf wght=600 -o Inter-SemiBold.ttf`.
 
 ## In a SwiftUI `font` modifier
 
