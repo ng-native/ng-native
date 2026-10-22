@@ -277,12 +277,58 @@ describe('a box clipped to a band in a stylesheet read as a browser reads it', (
     assert.match(reports[0]!, /dropped 'clip-path'/);
   });
 
-  it('is refused where an edge is a token', () => {
-    const { clipBand, reports } = compiled(
-      'clip-path: polygon(0 0, var(--x, 50%) 0, var(--x, 50%) 100%, 0 100%)',
-    );
-    assert.equal(clipBand, undefined);
-    assert.equal(reports.length, 1);
+  describe('with an edge that is a token, settled for the box as a browser substitutes it', () => {
+    const TOKENED = 'clip-path: polygon(0 0, var(--x, 50%) 0, var(--x, 50%) 100%, 0 100%)';
+    const banded = (declaration: string, rule = '') => {
+      const { sheet, reports } = compiled(`${declaration}${rule}`);
+      const engine = new Engine(createFakeFabric(), 1, { globalStyles: sheet as never });
+      const view = engine.createElement('view');
+      engine.setClasses(view, 'top');
+      engine.appendChild(engine.root, view);
+      engine.commit();
+      return { engine, view, reports, band: () => view.styleCache?.style['clipBand'] };
+    };
+    const band = (from: string, to: string) =>
+      `polygon(${from}% 0%, ${to}% 0%, ${to}% 100%, ${from}% 100%)`;
+
+    it('is the fallback where the token is not set', () => {
+      const { band: clipBand, reports } = banded(TOKENED);
+      assert.deepEqual([clipBand(), reports], [band('0', '50'), []]);
+    });
+
+    it("is the token's where a rule sets it", () => {
+      assert.equal(banded(TOKENED, '; --x: 30%').band(), band('0', '30'));
+    });
+
+    it('moves as a script sets the token, and goes back to the fallback as it is taken away', () => {
+      const { engine, view, band: clipBand } = banded(TOKENED);
+      engine.setCustomProperty(view, '--x', '72.5%');
+      engine.commit();
+      assert.equal(clipBand(), band('0', '72.5'));
+      engine.setCustomProperty(view, '--x', '');
+      engine.commit();
+      assert.equal(clipBand(), band('0', '50'));
+    });
+
+    it('takes a token for either edge, each the same at the top and the bottom', () => {
+      const both =
+        'clip-path: polygon(var(--a) 0, var(--b, 80%) 0, var(--b, 80%) 100%, var(--a) 100%)';
+      assert.equal(banded(both, '; --a: 20%').band(), band('20', '80'));
+    });
+
+    it('is no band where the token is no share of the box, or is unset with nothing beside it', () => {
+      assert.equal(banded(TOKENED, '; --x: 40px').band(), undefined);
+      const bare = 'clip-path: polygon(0 0, var(--x) 0, var(--x) 100%, 0 100%)';
+      assert.equal(banded(bare).band(), undefined);
+    });
+
+    it('is refused where the two ends of an edge are not the same', () => {
+      const { clipBand, reports } = compiled(
+        'clip-path: polygon(0 0, var(--x, 50%) 0, var(--y, 50%) 100%, 0 100%)',
+      );
+      assert.equal(clipBand, undefined);
+      assert.equal(reports.length, 1);
+    });
   });
 
   for (const other of [

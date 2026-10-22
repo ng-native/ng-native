@@ -1228,8 +1228,9 @@ function clippedToNothing(declaration, out) {
  * `clip-path` that is a band of the box from side to side, in a sheet read as a browser reads
  * it: `polygon(a 0, b 0, b 100%, a 100%)`, one picture over another cut where a slider is. Kept
  * as that text, with each edge a percentage, as `clipBand`: for what draws an image through a band
- * of itself (`@ng-native/web-compat`), and taken off what a view is sent. Any other shape, an edge that is
- * a length or a token, and a band of any box but the border box are left to be refused.
+ * of itself (`@ng-native/web-compat`), and taken off what a view is sent. An edge that is a token
+ * is `tokenedBand`'s. Any other shape, an edge that is a length, and a band of any box but the
+ * border box are left to be refused.
  */
 function clippedToABand({ property, value }, out) {
   if (property !== 'clip-path') return false;
@@ -1245,6 +1246,66 @@ function clippedToABand({ property, value }, out) {
   if (from === undefined) return false;
   out.clipBand = `polygon(${from}% 0%, ${to}% 0%, ${to}% 100%, ${from}% 100%)`;
   return true;
+}
+
+/**
+ * `clip-path` that is a band of the box with a token for an edge, in a sheet read as a browser
+ * reads it: a slider sets the token as it is dragged. Left for the engine to settle for the box,
+ * as `band`: each of the two edges a percentage, or a token with what is beside it. Answers
+ * whether it was one; a token anywhere else in the shape, or in a fallback, is left to be refused.
+ */
+function tokenedBand({ property, value }, deferred) {
+  if (property !== 'unparsed' || value?.propertyId?.property !== 'clip-path') return false;
+  const edges = bandEdges(polygonPoints(value.value).map((point) => point.map(bandEdge)));
+  if (!edges) return false;
+  deferred.push({ props: ['clipBand'], band: edges });
+  return true;
+}
+
+/** A band's two edges, where `points` are its four corners as `bandEdge` reads each; or null. */
+function bandEdges(points) {
+  const [from, to] = [points[0]?.[0], points[1]?.[0]];
+  const band = [
+    [from, '0%'],
+    [to, '0%'],
+    [to, '100%'],
+    [from, '100%'],
+  ];
+  return from && to && JSON.stringify(points) === JSON.stringify(band) ? [from, to] : null;
+}
+
+/** The terms of each point of a value that is one `polygon()`, as the parser left it; or none. */
+function polygonPoints(parts) {
+  const [polygon, ...rest] = meaningful(parts);
+  if (rest.length || polygon?.type !== 'function' || polygon.value.name !== 'polygon') return [];
+  /** @type {unknown[][]} */
+  const points = [[]];
+  for (const part of polygon.value.arguments) {
+    if (isComma(part)) points.push([]);
+    else points[points.length - 1].push(part);
+  }
+  return points.map(meaningful);
+}
+
+/** An edge of a band as written: a percentage, or a token with a percentage or nothing beside it. */
+function bandEdge(term) {
+  if (term.type !== 'var') {
+    const edge = shareOfTerm(term);
+    return edge === '?' ? null : `${edge}%`;
+  }
+  const reference = term.value.name.ident;
+  if (!term.value.fallback) return { reference };
+  const [fallback, ...rest] = meaningful(term.value.fallback);
+  const edge = rest.length ? '?' : shareOfTerm(fallback);
+  return edge === '?' ? null : { reference, fallback: `${edge}%` };
+}
+
+/** A term the parser left as written, read as `share` reads an edge: a bare 0 is one too. */
+function shareOfTerm(term) {
+  if (term?.type !== 'token') return '?';
+  const { type, value } = term.value;
+  if (type === 'number' || type === 'dimension') return value === 0 ? '0' : '?';
+  return share(term.value);
 }
 
 /** A band's four corners, as `share` writes each: the same two edges at the top and the bottom. */
@@ -2986,6 +3047,7 @@ function compileCss(source, context = 'styles', options = {}) {
    */
   function readAsABrowser(declaration, out, deferred, context) {
     if (shapePaint(declaration, out, deferred, context)) return true;
+    if (tokenedBand(declaration, deferred)) return true;
     if (!isContent(declaration)) return asABrowserReads(declaration, out);
     declareContent(declaration, out, context);
     return true;

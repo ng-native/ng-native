@@ -349,7 +349,8 @@ const SLIDER =
   '.frame { position: relative; width: 300px; height: 200px } ' +
   '.picture { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover } ' +
   '.cut { clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%) } ' +
-  '.moved { clip-path: polygon(20% 0, 80% 0, 80% 100%, 20% 100%) }';
+  '.moved { clip-path: polygon(20% 0, 80% 0, 80% 100%, 20% 100%) } ' +
+  '.tokened { clip-path: polygon(0 0, var(--position, 40%) 0, var(--position, 40%) 100%, 0 100%) }';
 
 describe('an image clipped to a band of itself', () => {
   const slider = async () => {
@@ -453,6 +454,20 @@ describe('an image clipped to a band of itself', () => {
     element.style.clipPath = '';
     await settle();
     assert.equal(drawn().band['width'], '50%', "the sheet's again");
+  });
+
+  it('follows the token its sheet cuts the band at, as a script sets it and takes it away', async () => {
+    const app = await slider();
+    app.instance.cut.set('picture tokened');
+    await settle();
+    assert.equal(drawn().band['width'], '40%', 'the fallback, where the token is not set');
+    const element = (globalThis as Dom).document.querySelector('[testID=top]');
+    element.style.setProperty('--position', '65%');
+    await settle();
+    assert.equal(drawn().band['width'], '65%');
+    element.style.removeProperty('--position');
+    await settle();
+    assert.equal(drawn().band['width'], '40%', 'the fallback again');
   });
 
   it('shows another src through the band, and tells of it loading', async () => {

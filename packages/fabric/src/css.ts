@@ -383,6 +383,11 @@ export interface DeferredDeclaration {
    */
   readonly gradient?: GradientTemplate | readonly GradientTemplate[];
   /**
+   * A band of the box from side to side whose edges are tokens, `clipBand` as a library's sheet
+   * writes it for a slider: each edge a percentage, or a token with the percentage beside it.
+   */
+  readonly band?: readonly BandEdge[];
+  /**
    * Arithmetic around the reference, settled at build time. `value * scale + offset`, then no
    * smaller than `floor`. What `calc(var(--x) + 12px)` and `max(var(--x), 16px)` become.
    */
@@ -5247,6 +5252,7 @@ function referenced(
   tokens: Readonly<Record<string, TokenValue>>,
 ): unknown {
   if (declaration.gradient) return paintLayers(declaration.gradient, tokens);
+  if (declaration.band) return settledBand(declaration.band, tokens);
   // The first token set is substituted, whatever it holds: one of the wrong kind leaves the
   // property unset rather than trying the next, or the fallback.
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
@@ -5706,6 +5712,31 @@ function fromChannels(
   return opacity >= 1
     ? `rgb(${r}, ${g}, ${b})`
     : `rgba(${r}, ${g}, ${b}, ${Math.round(opacity * 1000) / 1000})`;
+}
+
+/** An edge of a band: a percentage, or a token with the percentage beside it where one is. */
+type BandEdge = string | { readonly reference: string; readonly fallback?: string };
+
+/**
+ * A band's clip with its edges settled, as `clipBand` is written: none where an edge is a token
+ * that is no percentage of the box, or unset with nothing beside it, as CSS then has no clip.
+ */
+function settledBand(
+  band: readonly BandEdge[],
+  tokens: Readonly<Record<string, TokenValue>>,
+): string | undefined {
+  const [from, to] = band.map((edge) =>
+    percentOf(typeof edge === 'string' ? edge : substitute(edge, tokens, (token) => token.length)),
+  );
+  if (from === undefined || to === undefined) return undefined;
+  return `polygon(${from}% 0%, ${to}% 0%, ${to}% 100%, ${from}% 100%)`;
+}
+
+/** A length as a percentage, 0 included, or undefined for any other. */
+function percentOf(length: unknown): string | undefined {
+  if (length === 0) return '0';
+  const share = typeof length === 'string' ? /^(\d*\.?\d+)%$/.exec(length) : null;
+  return share ? String(Number(share[1])) : undefined;
 }
 
 /** One template, or a layered background of several: every layer painted, or, as CSS would, none. */
