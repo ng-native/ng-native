@@ -16,12 +16,31 @@ export function shapeUnder(landed: EngineNode, x: number, y: number): EngineNode
   while (root && root.tag !== 'svg') root = root.parent;
   if (!root) return undefined;
   const frame = frameOf(root);
-  const [vbX = 0, vbY = 0, vbWidth, vbHeight] = (shapeAttributes(root)['viewBox'] ?? '')
+  const attrs = shapeAttributes(root);
+  const [vbX = 0, vbY = 0, vbWidth, vbHeight] = (attrs['viewBox'] ?? '')
     .split(/[\s,]+/)
     .map(Number);
-  const scaleX = vbWidth && frame.width ? frame.width / vbWidth : 1;
-  const scaleY = vbHeight && frame.height ? frame.height / vbHeight : 1;
-  const point = { x: (x - frame.x) / scaleX + vbX, y: (y - frame.y) / scaleY + vbY };
+  let scaleX = vbWidth && frame.width ? frame.width / vbWidth : 1;
+  let scaleY = vbHeight && frame.height ? frame.height / vbHeight : 1;
+  let [offsetX, offsetY] = [0, 0];
+  // A view box of another shape than the drawing is drawn at one scale and placed as its
+  // `preserveAspectRatio` says, `xMidYMid meet` where it says nothing, as native and a browser
+  // draw it; `none` scales each side on its own.
+  const [align = 'xMidYMid', fit = 'meet'] = (attrs['preserveAspectRatio'] ?? '')
+    .trim()
+    .split(/\s+/);
+  if (vbWidth && vbHeight && frame.width && frame.height && align !== 'none') {
+    const scale = (fit === 'slice' ? Math.max : Math.min)(scaleX, scaleY);
+    const place = (spare: number, at: string) =>
+      at === 'Min' ? 0 : at === 'Max' ? spare : spare / 2;
+    offsetX = place(frame.width - vbWidth * scale, align.slice(1, 4));
+    offsetY = place(frame.height - vbHeight * scale, align.slice(5, 8));
+    scaleX = scaleY = scale;
+  }
+  const point = {
+    x: (x - frame.x - offsetX) / scaleX + vbX,
+    y: (y - frame.y - offsetY) / scaleY + vbY,
+  };
   return under(landed, point, root);
 }
 

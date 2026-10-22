@@ -211,6 +211,27 @@ describe('@ng-native/web-compat, the mouse a touch on a drawing is', () => {
     assert.deepEqual(heard, []);
   });
 
+  it('finds the shape under the finger in a view box of another shape than the drawing', async () => {
+    // A square view box in a drawing twice as wide is drawn centred, at one scale, as native and
+    // a browser both draw it: the shape at x 0 to 40 is 50 to 90 points across.
+    const { app, svg, tap, heard } = await scene();
+    svg.setAttribute('nativeID', 'art');
+    app.fabric.frames.set('art', { x: 0, y: 0, width: 200, height: 100 });
+    svg.setAttribute('viewBox', '0 0 100 100');
+    await tap(85, 10);
+    assert.equal(heard[0], 'mouseover a -');
+  });
+
+  it('finds it by each side scaled alone where the drawing says its aspect is none', async () => {
+    const { app, svg, tap, heard } = await scene();
+    svg.setAttribute('nativeID', 'art');
+    app.fabric.frames.set('art', { x: 0, y: 0, width: 200, height: 100 });
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    await tap(20, 10);
+    assert.equal(heard[0], 'mouseover a -');
+  });
+
   it('goes over the shape whose box is under the finger, where native found none', async () => {
     const { tap, heard } = await scene();
     await tap(60, 10);
