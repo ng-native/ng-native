@@ -255,19 +255,22 @@ describe('pull to refresh on Android', () => {
       mod['ColouredRefresh'] as Type<{ colors: { set(value?: readonly string[]): void } }>,
       { processColor: (value) => (value === 'nope' ? null : `processed:${String(value)}`) },
     );
-    const layout = () => find(fabric, 'AndroidSwipeRefreshLayout')[0]!;
-    assert.deepEqual(layout().props['colors'], ['processed:#ff0000', 'processed:blue']);
-    assert.equal(layout().props['progressBackgroundColor'], 'processed:#00ff00');
+    try {
+      const layout = () => find(fabric, 'AndroidSwipeRefreshLayout')[0]!;
+      assert.deepEqual(layout().props['colors'], ['processed:#ff0000', 'processed:blue']);
+      assert.equal(layout().props['progressBackgroundColor'], 'processed:#00ff00');
 
-    // An entry with no colour is transparent, 0, where React Native falls back.
-    instance.colors.set(['nope', '#fff']);
-    await settle();
-    assert.deepEqual(layout().props['colors'], [0, 'processed:#fff']);
+      // An entry with no colour is transparent, 0, where React Native falls back.
+      instance.colors.set(['nope', '#fff']);
+      await settle();
+      assert.deepEqual(layout().props['colors'], [0, 'processed:#fff']);
 
-    instance.colors.set(undefined);
-    await settle();
-    assert.equal(layout().props['colors'] ?? null, null);
-    cleanup();
+      instance.colors.set(undefined);
+      await settle();
+      assert.equal(layout().props['colors'] ?? null, null);
+    } finally {
+      cleanup();
+    }
   });
 
   it('wraps the list inside a section list, which the control is projected through', async () => {
