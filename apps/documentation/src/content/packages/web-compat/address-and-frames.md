@@ -58,12 +58,13 @@ script, and `allow` turns on autoplay, fullscreen and picture in picture where i
 
 ### Emulated frames
 
-Where `react-native-webview` is not installed, and in Node, a frame is an emulated document
-instead: a document of the app's own, from `about:blank`, `srcdoc` or what `src` names, which a
-script reads and writes as a document of its own origin, with its own `location`, `defaultView`,
-listeners, and `open`, `write` and `close`. It is not drawn, so a measurement in it is zero, and
-no script in it runs. An app that measures or prints in a frame asks for it, and so does a test
-that reads a frame's document:
+Where `react-native-webview` is not installed, and in Node, a frame is an emulated document instead:
+a document of the app's own, from `about:blank`, `srcdoc` or what `src` names, which a script reads
+and writes as a document of its own origin, with its own `location`, `defaultView`, listeners, and
+`open`, `write` and `close`. Its window's `matchMedia` answers by the frame's own `width` and
+`height`, and tells a listener as they change. It is not drawn, so a measurement in it is zero, and
+no script in it runs. An app that measures or prints in a frame asks for it, and so does a test that
+reads a frame's document:
 
 ```ts
 import { provideWebCompat } from '@ng-native/web-compat';

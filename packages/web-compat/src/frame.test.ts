@@ -496,6 +496,21 @@ describe('iframe', () => {
     assert.deepEqual([window.outerWidth, window.outerHeight], [200, 100]);
   });
 
+  it('answers matchMedia by its own size, and tells a listener as that changes', async () => {
+    // A chart in a frame lays itself out by the frame's width, not the page's.
+    const document = await page();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const narrow = iframe.contentWindow.matchMedia('(max-width: 250px)');
+    assert.equal(narrow.matches, false, 'at 300 wide');
+    const heard: boolean[] = [];
+    narrow.addEventListener('change', (event: Dom) => heard.push(event.matches));
+    iframe.width = '200';
+    await settle();
+    assert.equal(narrow.matches, true, 'at 200 wide');
+    assert.deepEqual(heard, [true]);
+  });
+
   it('closes a frame inside a frame that is taken out', async () => {
     const document = await page();
     const outer = document.createElement('iframe');

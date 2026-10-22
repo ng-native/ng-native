@@ -14,7 +14,8 @@ import { own, type Reflection } from './reflect.ts';
 import { descendants } from './in-document.ts';
 import { afterTogether } from './mutation-observer.ts';
 import { createNodeIterator, createTreeWalker } from './traversal.ts';
-import { engineOf } from './window.ts';
+import { mediaQueryList } from './match-media.ts';
+import { engineOf, preferences } from './window.ts';
 import { deliverMessage, pageOrigin } from './message-event.ts';
 import { frameViewCreated, frameViewWindow, isFrameView, keepPlainFrame } from './frame-view.ts';
 import { parseXml, type XmlTarget } from './xml.ts';
@@ -76,6 +77,8 @@ interface Frame {
   /** Counted up by each navigation, so that a load that is no longer wanted is dropped. */
   navigation: number;
   live: boolean;
+  /** Told when the element is given another `width` or `height`: its `matchMedia` lists. */
+  readonly resized: Set<() => void>;
 }
 
 const frames = new WeakMap<EngineNode, Frame>();
@@ -258,6 +261,7 @@ function open(element: EngineNode, engine: Engine): void {
     url: 'about:blank',
     navigation: 0,
     live: true,
+    resized: new Set(),
   } as unknown as Frame;
   (frame as { window: Members }).window = windowFor(frame);
   frame.document = blankDocument(frame);
@@ -311,6 +315,9 @@ export function frameAttributeSet(node: EngineNode, name: string): void {
   if (!frame) return;
   // Once the attribute is written, which is after this is told of it.
   if (name === 'src' || name === 'srcdoc') queueMicrotask(() => attributesChanged(node));
+  if (name === 'width' || name === 'height') {
+    queueMicrotask(() => frame.resized.forEach((tell) => tell()));
+  }
 }
 
 /** Go somewhere: the document is replaced once what is there has been read, and `load` sent. */
@@ -448,6 +455,24 @@ function windowFor(frame: Frame): Members {
       unlisten(window, type, listener, options),
     dispatchEvent: (event: unknown) => dispatch(event, [window]),
     getComputedStyle: computedStyle,
+    // By the frame's own size, which its `width` and `height` say, with the page's scheme and
+    // motion: see `match-media.ts`.
+    matchMedia: (...args: unknown[]) => {
+      if (args.length === 0) {
+        throw new TypeError("Failed to execute 'matchMedia': 1 argument required.");
+      }
+      return mediaQueryList(String(args[0]), {
+        screen: () => ({
+          ...preferences(),
+          width: size('width', 300),
+          height: size('height', 150),
+        }),
+        watch: (changed) => {
+          frame.resized.add(changed);
+          return () => void frame.resized.delete(changed);
+        },
+      });
+    },
     postMessage: (message: unknown, options?: unknown) =>
       postMessage(window, message, options, originOfFrame(frame), pageOrigin(frame.engine)),
     close() {},

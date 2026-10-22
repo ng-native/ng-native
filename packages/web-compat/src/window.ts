@@ -429,7 +429,7 @@ const screenSize = () => engines.at(-1)?.viewport ?? { width: 0, height: 0 };
  * The screen's size, with the colour scheme and the motion the engine was given: what a media
  * query reads, as the app's own stylesheets do, so a keyboard coming up turns no query.
  */
-const preferences = () => {
+export const preferences = () => {
   const conditions = engines.at(-1)?.conditions;
   return {
     ...screenSize(),
