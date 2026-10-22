@@ -124,6 +124,13 @@ function globalsNow(): Map<string, PropertyDescriptor | undefined> {
 const membersOf = (node: object): string[] =>
   Object.getOwnPropertyNames(Object.getPrototypeOf(node)).sort();
 
+/** That a node answers no member it did not have before the package: one of an app that did not ask. */
+function answersNoneBut(node: Dom, before: readonly string[]): void {
+  for (const name of membersOf(node)) {
+    if (!before.includes(name)) assert.equal(node[name], undefined, name);
+  }
+}
+
 /** Whether a press on the box of a `Clicks` app is heard as its `(click)`. */
 async function pressHeard(): Promise<boolean> {
   await userEvent.press(screen.getByTestId('box'));
@@ -245,8 +252,16 @@ describe('provideWebCompat', () => {
     const { contentWindowOf } = await import('./frame.ts');
     assert.equal(contentWindowOf(late), null);
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
-    assert.deepEqual(membersOf(host), members, 'every node member as it was');
-    assert.equal(host.getAttribute, undefined);
+    // A node of the app that went still answers, as an element out of the document does in a
+    // browser: a library's late timer has something to call.
+    assert.equal(typeof host.getAttribute, 'function');
+    assert.equal(typeof host.classList.add, 'function');
+    // A node of an app that did not ask has none of it, as it had none before.
+    const again = await render(Clicks);
+    const plainHost = again.instance.host;
+    // By the engine's own list: the node has no `lastElementChild` of the package's.
+    const plainDiv = plainHost.childList.find((node: Dom) => node.tag === 'div');
+    answersNoneBut(plainHost, members);
     // The runtime's own `getComputedStyle` is back, which the comparison above says.
     const gone = [
       ...tree,
@@ -266,19 +281,27 @@ describe('provideWebCompat', () => {
       [undefined, undefined],
     );
     for (const name of [...PLACED, 'offsetWidth', 'scrollTop']) {
-      assert.equal(div[name], undefined, name);
+      assert.equal(plainDiv[name], undefined, name);
     }
-    assert.deepEqual([div.style, style.sheet], [undefined, undefined]);
+    assert.equal(plainDiv.style, undefined);
+    // The app's own `<style>`, out of any document now, has no sheet, as a browser's has none.
+    assert.equal(style.sheet, null);
     assert.deepEqual(
-      [host.childNodes, host.cloneNode, host.append],
+      [plainHost.childNodes, plainHost.cloneNode, plainHost.append],
       [undefined, undefined, undefined],
     );
     assert.deepEqual(
-      [div.innerHTML, div.namespaceURI, div.title, div.dataset, div.attributes],
+      [
+        plainDiv.innerHTML,
+        plainDiv.namespaceURI,
+        plainDiv.title,
+        plainDiv.dataset,
+        plainDiv.attributes,
+      ],
       [undefined, undefined, undefined, undefined, undefined],
     );
     for (const name of [...selectors, 'querySelector', 'querySelectorAll']) {
-      assert.equal(host[name], undefined, name);
+      assert.equal(plainHost[name], undefined, name);
     }
     assert.equal(Object.getPrototypeOf(globalThis), windowPrototype, 'no named properties');
     for (const name of EVENT_GLOBALS) {
@@ -286,15 +309,15 @@ describe('provideWebCompat', () => {
     }
     assert.equal('event' in globalThis, false);
     assert.equal((Event.prototype as Dom).AT_TARGET, undefined, "on Node's `Event` alone again");
-    for (const name of ['onclick', 'onload', 'blur', 'click']) assert.equal(div[name], undefined);
+    for (const name of ['onclick', 'onload', 'blur', 'click'])
+      assert.equal(plainDiv[name], undefined);
     assert.equal((globalThis as Dom).clicks, undefined);
     assert.equal(registeredViewName('button'), buttonView);
     formsAreDown(input, inputView);
     // The engine's own, which has no more than `contains`.
-    assert.equal(host.classList.add, undefined);
+    assert.equal(plainHost.classList.add, undefined);
     // The window's listeners went with it, and the renderer's extension.
-    const again = await render(Clicks);
-    assert.equal(again.instance.host.getAttribute, undefined);
+    assert.equal(plainHost.getAttribute, undefined);
     assert.equal(again.instance.host.childList.at(-1).props['accessibilityRole'], undefined);
     assert.equal(await pressHeard(), false);
     cleanup();
@@ -362,14 +385,17 @@ describe('provideWebCompat', () => {
     );
     assert.deepEqual(before, [undefined, undefined, undefined], 'none of them a name before');
     for (const name of CANVAS_GLOBALS) assert.equal((globalThis as Dom)[name], undefined, name);
-    assert.deepEqual(
-      [node.getContext, node.toDataURL, node.toBlob],
-      [undefined, undefined, undefined],
-    );
+    // The app's canvas still answers, as a browser's out of the document does.
+    assert.equal(typeof node.getContext, 'function');
     // And a canvas is what the renderer makes of one again, with nothing drawn in it.
     await render(Canvas);
     assert.equal(screen.getByTestId('canvas').viewName, plain);
     assert.deepEqual(screen.getByTestId('canvas').children, []);
+    const plainNode: Dom = screen.getByTestId('canvas').instanceHandle;
+    assert.deepEqual(
+      [plainNode.getContext, plainNode.toDataURL, plainNode.toBlob],
+      [undefined, undefined, undefined],
+    );
   });
 
   it("leaves a runtime's own ImageData as it is, while the app is up and after", async () => {
@@ -387,6 +413,26 @@ describe('provideWebCompat', () => {
     }
   });
 
+  it('still answers for a node of an app that is gone, and not for one of an app that did not ask', async () => {
+    // A library's timer fires after its app is torn down: a ripple that fades, a class a field
+    // adds. An element out of the document still answers in a browser, and here.
+    const { provideWebCompat } = await load();
+    const host = (await render(Page, { providers: [provideWebCompat()] })).instance.host;
+    cleanup();
+    assert.equal(typeof host.getAttribute, 'function');
+    host.classList.add('late');
+    assert.equal(host.classList.contains('late'), true);
+    const plain = (await render(Page)).instance.host;
+    assert.equal(plain.getAttribute, undefined);
+    // The engine's own, which has no more than `contains`.
+    assert.equal(plain.classList.add, undefined);
+    cleanup();
+    // And for an app that asks after one that did not, as it did the first time.
+    const again = (await render(Page, { providers: [provideWebCompat()] })).instance.host;
+    assert.equal(typeof again.getAttribute, 'function');
+    assert.equal(typeof again.classList.add, 'function');
+  });
+
   it('stays while any app that asked for it is up, and gives the document to the newest', async () => {
     const { provideWebCompat } = await load();
     const before = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -398,7 +444,8 @@ describe('provideWebCompat', () => {
     assert.equal(typeof one.instance.host.getAttribute, 'function');
     one.unmount();
     assert.deepEqual(Object.getOwnPropertyDescriptor(globalThis, 'document'), before);
-    assert.equal(one.instance.host.getAttribute, undefined);
+    // Gone, its nodes still answer: see the test above.
+    assert.equal(typeof one.instance.host.getAttribute, 'function');
   });
 
   it('changes nothing in an app that did not ask, while one that did is up', async () => {
@@ -591,10 +638,10 @@ function formsAreUp(app: Dom): Dom {
   return input;
 }
 
-/** C8's, once the last app that asked is gone. */
+/** A field of an app that went: its view name as it was, and its members still answering. */
 function formsAreDown(input: Dom, inputView: unknown): void {
   assert.equal(registeredViewName('input'), inputView);
-  for (const name of CONTROL_MEMBERS) assert.equal(input[name], undefined, name);
+  for (const name of CONTROL_MEMBERS) assert.equal(name in input, true, name);
 }
 
 /**

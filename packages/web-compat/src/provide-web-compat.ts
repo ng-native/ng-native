@@ -41,7 +41,7 @@ import { selectorMembers } from './selector-members.ts';
 import { registerSvg } from './svg.ts';
 import { treeMembers } from './tree-members.ts';
 import { cancelAnimations } from './web-animation.ts';
-import { installWindow, windowOf } from './window.ts';
+import { engineOf, installWindow, windowOf } from './window.ts';
 import { keyboardMoved, windowHeight } from './window-size.ts';
 
 /** How many apps in the process asked for it: nodes share one prototype, and globals are global. */
@@ -52,31 +52,38 @@ let removeWindow: (() => void) | undefined;
 const documents: unknown[] = [];
 let original: PropertyDescriptor | undefined;
 
+/** The engines of the apps that asked, up or gone: a node of one keeps the members. */
+const asked = new WeakSet<Engine>();
+/** The node members, and what answers for a node of an app that asked once none is up. */
+let members: PropertyDescriptorMap | undefined;
+let removeLeft: (() => void) | undefined;
+
 /** Add what every app shares: the node members and the renderer's listeners. */
 function install(engine: Engine): void {
+  removeLeft?.();
+  removeLeft = undefined;
   const core = Object.getPrototypeOf(engine.root) as CoreNode;
   // Read now: once extended, the prototype's listeners are this package's.
   const { addEventListener, removeEventListener, getAnimations } = core;
+  // The properties of HTML elements over the rest: see `html-members.ts`.
+  members = withHtmlMembers({
+    // `onclick` and the rest: see `event-handlers.ts`.
+    ...eventHandlerMembers,
+    ...nodeMembers({ addEventListener, removeEventListener, getAnimations }),
+    ...treeMembers,
+    ...characterDataMembers,
+    ...relationMembers,
+    ...attributeMembers,
+    ...markupMembers,
+    ...htmlMethods,
+    ...selectorMembers,
+    ...geometryMembers,
+    ...scrollingMembers,
+    // `focus()`, `blur()` and `click()`: see `element-focus.ts`.
+    ...focusMembers,
+  });
   removals = [
-    // The properties of HTML elements over the rest: see `html-members.ts`.
-    extendNodes(
-      withHtmlMembers({
-        // `onclick` and the rest: see `event-handlers.ts`.
-        ...eventHandlerMembers,
-        ...nodeMembers({ addEventListener, removeEventListener, getAnimations }),
-        ...treeMembers,
-        ...characterDataMembers,
-        ...relationMembers,
-        ...attributeMembers,
-        ...markupMembers,
-        ...htmlMethods,
-        ...selectorMembers,
-        ...geometryMembers,
-        ...scrollingMembers,
-        // `focus()`, `blur()` and `click()`: see `element-focus.ts`.
-        ...focusMembers,
-      }),
-    ),
+    extendNodes(members),
     extendRenderer(webListen),
     registerElements(),
     // The drawing's own elements, as react-native-svg's native views: see `svg.ts`.
@@ -93,12 +100,46 @@ function install(engine: Engine): void {
   ];
 }
 
-/** Take away all of it, the globals too: no app that asked is up. */
-function uninstall(): void {
+/**
+ * Take away all of it, the globals too: no app that asked is up. A node of one of those apps
+ * still has the members: see `leftFor`.
+ */
+function uninstall(engine: Engine): void {
   for (const remove of removals) remove();
   removals = [];
   removeWindow?.();
   removeWindow = undefined;
+  if (members) removeLeft = extendNodes(leftFor(members, Object.getPrototypeOf(engine.root)));
+}
+
+/**
+ * The node members for after the last app that asked has gone: each answers for a node of one
+ * of those apps, as an element out of the document still answers in a browser, and is what the
+ * engine has for any other. A library's timer fires after its app is torn down, a ripple that
+ * fades or a class a field adds, and has something to call.
+ *
+ * ponytail: a member that reads a global the package gave the window finds it gone. Keep that
+ * global for such nodes too if a library's late timer is seen to throw on one.
+ */
+function leftFor(all: PropertyDescriptorMap, core: object): PropertyDescriptorMap {
+  const left: PropertyDescriptorMap = {};
+  for (const name of Object.keys(all)) {
+    const ours = all[name]!;
+    const theirs = Object.getOwnPropertyDescriptor(core, name);
+    const of = (node: object) => (asked.has(engineOf(node as never)) ? ours : theirs);
+    left[name] = {
+      get(this: object) {
+        const one = of(this);
+        return one?.get ? one.get.call(this) : one?.value;
+      },
+      set(this: object, value: unknown) {
+        const one = of(this);
+        if (one?.set) one.set.call(this, value);
+        else Object.defineProperty(this, name, { value, writable: true, configurable: true });
+      },
+    };
+  }
+  return left;
 }
 
 /** Make the global `document` the one given, or what was there before any app, for none. */
@@ -193,6 +234,7 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       const engine = inject(Engine);
       if (apps === 0) install(engine);
       apps++;
+      asked.add(engine);
       removeWindow ??= installWindow();
       // A library reads the global as often as the injected one. The newest app up has it.
       if (!documents.length) original = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -250,7 +292,7 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
         // In whatever order the apps go: the newest still up, or what was there before any.
         documents.splice(documents.indexOf(document), 1);
         setGlobalDocument(documents.at(-1));
-        if (--apps === 0) uninstall();
+        if (--apps === 0) uninstall(engine);
       });
     }),
   ]);

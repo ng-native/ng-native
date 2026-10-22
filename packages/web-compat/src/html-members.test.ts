@@ -524,14 +524,15 @@ class Plain {
 }
 
 describe('draggable and isContentEditable, while the package is up', () => {
-  it('are on an element only while an app that asked for the package is up', async () => {
+  it('are on an element of an app that asked for the package, and on none of an app that did not', async () => {
     const asking = await render(Plain, { providers: [provideWebCompat()] });
     const host = asking.instance.host;
     assert.equal(host.draggable, false);
     assert.equal(host.isContentEditable, false);
     cleanup();
-    assert.equal(host.draggable, undefined);
-    assert.equal(host.isContentEditable, undefined);
+    // Still, once the app is gone, as an element out of the document answers in a browser.
+    assert.equal(host.draggable, false);
+    assert.equal(host.isContentEditable, false);
     const plain = await render(Plain);
     assert.equal(plain.instance.host.draggable, undefined);
     assert.equal(plain.instance.host.isContentEditable, undefined);

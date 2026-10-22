@@ -158,7 +158,10 @@ Experimental and partial. It has:
 The rest of the DOM is not part of it yet.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken
-away again when the app is destroyed.
+away again when the app is destroyed, but for one thing: an element of that app still answers as
+one, as an element out of the document does in a browser, so a library's timer that fires after
+its app is gone (a ripple that fades, a class a field adds) has something to call. An element of
+an app that never asked has none of it.
 
 ## Install
 
