@@ -26,7 +26,7 @@ type Dom = any;
       <div id="held" tabindex="-1"></div>
       <a id="bare">Bare</a>
       <a id="link" href="/somewhere">Link</a>
-      <text-input id="field" />
+      <text-input id="field" testID="field" />
       <button id="reachable" disabled tabindex="0">Reachable</button>
       <text-input id="closed" disabled />
     </div>
@@ -263,6 +263,41 @@ describe('focus on what is not a text field', () => {
     assert.equal(active(document), 'field');
     fabric.emit(native, 'topBlur');
     assert.equal(active(document), 'body');
+  });
+
+  it("tells a field's listener of focus and blur with an event it can stop, as it is of any other", async () => {
+    // A combobox closes its list on the input's blur, calls preventDefault on the event and reads
+    // whether it was stopped.
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    const heard: unknown[] = [];
+    for (const type of ['focus', 'blur']) {
+      field.addEventListener(type, (event: Dom) => {
+        event.preventDefault();
+        heard.push([event.type, event.cancelable, event.defaultPrevented]);
+      });
+    }
+    fabric.emit(screen.getByTestId('field'), 'topFocus');
+    fabric.emit(screen.getByTestId('field'), 'topBlur');
+    assert.deepEqual(heard, [
+      ['focus', true, true],
+      ['blur', true, true],
+    ]);
+    // And of a button's, which a script moves the focus to and from.
+    heard.length = 0;
+    const one = document.getElementById('one');
+    for (const type of ['focus', 'blur']) {
+      one.addEventListener(type, (event: Dom) => {
+        event.preventDefault();
+        heard.push([event.type, event.cancelable, event.defaultPrevented]);
+      });
+    }
+    one.focus();
+    one.blur();
+    assert.deepEqual(heard, [
+      ['focus', true, true],
+      ['blur', true, true],
+    ]);
   });
 
   it('is heard of on the document and the body, focusin and focusout, as a focus monitor listens', async () => {
