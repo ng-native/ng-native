@@ -118,13 +118,25 @@ const isHtml = (name: string): boolean =>
  * What a browser's own stylesheet starts an HTML element at, under every style an app or a
  * library writes. Its padding and border are outside the width and height it is given, where a
  * native view's are inside them.
+ *
+ * It starts `static`: an absolute element inside it is placed against the nearest ancestor that
+ * says `relative`, which is how a library writes its overlays, where a native view starts
+ * `relative` and is that ancestor for everything in it. And as a flex item it gives up room when
+ * its container has too little, where a native view keeps its size: `flex-shrink` starts at 1
+ * there and 0 here. It stops at its content, which is `min-width: auto` and `min-height: auto`.
  */
-const CONTENT_BOX = { boxSizing: 'content-box' };
+const AS_A_BROWSER = { position: 'static', flexShrink: 1, minWidth: 'auto', minHeight: 'auto' };
+const CONTENT_BOX = { ...AS_A_BROWSER, boxSizing: 'content-box' };
 /**
  * What a browser sizes whole, its padding and border inside its size: a button, a select, and a
  * table, which is no block and keeps the engine's layout.
  */
-const WHOLE = { boxSizing: 'border-box' };
+const WHOLE = { ...AS_A_BROWSER, boxSizing: 'border-box' };
+/**
+ * A button has what it holds in the middle of its height, as a browser has one: an inline block
+ * with `align-content: center`. A stylesheet that lays it out as a flex box places it itself.
+ */
+const BUTTON = { ...WHOLE, display: 'inline-block', alignContent: 'center' };
 /**
  * The elements a browser lays out as blocks: one under the other, as wide as what holds them.
  * A paragraph and a heading are text to the engine, and blocks to what holds them. A table's
@@ -148,6 +160,7 @@ export const ROW = { ...CONTENT_BOX, flexDirection: 'row' };
  * padding is inside the width its column gives it, as a column's is.
  */
 export const CELL = {
+  ...AS_A_BROWSER,
   display: 'block',
   boxSizing: 'border-box',
   flexGrow: 1,
@@ -172,6 +185,7 @@ export function defaultsOf(node: EngineNode, engine: Engine): Record<string, unk
   if (node.namespace !== undefined || !isHtml(node.tag) || !documentOf(engine)) return undefined;
   const record = nameRecordOf(node);
   if (record && record.namespace !== XHTML) return undefined;
+  if (node.tag === 'button') return BUTTON;
   if (SIZED_WHOLE.has(node.tag)) return WHOLE;
   return BLOCKS.has(node.tag) ? BLOCK : (TABLE_PARTS[node.tag] ?? CONTENT_BOX);
 }

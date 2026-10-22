@@ -2,12 +2,21 @@
  * What a library's HTML element starts as before any stylesheet, as a browser's own stylesheet
  * has it: sized `content-box`, a block where HTML has one, and a button or a select sized whole.
  * Only in an app that asked for the package, only for HTML's elements, and under every style an
- * app or a library writes.
+ * app or a library writes. And as a browser lays it out: `static`, so an absolute element is
+ * placed against the nearest one that says `relative`; a flex item that gives up room down to
+ * its content; and a button's label in the middle of it.
  */
 import assert from 'node:assert/strict';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, inject } from '@angular/core';
-import { cleanup, render, screen, settle, type FakeFabricNode } from '@ng-native/testing';
+import {
+  cleanup,
+  compileCss,
+  render,
+  screen,
+  settle,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 /** What a library sees of an element: loosely typed, as its own code would be against the DOM. */
@@ -210,5 +219,85 @@ describe('the same template in an app that did not ask', () => {
       table: { testID: 'table' },
       input: { testID: 'input' },
     });
+  });
+});
+
+@Component({ selector: 'x-chip', template: '<ng-content />' })
+class Chip {}
+
+@Component({
+  selector: 'x-laid',
+  imports: [Chip],
+  template: `
+    <div testID="div"><span testID="span">Words</span></div>
+    <x-chip testID="custom">Chip</x-chip>
+    <div testID="row" style="display: flex; flex-direction: row">
+      <div testID="item" style="width: 400px">Item</div>
+      <x-chip testID="custom-item" style="width: 400px">Chip</x-chip>
+      <view testID="view-item" style="width: 400px"></view>
+    </div>
+    <div testID="placed" style="position: relative"></div>
+    <view testID="view"></view>
+    <button testID="button">Save</button>
+    <button testID="laid-out">Laid out</button>
+  `,
+})
+class Laid {}
+
+const props = (id: string) => screen.getByTestId(id).props as Record<string, unknown>;
+const page = async (providers = [provideWebCompat()]) => {
+  await render(Laid, {
+    providers,
+    globalStyles: compileCss('[testID="laid-out"] { display: flex }', 'global'),
+  });
+  await settle();
+};
+
+describe("an HTML element's start under web-compat, as a browser lays it out", () => {
+  // A library's custom element, named to the build.
+  const globals = globalThis as { ɵngNativeBrowserElements?: Set<string> };
+  beforeEach(() => void (globals.ɵngNativeBrowserElements = new Set(['x-chip'])));
+  afterEach(() => void delete globals.ɵngNativeBrowserElements);
+
+  it('is static, an HTML element and a custom element alike, as a browser has it', async () => {
+    await page();
+    for (const id of ['div', 'span', 'custom', 'button']) {
+      assert.equal(props(id)['position'], 'static', id);
+    }
+  });
+
+  it("leaves a position the element is given, and the engine's own views", async () => {
+    await page();
+    assert.equal(props('placed')['position'], 'relative');
+    assert.equal(props('view')['position'] ?? 'relative', 'relative');
+  });
+
+  it('gives up room as a flex item wider than its row, as a browser has it', async () => {
+    // Its content is narrower than its width, so its automatic minimum leaves it free to shrink.
+    await page();
+    for (const id of ['item', 'custom-item']) {
+      assert.equal(props(id)['flexShrink'], 1, id);
+    }
+    assert.equal(props('view-item')['flexShrink'] ?? 0, 0, 'and a native view keeps its size');
+  });
+
+  it("has a button's label in the middle of it, until a stylesheet lays the button out", async () => {
+    // A browser's button is an inline block with `align-content: center`: taller than its
+    // label, the label is in the middle. One a stylesheet makes a flex box is laid out as it says.
+    await page();
+    assert.equal(props('button')['justifyContent'], 'center');
+    assert.equal(props('laid-out')['justifyContent'] ?? null, null);
+  });
+
+  it('is none of it in an app that did not ask for the package', async () => {
+    const { error } = console;
+    console.error = () => {};
+    try {
+      await page([]);
+    } finally {
+      console.error = error;
+    }
+    assert.equal(props('div')['position'] ?? undefined, undefined);
+    assert.equal(props('item')['flexShrink'] ?? 0, 0);
   });
 });

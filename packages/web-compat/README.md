@@ -126,6 +126,10 @@ Experimental and partial. It has:
   and drawn as an `<svg>` of its shapes alone. An image a library's sheet or a script clips to a
   band of itself, `clip-path: polygon(a 0, b 0, b 100%, a 100%)`, is drawn through the band, as a
   before-and-after slider cuts one picture over another.
+- An HTML element starts as a browser's own stylesheet has it: `content-box`, a block where HTML
+  has one, `position: static` (an absolute element is placed against the nearest one that says
+  `relative`), and as a flex item `flex-shrink: 1` down to its content. A button has its label in
+  the middle of its height until a stylesheet lays it out.
 - A `<button>` and an `<a>` with their roles, each taking a press with no listener (`:active`
   while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
   disabled, and a table's and a form's elements as views.

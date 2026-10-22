@@ -185,7 +185,8 @@ describe('a table in an app that asked for web-compat', () => {
         zIndex: zIndex ?? null,
       };
     };
-    const plain = { position: null, left: null, height: null, zIndex: null };
+    // In the flow, where a browser's cell is: `static`, as every HTML element starts.
+    const plain = { position: 'static', left: null, height: null, zIndex: null };
     const down = { position: 'absolute', height: '200%', after: null, zIndex: null };
     // A heading down the first column: what follows it, in its row and the next, starts past it.
     assert.deepEqual(box('brand'), { ...down, left: 0, width: third(1) });
@@ -352,7 +353,7 @@ describe('spans in a table', () => {
     for (const written of ['3', '0']) {
       app.instance.down.set(written);
       await settle();
-      assert.equal(screen.getByTestId('head').props['position'] ?? null, null, written);
+      assert.equal(screen.getByTestId('head').props['position'], 'static', written);
       assert.equal(screen.getByTestId('first').props['marginLeft'] ?? null, null, written);
     }
   });
