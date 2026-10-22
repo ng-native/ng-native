@@ -99,7 +99,8 @@ Experimental and partial. It has:
   shows its chosen `<option>` and opens a list of them when it or its label is pressed. A control
   has `checked`, `validity` with `checkValidity()`, `reportValidity()` and `setCustomValidity()`,
   `selectionStart` and `setSelectionRange()`, and its `form`, which has `elements`,
-  `requestSubmit()` and `reset()`. A disabled `<fieldset>` disables what is in it, its `<legend>` sits on its top border, a file input's
+  `requestSubmit()` and `reset()`. A disabled `<fieldset>` disables what is in it, its `<legend>`
+  sits on its top border, a file input's
   `click()` opens the system's file picker through `expo-document-picker`, and `:valid`, `:checked`,
   `:placeholder-shown` and the rest match. An app opens a picker of its own instead by providing
   `FILE_PICKER`, an object with the `getDocumentAsync()` of `expo-document-picker` (its type is
