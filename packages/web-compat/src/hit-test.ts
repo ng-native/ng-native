@@ -1,6 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { frameOf, styled } from './geometry.ts';
-import { windowSize } from './window.ts';
+import { windowSize } from './window-size.ts';
 
 /**
  * What a node says of touches: in its style, by a rule, or on itself. A style's `none` with
