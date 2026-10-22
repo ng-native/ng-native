@@ -110,7 +110,9 @@ jobs:
       # The browser suite (`packages/web/browser`, run by `pnpm coverage` below) drives a real
       # Chromium, and only Chromium is installed. Cached by Playwright's version, which is what
       # decides the browser build it downloads. The system libraries it needs on Linux are apt
-      # packages rather than part of the cache, so those are installed either way.
+      # packages rather than part of the cache: installed with the browser where it is not cached,
+      # and taken as the runner's image has them where it is, which ships Google Chrome and its
+      # libraries. Installing them again took nine minutes of a fifteen-minute limit.
       # Only beside the first shard, which is where the browser suite runs.
       - id: playwright
         if: matrix.shard == 1
@@ -123,8 +125,6 @@ jobs:
           key: ${{ runner.os }}-chromium-${{ steps.playwright.outputs.version }}
       - if: matrix.shard == 1 && steps.browsers.outputs.cache-hit != 'true'
         run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
-      - if: matrix.shard == 1 && steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm --filter @ng-native/web exec playwright install-deps chromium
 
       # Every suite, always, rather than what changed: the floor is on the merged number, and a
       # change in one package moves the coverage of another.
