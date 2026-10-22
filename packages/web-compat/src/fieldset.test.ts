@@ -130,6 +130,22 @@ describe("a fieldset's legend", () => {
     assert.equal(fieldsetMargin(), 12);
   });
 
+  it('is the next legend once the first is moved out of the fieldset', async () => {
+    const app = await render(TwoLegends, { providers: [provideWebCompat()] });
+    await settle();
+    const { document } = app.instance;
+    const second = document.querySelectorAll('legend')[1];
+    await measured(40);
+    await fireEvent(screen.getByTestId('second'), 'layout', { layout: { height: 24 } });
+    await settle();
+    const box = document.createElement('div');
+    document.querySelector('fieldset').appendChild(box);
+    box.appendChild(document.querySelector('legend'));
+    await settle();
+    assert.equal(second.props['styleOverride']?.marginTop, -31);
+    assert.equal(fieldsetMargin(), 12);
+  });
+
   it('is not moved in an app without provideWebCompat()', async () => {
     await render(Details);
     await settle();

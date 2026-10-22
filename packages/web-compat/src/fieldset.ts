@@ -115,8 +115,11 @@ function place(legend: EngineNode, height: number, engine: Engine): void {
  */
 export function legendInserted(node: EngineNode, parent: EngineNode, engine: Engine): void {
   if (node.tag !== 'legend') return;
-  if (marginOn.get(node) !== parent) release(node, engine);
-  if (parent.tag !== 'fieldset') return void inFieldset.delete(node);
+  // Moved here straight from a fieldset, which is not told it left: it leaves that one first.
+  const was = inFieldset.get(node);
+  if (was && was !== parent) legendRemoved(node, engine);
+  else if (marginOn.get(node) !== parent) release(node, engine);
+  if (parent.tag !== 'fieldset') return;
   inFieldset.set(node, parent);
   // One put in before the legend on the border takes the border from it.
   if (firstLegend(parent) === node) {
