@@ -91,8 +91,12 @@ describe('bootstrap runs the app initializers', () => {
       providers: [provideAppInitializer(() => inject(Greeting).text.set('loaded'))],
     });
 
-    const root = app.componentRef.instance as { readonly textAtCreation: string };
-    assert.equal(root.textAtCreation, 'loaded');
+    try {
+      const root = app.componentRef.instance as { readonly textAtCreation: string };
+      assert.equal(root.textAtCreation, 'loaded');
+    } finally {
+      app.applicationRef.destroy();
+    }
   });
 
   it('starts one that returns a promise without holding up the first frame', async () => {
