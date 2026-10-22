@@ -33,8 +33,12 @@ function lateSource(startup: AccessibilitySettings) {
  * `startup` only when the test says so, and returns the reduced motion the engine was last told.
  */
 async function watchReducedMotion(
-  startup: boolean,
-  run: (control: { change: (value: boolean) => void; answer: () => void }) => void,
+  startup: boolean | Error,
+  run: (control: {
+    change: (value: boolean) => void;
+    answer: () => void;
+    stop: () => void;
+  }) => void,
 ): Promise<boolean | undefined> {
   let reduceMotionChanged: (value: boolean) => void = () => {};
   let answer: () => void = () => {};
@@ -43,7 +47,10 @@ async function watchReducedMotion(
     AccessibilityInfo: {
       isScreenReaderEnabled: () => Promise.resolve(false),
       isReduceMotionEnabled: () =>
-        new Promise<boolean>((resolve) => (answer = () => resolve(startup))),
+        new Promise<boolean>(
+          (resolve, reject) =>
+            (answer = () => (startup instanceof Error ? reject(startup) : resolve(startup))),
+        ),
       isBoldTextEnabled: () => Promise.resolve(false),
       addEventListener: (event: string, handler: (value: boolean) => void) => {
         if (event === 'reduceMotionChanged') reduceMotionChanged = handler;
@@ -75,7 +82,7 @@ async function watchReducedMotion(
     stop = watchConditions(engine);
     // Past the screen reader's read, so the reduced motion read has begun.
     await settle();
-    run({ change: (value) => reduceMotionChanged(value), answer: () => answer() });
+    run({ change: (value) => reduceMotionChanged(value), answer: () => answer(), stop });
     await settle();
     return updates.at(-1)?.reducedMotion;
   } finally {
@@ -83,6 +90,21 @@ async function watchReducedMotion(
     delete host['require'];
     delete host['nativeFabricUIManager'];
   }
+}
+
+/** Runs `body` and returns the promise rejections nothing handled while it ran. */
+async function unhandledDuring(body: () => Promise<unknown>): Promise<unknown[]> {
+  const unhandled: unknown[] = [];
+  const listen = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', listen);
+  try {
+    await body();
+    await settle();
+    await settle();
+  } finally {
+    process.off('unhandledRejection', listen);
+  }
+  return unhandled;
 }
 
 describe('an accessibility change before the startup read answers', () => {
@@ -122,5 +144,49 @@ describe('an accessibility change before the startup read answers', () => {
   it("takes the startup answer for the engine's reduced motion when no event came", async () => {
     const reducedMotion = await watchReducedMotion(true, ({ answer }) => answer());
     assert.equal(reducedMotion, true);
+  });
+
+  it("leaves the engine's reduced motion alone when the startup answer comes after unsubscribe", async () => {
+    const reducedMotion = await watchReducedMotion(true, ({ answer, stop }) => {
+      stop();
+      answer();
+    });
+    assert.equal(reducedMotion, undefined, 'nothing told the engine after it unsubscribed');
+  });
+});
+
+describe('a startup read that fails', () => {
+  it('keeps the neutral settings and still takes the changes', async () => {
+    let listener: (change: Partial<AccessibilitySettings>) => void = () => {};
+    const unhandled = await unhandledDuring(async () => {
+      const settings = Injector.create({
+        providers: [
+          {
+            provide: Accessibility.SOURCE,
+            useValue: {
+              current: () => Promise.reject(new Error('no answer')),
+              subscribe: (fn: typeof listener) => ((listener = fn), () => {}),
+              announce: () => {},
+            },
+          },
+          { provide: Accessibility, useClass: Accessibility, deps: [] },
+        ],
+      }).get(Accessibility);
+      await settle();
+      assert.equal(settings.reduceMotion(), false);
+      assert.equal(settings.fontScale(), 1);
+      listener({ reduceMotion: true });
+      assert.equal(settings.reduceMotion(), true);
+    });
+    assert.deepEqual(unhandled, []);
+  });
+
+  it("leaves the engine's reduced motion as it was", async () => {
+    let reducedMotion: boolean | undefined;
+    const unhandled = await unhandledDuring(async () => {
+      reducedMotion = await watchReducedMotion(new Error('no answer'), ({ answer }) => answer());
+    });
+    assert.deepEqual(unhandled, []);
+    assert.equal(reducedMotion, undefined);
   });
 });

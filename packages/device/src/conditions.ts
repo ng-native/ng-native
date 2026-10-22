@@ -122,6 +122,7 @@ export function watchConditions<Node>(
   );
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
   let heardReduceMotion = false;
+  let stopped = false;
   const settings = accessibility.subscribe((change) => {
     if (change.fontScale !== undefined && change.fontScale !== scale) resize({}, change.fontScale);
     if (change.reduceMotion !== undefined) {
@@ -129,13 +130,15 @@ export function watchConditions<Node>(
       push({ reducedMotion: change.reduceMotion });
     }
   });
-  void accessibility
-    .current()
-    .then(
-      ({ reduceMotion }) => !heardReduceMotion && reduceMotion && push({ reducedMotion: true }),
-    );
+  // A read that fails leaves no reduced motion, as the first paint assumed.
+  accessibility.current().then(
+    ({ reduceMotion }) =>
+      !stopped && !heardReduceMotion && reduceMotion && push({ reducedMotion: true }),
+    () => {},
+  );
 
   return () => {
+    stopped = true;
     sizes();
     scheme();
     settings();
