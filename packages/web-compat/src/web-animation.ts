@@ -35,6 +35,8 @@ const fillsBackwards = (fill: Fill): boolean => fill === 'backwards' || fill ===
 const owed = new Map<Engine, Set<WebAnimation>>();
 
 /** Each engine record, by the animation a script holds of it: asked twice, it is the same one. */
+/** The `@keyframes` animation a script was last given of each element. */
+const playingOn = new WeakMap<EngineNode, WebAnimation>();
 const animations = new WeakMap<RunningAnimation | Transition, WebAnimation>();
 
 /**
@@ -84,10 +86,15 @@ export class WebAnimation {
     this.effect = new AnimationEffect(this, core.effect, node);
   }
 
-  /** Whether it is what the engine's record runs now. */
+  /**
+   * Whether it is what the engine's record runs now: a transition by where it started and what it
+   * eases to, and an animation by its name and start, as the engine copies one it plays on.
+   */
   isOf(record: RunningAnimation | Transition): boolean {
     const { run } = this;
-    return !run || ('to' in record && record.start === run.start && record.to === run.to);
+    if (run) return 'to' in record && record.start === run.start && record.to === run.to;
+    if (record === this.record || 'to' in record) return record === this.record;
+    return record.spec.name === this.animationName && record.start === this.record.start;
   }
 
   get playState(): PlayState {
@@ -298,9 +305,12 @@ export function webAnimation(core: CoreAnimation, node: EngineNode): WebAnimatio
       ? node.playing
       : node.transitions?.get(core.transitionProperty ?? '');
   if (!record) return undefined;
-  let animation = animations.get(record);
-  if (!animation?.isOf(record))
-    animations.set(record, (animation = new WebAnimation(core, node, record)));
+  // An animation is kept by its element, which the engine gives a copy of its record as it plays.
+  const kept = core.animationName !== undefined ? playingOn.get(node) : animations.get(record);
+  if (kept?.isOf(record)) return kept;
+  const animation = new WebAnimation(core, node, record);
+  if (core.animationName !== undefined) playingOn.set(node, animation);
+  else animations.set(record, animation);
   return animation;
 }
 

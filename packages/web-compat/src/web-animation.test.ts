@@ -144,6 +144,17 @@ describe('getAnimations', () => {
     assert.equal(s.row.getAnimations()[0] === animation, true, "and still the element's");
   });
 
+  it('is the same animation once the engine plays it on from a copy of its record', async () => {
+    // As it does where native laid an animation out and it goes on in JavaScript.
+    const s = await pane();
+    s.row.classList.add('out');
+    await settle();
+    const [animation] = s.row.getAnimations();
+    s.row.playing = { ...s.row.playing };
+    const [again] = s.row.getAnimations();
+    assert.equal(again === animation, true, 'the same animation');
+  });
+
   it("is still the element's once it has finished, where its own fill holds its last frame", async () => {
     const s = await pane();
     s.row.classList.add('kept');
