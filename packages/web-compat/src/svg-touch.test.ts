@@ -222,6 +222,15 @@ describe('@ng-native/web-compat, the mouse a touch on a drawing is', () => {
     assert.equal(heard[0], 'mouseover a -');
   });
 
+  it('reads a view box written with spaces and commas about it, as the drawing does', async () => {
+    const { app, svg, tap, heard } = await scene();
+    svg.setAttribute('nativeID', 'art');
+    app.fabric.frames.set('art', { x: 0, y: 0, width: 200, height: 100 });
+    svg.setAttribute('viewBox', ' 0, 0, 100, 100 ');
+    await tap(85, 10);
+    assert.equal(heard[0], 'mouseover a -');
+  });
+
   it('finds it by each side scaled alone where the drawing says its aspect is none', async () => {
     const { app, svg, tap, heard } = await scene();
     svg.setAttribute('nativeID', 'art');

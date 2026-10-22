@@ -1,4 +1,5 @@
 import type { EngineNode } from '@ng-native/fabric';
+import { viewBoxProps } from '@ng-native/icons';
 import { frameOf } from './geometry.ts';
 import { boxOf, moved, type Box } from './svg-box.ts';
 import { shapeAttributes } from './svg.ts';
@@ -22,12 +23,20 @@ export function shapeUnder(landed: EngineNode, x: number, y: number): EngineNode
 const placed = (spare: number, at: string): number =>
   at === 'Min' ? 0 : at === 'Max' ? spare : spare / 2;
 
-/** A drawing's view box, where it has one with a size. */
+/** A drawing's view box, where it has one with a size: read as the drawing reads it. */
 function viewBoxOf(attrs: Readonly<Record<string, string>>) {
-  const [x = 0, y = 0, width = 0, height = 0] = (attrs['viewBox'] ?? '')
-    .split(/[\s,]+/)
-    .map(Number);
-  return width && height ? { x, y, width, height } : undefined;
+  const {
+    minX: x,
+    minY: y,
+    vbWidth: width,
+    vbHeight: height,
+  } = viewBoxProps(attrs['viewBox']) as {
+    minX?: number;
+    minY?: number;
+    vbWidth?: number;
+    vbHeight?: number;
+  };
+  return width && height ? { x: x ?? 0, y: y ?? 0, width, height } : undefined;
 }
 
 /** How a drawing fits its view box: `xMidYMid meet` where it says nothing. */
