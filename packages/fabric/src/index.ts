@@ -68,6 +68,7 @@ export {
   type ViewNameOptions,
   type PostScriptNames,
   viewNameOf,
+  isTextInput,
   type EngineNode,
   type EngineOptions,
   type EngineStats,

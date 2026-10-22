@@ -4826,6 +4826,9 @@ const FONT_REFRESH_STEP = 0.006;
 /** The views that take a cursor, on either platform. */
 const TEXT_INPUTS = new Set(['TextInput', 'AndroidTextInput']);
 
+/** Whether a node commits as a text input, the view that takes a cursor, on either platform. */
+export const isTextInput = (node: ViewNameNode): boolean => TEXT_INPUTS.has(viewNameOf(node));
+
 /**
  * Android's horizontal scroll view and the view that holds its content. RN's `ScrollView.js`
  * commits them in place of `ScrollView` and its plain content view when `horizontal` is set, and

@@ -1,9 +1,8 @@
-import type { Engine, EngineNode } from '@ng-native/fabric';
+import { isTextInput, type Engine, type EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { activate, ancestry, clickElement, disabled } from './activation.ts';
 import { canvasCreated, setCanvasSize } from './canvas.ts';
 import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './document.ts';
-import { isTextField } from './element-focus.ts';
 import { giveDefaults, giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
 import { nativeEvent } from './event-classes.ts';
 import { inPassiveListener, listen, type Heard } from './events.ts';
@@ -771,7 +770,7 @@ function checkControl(node: EngineNode, name: string, value: unknown, engine: En
 // A label's control clicked as `click()` clicks it. One typed into is focused instead, and a
 // select opens its list, as a press on it does.
 labelPress.click = (control) => {
-  if (isTextField(control)) return false;
+  if (isTextInput(control)) return false;
   if (isSelect(control)) {
     if (!disabled(control)) pressSelect(control, engineOf(control));
     return true;

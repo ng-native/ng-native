@@ -1,9 +1,6 @@
-import { viewNameOf, type EngineNode, type HostEngine, type HostNode } from '@ng-native/fabric';
+import { isTextInput, type EngineNode, type HostEngine, type HostNode } from '@ng-native/fabric';
 
 export type KeyboardShouldPersistTaps = 'always' | 'never' | 'handled';
-
-/** A text input's view on iOS and on Android. */
-const TEXT_INPUTS: ReadonlySet<string> = new Set(['TextInput', 'AndroidTextInput']);
 
 /**
  * What a tap in a scrolling container does while a text input has the keyboard up, which is
@@ -25,7 +22,7 @@ export function dismissKeyboardOnTap(
 
   /** A keyboard is up for an input, and the tap is not on a text input. */
   const tapDismisses = (target: EngineNode): boolean =>
-    engine.focusedField !== null && !TEXT_INPUTS.has(viewNameOf(target));
+    engine.focusedField !== null && !isTextInput(target);
 
   // RN's `_observedScrollSinceBecomingResponder`: a touch that scrolled was a drag, and a drag
   // through the content is reading it, so its release leaves the keyboard up.
