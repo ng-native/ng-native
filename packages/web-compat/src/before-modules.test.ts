@@ -120,6 +120,27 @@ it("hands what a library listened for on the document, as it loaded, to an app's
     (early['removeEventListener'] as Window['removeEventListener'])('later', kept);
     document.dispatchEvent(new Event('later'));
     assert.deepEqual(heard, ['kept'], 'and taken off again');
+
+    // Each app is handed them, a second as the first is up, and one that went is told no more.
+    const second = await render(Page, { providers: [provideWebCompat()] });
+    const other = (globalThis as unknown as { document: Window }).document;
+    assert.notEqual(other, document, "the second app's own document");
+    heard.length = 0;
+    other.dispatchEvent(new Event('picked'));
+    assert.deepEqual(heard, ['kept'], 'the second app hears what was listened for early');
+    const both = () => void heard.push('both');
+    heard.length = 0;
+    listen('later', both);
+    document.dispatchEvent(new Event('later'));
+    other.dispatchEvent(new Event('later'));
+    assert.deepEqual(heard, ['both', 'both'], 'a later listener reaches both');
+    second.unmount();
+    const gone = () => void heard.push('gone');
+    heard.length = 0;
+    listen('after', gone);
+    other.dispatchEvent(new Event('after'));
+    document.dispatchEvent(new Event('after'));
+    assert.deepEqual(heard, ['gone'], 'and not the document of an app that went');
   } finally {
     cleanup();
     if (had) Object.defineProperty(globalThis, 'document', had);
