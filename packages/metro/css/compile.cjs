@@ -43,6 +43,7 @@ const {
   propsFor,
   camel,
   ALIASES,
+  AXIS_SHORTHANDS,
 } = require('./properties.cjs');
 const { deferGradient, GRADIENTS } = require('./gradients.cjs');
 const { calcWithTokens, motionWithTokens } = require('./token-arithmetic.cjs');
@@ -2190,6 +2191,28 @@ function addCustom(declaration, out, tokens, deferred, context) {
 }
 
 /**
+ * `padding-horizontal: 12px` as the declaration of the CSS property it is the one-value form of,
+ * `padding-inline: 12px`, so it takes every value that does and lands on the same edges. A value
+ * with a `var()` or an `env()` in it is what lightningcss makes of that property with one, and
+ * any other is read again as written. Any other declaration is returned as it is.
+ */
+function axisAsCss(declaration, context) {
+  const name = declaration.property === 'custom' ? declaration.value?.name : undefined;
+  if (!Object.hasOwn(AXIS_SHORTHANDS, name ?? '')) return declaration;
+  const property = AXIS_SHORTHANDS[name];
+  const parts = declaration.value.value ?? [];
+  if (meaningful(parts).length !== 1) {
+    throw new CssUnsupported(
+      `${context}: '${name}' takes one value, as React Native's own does. Write '${property}' ` +
+        `for a different value on each side.`,
+    );
+  }
+  const value = { propertyId: { property }, value: parts };
+  if (mentionsVar(withEnvAsVar(value, context).value)) return { property: 'unparsed', value };
+  return reparsed(property, cssText(parts, context), context);
+}
+
+/**
  * `touch-pan-x`: Tailwind makes the value of three tokens, each set by a class of its own.
  *
  * ponytail: refused, and said. `touch-none` and a `touch-action` written out are read; give the
@@ -2619,6 +2642,7 @@ function termText(part, context) {
  * has no standard for, so a plain keyword is recovered rather than refusing them sight unseen.
  */
 function addDeclaration(declaration, out, tokens, deferred, context) {
+  declaration = axisAsCss(declaration, context);
   if (declaration.property === 'custom') {
     addCustom(declaration, out, tokens, deferred, context);
     return;

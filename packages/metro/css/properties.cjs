@@ -369,6 +369,20 @@ const LOGICAL_SIDES = {
   'inset-block': ['blockStart', 'blockEnd'],
 };
 
+/**
+ * React Native's axis shorthands, which CSS has no property of that name for, as the CSS property
+ * one value of each is. `paddingHorizontal` is one length on the left and the right, which is
+ * `padding-inline` with one value. Compiled as that is, to the edges, a later or stronger
+ * `padding-left` or `padding-inline-start` overrides it on its edge, and it overrides an earlier
+ * or weaker one, as the cascade settles any two declarations of an edge.
+ */
+const AXIS_SHORTHANDS = {
+  'padding-horizontal': 'padding-inline',
+  'padding-vertical': 'padding-block',
+  'margin-horizontal': 'margin-inline',
+  'margin-vertical': 'margin-block',
+};
+
 /** RN's own list. Anything else is a typographic feature native has no way to ask for. */
 const FONT_VARIANTS = new Set([
   'small-caps',
@@ -2341,4 +2355,5 @@ module.exports = {
   propsFor,
   camel,
   ALIASES,
+  AXIS_SHORTHANDS,
 };

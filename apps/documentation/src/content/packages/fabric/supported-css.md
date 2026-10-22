@@ -416,9 +416,20 @@ direction: `-start` and `-end` are Yoga's start and end edges, which swap in a r
 layout, and a pair written with one value (`inset-inline: 0`) is simply both sides. They compile
 to the edges every native view reads, not to React Native's own `insetInlineStart` and
 `marginBlock` spellings: those are aliases that some views, `<safe-area-view>` among them, never
-apply, so a class on one did nothing. One difference from the browser: where a start or end edge
-meets a physical one (`inset-inline-start` and `left` on the same element), the start or end
-edge wins, whichever was written last.
+apply, so a class on one did nothing. Where a start or end edge meets the physical one it lands on
+(`inset-inline-start` and `left` on the same element, left to right), the later or stronger
+declaration wins, as in a browser.
+
+React Native's own axis shorthands, which a binding sets as `[style.paddingHorizontal]`, have a
+spelling here too: `padding-horizontal`, `padding-vertical`, `margin-horizontal` and
+`margin-vertical`. Each takes one value, and compiles exactly as `padding-inline`, `padding-block`,
+`margin-inline` or `margin-block` with that value does: to both edges of its axis. So the cascade
+settles it against the edges as it settles any shorthand, where React Native would always prefer
+the edge: a later or stronger `padding-left` or `padding-inline-start` overrides it on that edge,
+and it overrides an earlier or weaker one. A second value is dropped with a warning; write
+`padding-inline` for a different value on each side.
+A browser has none of these properties, so the [web host](/packages/web) ignores them: a sheet that
+also runs there writes `padding-inline` and the rest.
 
 `border-style` is likewise one value for all four sides: a native border has one style, so the sides
 that are drawn are all drawn in it, and a second drawn style on one side is not one native can give
