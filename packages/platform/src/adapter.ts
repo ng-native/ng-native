@@ -490,7 +490,16 @@ class NativeRenderer implements Renderer2 {
     }
     // Angular's names for a global target, 'window', 'document' and 'body': there is none here.
     if (typeof target === 'string') return () => {};
-    return this.engine.setEventListener(target, topLevelType(eventName), callback);
+    // `once` taken off before the first call: the engine keeps a listener until it is told.
+    let unlisten = () => {};
+    const listener = options?.once
+      ? (event: unknown) => {
+          unlisten();
+          return callback(event);
+        }
+      : callback;
+    unlisten = this.engine.setEventListener(target, topLevelType(eventName), listener);
+    return unlisten;
   }
 }
 
