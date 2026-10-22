@@ -455,6 +455,17 @@ describe('provideWebCompat', () => {
     assert.equal(typeof one.instance.host.getAttribute, 'function');
   });
 
+  it('leaves the global document to the apps still up, the older one going first', async () => {
+    const { provideWebCompat } = await load();
+    const before = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    const one = await render(Page, { providers: [provideWebCompat()] });
+    const two = await render(Page, { providers: [provideWebCompat()] });
+    one.unmount();
+    assert.equal((globalThis as Dom).document, two.instance.document);
+    two.unmount();
+    assert.deepEqual(Object.getOwnPropertyDescriptor(globalThis, 'document'), before);
+  });
+
   it('changes nothing in an app that did not ask, while one that did is up', async () => {
     const { provideWebCompat } = await load();
     await render(Page, { providers: [provideWebCompat()] });

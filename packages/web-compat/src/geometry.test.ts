@@ -122,6 +122,51 @@ describe('getBoundingClientRect and getClientRects', () => {
 });
 
 describe('offset and client members', () => {
+  it('answers its size as it is laid out, whatever it is scaled to as it is drawn', async () => {
+    // A panel that scales in: a library places it under its trigger by offsetWidth, which a
+    // transform does not change, where its bounding box is the nine tenths it is drawn at.
+    const { app, place, div } = await page();
+    const card = div();
+    await settle();
+    place(card, { x: 15, y: 20, width: 270, height: 36 });
+    Object.assign(app.fabric, { getBoundingClientRect: () => [0, 20, 300, 40] });
+    try {
+      assert.equal(card.getBoundingClientRect().width, 270);
+      assert.deepEqual(
+        [card.offsetWidth, card.offsetHeight, card.clientWidth, card.clientHeight],
+        [300, 40, 300, 40],
+      );
+    } finally {
+      Reflect.deleteProperty(app.fabric, 'getBoundingClientRect');
+    }
+  });
+
+  it('measures with every style written so far, as a browser lays out before it answers', async () => {
+    // The CDK resets an overlay's box to the whole screen and measures the pane in the next
+    // statement, to see where it fits. Measured as it was last committed, it fits anywhere.
+    const { div } = await page();
+    const card = div();
+    await settle();
+    card.style.top = '5px';
+    card.getBoundingClientRect();
+    // As committed: what native was sent.
+    assert.equal(card.committed?.props['top'], 5);
+  });
+
+  it('commits what is written after a measurement before the task is over', async () => {
+    // The CDK clears an open overlay's place, measures it, and writes the place it belongs: a
+    // browser paints once, with the last. Left for the next render, the cleared one is drawn.
+    const { div } = await page();
+    const card = div(undefined, 'top: 3px');
+    await settle();
+    card.style.top = '';
+    card.getBoundingClientRect();
+    card.style.top = '9px';
+    assert.notEqual(card.committed?.props['top'], 9, 'not yet');
+    await Promise.resolve();
+    assert.equal(card.committed?.props['top'], 9);
+  });
+
   it('places an element in the nearest box that is not static, a table cell, or the body', async () => {
     // A native view is positioned, as one is placed against it: one that says `static` is not.
     const { document, make, div } = await page();

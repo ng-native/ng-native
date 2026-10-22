@@ -76,6 +76,20 @@ describe('an inline element in an app that asked for web-compat', () => {
     assert.equal(node('div').inlineLevel, undefined);
   });
 
+  it("keeps a table's groups of rows as wide as the table, and not boxes in a line", async () => {
+    // Inline is what a span is: a group of rows in a line is as narrow as its cells' words.
+    await render(Page, { providers: [provideWebCompat()] });
+    await settle();
+    const document = globals.document!;
+    const table = document.createElement('table');
+    for (const name of ['thead', 'tbody', 'tfoot']) table.appendChild(document.createElement(name));
+    document.body.appendChild(table);
+    await settle();
+    for (const name of ['thead', 'tbody', 'tfoot']) {
+      assert.equal(table.querySelector(name).inlineLevel, undefined, name);
+    }
+  });
+
   it("sets what a label holds on its line, a library's element and a span side by side", async () => {
     // A required field's label: its words in the library's element, and the marker in a span.
     await render(Page, { providers: [provideWebCompat()] });
