@@ -47,6 +47,14 @@ describe('navigator', () => {
     });
   });
 
+  it('names no version of the system or the browser, which it cannot know', async () => {
+    // A library that reads a version from it would read one the phone may not have.
+    await render(Page, { providers: [provideWebCompat()] });
+    const agent = String(navigator()?.['userAgent']);
+    assert.match(agent, /iPhone/);
+    assert.doesNotMatch(agent, /OS \d|Version\/\d|Android \d/);
+  });
+
   it('names a phone of the platform the app runs on', async () => {
     await withNavigator({ product: 'ReactNative' }, async () => {
       try {
