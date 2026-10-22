@@ -546,7 +546,9 @@ Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are t
 [Animation](/packages/fabric/animation).
 
 `tint-color` is native's own, with no counterpart on the web: the color an image is drawn in, and
-the color of an SF Symbol. It takes a token as any color does, and a `platform-color()`.
+the color of an SF Symbol. It takes the values `color` takes: a token, `platform-color()`, a
+relative color or a `color-mix()`, `light-dark()`, and `currentColor`, which is the element's text
+color. `shadow-color` takes the same.
 
 `padding-horizontal`, `padding-vertical`, `margin-horizontal` and `margin-vertical` are React
 Native's own too, with no counterpart on the web. Each takes one length for both sides of its axis:

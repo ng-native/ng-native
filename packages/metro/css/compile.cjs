@@ -2034,23 +2034,30 @@ function tokenWords(tokens) {
 }
 
 /**
- * A colour CSS has no property for, such as `tint-color`. Read like a token's value, which is the
- * same token list: a colour settles here, a var() is looked up on device. False when it is neither.
+ * A colour CSS has no property for, `tint-color` or `shadow-color`. lightningcss hands it over as
+ * the same raw terms it leaves a `color` with a var() in as, so a colour written out settles here
+ * and anything else is read as that `color` is: a platform colour, a relative colour or a mix of
+ * a token, a light-dark() side, and a var().
  */
 function addCustomColor(name, parts, out, deferred, context) {
-  const platform = asPlatformColor({ propertyId: { property: name }, value: parts }, context);
-  if (platform) {
-    for (const prop of platform.props) out[prop] = platform.value;
-    return true;
-  }
   const value = tokenValue(parts, context);
   if (value?.color !== undefined) {
     out[camel(name)] = value.color;
-    return true;
+    return;
   }
-  if (!value?.alias) return false;
-  deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
-  return true;
+  const word = onlyWord(meaningful(parts));
+  // The element's text colour, as it is in a `background-color`, which only the device knows.
+  if (word?.toLowerCase() === 'currentcolor') {
+    deferred.push({ props: propsFor(name), within: CURRENT_COLOUR });
+    return;
+  }
+  // A system colour, `LinkText`, which the colour translator reads by its name.
+  if (word !== null && !CSS_WIDE.has(word)) {
+    addCustomWord(name, parts, out, context);
+    return;
+  }
+  const raw = { propertyId: { property: name }, value: parts };
+  addUnparsed({ property: 'unparsed', value: raw }, out, deferred, context);
 }
 
 /** The clamps, which lightningcss does not parse and which take a number of lines. */
@@ -2171,7 +2178,10 @@ function addCustom(declaration, out, tokens, deferred, context) {
     return;
   }
 
-  if (kindOf(name) === 'color' && addCustomColor(name, parts, out, deferred, context)) return;
+  if (kindOf(name) === 'color') {
+    addCustomColor(name, parts, out, deferred, context);
+    return;
+  }
 
   if (ALIASES[name] || kindOf(name) === 'length') {
     addAliased(name, parts, out, deferred, context);
