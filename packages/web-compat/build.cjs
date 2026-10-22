@@ -19,13 +19,29 @@ const path = require('node:path');
 /** `@ng-icons/core` with the icon component the native one. */
 const SHIM = '@ng-native/web-compat/ng-icons';
 
-/** The two packages that need the real `@ng-icons/core`: the shim, and the native icons. */
-const OWN = /[\\/](@ng-native|packages)[\\/](web-compat|icons)[\\/]/;
+/**
+ * The two packages that need the real `@ng-icons/core`, the shim and the native icons: by their
+ * names where an app installs them, and by where they are where they are this checkout's own. A
+ * monorepo's own `packages/icons` is a library like any other.
+ */
+const OWN = /[\\/]@ng-native[\\/](web-compat|icons)[\\/]/;
+const OWN_ROOTS = [__dirname, rootOf('@ng-native/icons')].filter(Boolean);
+
+/** Where a package is, as this one resolves it; none where it is not installed. */
+function rootOf(name) {
+  try {
+    return path.dirname(require.resolve(`${name}/package.json`));
+  } catch {
+    return undefined;
+  }
+}
 
 /** What a module's import is resolved as in place of what it wrote, or null for as written. */
 function aliasOf(moduleName, importer) {
   if (moduleName !== '@ng-icons/core') return null;
-  return importer && OWN.test(importer) ? null : SHIM;
+  const own =
+    OWN.test(importer ?? '') || OWN_ROOTS.some((root) => importer?.startsWith(root + path.sep));
+  return own ? null : SHIM;
 }
 
 /**

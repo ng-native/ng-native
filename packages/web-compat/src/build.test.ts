@@ -134,15 +134,25 @@ describe('the alias for a library that imports @ng-icons/core', () => {
   });
 
   it('is nothing for the shim itself and for the native icons, which need the real module', () => {
+    const icons = path.dirname(
+      createRequire(import.meta.url).resolve('@ng-native/icons/package.json'),
+    );
     for (const own of [
-      '/repo/packages/web-compat/src/ng-icons.ts',
+      path.join(import.meta.dirname, 'ng-icons.ts'),
       '/app/node_modules/@ng-native/web-compat/dist/ng-icons.js',
-      '/repo/packages/icons/src/ng-icon.ts',
+      path.join(icons, 'src/ng-icon.ts'),
       '/app/node_modules/@ng-native/icons/dist/index.js',
+      '/app/node_modules/.pnpm/@ng-native+icons@1.0.0/node_modules/@ng-native/icons/dist/index.js',
       'C:\\app\\node_modules\\@ng-native\\icons\\dist\\index.js',
     ]) {
       assert.equal(aliasOf('@ng-icons/core', own), null, own);
     }
+  });
+
+  it("is the shim for an app's own packages of the same directory names", () => {
+    // A monorepo's own `packages/icons` is a library like any other, whatever it is called.
+    assert.equal(aliasOf('@ng-icons/core', '/app/packages/icons/src/icon.ts'), SHIM);
+    assert.equal(aliasOf('@ng-icons/core', '/app/packages/web-compat/src/x.ts'), SHIM);
   });
 
   it('is nothing for any other module, an icon set included', () => {
@@ -213,7 +223,10 @@ describe('webCompat, resolving @ng-icons/core for Vite', () => {
     assert.deepEqual(found, { id: `/resolved/${SHIM}` });
     assert.deepEqual(resolved, [[SHIM, LIBRARY, { ssr: true, skipSelf: true }]]);
     assert.equal(await plugin.resolveId.call(host, '@ng-icons/lucide', LIBRARY, {}), null);
-    const own = '/repo/packages/icons/src/ng-icon.ts';
+    const icons = path.dirname(
+      createRequire(import.meta.url).resolve('@ng-native/icons/package.json'),
+    );
+    const own = path.join(icons, 'src/ng-icon.ts');
     assert.equal(await plugin.resolveId.call(host, '@ng-icons/core', own, {}), null);
   });
 });
