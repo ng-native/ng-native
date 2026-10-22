@@ -7187,6 +7187,18 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
   }
 
+  /**
+   * Stop showing the last frame of a node's finished `@keyframes` animation, where nothing holds
+   * it there any more: script took its hold away after it ended. The node is what the cascade
+   * gives it again with the next commit.
+   */
+  releaseFinished(node: EngineNode): void {
+    const running = node.playing;
+    if (!running?.done || fillsForwards(running)) return;
+    running.values = {};
+    this.markProps(node, false);
+  }
+
   addClass(node: EngineNode, name: string): void {
     const was = this.classAttribute(node);
     (node.classes ??= new Set()).add(name);

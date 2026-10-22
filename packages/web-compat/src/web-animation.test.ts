@@ -144,6 +144,20 @@ describe('getAnimations', () => {
     assert.equal(s.row.getAnimations()[0] === animation, true, "and still the element's");
   });
 
+  it('lets go of a held last frame when the fill is taken off after it has finished', async () => {
+    const s = await pane();
+    s.row.classList.add('out');
+    await settle();
+    const [animation] = s.row.getAnimations();
+    animation.effect.updateTiming({ fill: 'forwards' });
+    await s.tick(120);
+    assert.equal(screen.getByTestId('row').props['opacity'], 0, 'held where it ended');
+    animation.effect.updateTiming({ fill: 'none' });
+    await s.tick(0);
+    assert.equal(screen.getByTestId('row').props['opacity'] ?? 1, 1, 'back at rest');
+    assert.equal(s.row.getAnimations().length, 0, 'and no longer listed');
+  });
+
   it('is another animation once it is started again, at the same time as the last', async () => {
     // The clock stands still: what tells two runs apart is that the second is a new one.
     const s = await pane();

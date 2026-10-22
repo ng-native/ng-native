@@ -177,12 +177,20 @@ export class WebAnimation {
     };
   }
 
-  /** Hold an `@keyframes` animation at its last frame once it ends, or stop holding it. */
+  /**
+   * Hold an `@keyframes` animation at its last frame once it ends, or stop holding it: one that
+   * has ended already goes back to rest.
+   */
   hold(fill: string): void {
-    const playing = this.playing();
-    if (!playing || playing.done) return;
-    if (fill === 'forwards' || fill === 'both') playing.held = true;
-    else playing.held = undefined;
+    this.playing();
+    const record = this.record;
+    if ('to' in record || this.node.playing !== record) return;
+    if (fill === 'forwards' || fill === 'both') {
+      if (!record.done) record.held = true;
+      return;
+    }
+    record.held = undefined;
+    if (record.done) engineOf(this.node).releaseFinished(this.node);
   }
 
   /** The `@keyframes` animation the node is playing, while it is this one and has not ended. */
