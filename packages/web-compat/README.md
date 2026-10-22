@@ -90,7 +90,8 @@ Experimental and partial. It has:
   touch native finds no shape for, as between the letters of a text, is on the text, rectangle,
   circle or ellipse whose box is under the finger; and a touch on a shape sends `mouseover` and
   `mouseenter`, and `mouseout` and `mouseleave` for the shape before, as a phone's browser does,
-  so a chart shows a series' tooltip. `@ng-native/icons` is a peer dependency for this. The app installs `react-native-svg` for the
+  so a chart shows a series' tooltip. `@ng-native/icons` is a peer dependency for this. The app
+  installs `react-native-svg` for the
   native views; none of its JavaScript is imported, and without it a drawing shows nothing, as
   an icon does. A `<path>` of thousands of straight segments that go one way across, a chart's
   line series, is drawn thinned to the lowest and highest point of each point-wide column, as
