@@ -205,6 +205,16 @@ project. Every other component in the app stays the native view it is.
 CDK does to learn whether one can be passive. What they are given is handed to the window once an
 app is up, so such a library can be imported anywhere in the app, not only on a lazy route.
 
+## A library's icons
+
+A library that draws its icons with `NgIcon` from `@ng-icons/core`, as Spartan UI's helm does,
+sets each icon's SVG markup as `innerHTML`, which no native view draws. `withWebCompat` resolves
+`@ng-icons/core` to `@ng-native/web-compat/ng-icons`: the same module, with `NgIcon` the one from
+`@ng-native/icons`, which takes the same inputs and draws the same icons as native shapes. It is
+resolved so for the library and for the app, and `webCompat()` does the same in Vitest. Wrap the
+Metro config with `withWebCompat` last, so a resolver another helper set is the one it goes
+through.
+
 ## A library that asks whether it is in a browser
 
 Angular's `PLATFORM_ID` is `native` on a device, and some libraries open an overlay or measure

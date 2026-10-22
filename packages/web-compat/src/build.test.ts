@@ -7,16 +7,26 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-const { withWebCompat, webCompat } = createRequire(import.meta.url)('../build.cjs') as {
+const { aliasOf, withWebCompat, webCompat } = createRequire(import.meta.url)('../build.cjs') as {
+  aliasOf(moduleName: string, importer: string | undefined): string | null;
   withWebCompat<T extends object>(
     config: T,
     options?: { libraries: string[]; sources?: unknown },
-  ): T & { transformer: { cacheVersion: string } };
+  ): T & { transformer: { cacheVersion: string }; resolver: { resolveRequest: Resolve } };
   webCompat(options?: { libraries: string[]; sources?: unknown }): {
     name: string;
     enforce: string;
+    resolveId: ResolveId;
   };
 };
+type Context = { originModulePath: string; resolveRequest: Resolve };
+type Resolve = (context: Context, moduleName: string, platform: string | null) => unknown;
+type ResolveId = (
+  this: { resolve(source: string, importer?: string, options?: object): Promise<unknown> },
+  source: string,
+  importer: string | undefined,
+  options: object,
+) => Promise<unknown>;
 
 const LIBRARIES = 'ANGULAR_NATIVE_LIBRARY_BROWSER';
 const SOURCES = 'ANGULAR_NATIVE_SOURCE_BROWSER';
@@ -69,7 +79,7 @@ describe("a library's sheets read as a browser reads them, asked for by the buil
     const plugin = webCompat({ libraries: ['@a/web'], sources: ['/abs/ui'] });
     assert.equal(process.env[LIBRARIES], '@a/web');
     assert.equal(process.env[SOURCES], '/abs/ui');
-    assert.deepEqual(plugin, { name: 'ng-native-web-compat', enforce: 'pre' });
+    assert.deepEqual([plugin.name, plugin.enforce], ['ng-native-web-compat', 'pre']);
   });
 
   it('is asked for the libraries it names, and refuses to guess where it names none', () => {
@@ -83,7 +93,7 @@ describe("a library's sheets read as a browser reads them, asked for by the buil
   it('keeps the rest of the config as it was', () => {
     const resolver = { sourceExts: ['ts'] };
     const config = withWebCompat({ projectRoot: '/app', resolver }, WEB);
-    assert.equal(config.resolver, resolver);
+    assert.deepEqual((config.resolver as typeof resolver).sourceExts, ['ts']);
     assert.equal(config.projectRoot, '/app');
     assert.equal(config.transformer.cacheVersion, 'library-browser-@acme/web');
   });
@@ -111,5 +121,99 @@ describe('withWebCompat, given directories of the app written for a browser', ()
   it('refuses one that is not a path', () => {
     assert.throws(() => withWebCompat({}, { ...WEB, sources: [''] }), /sources/);
     assert.throws(() => withWebCompat({}, { ...WEB, sources: './src/helm' }), /sources/);
+  });
+});
+
+const SHIM = '@ng-native/web-compat/ng-icons';
+const LIBRARY = '/app/node_modules/@spartan-ng/helm/checkbox.mjs';
+
+describe('the alias for a library that imports @ng-icons/core', () => {
+  it('is the shim, for a library and for the app', () => {
+    assert.equal(aliasOf('@ng-icons/core', LIBRARY), SHIM);
+    assert.equal(aliasOf('@ng-icons/core', '/app/src/app/helm/checkbox.ts'), SHIM);
+  });
+
+  it('is nothing for the shim itself and for the native icons, which need the real module', () => {
+    for (const own of [
+      '/repo/packages/web-compat/src/ng-icons.ts',
+      '/app/node_modules/@ng-native/web-compat/dist/ng-icons.js',
+      '/repo/packages/icons/src/ng-icon.ts',
+      '/app/node_modules/@ng-native/icons/dist/index.js',
+      'C:\\app\\node_modules\\@ng-native\\icons\\dist\\index.js',
+    ]) {
+      assert.equal(aliasOf('@ng-icons/core', own), null, own);
+    }
+  });
+
+  it('is nothing for any other module, an icon set included', () => {
+    assert.equal(aliasOf('@ng-icons/lucide', LIBRARY), null);
+    assert.equal(aliasOf('@ng-icons/core/package.json', LIBRARY), null);
+    assert.equal(aliasOf('@angular/core', LIBRARY), null);
+  });
+
+  it('is a module that is @ng-icons/core with the icon component the native one', async () => {
+    const shim = await import('./ng-icons.ts');
+    const real = await import('@ng-icons/core');
+    const { NgIcon } = await import('@ng-native/icons');
+    assert.equal(shim.NgIcon, NgIcon);
+    assert.equal(shim.NgIconComponent, NgIcon);
+    assert.equal(shim.provideIcons, real.provideIcons);
+  });
+});
+
+describe('withWebCompat, resolving @ng-icons/core for Metro', () => {
+  const asked: [string, string][] = [];
+  const context = (originModulePath: string): Context => ({
+    originModulePath,
+    resolveRequest: (inner, moduleName) => {
+      asked.push(['default', moduleName]);
+      return { filePath: moduleName, from: inner.originModulePath };
+    },
+  });
+
+  it('resolves the import to the shim, through the resolver Metro would have used', () => {
+    asked.length = 0;
+    const config = withWebCompat({}, WEB);
+    const found = config.resolver.resolveRequest(context(LIBRARY), '@ng-icons/core', 'ios');
+    assert.deepEqual(found, { filePath: SHIM, from: LIBRARY });
+    config.resolver.resolveRequest(context(LIBRARY), '@angular/core', 'ios');
+    assert.deepEqual(asked, [
+      ['default', SHIM],
+      ['default', '@angular/core'],
+    ]);
+  });
+
+  it('goes through a resolver the config already had', () => {
+    asked.length = 0;
+    const own: Resolve = (inner, moduleName) => {
+      asked.push(['own', moduleName]);
+      return inner.resolveRequest(inner, moduleName, null);
+    };
+    const config = withWebCompat({ resolver: { resolveRequest: own } }, WEB);
+    config.resolver.resolveRequest(context(LIBRARY), '@ng-icons/core', 'android');
+    assert.deepEqual(asked, [
+      ['own', SHIM],
+      ['default', SHIM],
+    ]);
+  });
+});
+
+describe('webCompat, resolving @ng-icons/core for Vite', () => {
+  it('resolves the import to the shim before any other plugin, and nothing else', async () => {
+    const plugin = webCompat(WEB);
+    assert.equal(plugin.enforce, 'pre');
+    const resolved: unknown[] = [];
+    const host = {
+      resolve: async (source: string, importer?: string, options?: object) => {
+        resolved.push([source, importer, options]);
+        return { id: `/resolved/${source}` };
+      },
+    };
+    const found = await plugin.resolveId.call(host, '@ng-icons/core', LIBRARY, { ssr: true });
+    assert.deepEqual(found, { id: `/resolved/${SHIM}` });
+    assert.deepEqual(resolved, [[SHIM, LIBRARY, { ssr: true, skipSelf: true }]]);
+    assert.equal(await plugin.resolveId.call(host, '@ng-icons/lucide', LIBRARY, {}), null);
+    const own = '/repo/packages/icons/src/ng-icon.ts';
+    assert.equal(await plugin.resolveId.call(host, '@ng-icons/core', own, {}), null);
   });
 });

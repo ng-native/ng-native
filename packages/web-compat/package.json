@@ -17,6 +17,7 @@
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./ng-icons": "./src/ng-icons.ts",
     "./metro": {
       "types": "./build.d.cts",
       "default": "./build.cjs"
@@ -35,6 +36,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./ng-icons": {
+        "types": "./dist/ng-icons.d.ts",
+        "default": "./dist/ng-icons.js"
       },
       "./metro": {
         "types": "./build.d.cts",
@@ -56,11 +61,15 @@
   "peerDependencies": {
     "@angular/common": "^22.0.0",
     "@angular/core": "^22.0.0",
+    "@ng-icons/core": ">=30",
     "@ng-native/icons": "workspace:*",
     "expo-document-picker": "^57.0.0 || ^58.0.0",
     "react-native-webview": ">=13.16.1"
   },
   "peerDependenciesMeta": {
+    "@ng-icons/core": {
+      "optional": true
+    },
     "expo-document-picker": {
       "optional": true
     },
