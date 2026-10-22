@@ -19,6 +19,7 @@ type Dom = any;
       testID="size"
       id="size"
       [value]="size()"
+      [style.color]="color()"
       (input)="heard.push('input')"
       (change)="heard.push('change:' + $any($event.target).value)"
     >
@@ -33,6 +34,7 @@ type Dom = any;
 class Sizes {
   readonly document: Dom = inject(DOCUMENT);
   readonly size = signal('m');
+  readonly color = signal('rgb(20, 20, 20)');
   readonly heard: string[] = [];
 }
 
@@ -99,6 +101,70 @@ describe('a select', () => {
     await userEvent.press(screen.getByTestId('size'));
     await userEvent.press(screen.getByTestId('option-l'));
     assert.equal(select.value, 'm');
+  });
+
+  it('closes its list on a press outside it, choosing nothing', async () => {
+    const { instance, select } = await sizes();
+    await userEvent.press(screen.getByTestId('size'));
+    // The layer the list is on is everything outside it.
+    await userEvent.press(screen.getByTestId('option-s').parent!.parent!);
+    await settle();
+    assert.equal(screen.queryByTestId('option-s'), null);
+    assert.deepEqual([select.value, instance.heard], ['m', []]);
+  });
+
+  it('opens its list under itself, where the page it is put in starts below a header', async () => {
+    const app = await render(Sizes, { providers: [provideWebCompat()] });
+    await settle();
+    const document = app.instance.document;
+    // The page starts 100 points down the window, under a header; the select is 300 down.
+    document.body.setAttribute('nativeID', 'body');
+    document.getElementById('size').setAttribute('nativeID', 'size-view');
+    app.fabric.frames.set('body', { x: 0, y: 100, width: 400, height: 700 });
+    app.fabric.frames.set('size-view', { x: 20, y: 300, width: 120, height: 36 });
+    await settle();
+    await userEvent.press(screen.getByTestId('size'));
+    await settle();
+    const list = screen.getByTestId('option-s').parent!;
+    assert.deepEqual(
+      [list.props['top'], list.props['left'], list.props['minWidth']],
+      [240, 20, 120],
+    );
+  });
+
+  it('draws its list light under dark text, and dark under light text', async () => {
+    const { instance } = await sizes();
+    const panel = () => screen.getByTestId('option-s').parent!.props['backgroundColor'];
+    await userEvent.press(screen.getByTestId('size'));
+    await settle();
+    assert.equal(panel(), '#ffffff');
+    await userEvent.press(screen.getByTestId('option-m'));
+    instance.color.set('rgb(250, 250, 250)');
+    await settle();
+    await userEvent.press(screen.getByTestId('size'));
+    await settle();
+    assert.equal(panel(), '#262626');
+  });
+
+  it('shows its option on the middle of its line, with no background of its own', async () => {
+    const { select } = await sizes();
+    assert.equal(screen.getByTestId('size').props['justifyContent'], 'center');
+    // The option shown, as it is committed.
+    assert.equal(select.options[1].committed?.props['backgroundColor'], 'transparent');
+  });
+
+  it('opens its list with nothing reported: its options are text of its own making', async () => {
+    const said: string[] = [];
+    const { error } = console;
+    console.error = (...all: unknown[]) => void said.push(all.map(String).join(' '));
+    try {
+      await sizes();
+      await userEvent.press(screen.getByTestId('size'));
+      await settle();
+    } finally {
+      console.error = error;
+    }
+    assert.deepEqual(said, []);
   });
 
   it('opens no list while it is disabled', async () => {
