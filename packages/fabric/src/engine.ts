@@ -6040,7 +6040,11 @@ function isColorProp(key: string): boolean {
   if (answer === undefined) {
     colorProps.set(
       key,
-      (answer = IS_COLOR_PROP.test(key) || STATE_COLOR_PROPS.has(key) || BRUSH_PROPS.has(key)),
+      (answer =
+        IS_COLOR_PROP.test(key) ||
+        STATE_COLOR_PROPS.has(key) ||
+        BRUSH_PROPS.has(key) ||
+        COLOR_LIST_PROPS.has(key)),
     );
   }
   return answer;
@@ -6056,6 +6060,12 @@ const ASSET_PROPS = new Set(['source', 'defaultSource', 'loadingIndicatorSource'
  * approximated, it is dropped.
  */
 const NESTED_COLOR_LIST_PROPS = new Set(['boxShadow']);
+
+/**
+ * Props whose value is a list of colours: the spinner colours of Android's swipe layout and an SF
+ * Symbol's palette, each of which React Native or Expo runs through `processColorArray`.
+ */
+const COLOR_LIST_PROPS = new Set(['colors']);
 
 /** The props of an SVG shape that take a brush, not a colour. */
 const BRUSH_PROPS = new Set(['fill', 'stroke']);
@@ -13116,6 +13126,12 @@ export class Engine implements HostEngine {
     return out;
   }
 
+  /** Copy a list of colours, each through the host's converter, one it cannot read transparent. */
+  private processColorList(value: unknown): unknown {
+    if (!Array.isArray(value)) return value;
+    return value.map((entry) => this.color(entry) ?? 0);
+  }
+
   /** Copy a list of shadow-like objects, running each `color` through the host's converter. */
   private processNestedColors(value: unknown): unknown {
     if (!Array.isArray(value)) return value;
@@ -14498,6 +14514,7 @@ export class Engine implements HostEngine {
    * reads no colour in no paint of the shape's own.
    */
   private painted(key: string, value: unknown): unknown {
+    if (COLOR_LIST_PROPS.has(key)) return this.processColorList(value);
     if (!BRUSH_PROPS.has(key)) return this.color(value);
     // Already a brush, as the icon wrote it: only one the cascade settled is still text. An
     // icon's solid brush holds whatever the host read, which is nothing for an unreadable colour.

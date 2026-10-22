@@ -83,3 +83,18 @@ export class SectionRefresh {
   readonly style = { flex: 1 };
   readonly log: string[] = [];
 }
+
+/** A refresh control with the colours Android's spinner cycles through. */
+@Component({
+  selector: 'x-coloured-refresh',
+  imports: [ScrollView, RefreshControl, Text],
+  template: `
+    <scroll-view>
+      <refresh-control [colors]="colors()" progressBackgroundColor="#00ff00" />
+      <text>content</text>
+    </scroll-view>
+  `,
+})
+export class ColouredRefresh {
+  readonly colors = signal<readonly string[] | undefined>(['#ff0000', 'blue']);
+}
