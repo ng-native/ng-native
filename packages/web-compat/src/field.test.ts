@@ -239,9 +239,10 @@ describe('a text field', () => {
       app.fabric.commands
         .filter(({ name }) => name === 'setTextAndSelection')
         .map(({ args }) => args);
+    let stopping = true;
     long.addEventListener(
       'keydown',
-      (event: Dom) => event.key === 'Enter' && event.preventDefault(),
+      (event: Dom) => stopping && event.key === 'Enter' && event.preventDefault(),
     );
     await fireEvent(field('long'), 'topChange', { text: 'hi', eventCount: 1 });
     await fireEvent(field('long'), 'topKeyPress', { key: 'Enter' });
@@ -250,6 +251,11 @@ describe('a text field', () => {
     await fireEvent(field('long'), 'topKeyPress', { key: 'a' });
     await fireEvent(field('long'), 'topChange', { text: 'hia', eventCount: 3 });
     assert.equal(long.value, 'hia');
+    // A return nobody stopped is a new line, and nothing is put back.
+    stopping = false;
+    await fireEvent(field('long'), 'topKeyPress', { key: 'Enter' });
+    await fireEvent(field('long'), 'topChange', { text: 'hia\n', eventCount: 4 });
+    assert.equal(long.value, 'hia\n');
     assert.equal(sets().length, 1);
   });
 
@@ -290,6 +296,7 @@ describe('a text field', () => {
     await settle();
     assert.equal(prop('name', 'keyboardType'), undefined);
     assert.equal(prop('name', 'textContentType'), undefined);
+    assert.equal(prop('name', 'autoComplete'), undefined);
   });
 
   it('answers with the type an input was written with, and text where it has none', async () => {
