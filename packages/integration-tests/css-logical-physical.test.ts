@@ -213,3 +213,46 @@ describe('a logical edge and a physical one', () => {
     assert.equal(props['marginRight'], 10);
   });
 });
+
+describe("React Native's horizontal names beside a logical or physical side", () => {
+  // `padding-horizontal: 12px` is its two physical sides, so beside an inline start or end it
+  // settles as `padding-left` and `padding-right` written out do: the later wins, the start
+  // paired with the left or the right by the direction.
+  const BOX = /^(padding|margin)(Left|Right|Start|End|Horizontal)$/;
+  const box = (props: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(props).filter(([key, value]) => BOX.test(key) && value != null),
+    );
+  const PADDING = 'padding-left: 12px; padding-right: 12px';
+  const cases = [
+    ['padding-horizontal: 12px', PADDING, 'padding-inline-start: 4px'],
+    ['padding-horizontal: 12px', PADDING, 'padding-inline-end: 4px'],
+    ['padding-horizontal: 12px', PADDING, 'padding-left: 4px'],
+    [
+      'margin-horizontal: 12px',
+      'margin-left: 12px; margin-right: 12px',
+      'margin-inline-start: 4px',
+    ],
+  ];
+
+  for (const direction of ['ltr', 'rtl'] as const) {
+    for (const [axis, written, side] of cases) {
+      it(`settles ${axis} beside ${side} as its sides written out, ${direction}`, () => {
+        const pairs = [
+          [`.a { ${axis} } .b { ${side} }`, `.a { ${written} } .b { ${side} }`],
+          [`.b { ${side} } .a { ${axis} }`, `.b { ${side} } .a { ${written} }`],
+          [`.a { ${axis}; ${side} }`, `.a { ${written}; ${side} }`],
+          [`.a { ${side}; ${axis} }`, `.a { ${side}; ${written} }`],
+        ];
+        for (const [named, longhands] of pairs) {
+          const got = box(scene(named!, 'a b', direction).props());
+          assert.deepEqual(got, box(scene(longhands!, 'a b', direction).props()), named);
+          assert.equal(
+            Object.keys(got).some((key) => key.endsWith('Horizontal')),
+            false,
+          );
+        }
+      });
+    }
+  }
+});
