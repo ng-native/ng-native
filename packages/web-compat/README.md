@@ -58,6 +58,10 @@ Experimental and partial. It has:
   either moves, and `document.body`, where an overlay goes, covers just that part of the screen,
   with what is `fixed` in it fixed to it. On Android, which draws an app under its system bars,
   the window is as tall as the app is drawn. `screen` and `matchMedia` read the whole screen.
+- On Android, where `react-native-screens` measures a view in a screen from under its navigation
+  header, an element in a screen is placed where it is drawn and touched, so a library that
+  compares a finger with what it measured finds the element under the finger. A touch says
+  whether native measures short, and until one does an element in a screen is taken to be.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a

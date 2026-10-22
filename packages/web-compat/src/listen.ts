@@ -36,6 +36,7 @@ import {
   setSelect,
 } from './select.ts';
 import { engineOf } from './window.ts';
+import { noteTouch } from './touch-place.ts';
 import { headerMoved, putInPage, topMoved, windowTop } from './window-size.ts';
 import { together } from './mutation-observer.ts';
 import { frameAttributeSet, frameCreated } from './frame.ts';
@@ -886,6 +887,8 @@ export const wasCancelled = (native: object): boolean => cancelled.has(native);
 function domFields(type: string, target: EngineNode, event: unknown): Record<string, unknown> {
   // What native said, which every element the event goes up through is told of.
   const native = (event as { nativeEvent?: object } | undefined)?.nativeEvent;
+  // Before a listener is told of a touch and measures: see `touch-place.ts`.
+  noteTouch(engineOf(target), event);
   return {
     ...touchFields(native, windowTop(engineOf(target))),
     // The key a field says was pressed: see `field.ts`.

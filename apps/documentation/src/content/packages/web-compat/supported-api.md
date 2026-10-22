@@ -130,6 +130,10 @@ Gaps:
   either moves, and `document.body`, where an overlay goes, covers just that part of the screen,
   with what is `fixed` in it fixed to it. On Android, which draws an app under its system bars,
   the window is as tall as the app is drawn. `screen` and `matchMedia` read the whole screen.
+- On Android, where `react-native-screens` measures a view in a screen from under its navigation
+  header, an element in a screen is placed where it is drawn and touched, so a library that
+  compares a finger with what it measured finds the element under the finger. A touch says
+  whether native measures short, and until one does an element in a screen is taken to be.
 - `ResizeObserver`, and `IntersectionObserver` with a root, a margin and thresholds. An app that
   observes nothing pays nothing for them.
 - `navigator.userAgent` names a phone of the platform the app runs on (an iPhone on iOS, an Android

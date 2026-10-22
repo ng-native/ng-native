@@ -44,6 +44,7 @@ import { adopt, adoptedOf, styleSheetsOf } from './runtime-style.ts';
 import type { CSSStyleSheet } from './css-style-sheet.ts';
 import { query } from './selector.ts';
 import { createNodeIterator, createTreeWalker } from './traversal.ts';
+import { noteTouch } from './touch-place.ts';
 import { listenToResize, windowBody, windowHeight, windowSize, windowTop } from './window-size.ts';
 
 /** The document a library is given: what it creates elements with and appends overlays to. */
@@ -245,6 +246,8 @@ export function listenAnywhere(
   const tell = (event: unknown) => {
     if (event === during) return;
     if (type === 'click' && (heldForMenu.has(engine) || wasDrag(engine, event))) return;
+    // Before a listener is told of a touch and measures: see `touch-place.ts`.
+    noteTouch(engine, event);
     const target = (event as { target: EngineNode | null }).target;
     const path: EngineNode[] = [];
     for (let node = target; node; node = node.parent) path.push(node);
