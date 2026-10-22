@@ -38,6 +38,19 @@ class Bound {
   readonly look = signal('padding: 18px; border-width: 1px');
 }
 
+@Component({
+  selector: 'x-two',
+  template: `
+    <fieldset testID="set" style="padding: 18px; border-width: 1px">
+      <legend testID="legend">Details</legend>
+      <legend testID="second">More</legend>
+    </fieldset>
+  `,
+})
+class TwoLegends {
+  readonly document: Dom = inject(DOCUMENT);
+}
+
 afterEach(cleanup);
 
 const measured = async (height: number) => {
@@ -79,6 +92,29 @@ describe("a fieldset's legend", () => {
     await settle();
     await measured(40);
     assert.equal(legendMargin(), -39);
+  });
+
+  it('is the first of them only, and the next once the first is gone', async () => {
+    // A browser draws the first legend on the border, and any other as a block in the box.
+    const app = await render(TwoLegends, { providers: [provideWebCompat()] });
+    await settle();
+    const { document } = app.instance;
+    const second = document.querySelectorAll('legend')[1];
+    await measured(40);
+    await fireEvent(screen.getByTestId('second'), 'layout', { layout: { height: 24 } });
+    await settle();
+    assert.equal(legendMargin(), -39);
+    assert.equal(fieldsetMargin(), 20, 'by the first legend, not the one laid out last');
+    assert.equal(second.props['styleOverride'] ?? null, null);
+    document.querySelector('legend').remove();
+    await settle();
+    assert.equal(second.props['styleOverride']?.marginTop, -31, 'at the height it was laid out at');
+    assert.equal(fieldsetMargin(), 12);
+    // And one put in before it takes the border from it.
+    const set = document.querySelector('fieldset');
+    set.insertBefore(document.createElement('legend'), set.firstChild);
+    await settle();
+    assert.equal(second.props['styleOverride'] ?? null, null);
   });
 
   it('is not moved in an app without provideWebCompat()', async () => {

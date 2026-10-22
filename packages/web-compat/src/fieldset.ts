@@ -74,9 +74,15 @@ function release(legend: EngineNode, engine: Engine): void {
   engine.commit();
 }
 
+/** The legend a browser draws on a fieldset's border: its first, as `fenced` has it too. */
+const firstLegend = (fieldset: EngineNode) =>
+  fieldset.childList.find((each) => each.tag === 'legend');
+
 function place(legend: EngineNode, height: number, engine: Engine): void {
   const fieldset = legend.parent;
   if (fieldset?.tag !== 'fieldset') return;
+  // Any other is a block in the box, as written.
+  if (firstLegend(fieldset) !== legend) return release(legend, engine);
   const around = fieldset.committed?.props ?? {};
   const border = points(around['borderTopWidth']);
   // With no border there is none to set it on: it is the first thing in the box, as written.
@@ -108,6 +114,12 @@ export function legendInserted(node: EngineNode, parent: EngineNode, engine: Eng
   if (node.tag !== 'legend') return;
   if (marginOn.get(node) !== parent) release(node, engine);
   if (parent.tag !== 'fieldset') return;
+  // One put in before the legend on the border takes the border from it.
+  if (firstLegend(parent) === node) {
+    for (const other of parent.childList) {
+      if (other !== node && marginOn.get(other) === parent) release(other, engine);
+    }
+  }
   if (!placed.has(node)) {
     placed.add(node);
     engine.setEventListener(node, 'topLayout', (event) => {
@@ -122,7 +134,15 @@ export function legendInserted(node: EngineNode, parent: EngineNode, engine: Eng
   if (known !== undefined) place(node, known, engine);
 }
 
-/** A legend taken out of its fieldset: its margins and the fieldset's are taken back. */
+/**
+ * A legend taken out of its fieldset: its margins and the fieldset's are taken back, and the
+ * legend after it, now the first, is set on the border.
+ */
 export function legendRemoved(node: EngineNode, engine: Engine): void {
-  if (node.tag === 'legend') release(node, engine);
+  if (node.tag !== 'legend') return;
+  const fieldset = marginOn.get(node);
+  release(node, engine);
+  const next = fieldset && firstLegend(fieldset);
+  const known = next && heights.get(next);
+  if (known !== undefined) place(next!, known, engine);
 }
