@@ -18,6 +18,7 @@ import {
   type Route,
 } from '@angular/router';
 import { navigationIntent } from './native-navigation.ts';
+import { NativePlatformLocation } from './native-platform-location.ts';
 import { poppingTo } from './popping-to.ts';
 import { PRESENTED } from './presented-route.ts';
 import { isScreenRoute, isTabRoute } from './tab-routes.ts';
@@ -111,7 +112,7 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
     if (handle) {
       // The same screen stored again takes its place at the end, not a second one.
       this.handles.set(key, [...kept.filter((one) => one !== handle), handle]);
-      this.entryOf.set(handle, this.shownIn.get(route));
+      this.entryOf.set(handle, this.inHistory(this.shownIn.get(route)));
       this.forgetOnDestroy((handle as StoredHandle).componentRef);
       return;
     }
@@ -142,8 +143,19 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
   private showing(route: ActivatedRouteSnapshot, from?: ActivatedRouteSnapshot): void {
     const navigation = this.injector?.get(Router).currentNavigation();
     // Added to the ones it was shown in before, for a screen kept as it is. A navigation that skips
-    // the location change writes no entry, so its id is in none and matches nothing.
-    this.shownIn.set(route, [...((from && this.shownIn.get(from)) || []), navigation?.id]);
+    // the location change writes no entry, so its id is in none and goes at the next.
+    this.shownIn.set(route, [...this.inHistory(from && this.shownIn.get(from)), navigation?.id]);
+  }
+
+  /**
+   * The ids an entry in history still holds: one a navigation replaced, skipped, or left ahead of
+   * a push is in none, and matches nothing again. All of them where the history is not ours.
+   */
+  private inHistory(ids: readonly (number | undefined)[] | undefined): (number | undefined)[] {
+    const history = this.injector?.get(PlatformLocation, null);
+    if (!(history instanceof NativePlatformLocation)) return [...(ids ?? [])];
+    const held = history.ɵnavigationIds();
+    return (ids ?? []).filter((id) => id !== undefined && held.has(id));
   }
 
   private readonly watched = new WeakSet<ComponentRef<unknown>>();

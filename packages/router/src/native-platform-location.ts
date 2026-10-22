@@ -75,6 +75,19 @@ export class NativePlatformLocation implements PlatformLocation {
     return this.entries[this.cursor + offset]?.url ?? null;
   }
 
+  /**
+   * The navigation ids the router wrote into the entries, the ones ahead included. For the reuse
+   * strategy, which forgets a screen's entries once history no longer holds them.
+   */
+  ɵnavigationIds(): Set<number> {
+    const ids = new Set<number>();
+    for (const { state } of this.entries) {
+      const id = (state as { navigationId?: unknown } | null)?.navigationId;
+      if (typeof id === 'number') ids.add(id);
+    }
+    return ids;
+  }
+
   /** The history up to the page showing, oldest first. For parking it across a reload. */
   ɵpages(): readonly { readonly url: string; readonly state: unknown }[] {
     return this.entries.slice(0, this.cursor + 1);
