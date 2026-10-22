@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, inject } from '@angular/core';
 import { TextInput } from '@ng-native/components';
-import { cleanup, render, settle } from '@ng-native/testing';
+import { Engine } from '@ng-native/fabric';
+import { cleanup, render, screen, settle, userEvent } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 /** What a library sees of an element or a document: loosely typed, as its own code would be. */
@@ -39,7 +40,11 @@ afterEach(cleanup);
 const page = async () => {
   const app = await render(Page, { providers: [provideWebCompat()] });
   await settle();
-  return { document: app.fixture.componentInstance.document as Dom, fabric: app.fabric };
+  return {
+    document: app.fixture.componentInstance.document as Dom,
+    fabric: app.fabric,
+    engine: app.componentRef.injector.get(Engine),
+  };
 };
 
 /** The active element by its id: a node in a failed assertion is printed with the whole engine. */
@@ -56,6 +61,34 @@ function hear(element: Dom): string[] {
 }
 
 describe('focus on what is not a text field', () => {
+  it('brings what it focuses into sight only in answer to a touch, and not where told not to', async () => {
+    // A library focuses a panel as its page is built, a question or a focus trap: a screen that
+    // opens part way down for it has moved for nobody. A form that sends its user to the field
+    // to put right does so as its button is pressed.
+    const { document, engine } = await page();
+    const revealed: string[] = [];
+    const reveal = engine.reveal.bind(engine);
+    engine.reveal = (node: Dom) => void revealed.push(node.id);
+    try {
+      const held = document.getElementById('held');
+      held.focus();
+      assert.deepEqual(revealed, [], 'as the page is built');
+      held.blur();
+      const one = document.getElementById('one');
+      const quiet = () => held.focus({ preventScroll: true });
+      one.addEventListener('click', quiet);
+      await userEvent.press(screen.getByText('One'));
+      assert.deepEqual(revealed, [], 'told not to scroll');
+      held.blur();
+      one.removeEventListener('click', quiet);
+      one.addEventListener('click', () => held.focus());
+      await userEvent.press(screen.getByText('One'));
+      assert.deepEqual(revealed, ['held'], 'in answer to the press');
+    } finally {
+      engine.reveal = reveal;
+    }
+  });
+
   it('is taken by what can be focused, with its events, and is the active element', async () => {
     const { document } = await page();
     const one = document.getElementById('one');

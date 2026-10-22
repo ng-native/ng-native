@@ -203,7 +203,8 @@ engine, which plays on until the element is taken away or no longer asks for the
   focuses its control.
 - `focus()` and `blur()` take effect at once, on a button, a link or what has a `tabindex` as on a
   text field, with `document.activeElement`, `:focus`, and `focusin` and `focusout` heard on the
-  document.
+  document. What is not a text field is scrolled into sight only where `focus()` answers a touch,
+  as a form sends its user to a field to put right, and never with `{ preventScroll: true }`.
 - A `<button>` and an `<a>` take a press with no listener, are `:active` while held and marked
   `data-hover` while a pointer is over them, and are announced as disabled while they are.
 - A `touchmove` listener that is not passive and calls `preventDefault()` stops the scroll view
