@@ -350,6 +350,8 @@ export function installWindow(): () => void {
     }
     watchOthersWith(undefined);
     for (const name of added) {
+      // A module that kept a storage reads nothing of this app from it after.
+      if (globals[name] instanceof MemoryStorage) globals[name].clear();
       if (target[name] === globals[name]) delete target[name];
     }
     giveBack(standIns, target);

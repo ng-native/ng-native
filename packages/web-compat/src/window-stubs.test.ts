@@ -58,6 +58,16 @@ describe('the window of an app that asked for the package', () => {
     assert.equal(globals.localStorage.getItem('left'), null);
   });
 
+  it('keeps nothing in a storage a module held on to after the app is destroyed', async () => {
+    await render(Page, { providers: [provideWebCompat()] });
+    const { localStorage: local, sessionStorage: session } = globals;
+    local.setItem('left', 'over');
+    session.setItem('left', 'over');
+    cleanup();
+    assert.equal(local.getItem('left'), null);
+    assert.equal(session.getItem('left'), null);
+  });
+
   it('has a selection with nothing in it, on the window and the document', async () => {
     await render(Page, { providers: [provideWebCompat()] });
     for (const holder of [globals, globals.document]) {
