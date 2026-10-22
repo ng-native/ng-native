@@ -503,6 +503,9 @@ describe('isContentEditable', () => {
     assert.equal(inner.isContentEditable, false);
     outer.setAttribute('contenteditable', 'nonsense');
     assert.equal(outer.isContentEditable, false, 'a value that is none is inherit');
+    outer.setAttribute('contenteditable', 'true');
+    inner.setAttribute('contenteditable', 'nonsense');
+    assert.equal(inner.isContentEditable, true, 'and is read past to the element above');
   });
 
   it('is read only, and not true of a text field', async () => {
