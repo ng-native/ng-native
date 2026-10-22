@@ -279,6 +279,10 @@ describe("an HTML element's start under web-compat, as a browser lays it out", (
     panel.style.transform = 'translateX(0)';
     await settle();
     assert.equal(props('div')['position'], 'relative');
+    // And not moved by an inset, which a browser takes for nothing on a static box.
+    panel.style.top = '10px';
+    await settle();
+    assert.equal(props('div')['top'] ?? undefined, undefined, 'not moved by its top');
     panel.style.transform = 'none';
     await settle();
     assert.equal(props('div')['position'], 'static', 'and static again with none');

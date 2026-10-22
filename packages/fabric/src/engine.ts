@@ -2226,11 +2226,13 @@ const GRID_KEYS = [
   'justifyItems',
   'justifySelf',
 ];
+/** Each inset a box can be given, the logical ones too. */
+const INSET_SIDES = ['top', 'right', 'bottom', 'left', 'start', 'end'];
 /** What places a box among its siblings, which the grid does for an item instead. */
 const PLACING_KEYS = [
   ...['margin', 'marginVertical', 'marginHorizontal'],
   ...['marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'marginStart', 'marginEnd'],
-  ...['top', 'right', 'bottom', 'left', 'start', 'end'],
+  ...INSET_SIDES,
   ...['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf'],
 ];
 const SIZE_LIMITS = ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'];
@@ -2271,6 +2273,8 @@ function gridLayout(node: EngineNode, props: Record<string, unknown>): void {
   // knows only positions: see `placesItself`.
   if (props['position'] === 'static' && transformed(props['transform'])) {
     props['position'] = 'relative';
+    // Still static to what places it: an inset moves no static box, in a grid or out of one.
+    for (const key of INSET_SIDES) if (props[key] !== undefined) delete props[key];
   }
   const state = gridOver(node);
   if (state) gridItem(node, state, props);
