@@ -1,5 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
-import { FormField, form, required } from '@angular/forms/signals';
+import { FormField, form, required, validate } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { provideNativeDateAdapter } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
@@ -71,6 +71,8 @@ export class TaskDialog {
   });
   protected readonly task = form(this.model, (path) => {
     required(path.title);
+    // Spaces alone are no title: the one saved is trimmed.
+    validate(path.title, ({ value }) => (value().trim() ? undefined : { kind: 'required' }));
   });
 
   protected save(): void {

@@ -24,8 +24,12 @@ afterEach(async () => {
     expect(screen.queryByRole('menuitem')).toBeNull();
     expect(screen.queryByRole('option')).toBeNull();
   });
-  // A backdrop is taken away once its fade ends, or after 500ms where none is heard.
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  // A backdrop is taken away once its fade ends, or after 500ms where none is heard: each dialog
+  // has its own, and a calendar's closes before the dialog it was opened from.
+  const page = (globalThis as { document?: { querySelector(s: string): unknown } }).document;
+  await vi.waitFor(() => expect(page?.querySelector('.cdk-overlay-backdrop') ?? null).toBeNull(), {
+    timeout: 3000,
+  });
   cleanup();
 });
 
@@ -80,6 +84,21 @@ test('the menu clears what is done', async () => {
   await vi.waitFor(() => expect(item().props['pointerEvents']).not.toBe('none'));
   await press(item());
   await vi.waitFor(() => expect(screen.getByText('0 of 3 done')).toBeTruthy());
+});
+
+test('a title of spaces alone adds no task', async () => {
+  await start();
+  await press(screen.getByLabelText('New task'));
+  const user = userEvent.setup();
+  await user.type(await screen.findByTestId('task-title'), '   ');
+  expect(screen.getByTestId('task-title').props['text']).toBe('   ');
+  await press(screen.getByText('Add'));
+  // A task is added once the dialog has closed, after its animation: long enough to see one.
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  await settle();
+  expect(screen.queryByText('Task added')).toBeNull();
+  expect(screen.getByText('1 of 4 done')).toBeTruthy();
+  await press(screen.getByText('Cancel'));
 });
 
 test('a task due on a day picked from the calendar says so under its title', async () => {
