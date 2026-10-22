@@ -302,9 +302,15 @@ elements.
   the drawing's own size, with no element of it in the page. As a browser draws an SVG as an
   image, only its shapes are drawn: a `foreignObject` or a `script` in it, and any HTML, is left
   out, so nothing in it is fetched or framed.
+- An image clipped to a band of itself from side to side,
+  `clip-path: polygon(a 0, b 0, b 100%, a 100%)` with `a` and `b` percentages, is drawn through
+  the band: one picture over another, cut where a before-and-after slider is. The band is a
+  library's stylesheet's or one a script sets in `style.clipPath`, and the image follows it as it
+  moves and is whole once it goes.
 
 Gaps: `srcset`, `sizes`, `loading` and `decoding` are kept as attributes, and the picture is the
-one `src` names. `width` and `height` read the attribute or the picture, not the size the image is
+one `src` names. An image whose picture is an SVG is drawn whole, and a band of a `<style>` made
+while the app runs is not read. `width` and `height` read the attribute or the picture, not the size the image is
 laid out at. There is no `Image` constructor. A `src` is resolved when it is set, and not again
 when the page's address changes.
 

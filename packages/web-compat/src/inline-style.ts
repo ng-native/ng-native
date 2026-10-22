@@ -1,5 +1,6 @@
 import { backgroundLayers, type EngineNode } from '@ng-native/fabric';
 import { reduceCalc } from './calc.ts';
+import { bandOf } from './image-band.ts';
 import { transitionOf, transitionPart } from './transition-style.ts';
 
 /**
@@ -207,6 +208,12 @@ const OWN: Readonly<Record<string, (value: unknown) => Record<string, unknown>>>
   ),
   border: (value) => lineOf(FOUR, value),
   boxShadow: (value) => ({ boxShadow: shadowsOf(value) }),
+  // A band of the box, which an image is drawn through, as a library's sheet has it: see
+  // `image-band.ts`. Any other clip is set as written.
+  clipPath: (value) =>
+    bandOf(value)
+      ? { clipBand: value, clipPath: null }
+      : { clipBand: null, clipPath: value ?? null },
   ...Object.fromEntries(
     FOUR.map((side) => [`border${side}`, (value: unknown) => lineOf([side], value)]),
   ),

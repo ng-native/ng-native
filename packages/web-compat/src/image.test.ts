@@ -1,11 +1,12 @@
 /**
  * `<img>`: the platform's image view, shown from its `src` resolved against the page's address,
  * said to a screen reader by its `alt`, sized by its `width` and `height` or by its picture once
- * that has loaded, fitted to its box as `object-fit` says, and an SVG drawn from its markup.
+ * that has loaded, fitted to its box as `object-fit` says, an SVG drawn from its markup, and one
+ * clipped to a band of itself drawn through it.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Component, signal } from '@angular/core';
+import { ApplicationRef, Component, signal } from '@angular/core';
 import { registeredViewName } from '@ng-native/fabric';
 import { cleanup, compileCss, fireEvent, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
@@ -320,5 +321,170 @@ describe('an image', () => {
     assert.equal(plain.props['accessibilityLabel'], undefined);
     cleanup();
     assert.equal(registeredViewName('img'), undefined, 'and is no image once no app asks');
+  });
+});
+
+@Component({
+  template: `
+    <view class="frame">
+      <img testID="under" class="picture" src="https://example.test/after.jpg" />
+      <img
+        testID="top"
+        class="picture"
+        [class]="cut()"
+        [src]="src()"
+        (load)="seen.push($any($event).target.naturalWidth)"
+      />
+    </view>
+  `,
+})
+class Slider {
+  readonly cut = signal('picture cut');
+  readonly src = signal('https://example.test/before.jpg');
+  readonly seen: number[] = [];
+}
+
+/** A library's sheet for a before-and-after slider: the top picture cut where the slider is. */
+const SLIDER =
+  '.frame { position: relative; width: 300px; height: 200px } ' +
+  '.picture { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover } ' +
+  '.cut { clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%) } ' +
+  '.moved { clip-path: polygon(20% 0, 80% 0, 80% 100%, 20% 100%) }';
+
+describe('an image clipped to a band of itself', () => {
+  const slider = async () => {
+    const app = await render(Slider, {
+      providers: [provideWebCompat()],
+      // As a library's sheet is compiled: an option of the build's.
+      globalStyles: compileCss(SLIDER, 'global', { generated: true } as never),
+    });
+    await settle();
+    return app;
+  };
+
+  /** What is drawn of the top picture: the band it is seen through, and the picture in it. */
+  const drawn = () => {
+    const top = screen.getByTestId('top');
+    const [band, ...more] = top.children;
+    const picture = band?.children[0];
+    const pick = (props: Record<string, unknown> | undefined, ...keys: string[]) =>
+      Object.fromEntries(keys.map((key) => [key, props?.[key] ?? undefined]));
+    return {
+      top: { viewName: top.viewName, source: none(top.props['source']), more: more.length },
+      band: pick(band?.props, 'position', 'left', 'width', 'top', 'bottom', 'overflow'),
+      picture: {
+        ...pick(picture?.props, 'source', 'left', 'width', 'height', 'resizeMode'),
+        viewName: picture?.viewName,
+      } as Record<string, unknown>,
+    };
+  };
+
+  it('is drawn through the band, the picture where it was under it', async () => {
+    await slider();
+    assert.deepEqual(drawn(), {
+      top: { viewName: 'View', source: undefined, more: 0 },
+      band: {
+        position: 'absolute',
+        left: '0%',
+        width: '50%',
+        top: 0,
+        bottom: 0,
+        overflow: 'hidden',
+      },
+      picture: {
+        viewName: 'Image',
+        source: [{ uri: 'https://example.test/before.jpg' }],
+        left: '0%',
+        width: '200%',
+        height: '100%',
+        resizeMode: 'cover',
+      },
+    });
+    const top = screen.getByTestId('top');
+    assert.equal(Object.hasOwn(top.props, 'clipBand'), false, 'and no view is sent the band');
+    // The picture under it is whole, and a script sees nothing in the one on top.
+    assert.equal(screen.getByTestId('under').viewName, 'Image');
+    const element = (globalThis as Dom).document.querySelector('[testID=top]');
+    assert.equal(element.children.length, 0);
+  });
+
+  it('follows the band as it moves, and is whole once nothing clips it', async () => {
+    const app = await slider();
+    app.instance.cut.set('picture moved');
+    // In the task that moved it, before anything else commits: drawn in the frame it moved in.
+    app.componentRef.injector.get(ApplicationRef).tick();
+    const moved = drawn();
+    assert.deepEqual([moved.band['left'], moved.band['width']], ['20%', '60%']);
+    // As wide as the image, and back from the band's edge by where the band starts.
+    const width = Number.parseFloat(String(moved.picture['width']));
+    const left = Number.parseFloat(String(moved.picture['left']));
+    assert.ok(Math.abs(width - 10000 / 60) < 1e-9, String(width));
+    assert.ok(Math.abs(left + 2000 / 60) < 1e-9, String(left));
+    app.instance.cut.set('picture');
+    await settle();
+    const top = screen.getByTestId('top');
+    assert.deepEqual(
+      [top.viewName, top.children.length, top.props['source']],
+      ['Image', 0, [{ uri: 'https://example.test/before.jpg' }]],
+    );
+    app.instance.cut.set('picture cut');
+    await settle();
+    assert.equal(drawn().band['width'], '50%', 'and through the band again');
+  });
+
+  it('follows a band a script sets, and one it takes away', async () => {
+    await slider();
+    const element = (globalThis as Dom).document.querySelector('[testID=top]');
+    element.style.clipPath = 'polygon(0 0, 30% 0, 30% 100%, 0 100%)';
+    await settle();
+    assert.equal(drawn().band['width'], '30%');
+    element.style.clipPath = '';
+    await settle();
+    assert.equal(drawn().band['width'], '50%', "the sheet's again");
+  });
+
+  it('shows another src through the band, and tells of it loading', async () => {
+    const app = await slider();
+    app.instance.src.set('https://example.test/later.jpg');
+    await settle();
+    assert.deepEqual(drawn().picture['source'], [{ uri: 'https://example.test/later.jpg' }]);
+    assert.equal(drawn().top.source, undefined);
+    const picture = screen.getByTestId('top').children[0]!.children[0]!;
+    await fireEvent(picture, 'load', { source: { width: 600, height: 400, uri: 'x' } });
+    await settle();
+    assert.deepEqual(app.instance.seen, [600]);
+  });
+
+  it('draws a picture that is an SVG whole, and the next one through the band again', async () => {
+    const real = globalThis.fetch;
+    let arrive = () => {};
+    globalThis.fetch = (() =>
+      new Promise((done) => {
+        arrive = () =>
+          done({
+            ok: true,
+            text: () => Promise.resolve('<svg width="4" height="2"><path d="M0 0h4v2H0z"/></svg>'),
+          });
+      })) as never;
+    try {
+      const app = await slider();
+      app.instance.src.set('https://example.test/before.svg');
+      await settle();
+      // Committed while the drawing is on its way, and again once it is there.
+      arrive();
+      await new Promise((done) => setTimeout(done, 5));
+      await settle();
+      const top = screen.getByTestId('top');
+      assert.deepEqual(
+        top.children.map((child) => child.viewName),
+        ['RNSVGSvgView'],
+      );
+      app.instance.src.set('https://example.test/before.jpg');
+      await settle();
+      assert.deepEqual(drawn().picture['source'], [{ uri: 'https://example.test/before.jpg' }]);
+      assert.equal(drawn().band['width'], '50%');
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 });

@@ -7,6 +7,7 @@ import {
 import { parseFragment, serializeOuter, type DefaultTreeAdapterMap } from 'parse5';
 import { documentOf } from './document.ts';
 import { setMarkup } from './html.ts';
+import { showSource, unband, watchBand } from './image-band.ts';
 import { keptOwn } from './in-document.ts';
 import { parseUrl } from './parse-url.ts';
 import {
@@ -26,7 +27,8 @@ import {
  * that has loaded where nothing else sizes it: the engine's `intrinsicSize`. `naturalWidth`,
  * `naturalHeight` and `complete` say what has loaded, and `load` and `error` are told as native
  * says them. Its picture fills its box, as `object-fit: fill` does, and a stylesheet's
- * `object-fit` is the `resizeMode` the image view takes; what is past the box is clipped.
+ * `object-fit` is the `resizeMode` the image view takes; what is past the box is clipped. One a
+ * library's sheet or a script clips to a band of itself is drawn through it: see `image-band.ts`.
  *
  * A picture that is an SVG, by its name, is fetched and drawn as an `<svg>` written in a template
  * is, which no image view reads.
@@ -70,6 +72,8 @@ export function imageCreated(node: EngineNode, engine: Engine): void {
     const picture = pictures.get(node);
     if (picture) Object.assign(picture, { state: 'broken', width: 0, height: 0 });
   });
+  // Drawn through a band of itself where a rule or a script clips it to one: see `image-band.ts`.
+  watchBand(node, engine);
 }
 
 /** What native says of a picture that has loaded: its size, as `{ source: { width, height } }`. */
@@ -103,8 +107,13 @@ function show(node: EngineNode, picture: Picture, value: unknown, engine: Engine
   Object.assign(picture, { uri, state: uri ? 'loading' : 'loaded', width: 0, height: 0 });
   engine.setProp(node, 'intrinsicSize', null);
   undraw(node, engine);
-  if (uri && DRAWN.test(uri)) return draw(node, uri, engine);
-  engine.setProp(node, 'source', uri ? [{ uri }] : null);
+  if (uri && DRAWN.test(uri)) {
+    // A drawing is drawn whole: see `image-band.ts`.
+    unband(node, engine);
+    return draw(node, uri, engine);
+  }
+  // On the picture in its band, where it is drawn through one.
+  showSource(node, uri ? [{ uri }] : null, engine);
 }
 
 /**

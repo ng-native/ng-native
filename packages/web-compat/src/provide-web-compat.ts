@@ -24,6 +24,7 @@ import { registerImage } from './image.ts';
 import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
 import { forgetCommits } from './commit-watch.ts';
+import { forgetBands } from './image-band.ts';
 import { eventHandlerMembers } from './event-handlers.ts';
 import { pickWith } from './file-input.ts';
 import { focusMembers, passOverToldBlurs } from './element-focus.ts';
@@ -239,6 +240,7 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
         unwatchStyles();
         // What an observer still watching in it heard of its commits: see `commit-watch.ts`.
         forgetCommits(engine);
+        forgetBands(engine);
         forgetRenderer();
         leaveWindow();
         heedBlurs();

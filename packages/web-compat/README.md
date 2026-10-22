@@ -117,7 +117,9 @@ Experimental and partial. It has:
   its `alt` said to a screen reader, its `width` and `height` as its size, the size of its
   picture where nothing else sizes it, `naturalWidth`, `naturalHeight`, `complete`, `load` and
   `error`, and `object-fit` as how the picture fits its box. A picture that is an SVG is fetched
-  and drawn as an `<svg>` of its shapes alone.
+  and drawn as an `<svg>` of its shapes alone. An image a library's sheet or a script clips to a
+  band of itself, `clip-path: polygon(a 0, b 0, b 100%, a 100%)`, is drawn through the band, as a
+  before-and-after slider cuts one picture over another.
 - A `<button>` and an `<a>` with their roles, each taking a press with no listener (`:active`
   while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
   disabled, and a table's and a form's elements as views.
