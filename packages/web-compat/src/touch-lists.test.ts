@@ -59,6 +59,19 @@ describe('@ng-native/web-compat, the fingers a touch event lists', () => {
     assert.deepEqual(heard, [{ touches: [30], targetTouches: [30], changedTouches: [30] }]);
   });
 
+  it('lists the one finger down as on the target where it does not say what it is on', async () => {
+    // A touch this package or a test sends, with a target for the event and none for its finger.
+    const { at, heard } = await page();
+    const { target, ...finger } = at(0, 'one', 30);
+    await fireEvent(screen.getByTestId('one'), 'topTouchStart', {
+      ...finger,
+      target,
+      touches: [finger],
+      changedTouches: [finger],
+    });
+    assert.deepEqual(heard[0]?.['targetTouches'], [30]);
+  });
+
   it('lists only the fingers on the target, and none that has lifted', async () => {
     const { at, heard } = await page();
     const [first, second] = [at(0, 'one', 30), at(1, 'two', 70)];

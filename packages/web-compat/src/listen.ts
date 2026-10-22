@@ -821,6 +821,15 @@ const touchList = (touches: readonly Touch[] | undefined, top: number): object[]
 };
 
 /**
+ * Whether a finger is on the view an event is sent to: by what it says it is on, or where it says
+ * nothing and is the only finger down, as a touch this package sends may, that one.
+ */
+const onTarget = (touch: Touch, said: { target?: unknown; touches?: Touch[] }): boolean =>
+  touch.target === undefined && said.touches?.length === 1
+    ? said.target !== undefined
+    : touch.target === said.target;
+
+/**
  * Where a touch is, as a DOM event says it: the finger that changed at the page and the client,
  * the fingers down as `touches`, and as `targetTouches` those of them that came down on the view
  * the changed one did, which is where the event is sent. CDK's drag and drop reads where a drag
@@ -839,7 +848,7 @@ export function touchFields(native: unknown, top: number): Record<string, unknow
     pageY: y,
     touches: touchList(said.touches, top),
     targetTouches: touchList(
-      said.touches?.filter((touch) => touch.target === said.target),
+      said.touches?.filter((touch) => onTarget(touch, said)),
       top,
     ),
     changedTouches: touchList(said.changedTouches, top),
