@@ -230,10 +230,10 @@ a page written right to left too, and a date's or a time's `valueAsNumber` is `N
 ## SVG
 
 - An `<svg>` a template writes, markup builds or a script makes with `createElementNS` is drawn by
-  react-native-svg's native views, the ones `@ng-native/icons` draws with: shapes, groups, texts
-  and their spans, a text along a path, gradients and their stops, clips, masks, markers, patterns,
-  a drop shadow and HTML in a `foreignObject`, which is the whole drawing for each of `x`, `y`,
-  `width` and `height` it does not say.
+  react-native-svg's native views, the ones `@ng-native/icons` draws with: shapes, groups, links
+  (drawn as a group of what they hold), texts and their spans, a text along a path, gradients and
+  their stops, clips, masks, markers, patterns, a drop shadow and HTML in a `foreignObject`, which
+  is the whole drawing for each of `x`, `y`, `width` and `height` it does not say.
 - Its elements have SVG's names and namespace, `className` as an object with `baseVal`,
   `getBBox`, `getComputedTextLength`, `ownerSVGElement` and `createSVGRect`.
 - A style a script sets on a shape is its paint or its font, a paint that names a token is that
