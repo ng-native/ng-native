@@ -25,7 +25,12 @@ const SHIM = '@ng-native/web-compat/ng-icons';
  * monorepo's own `packages/icons` is a library like any other.
  */
 const OWN = /[\\/]@ng-native[\\/](web-compat|icons)[\\/]/;
-const OWN_ROOTS = [__dirname, rootOf('@ng-native/icons')].filter(Boolean);
+const OWN_ROOTS = [__dirname, rootOf('@ng-native/icons')].filter(Boolean).map(slashed);
+
+/** A path with forward slashes: a bundler on Windows writes either. */
+function slashed(file) {
+  return file.replaceAll('\\', '/');
+}
 
 /** Where a package is, as this one resolves it; none where it is not installed. */
 function rootOf(name) {
@@ -39,8 +44,8 @@ function rootOf(name) {
 /** What a module's import is resolved as in place of what it wrote, or null for as written. */
 function aliasOf(moduleName, importer) {
   if (moduleName !== '@ng-icons/core') return null;
-  const own =
-    OWN.test(importer ?? '') || OWN_ROOTS.some((root) => importer?.startsWith(root + path.sep));
+  const from = slashed(importer ?? '');
+  const own = OWN.test(from) || OWN_ROOTS.some((root) => from.startsWith(`${root}/`));
   return own ? null : SHIM;
 }
 

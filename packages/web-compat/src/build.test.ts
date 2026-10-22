@@ -149,6 +149,16 @@ describe('the alias for a library that imports @ng-icons/core', () => {
     }
   });
 
+  it('is nothing for the native icons on Windows, written with either slash', () => {
+    const icons = path.dirname(
+      createRequire(import.meta.url).resolve('@ng-native/icons/package.json'),
+    );
+    const back = `${icons.replaceAll('/', '\\')}\\src\\ng-icon.ts`;
+    const forward = `${icons.replaceAll('\\', '/')}/src/ng-icon.ts`;
+    assert.equal(aliasOf('@ng-icons/core', back), null, back);
+    assert.equal(aliasOf('@ng-icons/core', forward), null, forward);
+  });
+
   it("is the shim for an app's own packages of the same directory names", () => {
     // A monorepo's own `packages/icons` is a library like any other, whatever it is called.
     assert.equal(aliasOf('@ng-icons/core', '/app/packages/icons/src/icon.ts'), SHIM);
