@@ -958,6 +958,18 @@ describe('@ng-native/web-compat svg definitions', () => {
       );
     near(tip.getBBox(), [8, 8, 74.58, 28]);
     near(plain.getBBox(), [0, 21, 61.08, 23]);
+    // Its characters each in the font of the span they are in, a run of spaces as one.
+    assert.equal(plain.getNumberOfChars(), 9);
+    const whole = plain.getComputedTextLength();
+    assert.ok(Math.abs(plain.getSubStringLength(0, 9) - whole) < 0.01);
+    const big = plain.getSubStringLength(6, 3);
+    assert.ok(Math.abs(plain.getSubStringLength(0, 6) + big - whole) < 0.01);
+    assert.ok(big > plain.getSubStringLength(0, 3), 'bold at 20 is wider than plain at 12');
+    const spaced: Dom = document.createElementNS(SVG, 'text');
+    spaced.textContent = 'a   b';
+    drawing.append(spaced);
+    await settle();
+    assert.equal(spaced.getNumberOfChars(), 3);
   });
 
   it('anchors a text by the path it is set along, as a sunburst centres its labels on an arc', async () => {

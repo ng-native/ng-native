@@ -32,7 +32,7 @@ import {
 import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { setStyleAttribute, styleOf } from './style-declaration.ts';
 import { isKeptOnShape, isShape, writtenAttributes } from './svg.ts';
-import { boxOf, fontFamilyOf, fontSizeOf, fontWeightOf, widthOf } from './svg-box.ts';
+import { boxOf, drawnRuns, runsWidth } from './svg-box.ts';
 import { heldAnimation, webAnimation, type CoreAnimation } from './web-animation.ts';
 import { engineOf } from './window.ts';
 
@@ -497,16 +497,16 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   }),
   // A text's characters, and how wide a run of them is drawn: what a chart cuts a label short by.
   getNumberOfChars: method(function () {
-    return textOf(this).length;
+    return drawnRuns(this).reduce((count, run) => count + run.words.length, 0);
   }),
   getSubStringLength: method(function (from: unknown, count: unknown) {
-    const text = textOf(this);
+    const runs = drawnRuns(this);
+    const length = runs.reduce((sum, run) => sum + run.words.length, 0);
     const start = Math.trunc(Number(from));
-    if (!(start >= 0 && start < text.length)) {
+    if (!(start >= 0 && start < length)) {
       throw domError('The index is not in the range of the text.', 'IndexSizeError');
     }
-    const run = text.slice(start, start + Math.max(0, Math.trunc(Number(count))));
-    return widthOf(run, fontSizeOf(this), fontWeightOf(this), fontFamilyOf(this));
+    return runsWidth(runs, start, start + Math.max(0, Math.trunc(Number(count))));
   }),
   // The drawing a shape is in: the nearest `<svg>` above it, and none for the drawing itself.
   ownerSVGElement: get(function () {
