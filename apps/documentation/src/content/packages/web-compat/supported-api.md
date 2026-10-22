@@ -168,7 +168,9 @@ in a stack: with two stacks side by side it is the header of whichever pushed a 
 - `getAnimations()` on an element, and with `{ subtree: true }` on what it holds as well, gives
   each `@keyframes` animation and transition the engine runs there as a Web Animations
   `Animation`, the same one each time it is asked, with its `animationName` or
-  `transitionProperty`, its `playState` and its `effect`'s `target`.
+  `transitionProperty`, its `playState` and its `effect`'s `target`. A `@keyframes` animation
+  that has finished and still shows its last frame, by its own fill or one `updateTiming` asked
+  for, is still there, `finished`.
 - `finished` resolves with the animation when the engine ends it, and rejects with an
   `AbortError` when it stops first: the element no longer asks for it, it is taken away, or its
   app goes. A library waits on it before it takes a leaving element away.

@@ -304,6 +304,26 @@ export function webAnimation(core: CoreAnimation, node: EngineNode): WebAnimatio
   return animation;
 }
 
+/**
+ * The `@keyframes` animation an element still shows at its last frame once it has finished, by
+ * its own fill or one a script asked for: still one of the element's animations, as a browser has
+ * an animation that is in effect. The engine leaves it out of what it answers, which Angular reads
+ * to know how long to wait for an animation that is still to end.
+ */
+export function heldAnimation(node: EngineNode): WebAnimation | undefined {
+  const playing = node.playing;
+  if (!playing?.done || !(playing.held || fillsForwards(playing.spec.fill as Fill))) {
+    return undefined;
+  }
+  const { name, duration, delay, iterations } = playing.spec;
+  const timing = {
+    duration: duration * (iterations ?? Infinity),
+    delay,
+    iterations: iterations ?? Infinity,
+  };
+  return webAnimation({ animationName: name, effect: { getTiming: () => timing } }, node);
+}
+
 /** An app has gone: each `finished` it still owed rejects, as its elements went with it. */
 export function cancelAnimations(engine: Engine): void {
   for (const animation of [...(owed.get(engine) ?? [])]) animation.cancel();

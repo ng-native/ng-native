@@ -33,7 +33,7 @@ import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { setStyleAttribute, styleOf } from './style-declaration.ts';
 import { isKeptOnShape, isShape, writtenAttributes } from './svg.ts';
 import { boxOf } from './svg-box.ts';
-import { webAnimation, type CoreAnimation } from './web-animation.ts';
+import { heldAnimation, webAnimation, type CoreAnimation } from './web-animation.ts';
 import { engineOf } from './window.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -596,11 +596,12 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   // pane for the animations of its content. See `web-animation.ts`.
   getAnimations: method(function (options?: { subtree?: boolean }) {
     const nodes = options?.subtree ? [this, ...descendants(this)] : [this];
-    return nodes.flatMap((node) =>
-      (core.getAnimations.call(node) as CoreAnimation[]).flatMap(
+    return nodes.flatMap((node) => [
+      ...[heldAnimation(node)].filter((held) => held !== undefined),
+      ...(core.getAnimations.call(node) as CoreAnimation[]).flatMap(
         (animation) => webAnimation(animation, node) ?? [],
       ),
-    );
+    ]);
   }),
   textContent: get(
     function () {

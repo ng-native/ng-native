@@ -33,6 +33,7 @@ const CSS = `
   @keyframes exit { from { opacity: 1 } to { opacity: 0 } }
   @keyframes spin { to { transform: rotate(360deg) } }
   .out { animation: exit 100ms linear }
+  .kept { animation: exit 100ms linear forwards }
   .twice { animation: exit 100ms linear 50ms 2 }
   .spins { animation: spin 100ms linear infinite }
   .fades { opacity: 1; transition: opacity 100ms linear }
@@ -140,6 +141,25 @@ describe('getAnimations', () => {
     await s.tick(120);
     assert.equal(animation.playState, 'finished');
     assert.equal(screen.getByTestId('row').props['opacity'], 0, 'held where it ended');
+    assert.equal(s.row.getAnimations()[0] === animation, true, "and still the element's");
+  });
+
+  it("is still the element's once it has finished, where its own fill holds its last frame", async () => {
+    const s = await pane();
+    s.row.classList.add('kept');
+    await settle();
+    const [animation] = s.row.getAnimations();
+    await s.tick(120);
+    const after = s.row.getAnimations();
+    assert.equal(after.length, 1, 'still there');
+    assert.equal(after[0] === animation, true, 'the same animation');
+    assert.equal(after[0].playState, 'finished');
+    // And not one that ends with nothing held.
+    s.row.classList.remove('kept');
+    s.row.classList.add('out');
+    await settle();
+    await s.tick(120);
+    assert.equal(s.row.getAnimations().length, 0, 'none held');
   });
 
   it('lets one go at its end again once updateTiming takes the fill back off', async () => {
