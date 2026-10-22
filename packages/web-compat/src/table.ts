@@ -63,19 +63,28 @@ export function spanRows(node: EngineNode, rows: number, engine: Engine): void {
   layOutLater(node, engine);
 }
 
-/** The table each row and cell was last put in: what is laid out again when it is taken out. */
+/** The table each row, cell and group was last put in: laid out again when it leaves. */
 const homes = new WeakMap<EngineNode, EngineNode>();
 
-/** A row or a cell was put in a table. */
+/** What a table's columns are counted from: its rows, their cells, and the groups of rows. */
+const PARTS = new Set(['td', 'th', 'tr', 'thead', 'tbody', 'tfoot']);
+
+/**
+ * A row, a cell or a group of rows was put in a table: that table's columns are counted again,
+ * and the table it was in before, where it moved from one to another.
+ */
 export function tableInserted(node: EngineNode, engine: Engine): void {
-  if (!CELLS.has(node.tag) && node.tag !== 'tr') return;
-  homes.set(node, tableOf(node));
+  if (!PARTS.has(node.tag)) return;
+  const before = homes.get(node);
+  const table = tableOf(node);
+  homes.set(node, table);
+  if (before && before !== table && before.parent) layOutLater(before, engine);
   layOutLater(node, engine);
 }
 
 /**
- * A row or a cell was taken out: the table it was in has one fewer, and its columns are counted
- * again. Read from where it was put, since it is in nothing once it is out.
+ * A row, a cell or a group of rows was taken out: the table it was in has fewer, and its columns
+ * are counted again. Read from where it was put, since it is in nothing once it is out.
  */
 export function tableRemoved(node: EngineNode, engine: Engine): void {
   const table = homes.get(node);

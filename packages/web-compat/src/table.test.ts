@@ -449,6 +449,29 @@ describe('a row or a cell taken out of a table', () => {
   });
 });
 
+describe('a group of rows put in or taken out of a table', () => {
+  it('lays the table out again with the rows it brings or takes', async () => {
+    await render(Table, { providers: [provideWebCompat()] });
+    await settle();
+    // Seven columns, from the row of one, four and two.
+    assert.deepEqual(share('short'), [14.29, 0]);
+    const document = (globalThis as { document?: Dom }).document!;
+    const table = document.querySelector('table');
+    // A group of one row of ten cells, built and put in whole, as a script makes a table.
+    const group = document.createElement('tbody');
+    const row = document.createElement('tr');
+    for (let at = 0; at < 10; at++) row.appendChild(document.createElement('td'));
+    group.appendChild(row);
+    table.appendChild(group);
+    await settle();
+    assert.deepEqual(share('short'), [10, 0]);
+    // And seven again once it goes.
+    table.removeChild(group);
+    await settle();
+    assert.deepEqual(share('short'), [14.29, 0]);
+  });
+});
+
 describe('a table whose app is destroyed before its columns are counted', () => {
   it('lays nothing out once the app is gone', async () => {
     const app = await render(Table, { providers: [provideWebCompat()] });
