@@ -2267,6 +2267,11 @@ function gridLayout(node: EngineNode, props: Record<string, unknown>): void {
     // would leave them to whatever further up is positioned.
     if (node.grid && props['position'] === 'static') props['position'] = 'relative';
   }
+  // A transform makes a box what its absolute boxes are placed against, static or not, and Yoga
+  // knows only positions: see `placesItself`.
+  if (props['position'] === 'static' && transformed(props['transform'])) {
+    props['position'] = 'relative';
+  }
   const state = gridOver(node);
   if (state) gridItem(node, state, props);
 }
@@ -2825,6 +2830,20 @@ const LAID_OUT_HERE = new Set([
   'tableLayout',
   'clipBand',
 ]);
+/**
+ * Whether a box is what an absolute box in it is placed against: one that is not static, or one
+ * with a transform, which CSS makes a containing block however it is positioned.
+ */
+function placesItself(node: EngineNode): boolean {
+  return readStyle(node, 'position') !== 'static' || transformed(readStyle(node, 'transform'));
+}
+
+/** Whether a transform is one: a list or text of one, and not `none`. */
+const transformed = (transform: unknown): boolean =>
+  Array.isArray(transform)
+    ? transform.length > 0
+    : typeof transform === 'string' && transform !== '' && transform !== 'none';
+
 const POSITIONS_HERE = new Set(['static', 'fixed', 'sticky']);
 
 /** What a declaration can ask of the engine that an app of plain flex does not: see `asks`. */
@@ -10156,7 +10175,7 @@ export class Engine implements HostEngine {
     const inGrid = () => node.parent?.grid !== undefined;
     // Under a box that is not positioned, it is placed against one further up, and a share of
     // a size is a share of that one's.
-    const through = () => node.parent != null && readStyle(node.parent, 'position') === 'static';
+    const through = () => node.parent != null && !placesItself(node.parent);
     // In a block, or in a line of one: a container the engine lays out as a browser's flow.
     const block = node.parent?.flow !== undefined;
     if (position === 'fixed' || block || auto() || inGrid() || through()) this.unplaced.add(node);
@@ -10314,7 +10333,7 @@ export class Engine implements HostEngine {
   /** The box Yoga positions an out-of-flow node by: the nearest ancestor that is not static. */
   private containingBlock(node: EngineNode): EngineNode {
     for (let up = node.parent; up; up = up.parent) {
-      if (up.nodeKind !== 'element' || readStyle(up, 'position') !== 'static') return up;
+      if (up.nodeKind !== 'element' || placesItself(up)) return up;
     }
     return this.root;
   }

@@ -231,6 +231,10 @@ class Chip {}
   template: `
     <div testID="div"><span testID="span">Words</span></div>
     <x-chip testID="custom">Chip</x-chip>
+    <div style="display: flex; height: 50px">
+      <div testID="column-item">Item</div>
+      <div testID="column-unlimited" style="min-height: 0">Item</div>
+    </div>
     <div testID="row" style="display: flex; flex-direction: row">
       <div testID="item" style="width: 400px">Item</div>
       <x-chip testID="custom-item" style="width: 400px">Chip</x-chip>
@@ -266,6 +270,20 @@ describe("an HTML element's start under web-compat, as a browser lays it out", (
     }
   });
 
+  it('is the box an absolute element in it is placed against where it is transformed', async () => {
+    // A transform makes a box the containing block of what is absolute in it, static or not: a
+    // panel that scales in holds its own absolute arrow. Native knows only positions.
+    await page();
+    const document = (globalThis as { document?: any }).document;
+    const panel = document.querySelector('[testID="div"]');
+    panel.style.transform = 'translateX(0)';
+    await settle();
+    assert.equal(props('div')['position'], 'relative');
+    panel.style.transform = 'none';
+    await settle();
+    assert.equal(props('div')['position'], 'static', 'and static again with none');
+  });
+
   it("leaves a position the element is given, and the engine's own views", async () => {
     await page();
     assert.equal(props('placed')['position'], 'relative');
@@ -279,6 +297,14 @@ describe("an HTML element's start under web-compat, as a browser lays it out", (
       assert.equal(props(id)['flexShrink'], 1, id);
     }
     assert.equal(props('view-item')['flexShrink'] ?? 0, 0, 'and a native view keeps its size');
+  });
+
+  it('stops at its content as it gives up room, which min-height: 0 lets it past', async () => {
+    // Down a column too short for both, a browser shrinks neither below its words, whose minimum
+    // is `min-height: auto`; one given a minimum of nothing gives up its room.
+    await page();
+    assert.equal(props('column-item')['flexShrink'], 0, 'kept at its content');
+    assert.equal(props('column-unlimited')['flexShrink'], 1, 'free to shrink');
   });
 
   it("has a button's label in the middle of it, until a stylesheet lays the button out", async () => {
