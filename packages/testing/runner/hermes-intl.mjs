@@ -1,12 +1,13 @@
 /**
  * Takes from `Intl` the constructors Hermes, the engine an app runs on, does not have. Hermes has
- * `Intl.Collator`, `Intl.DateTimeFormat` and `Intl.NumberFormat`; Node has these as well, so code
- * that builds one of them passes its tests and then throws `TypeError: undefined cannot be used as
- * a constructor` on a device. Without them here, it throws the same `TypeError` in the test.
+ * `Intl.Collator`, `Intl.DateTimeFormat` and `Intl.NumberFormat`; Node has the ones below as well,
+ * so code that builds one of them passes its tests and then throws `TypeError: undefined cannot be
+ * used as a constructor` on a device. Without them here, it throws a `TypeError` in the test too.
  *
- * A setup file of `ngNative()`'s unless it is given `intl: 'node'`, and imported by `register.mjs`.
- * Only Node's own are removed: an app's setup files run before this one, and a polyfill one of them
- * installs, as the app's entry file does on a device, stays.
+ * `ngNative()` runs this ahead of the app's own setup files unless it is given `intl: 'node'`, and
+ * `register.mjs` imports it. A polyfill installed after it sees `Intl` as Hermes has it. Only
+ * Node's own constructors are removed, so a polyfill installed before it, such as one given to
+ * `node --import` ahead of `register.mjs`, stays.
  */
 const LACKING = [
   'DisplayNames',

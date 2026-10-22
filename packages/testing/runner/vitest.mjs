@@ -286,7 +286,7 @@ export function ngNative(options = {}) {
       // only under one.
       ...withConditions(tsconfigConditions(config?.root ?? process.cwd())),
       test: {
-        setupFiles: options.intl === 'node' ? [SETUP] : [SETUP, HERMES_INTL],
+        setupFiles: [SETUP],
         // Vitest hands every ES module a CommonJS `require` by default, for compatibility with an
         // older runner. Code here checks for one to tell a device from Node: given one, it
         // requires `react-native`, whose Flow source nothing in a test can parse. Off, a module
@@ -299,7 +299,10 @@ export function ngNative(options = {}) {
       root = config.root;
     },
     // Once for each project; the directory is the Vitest instance's, so it is removed once.
-    configureVitest({ vitest }) {
+    configureVitest({ vitest, project }) {
+      // Ahead of the app's own setup files, which `config` can only add after: a polyfill there
+      // that installs only what `Intl` lacks then sees it lacking, as it does on a device.
+      if (options.intl !== 'node') project.config.setupFiles.unshift(HERMES_INTL);
       if (cleaned.has(vitest)) return;
       cleaned.add(vitest);
       removeModuleCopies(vitest);

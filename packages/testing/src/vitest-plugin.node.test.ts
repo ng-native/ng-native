@@ -420,9 +420,12 @@ describe('a Vitest run', () => {
     assert.equal(await intlRun('function', { intl: 'node' }), 0);
   });
 
-  it("keeps a polyfill the app's own setup file installs", async () => {
+  it("keeps a polyfill the app's own setup file installs where Intl lacks one", async () => {
     const polyfill = path.join(root, 'polyfill.ts');
-    writeFileSync(polyfill, 'Object.assign(Intl, { RelativeTimeFormat: class {} });\n');
+    writeFileSync(
+      polyfill,
+      "if (!('RelativeTimeFormat' in Intl)) Object.assign(Intl, { RelativeTimeFormat: class {} });\n",
+    );
     try {
       assert.equal(await intlRun('function', {}, [polyfill]), 0);
     } finally {

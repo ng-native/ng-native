@@ -74,9 +74,12 @@ Both `ngNative()` and `@ng-native/testing/register` remove them. The three Herme
 own, so an option Hermes does not support on them, such as `notation: 'compact'` on iOS, still
 works in a test.
 
-Only Node's own are removed, so an app that polyfills them keeps its polyfill: import it in a
-Vitest setup file, or in a module given to `node --import`, as the app's entry file imports it on a
-device. For Node's full `Intl` in Vitest instead, give `intl: 'node'`:
+An app that polyfills them keeps its polyfill: import it in a Vitest setup file, or in a module
+given to `node --import`, as the app's entry file imports it on a device. `ngNative()` removes them
+ahead of the app's own setup files, so a polyfill that installs only what `Intl` lacks sees them
+missing, as it does on Hermes. Under `node --import`, import the polyfill after
+`@ng-native/testing/register` for the same reason; one installed before it is kept as well. For
+Node's full `Intl` in Vitest instead, give `intl: 'node'`:
 
 ```ts
 ngNative({ intl: 'node' });
