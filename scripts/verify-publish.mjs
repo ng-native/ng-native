@@ -42,6 +42,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
   rmSync,
 } from 'node:fs';
@@ -63,24 +64,18 @@ if (unread.length) {
   );
 }
 
-/** Every package that would go to npm, plus the template. */
+/**
+ * Every package that would go to npm, plus the template: each under `packages/` its manifest does
+ * not mark private, so a new package is checked from the day it is added.
+ */
 const PUBLISHED = [
-  'packages/analog',
-  'packages/components',
-  'packages/device',
-  'packages/eslint-plugin',
-  'packages/expo',
-  'packages/fabric',
-  'packages/icons',
-  'packages/metro',
-  'packages/migrate',
-  'packages/nx',
-  'packages/platform',
-  'packages/router',
-  'packages/schematics',
-  'packages/tailwind',
-  'packages/testing',
-  'packages/web',
+  ...readdirSync(path.join(root, 'packages'))
+    .sort()
+    .map((name) => `packages/${name}`)
+    .filter((dir) => {
+      const manifest = path.join(root, dir, 'package.json');
+      return existsSync(manifest) && JSON.parse(readFileSync(manifest, 'utf8')).private !== true;
+    }),
   'template',
 ];
 

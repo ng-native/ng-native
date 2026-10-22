@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
@@ -370,6 +370,31 @@ describe('the transform chain', () => {
   it('runs an externally-templated component end to end', async () => {
     const mod = await compileFixture(fixture('external.ts'));
     assert.ok(mod['External'], 'component compiled and loaded');
+  });
+
+  it('compiles every source of @ng-native/web-compat, which an app bundles from source', async () => {
+    // Babel's TypeScript transform is stricter than tsc: a `declare` field fails the bundle on a
+    // green typecheck, with a 500 from Metro on the device.
+    const transformer = require('@ng-native/metro/transformer.cjs') as {
+      transform(params: object): Promise<unknown>;
+    };
+    const dir = fileURLToPath(new URL('../web-compat/src/', import.meta.url));
+    const failed: string[] = [];
+    for (const name of readdirSync(dir, { recursive: true, encoding: 'utf8' })) {
+      if (!name.endsWith('.ts') || name.endsWith('.test.ts')) continue;
+      const filename = path.join(dir, name);
+      try {
+        await transformer.transform({
+          filename,
+          src: readFileSync(filename, 'utf8'),
+          options: { dev: true, projectRoot: process.cwd(), platform: 'android' },
+          plugins: [],
+        });
+      } catch (error) {
+        failed.push(`${name}: ${(error as Error).message.split('\n')[0]}`);
+      }
+    }
+    assert.deepEqual(failed, []);
   });
 });
 
