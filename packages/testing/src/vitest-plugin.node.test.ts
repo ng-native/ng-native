@@ -386,6 +386,50 @@ describe('a Vitest run', () => {
   });
   after(() => rmSync(root, { recursive: true, force: true }));
 
+  /** Runs `intl.test.ts`, which passes when `Intl.RelativeTimeFormat` is `expected`. */
+  async function intlRun(
+    expected: string,
+    options?: Parameters<typeof ngNative>[0],
+    setupFiles: string[] = [],
+  ) {
+    writeFileSync(
+      path.join(root, 'intl.test.ts'),
+      "import { expect, it } from 'vitest';\n" +
+        `it('has it or not', () => expect(typeof Intl.RelativeTimeFormat).toBe('${expected}'));\n`,
+    );
+    const { createVitest } = await import('vitest/node');
+    const vitest = await createVitest(
+      'test',
+      { root, config: false, watch: false, reporters: [], include: ['intl.test.ts'], setupFiles },
+      { plugins: [ngNative(options)] },
+    );
+    try {
+      await vitest.start();
+      return vitest.state.getCountOfFailedTests();
+    } finally {
+      await vitest.close();
+      rmSync(path.join(root, 'intl.test.ts'), { force: true });
+    }
+  }
+
+  it('runs without the Intl constructors Hermes lacks', async () => {
+    assert.equal(await intlRun('undefined'), 0);
+  });
+
+  it("keeps Node's Intl for intl: 'node', for an app that polyfills what Hermes lacks", async () => {
+    assert.equal(await intlRun('function', { intl: 'node' }), 0);
+  });
+
+  it("keeps a polyfill the app's own setup file installs", async () => {
+    const polyfill = path.join(root, 'polyfill.ts');
+    writeFileSync(polyfill, 'Object.assign(Intl, { RelativeTimeFormat: class {} });\n');
+    try {
+      assert.equal(await intlRun('function', {}, [polyfill]), 0);
+    } finally {
+      rmSync(polyfill, { force: true });
+    }
+  });
+
   it('leaves no copy of the modules it ran in the temp directory', async () => {
     const { createVitest } = await import('vitest/node');
     const vitest = await createVitest(

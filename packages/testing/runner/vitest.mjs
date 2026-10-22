@@ -8,8 +8,9 @@
  * - It inlines. Vitest hands `node_modules` straight to Node by default, which would mean an
  *   `@ng-native/*` package's `.ts` source reaching a runtime that refuses to strip types under
  *   `node_modules`, and `@angular/*` reaching it unlinked. Inlined, both come through the plugin.
- * - It adds a setup file with the globals Angular reads as it is first evaluated, and runs ES
- *   modules without the CommonJS variables Vitest otherwise injects into them.
+ * - It adds a setup file with the globals Angular reads as it is first evaluated, and one that
+ *   leaves `Intl` with only the constructors Hermes has (`hermes-intl.mjs`, unless `intl: 'node'`),
+ *   and runs ES modules without the CommonJS variables Vitest otherwise injects into them.
  * - It stubs assets. With no `require`, an app's `require('./logo.png')` would throw; it becomes
  *   `{ testUri }` instead. And it stands in for the gesture and animation entry points, whose
  *   React Native source Node cannot load (`STAND_INS`).
@@ -40,6 +41,7 @@ import {
 } from './compile.mjs';
 
 const SETUP = fileURLToPath(new URL('./setup.mjs', import.meta.url));
+const HERMES_INTL = fileURLToPath(new URL('./hermes-intl.mjs', import.meta.url));
 
 /**
  * Entry points a test gets a stand-in for, because what they import is React Native source that
@@ -270,7 +272,7 @@ function removeModuleCopies(vitest) {
 const cleaned = new WeakSet();
 
 /**
- * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false }} [options]
+ * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false, intl?: 'hermes' | 'node' }} [options]
  * @returns {import('vitest/config').Plugin}
  */
 export function ngNative(options = {}) {
@@ -284,7 +286,7 @@ export function ngNative(options = {}) {
       // only under one.
       ...withConditions(tsconfigConditions(config?.root ?? process.cwd())),
       test: {
-        setupFiles: [SETUP],
+        setupFiles: options.intl === 'node' ? [SETUP] : [SETUP, HERMES_INTL],
         // Vitest hands every ES module a CommonJS `require` by default, for compatibility with an
         // older runner. Code here checks for one to tell a device from Node: given one, it
         // requires `react-native`, whose Flow source nothing in a test can parse. Off, a module
