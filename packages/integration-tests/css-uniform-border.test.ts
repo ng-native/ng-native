@@ -108,3 +108,70 @@ describe('a border the same on every side', () => {
     assert.equal('borderColor' in props(), false);
   });
 });
+
+describe('a border made the same on every side by the element', () => {
+  const SHEET = '.a { border: 4px dashed #cc0000; border-radius: 16px }';
+  const every = (part: 'Width' | 'Color', value: unknown) =>
+    Object.fromEntries(['Top', 'Right', 'Bottom', 'Left'].map((s) => [`border${s}${part}`, value]));
+
+  it('is given unsided from the style the view is committed with', () => {
+    const { engine, node, props } = view(SHEET);
+    engine.setProp(node, 'style', { ...every('Width', 6), ...every('Color', 'blue') });
+    engine.commit();
+    assert.deepEqual(sides(props(), 'Width'), [6, 6, 6, 6]);
+    assert.equal(props()['borderWidth'], 6);
+    assert.equal(props()['borderColor'], 'blue');
+    assert.equal(props()['borderStyle'], 'dashed');
+
+    // And from the sheet again once the element's own style goes.
+    engine.setProp(node, 'style', null);
+    engine.commit();
+    assert.equal(props()['borderWidth'], 4);
+    assert.equal(props()['borderColor'], 'rgb(204, 0, 0)');
+  });
+
+  it('keeps the sheet unsided where the element makes one side differ', () => {
+    const { engine, node, props } = view(SHEET);
+    engine.setProp(node, 'style', { borderTopWidth: 6 });
+    engine.commit();
+    assert.deepEqual(sides(props(), 'Width'), [6, 4, 4, 4]);
+    assert.notEqual(props()['borderWidth'], 6);
+  });
+});
+
+describe('a uniform border while its colour or width transitions', () => {
+  function transitioning(property: string, from: string, to: string) {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(`
+        view { border: ${from} dashed; border-radius: 16px; transition: ${property} 100ms linear }
+        view.on { border: ${to} dashed }
+      `) as never,
+      now: () => now,
+    });
+    const node = engine.createElement('view');
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    engine.setClasses(node, 'on');
+    engine.commit();
+    now += 50;
+    engine.advanceAnimations();
+    engine.commit();
+    return fabric.committed[0]!.props;
+  }
+
+  it('eases the unsided colour with the sides, so Android keeps it dashed', () => {
+    const props = transitioning('border-color', '4px #ff0000', '4px #0000ff');
+    const [top] = sides(props, 'Color');
+    assert.notEqual(top, 'rgb(0, 0, 255)', 'halfway, not at its end');
+    assert.deepEqual(sides(props, 'Color'), [top, top, top, top]);
+    assert.equal(props['borderColor'], top);
+  });
+
+  it('eases the unsided width with the sides', () => {
+    const props = transitioning('border-width', '1px red', '5px red');
+    assert.deepEqual(sides(props, 'Width'), [3, 3, 3, 3]);
+    assert.equal(props['borderWidth'], 3);
+  });
+});

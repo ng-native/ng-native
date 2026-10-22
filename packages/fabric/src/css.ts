@@ -873,7 +873,7 @@ const BORDER_SIDES = Object.fromEntries(
  * side equals them; given the sides alone it fills each in solid. A border with no width strokes
  * nothing, so preflight's `border: 0 solid` adds nothing to every element.
  */
-function settleUnsidedBorder(own: Record<string, unknown>): void {
+export function settleUnsidedBorder(own: Record<string, unknown>): void {
   // No top width, its own or unsided: no four sides that agree. Most views have no border.
   if (own['borderTopWidth'] === undefined && own['borderWidth'] === undefined) return;
   const width = agreedSides(own, 'Width');

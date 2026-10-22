@@ -42,6 +42,7 @@ import {
   type TokenValue,
   isGenerated,
   noteGeneratedBoxes,
+  settleUnsidedBorder,
 } from './css.ts';
 import { applyAria } from './aria-props.ts';
 import { STYLED_ELEMENTS } from './element-styles.ts';
@@ -5373,6 +5374,27 @@ const EASED_COLOURS = new Set([
   'borderLeftColor',
 ]);
 const NATIVELY_EASED = new Set(['opacity', 'transform', ...EASED_COLOURS]);
+
+const SIDE_COLOURS = ['borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'];
+
+/**
+ * Ease a view's unsided border colour with its four sides where they ease alike: Android dashes
+ * a rounded border only from `borderColor`, and only while every side equals it.
+ */
+function unsidedBorderTrack(
+  tracks: Map<string, readonly TrackPoint[]>,
+  props: Record<string, unknown>,
+): void {
+  if (props['borderColor'] === undefined || tracks.has('borderColor')) return;
+  const [top, ...rest] = SIDE_COLOURS.map((key) => tracks.get(key));
+  if (!top || rest.some((track) => !sameTrack(track, top))) return;
+  tracks.set('borderColor', top);
+}
+
+const sameTrack = (one: readonly TrackPoint[] | undefined, other: readonly TrackPoint[]) =>
+  one !== undefined &&
+  one.length === other.length &&
+  one.every((point, at) => point.value === other[at]!.value);
 
 /** What a node that hands its background colour over has handed so far: nothing. */
 const UNREPORTED = Symbol('unreported');
@@ -11273,6 +11295,8 @@ export class Engine implements HostEngine {
     const field = TEXT_INPUTS.has(viewName);
     if (field) fieldStyled(viewName, style, this.fontScale);
     const merged = composeTransform(node, this.eased(node, style));
+    // From the sides as committed: the element's own, and each frame of a transition.
+    settleUnsidedBorder(merged);
     // On iOS: Android's field says the baseline of the line it is sized and centred by.
     if (field) centreSingleLine(viewName, merged, this.fontScale, isOnBaseline(node, viewName));
     // After a transition, which eases the basis as the basis it was written as.
@@ -12837,6 +12861,7 @@ export class Engine implements HostEngine {
         ] as const;
       }),
     );
+    unsidedBorderTrack(tracks, props);
     const spec: AnimationSpec = {
       name: '',
       duration: first.duration,

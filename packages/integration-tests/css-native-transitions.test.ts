@@ -290,6 +290,33 @@ describe('a transition of a colour', () => {
     assert.deepEqual(s.events, ['start backgroundColor', 'end backgroundColor']);
   });
 
+  it('eases a uniform border unsided with its sides, which Android dashes a rounded one from', () => {
+    const s = scene(
+      '.a { border: 4px dashed rgb(255, 0, 0); border-radius: 16px; ' +
+        'transition: border-color 200ms linear } .a.on { border-color: rgb(0, 0, 255) }',
+    );
+    s.classes('a on');
+    assert.equal(s.started().length, 1);
+    const half = s.at(0.5);
+    for (const side of ['Top', 'Right', 'Bottom', 'Left']) {
+      for (const part of ['r', 'g', 'b', 'a']) {
+        const key = `border${side}Color.${part}`;
+        assert.equal(half[`borderColor.${part}`], half[key], key);
+      }
+    }
+    assert.ok(half['borderColor.r']! > 0 && half['borderColor.b']! > 0, 'halfway, not an end');
+  });
+
+  it('leaves the unsided colour alone where only some sides ease, to end alike', () => {
+    const s = scene(
+      '.a { border: 4px dashed rgb(0, 0, 255); border-top-color: rgb(255, 0, 0); ' +
+        'transition: border-color 200ms linear } .a.on { border-top-color: rgb(0, 0, 255) }',
+    );
+    s.classes('a on');
+    assert.equal(s.started().length, 1);
+    assert.equal(s.at(0.5)['borderColor.r'], undefined);
+  });
+
   it('shares a clock with an opacity that starts with it and eases alike', () => {
     const s = scene(
       '.a { opacity: 1; background-color: rgb(0, 0, 0); transition: all 200ms linear } ' +
