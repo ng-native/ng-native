@@ -53,12 +53,13 @@ async function page() {
   const div = (parent?: Dom, style?: string) => make('div', parent, style);
   /** Native says an element that scrolls has been scrolled. */
   const scrolled = async (element: Dom, x: number, y: number) => {
-    element.setAttribute('testID', idOf(element));
-    // Committed now, rather than left to `settle`, which gives up after a few frames on a busy
-    // machine and leaves the view unnamed for the query below.
     engine.commit();
     await settle();
-    app.fabric.emit(screen.getByTestId(idOf(element)), 'topScroll', { contentOffset: { x, y } });
+    // To the view the element is committed as, rather than one found by a name: a busy machine
+    // ran the full suite with the name not yet among the views a query reads.
+    const view = (element as { committed?: { handle?: unknown } }).committed?.handle;
+    assert.ok(view, 'the element is committed');
+    app.fabric.emit(view as never, 'topScroll', { contentOffset: { x, y } });
   };
   const sent = () =>
     app.fabric.commands
