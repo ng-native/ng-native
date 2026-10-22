@@ -185,9 +185,13 @@ describe('elementFromPoint', () => {
     same(document.elementFromPoint(70, 110), past, 'drawn past a box that does not clip');
   });
 
-  it('lists no body that is not drawn', async () => {
+  it('lists no body that is not drawn, or that takes no touches', async () => {
     const { document } = await page();
     document.body.style.setProperty('display', 'none');
+    await settle();
+    assert.equal(document.elementsFromPoint(10, 10).includes(document.body), false);
+    document.body.style.setProperty('display', 'flex');
+    document.body.style.setProperty('pointer-events', 'none');
     await settle();
     assert.equal(document.elementsFromPoint(10, 10).includes(document.body), false);
   });

@@ -106,6 +106,9 @@ export function elementsFromPoint(
   collect(engine.root, x, y, found, false);
   // Under all of it, the body and the page, as a browser lists them: the body is drawn as
   // tall as the window here, where a browser's is as tall as what is in it.
-  if (!found.includes(body) && styled(body, 'display') !== 'none') found.push(body);
+  // The engine's own `box-none` on it lets touches through to what is under the app; only the
+  // page's `none` keeps it off the list, as a browser does.
+  const listed = styled(body, 'pointerEvents') !== 'none' && styled(body, 'display') !== 'none';
+  if (listed && !found.includes(body)) found.push(body);
   return [...found, engine.root];
 }
