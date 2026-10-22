@@ -303,6 +303,19 @@ describe("an HTML element's start under web-compat, as a browser lays it out", (
     assert.equal(props('view-item')['flexShrink'] ?? 0, 0, 'and a native view keeps its size');
   });
 
+  it('gives up no room in the body, which is a block as a browser has it', async () => {
+    // What a library puts in the body is in its flow, and a block's flow shrinks nothing: two
+    // boxes there were squeezed to no height in a window that had room for them.
+    await page();
+    const document = (globalThis as { document?: any }).document;
+    const box = document.createElement('div');
+    box.style.height = '100px';
+    document.body.appendChild(box);
+    await settle();
+    // As committed: held unseen for a frame, it is in no query yet.
+    assert.equal(box.committed?.props['flexShrink'] ?? 0, 0);
+  });
+
   it('stops at its content as it gives up room, which min-height: 0 lets it past', async () => {
     // Down a column too short for both, a browser shrinks neither below its words, whose minimum
     // is `min-height: auto`; one given a minimum of nothing gives up its room.

@@ -138,6 +138,9 @@ const BODY_LAYER = 1_000_000;
  */
 function createBody(engine: Engine): EngineNode {
   const body = ownView(engine);
+  // A block, as a browser's body is: what is in its flow takes the room it is given and gives up
+  // none, where an HTML element starts as a flex item that does (see `elements.ts`).
+  engine.setDefaultStyle(body, { display: 'block' });
   windowBody(engine, body);
   const fill = () => {
     const top = windowTop(engine);
