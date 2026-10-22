@@ -255,6 +255,22 @@ describe('a range input', () => {
     assert.deepEqual(app.instance.heard, ['input 10', 'input 8']);
   });
 
+  it('moves across its content box, inside its padding, as a browser has it', async () => {
+    // Material's slider pads the input it lays over its track: the value runs between the
+    // padding, not across the whole box.
+    const { app, slider } = await page();
+    app.fabric.frames.set('View', { x: 0, y: 0, width: 140, height: 20 });
+    slider.style.padding = '0 20px';
+    await settle();
+    const view = screen.getByTestId('slider');
+    await drag(view, 70, 20);
+    assert.equal(slider.value, '0', 'the start of the content box');
+    await drag(view, 20, 120);
+    assert.equal(slider.value, '10', 'its end');
+    await drag(view, 120, 70);
+    assert.equal(slider.value, '5', 'its middle');
+  });
+
   it('moves under a finger with no listener, and is told to a listener added later', async () => {
     const { app, make } = await page();
     app.fabric.frames.set('View', { x: 0, y: 0, width: 100, height: 20 });

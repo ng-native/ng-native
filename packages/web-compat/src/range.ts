@@ -1,5 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { disabled } from './activation.ts';
+import { computedStyle } from './computed-style.ts';
 import { domError } from './dom-error.ts';
 import { parseFloatingPoint, type Reflecting } from './reflect.ts';
 import { engineOf } from './window.ts';
@@ -231,11 +232,22 @@ export function slideRange(node: EngineNode, phase: 'down' | 'move' | 'up', x: n
   if (phase === 'down') dragging.set(node, rangeValue(node)!);
   if (!dragging.has(node)) return;
   const rect = (node as unknown as { getBoundingClientRect(): Rect }).getBoundingClientRect();
-  if (!(rect.width > 0)) return;
+  // Across its content box, inside its padding, as a browser runs a range: Material's slider
+  // pads the input it lays over its track.
+  const [start, end] = paddingOf(node);
+  const width = rect.width - start - end;
+  if (!(width > 0)) return;
   const bounds = boundsOf(node);
-  const along = Math.min(Math.max((x - rect.x) / rect.width, 0), 1);
+  const along = Math.min(Math.max((x - rect.x - start) / width, 0), 1);
   const next = sanitized(node, String(bounds.min + along * (bounds.max - bounds.min)));
   if (next === rangeValue(node)) return;
   set.set(node, next);
   engine.dispatchEvent(node, 'topInput', {});
+}
+
+/** A range's padding at its start and its end, in points, as its computed style has them. */
+function paddingOf(node: EngineNode): [number, number] {
+  const style = computedStyle(node) as { paddingLeft?: string; paddingRight?: string };
+  const points = (value: string | undefined) => Number.parseFloat(value ?? '') || 0;
+  return [points(style.paddingLeft), points(style.paddingRight)];
 }
