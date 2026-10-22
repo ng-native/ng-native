@@ -14,7 +14,8 @@ type Dom = any;
 @Component({
   selector: 'x-copy',
   template: `<input id="link" value="https://shop.example/" />
-    <textarea id="note">Hello there</textarea>`,
+    <textarea id="note">Hello there</textarea>
+    <input id="agree" type="checkbox" />`,
 })
 class Copy {
   readonly document: Dom = inject(DOCUMENT);
@@ -88,6 +89,37 @@ describe("a document's copy command", () => {
         assert.equal(document.execCommand('cut'), false);
         assert.equal(document.execCommand('selectAll'), false);
         assert.deepEqual(written, []);
+      },
+    );
+  });
+
+  it('answers false once the field selected has left the page', async () => {
+    const written: string[] = [];
+    await withClipboard(
+      { setStringAsync: async (text: string) => void written.push(text) },
+      async () => {
+        const document = await page();
+        const link = document.getElementById('link');
+        link.select();
+        link.remove();
+        assert.equal(document.execCommand('copy'), false);
+        assert.deepEqual(written, []);
+      },
+    );
+  });
+
+  it('copies no value of a field with no text to select', async () => {
+    const written: string[] = [];
+    await withClipboard(
+      { setStringAsync: async (text: string) => void written.push(text) },
+      async () => {
+        const document = await page();
+        document.getElementById('agree').select();
+        assert.equal(document.execCommand('copy'), false, 'a checkbox has no text selected');
+        document.getElementById('link').select();
+        document.getElementById('agree').select();
+        document.execCommand('copy');
+        assert.deepEqual(written, ['https://shop.example/'], 'the field selected before');
       },
     );
   });

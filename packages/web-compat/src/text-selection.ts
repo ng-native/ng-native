@@ -102,10 +102,11 @@ const MEMBERS: Readonly<Record<string, Reflection>> = {
   ) {
     setRange(this, from, to, direction);
   }),
-  // The whole text, and the field kept as the one a copy takes.
+  // The whole text, and the field kept as the one a copy takes: one with no text to select is not.
   select: method(function (this: Field) {
+    if (!selectable(this)) return;
     keepSelected(engineOf(this), this);
-    if (selectable(this)) setRange(this, 0, textOf(this).length);
+    setRange(this, 0, textOf(this).length);
   }),
 };
 

@@ -8,7 +8,12 @@ interface NativeClipboard {
   setStringAsync?: (text: string, options: object) => Promise<unknown>;
 }
 
-type Field = EngineNode & { value?: unknown; selectionStart?: unknown; selectionEnd?: unknown };
+type Field = EngineNode & {
+  value?: unknown;
+  selectionStart?: unknown;
+  selectionEnd?: unknown;
+  isConnected?: unknown;
+};
 
 /** A field's text has been selected, as a library does before it asks the document to copy it. */
 export function select(engine: Engine, field: EngineNode): void {
@@ -35,7 +40,8 @@ export function copySelected(engine: Engine): boolean {
   const modules = (globalThis as { expo?: { modules?: Record<string, NativeClipboard> } }).expo
     ?.modules;
   const write = modules?.['ExpoClipboard']?.setStringAsync;
-  if (!field || typeof write !== 'function') return false;
+  // One taken out of the page since, as a screen left behind, is nothing to copy.
+  if (!field?.isConnected || typeof write !== 'function') return false;
   // Answered at once, as the command is: a failure after is nothing a library waits to hear.
   try {
     void Promise.resolve(write.call(modules?.['ExpoClipboard'], textToCopy(field), {})).catch(
