@@ -14,7 +14,7 @@ dom/traversal                                                                  1
 html/dom                                                                       209        56 (26.8%)   168            63898            64451  99.1%
 html/editing/the-hidden-attribute                                              10         2 (20.0%)    15             20               42     47.6%
 html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute  3          1 (33.3%)    4              8                10     80.0%
-css/cssom-view                                                                 220        52 (23.6%)   27             713              1714   41.6%
+css/cssom-view                                                                 220        52 (23.6%)   27             724              1714   42.2%
 resize-observer                                                                32         7 (21.9%)    7              16               48     33.3%
 intersection-observer                                                          137        29 (21.2%)   17             147              337    43.6%
 domparsing                                                                     68         21 (30.9%)   20             614              1856   33.1%

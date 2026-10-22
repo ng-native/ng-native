@@ -1,7 +1,7 @@
 {
   "commit": "6dcecaab61b33a51e04f49be43941461808193cc",
   "files": {
-    "css/cssom-view/CaretPosition-001.html": {"status":"OK","pass":0,"fail":2,"total":2,"passed":"da39a3ee5e","names":"523d272601","failed":["4bd0e825","5ce7c533"]},
+    "css/cssom-view/CaretPosition-001.html": {"status":"OK","pass":1,"fail":1,"total":2,"passed":"5ce7c53346","names":"523d272601","failed":["4bd0e825"]},
     "css/cssom-view/DOMRectList.html": {"status":"OK","pass":1,"fail":1,"total":2,"passed":"c350738335","names":"8e63243cd4","failed":["971dc4f3"]},
     "css/cssom-view/Element-currentCSSZoom.html": {"status":"OK","pass":0,"fail":2,"total":2,"passed":"da39a3ee5e","names":"d29f1957f6","failed":["328ef25c","f08079a2"]},
     "css/cssom-view/GetBoundingRect.html": {"status":"OK","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"749966cd37","failed":["749966cd"]},
@@ -53,7 +53,7 @@
     "css/cssom-view/elementFromPoint-002.html": {"status":"OK","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"4ba727fbb4","failed":["4ba727fb"]},
     "css/cssom-view/elementFromPoint-003.html": {"status":"OK","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"4ba727fbb4","failed":["4ba727fb"]},
     "css/cssom-view/elementFromPoint-dynamic-anon-box.html": {"status":"OK","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"981193fa61","failed":["981193fa"]},
-    "css/cssom-view/elementFromPoint-ellipsis-in-inline-box.html": {"status":"OK","pass":0,"fail":3,"total":3,"passed":"da39a3ee5e","names":"0980ecfdc8","failed":["9de1657d","cd16f87a","d05ecc83"]},
+    "css/cssom-view/elementFromPoint-ellipsis-in-inline-box.html": {"status":"OK","pass":1,"fail":2,"total":3,"passed":"cd16f87a42","names":"0980ecfdc8","failed":["9de1657d","d05ecc83"]},
     "css/cssom-view/elementFromPoint-float-in-relative.html": {"status":"OK","pass":1,"fail":0,"total":1,"passed":"1f74579f69","names":"1f74579f69","failed":[]},
     "css/cssom-view/elementFromPoint-float-in-table.html": {"status":"OK","pass":2,"fail":0,"total":2,"passed":"6cdc25bbf3","names":"6cdc25bbf3","failed":[]},
     "css/cssom-view/elementFromPoint-list-001.html": {"status":"OK","pass":0,"fail":10,"total":10,"passed":"da39a3ee5e","names":"c382c42960","failed":["053d1634","0cb57f7a","25c8bb69","3abdabb2","3ae1e894","452f221f","93778ec0","a2354cb5","c2dd73c1","c966989e"]},
@@ -64,7 +64,7 @@
     "css/cssom-view/elementFromPoint-subpixel.html": {"status":"OK","pass":0,"fail":4,"total":4,"passed":"da39a3ee5e","names":"7affd1c410","failed":["29493d9d","4c6311b3","b0ab5ba4","fd054c79"]},
     "css/cssom-view/elementFromPoint-visibility-hidden-resizer.html": {"status":"OK","pass":0,"fail":1,"total":1,"passed":"da39a3ee5e","names":"9eb2b97095","failed":["9eb2b970"]},
     "css/cssom-view/elementFromPoint.html": {"status":"OK","pass":5,"fail":6,"total":11,"passed":"c129036f07","names":"1ce16e372f","failed":["0d8efa37","14bf2c56","177c3cb0","587afc97","e4715309","fa15e177"]},
-    "css/cssom-view/elementFromPosition.html": {"status":"OK","pass":0,"fail":16,"total":16,"passed":"da39a3ee5e","names":"ef05ceda65","failed":["4adef551","4b579233","637ec087","7829542d","7a048ddc","9b0e92ee","9e44169a","a2785cd9","b2dd4868","b3e49080","c2e90ae5","c6eb90c7","ce959639","df09cf93","f26148d4","f6561606"]},
+    "css/cssom-view/elementFromPosition.html": {"status":"OK","pass":9,"fail":7,"total":16,"passed":"22813778ca","names":"ef05ceda65","failed":["4b579233","637ec087","7829542d","9b0e92ee","9e44169a","b2dd4868","f6561606"]},
     "css/cssom-view/elementScroll-002.html": {"status":"OK","pass":2,"fail":2,"total":4,"passed":"1e2e0ce5b1","names":"c7d2bf0132","failed":["5b5b77a7","707ca11a"]},
     "css/cssom-view/elementScroll.html": {"status":"OK","pass":0,"fail":8,"total":8,"passed":"da39a3ee5e","names":"5ccb5c6453","failed":["3eb9f185","3f54a2bd","600d0ad9","617f42e0","7c3399d0","c7f2c2b5","d305bd0a","d4d79f12"]},
     "css/cssom-view/elementsFromPoint-iframes.html": {"status":"TIMEOUT","pass":0,"fail":2,"total":2,"passed":"da39a3ee5e","names":"972917a0aa","failed":["461f8d8e","accb8f5a"]},
