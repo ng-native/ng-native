@@ -202,6 +202,9 @@ export class Room {
 })
 export class WrappedBar {}
 
+/** The rewind a router's navigation is waiting to make, from the outlet copy these screens use. */
+export { pendingRewind } from '../../router/src/native-stack-outlet.ts';
+
 export const routes: Routes = [
   { path: '', component: Home },
   {

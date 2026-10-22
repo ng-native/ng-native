@@ -7,7 +7,17 @@ import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import { ErrorHandler, type Type } from '@angular/core';
 import { PlatformLocation } from '@angular/common';
-import { Router, withComponentInputBinding, withRouterConfig, type Routes } from '@angular/router';
+import {
+  ActivationEnd,
+  NavigationCancel,
+  NavigationError,
+  NavigationSkipped,
+  Router,
+  withComponentInputBinding,
+  withRouterConfig,
+  type Event,
+  type Routes,
+} from '@angular/router';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { NativeNavigation, intentOf } from '../router/src/native-navigation.ts';
 import { NativePlatformLocation } from '../router/src/native-platform-location.ts';
@@ -44,6 +54,23 @@ describe('a plain navigation to a url further down the stack', () => {
 
   /** The history up to the page showing, oldest first. */
   const historyOf = () => history.ɵpages().map((page) => page.url);
+  /** The rewind the router's navigation is waiting to make, if any. */
+  const pending = () =>
+    (mod['pendingRewind'] as (router: Router) => { navigation: number; steps: number } | undefined)(
+      router,
+    );
+  /** The router events sent while `run` runs, and the turns after it. */
+  async function eventsOf(run: () => Promise<unknown>): Promise<Event[]> {
+    const seen: Event[] = [];
+    const events = router.events.subscribe((event) => seen.push(event));
+    try {
+      await run();
+      await idle();
+    } finally {
+      events.unsubscribe();
+    }
+    return seen;
+  }
 
   before(async () => {
     mod = await compileFixture('fixtures/stack-app.ts');
@@ -200,6 +227,61 @@ describe('a plain navigation to a url further down the stack', () => {
     assert.equal(router.url, '/wrapped-tabs/venues/1');
     assert.equal(historyOf().at(-1), '/wrapped-tabs/venues/1');
     assert.equal(historyOf().at(-2), '/wrapped-tabs/venues/2');
+  });
+
+  it('counts one entry for a screen the stack took in from another stack', async () => {
+    await nav.popToRoot();
+    await nav.push('/compose');
+    await nav.push('/compose/step');
+    await nav.push('/user/3');
+    // A second compose stack, opened at its step: the first one's start page is the one kept.
+    await nav.push('/compose/step');
+    await idle();
+    // So this goes back to that page, out of the first stack and into this one.
+    assert.equal(await router.navigateByUrl('/compose'), true);
+    await idle();
+    assert.deepEqual(historyOf(), [
+      '/',
+      '/compose',
+      '/compose/step',
+      '/user/3',
+      '/compose/step',
+      '/compose',
+    ]);
+
+    assert.equal(await router.navigateByUrl('/compose/step'), true);
+    await idle();
+    assert.equal(router.url, '/compose/step');
+    assert.deepEqual(historyOf(), ['/', '/compose', '/compose/step', '/user/3', '/compose/step']);
+  });
+
+  it('forgets the rewind of a navigation another one supersedes as it activates', async () => {
+    let taken: unknown;
+    const supersede = router.events.subscribe((event) => {
+      if (!(event instanceof ActivationEnd) || taken) return;
+      taken = pending();
+      void router.navigateByUrl('/user/3');
+    });
+    try {
+      const events = await eventsOf(() => router.navigateByUrl('/user/1'));
+      assert.ok(events.some((event) => event instanceof NavigationCancel));
+    } finally {
+      supersede.unsubscribe();
+    }
+    assert.ok(
+      taken,
+      'the navigation took the screen over the kept one off before it was cancelled',
+    );
+    assert.equal(router.url, '/user/3');
+    assert.equal(pending(), undefined);
+  });
+
+  it('records nothing for a navigation that ends before it takes a screen off', async () => {
+    const skipped = await eventsOf(() => router.navigateByUrl('/user/2'));
+    assert.ok(skipped.some((event) => event instanceof NavigationSkipped));
+    assert.equal(pending(), undefined);
+    assert.deepEqual(stack(fabric), ['home', 'user 1', 'user 2']);
+    assert.deepEqual(historyOf(), ['/', '/user/1', '/user/2']);
   });
 
   it('leaves the history matching the stack when a link opens its parent pages', async () => {
@@ -486,5 +568,46 @@ describe('a navigation to a url further down the stack that fails or is cancelle
       'user 9',
     ]);
     assert.equal(live['User'], 1, 'user 1 is gone, and user 9 is there');
+  });
+});
+
+describe('a plain navigation to a url further down the stack that a guard refuses', () => {
+  afterEach(() => cleanup());
+
+  it('takes no screen off, and records no rewind', async () => {
+    const mod = await compileFixture('fixtures/stack-app.ts');
+    let allow = true;
+    const routes = (mod['routes'] as Routes).map((route) =>
+      route.path === 'user/:id' ? { ...route, canActivate: [() => allow] } : route,
+    );
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [provideNativeRouter(routes, withComponentInputBinding())],
+    });
+    const router = app.componentRef.injector.get(Router);
+    const nav = app.componentRef.injector.get(NativeNavigation);
+    const history = app.componentRef.injector.get(PlatformLocation) as NativePlatformLocation;
+    const pending = mod['pendingRewind'] as (router: Router) => unknown;
+    await nav.push('/user/1');
+    await nav.push('/user/2');
+    await idle();
+
+    allow = false;
+    const cancelled: NavigationCancel[] = [];
+    const events = router.events.subscribe((event) => {
+      if (event instanceof NavigationCancel) cancelled.push(event);
+    });
+    try {
+      assert.equal(await router.navigateByUrl('/user/1'), false);
+      await idle();
+    } finally {
+      events.unsubscribe();
+    }
+    assert.equal(cancelled.length, 1);
+    assert.equal(pending(router), undefined);
+    assert.deepEqual(stack(app.fabric), ['home', 'user 1', 'user 2']);
+    assert.deepEqual(
+      history.ɵpages().map((page) => page.url),
+      ['/', '/user/1', '/user/2'],
+    );
   });
 });

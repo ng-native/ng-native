@@ -117,6 +117,11 @@ const presented = new WeakMap<object, number>();
  */
 const rewinds = new WeakMap<object, { navigation: number; steps: number }>();
 
+/** The rewind a router's navigation in flight is waiting to make, if any. Exposed for tests. */
+export function pendingRewind(router: object): { navigation: number; steps: number } | undefined {
+  return rewinds.get(router);
+}
+
 /** What every screen needs to fill the stack, the same five keys RNSScreen itself expects. */
 const FILL = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 } as const;
 
