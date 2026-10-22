@@ -221,6 +221,44 @@ describe('@ng-native/web-compat svg by element name', () => {
   });
 });
 
+/** A drawing with a link round some of its shapes, as the SVG logo has. */
+@Component({
+  selector: 'x-linked',
+  template: `
+    <svg viewBox="0 0 100 100" width="80" height="80">
+      <a testID="link" href="https://www.w3.org/Graphics/SVG/">
+        <rect testID="inside" width="100" height="100" fill="#ff9900" />
+      </a>
+    </svg>
+  `,
+})
+class Linked {}
+
+describe('@ng-native/web-compat svg link', () => {
+  it('draws a link in a drawing as a group of what it holds, as an <a> by its name', async () => {
+    const app = await render(Linked, { providers: [provideWebCompat()] });
+    await settle();
+    // A drawing holds nothing but its own views: a plain view in it draws nothing at all.
+    assert.equal(screen.getByTestId('link').viewName, 'RNSVGGroup');
+    assert.equal(screen.getByTestId('inside').viewName, 'RNSVGRect');
+    const document = (globalThis as unknown as { document: Dom }).document;
+    assert.equal(document.querySelector('svg a')?.localName, 'a');
+    // One markup builds, as a picture fetched for an <img> is.
+    const svg = document.querySelector('svg');
+    svg.innerHTML = '<a href="#b"><circle r="5" /></a>';
+    await settle();
+    assert.equal(svg.firstChild.localName, 'a');
+    const drawing = (nodes: readonly FakeFabricNode[]): FakeFabricNode | undefined =>
+      nodes.find((node) => node.viewName === 'RNSVGSvgView') ??
+      nodes.map((node) => drawing(node.children)).find(Boolean);
+    const [link] = drawing(app.fabric.committed)!.children;
+    assert.deepEqual(
+      [link!.viewName, link!.children.map((child) => child.viewName)],
+      ['RNSVGGroup', ['RNSVGCircle']],
+    );
+  });
+});
+
 describe('@ng-native/web-compat svg attributes in a selector', () => {
   /** A page with a sheet a script writes into it, and a box to put a drawing in. */
   const page = async (css: string) => {

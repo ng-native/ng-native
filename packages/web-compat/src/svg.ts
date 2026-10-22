@@ -29,6 +29,8 @@ import {
  */
 /** A `<text>` in a drawing, by a name of its own: `text` is the app's text element. */
 const SVG_TEXT = 'svg:text';
+/** A link in a drawing, which groups what it holds: HTML's `<a>` is a view, which draws nothing in one. */
+const SVG_LINK = 'svg:a';
 
 /**
  * What a drawing holds that nothing here draws: its effects, and what describes it. A chart's
@@ -48,6 +50,7 @@ export function svgNamed(name: string, namespace: string): string | undefined {
   if (name === 'text') return SVG_TEXT;
   // A span a template writes in a text, placed by attributes of its own: a label of two lines.
   if (name === 'tspan') return SVG_SPAN;
+  if (name === 'a') return SVG_LINK;
   // A step of a filter the drawing has none of its own for: see `svg-filter.ts`.
   if (/^fe[A-Z]/.test(name) && !Object.hasOwn(FILTERED, name)) return STEP;
   return NOT_DRAWN.test(name.toLowerCase()) ? SVG_UNDRAWN : name;
@@ -78,6 +81,7 @@ const TEXT_PATH = 'textPath';
 
 const SHAPES: Readonly<Record<string, string>> = {
   g: 'RNSVGGroup',
+  [SVG_LINK]: 'RNSVGGroup',
   path: 'RNSVGPath',
   circle: 'RNSVGCircle',
   ellipse: 'RNSVGEllipse',
