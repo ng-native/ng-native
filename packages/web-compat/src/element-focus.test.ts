@@ -21,7 +21,7 @@ type Dom = any;
       <button id="one">One</button>
       <button id="two">Two</button>
       <button id="off" disabled>Off</button>
-      <div id="plain"></div>
+      <div id="plain" testID="plain"></div>
       <div id="held" tabindex="-1"></div>
       <a id="bare">Bare</a>
       <a id="link" href="/somewhere">Link</a>
@@ -65,7 +65,7 @@ describe('focus on what is not a text field', () => {
     // A library focuses a panel as its page is built, a question or a focus trap: a screen that
     // opens part way down for it has moved for nobody. A form that sends its user to the field
     // to put right does so as its button is pressed.
-    const { document, engine } = await page();
+    const { document, engine, fabric } = await page();
     const revealed: string[] = [];
     const reveal = engine.reveal.bind(engine);
     engine.reveal = (node: Dom) => void revealed.push(node.id);
@@ -84,6 +84,16 @@ describe('focus on what is not a text field', () => {
       one.addEventListener('click', () => held.focus());
       await userEvent.press(screen.getByText('One'));
       assert.deepEqual(revealed, ['held'], 'in answer to the press');
+      // Nor as what holds it scrolls: the page is where the finger moved it.
+      held.blur();
+      revealed.length = 0;
+      const plain = document.getElementById('plain');
+      plain.style.overflow = 'auto';
+      await settle();
+      plain.addEventListener('scroll', () => held.focus());
+      fabric.emit(screen.getByTestId('plain'), 'topScroll', { contentOffset: { x: 0, y: 40 } });
+      assert.equal(active(document), 'held', 'focused all the same');
+      assert.deepEqual(revealed, [], 'as it scrolls');
     } finally {
       engine.reveal = reveal;
     }

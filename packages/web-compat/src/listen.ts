@@ -62,20 +62,31 @@ const ICON_MARKUP = /^\s*<svg[\s>]/i;
 /** Elements whose own component already turns a touch into a press. */
 const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
 
-/** The native event a listener's own element is being told, while it is told it. */
+/** The native event a listener's own element is being told, while it is told it, and its name. */
 let current: unknown;
+let currentName: string | undefined;
 
 /** The native event an element's listener is being told now: see `listenAnywhere`. */
 export const delivering = (): unknown => current;
 
-/** Tell an element's listener of a native event, which is the one being delivered until it is told. */
-function deliverAs<T>(event: unknown, tell: () => T): T {
-  const outer = current;
-  current = event;
+/** What is told as what holds the user's content moves, and not in answer to their hand. */
+const SCROLLS = new Set(['scroll', 'scrollend']);
+
+/** Whether a listener is being told of something the user did: a touch, a key, an edit. */
+export const deliveringAnAction = (): boolean =>
+  current !== undefined && !SCROLLS.has(currentName ?? '');
+
+/**
+ * Tell an element's listener of a native event, which is the one being delivered until it is
+ * told, under the name a listener hears it by where that is known.
+ */
+function deliverAs<T>(event: unknown, tell: () => T, name?: string): T {
+  const [outer, outerName] = [current, currentName];
+  [current, currentName] = [event, name];
   try {
     return tell();
   } finally {
-    current = outer;
+    [current, currentName] = [outer, outerName];
   }
 }
 
@@ -492,7 +503,9 @@ function listenToNative(
   callback: Heard,
 ): () => void {
   const tell = (event: unknown) =>
-    wasRefused(event) ? undefined : deliverAs(event, () => callback(dom(eventName, target, event)));
+    wasRefused(event)
+      ? undefined
+      : deliverAs(event, () => callback(dom(eventName, target, event)), eventName);
   if (MOUSE_OF_TOUCH.has(eventName)) {
     // The mouse a touch is, told as a browser tells it: see `mouse-after-touch.ts`.
     return engine.setEventListener(target, native, (event) => {

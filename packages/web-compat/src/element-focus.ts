@@ -4,7 +4,7 @@ import { eventPath } from './document.ts';
 import { dispatch, newEvent } from './events.ts';
 import { isFileInput, pickFiles } from './file-input.ts';
 import { attributeOf } from './element-tree.ts';
-import { delivering } from './listen.ts';
+import { deliveringAnAction } from './listen.ts';
 import { engineOf } from './window.ts';
 
 /**
@@ -151,13 +151,14 @@ function focus(node: EngineNode, options?: { preventScroll?: unknown }): void {
     tell(engine, node, 'topFocus');
   }
   // Brought into sight, as a browser scrolls to what it focuses (see `Engine.focus`), but only
-  // in answer to a touch and not where the caller says `preventScroll`: a library focuses a
+  // in answer to a touch, a key or an edit, not as what holds it scrolls, and not where the
+  // caller says `preventScroll`: a library focuses a
   // panel as its page is built, a question or a focus trap, and a screen that opens part way
   // down for it has moved for nobody.
   //
   // ponytail: a focus from a timer or a promise a touch started is not in answer to it here.
   // Carry the touch through to those if a form is seen not to scroll to what it sends to.
-  if (!options?.preventScroll && delivering() !== undefined) engine.focus(node);
+  if (!options?.preventScroll && deliveringAnAction()) engine.focus(node);
 }
 
 const method = (value: (this: EngineNode) => unknown) => ({ value, writable: true });
