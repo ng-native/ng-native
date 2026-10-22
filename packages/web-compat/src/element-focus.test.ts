@@ -22,6 +22,7 @@ type Dom = any;
       <button id="two">Two</button>
       <button id="off" disabled>Off</button>
       <div id="plain" testID="plain"></div>
+      <img id="picture" testID="picture" src="https://example.test/a.png" />
       <div id="held" tabindex="-1"></div>
       <a id="bare">Bare</a>
       <a id="link" href="/somewhere">Link</a>
@@ -94,6 +95,12 @@ describe('focus on what is not a text field', () => {
       fabric.emit(screen.getByTestId('plain'), 'topScroll', { contentOffset: { x: 0, y: 40 } });
       assert.equal(active(document), 'held', 'focused all the same');
       assert.deepEqual(revealed, [], 'as it scrolls');
+      // Nor as a picture loads, which is no answer to anyone either.
+      held.blur();
+      document.getElementById('picture').addEventListener('load', () => held.focus());
+      fabric.emit(screen.getByTestId('picture'), 'topLoad', { source: { width: 4, height: 4 } });
+      assert.equal(active(document), 'held', 'focused as it loads');
+      assert.deepEqual(revealed, [], 'as it loads');
     } finally {
       engine.reveal = reveal;
     }

@@ -69,12 +69,13 @@ let currentName: string | undefined;
 /** The native event an element's listener is being told now: see `listenAnywhere`. */
 export const delivering = (): unknown => current;
 
-/** What is told as what holds the user's content moves, and not in answer to their hand. */
-const SCROLLS = new Set(['scroll', 'scrollend']);
-
-/** Whether a listener is being told of something the user did: a touch, a key, an edit. */
+/**
+ * Whether a listener is being told of something the user did: a touch, a key, an edit, each told
+ * by a way of its own with no name, or what native says by a name that is one of `ACTIONS`. A
+ * scroll and a picture loading are no answer to anyone.
+ */
 export const deliveringAnAction = (): boolean =>
-  current !== undefined && !SCROLLS.has(currentName ?? '');
+  current !== undefined && (currentName === undefined || ACTIONS.has(currentName));
 
 /**
  * Tell an element's listener of a native event, which is the one being delivered until it is
@@ -578,6 +579,11 @@ const NATIVE_NAMES: Readonly<Record<string, string>> = {
   focus: 'topFocus',
   blur: 'topBlur',
 };
+
+/** What native says by name that is the user's own doing: all of it but a scroll. */
+const ACTIONS: ReadonlySet<string> = new Set(
+  Object.keys(NATIVE_NAMES).filter((name) => name !== 'scroll'),
+);
 
 /** What native says of an image's picture: see `image.ts`. */
 const IMAGE_EVENTS: Readonly<Record<string, string>> = { load: 'topLoad', error: 'topError' };
