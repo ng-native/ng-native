@@ -103,14 +103,19 @@ export function keyboardSource(): KeyboardSource {
       return windowTopOf(native);
     },
     subscribe: (listener) => {
+      // A keyboard already up says nothing until it next moves. `Keyboard.js` keeps the last show
+      // it heard, from whenever React Native first loaded it.
+      const shown = keyboard.metrics?.();
+      const already = shown ? { height: shown.height, screenY: shown.screenY } : null;
       if (Platform?.OS !== 'ios') {
         const subscriptions = [
           keyboard.addListener('keyboardDidShow', (event) => listener(metricsOf(event))),
           keyboard.addListener('keyboardDidHide', () => listener({ height: 0 })),
         ];
+        if (already) listener(already);
         return () => subscriptions.forEach((subscription) => subscription.remove());
       }
-      let up = false;
+      let up = already !== null;
       const subscriptions = [
         keyboard.addListener('keyboardWillShow', (event) => {
           up = true;
@@ -124,10 +129,23 @@ export function keyboardSource(): KeyboardSource {
           listener({ height: 0, ...timingOf(event) });
         }),
       ];
+      if (already) listener(already);
       return () => subscriptions.forEach((subscription) => subscription.remove());
     },
     dismiss: () => keyboard.dismiss(),
   };
+}
+
+/**
+ * Require React Native's `Keyboard.js` now, so it records each show and hide from here on.
+ *
+ * It keeps the last one it heard, which `keyboardSource` starts from, but only from when it is
+ * first required. Left to the `Keyboard` service, that is when the first `text-input` appears, and
+ * a keyboard the native header's search bar opened before then reads as down until it next moves.
+ */
+export function recordKeyboard(): void {
+  const native = reactNative();
+  if (native) void native.Keyboard;
 }
 
 /**

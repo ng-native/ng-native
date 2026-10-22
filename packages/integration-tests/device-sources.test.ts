@@ -31,7 +31,7 @@ import { appStateSource } from '../device/src/app-state.ts';
 import { colorSchemeSource } from '../device/src/color-scheme.ts';
 import { deepLinkSource } from '../device/src/deep-links.ts';
 import { directionSource } from '../device/src/direction.ts';
-import { keyboardSource } from '../device/src/keyboard.ts';
+import { Keyboard, keyboardSource } from '../device/src/keyboard.ts';
 import { screenSource } from '../device/src/screen.ts';
 import { sharingSource } from '../device/src/sharing.ts';
 
@@ -193,12 +193,14 @@ describe('the accessibility source', () => {
 
 describe('the keyboard source', () => {
   /** A fake `react-native` on one platform, keeping every keyboard handler it is given. */
-  function keyboardOn(os: string) {
+  function keyboardOn(os: string, up?: { height: number; screenY: number }) {
     const handlers = new Map<string, (event: unknown) => void>();
     const removed: string[] = [];
     const native = {
       Platform: { OS: os },
       Keyboard: {
+        // React Native's own record of the last show or hide it heard, from `Keyboard.js`.
+        metrics: () => up,
         dismiss: () => {},
         addListener: (event: string, handler: (e: unknown) => void) => {
           handlers.set(event, handler);
@@ -294,6 +296,58 @@ describe('the keyboard source', () => {
     ]);
     stop();
     assert.deepEqual(removed.sort(), ['keyboardDidHide', 'keyboardDidShow']);
+  });
+
+  it('on iOS, reports a keyboard already up when it starts listening', () => {
+    // React Native's `Keyboard.js` has kept the last show it heard, and nothing else will say
+    // the keyboard is up until it next moves.
+    const { seen, stop, fire } = keyboardOn('ios', { height: 335, screenY: 456 });
+    assert.deepEqual(seen, [{ height: 335, screenY: 456 }], 'no motion, so no timing');
+
+    // Up, so a frame change while it stays up is the keyboard changing size.
+    fire('keyboardWillChangeFrame', frame(291, 500));
+    assert.deepEqual(seen.at(-1), { height: 291, screenY: 500, duration: 250, easing: 'keyboard' });
+    stop();
+  });
+
+  it('on Android, reports a keyboard already up when it starts listening', () => {
+    const { seen, stop } = keyboardOn('android', { height: 291, screenY: 500 });
+    assert.deepEqual(seen, [{ height: 291, screenY: 500 }]);
+    stop();
+  });
+
+  it('gives a Keyboard service started over a keyboard already up its height at once', () => {
+    const native = {
+      Platform: { OS: 'ios' },
+      Keyboard: {
+        metrics: () => ({ height: 335, screenY: 456 }),
+        dismiss: () => {},
+        addListener: () => ({ remove: () => {} }),
+      },
+    };
+    const keyboard = withNative(native, () =>
+      Injector.create({
+        providers: [
+          { provide: Keyboard.SOURCE, useFactory: keyboardSource, deps: [] },
+          { provide: Keyboard, deps: [] },
+        ],
+      }).get(Keyboard),
+    );
+    assert.equal(keyboard.height(), 335);
+    assert.equal(keyboard.visible(), true);
+    assert.deepEqual(keyboard.metrics(), { height: 335, screenY: 456 });
+  });
+
+  it('reports nothing at the start while the keyboard is down', () => {
+    for (const os of ['ios', 'android']) {
+      const { seen, stop, fire } = keyboardOn(os);
+      assert.deepEqual(seen, [], os);
+      if (os === 'ios') {
+        fire('keyboardWillChangeFrame', frame(335, 791));
+        assert.deepEqual(seen, [], 'a frame change while down is still ignored');
+      }
+      stop();
+    }
   });
 
   it('says where the window views are measured in starts, below the top of the screen', () => {

@@ -57,6 +57,8 @@ export interface ReactNative {
   };
   Keyboard: {
     dismiss(): void;
+    /** Where the last show `Keyboard.js` heard put the keyboard, or nothing once it hid. */
+    metrics?(): { height: number; screenY: number } | null | undefined;
     addListener(
       event:
         | 'keyboardDidShow'
