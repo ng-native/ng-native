@@ -18,6 +18,7 @@ import {
   type Route,
 } from '@angular/router';
 import { navigationIntent } from './native-navigation.ts';
+import { poppingTo } from './popping-to.ts';
 import { PRESENTED } from './presented-route.ts';
 import { isScreenRoute, isTabRoute } from './tab-routes.ts';
 
@@ -238,16 +239,26 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
     // written its own id into the entry: the same answer.
     const before = this.answered.get(route);
     if (before && kept.includes(before)) return before;
-    // The one at the history entry a back returns to, where two screens share the url: a back of
-    // three screens from C over A, B, A is the first A. Otherwise the newest, the one a back from
-    // the top of the stack returns to.
-    const entry = this.backTo();
-    const handle =
-      (entry !== undefined && kept.find((one) => this.entryOf.get(one) === entry)) ||
-      kept.at(-1) ||
-      null;
+    const handle = this.pick(kept);
     if (handle) this.answered.set(route, handle);
     return handle;
+  }
+
+  /**
+   * The one at the history entry a back returns to, where two screens share the url: a back of
+   * three screens from C over A, B, A is the first A. Or the one a pop the history could not make
+   * goes down to. Otherwise the newest, the one a back from the top of the stack returns to.
+   */
+  private pick(kept: readonly DetachedRouteHandle[]): DetachedRouteHandle | null {
+    const entry = this.backTo();
+    const router = this.injector?.get(Router);
+    const target = router && poppingTo.get(router);
+    return (
+      (entry !== undefined && kept.find((one) => this.entryOf.get(one) === entry)) ||
+      (target && kept.filter((one) => (one as StoredHandle).componentRef === target).at(-1)) ||
+      kept.at(-1) ||
+      null
+    );
   }
 
   /** The id in the history entry a back is returning to, which names the screen shown there. */

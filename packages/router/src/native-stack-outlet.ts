@@ -59,6 +59,7 @@ import { NativeBack, isShowing } from './native-back.ts';
 import { navigationIntent, type NativeIntent } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
 import { PRESENTED, withoutPresented } from './presented-route.ts';
+import { poppingTo } from './popping-to.ts';
 import { markScreenRoute } from './tab-routes.ts';
 import { IN_TAB } from './in-tab.ts';
 import { ownHost } from './own-host.ts';
@@ -999,7 +1000,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       this.location.historyGo(-steps);
       return;
     }
-    void this.router!.navigateByUrl(url, { replaceUrl: true });
+    void this.navigateDownTo(below!);
   }
 
   /**
@@ -1024,7 +1025,20 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       this.location.historyGo(-steps);
       return arrived;
     }
-    return this.router!.navigateByUrl(url, { replaceUrl: true });
+    return this.navigateDownTo(this.entries[index]!);
+  }
+
+  /**
+   * Send the router to `entry` by a navigation that replaces the entry, for a pop the history
+   * behind cannot make. With the same url on the stack twice, the reuse strategy is told which of
+   * the screens at it this is.
+   */
+  private navigateDownTo(entry: StackEntry): Promise<boolean> {
+    const router = this.router!;
+    poppingTo.set(router, entry.ref);
+    return router.navigateByUrl(this.urlOf(entry), { replaceUrl: true }).finally(() => {
+      if (poppingTo.get(router) === entry.ref) poppingTo.delete(router);
+    });
   }
 
   /** Whether the navigation that happens next succeeds. */

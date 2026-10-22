@@ -145,8 +145,8 @@ const historyOf = (app: { componentRef: { injector: Injector } }) =>
     .ɵpages()
     .map((page) => page.url);
 
-/** A, B, a second A and C, pushed in that order. */
-async function twoAtOneUrl() {
+/** A, B, a second A and C, pushed in that order, or the urls given after A. */
+async function twoAtOneUrl(urls = ['/b', '/a', '/c']) {
   const app = await render(mod['RepeatShell'] as Type<unknown>, {
     providers: [provideNativeRouter(mod['repeatRoutes'] as Routes)],
   });
@@ -159,7 +159,7 @@ async function twoAtOneUrl() {
     flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen');
   const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
   const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
-  for (const url of ['/b', '/a', '/c']) {
+  for (const url of urls) {
     await nav.push(url);
     await turns();
   }
@@ -265,4 +265,62 @@ it('goes back through two live screens at one url one at a time', async () => {
   assert.equal(router.url, '/a');
   assert.equal(screens().length, 1);
   assert.deepEqual(texts(), [first]);
+});
+
+it('goes back to the lower of two screens at one url through popTo(), with history not matching the stack', async () => {
+  // The query change on B adds an entry but no screen, so the entry three back is B's, not A's,
+  // and popTo() goes there by a navigation instead of through history.
+  const { app, nav, router, turns, screens, texts, first } = await twoAtOneUrl([
+    '/b',
+    '/b?x=1',
+    '/a',
+    '/c',
+  ]);
+  assert.deepEqual(historyOf(app), ['/a', '/b', '/b?x=1', '/a', '/c']);
+
+  assert.equal(await nav.popTo('/a'), true);
+  await turns();
+  assert.equal(router.url, '/a');
+  assert.equal(screens().length, 1, 'the screen asked for, with none over it');
+  assert.deepEqual(texts(), [first], 'the first A, not the second');
+});
+
+it('goes back to the lower of two screens at one url through a native pop of three, with history not matching the stack', async () => {
+  const { app, router, turns, screens, texts, first } = await twoAtOneUrl([
+    '/b',
+    '/b?x=1',
+    '/a',
+    '/c',
+  ]);
+  assert.deepEqual(historyOf(app), ['/a', '/b', '/b?x=1', '/a', '/c']);
+
+  await fireEvent(screens().at(-1)!, 'dismissed', { dismissCount: 3 });
+  await turns();
+  assert.equal(router.url, '/a');
+  assert.equal(screens().length, 1, 'the screen native popped to, with none over it');
+  assert.deepEqual(texts(), [first], 'the first A, not the second');
+});
+
+it('goes back to the newer of two screens at one url by a plain navigation after a pop to the lower one', async () => {
+  // The pop's choice of screen lasts only as long as the pop's own navigation.
+  const { nav, router, turns, screens, texts, first } = await twoAtOneUrl([
+    '/b',
+    '/b?x=1',
+    '/a',
+    '/c',
+  ]);
+  assert.equal(await nav.popTo('/a'), true);
+  await turns();
+  assert.deepEqual(texts(), [first]);
+  for (const url of ['/b', '/a', '/c']) {
+    await nav.push(url);
+    await turns();
+  }
+  assert.equal(screens().length, 4, 'A, B, a third A and C');
+  const third = texts().at(-1);
+
+  assert.equal(await router.navigateByUrl('/a'), true);
+  await turns();
+  assert.equal(screens().length, 3);
+  assert.deepEqual(texts(), [first, third], 'the newest A, as #481 has it');
 });
