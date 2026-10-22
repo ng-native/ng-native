@@ -16,10 +16,10 @@ gives the engine's nodes those members, so the library runs unchanged.
 - `provideWebCompat()` in `src/app/app.config.ts`, and `withWebCompat()` last in
   `metro.config.js`, naming `@angular/material` and `@angular/cdk` so their stylesheets are read
   as a browser reads them. The app's own components stay native views.
-- The screen is a lazy route: the CDK adds a listener to the window as its modules load, and the
-  window has listeners only once `provideWebCompat()` has run.
 - The CDK's `Platform` told it is a browser on a phone (`src/app/cdk-platform.ts`), so it
-  positions overlays against their triggers and Material uses its touch behaviour.
+  positions overlays against their triggers and Material uses its touch behaviour. The CDK's
+  `Platform` and its overlays are the app's, and read the app's own `PLATFORM_ID`, which says it
+  is on a device: `provideBrowserPlatformId()` on a route does not reach them.
 - `loadFonts()` before mounting, for the Material Icons font the theme declares.
 
 ## Run it
