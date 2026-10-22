@@ -16,11 +16,12 @@ interface Fixture {
 }
 
 let Sheet: Type<Fixture>;
+let Broken: Type<unknown>;
 
 before(async () => {
-  Sheet = (await compileFixture('fixtures/testing-bottom-sheet.ts'))[
-    'TestingBottomSheetFixture'
-  ] as Type<Fixture>;
+  const mod = await compileFixture('fixtures/testing-bottom-sheet.ts');
+  Sheet = mod['TestingBottomSheetFixture'] as Type<Fixture>;
+  Broken = mod['TestingBrokenFixture'] as Type<unknown>;
 });
 
 afterEach(() => {
@@ -64,6 +65,17 @@ describe('an open sheet with an item in its bar', () => {
     assert.equal(scope.expo, undefined, 'gone with the render');
     await render(Sheet);
     assert.ok(screen.getByTestId('save'), 'and back for the next one');
+  });
+
+  it('answers for no build after a render that failed', async () => {
+    const scope = globalThis as { expo?: unknown };
+    await assert.rejects(render(Broken), /broken on creation/);
+    assert.equal(scope.expo, undefined, 'none left by the failed render');
+    await render(Sheet);
+    await assert.rejects(render(Broken), /broken on creation/);
+    assert.ok(scope.expo, 'kept for the render still up');
+    cleanup();
+    assert.equal(scope.expo, undefined);
   });
 
   it('leaves an expo global a test set as it was', async () => {

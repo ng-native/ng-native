@@ -32,3 +32,11 @@ export class TestingBottomSheetFixture {
   readonly count = signal(0);
   readonly saved = signal(0);
 }
+
+/** A component whose creation fails, so its render rejects. */
+@Component({ selector: 'x-testing-broken', template: '' })
+export class TestingBrokenFixture {
+  constructor() {
+    throw new Error('broken on creation');
+  }
+}

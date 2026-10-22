@@ -96,6 +96,14 @@ function standInForExpo(): void {
   if (scope.expo) return;
   scope.expo = expoStandIn = { getViewConfig: () => ({}) };
 }
+
+/** Removes the stand-in once nothing is rendered, unless something has replaced it since. */
+function releaseExpo(): void {
+  if (mounted.length === 0 && expoStandIn && scope.expo === expoStandIn) {
+    delete scope.expo;
+    expoStandIn = undefined;
+  }
+}
 /** Which render a node a query returned belongs to, so an event on it reaches the right fake. */
 const owners = new WeakMap<FakeFabricNode, Mounted>();
 
@@ -235,16 +243,23 @@ export async function render<T>(
   const fabric = createFakeFabric();
   if (!isTemplate) refuseUnknownInputs(type, inputs);
   standInForExpo();
-  const app = mount(1, type, fabric, {
-    ...engine,
-    providers,
-    inputs: isTemplate ? {} : inputs,
-    // As a template would bind them, so an output a host directive forwards is heard, by the name
-    // it is forwarded under, and a name that is no output is refused by Angular, by name.
-    bindings: Object.entries(on ?? {}).map(([name, handler]) =>
-      outputBinding(name, handler as (value: unknown) => void),
-    ),
-  });
+  let app: ReturnType<typeof mount>;
+  try {
+    app = mount(1, type, fabric, {
+      ...engine,
+      providers,
+      inputs: isTemplate ? {} : inputs,
+      // As a template would bind them, so an output a host directive forwards is heard, by the
+      // name it is forwarded under, and a name that is no output is refused by Angular, by name.
+      bindings: Object.entries(on ?? {}).map(([name, handler]) =>
+        outputBinding(name, handler as (value: unknown) => void),
+      ),
+    });
+  } catch (error) {
+    // Never mounted, so no unmount will take the stand-in away.
+    releaseExpo();
+    throw error;
+  }
   const self: Mounted = {
     fabric,
     engine: app.engine,
@@ -296,10 +311,7 @@ function unmount(target: Mounted): void {
   if (at === -1) return;
   mounted.splice(at, 1);
   target.applicationRef.destroy();
-  if (mounted.length === 0 && expoStandIn && scope.expo === expoStandIn) {
-    delete scope.expo;
-    expoStandIn = undefined;
-  }
+  releaseExpo();
 }
 
 /**
