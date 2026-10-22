@@ -265,6 +265,11 @@ describe('a box clipped to a band in a stylesheet read as a browser reads it', (
     );
   });
 
+  it('is no band for clip-path: none, which ends one a rule before gave the box', () => {
+    const none = compiled('clip-path: none');
+    assert.deepEqual([none.clipBand, none.reports], ['none', []]);
+  });
+
   it("is refused in an app's own stylesheet, as before", () => {
     const { clipBand, reports } = compiled(BAND, false);
     assert.equal(clipBand, undefined);

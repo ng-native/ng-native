@@ -432,6 +432,18 @@ describe('an image clipped to a band of itself', () => {
     assert.equal(drawn().band['width'], '50%', 'and through the band again');
   });
 
+  it('is whole where a script clips it to no band, over the band its sheet gives it', async () => {
+    await slider();
+    const element = (globalThis as Dom).document.querySelector('[testID=top]');
+    element.style.clipPath = 'none';
+    await settle();
+    const top = screen.getByTestId('top');
+    assert.deepEqual([top.viewName, top.children.length], ['Image', 0], 'the style wins');
+    element.style.clipPath = '';
+    await settle();
+    assert.equal(drawn().band['width'], '50%', "the sheet's again");
+  });
+
   it('follows a band a script sets, and one it takes away', async () => {
     await slider();
     const element = (globalThis as Dom).document.querySelector('[testID=top]');

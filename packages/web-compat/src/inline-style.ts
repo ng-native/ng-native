@@ -213,7 +213,11 @@ const OWN: Readonly<Record<string, (value: unknown) => Record<string, unknown>>>
   clipPath: (value) =>
     bandOf(value)
       ? { clipBand: value, clipPath: null }
-      : { clipBand: null, clipPath: value ?? null },
+      : {
+          // Written and no band, it is no band over the sheet's; taken away, the sheet's again.
+          clipBand: value === undefined || value === null || value === '' ? null : 'none',
+          clipPath: value ?? null,
+        },
   ...Object.fromEntries(
     FOUR.map((side) => [`border${side}`, (value: unknown) => lineOf([side], value)]),
   ),

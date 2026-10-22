@@ -1232,7 +1232,13 @@ function clippedToNothing(declaration, out) {
  * a length or a token, and a band of any box but the border box are left to be refused.
  */
 function clippedToABand({ property, value }, out) {
-  if (property !== 'clip-path' || value?.shape?.type !== 'polygon') return false;
+  if (property !== 'clip-path') return false;
+  // No clip: no band, over one a rule before gave the box.
+  if (value?.type === 'none') {
+    out.clipBand = 'none';
+    return true;
+  }
+  if (value?.shape?.type !== 'polygon') return false;
   if (value.referenceBox !== 'border-box') return false;
   const points = value.shape.value.points.map(({ x, y }) => `${share(x)} ${share(y)}`);
   const [, from, to] = BAND.exec(points.join(', ')) ?? [];
