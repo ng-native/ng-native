@@ -267,7 +267,9 @@ export const webListen: RendererExtension = {
     return inlineStyle(node, name, value);
   },
   // Kept as `addEventListener` keeps a listener, so what a script sends reaches a template's too.
-  listen(target, eventName, callback, engine) {
+  // With the options a script gave `Renderer2.listen`: CDK's drag and drop keeps a drag from the
+  // page with a `touchmove` listener on the document that says it is not passive.
+  listen(target, eventName, callback, engine, options) {
     const document = documentOf(engine);
     if (!document) return undefined;
     const on = listenedOn(target, document);
@@ -278,7 +280,7 @@ export const webListen: RendererExtension = {
       (node
         ? engine.setEventListener(target as EngineNode, topLevel(eventName), heard)
         : undefined);
-    return listen(on, eventName, callback, undefined, attach) ?? (() => {});
+    return listen(on, eventName, callback, options, attach) ?? (() => {});
   },
 };
 

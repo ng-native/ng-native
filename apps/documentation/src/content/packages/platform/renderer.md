@@ -117,9 +117,11 @@ is optional, and the extensions are asked in the order they were added:
   in the process, with the engine the element is created in, so an extension that should draw
   only for the apps that asked for it checks the engine and answers nothing for any other. An
   icon's shapes are created by name alone, and render as they always have.
-- `listen(target, eventName, callback, engine)` takes a listener over: it answers what removes the
-  listener, or nothing to leave it to the renderer. The target is a node, or the name Angular gives
-  a global one: `'window'`, `'document'` or `'body'`.
+- `listen(target, eventName, callback, engine, options)` takes a listener over: it answers what
+  removes the listener, or nothing to leave it to the renderer. The target is a node, or the name
+  Angular gives a global one: `'window'`, `'document'` or `'body'`. The options are the ones a
+  script passed `Renderer2.listen`, `capture`, `once` and `passive`, and are undefined for a
+  template's listener.
 - `created(node, engine)` is told of each element a template creates, before it has attributes
   or children.
 - `inserted(node, parent, engine)` is told each time a node is put under a parent, and
