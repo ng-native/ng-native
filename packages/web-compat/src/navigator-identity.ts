@@ -25,12 +25,23 @@ export function installNavigator(): () => void {
   const agent = navigator['userAgent'];
   const named = typeof agent !== 'string' || !agent.startsWith('Mozilla/');
   const fingered = typeof navigator['maxTouchPoints'] !== 'number';
+  // What each was on the navigator itself, put back as it was: a runtime's own user agent that
+  // names no browser, or nothing where the prototype's answered.
+  const owned = {
+    userAgent: Object.getOwnPropertyDescriptor(navigator, 'userAgent'),
+    maxTouchPoints: Object.getOwnPropertyDescriptor(navigator, 'maxTouchPoints'),
+  };
   const define = (name: string, value: unknown) =>
     Object.defineProperty(navigator, name, { configurable: true, enumerable: true, value });
+  const giveBack = (name: keyof typeof owned) => {
+    const own = owned[name];
+    if (own) Object.defineProperty(navigator, name, own);
+    else delete navigator[name];
+  };
   if (named) define('userAgent', AGENTS[nativePlatform()] ?? AGENTS['ios']);
   if (fingered) define('maxTouchPoints', FINGERS);
   return () => {
-    if (named) delete navigator['userAgent'];
-    if (fingered) delete navigator['maxTouchPoints'];
+    if (named) giveBack('userAgent');
+    if (fingered) giveBack('maxTouchPoints');
   };
 }

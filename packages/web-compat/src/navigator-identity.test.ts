@@ -85,6 +85,17 @@ describe('navigator', () => {
     });
   });
 
+  it('gives back a user agent of its own that names no browser, as it was', async () => {
+    // React Native's own navigator, or a runtime's, that says what it is and is no browser.
+    await withNavigator({ product: 'ReactNative', userAgent: 'Hermes' }, async () => {
+      await render(Page, { providers: [provideWebCompat()] });
+      assert.match(String(navigator()?.['userAgent']), /iPhone/);
+      cleanup();
+      assert.equal(navigator()?.['userAgent'], 'Hermes');
+      assert.deepEqual(Object.keys(navigator()!).sort(), ['product', 'userAgent']);
+    });
+  });
+
   it('is left as it is for an app that did not ask for the package', async () => {
     await withNavigator({ product: 'ReactNative' }, async () => {
       await render(Page);
