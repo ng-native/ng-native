@@ -127,7 +127,8 @@ const membersOf = (node: object): string[] =>
 /** That a node answers no member it did not have before the package: one of an app that did not ask. */
 function answersNoneBut(node: Dom, before: readonly string[]): void {
   for (const name of membersOf(node)) {
-    if (!before.includes(name)) assert.equal(node[name], undefined, name);
+    // Nothing, or what any object has from further up, as `toString`.
+    if (!before.includes(name)) assert.equal(node[name], (Object.prototype as Dom)[name], name);
   }
 }
 
@@ -426,6 +427,12 @@ describe('provideWebCompat', () => {
     assert.equal(plain.getAttribute, undefined);
     // The engine's own, which has no more than `contains`.
     assert.equal(plain.classList.add, undefined);
+    // And what it has from further up, as any object has it.
+    assert.equal(String(plain), '[object Object]');
+    // A member that is only read is not written over, as a browser's is not.
+    host.nodeName = 'X';
+    assert.equal(host.nodeName, 'X-PAGE');
+    assert.equal(Object.hasOwn(host, 'nodeName'), false);
     cleanup();
     // And for an app that asks after one that did not, as it did the first time.
     const again = (await render(Page, { providers: [provideWebCompat()] })).instance.host;

@@ -125,7 +125,7 @@ function leftFor(all: PropertyDescriptorMap, core: object): PropertyDescriptorMa
   const left: PropertyDescriptorMap = {};
   for (const name of Object.keys(all)) {
     const ours = all[name]!;
-    const theirs = Object.getOwnPropertyDescriptor(core, name);
+    const theirs = inherited(core, name);
     const of = (node: object) => (asked.has(engineOf(node as never)) ? ours : theirs);
     left[name] = {
       get(this: object) {
@@ -135,7 +135,10 @@ function leftFor(all: PropertyDescriptorMap, core: object): PropertyDescriptorMa
       set(this: object, value: unknown) {
         const one = of(this);
         if (one?.set) one.set.call(this, value);
-        else Object.defineProperty(this, name, { value, writable: true, configurable: true });
+        // One that is only read keeps its value, as a browser's does outside strict code.
+        else if (!one?.get && one?.writable !== false) {
+          Object.defineProperty(this, name, { value, writable: true, configurable: true });
+        }
       },
     };
   }
@@ -148,6 +151,15 @@ function setGlobalDocument(document: unknown): void {
   if (document !== undefined) globals.document = document;
   else if (original) Object.defineProperty(globalThis, 'document', original);
   else delete globals.document;
+}
+
+/** What `from` has by a name, its own or from further up, as reading it finds it. */
+function inherited(from: object, name: string): PropertyDescriptor | undefined {
+  for (let at: object | null = from; at; at = Object.getPrototypeOf(at)) {
+    const found = Object.getOwnPropertyDescriptor(at, name);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /** How `provideWebCompat` is set up. */
