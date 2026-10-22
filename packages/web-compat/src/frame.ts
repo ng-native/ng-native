@@ -467,9 +467,15 @@ function windowFor(frame: Frame): Members {
           width: size('width', 300),
           height: size('height', 150),
         }),
+        // The frame resized, and the page's scheme or motion changing, which the engine tells
+        // its viewport's watchers of.
         watch: (changed) => {
           frame.resized.add(changed);
-          return () => void frame.resized.delete(changed);
+          const unwatch = frame.engine.watchViewport(changed);
+          return () => {
+            frame.resized.delete(changed);
+            unwatch();
+          };
         },
       });
     },

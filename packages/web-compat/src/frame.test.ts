@@ -511,6 +511,24 @@ describe('iframe', () => {
     assert.deepEqual(heard, [true]);
   });
 
+  it("tells a frame's matchMedia listener as the page's colour scheme changes", async () => {
+    // The scheme and the motion are the page's, which the system changes under the frame.
+    const document = await page();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const dark = iframe.contentWindow.matchMedia('(prefers-color-scheme: dark)');
+    const heard: boolean[] = [];
+    dark.addEventListener('change', (event: Dom) => heard.push(event.matches));
+    const engine = iframe.engine;
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'light' });
+    await settle();
+    heard.length = 0;
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'dark' });
+    await settle();
+    assert.equal(dark.matches, true);
+    assert.deepEqual(heard, [true]);
+  });
+
   it('closes a frame inside a frame that is taken out', async () => {
     const document = await page();
     const outer = document.createElement('iframe');
