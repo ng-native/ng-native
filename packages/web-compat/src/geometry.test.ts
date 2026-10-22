@@ -54,6 +54,9 @@ async function page() {
   /** Native says an element that scrolls has been scrolled. */
   const scrolled = async (element: Dom, x: number, y: number) => {
     element.setAttribute('testID', idOf(element));
+    // Committed now, rather than left to `settle`, which gives up after a few frames on a busy
+    // machine and leaves the view unnamed for the query below.
+    engine.commit();
     await settle();
     app.fabric.emit(screen.getByTestId(idOf(element)), 'topScroll', { contentOffset: { x, y } });
   };
