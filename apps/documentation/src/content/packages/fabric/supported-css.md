@@ -556,7 +556,13 @@ write another way:
   opacity of a view is the opacity of everything in it.
 - `clip: rect()` with nothing in it, and `clip-path: inset(50%)`, draw nothing of the box over
   any rule that draws it - no background, shadow, border, outline or minimum size - and leave it
-  there for a screen reader. Any other clip is dropped with a warning, as everywhere.
+  there for a screen reader.
+- `clip-path: polygon(a 0, b 0, b 100%, a 100%)`, a band of the box from side to side with `a` and
+  `b` percentages, is kept for [`@ng-native/web-compat`](/packages/web-compat), which draws an
+  `<img>` through the band: one picture over another, cut where a before-and-after slider is. No
+  native view is sent it, and without that package nothing is drawn of it. A band with an edge
+  that is a length or a token, and any other polygon, is dropped with a warning.
+- Any other clip is dropped with a warning, as everywhere.
 - `overflow-x` or `overflow-y` of `hidden` or `clip` clips both axes, since a view clips on both or
   on neither. `overflow-y: auto` or `scroll` is `overflow: scroll`, which also clips both axes: the
   box scrolls only where the element is a `<scroll-view>`, and a plain view does not. Any other
@@ -577,7 +583,7 @@ These are dropped with a warning that says so, not declarations that quietly do 
 - `will-change`
 - `contain`
 - CSS counters
-- `clip-path`
+- `clip-path`, other than the shapes a sheet read as a browser reads it keeps, above
 
 ## What a warning says
 

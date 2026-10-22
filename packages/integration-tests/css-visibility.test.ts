@@ -232,3 +232,89 @@ describe('a box clipped to nothing in a stylesheet read as a browser reads it', 
     assert.equal(s.reports.length, 1);
   });
 });
+
+describe('a box clipped to a band in a stylesheet read as a browser reads it', () => {
+  // One picture over another, cut where a before-and-after slider is: the picture on top is
+  // clipped to a band of itself from side to side. The band is kept for what draws an image
+  // through it, and no native view is sent it.
+  const BAND = 'clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%)';
+  const compiled = (declaration: string, generated = true) => {
+    const reports: string[] = [];
+    const sheet = compileCss(`.top { position: absolute; ${declaration} }`, 'library.css', {
+      generated,
+      onUnsupported: (message: string) => reports.push(message),
+    });
+    const declarations = sheet.rules[0]?.declarations ?? {};
+    return { sheet, reports, clipBand: declarations['clipBand'] };
+  };
+
+  it('is kept as the band it is, in a library sheet', () => {
+    const band = compiled(BAND);
+    assert.deepEqual(
+      [band.clipBand, band.reports],
+      ['polygon(0% 0%, 50% 0%, 50% 100%, 0% 100%)', []],
+    );
+    // Written another way: an edge that is part of a point, a zero that is a share, and the box
+    // it is a band of named.
+    const written = compiled(
+      'clip-path: polygon(25% 0%, 75.5% 0, 75.5% 100%, 25% 100%) border-box',
+    );
+    assert.deepEqual(
+      [written.clipBand, written.reports],
+      ['polygon(25% 0%, 75.5% 0%, 75.5% 100%, 25% 100%)', []],
+    );
+  });
+
+  it("is refused in an app's own stylesheet, as before", () => {
+    const { clipBand, reports } = compiled(BAND, false);
+    assert.equal(clipBand, undefined);
+    assert.equal(reports.length, 1);
+    assert.match(reports[0]!, /dropped 'clip-path'/);
+  });
+
+  it('is refused where an edge is a token', () => {
+    const { clipBand, reports } = compiled(
+      'clip-path: polygon(0 0, var(--x, 50%) 0, var(--x, 50%) 100%, 0 100%)',
+    );
+    assert.equal(clipBand, undefined);
+    assert.equal(reports.length, 1);
+  });
+
+  for (const other of [
+    'polygon(0 0, 100% 0, 50% 100%)',
+    'polygon(0 0, 40px 0, 40px 100%, 0 100%)',
+    'polygon(0 0, 50% 0, 60% 100%, 0 100%)',
+    'polygon(0 10%, 50% 10%, 50% 100%, 0 100%)',
+    'polygon(0 0, calc(50% + 2px) 0, calc(50% + 2px) 100%, 0 100%)',
+    'polygon(0 0, 50% 0, 50% 100%, 0 100%) content-box',
+    'inset(10%)',
+  ]) {
+    it(`refuses any other shape: ${other}`, () => {
+      const { clipBand, reports } = compiled(`clip-path: ${other}`);
+      assert.equal(clipBand, undefined);
+      assert.equal(reports.length, 1);
+    });
+  }
+
+  it('is sent to no native view, and kept for the engine', () => {
+    const { sheet } = compiled(BAND);
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'top');
+    engine.appendChild(engine.root, view);
+    // A drawing's shape names the clip path it uses by a prop of that name, which native reads.
+    const shape = engine.createElement('view');
+    engine.setProp(shape, 'clipPath', 'c');
+    engine.appendChild(engine.root, shape);
+    engine.commit();
+    const [banded, clipped] = fabric.committed;
+    assert.equal(banded!.props['position'], 'absolute');
+    assert.deepEqual(
+      Object.keys(banded!.props).filter((key) => /^clip/.test(key)),
+      [],
+    );
+    assert.equal(view.styleCache?.style['clipBand'], 'polygon(0% 0%, 50% 0%, 50% 100%, 0% 100%)');
+    assert.equal(clipped!.props['clipPath'], 'c');
+  });
+});

@@ -1170,13 +1170,14 @@ function controlState(part) {
 
 /**
  * Take a declaration only a sheet read as a browser reads it has a meaning for: a clip along one
- * axis, a box that is clipped to nothing, a box that is not seen, a table's layout. Answers
- * whether it was one.
+ * axis, a box that is clipped to nothing or to a band of itself, a box that is not seen, a
+ * table's layout. Answers whether it was one.
  */
 function asABrowserReads(declaration, out) {
   return (
     clippedOnAnAxis(declaration, out) ||
     clippedToNothing(declaration, out) ||
+    clippedToABand(declaration, out) ||
     seenOrNot(declaration, out) ||
     tableLaidOut(declaration, out)
   );
@@ -1221,6 +1222,32 @@ function clippedToNothing(declaration, out) {
   const nothing = emptyClip(declaration) || insetByHalf(declaration);
   if (nothing) out.clipped = true;
   return nothing;
+}
+
+/**
+ * `clip-path` that is a band of the box from side to side, in a sheet read as a browser reads
+ * it: `polygon(a 0, b 0, b 100%, a 100%)`, one picture over another cut where a slider is. Kept
+ * as that text, with each edge a percentage, as `clipBand`: for what draws an image through a band
+ * of itself (`@ng-native/web-compat`), and taken off what a view is sent. Any other shape, an edge that is
+ * a length or a token, and a band of any box but the border box are left to be refused.
+ */
+function clippedToABand({ property, value }, out) {
+  if (property !== 'clip-path' || value?.shape?.type !== 'polygon') return false;
+  if (value.referenceBox !== 'border-box') return false;
+  const points = value.shape.value.points.map(({ x, y }) => `${share(x)} ${share(y)}`);
+  const [, from, to] = BAND.exec(points.join(', ')) ?? [];
+  if (from === undefined) return false;
+  out.clipBand = `polygon(${from}% 0%, ${to}% 0%, ${to}% 100%, ${from}% 100%)`;
+  return true;
+}
+
+/** A band's four corners, as `share` writes each: the same two edges at the top and the bottom. */
+const BAND = /^([\d.]+) 0, ([\d.]+) 0, \2 100, \1 100$/;
+
+/** An edge of a shape as a percentage of its box: one, or a zero length. `?` for any other. */
+function share(edge) {
+  if (edge.type === 'percentage') return String(Number((edge.value * 100).toFixed(4)));
+  return edge.type === 'dimension' && edge.value.value === 0 ? '0' : '?';
 }
 
 /** `clip: rect()` with nothing in it. The parser has no name for `clip`, and hands its terms over. */

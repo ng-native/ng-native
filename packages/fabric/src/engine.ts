@@ -2500,13 +2500,15 @@ const sameEntries = (a: unknown, b: readonly unknown[]): boolean =>
 
 /**
  * Take off what is read here and is no style of a native view: `order`, by the container in
- * `inOrder`, `justify-self`, by the block a box is in, and `table-layout`, by what lays a
- * table out.
+ * `inOrder`, `justify-self`, by the block a box is in, `table-layout`, by what lays a table out,
+ * and the band a library's sheet clips a box to, by what draws an image through it. The band is
+ * `clipBand`: `clipPath` is the clip path a react-native-svg shape names, which reaches native.
  */
 function notNative(props: Record<string, unknown>): void {
   if (props['order'] !== undefined) delete props['order'];
   if (props['justifySelf'] !== undefined) delete props['justifySelf'];
   if (props['tableLayout'] !== undefined) delete props['tableLayout'];
+  if (props['clipBand'] !== undefined) delete props['clipBand'];
 }
 
 /**
@@ -2813,9 +2815,16 @@ const SIZE_KEYS = new Set([
 ]);
 /**
  * What only the engine reads, whatever it is set to: no native view lays out by any of them, or
- * draws by `visibility` or a clip to nothing (`seenByCss`).
+ * draws by `visibility`, a clip to nothing (`seenByCss`) or a clip to a band (`notNative`).
  */
-const LAID_OUT_HERE = new Set([...GRID_KEYS, 'order', 'visibility', 'clipped', 'tableLayout']);
+const LAID_OUT_HERE = new Set([
+  ...GRID_KEYS,
+  'order',
+  'visibility',
+  'clipped',
+  'tableLayout',
+  'clipBand',
+]);
 const POSITIONS_HERE = new Set(['static', 'fixed', 'sticky']);
 
 /** What a declaration can ask of the engine that an app of plain flex does not: see `asks`. */
