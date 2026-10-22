@@ -298,6 +298,9 @@ describe('an image', () => {
     copy.setAttribute('testID', 'copy');
     document().body.appendChild(copy);
     await settle();
+    // Seen from the frame after it is put over the app: see `inserted-unseen.ts`.
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await settle();
     const view = screen.getByTestId('copy');
     assert.equal(view.viewName, 'Image');
     assert.deepEqual(view.props['source'], [{ uri: 'https://example.test/logo.png' }]);
