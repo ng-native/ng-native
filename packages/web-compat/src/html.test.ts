@@ -385,8 +385,12 @@ describe('markup a template binds with [innerHTML]', () => {
     await settle();
     assert.equal(label.textContent, 'Only this');
     assert.deepEqual(tags(), ['u']);
+    // And as it is drawn: the old words gone from the screen, the new ones on it.
+    assert.ok(screen.getByText(/Only/));
+    assert.equal(screen.queryByText('folders'), null);
     page.label.set(null);
     await settle();
     assert.equal(label.textContent, '');
+    assert.equal(screen.queryByText(/Only/), null);
   });
 });
