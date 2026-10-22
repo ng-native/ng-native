@@ -310,8 +310,11 @@ function unmount(target: Mounted): void {
   const at = mounted.indexOf(target);
   if (at === -1) return;
   mounted.splice(at, 1);
-  target.applicationRef.destroy();
-  releaseExpo();
+  try {
+    target.applicationRef.destroy();
+  } finally {
+    releaseExpo();
+  }
 }
 
 /**

@@ -17,11 +17,13 @@ interface Fixture {
 
 let Sheet: Type<Fixture>;
 let Broken: Type<unknown>;
+let BrokenTeardown: Type<unknown>;
 
 before(async () => {
   const mod = await compileFixture('fixtures/testing-bottom-sheet.ts');
   Sheet = mod['TestingBottomSheetFixture'] as Type<Fixture>;
   Broken = mod['TestingBrokenFixture'] as Type<unknown>;
+  BrokenTeardown = mod['TestingBrokenTeardownFixture'] as Type<unknown>;
 });
 
 afterEach(() => {
@@ -75,6 +77,13 @@ describe('an open sheet with an item in its bar', () => {
     await assert.rejects(render(Broken), /broken on creation/);
     assert.ok(scope.expo, 'kept for the render still up');
     cleanup();
+    assert.equal(scope.expo, undefined);
+  });
+
+  it('answers for no build after an unmount that failed', async () => {
+    const scope = globalThis as { expo?: unknown };
+    const { unmount } = await render(BrokenTeardown);
+    assert.throws(unmount, /broken on destroy/);
     assert.equal(scope.expo, undefined);
   });
 

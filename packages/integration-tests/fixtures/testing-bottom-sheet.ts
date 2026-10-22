@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { Pressable } from '../../components/src/pressable.ts';
 import { Text } from '../../components/src/text.ts';
 import { View } from '../../components/src/view.ts';
@@ -38,5 +38,15 @@ export class TestingBottomSheetFixture {
 export class TestingBrokenFixture {
   constructor() {
     throw new Error('broken on creation');
+  }
+}
+
+/** A component whose teardown fails, so unmounting it throws. */
+@Component({ selector: 'x-testing-broken-teardown', template: '' })
+export class TestingBrokenTeardownFixture {
+  constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      throw new Error('broken on destroy');
+    });
   }
 }
