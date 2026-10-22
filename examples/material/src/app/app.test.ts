@@ -82,17 +82,22 @@ test('the menu clears what is done', async () => {
   await vi.waitFor(() => expect(screen.getByText('0 of 3 done')).toBeTruthy());
 });
 
-test('a task due tomorrow says so under its title', async () => {
+test('a task due on a day picked from the calendar says so under its title', async () => {
   await start();
   await press(screen.getByLabelText('New task'));
   const user = userEvent.setup();
   await user.type(await screen.findByTestId('task-title'), 'Pack bags');
-  await press(screen.getByTestId('task-due'));
-  await press(await screen.findByText('Tomorrow'));
+  await press(screen.getByTestId('task-due-toggle'));
+  // Today, which is always in the month the calendar opens on.
+  const today = new Date();
+  const label = today.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  await press(await screen.findByLabelText(label));
   await press(screen.getByText('Add'));
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const day = tomorrow.toLocaleDateString('en-GB', {
+  const day = today.toLocaleDateString('en-GB', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',

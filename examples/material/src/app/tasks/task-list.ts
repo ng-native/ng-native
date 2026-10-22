@@ -13,7 +13,7 @@ export interface Task {
 
 export type NewTask = Omit<Task, 'id' | 'done'>;
 
-export const daysFromToday = (offset: number) => {
+const daysFromToday = (offset: number) => {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
   date.setDate(date.getDate() + offset);

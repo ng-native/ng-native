@@ -8,7 +8,7 @@ gives the engine's nodes those members, so the library runs unchanged.
 | Part                                      | What it shows                                                                                                                         |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Tasks (`src/app/tasks/tasks-page.ts`)     | Material's toolbar and menu, a progress bar, tabs for to do and done, checkboxes, icons, a floating button, and a snack bar with Undo |
-| New task (`src/app/tasks/task-dialog.ts`) | A Material dialog with form fields, a textarea and selects, bound with Signal Forms                                                   |
+| New task (`src/app/tasks/task-dialog.ts`) | A Material dialog with form fields, a textarea, a select and a date picker whose calendar is a table, bound with Signal Forms         |
 | Theme (`src/material-theme.css`)          | Material's system tokens as `mat.theme` writes them, with `light-dark()` for the dark scheme, and its icon font                       |
 
 ## What it takes
