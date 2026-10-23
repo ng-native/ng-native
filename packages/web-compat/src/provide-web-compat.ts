@@ -293,11 +293,14 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       );
       const leaveWindow = windowOf(engine);
       // The window ends at the top of the keyboard while it is up: see `window-size.ts`. Where the
-      // keyboard is going, which it is said to be as it starts to move. Ended with the app.
+      // keyboard is going, which it is said to be as it starts to move. Ended with the app. Its
+      // `screenY` counts from the top of the screen, and the window can start below that.
       const keyboard = inject(Keyboard);
       effect(() => {
         const { height, screenY } = keyboard.metrics();
-        keyboardMoved(engine, height > 0 ? (screenY ?? windowHeight(engine) - height) : undefined);
+        const top =
+          screenY === undefined ? windowHeight(engine) - height : screenY - keyboard.windowTop;
+        keyboardMoved(engine, height > 0 ? top : undefined);
       });
       // A field's blur is told at once, and native's answer to it passed over: see `element-focus.ts`.
       const heedBlurs = passOverToldBlurs(engine);
