@@ -97,6 +97,47 @@ describe('the native keyboard source', () => {
     assert.deepEqual(heard, [{ height: 300, screenY: 560, duration: 0, easing: 'keyboard' }]);
   });
 
+  it('reports where a motion it joined part way ended, its start having gone unheard', () => {
+    const { source, frame } = fakes();
+    const heard: KeyboardMetrics[] = [];
+    source.subscribe((metrics) => heard.push(metrics));
+    // Watching began while the keyboard moved: its frames and end come, its change never does.
+    frame({ height: 200, screenY: 666 });
+    frame({ height: 288, screenY: 578 });
+    frame({ end: true });
+    assert.deepEqual(heard, [{ height: 288, screenY: 578, duration: 0 }]);
+  });
+
+  it("reports nothing at that end when React Native's own event already said it", async () => {
+    const { source, frame, didShow } = fakes();
+    const heard: KeyboardMetrics[] = [];
+    source.subscribe((metrics) => heard.push(metrics));
+    didShow({ height: 288, screenY: 578 });
+    await wait(150);
+    frame({ height: 288, screenY: 578 });
+    frame({ end: true });
+    assert.deepEqual(heard, [{ height: 288, screenY: 578 }]);
+  });
+
+  it('reports nothing more at the end of a motion whose start it heard', () => {
+    const { source, change, frame } = fakes();
+    const heard: KeyboardMetrics[] = [];
+    source.subscribe((metrics) => heard.push(metrics));
+    frame({ height: 0 });
+    change({ height: 288, screenY: 578, duration: 285, easing: 'easeOut' });
+    frame({ height: 288, screenY: 578 });
+    frame({ end: true });
+    // And the next motion, joined from its start, is no different.
+    frame({ height: 288, screenY: 578 });
+    change({ height: 0, duration: 285, easing: 'easeOut' });
+    frame({ height: 0 });
+    frame({ end: true });
+    assert.deepEqual(
+      heard.map((metrics) => metrics.height),
+      [288, 0],
+    );
+  });
+
   it('reports every frame of the motion, and its end as none', () => {
     const { source, frame } = fakes();
     const heard: (KeyboardMetrics | null)[] = [];
