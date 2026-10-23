@@ -723,6 +723,11 @@ function drawnSolid(context, style) {
   );
 }
 
+/** What native does not do of a declaration whose rest is kept: reported, or thrown in a strict compile. */
+function refusePart(message) {
+  refuse(message);
+}
+
 /** A strict compile, with no `report`, throws even when run from within a lenient one. */
 function withRefusals(report, run) {
   const outer = refuse;
@@ -1260,6 +1265,7 @@ module.exports = {
   OF_A_BOX,
   CssUnsupported,
   withRefusals,
+  refusePart,
   drawnSolid,
   fallbackChain,
   fallbacks,

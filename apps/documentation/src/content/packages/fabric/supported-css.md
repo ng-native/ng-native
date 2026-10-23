@@ -591,6 +591,14 @@ write another way:
   native view is sent it, and without that package nothing is drawn of it. A band with an edge
   that is a length or a token, and any other polygon, is dropped with a warning.
 - Any other clip is dropped with a warning, as everywhere.
+- `will-change`, `contain`, `perspective` and `backdrop-filter` make a `position: static` box the
+  one an absolute box inside it is placed against, as in a browser: a `will-change` naming
+  `transform`, `translate`, `rotate`, `scale`, `perspective`, `filter`, `backdrop-filter`,
+  `contain` or `position`, a `contain` of `layout`, `paint`, `strict` or `content`, and a
+  `perspective` or `backdrop-filter` other than `none`. No native view is sent them. Native draws
+  no perspective and no backdrop filter, and contains neither the size nor the paint of a box,
+  which is said with a warning. Any of the four whose value reads a token is dropped with a
+  warning.
 - `overflow-x` or `overflow-y` of `hidden` or `clip` clips both axes, since a view clips on both or
   on neither. `overflow-y: auto` or `scroll` is `overflow: scroll`, which also clips both axes: the
   box scrolls only where the element is a `<scroll-view>`, and a plain view does not. Any other
@@ -608,8 +616,8 @@ These are dropped with a warning that says so, not declarations that quietly do 
 - Table layout: `table-layout`, `border-collapse`, `caption-side`, `empty-cells`. A library's
   sheet read as a browser's keeps `table-layout`, for `@ng-native/web-compat`'s tables
 - Multi-column layout
-- `will-change`
-- `contain`
+- `will-change` and `contain`, which a sheet read as a browser's keeps for placing absolute boxes,
+  above
 - CSS counters
 - `clip-path`, other than the shapes a sheet read as a browser reads it keeps, above
 

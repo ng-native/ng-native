@@ -2657,7 +2657,8 @@ const sameEntries = (a: unknown, b: readonly unknown[]): boolean =>
 /**
  * Take off what is read here and is no style of a native view: `order`, by the container in
  * `inOrder`, `justify-self`, by the block a box is in, `table-layout`, by what lays a table out,
- * and the band a library's sheet clips a box to, by what draws an image through it. The band is
+ * the band a library's sheet clips a box to, by what draws an image through it, and what makes a
+ * box what its absolute boxes are placed against, by `containsAbsolutes`. The band is
  * `clipBand`: `clipPath` is the clip path a react-native-svg shape names, which reaches native.
  */
 function notNative(props: Record<string, unknown>): void {
@@ -2665,6 +2666,7 @@ function notNative(props: Record<string, unknown>): void {
   if (props['justifySelf'] !== undefined) delete props['justifySelf'];
   if (props['tableLayout'] !== undefined) delete props['tableLayout'];
   if (props['clipBand'] !== undefined) delete props['clipBand'];
+  for (const key of CONTAINING_ONLY) if (props[key] !== undefined) delete props[key];
 }
 
 /**
@@ -2969,6 +2971,8 @@ function mixedValues(
 const SIZE_KEYS = new Set([
   ...['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'flexBasis'],
 ]);
+/** What makes a box a containing block that no native view has a style for: `containsAbsolutes`. */
+const CONTAINING_ONLY = ['willChange', 'contain', 'perspective', 'backdropFilter'];
 /**
  * What only the engine reads, whatever it is set to: no native view lays out by any of them, or
  * draws by `visibility`, a clip to nothing (`seenByCss`) or a clip to a band (`notNative`).
@@ -2980,6 +2984,7 @@ const LAID_OUT_HERE = new Set([
   'clipped',
   'tableLayout',
   'clipBand',
+  ...CONTAINING_ONLY,
 ]);
 /**
  * Whether a box is what an absolute box in it is placed against: one that is not static, or one

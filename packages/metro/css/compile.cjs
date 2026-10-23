@@ -27,6 +27,7 @@ const {
   PER_TURN,
   round,
   withRefusals,
+  refusePart,
   mixedToken,
   OF_A_BOX,
   color,
@@ -49,7 +50,7 @@ const {
 } = require('./properties.cjs');
 const { deferGradient, GRADIENTS } = require('./gradients.cjs');
 const { calcWithTokens, motionWithTokens } = require('./token-arithmetic.cjs');
-const { undrawnOnIos } = require('./filters.cjs');
+const { filter, undrawnOnIos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
 
 /** Angular's emulated encapsulation marker, which we strip: scoping is per rule set already. */
@@ -2687,6 +2688,83 @@ function addDeclaration(declaration, out, tokens, deferred, context) {
   }
 }
 
+/**
+ * One declaration of a rule in a sheet read as a browser reads it: as `addDeclaration` has it, or
+ * one of the properties that make a box the containing block of the absolute boxes in it, for the
+ * engine alone (`heldForTheEngine`). An app's own sheet is refused them, and places such a box
+ * against one it gives a position.
+ */
+function addBrowsersDeclaration(declaration, out, tokens, deferred, context) {
+  if (!heldForTheEngine(declaration, out, context)) {
+    addDeclaration(declaration, out, tokens, deferred, context);
+  }
+}
+
+/** What native does not do of each property `heldForTheEngine` keeps, where the value does it. */
+const NOT_DRAWN = {
+  perspective: 'native gives the boxes in it no perspective',
+  'backdrop-filter': 'native draws no backdrop filter',
+  contain: 'native contains neither the size nor the paint of a box',
+};
+/** The containments native does not do: of size, which lays a box out as if it were empty, and of paint, which clips it. */
+const NOT_CONTAINED = new Set(['size', 'inline-size', 'paint', 'strict', 'content']);
+
+/**
+ * `will-change`, `contain`, `perspective` and `backdrop-filter`, which can make a box what the
+ * absolute boxes in it are placed against however it is positioned, as a transform does. Kept for
+ * the engine, which reads that from them and sends none of them to a native view: `will-change`
+ * and `contain` as the words written, `perspective` as its length and `backdrop-filter` as the
+ * list `filter` is, each or `none`, as a value set on an element is. What native does not do of a
+ * value is reported and the value kept. A value with a token in it is refused. Answers whether it
+ * was one.
+ */
+function heldForTheEngine(declaration, out, context) {
+  const { property, value } = declaration;
+  const name =
+    property === 'custom'
+      ? value?.name
+      : property === 'unparsed'
+        ? value?.propertyId?.property
+        : property;
+  if (!['will-change', 'contain', 'perspective', 'backdrop-filter'].includes(name)) return false;
+  if (property === 'unparsed' || (property === 'custom' && mentionsVar(value.value))) {
+    throw new CssUnsupported(`${context}: '${name}' made of tokens is not read. Write the value.`);
+  }
+  const kept = keptValue(name, value, context);
+  if (leftOut(name, kept)) refusePart(`${context}: ${NOT_DRAWN[name]}.`);
+  out[camel(name)] = kept;
+  return true;
+}
+
+/** Whether native leaves out something a value `heldForTheEngine` keeps does. */
+function leftOut(name, kept) {
+  if (name === 'contain') return kept.split(' ').some((word) => NOT_CONTAINED.has(word));
+  // A `will-change` is a hint: there is nothing more to it that a box would show.
+  return name !== 'will-change' && kept !== 'none';
+}
+
+/** The value `heldForTheEngine` keeps of one of its properties. */
+function keptValue(name, value, context) {
+  if (name === 'backdrop-filter') return value?.type === 'none' ? 'none' : filter(value, context);
+  if (name === 'perspective') return keptPerspective(value, context);
+  // A `will-change` is a list, its names between commas.
+  const words = meaningful(value.value).filter(
+    (term) => name !== 'will-change' || term.value?.type !== 'comma',
+  );
+  if (!words.length || words.some((term) => term.type !== 'token' || term.value.type !== 'ident')) {
+    throw new CssUnsupported(`${context}: could not read '${name}'`);
+  }
+  return words.map((term) => term.value.value).join(name === 'will-change' ? ', ' : ' ');
+}
+
+/** A `perspective`: `none`, or its length in points. */
+function keptPerspective(value, context) {
+  if (value?.type === 'none') return 'none';
+  const points = value?.type === 'length' ? length(value.value, context) : undefined;
+  if (typeof points === 'number') return points;
+  throw new CssUnsupported(`${context}: 'perspective' is read in px or rem`);
+}
+
 /** Whether a structured value has a length in it that only the device can settle. */
 function holdsMarker(value) {
   if (value === null || typeof value !== 'object') return false;
@@ -3438,6 +3516,7 @@ function compileCss(source, context = 'styles', options = {}) {
     const { declarations, importantDeclarations } = rule.value.declarations;
     const tokens = {};
     const deferred = [];
+    const adds = options.generated ? addBrowsersDeclaration : addDeclaration;
 
     /** Translate one list of declarations, collecting tokens and deferred values as it goes. */
     const build = (list, sides) => {
@@ -3458,8 +3537,7 @@ function compileCss(source, context = 'styles', options = {}) {
         if (easedByToken(declaration, out, deferred, context)) continue;
         if (timedByToken(declaration, out, context)) continue;
         const before = deferred.length;
-        const add = (one) =>
-          declare(one, out, tokens, deferred, context, addDeclaration, platforms);
+        const add = (one) => declare(one, out, tokens, deferred, context, adds, platforms);
         declareOrAnimate(declaration, add, context);
         for (let i = before; i < deferred.length; i++) deferred[i].props.forEach(sides.wrote);
       }

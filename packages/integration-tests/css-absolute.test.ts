@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
+import type { FakeFabricNode } from '@ng-native/testing';
 import { createLaidOutFabric } from './laid-out-fabric.ts';
 
 const require = createRequire(import.meta.url);
@@ -438,5 +439,138 @@ describe('an absolute box in a static box that CSS makes what it is placed again
     assert.deepEqual(s.box('a'), [80, 40, 40, 20]);
     s.engine.setProp(h, 'style', { willChange: 'opacity' });
     assert.deepEqual(s.box('a'), [130, 90, 40, 20]);
+  });
+});
+
+describe("an absolute box in a static box a library's sheet makes what it is placed against", () => {
+  // Chrome: each of these makes a static box an absolute box's containing block from a sheet, as
+  // from a value set on the element, and a later rule's value takes over from an earlier one's.
+  const placed = (rule: string, classes = 'h c', generated = true) => {
+    const css =
+      '.g { position: relative; width: 300px; height: 200px } ' +
+      '.h { position: static; width: 100px; height: 100px; margin-left: 50px } ' +
+      `.h.c { ${rule} } .a { ${BOX} inset: 0; margin: auto }`;
+    const sheet = compileCss(css, 'lib.css', { onUnsupported: () => {}, generated });
+    const fabric = createLaidOutFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const add = (name: string, parent: EngineNode) => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, name);
+      engine.setProp(node, 'nativeID', name);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    add('a', add(classes, add('g', engine.root)));
+    engine.commit();
+    const { left, top, width, height } = fabric.box('a');
+    const find = (node: FakeFabricNode): FakeFabricNode | undefined =>
+      node.props['nativeID'] === classes ? node : node.children.map(find).find(Boolean);
+    const style = fabric.committed.map(find).find(Boolean)!.props;
+    return { box: [left, top, width, height], style };
+  };
+  const INSIDE = [80, 40, 40, 20];
+  const ABOVE = [130, 90, 40, 20];
+
+  for (const rule of [
+    'will-change: transform',
+    'will-change: opacity, filter',
+    'will-change: position',
+    'contain: paint',
+    'contain: layout style',
+    'contain: content',
+    'contain: strict',
+    'perspective: 100px',
+    'backdrop-filter: blur(2px)',
+  ]) {
+    it(`is centred in a static box with ${rule}, which native is not sent`, () => {
+      const { box, style } = placed(rule);
+      assert.deepEqual(box, INSIDE);
+      const key = rule
+        .split(':')[0]!
+        .replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase());
+      assert.equal(key in style, false, `${key} is read by the engine alone`);
+      assert.equal(style['position'], 'relative');
+    });
+  }
+
+  for (const rule of [
+    'will-change: auto',
+    'will-change: opacity',
+    'contain: none',
+    'contain: size',
+    'perspective: none',
+    'backdrop-filter: none',
+  ]) {
+    it(`is centred in the box above a static box with ${rule}`, () => {
+      assert.deepEqual(placed(rule).box, ABOVE);
+    });
+  }
+
+  it('sends native none of them where nothing else asks for a layout of CSS', () => {
+    const rule =
+      'will-change: transform; contain: paint; perspective: 1px; backdrop-filter: blur(1px)';
+    const sheet = compileCss(`.c { ${rule} }`, 'lib.css', {
+      onUnsupported: () => {},
+      generated: true,
+    });
+    const fabric = createLaidOutFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const node = engine.createElement('view');
+    engine.setClasses(node, 'c');
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    const [committed] = fabric.committed;
+    for (const key of ['willChange', 'contain', 'perspective', 'backdropFilter']) {
+      assert.equal(key in committed!.props, false, key);
+    }
+  });
+
+  it('says what native does not draw of them, and fails a strict compile for it', () => {
+    const said = (rule: string) => {
+      const warnings: string[] = [];
+      const options = { onUnsupported: (m: string) => warnings.push(m), generated: true };
+      compileCss(`.c { ${rule} }`, 'lib.css', options);
+      return warnings;
+    };
+    assert.match(said('backdrop-filter: blur(1px)')[0]!, /part of 'backdrop-filter'.*no backdrop/);
+    assert.match(said('perspective: 1px')[0]!, /part of 'perspective'.*no perspective/);
+    for (const rule of ['paint', 'content', 'size', 'inline-size layout', 'strict']) {
+      assert.match(said(`contain: ${rule}`)[0]!, /part of 'contain'.*size nor the paint/, rule);
+    }
+    assert.match(said('will-change: var(--w)')[0]!, /'will-change' made of tokens/);
+    for (const rule of [
+      'will-change: transform',
+      'contain: layout style',
+      'contain: none',
+      'perspective: none',
+      'backdrop-filter: none',
+    ]) {
+      assert.deepEqual(said(rule), [], rule);
+      assert.doesNotThrow(() => compileCss(`.c { ${rule} }`, 'lib.css', { generated: true }), rule);
+    }
+    const strict = () =>
+      compileCss('.c { backdrop-filter: blur(1px) }', 'lib.css', { generated: true });
+    assert.throws(strict, /no backdrop/);
+  });
+
+  it("is centred in the box above where the app's own sheet says it, which is refused it", () => {
+    const warnings: string[] = [];
+    const options = { onUnsupported: (m: string) => warnings.push(m) };
+    compileCss('.c { will-change: transform; contain: layout }', 'app.css', options);
+    assert.equal(warnings.length, 2);
+    assert.match(warnings[0]!, /dropped 'will-change'/);
+    assert.match(warnings[1]!, /dropped 'contain'/);
+    assert.deepEqual(placed('will-change: transform', 'h c', false).box, ABOVE);
+  });
+
+  it('is centred in the box above once a later rule says none or auto', () => {
+    for (const [one, none] of [
+      ['will-change: transform', 'will-change: auto'],
+      ['contain: paint', 'contain: none'],
+      ['perspective: 10px', 'perspective: none'],
+      ['backdrop-filter: blur(1px)', 'backdrop-filter: none'],
+    ]) {
+      assert.deepEqual(placed(`${one} } .h.c.n { ${none}`, 'h c n').box, ABOVE, none);
+    }
   });
 });
