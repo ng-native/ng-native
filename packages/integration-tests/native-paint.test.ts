@@ -394,3 +394,18 @@ describe('a painted view whose transitions change shape, take presses, or follow
     assert.ok((s.rec.connected().get(s.engine.tagOf(s.view)) ?? []).length <= 1, 'one graph');
   });
 });
+
+describe('a painted view a native graph once owned an opacity on', () => {
+  it('paints a one-off opacity change, which a commit would no longer show', () => {
+    const s = scene(`${BAR} .bar.fade { transition: opacity 150ms linear }`);
+    s.classes('bar fade');
+    s.style({ opacity: 0.5 });
+    s.finishLast();
+    s.classes('bar');
+    // A run of transform changes hands the view to the painter, with only its transform.
+    for (let x = 10; x <= 40; x += 10) s.tick(50, { ...move(x), opacity: 0.5 });
+    // Changed once, long after the fade: no run of its own.
+    s.tick(1500, { ...move(40), opacity: 0.8 });
+    assert.equal(s.painted()['opacity'], 0.8);
+  });
+});

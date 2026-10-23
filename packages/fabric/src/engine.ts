@@ -13239,7 +13239,8 @@ export class Engine implements HostEngine {
 
   /**
    * Whether a payload changes paint native could paint, and whether each such change is in a
-   * run, where a run can hand the view over. Takes on each prop in a run.
+   * run, where a run can hand the view over. Takes on each prop in a run, and each a graph of
+   * native's has set on the view, which a commit no longer changes (see `Touched`).
    * A change in no run is committed as well as painted: a fade a press starts and a transition
    * that ends are a commit each, as they were, and the shadow node is never behind for them.
    */
@@ -13256,7 +13257,7 @@ export class Engine implements HostEngine {
       changed = true;
       const again = runs && this.paintedAgain(node, key);
       if (!again) inRun = false;
-      if (again) state.keys.add(key);
+      if (again || this.owns(node, key)) state.keys.add(key);
     }
     return { changed, inRun };
   }
@@ -13452,6 +13453,12 @@ export class Engine implements HostEngine {
       ({ values, refused }) => !refused.length && Array.isArray(values.transform ?? []),
     );
     return numbers ? { from: ends[0]!.values, to: ends[1]!.values } : null;
+  }
+
+  /** Whether a graph of native's has set a prop on the view the node is committed as. */
+  private owns(node: EngineNode, key: string): boolean {
+    const owned = node.owned;
+    return !!owned && owned.tag === node.committed?.tag && owned.keys.has(key);
   }
 
   /** Take back from native every clock it eases on a view but those of `keys`. */
