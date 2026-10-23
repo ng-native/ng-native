@@ -40,6 +40,11 @@
       "version": "0.17.1",
       "description": "Give each Angular Native project in angular.json a typecheck target, run by ngc.",
       "factory": "./migrations/run.cjs#native-typecheck-target"
+    },
+    "stop-watching-conditions": {
+      "version": "0.17.2",
+      "description": "Keep what watchConditions returns in each app's entry point and stop it as the app is destroyed.",
+      "factory": "./migrations/run.cjs#stop-watching-conditions"
     }
   }
 }
