@@ -335,6 +335,34 @@ describe('a navigation to a url further down the stack that fails or is cancelle
     assert.deepEqual(historyOf(), ['/', '/compose']);
   });
 
+  it('leaves Back working for a failed page under the screen on top', async () => {
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/compose');
+    await failed(router.navigateByUrl('/compose/broken'));
+    await idle();
+    assert.equal(router.url, '/compose');
+    assert.deepEqual(stack(fabric), ['home', 'start', 'start']);
+
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/');
+    assert.deepEqual(stack(fabric), ['home']);
+  });
+
+  it('leaves Back working for a failed page under a screen in a stack inside the top one', async () => {
+    await nav.push('/draft');
+    await nav.push('/draft/nested');
+    await idle();
+    await failed(router.navigateByUrl('/draft/nested/broken'));
+    await idle();
+    assert.equal(router.url, '/draft/nested');
+
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/draft', 'the stack inside the draft takes the Back');
+  });
+
   it('leaves no rewind behind for the next navigation to make', async () => {
     await failed(router.navigateByUrl('/compose/broken'));
     await idle();

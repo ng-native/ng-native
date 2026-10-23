@@ -733,8 +733,10 @@ describe('a navigation that writes its url before it is refused', () => {
         provideNativeRouter(
           mod['routes'] as Routes,
           withComponentInputBinding(),
-          withRouterConfig({ urlUpdateStrategy: 'eager' }),
+          // Resolved, as a redirect's rejection is one Angular itself leaves unhandled.
+          withRouterConfig({ urlUpdateStrategy: 'eager', resolveNavigationPromiseOnError: true }),
         ),
+        { provide: ErrorHandler, useValue: { handleError() {} } },
       ],
     });
     const router = app.componentRef.injector.get(Router);
@@ -758,6 +760,24 @@ describe('a navigation that writes its url before it is refused', () => {
       history.ɵpages().map((page) => page.url),
       ['/', '/user/1', '/user/5'],
       'and one a guard sends elsewhere is replaced by where it went',
+    );
+
+    await nav.push('/moved-refused');
+    await idle();
+    assert.equal(router.url, '/user/5');
+    assert.deepEqual(
+      history.ɵpages().map((page) => page.url),
+      ['/', '/user/1', '/user/5'],
+      'and none for one a guard sends to a page that refuses it',
+    );
+
+    assert.equal(await nav.push('/moved-broken'), false);
+    await idle();
+    assert.equal(router.url, '/user/5');
+    assert.deepEqual(
+      history.ɵpages().map((page) => page.url),
+      ['/', '/user/1', '/user/5'],
+      'or to a page that throws',
     );
   });
 });

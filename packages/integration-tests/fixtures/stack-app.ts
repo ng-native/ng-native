@@ -256,8 +256,26 @@ export const routes: Routes = [
     children: [
       { path: '', component: ComposeStart },
       { path: 'step', component: ComposeStep },
+      {
+        path: 'nested',
+        component: Compose,
+        children: [
+          { path: '', component: ComposeStart },
+          { path: 'broken', component: Broken },
+        ],
+      },
     ],
   },
   { path: 'refused', component: Fine, canActivate: [() => false] },
   { path: 'moved', component: Fine, canActivate: [() => inject(Router).parseUrl('/user/5')] },
+  {
+    path: 'moved-broken',
+    component: Fine,
+    canActivate: [() => inject(Router).parseUrl('/broken')],
+  },
+  {
+    path: 'moved-refused',
+    component: Fine,
+    canActivate: [() => inject(Router).parseUrl('/refused')],
+  },
 ];

@@ -27,11 +27,20 @@ const rolledBack = (event: Event): event is NavigationError | NavigationCancel =
 export function discardFailedEntries(): void {
   const history = inject(PlatformLocation);
   if (!(history instanceof NativePlatformLocation)) return;
-  // As the navigation in flight found it. One ends before the next starts.
+  // As the navigation in flight found it. One ends before the next starts. A guard's redirect
+  // keeps it: with 'eager' the redirected navigation replaces the entry the first one wrote.
   let depth = 0;
+  let redirected = false;
   const events = inject(Router).events.subscribe((event) => {
-    if (event instanceof NavigationStart) depth = history.ɵpages().length;
-    else if (rolledBack(event) && history.ɵpages().length === depth + 1) history.ɵdiscard();
+    if (event instanceof NavigationStart) {
+      if (!redirected) depth = history.ɵpages().length;
+      redirected = false;
+    } else if (
+      event instanceof NavigationCancel &&
+      event.code === NavigationCancellationCode.Redirect
+    ) {
+      redirected = true;
+    } else if (rolledBack(event) && history.ɵpages().length === depth + 1) history.ɵdiscard();
   });
   inject(DestroyRef).onDestroy(() => events.unsubscribe());
 }

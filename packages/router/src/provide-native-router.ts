@@ -46,6 +46,7 @@ import {
   type TabDefaults,
 } from './native-bar-defaults.ts';
 import { discardFailedEntries } from './discard-failed-entries.ts';
+import { restoreFailedSnapshots } from './native-back.ts';
 import { followLink, linkAncestry, type LinkParent } from './native-links.ts';
 import {
   NATIVE_INTENT,
@@ -158,6 +159,7 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
     NativeNavigation,
     provideEnvironmentInitializer(carryIntentAcrossRedirects),
     provideEnvironmentInitializer(discardFailedEntries),
+    provideEnvironmentInitializer(restoreFailedSnapshots),
     provideEnvironmentInitializer(keepHistoryAcrossReloads),
   ];
   if (!parentOf) {
