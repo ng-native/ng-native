@@ -90,9 +90,11 @@ to a list, and a test for it. It finds what a counter does not.
 The docs' own component samples are checked by `packages/integration-tests/docs-samples.test.ts` on
 every PR. Run it on the release tag only if docs changed a lot this release.
 
-Pages for other hosts (`packages/web.md`, `packages/analog.md`, Storybook) are checked by
-`verify-publish.mjs --web` and `--storybook` in the release workflow. Look at that job's result
-rather than redoing them, unless their pages changed this release.
+The web host page (`packages/web.md`) and the Storybook recipe are checked by
+`verify-publish.mjs --web` and `--storybook`. Look at those jobs' results rather than redoing them,
+unless their pages changed this release. Nothing automated follows `packages/analog.md`: when it
+or `@ng-native/analog` changed this release, follow its Setup section in the template app and open
+a page on the simulator.
 
 ## 4. Upgrades
 

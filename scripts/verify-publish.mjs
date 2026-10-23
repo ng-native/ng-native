@@ -1097,13 +1097,27 @@ async function manualApp(dir, { newestSdk = false } = {}) {
       '\n' +
       tailwindConfig.slice(tailwindConfig.indexOf('\n') + 1),
   );
+  // The guide's second `src/main.ts` block: its imports, then the mount options it says go beside
+  // `processColor`.
+  const mainEdit = blocks
+    .filter(({ code }) => code.startsWith('// src/main.ts'))[1]
+    ?.code.split('\n')
+    .slice(1)
+    .filter((line) => line.trim() && !line.trim().startsWith('//'));
+  if (!mainEdit) throw new Error('the guide has no second src/main.ts block for Tailwind');
+  const imports = mainEdit.filter((line) => line.startsWith('import '));
+  const options = mainEdit.filter((line) => !line.startsWith('import '));
   const main = path.join(app, 'src/main.ts');
   replaceIn(
     main,
     "import { App } from './app/app.ts';",
-    "import { App } from './app/app.ts';\nimport tailwind from '../.angular-native/app.tailwind.js';",
+    ["import { App } from './app/app.ts';", ...imports].join('\n'),
   );
-  replaceIn(main, 'processColor,', 'processColor,\n    globalStyles: tailwind,');
+  replaceIn(
+    main,
+    'processColor,',
+    ['processColor,', ...options.map((line) => `    ${line.trim()}`)].join('\n'),
+  );
 
   // The guide's order: Metro makes the Tailwind sheet before the first typecheck needs it.
   console.log('bundling for every platform');
