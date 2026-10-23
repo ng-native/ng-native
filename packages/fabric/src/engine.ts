@@ -5379,16 +5379,19 @@ const SIDE_COLOURS = ['borderTopColor', 'borderRightColor', 'borderBottomColor',
 
 /**
  * Ease a view's unsided border colour with its four sides where they ease alike: Android dashes
- * a rounded border only from `borderColor`, and only while every side equals it.
+ * a rounded border only from `borderColor`, and only while every side equals it. Asked of what
+ * the view is committed with, which the element's own sides can make uniform too.
  */
 function unsidedBorderTrack(
   tracks: Map<string, readonly TrackPoint[]>,
   props: Record<string, unknown>,
 ): void {
-  if (props['borderColor'] === undefined || tracks.has('borderColor')) return;
+  if (tracks.has('borderColor')) return;
   const [top, ...rest] = SIDE_COLOURS.map((key) => tracks.get(key));
   if (!top || rest.some((track) => !sameTrack(track, top))) return;
-  tracks.set('borderColor', top);
+  const settled = { ...props };
+  settleUnsidedBorder(settled);
+  if (settled['borderColor'] !== undefined) tracks.set('borderColor', top);
 }
 
 const sameTrack = (one: readonly TrackPoint[] | undefined, other: readonly TrackPoint[]) =>

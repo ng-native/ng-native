@@ -290,6 +290,39 @@ describe('a transition of a colour', () => {
     assert.deepEqual(s.events, ['start backgroundColor', 'end backgroundColor']);
   });
 
+  it('eases a uniform border unsided where only the element gives its sides', () => {
+    const s = scene(
+      '.a { border-style: dashed; border-radius: 16px; transition: border-color 200ms linear }',
+    );
+    const sides = (colour: string) => ({
+      borderWidth: 4,
+      ...Object.fromEntries(
+        ['Top', 'Right', 'Bottom', 'Left'].map((side) => [`border${side}Color`, colour]),
+      ),
+    });
+    s.engine.setProp(s.view, 'style', sides('rgb(255, 0, 0)'));
+    s.engine.commit();
+    s.engine.setProp(s.view, 'style', sides('rgb(0, 0, 255)'));
+    s.engine.commit();
+    assert.equal(s.started().length, 1);
+    const half = s.at(0.5);
+    for (const part of ['r', 'g', 'b', 'a']) {
+      assert.equal(half[`borderColor.${part}`], half[`borderTopColor.${part}`], part);
+    }
+    assert.ok(half['borderColor.r']! > 0 && half['borderColor.b']! > 0, 'halfway, not an end');
+  });
+
+  it('drives no unsided colour where the widths differ, which native draws side by side', () => {
+    const s = scene(
+      '.a { border: dashed rgb(255, 0, 0); border-width: 1px 2px; ' +
+        'transition: border-color 200ms linear } .a.on { border-color: rgb(0, 0, 255) }',
+    );
+    s.classes('a on');
+    assert.equal(s.started().length, 1);
+    assert.notEqual(s.at(0.5)['borderTopColor.r'], undefined);
+    assert.equal(s.at(0.5)['borderColor.r'], undefined);
+  });
+
   it('eases a uniform border unsided with its sides, which Android dashes a rounded one from', () => {
     const s = scene(
       '.a { border: 4px dashed rgb(255, 0, 0); border-radius: 16px; ' +
