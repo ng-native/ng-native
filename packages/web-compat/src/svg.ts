@@ -79,9 +79,27 @@ export function drawingElement(engine: Engine, name: string, drawn: boolean): En
  * What a shape with no fill of its own is filled with, and every shape in it that has none:
  * black, which is where SVG starts. Given to what is written straight into the drawing, as a
  * default under any stylesheet: the native shapes take a fill from the one they are in, and
- * the drawing itself has none to give.
+ * the drawing's native view has none to give.
  */
 const FILLED = { fill: 'black' };
+
+/**
+ * The paint a shape written straight into a drawing starts with, where it says none of its own:
+ * the drawing's, `<svg fill="currentColor">` as Material's icons have, or black for a fill.
+ *
+ * ponytail: a drawing's paint that names a token, `fill="var(--ink)"`, is not settled here. Give
+ * it the cascade, as a shape's own is in `paintByToken`, if a library is seen to write one.
+ */
+function startingPaint(node: EngineNode): Record<string, string> | undefined {
+  if (node.parent?.tag !== 'svg') return undefined;
+  const own = attributesOf(node).attrs;
+  const drawing = attributesOf(node.parent).attrs;
+  const fill = 'fill' in own ? undefined : (drawing['fill'] ?? 'black');
+  const stroke = 'stroke' in own ? undefined : drawing['stroke'];
+  if (fill === 'black' && stroke === undefined) return FILLED;
+  if (fill === undefined && stroke === undefined) return undefined;
+  return { ...(fill !== undefined && { fill }), ...(stroke !== undefined && { stroke }) };
+}
 
 const TEXT_PATH = 'textPath';
 
@@ -583,19 +601,23 @@ export function textShapeOf(
 /** What a paint set on a shape changes beside its own prop: its token, and its starting fill. */
 function paintSet(node: EngineNode, name: string, written: string | undefined, engine: Engine) {
   paintByToken(node, name, written, engine);
-  if (name === 'fill') startFilled(node, engine);
+  if (PAINTS.includes(name)) startFilled(node, engine);
 }
 
 /**
- * Give a shape written straight into a drawing the fill a drawing starts with, where it says
+ * Give a shape written straight into a drawing the paint a drawing starts with, where it says
  * none of its own: `fill="none"` is one, and is no fill.
  */
 function startFilled(node: EngineNode, engine: Engine): void {
   if (node.nodeKind !== 'element' || !Object.hasOwn(SHAPES, node.tag)) return;
-  const starts = node.parent?.tag === 'svg' && !('fill' in attributesOf(node).attrs);
-  if ((node.defaultStyle === FILLED) !== starts) {
-    engine.setDefaultStyle(node, starts ? FILLED : undefined);
-  }
+  const paint = startingPaint(node);
+  const had = node.defaultStyle;
+  if (
+    had === paint ||
+    (had && paint && had['fill'] === paint['fill'] && had['stroke'] === paint['stroke'])
+  )
+    return;
+  engine.setDefaultStyle(node, paint);
 }
 
 /**
@@ -733,6 +755,9 @@ function setShape(
     // Its own size is a default, as a browser has an attribute under any rule of a stylesheet.
     const props = drawAgain(node, engine);
     engine.setDefaultStyle(node, { ...proportioned(props), ...sizeOf(shape.attrs) });
+    if (name === 'fill' || name === 'stroke') {
+      for (const child of node.childList) startFilled(child, engine);
+    }
     redrawLongPathsUnder(node, engine, (path) => drawLater(path, engine));
   } else {
     drawLater(node, engine);

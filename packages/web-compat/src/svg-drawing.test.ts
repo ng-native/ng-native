@@ -1769,3 +1769,43 @@ describe('the font of a text in a drawing on Android', () => {
     }
   });
 });
+
+@Component({
+  selector: 'x-inked-icon',
+  template: `
+    <svg viewBox="0 0 24 24" [attr.fill]="ink()">
+      <path testID="bare" d="M0 0h9v9z" />
+      <path testID="own" fill="red" d="M0 0h9v9z" />
+    </svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path testID="outlined" d="M0 0h9v9z" />
+    </svg>
+  `,
+})
+class InkedIcon {
+  readonly ink = signal<string | null>('currentColor');
+}
+
+describe('@ng-native/web-compat svg paint attribute', () => {
+  it("fills a shape with none of its own with its drawing's, as Material's date toggle is", async () => {
+    const app = await render(InkedIcon, { providers: [provideWebCompat()] });
+    await settle();
+    const fill = (id: string) => screen.getByTestId(id).props['fill'];
+    // `currentColor`: the colour of the drawing's view, which native paints with.
+    assert.deepEqual(fill('bare'), { type: 2 });
+    assert.deepEqual(fill('own'), { type: 0, payload: 'red' });
+    // An outlined icon, as Lucide's are.
+    // A fill named and not set is none, as react-native-svg reads the list.
+    assert.equal(fill('outlined'), null);
+    assert.ok((screen.getByTestId('outlined').props['propList'] as string[]).includes('fill'));
+    assert.deepEqual(screen.getByTestId('outlined').props['stroke'], { type: 2 });
+    app.instance.ink.set('blue');
+    await settle();
+    assert.deepEqual(fill('bare'), { type: 0, payload: 'blue' });
+    // With the attribute gone, black, where SVG starts.
+    app.instance.ink.set(null);
+    await settle();
+    assert.deepEqual(fill('bare'), { type: 0, payload: 'black' });
+    assert.deepEqual(fill('own'), { type: 0, payload: 'red' });
+  });
+});
