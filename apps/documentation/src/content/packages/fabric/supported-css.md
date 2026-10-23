@@ -427,9 +427,9 @@ spelling here too: `padding-horizontal`, `padding-vertical`, `margin-horizontal`
 settles it against the edges as it settles any shorthand, where React Native would always prefer
 the edge: a later or stronger `padding-left` or `padding-inline-start` overrides it on that edge,
 and it overrides an earlier or weaker one. A second value is dropped with a warning; write
-`padding-inline` for a different value on each side.
-A browser has none of these properties, so the [web host](/packages/web) ignores them: a sheet that
-also runs there writes `padding-inline` and the rest.
+`padding-inline` for a different value on each side. A browser has none of these properties, so
+the [web host](/packages/web) ignores them: a sheet that also runs there writes `padding-inline`
+and the rest.
 
 `border-style` is likewise one value for all four sides: a native border has one style, so the sides
 that are drawn are all drawn in it, and a second drawn style on one side is not one native can give
@@ -558,10 +558,6 @@ Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are t
 
 `tint-color` is native's own, with no counterpart on the web: the color an image is drawn in, and
 the color of an SF Symbol. It takes a token as any color does, and a `platform-color()`.
-
-`padding-horizontal`, `padding-vertical`, `margin-horizontal` and `margin-vertical` are React
-Native's own too, with no counterpart on the web. Each takes one length for both sides of its axis:
-`padding-horizontal: 12px` is `padding-left: 12px; padding-right: 12px`.
 
 ## A sheet read as a browser reads it
 

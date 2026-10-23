@@ -2260,12 +2260,6 @@ const SIDE_SHORTHANDS = {
   // `border-left` still overrides it, and top and bottom.
   'border-inline-width': ['borderLeftWidth', 'borderRightWidth'],
   'border-block-width': ['borderTopWidth', 'borderBottomWidth'],
-  // React Native's own names for both sides of an axis, which take one value. Written as the
-  // sides, since `paddingHorizontal` is an alias only some views read: see `LOGICAL`.
-  'padding-horizontal': ['paddingLeft', 'paddingRight'],
-  'padding-vertical': ['paddingTop', 'paddingBottom'],
-  'margin-horizontal': ['marginLeft', 'marginRight'],
-  'margin-vertical': ['marginTop', 'marginBottom'],
   'border-radius': [
     'borderTopLeftRadius',
     'borderTopRightRadius',

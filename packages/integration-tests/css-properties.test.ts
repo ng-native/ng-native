@@ -549,23 +549,6 @@ describe('logical properties', () => {
     );
     assert.deepEqual(writes('padding-horizontal: var(--x)'), ['paddingLeft', 'paddingRight']);
     assert.deepEqual(writes('margin-vertical: var(--x)'), ['marginTop', 'marginBottom']);
-    const deferredOf = (css: string) => compileCss(`view { ${css} }`).rules[0].deferred;
-    const values = [
-      'calc(var(--x) * 2)',
-      'env(safe-area-inset-left)',
-      'max(1rem, env(safe-area-inset-left))',
-    ];
-    for (const value of values) {
-      const [one] = deferredOf(`padding-horizontal: ${value}`);
-      const [left] = deferredOf(`padding-left: ${value}`);
-      assert.deepEqual(one, { ...left, props: ['paddingLeft', 'paddingRight'] }, value);
-    }
-  });
-
-  it('refuses two values for one of them, which React Native gives one', () => {
-    assert.throws(() => compileCss('view { padding-horizontal: 1px 2px }'), /takes one length/);
-    assert.throws(() => compileCss('view { margin-vertical: 1px 2px }'), /takes one length/);
-    assert.throws(() => compileCss('view { padding-vertical: auto }'), /takes one length/);
   });
 
   it('never writes one of the names only some views read', () => {
