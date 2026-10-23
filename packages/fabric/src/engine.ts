@@ -12355,6 +12355,7 @@ export class Engine implements HostEngine {
     if (count !== -1 && !(Number.isInteger(count) && count > 0)) return false;
     const length = Math.max(2, Math.round((spec.duration * span) / NATIVE_FRAME) + 1);
     const frames = Array.from({ length }, (_, i) => i / (length - 1));
+    this.leavePainting(node);
     const native = this.scrollDriver.play(
       node,
       channels,
@@ -13459,6 +13460,16 @@ export class Engine implements HostEngine {
   private owns(node: EngineNode, key: string): boolean {
     const owned = node.owned;
     return !!owned && owned.tag === node.committed?.tag && owned.keys.has(key);
+  }
+
+  /**
+   * Let the painter go, for a graph of an animation to move the view: one graph moves a view,
+   * and what the painter eased goes on from JavaScript.
+   */
+  private leavePainting(node: EngineNode): void {
+    if (!node.paint) return;
+    this.backToScriptAll(node, []);
+    this.stopPainting(node);
   }
 
   /** Take back from native every clock it eases on a view but those of `keys`. */

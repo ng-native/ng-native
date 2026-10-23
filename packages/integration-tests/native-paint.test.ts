@@ -425,3 +425,19 @@ describe('a painted view given its first transform with a transition', () => {
     assert.equal((created[2] as { value: number }).value, 0);
   });
 });
+
+describe('a painted view a native @keyframes animation starts on', () => {
+  it('lets the painter go first, taking back what it was easing, so one graph moves the view', () => {
+    const css =
+      `${BAR} .bar { transition: transform 150ms linear }` +
+      ' @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }' +
+      ' .bar.spin { animation: spin 1s linear infinite }';
+    const s = scene(css);
+    for (let x = 10; x <= 40; x += 10) s.tick(50, move(x));
+    s.tick(10, move(80));
+    s.classes('bar spin');
+    const graphs = s.rec.connected().get(s.engine.tagOf(s.view)) ?? [];
+    assert.equal(graphs.length, 1, 'one graph on the view');
+    assert.equal(s.view.transitions?.get('transform')?.native, undefined, 'none left native');
+  });
+});
