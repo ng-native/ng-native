@@ -78,6 +78,12 @@ The same `providers` work in `render()`, for a component that injects the servic
 `'web'` in the web host. In a test it is the platform the test renders as, `'ios'` unless it
 called `registerPlatformComponents('android')`.
 
+A stand-alone `mount` from `@ng-native/web` provides `'web'` in its root injector. An island
+(`mount(el, C, { injector })` or `<ng-native-island>`) provides it only in the island's own
+injector, so a root service of the host app that injects `OS` reads `'ios'` there, the default off
+a device. A host app that uses islands and has such services provides it in its own
+`bootstrapApplication` providers: `{ provide: OS, useValue: 'web' }`.
+
 `OS_VERSION` is the major version of that operating system, for a default that follows what the
 platform draws in that version: `26` on iOS 26.5, and the API level on Android. It is `null` on
 the web and in a test.

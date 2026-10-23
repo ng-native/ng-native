@@ -119,8 +119,13 @@ Anything it does not provide itself comes from the app, once, for both:
 | Every `providedIn: 'root'` service, including your own                             | The renderer and engine that turn `<view>` into a `<div>`            |
 | Anything `bootstrapApplication` provides, such as `provideHttpClient()` or a store | `Screen`, `ColorScheme`, `Direction`, `HardwareBack` and `StatusBar` |
 | Anything a component above the island provides                                     | Anything you pass in `providers`                                     |
-| Change detection: the app checks the island as one of its own views                |                                                                      |
+| Change detection: the app checks the island as one of its own views                | `OS`, as `'web'`, for the components inside the island only          |
 | The app's `ErrorHandler`                                                           |                                                                      |
+
+`OS` is in the right column only for the components inside the island: it is `'web'` there, and a
+root service of the host app does not see it. A host app that uses islands and has root services
+that inject `OS` provides `{ provide: OS, useValue: 'web' }` in its own `bootstrapApplication`
+providers, from `@ng-native/device`.
 
 The five device services on the right read the browser - the window's size, `prefers-color-scheme`,
 `document.dir` - rather than a phone, so each island builds its own against those sources.
