@@ -300,4 +300,27 @@ describe('a transition of a colour', () => {
     assert.equal(s.at(1)['opacity'], 0.5);
     assert.equal(s.at(1)['backgroundColor.b'], 30);
   });
+
+  it('is eased natively where the view is moved by a transform of its own beside it, the move kept', () => {
+    // A label offset in a line: the offset is a move before its transform, which the native
+    // ease carries, so the label neither jumps by the offset nor is eased from JavaScript.
+    const css =
+      '.row { display: flex; flex-direction: row; flex-wrap: wrap }' +
+      ' .a { position: relative; top: 28px; transition: transform 200ms linear }' +
+      ' .a.up { transform: translateY(-10px) }';
+    const s = scene(css);
+    const row = s.engine.createElement('view');
+    s.engine.setClasses(row, 'row');
+    s.engine.appendChild(s.engine.root, row);
+    s.engine.removeChild(s.engine.root, s.view);
+    s.engine.appendChild(row, s.view);
+    s.engine.commit();
+    s.engine.advanceAnimations();
+    s.classes('a up');
+    assert.equal(s.started().length, 1);
+    // Native eases its own transform, and the engine's move stays committed before it.
+    assert.deepEqual([s.at(0), s.at(1)], [{ translateY: 0 }, { translateY: -10 }]);
+    const view = s.engine.root.childList[0]!.childList[0]!;
+    assert.deepEqual(view.committed!.props['transform'], [{ translateY: 28 }]);
+  });
 });

@@ -1386,4 +1386,19 @@ describe('an animation whose every part is a token, as tw-animate-css writes one
     late.frame(150);
     assert.equal(late.props()['opacity'] ?? 1, 1);
   });
+
+  const OPEN =
+    '@keyframes open { from { height: 0 } to { height: var(--h) } }' +
+    ' .a { height: 0; animation: open 200ms linear forwards }';
+
+  it('is kept for the engine to settle, in a sheet of the app and in one of a library', () => {
+    const [, written] = compileCss(OPEN, 'app.css').keyframes.open;
+    assert.deepEqual(written.deferred.length, 1);
+    const sheet = compileCss(OPEN, 'library.css', { generated: true });
+    const [, to] = sheet.keyframes.open;
+    assert.deepEqual(
+      to.deferred.map((one: { props: string[] }) => one.props),
+      [['height']],
+    );
+  });
 });
