@@ -119,8 +119,9 @@ Anything it does not provide itself comes from the app, once, for both:
 | Every `providedIn: 'root'` service, including your own                             | The renderer and engine that turn `<view>` into a `<div>`            |
 | Anything `bootstrapApplication` provides, such as `provideHttpClient()` or a store | `Screen`, `ColorScheme`, `Direction`, `HardwareBack` and `StatusBar` |
 | Anything a component above the island provides                                     | Anything you pass in `providers`                                     |
-| Change detection: the app checks the island as one of its own views                | `OS`, as `'web'`, for the components inside the island only          |
+| Change detection: the app checks the island as one of its own views                |                                                                      |
 | The app's `ErrorHandler`                                                           |                                                                      |
+| `OS` for the host app's root services: `'ios'` unless the app provides it          | `OS` as `'web'`, for the components inside the island only           |
 
 `OS` is in the right column only for the components inside the island: it is `'web'` there, and a
 root service of the host app does not see it. A host app that uses islands and has root services
