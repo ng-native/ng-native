@@ -92,8 +92,9 @@ export function recorder() {
     return up(node);
   };
   /**
-   * What a graph that plays no animation sets on a view, each value node at the value it was
-   * last set to: a transform is its entries.
+   * What a graph that plays no animation paints on a view, each value node at the value it was
+   * last set to: the engine's painter (`native-paint.ts`). A colour is its four parts, and a
+   * transform its entries, or the list an object node holds.
    */
   const painted = (viewTag: unknown): Record<string, unknown> => {
     type Config = Record<string, unknown> & { type: string };
@@ -113,12 +114,20 @@ export function recorder() {
       const style = configs.get((configs.get(propsTag)!['props'] as { style: unknown }).style)!;
       for (const [key, tag] of Object.entries(style['style'] as Record<string, unknown>)) {
         const config = configs.get(tag)!;
-        if (config.type === 'value') {
-          out[key] = values.get(tag);
-          continue;
+        if (config.type === 'value') out[key] = values.get(tag);
+        else if (config.type === 'object') out[key] = config['value'];
+        else if (config.type === 'color') {
+          out[key] = ['r', 'g', 'b', 'a'].map((part) => values.get(config[part]));
+        } else {
+          const entries = config['transforms'] as {
+            property: string;
+            nodeTag?: unknown;
+            value?: number;
+          }[];
+          out[key] = entries.map((entry) => ({
+            [entry.property]: entry.nodeTag === undefined ? entry.value : values.get(entry.nodeTag),
+          }));
         }
-        const entries = config['transforms'] as { property: string; nodeTag?: unknown }[];
-        out[key] = entries.map((entry) => ({ [entry.property]: values.get(entry.nodeTag) }));
       }
     }
     return out;

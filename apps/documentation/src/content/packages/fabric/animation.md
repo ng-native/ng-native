@@ -241,6 +241,22 @@ JavaScript in between. A header that collapses as the page scrolls follows the f
   way; a translate in percentages, or any other property, holds its first frame, with a warning in
   development.
 
+## Paint that changes again and again
+
+A plain view whose `transform`, `opacity` or a colour such as `background-color` changes
+again and again, a progress bar stepped every 50ms for one, is painted by native with no
+commit. Its first change is committed as any other. A second change of the same prop within a
+second is committed too, and keeps the view as a native view of its own. From the next change,
+each new value is set on React Native's animated nodes, which reach the view without a commit,
+a layout or a diff. A transition on such a view is eased on the same nodes, from where native
+has it.
+
+The shadow tree is brought up to date with the view's next commit for anything else, once the
+view has been left alone for half a second, and before anything measures where a view is
+drawn. A transform the transform node cannot take as numbers, a matrix in three dimensions, is
+given to native whole. A colour native cannot parse is committed as before. Where the animated
+module is absent, every change is committed.
+
 ## Where a commit for this comes from
 
 Neither a transition frame nor an `animate.enter`/`animate.leave` class change is a signal or
