@@ -83,31 +83,29 @@ export function drawingElement(engine: Engine, name: string, drawn: boolean): En
  */
 const FILLED = { fill: 'black' };
 
-/**
- * The paint a shape written straight into a drawing starts with, where it says none of its own:
- * the drawing's, `<svg fill="currentColor">` as Material's icons have, or black for a fill.
- *
- * ponytail: a drawing's paint that names a token, `fill="var(--ink)"`, is not settled here. Give
- * it the cascade, as a shape's own is in `paintByToken`, if a library is seen to write one.
- */
-function startingPaint(node: EngineNode): Record<string, unknown> | undefined {
-  if (node.parent?.tag !== 'svg') return undefined;
-  const own = attributesOf(node).attrs;
-  const drawing = attributesOf(node.parent).attrs;
-  const fill = 'fill' in own ? undefined : (drawing['fill'] ?? 'black');
-  const stroke = 'stroke' in own ? undefined : drawing['stroke'];
-  if (fill === 'black' && stroke === undefined) return FILLED;
-  if (fill === undefined && stroke === undefined) return undefined;
-  return {
-    ...(fill !== undefined && { fill: referenced(fill) }),
-    ...(stroke !== undefined && { stroke: referenced(stroke) }),
-  };
-}
+/** The paint a drawing's own attributes give the shapes in it: see `drawingPaint`. */
+const DRAWING_PAINT = ['fill', 'stroke', 'stroke-width'];
+const DRAWING_PAINT_PROPS = ['fill', 'stroke', 'strokeWidth', 'propList'];
 
-/** A paint that names a gradient in the definitions as the native view takes it: see `painted`. */
-function referenced(paint: string): unknown {
-  const named = NAMED.exec(paint);
-  return named ? { type: 1, brushRef: named[1] } : paint;
+/**
+ * Give an `<svg>` its paint attributes, `fill="none" stroke="currentColor"` as Lucide's icons
+ * have, as a paint of its own, as a group's are: the engine hands it down to its shapes over
+ * what the drawing inherits from a box around it, and under a rule for the drawing itself, as
+ * a browser ranks an attribute. Kept off the native view, which draws no paint of its own.
+ *
+ * ponytail: a drawing's paint that names a token, `fill="var(--ink)"`, is not handed down.
+ * Give it the cascade, as a shape's own is in `paintByToken`, if a library is seen to write one.
+ */
+function drawingPaint(node: EngineNode, attrs: Readonly<Record<string, string>>, engine: Engine) {
+  const written: Record<string, string> = {};
+  for (const name of DRAWING_PAINT) if (attrs[name] !== undefined) written[name] = attrs[name];
+  const color = (colour: string) => engine.color(colour);
+  const props = drawable('path', written, nativeProps('path', written, { color }));
+  for (const key of DRAWING_PAINT_PROPS) {
+    const value = props[key];
+    if (!sameProp(node.props[key], value)) engine.setProp(node, key, value);
+    if (value !== undefined) engine.keepAsAttribute(node, key);
+  }
 }
 
 const TEXT_PATH = 'textPath';
@@ -610,19 +608,19 @@ export function textShapeOf(
 /** What a paint set on a shape changes beside its own prop: its token, and its starting fill. */
 function paintSet(node: EngineNode, name: string, written: string | undefined, engine: Engine) {
   paintByToken(node, name, written, engine);
-  if (PAINTS.includes(name)) startFilled(node, engine);
+  if (name === 'fill') startFilled(node, engine);
 }
 
 /**
- * Give a shape written straight into a drawing the paint a drawing starts with, where it says
+ * Give a shape written straight into a drawing the fill a drawing starts with, where it says
  * none of its own: `fill="none"` is one, and is no fill.
  */
 function startFilled(node: EngineNode, engine: Engine): void {
   if (node.nodeKind !== 'element' || !Object.hasOwn(SHAPES, node.tag)) return;
-  const paint = startingPaint(node);
-  const had = node.defaultStyle;
-  if (had === paint || (had && paint && sameProp(had, paint))) return;
-  engine.setDefaultStyle(node, paint);
+  const starts = node.parent?.tag === 'svg' && !('fill' in attributesOf(node).attrs);
+  if ((node.defaultStyle === FILLED) !== starts) {
+    engine.setDefaultStyle(node, starts ? FILLED : undefined);
+  }
 }
 
 /**
@@ -760,9 +758,7 @@ function setShape(
     // Its own size is a default, as a browser has an attribute under any rule of a stylesheet.
     const props = drawAgain(node, engine);
     engine.setDefaultStyle(node, { ...proportioned(props), ...sizeOf(shape.attrs) });
-    if (name === 'fill' || name === 'stroke') {
-      for (const child of node.childList) startFilled(child, engine);
-    }
+    if (DRAWING_PAINT.includes(name)) drawingPaint(node, shape.attrs, engine);
     redrawLongPathsUnder(node, engine, (path) => drawLater(path, engine));
   } else {
     drawLater(node, engine);

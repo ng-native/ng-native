@@ -1819,3 +1819,51 @@ describe('@ng-native/web-compat svg paint attribute', () => {
     assert.deepEqual(fill('own'), { type: 0, payload: 'red' });
   });
 });
+
+@Component({
+  selector: 'x-buttoned-icons',
+  template: `
+    <div class="btn">
+      <svg testID="ring-drawing" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <circle testID="ring" cx="12" cy="12" r="9" />
+      </svg>
+      <svg viewBox="0 0 24 24" [attr.fill]="ink()"><path testID="blue" d="M0 0h9v9z" /></svg>
+      <svg class="ruled" viewBox="0 0 24 24" fill="#1565c0">
+        <path testID="ruled" d="M0 0h9v9z" />
+      </svg>
+      <svg viewBox="0 0 24 24"><path testID="bare" d="M0 0h9v9z" /></svg>
+    </div>
+  `,
+})
+class ButtonedIcons {
+  readonly ink = signal<string | null>('#1565c0');
+}
+
+describe('@ng-native/web-compat svg paint attribute in a painted box', () => {
+  it("draws with the drawing's own attribute over the box's paint, and a rule's over both", async () => {
+    // Material's icon button, `.mat-mdc-icon-button { fill: currentColor }`, around a Lucide
+    // icon and a coloured one: Chrome draws a ring and blue, the attribute being the svg's own.
+    const app = await render(ButtonedIcons, {
+      providers: [provideWebCompat()],
+      globalStyles: compileCss(
+        '.btn { fill: currentColor; color: rgb(0, 128, 0) } .ruled { fill: rgb(255, 0, 0) }',
+        'global',
+        { ...LIBRARY },
+      ) as never,
+    });
+    await settle();
+    const props = (id: string) => screen.getByTestId(id).props;
+    assert.equal(props('ring')['fill'] ?? null, null, 'a ring, not a disc');
+    assert.ok((props('ring')['propList'] as string[]).includes('fill'));
+    assert.deepEqual(props('ring')['stroke'], { type: 2 });
+    // Kept off the drawing's own view, which draws no paint of its own.
+    assert.equal(props('ring-drawing')['propList'], undefined);
+    assert.deepEqual(props('blue')['fill'], { type: 0, payload: '#1565c0' });
+    assert.deepEqual(props('ruled')['fill'], { type: 0, payload: 'rgb(255, 0, 0)' });
+    // With no attribute of its own, the drawing takes the box's.
+    assert.deepEqual(props('bare')['fill'], { type: 2 });
+    app.fixture.componentInstance.ink.set(null);
+    await settle();
+    assert.deepEqual(props('blue')['fill'], { type: 2 });
+  });
+});
