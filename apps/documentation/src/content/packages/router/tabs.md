@@ -172,9 +172,10 @@ is removed or `tabBarHidden` turns false. A `[barHidden]` bound on the `<native-
 over every page, either way; left unbound, the pages decide. A header outside any tab ignores it.
 
 react-native-screens hides the bar on the tab bar as a whole rather than per screen, so the bar
-disappears and reappears without UIKit's slide: as a push starts, and on iOS as a pop by the back
-button or the swipe finishes (on Android, as it starts). On iOS 18 and later it asks the tab bar
-controller to hide the bar; below iOS 18 it hides the bar's view.
+disappears and reappears without UIKit's slide. It disappears as a push starts. On a pop by the
+header's back button on iOS, it comes back once the slide has finished; on a pop by Android's back
+button, as the pop starts. On iOS 18 and later react-native-screens asks the tab bar controller to
+hide the bar; below iOS 18 it hides the bar's view.
 
 ## Content above the tab bar
 
