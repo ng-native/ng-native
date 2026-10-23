@@ -90,11 +90,27 @@ describe('a bound style read from text the app did not write', () => {
   it('reads colours nested in the fallbacks of others once each', () => {
     // A colour function that is no colour, for its `x`, was read again as part of a mix, and so
     // was each one in its fallback: twice as long for each, some 400ms at sixteen.
-    let text = 'red';
-    for (let i = 0; i < 16; i++) text = `rgb(var(--c, ${text}), x)`;
-    const start = performance.now();
-    tokenFromValue(text);
-    const took = performance.now() - start;
-    assert.ok(took < 100, `${Math.round(took)}ms`);
+    // Counted in regular-expression reads of the text, which a loaded machine does not change
+    // as it does a time.
+    const reads = (depth: number) => {
+      let text = 'red';
+      for (let i = 0; i < depth; i++) text = `rgb(var(--c, ${text}), x)`;
+      const exec = RegExp.prototype.exec;
+      let count = 0;
+      RegExp.prototype.exec = function (this: RegExp, ...args: [string]) {
+        count++;
+        return exec.apply(this, args);
+      };
+      try {
+        tokenFromValue(text);
+      } finally {
+        RegExp.prototype.exec = exec;
+      }
+      return count;
+    };
+    const shallow = reads(8);
+    const deep = reads(16);
+    // Twice as many levels cost about twice the reads; read twice at each level it is 256 times.
+    assert.ok(deep < 3 * shallow, `${shallow} reads at 8 levels, ${deep} at 16`);
   });
 });
