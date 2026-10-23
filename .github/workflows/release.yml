@@ -40,10 +40,11 @@ jobs:
       - run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
       - run: pnpm coverage
 
-  # CI's distribution check, plus one of the two generators in a fresh workspace: ng new with
-  # ng add, or Nx's angular-monorepo preset with nx add. Too slow for every push, and exactly what
-  # a release of the schematics or the Nx plugin can break. One job each, side by side: the Nx one
-  # alone is about nine minutes.
+  # One setup route in a fresh project: ng new with ng add, Nx's angular-monorepo preset with
+  # nx add and the library generators, or the manual setup guide followed from its code blocks.
+  # Too slow for every push, and exactly what a release of the schematics, the Nx plugin or the
+  # Metro config plugin can break. One job each, side by side: the Nx one alone is about nine
+  # minutes.
   generators:
     name: generators (${{ matrix.generator }})
     if: github.ref == 'refs/heads/main'
@@ -51,7 +52,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        generator: [angular, nx]
+        generator: [angular, nx, manual]
     steps:
       - uses: actions/checkout@v7
 

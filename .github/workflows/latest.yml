@@ -37,6 +37,10 @@ jobs:
           - nx-angular-npm
           - nx-angular-pnpm
           - nx-ts-npm
+          # The manual setup guide on the SDK it pins, and on the newest one create-expo-app
+          # gives, which is what an existing app is on: a new Expo SDK broke prebuild there once.
+          - manual-npm
+          - manual-newest-sdk
           # Not a workspace: each prop a typed ui-* component sends, checked against the native
           # views of the newest @expo/ui the peer range allows. A native view ignores a prop it
           # doesn't declare, so a rename there fails nothing else.
