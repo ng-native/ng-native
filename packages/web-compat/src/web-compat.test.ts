@@ -502,6 +502,8 @@ describe('@ng-native/web-compat document and window', () => {
     assert.equal(overlay.tag, 'div');
     overlay.setAttribute('testID', 'overlay');
     document.body.appendChild(overlay);
+    // Seen from the frame after it is put over the app: see `inserted-unseen.ts`.
+    await new Promise((resolve) => setTimeout(resolve, 40));
     await settle();
     assert.ok(screen.getByTestId('overlay'));
     assert.equal(document.body.props.pointerEvents, 'box-none');
@@ -1912,6 +1914,8 @@ describe('@ng-native/web-compat checkboxes and radios', () => {
     const input = globals.document.createElement('input');
     input.setAttribute('testID', 'made');
     globals.document.body.appendChild(input);
+    // Touched from the frame after it is put over the app, which is when it is first seen.
+    await new Promise((resolve) => setTimeout(resolve, 40));
     await settle();
     const held = async () => {
       await fireEvent(screen.getByTestId('made'), 'touchStart', finger(5, 5));

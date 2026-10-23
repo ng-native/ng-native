@@ -172,7 +172,8 @@ describe('native stack outlet', () => {
               return inputBinding;
             },
             get routerState() {
-              return { root: { children: showing } };
+              const snapshots = showing.map((route) => route.snapshot);
+              return { snapshot: { root: { children: snapshots } } };
             },
             getCurrentNavigation: () =>
               intent ? { extras: { state: { [NATIVE_INTENT]: intent } } } : null,

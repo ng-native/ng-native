@@ -33,10 +33,10 @@ const { dependencies, devDependencies, accepted } = shared;
  */
 const expoCompanions = {
   'react-dom': dependencies.react,
-  '@expo/cli': '^57.0.27',
+  '@expo/cli': '^58.1.14',
   '@babel/runtime': '^7.20.0',
   '@babel/core': devDependencies['@babel/core'],
-  '@expo/metro': '~56.0.2',
+  '@expo/metro': '~58.0.0',
 };
 
 /**
@@ -98,13 +98,13 @@ function tsconfig(workspaceBase, conditions = []) {
   const customConditions = ['react-native', ...conditions.filter((c) => c !== 'react-native')];
   if (!workspaceBase) {
     if (customConditions.length > 1) compilerOptions.customConditions = customConditions;
-    return { extends: 'expo/tsconfig.base', compilerOptions, angularCompilerOptions };
+    return { extends: 'expo/tsconfig.base.json', compilerOptions, angularCompilerOptions };
   }
   // The workspace's base is written for a web build or for emitting declarations, and wins over
   // Expo's where they overlap. These are Expo's, restored: without `DOM` and `ESNext` the framework
   // packages' own source, which the app compiles, fails to typecheck.
   return {
-    extends: ['expo/tsconfig.base', workspaceBase],
+    extends: ['expo/tsconfig.base.json', workspaceBase],
     compilerOptions: {
       ...compilerOptions,
       noEmit: true,
@@ -122,7 +122,7 @@ function tsconfig(workspaceBase, conditions = []) {
 }
 
 /** The `@ng-native` packages with entry points beside their main one, each published in `dist`. */
-const WITH_ENTRY_POINTS = ['components', 'expo', 'platform', 'web'];
+const WITH_ENTRY_POINTS = ['components', 'expo', 'platform', 'web', 'web-compat'];
 
 /** `nx typecheck` in a workspace whose libraries are the package manager's links. */
 const TYPECHECK_ONE_COPY = TYPECHECK.replace('tsconfig.json', 'tsconfig.typecheck.json');

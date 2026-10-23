@@ -18,17 +18,17 @@ Angular CLI and Nx generators perform this setup and integrate workspace command
 **Create a blank project:**
 
 ```sh
-npx create-expo-app my-app --template blank-typescript@sdk-57
+npx create-expo-app my-app --template blank-typescript@sdk-58
 cd my-app
 rm App.tsx index.ts
 npm pkg set main=src/main.ts
 ```
 
-The packages support Expo SDK 57 and 58. `@sdk-57` starts the app on SDK 57, the SDK the template
+The packages support Expo SDK 57 and 58. `@sdk-58` starts the app on SDK 58, the SDK the template
 is on; without it, `create-expo-app` takes the newest SDK.
 
 **For an existing app:** it has to be on SDK 57 or 58. An app on an older SDK moves with
-`npx expo install expo@^57.0.0`, then `npx expo install --fix`. Remove its entry point, `App.tsx`
+`npx expo install expo@^58.0.0`, then `npx expo install --fix`. Remove its entry point, `App.tsx`
 and `index.ts` or `index.js`, and run `npm pkg set main=src/main.ts`, so Expo starts from the
 `src/main.ts` below. Keep the dependencies, native configuration and assets.
 
@@ -96,7 +96,7 @@ the `MainApplication.kt` that `expo prebuild` writes.
 ```json
 // tsconfig.json
 {
-  "extends": "expo/tsconfig.base",
+  "extends": "expo/tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
     "allowImportingTsExtensions": true
@@ -107,6 +107,10 @@ the `MainApplication.kt` that `expo prebuild` writes.
 `allowImportingTsExtensions` is required. These packages ship TypeScript with `.ts` imports so
 Metro's Angular compiler processes library and app components together. Without this setting,
 `tsc` reports errors for files in `node_modules`.
+
+`extends` names Expo's file with its `.json`. From SDK 58 `expo` has an exports map, and Vitest
+cannot find `expo/tsconfig.base` without the extension: every test file fails to load with
+`Failed to load tsconfig 'expo/tsconfig.base'`. `tsc` accepts either name.
 
 ### Checking templates
 
@@ -162,14 +166,16 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
     resolveAssetSource: (value) => Image.resolveAssetSource(value as never),
   });
 
-  watchConditions(app.engine);
+  const stopWatching = watchConditions(app.engine);
+  app.applicationRef.onDestroy(stopWatching);
 });
 ```
 
 The entry point configures colors, assets and device-dependent styles before rendering:
 
 - **`conditions`** supplies `@media` values. `watchConditions` updates them on rotation or theme
-  changes, making `dark:` follow the system.
+  changes, making `dark:` follow the system. It returns a function that stops it, called as the app
+  is destroyed: Android destroys the app when it recreates the activity, after mounting a new one.
 - **`tokens`** supplies device values such as hairline width. Without it, `1px` produces a thick
   divider instead of a third of a point on a 3x screen.
 - **`resolveAssetSource`** converts `require('./x.png')` to a native-loadable asset; without it,

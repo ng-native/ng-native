@@ -1,5 +1,6 @@
 import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
 import { documentOf, ownView } from './document.ts';
+import { drawAtOnce } from './inserted-unseen.ts';
 import { defaultsOf } from './elements.ts';
 
 /**
@@ -22,6 +23,11 @@ interface Select {
    * until an option of it comes in or options are taken out.
    */
   value: string | null | undefined;
+  /**
+   * The option last chosen by place, by a press or by `selected`, which is the one shown while it
+   * is still the select's and of `value`: of two options of one value, the one that was chosen.
+   */
+  option?: EngineNode;
   /** Takes the open list away, while it is open. */
   close?: () => void;
 }
@@ -59,6 +65,11 @@ const SHOWN = { backgroundColor: 'transparent' };
 
 const on = (value: unknown): boolean => value != null && value !== false && value !== 'false';
 
+/** Whether an option cannot be chosen: it is disabled, or the group it is in is. */
+const disabledOption = (option: EngineNode): boolean =>
+  on(option.props['disabled']) ||
+  (option.parent?.tag === 'optgroup' && on(option.parent.props['disabled']));
+
 /** A select's options in order, those inside an `<optgroup>` among them. */
 export function optionsOf(node: EngineNode): EngineNode[] {
   return node.childList.flatMap((child) =>
@@ -83,12 +94,13 @@ const valueOfOption = (option: EngineNode): string =>
  */
 export function chosen(node: EngineNode): EngineNode | undefined {
   const options = optionsOf(node);
-  const value = selects.get(node)?.value;
+  const { value, option } = selects.get(node) ?? {};
   if (value === null) return undefined;
+  if (option && valueOfOption(option) === value) return option;
   if (value !== undefined) return options.find((each) => valueOfOption(each) === value);
   return (
     [...options].reverse().find((option) => on(option.props['selected'])) ??
-    options.find((option) => !on(option.props['disabled'])) ??
+    options.find((option) => !disabledOption(option)) ??
     options[0]
   );
 }
@@ -114,25 +126,26 @@ export const selectedIndex = (node: EngineNode): number =>
 export function selectAt(node: EngineNode, index: number, engine: Engine): void {
   const select = selects.get(node);
   if (!select) return;
-  const option = optionsOf(node)[index];
-  select.value = option ? valueOfOption(option) : null;
+  chooseOption(select, optionsOf(node)[index] ?? null);
   show(node, engine);
 }
 
 /**
  * The options of a select changed: none chosen chooses again, as a browser's does once options
- * come or go, and so does a value no option has once one is taken out. A value no option has yet
- * stays for one coming in, which a binding set before its options were made is.
+ * come or go, and so does the option chosen, or a value no option has, once one is taken out. A
+ * value no option has yet stays for one coming in, which a binding set before its options were
+ * made is.
  */
 function optionsChanged(node: EngineNode, removed: boolean, engine: Engine): void {
   const select = selects.get(node);
   if (!select) return;
-  const value = select.value;
+  const { value, option } = select;
+  const options = optionsOf(node);
   const gone =
     removed &&
     typeof value === 'string' &&
-    !optionsOf(node).some((option) => valueOfOption(option) === value);
-  if (value === null || gone) select.value = undefined;
+    (option ? !options.includes(option) : !options.some((each) => valueOfOption(each) === value));
+  if (value === null || gone) chooseOption(select, undefined);
   show(node, engine);
 }
 
@@ -148,6 +161,15 @@ function show(node: EngineNode, engine: Engine): void {
   }
 }
 
+/**
+ * Choose `option`, the one shown from now on, or none with `null`. With `undefined` the select
+ * chooses again: the option that says it is `selected`, or the first that can be chosen.
+ */
+function chooseOption(select: Select, option: EngineNode | null | undefined): void {
+  select.option = option ?? undefined;
+  select.value = option ? valueOfOption(option) : option;
+}
+
 /** Make a `<select>` the control, and have an `<optgroup>` lay nothing out of its own. */
 export function createSelect(node: EngineNode, engine: Engine): boolean {
   if (!documentOf(engine)) return false;
@@ -161,19 +183,30 @@ export function createSelect(node: EngineNode, engine: Engine): boolean {
   return true;
 }
 
-/** The select each option or group was last put in, to show again once it is taken out. */
+/**
+ * The select each option or group was last put in, to show again once it is taken out. The
+ * options of a group are its select's too, put in with it whole.
+ */
 const ownedBy = new WeakMap<EngineNode, EngineNode>();
+
+/** `node`, and the options in it where it is a group, owned by `select`, or by none. */
+function own(node: EngineNode, select: EngineNode | undefined): void {
+  for (const each of node.tag === 'optgroup' ? [node, ...optionsOf(node)] : [node]) {
+    if (select) ownedBy.set(each, select);
+    else ownedBy.delete(each);
+  }
+}
 
 /** An option came into a select, or a group of them: what the select shows may be another. */
 export function optionInserted(node: EngineNode, parent: EngineNode, engine: Engine): void {
   if (node.tag !== 'option' && node.tag !== 'optgroup') return;
   const select = parent.tag === 'optgroup' ? parent.parent : parent;
   const before = ownedBy.get(node);
-  ownedBy.delete(node);
+  own(node, undefined);
   // Moved from another select, which shows what it has left.
   if (before && before !== select) optionsChanged(before, true, engine);
   if (select && selects.has(select)) {
-    ownedBy.set(node, select);
+    own(node, select);
     optionsChanged(select, false, engine);
   }
 }
@@ -181,7 +214,7 @@ export function optionInserted(node: EngineNode, parent: EngineNode, engine: Eng
 /** An option or a group taken out of its select: the select shows what is left. */
 export function optionRemoved(node: EngineNode, engine: Engine): void {
   const select = ownedBy.get(node);
-  ownedBy.delete(node);
+  own(node, undefined);
   if (select) optionsChanged(select, true, engine);
 }
 
@@ -197,8 +230,8 @@ export function setSelect(node: EngineNode, name: string, value: unknown, engine
     const select = selectOf(node);
     if (!select) return false;
     const state = selects.get(select)!;
-    // The option chosen by its value is still the one chosen once its value changes.
-    const following = name === 'value' && state.value === valueOfOption(node);
+    // The option chosen is still the one chosen once its value changes.
+    const following = name === 'value' && state.value != null && chosen(select) === node;
     engine.setProp(node, name, value);
     if (following) state.value = valueOfOption(node);
     show(select, engine);
@@ -207,6 +240,7 @@ export function setSelect(node: EngineNode, name: string, value: unknown, engine
   const select = selects.get(node);
   if (!select || name !== 'value') return false;
   select.value = value == null ? undefined : String(value);
+  select.option = undefined;
   show(node, engine);
   return true;
 }
@@ -216,8 +250,8 @@ export function setSelected(option: EngineNode, selected: boolean, engine: Engin
   const node = selectOf(option);
   const select = node && selects.get(node);
   if (!select) return;
-  if (selected) select.value = valueOfOption(option);
-  else if (chosen(node) === option) select.value = undefined;
+  if (selected) chooseOption(select, option);
+  else if (chosen(node) === option) chooseOption(select, undefined);
   show(node, engine);
 }
 
@@ -225,7 +259,7 @@ export function setSelected(option: EngineNode, selected: boolean, engine: Engin
 export function resetSelect(node: EngineNode, engine: Engine): void {
   const select = selects.get(node);
   if (!select) return;
-  select.value = undefined;
+  chooseOption(select, undefined);
   show(node, engine);
 }
 
@@ -255,8 +289,11 @@ export function pressSelect(node: EngineNode, engine: Engine): void {
   engine.setProp(list, 'style', { ...LIST, ...panel, ...place });
   for (const option of optionsOf(node)) {
     row(engine, list, option, theme.text, () => {
-      select.value = valueOfOption(option);
+      const again = chosen(node) === option;
+      chooseOption(select, option);
       select.close?.();
+      // A browser says nothing when the option chosen is the one that was.
+      if (again) return;
       show(node, engine);
       // As a browser tells it: `input`, then `change`, each with the select as its target.
       engine.dispatchEvent(node, 'topInput', {});
@@ -264,6 +301,7 @@ export function pressSelect(node: EngineNode, engine: Engine): void {
     });
   }
   engine.appendChild(layer, list);
+  drawAtOnce(layer);
   // Through the body's own append, which is what joins it to the tree, on top of the app.
   (body as unknown as { appendChild(child: EngineNode): void }).appendChild(layer);
   select.close = () => {
@@ -280,7 +318,7 @@ function row(
   color: string,
   choose: () => void,
 ): void {
-  const disabled = on(option.props['disabled']);
+  const disabled = disabledOption(option);
   const view = pressable(engine, { ...ROW, opacity: disabled ? 0.5 : 1 }, () => {
     if (!disabled) choose();
   });

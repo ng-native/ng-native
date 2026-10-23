@@ -33,10 +33,12 @@ import { MutationObserver, MutationRecord } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
 import { nodeInterfaces } from './node-interfaces.ts';
 import { installNamedProperties } from './named-properties.ts';
+import { installNavigator } from './navigator-identity.ts';
 import { ResizeObserver, ResizeObserverEntry, ResizeObserverSize } from './resize-observer.ts';
 import { scrollAsked, scrollPromise } from './scroll-offset.ts';
 import { NodeFilter, NodeIterator, TreeWalker } from './traversal.ts';
 import { listenOnWindow, windowListensTo } from './window-listeners.ts';
+import { listenToResize, windowSize } from './window-size.ts';
 import { XMLSerializer } from './xml-serializer.ts';
 
 /** The engine a node is in. */
@@ -79,28 +81,28 @@ function matchMedia(...args: unknown[]): MediaQueryList {
 }
 
 /**
- * `window.screen`: the window, as nothing here is drawn outside it. Read each time, as the
- * device can turn.
+ * `window.screen`: the screen the window is on, which the keyboard and a navigation header do
+ * not make any smaller. Read each time, as the device can turn.
  */
 const screen = Object.freeze({
   get width() {
-    return size().width;
+    return screenSize().width;
   },
   get height() {
-    return size().height;
+    return screenSize().height;
   },
   get availWidth() {
-    return size().width;
+    return screenSize().width;
   },
   get availHeight() {
-    return size().height;
+    return screenSize().height;
   },
   availLeft: 0,
   availTop: 0,
   colorDepth: 24,
   pixelDepth: 24,
   get orientation() {
-    const { width, height } = size();
+    const { width, height } = screenSize();
     const portrait = height >= width;
     return { type: portrait ? 'portrait-primary' : 'landscape-primary', angle: portrait ? 0 : 90 };
   },
@@ -139,6 +141,44 @@ const visualViewport = {
   dispatchEvent: (event: unknown) => dispatch(event, [visualViewport]),
 };
 
+/**
+ * A browser's storage, for as long as the app is up: there is no disk behind it, and the next
+ * app starts with none of what this one kept.
+ */
+class MemoryStorage {
+  private readonly kept = new Map<string, string>();
+  get length(): number {
+    return this.kept.size;
+  }
+  key(at: number): string | null {
+    return [...this.kept.keys()][at] ?? null;
+  }
+  getItem(name: unknown): string | null {
+    return this.kept.get(String(name)) ?? null;
+  }
+  setItem(name: unknown, value: unknown): void {
+    this.kept.set(String(name), String(value));
+  }
+  removeItem(name: unknown): void {
+    this.kept.delete(String(name));
+  }
+  clear(): void {
+    this.kept.clear();
+  }
+}
+
+/** A selection with nothing in it, as a library asks of one before it reads or clears it. */
+const NOTHING_SELECTED = Object.freeze({
+  rangeCount: 0,
+  isCollapsed: true,
+  anchorNode: null,
+  focusNode: null,
+  toString: () => '',
+  removeAllRanges: noop,
+  empty: noop,
+  addRange: noop,
+});
+
 /** What a library reads from `window`, some of it as it loads. */
 const GLOBALS: Readonly<Record<string, unknown>> = {
   // The window's own listeners, which hear what a script sends it or anything under it, and a
@@ -155,6 +195,12 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   ...EVENT_CLASSES,
   // There for a device that takes touches, which is how a library asks.
   ontouchstart: null,
+  // Nothing is selected: an answer a library reads the text of, and clears before a drag.
+  getSelection: () => NOTHING_SELECTED,
+  // A window an app cannot open is none: a link is the app's to follow, with `Linking`.
+  open: () => null,
+  // No element is in a shadow tree. A library asks whether what it is in is one.
+  ShadowRoot: class ShadowRoot {},
   // The page's window is the top one, in no frame, and its `frames` the window of each iframe
   // in it by its place: see `frame.ts`. Read as the window is put in, after every module.
   self: globalThis,
@@ -222,14 +268,53 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   IntersectionObserverEntry,
 };
 
+/** The window's listening, which `before-modules.js` stands in for before any module runs. */
+const LISTENING = ['addEventListener', 'removeEventListener', 'dispatchEvent'] as const;
+
+interface StandIns {
+  addEventListener(type: string, listener: unknown, options?: unknown): void;
+  removeEventListener(type: string, listener: unknown, options?: unknown): void;
+  dispatchEvent(event: unknown): boolean;
+  readonly kept: { type: string; listener: unknown; options: unknown }[];
+}
+
+/** The stand-ins Metro put in, taken out for the window's own to go in. */
+function takeStandIns(target: Record<string, unknown>): StandIns | undefined {
+  const standIns = (target['addEventListener'] as { standIns?: StandIns } | undefined)?.standIns;
+  if (standIns) for (const name of LISTENING) delete target[name];
+  return standIns;
+}
+
+/** What a library gave the stand-ins as it loaded, given to the window's own listeners. */
+function handOver(standIns: StandIns | undefined, target: Record<string, unknown>): void {
+  const listen = target['addEventListener'] as StandIns['addEventListener'];
+  for (const { type, listener, options } of standIns?.kept ?? []) listen(type, listener, options);
+}
+
+/** The stand-ins back, once the window's own have gone, for a later app to be handed. */
+function giveBack(standIns: StandIns | undefined, target: Record<string, unknown>): void {
+  if (standIns) for (const name of LISTENING) target[name] ??= standIns[name];
+}
+
 /**
  * Define the globals above that the runtime does not have, and answer what removes them again.
  * One the runtime has is left alone: React Native's own `requestAnimationFrame`, a test's jsdom.
  */
 export function installWindow(): () => void {
   const target = globalThis as Record<string, unknown>;
-  const added = Object.keys(GLOBALS).filter((name) => typeof target[name] === 'undefined');
-  for (const name of added) target[name] = GLOBALS[name];
+  // The stand-ins Metro put in before any module ran, and what a library gave them as it loaded:
+  // see `before-modules.js`. The window's own go in over them, are handed what they kept, and
+  // give them back after.
+  const standIns = takeStandIns(target);
+  // The storages are made for this window, so that what one app kept is not in the next.
+  const globals: Record<string, unknown> = {
+    ...GLOBALS,
+    localStorage: new MemoryStorage(),
+    sessionStorage: new MemoryStorage(),
+  };
+  const added = Object.keys(globals).filter((name) => typeof target[name] === 'undefined');
+  for (const name of added) target[name] = globals[name];
+  handOver(standIns, target);
   // Over the one the Metro preset's polyfill has, which answers nothing: an animation library
   // asks it for a custom property, and a component library for what it just wrote.
   const computed = target['getComputedStyle'];
@@ -240,6 +325,8 @@ export function installWindow(): () => void {
   const windowed = typeof target['window'] === 'undefined';
   if (windowed) target['window'] = target;
   const unplaced = placeNodes(target);
+  // A phone's browser, as the user agent says: see `navigator-identity.ts`.
+  const unidentified = installNavigator();
   // An element with an id is a global by it: see `named-properties.ts`.
   const unnamed = installNamedProperties(target);
   // The event a listener is being told: see `events.ts`.
@@ -263,11 +350,17 @@ export function installWindow(): () => void {
       target['IntersectionObserver'] = intersecting;
     }
     watchOthersWith(undefined);
-    for (const name of added) if (target[name] === GLOBALS[name]) delete target[name];
+    for (const name of added) {
+      // A module that kept a storage reads nothing of this app from it after.
+      if (globals[name] instanceof MemoryStorage) globals[name].clear();
+      if (target[name] === globals[name]) delete target[name];
+    }
+    giveBack(standIns, target);
     for (const name of sized) delete target[name];
     // What was added with them goes with them, as a page's listeners go with its window.
     unlistenAll(globalThis);
     unplaced();
+    unidentified();
     unnamed();
     unphased();
     if (evented) delete target['event'];
@@ -310,6 +403,9 @@ const engines: Engine[] = [];
 /** The engine of the newest app up, which the window speaks for. */
 export const currentEngine = (): Engine | undefined => engines.at(-1);
 
+/** Whether an app that asked for the package is up, and not destroyed. */
+export const isUp = (engine: Engine): boolean => engines.includes(engine);
+
 /** An app that asked for the package has started: its window is the one read, until it goes. */
 export function windowOf(engine: Engine): () => void {
   engines.push(engine);
@@ -320,26 +416,23 @@ export function windowOf(engine: Engine): () => void {
   };
 }
 
-/**
- * Hear the window of an app change size, as a `resize` listener on `window` does: the device
- * turning, or the window given another size.
- */
-export const listenToResize = (engine: Engine, listener: () => void): (() => void) =>
-  engine.watchViewport(listener);
-
-/** The size of an app's window, which is the screen's: nothing is drawn outside it. */
-export const windowSize = (engine: Engine): { width: number; height: number } => engine.viewport;
-
+/** The size of the window `window` speaks for: see `window-size.ts`. */
 const size = () => {
   const engine = engines.at(-1);
   return engine ? windowSize(engine) : { width: 0, height: 0 };
 };
 
-/** The window's size, with the colour scheme and the motion the engine was given. */
-const preferences = () => {
+/** The size of the screen, which the keyboard and a header are drawn over and do not change. */
+const screenSize = () => engines.at(-1)?.viewport ?? { width: 0, height: 0 };
+
+/**
+ * The screen's size, with the colour scheme and the motion the engine was given: what a media
+ * query reads, as the app's own stylesheets do, so a keyboard coming up turns no query.
+ */
+export const preferences = () => {
   const conditions = engines.at(-1)?.conditions;
   return {
-    ...size(),
+    ...screenSize(),
     colorScheme: conditions?.colorScheme,
     reducedMotion: conditions?.reducedMotion,
   };

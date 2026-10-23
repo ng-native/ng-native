@@ -42,7 +42,7 @@ import { ImageData, whole } from './image-data.ts';
 import { keptOwn } from './in-document.ts';
 import { pngOf } from './png.ts';
 import { method, own, type Reflection } from './reflect.ts';
-import { gradientShapeOf, reshape, shapeOf, textShapeOf } from './svg.ts';
+import { gradientShapeOf, reshape, shapeOf, textShapeOf, thinPlaced } from './svg.ts';
 import { widthOf } from './svg-box.ts';
 import { engineOf } from './window.ts';
 
@@ -1070,6 +1070,7 @@ class Context2D {
         this.slots.push(slot);
         engine.appendChild(layer, slot.node);
       }
+      thinPlaced(this.slots[this.next]!.shape, engine);
       this.next++;
     }
     if (this.cleared) this.forget(this.next);

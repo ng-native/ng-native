@@ -67,7 +67,7 @@ describe('the generated app', () => {
 
   it("extends the workspace base after Expo's, and puts Expo's settings back", () => {
     const config = native.tsconfig('../../tsconfig.base.json');
-    assert.deepEqual(config.extends, ['expo/tsconfig.base', '../../tsconfig.base.json']);
+    assert.deepEqual(config.extends, ['expo/tsconfig.base.json', '../../tsconfig.base.json']);
     assert.deepEqual(config.compilerOptions.lib, ['DOM', 'ESNext']);
     assert.equal(config.compilerOptions.allowImportingTsExtensions, true);
     assert.equal(config.compilerOptions.noEmit, true);

@@ -28,12 +28,12 @@ targets from its `app.json`, `metro.config.js` and `package.json`, so there is n
 reimplement.
 
 It does not run `@nx/expo:init`, which installs Expo itself at the SDK `@nx/expo` was released
-against. On Nx 23.2 that is SDK 56, with a `react-dom` that asks for React 19.3; an Angular Native
-app needs SDK 57 and React 19.2.3, and npm refuses to install the two side by side. It adds the
-two things `init` would have that the app does need, at the app's versions: `react-dom` at the
-app's React, because `@nx/expo` depends on `@nx/react` and npm would otherwise take its
-`react-dom` peer at 19.3 and refuse every later install, and `@expo/cli`, which `nx prebuild` loads
-from the workspace root.
+against. On Nx 23.2 that is SDK 56; an Angular Native app needs SDK 58 and React 19.3.0, and npm
+refuses to install the two side by side. It adds the two things `init` would have that the app does
+need, at the app's versions: `react-dom` at the app's React, because `@nx/expo` depends on
+`@nx/react` and npm would otherwise take its `react-dom` peer at the newest release, which asks for
+a newer React, and refuse every later install, and `@expo/cli`, which `nx prebuild` loads from the
+workspace root.
 
 With package-manager workspaces it adds `expo`, `react` and `react-native` at the root as well,
 at the app's versions, in place of `@expo/cli`. The package manager resolves `@nx/expo`'s `expo`
@@ -79,8 +79,9 @@ is left as it is, with a warning naming the two to decide.
 `@nx/expo` infers it as its `@nx/expo:start` executor, which Nx 23 deprecates and warns about on
 every run, so the generator runs the same `expo start` directly. `serve` runs it as well, in place
 of the `expo start --web` `@nx/expo` infers for every Expo app, since the app has no web platform.
-`nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same deprecation
-notice. `typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
+On Nx 23, `nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same
+deprecation notice; Nx 24 infers them as the `expo prebuild` and `eas build` commands.
+`typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
 once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports exists on a fresh
 checkout. It declares `.angular-native/` as its output, so a cache hit restores the sheet too.
 

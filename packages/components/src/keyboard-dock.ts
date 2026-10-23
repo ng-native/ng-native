@@ -223,7 +223,8 @@ export class KeyboardDock extends ViewBase {
     if (height === 0) return this.inset();
     const edge = this.bottomEdge();
     if (edge === null || screenY === undefined) return height;
-    return Math.max(0, edge - screenY);
+    // The edge is in the window, and on Android that can start below the status bar.
+    return Math.max(0, edge - (screenY - this.keyboard.windowTop));
   });
 
   /**

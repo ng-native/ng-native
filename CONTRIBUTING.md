@@ -46,7 +46,7 @@ A package resolves only what it declares: there is no hoisted root that answers 
 import a package forgot to declare fails here rather than on someone else's machine.
 `pnpm-workspace.yaml` pins the React Native native modules with `overrides`, because a native
 module has to exist exactly once in a build: a second copy of Reanimated is a second copy of its
-native side, and it silently does nothing. The versions are the ones Expo SDK 57 bundles, which
+native side, and it silently does nothing. The versions are the ones Expo SDK 58 bundles, which
 `npx expo install --check` verifies.
 
 A package with React Native among its dependencies declares `@babel/core` 7 as a devDependency,
@@ -104,12 +104,13 @@ that passes more, so a change that makes a test pass records it with `--update` 
 request. How a file ended (OK or TIMEOUT) is recorded but not compared, since a file that
 passes nothing lands either side of its time limit from one run to the next.
 
-The Web Platform Tests workflow runs `--check` on the DOM, selector, CSSOM, `html/dom` and
-`domparsing` suites, in about four minutes on a laptop, when what they run on changes: the package,
+The Web Platform Tests workflow runs `--check` on the DOM, selector, CSSOM, `html/dom`,
+`domparsing` and `intersection-observer` suites, in about five minutes on a laptop, when what they
+run on changes: the package,
 `packages/fabric` and `packages/platform`, the layout fixtures in `packages/integration-tests`,
 `packages/testing`, the lockfile, or the workflow and its setup (the paths are in
 `.github/workflows/wpt.yml`). The full run takes over eight, one process at a time, so a change to
-the other suites (events, geometry, the observers, canvas, parsing) runs `node wpt/run.mjs --check`
+the other suites (events, geometry, the other observers, canvas, parsing) runs `node wpt/run.mjs --check`
 locally before its pull request opens, and records with `--update` from a full run so `summary.txt`
 stays whole.
 

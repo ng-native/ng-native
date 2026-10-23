@@ -116,6 +116,10 @@ export function ours(style: Style, property: string): unknown {
       return style['selectable'];
     case 'text-overflow':
       return style['ellipsizeMode'];
+    case 'text-wrap-style':
+      return [style['lineBreakStrategyIOS'], style['textBreakStrategy']];
+    case 'word-break':
+      return style['lineBreakStrategyIOS'];
     case 'animation-name':
     case 'animation-duration':
     case 'animation-timing-function':
@@ -192,6 +196,20 @@ const SAME_KEYWORD: Record<string, Record<string, readonly unknown[]>> = {
 };
 
 /** Whether the two agree on one property. */
+/** iOS's and Android's line-break strategies for each `text-wrap-style`, unset being the first. */
+const WRAP_STYLES: Record<string, readonly [string, string]> = {
+  auto: ['none', 'highQuality'],
+  stable: ['none', 'highQuality'],
+  pretty: ['standard', 'highQuality'],
+  balance: ['none', 'balanced'],
+};
+
+function sameWrapStyle(browser: string, value: unknown): boolean {
+  const expected = WRAP_STYLES[browser];
+  const [ios = 'none', android = 'highQuality'] = (value ?? []) as (string | undefined)[];
+  return expected !== undefined && ios === expected[0] && android === expected[1];
+}
+
 // eslint-disable-next-line complexity -- one flat case per kind of CSS value
 export function compare(property: string, browser: string, style: Style, box: number): Verdict {
   const value = ours(style, property);
@@ -233,6 +251,10 @@ export function compare(property: string, browser: string, style: Style, box: nu
   // `nowrap` is one line, which is how native keeps text from wrapping.
   if (property === 'text-wrap-mode')
     return verdict(browser === 'nowrap' ? value === 1 : value === undefined);
+  if (property === 'text-wrap-style') return verdict(sameWrapStyle(browser, value));
+  // `keep-all` is iOS's Korean-word strategy; any other leaves it.
+  if (property === 'word-break')
+    return verdict((browser === 'keep-all') === (value === 'hangul-word'));
   if (property === 'background-position') return verdict(samePosition(browser, value));
   if (COLOUR.test(property)) return verdict(sameColour(browser, value));
   // A size the engine reads where the container is known, kept as the keyword until then.

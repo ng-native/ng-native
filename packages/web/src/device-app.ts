@@ -2,7 +2,7 @@
  * Fixture for `device-sources.test.ts`. See `button-app.ts` for why a `@Component` lives out here.
  */
 import { Component, inject } from '@angular/core';
-import { Direction, Screen } from '@ng-native/device';
+import { Direction, OS, Screen } from '@ng-native/device';
 import { Text, View } from '@ng-native/components';
 
 @Component({
@@ -15,4 +15,5 @@ import { Text, View } from '@ng-native/components';
 export class DeviceApp {
   readonly screen = inject(Screen);
   readonly direction = inject(Direction);
+  readonly os = inject(OS);
 }

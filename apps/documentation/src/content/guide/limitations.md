@@ -44,7 +44,8 @@ selects, TypeScript `$localize`, `localize-extract` over the Metro bundle, and `
 before mount. See [Localization](/guide/localization).
 
 Loading a language after rendering does not update existing templates; switching language requires
-an app reload. Metro has no build-time translation (`localize-translate`), and `ng extract-i18n`
+an app reload; [Transloco](/guide/localization-transloco) switches at runtime with no reload.
+Metro has no build-time translation (`localize-translate`), and `ng extract-i18n`
 cannot build native apps.
 
 Plurals and selects work on iOS, Android and the [web host](/packages/web).

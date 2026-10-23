@@ -12,6 +12,7 @@ import type { Conditions, TokenValue } from '@ng-native/fabric';
 import { accessibilitySource } from './accessibility.ts';
 import { colorSchemeSource } from './color-scheme.ts';
 import { directionSource } from './direction.ts';
+import { recordKeyboard } from './keyboard.ts';
 import { screenSource } from './screen.ts';
 import { reactNative } from './react-native.ts';
 
@@ -88,6 +89,8 @@ export function watchConditions<Node>(
   engine: Resolves<Node>,
   options: WatchOptions = {},
 ): () => void {
+  // Not a condition, but this is what runs at startup: see `recordKeyboard`.
+  recordKeyboard();
   const screen = screenSource();
   const colors = colorSchemeSource();
   const accessibility = accessibilitySource();
@@ -121,15 +124,24 @@ export function watchConditions<Node>(
     resize({ width: window.width, height: window.height, pixelRatio: pixelRatio() }, fontScale()),
   );
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
+  let heardReduceMotion = false;
+  let stopped = false;
   const settings = accessibility.subscribe((change) => {
     if (change.fontScale !== undefined && change.fontScale !== scale) resize({}, change.fontScale);
-    if (change.reduceMotion !== undefined) push({ reducedMotion: change.reduceMotion });
+    if (change.reduceMotion !== undefined) {
+      heardReduceMotion = true;
+      push({ reducedMotion: change.reduceMotion });
+    }
   });
-  void accessibility
-    .current()
-    .then(({ reduceMotion }) => reduceMotion && push({ reducedMotion: true }));
+  // A read that fails leaves no reduced motion, as the first paint assumed.
+  accessibility.current().then(
+    ({ reduceMotion }) =>
+      !stopped && !heardReduceMotion && reduceMotion && push({ reducedMotion: true }),
+    () => {},
+  );
 
   return () => {
+    stopped = true;
     sizes();
     scheme();
     settings();

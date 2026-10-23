@@ -8,15 +8,21 @@
  *
  * No decorators, so tests can import it and so it can be provided with `useClass`.
  */
+import { PlatformLocation } from '@angular/common';
 import { Injector, inject, type ComponentRef } from '@angular/core';
 import {
   BaseRouteReuseStrategy,
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
   type ActivatedRouteSnapshot,
   type DetachedRouteHandle,
   Router,
   type Route,
 } from '@angular/router';
 import { navigationIntent } from './native-navigation.ts';
+import { NativePlatformLocation } from './native-platform-location.ts';
+import { poppingTo } from './popping-to.ts';
 import { PRESENTED } from './presented-route.ts';
 import { isScreenRoute, isTabRoute } from './tab-routes.ts';
 
@@ -39,6 +45,14 @@ const REUSE_SCREEN = 'ɵreuseScreen';
 export function reuseScreen<T extends Route>(route: T): T {
   return { ...route, data: { ...route.data, [REUSE_SCREEN]: true } };
 }
+
+/** Whether `event` is the last a navigation reports. */
+const isNavigationEnding = (
+  event: unknown,
+): event is NavigationEnd | NavigationCancel | NavigationError =>
+  event instanceof NavigationEnd ||
+  event instanceof NavigationCancel ||
+  event instanceof NavigationError;
 
 /** What the router actually stores: `DetachedRouteHandle` is typed as an opaque object. */
 interface StoredHandle {
@@ -104,17 +118,94 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
   }
 
   override store(route: ActivatedRouteSnapshot, handle: DetachedRouteHandle | null): void {
+    this.keepForRollBack();
     const key = keyOf(route);
     const kept = this.handles.get(key) ?? [];
     if (handle) {
       // The same screen stored again takes its place at the end, not a second one.
       this.handles.set(key, [...kept.filter((one) => one !== handle), handle]);
+      this.entryOf.set(handle, this.inHistory(this.shownIn.get(route)));
       this.forgetOnDestroy((handle as StoredHandle).componentRef);
       return;
     }
-    // The router has re-attached the one `retrieve` answered with: the last.
-    if (kept.length > 1) this.handles.set(key, kept.slice(0, -1));
+    // The router has re-attached the one `retrieve` answered with.
+    const attached = this.answered.get(route) ?? kept.at(-1);
+    // Its other entries are still in history, behind or ahead of the one it is back at.
+    if (attached) {
+      const before = this.entryOf.get(attached) ?? [];
+      this.shownIn.set(route, [...before, ...(this.shownIn.get(route) ?? [])]);
+    }
+    const left = kept.filter((one) => one !== attached);
+    if (left.length) this.handles.set(key, left);
     else this.handles.delete(key);
+  }
+
+  /**
+   * The navigations that put each route's screen on screen, by the snapshot the last one built,
+   * and so the ids in that screen's history entries: Angular writes the id of the navigation into
+   * the entry it pushes or replaces, a back included. More than one where the screen changed in
+   * place, a query set on it, which gives it an entry of its own.
+   */
+  private readonly shownIn = new WeakMap<ActivatedRouteSnapshot, readonly (number | undefined)[]>();
+  /** Each kept screen's history entries, by those navigations' ids. */
+  private readonly entryOf = new WeakMap<DetachedRouteHandle, readonly (number | undefined)[]>();
+  /** The screen `retrieve` answered with for a route, for `store` to take out once attached. */
+  private readonly answered = new WeakMap<ActivatedRouteSnapshot, DetachedRouteHandle>();
+
+  private showing(route: ActivatedRouteSnapshot, from?: ActivatedRouteSnapshot): void {
+    const navigation = this.injector?.get(Router).currentNavigation();
+    // Added to the ones it was shown in before, for a screen kept as it is. A navigation that skips
+    // the location change writes no entry, so its id is in none and goes at the next.
+    this.shownIn.set(route, [...this.inHistory(from && this.shownIn.get(from)), navigation?.id]);
+  }
+
+  /**
+   * The ids an entry in history still holds: one a navigation replaced, skipped, or left ahead of
+   * a push is in none, and matches nothing again. All of them where the history is not ours.
+   */
+  private inHistory(ids: readonly (number | undefined)[] | undefined): (number | undefined)[] {
+    const history = this.injector?.get(PlatformLocation, null);
+    if (!(history instanceof NativePlatformLocation)) return [...(ids ?? [])];
+    const held = history.ɵnavigationIds();
+    return (ids ?? []).filter((id) => id !== undefined && held.has(id));
+  }
+
+  /**
+   * The screens kept before the navigation in flight first stored or took one, to put back if it
+   * fails: the router leaves the screens it detached and attached as they were then, and a screen
+   * a stack takes off to go back to one kept below is back on top.
+   */
+  private beforeNavigation: {
+    navigation: number;
+    handles: Map<string, DetachedRouteHandle[]>;
+  } | null = null;
+  private rollsBack = false;
+
+  private keepForRollBack(): void {
+    const router = this.injector?.get(Router);
+    const navigation = router?.currentNavigation()?.id;
+    if (navigation === undefined || this.beforeNavigation?.navigation === navigation) return;
+    const handles = new Map([...this.handles].map(([key, kept]) => [key, [...kept]]));
+    this.beforeNavigation = { navigation, handles };
+    if (this.rollsBack) return;
+    // Subscribed on first use: the router is built with this strategy, so not yet there before.
+    this.rollsBack = true;
+    router!.events.subscribe((event) => {
+      const before = this.beforeNavigation;
+      if (!isNavigationEnding(event) || before?.navigation !== event.id) return;
+      this.beforeNavigation = null;
+      if (event instanceof NavigationError) this.rollBack(before.handles);
+    });
+  }
+
+  private rollBack(handles: Map<string, DetachedRouteHandle[]>): void {
+    this.handles.clear();
+    for (const [key, kept] of handles) {
+      const live = kept.filter(
+        (handle) => !(handle as StoredHandle).componentRef?.hostView.destroyed,
+      );
+      if (live.length) this.handles.set(key, live);
+    }
   }
 
   private readonly watched = new WeakSet<ComponentRef<unknown>>();
@@ -156,7 +247,10 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
       !isScreenRoute(config) ||
       config?.data?.[REUSE_SCREEN] === true ||
       keyOf(future) === keyOf(curr);
-    if (reuse) this.reused.add(future);
+    if (reuse) {
+      this.reused.add(future);
+      this.showing(future, curr);
+    }
     return reuse;
   }
 
@@ -179,6 +273,7 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
    */
   override shouldAttach(route: ActivatedRouteSnapshot): boolean {
     if (route.component === null) return false;
+    this.showing(route);
     if (this.pushing() && !(isTabRoute(route.routeConfig) && this.inKeptBar(route))) return false;
     return this.retrieve(route) !== null;
   }
@@ -206,7 +301,38 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
     );
     if (kept.length) this.handles.set(key, kept);
     else this.handles.delete(key);
-    // The newest: the one a back from the top of the stack returns to.
-    return kept.at(-1) ?? null;
+    // Asked again for the same route as the router attaches it, by which time the router has
+    // written its own id into the entry: the same answer.
+    const before = this.answered.get(route);
+    if (before && kept.includes(before)) return before;
+    const handle = this.pick(kept);
+    if (handle) this.answered.set(route, handle);
+    return handle;
+  }
+
+  /**
+   * The one at the history entry a back returns to, where two screens share the url: a back of
+   * three screens from C over A, B, A is the first A. Or the one a pop the history could not make
+   * goes down to. Otherwise the newest, the one a back from the top of the stack returns to.
+   */
+  private pick(kept: readonly DetachedRouteHandle[]): DetachedRouteHandle | null {
+    const entry = this.backTo();
+    const router = this.injector?.get(Router);
+    const target = router && poppingTo.get(router);
+    return (
+      (entry !== undefined && kept.find((one) => this.entryOf.get(one)?.includes(entry))) ||
+      (target && kept.filter((one) => (one as StoredHandle).componentRef === target).at(-1)) ||
+      kept.at(-1) ||
+      null
+    );
+  }
+
+  /** The id in the history entry a back is returning to, which names the screen shown there. */
+  private backTo(): number | undefined {
+    const router = this.injector?.get(Router);
+    if (router?.currentNavigation()?.trigger !== 'popstate') return undefined;
+    const state = this.injector?.get(PlatformLocation, null)?.getState();
+    const id = (state as { navigationId?: unknown } | null)?.navigationId;
+    return typeof id === 'number' ? id : undefined;
   }
 }

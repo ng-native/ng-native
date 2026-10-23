@@ -62,6 +62,13 @@ export class BoardingPass {
 Levels stack across every app the runtime mounts, and an app that is destroyed puts back its own.
 On Android, an activity that comes to the front is given the level again.
 
+iOS has no window level of the app's own: the level set is the screen's, and it stays after the
+app until the device locks. So when no app holds a level, the next `set()` first reads the level
+the screen has. When the last level is dropped, or `restore()` is called, that level is set again,
+so a change made in Control Center while a level was held is undone. If the level cannot be read,
+nothing is put back. Leaving the app while a level is held, without dropping it, keeps the screen
+at that level until the device locks.
+
 ## Without the module
 
 On iOS and Android, a missing `expo-brightness` - never installed, or installed without the app

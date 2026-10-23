@@ -8,7 +8,14 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { ErrorHandler, Injector, type Provider, type Type } from '@angular/core';
+import {
+  ErrorHandler,
+  Injector,
+  runInInjectionContext,
+  signal,
+  type Provider,
+  type Type,
+} from '@angular/core';
 import { Engine, HostEngine } from '@ng-native/fabric';
 import {
   COMPACT_WIDTH,
@@ -19,6 +26,7 @@ import {
   Direction,
   HardwareBack,
   Keyboard,
+  SCREEN_IN_FRONT,
   SafeArea,
   Screen,
   type KeyboardMetrics,
@@ -222,6 +230,41 @@ describe('the back button', () => {
     assert.equal(handler!(), true, 'the platform asks, and this answers');
     stop();
     assert.equal(handler, null, 'and lets go');
+  });
+
+  it("asks a handler only while the caller's screen is in front, as it is when pressed", () => {
+    let handler: (() => boolean) | null = null;
+    const back = build(HardwareBack, [
+      {
+        provide: HardwareBack.SOURCE,
+        useValue: { subscribe: (fn: () => boolean) => ((handler = fn), () => {}) },
+      },
+    ]);
+    const inFront = signal(true);
+    let asked = 0;
+    const screen = Injector.create({
+      providers: [{ provide: SCREEN_IN_FRONT, useValue: inFront }],
+    });
+    runInInjectionContext(screen, () => back.handle(() => (asked++, true)));
+
+    inFront.set(false);
+    assert.equal(handler!(), false, 'a covered screen leaves the press to the platform');
+    assert.equal(asked, 0);
+    inFront.set(true);
+    assert.equal(handler!(), true, 'and is asked again once it is in front');
+    assert.equal(asked, 1);
+  });
+
+  it('asks a handler subscribed where no screen is provided, as an app root is', () => {
+    let handler: (() => boolean) | null = null;
+    const back = build(HardwareBack, [
+      {
+        provide: HardwareBack.SOURCE,
+        useValue: { subscribe: (fn: () => boolean) => ((handler = fn), () => {}) },
+      },
+    ]);
+    runInInjectionContext(Injector.create({ providers: [] }), () => back.handle(() => true));
+    assert.equal(handler!(), true);
   });
 });
 

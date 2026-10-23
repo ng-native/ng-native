@@ -4,8 +4,8 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Component, DOCUMENT, inject } from '@angular/core';
-import { cleanup, render, settle } from '@ng-native/testing';
+import { Component, DOCUMENT, ElementRef, inject, signal } from '@angular/core';
+import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 /** What a library sees of an element or a document: loosely typed, as its own code would be. */
@@ -347,5 +347,50 @@ describe("A table's parts", () => {
     body.appendChild(document.createElement('tr'));
     assert.equal(rows.length, 4);
     assert.equal(document.createElement('table').tHead, null);
+  });
+});
+
+@Component({
+  selector: 'x-marked-up',
+  template: `<span testID="label" [innerHTML]="label()"></span>`,
+})
+class MarkedUp {
+  readonly host = inject(ElementRef).nativeElement;
+  readonly label = signal<string | null>(
+    'Files &amp; <b>folders</b> <i class="hint">3 &lt; 4</i><script>steal()</script><br>',
+  );
+}
+
+describe('markup a template binds with [innerHTML]', () => {
+  const markedUp = async () => {
+    const app = await render(MarkedUp, { providers: [provideWebCompat()] });
+    await settle();
+    const label = (app.instance.host as Dom).children[0];
+    const tags = () => [...label.children].map((each: Dom) => each.localName);
+    return { page: app.instance, label, tags };
+  };
+
+  it('is drawn as the elements and text it is, but for what the sanitizer takes out', async () => {
+    const { label, tags } = await markedUp();
+    assert.equal(label.textContent, 'Files & folders 3 < 4');
+    assert.deepEqual(tags(), ['b', 'i', 'br']);
+    assert.equal(label.querySelector('i').getAttribute('class'), 'hint');
+    assert.ok(screen.getByText('folders'));
+    assert.equal(screen.queryByText('steal()'), null);
+  });
+
+  it('replaces what the element held when it changes, and empties it for none', async () => {
+    const { page, label, tags } = await markedUp();
+    page.label.set('<u>Only</u> this');
+    await settle();
+    assert.equal(label.textContent, 'Only this');
+    assert.deepEqual(tags(), ['u']);
+    // And as it is drawn: the old words gone from the screen, the new ones on it.
+    assert.ok(screen.getByText(/Only/));
+    assert.equal(screen.queryByText('folders'), null);
+    page.label.set(null);
+    await settle();
+    assert.equal(label.textContent, '');
+    assert.equal(screen.queryByText(/Only/), null);
   });
 });

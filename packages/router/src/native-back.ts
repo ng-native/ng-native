@@ -11,8 +11,16 @@
  * screen pushed over the whole tab bar, is still subscribed, so each answer first checks that
  * its outlet is showing what the router is showing.
  */
-import { Service, inject } from '@angular/core';
-import type { ActivatedRoute, Router } from '@angular/router';
+import { DestroyRef, Service, inject } from '@angular/core';
+import {
+  ChildrenOutletContexts,
+  NavigationError,
+  NavigationStart,
+  Router,
+  type ActivatedRoute,
+  type ActivatedRouteSnapshot,
+  type UrlSegment,
+} from '@angular/router';
 import { HardwareBack } from '@ng-native/device';
 
 /** What a stack offers `NativeNavigation` beyond a back: going down it several screens at once. */
@@ -177,9 +185,107 @@ export type BackAnswer = (from: 'button' | 'app') => boolean;
 /**
  * Whether a route is part of what the router shows now, rather than a subtree the reuse strategy
  * detached and is keeping for later: a tab behind, or a screen covered by one pushed over it.
+ *
+ * Read from the snapshots: the root route is the same object in every state, and after a failed
+ * navigation its children are still the ones that navigation would have shown.
  */
 export function isShowing(router: Router, route: ActivatedRoute | null): boolean {
   if (!route) return false;
-  const visit = (node: ActivatedRoute): boolean => node === route || node.children.some(visit);
-  return visit(router.routerState.root);
+  const showing = route.snapshot;
+  const visit = (node: ActivatedRouteSnapshot): boolean =>
+    node === showing || node.children.some(visit);
+  return visit(router.routerState.snapshot.root);
+}
+
+/**
+ * Put back the snapshots of the routes showing when a navigation fails, for `isShowing`.
+ *
+ * The router moves each route it keeps, such as the parent of a page that throws, on to the
+ * navigation's snapshot as it activates it, and on a failure puts back only its own state. That
+ * route would then be missing from the snapshots, and its outlet would ignore a Back.
+ */
+export function restoreFailedSnapshots(): void {
+  const router = inject(Router);
+  const contexts = inject(ChildrenOutletContexts);
+  let showing = new Map<ActivatedRoute, ActivatedRouteSnapshot>();
+  const events = router.events.subscribe((event) => {
+    if (event instanceof NavigationStart) showing = showingRoutes(router, contexts);
+    else if (event instanceof NavigationError) {
+      for (const [route, snapshot] of showing) restoreSnapshot(route, snapshot);
+    }
+  });
+  inject(DestroyRef).onDestroy(() => events.unsubscribe());
+}
+
+/**
+ * Put back the snapshot a failed navigation moved `route` on from, and send what that move changed
+ * back through the route's observables, as the router sends a change: a page reading its query
+ * params, or bound to them as inputs, sees the values it had again.
+ *
+ * The router's observables for a route are the subjects it sends each change through, though it
+ * types them as plain observables. One that cannot be sent to is left as it is.
+ */
+export function restoreSnapshot(route: ActivatedRoute, snapshot: ActivatedRouteSnapshot): void {
+  const failed = route.snapshot;
+  route.snapshot = snapshot;
+  if (failed === snapshot) return;
+  const resend = <T>(observable: object, from: T, to: T, same: (a: T, b: T) => boolean) => {
+    if (!same(from, to)) (observable as { next?: (value: T) => void }).next?.(to);
+  };
+  resend(route.queryParams, failed.queryParams, snapshot.queryParams, sameRecord);
+  resend(route.fragment, failed.fragment, snapshot.fragment, Object.is);
+  resend(route.params, failed.params, snapshot.params, sameRecord);
+  resend(route.url, failed.url, snapshot.url, sameSegments);
+  resend(route.data, failed.data, snapshot.data, sameRecord);
+}
+
+/** Whether two records hold the same values, an array of values compared item by item. */
+function sameRecord(a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>) {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => {
+    const [x, y] = [a[key], b[key]];
+    if (Array.isArray(x) && Array.isArray(y)) {
+      return x.length === y.length && x.every((item, index) => item === y[index]);
+    }
+    return key in b && x === y;
+  });
+}
+
+function sameSegments(a: readonly UrlSegment[], b: readonly UrlSegment[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (segment, index) =>
+        segment.path === b[index]!.path && sameRecord(segment.parameters, b[index]!.parameters),
+    )
+  );
+}
+
+/**
+ * Each route the router shows now, with its snapshot, found through the outlets showing them.
+ *
+ * A route with no component, a `loadChildren` wrapper or a group, has no outlet of its own: the
+ * router activates its children in its parent's outlets, so they are looked up there.
+ */
+function showingRoutes(
+  router: Router,
+  contexts: ChildrenOutletContexts,
+): Map<ActivatedRoute, ActivatedRouteSnapshot> {
+  const state = router.routerState;
+  const found = new Map([[state.root, state.snapshot.root]]);
+  const visit = (node: ActivatedRouteSnapshot, inside: ChildrenOutletContexts) => {
+    for (const child of node.children) {
+      if (!child.component) {
+        visit(child, inside);
+        continue;
+      }
+      const context = inside.getContext(child.outlet);
+      if (!context?.route) continue;
+      found.set(context.route, child);
+      visit(child, context.children);
+    }
+  };
+  visit(state.snapshot.root, contexts);
+  return found;
 }

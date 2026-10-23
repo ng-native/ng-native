@@ -60,12 +60,13 @@ interface NativeNavigationBar {
 const NONE: NavigationBarSource = { setStyle: () => {}, setHidden: () => {} };
 
 export function navigationBarSource(): NavigationBarSource {
-  if (reactNative()?.Platform?.OS !== 'android') return NONE;
+  // Copies: with no bar to share, each app claims its own.
+  if (reactNative()?.Platform?.OS !== 'android') return { ...NONE };
   const modules = (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo?.modules;
   const native = modules?.['ExpoNavigationBar'] as NativeNavigationBar | undefined;
   // Without the module a claim changes nothing, so it does not ride on the screens either, where
   // react-native-screens would hide the bar the next time one appears.
-  if (!native) return NONE;
+  if (!native) return { ...NONE };
   // One per module, so every app the runtime mounts claims the same bar.
   return sharedBySource(navigationBarSource, native, () => ({
     setStyle: (style) => void native.setStyle?.(style)?.catch(() => {}),

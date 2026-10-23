@@ -48,3 +48,41 @@ export const routes: Routes = [
     ],
   },
 ];
+
+export const promoEnabled = signal(true);
+
+@Component({
+  selector: 'x-promo-bar',
+  imports: [NativeTab, NativeTabsOutlet],
+  template: `
+    <native-tabs-outlet>
+      @if (promoEnabled()) {
+        <native-tab path="promo" title="Promo" />
+      }
+      <native-tab path="home" title="Home" />
+      <native-tab path="library" title="Library" />
+    </native-tabs-outlet>
+  `,
+})
+export class PromoBar {
+  protected readonly promoEnabled = promoEnabled;
+}
+
+@Component({ selector: 'x-promo', imports: [Text], template: `<text>promo</text>` })
+export class Promo {}
+
+@Component({ selector: 'x-library', imports: [Text], template: `<text>library</text>` })
+export class Library {}
+
+export const promoRoutes: Routes = [
+  {
+    path: '',
+    component: PromoBar,
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'home' },
+      { path: 'promo', component: Promo },
+      { path: 'home', component: Home },
+      { path: 'library', component: Library },
+    ],
+  },
+];

@@ -1,0 +1,57 @@
+{
+  "name": "material-example",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/main.ts",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "export": "expo export --platform ios --platform android --output-dir dist"
+  },
+  "dependencies": {
+    "@angular/cdk": "22.2.0",
+    "@angular/common": "22.2.0",
+    "@angular/core": "22.2.0",
+    "@angular/forms": "22.2.0",
+    "@angular/material": "22.2.0",
+    "@angular/router": "22.2.0",
+    "@ng-native/components": "workspace:*",
+    "@ng-native/device": "workspace:*",
+    "@ng-native/expo": "workspace:*",
+    "@ng-native/fabric": "workspace:*",
+    "@ng-native/icons": "workspace:*",
+    "@ng-native/platform": "workspace:*",
+    "@ng-native/router": "workspace:*",
+    "@ng-native/web-compat": "workspace:*",
+    "expo": "~58.0.16",
+    "expo-document-picker": "~58.0.4",
+    "expo-font": "~58.0.9",
+    "expo-modules-core": "~58.0.23",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "~4.30.0",
+    "react-native-svg": "15.16.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@expo/vector-icons": "^15.1.1",
+    "@ng-native/metro": "workspace:*",
+    "@ng-native/tailwind": "workspace:*",
+    "@ng-native/testing": "workspace:*",
+    "@tailwindcss/cli": "^4.3.3",
+    "@types/react": "~19.3.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2"
+  },
+  "nx": {
+    "tags": [
+      "scope:material-example",
+      "layer:app"
+    ]
+  }
+}

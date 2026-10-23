@@ -651,6 +651,96 @@ describe('engine-node-fields, through nx migrate, ng update and ng-native-migrat
   });
 });
 
+describe('stop-watching-conditions, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/main.ts': [
+      "import { mount } from '@ng-native/platform';",
+      "import { watchConditions } from '@ng-native/device';",
+      '',
+      "AppRegistry.registerRunnable('main', ({ rootTag }) => {",
+      '  const app = mount(Number(rootTag), App, getFabricUIManager());',
+      '  watchConditions(app.engine);',
+      '});',
+      '',
+    ].join('\n'),
+    'apps/second/src/main.ts': [
+      "import { watchConditions as watch } from '@ng-native/device';",
+      '',
+      'export function start(root: Mounted) {',
+      '  watch(root.engine, { debounce: 16 });',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/engine-only.ts': [
+      "import { watchConditions } from '@ng-native/device';",
+      '',
+      'export function start(engine: Engine, app: Mounted) {',
+      '  watchConditions(engine);',
+      '  watchConditions(app.root);',
+      '}',
+      'export class Watcher {',
+      '  constructor(private readonly engine: Engine) {',
+      '    watchConditions(this.engine);',
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/taken.ts': [
+      "import { watchConditions } from '@ng-native/device';",
+      '',
+      'export function start(app: Mounted, stopWatching: () => void) {',
+      '  watchConditions(app.engine);',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/other.ts': [
+      "import { Screen } from '@ng-native/device';",
+      "import { watchConditions } from './conditions';",
+      'watchConditions(app.engine);',
+      '',
+    ].join('\n'),
+  };
+
+  it('keeps what watchConditions returns and stops it as the app is destroyed', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'stop-watching-conditions', '0.17.1');
+    assert.equal(
+      nx.files['src/main.ts'],
+      files['src/main.ts'].replace(
+        '  watchConditions(app.engine);',
+        '  const stopWatching = watchConditions(app.engine);\n  app.applicationRef.onDestroy(stopWatching);',
+      ),
+    );
+    assert.equal(
+      nx.files['apps/second/src/main.ts'],
+      files['apps/second/src/main.ts'].replace(
+        '  watch(root.engine, { debounce: 16 });',
+        '  const stopWatching = watch(root.engine, { debounce: 16 });\n  root.applicationRef.onDestroy(stopWatching);',
+      ),
+    );
+    assert.equal(nx.files['src/app/engine-only.ts'], files['src/app/engine-only.ts']);
+    assert.equal(
+      nx.files['src/app/other.ts'],
+      files['src/app/other.ts'],
+      'another watchConditions',
+    );
+    assert.equal(nx.files['src/app/taken.ts'], files['src/app/taken.ts'], 'stopWatching is taken');
+    assert.deepEqual(nx.notes, [
+      'src/app/engine-only.ts:4: watchConditions(engine) returns a function that stops watching. Keep it and call it as the app is destroyed: app.applicationRef.onDestroy(stop).',
+      'src/app/engine-only.ts:5: watchConditions(app.root) returns a function that stops watching. Keep it and call it as the app is destroyed: app.applicationRef.onDestroy(stop).',
+      'src/app/engine-only.ts:9: watchConditions(this.engine) returns a function that stops watching. Keep it and call it as the app is destroyed: app.applicationRef.onDestroy(stop).',
+      'src/app/taken.ts:4: watchConditions(app.engine) returns a function that stops watching. Keep it and call it as the app is destroyed: app.applicationRef.onDestroy(stop).',
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('changes nothing the second time', async () => {
+    const first = await viaNx(files, 'stop-watching-conditions');
+    const again = await viaNx(first.files as Record<string, string>, 'stop-watching-conditions');
+    assert.deepEqual(again.files, first.files);
+  });
+});
+
 describe('ng-native-migrate', () => {
   const app = {
     'package.json': JSON.stringify({ dependencies: { '@ng-native/components': '^0.1.3' } }),

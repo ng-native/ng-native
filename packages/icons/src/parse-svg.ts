@@ -30,11 +30,30 @@ const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"'
 const characters = (raw: string): string =>
   raw.replace(/\s+/g, ' ').replace(/&(amp|lt|gt|quot|apos);/g, (_, name) => ENTITIES[name]!);
 
-/** `<tag`, `/>`, `</tag>` and the attribute soup between them. */
-const TAG = /<\s*(\/)?\s*([a-zA-Z][\w:-]*)((?:[^>"']|"[^"]*"|'[^']*')*)(\/)?>/g;
-const ATTRIBUTE = /([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-/** Comments and processing instructions, which carry nothing a renderer needs. */
-const IGNORED = /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[[\s\S]*?\]\]>/g;
+/**
+ * `<tag`, `/>`, `</tag>` and the attribute soup between them, each read one way only, so that a tag
+ * that never closes is given up once rather than tried again split another way. The soup stops at
+ * a `<` outside quotes: `<a<a<a…` is given up at the next `<`. The name is all of the word, not
+ * a part of it with the rest read as soup, and the space before it is all on one side of a `/`.
+ */
+const TAG = /<\s*(?:(\/)\s*)?([a-zA-Z][\w:-]*)(?![\w:-])((?:[^<>"']|"[^"]*"|'[^']*')*)(\/)?>/g;
+/**
+ * A name, `=` and a quoted value. The name starts after a space, so a long word with no `=` after
+ * it is tried once, not again from each of its letters.
+ */
+const ATTRIBUTE = /(?:^|\s)([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+/**
+ * How deep elements may nest for an icon to keep them. Each level is a view in the tree and a call
+ * deeper wherever the tree is walked, so `[svg]` markup from a server nested a few thousand deep
+ * would overflow the stack. The icon sets nest two or three.
+ */
+const MAX_DEPTH = 32;
+/**
+ * Comments and processing instructions, which carry nothing a renderer needs. One left open runs
+ * to the end, as an open comment does in a browser: looking for its end again from each `<!--` in
+ * `<!--<!--<!--…` took as long as the markup's length squared.
+ */
+const IGNORED = /<!--[\s\S]*?(?:-->|$)|<\?[\s\S]*?(?:\?>|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/g;
 
 function attributesOf(source: string): Record<string, string> {
   const attrs: Record<string, string> = {};
@@ -44,6 +63,15 @@ function attributesOf(source: string): Record<string, string> {
     attrs[match[1]!] = match[2] ?? match[3] ?? '';
   }
   return attrs;
+}
+
+/**
+ * A new element as the last child of the one it is in, unless that is `MAX_DEPTH` deep: then it,
+ * and everything in it, is left out of the tree. It still goes on the stack after this, so the
+ * tags that close it close it and not one of its ancestors.
+ */
+function placeUnder(stack: readonly SvgNode[], node: SvgNode): void {
+  if (stack.length < MAX_DEPTH) stack[stack.length - 1]?.children.push(node);
 }
 
 /**
@@ -76,7 +104,7 @@ export function parseSvg(markup: string): SvgNode | null {
     }
 
     const node: SvgNode = { tag: tag!, attrs: attributesOf(attributes ?? ''), children: [] };
-    stack[stack.length - 1]?.children.push(node);
+    placeUnder(stack, node);
     root ??= node;
     // The attribute run is greedy and swallows the `/` of `<path/>`, so the closing slash is
     // recognised at either end of it. Miss this and every sibling nests inside the one before it,

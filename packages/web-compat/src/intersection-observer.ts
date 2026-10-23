@@ -6,7 +6,8 @@ import { domError } from './dom-error.ts';
 import { report } from './events.ts';
 import { border, clientSize, drawn, frameOf, isTable, styled } from './geometry.ts';
 import { asElement } from './resize-observer.ts';
-import { engineOf, listenToResize, windowSize } from './window.ts';
+import { engineOf } from './window.ts';
+import { listenToResize, windowSize } from './window-size.ts';
 import { oncePerFrame } from './next-frame.ts';
 
 /**
@@ -295,8 +296,14 @@ const lookNextFrame = oncePerFrame(() => {
 });
 
 function schedule(): void {
-  if (live.size) lookNextFrame();
+  if (live.size) lookNextFrame.ask();
 }
+
+/**
+ * An app went away: a look it asked for may be on a timer that went with it, and the next app's
+ * first is asked for at once rather than passed over as already asked.
+ */
+export const forgetLooks = (): void => lookNextFrame.forget();
 
 /**
  * What can move an element: its own layout, a scroll of anything it is in, a commit of its app

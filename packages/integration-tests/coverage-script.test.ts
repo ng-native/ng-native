@@ -282,9 +282,18 @@ describe('coverage script integrity', () => {
   // CI runs the native suite as shards on runners of their own, and one more job merges them.
   const sharded = ['--report', '--shards', '2', '--min', '95'];
 
+  /** The reports a merge of two shards reads: each split suite's by shard, the rest whole. */
+  const asShards = (root: string) => {
+    for (const split of ['native', 'web-compat']) {
+      rmSync(path.join(root, `coverage/${split}.info`));
+      for (const shard of [1, 2])
+        writeFileSync(path.join(root, `coverage/${split}-${shard}.info`), lcov());
+    }
+  };
+
   it('counts a line that only one shard of the native suite reached', () =>
     workspace((root) => {
-      rmSync(path.join(root, 'coverage/native.info'));
+      asShards(root);
       const other = '../fabric/src/node.ts';
       writeFileSync(path.join(root, 'coverage/native-1.info'), lcov() + lcov(0, other));
       writeFileSync(path.join(root, 'coverage/native-2.info'), lcov(1, other));
@@ -295,8 +304,9 @@ describe('coverage script integrity', () => {
 
   it('rejects a merge with a shard missing, and one whose shard count is not a number', () =>
     workspace((root) => {
-      writeFileSync(path.join(root, 'coverage/native-1.info'), lcov());
-      rejects(root, /native-2 coverage.*(missing|read|ENOENT)/i, sharded);
+      asShards(root);
+      rmSync(path.join(root, 'coverage/web-compat-2.info'));
+      rejects(root, /web-compat-2 coverage.*(missing|read|ENOENT)/i, sharded);
       rejects(root, /--shards/, ['--report', '--shards', 'two']);
     }));
 
@@ -327,21 +337,32 @@ syncBuiltinESMExports();
     return { result, calls: calls.map((line) => JSON.parse(line) as string[]) };
   }
 
-  it('runs one shard of the native suite, and the other suites beside the first', () =>
+  it('runs a shard of the native and web-compat suites on each, the browser beside the first and the rest beside the last', () =>
     workspace((root) => {
+      // A shard that ran every suite not split ran for as long as the other three together, and
+      // was stopped at its time limit on a busy runner.
       for (const report of reports) rmSync(path.join(root, 'coverage', report));
+      const cwd = (call: string[]) =>
+        call
+          .find((arg) => arg.includes('--test-reporter-destination=') && arg.endsWith('.info'))
+          ?.split('/')
+          .at(-1) ?? 'browser';
       const second = shardRun(root, '2/2');
       assert.equal(second.result.status, 0, second.result.stderr);
-      assert.equal(second.calls.length, 1);
-      assert.ok(second.calls[0]!.includes('--test-shard=2/2'));
-      assert.ok(existsSync(path.join(root, 'coverage/native-2.info')));
+      assert.deepEqual(second.calls.map(cwd), [
+        'native-2.info',
+        'web-compat-2.info',
+        'web.info',
+        'testing.info',
+      ]);
+      assert.ok(second.calls.slice(0, 2).every((call) => call.includes('--test-shard=2/2')));
       assert.equal(existsSync(path.join(root, 'coverage/summary.json')), false, 'no report yet');
 
       rmSync(path.join(root, 'calls.jsonl'));
       const first = shardRun(root, '1/2');
       assert.equal(first.result.status, 0, first.result.stderr);
-      assert.equal(first.calls.length, 5);
-      assert.ok(first.calls[0]!.includes('--test-shard=1/2'));
+      assert.deepEqual(first.calls.map(cwd), ['native-1.info', 'web-compat-1.info', 'browser']);
+      assert.ok(first.calls.slice(0, 2).every((call) => call.includes('--test-shard=1/2')));
       assert.ok(existsSync(path.join(root, 'coverage/native-2.info')), 'the other shard is kept');
       assert.equal(cli(root, sharded).status, 0);
     }));

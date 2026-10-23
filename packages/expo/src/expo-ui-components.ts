@@ -277,9 +277,42 @@ export class UiList {
 }
 
 /**
+ * How far a finger goes sideways, and further than it goes down, before a row's swipe actions take
+ * the touch. SwiftUI's own row button still taps at about 20 points and its actions come out by
+ * about 30.
+ */
+const SWIPE_SLOP = 20;
+
+/**
+ * Take a sideways drag from what holds the touch inside the row, as SwiftUI does: its list moves
+ * the row and never taps it. Native sends the app's views inside the row no cancel, since React
+ * Native's touch handler runs beside the list's gestures rather than giving way to them, so the
+ * row's own responder asks for the drag, and a `pressable` that gives it up does not press.
+ */
+function takeSidewaysDrag(): void {
+  const node = inject(ElementRef).nativeElement as HostNode;
+  const engine = node.engine ?? inject(HostEngine);
+  let from: { x: number; y: number } | null = null;
+  const stop = engine.setResponder(node, {
+    onStartShouldSetResponderCapture: (event) => {
+      from = { x: event.nativeEvent.pageX ?? 0, y: event.nativeEvent.pageY ?? 0 };
+      return false;
+    },
+    onMoveShouldSetResponderCapture: (event) => {
+      if (!from) return false;
+      const across = Math.abs((event.nativeEvent.pageX ?? from.x) - from.x);
+      const down = Math.abs((event.nativeEvent.pageY ?? from.y) - from.y);
+      return across >= SWIPE_SLOP && across > down;
+    },
+  });
+  inject(DestroyRef).onDestroy(stop);
+}
+
+/**
  * The system's swipe actions on a list row, iOS only. The first child is the row; the actions go
  * in `<ui-slot name="actions" [extraProps]="{ edge: 'trailing', allowsFullSwipe: true }">`, one
- * slot per edge, as `ui-button`s.
+ * slot per edge, as `ui-button`s. A sideways drag on the row is the swipe's, so a `pressable` in a
+ * `ui-view-host` in the row does not press for it.
  */
 @Component({
   selector: 'ui-swipe-actions',
@@ -289,6 +322,10 @@ export class UiList {
 export class UiSwipeActions {
   protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
+
+  constructor() {
+    if (nativePlatform() !== 'android') takeSidewaysDrag();
+  }
 }
 
 /** What `ui-slider` sends as the thumb moves: its new value. */
@@ -1547,6 +1584,13 @@ export class UiToolbarItem {
 export type UiPresentationDetent =
   'medium' | 'large' | { readonly fraction: number } | { readonly height: number };
 
+/**
+ * Whether the screen behind a SwiftUI sheet takes touches, as `presentationBackgroundInteraction`
+ * says it: as the system decides, always, never, or while the sheet rests at or below a detent.
+ */
+export type UiBottomSheetBackgroundInteraction =
+  'automatic' | 'enabled' | 'disabled' | { readonly upThrough: UiPresentationDetent };
+
 /** The detents of a sheet given none and not sized to its content. */
 const HALF_AND_FULL: readonly UiPresentationDetent[] = ['medium', 'large'];
 
@@ -1663,6 +1707,8 @@ function windowWidth(): Signal<number | undefined> {
           [showDragHandle]="showDragIndicator()"
           [containerColor]="color()"
           [skipPartiallyExpanded]="fits()"
+          [sheetGesturesEnabled]="!interactiveDismissDisabled()"
+          [properties]="dismissal()"
           (dismissRequest)="dismissRequested($event)"
         >
           <ui-view-host layoutRoot [matchContents]="fits() || undefined">
@@ -1742,6 +1788,30 @@ export class UiBottomSheet {
    */
   readonly backgroundColor = input<string>();
   /**
+   * The user cannot dismiss the sheet; only `open` closes it. On iOS it is SwiftUI's
+   * `interactiveDismissDisabled`: a swipe down takes the sheet to its smallest detent and no
+   * further, and a tap outside it does nothing. On Android a swipe, the back button and a tap
+   * outside the sheet are all turned off, as `@expo/ui`'s own sheet does; Compose's sheet has no
+   * way to keep the drag between its heights without the swipe that dismisses it, so that drag is
+   * off too.
+   */
+  readonly interactiveDismissDisabled = input(false, { transform: booleanAttribute });
+  /**
+   * Whether the screen behind the sheet takes touches, iOS 16.4 and later only: SwiftUI's
+   * `presentationBackgroundInteraction`. `'enabled'` always, `'disabled'` never, `'automatic'` as
+   * the system decides, and `{ upThrough: 'medium' }` while the sheet rests at that detent or
+   * below it, which should be one of its `detents`. Unset, SwiftUI decides. Android has no
+   * equivalent: Compose's sheet is in a window of its own over the screen, which takes no touch
+   * while it shows.
+   */
+  readonly backgroundInteraction = input<UiBottomSheetBackgroundInteraction>();
+  /**
+   * More SwiftUI modifiers, iOS only, after the sheet's own on the `ui-group` around its content,
+   * where SwiftUI reads presentation modifiers from: `presentationCornerRadius`, for one. They
+   * apply to the content too. Android takes no notice of them.
+   */
+  readonly modifiers = input<readonly UiModifier[]>();
+  /**
    * The sheet has finished closing, whether the user dismissed it or `open` was set false: the
    * moment another sheet or a dialog can be presented.
    */
@@ -1818,7 +1888,31 @@ export class UiBottomSheet {
       visibility: this.showDragIndicator() ? 'visible' : 'hidden',
     },
     ...this.background(),
+    ...(this.interactiveDismissDisabled()
+      ? [{ $type: 'interactiveDismissDisabled', isDisabled: true }]
+      : []),
+    ...this.interaction(),
+    ...(this.modifiers() ?? []),
   ]);
+
+  /** Whether the screen behind the sheet takes touches, in `@expo/ui`'s shape, where one is set. */
+  private readonly interaction = computed<readonly UiModifier[]>(() => {
+    const given = this.backgroundInteraction();
+    if (given === undefined) return [];
+    const $type = 'presentationBackgroundInteraction';
+    return typeof given === 'string'
+      ? [{ $type, interactionType: given }]
+      : [{ $type, interactionType: 'enabledUpThrough', detent: given.upThrough }];
+  });
+
+  /**
+   * How Compose's sheet may be dismissed other than by a swipe. Always committed, so that turning
+   * `interactiveDismissDisabled` off again reaches native.
+   */
+  protected readonly dismissal = computed(() => {
+    const dismissible = !this.interactiveDismissDisabled();
+    return { shouldDismissOnBackPress: dismissible, shouldDismissOnClickOutside: dismissible };
+  });
 
   /** The `background-color` the element has from CSS, which the sheet draws rather than it. */
   private readonly painted = signal<unknown>(undefined);

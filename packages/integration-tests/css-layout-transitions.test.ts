@@ -452,4 +452,40 @@ describe('a @keyframes animation of a height', () => {
     assert.equal(s.height(), 10);
     assert.equal(s.engine.animating, true);
   });
+
+  it('goes on by the clock it started on once a variable its last frame waits for is set', () => {
+    // A library measures the panel after it has asked for the animation. Chrome does not start
+    // it again when the variable comes: it is where its clock says, a fifth of the way at 40ms.
+    const fabric = createFakeFabric();
+    const asked: { duration: number }[] = [];
+    Object.assign(fabric, {
+      configureNextLayoutAnimation: (config: { duration: number }) => void asked.push(config),
+    });
+    const css =
+      '@keyframes open { from { height: 0 } to { height: var(--h) } }' +
+      ' .p { height: 0 } .p.open { height: var(--h, 0px); animation: open 200ms linear forwards }';
+    let now = 0;
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(css, 'library.css', { generated: true }) as StyleSheet,
+      now: () => now,
+    });
+    const p = engine.createElement('view');
+    engine.setClasses(p, 'p');
+    engine.appendChild(engine.root, p);
+    engine.commit();
+    engine.setClasses(p, 'p open');
+    engine.commit();
+    assert.deepEqual(asked, [], 'nowhere to move it to yet');
+    now += 5;
+    engine.setCustomProperty(p, '--h', '40px');
+    engine.commit();
+    now += 35;
+    engine.advanceAnimations();
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['height'], 8);
+    now += 160;
+    engine.advanceAnimations();
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['height'], 40);
+  });
 });

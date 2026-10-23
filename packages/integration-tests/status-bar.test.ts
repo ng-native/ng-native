@@ -17,6 +17,7 @@ import {
   type ColorSchemeSource,
   type Scheme,
   type StatusBarSource,
+  statusBarSource,
 } from '@ng-native/device';
 
 /** What the platform was told, in order. */
@@ -421,6 +422,15 @@ describe('a status bar two apps claim', () => {
     current.bar.set({ style: 'dark' });
     assert.deepEqual(current.bar.state(), { style: 'dark', hidden: true });
     assert.deepEqual(old.bar.state(), current.bar.state());
+  });
+
+  it('keeps each app to its own claims where there is no bar to share', () => {
+    // Without React Native, as on the web or in a test, nothing is the window's: an app that
+    // never goes would otherwise leave its claims under every app after it.
+    const first = app(statusBarSource());
+    first.bar.push({ style: 'light', hidden: true });
+    const second = app(statusBarSource());
+    assert.deepEqual(second.bar.state(), {});
   });
 
   it('follows the scheme of the app whose auto style is in force', () => {

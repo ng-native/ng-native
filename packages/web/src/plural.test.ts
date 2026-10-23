@@ -73,11 +73,10 @@ describe('an ICU plural, on the web, in a development build', () => {
     assert.equal(text(root), 'one left');
   });
 
-  it('answers instanceof Node for its own nodes only, and leaves Element alone', () => {
+  it('answers instanceof Node for its own nodes only', () => {
     const { ref } = mountApp(fixtures.PluralApp);
     const wrapper = ref.location.nativeElement as object;
     assert.ok(wrapper instanceof Node);
-    assert.ok(!(wrapper instanceof Element));
     assert.ok(document.createComment('') instanceof Node);
     assert.ok(!(document.createTextNode('') instanceof Element));
     assert.ok(!({} instanceof Node));

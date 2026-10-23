@@ -55,10 +55,15 @@ describe('bootstrap registers the root component with ApplicationRef', () => {
 describe('bootstrap runs the app initializers', () => {
   const GREETING = new InjectionToken<string>('greeting');
   let Counter: Type<unknown>;
+  let InitializedApp: Type<unknown>;
+  let Greeting: Type<{ readonly text: { set(value: string): void } }>;
 
   before(async () => {
     const mod = await compileFixture('fixtures/counter.ts');
     Counter = mod['Counter'] as Type<unknown>;
+    const initialized = await compileFixture('fixtures/initialized-app.ts');
+    InitializedApp = initialized['InitializedApp'] as typeof InitializedApp;
+    Greeting = initialized['Greeting'] as typeof Greeting;
   });
 
   it('runs one before the root component exists, where it can inject', () => {
@@ -77,6 +82,21 @@ describe('bootstrap runs the app initializers', () => {
     // bare `createEnvironmentInjector` it registered and never ran, with nothing to say so.
     assert.deepEqual(seen, ['hello, 0 components']);
     assert.equal(app.componentRef.injector.get(ApplicationInitStatus).done, true);
+  });
+
+  it('runs one before the root component is created, so the component reads what it loaded', () => {
+    // `ApplicationRef.components` stays empty until the first tick whatever the order, so the
+    // root component reads the initializer's work as it is constructed.
+    const app = mount(ROOT_TAG, InitializedApp, createFakeFabric(), {
+      providers: [provideAppInitializer(() => inject(Greeting).text.set('loaded'))],
+    });
+
+    try {
+      const root = app.componentRef.instance as { readonly textAtCreation: string };
+      assert.equal(root.textAtCreation, 'loaded');
+    } finally {
+      app.applicationRef.destroy();
+    }
   });
 
   it('starts one that returns a promise without holding up the first frame', async () => {

@@ -47,6 +47,7 @@ import {
   type ComponentRef,
   type EnvironmentInjector,
   type Type,
+  type Signal,
   type WritableSignal,
 } from '@angular/core';
 import { SCREEN_IN_FRONT } from '@ng-native/device';
@@ -125,7 +126,7 @@ interface TabSelection {
   providers: [{ provide: SVG_ICON_HOST, useFactory: () => inject(ViewContainerRef) }],
   host: {
     '[style]': 'fill',
-    '[tabBarHidden]': 'barHidden()',
+    '[tabBarHidden]': 'hidesBar()',
     '[tabBarTintColor]': 'tintColor() ?? defaults().tintColor',
     '[nativeContainerBackgroundColor]': 'backgroundColor() ?? defaults().backgroundColor',
     '[colorScheme]': 'colorScheme() ?? defaults().colorScheme',
@@ -164,8 +165,16 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
 
   // --- the bar itself -----------------------------------------------------
 
-  /** Hide the bar without unmounting the tabs, for a screen that wants the whole window. */
+  /**
+   * Hide the bar without unmounting the tabs, for a screen that wants the whole window. Unset, the
+   * bar is hidden while the page in front of the tab in front has `<native-header tabBarHidden>`.
+   */
   readonly barHidden = input(undefined, { transform: optionalBoolean });
+  /** What pages have asked of the bar: see `InTab.hideBar`. */
+  private readonly barRequests = signal<ReadonlySet<Signal<boolean>>>(new Set());
+  protected readonly hidesBar = computed(
+    () => this.barHidden() ?? [...this.barRequests()].some((hidden) => hidden()),
+  );
   /** The colour of the selected item. iOS. */
   readonly tintColor = input<string | number>();
   /** Behind the tabs, where a screen does not paint. */
@@ -521,7 +530,8 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
    * screen's stack answers instead.
    */
   private goBack(): boolean {
-    const first = this.entries[0];
+    const key = this.declared()[0]?.path();
+    const first = this.entries.find((entry) => entry.key === key);
     const selected = this.selected;
     if (!first || !selected || selected === first || !this.router) return false;
     if (!this.isActivated || !isShowing(this.router, selected.route)) return false;
@@ -679,6 +689,15 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     const outer = this.injector.get(SCREEN_IN_FRONT);
     const tab: InTab = {
       onLeave: (leave) => (entry.leaving.add(leave), () => entry.leaving.delete(leave)),
+      hideBar: (hidden) => {
+        this.barRequests.update((requests) => new Set(requests).add(hidden));
+        return () =>
+          this.barRequests.update((requests) => {
+            const rest = new Set(requests);
+            rest.delete(hidden);
+            return rest;
+          });
+      },
     };
     return Injector.create({
       parent: this.injector,

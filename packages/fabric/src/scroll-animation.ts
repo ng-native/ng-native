@@ -365,7 +365,7 @@ export function sharesAsPoints<T extends Track>(
  * A transform entry's amount as native's transform node takes it: points, a factor, or an angle
  * in radians. Null for what it cannot take, a percentage translate.
  */
-function amount(key: string, value: unknown): number | null {
+export function amount(key: string, value: unknown): number | null {
   if (typeof value === 'number') return value;
   if (typeof value !== 'string') return null;
   const angle = /^(-?[\d.]+)(deg|rad|grad|turn)$/.exec(value);

@@ -102,15 +102,18 @@ jobs:
           path: packages/web-compat/wpt/.cache/
           key: wpt-${{ steps.pin.outputs.commit }}-${{ hashFiles('packages/web-compat/wpt/pin.mjs') }}
 
-      # The suites of the DOM, selectors and the CSSOM: about four minutes on a laptop, where every
-      # suite in pin.mjs takes over eight, most of it files waiting out their time limit. The rest
-      # (events, geometry, the observers, canvas, parsing) is the full run, which a change to them
-      # runs locally before it opens: see CONTRIBUTING.md. A filter is whole for what it matches:
-      # a recorded file in these suites that is not run fails the check.
+      # The suites of the DOM, selectors, the CSSOM and IntersectionObserver: about five minutes on
+      # a laptop, where every suite in pin.mjs takes over eight, most of it files waiting out their
+      # time limit. IntersectionObserver is here because what an app's frames and commits do moves
+      # it, and a change elsewhere has moved it unseen before. The rest (events, geometry, the
+      # other observers, canvas, parsing) is the full run, which a change to them runs locally
+      # before it opens: see CONTRIBUTING.md. A filter is whole for what it matches: a recorded
+      # file in these suites that is not run fails the check.
       - name: Check the Web Platform Tests against the expectations
         run: >-
           node packages/web-compat/wpt/run.mjs --check
           dom/nodes/ dom/collections/ dom/traversal/ css/selectors/ css/cssom/ html/dom/ domparsing/
+          intersection-observer/
 
       # What this run found, to compare with the checked-in summary.txt.
       - if: failure()

@@ -22,6 +22,7 @@ import {
   type ComponentRef,
   type EnvironmentInjector,
   type EnvironmentProviders,
+  type ListenerOptions,
   type Provider,
   type RendererStyleFlags2,
   type Type,
@@ -44,6 +45,7 @@ import {
   nativePlatform,
   onFontsRegistered,
   onFontsSettled,
+  platformColourOf,
   reportUnboundFormsInput,
   styleSheetOf,
   type EngineNode,
@@ -54,6 +56,7 @@ import {
 } from '@ng-native/fabric';
 import { calmLoadingBanner, type LoadingBanner } from './dev-loading-view.ts';
 import { installHotEpoch } from './hot-epoch.ts';
+import { onSurfaceStop } from './surface-stop.ts';
 
 /**
  * Angular `(touchEnd)` -> Fabric `topTouchEnd`.
@@ -100,7 +103,16 @@ const styleValue = (value: unknown): unknown =>
 const declaredValue = (key: string, value: unknown): unknown =>
   key === 'fontFamily' && typeof value === 'string'
     ? (firstFamily(value) ?? value)
-    : styleValue(value);
+    : (platformColour(key, value) ?? styleValue(value));
+
+const COLOUR_KEY = /color$/i;
+
+/**
+ * `platform-color(link)` in a colour property, as the stylesheet holds it: the names, which the
+ * engine gives the platform's shape. Written as text, native reads no colour from it.
+ */
+const platformColour = (key: string, value: unknown): unknown =>
+  typeof value === 'string' && COLOUR_KEY.test(key) ? platformColourOf(value) : undefined;
 
 /**
  * A bound custom property's name, as it was written. Angular 22 compiles `[style.--tint]` to
@@ -480,14 +492,24 @@ class NativeRenderer implements Renderer2 {
     target: EngineNode | string,
     eventName: string,
     callback: (event: unknown) => boolean | void,
+    options?: ListenerOptions,
   ): () => void {
     for (const extension of extensions) {
-      const unlisten = extension.listen?.(target, eventName, callback, this.engine);
+      const unlisten = extension.listen?.(target, eventName, callback, this.engine, options);
       if (unlisten) return unlisten;
     }
     // Angular's names for a global target, 'window', 'document' and 'body': there is none here.
     if (typeof target === 'string') return () => {};
-    return this.engine.setEventListener(target, topLevelType(eventName), callback);
+    // `once` taken off before the first call: the engine keeps a listener until it is told.
+    let unlisten = () => {};
+    const listener = options?.once
+      ? (event: unknown) => {
+          unlisten();
+          return callback(event);
+        }
+      : callback;
+    unlisten = this.engine.setEventListener(target, topLevelType(eventName), listener);
+    return unlisten;
   }
 }
 
@@ -506,12 +528,15 @@ export interface RendererExtension {
   /**
    * Take a listener over: answer what removes it, or nothing to leave it to the renderer. The
    * target is a node, or the name Angular gives a global one: `'window'`, `'document'`, `'body'`.
+   * The options are what a script gave `Renderer2.listen`: whether the listener hears the event
+   * as it goes down, once only, and passively.
    */
   listen?(
     target: EngineNode | string,
     eventName: string,
     callback: (event: unknown) => boolean | void,
     engine: Engine,
+    options?: ListenerOptions,
   ): (() => void) | undefined;
   /**
    * Told of each element a template creates, before it has attributes or children: where an
@@ -1248,6 +1273,19 @@ export function mount(
   for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
 
   const applicationRef = injector.get(ApplicationRef);
+  // The app goes with the surface it is on, which Fabric stops when, among others, Android
+  // recreates the activity: see `surface-stop.ts`. What its destroy throws goes to its own
+  // `ErrorHandler`, looked up while the app can still answer, rather than into Fabric's call.
+  applicationRef.onDestroy(
+    onSurfaceStop(rootTag, () => {
+      const errors = injector.get(ErrorHandler);
+      try {
+        applicationRef.destroy();
+      } catch (error) {
+        errors.handleError(error);
+      }
+    }),
+  );
 
   // `ApplicationRef.bootstrap()` does all of this; `createComponent` does not, and we
   // deliberately do not use `bootstrap()` because it wants a DOM selector. Order and

@@ -73,6 +73,20 @@ class Grow {
   readonly document: Dom = inject(DOCUMENT);
 }
 
+@Component({
+  selector: 'x-details',
+  template: `
+    <input testID="caret" [style]="caret()" />
+    <input testID="sized" />
+    <textarea testID="columns"></textarea>
+    <div testID="plain" [style]="caret()"></div>
+  `,
+})
+class Details {
+  readonly document: Dom = inject(DOCUMENT);
+  readonly caret = signal('caret-color: transparent');
+}
+
 afterEach(cleanup);
 
 const fields = async () => {
@@ -216,6 +230,88 @@ describe('a text field', () => {
     assert.deepEqual(typed, ['Hi']);
   });
 
+  it('puts the edit back that brought the return a listener stopped, by command', async () => {
+    // Native adds the line whatever is said of the key: the text before it is set again, naming
+    // the edit it follows, and a key that was not stopped is a new line, as with nobody listening.
+    const { app, document } = await fields();
+    const long = document.getElementById('long');
+    const sets = () =>
+      app.fabric.commands
+        .filter(({ name }) => name === 'setTextAndSelection')
+        .map(({ args }) => args);
+    let stopping = true;
+    long.addEventListener(
+      'keydown',
+      (event: Dom) => stopping && event.key === 'Enter' && event.preventDefault(),
+    );
+    await fireEvent(field('long'), 'topChange', { text: 'hi', eventCount: 1 });
+    await fireEvent(field('long'), 'topKeyPress', { key: 'Enter' });
+    await fireEvent(field('long'), 'topChange', { text: 'hi\n', eventCount: 2 });
+    assert.deepEqual(sets(), [[2, 'hi', -1, -1]]);
+    await fireEvent(field('long'), 'topKeyPress', { key: 'a' });
+    await fireEvent(field('long'), 'topChange', { text: 'hia', eventCount: 3 });
+    assert.equal(long.value, 'hia');
+    // A return nobody stopped is a new line, and nothing is put back.
+    stopping = false;
+    await fireEvent(field('long'), 'topKeyPress', { key: 'Enter' });
+    await fireEvent(field('long'), 'topChange', { text: 'hia\n', eventCount: 4 });
+    assert.equal(long.value, 'hia\n');
+    assert.equal(sets().length, 1);
+  });
+
+  it('empties a field a library clears after something was typed in it', async () => {
+    // A field of chips takes what was typed as a chip and sets the value to nothing. What was
+    // typed is native's alone, so nothing is no change to the text the view was given: it is
+    // set by command, naming the edit it follows.
+    const { app, document } = await fields();
+    const long = document.getElementById('long');
+    const sets = () =>
+      app.fabric.commands
+        .filter(({ name }) => name === 'setTextAndSelection')
+        .map(({ args }) => args);
+    await fireEvent(field('long'), 'topChange', { text: 'fast', eventCount: 4 });
+    long.value = '';
+    await settle();
+    assert.deepEqual(sets(), [[4, '', -1, -1]]);
+    assert.equal(long.value, '');
+    // A value that is a change to what the view was given is sent as one, with no command.
+    long.value = 'set';
+    await settle();
+    assert.equal(field('long').props['text'], 'set');
+    assert.equal(sets().length, 1);
+  });
+
+  it('reads an input mode as the keyboard, and an autocomplete as what the system offers', async () => {
+    const { document } = await fields();
+    const name = document.getElementById('name');
+    name.setAttribute('inputmode', 'numeric');
+    name.setAttribute('autocomplete', 'one-time-code');
+    await settle();
+    assert.equal(field('name').props['keyboardType'], 'number-pad');
+    assert.equal(prop('name', 'inputMode'), undefined, 'not set as written');
+    assert.equal(field('name').props['textContentType'], 'oneTimeCode');
+    assert.equal(field('name').props['autoComplete'], 'sms-otp');
+    name.removeAttribute('inputmode');
+    name.removeAttribute('autocomplete');
+    await settle();
+    assert.equal(prop('name', 'keyboardType'), undefined);
+    assert.equal(prop('name', 'textContentType'), undefined);
+    assert.equal(prop('name', 'autoComplete'), undefined);
+  });
+
+  it('answers with the type an input was written with, and text where it has none', async () => {
+    // A library asks whether a key was typed into a text field by `type.toLowerCase()`.
+    const { document } = await fields();
+    const name = document.getElementById('name');
+    assert.equal(name.type, 'text');
+    assert.equal(document.getElementById('long').type, 'textarea');
+    assert.equal(document.getElementById('check').type, 'checkbox');
+    for (const type of ['password', 'email']) {
+      name.setAttribute('type', type);
+      assert.equal(name.type, type);
+    }
+  });
+
   it('reads a type as the keyboard and entry it stands for, and follows it changing', async () => {
     const { document } = await fields();
     const name = document.getElementById('name');
@@ -318,5 +414,74 @@ describe('a text field', () => {
     } finally {
       fabric.frames.get = get;
     }
+  });
+});
+
+describe('the details of a text field', () => {
+  const details = async (providers: unknown[] = [provideWebCompat()]) => {
+    const app = await render(Details, { providers: providers as never });
+    await settle();
+    return { app, instance: app.instance, document: app.instance.document as Dom };
+  };
+  const wide = (id: string) => Math.round(field(id).props['width'] as number);
+
+  it('hides its caret for a transparent caret-color, and colours the selection for another', async () => {
+    // A one-time code field is one input drawn as a slot a character, with a caret of its own.
+    const { instance } = await details();
+    assert.equal(prop('caret', 'caretHidden'), true);
+    assert.equal(prop('caret', 'selectionColor'), undefined);
+    instance.caret.set('caret-color: red');
+    await settle();
+    assert.equal(prop('caret', 'caretHidden'), undefined);
+    assert.equal(prop('caret', 'selectionColor'), 'red');
+    instance.caret.set('caret-color: auto');
+    await settle();
+    assert.equal(prop('caret', 'caretHidden'), undefined);
+    assert.equal(prop('caret', 'selectionColor'), undefined, "the platform's own again");
+  });
+
+  it('leaves the caret-color of anything but a field as a style', async () => {
+    await details();
+    assert.equal(prop('plain', 'caretHidden'), undefined);
+    assert.equal(prop('plain', 'selectionColor'), undefined);
+  });
+
+  it('is twenty characters wide with no size, as wide as its size says, and twenty again without', async () => {
+    const { document } = await details();
+    const twenty = wide('sized');
+    assert.ok(twenty > 0);
+    const area = wide('columns');
+    assert.ok(area > 0, 'a text area with no cols too');
+    const sized = document.querySelector('input[testID="sized"]');
+    sized.setAttribute('size', '10');
+    await settle();
+    assert.ok(wide('sized') < twenty);
+    assert.equal(sized.getAttribute('size'), '10');
+    sized.removeAttribute('size');
+    await settle();
+    assert.equal(sized.getAttribute('size'), null);
+    assert.equal(wide('sized'), twenty);
+    sized.setAttribute('size', '10');
+    sized.setAttribute('size', '0');
+    await settle();
+    assert.equal(wide('sized'), twenty, 'a size of none is no size');
+    const columns = document.querySelector('textarea');
+    columns.setAttribute('cols', '10');
+    await settle();
+    assert.ok(wide('columns') < area);
+    assert.equal(columns.getAttribute('cols'), '10');
+    columns.setAttribute('cols', '0');
+    await settle();
+    assert.equal(wide('columns'), area, 'no columns is none');
+    columns.setAttribute('cols', '10');
+    columns.removeAttribute('cols');
+    await settle();
+    assert.equal(wide('columns'), area);
+  });
+
+  it('is a plain view with none of it in an app without provideWebCompat()', async () => {
+    await details([]);
+    assert.equal(prop('caret', 'caretHidden'), undefined);
+    assert.equal(prop('sized', 'size'), undefined);
   });
 });

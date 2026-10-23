@@ -7,7 +7,10 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { SyntheticEvent } from '@ng-native/fabric';
+import type { BrowserNode } from './dom-node.ts';
 import type { NestedPressApp } from './responder-app.ts';
+import { ResponderSystem } from './responder.ts';
 import { installJsdomEnvironment } from './jsdom-env.ts';
 
 async function bootstrapNested() {
@@ -88,5 +91,58 @@ describe('responder negotiation, over a real nested tree', () => {
     assert.deepEqual(app.log(), ['outer']);
 
     componentRef.destroy();
+  });
+});
+
+describe('responder negotiation on a move', () => {
+  /** Nodes as the negotiation reads them: only the parent chain matters to it. */
+  const tree = () => {
+    const outer = { parent: null } as unknown as BrowserNode;
+    const inner = { parent: outer } as unknown as BrowserNode;
+    const leaf = { parent: inner } as unknown as BrowserNode;
+    const sibling = { parent: outer } as unknown as BrowserNode;
+    return { outer, inner, leaf, sibling };
+  };
+  const event = new SyntheticEvent({});
+
+  it('hands a drag to an ancestor that claims a move, terminating the responder', () => {
+    const { outer, inner } = tree();
+    const log: string[] = [];
+    const system = new ResponderSystem();
+    system.setResponder(inner, {
+      onStartShouldSetResponder: () => true,
+      onResponderGrant: () => log.push('inner:grant'),
+      onResponderTerminate: () => log.push('inner:terminate'),
+    });
+    system.setResponder(outer, {
+      onMoveShouldSetResponderCapture: () => true,
+      onResponderGrant: () => log.push('outer:grant'),
+      onResponderMove: () => log.push('outer:move'),
+    });
+
+    system.runResponder(inner, 'topTouchStart', event);
+    system.runResponder(inner, 'topTouchMove', event);
+
+    assert.equal(system.responder, outer);
+    assert.deepEqual(log, ['inner:grant', 'inner:terminate', 'outer:grant', 'outer:move']);
+  });
+
+  it('asks only above the responder, from what it and the target are both in', () => {
+    const { outer, inner, leaf, sibling } = tree();
+    let asked = 0;
+    const system = new ResponderSystem();
+    system.setResponder(inner, { onStartShouldSetResponder: () => true });
+    system.setResponder(leaf, { onMoveShouldSetResponder: () => (asked++, true) });
+    system.setResponder(outer, { onMoveShouldSetResponder: () => true });
+
+    system.runResponder(inner, 'topTouchStart', event);
+    system.runResponder(leaf, 'topTouchMove', event);
+    assert.equal(system.responder, outer);
+    assert.equal(asked, 0, 'the leaf inside the responder is never asked');
+
+    system.runResponder(inner, 'topTouchEnd', event);
+    system.runResponder(inner, 'topTouchStart', event);
+    system.runResponder(sibling, 'topTouchMove', event);
+    assert.equal(system.responder, outer, 'and a finger on a sibling asks what both are in');
   });
 });

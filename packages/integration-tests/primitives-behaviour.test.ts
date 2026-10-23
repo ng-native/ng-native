@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { afterEach, before, describe, it, mock } from 'node:test';
 import type { Type } from '@angular/core';
 import { Keyboard } from '@ng-native/device';
+import { registerPlatformComponents } from '@ng-native/fabric';
 import {
   cleanup,
   fireEvent,
@@ -231,6 +232,33 @@ describe('scroll view keyboard policy', () => {
     assert.deepEqual(fabric.commands, []);
   });
 
+  it('leaves the keyboard up for a tap on another field', async () => {
+    // React Native's ScrollView lets a tap on any text input through, not only on the focused one:
+    // moving from one field of a form to the next keeps the keyboard up.
+    const { fabric } = await boot('KeyboardTaps');
+    await fireEvent(byID(fabric, 'field'), 'focus', {});
+    await touch(byID(fabric, 'next'), 'topTouchStart');
+    await touch(byID(fabric, 'next'), 'topTouchEnd');
+    assert.deepEqual(fabric.commands, []);
+  });
+
+  it("leaves the keyboard up for a tap on another field under Android's view name", async () => {
+    registerPlatformComponents('android');
+    try {
+      const { fabric } = await boot('KeyboardTaps');
+      await fireEvent(byID(fabric, 'field'), 'focus', {});
+      await touch(byID(fabric, 'next'), 'topTouchStart');
+      await touch(byID(fabric, 'next'), 'topTouchEnd');
+      assert.deepEqual(fabric.commands, []);
+      // A tap elsewhere still dismisses.
+      await touch(byID(fabric, 'elsewhere'), 'topTouchStart');
+      await touch(byID(fabric, 'elsewhere'), 'topTouchEnd');
+      assert.deepEqual(fabric.commands, [{ viewName: 'AndroidTextInput', name: 'blur', args: [] }]);
+    } finally {
+      registerPlatformComponents('ios');
+    }
+  });
+
   // A view takes focus from a hardware keyboard or a D-pad, and holds no keyboard to put away, so
   // the scroll view has no reason to take the tap from the child it lands on.
   it('leaves a tap to its child while what has the focus is not a text input', async () => {
@@ -272,6 +300,15 @@ describe('the props and behaviours other fixtures leave at their defaults', () =
     await touch(byID(fabric, 'elsewhere3'), 'topTouchStart');
     await touch(byID(fabric, 'elsewhere3'), 'topTouchEnd');
     assert.deepEqual(fabric.commands, [{ viewName: 'TextInput', name: 'blur', args: [] }]);
+  });
+
+  it('leaves the keyboard up with taps handled for a tap on another field', async () => {
+    // A text input takes the tap in React Native, as a pressable does.
+    const { fabric } = await boot('Odds');
+    await fireEvent(byID(fabric, 'field3'), 'focus', {});
+    await touch(byID(fabric, 'next3'), 'topTouchStart');
+    await touch(byID(fabric, 'next3'), 'topTouchEnd');
+    assert.deepEqual(fabric.commands, []);
   });
 
   it('reads a named deceleration rate as the number native takes', async () => {

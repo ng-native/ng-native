@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Component } from '@angular/core';
+import { Component, Renderer2 } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
@@ -234,6 +234,19 @@ describe('@ng-native/web-compat, a drag kept from the page', () => {
     } finally {
       window.removeEventListener('touchmove', prevent);
     }
+  });
+
+  it('stops it for a document listener a script added through the renderer as not passive', async () => {
+    // As CDK's drag and drop keeps a drag from the page: with `Renderer2.listen`, not the document.
+    const { app, document, drag } = await page();
+    const renderer = app.componentRef.injector.get(Renderer2);
+    const stop = renderer.listen(document, 'touchmove', prevent, { passive: false });
+    try {
+      assert.deepEqual(drag(), { during: false, after: true });
+    } finally {
+      stop();
+    }
+    assert.deepEqual(drag(), { during: true, after: true }, 'and not once it is removed');
   });
 
   it("leaves the default of a move a template's document listener prevented unprevented", async () => {

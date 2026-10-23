@@ -42,7 +42,8 @@ export class DeviceOrientation {
           'expo-screen-orientation',
           () => require('expo-screen-orientation') as typeof import('expo-screen-orientation'),
         );
-        if (!expo) return NOTHING;
+        // A copy: with no screen to share, each app locks its own.
+        if (!expo) return { ...NOTHING };
         // Missing from the build: stand-ins, to say so when they are used.
         if (!present(expo)) return { reported: expo, lock: expo, unlock: expo } as never;
 

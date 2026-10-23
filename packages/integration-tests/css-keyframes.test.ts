@@ -431,6 +431,18 @@ describe('playing an animation', () => {
     assert.equal(s.painted('width'), 50, 'the last frame, not the rule');
   });
 
+  it('holds the last frame once script holds it, as `forwards` does, whatever its own fill', () => {
+    // `updateTiming({ fill: 'forwards' })` in the Web Animations API: a dialog that closes holds
+    // each exit animation at its end, so nothing snaps back before the dialog is taken away.
+    const s = scene(css);
+    s.classes('enter');
+    s.tick(50);
+    s.view.playing!.held = true;
+    s.tick(70);
+    assert.equal(s.painted('width'), 50, 'the last frame, not the rule');
+    assert.equal(s.engine.animating, false, 'and nothing is left ticking');
+  });
+
   it('keeps the resting style through the delay, then plays from the first frame', () => {
     const s = scene(`${css} view.late { animation: rise 100ms linear 50ms; }`);
     s.classes('late');
@@ -1373,5 +1385,20 @@ describe('an animation whose every part is a token, as tw-animate-css writes one
     assert.equal(late.props()['opacity'], 0, 'held through its delay');
     late.frame(150);
     assert.equal(late.props()['opacity'] ?? 1, 1);
+  });
+
+  const OPEN =
+    '@keyframes open { from { height: 0 } to { height: var(--h) } }' +
+    ' .a { height: 0; animation: open 200ms linear forwards }';
+
+  it('is kept for the engine to settle, in a sheet of the app and in one of a library', () => {
+    const [, written] = compileCss(OPEN, 'app.css').keyframes.open;
+    assert.deepEqual(written.deferred.length, 1);
+    const sheet = compileCss(OPEN, 'library.css', { generated: true });
+    const [, to] = sheet.keyframes.open;
+    assert.deepEqual(
+      to.deferred.map((one: { props: string[] }) => one.props),
+      [['height']],
+    );
   });
 });

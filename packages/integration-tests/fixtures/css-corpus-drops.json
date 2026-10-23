@@ -1,7 +1,7 @@
 {
   "bootstrap": {
     "rules": 2592,
-    "dropped": 579,
+    "dropped": 576,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -64,6 +64,7 @@
       "justifyContent",
       "left",
       "letterSpacing",
+      "lineBreakStrategyIOS",
       "lineHeight",
       "marginBottom",
       "marginLeft",
@@ -163,7 +164,7 @@
         "var() cannot be used in the 'background-image' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 4
       },
       "background-position-x": {
-        "var() cannot be used in the 'background-position-x' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'background-position-x' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "background-size": {
         "'background-size' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
@@ -301,7 +302,7 @@
         "'visibility' has no React Native equivalent: no style prop of a native view does what it does. Use opacity: 0 to hide a box and keep its space, or display: none to remove it.": 20
       },
       "word-break": {
-        "'word-break' has no React Native equivalent: no style prop of a native view does what it does.": 4
+        "word-break: break-word has no native equivalent; normal and keep-all, on iOS, are read.": 1
       },
       "word-spacing": {
         "'word-spacing' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
@@ -487,7 +488,7 @@
         "'border-inline-start-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
       "border-inline-start-style": {
-        "var() cannot be used in the 'border-inline-start-style' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'border-inline-start-style' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "border-spacing": {
         "'border-spacing' has no React Native equivalent: no style prop of a native view does what it does.": 1
@@ -572,12 +573,10 @@
         "arithmetic with tokens in it cannot take 'vh' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
       },
       "overflow-x": {
-        "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 10,
-        "var() cannot be used in the 'overflow-x' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 11
       },
       "overflow-y": {
-        "'overflow-y': native has one overflow for both axes. Write 'overflow'.": 8,
-        "var() cannot be used in the 'overflow-y' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'overflow-y': native has one overflow for both axes. Write 'overflow'.": 9
       },
       "padding-left": {
         "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
@@ -595,7 +594,7 @@
         "var() cannot be used in the 'text-decoration' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 3
       },
       "text-rendering": {
-        "var() cannot be used in the 'text-rendering' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'text-rendering' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "text-size-adjust": {
         "'text-size-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 1
@@ -616,7 +615,7 @@
         "'width: unset' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 7
       },
       "word-break": {
-        "'word-break' has no React Native equivalent: no style prop of a native view does what it does.": 1
+        "word-break: break-word has no native equivalent; normal and keep-all, on iOS, are read.": 1
       },
       "word-wrap": {
         "'word-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 2
@@ -764,14 +763,13 @@
         "'-webkit-tap-highlight-color' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 1
       },
       "accent-color": {
-        "var() cannot be used in the 'accent-color' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'accent-color' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "appearance": {
         "'appearance' has no React Native equivalent: no style prop of a native view does what it does.": 14
       },
       "backdrop-filter": {
-        "'backdrop-filter' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2,
-        "var() cannot be used in the 'backdrop-filter' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 2
+        "'backdrop-filter' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 4
       },
       "background-attachment": {
         "'background-attachment: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -881,7 +879,7 @@
   },
   "open-props": {
     "rules": 87,
-    "dropped": 179,
+    "dropped": 175,
     "emitted": [
       "alignItems",
       "aspectRatio",
@@ -925,6 +923,7 @@
       "height",
       "justifyItems",
       "letterSpacing",
+      "lineBreakStrategyIOS",
       "lineHeight",
       "marginBottom",
       "marginLeft",
@@ -944,6 +943,7 @@
       "placeholderTextColor",
       "rowGap",
       "textAlign",
+      "textBreakStrategy",
       "textDecorationColor",
       "touchAction",
       "width"
@@ -971,7 +971,7 @@
         "'-webkit-tap-highlight-color' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 1
       },
       "accent-color": {
-        "var() cannot be used in the 'accent-color' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'accent-color' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "background-origin": {
         "'background-origin' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -980,7 +980,7 @@
         "'border-collapse' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "caret-color": {
-        "var() cannot be used in the 'caret-color' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'caret-color' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "color-scheme": {
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
@@ -1017,9 +1017,6 @@
       },
       "text-underline-offset": {
         "'text-underline-offset' has no React Native equivalent: no style prop of a native view does what it does.": 1
-      },
-      "text-wrap": {
-        "'text-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 4
       },
       "white-space": {
         "white-space: pre is not supported: native text has no switch for how spaces and line breaks are kept. nowrap, read as one line, and normal are.": 1

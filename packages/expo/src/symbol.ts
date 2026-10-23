@@ -2,9 +2,15 @@
  * `<expo-symbol>`: an SF Symbol, from `expo-symbols`, typed so a template is checked against the
  * props. iOS only. Registered with `registerExpoViews('expo-symbol')`.
  *
- * It does what the module's React component does before native sees the props: the view is `size`
- * points square (24 unless set), `type` is `monochrome` unless set, one colour or several become
- * the list native takes, and an `animationSpec` is what turns animation on.
+ * It does what the module's React component does before native sees the props: `type` is
+ * `monochrome` unless set, one colour or several become the list native takes, and an
+ * `animationSpec` is what turns animation on.
+ *
+ * `size` is a point size, as SwiftUI's `.font(.system(size:))` takes it (24 unless set): the view
+ * is the size of the symbol's image at that point size, weight and scale, which this package's
+ * native module reports, and the symbol fills it. Without that module, as in Expo Go, the view is
+ * `size` points square, as the React component makes it, and the symbol is fitted into it, which
+ * draws most symbols smaller than SwiftUI does.
  *
  * ```html
  * <expo-symbol name="heart.fill" [size]="28" tintColor="#ff2d55" weight="semibold" />
@@ -68,8 +74,8 @@ export interface SymbolAnimationSpec {
     '[resizeMode]': 'resizeMode()',
     '[animationSpec]': 'animationSpec()',
     '[animated]': 'animated()',
-    '[style.width]': 'size()',
-    '[style.height]': 'size()',
+    '[style.width]': 'box()[0]',
+    '[style.height]': 'box()[1]',
   },
 })
 export class ExpoSymbol {
@@ -84,7 +90,7 @@ export class ExpoSymbol {
   readonly colors = input<string | readonly string[]>();
   readonly resizeMode = input<SymbolResizeMode>();
   readonly animationSpec = input<SymbolAnimationSpec>();
-  /** Points, both ways. */
+  /** The point size the symbol is drawn at. */
   readonly size = input(24, { transform: (value: unknown) => optionalNumber(value) ?? 24 });
 
   protected readonly colourList = computed(() => {
@@ -92,4 +98,32 @@ export class ExpoSymbol {
     return colours === undefined ? undefined : typeof colours === 'string' ? [colours] : colours;
   });
   protected readonly animated = computed(() => this.animationSpec() !== undefined);
+  /** Width and height: the symbol image's at the point size, or the square without native's. */
+  protected readonly box = computed(() => {
+    const size = this.size();
+    return symbolImageSize(this.name(), size, this.weight(), this.scale()) ?? [size, size];
+  });
+}
+
+/** This package's native symbol module, iOS only and absent from Expo Go. */
+interface NativeSymbol {
+  imageSize?(
+    name: string,
+    pointSize: number,
+    weight?: SymbolWeight,
+    scale?: SymbolScale,
+  ): readonly number[] | null;
+}
+
+/** The size of the symbol's image in points, or null where native cannot say. */
+function symbolImageSize(
+  name: string,
+  pointSize: number,
+  weight: SymbolWeight | undefined,
+  scale: SymbolScale | undefined,
+): readonly [number, number] | null {
+  const native = (globalThis as { expo?: { modules?: { NgNativeSymbol?: NativeSymbol } } }).expo
+    ?.modules?.NgNativeSymbol;
+  const size = native?.imageSize?.(name, pointSize, weight, scale);
+  return size ? [size[0]!, size[1]!] : null;
 }

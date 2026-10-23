@@ -118,6 +118,28 @@ describe('the renderer', () => {
   });
 });
 
+describe('a listener added through the renderer with no extension to take it', () => {
+  it('hears the event once only where it is given once', async () => {
+    const mod = await compileFixture('fixtures/features.ts');
+    const app = mount(1, mod['Features'] as Type<unknown>, createFakeFabric());
+    try {
+      await settle();
+      const renderer = app.componentRef.injector.get(RendererFactory2).createRenderer(null, null);
+      const node = renderer.createElement('view') as EngineNode;
+      renderer.appendChild(app.engine.root, node);
+      let once = 0;
+      let every = 0;
+      renderer.listen(node, 'press', () => void once++, { once: true });
+      renderer.listen(node, 'press', () => void every++);
+      app.engine.dispatchEvent(node, 'topPress', {});
+      app.engine.dispatchEvent(node, 'topPress', {});
+      assert.deepEqual([once, every], [1, 2]);
+    } finally {
+      app.applicationRef.destroy();
+    }
+  });
+});
+
 describe('taking a node out through the renderer', () => {
   it('takes it out of the parent it has, whatever parent it is handed', async () => {
     // Angular's DOM renderer does: it is handed a parent for the sake of an older one that did

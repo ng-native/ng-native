@@ -90,7 +90,7 @@ stylesheet, or in the component whose styles use them.
 
 ### A variable font
 
-A variable font is one file that covers a range of weights, declared as CSS declares it:
+A variable font is one file that covers a range of weights. Declare it once, with the range:
 
 ```css
 @font-face {
@@ -100,9 +100,42 @@ A variable font is one file that covers a range of weights, declared as CSS decl
 }
 ```
 
-A weight inside the range is covered by that face, and the text keeps its `font-weight`, since the
-weight is what native picks the instance by. The face is registered as `Inter-100to900`. Two files
-that split a family, `100 400` and `500 900`, are picked between by the range each covers.
+The face is registered as `Inter-100to900`, a text whose `font-weight` falls in the range is
+pointed at it, and the weight stays on the text for the platform to pick the instance by. A weight
+outside the range takes the face nearest it, as in a browser. From Expo SDK 58:
+
+- **iOS** draws the font's named instance nearest the weight. A weight between two named instances,
+  such as 650, draws one of them.
+- **Android 15 and later** draws the weight from the font's `wght` axis. **Android 10 to 14** draw
+  it at the nearest hundred, 100 to 900.
+- **Android 9 and earlier** draws the font's default instance, made bolder by the platform at a bold
+  weight.
+
+Before Expo SDK 58, expo-font registers only the font's default instance, so the weight picks
+nothing: iOS draws the default instance at every weight, and Android draws it below 700 and its
+system font at 700 and above. The build warns about a face with a range there. On those versions,
+declare one file per weight instead, each with the weight it draws:
+
+```css
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-Regular.ttf');
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-SemiBold.ttf');
+  font-weight: 600;
+}
+```
+
+Many variable fonts ship their static weights beside the variable file. For one that does not,
+fontTools cuts one:
+
+```sh
+fonttools varLib.instancer Inter-VariableFont_wght.ttf wght=600 -o Inter-SemiBold.ttf
+```
 
 ## In a SwiftUI `font` modifier
 

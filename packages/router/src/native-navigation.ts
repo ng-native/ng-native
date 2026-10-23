@@ -21,13 +21,15 @@ import {
   NavigationError,
   NavigationSkipped,
   NavigationSkippedCode,
+  PRIMARY_OUTLET,
   Router,
   type Navigation,
   type NavigationExtras,
 } from '@angular/router';
 import { NativeBack } from './native-back.ts';
 import type { ScreenPresentation, StackPresentation } from './screen-presentation.ts';
-import { leavingPresented, presentedCommands } from './presented-route.ts';
+import { PRESENTED, leavingPresented, presentedCommands } from './presented-route.ts';
+import { hasCommandKeyParameters, urlCommands, withWrittenParameters } from './url-commands.ts';
 
 /** What `Router` takes: a url string, or the array form with segments and params. */
 export type NavigationCommands = string | readonly unknown[];
@@ -60,6 +62,12 @@ const asksMore = (commands: NavigationCommands, extras: NavigationExtras): boole
   (typeof commands === 'string' && /[?#]/.test(commands)) ||
   extras.queryParams != null ||
   extras.fragment != null;
+
+/** A url string's path, and the outlet whose segments it writes. */
+interface WrittenPath {
+  readonly path: string;
+  readonly outlet: string;
+}
 
 /** A url string up to its query or fragment. */
 const pathOf = (url: string): string => url.split(/[?#]/, 1)[0]!;
@@ -215,7 +223,9 @@ export class NativeNavigation {
     const over = this.overTheTabInFront(commands, extras);
     if (!over) return this.go(commands, extras, intent);
     return over.then((found) =>
-      this.go(found?.commands ?? commands, found?.extras ?? extras, intent),
+      found
+        ? this.go(found.commands, found.extras, intent, found.written)
+        : this.go(commands, extras, intent),
     );
   }
 
@@ -288,6 +298,9 @@ export class NativeNavigation {
     commands: NavigationCommands,
     options: NativeNavigationOptions,
     intent: NativeIntent,
+    written: WrittenPath | null = typeof commands === 'string'
+      ? { path: pathOf(commands), outlet: PRIMARY_OUTLET }
+      : null,
   ): Promise<boolean> {
     const { presentation, state, ...extras } = options;
     const full: NativeIntent = presentation
@@ -295,13 +308,23 @@ export class NativeNavigation {
       : intent;
 
     const navigate = () => {
-      const list = typeof commands === 'string' ? [pathOf(commands)] : [...commands];
+      const list =
+        typeof commands === 'string' ? urlCommands(this.router, pathOf(commands)) : [...commands];
       const all = {
         ...extras,
         ...(typeof commands === 'string' ? this.queryOf(commands, extras) : {}),
         state: { ...(state as object), [NATIVE_INTENT]: full },
       };
       const leaving = leavingPresented(this.router, list, all);
+      // A parameter the commands could not carry goes back on the tree they make, which is what
+      // `navigate` would go to; `navigateByUrl` then takes it as it is.
+      if (written && hasCommandKeyParameters(this.router, written.path)) {
+        const tree = leaving ?? this.router.createUrlTree(list, all);
+        return this.router.navigateByUrl(
+          withWrittenParameters(this.router, tree, written.path, written.outlet),
+          all,
+        );
+      }
       return leaving ? this.router.navigateByUrl(leaving, all) : this.router.navigate(list, all);
     };
     // A screen stacked on the first one waits for it. Navigating while the router's first
@@ -356,8 +379,9 @@ export class NativeNavigation {
   /** The path the commands lead to, without its query and fragment. */
   private pathFor(commands: NavigationCommands, extras: NavigationExtras): string {
     if (typeof commands === 'string' && commands.startsWith('/')) return pathOf(commands);
-    // Resolved as `go` navigates them: a relative string against `relativeTo`, as a command.
-    const list = typeof commands === 'string' ? [pathOf(commands)] : [...commands];
+    // Resolved as `go` navigates them: a relative string against `relativeTo`.
+    const list =
+      typeof commands === 'string' ? urlCommands(this.router, pathOf(commands)) : [...commands];
     return pathOf(this.router.serializeUrl(this.router.createUrlTree(list, extras)));
   }
 
@@ -371,7 +395,11 @@ export class NativeNavigation {
   private overTheTabInFront(
     commands: NavigationCommands,
     extras: NavigationExtras,
-  ): Promise<{ commands: unknown[]; extras: NavigationExtras } | null> | null {
+  ): Promise<{
+    commands: unknown[];
+    extras: NavigationExtras;
+    written: WrittenPath;
+  } | null> | null {
     if (!this.outlets.presents) return null;
     const path = this.pathFor(commands, extras);
     // A tab in front of a bar a screen covers is behind that screen just the same.
@@ -379,7 +407,11 @@ export class NativeNavigation {
     const query = typeof commands === 'string' ? this.queryOf(commands, extras) : {};
     return presentedCommands(this.router, path).then(
       (presented) =>
-        presented && { commands: presented, extras: { ...extras, ...query, relativeTo: null } },
+        presented && {
+          commands: presented,
+          extras: { ...extras, ...query, relativeTo: null },
+          written: { path, outlet: PRESENTED },
+        },
     );
   }
 

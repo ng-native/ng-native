@@ -7,6 +7,7 @@
  * `@ng-native/expo`'s `provideNativeKeyboard()` adds the duration and curve. See `keyboardSource`.
  */
 import {
+  ApplicationRef,
   DestroyRef,
   InjectionToken,
   Service,
@@ -15,14 +16,22 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
-import { HostEngine } from '@ng-native/fabric';
-import { reactNative, type NativeKeyboardEvent } from './react-native.ts';
+import { HostEngine, nativePlatform, type HostNode } from '@ng-native/fabric';
+import {
+  edgeToEdgeFlag,
+  reactNative,
+  type NativeKeyboardEvent,
+  type ReactNative,
+} from './react-native.ts';
 
 /** What the platform reports when the keyboard moves. */
 export interface KeyboardMetrics {
   /** Height in dp; zero when the keyboard is hidden. */
   readonly height: number;
-  /** Where its top edge is, from the top of the screen. Absent when hidden. */
+  /**
+   * Where its top edge is, from the top of the screen. Absent when hidden. A view measured in the
+   * window is compared with it less `Keyboard.windowTop`.
+   */
   readonly screenY?: number;
   /** How long its own animation takes, in ms, for anything moving with it. */
   readonly duration?: number;
@@ -45,6 +54,12 @@ export interface KeyboardSource {
    */
   subscribeMotion?(listener: (frame: KeyboardMetrics | null) => void): () => void;
   dismiss(): void;
+  /**
+   * How far below the top of the screen the window a view is measured in starts, in points, for
+   * a source that knows it is not zero. Read when it is compared, as it changes with the status
+   * bar. See `keyboardSource`.
+   */
+  readonly windowTop?: number;
 }
 
 /** The timing a keyboard event carries, when it carries any. */
@@ -64,7 +79,8 @@ const metricsOf = (event: NativeKeyboardEvent): KeyboardMetrics => ({
  *
  * On iOS the Will events: they arrive as the keyboard starts to move, carrying its duration and
  * curve, so a layout configured from them moves with the keyboard. The Did events arrive once it
- * has landed, and a layout that waits for them moves after it. `keyboardWillChangeFrame` covers a
+ * has landed, and a layout that waits for them moves after it, so they are heard only until the
+first Will event, for a keyboard already moving when listening starts. `keyboardWillChangeFrame` covers a
  * keyboard that changes size while it is up - the predictive bar, another language's layout - and
  * is ignored while it is down: UIKit posts one beside every show and hide as well, and the one
  * beside a hide is the frame the keyboard leaves by, off the bottom of the screen.
@@ -72,6 +88,12 @@ const metricsOf = (event: NativeKeyboardEvent): KeyboardMetrics => ({
  * Android sends no Will events at all, so there it is the Did events. They arrive once the
  * window's insets have changed, which is as the keyboard starts to move rather than once it has
  * stopped, with a duration of zero: they say nothing of the motion.
+ *
+ * Both platforms report the keyboard's `screenY` from the top of the screen. iOS measures a view
+ * from there too. Android measures it from below the status bar when React Native's edge-to-edge
+ * flag is off, even in an app drawn under the bar, such as Expo Go, which leaves the flag off: its
+ * `measureInWindow` leaves out the bar's inset then. `windowTop` is that inset, zero when the flag
+ * is on, which a layout takes off `screenY` to compare the keyboard with a view it measured.
  */
 export function keyboardSource(): KeyboardSource {
   const native = reactNative();
@@ -79,18 +101,30 @@ export function keyboardSource(): KeyboardSource {
   const { Keyboard: keyboard, Platform } = native;
 
   return {
+    get windowTop() {
+      return windowTopOf(native);
+    },
     subscribe: (listener) => {
+      // A keyboard already up says nothing until it next moves. `Keyboard.js` keeps the last show
+      // it heard, from whenever React Native first loaded it.
+      const shown = keyboard.metrics?.();
+      const already = shown ? { height: shown.height, screenY: shown.screenY } : null;
       if (Platform?.OS !== 'ios') {
         const subscriptions = [
           keyboard.addListener('keyboardDidShow', (event) => listener(metricsOf(event))),
           keyboard.addListener('keyboardDidHide', () => listener({ height: 0 })),
         ];
+        if (already) listener(already);
         return () => subscriptions.forEach((subscription) => subscription.remove());
       }
-      let up = false;
+      let up = already !== null;
+      // Started while the keyboard moves, the Will event is missed and `Keyboard.js` still holds
+      // where it started from, so the Did event says where it landed. After a Will event, the
+      // Will events say it all: a show a hide interrupts can land after the hide begins.
+      let heard = false;
       const subscriptions = [
         keyboard.addListener('keyboardWillShow', (event) => {
-          up = true;
+          up = heard = true;
           listener(metricsOf(event));
         }),
         keyboard.addListener('keyboardWillChangeFrame', (event) => {
@@ -98,13 +132,51 @@ export function keyboardSource(): KeyboardSource {
         }),
         keyboard.addListener('keyboardWillHide', (event) => {
           up = false;
+          heard = true;
           listener({ height: 0, ...timingOf(event) });
         }),
+        keyboard.addListener('keyboardDidShow', (event) => {
+          if (heard) return;
+          up = true;
+          listener({ height: event.endCoordinates.height, screenY: event.endCoordinates.screenY });
+        }),
+        keyboard.addListener('keyboardDidHide', () => {
+          if (heard) return;
+          up = false;
+          listener({ height: 0 });
+        }),
       ];
+      if (already) listener(already);
       return () => subscriptions.forEach((subscription) => subscription.remove());
     },
     dismiss: () => keyboard.dismiss(),
   };
+}
+
+/**
+ * Require React Native's `Keyboard.js` now, so it records each show and hide from here on.
+ *
+ * It keeps the last one it heard, which `keyboardSource` starts from, but only from when it is
+ * first required. Left to the `Keyboard` service, that is when the first `text-input` appears, and
+ * a keyboard the native header's search bar opened before then reads as down until it next moves.
+ */
+export function recordKeyboard(): void {
+  const native = reactNative();
+  if (native) void native.Keyboard;
+}
+
+/**
+ * What React Native's Android `measureInWindow` leaves out above a view: the status bar's height,
+ * unless its edge-to-edge flag is on. Zero on iOS.
+ */
+function windowTopOf(native: ReactNative): number {
+  if (native.Platform?.OS !== 'android' || edgeToEdgeFlag(native)) return 0;
+  // `StatusBar.currentHeight` is the bar's height when the app started. The module's own constant
+  // is read from the window's current insets on each call, as the inset `measureInWindow` leaves
+  // out is: after a rotation the two still agree.
+  const manager = native.TurboModuleRegistry?.get('StatusBarManager') as
+    { getConstants?(): { HEIGHT?: number } } | null | undefined;
+  return manager?.getConstants?.().HEIGHT ?? native.StatusBar?.currentHeight ?? 0;
 }
 
 /**
@@ -143,6 +215,7 @@ export class Keyboard {
 
   private readonly source = inject(Keyboard.SOURCE);
   private readonly engine = inject(HostEngine, { optional: true });
+  private readonly app = inject(ApplicationRef, { optional: true });
   private readonly current = signal<KeyboardMetrics>({ height: 0 });
   private readonly frame = signal<KeyboardMetrics | null>(null);
 
@@ -160,6 +233,27 @@ export class Keyboard {
    * move with it instead. Elsewhere it is `metrics`, and a layout animates to where that says.
    */
   readonly followsMotion = this.source.subscribeMotion !== undefined;
+
+  /**
+   * How far below the top of the screen the window `measureInWindow` reports in starts: the status
+   * bar's height on Android unless React Native's edge-to-edge flag is on, and zero otherwise. The
+   * keyboard's top edge in that window is `screenY` less this. It changes with a rotation, so read
+   * it when comparing rather than keeping it.
+   *
+   * On Android, read from where React Native measures the app's root, which is drawn from the top
+   * of the screen: React Native takes the bar off its measurements as it lays the root out, and keeps
+   * doing so when the bar is hidden or shown later, until the root is laid out again. The bar's
+   * own height stands in where the root has not been measured.
+   */
+  get windowTop(): number {
+    let top = this.source.windowTop ?? 0;
+    // ponytail: the first root component is taken to start at the top of the screen, as an app's
+    // root does; a root placed lower would read as a window starting higher.
+    const root = this.app?.components[0]?.location.nativeElement as HostNode | undefined;
+    if (root && nativePlatform() === 'android')
+      this.engine?.measure(root, (frame) => (top = -frame.y));
+    return top;
+  }
 
   /** Where the keyboard is now: at every frame of its motion where `followsMotion`. */
   readonly position: Signal<KeyboardMetrics> = computed(() => this.frame() ?? this.current());

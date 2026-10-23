@@ -43,6 +43,7 @@ import { NATIVE_TAB_DEFAULTS } from './native-bar-defaults.ts';
 import { ownHost } from './own-host.ts';
 import { optionalBoolean } from './transforms.ts';
 import { SVG_ICON_HOST, SVG_ICON_RENDERER } from './svg-icons.ts';
+import { SCREENS_VERSION, screensReadsRenderingModes } from './screens-version.ts';
 
 /**
  * Where a tab's picture comes from.
@@ -190,6 +191,28 @@ export function tabIconProps(
   };
 }
 
+/** Every icon prop a tab commits. */
+type TabIconSet = ReturnType<typeof tabIconProps> & {
+  iconImageRenderingMode?: string;
+  selectedIconImageRenderingMode?: string;
+};
+
+/**
+ * iOS: a template icon in the form react-native-screens 4.29 and later read, an `image` with a
+ * `template` rendering mode per state. Those releases dropped `iconType: 'template'`, and native
+ * aborts the app on an `iconType` it does not know, so the older form cannot be sent to them. A
+ * selected icon is a template too, since `tabIconProps` pairs only icons of one kind.
+ */
+function withRenderingModes(icons: TabIconSet): TabIconSet {
+  if (icons.iconType !== 'template') return icons;
+  return {
+    ...icons,
+    iconType: 'image',
+    iconImageRenderingMode: 'template',
+    selectedIconImageRenderingMode: 'template',
+  };
+}
+
 declare const ngDevMode: unknown;
 
 function isSvg(icon: TabIcon | undefined): icon is Extract<TabIcon, { svg: string }> {
@@ -266,6 +289,8 @@ export function screenKeyOf(path: string): string {
     // an icon with a gap where the label belongs.
     '[isTitleUndefined]': 'title() === undefined',
     '[iconType]': 'icons().iconType',
+    '[iconImageRenderingMode]': 'icons().iconImageRenderingMode',
+    '[selectedIconImageRenderingMode]': 'icons().selectedIconImageRenderingMode',
     '[iconResourceName]': 'icons().iconResourceName',
     '[iconImageSource]': 'icons().iconImageSource',
     '[selectedIconResourceName]': 'icons().selectedIconResourceName',
@@ -285,6 +310,7 @@ export class NativeTab implements OnInit {
   private readonly svgRenderer = inject(SVG_ICON_RENDERER);
   private readonly svgHost = inject(SVG_ICON_HOST, { optional: true });
   private readonly errors = inject(ErrorHandler);
+  private readonly readsRenderingModes = screensReadsRenderingModes(inject(SCREENS_VERSION));
 
   /**
    * The `RNSTabsScreen` this tab is. The outlet creates the activated route's component inside
@@ -368,13 +394,14 @@ export class NativeTab implements OnInit {
   private readonly drawnIcon = this.drawn(this.icon);
   private readonly drawnSelectedIcon = this.drawn(this.selectedIcon);
 
-  protected readonly icons = computed(() => {
+  protected readonly icons = computed((): TabIconSet => {
     const icon = this.iconProps(this.icon() ?? this.shorthand(), this.drawnIcon());
     // A selected icon drawn before the icon it replaces waits for it: native takes no pair of a
     // selected icon and none.
     const undrawn = isSvg(this.icon()) && this.drawnIcon() === undefined;
     const selected = undrawn ? {} : this.iconProps(this.selectedIcon(), this.drawnSelectedIcon());
-    return tabIconProps(icon, selected);
+    const icons = tabIconProps(icon, selected);
+    return this.readsRenderingModes ? withRenderingModes(icons) : icons;
   });
 
   /**

@@ -21,6 +21,12 @@ import {
   shadowRemoved,
   KEPT as KEPT_NODE,
 } from './svg-filter.ts';
+import {
+  LONG_PATH,
+  drawnPathData,
+  redrawLongPathsUnder,
+  type DrawingReader,
+} from './dense-drawing.ts';
 
 /**
  * An `<svg>` a library writes in its own template, a checkbox's tick or a switch's icon, drawn
@@ -29,6 +35,8 @@ import {
  */
 /** A `<text>` in a drawing, by a name of its own: `text` is the app's text element. */
 const SVG_TEXT = 'svg:text';
+/** A link in a drawing, which groups what it holds: HTML's `<a>` is a view, which draws nothing in one. */
+const SVG_LINK = 'svg:a';
 
 /**
  * What a drawing holds that nothing here draws: its effects, and what describes it. A chart's
@@ -48,6 +56,7 @@ export function svgNamed(name: string, namespace: string): string | undefined {
   if (name === 'text') return SVG_TEXT;
   // A span a template writes in a text, placed by attributes of its own: a label of two lines.
   if (name === 'tspan') return SVG_SPAN;
+  if (name === 'a') return SVG_LINK;
   // A step of a filter the drawing has none of its own for: see `svg-filter.ts`.
   if (/^fe[A-Z]/.test(name) && !Object.hasOwn(FILTERED, name)) return STEP;
   return NOT_DRAWN.test(name.toLowerCase()) ? SVG_UNDRAWN : name;
@@ -70,14 +79,40 @@ export function drawingElement(engine: Engine, name: string, drawn: boolean): En
  * What a shape with no fill of its own is filled with, and every shape in it that has none:
  * black, which is where SVG starts. Given to what is written straight into the drawing, as a
  * default under any stylesheet: the native shapes take a fill from the one they are in, and
- * the drawing itself has none to give.
+ * the drawing's native view has none to give.
  */
 const FILLED = { fill: 'black' };
+
+/** The paint a drawing's own attributes give the shapes in it: see `drawingPaint`. */
+const DRAWING_PAINT = ['fill', 'stroke', 'stroke-width'];
+const DRAWING_PAINT_PROPS = ['fill', 'stroke', 'strokeWidth', 'propList'];
+
+/**
+ * Give an `<svg>` its paint attributes, `fill="none" stroke="currentColor"` as Lucide's icons
+ * have, as a paint of its own, as a group's are: the engine hands it down to its shapes over
+ * what the drawing inherits from a box around it, and under a rule for the drawing itself, as
+ * a browser ranks an attribute. Kept off the native view, which draws no paint of its own.
+ *
+ * ponytail: a drawing's paint that names a token, `fill="var(--ink)"`, is not handed down.
+ * Give it the cascade, as a shape's own is in `paintByToken`, if a library is seen to write one.
+ */
+function drawingPaint(node: EngineNode, attrs: Readonly<Record<string, string>>, engine: Engine) {
+  const written: Record<string, string> = {};
+  for (const name of DRAWING_PAINT) if (attrs[name] !== undefined) written[name] = attrs[name];
+  const color = (colour: string) => engine.color(colour);
+  const props = drawable('path', written, nativeProps('path', written, { color }));
+  for (const key of DRAWING_PAINT_PROPS) {
+    const value = props[key];
+    if (!sameProp(node.props[key], value)) engine.setProp(node, key, value);
+    if (value !== undefined) engine.keepAsAttribute(node, key);
+  }
+}
 
 const TEXT_PATH = 'textPath';
 
 const SHAPES: Readonly<Record<string, string>> = {
   g: 'RNSVGGroup',
+  [SVG_LINK]: 'RNSVGGroup',
   path: 'RNSVGPath',
   circle: 'RNSVGCircle',
   ellipse: 'RNSVGEllipse',
@@ -140,7 +175,19 @@ export function svgInserted(node: EngineNode, parent: EngineNode, engine: Engine
   if (node.tag === 'defs') return defined(node, parent, engine);
   if (node.tag === SVG_UNDRAWN) return engine.setDefaultStyle(node, UNDRAWN);
   if (node.tag === 'feDropShadow') drawAgain(node, engine);
+  // One with no attribute is never drawn by one being set, and is the whole drawing.
+  if (node.tag === 'foreignObject') drawLater(node, engine);
   startFilled(node, engine);
+  longPathsMoved(node, engine);
+}
+
+/** Where a long path, or a group of them, is put changes the scale it is drawn across. */
+function longPathsMoved(node: EngineNode, engine: Engine): void {
+  if (node.tag === 'path' && (attributesOf(node).attrs['d']?.length ?? 0) >= LONG_PATH) {
+    drawLater(node, engine);
+  } else if (node.tag === 'g') {
+    redrawLongPathsUnder(node, engine, (path) => drawLater(path, engine));
+  }
 }
 
 /** What a text is drawn by beside its words, put in it: a path it is set along, a copy as its outline. */
@@ -481,6 +528,19 @@ export function shapeOf(
 }
 
 /**
+ * A shape a canvas has put in its drawing, or drawn again: a long path is drawn thinned at the
+ * scale it is drawn at, as one a template writes is. A canvas puts its shapes in itself, where
+ * `svgInserted` does not hear of them.
+ */
+export function thinPlaced(node: EngineNode, engine: Engine): void {
+  if (node.tag !== 'path') return;
+  const d = attributesOf(node).props['d'];
+  if (typeof d !== 'string' || d.length < LONG_PATH) return;
+  const drawn = drawnPathData(node, d, READER, engine);
+  if (drawn !== node.props['d']) engine.setProp(node, 'd', drawn);
+}
+
+/**
  * The same shape with other attributes: what the native view reads of them now, set where it
  * is another than it was. A canvas drawn again is mostly the shapes it was, each a little moved.
  */
@@ -698,6 +758,8 @@ function setShape(
     // Its own size is a default, as a browser has an attribute under any rule of a stylesheet.
     const props = drawAgain(node, engine);
     engine.setDefaultStyle(node, { ...proportioned(props), ...sizeOf(shape.attrs) });
+    if (DRAWING_PAINT.includes(name)) drawingPaint(node, shape.attrs, engine);
+    redrawLongPathsUnder(node, engine, (path) => drawLater(path, engine));
   } else {
     drawLater(node, engine);
     paintSet(node, name, written, engine);
@@ -731,9 +793,20 @@ function drawUndrawn(engine: Engine): void {
   if (!nodes) return;
   undrawn.delete(engine);
   for (const node of nodes) {
+    const matrix = attributesOf(node).props['matrix'];
     drawAgain(node, engine);
+    // A group scaled anew draws the long paths in it across other columns.
+    if (node.tag === 'g' && !sameProp(matrix, attributesOf(node).props['matrix'])) {
+      redrawLongPathsUnder(node, engine, (path) => drawAgain(path, engine));
+    }
   }
 }
+
+/** What drawing a long path reads of the shapes it is in. */
+const READER: DrawingReader = {
+  props: (node) => attributesOf(node).props,
+  attrs: (node) => attributesOf(node).attrs,
+};
 
 /** A path a text is set along gives the text its anchor, and a span of a copy its outline. */
 function partChanged(node: EngineNode, engine: Engine): void {
@@ -749,8 +822,12 @@ function propsOf(node: EngineNode, engine: Engine): Record<string, unknown> {
   if (node.tag === 'svg') return viewBox(attrs['viewBox']);
   if (node.tag === 'feDropShadow') return shadowProps(attrs);
   const color = (colour: string) => engine.color(sideFor(node, colour, engine));
-  const read = nativeProps(node.tag, attrs, { color });
-  return drawable(node.tag, attrs, read);
+  const props = drawable(node.tag, attrs, nativeProps(node.tag, attrs, { color }));
+  // A long line is drawn thinned; what a script reads of it is as written.
+  if (node.tag === 'path' && typeof props['d'] === 'string') {
+    props['d'] = drawnPathData(node, props['d'], READER, engine);
+  }
+  return props;
 }
 
 /**

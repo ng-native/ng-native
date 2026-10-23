@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { inflateSync } from 'node:zlib';
 import { Component } from '@angular/core';
-import { cleanup, render, screen, settle } from '@ng-native/testing';
+import { cleanup, fireEvent, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 import { base64Of, pngOf } from './png.ts';
 
@@ -274,13 +274,30 @@ describe('@ng-native/web-compat canvas pictures', () => {
     assert.deepEqual([x, y, width, height], [-20, 0, 40, 20]);
   });
 
-  it('draws nothing of an image, whose picture is not known', async () => {
+  it('draws an image by its source once it has loaded, shown and not read back', async () => {
     const { context, image } = await canvases();
+    // Not loaded: nothing is known of its size, and nothing is drawn.
     context.drawImage(image, 0, 0);
     assert.equal(context.createPattern(image, 'repeat'), null);
     await settle();
     assert.equal(shapes().length, 0);
-    assert.deepEqual(pixel(context, 0, 0), [0, 0, 0, 0]);
+    await fireEvent(screen.getByTestId('picture'), 'topLoad', { source: { width: 8, height: 4 } });
+    await settle();
+    context.drawImage(image, 1, 2);
+    context.drawImage(image, 0, 0, 16, 8);
+    await settle();
+    const [whole, sized] = shapes();
+    const props = whole!.props as Dom;
+    assert.deepEqual(props.src, { uri: 'https://example.com/dot.png' });
+    assert.deepEqual([props.x, props.y, props.width, props.height], [1, 2, 8, 4]);
+    assert.deepEqual([sized!.props['width'], sized!.props['height']], [16, 8]);
+    // Its pixels are the platform's, which no script reads: transparent where it is drawn.
+    assert.deepEqual(pixel(context, 2, 3), [0, 0, 0, 0]);
+    // Another picture is not known until it has loaded, and draws nothing until then.
+    image.src = 'https://example.com/other.png';
+    context.drawImage(image, 0, 0);
+    await settle();
+    assert.equal(shapes().length, 2);
   });
 
   it('is told from a plain object as a chart library tells a picture', async () => {

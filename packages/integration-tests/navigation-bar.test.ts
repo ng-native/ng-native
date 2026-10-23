@@ -187,6 +187,20 @@ describe("the navigation bar's platform source", () => {
     return { calls, native };
   }
 
+  it('keeps each app to its own claims off a device, where there is no bar to share', () => {
+    const first = build(navigationBarSource());
+    first.bar.push({ style: 'light', hidden: true });
+    const second = build(navigationBarSource());
+    assert.deepEqual(second.bar.state(), {});
+  });
+
+  it('keeps each app to its own claims on Android without the module', () => {
+    const first = build(onDevice('android', {}, navigationBarSource));
+    first.bar.push({ style: 'light', hidden: true });
+    const second = build(onDevice('android', {}, navigationBarSource));
+    assert.deepEqual(second.bar.state(), {});
+  });
+
   it('does nothing off a device rather than throwing', () => {
     const source = navigationBarSource();
     source.setStyle('dark');

@@ -29,12 +29,12 @@ npm install @ng-native/web-compat @ng-native/icons
 npx expo install react-native-svg
 ```
 
-| Package                | Needed                 | What it enables                                                                |
-| ---------------------- | ---------------------- | ------------------------------------------------------------------------------ |
-| `@ng-native/icons`     | Yes, a peer dependency | `<svg>` and `<canvas>`, drawn with the views `@ng-native/icons` draws with     |
-| `react-native-svg`     | For anything drawn     | The native views. Without it a drawing shows nothing, as an icon does          |
-| `react-native-webview` | Optional, `>=13.16.1`  | An `<iframe>` as a native web view. Without it a frame is an emulated document |
-| `expo-document-picker` | Optional, `^57.0.0`    | A file input's `click()` opening the system's file picker                      |
+| Package                | Needed                           | What it enables                                                                |
+| ---------------------- | -------------------------------- | ------------------------------------------------------------------------------ |
+| `@ng-native/icons`     | Yes, a peer dependency           | `<svg>` and `<canvas>`, drawn with the views `@ng-native/icons` draws with     |
+| `react-native-svg`     | For anything drawn               | The native views. Without it a drawing shows nothing, as an icon does          |
+| `react-native-webview` | Optional, `>=13.16.1`            | An `<iframe>` as a native web view. Without it a frame is an emulated document |
+| `expo-document-picker` | Optional, `^57.0.0` or `^58.0.0` | A file input's `click()` opening the system's file picker                      |
 
 react-native-svg's JavaScript is never imported: the package commits its native views directly,
 as `@ng-native/icons` does. An app with an `<iframe>` installs the web view:
@@ -99,6 +99,11 @@ module.exports = withWebCompat(withAngularNative(getDefaultConfig(__dirname)), {
 own sources, relative to the project. A library written for native is left out of both, and keeps
 its columns. The transformer's cache version changes with both lists, so a file transformed before
 a list changed is transformed again.
+
+`withWebCompat` also gives the window its `addEventListener`, `removeEventListener` and
+`dispatchEvent` before any module runs, for a library that adds a listener as it loads, as the
+CDK does to learn whether one can be passive. What they are given is handed to the window once an
+app is up, so such a library can be imported anywhere in the app, not only on a lazy route.
 
 The same options go to Vitest, as a Vite plugin beside `ngNative()`:
 

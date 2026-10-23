@@ -242,16 +242,18 @@ describe('media types and asset fields', () => {
     // The enums live in files Node cannot load, so their compiled lines are read as text.
     const require = createRequire(import.meta.url);
     const root = path.dirname(require.resolve('expo-media-library/package.json'));
-    const read = (name: string) => {
-      const source = readFileSync(path.join(root, `build/types/${name}.js`), 'utf8');
+    const read = (name: string, file: string) => {
+      const source = readFileSync(path.join(root, `build/next/types/${file}.types.js`), 'utf8');
       return Object.fromEntries(
         [...source.matchAll(new RegExp(`${name}\\["(\\w+)"\\] = "(\\w+)"`, 'g'))].map(
           ([, key, value]) => [key, value],
         ),
       );
     };
-    assert.ok(Object.keys(read('MediaType')).length > 0, 'found the enum');
-    assert.deepEqual({ ...MediaType }, read('MediaType'));
-    assert.deepEqual({ ...AssetField }, read('AssetField'));
+    assert.ok(Object.keys(read('MediaType', 'Asset')).length > 0, 'found the enum');
+    assert.deepEqual({ ...MediaType }, read('MediaType', 'Asset'));
+    const { MEDIA_SUBTYPES, ...fields } = read('AssetField', 'Query');
+    assert.equal(MEDIA_SUBTYPES, 'mediaSubtypes');
+    assert.deepEqual({ ...AssetField }, fields);
   });
 });

@@ -484,9 +484,13 @@ const STAY = new Set([
   ...['focus', 'blur', 'scroll', 'load', 'error', 'resize'],
   ...['mouseenter', 'mouseleave', 'pointerenter', 'pointerleave'],
 ]);
-/** The events a listener can cancel in a browser. */
+/**
+ * The events a listener can cancel in a browser, and `focus` and `blur`, which a browser sends as
+ * not: a combobox calls `preventDefault` on its input's blur and reads whether it was stopped.
+ */
 const CANCELABLE = new Set([
   ...['click', 'dblclick', 'contextmenu', 'auxclick', 'wheel', 'submit', 'reset', 'beforeinput'],
+  ...['focus', 'blur'],
   ...['mousedown', 'mouseup', 'mousemove', 'mouseover', 'mouseout'],
   ...['pointerdown', 'pointerup', 'pointermove', 'pointerover', 'pointerout'],
   ...['touchstart', 'touchmove', 'touchend', 'keydown', 'keyup', 'keypress'],

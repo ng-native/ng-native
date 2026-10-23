@@ -538,6 +538,21 @@ describe('keeping the screen on', () => {
     assert.equal(current.service.active(), true);
   });
 
+  it('keeps each app to its own holds where expo-keep-awake is not there', () => {
+    // Without the module, as on the web or in a test, there is no screen to share: an app that
+    // never goes would otherwise leave its holds under every app after it.
+    const first = inAppWith(KeepAwake.SOURCE, null, () => new KeepAwake());
+    first.service.hold('video');
+    const second = inAppWith(KeepAwake.SOURCE, null, () => new KeepAwake());
+    try {
+      assert.equal(first.service.active(), true);
+      assert.equal(second.service.active(), false);
+    } finally {
+      first.destroy();
+      second.destroy();
+    }
+  });
+
   it('releases what an app still holds when it goes', async () => {
     const native = platform();
     const app = inAppWith(KeepAwake.SOURCE, native, () => new KeepAwake());

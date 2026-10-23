@@ -9,13 +9,13 @@ import { inXmlDocument, madeDocumentOf } from './created-document.ts';
 import { documentOf, eventPath, nameOf } from './document.ts';
 import { isFragment } from './document-fragment.ts';
 import { documentOfRoot, topOf } from './document-roots.ts';
-import { required } from './dom-error.ts';
+import { domError, required } from './dom-error.ts';
 import { marksHover } from './elements.ts';
 import { dispatch, listen, unlisten, type Heard } from './events.ts';
 import { isField } from './field.ts';
 import { frameCreated } from './frame.ts';
 import { setFrameView } from './frame-view.ts';
-import { inDocument, isInDocument, lastInDocument } from './in-document.ts';
+import { descendants, inDocument, isInDocument, lastInDocument } from './in-document.ts';
 import { announcesDisabled, listenNatively, hasCapture, topLevel } from './listen.ts';
 import { observing, removingAttribute, settingAttribute, together } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
@@ -32,7 +32,8 @@ import {
 import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { setStyleAttribute, styleOf } from './style-declaration.ts';
 import { isKeptOnShape, isShape, writtenAttributes } from './svg.ts';
-import { boxOf } from './svg-box.ts';
+import { boxOf, drawnRuns, runsWidth } from './svg-box.ts';
+import { heldAnimation, webAnimation, type CoreAnimation } from './web-animation.ts';
 import { engineOf } from './window.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -43,6 +44,7 @@ type Listener = (event: unknown) => void;
 export interface CoreNode {
   addEventListener(type: string, listener: Listener): void;
   removeEventListener(type: string, listener: Listener): void;
+  getAnimations(): unknown[];
 }
 
 /**
@@ -493,6 +495,19 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   getComputedTextLength: method(function () {
     return boxOf(this).width;
   }),
+  // A text's characters, and how wide a run of them is drawn: what a chart cuts a label short by.
+  getNumberOfChars: method(function () {
+    return drawnRuns(this).reduce((count, run) => count + run.words.length, 0);
+  }),
+  getSubStringLength: method(function (from: unknown, count: unknown) {
+    const runs = drawnRuns(this);
+    const length = runs.reduce((sum, run) => sum + run.words.length, 0);
+    const start = Math.trunc(Number(from));
+    if (!(start >= 0 && start < length)) {
+      throw domError('The index is not in the range of the text.', 'IndexSizeError');
+    }
+    return runsWidth(runs, start, start + Math.max(0, Math.trunc(Number(count))));
+  }),
   // The drawing a shape is in: the nearest `<svg>` above it, and none for the drawing itself.
   ownerSVGElement: get(function () {
     for (let at = this.parent; at; at = at.parent) if (at.tag === 'svg') return at;
@@ -589,6 +604,17 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   contains: method(function (other: EngineNode | null) {
     for (let at = other; at; at = at.parent) if (at === this) return true;
     return false;
+  }),
+  // As the Web Animations API has them, and those of what it holds where asked: a dialog asks its
+  // pane for the animations of its content. See `web-animation.ts`.
+  getAnimations: method(function (options?: { subtree?: boolean }) {
+    const nodes = options?.subtree ? [this, ...descendants(this)] : [this];
+    return nodes.flatMap((node) => [
+      ...[heldAnimation(node)].filter((held) => held !== undefined),
+      ...(core.getAnimations.call(node) as CoreAnimation[]).flatMap(
+        (animation) => webAnimation(animation, node) ?? [],
+      ),
+    ]);
   }),
   textContent: get(
     function () {

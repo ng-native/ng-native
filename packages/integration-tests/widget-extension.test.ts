@@ -519,6 +519,7 @@ describe('a layout through the widget extension', () => {
     assert.deepEqual(extensionRender(angular, { at: '2026-10-10T12:00:00.000Z' }), {
       type: 'TextView',
       props: { date: 1791633600000, dateStyle: 'relative' },
+      __expoWidgetIdentity: '["TextView",0]',
     });
   });
 

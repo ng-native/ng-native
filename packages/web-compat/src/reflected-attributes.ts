@@ -1,3 +1,4 @@
+import { editedByContent } from './element-tree.ts';
 import {
   action,
   baseHref,
@@ -8,6 +9,7 @@ import {
   long,
   nullable,
   nullAsEmpty,
+  own,
   string,
   unsigned,
   url,
@@ -49,6 +51,20 @@ const hidden: Reflection = {
     } else if (value) node.setAttribute('hidden', '');
     else node.removeAttribute('hidden');
   },
+};
+
+/**
+ * HTML's `draggable`: `true` or `false` by the attribute, and for an image or a link with an
+ * `href` where it says neither, as a browser drags those unasked. Anything set is a boolean.
+ */
+const draggable: Reflection = {
+  get: (node) => {
+    const written = node.getAttribute('draggable')?.toLowerCase();
+    if (written === 'true') return true;
+    if (written === 'false') return false;
+    return node.tag === 'img' || (node.tag === 'a' && node.getAttribute('href') !== null);
+  },
+  set: (node, value) => node.setAttribute('draggable', value ? 'true' : 'false'),
 };
 
 const DIRECTION = { keywords: ['ltr', 'rtl', 'auto'] };
@@ -151,6 +167,9 @@ export const GLOBAL: Table = {
   accessKey: string('accesskey', 'accessKey'),
   autofocus: boolean('autofocus'),
   hidden,
+  draggable,
+  // Read only: what `contenteditable` makes of the element, or of the one it is in.
+  isContentEditable: own(editedByContent),
   inert: boolean('inert'),
   slot: string('slot'),
   nonce,

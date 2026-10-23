@@ -90,7 +90,7 @@ export function fontFamilyOf(node: EngineNode | null): string | undefined {
 }
 
 /** Words of a text and the node whose font they are drawn in: the span they are in, or the text. */
-interface Run {
+export interface Run {
   readonly words: string;
   readonly font: EngineNode;
 }
@@ -140,9 +140,29 @@ export function lineStarts(text: EngineNode): { at: number; width: number }[] {
   let at = 0;
   return linesOf(text).map((line) => {
     const start = at;
-    for (const run of line.runs) at += run.words.replace(/[ \t\n\r\f]+/g, ' ').length;
+    for (const run of line.runs) at += drawn(run.words).length;
     return { at: start, width: lineWidth(line) };
   });
+}
+
+/** Words as native draws them: a run of spaces as the one it keeps of it. */
+const drawn = (words: string): string => words.replace(/[ \t\n\r\f]+/g, ' ');
+
+/** The letters a text draws, each run in the font of the span it is in. */
+export const drawnRuns = (text: EngineNode): Run[] =>
+  linesOf(text).flatMap(({ runs }) =>
+    runs.map(({ words, font }) => ({ words: drawn(words), font })),
+  );
+
+/** How wide the letters of `runs` from `start` up to `end` are drawn, each in its run's font. */
+export function runsWidth(runs: Run[], start: number, end: number): number {
+  let [at, width] = [0, 0];
+  for (const { words, font } of runs) {
+    const part = words.slice(Math.max(0, start - at), Math.max(0, end - at));
+    if (part) width += widthOf(part, fontSizeOf(font), fontWeightOf(font), fontFamilyOf(font));
+    at += words.length;
+  }
+  return width;
 }
 
 /** The largest font of a line's words, which its reach over and under its baseline is of. */

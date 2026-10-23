@@ -41,8 +41,8 @@ describe('init', () => {
       'nx',
       'react-dom',
     ]);
-    assert.equal(manifest.devDependencies['react-dom'], '19.2.3');
-    assert.match(manifest.devDependencies['@expo/cli'], /^\^57\./);
+    assert.equal(manifest.devDependencies['react-dom'], '19.3.0');
+    assert.match(manifest.devDependencies['@expo/cli'], /^\^58\./);
     assert.deepEqual(manifest.dependencies, {});
   });
 
@@ -70,7 +70,7 @@ describe('init', () => {
       const tree = workspace();
       if (pnpm) tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n");
       await init(tree, { skipFormat: true });
-      assert.equal(readJson(tree, 'package.json').devDependencies['@expo/metro'], '~56.0.2');
+      assert.equal(readJson(tree, 'package.json').devDependencies['@expo/metro'], '~58.0.0');
     }
   });
 
@@ -93,10 +93,10 @@ describe('init', () => {
       'react-dom',
       'react-native',
     ]);
-    assert.equal(devDependencies.expo, '~57.0.26');
-    assert.equal(devDependencies.react, '19.2.3');
-    assert.equal(devDependencies['react-dom'], '19.2.3');
-    assert.equal(devDependencies['react-native'], '0.86.3');
+    assert.equal(devDependencies.expo, '~58.0.16');
+    assert.equal(devDependencies.react, '19.3.0');
+    assert.equal(devDependencies['react-dom'], '19.3.0');
+    assert.equal(devDependencies['react-native'], '0.88.0');
   });
 
   it('keeps a React the root of a package-manager workspace already has', async () => {

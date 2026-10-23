@@ -6,13 +6,18 @@
  * parser (`@ng-native/metro/css/values.cjs`). A bound one only exists here, where there is not,
  * so this takes the shapes a binding actually holds and nothing more: a length in `px`, `%`,
  * `rem`, `em` or a viewport unit, two to four lengths in `px`, a number, a colour as React Native
- * writes one, a colour's three channels, a word, another token, `var(--brand)`, and one made of
- * others, `calc(var(--gap) * 2)`, `calc(10px * 2)` or a `color-mix()` (see
- * inline-derived-token.ts).
+ * writes one, a `platform-color()`, a colour's three channels, a word, another token,
+ * `var(--brand)`, and one made of others, `calc(var(--gap) * 2)`, `calc(10px * 2)` or a
+ * `color-mix()` (see inline-derived-token.ts).
  * Anything else is kept as a word, which leaves a use site that wants a length or a colour unset,
  * as a token of the wrong kind does.
  */
-import { CSS_SPACE, type DeferredDeclaration, type TokenValue } from './css.ts';
+import {
+  CSS_SPACE,
+  type DeferredDeclaration,
+  type PlatformColour,
+  type TokenValue,
+} from './css.ts';
 import { derivedToken } from './inline-derived-token.ts';
 import { HUE_DEGREES, isNamedColor } from './transition.ts';
 
@@ -112,7 +117,8 @@ function fromNumber(value: number): TokenValue | undefined {
  * it can take, as the build-time conversion gives, and a use site reads the one it needs.
  */
 function fromWord(text: string): TokenValue {
-  const weight = WEIGHTS[text.toLowerCase()];
+  const lower = text.toLowerCase();
+  const weight = Object.hasOwn(WEIGHTS, lower) ? WEIGHTS[lower] : undefined;
   return {
     keyword: text,
     ...(isNamedColor(text) ? { color: text } : {}),
@@ -235,7 +241,45 @@ function withUnit(text: string): TokenValue | undefined {
  * not a colour native can draw.
  */
 function withTokens(text: string): TokenValue {
+  if (nestsTooDeep(text)) return { keyword: text };
   return fromVar(text) ?? derivedToken(text) ?? { keyword: text };
+}
+
+/**
+ * How deep a value's brackets may nest for its tokens to be read. Each level is a call deeper in
+ * the reading, and in working the value out after, so a few thousand, in text from a server,
+ * would overflow the stack in the middle of a binding. A stylesheet's deepest is a handful.
+ */
+const MAX_NESTING = 32;
+
+function nestsTooDeep(text: string): boolean {
+  let depth = 0;
+  for (const char of text) {
+    if (char === '(' && ++depth > MAX_NESTING) return true;
+    if (char === ')') depth--;
+  }
+  return false;
+}
+
+const PLATFORM_COLOR = /^platform-color\(([\s\S]*)\)$/i;
+/** A platform colour's name: a word, or a quoted string, as Android's `?attr/...` has to be. */
+const PLATFORM_NAME = /^(?:'([^'\\]*)'|"([^"\\]*)"|([a-z_][\w-]*))$/i;
+
+/**
+ * `platform-color(link, "?attr/colorAccent")`, as the stylesheet holds one (`platformColor` in
+ * compile.cjs): its names, which the platform resolves. Undefined for anything else, a call with
+ * no name in it included.
+ */
+export function platformColourOf(text: string): PlatformColour | undefined {
+  const inside = PLATFORM_COLOR.exec(text)?.[1];
+  if (inside === undefined) return undefined;
+  const names: string[] = [];
+  for (const written of inside.split(',')) {
+    const name = PLATFORM_NAME.exec(cssTrim(written));
+    if (!name) return undefined;
+    names.push(name[1] ?? name[2] ?? name[3]!);
+  }
+  return { platformColor: names };
 }
 
 export function tokenFromValue(value: unknown): TokenValue | undefined {
@@ -246,6 +290,8 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   const measure = withUnit(text);
   if (measure) return measure;
   if (NUMBER.test(text)) return fromNumber(Number(text));
+  const platform = platformColourOf(text);
+  if (platform) return { color: platform };
   if (DERIVED.test(text)) return withTokens(text);
   if (COLOR_FUNCTION.test(text)) return { color: text };
   // `0 0 0` is both, so it is kept as both, as the stylesheet's own token is.

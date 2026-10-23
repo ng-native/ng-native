@@ -21,6 +21,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 describe('the device capabilities, on the web', () => {
   let screen: { window: () => { width: number; height: number }; compact: () => boolean };
   let direction: { current: () => string; rtl: () => boolean };
+  let os: string;
   let doc: Document;
   let view: Window & typeof globalThis;
 
@@ -37,9 +38,11 @@ describe('the device capabilities, on the web', () => {
     const app = mount(root, DeviceApp).componentRef.instance as {
       screen: typeof screen;
       direction: typeof direction;
+      os: string;
     };
     screen = app.screen;
     direction = app.direction;
+    os = app.os;
     await settle();
   });
 
@@ -60,6 +63,10 @@ describe('the device capabilities, on the web', () => {
     view.dispatchEvent(new view.Event('resize'));
     assert.equal(screen.window().width, 400);
     assert.equal(screen.compact(), true, 'and changes its mind about the layout');
+  });
+
+  it('says the OS is the web, not the iOS the engine falls back to', () => {
+    assert.equal(os, 'web');
   });
 
   it('reads the direction off the document, which is where a web app says it', () => {

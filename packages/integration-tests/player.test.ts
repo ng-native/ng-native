@@ -7,10 +7,10 @@
  * are plain mutable fields no template can watch.
  */
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { watchPlayer, type NativePlayer } from '@ng-native/expo/player';
-import { audioPlayer } from '@ng-native/expo/audio';
+import { audioPlayer, audioRecorder } from '@ng-native/expo/audio';
 import { videoPlayer } from '@ng-native/expo/video';
 
 /** Fakes `require`, the same seam `optional()` reaches through on a device or in Node. */
@@ -298,5 +298,305 @@ describe('owning a player', () => {
     assert.equal(owned.state().status, 'error', 'an error wins over loading');
 
     injector.destroy();
+  });
+});
+
+/** Fakes `require` for several modules at once: `expo-audio`, and `react-native` for the platform. */
+function withModules<T>(modules: Record<string, unknown>, run: () => T): T {
+  const host = globalThis as Record<string, unknown>;
+  host['require'] = (requested: string) => {
+    if (!(requested in modules)) throw new Error(`Cannot find module '${requested}'`);
+    return modules[requested];
+  };
+  try {
+    return run();
+  } finally {
+    delete host['require'];
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A recorder that reports a status and records what it was made with. */
+function recorder() {
+  const status = {
+    canRecord: false,
+    isRecording: false,
+    durationMillis: 0,
+    mediaServicesDidReset: false,
+    url: null as string | null,
+  };
+  const made: unknown[] = [];
+  const api = {
+    released: false,
+    status: status as typeof status & { metering?: number },
+    made,
+    getStatus: () => ({ ...status }),
+    release() {
+      api.released = true;
+    },
+  };
+  class AudioRecorder {
+    constructor(options: unknown) {
+      made.push(options);
+      return api;
+    }
+  }
+  return { api, made, expoAudio: { AudioModule: { AudioRecorder } } };
+}
+
+/** expo-audio on the web: AudioModule is a plain module with AudioRecorderWeb and no release(). */
+function webRecorder() {
+  const made: unknown[] = [];
+  const api = {
+    cleared: false,
+    getStatus: () => ({
+      canRecord: false,
+      isRecording: false,
+      durationMillis: 0,
+      mediaServicesDidReset: false,
+      url: null,
+    }),
+    clearTimeouts() {
+      api.cleared = true;
+    },
+  };
+  class AudioRecorderWeb {
+    constructor(options: unknown) {
+      made.push(options);
+      return api;
+    }
+  }
+  return { api, made, expoAudio: { AudioModule: { AudioRecorderWeb } } };
+}
+
+const VOICE = {
+  extension: '.m4a',
+  sampleRate: 44100,
+  numberOfChannels: 1,
+  bitRate: 64000,
+  isMeteringEnabled: true,
+  android: { outputFormat: 'mpeg4', audioEncoder: 'aac' },
+  ios: { outputFormat: 'aac ', audioQuality: 64 },
+} as never;
+
+/**
+ * `audioRecorder`: expo-audio's `useAudioRecorder` and `useAudioRecorderState` without React. The
+ * recorder is a shared object made with the platform's options merged in, as the hook makes it, and
+ * released with the component.
+ */
+describe('owning a recorder', () => {
+  const after: (() => void)[] = [];
+  afterEach(() => {
+    for (const destroy of after.splice(0)) destroy();
+  });
+
+  it("makes the recorder with the platform's options merged in, as useAudioRecorder does", () => {
+    for (const [os, own] of [
+      ['android', { outputFormat: 'mpeg4', audioEncoder: 'aac' }],
+      ['ios', { outputFormat: 'aac ', audioQuality: 64 }],
+    ] as const) {
+      const { api, expoAudio } = recorder();
+      const injector = Injector.create({ providers: [] });
+      // Destroyed whatever happens: a recorder left alive keeps polling, and the test never ends.
+      after.push(() => injector.destroy());
+      const owned = withModules(
+        { 'expo-audio': expoAudio, 'react-native': { Platform: { OS: os } } },
+        () => runInInjectionContext(injector, () => audioRecorder(VOICE)),
+      );
+      // Android reads isMeteringEnabled from these alone, not from prepareToRecordAsync's.
+      assert.deepEqual(api.made, [
+        {
+          extension: '.m4a',
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 64000,
+          isMeteringEnabled: true,
+          directory: undefined,
+          ...own,
+        },
+      ]);
+      assert.equal(owned.native, api);
+      after.pop()!();
+      assert.equal(api.released, true, `released with the component on ${os}`);
+    }
+  });
+
+  it("lets the platform's options win over the common ones, as useAudioRecorder does", () => {
+    // RecordingPresets.LOW_QUALITY records .3gp on Android over a common .m4a.
+    const options = {
+      extension: '.m4a',
+      sampleRate: 44100,
+      numberOfChannels: 2,
+      bitRate: 64000,
+      android: { extension: '.3gp', sampleRate: 22050 },
+      ios: { extension: '.caf', numberOfChannels: 1 },
+      web: { bitRate: 32000 },
+    } as never;
+    for (const [os, own] of [
+      ['android', { extension: '.3gp', sampleRate: 22050 }],
+      ['ios', { extension: '.caf', numberOfChannels: 1 }],
+      ['web', { bitRate: 32000 }],
+    ] as const) {
+      const { made, expoAudio } = os === 'web' ? webRecorder() : recorder();
+      const injector = Injector.create({ providers: [] });
+      after.push(() => injector.destroy());
+      withModules({ 'expo-audio': expoAudio, 'react-native': { Platform: { OS: os } } }, () =>
+        runInInjectionContext(injector, () => audioRecorder(options)),
+      );
+      const made0 = made[0] as Record<string, unknown>;
+      for (const [key, value] of Object.entries(own))
+        assert.equal(made0[key], value, `${key} on ${os}`);
+      withModules({ 'react-native': { Platform: { OS: os } } }, () => after.pop()!());
+    }
+  });
+
+  it('makes the web recorder on the web, and clears its timeouts with the component', () => {
+    const { api, made, expoAudio } = webRecorder();
+    const injector = Injector.create({ providers: [] });
+    after.push(() => injector.destroy());
+    const owned = withModules(
+      { 'expo-audio': expoAudio, 'react-native': { Platform: { OS: 'web' } } },
+      () => runInInjectionContext(injector, () => audioRecorder(VOICE)),
+    );
+    assert.equal(owned.native, api);
+    assert.deepEqual(made, [
+      {
+        extension: '.m4a',
+        sampleRate: 44100,
+        numberOfChannels: 1,
+        bitRate: 64000,
+        isMeteringEnabled: true,
+      },
+    ]);
+    withModules({ 'react-native': { Platform: { OS: 'web' } } }, () => after.pop()!());
+    assert.equal(api.cleared, true, 'useAudioRecorder clears the timeouts on the web');
+  });
+
+  it("follows the recorder's status while the component lives, and stops with it", async () => {
+    const { api, expoAudio } = recorder();
+    const injector = Injector.create({ providers: [] });
+    after.push(() => injector.destroy());
+    const owned = withModules({ 'expo-audio': expoAudio }, () =>
+      runInInjectionContext(injector, () => audioRecorder(VOICE, { statusInterval: 0.005 })),
+    );
+    assert.equal(owned.state().isRecording, false, 'the status it had when it was made');
+
+    Object.assign(api.status, { isRecording: true, durationMillis: 1200, metering: -20 });
+    await sleep(40);
+    assert.equal(owned.state().isRecording, true);
+    assert.equal(owned.state().durationMillis, 1200);
+    assert.equal(owned.state().metering, -20);
+
+    after.pop()!();
+    api.status.durationMillis = 5000;
+    await sleep(40);
+    assert.equal(owned.state().durationMillis, 1200, 'no longer asked once the component is gone');
+  });
+
+  it('keeps the same status for what useAudioRecorderState counts as no change', async () => {
+    const { api, expoAudio } = recorder();
+    const injector = Injector.create({ providers: [] });
+    after.push(() => injector.destroy());
+    // Levels a binary float steps exactly: 0 to -0.1 is 0.1 dB to the bit.
+    Object.assign(api.status, { isRecording: true, durationMillis: 1000, metering: 0 });
+    const owned = withModules({ 'expo-audio': expoAudio }, () =>
+      runInInjectionContext(injector, () => audioRecorder(VOICE, { statusInterval: 0.005 })),
+    );
+    const first = owned.state();
+
+    Object.assign(api.status, { durationMillis: 1050, metering: -0.1 });
+    await sleep(40);
+    assert.equal(owned.state(), first, '50 ms and 0.1 dB is no change');
+
+    api.status.durationMillis = 1051;
+    await sleep(40);
+    assert.equal(owned.state().durationMillis, 1051, 'past 50 ms is a change');
+
+    const second = owned.state();
+    api.status.metering = -0.21;
+    await sleep(40);
+    assert.notEqual(owned.state(), second, 'past 0.1 dB is a change');
+    assert.equal(owned.state().metering, -0.21);
+
+    const third = owned.state();
+    api.status.url = 'file:///voice.m4a';
+    await sleep(40);
+    assert.notEqual(owned.state(), third, 'a new url is a change');
+    assert.equal(owned.state().url, 'file:///voice.m4a');
+
+    // pause() turns isRecording off and leaves durationMillis where it was: a pause button
+    // follows the flag alone, and so does each other flag.
+    for (const flag of ['isRecording', 'canRecord', 'mediaServicesDidReset'] as const) {
+      const before = owned.state();
+      api.status[flag] = !api.status[flag];
+      await sleep(40);
+      assert.notEqual(owned.state(), before, `${flag} alone is a change`);
+      assert.equal(owned.state()[flag], api.status[flag]);
+    }
+
+    const metered = owned.state();
+    delete api.status.metering;
+    await sleep(40);
+    assert.notEqual(owned.state(), metered, 'losing the level is a change');
+    assert.equal(owned.state().metering, undefined);
+
+    const unmetered = owned.state();
+    api.status.metering = -20.25;
+    await sleep(40);
+    assert.notEqual(owned.state(), unmetered, 'gaining the level is a change');
+    assert.equal(owned.state().metering, -20.25);
+  });
+
+  it('asks every half second, and leaves metering off, unless it is told otherwise', () => {
+    const { api, expoAudio } = recorder();
+    const injector = Injector.create({ providers: [] });
+    after.push(() => injector.destroy());
+    // Count the poll rather than run it: only its interval is under test.
+    const setInterval = globalThis.setInterval;
+    const intervals: unknown[] = [];
+    globalThis.setInterval = ((_: unknown, ms: unknown) => {
+      intervals.push(ms);
+      return 0;
+    }) as unknown as typeof setInterval;
+    try {
+      const { isMeteringEnabled: _, ...unmetered } = VOICE as Record<string, unknown>;
+      withModules({ 'expo-audio': expoAudio, 'react-native': { Platform: { OS: 'ios' } } }, () =>
+        runInInjectionContext(injector, () => audioRecorder(unmetered as never)),
+      );
+    } finally {
+      globalThis.setInterval = setInterval;
+    }
+    assert.deepEqual(intervals, [500], 'useAudioRecorderState asks every 500 ms');
+    assert.equal(
+      (api.made[0] as { isMeteringEnabled: unknown }).isMeteringEnabled,
+      false,
+      'createRecordingOptions turns metering off when the options leave it out',
+    );
+  });
+
+  it('makes nothing outside an injection context, where nothing could release it', () => {
+    const { api, expoAudio } = recorder();
+    // A poll that leaked would keep the test process alive: count it instead of running it.
+    const setInterval = globalThis.setInterval;
+    let polls = 0;
+    globalThis.setInterval = (() => ++polls) as unknown as typeof setInterval;
+    try {
+      withModules({ 'expo-audio': expoAudio }, () =>
+        assert.throws(() => audioRecorder(VOICE), /NG0203|injection context/),
+      );
+    } finally {
+      globalThis.setInterval = setInterval;
+    }
+    assert.deepEqual(api.made, [], 'no recorder left unreleased');
+    assert.equal(polls, 0, 'and no poll left running');
+  });
+
+  it('refuses to make one in Node, where expo-audio has nothing to load', () => {
+    const injector = Injector.create({ providers: [] });
+    assert.throws(
+      () => runInInjectionContext(injector, () => audioRecorder(VOICE)),
+      /expo-audio has no native module to load in Node/,
+    );
   });
 });

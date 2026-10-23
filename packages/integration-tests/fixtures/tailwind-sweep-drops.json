@@ -1867,6 +1867,8 @@
     "mask-y-to-zinc-950!"
   ],
   "dropped 'accent-color': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+    "accent-(--x)",
+    "accent-(--x)!",
     "accent-[#1a2b3c]",
     "accent-[#1a2b3c]!",
     "accent-[#1a2b3c]/[0.3]",
@@ -1909,10 +1911,6 @@
     "accent-[3]!",
     "accent-[calc(1rem+2px)]",
     "accent-[calc(1rem+2px)]!"
-  ],
-  "dropped 'accent-color': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "accent-(--x)",
-    "accent-(--x)!"
   ],
   "dropped 'align-items': align-items: last baseline has no Yoga equivalent; write baseline, which is the first.": [
     "items-baseline-last",
@@ -2218,6 +2216,8 @@
     "backdrop-contrast-[37%]!",
     "backdrop-contrast-[3]",
     "backdrop-contrast-[3]!",
+    "backdrop-filter-(--x)",
+    "backdrop-filter-(--x)!",
     "backdrop-grayscale",
     "backdrop-grayscale backdrop-opacity-50",
     "backdrop-grayscale!",
@@ -2352,10 +2352,6 @@
     "backdrop-saturate-(--x)!",
     "backdrop-sepia-(--x)",
     "backdrop-sepia-(--x)!"
-  ],
-  "dropped 'backdrop-filter': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "backdrop-filter-(--x)",
-    "backdrop-filter-(--x)!"
   ],
   "dropped 'background-attachment': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "bg-fixed",
@@ -3372,6 +3368,8 @@
     "caret-[calc(1rem+2px)]!"
   ],
   "dropped 'caret-color': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "caret-(--x)",
+    "caret-(--x)!",
     "caret-[#1a2b3c]",
     "caret-[#1a2b3c]!",
     "caret-[#1a2b3c]/[0.3]",
@@ -3394,10 +3392,6 @@
     "caret-rose-300!",
     "caret-zinc-950",
     "caret-zinc-950!"
-  ],
-  "dropped 'caret-color': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "caret-(--x)",
-    "caret-(--x)!"
   ],
   "dropped 'clear': '…' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": [
     "clear-both",
@@ -3590,12 +3584,10 @@
   "dropped 'container-type': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "@container",
     "@container!",
+    "@container-(--x)",
+    "@container-(--x)!",
     "@container-normal",
     "@container-normal!"
-  ],
-  "dropped 'container-type': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "@container-(--x)",
-    "@container-(--x)!"
   ],
   "dropped 'content-visibility': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "content-auto",
@@ -3854,6 +3846,8 @@
     "fill-[calc(1rem+2px)]!"
   ],
   "dropped 'fill': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "fill-(--x)",
+    "fill-(--x)!",
     "fill-[#1a2b3c]",
     "fill-[#1a2b3c]!",
     "fill-[#1a2b3c]/[0.3]",
@@ -3878,10 +3872,6 @@
     "fill-rose-300!",
     "fill-zinc-950",
     "fill-zinc-950!"
-  ],
-  "dropped 'fill': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "fill-(--x)",
-    "fill-(--x)!"
   ],
   "dropped 'filter': '…' is not a value native can take": [
     "filter-[#1a2b3c]",
@@ -4062,6 +4052,8 @@
     "font-stretch-[rgb(10,20,30)]!"
   ],
   "dropped 'font-stretch': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "font-stretch-(--x)",
+    "font-stretch-(--x)!",
     "font-stretch-100%",
     "font-stretch-100%!",
     "font-stretch-105%",
@@ -4102,10 +4094,6 @@
     "font-stretch-ultra-condensed!",
     "font-stretch-ultra-expanded",
     "font-stretch-ultra-expanded!"
-  ],
-  "dropped 'font-stretch': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "font-stretch-(--x)",
-    "font-stretch-(--x)!"
   ],
   "dropped 'font-variant-numeric': font-variant-numeric: '…' is not a font variant native can ask a font for.": [
     "diagonal-fractions",
@@ -5006,6 +4994,8 @@
     "leading-[rgb(10,20,30)]!"
   ],
   "dropped 'list-style-image': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+    "list-image-(--x)",
+    "list-image-(--x)!",
     "list-image-none",
     "list-image-none!"
   ],
@@ -5031,10 +5021,6 @@
     "list-image-[rgb(10,20,30)]",
     "list-image-[rgb(10,20,30)]!"
   ],
-  "dropped 'list-style-image': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "list-image-(--x)",
-    "list-image-(--x)!"
-  ],
   "dropped 'list-style-position': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
     "list-inside",
     "list-inside!",
@@ -5042,6 +5028,8 @@
     "list-outside!"
   ],
   "dropped 'list-style-type': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+    "list-(--x)",
+    "list-(--x)!",
     "list-decimal",
     "list-decimal!",
     "list-disc",
@@ -5070,10 +5058,6 @@
     "list-[calc(1rem+2px)]!",
     "list-[rgb(10,20,30)]",
     "list-[rgb(10,20,30)]!"
-  ],
-  "dropped 'list-style-type': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "list-(--x)",
-    "list-(--x)!"
   ],
   "dropped 'margin-block-end': '…' is not a value native can take": [
     "-mbe-[#1a2b3c]",
@@ -6781,6 +6765,8 @@
     "-mask-linear-6!",
     "-mask-linear-[30deg]",
     "-mask-linear-[30deg]!",
+    "mask-(--x)",
+    "mask-(--x)!",
     "mask-b-from-0",
     "mask-b-from-0 mask-b-from-amber-50",
     "mask-b-from-0!",
@@ -7303,10 +7289,6 @@
     "-mask-linear-(--x)",
     "-mask-linear-(--x)!"
   ],
-  "dropped 'mask-image': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "mask-(--x)",
-    "mask-(--x)!"
-  ],
   "dropped 'mask-mode': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "mask-alpha",
     "mask-alpha!",
@@ -7358,6 +7340,8 @@
     "mask-center!",
     "mask-left",
     "mask-left!",
+    "mask-position-(--x)",
+    "mask-position-(--x)!",
     "mask-position-[0.35]",
     "mask-position-[0.35]!",
     "mask-position-[1.25rem]",
@@ -7378,10 +7362,6 @@
     "mask-top-left!",
     "mask-top-right",
     "mask-top-right!"
-  ],
-  "dropped 'mask-position': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "mask-position-(--x)",
-    "mask-position-(--x)!"
   ],
   "dropped 'mask-repeat': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "mask-no-repeat",
@@ -7414,6 +7394,8 @@
     "mask-contain!",
     "mask-cover",
     "mask-cover!",
+    "mask-size-(--x)",
+    "mask-size-(--x)!",
     "mask-size-[0.35]",
     "mask-size-[0.35]!",
     "mask-size-[1.25rem]",
@@ -7426,10 +7408,6 @@
     "mask-size-[3]!",
     "mask-size-[calc(1rem+2px)]",
     "mask-size-[calc(1rem+2px)]!"
-  ],
-  "dropped 'mask-size': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "mask-size-(--x)",
-    "mask-size-(--x)!"
   ],
   "dropped 'mask-source-type': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "mask-alpha",
@@ -7836,8 +7814,6 @@
     "outline-[30deg]!"
   ],
   "dropped 'outline-offset': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
-    "-outline-offset-(--x)",
-    "-outline-offset-(--x)!",
     "-outline-offset-[#1a2b3c]",
     "-outline-offset-[#1a2b3c]!",
     "-outline-offset-[0.35]",
@@ -8143,6 +8119,8 @@
     "perspective-origin-[rgb(10,20,30)]!"
   ],
   "dropped 'perspective-origin': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "perspective-origin-(--x)",
+    "perspective-origin-(--x)!",
     "perspective-origin-[0.35]",
     "perspective-origin-[0.35]!",
     "perspective-origin-[1.25rem]",
@@ -8174,10 +8152,6 @@
     "perspective-origin-top-right",
     "perspective-origin-top-right!"
   ],
-  "dropped 'perspective-origin': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "perspective-origin-(--x)",
-    "perspective-origin-(--x)!"
-  ],
   "dropped 'perspective': '…' is not a value native can take": [
     "perspective-[#1a2b3c]",
     "perspective-[#1a2b3c]!",
@@ -8191,6 +8165,8 @@
     "perspective-[rgb(10,20,30)]!"
   ],
   "dropped 'perspective': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "perspective-(--x)",
+    "perspective-(--x)!",
     "perspective-[0.35]",
     "perspective-[0.35]!",
     "perspective-[1.25rem]",
@@ -8213,10 +8189,6 @@
     "perspective-none!",
     "perspective-normal",
     "perspective-normal!"
-  ],
-  "dropped 'perspective': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "perspective-(--x)",
-    "perspective-(--x)!"
   ],
   "dropped 'place-content': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "place-content-around",
@@ -8469,6 +8441,8 @@
     "scroll-mbe-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-block-end': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-mbe-(--x)",
+    "-scroll-mbe-(--x)!",
     "-scroll-mbe-14",
     "-scroll-mbe-14!",
     "-scroll-mbe-[0.35]",
@@ -8487,6 +8461,8 @@
     "-scroll-mbe-gutter!",
     "-scroll-mbe-px",
     "-scroll-mbe-px!",
+    "scroll-mbe-(--x)",
+    "scroll-mbe-(--x)!",
     "scroll-mbe-0",
     "scroll-mbe-0!",
     "scroll-mbe-36",
@@ -8510,12 +8486,6 @@
     "scroll-mbe-px",
     "scroll-mbe-px!"
   ],
-  "dropped 'scroll-margin-block-end': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-mbe-(--x)",
-    "-scroll-mbe-(--x)!",
-    "scroll-mbe-(--x)",
-    "scroll-mbe-(--x)!"
-  ],
   "dropped 'scroll-margin-block-start': '…' is not a value native can take": [
     "-scroll-mbs-[#1a2b3c]",
     "-scroll-mbs-[#1a2b3c]!",
@@ -8535,6 +8505,8 @@
     "scroll-mbs-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-block-start': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-mbs-(--x)",
+    "-scroll-mbs-(--x)!",
     "-scroll-mbs-14",
     "-scroll-mbs-14!",
     "-scroll-mbs-[0.35]",
@@ -8553,6 +8525,8 @@
     "-scroll-mbs-gutter!",
     "-scroll-mbs-px",
     "-scroll-mbs-px!",
+    "scroll-mbs-(--x)",
+    "scroll-mbs-(--x)!",
     "scroll-mbs-0",
     "scroll-mbs-0!",
     "scroll-mbs-36",
@@ -8576,12 +8550,6 @@
     "scroll-mbs-px",
     "scroll-mbs-px!"
   ],
-  "dropped 'scroll-margin-block-start': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-mbs-(--x)",
-    "-scroll-mbs-(--x)!",
-    "scroll-mbs-(--x)",
-    "scroll-mbs-(--x)!"
-  ],
   "dropped 'scroll-margin-block': '…' is not a value native can take": [
     "-scroll-my-[#1a2b3c]",
     "-scroll-my-[#1a2b3c]!",
@@ -8601,6 +8569,8 @@
     "scroll-my-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-block': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-my-(--x)",
+    "-scroll-my-(--x)!",
     "-scroll-my-14",
     "-scroll-my-14!",
     "-scroll-my-[0.35]",
@@ -8619,6 +8589,8 @@
     "-scroll-my-gutter!",
     "-scroll-my-px",
     "-scroll-my-px!",
+    "scroll-my-(--x)",
+    "scroll-my-(--x)!",
     "scroll-my-0",
     "scroll-my-0!",
     "scroll-my-36",
@@ -8642,12 +8614,6 @@
     "scroll-my-px",
     "scroll-my-px!"
   ],
-  "dropped 'scroll-margin-block': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-my-(--x)",
-    "-scroll-my-(--x)!",
-    "scroll-my-(--x)",
-    "scroll-my-(--x)!"
-  ],
   "dropped 'scroll-margin-bottom': '…' is not a value native can take": [
     "-scroll-mb-[#1a2b3c]",
     "-scroll-mb-[#1a2b3c]!",
@@ -8667,6 +8633,8 @@
     "scroll-mb-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-bottom': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-mb-(--x)",
+    "-scroll-mb-(--x)!",
     "-scroll-mb-14",
     "-scroll-mb-14!",
     "-scroll-mb-[0.35]",
@@ -8685,6 +8653,8 @@
     "-scroll-mb-gutter!",
     "-scroll-mb-px",
     "-scroll-mb-px!",
+    "scroll-mb-(--x)",
+    "scroll-mb-(--x)!",
     "scroll-mb-0",
     "scroll-mb-0!",
     "scroll-mb-36",
@@ -8708,12 +8678,6 @@
     "scroll-mb-px",
     "scroll-mb-px!"
   ],
-  "dropped 'scroll-margin-bottom': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-mb-(--x)",
-    "-scroll-mb-(--x)!",
-    "scroll-mb-(--x)",
-    "scroll-mb-(--x)!"
-  ],
   "dropped 'scroll-margin-inline-end': '…' is not a value native can take": [
     "-scroll-me-[#1a2b3c]",
     "-scroll-me-[#1a2b3c]!",
@@ -8733,6 +8697,8 @@
     "scroll-me-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-inline-end': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-me-(--x)",
+    "-scroll-me-(--x)!",
     "-scroll-me-14",
     "-scroll-me-14!",
     "-scroll-me-[0.35]",
@@ -8751,6 +8717,8 @@
     "-scroll-me-gutter!",
     "-scroll-me-px",
     "-scroll-me-px!",
+    "scroll-me-(--x)",
+    "scroll-me-(--x)!",
     "scroll-me-0",
     "scroll-me-0!",
     "scroll-me-36",
@@ -8774,12 +8742,6 @@
     "scroll-me-px",
     "scroll-me-px!"
   ],
-  "dropped 'scroll-margin-inline-end': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-me-(--x)",
-    "-scroll-me-(--x)!",
-    "scroll-me-(--x)",
-    "scroll-me-(--x)!"
-  ],
   "dropped 'scroll-margin-inline-start': '…' is not a value native can take": [
     "-scroll-ms-[#1a2b3c]",
     "-scroll-ms-[#1a2b3c]!",
@@ -8799,6 +8761,8 @@
     "scroll-ms-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-inline-start': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-ms-(--x)",
+    "-scroll-ms-(--x)!",
     "-scroll-ms-14",
     "-scroll-ms-14!",
     "-scroll-ms-[0.35]",
@@ -8817,6 +8781,8 @@
     "-scroll-ms-gutter!",
     "-scroll-ms-px",
     "-scroll-ms-px!",
+    "scroll-ms-(--x)",
+    "scroll-ms-(--x)!",
     "scroll-ms-0",
     "scroll-ms-0!",
     "scroll-ms-36",
@@ -8840,12 +8806,6 @@
     "scroll-ms-px",
     "scroll-ms-px!"
   ],
-  "dropped 'scroll-margin-inline-start': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-ms-(--x)",
-    "-scroll-ms-(--x)!",
-    "scroll-ms-(--x)",
-    "scroll-ms-(--x)!"
-  ],
   "dropped 'scroll-margin-inline': '…' is not a value native can take": [
     "-scroll-mx-[#1a2b3c]",
     "-scroll-mx-[#1a2b3c]!",
@@ -8865,6 +8825,8 @@
     "scroll-mx-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-inline': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-mx-(--x)",
+    "-scroll-mx-(--x)!",
     "-scroll-mx-14",
     "-scroll-mx-14!",
     "-scroll-mx-[0.35]",
@@ -8883,6 +8845,8 @@
     "-scroll-mx-gutter!",
     "-scroll-mx-px",
     "-scroll-mx-px!",
+    "scroll-mx-(--x)",
+    "scroll-mx-(--x)!",
     "scroll-mx-0",
     "scroll-mx-0!",
     "scroll-mx-36",
@@ -8906,12 +8870,6 @@
     "scroll-mx-px",
     "scroll-mx-px!"
   ],
-  "dropped 'scroll-margin-inline': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-mx-(--x)",
-    "-scroll-mx-(--x)!",
-    "scroll-mx-(--x)",
-    "scroll-mx-(--x)!"
-  ],
   "dropped 'scroll-margin-left': '…' is not a value native can take": [
     "-scroll-ml-[#1a2b3c]",
     "-scroll-ml-[#1a2b3c]!",
@@ -8931,6 +8889,8 @@
     "scroll-ml-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-left': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-ml-(--x)",
+    "-scroll-ml-(--x)!",
     "-scroll-ml-14",
     "-scroll-ml-14!",
     "-scroll-ml-[0.35]",
@@ -8949,6 +8909,8 @@
     "-scroll-ml-gutter!",
     "-scroll-ml-px",
     "-scroll-ml-px!",
+    "scroll-ml-(--x)",
+    "scroll-ml-(--x)!",
     "scroll-ml-0",
     "scroll-ml-0!",
     "scroll-ml-36",
@@ -8972,12 +8934,6 @@
     "scroll-ml-px",
     "scroll-ml-px!"
   ],
-  "dropped 'scroll-margin-left': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-ml-(--x)",
-    "-scroll-ml-(--x)!",
-    "scroll-ml-(--x)",
-    "scroll-ml-(--x)!"
-  ],
   "dropped 'scroll-margin-right': '…' is not a value native can take": [
     "-scroll-mr-[#1a2b3c]",
     "-scroll-mr-[#1a2b3c]!",
@@ -8997,6 +8953,8 @@
     "scroll-mr-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-right': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-mr-(--x)",
+    "-scroll-mr-(--x)!",
     "-scroll-mr-14",
     "-scroll-mr-14!",
     "-scroll-mr-[0.35]",
@@ -9015,6 +8973,8 @@
     "-scroll-mr-gutter!",
     "-scroll-mr-px",
     "-scroll-mr-px!",
+    "scroll-mr-(--x)",
+    "scroll-mr-(--x)!",
     "scroll-mr-0",
     "scroll-mr-0!",
     "scroll-mr-36",
@@ -9038,12 +8998,6 @@
     "scroll-mr-px",
     "scroll-mr-px!"
   ],
-  "dropped 'scroll-margin-right': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-mr-(--x)",
-    "-scroll-mr-(--x)!",
-    "scroll-mr-(--x)",
-    "scroll-mr-(--x)!"
-  ],
   "dropped 'scroll-margin-top': '…' is not a value native can take": [
     "-scroll-mt-[#1a2b3c]",
     "-scroll-mt-[#1a2b3c]!",
@@ -9063,6 +9017,8 @@
     "scroll-mt-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin-top': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-mt-(--x)",
+    "-scroll-mt-(--x)!",
     "-scroll-mt-14",
     "-scroll-mt-14!",
     "-scroll-mt-[0.35]",
@@ -9081,6 +9037,8 @@
     "-scroll-mt-gutter!",
     "-scroll-mt-px",
     "-scroll-mt-px!",
+    "scroll-mt-(--x)",
+    "scroll-mt-(--x)!",
     "scroll-mt-0",
     "scroll-mt-0!",
     "scroll-mt-36",
@@ -9104,12 +9062,6 @@
     "scroll-mt-px",
     "scroll-mt-px!"
   ],
-  "dropped 'scroll-margin-top': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-mt-(--x)",
-    "-scroll-mt-(--x)!",
-    "scroll-mt-(--x)",
-    "scroll-mt-(--x)!"
-  ],
   "dropped 'scroll-margin': '…' is not a value native can take": [
     "-scroll-m-[#1a2b3c]",
     "-scroll-m-[#1a2b3c]!",
@@ -9129,6 +9081,8 @@
     "scroll-m-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-margin': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-scroll-m-(--x)",
+    "-scroll-m-(--x)!",
     "-scroll-m-14",
     "-scroll-m-14!",
     "-scroll-m-[0.35]",
@@ -9147,6 +9101,8 @@
     "-scroll-m-gutter!",
     "-scroll-m-px",
     "-scroll-m-px!",
+    "scroll-m-(--x)",
+    "scroll-m-(--x)!",
     "scroll-m-0",
     "scroll-m-0!",
     "scroll-m-36",
@@ -9170,12 +9126,6 @@
     "scroll-m-px",
     "scroll-m-px!"
   ],
-  "dropped 'scroll-margin': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-scroll-m-(--x)",
-    "-scroll-m-(--x)!",
-    "scroll-m-(--x)",
-    "scroll-m-(--x)!"
-  ],
   "dropped 'scroll-padding-block-end': '…' is not a value native can take": [
     "scroll-pbe-[#1a2b3c]",
     "scroll-pbe-[#1a2b3c]!",
@@ -9187,6 +9137,8 @@
     "scroll-pbe-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-block-end': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-pbe-(--x)",
+    "scroll-pbe-(--x)!",
     "scroll-pbe-0",
     "scroll-pbe-0!",
     "scroll-pbe-36",
@@ -9210,10 +9162,6 @@
     "scroll-pbe-px",
     "scroll-pbe-px!"
   ],
-  "dropped 'scroll-padding-block-end': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-pbe-(--x)",
-    "scroll-pbe-(--x)!"
-  ],
   "dropped 'scroll-padding-block-start': '…' is not a value native can take": [
     "scroll-pbs-[#1a2b3c]",
     "scroll-pbs-[#1a2b3c]!",
@@ -9225,6 +9173,8 @@
     "scroll-pbs-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-block-start': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-pbs-(--x)",
+    "scroll-pbs-(--x)!",
     "scroll-pbs-0",
     "scroll-pbs-0!",
     "scroll-pbs-36",
@@ -9248,10 +9198,6 @@
     "scroll-pbs-px",
     "scroll-pbs-px!"
   ],
-  "dropped 'scroll-padding-block-start': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-pbs-(--x)",
-    "scroll-pbs-(--x)!"
-  ],
   "dropped 'scroll-padding-block': '…' is not a value native can take": [
     "scroll-py-[#1a2b3c]",
     "scroll-py-[#1a2b3c]!",
@@ -9263,6 +9209,8 @@
     "scroll-py-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-block': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-py-(--x)",
+    "scroll-py-(--x)!",
     "scroll-py-0",
     "scroll-py-0!",
     "scroll-py-36",
@@ -9286,10 +9234,6 @@
     "scroll-py-px",
     "scroll-py-px!"
   ],
-  "dropped 'scroll-padding-block': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-py-(--x)",
-    "scroll-py-(--x)!"
-  ],
   "dropped 'scroll-padding-bottom': '…' is not a value native can take": [
     "scroll-pb-[#1a2b3c]",
     "scroll-pb-[#1a2b3c]!",
@@ -9301,6 +9245,8 @@
     "scroll-pb-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-bottom': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-pb-(--x)",
+    "scroll-pb-(--x)!",
     "scroll-pb-0",
     "scroll-pb-0!",
     "scroll-pb-36",
@@ -9324,10 +9270,6 @@
     "scroll-pb-px",
     "scroll-pb-px!"
   ],
-  "dropped 'scroll-padding-bottom': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-pb-(--x)",
-    "scroll-pb-(--x)!"
-  ],
   "dropped 'scroll-padding-inline-end': '…' is not a value native can take": [
     "scroll-pe-[#1a2b3c]",
     "scroll-pe-[#1a2b3c]!",
@@ -9339,6 +9281,8 @@
     "scroll-pe-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-inline-end': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-pe-(--x)",
+    "scroll-pe-(--x)!",
     "scroll-pe-0",
     "scroll-pe-0!",
     "scroll-pe-36",
@@ -9362,10 +9306,6 @@
     "scroll-pe-px",
     "scroll-pe-px!"
   ],
-  "dropped 'scroll-padding-inline-end': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-pe-(--x)",
-    "scroll-pe-(--x)!"
-  ],
   "dropped 'scroll-padding-inline-start': '…' is not a value native can take": [
     "scroll-ps-[#1a2b3c]",
     "scroll-ps-[#1a2b3c]!",
@@ -9377,6 +9317,8 @@
     "scroll-ps-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-inline-start': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-ps-(--x)",
+    "scroll-ps-(--x)!",
     "scroll-ps-0",
     "scroll-ps-0!",
     "scroll-ps-36",
@@ -9400,10 +9342,6 @@
     "scroll-ps-px",
     "scroll-ps-px!"
   ],
-  "dropped 'scroll-padding-inline-start': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-ps-(--x)",
-    "scroll-ps-(--x)!"
-  ],
   "dropped 'scroll-padding-inline': '…' is not a value native can take": [
     "scroll-px-[#1a2b3c]",
     "scroll-px-[#1a2b3c]!",
@@ -9415,6 +9353,8 @@
     "scroll-px-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-inline': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-px-(--x)",
+    "scroll-px-(--x)!",
     "scroll-px-0",
     "scroll-px-0!",
     "scroll-px-36",
@@ -9438,10 +9378,6 @@
     "scroll-px-px",
     "scroll-px-px!"
   ],
-  "dropped 'scroll-padding-inline': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-px-(--x)",
-    "scroll-px-(--x)!"
-  ],
   "dropped 'scroll-padding-left': '…' is not a value native can take": [
     "scroll-pl-[#1a2b3c]",
     "scroll-pl-[#1a2b3c]!",
@@ -9453,6 +9389,8 @@
     "scroll-pl-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-left': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-pl-(--x)",
+    "scroll-pl-(--x)!",
     "scroll-pl-0",
     "scroll-pl-0!",
     "scroll-pl-36",
@@ -9476,10 +9414,6 @@
     "scroll-pl-px",
     "scroll-pl-px!"
   ],
-  "dropped 'scroll-padding-left': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-pl-(--x)",
-    "scroll-pl-(--x)!"
-  ],
   "dropped 'scroll-padding-right': '…' is not a value native can take": [
     "scroll-pr-[#1a2b3c]",
     "scroll-pr-[#1a2b3c]!",
@@ -9491,6 +9425,8 @@
     "scroll-pr-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-right': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-pr-(--x)",
+    "scroll-pr-(--x)!",
     "scroll-pr-0",
     "scroll-pr-0!",
     "scroll-pr-36",
@@ -9514,10 +9450,6 @@
     "scroll-pr-px",
     "scroll-pr-px!"
   ],
-  "dropped 'scroll-padding-right': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-pr-(--x)",
-    "scroll-pr-(--x)!"
-  ],
   "dropped 'scroll-padding-top': '…' is not a value native can take": [
     "scroll-pt-[#1a2b3c]",
     "scroll-pt-[#1a2b3c]!",
@@ -9529,6 +9461,8 @@
     "scroll-pt-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding-top': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-pt-(--x)",
+    "scroll-pt-(--x)!",
     "scroll-pt-0",
     "scroll-pt-0!",
     "scroll-pt-36",
@@ -9552,10 +9486,6 @@
     "scroll-pt-px",
     "scroll-pt-px!"
   ],
-  "dropped 'scroll-padding-top': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-pt-(--x)",
-    "scroll-pt-(--x)!"
-  ],
   "dropped 'scroll-padding': '…' is not a value native can take": [
     "scroll-p-[#1a2b3c]",
     "scroll-p-[#1a2b3c]!",
@@ -9567,6 +9497,8 @@
     "scroll-p-[rgb(10,20,30)]!"
   ],
   "dropped 'scroll-padding': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "scroll-p-(--x)",
+    "scroll-p-(--x)!",
     "scroll-p-0",
     "scroll-p-0!",
     "scroll-p-36",
@@ -9589,10 +9521,6 @@
     "scroll-p-gutter!",
     "scroll-p-px",
     "scroll-p-px!"
-  ],
-  "dropped 'scroll-padding': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "scroll-p-(--x)",
-    "scroll-p-(--x)!"
   ],
   "dropped 'scroll-snap-align': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "snap-align-none",
@@ -9750,6 +9678,8 @@
     "stroke-[30deg]!"
   ],
   "dropped 'stroke': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "stroke-(--x)",
+    "stroke-(--x)!",
     "stroke-[#1a2b3c]",
     "stroke-[#1a2b3c]!",
     "stroke-[#1a2b3c]/[0.3]",
@@ -9773,11 +9703,9 @@
     "stroke-zinc-950",
     "stroke-zinc-950!"
   ],
-  "dropped 'stroke': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "stroke-(--x)",
-    "stroke-(--x)!"
-  ],
   "dropped 'tab-size': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+    "tab-(--x)",
+    "tab-(--x)!",
     "tab-2",
     "tab-2!",
     "tab-4",
@@ -9806,10 +9734,6 @@
     "tab-[37%]!",
     "tab-[rgb(10,20,30)]",
     "tab-[rgb(10,20,30)]!"
-  ],
-  "dropped 'tab-size': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "tab-(--x)",
-    "tab-(--x)!"
   ],
   "dropped 'table-layout': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
     "table-auto",
@@ -9870,6 +9794,8 @@
     "indent-[rgb(10,20,30)]!"
   ],
   "dropped 'text-indent': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
+    "-indent-(--x)",
+    "-indent-(--x)!",
     "-indent-14",
     "-indent-14!",
     "-indent-[0.35]",
@@ -9888,6 +9814,8 @@
     "-indent-gutter!",
     "-indent-px",
     "-indent-px!",
+    "indent-(--x)",
+    "indent-(--x)!",
     "indent-0",
     "indent-0!",
     "indent-36",
@@ -9910,12 +9838,6 @@
     "indent-gutter!",
     "indent-px",
     "indent-px!"
-  ],
-  "dropped 'text-indent': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "-indent-(--x)",
-    "-indent-(--x)!",
-    "indent-(--x)",
-    "indent-(--x)!"
   ],
   "dropped 'text-shadow': '…' is not a value native can take": [
     "text-shadow-[0.35]",
@@ -10002,15 +9924,9 @@
     "underline-offset-auto",
     "underline-offset-auto!"
   ],
-  "dropped 'text-wrap': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "text-balance",
-    "text-balance!",
+  "dropped 'text-wrap': text-wrap: nowrap is not read here. Write white-space: nowrap, which is one line.": [
     "text-nowrap",
-    "text-nowrap!",
-    "text-pretty",
-    "text-pretty!",
-    "text-wrap",
-    "text-wrap!"
+    "text-nowrap!"
   ],
   "dropped 'top': '…' is not a value native can take": [
     "-top-[#1a2b3c]",
@@ -10451,13 +10367,9 @@
     "will-change-transform",
     "will-change-transform!"
   ],
-  "dropped 'word-break': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+  "dropped 'word-break': word-break: break-all has no native equivalent; normal and keep-all, on iOS, are read.": [
     "break-all",
-    "break-all!",
-    "break-keep",
-    "break-keep!",
-    "break-normal",
-    "break-normal!"
+    "break-all!"
   ],
   "dropped 'z-index': '…' is not a value native can take": [
     "-z-[#1a2b3c]",

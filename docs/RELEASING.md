@@ -66,8 +66,11 @@ is then launched, iOS on a simulator and Android on an emulator, and driven thro
 flow (`examples/canary/.maestro/release`), so an app that builds but crashes at launch fails there,
 as it does on every pull request. Beside it, the
 `generators` job adds a native app to a fresh `ng new` workspace with `ng add @ng-native/schematics`,
-and to a fresh Nx `angular-monorepo` workspace with `nx add @ng-native/nx`, and tests and bundles
-each, installing with npm. The `storybook` job sets up the Storybook recipe from the web docs
+and to a fresh Nx `angular-monorepo` workspace with `nx add @ng-native/nx`, runs the generator
+commands each docs page gives, and tests and bundles each, installing with npm. A third job follows
+the manual setup guide from its code blocks in a blank Expo app, through `expo prebuild`. Each
+fails if the workspace holds two versions of `@angular/core`, `react`, `react-native` or `expo`.
+The `storybook` job sets up the Storybook recipe from the web docs
 (`packages/web/storybook.md`) on the packages being released, on the Storybook and Vite versions
 that page states, builds it with `storybook build` and checks it in Chromium. Once all of those
 pass, it runs the same gate CI does, then:
@@ -98,12 +101,13 @@ npm at that version are skipped, and the rest are published.
 `node scripts/verify-publish.mjs` publishes everything to a local Verdaccio, generates an app with
 `create-expo-app --template @ng-native/template`, and bundles it. With `--web` it also sets up a
 browser app on `@ng-native/web` as its documentation page does, builds it with Vite and checks it in
-Chromium. CI runs both on every push. With `--generators` it also runs the two workspace checks
-above, which take several minutes, so only the release workflow does; `--generators=angular` or
-`--generators=nx` runs one of them, without the template check. `--scenario=web` runs the
-browser check alone. [CONTRIBUTING.md](../CONTRIBUTING.md#checking-distribution-locally) has the
-local steps. `--storybook` runs only the Storybook check the release workflow runs. A newer
-Storybook or Vite for that check is a change to the versions `storybook.md` states, together with
+Chromium. CI runs both on every push. With `--generators` it also runs the three setup checks
+above, which take several minutes, so only the release workflow does; `--generators=angular`,
+`--generators=nx` or `--generators=manual` runs one of them, without the template check.
+`--scenario=web` runs the browser check alone.
+[CONTRIBUTING.md](../CONTRIBUTING.md#checking-distribution-locally) has the local steps.
+`--storybook` runs only the Storybook check the release workflow runs. A newer Storybook or Vite
+for that check is a change to the versions `storybook.md` states, together with
 the `storybook` and `@storybook/html-vite` devDependencies of `packages/integration-tests`, which
 typecheck the page's code on every pull request. `docs-samples.test.ts` fails while the two differ.
 
@@ -115,11 +119,12 @@ while the tests here still ran 22.1.5. `.github/workflows/latest.yml` runs every
 from the Actions tab, to catch that within a week. Each workspace job runs one scenario of
 `node scripts/verify-publish.mjs --scenario=<name>`: the template with npm and with pnpm, `ng new`
 with `ng add`, Nx's `angular-monorepo` preset with npm and with pnpm, and its TypeScript preset
-with npm. Each Nx one also generates a library the app renders and tests, and every scenario runs
-its install a second time and bundles for iOS and Android. The job summary lists the Angular, Expo,
-React Native, Nx, Vitest and TypeScript each scenario resolved. One more job,
-`expo-ui-native-props`, runs `node scripts/expo-ui-native-props.mjs --latest`: it checks each prop a
-typed `ui-*` component sends against the native views of the newest `@expo/ui` that
+with npm, and the manual setup guide on the SDK it pins and on the newest SDK. Each Nx one also
+generates a library the app renders and tests. The template, Angular CLI and Nx scenarios run their
+install a second time, and every native scenario bundles for iOS and Android. The job summary
+lists the Angular, Expo, React Native, Nx, Vitest and TypeScript each scenario resolved. One more
+job, `expo-ui-native-props`, runs `node scripts/expo-ui-native-props.mjs --latest`: it checks each
+prop a typed `ui-*` component sends against the native views of the newest `@expo/ui` that
 `@ng-native/expo`'s peer range allows, since a native view ignores a prop it doesn't declare and a
 rename there fails nothing else. A scheduled failure opens an issue
 titled `Latest versions: <scenario> fails`, or comments on the one already open; close it once

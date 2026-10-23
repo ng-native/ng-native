@@ -20,18 +20,18 @@
     "@ng-native/platform": "workspace:*",
     "@angular/common": "^22.0.0",
     "@angular/core": "^22.0.0",
-    "expo": "~57.0.26",
-    "expo-status-bar": "~57.0.1",
-    "expo-system-ui": "~57.0.4",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
-    "react-native-safe-area-context": "~5.7.0"
+    "expo": "~58.0.16",
+    "expo-status-bar": "~58.0.3",
+    "expo-system-ui": "~58.0.6",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1"
   },
   "devDependencies": {
     "@angular/compiler-cli": "^22.0.0",
     "@babel/core": "^7.29.7",
     "@ng-native/testing": "workspace:*",
-    "@types/react": "~19.2.2",
+    "@types/react": "~19.3.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.0"
   },

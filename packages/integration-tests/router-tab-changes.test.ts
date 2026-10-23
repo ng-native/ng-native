@@ -3,9 +3,11 @@
  * when it turns on.
  */
 import assert from 'node:assert/strict';
-import { afterEach, before, beforeEach, describe, it } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 import type { Type, WritableSignal } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
+import { HardwareBack } from '@ng-native/device';
+import { registerPlatformComponents } from '@ng-native/fabric';
 import {
   cleanup,
   fireEvent,
@@ -15,6 +17,7 @@ import {
   type FakeFabricNode,
 } from '@ng-native/testing';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
+import { registerScreenComponents } from '../router/src/screens.ts';
 import { compileFixture } from './compile.ts';
 
 function flatten(nodes: FakeFabricNode[]): FakeFabricNode[] {
@@ -102,5 +105,100 @@ describe('a tab added after start', () => {
     await idle();
     assert.equal(router.url, '/beta');
     assert.equal(selected(), 'beta');
+  });
+});
+
+describe("Android's back with the first tab taken away", () => {
+  let mod: Record<string, unknown>;
+  let promoEnabled: WritableSignal<boolean>;
+  let router: Router;
+  let handlers: (() => boolean)[];
+
+  const pressBack = async (): Promise<boolean> => {
+    const taken = [...handlers].reverse().some((handler) => handler());
+    await idle();
+    return taken;
+  };
+  const go = async (url: string) => {
+    assert.equal(await router.navigateByUrl(url), true);
+    await idle();
+  };
+  const showPromo = async (shown: boolean) => {
+    promoEnabled.set(shown);
+    await idle();
+  };
+
+  before(async () => {
+    registerPlatformComponents('android');
+    registerScreenComponents();
+    mod = await compileFixture('fixtures/tab-changes.ts');
+    promoEnabled = mod['promoEnabled'] as WritableSignal<boolean>;
+  });
+
+  after(() => {
+    promoEnabled.set(true);
+    registerPlatformComponents('ios');
+    registerScreenComponents();
+  });
+
+  const start = async (promo: boolean) => {
+    handlers = [];
+    promoEnabled.set(promo);
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(mod['promoRoutes'] as Routes),
+        {
+          provide: HardwareBack.SOURCE,
+          useValue: {
+            subscribe: (handler: () => boolean) => {
+              handlers.push(handler);
+              return () => handlers.splice(handlers.indexOf(handler), 1);
+            },
+          },
+        },
+      ],
+    });
+    router = app.componentRef.injector.get(Router);
+    await idle();
+    assert.equal(router.url, '/home');
+  };
+
+  afterEach(() => cleanup());
+
+  it('goes to the first tab still in the bar', async () => {
+    await start(true);
+    await go('/promo');
+    await go('/library');
+    await showPromo(false);
+
+    assert.equal(await pressBack(), true);
+    assert.equal(router.url, '/home', 'not to the promo tab, which is not in the bar');
+  });
+
+  it('declines on the first tab still in the bar, so the platform leaves the app', async () => {
+    await start(true);
+    await showPromo(false);
+
+    assert.equal(await pressBack(), false, 'nothing in the app takes it');
+    assert.equal(router.url, '/home');
+  });
+
+  it('goes to the first tab again once it is back in the bar', async () => {
+    await start(true);
+    await go('/promo');
+    await go('/library');
+    await showPromo(false);
+    await showPromo(true);
+
+    assert.equal(await pressBack(), true);
+    assert.equal(router.url, '/promo');
+  });
+
+  it('goes to a first tab that was not in the bar when the app started', async () => {
+    await start(false);
+    await showPromo(true);
+
+    assert.equal(await pressBack(), true, 'home is no longer the first tab');
+    assert.equal(router.url, '/promo');
   });
 });

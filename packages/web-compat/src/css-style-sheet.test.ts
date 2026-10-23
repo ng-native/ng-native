@@ -392,8 +392,9 @@ describe('the sheet of a <style> in the page', () => {
     assert.equal(screen.getByTestId('one').props['minHeight'], 7);
     sheet.deleteRule(1);
     await settle();
-    // A token no longer given leaves the declaration that reads it unset: the view's own.
-    assert.equal(screen.getByTestId('one').props['minHeight'] ?? null, null);
+    // A token no longer given leaves the declaration that reads it unset: the element's start,
+    // a browser's automatic minimum.
+    assert.equal(screen.getByTestId('one').props['minHeight'], 'auto');
   });
 
   it('styles nothing while it is disabled', async () => {

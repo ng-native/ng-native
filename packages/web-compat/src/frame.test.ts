@@ -496,6 +496,44 @@ describe('iframe', () => {
     assert.deepEqual([window.outerWidth, window.outerHeight], [200, 100]);
   });
 
+  it('answers matchMedia by its own size, and tells a listener as that changes', async () => {
+    // A chart in a frame lays itself out by the frame's width, not the page's.
+    const document = await page();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const narrow = iframe.contentWindow.matchMedia('(max-width: 250px)');
+    assert.equal(narrow.matches, false, 'at 300 wide');
+    const heard: boolean[] = [];
+    narrow.addEventListener('change', (event: Dom) => heard.push(event.matches));
+    iframe.width = '200';
+    await settle();
+    assert.equal(narrow.matches, true, 'at 200 wide');
+    assert.deepEqual(heard, [true]);
+  });
+
+  it("tells a frame's matchMedia listener as the page's colour scheme changes", async () => {
+    // The scheme and the motion are the page's, which the system changes under the frame.
+    const document = await page();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const dark = iframe.contentWindow.matchMedia('(prefers-color-scheme: dark)');
+    const heard: boolean[] = [];
+    dark.addEventListener('change', (event: Dom) => heard.push(event.matches));
+    const engine = iframe.engine;
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'light' });
+    await settle();
+    heard.length = 0;
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'dark' });
+    await settle();
+    assert.equal(dark.matches, true);
+    assert.deepEqual(heard, [true]);
+    // And no more once the frame is closed: the engine keeps nothing of it to tell.
+    iframe.remove();
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'light' });
+    await settle();
+    assert.deepEqual(heard, [true], 'not told once the frame is closed');
+  });
+
   it('closes a frame inside a frame that is taken out', async () => {
     const document = await page();
     const outer = document.createElement('iframe');

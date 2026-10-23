@@ -2,6 +2,7 @@ import { registerViewName, type Engine, type EngineNode } from '@ng-native/fabri
 import type { Matrix } from './canvas-path.ts';
 import type { Pixels } from './canvas-raster.ts';
 import { domError } from './dom-error.ts';
+import { loadedPicture } from './image.ts';
 import { pngUrlOf } from './png.ts';
 
 /**
@@ -9,9 +10,9 @@ import { pngUrlOf } from './png.ts';
  * known, or an `<img>`, whose are the platform's. On screen it is a react-native-svg image of
  * a URL: the image's own, or a PNG of the pixels, made once for each set of them.
  *
- * ponytail: an `<img>` is no picture yet: nothing tells this package its size or that it has
- * loaded, so drawing one draws nothing, as drawing one not loaded does in a browser. Draw it by
- * its URL once its picture's size is known.
+ * ponytail: an `<img>`'s pixels never reach JavaScript, so it is drawn on screen and is not in
+ * the pixels read back, where it is transparent. One not loaded draws nothing, as in a browser,
+ * and so does one whose picture is an SVG, which is drawn from its markup: see `image.ts`.
  */
 export interface Picture {
   readonly width: number;
@@ -46,10 +47,12 @@ export function pictureOf(
       throw domError('The canvas has no size.', 'InvalidStateError');
     return { width: pixels.width, height: pixels.height, pixels };
   }
-  // An `<img>`, whose size is not known: see the note above. An SVG `<image>`, which is not
-  // drawn and so never loads. It is kept under the name of every SVG element that is not drawn,
-  // see `svg.ts`, and so is any of them. One written in markup keeps its own name.
-  if (node?.tag === 'img' || node?.tag === 'svg:undrawn' || node?.tag === 'image') return null;
+  // An `<img>`, by what it is shown from once it has loaded: see `image.ts`.
+  if (node?.tag === 'img') return loadedPicture(node);
+  // An SVG `<image>`, which is not drawn and so never loads. It is kept under the name of every
+  // SVG element that is not drawn, see `svg.ts`, and so is any of them. One written in markup
+  // keeps its own name.
+  if (node?.tag === 'svg:undrawn' || node?.tag === 'image') return null;
   throw new TypeError('What is drawn is not an image or a canvas.');
 }
 

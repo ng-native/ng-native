@@ -9,6 +9,8 @@
  * `__DEV__` is true for the same reason.
  */
 import { createRequire, register } from 'node:module';
+// Only the `Intl` constructors Hermes has. See `hermes-intl.mjs`.
+import './hermes-intl.mjs';
 
 createRequire(import.meta.url)('@ng-native/metro/polyfills/animation-globals.js');
 // Metro's prelude defines this in every bundle, and app code reads it bare.

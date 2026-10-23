@@ -1,7 +1,8 @@
-import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
+import { claimHost, markPage, type Engine, type EngineNode } from '@ng-native/fabric';
 import { createAttribute, createAttributeNS } from './attr.ts';
 import { createCDATASection } from './cdata-section.ts';
 import { createComment } from './character-data.ts';
+import { copySelected } from './copy-command.ts';
 import { documentChildren } from './document-children.ts';
 import { markFragment } from './document-fragment.ts';
 import { documentNodeMembers } from './document-node.ts';
@@ -22,6 +23,7 @@ import {
 import { asMouse } from './mouse-after-touch.ts';
 import { madeByScript } from './html-tree.ts';
 import { elementsUnder } from './element-tree.ts';
+import { elementFromPoint, elementsFromPoint } from './hit-test.ts';
 import { descendants } from './in-document.ts';
 import { baseUrl, locationOf, pageUrl } from './page-address.ts';
 import { delivering, touchFields } from './listen.ts';
@@ -42,7 +44,8 @@ import { adopt, adoptedOf, styleSheetsOf } from './runtime-style.ts';
 import type { CSSStyleSheet } from './css-style-sheet.ts';
 import { query } from './selector.ts';
 import { createNodeIterator, createTreeWalker } from './traversal.ts';
-import { listenToResize } from './window.ts';
+import { noteTouch } from './touch-place.ts';
+import { listenToResize, windowBody, windowHeight, windowSize, windowTop } from './window-size.ts';
 
 /** The document a library is given: what it creates elements with and appends overlays to. */
 export interface CompatDocument {
@@ -121,9 +124,13 @@ function bodyColours(body: EngineNode): PropertyDescriptorMap {
 const BODY_LAYER = 1_000_000;
 
 /**
- * `document.body`: a layer over the whole screen that lets touches through to the app, so what a
+ * `document.body`: a layer over the window that lets touches through to the app, so what a
  * library appends to it (an overlay container) draws above the screen. It is in the tree from
  * the start and over the app by its z-index, wherever under the root it is.
+ *
+ * It is drawn over the window and no more of the screen: from under the navigation header and as
+ * far down as the top of the keyboard while that is up, so an overlay placed from an edge of it
+ * is placed from there. What is `fixed` in it, as an overlay's container is, is fixed to it.
  *
  * Not joined by its first child, nor moved to the end to be on top: a view that joins the root or
  * moves in it changes what the app's root view is beside, and every view under that is styled
@@ -131,14 +138,25 @@ const BODY_LAYER = 1_000_000;
  */
 function createBody(engine: Engine): EngineNode {
   const body = ownView(engine);
-  engine.setProp(body, 'style', {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: BODY_LAYER,
-  });
+  // A block, as a browser's body is: what is in its flow takes the room it is given and gives up
+  // none, where an HTML element starts as a flex item that does (see `elements.ts`).
+  engine.setDefaultStyle(body, { display: 'block' });
+  windowBody(engine, body);
+  const fill = () => {
+    const top = windowTop(engine);
+    engine.setProp(body, 'style', {
+      position: 'absolute',
+      top,
+      left: 0,
+      right: 0,
+      bottom: windowHeight(engine) - top - windowSize(engine).height,
+      zIndex: BODY_LAYER,
+    });
+  };
+  fill();
+  // For as long as the engine is: the body is the app's for as long as the app is up.
+  listenToResize(engine, fill);
+  markPage(body);
   engine.setProp(body, 'pointerEvents', 'box-none');
   // Everything in the page is in its body, to a library that asks: the app is drawn beside
   // this view and not in it.
@@ -231,6 +249,8 @@ export function listenAnywhere(
   const tell = (event: unknown) => {
     if (event === during) return;
     if (type === 'click' && (heldForMenu.has(engine) || wasDrag(engine, event))) return;
+    // Before a listener is told of a touch and measures: see `touch-place.ts`.
+    noteTouch(engine, type, event);
     const target = (event as { target: EngineNode | null }).target;
     const path: EngineNode[] = [];
     for (let node = target; node; node = node.parent) path.push(node);
@@ -239,7 +259,7 @@ export function listenAnywhere(
       type,
       target,
       nativeEvent,
-      ...touchFields(nativeEvent),
+      ...touchFields(nativeEvent, windowTop(engine)),
       ...pointerOf(type, nativeEvent),
       composedPath: () => path,
       cancelable: true,
@@ -527,6 +547,9 @@ export function documentFor(engine: Engine): CompatDocument {
     // Walked as they are asked: see `traversal.ts`.
     createTreeWalker,
     createNodeIterator,
+    // What is drawn at a point of the window: see `hit-test.ts`.
+    elementFromPoint: (...point: unknown[]) => elementFromPoint(engine, body, point),
+    elementsFromPoint: (...point: unknown[]) => elementsFromPoint(engine, body, point),
     getElementById(id: unknown) {
       const wanted = String(id);
       for (const node of everything()) if (node.props['nativeID'] === wanted) return node;
@@ -567,6 +590,9 @@ export function documentFor(engine: Engine): CompatDocument {
     // An event to be given its type before it is sent: see `events.ts`.
     createEvent,
     hasFocus: () => true,
+    // The window's, which nothing is selected in: see `window.ts`.
+    getSelection: () => (globalThis as { getSelection?: () => unknown }).getSelection?.() ?? null,
+    execCommand: (command: string) => command === 'copy' && copySelected(engine),
   };
   Object.assign(created, anywhere(engine, created));
   Object.assign(created, documentNodeMembers(created as never, false));

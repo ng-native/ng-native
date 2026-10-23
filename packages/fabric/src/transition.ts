@@ -792,6 +792,11 @@ export interface RunningAnimation {
    * in JavaScript. `values` is then that last frame, which is what the view is committed with.
    */
   laid?: true;
+  /**
+   * Set where script holds it at its last frame once it ends, as the Web Animations API's
+   * `updateTiming({ fill: 'forwards' })` does, whatever its own `animation-fill-mode` says.
+   */
+  held?: true;
 }
 
 /**

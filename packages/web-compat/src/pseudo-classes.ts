@@ -4,6 +4,7 @@ import { documentOfRoot, topOf } from './document-roots.ts';
 import { directionOf } from './directionality.ts';
 import {
   attributeOf,
+  editedByContent,
   elementsUnder,
   hasAttribute,
   isElement,
@@ -102,12 +103,7 @@ function editable(node: EngineNode): boolean {
   if (isHtml(node, 'textarea') || (isHtml(node, 'input') && TYPED.has(typeOf(node)))) {
     return !hasAttribute(node, 'readonly') && !disabled(node);
   }
-  for (let at: EngineNode | null = node; at; at = parentElement(at)) {
-    const value = attributeOf(at, 'contenteditable');
-    if (value === null || value.toLowerCase() === 'inherit') continue;
-    return ['', 'true', 'plaintext-only'].includes(value.toLowerCase());
-  }
-  return false;
+  return editedByContent(node);
 }
 
 /** An element's own members, as a script reads them. */

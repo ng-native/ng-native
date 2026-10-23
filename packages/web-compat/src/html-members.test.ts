@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Component, DOCUMENT, inject, signal } from '@angular/core';
+import { Component, DOCUMENT, ElementRef, inject, signal } from '@angular/core';
 import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
@@ -444,5 +444,97 @@ describe("a link's URL", () => {
     link.host = 'site.example';
     assert.equal(link.getAttribute('href'), 'http://[docs', 'nothing to set a part of');
     assert.equal(make('a').host, '');
+  });
+});
+
+describe('draggable', () => {
+  it('is true or false by the attribute, and for an image or a link with an href by default', async () => {
+    const { make } = await page();
+    const div = make('div');
+    assert.equal(div.draggable, false);
+    div.setAttribute('draggable', 'true');
+    assert.equal(div.draggable, true);
+    div.setAttribute('draggable', 'FALSE');
+    assert.equal(div.draggable, false);
+    div.setAttribute('draggable', 'auto');
+    assert.equal(div.draggable, false, 'auto is the element default');
+    assert.equal(make('img').draggable, true);
+    assert.equal(make('a', { href: '/x' }).draggable, true);
+    assert.equal(make('a').draggable, false);
+    assert.equal(make('img', { draggable: 'false' }).draggable, false);
+  });
+
+  it('is written as the attribute, by anything a script sets it to', async () => {
+    const { make } = await page();
+    const div = make('div');
+    div.draggable = true;
+    assert.equal(div.getAttribute('draggable'), 'true');
+    div.draggable = false;
+    assert.equal(div.getAttribute('draggable'), 'false');
+    assert.equal(div.draggable, false);
+    div.draggable = 'yes';
+    assert.equal(div.getAttribute('draggable'), 'true', 'a boolean, as WebIDL converts');
+    div.draggable = 0;
+    assert.equal(div.getAttribute('draggable'), 'false');
+  });
+});
+
+describe('isContentEditable', () => {
+  it('is whether contenteditable makes the element editable, inherited from above', async () => {
+    const { make } = await page();
+    const outer = make('div');
+    const inner = make('span');
+    outer.appendChild(inner);
+    assert.equal(outer.isContentEditable, false);
+    assert.equal(inner.isContentEditable, false);
+    outer.setAttribute('contenteditable', '');
+    assert.equal(outer.isContentEditable, true, 'empty is true');
+    assert.equal(inner.isContentEditable, true, 'and inherited');
+    inner.setAttribute('contenteditable', 'false');
+    assert.equal(inner.isContentEditable, false, 'unless it says otherwise');
+    inner.setAttribute('contenteditable', 'inherit');
+    assert.equal(inner.isContentEditable, true);
+    outer.setAttribute('contenteditable', 'plaintext-only');
+    assert.equal(outer.isContentEditable, true);
+    outer.setAttribute('contenteditable', 'TRUE');
+    assert.equal(outer.isContentEditable, true);
+    outer.setAttribute('contenteditable', 'false');
+    assert.equal(outer.isContentEditable, false);
+    assert.equal(inner.isContentEditable, false);
+    outer.setAttribute('contenteditable', 'nonsense');
+    assert.equal(outer.isContentEditable, false, 'a value that is none is inherit');
+    outer.setAttribute('contenteditable', 'true');
+    inner.setAttribute('contenteditable', 'nonsense');
+    assert.equal(inner.isContentEditable, true, 'and is read past to the element above');
+  });
+
+  it('is read only, and not true of a text field', async () => {
+    const { make } = await page();
+    const div = make('div', { contenteditable: 'true' });
+    div.isContentEditable = false;
+    assert.equal(div.isContentEditable, true);
+    assert.equal(make('input').isContentEditable, false);
+    assert.equal(make('textarea').isContentEditable, false);
+  });
+});
+
+@Component({ selector: 'x-plain', template: '<div></div>' })
+class Plain {
+  readonly host: Dom = inject(ElementRef).nativeElement;
+}
+
+describe('draggable and isContentEditable, while the package is up', () => {
+  it('are on an element of an app that asked for the package, and on none of an app that did not', async () => {
+    const asking = await render(Plain, { providers: [provideWebCompat()] });
+    const host = asking.instance.host;
+    assert.equal(host.draggable, false);
+    assert.equal(host.isContentEditable, false);
+    cleanup();
+    // Still, once the app is gone, as an element out of the document answers in a browser.
+    assert.equal(host.draggable, false);
+    assert.equal(host.isContentEditable, false);
+    const plain = await render(Plain);
+    assert.equal(plain.instance.host.draggable, undefined);
+    assert.equal(plain.instance.host.isContentEditable, undefined);
   });
 });

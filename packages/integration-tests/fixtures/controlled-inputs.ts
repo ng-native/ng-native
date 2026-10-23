@@ -112,3 +112,41 @@ export class ControlledForm {
   readonly field = viewChild.required(TextInput);
   readonly toggle = viewChild.required(Switch);
 }
+
+/** A field whose caret the app places from code. */
+@Component({
+  selector: 'x-selected-input',
+  imports: [TextInput],
+  template: '<text-input nativeID="field" [(value)]="text" [selection]="selection()" />',
+})
+export class SelectedInput {
+  readonly text = signal('hello');
+  readonly selection = signal<{ start: number; end?: number } | undefined>(undefined);
+}
+
+/** A field with a selection from its first render. */
+@Component({
+  selector: 'x-initially-selected-input',
+  imports: [TextInput],
+  template: '<text-input nativeID="field" value="hello" [selection]="{ start: 1, end: 4 }" />',
+})
+export class InitiallySelectedInput {}
+
+/** Android's caret and handle colours, each set or left to follow the selection colour. */
+@Component({
+  selector: 'x-coloured-input',
+  imports: [TextInput],
+  template: `
+    <text-input
+      nativeID="field"
+      [selectionColor]="selectionColor()"
+      [cursorColor]="cursorColor()"
+      [selectionHandleColor]="handleColor()"
+    />
+  `,
+})
+export class ColouredInput {
+  readonly selectionColor = signal<string | undefined>('red');
+  readonly cursorColor = signal<string | undefined>(undefined);
+  readonly handleColor = signal<string | undefined>(undefined);
+}

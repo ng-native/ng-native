@@ -37,6 +37,12 @@ const FUNCTION = /([a-z][a-z-]*)\([ \t\n\r\f]*/iy;
 const VAR = /var\([ \t\n\r\f]*(--[\w-]+)[ \t\n\r\f]*/iy;
 const LITERAL = /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|[a-z]+)?/iy;
 const WORD = /[^ \t\n\r\f,/()]+/y;
+/**
+ * A `color-mix()` or a relative colour, the only shapes `mixToken` keeps. Any other colour function
+ * is one `colourToken` has already read, or failed to: reading it again there reads the fallbacks
+ * inside it again too, twice for each one nested, `rgb(var(--c, rgb(var(--c, …), x)), x)`.
+ */
+const MIXED = /^(?:color-mix\(|[a-z]+\([ \t\n\r\f]*from[ \t\n\r\f])/i;
 /** A fallback that is a `var()` or arithmetic, rather than a value written out. */
 const NESTED = /^[ \t\n\r\f]*(var|calc|min|max)\(/i;
 /** What one of each unit counts as: points, degrees, milliseconds, or itself. */
@@ -61,6 +67,10 @@ const SPACES: Readonly<Record<string, 'rgb' | 'hsl'>> = {
   hsl: 'hsl',
   hsla: 'hsl',
 };
+
+/** The space a colour function's channels are in, and none for a name every object has. */
+const colourSpace = (fn: string): 'rgb' | 'hsl' | undefined =>
+  Object.hasOwn(SPACES, fn) ? SPACES[fn] : undefined;
 
 /** Thrown where the text stops being one of the shapes, and caught by `whole`. */
 const UNREADABLE = new Error('not a token made of others');
@@ -228,7 +238,7 @@ function colourArguments(cursor: Cursor): {
   args: Argument[];
   legacy: boolean;
 } {
-  const space = SPACES[(match(cursor, FUNCTION) ?? fail())[1]!.toLowerCase()] ?? fail();
+  const space = colourSpace((match(cursor, FUNCTION) ?? fail())[1]!.toLowerCase()) ?? fail();
   const args: Argument[] = [];
   let legacy = false;
   while (!take(cursor, ')')) {
@@ -355,7 +365,9 @@ function referenceColour({ reference: name, fallback }: Reference): ColourExpres
 function colourFallback(text: string): { fallback: string } | { fallbackToken: TokenValue } {
   const token = tokenFromValue(text);
   if (token?.hsl || token?.deferredColour) return { fallbackToken: token };
-  return { fallback: token?.color ?? fail() };
+  // A platform colour has no channels to mix: refused, as a word is.
+  const colour = token?.color;
+  return { fallback: typeof colour === 'string' ? colour : fail() };
 }
 
 const nextReference = (cursor: Cursor): Reference =>
@@ -372,7 +384,8 @@ function mixColour(cursor: Cursor): ColourExpression {
   const fn = match(cursor, FUNCTION)?.[1]?.toLowerCase();
   if (fn === 'color-mix') return mixExpression(cursor);
   if (!fn) return { color: (match(cursor, WORD) ?? fail())[0] };
-  if (RELATIVE[fn] && takeWord(cursor, 'from')) return relativeExpression(cursor, RELATIVE[fn]);
+  const relative = relativeSpace(fn);
+  if (relative && takeWord(cursor, 'from')) return relativeExpression(cursor, relative);
   if (fn === 'color' && takeWord(cursor, 'from')) return srgbExpression(cursor);
   cursor.at = closing(cursor);
   return functionColour(cursor.text.slice(start, cursor.at));
@@ -457,6 +470,10 @@ const RELATIVE: Readonly<Record<string, RelativeSpace>> = {
   oklab: { space: 'oklab', keywords: ['l', 'a', 'b'], full: [1, 0.4, 0.4] },
   oklch: { space: 'oklch', keywords: ['l', 'c', 'h'], full: [1, 0.4, null] },
 };
+
+/** The relative colour function a name is, and none for a name every object has, `constructor`. */
+const relativeSpace = (fn: string): RelativeSpace | undefined =>
+  Object.hasOwn(RELATIVE, fn) ? RELATIVE[fn] : undefined;
 
 /** Whether the next word is `word`, in any case; taken, with the space after it, if so. */
 function takeWord(cursor: Cursor, word: string): boolean {
@@ -593,5 +610,5 @@ function channelOperand(cursor: Cursor, keywords: readonly string[]): string {
  * is no such shape.
  */
 export function derivedToken(text: string): TokenValue | undefined {
-  return calcToken(text) ?? colourToken(text) ?? mixToken(text);
+  return calcToken(text) ?? colourToken(text) ?? (MIXED.test(text) ? mixToken(text) : undefined);
 }

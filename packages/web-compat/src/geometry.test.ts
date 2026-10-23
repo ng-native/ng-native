@@ -53,9 +53,13 @@ async function page() {
   const div = (parent?: Dom, style?: string) => make('div', parent, style);
   /** Native says an element that scrolls has been scrolled. */
   const scrolled = async (element: Dom, x: number, y: number) => {
-    element.setAttribute('testID', idOf(element));
+    engine.commit();
     await settle();
-    app.fabric.emit(screen.getByTestId(idOf(element)), 'topScroll', { contentOffset: { x, y } });
+    // To the view the element is committed as, rather than one found by a name: a busy machine
+    // ran the full suite with the name not yet among the views a query reads.
+    const view = (element as { committed?: { handle?: unknown } }).committed?.handle;
+    assert.ok(view, 'the element is committed');
+    app.fabric.emit(view as never, 'topScroll', { contentOffset: { x, y } });
   };
   const sent = () =>
     app.fabric.commands
@@ -118,6 +122,51 @@ describe('getBoundingClientRect and getClientRects', () => {
 });
 
 describe('offset and client members', () => {
+  it('answers its size as it is laid out, whatever it is scaled to as it is drawn', async () => {
+    // A panel that scales in: a library places it under its trigger by offsetWidth, which a
+    // transform does not change, where its bounding box is the nine tenths it is drawn at.
+    const { app, place, div } = await page();
+    const card = div();
+    await settle();
+    place(card, { x: 15, y: 20, width: 270, height: 36 });
+    Object.assign(app.fabric, { getBoundingClientRect: () => [0, 20, 300, 40] });
+    try {
+      assert.equal(card.getBoundingClientRect().width, 270);
+      assert.deepEqual(
+        [card.offsetWidth, card.offsetHeight, card.clientWidth, card.clientHeight],
+        [300, 40, 300, 40],
+      );
+    } finally {
+      Reflect.deleteProperty(app.fabric, 'getBoundingClientRect');
+    }
+  });
+
+  it('measures with every style written so far, as a browser lays out before it answers', async () => {
+    // The CDK resets an overlay's box to the whole screen and measures the pane in the next
+    // statement, to see where it fits. Measured as it was last committed, it fits anywhere.
+    const { div } = await page();
+    const card = div();
+    await settle();
+    card.style.top = '5px';
+    card.getBoundingClientRect();
+    // As committed: what native was sent.
+    assert.equal(card.committed?.props['top'], 5);
+  });
+
+  it('commits what is written after a measurement before the task is over', async () => {
+    // The CDK clears an open overlay's place, measures it, and writes the place it belongs: a
+    // browser paints once, with the last. Left for the next render, the cleared one is drawn.
+    const { div } = await page();
+    const card = div(undefined, 'top: 3px');
+    await settle();
+    card.style.top = '';
+    card.getBoundingClientRect();
+    card.style.top = '9px';
+    assert.notEqual(card.committed?.props['top'], 9, 'not yet');
+    await Promise.resolve();
+    assert.equal(card.committed?.props['top'], 9);
+  });
+
   it('places an element in the nearest box that is not static, a table cell, or the body', async () => {
     // A native view is positioned, as one is placed against it: one that says `static` is not.
     const { document, make, div } = await page();
@@ -646,7 +695,9 @@ describe('ResizeObserver', () => {
     const shown = async () => {
       await settle();
       const layout = { x: 0, y: 0, width: 50, height: 20 };
-      app.fabric.emit(screen.getByTestId('watched'), 'topLayout', { layout });
+      // Laid out though it is not seen yet, as what is put over the app is not for a frame.
+      const watched = screen.getByTestId('watched', { includeHiddenElements: true });
+      app.fabric.emit(watched, 'topLayout', { layout });
       await nextFrame();
     };
     const seen: number[] = [];
@@ -698,7 +749,8 @@ describe('ResizeObserver', () => {
     );
     observer.observe(box);
     const layout = { x: 0, y: 0, width: 60, height: 20 };
-    app.fabric.emit(screen.getByTestId('again'), 'topLayout', { layout });
+    const again = screen.getByTestId('again', { includeHiddenElements: true });
+    app.fabric.emit(again, 'topLayout', { layout });
     await nextFrame();
     observer.unobserve(box);
     // Laid out again while nothing heard it.
@@ -751,6 +803,34 @@ describe('IntersectionObserver', () => {
     assert.throws(make({ rootMargin: '1px 1px 1px 1px 1px' }), { name: 'SyntaxError' });
     assert.throws(make({ root: 'root' }), TypeError);
     assert.throws(() => plain.observe('foo'), TypeError);
+  });
+
+  it("looks at the next app's elements at once, where the app before went with a look still owed", async () => {
+    // A host that runs one page after another clears the timers the page before left, so a look
+    // it asked for never comes. The next page's first was passed over as already asked for, and
+    // its observers heard nothing for a second.
+    const before = await page();
+    const gone = before.div();
+    await settle();
+    const lost = () => 0;
+    const own = { frame: globals.requestAnimationFrame, timer: globals.setTimeout };
+    globals.requestAnimationFrame = lost;
+    globals.setTimeout = lost;
+    try {
+      new globals.IntersectionObserver(() => {}).observe(gone);
+    } finally {
+      globals.requestAnimationFrame = own.frame;
+      globals.setTimeout = own.timer;
+    }
+    cleanup();
+    const { place, div } = await page();
+    const target = div();
+    await settle();
+    place(target, { x: 10, y: 10, width: 20, height: 20 });
+    const calls: Dom[][] = [];
+    new globals.IntersectionObserver((entries: Dom[]) => calls.push(entries)).observe(target);
+    await nextFrame();
+    assert.equal(calls.length, 1);
   });
 
   it('tells of each element the first time it is looked at, in sight or not', async () => {

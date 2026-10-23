@@ -41,12 +41,12 @@
   },
   "dependencies": {
     "@ng-native/migrate": "workspace:*",
-    "@nx/devkit": "^23.0.0",
+    "@nx/devkit": "^23.0.0 || ^24.0.0",
     "minimatch": "^10.0.0",
     "semver": "^7.7.0"
   },
   "peerDependencies": {
-    "nx": "^23.0.0"
+    "nx": "^23.0.0 || ^24.0.0"
   },
   "devDependencies": {
     "@types/semver": "^7.7.0",

@@ -1,4 +1,5 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
+import { Screen } from '@ng-native/device';
 import { SafeAreaProvider } from '../../components/src/safe-area-provider.ts';
 import { SafeAreaView } from '../../components/src/safe-area-view.ts';
 import { View } from '../../components/src/view.ts';
@@ -33,4 +34,29 @@ import { Text } from '../../components/src/text.ts';
 })
 export class SafeAreaHost {
   readonly edges = signal<readonly ('top' | 'bottom')[]>(['bottom']);
+}
+
+@Component({
+  selector: 'x-safe-area-toggle',
+  imports: [SafeAreaProvider, Text, View],
+  template: `
+    @if (first()) {
+      <safe-area-provider nativeID="first" />
+    }
+    @if (second()) {
+      <safe-area-provider nativeID="second" />
+    }
+    <text>{{ screen.window().width }}x{{ screen.window().height }}</text>
+    <view nativeID="floating"></view>
+  `,
+  styles: `
+    #floating {
+      margin-bottom: var(--safe-area-inset-bottom, 0px);
+    }
+  `,
+})
+export class SafeAreaToggleHost {
+  protected readonly screen = inject(Screen);
+  readonly first = signal(true);
+  readonly second = signal(false);
 }

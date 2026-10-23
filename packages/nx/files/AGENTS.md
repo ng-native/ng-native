@@ -83,3 +83,7 @@ change; both are fast.
 `getByText` or `getByTestId` (which matches `nativeID` and `testID`), and act with
 `userEvent.setup().press(...)` or `.type(...)`, all from `@ng-native/testing`. Tests run in Node
 with no simulator, so write one alongside a change.
+
+A service that depends on the platform injects `OS` and `OS_VERSION` from `@ng-native/device`
+rather than importing `Platform` from `react-native`, which a test cannot load. A test provides
+the values it wants: `{ provide: OS, useValue: 'android' }`.

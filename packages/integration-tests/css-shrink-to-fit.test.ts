@@ -770,3 +770,47 @@ describe('a box out of the flow with no width, holding a least width that is a s
     assert.equal(s.nodes.get('pane between')!.fit, undefined);
   });
 });
+
+describe('a chip set in an item that is as wide as its content', () => {
+  // Angular Material's chip set, in a column that does not stretch it: the set's row of chips
+  // has `min-width: 100%` with a margin pulling it 8px left, and a chip's cell has `flex-basis:
+  // 100%`. Chrome makes the set and the chip as wide as the chip's words, its padding and its
+  // margin; Yoga took each share of the room, and the chip filled the column.
+  const CHIPS =
+    '.text { display: flex; flex-direction: column; align-items: flex-start; width: 300px }' +
+    ' .set { display: flex; flex-direction: row }' +
+    ' .chips { display: flex; flex-direction: row; flex-wrap: wrap; min-width: 100%; margin-left: -8px }' +
+    ' .chip { display: inline-flex; flex-direction: row; align-items: center; max-width: 100%;' +
+    ' position: relative; margin: 4px 0 4px 8px }' +
+    ' .cell { display: flex; flex-direction: row; align-items: center; flex-basis: 100% }' +
+    ' .action { display: flex; flex-direction: row; padding: 0 12px }';
+
+  it('fits a chip whose basis is the only share in it, in a row that does not stretch it', () => {
+    // Nothing else in the scene is a share of a width: the basis alone has the chip fitted.
+    const css =
+      '.row { display: flex; flex-direction: row; width: 300px }' +
+      ' .chip { display: flex; flex-direction: row; padding: 0 12px }' +
+      ' .cell { display: flex; flex-direction: row; flex-basis: 100% }';
+    for (const conformance of ['classic', 'strict'] as const) {
+      const s = scene(css, ['row', ['chip', ['cell', ['label']]]], conformance);
+      say(s, 'label', 'High');
+      assert.equal(s.box('chip')[2], 64, conformance);
+      assert.equal(s.box('cell')[2], 40, conformance);
+    }
+  });
+
+  for (const conformance of ['classic', 'strict'] as const) {
+    it(`is as wide as the chip's words, laid out ${conformance}`, () => {
+      const s = scene(
+        CHIPS,
+        ['text', ['set', ['chips', ['chip', ['cell', ['action']]]]]],
+        conformance,
+      );
+      say(s, 'action', 'High');
+      // Chrome: the chip 64 wide, its words 40 and its padding 24, and the set as wide as it.
+      assert.equal(s.box('chip')[2], 64, 'chip');
+      assert.equal(s.box('set')[2], 64, 'set');
+      assert.equal(s.box('text')[2], 300, 'text');
+    });
+  }
+});
