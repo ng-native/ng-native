@@ -1124,6 +1124,28 @@ describe('Angular HMR, with an external template and stylesheet', () => {
     assert.match(fabric.render(), /RawText "RELOADED count is 0"/, 'the edit, not the cached copy');
   });
 
+  it('applies an edited template on a reload, when it hosts an outlet and the component module is stale', async () => {
+    // A template with an outlet is never swapped on a live view, which would lose its screens: the
+    // edit reloads instead. After the reload nothing has been made from the component yet, so the
+    // edit the template's module carries is applied as the component registers, or every reload
+    // shows the cached copy until the component's own file changes. The transform reads the text
+    // for an outlet tag, so a comment naming one stands in for a real outlet here.
+    const edited = read(template)
+      .replace('count is', 'OUTLET count is')
+      .concat('<!-- <native-stack-outlet /> -->\n');
+    await evaluate(edited, template, fixture('external-counter.html.outlet-a.generated.ts'));
+    const mod = await evaluate(
+      read(owner),
+      owner,
+      fixture('external-counter.outlet-a.generated.ts'),
+    );
+
+    const { fabric } = await render(mod['ExternalCounter'] as Type<unknown>);
+
+    assert.match(fabric.render(), /RawText "OUTLET count is 0"/, 'the edit, not the cached copy');
+    assert.deepEqual(reloads, [], 'and no reload asked for');
+  });
+
   it("keeps the component's own edit on a reload, when the stylesheet module is the stale one", async () => {
     // The other way round: the component was edited after its stylesheet last was, so Metro
     // re-transforms the component and serves the stylesheet's module from its cache, carrying the

@@ -284,7 +284,7 @@ ${SWAP}${PATCH}
       if (!waiting) continue;
       pending.delete(defs[j].id);
       if (waiting.source !== source) continue;
-      swap(entry, waiting);
+      swap(entry, waiting, true);
     }
   } else if (previous.source === source && again(previous)) {
     // The update this file has just applied, sent a second time: nothing to do but accept it.
@@ -445,13 +445,14 @@ function stringEnd(code, at) {
  * and a recreated view asks the renderer factory for the component's sheet again.
  */
 const SWAP = `
-  function swap(entry, def) {
+  function swap(entry, def, unmade) {
     var type = entry.types.get(def.id);
     if (!type) return false;
     var template = entry.templates.get(def.id) !== def.template;
     var styles = "sheet" in def && entry.styles.get(def.id) !== def.styles;
     if (!template && !styles) return true;
-    if (def.outlet) return false;
+    // A live view with an outlet would lose its screens; one not yet made has none to lose.
+    if (def.outlet && !unmade) return false;
     if (styles) type["ɵnativeStyles"] = def.sheet || undefined;
     console.log("[angular-native] hot " + (template ? "template" : "style") + " swap", def.id);
     try {
