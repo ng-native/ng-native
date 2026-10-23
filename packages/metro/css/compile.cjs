@@ -2068,14 +2068,34 @@ const AXIS = /^(padding|margin)-(horizontal|vertical)$/;
  * token is, so a unit is not lost on the way: read as a word, 1.25rem was 1.25.
  */
 function addAliased(name, parts, out, deferred, context) {
+  if (AXIS.test(name)) {
+    addAxis(name, parts, out, deferred, context);
+    return;
+  }
   const value = tokenValue(parts, context);
   if (value?.alias) {
     deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
     return;
   }
-  // `calc(var(--x) * 2)` or `max(1rem, env(...))`: read as a longhand with a var() in it is.
-  const computed = parts?.some((part) => part?.type === 'env' || part?.type === 'function');
-  if (!value && computed && AXIS.test(name)) {
+  if (value?.length === undefined) throw unsupported(name, context);
+  if (typeof value.length === 'string' && value.length.endsWith('%') && NO_PERCENT.has(name)) {
+    throw new CssUnsupported(`${context}: '${name}' takes a length, not a percentage`);
+  }
+  for (const prop of propsFor(name)) out[prop] = value.length;
+}
+
+/**
+ * `padding-horizontal` and the rest: one length for both sides, `auto` for a margin. A token or a
+ * function of one, `calc(var(--x) * 2)` or `max(1rem, env(...))`, is read as a longhand with a
+ * var() in it is.
+ */
+function addAxis(name, parts, out, deferred, context) {
+  const value = tokenValue(parts, context);
+  if (value?.alias) {
+    deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
+    return;
+  }
+  if (!value && parts?.some((part) => part?.type === 'env' || part?.type === 'function')) {
     addUnparsed(
       { value: { propertyId: { property: name }, value: parts } },
       out,
@@ -2084,18 +2104,11 @@ function addAliased(name, parts, out, deferred, context) {
     );
     return;
   }
-  if (value?.keyword === 'auto' && name.startsWith('margin-')) {
-    for (const prop of propsFor(name)) out[prop] = 'auto';
-    return;
-  }
-  if (value?.length === undefined && AXIS.test(name)) {
+  const length = value?.keyword === 'auto' && name.startsWith('margin-') ? 'auto' : value?.length;
+  if (length === undefined) {
     throw new CssUnsupported(`${context}: '${name}' takes one length, for both sides`);
   }
-  if (value?.length === undefined) throw unsupported(name, context);
-  if (typeof value.length === 'string' && value.length.endsWith('%') && NO_PERCENT.has(name)) {
-    throw new CssUnsupported(`${context}: '${name}' takes a length, not a percentage`);
-  }
-  for (const prop of propsFor(name)) out[prop] = value.length;
+  for (const prop of propsFor(name)) out[prop] = length;
 }
 
 /**
