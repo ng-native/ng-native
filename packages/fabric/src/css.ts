@@ -829,10 +829,53 @@ const INHERITED_POINTER_EVENTS = new Set(['none', 'auto']);
 
 /**
  * A shape's paint, which SVG hands down: a path under an `<svg>` with a `fill` has that fill.
- * Inherited only in a library's drawing (`StyleTarget.namespace`). An icon's shapes are left to
- * react-native-svg, which hands a group's paint down itself, from what the shape set as its own.
+ * Handed down through any element, as a browser does, `.btn { fill: currentColor }` to the
+ * icon in the button, and taken only by a library's drawing (`StyleTarget.namespace`). An icon's
+ * shapes are left to react-native-svg, which hands a group's paint down itself, from what the
+ * shape set as its own.
+ *
+ * ponytail: an inline style's paint is handed down by a drawing's node alone (`setsInherited`).
+ * Hand it down from any node as a rule's is if `[style.fill]` on a box around a drawing is seen.
  */
 const SHAPE_PAINT_INHERITED: ReadonlySet<string> = new Set(['fill', 'stroke', 'strokeWidth']);
+
+/**
+ * Whether a node takes the shape's paint it is handed: a node of a library's drawing, or one a
+ * package makes in it, as web-compat makes the span a text's words are drawn by.
+ */
+const takesPaint = (node: StyleTarget): boolean =>
+  node.namespace !== undefined || node.parent?.namespace !== undefined;
+
+/** Whether a node is handed a shape's paint: see `SHAPE_PAINT_INHERITED`. */
+const handedPaint = (inherited: Record<string, unknown>): boolean =>
+  inherited['fill'] !== undefined ||
+  inherited['stroke'] !== undefined ||
+  inherited['strokeWidth'] !== undefined;
+
+/** The styles of nodes outside a drawing with no rules, by the map they inherit: see `unpainted`. */
+const unpaintedStyles = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
+
+/**
+ * A style without the shape's paint it was handed, for a node outside a drawing: it hands the
+ * paint on and takes none, as an icon's shape commits only the paint it was given itself.
+ */
+function unpainted(
+  style: Record<string, unknown>,
+  own: Record<string, unknown> | null,
+): Record<string, unknown> {
+  if (!handedPaint(style)) return style;
+  if (own) {
+    for (const key of SHAPE_PAINT_INHERITED) if (!(key in own)) delete style[key];
+    return style;
+  }
+  let bare = unpaintedStyles.get(style);
+  if (!bare) {
+    bare = { ...style };
+    for (const key of SHAPE_PAINT_INHERITED) delete bare[key];
+    unpaintedStyles.set(style, bare);
+  }
+  return bare;
+}
 
 /** Whether a prop of a shape in a drawing is a paint it hands down: see `inheritFrom`. */
 export const handsDownPaint = (key: string): boolean =>
@@ -3343,7 +3386,7 @@ function inheritFrom(
   const drawing = node?.namespace !== undefined;
   let inherited = drawing ? ownPaint(node!, parentInherited, own) : parentInherited;
   for (const key of Object.keys(own)) {
-    if (!(INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key)))) continue;
+    if (!(INHERITED.has(key) || SHAPE_PAINT_INHERITED.has(key))) continue;
     // `pointer-events: inherit`, which only an inline style on an element no rule matches still
     // holds here: what the parent hands down stands.
     if (key === 'pointerEvents' && own[key] === 'inherit') continue;
@@ -4074,7 +4117,9 @@ export class StyleResolver {
       parentContext,
       scope: scope ?? context,
       parentScope,
-      style: unstyledStyle(parentInherited, inline),
+      style: takesPaint(node)
+        ? unstyledStyle(parentInherited, inline)
+        : unpainted(unstyledStyle(parentInherited, inline), null),
       inherited: handedOn(node, parentInherited, inline, drawing),
       tokens,
     };
@@ -4334,6 +4379,7 @@ export class StyleResolver {
     // `pointer-events: inherit` won the cascade: what the parent hands down stands.
     if (own['pointerEvents'] === 'inherit') delete own['pointerEvents'];
     const style = { ...parentInherited, ...own };
+    if (!takesPaint(node)) unpainted(style, own);
     settleLineHeight(style);
     const inherited = decorate(style, inheritFrom(parentInherited, own, node), own);
     const rtl = (style['direction'] ?? this.conditions.direction) === 'rtl';

@@ -320,6 +320,30 @@ describe("a shape's paint, in a sheet read as a browser reads it", () => {
     });
   });
 
+  it("is handed down from a box around the drawing, as Material's icon button gives its icon", () => {
+    // `<button class="btn"><svg><path/></svg></button>` with `.btn { fill: currentColor }`: a
+    // browser hands `fill` down through every element, not a drawing's alone.
+    withViews({ ...SHAPES, 'x-box': 'RCTView' }, () => {
+      const { fabric, engine, add } = scene('.btn { fill: currentColor }');
+      const button = engine.createElement('x-box');
+      engine.setClasses(button, 'btn');
+      engine.appendChild(engine.root, button);
+      add('x-path', add('x-svg', button));
+      const icon = engine.createElement('x-path');
+      engine.appendChild(button, icon);
+      engine.commit();
+      const [box] = fabric.committed;
+      const [svg, iconShape] = box!.children;
+      assert.deepEqual(svg!.children[0]!.props, { fill: { type: 2 }, propList: ['fill'] });
+      // An icon's shape is left to react-native-svg, as it always has been.
+      assert.deepEqual(iconShape!.props, {});
+      // And lets it go with the rule.
+      engine.setClasses(button, '');
+      engine.commit();
+      assert.equal(fabric.committed[0]!.children[0]!.children[0]!.props['fill'] ?? null, null);
+    });
+  });
+
   it('keeps a list naming no paint on a shape that stops naming one, so native lets it go', () => {
     // react-native-svg keeps the list it had where it is sent none, on Android, or an empty one,
     // on iOS: the shape would keep the paint as its own after the rule stopped giving it.
