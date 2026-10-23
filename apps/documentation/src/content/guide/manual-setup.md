@@ -162,14 +162,16 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
     resolveAssetSource: (value) => Image.resolveAssetSource(value as never),
   });
 
-  watchConditions(app.engine);
+  const stopWatching = watchConditions(app.engine);
+  app.applicationRef.onDestroy(stopWatching);
 });
 ```
 
 The entry point configures colors, assets and device-dependent styles before rendering:
 
 - **`conditions`** supplies `@media` values. `watchConditions` updates them on rotation or theme
-  changes, making `dark:` follow the system.
+  changes, making `dark:` follow the system. It returns a function that stops it, called as the app
+  is destroyed: Android destroys the app when it recreates the activity, after mounting a new one.
 - **`tokens`** supplies device values such as hairline width. Without it, `1px` produces a thick
   divider instead of a third of a point on a 3x screen.
 - **`resolveAssetSource`** converts `require('./x.png')` to a native-loadable asset; without it,

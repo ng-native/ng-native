@@ -85,6 +85,14 @@ describe('in an integrated workspace', () => {
     assert.match(tree.read('apps/mobile/src/main.ts', 'utf-8')!, /^import 'expo';$/m);
   });
 
+  it('stops watching conditions in main.ts as the app is destroyed', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    assert.match(main, /^ {2}const stopWatching = watchConditions\(app\.engine\);$/m);
+    assert.match(main, /^ {2}app\.applicationRef\.onDestroy\(stopWatching\);$/m);
+  });
+
   it('puts a safe-area-provider above its safe-area-view, which has no insets without one', async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });

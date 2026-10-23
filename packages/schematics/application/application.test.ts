@@ -74,6 +74,12 @@ describe('ng add', () => {
     assert.match(tree.readContent('projects/native/src/main.ts'), /^import 'expo';$/m);
   });
 
+  it('stops watching conditions in main.ts as the app is destroyed', () => {
+    const main = tree.readContent('projects/native/src/main.ts');
+    assert.match(main, /^ {2}const stopWatching = watchConditions\(app\.engine\);$/m);
+    assert.match(main, /^ {2}app\.applicationRef\.onDestroy\(stopWatching\);$/m);
+  });
+
   it('writes an AGENTS.md with the commands this workspace runs, and a CLAUDE.md that reads it', () => {
     const agents = tree.readContent('projects/native/AGENTS.md');
     assert.match(agents, /^ng run native:run-ios +# the iOS simulator$/m);

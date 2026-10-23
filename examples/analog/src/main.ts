@@ -21,5 +21,6 @@ AppRegistry.registerRunnable('main', ({ rootTag }: { rootTag: number | string })
   });
 
   // A theme switch changes what `light-dark()` resolves to, and nothing in the app is dirty then.
-  watchConditions(app.engine);
+  const stopWatching = watchConditions(app.engine);
+  app.applicationRef.onDestroy(stopWatching);
 });
