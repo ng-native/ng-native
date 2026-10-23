@@ -241,6 +241,98 @@ describe('a view a native animation has let go', () => {
   });
 });
 
+describe('a view a native animation has moved, held unseen for a frame', () => {
+  // `hold` keeps what a library inserts and then measures unseen until it is styled: its
+  // opacity, committed as nothing, has to reach native where a graph has set the view's.
+  it('is set unseen on native, and back at its own opacity once let go', () => {
+    const s = scene('leaves');
+    s.finish(s.started()[0]!);
+    assert.deepEqual(s.set(), { opacity: 1 });
+    s.engine.hold(s.view, true);
+    s.engine.commit();
+    assert.equal(s.props()['opacity'], 0);
+    assert.deepEqual(s.set(), { opacity: 0 }, 'unseen on native too');
+    s.engine.hold(s.view, false);
+    s.engine.commit();
+    assert.deepEqual(s.set(), { opacity: 1 });
+  });
+
+  it('starts on native once let go, a fade it is inserted with, which a graph would show', () => {
+    // A graph that plays the opacity sets it over what is committed: started under the hold, a
+    // fade out would be drawn at its first frame, whole, through the frame it is held unseen. A
+    // browser starts it as it first paints the element, which is once the hold is over.
+    const rec = recorder();
+    const fabric = createFakeFabric();
+    let now = 0;
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(CSS) as StyleSheet,
+      nativeAnimated: rec.native,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'leaves');
+    engine.hold(view, true);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['opacity'], 0);
+    assert.equal(rec.named('start').length, 0, 'nothing native plays over the hold');
+    now = 16;
+    engine.advanceAnimations();
+    engine.setProp(view, 'style', { width: 10 });
+    engine.commit();
+    assert.equal(rec.named('start').length, 0, 'nor once it is styled again, still held');
+    engine.hold(view, false);
+    engine.commit();
+    assert.equal(rec.named('start').length, 1, 'played on native from here');
+    assert.equal(fabric.committed[0]!.props['opacity'], 1, 'from its first frame');
+  });
+
+  it('starts its clock once let go, played from JavaScript as well', () => {
+    const rec = recorder();
+    const fabric = createFakeFabric();
+    let now = 0;
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(
+        `${CSS} @keyframes tint { to { background-color: blue } } .tints { animation: tint 200ms linear }`,
+      ) as StyleSheet,
+      nativeAnimated: rec.native,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'tints');
+    engine.hold(view, true);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    now = 100;
+    engine.hold(view, false);
+    engine.commit();
+    now = 250;
+    engine.advanceAnimations();
+    engine.commit();
+    assert.equal(engine.animating, true, '150ms into its 200, not past its end');
+  });
+
+  it('starts paused once let go where it was paused while held', () => {
+    const rec = recorder();
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(`${CSS} .paused { animation-play-state: paused }`) as StyleSheet,
+      nativeAnimated: rec.native,
+      now: () => 0,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'leaves');
+    engine.hold(view, true);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    engine.setClasses(view, 'leaves paused');
+    engine.hold(view, false);
+    engine.commit();
+    assert.equal(rec.named('start').length, 0, 'not played while paused');
+    assert.equal(engine.animating, false);
+  });
+});
+
 describe('a view no native animation has moved', () => {
   it('has its opacity and transform committed, and nothing set on native', () => {
     const s = scene('');

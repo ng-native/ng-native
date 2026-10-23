@@ -12459,6 +12459,27 @@ export class Engine implements HostEngine {
     if (!running.done && running.pausedAt === undefined) this.playing.add(node);
   }
 
+  /** Each animation started on a node held unseen (see `hold`), to be played once it is let go. */
+  private readonly startsUnheld = new WeakSet<RunningAnimation>();
+
+  /**
+   * Play an animation started on a node held unseen, once it is let go: its clock starts here, as
+   * a browser starts it as it first paints the element. Not where it was paused meanwhile, nor a
+   * second time where it was run again while held, which plays it here already.
+   */
+  private playUnheld(
+    node: EngineNode,
+    current: RunningAnimation,
+    spec: AnimationSpec,
+    props: Record<string, unknown>,
+  ): void {
+    if (!this.startsUnheld.delete(current) || spec.paused) return;
+    current.start = this.now();
+    if (current.pausedAt === undefined && !this.playing.has(node)) {
+      this.playSomewhere(node, current, props);
+    }
+  }
+
   /** Start the clock on an animation, unless the node is already playing this one. */
   private startPlaying(
     node: EngineNode,
@@ -12494,6 +12515,7 @@ export class Engine implements HostEngine {
       this.emitTransition(node, 'topAnimationstart', spec.name);
       return;
     }
+    this.playUnheld(node, current, spec, props);
     // A view made again is another view: the one native was moving is gone. And one whose
     // important declarations changed is moving what it now must not, or not what it now may.
     if (node.committed === null || pinsChanged(node, current)) this.backToScript(node, current);
@@ -12510,7 +12532,10 @@ export class Engine implements HostEngine {
     started: RunningAnimation,
     props: Record<string, unknown>,
   ): void {
-    if (this.layPlayed(node, started)) this.laidPlayed.push({ node, running: started });
+    // A browser starts it as it first paints the element: a graph native plays would set its
+    // opacity over the hold's. See `playUnheld`.
+    if (node.held) this.startsUnheld.add(started);
+    else if (this.layPlayed(node, started)) this.laidPlayed.push({ node, running: started });
     else if (!this.playNatively(node, started, props)) this.playing.add(node);
   }
 
