@@ -354,3 +354,43 @@ describe('what reads where a view is drawn, while native paints one ahead of the
     assert.deepEqual(s.fabric.committed[0]!.props['transform'], [{ translateX: 50 }]);
   });
 });
+
+describe('a painted view whose transitions change shape, take presses, or follow a setter', () => {
+  const BOTH = `${BAR} .bar { transition: transform 150ms linear, opacity 150ms linear }`;
+
+  it('hands a transform it eases back to JavaScript before an opacity joins the graph', () => {
+    const s = scene(BOTH);
+    for (let x = 10; x <= 40; x += 10) s.tick(50, move(x));
+    s.tick(10, { ...move(40), opacity: 0.5 });
+    // Built again for the opacity, the graph would have dropped the transform's ease and left
+    // it marked as native's, never to end, and drawn at its target at once.
+    const eased = s.view.transitions?.get('transform');
+    assert.ok(eased && !eased.done, 'the transform is still on its way');
+    assert.notEqual(
+      eased.native?.keys.includes('transform') && !eased.native.keys.includes('opacity'),
+      true,
+    );
+    s.later(300);
+    assert.equal(s.engine.animating, false, 'and ends');
+  });
+
+  it('eases an opacity it paints on a view that takes presses to no lower than takes a touch', () => {
+    // A backdrop that fades out: eased to nothing, iOS would let presses through it.
+    const s = scene(`${BAR} .bar { transition: opacity 150ms linear }`);
+    s.engine.setResponder(s.view, {});
+    for (const opacity of [0.5, 0.4, 0.3, 0]) s.tick(50, { opacity });
+    const to = (s.rec.named('start').at(-1)![3] as { toValue: number }).toValue;
+    assert.ok(to >= 0.011, `eased to ${to}`);
+  });
+
+  it("lets go of the setter's graph on the view when it paints it", () => {
+    const s = scene(`${BAR} .bar.fade { transition: opacity 150ms linear }`);
+    s.classes('bar fade');
+    s.style({ opacity: 0.5 });
+    s.finishLast();
+    s.classes('bar');
+    // Each change from here: the first is the setter's, and the painter's from the run on.
+    for (const opacity of [0.4, 0.3, 0.2, 0.1]) s.tick(50, { opacity });
+    assert.ok((s.rec.connected().get(s.engine.tagOf(s.view)) ?? []).length <= 1, 'one graph');
+  });
+});

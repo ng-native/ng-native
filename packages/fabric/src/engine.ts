@@ -13229,6 +13229,8 @@ export class Engine implements HostEngine {
 
   /** Have native paint a view, with no props yet: `paintRun` adds them. */
   private paintFrom(node: EngineNode): PaintState {
+    // One graph a view: the setter's, which `setOwned` connected, goes as the painter's comes.
+    this.scrollDriver?.forget(node);
     const state: PaintState = { keys: new Set(), stale: new Set() };
     node.paint = state;
     this.paintedNodes.add(node);
@@ -13345,7 +13347,7 @@ export class Engine implements HostEngine {
       const value = valueOf(key) ?? null;
       if (key === 'opacity') {
         if (value !== null && typeof value !== 'number') refused.push(key);
-        else values.opacity = value ?? 1;
+        else values.opacity = this.touchedOpacity(node, value ?? 1);
       } else if (key === 'transform') {
         Object.assign(values, this.transformPainted(node, value));
       } else {
@@ -13356,6 +13358,17 @@ export class Engine implements HostEngine {
     }
     values.colors = colors;
     return { values, refused };
+  }
+
+  /**
+   * An opacity as native is to paint it: no lower than what still takes a touch, on a view that
+   * takes presses, as a commit sends it (`stillTouched`).
+   */
+  private touchedOpacity(node: EngineNode, opacity: number): number {
+    if (!this.responders.has(node)) return opacity;
+    return stillTouched({ opacity, pointerEvents: node.committed?.props['pointerEvents'] })[
+      'opacity'
+    ] as number;
   }
 
   /** A transform as native is to paint it, and whether it is a share of the view's box. */
@@ -13402,6 +13415,9 @@ export class Engine implements HostEngine {
     const paint = node.paint!;
     if (!this.painter?.eases || tag === undefined) return;
     if (INDIVIDUAL_TRANSFORMS.some((key) => props[key] !== undefined)) return;
+    // A prop the graph has none of builds it again, which stops what it eases: each of those is
+    // taken back by JavaScript from where it has got to first, so none is left native's.
+    if (keys.some((key) => !paint.keys.has(key))) this.backToScriptAll(node, keys);
     for (const key of keys) paint.keys.add(key);
     const ends = this.easedEnds(node, state, keys, props);
     if (!ends) return;
@@ -13436,6 +13452,15 @@ export class Engine implements HostEngine {
       ({ values, refused }) => !refused.length && Array.isArray(values.transform ?? []),
     );
     return numbers ? { from: ends[0]!.values, to: ends[1]!.values } : null;
+  }
+
+  /** Take back from native every clock it eases on a view but those of `keys`. */
+  private backToScriptAll(node: EngineNode, keys: readonly string[]): void {
+    const clocks = new Set<EasedNatively>();
+    for (const [key, eased] of node.transitions ?? []) {
+      if (eased.native && !keys.includes(key)) clocks.add(eased.native);
+    }
+    for (const clock of clocks) this.backToScriptEased(node, clock, this.now());
   }
 
   /** Native no longer paints a view, which has left the tree. */
