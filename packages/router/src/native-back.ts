@@ -19,6 +19,7 @@ import {
   Router,
   type ActivatedRoute,
   type ActivatedRouteSnapshot,
+  type UrlSegment,
 } from '@angular/router';
 import { HardwareBack } from '@ng-native/device';
 
@@ -210,10 +211,55 @@ export function restoreFailedSnapshots(): void {
   const events = router.events.subscribe((event) => {
     if (event instanceof NavigationStart) showing = showingRoutes(router, contexts);
     else if (event instanceof NavigationError) {
-      for (const [route, snapshot] of showing) route.snapshot = snapshot;
+      for (const [route, snapshot] of showing) restoreSnapshot(route, snapshot);
     }
   });
   inject(DestroyRef).onDestroy(() => events.unsubscribe());
+}
+
+/**
+ * Put back the snapshot a failed navigation moved `route` on from, and send what that move changed
+ * back through the route's observables, as the router sends a change: a page reading its query
+ * params, or bound to them as inputs, sees the values it had again.
+ *
+ * The router's observables for a route are the subjects it sends each change through, though it
+ * types them as plain observables. One that cannot be sent to is left as it is.
+ */
+export function restoreSnapshot(route: ActivatedRoute, snapshot: ActivatedRouteSnapshot): void {
+  const failed = route.snapshot;
+  route.snapshot = snapshot;
+  if (failed === snapshot) return;
+  const resend = <T>(observable: object, from: T, to: T, same: (a: T, b: T) => boolean) => {
+    if (!same(from, to)) (observable as { next?: (value: T) => void }).next?.(to);
+  };
+  resend(route.queryParams, failed.queryParams, snapshot.queryParams, sameRecord);
+  resend(route.fragment, failed.fragment, snapshot.fragment, Object.is);
+  resend(route.params, failed.params, snapshot.params, sameRecord);
+  resend(route.url, failed.url, snapshot.url, sameSegments);
+  resend(route.data, failed.data, snapshot.data, sameRecord);
+}
+
+/** Whether two records hold the same values, an array of values compared item by item. */
+function sameRecord(a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>) {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => {
+    const [x, y] = [a[key], b[key]];
+    if (Array.isArray(x) && Array.isArray(y)) {
+      return x.length === y.length && x.every((item, index) => item === y[index]);
+    }
+    return key in b && x === y;
+  });
+}
+
+function sameSegments(a: readonly UrlSegment[], b: readonly UrlSegment[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (segment, index) =>
+        segment.path === b[index]!.path && sameRecord(segment.parameters, b[index]!.parameters),
+    )
+  );
 }
 
 /**

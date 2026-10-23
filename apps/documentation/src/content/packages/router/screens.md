@@ -81,7 +81,9 @@ already there.
 A push to a url further down the stack is a new screen too: a customer that links to one of its
 jobs, whose page links back to the customer, is three screens, and back from the second customer
 returns to the job. That holds for `push()` and `nativeRouterLink`. A plain `Router.navigate()` to
-that url goes back to the screen already there instead, as `popTo()` does.
+that url goes back to the screen already there instead, as `popTo()` does, and history drops the
+entries of the screens it took off. One to a page under that screen, such as a step in a stack
+inside it, drops them too and keeps an entry for the page.
 
 A route whose parameter picks what one screen shows, rather than naming another screen to go to,
 opts back into the web behavior with `reuseScreen`:
@@ -143,9 +145,12 @@ comes off the stack, the screen it was pushed from carries on as the one showing
 a reset that failed leaves the screens it would have removed. A navigation back to a screen further
 down the stack that fails, on a page under that screen, puts back the screens above it, the same
 native screens with their state. History keeps no entry for the navigation that failed, so Back
-goes on from the screen showing. When the page is the first screen of
-a stack of its own, that stack goes too, and a tab's page that throws leaves the tab that was
-showing in front. The error reaches the app's `ErrorHandler` as well as the navigation's promise.
+goes on from the screen showing, and a Back that fails, or that a guard refuses, leaves history on
+the entry it started from. A route the failed navigation moved on, such as the screen it went back
+to, has its old params, query params and data sent through its observables again. When the page
+is the first screen of a stack of its own, that stack goes too, and a tab's page that throws
+leaves the tab that was showing in front. The error reaches the app's `ErrorHandler` as well as
+the navigation's promise.
 
 ## Refusing a dismissal
 

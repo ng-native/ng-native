@@ -7,7 +7,7 @@ import {
   type OnInit,
   type Signal,
 } from '@angular/core';
-import { Router, type Routes } from '@angular/router';
+import { ActivatedRoute, Router, type Routes } from '@angular/router';
 import { SCREEN_IN_FRONT } from '@ng-native/device';
 import { Text } from '../../components/src/text.ts';
 import { NativeStackOutlet } from '../../router/src/native-stack-outlet.ts';
@@ -89,11 +89,17 @@ export class Compose {
   constructor() {
     track('Compose');
     composeInFront.push(inject(SCREEN_IN_FRONT));
+    composeRoutes.push(inject(ActivatedRoute));
   }
 }
 
+/** Whether the guard of the `gated` route lets a navigation in. */
+export const gate = { open: true };
+
 /** Whether each `Compose` created is the screen in front, oldest first. */
 export const composeInFront: Signal<boolean>[] = [];
+/** The route of each `Compose` created, oldest first. */
+export const composeRoutes: ActivatedRoute[] = [];
 
 @Component({ selector: 'x-compose-start', imports: [Text], template: `<text>start</text>` })
 export class ComposeStart {}
@@ -264,6 +270,7 @@ export const routes: Routes = [
         component: Compose,
         children: [
           { path: '', component: ComposeStart },
+          { path: 'step', component: ComposeStep },
           { path: 'broken', component: Broken },
         ],
       },
@@ -283,6 +290,7 @@ export const routes: Routes = [
     ],
   },
   { path: 'refused', component: Fine, canActivate: [() => false] },
+  { path: 'gated', component: Fine, canActivate: [() => gate.open] },
   { path: 'moved', component: Fine, canActivate: [() => inject(Router).parseUrl('/user/5')] },
   {
     path: 'moved-broken',

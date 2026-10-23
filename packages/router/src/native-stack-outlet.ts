@@ -56,7 +56,7 @@ import {
 import { Location, PlatformLocation } from '@angular/common';
 import { NavigationBar, OS_VERSION, SCREEN_IN_FRONT, StatusBar } from '@ng-native/device';
 import { bindRouteInputs } from './bind-route-inputs.ts';
-import { NativeBack, isShowing } from './native-back.ts';
+import { NativeBack, isShowing, restoreSnapshot } from './native-back.ts';
 import { navigationIntent, type NativeIntent } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
 import { PRESENTED, withoutPresented } from './presented-route.ts';
@@ -95,6 +95,8 @@ interface StackEntry {
     navigation: number;
     children: ChildrenOutletContexts;
     snapshot: ActivatedRouteSnapshot;
+    /** The url the app showed before that navigation, whose history entry is this screen's. */
+    url: string | undefined;
   };
   /** Whether this screen is the one in front, for what it holds: see `SCREEN_IN_FRONT`. */
   inFront: WritableSignal<boolean>;
@@ -115,10 +117,17 @@ const presented = new WeakMap<object, number>();
  * navigation back to a screen holding a stack of its own drops screens in both stacks, and the
  * rewind to its entry goes back over all of them, once.
  */
-const rewinds = new WeakMap<object, { navigation: number; steps: number }>();
+const rewinds = new WeakMap<object, Rewind>();
+
+interface Rewind {
+  navigation: number;
+  steps: number;
+  /** The url the screen gone back to showed when it was covered, if known. */
+  url?: string;
+}
 
 /** The rewind a router's navigation in flight is waiting to make, if any. Exposed for tests. */
-export function pendingRewind(router: object): { navigation: number; steps: number } | undefined {
+export function pendingRewind(router: object): Rewind | undefined {
   return rewinds.get(router);
 }
 
@@ -585,6 +594,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
             navigation: entry.detachedIn,
             children: context.children,
             snapshot: entry.route.snapshot,
+            url: this.previousUrl(),
           }
         : undefined;
     entry.inFront.set(false);
@@ -751,7 +761,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * the navigation ends before anything commits, so native sees one change or none.
    */
   private pop(kept: StackEntry, above: StackEntry[]): void {
-    this.rewindAfter(above);
+    this.rewindAfter(above, kept.covered?.url);
     const navigation = this.navigationId();
     if (navigation === undefined) {
       for (const entry of above) this.drop(entry);
@@ -775,7 +785,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     if (popped?.navigation !== navigation) return;
     this.popped = null;
     const { kept } = popped;
-    kept.route.snapshot = popped.snapshot;
+    restoreSnapshot(kept.route, popped.snapshot);
     kept.detached = true;
     kept.detachedIn = popped.detachedIn;
     kept.inFront.set(false);
@@ -792,9 +802,9 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   /**
    * A navigation the history did not drive went back to a screen kept further down, taking
    * `dropped` screens off: a back has already moved the history, and a navigation that skips the
-   * location change leaves it where it is.
+   * location change leaves it where it is. `url` is the one the screen gone back to was showing.
    */
-  private rewindAfter(dropped: readonly StackEntry[]): void {
+  private rewindAfter(dropped: readonly StackEntry[], url: string | undefined): void {
     const navigation = this.router?.getCurrentNavigation();
     if (!navigation || navigation.trigger === 'popstate' || navigation.extras.skipLocationChange) {
       return;
@@ -805,9 +815,15 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     // A screen restored from another outlet has no count here, and is taken to have added one.
     const added = dropped.reduce((total, entry) => total + (entry.entries ?? 1), 0);
     const pending = rewinds.get(this.router!);
-    if (pending?.navigation === navigation.id) pending.steps += added;
-    else
-      rewinds.set(this.router!, { navigation: navigation.id, steps: added + this.entriesAdded() });
+    // An outlet inside the screen gone back to activates after the one holding it, so the last
+    // url is the innermost screen's, the one whose entry is furthest back.
+    if (pending?.navigation === navigation.id) {
+      pending.steps += added;
+      pending.url = url;
+    } else {
+      const steps = added + this.entriesAdded();
+      rewinds.set(this.router!, { navigation: navigation.id, steps, url });
+    }
   }
 
   /**
@@ -815,11 +831,19 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * router is there already. The entry keeps its state, the screen's presentation with it, and
    * takes the navigation's id, as the router writes one into the entry a back reaches. A stack in
    * a tab whose history went through another tab has that tab's entry there, and is left as it is.
+   *
+   * A navigation to another page under the kept screen, such as a step in a stack inside it, finds
+   * the url that screen was showing there instead. The page's own entry stays, and the entries of
+   * the screens taken off between the two go.
    */
-  private rewind(navigation: number, steps: number): void {
+  private rewind({ navigation, steps, url }: Rewind): void {
     const history = this.history;
     if (!(history instanceof NativePlatformLocation)) return;
-    if (this.historyUrl(-steps) !== this.router!.url) return;
+    const behind = this.historyUrl(-steps);
+    if (behind !== this.router!.url) {
+      if (url !== undefined && behind === url) history.ɵdropBehind(steps - 1);
+      return;
+    }
     history.ɵrewind(steps);
     const state = history.getState();
     const own = state && typeof state === 'object' ? state : {};
@@ -831,7 +855,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     const pending = this.router && rewinds.get(this.router);
     if (pending?.navigation === navigation) {
       rewinds.delete(this.router!);
-      this.rewind(navigation, pending.steps);
+      this.rewind(pending);
     }
     if (this.superseded?.navigation === navigation) {
       for (const entry of this.superseded.entries) this.remove(entry);
@@ -1185,6 +1209,12 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
         events.unsubscribe();
       });
     });
+  }
+
+  /** The url the app showed before the navigation in flight, as the router writes it. */
+  private previousUrl(): string | undefined {
+    const previous = this.router?.getCurrentNavigation()?.previousNavigation?.finalUrl;
+    return previous && this.router!.serializeUrl(previous);
   }
 
   /** The url a screen was showing when it was covered, rebuilt from its own route snapshot. */

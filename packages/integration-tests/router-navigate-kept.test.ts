@@ -8,6 +8,7 @@ import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import { ErrorHandler, type Type } from '@angular/core';
 import { PlatformLocation } from '@angular/common';
 import {
+  ActivatedRoute,
   ActivationEnd,
   NavigationCancel,
   NavigationSkipped,
@@ -179,6 +180,53 @@ describe('a plain navigation to a url further down the stack', () => {
     assert.deepEqual(historyOf(), ['/', '/compose']);
   });
 
+  it('drops the entries of the screens it took off for a page under the kept screen', async () => {
+    await nav.popToRoot();
+    await nav.push('/compose');
+    await nav.push('/user/1');
+    await idle();
+    assert.equal(await router.navigateByUrl('/compose/step'), true);
+    await idle();
+    assert.deepEqual(stack(fabric), ['home', 'start step', 'start', 'step']);
+    assert.deepEqual(historyOf(), ['/', '/compose', '/compose/step']);
+    assert.equal(
+      (history.getState() as Record<string, unknown>)['navigationId'],
+      router.lastSuccessfulNavigation()?.id,
+    );
+
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/compose', 'Back goes down the stack inside compose');
+    assert.deepEqual(historyOf(), ['/', '/compose']);
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/');
+    assert.deepEqual(stack(fabric), ['home']);
+  });
+
+  it('drops them for a page under a kept screen in a stack inside the kept one', async () => {
+    await nav.popToRoot();
+    await nav.push('/draft');
+    await nav.push('/draft/nested');
+    await nav.push('/draft/step');
+    await nav.push('/user/1');
+    await idle();
+    assert.equal(await router.navigateByUrl('/draft/nested/step'), true);
+    await idle();
+    assert.deepEqual(historyOf(), ['/', '/draft', '/draft/nested', '/draft/nested/step']);
+  });
+
+  it('drops them too when that navigation replaces the url', async () => {
+    await nav.popToRoot();
+    await nav.push('/compose');
+    await nav.push('/user/1');
+    await nav.push('/user/2');
+    await idle();
+    assert.equal(await router.navigateByUrl('/compose/step', { replaceUrl: true }), true);
+    await idle();
+    assert.deepEqual(historyOf(), ['/', '/compose', '/compose/step']);
+  });
+
   it('goes back to a tab bar a screen was pushed over, at the tab it was left on', async () => {
     await router.navigateByUrl('/wrapped-tabs/schedule');
     await router.navigateByUrl('/wrapped-tabs/speakers');
@@ -339,6 +387,7 @@ describe('a navigation to a url further down the stack that fails or is cancelle
   let live: Record<string, number>;
 
   let composeInFront: (() => boolean)[];
+  let composeRoutes: ActivatedRoute[];
 
   const historyOf = () => history.ɵpages().map((page) => page.url);
   /** The native screens in the app's own stack, by tag, bottom first. */
@@ -357,11 +406,13 @@ describe('a navigation to a url further down the stack that fails or is cancelle
     created = mod['created'] as Record<string, number>;
     live = mod['live'] as Record<string, number>;
     composeInFront = mod['composeInFront'] as (() => boolean)[];
+    composeRoutes = mod['composeRoutes'] as ActivatedRoute[];
   });
 
   beforeEach(async () => {
     for (const counts of [live, created]) for (const key of Object.keys(counts)) delete counts[key];
     composeInFront.length = 0;
+    composeRoutes.length = 0;
     const app = await render(mod['Shell'] as Type<unknown>, {
       providers: [
         provideNativeRouter(mod['routes'] as Routes, withComponentInputBinding()),
@@ -429,6 +480,15 @@ describe('a navigation to a url further down the stack that fails or is cancelle
     await idle();
     assert.equal(router.url, '/');
     assert.deepEqual(stack(fabric), ['home']);
+  });
+
+  it('stays on its entry when a page under the screen on top fails to replace it', async () => {
+    nav.back();
+    await idle();
+    await failed(router.navigateByUrl('/compose/broken', { replaceUrl: true }));
+    await idle();
+    assert.equal(router.url, '/compose');
+    assert.deepEqual(historyOf(), ['/', '/compose']);
   });
 
   it('leaves Back working for a failed page under a screen in a stack inside the top one', async () => {
@@ -541,18 +601,75 @@ describe('a navigation to a url further down the stack that fails or is cancelle
       }
       store(route, handle);
     };
+    const entry = history.ɵpages()[1];
     nav.back();
     await idle();
     assert.equal(fail, false, 'the Back reached the start page');
     assert.equal(router.url, '/user/1');
     assert.deepEqual(stack(fabric), ['home', 'start', 'start', 'user 1']);
     assert.equal(live['User'], 1);
+    assert.deepEqual(historyOf(), ['/', '/compose', '/user/1'], 'back on the entry it left');
+    assert.equal(history.ɵpages()[1], entry, 'the entry it went back to as it was');
 
     nav.back();
     await idle();
     assert.equal(router.url, '/compose');
     assert.deepEqual(stack(fabric), ['home', 'start', 'start']);
     assert.equal(created['Compose'], 1);
+  });
+
+  it('leaves the history as it was for a Back a guard refuses', async () => {
+    const gate = mod['gate'] as { open: boolean };
+    await nav.push('/gated');
+    await nav.push('/user/2');
+    await idle();
+    const entry = history.ɵpages()[3];
+    gate.open = false;
+    try {
+      nav.back();
+      await idle();
+    } finally {
+      gate.open = true;
+    }
+    assert.equal(router.url, '/user/2');
+    assert.deepEqual(historyOf(), ['/', '/compose', '/user/1', '/gated', '/user/2']);
+    assert.equal(history.ɵpages()[3], entry);
+
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/gated');
+    assert.deepEqual(historyOf(), ['/', '/compose', '/user/1', '/gated']);
+  });
+
+  it('puts back the query params of the kept screen it went back to', async () => {
+    const compose = composeRoutes[0]!;
+    const tabs: (string | null)[] = [];
+    const subscription = compose.queryParamMap.subscribe((map) => tabs.push(map.get('tab')));
+    try {
+      await failed(router.navigateByUrl('/compose/broken?tab=2'));
+      await idle();
+    } finally {
+      subscription.unsubscribe();
+    }
+    assert.deepEqual(compose.snapshot.queryParams, {});
+    assert.deepEqual(tabs, [null, '2', null]);
+  });
+
+  it('puts back the query params of the screen showing', async () => {
+    nav.back();
+    await idle();
+    const compose = composeRoutes[0]!;
+    const tabs: (string | null)[] = [];
+    const subscription = compose.queryParamMap.subscribe((map) => tabs.push(map.get('tab')));
+    try {
+      await failed(router.navigateByUrl('/compose/broken?tab=2'));
+      await idle();
+    } finally {
+      subscription.unsubscribe();
+    }
+    assert.equal(router.url, '/compose');
+    assert.deepEqual(compose.snapshot.queryParams, {});
+    assert.deepEqual(tabs, [null, '2', null]);
   });
 
   it('takes the screens off for good when a page it creates sends the app on', async () => {

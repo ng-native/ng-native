@@ -28,6 +28,13 @@ interface HistoryEntry {
   state: unknown;
 }
 
+/** A move through history by `historyGo`, and the entry it reached as it was then. */
+export interface HistoryMove {
+  readonly from: number;
+  readonly to: number;
+  readonly entry: HistoryEntry;
+}
+
 /** Split a url into its path, `?search` and `#hash` parts. */
 function parse(url: string): { pathname: string; search: string; hash: string } {
   const hashAt = url.indexOf('#');
@@ -44,6 +51,8 @@ function parse(url: string): { pathname: string; search: string; hash: string } 
 export class NativePlatformLocation implements PlatformLocation {
   private readonly entries: HistoryEntry[] = [{ url: '/', state: null }];
   private cursor = 0;
+  /** The last move by `historyGo`, until history changes some other way. */
+  private moved: HistoryMove | null = null;
 
   private readonly popStateListeners = new Set<LocationChangeListener>();
   private readonly hashChangeListeners = new Set<LocationChangeListener>();
@@ -100,6 +109,36 @@ export class NativePlatformLocation implements PlatformLocation {
   ɵrewind(steps: number): void {
     if (steps < 1 || steps > this.cursor) return;
     this.cursor -= steps;
+    this.moved = null;
+  }
+
+  /** The last move by `historyGo`, while it is still the last change to the history. */
+  ɵlastMove(): HistoryMove | null {
+    return this.moved;
+  }
+
+  /**
+   * Undo `move`, with no popstate: the entry it reached as it was before the router wrote over it,
+   * and the entry it left showing again. For a back whose navigation failed. Nothing when history
+   * has moved on since.
+   */
+  ɵundo(move: HistoryMove): void {
+    if (this.moved !== move || this.cursor !== move.to) return;
+    this.entries[move.to] = move.entry;
+    this.cursor = move.from;
+    this.moved = null;
+  }
+
+  /**
+   * Take out the `count` entries just behind the one showing, with no popstate. For a navigation
+   * that went back to a screen further down and on to a page under it: the screens taken off on
+   * the way leave no entries between the two.
+   */
+  ɵdropBehind(count: number): void {
+    if (count < 1 || count > this.cursor) return;
+    this.entries.splice(this.cursor - count, count);
+    this.cursor -= count;
+    this.moved = null;
   }
 
   /**
@@ -110,6 +149,7 @@ export class NativePlatformLocation implements PlatformLocation {
     if (this.cursor === 0) return;
     this.entries.splice(this.cursor, 1);
     this.cursor--;
+    this.moved = null;
   }
 
   private get current(): HistoryEntry {
@@ -170,6 +210,7 @@ export class NativePlatformLocation implements PlatformLocation {
     this.entries.length = this.cursor + 1;
     this.entries.push({ url, state });
     this.cursor++;
+    this.moved = null;
   }
 
   replaceState(state: unknown, _title: string, url: string): void {
@@ -188,6 +229,7 @@ export class NativePlatformLocation implements PlatformLocation {
     const target = this.cursor + relativePosition;
     // Out of range is a no-op, matching the browser rather than throwing.
     if (target < 0 || target >= this.entries.length) return;
+    this.moved = { from: this.cursor, to: target, entry: this.entries[target]! };
     this.cursor = target;
     this.emitPopState();
   }
