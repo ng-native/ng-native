@@ -491,6 +491,29 @@ describe('a token holding platform-color() where a colour has to be worked out',
     assert.match(said[1]!, /'--mixed' is dropped on device: .*var\(--accent\)/);
   });
 
+  it('says nothing at build time of a fallback that names it behind a token the sheet sets', () => {
+    assert.deepEqual(
+      buildSays(
+        ':root { --plain: blue; } .a { color: color-mix(in srgb, var(--plain, var(--accent)) 50%, white); }',
+      ),
+      [],
+    );
+  });
+
+  it('says so at build time of a token whose fallback is a platform colour, and not where its token is set', () => {
+    const fallsBack = buildSays(
+      `:root { --dim: var(--missing, ${LINK}); } .a { color: color-mix(in srgb, var(--dim) 50%, white); }`,
+    );
+    assert.equal(fallsBack.length, 1, fallsBack.join('\n'));
+    assert.match(fallsBack[0]!, /'color' is dropped on device: .*var\(--dim\)/);
+    assert.deepEqual(
+      buildSays(
+        `:root { --set: red; --dim: var(--set, ${LINK}); } .a { color: color-mix(in srgb, var(--dim) 50%, white); }`,
+      ),
+      [],
+    );
+  });
+
   it('says nothing at build time where the token is only read as a colour', () => {
     assert.deepEqual(
       buildSays(

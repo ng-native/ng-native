@@ -3818,11 +3818,11 @@ const PLATFORM_COLOR = 'platform-color';
  */
 function reportPlatformColourReads(rules, reads, onUnsupported) {
   if (!reads.length) return;
-  const held = platformColourTokens(rules);
+  const { held, set } = platformColourTokens(rules);
   if (!held.size) return;
   for (const { name, context, token, deferred } of reads) {
     const worked = token ? [token.shadow, token.deferredColour] : deferred.map(workedColour);
-    const found = referencesIn(worked).find((reference) => held.has(reference));
+    const found = referencesIn(worked, set).find((reference) => held.has(reference));
     if (!found) continue;
     onUnsupported(
       reported(
@@ -3836,15 +3836,24 @@ function reportPlatformColourReads(rules, reads, onUnsupported) {
   }
 }
 
-/** The tokens a sheet sets to a platform colour, and those set to one of them. */
+/**
+ * The tokens a sheet sets to a platform colour, and those set to one of them, through their own
+ * token or, where the sheet doesn't set that, their fallback. Also every token the sheet sets.
+ */
 function platformColourTokens(rules) {
   const tokens = rules.flatMap((rule) => Object.entries(rule.tokens ?? {}));
-  const held = new Set(tokens.filter(([, token]) => token?.color?.platformColor).map(([n]) => n));
+  const set = new Set(tokens.map(([name]) => name));
+  const held = new Set();
+  const holds = (token) => {
+    if (token?.color?.platformColor) return true;
+    if (token?.alias === undefined) return false;
+    return set.has(token.alias) ? held.has(token.alias) : holds(token.fallback);
+  };
   for (let size = -1; size !== held.size;) {
     size = held.size;
-    for (const [name, token] of tokens) if (held.has(token?.alias)) held.add(name);
+    for (const [name, token] of tokens) if (holds(token)) held.add(name);
   }
-  return held;
+  return { held, set };
 }
 
 /**
@@ -3859,18 +3868,31 @@ function workedColour(entry) {
   return entry.gradient ?? null;
 }
 
-/** Every token a compiled value names, at any depth. */
-function referencesIn(value, out = []) {
+const NAMING_KEYS = new Set(['reference', 'alias']);
+
+/** Every token a compiled value reads, at any depth. */
+function referencesIn(value, set, out = []) {
   if (Array.isArray(value)) {
-    for (const part of value) referencesIn(part, out);
+    for (const part of value) referencesIn(part, set, out);
   } else if (value && typeof value === 'object') {
+    // Of `var(--a, var(--b))`, the first token the sheet sets; all of them where it sets none.
+    const read = firstSet(value, set);
+    if (read) {
+      out.push(read);
+      return out;
+    }
     for (const [key, part] of Object.entries(value)) {
-      if (typeof part === 'string' && (key === 'reference' || key === 'alias')) out.push(part);
+      if (typeof part === 'string' && NAMING_KEYS.has(key)) out.push(part);
       else if (key === 'alternatives' && Array.isArray(part)) out.push(...part);
-      else referencesIn(part, out);
+      else referencesIn(part, set, out);
     }
   }
   return out;
+}
+
+function firstSet(value, set) {
+  if (!Array.isArray(value.alternatives)) return undefined;
+  return [value.reference, ...value.alternatives].find((name) => set.has(name));
 }
 
 /** The declaration a `platform-color()` value produces, or null if this is not one. */
