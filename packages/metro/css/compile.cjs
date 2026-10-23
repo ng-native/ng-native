@@ -3012,6 +3012,8 @@ function compileCss(source, context = 'styles', options = {}) {
   /** The platforms this sheet is built for: the one Metro is bundling, or both when it is not said. */
   const targets = NATIVE.includes(options.platform) ? [options.platform] : NATIVE;
   let order = 0;
+  /** The tokens each declaration reads, for `reportPlatformColourReads` once the sheet is read. */
+  const reads = [];
   /**
    * The sheet's cascade layers, in the order each was first named, and the one being compiled.
    * A rule carries its layer until the whole sheet is read, since a later `@layer a, b;` cannot
@@ -3076,9 +3078,18 @@ function compileCss(source, context = 'styles', options = {}) {
       // The whole rule: a slot can be set after the declaration that reads it.
       assertVariantsKnown(tokens, deferred, 0);
       supersede(deferred, before, written);
+      noteReads(name, tokens, deferred.slice(before), context);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
       onUnsupported(reported(context, `dropped '${name}'`, error.message));
+    }
+  }
+
+  /** What a declaration reads, kept for `reportPlatformColourReads` where there is one to tell. */
+  function noteReads(name, tokens, added, context) {
+    const token = String(name).startsWith('--') ? tokens?.[name] : undefined;
+    if (onUnsupported && (token || added.length)) {
+      reads.push({ name, context, token, deferred: added });
     }
   }
 
@@ -3604,6 +3615,7 @@ function compileCss(source, context = 'styles', options = {}) {
   // A rule names its layer by its place in the sheet's list of them. The engine gives each name
   // one place among every sheet's layers, as a document has one order for them all.
   for (const rule of rules) if (rule.layer) rule.layer = rule.layer.index;
+  reportPlatformColourReads(rules, reads, onUnsupported);
   return {
     rules,
     ...(layers.all.length ? { layers: layers.all.map((one) => one.path) } : {}),
@@ -3796,6 +3808,70 @@ function asksAboutPosition(compound) {
  * declaration can name iOS's colour and Android's.
  */
 const PLATFORM_COLOR = 'platform-color';
+
+/**
+ * Says where a sheet works a colour out of a token it sets to a platform colour: a `color-mix()`,
+ * a relative colour, a gradient or a shadow of `var(--accent)` where `--accent:
+ * platform-color(link)`. The platform resolves that colour by name, so it has no channels to work
+ * with, and the engine drops the declaration where the token holds one. The engine says so too,
+ * in development, for a token set in one sheet and read in another, which only it can see.
+ */
+function reportPlatformColourReads(rules, reads, onUnsupported) {
+  if (!reads.length) return;
+  const held = platformColourTokens(rules);
+  if (!held.size) return;
+  for (const { name, context, token, deferred } of reads) {
+    const worked = token ? [token.shadow, token.deferredColour] : deferred.map(workedColour);
+    const found = referencesIn(worked).find((reference) => held.has(reference));
+    if (!found) continue;
+    onUnsupported(
+      reported(
+        context,
+        `'${name}' is dropped on device`,
+        `it works a colour out of var(${found}), which holds a platform colour (platform-color() ` +
+          `or a system colour). The platform resolves that by name, so it has no channels to ` +
+          `mix, fade or draw in a gradient or a shadow. Use var(${found}) on its own in a colour property, or a colour written out.`,
+      ),
+    );
+  }
+}
+
+/** The tokens a sheet sets to a platform colour, and those set to one of them. */
+function platformColourTokens(rules) {
+  const tokens = rules.flatMap((rule) => Object.entries(rule.tokens ?? {}));
+  const held = new Set(tokens.filter(([, token]) => token?.color?.platformColor).map(([n]) => n));
+  for (let size = -1; size !== held.size;) {
+    size = held.size;
+    for (const [name, token] of tokens) if (held.has(token?.alias)) held.add(name);
+  }
+  return held;
+}
+
+/**
+ * The part of a deferred declaration that works a colour out of its tokens, or null where it
+ * takes a token whole: `color: var(--x)`, a light-dark() side of one, a line's `var()`.
+ */
+function workedColour(entry) {
+  const whole = (value) => value?.__colour && 'reference' in value.__colour;
+  if (entry.kind !== undefined) return entry.adjust?.alpha === undefined ? null : entry;
+  if (entry.within !== undefined) return whole(entry.within) ? null : entry.within;
+  if (entry.line?.colour) return entry.line.colour;
+  return entry.gradient ?? null;
+}
+
+/** Every token a compiled value names, at any depth. */
+function referencesIn(value, out = []) {
+  if (Array.isArray(value)) {
+    for (const part of value) referencesIn(part, out);
+  } else if (value && typeof value === 'object') {
+    for (const [key, part] of Object.entries(value)) {
+      if (typeof part === 'string' && (key === 'reference' || key === 'alias')) out.push(part);
+      else if (key === 'alternatives' && Array.isArray(part)) out.push(...part);
+      else referencesIn(part, out);
+    }
+  }
+  return out;
+}
 
 /** The declaration a `platform-color()` value produces, or null if this is not one. */
 function asPlatformColor(value, context) {
@@ -4194,4 +4270,5 @@ module.exports = {
   linear,
   markUnitless,
   opacityOf,
+  platformColor,
 };

@@ -6914,6 +6914,8 @@ export class Engine implements HostEngine {
       this.styles.onUndefinedToken = (name, props, on) =>
         this.reportUndefinedToken(name, props, on);
       this.styles.onUnreadDisplay = (name, value) => this.reportUnreadDisplay(name, value);
+      this.styles.onPlatformColour = (name, props, on) =>
+        this.reportPlatformColour(name, props, on);
     }
     this.now = options.now ?? (() => globalThis.performance?.now?.() ?? Date.now());
     this.onDirty = options.onDirty;
@@ -14844,6 +14846,27 @@ export class Engine implements HostEngine {
     console.warn(
       `[angular-native] ${prop}: ${value}, in a style on <${on}>, is no value ${prop} takes:` +
         ` ${why}. The declaration is dropped, as a browser drops it.`,
+    );
+  }
+
+  private readonly platformColours = new Set<string>();
+
+  /**
+   * Said once per token and props: a colour worked out of a token that holds a platform colour,
+   * which has no channels to work with, is dropped. The compiler says so where one sheet holds
+   * both; a token set in one sheet, or bound, and read in another is only known here.
+   */
+  private reportPlatformColour(name: string, props: readonly string[], on?: string): void {
+    const report = `${name} ${props.join(',')} ${on ?? ''}`;
+    if (this.platformColours.has(report)) return;
+    this.platformColours.add(report);
+    const where = on === undefined ? props.join(', ') : `${props.join(', ')}, bound on <${on}>,`;
+    console.warn(
+      `[angular-native] ${where} works a colour out of var(${name}), which holds a platform` +
+        ` colour (platform-color() or a system colour). The platform resolves that by name and` +
+        ` it has no channels to mix, fade or draw in a gradient or a shadow, so the declaration` +
+        ` is dropped. Use var(${name}) on its own, where a colour property takes it whole, or a` +
+        ` colour written out.`,
     );
   }
 

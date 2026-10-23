@@ -443,6 +443,17 @@ is no border, as on the web. `currentColor` as a side of such a mix, written or 
 the text color where the mix is used. A `border-width` with no color anywhere is drawn black,
 native's default, and the web host draws it black too.
 
+A custom property can hold a platform colour, `--accent: platform-color(link, "?attr/colorAccent")`,
+or a system colour such as `LinkText`, in any sheet, in a `@media` rule such as
+`prefers-color-scheme: dark`, or bound with `[style.--accent]`. `var(--accent)` in a colour
+property (`color`, `background-color`, a border color, `outline-color`, `text-decoration-color`,
+`tint-color`, `shadow-color` or a `text-shadow`'s color) commits what the colour written there
+commits, and so does a `var()` that falls back to one. The platform resolves such a colour by name,
+so it has no channels: a `color-mix()`, a relative colour, a gradient or a `box-shadow` worked out
+of the token, or a fade of it such as Tailwind's `bg-accent/50`, is dropped. The build says so where
+the sheet that sets the token also does that, and in development the engine says so on the device,
+naming the token, wherever it is set.
+
 A custom property can hold a font stack (read as its first family, as `font-family` is), a unitless
 line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or bare color channels for
 `rgba(var(--channels), <alpha>)`, which is how Bootstrap writes its color utilities. A shorthand may

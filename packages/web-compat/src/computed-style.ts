@@ -328,6 +328,15 @@ function shorthand(parts: string[]): string {
   return right === top ? top! : `${top} ${right}`;
 }
 
+/** A token's colour as text: a platform colour as the `platform-color()` that names it. */
+function tokenColourText(colour: NonNullable<TokenValue['color']>): string {
+  if (typeof colour === 'string') return colour;
+  const names = colour.platformColor.map((name) =>
+    /^[a-z_][\w-]*$/i.test(name) ? name : serializeString(name),
+  );
+  return `platform-color(${names.join(', ')})`;
+}
+
 /** A custom property as text, from the forms the engine keeps of it. */
 function tokenText(token: TokenValue | undefined): string {
   if (!token) return '';
@@ -336,7 +345,7 @@ function tokenText(token: TokenValue | undefined): string {
   if (token.length !== undefined) {
     return typeof token.length === 'number' ? `${token.length}px` : token.length;
   }
-  if (token.color !== undefined) return token.color;
+  if (token.color !== undefined) return tokenColourText(token.color);
   if (token.angle !== undefined) return `${token.angle}deg`;
   if (token.time !== undefined) return `${token.time}ms`;
   if (token.lengths)
