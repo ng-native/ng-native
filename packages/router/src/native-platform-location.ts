@@ -80,6 +80,15 @@ export class NativePlatformLocation implements PlatformLocation {
     return this.entries.slice(0, this.cursor + 1);
   }
 
+  /**
+   * Go back `steps` entries without a popstate, for a navigation already on the page there. The
+   * entries ahead stay as forward ones, as after a back.
+   */
+  ɵrewind(steps: number): void {
+    if (steps < 1 || steps > this.cursor) return;
+    this.cursor -= steps;
+  }
+
   private get current(): HistoryEntry {
     return this.entries[this.cursor]!;
   }

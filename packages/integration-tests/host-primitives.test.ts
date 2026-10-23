@@ -178,9 +178,9 @@ describe('host primitives', () => {
     const fading = () => withLabel(fabric, 'fade me');
     const dimmed = () => withLabel(fabric, 'dim already');
 
-    // Stated by the component's own rule, so the transition has a value to ease from. A caller
-    // with an opacity of its own still wins, because inline style beats the cascade.
-    assert.equal(fading().props['opacity'], 1);
+    // Not stated by the component, so it is native's default, 1, and still a value to ease from.
+    // A caller with an opacity of its own keeps it at rest.
+    assert.equal(fading().props['opacity'], undefined);
     assert.equal(dimmed().props['opacity'], 0.8, "the caller's own opacity is untouched");
 
     // Pressed once the screen has been drawn: a view no frame has shown yet starts nothing.
@@ -197,7 +197,7 @@ describe('host primitives', () => {
     assert.equal(fading().props['opacity'], 0.5, 'and it arrives');
   });
 
-  it('eases back and then lets go, handing the style back to the caller', async () => {
+  it('eases back to rest, leaving the opacity to the caller', async () => {
     const fading = () => withLabel(fabric, 'fade me');
 
     await fireEvent(fading(), 'touchStart');
@@ -211,11 +211,11 @@ describe('host primitives', () => {
     const returning = fading().props['opacity'] as number;
     assert.ok(Math.abs(returning - 0.75) < 1e-5, `halfway back, not ${returning}`);
 
-    // `transitionend` is what hands the opacity back; without it the binding would sit on 1 for
-    // ever and a caller changing their own opacity would be overruled.
+    // At rest nothing of the component's is left on the opacity, so a caller changing their own
+    // later is not overruled.
     tick(125);
     await settle();
-    assert.equal(fading().props['opacity'], 1, 'back to rest, and the binding let go');
+    assert.equal(fading().props['opacity'] ?? 1, 1, 'back to rest');
   });
 
   it('applies contentContainerStyle to a wrapper view, as RN does', () => {
@@ -257,15 +257,21 @@ describe('host primitives', () => {
 describe('platform view names', () => {
   it('answers what a node commits as, for a host that is not the engine', async () => {
     const { viewNameOf } = await import('@ng-native/fabric');
-    const paragraph = { kind: 'element', tag: 'text', parent: null };
+    const paragraph = { nodeKind: 'element', tag: 'text', parent: null };
 
-    assert.equal(viewNameOf({ kind: 'element', tag: 'view', parent: null }), 'View');
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'view', parent: null }), 'View');
     assert.equal(viewNameOf(paragraph), 'Paragraph');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'text', parent: paragraph }), 'VirtualText');
-    assert.equal(viewNameOf({ kind: 'text', tag: '#text', parent: paragraph }), 'RawText');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'pressable', parent: null }), 'View');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'scroll-view', parent: null }), 'ScrollView');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'app-habit-row', parent: null }), 'View');
+    assert.equal(
+      viewNameOf({ nodeKind: 'element', tag: 'text', parent: paragraph }),
+      'VirtualText',
+    );
+    assert.equal(viewNameOf({ nodeKind: 'text', tag: '#text', parent: paragraph }), 'RawText');
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'pressable', parent: null }), 'View');
+    assert.equal(
+      viewNameOf({ nodeKind: 'element', tag: 'scroll-view', parent: null }),
+      'ScrollView',
+    );
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'app-habit-row', parent: null }), 'View');
   });
 
   it('swaps the components Android registers differently', async () => {

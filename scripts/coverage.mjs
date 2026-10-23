@@ -121,6 +121,26 @@ const SUITES = [
     report: (out) => path.join(out, 'testing.info'),
   },
   {
+    // `@ng-native/web-compat`'s own suite. The native suite loads the package too, for the icons
+    // drawn beside a library's drawing, and reaches little of it.
+    name: 'web-compat',
+    cwd: 'packages/web-compat',
+    command: 'node',
+    args: (destination) => [
+      '--import',
+      '@ng-native/testing/register',
+      '--test',
+      '--experimental-test-coverage',
+      ...EXCLUDE.map((pattern) => `--test-coverage-exclude=${pattern}`),
+      '--test-reporter=lcov',
+      `--test-reporter-destination=${destination}`,
+      '--test-reporter=dot',
+      '--test-reporter-destination=stdout',
+      'src/*.test.ts',
+    ],
+    report: (out) => path.join(out, 'web-compat.info'),
+  },
+  {
     name: 'browser',
     cwd: 'packages/web',
     command: 'pnpm',
@@ -130,7 +150,10 @@ const SUITES = [
 ];
 
 /**
- * `SUITES` with the native one as `count` shards, each a suite with a report of its own.
+ * `SUITES` as `count` shards: the native and web-compat suites each split across them, every
+ * other whole, the browser's beside the first shard, where CI installs Chromium, and the rest
+ * beside the last. A shard that ran every suite not split ran for as long as the other three
+ * together, and was stopped at its time limit on a busy runner.
  *
  * A line any shard reached is covered, as with any two suites. Branches are not added together
  * either, for the reason `mergeSuites` gives: Node numbers a file's branches by what the run
@@ -138,16 +161,25 @@ const SUITES = [
  * shards than from one whole run; the floor is on lines, which read the same.
  */
 function sharded(count) {
-  const [native, ...rest] = SUITES;
-  const shards = Array.from({ length: count }, (_, at) => ({
-    ...native,
-    name: `native-${at + 1}`,
-    shard: at + 1,
-    args: (destination) => [`--test-shard=${at + 1}/${count}`, ...native.args(destination)],
-    report: (out) => path.join(out, `native-${at + 1}.info`),
+  const split = SUITES.filter((suite) => SPLIT.has(suite.name)).flatMap((suite) =>
+    Array.from({ length: count }, (_, at) => ({
+      ...suite,
+      name: `${suite.name}-${at + 1}`,
+      shard: at + 1,
+      args: (destination) => [`--test-shard=${at + 1}/${count}`, ...suite.args(destination)],
+      report: (out) => path.join(out, `${suite.name}-${at + 1}.info`),
+    })),
+  );
+  const whole = SUITES.filter((suite) => !SPLIT.has(suite.name)).map((suite) => ({
+    ...suite,
+    shard: suite.name === 'browser' ? 1 : count,
   }));
-  return [...shards, ...rest];
+  // Each shard's split suites first, as one run of the whole lays them out.
+  return [...split.sort((a, b) => a.shard - b.shard), ...whole];
 }
+
+/** The suites run a part on each shard: the two of over a hundred files. */
+const SPLIT = new Set(['native', 'web-compat']);
 
 /** `--shard 2/4` as `{ index: 2, count: 4 }`, `--shards 4` as `{ index: 0, count: 4 }`. */
 function shardOf(args) {
@@ -399,6 +431,11 @@ function mergeSuites(suites) {
   return totals;
 }
 
+/** A path relative to the repository, with `/` on every platform so a report reads the same. */
+function relativeToRoot(file) {
+  return path.relative(ROOT, file).split(path.sep).join('/');
+}
+
 /**
  * Whether a measured file is one a package ships. Not only what is under `src`: Metro, the
  * migrations and the Tailwind preset keep their code beside their `package.json`, and a floor
@@ -406,7 +443,7 @@ function mergeSuites(suites) {
  * instrument, and so is the hook a suite is started with.
  */
 function isShipped(file) {
-  const [packages, name] = path.relative(ROOT, file).split(path.sep);
+  const [packages, name] = relativeToRoot(file).split('/');
   return (
     packages === 'packages' &&
     name !== 'integration-tests' &&
@@ -422,8 +459,8 @@ function filesIn(merged) {
       const lines = [...data.lines.values()];
       const branches = [...data.branches.values()];
       return {
-        file: path.relative(ROOT, file),
-        package: path.relative(ROOT, file).split(path.sep)[1],
+        file: relativeToRoot(file),
+        package: relativeToRoot(file).split('/')[1],
         lines: lines.length,
         covered: lines.filter((hits) => hits > 0).length,
         branches: branches.length,
@@ -500,7 +537,7 @@ function main() {
     );
   }
   if (index) {
-    // One runner's part: its shard, and beside the first shard the suites that are not split.
+    // One runner's part: its share of the split suites, and the whole ones given to it.
     run(
       suites.filter((suite) => (suite.shard ?? 1) === index),
       incomplete(index),

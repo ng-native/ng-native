@@ -22,6 +22,12 @@ const firebaseAppDelegate = readFileSync(
   new URL('./fixtures/expo-app-delegate-firebase.swift', import.meta.url),
   'utf8',
 );
+// The AppDelegate.swift `expo prebuild` writes for Expo SDK 58, whose template starts React Native
+// from a scene delegate of its own, `SceneDelegate.swift`, beside this file.
+const sdk58AppDelegate = readFileSync(
+  new URL('./fixtures/expo-app-delegate-sdk-58.swift', import.meta.url),
+  'utf8',
+);
 // The MainApplication.kt `expo prebuild` writes for Expo SDK 57.
 const expoMainApplication = readFileSync(
   new URL('./fixtures/expo-main-application.kt', import.meta.url),
@@ -116,6 +122,14 @@ describe('the config plugin', () => {
     );
   });
 
+  it('refuses an app delegate that starts React Native itself some other way, rather than leaving it without scenes', () => {
+    // It still opens a window and starts React Native from the app delegate, which iOS 27 exits
+    // at launch over, so the status bar fix alone would not do.
+    const other = expoAppDelegate.replace('withModuleName: "main"', 'withModuleName: "other"');
+    assert.notEqual(other, expoAppDelegate);
+    assert.throws(() => adoptScenes(other), /scene life cycle was not adopted/);
+  });
+
   it("hands the status bar to view controllers, since iOS 27 ignores UIApplication's", () => {
     // What `expo prebuild` writes, and what React Native's own status bar module requires.
     const plist = adoptInfoPlist({ UIViewControllerBasedStatusBarAppearance: false });
@@ -142,6 +156,52 @@ describe('the config plugin', () => {
     assert.match(adopted, /adopt\(window\.rootViewController\)/);
     assert.match(adopted, /objc_allocateClassPair/);
     assert.doesNotMatch(adopted, /answer\(UIViewController\.self/);
+  });
+
+  describe('on Expo SDK 58, which adopts scenes itself', () => {
+    it("adds no scene delegate, which would be a second class of the same name as Expo's", () => {
+      const adopted = adoptScenes(sdk58AppDelegate);
+      assert.doesNotMatch(adopted, /class SceneDelegate/);
+      assert.equal(adopted.match(/startReactNative/g), null, 'Expo starts it from its own');
+    });
+
+    it("still answers React Native's status bar calls, installed before any scene connects", () => {
+      const adopted = adoptScenes(sdk58AppDelegate);
+      assert.match(
+        classBody(adopted, 'class AppDelegate'),
+        /AngularNativeStatusBar\.install\(\)\s*return super\.application\(application, didFinishLaunchingWithOptions: launchOptions\)/,
+      );
+      assert.match(adopted, /enum AngularNativeStatusBar/);
+      assert.match(adopted, /"setStyle:animated:"/);
+    });
+
+    it('keeps the rest of the app delegate as Expo wrote it, and changes nothing the second time', () => {
+      const adopted = adoptScenes(sdk58AppDelegate);
+      assert.ok(
+        adopted.startsWith(
+          sdk58AppDelegate.slice(0, sdk58AppDelegate.indexOf('    return super.application')),
+        ),
+      );
+      assert.match(adopted, /class ReactNativeDelegate: ExpoReactNativeFactoryDelegate/);
+      assert.equal(adoptScenes(adopted), adopted);
+    });
+
+    it("keeps the scene configuration Expo's Info.plist names", () => {
+      const manifest = {
+        UIApplicationSupportsMultipleScenes: false,
+        UISceneConfigurations: {
+          UIWindowSceneSessionRoleApplication: [
+            {
+              UISceneConfigurationName: 'Default Configuration',
+              UISceneDelegateClassName: '$(PRODUCT_MODULE_NAME).SceneDelegate',
+            },
+          ],
+        },
+      };
+      const plist = adoptInfoPlist({ UIApplicationSceneManifest: manifest });
+      assert.deepEqual(plist['UIApplicationSceneManifest'], manifest);
+      assert.equal(plist['UIViewControllerBasedStatusBarAppearance'], true);
+    });
   });
 
   // React Native 0.86 ships `enableLayoutAnimationsOnAndroid` false, and with it off Fabric never

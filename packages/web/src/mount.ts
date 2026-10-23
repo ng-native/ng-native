@@ -35,6 +35,7 @@
  */
 import {
   APP_BOOTSTRAP_LISTENER,
+  ApplicationInitStatus,
   ApplicationRef,
   DOCUMENT,
   PLATFORM_ID,
@@ -281,6 +282,7 @@ function mountAlone(
     ],
     platformInjector as EnvironmentInjector,
   );
+  runInitializers(injector);
   setLocaleId(injector.get(LOCALE_ID) || 'en-US');
 
   const componentRef = createComponent(component, {
@@ -318,6 +320,17 @@ function mountAlone(
       applicationRef.destroy();
     },
   };
+}
+
+/**
+ * The app initializers, before the root component exists, as the native `mount()` runs them (see
+ * its `runInitializers` for why through `ApplicationInitStatus`): a promise is started, not awaited,
+ * and a failed one reaches the `ErrorHandler`. A copy, as this package cannot import the platform.
+ */
+function runInitializers(injector: EnvironmentInjector): void {
+  const status = injector.get(ApplicationInitStatus);
+  (status as unknown as { runInitializers(): void }).runInitializers();
+  status.donePromise.catch((error: unknown) => injector.get(ErrorHandler).handleError(error));
 }
 
 /**

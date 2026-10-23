@@ -235,6 +235,194 @@ describe('a controlled text input', () => {
   });
 });
 
+/*
+ * `[selection]` as React Native's `TextInput` sends it. The prop alone does not move the caret:
+ * Android has no `selection` prop at all, and iOS reads it only as the field appears or its text
+ * is replaced. So RN sends
+ * `setTextAndSelection` whenever the bound selection differs from the one native last had, with
+ * the field's event count, its text, and an `end` that defaults to `start`.
+ */
+describe('a text input selection', () => {
+  interface Selected {
+    text: { set(value: string): void };
+    selection: { set(value: { start: number; end?: number } | undefined): void };
+  }
+  const select = (start: number, end: number) =>
+    fireEvent(screen.getByTestId('field'), 'selectionChange', { selection: { start, end } });
+
+  it('moves the caret when the selection changes after mount', async () => {
+    const { fabric, instance } = await boot<Selected>('SelectedInput');
+    await settle();
+    fabric.reset();
+
+    instance.selection.set({ start: 3 });
+    await settle();
+
+    assert.deepEqual(commands(fabric), [['setTextAndSelection', 0, 'hello', 3, 3]]);
+    assert.deepEqual(screen.getByTestId('field').props['selection'], { start: 3, end: 3 });
+    assert.equal(fabric.calls.completeRoot, 1, 'the text did not change, so nothing to measure');
+
+    instance.selection.set({ start: 3, end: 5 });
+    await settle();
+    assert.deepEqual(commands(fabric).at(-1), ['setTextAndSelection', 0, 'hello', 3, 5]);
+
+    instance.selection.set({ start: 1, end: 5 });
+    await settle();
+    assert.deepEqual(commands(fabric).at(-1), ['setTextAndSelection', 0, 'hello', 1, 5]);
+    assert.equal(fabric.commands.length, 3);
+  });
+
+  it('places the selection it mounts with', async () => {
+    const { fabric } = await boot('InitiallySelectedInput');
+    assert.deepEqual(commands(fabric), [['setTextAndSelection', 0, 'hello', 1, 4]]);
+  });
+
+  it('sends the count of the latest change', async () => {
+    const { fabric, instance } = await boot<Selected>('SelectedInput');
+    await fireEvent(screen.getByTestId('field'), 'change', { text: 'hello!', eventCount: 4 });
+    fabric.commands.splice(0);
+
+    instance.selection.set({ start: 6 });
+    await settle();
+
+    assert.deepEqual(commands(fabric), [['setTextAndSelection', 4, 'hello!', 6, 6]]);
+  });
+
+  it('sends a selection once, not again for an equal one', async () => {
+    const { fabric, instance } = await boot<Selected>('SelectedInput');
+    instance.selection.set({ start: 3 });
+    await settle();
+    fabric.commands.splice(0);
+
+    instance.selection.set({ start: 3, end: 3 });
+    await settle();
+    instance.text.set('hello');
+    await settle();
+
+    assert.deepEqual(fabric.commands, []);
+  });
+
+  it('puts the bound selection back when the user moves it, as RN does', async () => {
+    const { fabric, instance } = await boot<Selected>('SelectedInput');
+    instance.selection.set({ start: 3 });
+    await settle();
+    fabric.commands.splice(0);
+
+    await select(5, 5);
+
+    assert.deepEqual(commands(fabric), [['setTextAndSelection', 0, 'hello', 3, 3]]);
+  });
+
+  it('sends nothing when the user moves the caret to the bound selection', async () => {
+    const { fabric, instance } = await boot<Selected>('SelectedInput');
+    instance.selection.set({ start: 3 });
+    await settle();
+    fabric.commands.splice(0);
+
+    await select(3, 3);
+
+    assert.deepEqual(fabric.commands, []);
+  });
+
+  it('carries the bound selection with a text set from code', async () => {
+    const { fabric, instance } = await boot<Selected>('SelectedInput');
+    await fireEvent(screen.getByTestId('field'), 'change', { text: 'hello', eventCount: 1 });
+    instance.selection.set({ start: 2 });
+    await settle();
+    fabric.commands.splice(0);
+
+    instance.text.set('bye');
+    await settle();
+
+    assert.deepEqual(commands(fabric), [['setTextAndSelection', 1, 'bye', 2, 2]]);
+
+    // The text has gone out, so moving the caret now neither sends it again nor measures it.
+    fabric.reset();
+    instance.selection.set({ start: 1 });
+    await settle();
+    assert.deepEqual(commands(fabric).at(-1), ['setTextAndSelection', 1, 'bye', 1, 1]);
+    assert.equal(fabric.calls.completeRoot, 1);
+  });
+
+  it('sends nothing once the selection is unbound, and drops the prop', async () => {
+    const { fabric, instance } = await boot<Selected>('SelectedInput');
+    instance.selection.set({ start: 3 });
+    await settle();
+    fabric.commands.splice(0);
+
+    instance.selection.set(undefined);
+    await settle();
+    await select(5, 5);
+
+    assert.deepEqual(fabric.commands, []);
+    assert.equal(screen.getByTestId('field').props['selection'] ?? null, null);
+
+    instance.selection.set({ start: 3 });
+    await settle();
+    assert.deepEqual(commands(fabric), [['setTextAndSelection', 0, 'hello', 3, 3]]);
+  });
+
+  it('moves the caret on Android, which has no selection prop', async () => {
+    registerPlatformComponents('android');
+    try {
+      const { fabric, instance } = await boot<Selected>('SelectedInput');
+      fabric.commands.splice(0);
+
+      instance.selection.set({ start: 2 });
+      await settle();
+
+      assert.deepEqual(fabric.commands, [
+        { viewName: 'AndroidTextInput', name: 'setTextAndSelection', args: [0, 'hello', 2, 2] },
+      ]);
+    } finally {
+      cleanup();
+      registerPlatformComponents('ios');
+      for (const [element, viewName] of Object.entries(IOS_VIEW_NAMES)) {
+        registerViewName(element, viewName);
+      }
+    }
+  });
+});
+
+/*
+ * Android draws the caret and the selection handles in colours of their own, which RN's `TextInput`
+ * defaults to `selectionColor`, for consistency with iOS, where the selection colour tints both.
+ */
+describe('a text input caret and handle colours', () => {
+  interface Coloured {
+    selectionColor: { set(value: string | undefined): void };
+    cursorColor: { set(value: string | undefined): void };
+    handleColor: { set(value: string | undefined): void };
+  }
+  const props = () => screen.getByTestId('field').props;
+
+  it('follow the selection colour unless set', async () => {
+    const { instance } = await boot<Coloured>('ColouredInput');
+    const red = props()['selectionColor'];
+    assert.notEqual(red, undefined);
+    assert.equal(props()['cursorColor'], red);
+    assert.equal(props()['selectionHandleColor'], red);
+
+    instance.cursorColor.set('blue');
+    instance.handleColor.set('green');
+    await settle();
+    assert.notEqual(props()['cursorColor'], red);
+    assert.notEqual(props()['selectionHandleColor'], red);
+    assert.notEqual(props()['cursorColor'], props()['selectionHandleColor']);
+
+    instance.cursorColor.set(undefined);
+    instance.handleColor.set(undefined);
+    await settle();
+    assert.equal(props()['cursorColor'], red, 'back to the selection colour');
+    assert.equal(props()['selectionHandleColor'], red);
+
+    instance.selectionColor.set(undefined);
+    await settle();
+    assert.equal(props()['cursorColor'] ?? null, null);
+    assert.equal(props()['selectionHandleColor'] ?? null, null);
+  });
+});
+
 describe('controlled inputs under Signal Forms', () => {
   interface Form {
     data: {

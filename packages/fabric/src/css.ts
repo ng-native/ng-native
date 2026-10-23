@@ -37,8 +37,19 @@ export interface Compound {
   readonly attributes?: readonly AttributeTest[];
   /** `:is()` / `:where()` arguments: the compound matches if any of these do. */
   readonly is?: readonly (readonly Compound[])[];
+  /**
+   * `:is()` / `:where()` with an argument of more than a compound, `:is(.a + .b)`, once for each
+   * written: the node is the last element of one of these. Read only where `is` is set, which
+   * the compiler sets beside it, so a compound with no `:is()` pays nothing for it.
+   */
+  readonly isComplex?: readonly (readonly ComplexSelector[])[];
   /** `:not()` arguments: the compound matches only if none of these do. */
   readonly not?: readonly Compound[];
+  /**
+   * `:not()` with an argument of more than a compound: the node is the last of none of these.
+   * Read only where `not` is set, as `isComplex` is.
+   */
+  readonly notComplex?: readonly ComplexSelector[];
   /** `:host`: the node must be the host of the component whose sheet is being evaluated. */
   readonly host?: true;
   /** `:host-context()`, once for each written: the host, or one of its ancestors, must match it. */
@@ -76,6 +87,27 @@ export interface HasTest {
   /** `:has(> x)`: a child, not any descendant. */
   readonly child?: true;
   readonly any: readonly Compound[];
+  /**
+   * Arguments that are more than one compound for a descendant or a child, `:has(+ .a)` or
+   * `:has(.a > .b)`: some element related to the node by one of these is its last.
+   */
+  readonly relative?: readonly RelativeSelector[];
+}
+
+/** Compounds joined by combinators, matched leftwards from the last as a rule's are. */
+export interface ComplexSelector {
+  readonly compounds: readonly Compound[];
+  /** Between compounds; length is `compounds.length - 1`. */
+  readonly combinators: readonly Combinator[];
+}
+
+/**
+ * A `:has()` argument, which starts at the node it is asked of: `combinators[0]` joins that node
+ * to `compounds[0]`, and each one after joins the compound before it to the next.
+ */
+export interface RelativeSelector {
+  readonly compounds: readonly Compound[];
+  readonly combinators: readonly Combinator[];
 }
 
 /** `an + b`, counted from the start unless `fromEnd`. */
@@ -159,6 +191,11 @@ export interface Conditions {
    * (`Engine.remeasureText`), which `watchConditions` does after it.
    */
   readonly fontScale?: number;
+  /**
+   * The screen's pixels in a point: `PixelRatio.get()`. Nothing in the engine reads it; a
+   * package answering a page's `devicePixelRatio` does. Optional, and 1 when absent.
+   */
+  readonly pixelRatio?: number;
   /**
    * The direction the app is laid out in, which is the device's unless the app forced one:
    * `I18nManager.isRTL`. Optional, and left to right when absent. It decides which physical
@@ -346,6 +383,11 @@ export interface DeferredDeclaration {
    */
   readonly gradient?: GradientTemplate | readonly GradientTemplate[];
   /**
+   * A band of the box from side to side whose edges are tokens, `clipBand` as a library's sheet
+   * writes it for a slider: each edge a percentage, or a token with the percentage beside it.
+   */
+  readonly band?: readonly BandEdge[];
+  /**
    * Arithmetic around the reference, settled at build time. `value * scale + offset`, then no
    * smaller than `floor`. What `calc(var(--x) + 12px)` and `max(var(--x), 16px)` become.
    */
@@ -353,6 +395,11 @@ export interface DeferredDeclaration {
     readonly scale?: number;
     readonly offset?: number;
     readonly floor?: number;
+    /**
+     * A percentage the length is added to, `calc(100% - var(--x))`: written as that sum, which
+     * the engine works out once the box the percentage is of has been laid out.
+     */
+    readonly percent?: number;
     /**
      * The reference is multiplied by a length, so it is a number: `calc(var(--n) * 1px)`. Without
      * this it is a length, and a number token is no such thing, as CSS types a calc().
@@ -524,6 +571,11 @@ export interface StyleSheet {
    */
   readonly structural?: true;
   /**
+   * Some rule is for a generated box, `::before` or `::after`, which only a sheet compiled to
+   * draw them has. Said on the sheet so the engine reads the rules of no other for one.
+   */
+  readonly generated?: true;
+  /**
    * Some rule uses `:has()`, so what a node matches can change when something beneath it does.
    * Said on the sheet for the same reason `structural` is: the cost is invalidation, and only a
    * sheet that asks has the engine match a changed node's ancestors again.
@@ -613,31 +665,41 @@ export interface StyleCache {
 
 /**
  * Whether a child is one `:empty` sees. An anchor is a comment on the web, which it does not;
- * nor text of no length, which a binding to nothing leaves behind.
+ * nor text of no length, which a binding to nothing leaves behind; nor a box a rule generated,
+ * which is not in the tree a selector is matched against.
  */
 export function fills(child: StyleTarget): boolean {
-  if (child.kind === 'anchor') return false;
-  return child.kind !== 'text' || (child as { text?: string }).text !== '';
+  if (child.nodeKind === 'anchor' || (boxesDrawn && isGenerated(child.tag))) return false;
+  return child.nodeKind !== 'text' || (child as { nodeText?: string }).nodeText !== '';
 }
+
+/** The name a type selector matches a node by. */
+const typeOf = (node: StyleTarget): string => node.typeName ?? node.tag;
 
 /** What the matcher needs of a node. The engine's node satisfies this structurally. */
 export interface StyleTarget {
   readonly tag: string;
+  /** The name a type selector reads, where it is not `tag`: see `EngineNode.typeName`. */
+  readonly typeName?: string;
+  /** Set on a node of a library's drawing: see `EngineNode.namespace`. */
+  readonly namespace?: string;
   readonly parent: StyleTarget | null;
   /**
    * Needed only by the selectors that ask about a node's place among its siblings, which is why
    * it is read through the parent rather than kept as an index: an index would have to be right
    * after every insertion and removal, and this is right by construction.
    */
-  readonly children?: readonly StyleTarget[];
+  readonly childList?: readonly StyleTarget[];
   /**
    * Only elements are counted by the selectors that ask about position. Text is not one, and
    * neither is the anchor a structural directive leaves behind - the same reason a browser does
    * not count a comment. Absent means element, so a hand-built target needs nothing extra.
    */
-  readonly kind?: string;
+  readonly nodeKind?: string;
   readonly classes: ReadonlySet<string> | null;
   readonly props: Readonly<Record<string, unknown>>;
+  /** Attributes a package keeps apart from props, for selectors alone: see `attributeOf`. */
+  readonly keptAttributes?: Readonly<Record<string, string>>;
   /**
    * Whether `props.style` sets a property children inherit, kept by whoever sets the style so the
    * resolver reads the style only where it can matter. Absent is false.
@@ -657,9 +719,9 @@ export interface StyleTarget {
    * created it. Read from the node rather than passed in, because a node's ancestors usually
    * belong to other components and must be matched against their own sheets, not this one's.
    */
-  readonly sheet: StyleSheet | null;
+  readonly templateSheet: StyleSheet | null;
   /**
-   * The sheet of the component this node is the *host* of, if it is one. Distinct from `sheet`,
+   * The sheet of the component this node is the *host* of, if it is one. Distinct from `templateSheet`,
    * which is the sheet of the component that *created* it: a host node is created by the parent,
    * so those two are always different sheets and `:host` needs the second.
    */
@@ -746,6 +808,17 @@ const INHERITED = new Set([
 const INHERITED_POINTER_EVENTS = new Set(['none', 'auto']);
 
 /**
+ * A shape's paint, which SVG hands down: a path under an `<svg>` with a `fill` has that fill.
+ * Inherited only in a library's drawing (`StyleTarget.namespace`). An icon's shapes are left to
+ * react-native-svg, which hands a group's paint down itself, from what the shape set as its own.
+ */
+const SHAPE_PAINT_INHERITED: ReadonlySet<string> = new Set(['fill', 'stroke', 'strokeWidth']);
+
+/** Whether a prop of a shape in a drawing is a paint it hands down: see `inheritFrom`. */
+export const handsDownPaint = (key: string): boolean =>
+  key === 'propList' || SHAPE_PAINT_INHERITED.has(key);
+
+/**
  * `border-style: none`, which the compiler writes as a style native does not have. On the web it
  * makes every border width 0, whichever rule set the width, so `border-hidden border-x` draws no
  * side. Settled here, once the cascade has picked a style, and not sent on.
@@ -778,6 +851,50 @@ function settleBorders(own: Record<string, unknown>): void {
   if (own['borderStyle'] !== 'none') return;
   if (drawn === undefined) drawNoBorder(own);
   else own['borderStyle'] = drawn;
+}
+
+/** A border's four sides and its logical ones, by the part of it they hold. */
+const BORDER_SIDES = Object.fromEntries(
+  (['Width', 'Color'] as const).map((part) => [
+    part,
+    {
+      physical: ['Top', 'Right', 'Bottom', 'Left'].map((side) => `border${side}${part}`),
+      logical: ['Start', 'End', 'Block', 'BlockStart', 'BlockEnd'].map(
+        (side) => `border${side}${part}`,
+      ),
+    },
+  ]),
+) as Record<'Width' | 'Color', { physical: string[]; logical: string[] }>;
+
+/**
+ * A border's unsided width and colour, written beside the four sides once the cascade and every
+ * token have settled them, where they agree. Android strokes a rounded border, the only way it
+ * draws one dashed or dotted, from `borderWidth` and `borderColor` alone, and only when every
+ * side equals them; given the sides alone it fills each in solid. A border with no width strokes
+ * nothing, so preflight's `border: 0 solid` adds nothing to every element.
+ */
+function settleUnsidedBorder(own: Record<string, unknown>): void {
+  // No top width, its own or unsided: no four sides that agree. Most views have no border.
+  if (own['borderTopWidth'] === undefined && own['borderWidth'] === undefined) return;
+  const width = agreedSides(own, 'Width');
+  if (width === undefined || width === 0) return;
+  own['borderWidth'] = width;
+  const colour = agreedSides(own, 'Color');
+  if (colour !== undefined) own['borderColor'] = colour;
+}
+
+/**
+ * What the four sides of a border are, each read as native reads it, where they are the same,
+ * a colour held in an object by what is in it. A logical side, which a direction makes left or
+ * right, leaves it unsaid.
+ */
+function agreedSides(own: Record<string, unknown>, part: 'Width' | 'Color'): unknown {
+  const { physical, logical } = BORDER_SIDES[part];
+  if (logical.some((key) => own[key] !== undefined)) return undefined;
+  const unsided = own[`border${part}`];
+  const [first, ...rest] = physical.map((key) => own[key] ?? unsided);
+  const same = (one: unknown) => one === first || JSON.stringify(one) === JSON.stringify(first);
+  return rest.every(same) ? first : undefined;
 }
 
 /**
@@ -872,6 +989,8 @@ export const styleStats = {
   rulesFiled: 0,
   /** Nodes asked whether a rule `:has()` was asked for could be for them: see `isFor`. */
   subjectTests: 0,
+  /** Children whose place in a list `:has()` noted, to step from one to the next. */
+  placesIndexed: 0,
 };
 
 export function resetStyleStats(): void {
@@ -880,6 +999,7 @@ export function resetStyleStats(): void {
   styleStats.nodesResolved = 0;
   styleStats.rulesFiled = 0;
   styleStats.subjectTests = 0;
+  styleStats.placesIndexed = 0;
 }
 
 /** A prop's value as an attribute test compares it: in lower case, under the i flag. */
@@ -895,13 +1015,20 @@ const attributeText = (actual: unknown, test: AttributeTest): string =>
  * is the element's class list, as the attribute would spell it.
  */
 function matchesAttribute(node: StyleTarget, test: AttributeTest): boolean {
-  const actual = test.name === 'class' ? classAttribute(node) : node.props[test.name];
+  const actual = test.name === 'class' ? classAttribute(node) : attributeOf(node, test.name);
   if (actual === undefined || actual === null || actual === false) return false;
   if (test.operator === undefined) return true;
   // `^=`, `$=`, `*=` and `~=` with an empty value match nothing, as Selectors 4 says.
   if (test.value === '' && !EMPTY_MATCHES.has(test.operator)) return false;
   return matchesValue(attributeText(actual, test), test.operator, test.value!);
 }
+
+/**
+ * A node's attribute as a selector reads it: the one a package keeps for it apart from its props,
+ * where it keeps one by that name, and otherwise its prop. See `Engine.keepAttribute`.
+ */
+export const attributeOf = (node: StyleTarget, name: string): unknown =>
+  node.keptAttributes?.[name] ?? node.props[name];
 
 /** The classes of a node in the order they were set, one space between each; none is absent. */
 const classAttribute = (node: StyleTarget): string | undefined =>
@@ -941,7 +1068,7 @@ function matchesValue(
  */
 function ownedBy(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
   if (compound.host !== undefined || compound.hostContext !== undefined) return true;
-  return node.sheet === sheet;
+  return node.templateSheet === sheet;
 }
 
 /*
@@ -950,6 +1077,23 @@ function ownedBy(node: StyleTarget, compound: Compound, sheet: StyleSheet | null
  * same thing. It is also the hottest function in the matcher, called tens of thousands of times
  * per commit, so splitting each guard into its own call would cost more than it reads better.
  */
+/** The first character of a generated box's tag, `::before` or `::after`. */
+const COLON = 58;
+
+/**
+ * Whether any sheet in the process has drawn a generated box: until one has, no node is one, and
+ * the checks for one below cost a boolean read. Set once and left set.
+ *
+ * ponytail: never turned off again, as the checks are only a cost once it is on; count the
+ * engines with boxes if an app that drops its last library sheet needs the matching back.
+ */
+let boxesDrawn = false;
+
+/** Note that a sheet in play draws generated boxes: see `boxesDrawn`. */
+export function noteGeneratedBoxes(): void {
+  boxesDrawn = true;
+}
+
 // eslint-disable-next-line complexity
 function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
   styleStats.compoundTests++;
@@ -960,7 +1104,12 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (state === 'focus' ? !node.focused : !node.active) return false;
     }
   }
-  if (compound.type !== undefined && compound.type !== node.tag) return false;
+  if (compound.type !== undefined) {
+    // `typeOf`, asked here without the call: this is asked of every compound tested.
+    if (compound.type !== (node.typeName ?? node.tag)) return false;
+    // A generated box is no element to a compound that names none, `*` or a class alone, as a
+    // pseudo-element is none in a browser: one character told from any element's name.
+  } else if (boxesDrawn && node.tag.charCodeAt(0) === COLON) return false;
   if (compound.own !== undefined && !ownedBy(node, compound, sheet)) return false;
   if (compound.id !== undefined && node.props['nativeID'] !== compound.id) return false;
   for (const className of compound.classes) {
@@ -971,20 +1120,32 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (!matchesAttribute(node, test)) return false;
     }
   }
-  if (compound.empty !== undefined && node.children?.some(fills)) return false;
+  if (compound.empty !== undefined && node.childList?.some(fills)) return false;
   if (compound.nth !== undefined) {
     for (const test of compound.nth) {
       if (!matchesNth(node, test)) return false;
     }
   }
+  // `:not()`: the node is none of its arguments, a compound or a longer selector.
   if (compound.not) {
     for (const excluded of compound.not) {
       if (matchesCompound(node, excluded, sheet)) return false;
     }
+    if (compound.notComplex) {
+      for (const excluded of compound.notComplex) {
+        if (matchesComplex(node, excluded, sheet)) return false;
+      }
+    }
   }
+  // `:is()` and `:where()`: the node is one of each list of alternatives.
   if (compound.is) {
     for (const alternatives of compound.is) {
       if (!alternatives.some((option) => matchesCompound(node, option, sheet))) return false;
+    }
+    if (compound.isComplex) {
+      for (const alternatives of compound.isComplex) {
+        if (!alternatives.some((option) => matchesComplex(node, option, sheet))) return false;
+      }
     }
   }
   if (compound.has) {
@@ -1022,14 +1183,236 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
   return true;
 }
 
+/**
+ * `:has()` answers, by the node asked and the test, while the engine commits: a rule like
+ * `main:has(.missing) span` asks the same of `main` for each span in it, and each answer is a
+ * walk of everything in `main`. Nothing an answer hangs on changes in a commit, and a change
+ * between two drops them all: see `forgetHasAnswers`.
+ */
+let hasAnswers: Map<StyleTarget, Map<HasTest, boolean>> | null = null;
+
+/**
+ * What `:has()` found of a list while the engine commits, kept and dropped with `hasAnswers`:
+ * without it, asking each of a thousand items `:has(~ .x)` looks through the list once each.
+ */
+let relations: Relations | null = null;
+
+/** Keep `:has()` answers from here, or stop keeping them. */
+export function keepHasAnswers(keep: boolean): void {
+  hasAnswers = keep ? new Map() : null;
+  relations = keep ? new Relations() : null;
+}
+
+/** Drop the `:has()` answers kept, for something beneath a node changed. */
+export function forgetHasAnswers(): void {
+  hasAnswers?.clear();
+  if (relations) relations = new Relations();
+}
+
 /** Whether some element beneath `node`, or some child of it for `:has(> x)`, matches the test. */
 function hasBeneath(node: StyleTarget, test: HasTest, sheet: StyleSheet | null): boolean {
-  for (const child of node.children ?? []) {
-    if (child.kind !== undefined && child.kind !== 'element') continue;
+  const known = hasAnswers?.get(node)?.get(test);
+  if (known !== undefined) return known;
+  const found =
+    test.relative?.some((relative) => hasRelative(node, relative, sheet)) === true ||
+    hasCompound(node, test, sheet);
+  if (hasAnswers) {
+    let answers = hasAnswers.get(node);
+    if (!answers) hasAnswers.set(node, (answers = new Map()));
+    answers.set(test, found);
+  }
+  return found;
+}
+
+function hasCompound(node: StyleTarget, test: HasTest, sheet: StyleSheet | null): boolean {
+  if (!test.any.length) return false;
+  for (const child of node.childList ?? []) {
+    if (child.nodeKind !== undefined && child.nodeKind !== 'element') continue;
     if (test.any.some((option) => matchesCompound(child, option, sheet))) return true;
-    if (!test.child && hasBeneath(child, test, sheet)) return true;
+    if (!test.child && hasCompound(child, test, sheet)) return true;
   }
   return false;
+}
+
+/** Whether a node is the last element of a selector: matched leftwards, as a rule is. */
+function matchesComplex(node: StyleTarget, selector: ComplexSelector, sheet: StyleSheet | null) {
+  const last = selector.compounds.length - 1;
+  return (
+    matchesCompound(node, selector.compounds[last]!, sheet) &&
+    matchPrefix(node, selector, last - 1, sheet)
+  );
+}
+
+const SIBLING_COMBINATORS: ReadonlySet<Combinator> = new Set(['next-sibling', 'later-sibling']);
+
+/**
+ * Each element's place in its parent's list, found once for a `:has()` as it is asked: a list
+ * of thousands asked `:has(.a + .b)` is not searched again for each element in it to find the
+ * one before. Nothing changes while a selector is matched, so nothing is out of date.
+ */
+class Places {
+  private readonly lists = new Map<StyleTarget, Map<StyleTarget, number>>();
+
+  /** Where `node` is in its parent's list, counting what is not an element. */
+  place(node: StyleTarget): number {
+    const siblings = node.parent!.childList ?? [];
+    let places = this.lists.get(node.parent!);
+    if (!places) {
+      places = new Map(siblings.map((child, at) => [child, at]));
+      styleStats.placesIndexed += siblings.length;
+      this.lists.set(node.parent!, places);
+    }
+    return places.get(node)!;
+  }
+
+  /** The element `step` places along from `node`: before it for -1, after it for 1. */
+  element(node: StyleTarget, step: -1 | 1): StyleTarget | null {
+    const siblings = node.parent?.childList;
+    if (!siblings) return null;
+    for (let at = this.place(node) + step; at >= 0 && at < siblings.length; at += step) {
+      if (isElement(siblings[at]!)) return siblings[at]!;
+    }
+    return null;
+  }
+}
+
+/** A `:has()` argument less its first step: `.a .b` of `~ .a .b`, asked of the `.a`. */
+const TAILS = new WeakMap<RelativeSelector, RelativeSelector>();
+
+function tailOf(relative: RelativeSelector): RelativeSelector {
+  let tail = TAILS.get(relative);
+  if (!tail) {
+    tail = { compounds: relative.compounds.slice(1), combinators: relative.combinators.slice(1) };
+    TAILS.set(relative, tail);
+  }
+  return tail;
+}
+
+/**
+ * What a `:has()` argument that starts with `+` or `~` finds of a list: which elements after
+ * the node asked it can start from, the rest of it asked of each. That is the same whichever
+ * element before them asks, so a list is looked through once for all of them.
+ */
+class Relations {
+  readonly places = new Places();
+  /** By argument and list, the place of the last element `~` can start from, or -1. */
+  private readonly lastStarts = new Map<RelativeSelector, Map<StyleTarget, number>>();
+
+  /** Whether `relative`, which starts with `+` or `~`, is true of `anchor`. */
+  after(anchor: StyleTarget, relative: RelativeSelector, sheet: StyleSheet | null): boolean {
+    if (relative.combinators[0] === 'next-sibling') {
+      const next = this.places.element(anchor, 1);
+      return next !== null && this.startsAt(next, relative, sheet);
+    }
+    const list = anchor.parent;
+    return list !== null && this.places.place(anchor) < this.lastStart(list, relative, sheet);
+  }
+
+  private lastStart(list: StyleTarget, relative: RelativeSelector, sheet: StyleSheet | null) {
+    let byList = this.lastStarts.get(relative);
+    if (!byList) this.lastStarts.set(relative, (byList = new Map()));
+    let last = byList.get(list);
+    if (last === undefined) {
+      const siblings = list.childList ?? [];
+      last = siblings.length - 1;
+      while (
+        last >= 0 &&
+        !(isElement(siblings[last]!) && this.startsAt(siblings[last]!, relative, sheet))
+      ) {
+        last--;
+      }
+      byList.set(list, last);
+    }
+    return last;
+  }
+
+  /** Whether `node` is where the first compound of `relative` is, the rest of it asked of it. */
+  private startsAt(node: StyleTarget, relative: RelativeSelector, sheet: StyleSheet | null) {
+    if (!matchesCompound(node, relative.compounds[0]!, sheet)) return false;
+    return relative.compounds.length === 1 || hasRelative(node, tailOf(relative), sheet);
+  }
+}
+
+/**
+ * Whether some element is the last of a `:has()` argument asked of `anchor`: one beneath it, or
+ * after it where the argument starts with `+` or `~`, and beneath one of those where it goes on
+ * to a child or a descendant.
+ */
+function hasRelative(
+  anchor: StyleTarget,
+  relative: RelativeSelector,
+  sheet: StyleSheet | null,
+): boolean {
+  const known = relations ?? new Relations();
+  if (SIBLING_COMBINATORS.has(relative.combinators[0]!))
+    return known.after(anchor, relative, sheet);
+  return someBeneath(anchor, (node) => relativeFits(node, relative, anchor, sheet, known.places));
+}
+
+/** Whether some element beneath `node` passes `test`. */
+function someBeneath(node: StyleTarget, test: (node: StyleTarget) => boolean): boolean {
+  for (const child of node.childList ?? []) {
+    if (!isElement(child)) continue;
+    if (test(child) || someBeneath(child, test)) return true;
+  }
+  return false;
+}
+
+/** Whether `node` is the last element of a `:has()` argument asked of `anchor`. */
+function relativeFits(
+  node: StyleTarget,
+  relative: RelativeSelector,
+  anchor: StyleTarget,
+  sheet: StyleSheet | null,
+  places: Places,
+): boolean {
+  const last = relative.compounds.length - 1;
+  return (
+    matchesCompound(node, relative.compounds[last]!, sheet) &&
+    relativeLeft(node, last, { relative, anchor, sheet, places })
+  );
+}
+
+/** What a `:has()` argument is matched with: see `relativeLeft`. */
+interface Relating {
+  readonly relative: RelativeSelector;
+  readonly anchor: StyleTarget;
+  readonly sheet: StyleSheet | null;
+  readonly places: Places;
+}
+
+/**
+ * Match what is left of `relative.compounds[at]`, which `matched` is: the compound before it,
+ * or the anchor where it is the first, by the combinator between. A descendant or a later
+ * sibling tries each candidate, as `matchAny` does.
+ */
+function relativeLeft(matched: StyleTarget, at: number, relating: Relating): boolean {
+  const { relative, anchor, sheet, places } = relating;
+  const compound = at > 0 ? relative.compounds[at - 1]! : null;
+  const fits = (node: StyleTarget): boolean =>
+    compound === null
+      ? node === anchor
+      : matchesCompound(node, compound, sheet) && relativeLeft(node, at - 1, relating);
+  switch (relative.combinators[at]) {
+    case 'child':
+      return matched.parent !== null && fits(matched.parent);
+    case 'next-sibling': {
+      const before = places.element(matched, -1);
+      return before !== null && fits(before);
+    }
+    case 'later-sibling':
+      for (let before = places.element(matched, -1); before; before = places.element(before, -1)) {
+        if (fits(before)) return true;
+      }
+      return false;
+    default:
+      for (let up = matched.parent; up; up = up.parent) {
+        if (fits(up)) return true;
+        // Nothing above the anchor is beneath it.
+        if (up === anchor) return false;
+      }
+      return false;
+  }
 }
 
 /**
@@ -1051,7 +1434,7 @@ export function matches(
   if (
     sheet !== null &&
     sheet === node.hostSheet &&
-    sheet !== node.sheet &&
+    sheet !== node.templateSheet &&
     subject.host === undefined
   ) {
     return false;
@@ -1071,7 +1454,7 @@ export function matches(
  */
 function matchPrefix(
   matched: StyleTarget,
-  rule: StyleRule,
+  rule: ComplexSelector,
   index: number,
   sheet: StyleSheet | null,
 ): boolean {
@@ -1094,7 +1477,7 @@ function matchPrefix(
 /** A combinator with exactly one candidate: the parent, or the sibling immediately before. */
 function matchStep(
   candidate: StyleTarget | null,
-  rule: StyleRule,
+  rule: ComplexSelector,
   index: number,
   compound: Compound,
   sheet: StyleSheet | null,
@@ -1114,7 +1497,7 @@ function matchStep(
 function matchAny(
   first: StyleTarget | null,
   next: (node: StyleTarget) => StyleTarget | null,
-  rule: StyleRule,
+  rule: ComplexSelector,
   index: number,
   compound: Compound,
   sheet: StyleSheet | null,
@@ -1197,7 +1580,7 @@ function bitsAbove(node: StyleTarget): Bits {
   };
   for (let up = node.parent; up; up = up.parent) {
     if (up.classes) for (const className of up.classes) add(bitOf('.', className));
-    if (up.tag !== undefined) add(bitOf('<', up.tag));
+    if (up.tag !== undefined) add(bitOf('<', typeOf(up)));
     const id = up.props?.['nativeID'];
     if (typeof id === 'string') add(bitOf('#', id));
   }
@@ -1221,7 +1604,16 @@ function takesParents(rule: StyleRule): boolean {
 }
 
 /** Whether a node is one of the children CSS counts. Text and anchors are children, not elements. */
-const isElement = (node: StyleTarget) => node.kind === undefined || node.kind === 'element';
+const isElement = (node: StyleTarget) =>
+  // Asked of each sibling a rule counts: told from a generated box here, without a call.
+  (node.nodeKind === undefined || node.nodeKind === 'element') &&
+  !(boxesDrawn && node.tag.charCodeAt(0) === COLON);
+
+/**
+ * Whether an element's name is a generated box's, `::before` or `::after`: a child the engine
+ * keeps for a rule that draws one, which no selector counts among the element's children.
+ */
+export const isGenerated = (name: string): boolean => name.startsWith('::');
 
 /** A node's first `count` elements, or its last, skipping everything that is not one. */
 export function elementsAtEnd<T extends StyleTarget>(
@@ -1306,10 +1698,12 @@ function countSiblings(
   const counts = (compound.nth ?? []).filter((test) => test.a !== 0 || test.b !== 1 || test.ofType);
   if (counts.some((test) => withinHas || !test.fromEnd)) reach.after = Infinity;
   if (counts.some((test) => withinHas || test.fromEnd)) reach.before = true;
-  for (const inner of nestedCompounds(compound)) countSiblings(inner, reach, withinHas);
-  for (const test of compound.has ?? []) {
-    for (const inner of test.any) countSiblings(inner, reach, true);
+  // `:is(.a + .b)`: what the node matches hangs on the element before it, as a rule's does.
+  for (const selector of nestedSelectors(compound)) {
+    if (!withinHas) reach.after = Math.max(reach.after, stepsAlong(selector.combinators));
   }
+  for (const inner of nestedCompounds(compound)) countSiblings(inner, reach, withinHas);
+  for (const inner of hasCompounds(compound)) countSiblings(inner, reach, true);
 }
 
 /**
@@ -1346,7 +1740,7 @@ export function placeReadElsewhere(sheet: StyleSheet): readonly PlaceReader[] {
       // above the element styled, and its last compound is the element the rest hangs under.
       let start = 0;
       rule.compounds.forEach((compound, at) => {
-        placeReadAbove(compound, elsewhere);
+        placeReadAbove(compound, elsewhere, at < rule.compounds.length - 1);
         const joined = rule.combinators[at];
         if (joined === 'next-sibling' || joined === 'later-sibling') return;
         const run = rule.compounds.slice(start, at + 1);
@@ -1374,47 +1768,112 @@ const NAMED_BESIDE = new WeakMap<StyleSheet, ReadonlySet<string>>();
 export function namedBeside(sheet: StyleSheet): ReadonlySet<string> {
   let named = NAMED_BESIDE.get(sheet);
   if (named === undefined) {
-    named = new Set();
-    for (const rule of sheet.rules) {
-      rule.combinators.forEach((joined, at) => {
-        if (joined === 'next-sibling' || joined === 'later-sibling') {
-          propsNamed(rule.compounds[at]!, named as Set<string>);
-        }
-      });
-    }
-    NAMED_BESIDE.set(sheet, named);
+    const found = new Set<string>();
+    for (const rule of sheet.rules) besideIn(rule, rule, found);
+    NAMED_BESIDE.set(sheet, (named = found));
   }
   return named;
 }
 
-/** Add each prop a compound, or one nested in it at any depth, asks about: an attribute or an id. */
-function propsNamed(compound: Compound, into: Set<string>): void {
-  if (compound.id !== undefined) into.add('nativeID');
-  for (const test of compound.attributes ?? []) into.add(test.name);
-  const within = (compound.has ?? []).flatMap((test) => test.any);
-  for (const inner of [...nestedCompounds(compound), ...within]) propsNamed(inner, into);
+/**
+ * Add to `into` what each compound joined to a later one by `+` or `~` asks, in a selector and
+ * in each one nested in it. A `:has()` argument starts at the element it is asked of, so one
+ * with a sibling in it has every prop the rule names added.
+ */
+function besideIn(selector: unknown, rule: StyleRule, into: Set<string>): void {
+  if (selector === null || typeof selector !== 'object') return;
+  if (Array.isArray(selector)) return selector.forEach((inner) => besideIn(inner, rule, into));
+  const { compounds, combinators } = selector as Partial<ComplexSelector>;
+  if (Array.isArray(compounds) && Array.isArray(combinators)) {
+    const relative = combinators.length === compounds.length;
+    combinators.forEach((joined, at) => {
+      if (joined !== 'next-sibling' && joined !== 'later-sibling') return;
+      if (relative) propsNamed(rule, into);
+      else propsNamed(compounds[at], into);
+    });
+  }
+  for (const [key, inner] of Object.entries(selector)) {
+    if (!DECLARED.has(key)) besideIn(inner, rule, into);
+  }
+}
+
+/** Add every prop a part of a selector asks about to `into`: each attribute, and an id. */
+function propsNamed(part: unknown, into: Set<string>): void {
+  if (part === null || typeof part !== 'object') return;
+  if (Array.isArray(part)) return part.forEach((inner) => propsNamed(inner, into));
+  const { attributes, id } = part as Partial<Compound>;
+  if (id !== undefined) into.add('nativeID');
+  for (const test of attributes ?? []) into.add(test.name);
+  for (const [key, inner] of Object.entries(part)) if (!DECLARED.has(key)) propsNamed(inner, into);
 }
 
 /** Whether a compound, or one nested in it at any depth, asks about a place in a child list. */
 function readsPlace(compound: Compound): boolean {
   if (compound.nth?.length) return true;
-  const within = (compound.has ?? []).flatMap((test) => test.any);
-  return [...nestedCompounds(compound), ...within].some(readsPlace);
+  return [...nestedCompounds(compound), ...hasCompounds(compound)].some(readsPlace);
 }
 
 /**
  * Collect the compounds nested in one that are matched against an element above the one it is
- * matched against, and ask about that element's place: `:is(.group:first-child *)`.
+ * matched against, and ask about that element's place: `:is(.group:first-child *)`. `above`
+ * says the compound is itself matched against an element above the one styled.
  */
-function placeReadAbove(compound: Compound, elsewhere: PlaceReader[]): void {
-  const above = [
+function placeReadAbove(compound: Compound, elsewhere: PlaceReader[], above: boolean): void {
+  const over = [
     ...(compound.ancestors ?? []),
     ...(compound.parents ?? []),
     ...(compound.hostContext ?? []),
   ];
-  for (const inner of above) if (readsPlace(inner)) elsewhere.push({ compound: inner });
-  for (const inner of nestedCompounds(compound)) placeReadAbove(inner, elsewhere);
+  for (const inner of over) if (readsPlace(inner)) elsewhere.push({ compound: inner });
+  // `:is(.a + .b) .c` or `:not(:first-child .b)`: an element whose place changed can change what
+  // one under it matches, which is told from no class here. Only such sheets pay. Of the element
+  // styled, `.b:is(.a ~ *)` reads what is before the element alone, as a rule's own `~` does.
+  const reads = above ? beside : readFromUnder;
+  if (nestedSelectors(compound).some(reads)) elsewhere.push({ compound: { classes: [] } });
+  for (const inner of over) placeReadAbove(inner, elsewhere, true);
+  placeReadNested(compound, elsewhere, above);
 }
+
+/**
+ * `placeReadAbove` of the compounds nested in one: those of its `:is()` and `:not()` are matched
+ * against the element it is, and those of a longer selector in one before its last against others.
+ */
+function placeReadNested(compound: Compound, elsewhere: PlaceReader[], above: boolean): void {
+  for (const inner of [...(compound.not ?? []), ...(compound.is ?? []).flat()]) {
+    placeReadAbove(inner, elsewhere, above);
+  }
+  for (const selector of nestedSelectors(compound)) {
+    const last = selector.compounds.length - 1;
+    selector.compounds.forEach((inner, at) => placeReadAbove(inner, elsewhere, above || at < last));
+  }
+}
+
+/** Whether what a selector matches hangs on where an element is among those beside it. */
+const beside = (one: ComplexSelector): boolean =>
+  one.combinators.some((each) => SIBLING_COMBINATORS.has(each)) ||
+  (one.compounds.length > 1 && one.compounds.some(readsPlace));
+
+/**
+ * Whether a selector reads the place of an element above the one it ends at: a run of compounds
+ * joined by `+` and `~` before a descendant or child combinator, `.a + .b .c`, or a compound
+ * there that asks its place, `:first-child > .c`.
+ */
+function readFromUnder(one: ComplexSelector): boolean {
+  let start = 0;
+  for (let at = 0; at < one.combinators.length; at++) {
+    if (SIBLING_COMBINATORS.has(one.combinators[at]!)) continue;
+    const run = one.compounds.slice(start, at + 1);
+    if (run.length > 1 || run.some(readsPlace)) return true;
+    start = at + 1;
+  }
+  return false;
+}
+
+/** The selectors of more than a compound nested in one, in its `:is()` and its `:not()`. */
+const nestedSelectors = (compound: Compound): ComplexSelector[] => [
+  ...(compound.notComplex ?? []),
+  ...(compound.isComplex ?? []).flat(),
+];
 
 /** The compounds nested in one, a `:has()`'s apart. */
 const nestedCompounds = (compound: Compound): Compound[] => [
@@ -1423,11 +1882,19 @@ const nestedCompounds = (compound: Compound): Compound[] => [
   ...(compound.ancestors ?? []),
   ...(compound.parents ?? []),
   ...(compound.hostContext ?? []),
+  ...nestedSelectors(compound).flatMap((selector) => selector.compounds),
 ];
+
+/** The compounds of a compound's `:has()` arguments. */
+const hasCompounds = (compound: Compound): Compound[] =>
+  (compound.has ?? []).flatMap((test) => [
+    ...test.any,
+    ...(test.relative ?? []).flatMap((relative) => relative.compounds),
+  ]);
 
 /** The element before this one, skipping everything that is not one. */
 function previousElement(node: StyleTarget): StyleTarget | null {
-  const siblings = node.parent?.children;
+  const siblings = node.parent?.childList;
   if (!siblings) return null;
   for (let i = siblings.indexOf(node) - 1; i >= 0; i--) {
     if (isElement(siblings[i]!)) return siblings[i]!;
@@ -1443,7 +1910,7 @@ function previousElement(node: StyleTarget): StyleTarget | null {
  * counting, and the rest wait for a list that is actually slow.
  */
 function matchesNth(node: StyleTarget, test: NthTest): boolean {
-  const siblings = node.parent?.children;
+  const siblings = node.parent?.childList;
   if (!siblings) return false;
 
   if (test.a === 0 && test.b === 1 && !test.ofType) {
@@ -1525,6 +1992,177 @@ const TWIN: Readonly<Record<'ltr' | 'rtl', Readonly<Record<string, string>>>> = 
   ltr: twins(SIDES_LTR),
   rtl: twins(SIDES_LTR.map(([logical, physical]) => [logical, mirrored(physical)] as const)),
 };
+
+/** The props of each edge of a box across and down, in each form Yoga or React Native reads. */
+const across = (box: string): string[] =>
+  ['Left', 'Right', 'Start', 'End', 'InlineStart', 'InlineEnd'].map((side) => `${box}${side}`);
+const down = (box: string): string[] =>
+  ['Top', 'Bottom', 'BlockStart', 'BlockEnd'].map((side) => `${box}${side}`);
+
+/** A box's shorthand for every edge, across and down, keyed by the name an inline style uses. */
+function boxShorthands(
+  all: string,
+  edges: { across: string[]; down: string[] },
+  axes: { across: string[]; down: string[] },
+): [string, string[]][] {
+  return [
+    [all, [...edges.across, ...edges.down, ...axes.across, ...axes.down]],
+    // An axis's own name among them is skipped as one the element sets itself.
+    ...axes.across.map((axis): [string, string[]] => [axis, [...edges.across, ...axes.across]]),
+    ...axes.down.map((axis): [string, string[]] => [axis, [...edges.down, ...axes.down]]),
+  ];
+}
+
+/** Every corner, physical and logical, by the name of its radius. */
+const CORNERS = [
+  ...['TopLeft', 'TopRight', 'BottomLeft', 'BottomRight', 'TopStart', 'TopEnd'],
+  ...['BottomStart', 'BottomEnd', 'StartStart', 'StartEnd', 'EndStart', 'EndEnd'],
+].map((corner) => `border${corner}Radius`);
+
+/**
+ * The props each shorthand an inline style can set covers, in every form a native view reads
+ * them: physical, logical and the aliases Yoga takes. A stylesheet's shorthand is compiled to its
+ * longhands, so only an element's own style commits one as it is written, and there CSS has it
+ * win over a rule's longhand, where Yoga and React Native read the more specific edge or corner.
+ */
+const COVERS: ReadonlyMap<string, readonly string[]> = new Map([
+  ...['margin', 'padding'].flatMap((box) =>
+    boxShorthands(
+      box,
+      { across: across(box), down: down(box) },
+      { across: [`${box}Horizontal`, `${box}Inline`], down: [`${box}Vertical`, `${box}Block`] },
+    ),
+  ),
+  ...boxShorthands(
+    'inset',
+    {
+      across: ['left', 'right', 'start', 'end', 'insetInlineStart', 'insetInlineEnd'],
+      down: ['top', 'bottom', 'insetBlockStart', 'insetBlockEnd'],
+    },
+    { across: ['insetInline'], down: ['insetBlock'] },
+  ),
+  ['gap', ['rowGap', 'columnGap']],
+  ['borderWidth', [...across('border'), ...down('border')].map((side) => `${side}Width`)],
+  ['borderColor', [...across('border'), ...down('border'), 'borderBlock'].map((s) => `${s}Color`)],
+  ['borderBlockColor', down('border').map((side) => `${side}Color`)],
+  ['borderRadius', CORNERS],
+  ['flex', ['flexGrow', 'flexShrink', 'flexBasis']],
+]);
+
+/**
+ * The longhands Yoga reads `flex` as when none is set (`Node::resolveFlexGrow`,
+ * `resolveFlexShrink`, `processFlexBasis`), so an inline `flex` means the same over a class's.
+ * Null for a value that is no finite number, which covers nothing.
+ */
+function flexParts(n: unknown): Record<string, unknown> | null {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  return { flexGrow: n > 0 ? n : 0, flexShrink: n < 0 ? -n : 0, flexBasis: n > 0 ? 0 : 'auto' };
+}
+
+/**
+ * Whether a value is several CSS values, `4px 8px` or `4px / 8px`, split on whitespace outside
+ * brackets. Native takes none of them for a side, so a side keeps its own.
+ *
+ * ponytail: a side keeps its own rather than taking its part of the value. The renderer's
+ * `longhands` splits `padding`, `margin`, `inset` and `gap` into their parts; the others can join it.
+ */
+function severalValues(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  let flat = value;
+  for (let inner = flat; (inner = flat.replace(/\([^()]*\)/g, '()')) !== flat;) flat = inner;
+  return flat.split(CSS_SPACE).filter(Boolean).length > 1;
+}
+
+/**
+ * What a shorthand's value gives each side it covers: undefined for the value itself, the parts
+ * of a `flex`, or null for nothing, as for several values.
+ */
+function partsOf(shorthand: string, value: unknown): Record<string, unknown> | null | undefined {
+  if (severalValues(value)) return null;
+  return shorthand === 'flex' && value != null ? flexParts(value) : undefined;
+}
+
+/**
+ * How late React Native applies a shorthand to an edge it shares with another
+ * (`YogaLayoutableShadowNode`): the box's own name, then its axis, then the logical axis.
+ */
+function rankOf(shorthand: string): number {
+  if (/(Inline|Block)$/.test(shorthand)) return 2;
+  return /(Horizontal|Vertical|BlockColor)$/.test(shorthand) ? 1 : 0;
+}
+
+/** The shorthands covering each prop, the one React Native reads first ahead of the rest. */
+const COVERED_BY: ReadonlyMap<string, readonly string[]> = (() => {
+  const by = new Map<string, string[]>();
+  for (const [shorthand, keys] of COVERS) {
+    for (const key of keys) by.set(key, [...(by.get(key) ?? []), shorthand]);
+  }
+  for (const shorthands of by.values()) shorthands.sort((a, b) => rankOf(b) - rankOf(a));
+  return by;
+})();
+
+/** Whether an element sets a shorthand itself, inline or bound from a token. */
+const setsItself = (
+  shorthand: string,
+  inline: Readonly<Record<string, unknown>>,
+  bound: ReadonlyMap<string, unknown> | undefined,
+): boolean => inline[shorthand] != null || bound?.has(shorthand) === true;
+
+/** Whether an element sets any shorthand that covers a prop, so that there is anything to do. */
+function setsAnyShorthand(
+  inline: Readonly<Record<string, unknown>>,
+  bound: ReadonlyMap<string, unknown> | undefined,
+): boolean {
+  for (const key in inline) if (inline[key] != null && COVERS.has(key)) return true;
+  if (bound) for (const key of bound.keys()) if (COVERS.has(key)) return true;
+  return false;
+}
+
+const UNCOVERED = Symbol('uncovered');
+
+/** What `key` takes from the first of its shorthands the element sets and that gives it one. */
+function coveredValue(
+  key: string,
+  shorthands: readonly string[],
+  style: Readonly<Record<string, unknown>>,
+  inline: Readonly<Record<string, unknown>>,
+  bound: ReadonlyMap<string, unknown> | undefined,
+): unknown {
+  for (const shorthand of shorthands) {
+    if (!setsItself(shorthand, inline, bound)) continue;
+    const parts = partsOf(shorthand, style[shorthand]);
+    if (parts !== null) return parts ? parts[key] : style[shorthand];
+  }
+  return UNCOVERED;
+}
+
+/**
+ * Gives each prop in `style` that a shorthand the element sets itself covers the shorthand's
+ * value: one in its inline style, `inline`, or bound from a token, `bound`. The value rather than
+ * nothing, so a transition of the side eases to it, as in a browser. Not a prop the element sets
+ * as well, which Yoga reads over its shorthand as before, nor one a rule marked `!important`,
+ * which beats the element's own declaration. Of two shorthands over one prop, the one React Native
+ * reads: `paddingInline` over `paddingHorizontal`, whichever was written first.
+ *
+ * Per commit for every element with a style of its own, so it walks the props in `style`, a few,
+ * rather than every side and corner a shorthand covers.
+ */
+export function underOwnShorthands(
+  style: Record<string, unknown>,
+  inline: Readonly<Record<string, unknown>>,
+  bound: ReadonlyMap<string, unknown> | undefined,
+  important: ReadonlySet<string> | undefined,
+): void {
+  if (!setsAnyShorthand(inline, bound)) return;
+  for (const key in style) {
+    const shorthands = COVERED_BY.get(key);
+    if (!shorthands || key in inline || bound?.has(key) || important?.has(key)) continue;
+    const next = coveredValue(key, shorthands, style, inline, bound);
+    if (next === UNCOVERED) continue;
+    if (next == null) delete style[key];
+    else style[key] = next;
+  }
+}
 
 /** The properties of a rule that have another form, plain and important, or null for neither. */
 interface Sided {
@@ -1718,7 +2356,7 @@ function countPosition(
   let position = 0;
   let seen = 0;
   for (const sibling of siblings) {
-    if (!isElement(sibling) || (ofType && sibling.tag !== node.tag)) continue;
+    if (!isElement(sibling) || (ofType && typeOf(sibling) !== typeOf(node))) continue;
     seen++;
     if (sibling === node) position = seen;
   }
@@ -1811,16 +2449,21 @@ export function ruleKey(rule: StyleRule): string {
  * `:is()` of compounds that each have a key: it is filed under each of theirs, since a node it
  * matches has one of them.
  *
- * A rule that says nothing of the node's own name can still say whose child it is, `.row > *`.
- * It is filed under the parent's class, and offered to the children of an element that has it.
+ * Two kinds of rule say nothing of the node's own name and still say whose child it is: one for
+ * a generated box, `.card::before`, which is `.card > ::before` here, and one for any child,
+ * `.row > *`. Each is filed under the parent's class, and offered to the children of an element
+ * that has it. Filed by the box's own name, every `::before` rule there is would be offered to
+ * every such box.
  */
 export function ruleKeys(rule: StyleRule): readonly string[] {
   const key = rule.compounds[rule.compounds.length - 1];
   if (!key) return EVERY_NODE;
   if (key.classes.length) return [`class:${key.classes[0]}`];
   if (key.id !== undefined) return [`id:${key.id}`];
-  if (key.type !== undefined) return [`type:${key.type}`];
   const held = parentClass(rule, key);
+  if (key.type !== undefined && !(held !== undefined && isGenerated(key.type))) {
+    return [`type:${key.type}`];
+  }
   if (held !== undefined) return [`in:${held}`];
   return alternativeKeys(key) ?? attributeKey(key) ?? ancestorKeys(rule, key) ?? EVERY_NODE;
 }
@@ -1939,7 +2582,7 @@ function reach(node: StyleTarget, index: RuleIndex, found: IndexedEntry[]): void
     if (bucket) found.push(...bucket);
   };
   if (index.universal.length) found.push(...index.universal);
-  take(`type:${node.tag}`);
+  take(`type:${node.typeName ?? node.tag}`);
   const id = node.props['nativeID'];
   if (typeof id === 'string') take(`id:${id}`);
   if (node.classes) for (const name of node.classes) take(`class:${name}`);
@@ -1959,11 +2602,15 @@ function reachUnder(node: StyleTarget, take: (key: string) => void): void {
 
 /** The buckets of the attributes a node has: a prop of its own that is set. */
 function reachByAttribute(node: StyleTarget, take: (key: string) => void): void {
+  const kept = node.keptAttributes;
   for (const name in node.props) {
     const value = node.props[name];
     // As `matchesAttribute` has it: a prop that is false is an attribute that is not there.
     if (value !== undefined && value !== null && value !== false) take(`attr:${name}`);
+    else if (kept?.[name] !== undefined) take(`attr:${name}`);
   }
+  // One kept by no prop's name: a prop's is taken above.
+  if (kept) for (const name in kept) if (!(name in node.props)) take(`attr:${name}`);
 }
 
 /**
@@ -2107,7 +2754,14 @@ function subjectsOf(sheet: StyleSheet): Subjects {
  */
 export interface HasAbove {
   readonly classes: readonly string[];
+  /** The element the box is, where the rule names one. */
+  readonly type?: string;
   readonly subjects: Subjects;
+  /**
+   * The box is before the node, or before a box the node is in: `.card:has(.x) ~ .title`. What
+   * comes after it is matched again as well as what is under it.
+   */
+  readonly beside?: true;
 }
 
 const HAS_ABOVE = new WeakMap<StyleSheet, readonly HasAbove[]>();
@@ -2115,21 +2769,37 @@ const HAS_ABOVE = new WeakMap<StyleSheet, readonly HasAbove[]>();
 /** Whether a compound, or one it asks of the same node, uses `:has()`. */
 const asksBeneath = (compound: Compound): boolean =>
   compound.has !== undefined ||
-  [...(compound.not ?? []), ...(compound.is ?? []).flat()].some(asksBeneath);
+  [
+    ...(compound.not ?? []),
+    ...(compound.is ?? []).flat(),
+    ...nestedSelectors(compound).map((selector) => selector.compounds.at(-1)!),
+  ].some(asksBeneath);
 
 /**
- * The boxes above the styled node that a compound asks `:has()` of: the compound's own node,
- * where that is not the styled one, and each box it is asked to be inside,
- * `.body:is(.card:has(.x) *) .title`.
+ * The boxes other than the styled node that a compound asks `:has()` of: the compound's own
+ * node, where that is not the styled one, each box it is asked to be inside,
+ * `.body:is(.card:has(.x) *) .title`, and each element an `:is()` or `:not()` of more than a
+ * compound asks about, which can be before it as well as above it.
  */
-function* boxesAsked(compound: Compound, styled: boolean): Generator<Compound> {
-  if (!styled && asksBeneath(compound)) yield compound;
+function* boxesAsked(
+  compound: Compound,
+  styled: boolean,
+  beside: boolean,
+): Generator<{ box: Compound; beside: boolean }> {
+  if (!styled && asksBeneath(compound)) yield { box: compound, beside };
   for (const key of ['ancestors', 'parents', 'hostContext'] as const) {
-    for (const outer of compound[key] ?? []) yield* boxesAsked(outer, false);
+    for (const outer of compound[key] ?? []) yield* boxesAsked(outer, false, beside);
+  }
+  for (const selector of nestedSelectors(compound)) {
+    const last = selector.compounds.length - 1;
+    // The last is the compound's own node, which `asksBeneath` has asked of already.
+    for (const [at, inner] of selector.compounds.entries()) {
+      yield* boxesAsked(inner, at === last, at === last ? beside : true);
+    }
   }
 }
 
-/** Each box a sheet's rules ask `:has()` of above the node they style. */
+/** Each box a sheet's rules ask `:has()` of other than the node they style. */
 export function hasAbove(sheet: StyleSheet): readonly HasAbove[] {
   let known = HAS_ABOVE.get(sheet);
   if (known === undefined) {
@@ -2137,14 +2807,74 @@ export function hasAbove(sheet: StyleSheet): readonly HasAbove[] {
     for (const rule of sheet.rules) {
       const last = rule.compounds.length - 1;
       for (const [at, compound] of rule.compounds.entries()) {
-        for (const box of boxesAsked(compound, at === last)) {
+        const before = rule.combinators.slice(at).some((one) => SIBLING_COMBINATORS.has(one));
+        for (const { box, beside } of boxesAsked(compound, at === last, before)) {
           const subjects = noSubjects();
           noteSubject(subjects, rule);
-          found.push({ classes: box.classes, subjects });
+          found.push({
+            classes: classesOf(box),
+            ...(box.type !== undefined ? { type: box.type } : {}),
+            subjects,
+            ...(beside ? { beside: true } : {}),
+          });
         }
       }
     }
     HAS_ABOVE.set(sheet, (known = found));
+  }
+  return known;
+}
+
+/** Whether `node` can be the box a `:has()` rule asks: it has the classes and is the element. */
+export function couldAsk(reader: HasAbove, node: StyleTarget): boolean {
+  if (reader.type !== undefined && reader.type !== typeOf(node)) return false;
+  return reader.classes.every((name) => node.classes?.has(name));
+}
+
+/**
+ * The classes a node needs to match a compound: its own, and those every argument of one of its
+ * `:is()` or `:where()` lists names, `:where(.group)` as Tailwind's `group-has-*` writes it.
+ */
+function classesOf(compound: Compound): readonly string[] {
+  if (!compound.is && !compound.isComplex) return compound.classes;
+  const all = new Set(compound.classes);
+  const lists = [
+    ...(compound.is ?? []),
+    ...(compound.isComplex ?? []).map((list) => list.map((selector) => selector.compounds.at(-1)!)),
+  ];
+  for (const list of lists) {
+    const [first, ...rest] = list.map(classesOf);
+    for (const name of first ?? []) if (rest.every((other) => other.includes(name))) all.add(name);
+  }
+  return [...all];
+}
+
+/** Each compound in one, and each nested in it at any depth, `:has()` arguments among them. */
+function* everyCompound(compound: Compound): Generator<Compound> {
+  yield compound;
+  for (const inner of [...nestedCompounds(compound), ...hasCompounds(compound)]) {
+    yield* everyCompound(inner);
+  }
+}
+
+const HAS_BESIDE = new WeakMap<StyleSheet, boolean>();
+
+/**
+ * Whether a sheet asks `:has()` about what comes after a node, `:has(+ .x)` or `:has(~ .x .y)`:
+ * then a change can change what the elements before it match, and those before what it is in.
+ */
+export function hasBeside(sheet: StyleSheet): boolean {
+  let known = HAS_BESIDE.get(sheet);
+  if (known === undefined) {
+    const after = (test: HasTest) =>
+      test.relative?.some((one) => SIBLING_COMBINATORS.has(one.combinators[0]!)) === true;
+    known = sheet.rules.some((rule) =>
+      rule.compounds.some((outer) => {
+        for (const compound of everyCompound(outer)) if (compound.has?.some(after)) return true;
+        return false;
+      }),
+    );
+    HAS_BESIDE.set(sheet, known);
   }
   return known;
 }
@@ -2275,7 +3005,7 @@ export function joinSubjects(each: readonly Subjects[]): Subjects {
  *   nothing but `>` and a space between there and the element, and those of what `:is(.box *)`
  *   and `:is(.box > *)` put over it;
  * - `beneath`, inside `:has()`, wherever in the rule that is: what it asks of is under the box
- *   that answers it;
+ *   that answers it, or after it;
  * - `parentHas`, of what `:has(> )` asks of the box's children themselves, and nowhere else in
  *   `:has()`: the element is right under that box.
  *
@@ -2365,15 +3095,19 @@ interface Below {
 }
 
 /**
- * The classes `:has()` asks of what is under the box that answers it, into `beneath`, wherever
- * in the rule it is written, or into `parentHas` for what `:has(> )` asks of the box's children.
- * One it can ask of what is above the box goes `elsewhere`: `:is()` in `:has()` is not relative,
- * so the `.night` of `:has(:is(.night .cell))` can be any element over the cell.
+ * The classes `:has()` asks of what is under the box that answers it or after it, into
+ * `beneath`, wherever in the rule it is written, or into `parentHas` for what `:has(> )` asks of
+ * the box's children. One it can ask of what is above the box goes `elsewhere`: `:is()` in
+ * `:has()` is not relative, so the `.night` of `:has(:is(.night .cell))` can be any element over
+ * the cell.
  */
 function placeHas(tests: readonly HasTest[] | undefined, below: Below): void {
   for (const test of tests ?? []) {
     const into = test.child ? below.parentHas : below.beneath;
     for (const compound of test.any) placeBeneath(compound, into, below);
+    for (const one of test.relative ?? []) {
+      for (const compound of one.compounds) placeBeneath(compound, below.beneath, below);
+    }
   }
 }
 
@@ -2453,12 +3187,32 @@ function collectClasses(
  * One class of the list where the test is for a whole class or for part of one; any class
  * where it is for how the list starts or ends, or for a part with a space in it.
  */
-function answers(test: AttributeTest, name: string): boolean {
+function answers(test: AttributeTest, name: string, attribute?: ClassChange): boolean {
   const value = test.value ?? '';
   const folded = test.insensitive ? name.toLowerCase() : name;
   if (test.operator === 'includes') return folded === value;
   if (test.operator === 'substring' && !/\s/.test(value)) return folded.includes(value);
+  // `[class^="icon-"]` reads the attribute as a whole: told it, before and after, a change that
+  // leaves its answer as it was answers nothing new.
+  if (attribute) return classHolds(test, attribute.was) !== classHolds(test, attribute.now);
   return true;
+}
+
+/**
+ * A node's `class` attribute, as `[class^="icon-"]` reads it, before a change to its classes and
+ * after: undefined where it has none.
+ */
+export interface ClassChange {
+  readonly was: string | undefined;
+  readonly now: string | undefined;
+}
+
+/** Whether a test of the `class` attribute holds for it written as `value`. */
+function classHolds(test: AttributeTest, value: string | undefined): boolean {
+  if (value === undefined) return false;
+  if (test.operator === undefined) return true;
+  if (test.value === '' && !EMPTY_MATCHES.has(test.operator)) return false;
+  return matchesValue(attributeText(value, test), test.operator, test.value!);
 }
 
 /**
@@ -2473,7 +3227,7 @@ function boxAround(rule: StyleRule): string | undefined {
 
 /** Whether a rule among these could be for a node: never no where one is. */
 function writtenFor(of: Subjects, node: StyleTarget): boolean {
-  if (of.any || of.types.has(node.tag)) return true;
+  if (of.any || of.types.has(typeOf(node))) return true;
   for (const name of node.classes ?? []) if (of.classes.has(name)) return true;
   if (!of.inside.size) return false;
   for (let over = node.parent; over; over = over.parent) {
@@ -2564,10 +3318,12 @@ function unstyledStyle(
 function inheritFrom(
   parentInherited: Record<string, unknown>,
   own: Record<string, unknown>,
+  node?: StyleTarget,
 ): Record<string, unknown> {
-  let inherited = parentInherited;
+  const drawing = node?.namespace !== undefined;
+  let inherited = drawing ? ownPaint(node!, parentInherited, own) : parentInherited;
   for (const key of Object.keys(own)) {
-    if (!INHERITED.has(key)) continue;
+    if (!(INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key)))) continue;
     // `pointer-events: inherit`, which only an inline style on an element no rule matches still
     // holds here: what the parent hands down stands.
     if (key === 'pointerEvents' && own[key] === 'inherit') continue;
@@ -2577,6 +3333,41 @@ function inheritFrom(
     } else {
       inherited[key] = own[key];
     }
+  }
+  return inherited;
+}
+
+/** What a node no rule matches hands down: its inline style's, or a drawing's own paint. */
+function handedOn(
+  node: StyleTarget,
+  parentInherited: Record<string, unknown>,
+  inline: Record<string, unknown> | null,
+  drawing: boolean,
+): Record<string, unknown> {
+  return inline || drawing ? inheritFrom(parentInherited, inline ?? {}, node) : parentInherited;
+}
+
+/**
+ * What a shape of a drawing hands down of the paint it set itself, as an attribute its
+ * `propList` names, over a paint it inherits: a `<g stroke="none">` under a stroked `<svg>`
+ * strokes nothing inside it, as in a browser. A style of its own stands over either.
+ */
+function ownPaint(
+  node: StyleTarget,
+  parentInherited: Record<string, unknown>,
+  own: Record<string, unknown>,
+): Record<string, unknown> {
+  const named = node.props['propList'];
+  if (!Array.isArray(named)) return parentInherited;
+  let inherited = parentInherited;
+  for (const key of named as readonly string[]) {
+    if (!SHAPE_PAINT_INHERITED.has(key) || key in own) continue;
+    const value = node.props[key];
+    // A paint named and not set is `none`, as react-native-svg reads a list naming it.
+    const paint = value ?? (key === 'strokeWidth' ? undefined : 'none');
+    if (paint === undefined || inherited[key] === paint) continue;
+    if (inherited === parentInherited) inherited = { ...parentInherited };
+    inherited[key] = paint;
   }
   return inherited;
 }
@@ -2610,12 +3401,19 @@ function drawsLine(line: unknown): boolean {
   return line !== undefined && line !== 'none';
 }
 
-/** Whether an inline style sets a property children inherit. Allocates nothing: it runs per set. */
-export function setsInherited(style: unknown): boolean {
+/**
+ * Whether an inline style sets a property children inherit, by a node of a library's drawing or by
+ * any other. Allocates nothing, and calls nothing a key: it runs per set.
+ */
+export function setsInherited(style: unknown, drawing = false): boolean {
   if (!style || typeof style !== 'object') return false;
-  if (Array.isArray(style)) return style.some(setsInherited);
+  if (Array.isArray(style)) return style.some((entry) => setsInherited(entry, drawing));
   for (const key in style) {
-    if (INHERITED.has(key) && (style as Record<string, unknown>)[key] != null) return true;
+    if (
+      (INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key))) &&
+      (style as Record<string, unknown>)[key] != null
+    )
+      return true;
   }
   return false;
 }
@@ -2625,11 +3423,16 @@ export function setsInherited(style: unknown): boolean {
  * strongest normal declaration on its element, so what it sets is inherited, and read by
  * `color: inherit` and `currentColor`, as a rule's would be.
  */
-export function inlineInherited(style: unknown): Record<string, unknown> | null {
+export function inlineInherited(style: unknown, drawing = false): Record<string, unknown> | null {
   let out: Record<string, unknown> | null = null;
   // Flattened first, as native applies it, so a later entry's null clears an earlier value.
   for (const [key, value] of Object.entries(flattenInline(style, {}))) {
-    if (INHERITED.has(key) && value !== undefined && value !== null) (out ??= {})[key] = value;
+    if (
+      (INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key))) &&
+      value !== undefined &&
+      value !== null
+    )
+      (out ??= {})[key] = value;
   }
   return out;
 }
@@ -2654,7 +3457,7 @@ function flattenInline(style: unknown, into: Record<string, unknown>): Record<st
  *
  * Correctness first. Walking up meant matching every ancestor against the *starting node's*
  * sheet, but an ancestor almost always belongs to a different component, so a component's rules
- * reached nodes it did not own while a parent's real values never arrived. Reading `sheet` off
+ * reached nodes it did not own while a parent's real values never arrived. Reading `templateSheet` off
  * each node fixes both directions at once.
  *
  * Cost second. Walking up re-derived, for every node, everything its parent had already worked
@@ -2779,9 +3582,9 @@ export class StyleResolver {
    */
   private readonly additions: Addition[] = [];
 
-  /** Whether a sheet could match a node: one of its rules is written for it. */
-  couldMatch(sheet: StyleSheet, node: StyleTarget): boolean {
-    return writtenFor(subjectsOf(sheet), node);
+  /** What the rules of several sheets are for, as one: see `isFor`. */
+  subjectsOfAll(sheets: readonly StyleSheet[]): Subjects {
+    return sheets.length === 1 ? subjectsOf(sheets[0]!) : joinSubjects(sheets.map(subjectsOf));
   }
 
   /** How far each class named by the sheets met so far reaches: see `classReach`. */
@@ -2795,6 +3598,8 @@ export class StyleResolver {
    */
   private readonly deepSheets = new Set<StyleSheet>();
   private readonly deepIndexes = new WeakMap<StyleSheet, RuleIndex>();
+  /** Each component sheet's rules for a box of its host: see `hostBoxIndex`. */
+  private readonly hostBoxIndexes = new WeakMap<StyleSheet, RuleIndex>();
 
   /**
    * Read the classes a sheet names, once, as soon as any node is given it. One `scoped` to a
@@ -2878,10 +3683,10 @@ export class StyleResolver {
    * elements under it to match again, by what rules are for; or null, where no rule names any
    * of them and nothing is styled again.
    */
-  reachOf(classes: Iterable<string>): true | Subjects | null {
+  reachOf(classes: Iterable<string>, attribute?: ClassChange): true | Subjects | null {
     let found: Subjects | null = null;
     for (const name of classes) {
-      for (const how of this.reachesOf(name)) {
+      for (const how of this.reachesOf(name, attribute)) {
         if (how === true) return true;
         addSubjects((found ??= noSubjects()), how);
       }
@@ -2890,12 +3695,17 @@ export class StyleResolver {
   }
 
   /** How far a class reaches by its name, and by each test of the class attribute it answers. */
-  private *reachesOf(name: string): Generator<true | Subjects> {
+  private *reachesOf(name: string, attribute?: ClassChange): Generator<true | Subjects> {
     const how = this.reach.get(name);
     if (how) yield how;
     for (const [key, test] of this.classTests) {
-      if (answers(test, name)) yield this.reach.get(key) ?? true;
+      if (answers(test, name, attribute)) yield this.reach.get(key) ?? true;
     }
+  }
+
+  /** Whether a sheet tests the `class` attribute as a whole: see `ClassChange`. */
+  get testsClassAttribute(): boolean {
+    return this.classTests.size > 0;
   }
 
   /** Whether one of the rules `subjects` stands for could be for a node. */
@@ -3065,9 +3875,9 @@ export class StyleResolver {
   }
 
   /**
-   * Set by the engine once a sheet uses `:has()`, styles a pressed element or asks about a place
-   * in a child list. Until then no cache keeps the rules it matched, so an app that never asks
-   * pays nothing for it.
+   * Set by the engine while a sheet in play uses `:has()` or styles a pressed element, and once
+   * one asks about a place in a child list. Otherwise no cache keeps the rules it matched, so an
+   * app that never asks pays nothing for it.
    */
   tracksHas = false;
 
@@ -3186,8 +3996,10 @@ export class StyleResolver {
    */
   private hasNoRules(node: StyleTarget): boolean {
     return (
-      node.sheet === null &&
+      node.templateSheet === null &&
       node.hostSheet === null &&
+      // A generated box matches the `:host::before` of the component its element hosts.
+      !(boxesDrawn && node.tag.charCodeAt(0) === COLON && node.parent?.hostSheet) &&
       this.deepSheets.size === 0 &&
       this.globalSheet === null &&
       this.addedSheets.length === 0 &&
@@ -3217,7 +4029,8 @@ export class StyleResolver {
     const tokens = parent ? parent.tokens : this.tokensOnRoot;
     const parentContext = parent ? parent.context : ROOT_CONTEXT;
     // What inline style sets is inherited too, with no rule to read it against.
-    const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
+    const drawing = node.namespace !== undefined;
+    const inline = node.inlineInherits ? inlineInherited(node.props['style'], drawing) : null;
     const nothing =
       !inline &&
       parentInherited === EMPTY &&
@@ -3234,7 +4047,7 @@ export class StyleResolver {
       scope: scope ?? context,
       parentScope,
       style: unstyledStyle(parentInherited, inline),
-      inherited: inline ? inheritFrom(parentInherited, inline) : parentInherited,
+      inherited: handedOn(node, parentInherited, inline, drawing),
       tokens,
     };
     node.styleCache = passthrough;
@@ -3277,7 +4090,12 @@ export class StyleResolver {
     if (this.globalSheet) this.placeLayers(this.globalSheet);
     const indexes: RuleIndex[] = [];
     if (node.hostSheet) indexes.push(this.ownIndex(node.hostSheet, HOSTS));
-    if (node.sheet) indexes.push(this.ownIndex(node.sheet, CREATED));
+    // A generated box is tried against the rules of the component its element hosts too, where
+    // `:host::before` is written: it is no host itself, so a bare `:host` rule still misses it.
+    const host =
+      boxesDrawn && node.tag.charCodeAt(0) === COLON ? node.parent?.hostSheet : undefined;
+    if (host) indexes.push(this.hostBoxIndex(host));
+    if (node.templateSheet) indexes.push(this.ownIndex(node.templateSheet, CREATED));
     if (this.deepSheets.size) this.reachedFromAbove(node, indexes);
     indexes.push(this.sharedIndex());
     return candidateRules(node, indexes, this.cascadeOrder);
@@ -3290,9 +4108,26 @@ export class StyleResolver {
   private reachedFromAbove(node: StyleTarget, indexes: RuleIndex[]): void {
     for (let up = node.parent; up; up = up.parent) {
       const sheet = up.hostSheet;
-      if (!sheet || sheet === node.sheet || sheet === node.hostSheet) continue;
+      if (!sheet || sheet === node.templateSheet || sheet === node.hostSheet) continue;
       if (this.deepSheets.has(sheet)) indexes.push(this.deepIndex(sheet));
     }
+  }
+
+  /**
+   * A sheet's rules for a box of its host alone, `:host::before` and `:host(.x)::after`, filed as
+   * a component's own are. Its other rules for a box are for the elements of its template, which
+   * is how emulated encapsulation scopes them on the web: `.icon::before` in it never reaches the
+   * box of a host its parent puts the class `icon` on.
+   */
+  private hostBoxIndex(sheet: StyleSheet): RuleIndex {
+    let index = this.hostBoxIndexes.get(sheet);
+    if (!index) {
+      const boxes = this.entries(sheet, COMPONENT_SPECIFICITY_BUMP).filter(
+        ({ rule }) => rule.compounds.at(-2)?.host !== undefined,
+      );
+      this.hostBoxIndexes.set(sheet, (index = indexRules(boxes, undefined, HOSTS * SHEET_ROOM)));
+    }
+    return index;
   }
 
   /** A sheet's `::ng-deep` rules alone, filed as a component's own are. */
@@ -3389,9 +4224,17 @@ export class StyleResolver {
     parentInherited: Record<string, unknown>,
   ): Styled {
     // Shared between nodes that match alike, unless the node sets something of its own.
-    const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
-    // Nor one that takes a value from its parent's own style, which two parents differ in.
-    if (node.customProperties || inline || node.boundStyle || matched.some(takesParents)) {
+    const drawing = node.namespace !== undefined;
+    const inline = node.inlineInherits ? inlineInherited(node.props['style'], drawing) : null;
+    // Nor one that takes a value from its parent's own style, which two parents differ in, nor
+    // a node of a drawing, which hands down paint another node with its rules does not.
+    if (
+      node.customProperties ||
+      inline ||
+      node.boundStyle ||
+      drawing ||
+      matched.some(takesParents)
+    ) {
       return this.style(node, matched, parentTokens, parentInherited, inline);
     }
     if (this.sharedGeneration !== this.generation) {
@@ -3459,11 +4302,12 @@ export class StyleResolver {
       this.applyDeferred(result.deferred, own, tokens, parentInherited, result.important);
     }
     settleBorders(own);
+    settleUnsidedBorder(own);
     // `pointer-events: inherit` won the cascade: what the parent hands down stands.
     if (own['pointerEvents'] === 'inherit') delete own['pointerEvents'];
     const style = { ...parentInherited, ...own };
     settleLineHeight(style);
-    const inherited = decorate(style, inheritFrom(parentInherited, own), own);
+    const inherited = decorate(style, inheritFrom(parentInherited, own, node), own);
     const rtl = (style['direction'] ?? this.conditions.direction) === 'rtl';
     const important = importantNames(result, () => TWIN[rtl ? 'rtl' : 'ltr']);
     return important ? { style, inherited, tokens, important } : { style, inherited, tokens };
@@ -4408,6 +5252,7 @@ function referenced(
   tokens: Readonly<Record<string, TokenValue>>,
 ): unknown {
   if (declaration.gradient) return paintLayers(declaration.gradient, tokens);
+  if (declaration.band) return settledBand(declaration.band, tokens);
   // The first token set is substituted, whatever it holds: one of the wrong kind leaves the
   // property unset rather than trying the next, or the fallback.
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
@@ -4426,33 +5271,46 @@ function referenced(
 }
 
 /**
- * What native displays for a keyword: flex, none or contents. A block, inline, inline-block,
- * flow-root or inline-flex box is flex, as the compiler reads one written out, and so is `flow`,
- * which is a block. Anything else, a grid or a table, is no display native has, so the property
- * is unset.
+ * What a display keyword is laid out as: flex, none, contents, or one of the block containers,
+ * which the engine lays out as a flex column and commits as flex (`flow.ts`). An inline box is
+ * flex, as the compiler reads one written out, an inline-flex box sits in a line, and `flow` is
+ * a block.
+ * Anything else, a grid or a table, is no display native has, so the property is unset.
  */
 const DISPLAYS: ReadonlyMap<string, string> = new Map([
-  ...['flex', 'block', 'inline', 'inline-block', 'flow-root', 'inline-flex', 'flow'].map(
-    (word) => [word, 'flex'] as const,
+  ...['flex', 'inline'].map((word) => [word, 'flex'] as const),
+  ...['block', 'flow-root', 'inline-block', 'inline-flex', 'none', 'contents'].map(
+    (word) => [word, word] as const,
   ),
-  ['none', 'none'],
-  ['contents', 'contents'],
+  ['grid', 'grid'],
+  ['inline-grid', 'inline-grid'],
+  ['flow', 'block'],
 ]);
 
 /**
- * The two-keyword form, an outer display and an inner one in either order: `inline flex` is
- * `inline-flex` and `block flow` is `block`, as Chrome computes them, so each is flex here.
+ * The two-keyword form, an outer display and an inner one in either order, as Chrome computes
+ * it: `inline flex` is `inline-flex`, `block flow` is `block`, `inline flow-root` is
+ * `inline-block`.
  */
 const OUTER = new Set(['block', 'inline']);
-const INNER = new Set(['flow', 'flow-root', 'flex']);
+const INNER = new Set(['flow', 'flow-root', 'flex', 'grid']);
+const PAIRS: Readonly<Record<string, string>> = {
+  'block flow': 'block',
+  'block flow-root': 'flow-root',
+  'inline flow-root': 'inline-block',
+  'block grid': 'grid',
+  'inline grid': 'inline-grid',
+  'inline flex': 'inline-flex',
+};
 
 function displayOf(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const words = value.toLowerCase().split(CSS_SPACE);
   if (words.length === 1) return DISPLAYS.get(words[0]!);
-  const [first, second] = words as [string, string];
-  const pair = (OUTER.has(first) && INNER.has(second)) || (INNER.has(first) && OUTER.has(second));
-  return words.length === 2 && pair ? 'flex' : undefined;
+  if (words.length !== 2) return undefined;
+  const [outer, inner] = (OUTER.has(words[0]!) ? words : [words[1], words[0]]) as [string, string];
+  if (!OUTER.has(outer) || !INNER.has(inner)) return undefined;
+  return PAIRS[`${outer} ${inner}`] ?? 'flex';
 }
 
 /**
@@ -4856,6 +5714,31 @@ function fromChannels(
     : `rgba(${r}, ${g}, ${b}, ${Math.round(opacity * 1000) / 1000})`;
 }
 
+/** An edge of a band: a percentage, or a token with the percentage beside it where one is. */
+type BandEdge = string | { readonly reference: string; readonly fallback?: string };
+
+/**
+ * A band's clip with its edges settled, as `clipBand` is written: none where an edge is a token
+ * that is no percentage of the box, or unset with nothing beside it, as CSS then has no clip.
+ */
+function settledBand(
+  band: readonly BandEdge[],
+  tokens: Readonly<Record<string, TokenValue>>,
+): string | undefined {
+  const [from, to] = band.map((edge) =>
+    percentOf(typeof edge === 'string' ? edge : substitute(edge, tokens, (token) => token.length)),
+  );
+  if (from === undefined || to === undefined) return undefined;
+  return `polygon(${from}% 0%, ${to}% 0%, ${to}% 100%, ${from}% 100%)`;
+}
+
+/** A length as a percentage, 0 and one below it included, or undefined for any other. */
+function percentOf(length: unknown): string | undefined {
+  if (length === 0) return '0';
+  const share = typeof length === 'string' ? /^(-?\d*\.?\d+)%$/.exec(length) : null;
+  return share ? String(Number(share[1])) : undefined;
+}
+
 /** One template, or a layered background of several: every layer painted, or, as CSS would, none. */
 function paintLayers(
   gradient: GradientTemplate | readonly GradientTemplate[],
@@ -5121,7 +6004,9 @@ function wholePercentage(
   if (Array.isArray(marker.expression)) return undefined;
   const leaf = marker.expression as { reference: string };
   const value = formOf(tokens[leaf.reference], 'length');
-  return typeof value === 'string' && value.endsWith('%') ? value : undefined;
+  // And one holding a percentage with a length added, which the engine finishes: `calc(100% + -2px)`.
+  const whole = typeof value === 'string' && (value.endsWith('%') || value.startsWith('calc('));
+  return whole ? (value as string) : undefined;
 }
 
 function calculated(
@@ -5335,6 +6220,25 @@ function colourMarker(value: unknown): ColourExpression | undefined {
 }
 
 /**
+ * A token added to a percentage, `calc(100% - var(--handle))`: a length in points or a share of
+ * the same box adds up to one value. A length of the box's own font does not, here, so the box is
+ * given none rather than one that is not what the rule says.
+ */
+function withPercent(value: unknown, adjust: NonNullable<DeferredDeclaration['adjust']>): unknown {
+  const percent = adjust.percent!;
+  if (typeof value === 'string' && value.endsWith('%')) {
+    const share = percent + Number.parseFloat(value) * (adjust.scale ?? 1);
+    const offset = adjust.offset ?? 0;
+    return offset === 0 ? `${share}%` : `calc(${share}% + ${offset}px)`;
+  }
+  // A length of its own font, deferred, is no number here.
+  if (typeof value !== 'number') return undefined;
+  const scaled = value * (adjust.scale ?? 1) + (adjust.offset ?? 0);
+  // With nothing to add, the percentage alone, which needs no second pass.
+  return scaled === 0 ? `${percent}%` : `calc(${percent}% + ${scaled}px)`;
+}
+
+/**
  * A resolved length, moved by the arithmetic that surrounded its `var()`.
  *
  * A non-numeric value is left alone rather than coerced: the token was a keyword or a percentage
@@ -5343,6 +6247,7 @@ function colourMarker(value: unknown): ColourExpression | undefined {
 function adjusted(value: unknown, adjust: NonNullable<DeferredDeclaration['adjust']>): unknown {
   if (adjust.alpha !== undefined) return faded(value, adjust.alpha);
   const em = (value as { __defer?: DeferredEm } | null)?.__defer;
+  if (adjust.percent !== undefined) return withPercent(value, adjust);
   if (em && adjust.floor === undefined) return adjustedEm(em, adjust);
   if (typeof value !== 'number') return value;
   const scaled = value * (adjust.scale ?? 1) + (adjust.offset ?? 0);

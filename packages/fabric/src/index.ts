@@ -12,17 +12,21 @@
  */
 export {
   StyleResolver,
+  boundDeclaration,
   matches,
   styleSheetOf,
   type AttributeTest,
   type Combinator,
+  type ComplexSelector,
   type Compound,
   type Conditions,
   type DeferredDeclaration,
   type GradientTemplate,
+  type HasTest,
   type HslChannel,
   type MediaCondition,
   type NthTest,
+  type RelativeSelector,
   type RuleIndex,
   type StyleCache,
   type StyleRule,
@@ -34,29 +38,37 @@ export {
 export { ELEMENT_STYLES, ELEMENT_STYLES_CSS } from './element-styles.ts';
 export { EngineIntersectionObserver, installDeferTriggers } from './defer-triggers.ts';
 export { installNodeGlobal } from './node-global.ts';
+export { nextFrame } from './next-frame.ts';
 export { faceName, registeredFaces } from './font-faces.ts';
-export { firstFamily } from './inline-token.ts';
+export { firstFamily, tokenFromValue } from './inline-token.ts';
+export { layOutGrid, type Edges, type GridItem, type GridLayout, type Rect } from './grid.ts';
+export { isBlockContainer, planFlow, type FlowKey, type FlowPlan, type FlowTree } from './flow.ts';
 export {
   DIRECT_EVENTS,
   Engine,
   SyntheticEvent,
   claimHost,
+  extendNodes,
   keepNativeView,
   declareNativeProps,
   fontsLoading,
   fontsRegistered,
   fontsSettled,
   markComponentHost,
+  markPage,
+  scrollsOverflow,
   nativePlatform,
   onFontsRegistered,
   onFontsSettled,
   registerHoist,
   registerPlatformComponents,
   registerViewName,
+  registeredViewName,
   type PlatformViewName,
   type ViewNameOptions,
   type PostScriptNames,
   viewNameOf,
+  isTextInput,
   type EngineNode,
   type EngineOptions,
   type EngineStats,
@@ -88,6 +100,8 @@ export {
 export {
   bezier,
   interpolate,
+  isNamedColor,
+  parseColor,
   redirect,
   sample,
   settled,

@@ -327,7 +327,7 @@ export abstract class ViewBase {
    * off the node where the host put it there, which is one property read against an injector
    * lookup that walks every ancestor element, for every element on screen.
    */
-  protected readonly engine: HostEngine = this.node.host ?? inject(HostEngine);
+  protected readonly engine: HostEngine = this.node.engine ?? inject(HostEngine);
 
   /**
    * See `contributeAccessibility`. Empty for every element nothing is composed onto. Read, never

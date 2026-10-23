@@ -1,0 +1,327 @@
+/**
+ * Focus on what is not a text field: a button, a link, anything with a `tabindex`. A focus trap
+ * moves it between them and reads `document.activeElement` to know where it is.
+ */
+import assert from 'node:assert/strict';
+import { afterEach, describe, it } from 'node:test';
+import { Component, DOCUMENT, inject } from '@angular/core';
+import { TextInput } from '@ng-native/components';
+import { Engine } from '@ng-native/fabric';
+import { cleanup, render, screen, settle, userEvent } from '@ng-native/testing';
+import { provideWebCompat } from './index.ts';
+
+/** What a library sees of an element or a document: loosely typed, as its own code would be. */
+type Dom = any;
+
+@Component({
+  selector: 'x-page',
+  imports: [TextInput],
+  template: `
+    <div id="page">
+      <button id="one">One</button>
+      <button id="two">Two</button>
+      <button id="off" disabled>Off</button>
+      <div id="plain" testID="plain"></div>
+      <img id="picture" testID="picture" src="https://example.test/a.png" />
+      <div id="held" tabindex="-1"></div>
+      <a id="bare">Bare</a>
+      <a id="link" href="/somewhere">Link</a>
+      <text-input id="field" testID="field" />
+      <button id="reachable" disabled tabindex="0">Reachable</button>
+      <text-input id="closed" disabled />
+    </div>
+  `,
+})
+class Page {
+  readonly document: Dom = inject(DOCUMENT);
+}
+
+afterEach(cleanup);
+
+const page = async () => {
+  const app = await render(Page, { providers: [provideWebCompat()] });
+  await settle();
+  return {
+    document: app.fixture.componentInstance.document as Dom,
+    fabric: app.fabric,
+    engine: app.componentRef.injector.get(Engine),
+  };
+};
+
+/** The active element by its id: a node in a failed assertion is printed with the whole engine. */
+const active = (document: Dom): string =>
+  document.activeElement.id || document.activeElement.localName;
+
+/** The focus events an element hears, in order. */
+function hear(element: Dom): string[] {
+  const heard: string[] = [];
+  for (const type of ['focus', 'focusin', 'blur', 'focusout']) {
+    element.addEventListener(type, () => heard.push(type));
+  }
+  return heard;
+}
+
+describe('focus on what is not a text field', () => {
+  it('brings what it focuses into sight only in answer to a touch, and not where told not to', async () => {
+    // A library focuses a panel as its page is built, a question or a focus trap: a screen that
+    // opens part way down for it has moved for nobody. A form that sends its user to the field
+    // to put right does so as its button is pressed.
+    const { document, engine, fabric } = await page();
+    const revealed: string[] = [];
+    const reveal = engine.reveal.bind(engine);
+    engine.reveal = (node: Dom) => void revealed.push(node.id);
+    try {
+      const held = document.getElementById('held');
+      held.focus();
+      assert.deepEqual(revealed, [], 'as the page is built');
+      held.blur();
+      const one = document.getElementById('one');
+      const quiet = () => held.focus({ preventScroll: true });
+      one.addEventListener('click', quiet);
+      await userEvent.press(screen.getByText('One'));
+      assert.deepEqual(revealed, [], 'told not to scroll');
+      held.blur();
+      one.removeEventListener('click', quiet);
+      one.addEventListener('click', () => held.focus());
+      await userEvent.press(screen.getByText('One'));
+      assert.deepEqual(revealed, ['held'], 'in answer to the press');
+      // Nor as what holds it scrolls: the page is where the finger moved it.
+      held.blur();
+      revealed.length = 0;
+      const plain = document.getElementById('plain');
+      plain.style.overflow = 'auto';
+      await settle();
+      plain.addEventListener('scroll', () => held.focus());
+      fabric.emit(screen.getByTestId('plain'), 'topScroll', { contentOffset: { x: 0, y: 40 } });
+      assert.equal(active(document), 'held', 'focused all the same');
+      assert.deepEqual(revealed, [], 'as it scrolls');
+      // Nor as a picture loads, which is no answer to anyone either.
+      held.blur();
+      document.getElementById('picture').addEventListener('load', () => held.focus());
+      fabric.emit(screen.getByTestId('picture'), 'topLoad', { source: { width: 4, height: 4 } });
+      assert.equal(active(document), 'held', 'focused as it loads');
+      assert.deepEqual(revealed, [], 'as it loads');
+    } finally {
+      engine.reveal = reveal;
+    }
+  });
+
+  it('is taken by what can be focused, with its events, and is the active element', async () => {
+    const { document } = await page();
+    const one = document.getElementById('one');
+    const heard = hear(one);
+    one.focus();
+    assert.equal(active(document), 'one');
+    assert.equal(one.matches(':focus'), true);
+    assert.deepEqual(heard, ['focus', 'focusin']);
+    one.focus();
+    assert.deepEqual(heard, ['focus', 'focusin'], 'once, while it has it');
+    for (const id of ['held', 'link']) {
+      document.getElementById(id).focus();
+      assert.equal(active(document), id);
+    }
+    // Not by what cannot be focused, which leaves it where it was.
+    for (const id of ['plain', 'off', 'bare']) {
+      document.getElementById(id).focus();
+      assert.equal(active(document), 'link', id);
+    }
+  });
+
+  it('moves from one to the next, and is given up by blur', async () => {
+    const { document } = await page();
+    const one = document.getElementById('one');
+    const two = document.getElementById('two');
+    one.focus();
+    const left = hear(one);
+    const reached = hear(two);
+    two.focus();
+    assert.deepEqual(left, ['blur', 'focusout']);
+    assert.deepEqual(reached, ['focus', 'focusin']);
+    assert.equal(one.matches(':focus'), false);
+    two.blur();
+    assert.equal(active(document), 'body');
+    assert.deepEqual(reached, ['focus', 'focusin', 'blur', 'focusout']);
+    two.blur();
+    assert.equal(reached.length, 4, 'nothing to give up the second time');
+  });
+
+  it('is lost by an element moved to another parent, or one that has it in it', async () => {
+    // A browser takes an element out of the tree before it puts it back, and the focus goes.
+    const { document } = await page();
+    const one = document.getElementById('one');
+    const outer = document.getElementById('page');
+    const held = document.getElementById('held');
+    one.focus();
+    const heard = hear(one);
+    held.appendChild(one);
+    assert.equal(active(document), 'body');
+    assert.equal(one.matches(':focus'), false);
+    assert.deepEqual(heard, ['blur', 'focusout']);
+    one.focus();
+    outer.appendChild(held);
+    assert.equal(active(document), 'body', 'with the parent it was in');
+    // Another element moved leaves it where it is.
+    one.focus();
+    outer.appendChild(document.getElementById('two'));
+    assert.equal(active(document), 'one');
+    // And while an observer watches, which takes the element out first, as a browser does.
+    const observer = new (globalThis as unknown as { MutationObserver: Dom }).MutationObserver(
+      () => {},
+    );
+    observer.observe(outer, { childList: true, subtree: true });
+    try {
+      outer.appendChild(one);
+      assert.equal(active(document), 'body', 'with an observer watching');
+    } finally {
+      observer.disconnect();
+    }
+  });
+
+  it('takes the focus from a text field, which native is told to blur', async () => {
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    const one = document.getElementById('one');
+    field.focus();
+    one.focus();
+    assert.equal(active(document), 'one');
+    const blurs = fabric.commands.filter((command) => command.name === 'blur');
+    assert.equal(blurs.length, 1);
+    assert.match(blurs[0]!.viewName, /TextInput$/);
+  });
+
+  it('is given up by a button when a text field takes it', async () => {
+    const { document } = await page();
+    const one = document.getElementById('one');
+    one.focus();
+    const heard = hear(one);
+    document.getElementById('field').focus();
+    assert.equal(active(document), 'field');
+    assert.deepEqual(heard, ['blur', 'focusout']);
+  });
+
+  it('is taken by a field as it is asked, before focus() returns, and once', async () => {
+    // A library focuses a field and closes its list in the next statement: a listener that
+    // hears of the focus only when native answers hears of it after, and opens the list again.
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    let heard = 0;
+    field.addEventListener('focusin', () => heard++);
+    field.focus();
+    assert.equal(heard, 1, 'before focus() returns');
+    assert.equal(active(document), 'field');
+    assert.equal(fabric.commands.filter((command) => command.name === 'focus').length, 1);
+    // Asked again while it has it: nothing, as nothing changed.
+    field.focus();
+    assert.equal(heard, 1);
+    field.blur();
+    assert.equal(fabric.commands.filter((command) => command.name === 'blur').length, 1);
+  });
+
+  it('is not taken by a disabled control, whatever its tabindex, nor by a disabled field', async () => {
+    const { document, fabric } = await page();
+    for (const id of ['reachable', 'closed']) {
+      const control = document.getElementById(id);
+      const heard = hear(control);
+      control.focus();
+      assert.equal(active(document), 'body', id);
+      assert.deepEqual(heard, [], id);
+    }
+    assert.equal(fabric.commands.filter((command) => command.name === 'focus').length, 0);
+  });
+
+  it('is given up by a field at once, so it is taken again before native says it blurred', async () => {
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    field.focus();
+    const native = fabric.commands.find((command) => command.name === 'focus')!.node!;
+    const heard = hear(field);
+    field.blur();
+    assert.equal(active(document), 'body');
+    assert.deepEqual(heard, ['blur', 'focusout']);
+    field.focus();
+    assert.equal(active(document), 'field');
+    assert.equal(fabric.commands.filter((command) => command.name === 'focus').length, 2);
+    // Native answers the blur, then the focus: neither is news, and the field keeps the focus.
+    fabric.emit(native, 'topBlur');
+    fabric.emit(native, 'topFocus');
+    assert.equal(active(document), 'field');
+    assert.deepEqual(heard, ['blur', 'focusout', 'focus', 'focusin']);
+    // A blur native says of itself after that is one.
+    fabric.emit(native, 'topBlur');
+    assert.equal(active(document), 'body');
+    assert.deepEqual(heard.slice(4), ['blur', 'focusout']);
+  });
+
+  it('forgets a blur native never answered once native focuses the field of itself', async () => {
+    // Native gives no blur for a field it never had: the next one it says is no answer to it.
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    field.focus();
+    const native = fabric.commands.find((command) => command.name === 'focus')!.node!;
+    field.blur();
+    fabric.emit(native, 'topFocus');
+    assert.equal(active(document), 'field');
+    fabric.emit(native, 'topBlur');
+    assert.equal(active(document), 'body');
+  });
+
+  it("tells a field's listener of focus and blur with an event it can stop, as it is of any other", async () => {
+    // A combobox closes its list on the input's blur, calls preventDefault on the event and reads
+    // whether it was stopped.
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    const heard: unknown[] = [];
+    for (const type of ['focus', 'blur']) {
+      field.addEventListener(type, (event: Dom) => {
+        event.preventDefault();
+        heard.push([event.type, event.cancelable, event.defaultPrevented]);
+      });
+    }
+    fabric.emit(screen.getByTestId('field'), 'topFocus');
+    fabric.emit(screen.getByTestId('field'), 'topBlur');
+    assert.deepEqual(heard, [
+      ['focus', true, true],
+      ['blur', true, true],
+    ]);
+    // And of a button's, which a script moves the focus to and from.
+    heard.length = 0;
+    const one = document.getElementById('one');
+    for (const type of ['focus', 'blur']) {
+      one.addEventListener(type, (event: Dom) => {
+        event.preventDefault();
+        heard.push([event.type, event.cancelable, event.defaultPrevented]);
+      });
+    }
+    one.focus();
+    one.blur();
+    assert.deepEqual(heard, [
+      ['focus', true, true],
+      ['blur', true, true],
+    ]);
+  });
+
+  it('is heard of on the document and the body, focusin and focusout, as a focus monitor listens', async () => {
+    const { document } = await page();
+    const heard: Record<string, string[]> = { document: [], body: [] };
+    for (const [where, target] of [
+      ['document', document],
+      ['body', document.body],
+    ] as const) {
+      for (const type of ['focusin', 'focusout']) {
+        target.addEventListener(type, (event: Dom) =>
+          heard[where]!.push(`${type} ${event.target.id}`),
+        );
+      }
+    }
+    document.getElementById('one').focus();
+    document.getElementById('two').focus();
+    document.getElementById('field').focus();
+    for (const where of ['document', 'body']) {
+      assert.deepEqual(
+        heard[where],
+        ['focusin one', 'focusout one', 'focusin two', 'focusout two', 'focusin field'],
+        where,
+      );
+    }
+  });
+});

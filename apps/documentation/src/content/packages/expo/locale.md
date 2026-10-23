@@ -27,10 +27,12 @@ import { Locale } from '@ng-native/expo/locale';
 
 ```ts
 import { Component, computed, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Locale } from '@ng-native/expo/locale';
 
 @Component({
   selector: 'app-date',
+  imports: [Text],
   template: `<text>{{ formatted() }}</text>`,
 })
 export class Date {

@@ -301,7 +301,7 @@ export class NgIcon {
 
   private draw(): void {
     const root = this.root();
-    for (const child of [...this.host.children]) this.renderer.removeChild(this.host, child);
+    for (const child of [...this.host.childList]) this.renderer.removeChild(this.host, child);
     if (!root) return;
 
     // Everything hangs off one group carrying the root's presentation attributes, which is how

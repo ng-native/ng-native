@@ -23,7 +23,7 @@ function resolvedStyle(
     parent,
     classes: new Set(own),
     props: {},
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,

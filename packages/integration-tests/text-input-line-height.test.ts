@@ -374,7 +374,7 @@ describe('a single-line iOS text input in a row aligned by baseline', () => {
     const other = engine.createElement('view');
     engine.setProp(other, 'style', { flexDirection: 'row', alignItems: 'center' });
     engine.appendChild(engine.root, other);
-    const infix = row.children[0]!;
+    const infix = row.childList[0]!;
     engine.removeChild(row, infix);
     engine.appendChild(other, infix);
     engine.commit();
@@ -388,7 +388,7 @@ describe('a single-line iOS text input in a row aligned by baseline', () => {
     const other = engine.createElement('view');
     engine.setProp(other, 'style', { flexDirection: 'row', alignItems: 'center' });
     engine.appendChild(engine.root, other);
-    const infix = row.children[0]!;
+    const infix = row.childList[0]!;
     engine.removeChild(row, infix);
     engine.appendChild(other, infix);
     engine.removeChild(engine.root, row);

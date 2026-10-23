@@ -21,8 +21,10 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/*.generated.ts',
-      // Scratch apps the tailwind tests make and delete while lint may be walking the same folder.
+      // Scratch apps and modules the tailwind and library-styles tests make and delete while lint
+      // may be walking the same folder.
       '**/.tailwind-*',
+      '**/.library-styles-*',
       '**/dist/**',
       '.claude/**',
       'examples/*/.expo/**',
@@ -37,6 +39,9 @@ export default tseslint.config(
       'packages/nx/files/**',
       // A library as ng-packagr builds it, kept byte for byte: the tests read what it really emits.
       'packages/integration-tests/fixtures/ng-packagr/**',
+      // Web Platform Tests as `packages/web-compat/wpt/fetch.mjs` checks them out: another
+      // project's files, in a cache git ignores.
+      'packages/web-compat/wpt/.cache/**',
     ],
   },
   {
@@ -96,6 +101,21 @@ export default tseslint.config(
               // Angular-facing package that may import another, and only the router.
               sourceTag: 'layer:angular-addon',
               onlyDependOnLibsWithTags: ['layer:runtime', 'layer:device', 'scope:router'],
+              bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
+            },
+            {
+              // A package that presents the engine to code written for another host. It sits on
+              // the platform as well as the engine, to extend the renderer, on the icons for the
+              // props react-native-svg's views read, which a library's drawing is drawn by, and on
+              // the device for the links the page's address follows. Nothing that ships depends
+              // on it.
+              sourceTag: 'layer:compat',
+              onlyDependOnLibsWithTags: [
+                'layer:runtime',
+                'scope:platform',
+                'scope:icons',
+                'layer:device',
+              ],
               bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
             },
             {
@@ -194,6 +214,11 @@ export default tseslint.config(
       // The Vite preset an app's build config imports, for the same reason: it is build tooling
       // shipped beside the package, and no file under `src` imports it.
       'packages/web/vite.mjs',
+      // `@ng-native/web-compat`'s tests mount real components through the test harness, for the
+      // same reason: its source imports neither.
+      'packages/web-compat/src/*.test.ts',
+      // And the process its Web Platform Tests runner brings an app up in, the same way.
+      'packages/web-compat/wpt/worker.mjs',
       // The other way round: `@ng-native/testing`'s own tests import the package by its name,
       // not by relative path, because they stand in for an app's tests and an app has no other
       // way in. A relative import would bypass the `exports` map those tests exist to prove.

@@ -373,6 +373,24 @@ describe('running a transition', () => {
     assert.equal(s.engine.animating, true);
   });
 
+  it('runs one a declaration changed in place by its name asks for, as the renderer sets it', () => {
+    // The renderer names the declaration it wrote: only that one is read for a transition.
+    const s = scene('view { opacity: 1 }');
+    const style: Record<string, unknown> = { opacity: 1 };
+    s.engine.setProp(s.view, 'style', style);
+    s.engine.commit();
+    const declarations = sheet('v { transition: opacity 100ms linear }').rules[0]!.declarations;
+    for (const [key, value] of Object.entries(declarations)) {
+      style[key] = value;
+      s.engine.styleChanged(s.view, key);
+    }
+    s.engine.commit();
+    style['opacity'] = 0;
+    s.engine.styleChanged(s.view, 'opacity');
+    s.engine.commit();
+    assert.equal(s.engine.animating, true);
+  });
+
   it('runs one a hot swap brings in, where the sheet it replaces had none', () => {
     const plain = sheet('view { opacity: 1 } view.faded { opacity: 0 }');
     const s = scene('view { width: 10px }');

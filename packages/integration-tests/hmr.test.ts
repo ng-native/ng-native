@@ -62,6 +62,26 @@ describe('Angular HMR', () => {
     assert.equal(instance.count(), 2, 'the component instance survived the swap');
   });
 
+  for (const name of ['Map', 'WeakMap', 'Object', 'Reflect', 'JSON']) {
+    it(`renders and swaps a component named ${name}, a global the HMR code also uses`, async () => {
+      // A class declaration in the file shadows the global of the same name for everything in it,
+      // the HMR code included, which would construct the component for its registry.
+      const source = readFileSync(fixture('counter.ts'), 'utf8').replaceAll('Counter', name);
+      // A file of its own, so the registry holds no other case's component under its name.
+      const filename = fixture(`counter-${name}.ts`);
+      const first = await evaluate(source, filename, fixture(`counter-${name}.hmr-a.generated.ts`));
+      const { fabric } = await render(first[name] as Type<unknown>);
+      assert.match(fabric.render(), /RawText "tap"/);
+      await evaluate(
+        source.replace('>tap<', '>tapped<'),
+        filename,
+        fixture(`counter-${name}.hmr-b.generated.ts`),
+      );
+      await settle();
+      assert.match(fabric.render(), /RawText "tapped"/);
+    });
+  }
+
   it('compiles a component whose path has an @ in it, as a scoped package in node_modules does', async () => {
     // The HMR compiler reads the class name back out of a `path@ClassName` id by the first `@`,
     // so `node_modules/@ng-native/...` came out as a function named after the path: a syntax

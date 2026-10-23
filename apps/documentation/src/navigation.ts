@@ -205,6 +205,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/locale', title: 'Locale' },
         { path: 'packages/expo/sensors', title: 'Sensors' },
         { path: 'packages/expo/keep-awake', title: 'Keep awake' },
+        { path: 'packages/expo/keyboard', title: 'Keyboard motion' },
         { path: 'packages/expo/app-info', title: 'App info' },
         { path: 'packages/expo/haptics', title: 'Haptics', group: 'Feedback' },
         { path: 'packages/expo/clipboard', title: 'Clipboard' },
@@ -270,6 +271,11 @@ export const PACKAGES: NavSection = {
       ],
     },
     {
+      path: 'packages/eslint-plugin',
+      title: 'ESLint',
+      summary: 'What compiles and does nothing on a device',
+    },
+    {
       path: 'packages/tailwind',
       title: 'Tailwind',
       summary: 'The presets, and the variants a touch device needs',
@@ -292,6 +298,16 @@ export const PACKAGES: NavSection = {
         { path: 'packages/web/islands', title: 'Islands' },
         { path: 'packages/web/storybook', title: 'Storybook' },
         { path: 'packages/web/limits', title: 'Web limits' },
+      ],
+    },
+    {
+      path: 'packages/web-compat',
+      title: 'Web compatibility',
+      summary: 'Component libraries written for a browser, on native views',
+      children: [
+        { path: 'packages/web-compat/supported-api', title: 'Supported API' },
+        { path: 'packages/web-compat/address-and-frames', title: 'Address and frames' },
+        { path: 'packages/web-compat/web-platform-tests', title: 'Web Platform Tests' },
       ],
     },
     {

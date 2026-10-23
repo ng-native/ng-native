@@ -46,6 +46,7 @@ import {
   NavigationEnd,
   NavigationError,
   PRIMARY_OUTLET,
+  ROUTER_CONFIGURATION,
   Router,
   createUrlTreeFromSnapshot,
   type Data,
@@ -58,6 +59,7 @@ import { NativeBack, isShowing } from './native-back.ts';
 import { navigationIntent, type NativeIntent } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
 import { PRESENTED, withoutPresented } from './presented-route.ts';
+import { poppingTo } from './popping-to.ts';
 import { markScreenRoute } from './tab-routes.ts';
 import { IN_TAB } from './in-tab.ts';
 import { ownHost } from './own-host.ts';
@@ -77,6 +79,8 @@ interface StackEntry {
   unbind: () => void;
   /** How the screen was put on screen, for a push from it to follow. */
   presentation?: ScreenPresentation;
+  /** The history entries putting it on screen added: none where it skipped or replaced one. */
+  entries?: 0 | 1;
   /** The navigation that put this screen on the stack, until that navigation ends. */
   activatedIn?: number;
   /** The navigation that covered this screen, until that navigation ends. */
@@ -94,6 +98,13 @@ interface StackEntry {
  * push inside that stack must see it as a pushed screen, not one to present over.
  */
 const presented = new WeakMap<object, number>();
+
+/**
+ * The history entries, per router, that the navigation in flight took screens off for. A
+ * navigation back to a screen holding a stack of its own drops screens in both stacks, and the
+ * rewind to its entry goes back over all of them, once.
+ */
+const rewinds = new WeakMap<object, { navigation: number; steps: number }>();
 
 /** What every screen needs to fill the stack, the same five keys RNSScreen itself expects. */
 const FILL = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 } as const;
@@ -161,6 +172,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * `RouterOutletContract` directly, which is how its own tests drive it.
    */
   private readonly router = inject(Router, { optional: true });
+  private readonly routerConfig = inject(ROUTER_CONFIGURATION, { optional: true });
   /** For a refused back to reach the screen as native's own report would. */
   private readonly engine = inject(HostEngine, { optional: true });
 
@@ -196,11 +208,8 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     // Android's back button, and `NativeNavigation.back()`. Declining at the bottom of the stack
     // is deliberate: the outlet this one sits in gets its turn, and when none takes it the
     // platform backgrounds the app, which is what a user expects, rather than the app swallowing
-    // the press and appearing stuck.
-    //
-    // Not yet verified on a device: whether react-native-screens' own Android back handling
-    // (`nativeBackButtonDismissalEnabled`) also pops the screen, which would make one press pop
-    // twice. If a back press ever skips a screen on Android, look here first.
+    // the press and appearing stuck. react-native-screens' Android stack leaves the button to JS;
+    // its header's back arrow comes through `onHeaderBack`.
     const back = this.back;
     const unsubscribeBack = back.handle((from) =>
       from === 'button' && this.refusesButton() ? true : this.goBack(),
@@ -461,6 +470,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       detached: false,
       unbind,
       presentation,
+      entries: this.entriesAdded(),
       activatedIn: navigation,
       inFront,
     });
@@ -566,7 +576,9 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       });
       this.applicationRef.attachView(ref.hostView);
     } else {
-      for (const above of this.entries.splice(index + 1)) this.drop(above);
+      const above = this.entries.splice(index + 1);
+      for (const entry of above) this.drop(entry);
+      if (above.length) this.rewindAfter(above);
       if (this.currentIntent()?.stack === 'reset') {
         this.supersede(this.entries.slice(0, index), this.navigationId());
       }
@@ -690,8 +702,56 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     this.superseded = { entries, navigation };
   }
 
+  /** The history entries the navigation in flight adds: none where it skips or replaces one. */
+  private entriesAdded(): 0 | 1 {
+    const extras = this.router?.getCurrentNavigation()?.extras;
+    return extras?.skipLocationChange || extras?.replaceUrl ? 0 : 1;
+  }
+
+  /**
+   * A navigation the history did not drive went back to a screen kept further down, taking
+   * `dropped` screens off: a back has already moved the history, and a navigation that skips the
+   * location change leaves it where it is.
+   */
+  private rewindAfter(dropped: readonly StackEntry[]): void {
+    const navigation = this.router?.getCurrentNavigation();
+    if (!navigation || navigation.trigger === 'popstate' || navigation.extras.skipLocationChange) {
+      return;
+    }
+    // A router that resolves a cancelled navigation by computing how far to go in history counts
+    // its own entries, and a rewind it did not make would put that count out of step.
+    if (this.routerConfig?.canceledNavigationResolution === 'computed') return;
+    // A screen restored from another outlet has no count here, and is taken to have added one.
+    const added = dropped.reduce((total, entry) => total + (entry.entries ?? 1), 0);
+    const pending = rewinds.get(this.router!);
+    if (pending?.navigation === navigation.id) pending.steps += added;
+    else
+      rewinds.set(this.router!, { navigation: navigation.id, steps: added + this.entriesAdded() });
+  }
+
+  /**
+   * Back to the kept screen's own entry, when it is the one that far back, with no popstate: the
+   * router is there already. The entry keeps its state, the screen's presentation with it, and
+   * takes the navigation's id, as the router writes one into the entry a back reaches. A stack in
+   * a tab whose history went through another tab has that tab's entry there, and is left as it is.
+   */
+  private rewind(navigation: number, steps: number): void {
+    const history = this.history;
+    if (!(history instanceof NativePlatformLocation)) return;
+    if (this.historyUrl(-steps) !== this.router!.url) return;
+    history.ɵrewind(steps);
+    const state = history.getState();
+    const own = state && typeof state === 'object' ? state : {};
+    history.replaceState({ ...own, navigationId: navigation }, '', history.ɵurlAt(0)!);
+  }
+
   /** A navigation succeeded: what it superseded goes, and what it did is no longer undoable. */
   private settle(navigation: number): void {
+    const pending = this.router && rewinds.get(this.router);
+    if (pending?.navigation === navigation) {
+      rewinds.delete(this.router!);
+      this.rewind(navigation, pending.steps);
+    }
     if (this.superseded?.navigation === navigation) {
       for (const entry of this.superseded.entries) this.remove(entry);
       this.superseded = null;
@@ -761,6 +821,11 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       (event: { nativeEvent?: { dismissCount?: number } }) =>
         dismissed(event?.nativeEvent?.dismissCount ?? 1),
     );
+    // Android's header back arrow pops the screen natively unless this is off, and then it ignores
+    // `preventNativeDismiss`, as its Back button does. Off, it is sent here instead, and goes the
+    // way Back does: react-navigation's native stack turns it off for the same reason.
+    this.renderer.setProperty(screen, 'nativeBackButtonDismissalEnabled', false);
+    this.renderer.listen(screen, 'headerBackButtonClicked', () => this.onHeaderBack(screen));
     // Every key is a prop `RNSScreen` already declares, spelled the way the codegen spec spells
     // it, so this forwards rather than translates. Set before the screen joins the stack: the
     // native side reads the presentation as it mounts.
@@ -831,6 +896,22 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private refusesButton(): boolean {
     if (this.entries.length < 2 || !this.isShowing()) return false;
     return this.refuseBack(this.top!.screen);
+  }
+
+  /**
+   * Android's header back arrow on `screen`: refused where the screen refuses, as Back is, and
+   * otherwise a step back, or the presented page dismissed when the screen is that page's.
+   * react-native-screens sends the arrow of a stack's first screen on the screen the stack sits
+   * in, which holds the top screen's refusal for it.
+   */
+  private onHeaderBack(screen: unknown): void {
+    if (screen === this.presentedPage?.screen) {
+      if (!this.refuseBack(screen)) this.dismissPresentedPage();
+      return;
+    }
+    // A tab behind keeps its top screen, but nobody can tap its arrow: like Back, it is not asked.
+    if (screen !== this.top?.screen || !this.isShowing()) return;
+    if (!this.refuseBack(screen)) this.goBack();
   }
 
   /** Refuses Android's Back for a screen that sets `preventNativeDismiss`, and tells its page. */
@@ -919,7 +1000,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       this.location.historyGo(-steps);
       return;
     }
-    void this.router!.navigateByUrl(url, { replaceUrl: true });
+    void this.navigateDownTo(below!);
   }
 
   /**
@@ -944,7 +1025,20 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       this.location.historyGo(-steps);
       return arrived;
     }
-    return this.router!.navigateByUrl(url, { replaceUrl: true });
+    return this.navigateDownTo(this.entries[index]!);
+  }
+
+  /**
+   * Send the router to `entry` by a navigation that replaces the entry, for a pop the history
+   * behind cannot make. With the same url on the stack twice, the reuse strategy is told which of
+   * the screens at it this is.
+   */
+  private navigateDownTo(entry: StackEntry): Promise<boolean> {
+    const router = this.router!;
+    poppingTo.set(router, entry.ref);
+    return router.navigateByUrl(this.urlOf(entry), { replaceUrl: true }).finally(() => {
+      if (poppingTo.get(router) === entry.ref) poppingTo.delete(router);
+    });
   }
 
   /** Whether the navigation that happens next succeeds. */

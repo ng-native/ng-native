@@ -17,6 +17,7 @@ import {
   type Routes,
   type UrlTree,
 } from '@angular/router';
+import { primarySegments, segmentCommands } from './url-commands.ts';
 
 /** The root outlet a page of another tab is presented in. */
 export const PRESENTED = 'presented';
@@ -130,25 +131,25 @@ function presentedCopy(chain: readonly Route[]): Route {
   };
 }
 
-/** The copies each router has, by the path they match. */
-const copies = new WeakMap<Router, Set<string>>();
-
 /**
  * The commands that present the page at `path` in the root's presented outlet, having given its
  * route a copy there, or null when the config is not one this follows.
  */
 export async function presentedCommands(router: Router, path: string): Promise<unknown[] | null> {
-  const segments = path.split('/').filter(Boolean);
-  const chain = await chainTo(router.config, segments);
+  // Parsed, so the routes are matched against decoded segments and the escapes are written once.
+  const parsed = primarySegments(router, path);
+  const segments = parsed.map((segment) => segment.path);
+  const config = router.config;
+  const chain = await chainTo(config, segments);
+  // Routes reset while lazy children loaded: the copy is made from the routes the router has.
+  if (router.config !== config) return presentedCommands(router, path);
   if (!chain || chain === STOP) return null;
   const copy = presentedCopy(chain);
-  const known = copies.get(router) ?? new Set<string>();
-  copies.set(router, known);
-  if (!known.has(copy.path!)) {
-    known.add(copy.path!);
-    router.config.push(copy);
-  }
-  return [{ outlets: { [PRESENTED]: segments } }];
+  const copied = router.config.some(
+    (route) => route.outlet === PRESENTED && route.path === copy.path,
+  );
+  if (!copied) router.config.push(copy);
+  return [{ outlets: { [PRESENTED]: parsed.flatMap(segmentCommands) } }];
 }
 
 /** `url` without the page presented over it: where the app is, under the page. */

@@ -65,7 +65,7 @@ export class Xray {
     const corners = new Map<string, number>();
     for (const el of root.querySelectorAll('*')) {
       const node = nodeOf(el);
-      if (!node || node.kind !== 'element' || node.el !== el) continue;
+      if (!node || node.nodeKind !== 'element' || node.el !== el) continue;
       const rect = el.getBoundingClientRect();
       if (!rect.width && !rect.height) continue;
       const box = document.createElement('div');

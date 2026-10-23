@@ -16,6 +16,9 @@ export class RepeatA {
 @Component({ selector: 'x-repeat-b', imports: [Text], template: `<text>B</text>` })
 export class RepeatB {}
 
+@Component({ selector: 'x-repeat-c', imports: [Text], template: `<text>C</text>` })
+export class RepeatC {}
+
 @Component({
   selector: 'x-repeat-shell',
   imports: [NativeStackOutlet],
@@ -27,6 +30,7 @@ export const repeatRoutes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'a' },
   { path: 'a', component: RepeatA },
   { path: 'b', component: RepeatB },
+  { path: 'c', component: RepeatC },
 ];
 
 @Component({

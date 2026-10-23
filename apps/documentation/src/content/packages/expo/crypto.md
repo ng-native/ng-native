@@ -27,10 +27,12 @@ import { Crypto, CryptoDigestAlgorithm, CryptoEncoding } from '@ng-native/expo/c
 
 ```ts
 import { Component, inject, signal } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { Crypto, CryptoDigestAlgorithm } from '@ng-native/expo/crypto';
 
 @Component({
   selector: 'app-new-note',
+  imports: [Pressable, Text],
   template: `<pressable (press)="create()"
     ><text>New note {{ id() }}</text></pressable
   >`,

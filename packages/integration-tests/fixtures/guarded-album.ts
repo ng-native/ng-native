@@ -9,12 +9,13 @@ import { Bar, Home, Library, TabStack } from './tab-stacks.ts';
   imports: [Text],
   template: `<text>album</text>`,
   host: {
-    '[preventNativeDismiss]': 'true',
+    '[preventNativeDismiss]': 'refusing()',
     '(nativeDismissCancelled)': 'attempts.set(attempts() + 1)',
   },
 })
 export class GuardedAlbum {
   readonly attempts = signal(0);
+  readonly refusing = signal(true);
   constructor() {
     albums.push(this);
   }

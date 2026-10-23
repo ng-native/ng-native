@@ -15,6 +15,14 @@ interface Fixture {
   alignment: { set(value: 'center' | 'topLeading' | 'bottomTrailing' | undefined): void };
 }
 
+/** SwiftUI's `foregroundStyle` in one colour, in the forms `@expo/ui` before and from 57.0.15 read. */
+const foreground = (color: string) => ({
+  $type: 'foregroundStyle',
+  style: { type: 'color', color },
+  styleType: 'color',
+  color,
+});
+
 const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) => [node, ...all(node.children)]);
 
@@ -55,12 +63,15 @@ describe('the typed SwiftUI shapes, label and link', () => {
     assert.equal(named('AccessoryWidgetBackgroundView').length, 1);
   });
 
-  it('send a label its title, symbol and colour, and a link its destination and label', async () => {
+  it('send a label its title and symbol, with its symbol in its colour, and a link its destination and label', async () => {
     const { named } = await boot('ios');
-    const label = named('LabelView')[0]!.props;
+    const [labelView] = named('LabelView');
+    const label = labelView!.props;
     assert.equal(label['title'], 'Padel');
     assert.equal(label['systemImage'], 'tennisball.fill');
-    assert.ok(label['color'], 'the colour reaches native');
+    // SwiftUI's label reads no colour: the symbol is drawn in it, as the label's icon.
+    const icon = all(labelView!.children).find((n) => n.viewName.endsWith('_ImageView'));
+    assert.deepEqual(icon?.props['modifiers'], [foreground('#d7f23c')]);
     const [labelled, wrapping] = named('LinkView');
     assert.equal(labelled!.props['destination'], 'padel://score');
     assert.equal(labelled!.props['label'], 'Score');

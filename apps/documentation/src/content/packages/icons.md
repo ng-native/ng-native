@@ -104,6 +104,11 @@ written as `url(#id)` and a `<use href="#id">` (or `xlink:href`) point at the el
 `id`. Anything outside it - a `<style>` block, a `<filter>`, a `<pattern>` - is left out of the
 drawing, with a warning in a development build that names the tag.
 
+Markup fetched at runtime is read and drawn in time that grows with its length, even when it is
+broken: a tag, a comment or a `transform` that never closes is given up once. Elements nested
+more than 32 deep are left out, with everything inside them, and a comment left open hides the
+rest of the markup, as it does in a browser. An icon nests two or three deep.
+
 A gradient in `<defs>` fills or strokes any shape that references it with `url(#id)`:
 
 ```ts

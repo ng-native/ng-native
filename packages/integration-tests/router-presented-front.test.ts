@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import { ErrorHandler, type Signal, type Type } from '@angular/core';
-import { Router, type Routes } from '@angular/router';
+import { Router, type Route, type Routes } from '@angular/router';
 import { cleanup, render, settle } from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
@@ -66,5 +66,68 @@ describe('the tab under a presented screen', () => {
     await settle();
     assert.equal(router.url, '/home');
     assert.equal(home.inFront(), true);
+  });
+});
+
+describe('a page of another tab presented after the routes are reset', () => {
+  it('is presented over home again, its route copied into the new config', async () => {
+    const { router, navigation } = await boot();
+    await navigation.present('/library/7', { as: 'formSheet' });
+    await settle();
+    navigation.back();
+    await settle();
+    await settle();
+    assert.equal(router.url, '/home');
+
+    router.resetConfig(mod['routes'] as Routes);
+    await navigation.present('/library/8', { as: 'formSheet' });
+    await settle();
+    assert.equal(router.url, '/home(presented:library/8)');
+  });
+});
+
+describe('a page of another tab presented while the routes are reset', () => {
+  it('copies the route from the routes the router has once its lazy children load', async () => {
+    let release: () => void = () => {};
+    const loaded = new Promise<void>((resolve) => (release = resolve));
+    const tab = (extra: Partial<Route>): Routes => [
+      {
+        path: '',
+        component: mod['Bar'] as Type<unknown>,
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'home' },
+          { path: 'home', component: mod['Home'] as Type<unknown> },
+          {
+            path: 'library',
+            component: mod['TabStack'] as Type<unknown>,
+            loadChildren: () =>
+              loaded.then(() => [
+                { path: '', component: mod['Library'] as Type<unknown> },
+                { path: ':id', component: mod['Album'] as Type<unknown> },
+              ]),
+            ...extra,
+          },
+        ],
+      },
+    ];
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(tab({})),
+        { provide: ErrorHandler, useValue: { handleError: () => {} } },
+      ],
+    });
+    await settle();
+    const router = app.componentRef.injector.get(Router);
+    const navigation = app.componentRef.injector.get(NativeNavigation);
+    assert.equal(router.url, '/home');
+
+    const presenting = navigation.present('/library/8', { as: 'formSheet' });
+    await settle();
+    router.resetConfig(tab({ canActivate: [() => false] }));
+    release();
+    await presenting.catch(() => false);
+    await settle();
+
+    assert.equal(router.url, '/home', 'the guard of the routes in place keeps the page out');
   });
 });

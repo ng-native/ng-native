@@ -188,6 +188,21 @@ export function createFakeFabric(): FakeFabric {
     ) as unknown as FabricNode;
   };
 
+  /**
+   * A clone with the children it was handed, as native takes them: in the call that makes it, as
+   * an array (`shadowNodeListFromValue`). Anything else is a mistake here, such as props passed
+   * where the children go, and native would read it as no list of views at all.
+   */
+  const holding = (parent: FabricNode, children: unknown): FabricNode => {
+    if (!Array.isArray(children)) throw new TypeError('A clone takes its children as an array.');
+    const into = parent as unknown as FakeFabricNode;
+    for (const child of children as FakeFabricNode[]) {
+      adopt(into.reactTag, child);
+      into.children.push(child);
+    }
+    return parent;
+  };
+
   const node = (
     reactTag: number,
     viewName: string,
@@ -227,17 +242,21 @@ export function createFakeFabric(): FakeFabric {
       calls.createNode++;
       return node(reactTag, viewName, props, instanceHandle) as unknown as FabricNode;
     },
-    cloneNodeWithNewChildren(n) {
+    cloneNodeWithNewChildren(n, ...children: unknown[]) {
       calls.cloneWithChildren++;
-      return clone(n);
+      // As `UIManagerBinding.cpp` reads it: no second argument is no children.
+      return holding(clone(n), children.length ? children[0] : []);
     },
     cloneNodeWithNewProps(n, newProps) {
       calls.cloneWithProps++;
       return clone(n, newProps, true);
     },
-    cloneNodeWithNewChildrenAndProps(n, newProps) {
+    cloneNodeWithNewChildrenAndProps(n, ...rest: unknown[]) {
       calls.cloneWithChildrenAndProps++;
-      return clone(n, newProps);
+      // As the binding reads it: with three arguments the children are the second, and with any
+      // other count there are none and the props are the second.
+      const [children, newProps] = rest.length === 2 ? rest : [[], rest[0]];
+      return holding(clone(n, newProps as object), children);
     },
     appendChild(parent, child) {
       const into = parent as unknown as FakeFabricNode;

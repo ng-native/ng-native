@@ -27,7 +27,12 @@ const { transformAngular } = require('@ng-native/metro/angular-transform.cjs') a
   transformAngular: (
     src: string,
     filename: string,
-    options?: { dev?: boolean; platform?: string; libraryStyles?: string[] | false },
+    options?: {
+      dev?: boolean;
+      platform?: string;
+      libraryStyles?: string[] | false;
+      projectRoot?: string;
+    },
   ) => { code: string };
 };
 const { transformAngularFileSync } = require('@oxc-angular/vite/api') as {
@@ -99,6 +104,166 @@ async function sheetOf(code: string, className: string): Promise<{ rules: Rule[]
   return (type?.['ɵnativeStyles'] as { rules: Rule[] } | undefined) ?? null;
 }
 
+const BAR = `import {Component} from '@angular/core';
+@Component({
+  selector: 'acme-bar',
+  template: '<text>bar</text>',
+  styles: [
+    '.bar { display: flex; gap: 4px }',
+    '.stack { display: flex; flex-direction: column }',
+    '.bar:active { display: inline-flex }',
+    '.box { display: block }',
+  ],
+})
+export class Bar {}`;
+
+/** What `run` returns with `name` set to `value` in the environment, or unset for undefined. */
+function withEnv<T>(name: string, value: string | undefined, run: () => T): T {
+  const before = process.env[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+  try {
+    return run();
+  } finally {
+    if (before === undefined) delete process.env[name];
+    else process.env[name] = before;
+  }
+}
+
+describe("a library's flex container, in an app that asked for a browser's rows", () => {
+  const source = partial(BAR, FILE);
+  const rows = async (asked: string | undefined) => {
+    const { code } = withEnv('ANGULAR_NATIVE_LIBRARY_BROWSER', asked, () =>
+      transformAngular(source, FILE, { dev: false, platform: 'ios', libraryStyles: ['@acme/ui'] }),
+    );
+    const sheet = (await sheetOf(code, 'Bar'))!;
+    return (sheet.rules as (Rule & { specificity: number })[])
+      .filter((rule) => 'flexDirection' in rule.declarations)
+      .map(({ compounds, specificity, declarations }) => ({
+        compounds,
+        specificity,
+        declarations,
+      }));
+  };
+
+  it('is a row under any rule that names a direction, where the sheet named none', async () => {
+    assert.deepEqual(await rows('@acme/ui'), [
+      { compounds: [{ classes: ['bar'] }], specificity: 0, declarations: { flexDirection: 'row' } },
+      {
+        compounds: [{ classes: ['stack'] }],
+        specificity: 1000,
+        declarations: { flexDirection: 'column', display: 'flex' },
+      },
+      {
+        compounds: [{ classes: ['bar'], pseudo: ['active'] }],
+        specificity: 0,
+        declarations: { flexDirection: 'row' },
+      },
+    ]);
+  });
+
+  it('is a column in a library the app did not name, beside one it did', async () => {
+    // A library written for native is listed for its styles too, and is not a browser's.
+    const row = (rule: { declarations: object }) =>
+      (rule.declarations as { flexDirection?: string }).flexDirection === 'row';
+    assert.equal((await rows('@other/web,@acme/ui')).filter(row).length, 2);
+    assert.equal((await rows('@other/web,@acme/ui-kit')).filter(row).length, 0);
+  });
+
+  it('is a column, as everywhere, in an app that did not ask', async () => {
+    assert.deepEqual(await rows(undefined), [
+      {
+        compounds: [{ classes: ['stack'] }],
+        specificity: 1000,
+        declarations: { flexDirection: 'column', display: 'flex' },
+      },
+    ]);
+  });
+
+  it("tells the app which elements are the named library's, by each selector that names one", async () => {
+    // A component's or a directive's, in any case, and never an attribute's: the element an
+    // attribute is on is somebody else's.
+    const widgets = `import {Component, Directive} from '@angular/core';
+@Component({ selector: 'acme-bar, acme-Wide[tone], [acmeBar], button[acme-bar]', template: '' })
+export class Bar {}
+@Directive({ selector: 'acme-title, [acme-title], .acme-title:not(acme-skip)' })
+export class Title {}`;
+    const source = transformAngularFileSync(widgets, FILE, { compilationMode: 'partial' }).code;
+    const names = async (named: string | undefined) => {
+      const globals = globalThis as { ɵngNativeBrowserElements?: Set<string> };
+      try {
+        const options = { dev: false, platform: 'ios', libraryStyles: ['@acme/ui'] };
+        const { code } = withEnv('ANGULAR_NATIVE_LIBRARY_BROWSER', named, () =>
+          transformAngular(source, FILE, options),
+        );
+        await load(code);
+        return [...(globals.ɵngNativeBrowserElements ?? [])].sort();
+      } finally {
+        delete globals.ɵngNativeBrowserElements;
+      }
+    };
+    assert.deepEqual(await names('@acme/ui'), ['acme-bar', 'acme-title', 'acme-wide', 'button']);
+    assert.deepEqual(await names('@other/web'), [], 'a library the app did not name');
+    assert.deepEqual(await names(undefined), []);
+  });
+});
+
+describe("an app's own directory, named as written for a browser", () => {
+  it("tells the app which elements are its components'", () => {
+    // Components copied into the app, as Spartan UI's are: written for a browser, and no package.
+    const widget = `import {Component} from '@angular/core';
+@Component({ selector: 'hlm-panel, [hlmPanel]', template: '' })
+export class Panel {}`;
+    const named = (file: string, directories: string | undefined, projectRoot?: string) =>
+      withEnv('ANGULAR_NATIVE_SOURCE_BROWSER', directories, () => {
+        const { code } = transformAngular(widget, file, {
+          dev: false,
+          platform: 'ios',
+          projectRoot,
+        });
+        return /ɵngNativeBrowserElements[^\n]*\["hlm-panel"\]/.test(code);
+      });
+    const both = ['/app/src/other', '/app/src/helm'].join(path.delimiter);
+    assert.equal(named('/app/src/helm/panel/panel.ts', both), true);
+    // Metro names a file from the project it is in.
+    assert.equal(named('src/helm/panel/panel.ts', both, '/app'), true);
+    assert.equal(named('/app/src/helmet/panel.ts', both), false, 'a directory beside it');
+    assert.equal(named('/app/src/page/panel.ts', both), false);
+    assert.equal(named('/app/src/helm/panel/panel.ts', undefined), false);
+    // A directory written with its separator at the end is the same directory, and an empty
+    // entry, from a separator doubled or left at the end of the list, names none.
+    assert.equal(named('/app/src/helm/panel/panel.ts', `/app/src/helm${path.sep}`), true);
+    const empty = ['', '/app/src/helm', ''].join(path.delimiter);
+    assert.equal(named('/app/src/page/panel.ts', empty), false, 'an empty entry');
+  });
+
+  it("reads its component styles as a browser does, and no other directory's", () => {
+    // An example copied from a library's documentation: a flex container that is a row, and a
+    // rule that does not parse, which is dropped and not a failed build.
+    const widget = (styles: string) => `import {Component} from '@angular/core';
+@Component({ selector: 'hlm-bar', template: '<view class="row"></view>', styles: '${styles}' })
+export class Bar {}`;
+    const compiled = (file: string, styles: string, projectRoot?: string) =>
+      withEnv('ANGULAR_NATIVE_SOURCE_BROWSER', '/app/src/helm', () =>
+        warned(() => {
+          const options = { dev: false, platform: 'ios', projectRoot };
+          return transformAngular(widget(styles), file, options).code;
+        }),
+      ).result;
+    const broken = '.row { display: flex } ..broken { top: 0 }';
+    assert.match(compiled('/app/src/helm/bar.ts', broken), /"flexDirection":"row"/);
+    // Metro names a file from the project it is in.
+    assert.match(compiled('src/helm/bar.ts', broken, '/app'), /"flexDirection":"row"/);
+    // The app's own component: its flex container is a column, and CSS that does not parse
+    // fails the build.
+    assert.doesNotMatch(
+      compiled('/app/src/page/bar.ts', '.row { display: flex }'),
+      /"flexDirection"/,
+    );
+    assert.throws(() => compiled('/app/src/page/bar.ts', broken));
+  });
+});
+
 describe("a library's component CSS, opted in", () => {
   const source = partial(CHIP, FILE);
 
@@ -114,7 +279,13 @@ describe("a library's component CSS, opted in", () => {
     assert.deepEqual(
       sheet.rules.map((rule) => rule.declarations),
       [
-        { display: 'flex', paddingTop: 4, paddingRight: 8, paddingBottom: 4, paddingLeft: 8 },
+        {
+          display: 'inline-flex',
+          paddingTop: 4,
+          paddingRight: 8,
+          paddingBottom: 4,
+          paddingLeft: 8,
+        },
         // `background: <colour>` as the library wrote it, which says there is no image too.
         {
           backgroundColor: 'rgb(250, 115, 25)',
@@ -441,6 +612,50 @@ describe("a library's sheet, attached to its definition", () => {
   });
 });
 
+describe("a library's ::before and ::after, in a build told the library is a browser's", () => {
+  const BOX = `import {Component} from '@angular/core';
+@Component({
+  selector: 'acme-box',
+  template: '<text>box</text>',
+  styles: ['.box::before { content: ""; width: 2px }'],
+})
+export class Box {}`;
+  const source = partial(BOX, FILE);
+  const compiled = async (named: string | undefined) => {
+    const before = process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+    if (named === undefined) delete process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+    else process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'] = named;
+    try {
+      const { result, warnings } = warned(() =>
+        transformAngular(source, FILE, {
+          dev: false,
+          platform: 'ios',
+          libraryStyles: ['@acme/ui'],
+        }),
+      );
+      return { sheet: await sheetOf(result.code, 'Box'), warnings };
+    } finally {
+      if (before === undefined) delete process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+      else process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'] = before;
+    }
+  };
+
+  it('draws them for a library the build names among others', async () => {
+    const { sheet } = await compiled('@other/web,@acme/ui');
+    const box = sheet!.rules.find((rule) => 'content' in rule.declarations)!;
+    assert.deepEqual(box.compounds, [{ classes: ['box'] }, { classes: [], type: '::before' }]);
+    assert.deepEqual(box.declarations, { content: '', width: 2 });
+  });
+
+  it('drops them, as for any sheet, for a library the build does not name', async () => {
+    for (const named of [undefined, '@other/web']) {
+      const { sheet, warnings } = await compiled(named);
+      assert.equal(sheet, null);
+      assert.match(warnings.join('\n'), /pseudo-element/);
+    }
+  });
+});
+
 describe('CSS a library writes that does not parse', () => {
   it('drops that rule with a warning and keeps the rest, as Chrome does', async () => {
     // Chrome 154 drops `.ripple::after:not(:empty)` and applies `.ripple` and `:host`.
@@ -679,12 +894,19 @@ describe("an @ng-native package's own components, installed from npm", () => {
     );
   });
 
-  it('gives <touchable-opacity> its resting opacity and fade, with no libraryStyles', () => {
+  it('gives <touchable-opacity> its pressed opacity and fade, with no libraryStyles', () => {
     const { code, warnings } = published('touchable-opacity.js');
     assert.deepEqual(warnings, []);
-    const rules = attached(code).rules;
+    const rules = attached(code).rules as {
+      declarations: Record<string, unknown>;
+      deferred?: { props: string[] }[];
+    }[];
     assert.ok(
-      rules.some((rule) => 'opacity' in (rule.declarations as Record<string, unknown>)),
+      rules.some((rule) => rule.deferred?.some((d) => d.props.includes('opacity'))),
+      JSON.stringify(rules),
+    );
+    assert.ok(
+      rules.some((rule) => '$transition' in rule.declarations),
       JSON.stringify(rules),
     );
   });

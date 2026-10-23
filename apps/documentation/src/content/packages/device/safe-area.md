@@ -10,10 +10,12 @@ indicator, a rounded corner, and on Android the display cutout and the navigatio
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable } from '@ng-native/components';
 import { SafeArea } from '@ng-native/device';
 
 @Component({
   selector: 'app-floating-button',
+  imports: [Pressable],
   template: `<pressable
     [style.marginBottom]="safeArea.insets().bottom + 16"
     (press)="onPress()"
@@ -38,6 +40,9 @@ has measured. `frame` is the provider's own frame - the area it was handed to la
 Android 15 includes the system bars because the app draws behind them. `Screen.window` reads `frame`
 rather than `Dimensions` for that reason; see the [screen](/packages/device/screen) page. `known()`
 tells you whether a real measurement has arrived yet, for a layout that would rather wait than jump.
+When the provider that reported is destroyed, all three take what another provider still up last
+reported, and with none they go back to where they started and the `--safe-area-inset-*` custom
+properties go back to zero, so `Screen.window` follows `Dimensions` again until a provider reports.
 
 Most layouts should not read `SafeArea` at all. A
 [`<safe-area-view>`](/packages/components/safe-area) applies the insets natively, in the same layout
@@ -45,8 +50,8 @@ pass as everything else, without a round trip through JavaScript, and a screen i
 its header do it. Inject `SafeArea` for what neither covers: a floating button that must clear the
 home indicator, a scroll view computing its own content inset, a sheet drawing its own chrome.
 
-`report()` is called by `<safe-area-provider>`, not by an app. An inset written from anywhere else
-is a number that stops matching the screen the moment the device rotates.
+`report()` and `withdraw()` are called by `<safe-area-provider>`, not by an app. An inset written
+from anywhere else is a number that stops matching the screen the moment the device rotates.
 
 ## Off a device and on the web
 

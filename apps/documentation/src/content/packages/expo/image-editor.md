@@ -29,11 +29,13 @@ import { ImageEditor, SaveFormat, FlipType } from '@ng-native/expo/image-editor'
 
 ```ts
 import { Component, inject, signal } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { ImagePicker } from '@ng-native/expo/image-picker';
 import { ImageEditor, SaveFormat } from '@ng-native/expo/image-editor';
 
 @Component({
   selector: 'app-avatar',
+  imports: [Pressable, Text],
   template: `<pressable (press)="choose()"><text>Choose a photo</text></pressable>`,
 })
 export class Avatar {

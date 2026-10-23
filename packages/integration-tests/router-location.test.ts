@@ -87,6 +87,30 @@ describe('native platform location', () => {
     assert.deepEqual(popped, []);
   });
 
+  it('rewinds to an earlier entry without a popstate, keeping the ones ahead as forward', () => {
+    location.pushState({ step: 1 }, '', '/a');
+    location.pushState({ step: 2 }, '', '/b');
+    location.pushState({ step: 3 }, '', '/a');
+
+    location.ɵrewind(2);
+    assert.equal(location.href, '/a');
+    assert.deepEqual(location.getState(), { step: 1 });
+    assert.deepEqual(popped, [], 'the router is on that url already');
+    location.forward();
+    assert.equal(location.href, '/b');
+  });
+
+  it('ignores a rewind past the start, or forward', () => {
+    location.pushState(null, '', '/a');
+    location.pushState(null, '', '/b');
+    location.back();
+
+    location.ɵrewind(2);
+    assert.equal(location.href, '/a');
+    location.ɵrewind(-1);
+    assert.equal(location.href, '/a');
+  });
+
   it('stops notifying once a listener unsubscribes', () => {
     const stop = location.onPopState(() => popped.push('second'));
     stop();

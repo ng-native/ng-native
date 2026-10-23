@@ -112,7 +112,8 @@ function fromNumber(value: number): TokenValue | undefined {
  * it can take, as the build-time conversion gives, and a use site reads the one it needs.
  */
 function fromWord(text: string): TokenValue {
-  const weight = WEIGHTS[text.toLowerCase()];
+  const lower = text.toLowerCase();
+  const weight = Object.hasOwn(WEIGHTS, lower) ? WEIGHTS[lower] : undefined;
   return {
     keyword: text,
     ...(isNamedColor(text) ? { color: text } : {}),
@@ -235,7 +236,24 @@ function withUnit(text: string): TokenValue | undefined {
  * not a colour native can draw.
  */
 function withTokens(text: string): TokenValue {
+  if (nestsTooDeep(text)) return { keyword: text };
   return fromVar(text) ?? derivedToken(text) ?? { keyword: text };
+}
+
+/**
+ * How deep a value's brackets may nest for its tokens to be read. Each level is a call deeper in
+ * the reading, and in working the value out after, so a few thousand, in text from a server,
+ * would overflow the stack in the middle of a binding. A stylesheet's deepest is a handful.
+ */
+const MAX_NESTING = 32;
+
+function nestsTooDeep(text: string): boolean {
+  let depth = 0;
+  for (const char of text) {
+    if (char === '(' && ++depth > MAX_NESTING) return true;
+    if (char === ')') depth--;
+  }
+  return false;
 }
 
 export function tokenFromValue(value: unknown): TokenValue | undefined {

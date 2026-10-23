@@ -342,6 +342,31 @@ describe('HTML elements in a template', () => {
       assert.deepEqual(now(), { View: [{ Paragraph: ['"First"'] }] });
     });
 
+    it('is a view around the text elements it stacks, as a column of them', () => {
+      // A field's label: `<label><p>Name</p><p>As on your passport</p></label>`, the label a
+      // flex column. Each is an item on a line of its own, where one paragraph runs them on.
+      const sheet = compileCss('.col { display: flex; flex-direction: column }', 'flex');
+      const label = engine.createElement('label', sheet);
+      engine.setClasses(label, 'col');
+      for (const words of ['Name', 'As on your passport']) {
+        const line = engine.createElement('p');
+        engine.appendChild(line, engine.createText(words));
+        engine.appendChild(label, line);
+      }
+      commit(label);
+      const now = () => {
+        engine.commit();
+        return shape(fabric.committed[0]!);
+      };
+      assert.deepEqual(now(), {
+        View: [{ Paragraph: ['"Name"'] }, { Paragraph: ['"As on your passport"'] }],
+      });
+      engine.setClasses(label, '');
+      assert.deepEqual(now(), {
+        Paragraph: [{ VirtualText: ['"Name"'] }, { VirtualText: ['"As on your passport"'] }],
+      });
+    });
+
     it('leaves a <text> a paragraph, whose own it is to lay out', () => {
       assert.deepEqual(shape(commit(styled(CENTRED, 'text'))), { Paragraph: ['"AH"'] });
     });

@@ -1,0 +1,127 @@
+name: Web Platform Tests
+
+# `@ng-native/web-compat` against the Web Platform Tests it records expectations for
+# (packages/web-compat/wpt). `--check` fails where a file passes less than recorded, and as much
+# where it passes more or has other subtests: an improvement is recorded with `--update` in the
+# change that made it, so the expectations never go stale.
+#
+# Only when what the tests run on changed: the package and the device and icons packages it
+# imports, the engine and the renderer under it, the layout the page is laid out with, the testing
+# package and the loader the runner starts its processes with, the Metro transform that compiles
+# the components, the lockfile, and this workflow and the setup it uses.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/web-compat/**'
+      - '!packages/web-compat/**/*.md'
+      - 'packages/fabric/src/**'
+      - 'packages/fabric/package.json'
+      - 'packages/platform/src/**'
+      - 'packages/platform/package.json'
+      - 'packages/integration-tests/laid-out-fabric.ts'
+      - 'packages/integration-tests/layout.ts'
+      - 'packages/testing/src/**'
+      - 'packages/testing/runner/**'
+      - 'packages/testing/package.json'
+      - 'packages/device/src/**'
+      - 'packages/device/package.json'
+      - 'packages/icons/src/**'
+      - 'packages/icons/package.json'
+      - 'packages/metro/**'
+      - '!packages/metro/**/*.md'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/wpt.yml'
+      - '.github/actions/setup/**'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'packages/web-compat/**'
+      - '!packages/web-compat/**/*.md'
+      - 'packages/fabric/src/**'
+      - 'packages/fabric/package.json'
+      - 'packages/platform/src/**'
+      - 'packages/platform/package.json'
+      - 'packages/integration-tests/laid-out-fabric.ts'
+      - 'packages/integration-tests/layout.ts'
+      - 'packages/testing/src/**'
+      - 'packages/testing/runner/**'
+      - 'packages/testing/package.json'
+      - 'packages/device/src/**'
+      - 'packages/device/package.json'
+      - 'packages/icons/src/**'
+      - 'packages/icons/package.json'
+      - 'packages/metro/**'
+      - '!packages/metro/**/*.md'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/wpt.yml'
+      - '.github/actions/setup/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      # The commit the expectations were recorded at, read from where the runner reads it. On its
+      # own line, so a failure to read it fails the step rather than keying the cache on nothing.
+      - id: pin
+        run: |
+          commit=$(node --input-type=module -e "import { COMMIT } from './packages/web-compat/wpt/pin.mjs'; console.log(COMMIT)")
+          test -n "$commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      # The checkout of that commit, kept between runs. Keyed by the commit and by pin.mjs as a
+      # whole, which lists the directories checked out: a suite added is a new checkout.
+      - id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: packages/web-compat/wpt/.cache/
+          key: wpt-${{ steps.pin.outputs.commit }}-${{ hashFiles('packages/web-compat/wpt/pin.mjs') }}
+
+      # Always: it does nothing on a checkout it stamped as whole that is still at the pinned commit
+      # with nothing changed, and fetches again otherwise. It exits non-zero on a fetch that failed
+      # or came back short, and the runner does not run without its stamp.
+      - run: node packages/web-compat/wpt/fetch.mjs
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: packages/web-compat/wpt/.cache/
+          key: wpt-${{ steps.pin.outputs.commit }}-${{ hashFiles('packages/web-compat/wpt/pin.mjs') }}
+
+      # The suites of the DOM, selectors, the CSSOM and IntersectionObserver: about five minutes on
+      # a laptop, where every suite in pin.mjs takes over eight, most of it files waiting out their
+      # time limit. IntersectionObserver is here because what an app's frames and commits do moves
+      # it, and a change elsewhere has moved it unseen before. The rest (events, geometry, the
+      # other observers, canvas, parsing) is the full run, which a change to them runs locally
+      # before it opens: see CONTRIBUTING.md. A filter is whole for what it matches: a recorded
+      # file in these suites that is not run fails the check.
+      - name: Check the Web Platform Tests against the expectations
+        run: >-
+          node packages/web-compat/wpt/run.mjs --check
+          dom/nodes/ dom/collections/ dom/traversal/ css/selectors/ css/cssom/ html/dom/ domparsing/
+          intersection-observer/
+
+      # What this run found, to compare with the checked-in summary.txt.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpt-results
+          path: |
+            packages/web-compat/wpt/.cache/summary.txt
+            packages/web-compat/wpt/.cache/results.json
+          if-no-files-found: ignore
+          retention-days: 7

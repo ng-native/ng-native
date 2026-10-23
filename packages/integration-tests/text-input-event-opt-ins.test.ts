@@ -1,8 +1,9 @@
 /**
  * The events Android's text field sends only when a prop asks for them. `ReactTextInputManager`
- * watches content size, scrolling and key presses behind `onContentSizeChange`, `onScroll` and
- * `onKeyPress` props, which React Native's `TextInput.js` sets by passing a handler through. A
- * listener here is not a prop, so without the opt-in none of the three ever fires on Android.
+ * watches content size, scrolling, key presses and the selection behind `onContentSizeChange`,
+ * `onScroll`, `onKeyPress` and `onSelectionChange` props, which React Native's `TextInput.js` sets
+ * by passing a handler through. A listener here is not a prop, so without the opt-in none of them
+ * ever fires on Android.
  */
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -65,6 +66,18 @@ describe("a text input's events that Android sends only on request", () => {
       assert.deepEqual(instance.sizes, [60]);
       assert.equal(instance.scrolls, 1);
       assert.deepEqual(instance.keys, ['a']);
+    } finally {
+      registerPlatformComponents('ios');
+    }
+  });
+
+  it('include selection changes, asked for on every Android field as RN always passes its handler', async () => {
+    registerPlatformComponents('android');
+    try {
+      await fields();
+      // The component listens itself, to put a bound selection back when the caret moves.
+      assert.equal(screen.getByTestId('listened').props['onSelectionChange'], true);
+      assert.equal(screen.getByTestId('quiet').props['onSelectionChange'], true);
     } finally {
       registerPlatformComponents('ios');
     }

@@ -42,6 +42,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
   rmSync,
 } from 'node:fs';
@@ -63,24 +64,18 @@ if (unread.length) {
   );
 }
 
-/** Every package that would go to npm, plus the template. */
+/**
+ * Every package that would go to npm, plus the template: each under `packages/` its manifest does
+ * not mark private, so a new package is checked from the day it is added.
+ */
 const PUBLISHED = [
-  'packages/analog',
-  'packages/components',
-  'packages/device',
-  'packages/expo',
-  'packages/fabric',
-  'packages/icons',
-  'packages/metro',
-  'packages/migrate',
-  'packages/nativescript',
-  'packages/nx',
-  'packages/platform',
-  'packages/router',
-  'packages/schematics',
-  'packages/tailwind',
-  'packages/testing',
-  'packages/web',
+  ...readdirSync(path.join(root, 'packages'))
+    .sort()
+    .map((name) => `packages/${name}`)
+    .filter((dir) => {
+      const manifest = path.join(root, dir, 'package.json');
+      return existsSync(manifest) && JSON.parse(readFileSync(manifest, 'utf8')).private !== true;
+    }),
   'template',
 ];
 
@@ -215,6 +210,35 @@ function check(app, { pm = 'pnpm', latest = false } = {}) {
   console.log('testing');
   run(pm, ['test'], app);
 
+  // ESLint set up as the eslint-plugin docs page tells an app from the template to, from the
+  // registry: clean on the template's own source, and failing on a file that does what the rules
+  // are there to catch.
+  console.log('adding ESLint as its docs page says, and linting');
+  // `@local`, the tag `publishAll` gives what it publishes here.
+  const lint = ['eslint', 'typescript-eslint', 'angular-eslint', '@ng-native/eslint-plugin@local'];
+  run(pm, [pm === 'npm' ? 'install' : 'add', '--save-dev', ...lint], app);
+  writeFileSync(
+    path.join(app, 'eslint.config.mjs'),
+    "import ngNative from '@ng-native/eslint-plugin';\n\n" +
+      "export default [{ ignores: ['.expo/', 'ios/', 'android/', 'dist/'] }, ...ngNative.configs.recommended];\n",
+  );
+  run('npx', ['eslint', '.'], app);
+  const probe = path.join(app, 'src/app/lint-probe.ts');
+  writeFileSync(
+    probe,
+    "import { Component } from '@angular/core';\n" +
+      "@Component({ selector: 'app-probe', template: '<pressable (click)=\"go()\" />' })\n" +
+      'export class Probe { go() {} }\n',
+  );
+  try {
+    run('npx', ['eslint', '.'], app);
+    throw new Error('lint passed a (click) on a <pressable>: the rules did not run');
+  } catch (error) {
+    if (!String(error.stdout ?? error.message).includes('@ng-native/no-dom-events')) throw error;
+  } finally {
+    rmSync(probe);
+  }
+
   console.log('bundling');
   const modules = bundle(
     'npx',
@@ -307,13 +331,21 @@ async function angularWorkspace(dir, { latest = false } = {}) {
     run('npx', ['--yes', '@angular/cli@22', 'new', 'web', '--defaults', '--skip-git'], dir, false),
   );
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
-  run('npx', ['ng', 'add', '@ng-native/schematics@local', '--skip-confirmation'], workspace, false);
+  // With the linter, so `ng lint native` below runs on what `--linter=eslint` installs.
+  run(
+    'npx',
+    ['ng', 'add', '@ng-native/schematics@local', '--skip-confirmation', '--linter=eslint'],
+    workspace,
+    false,
+  );
   if (latest) {
     console.log('npm install, again');
     install('npm', workspace);
   }
   console.log('testing the web app and the native one');
   run('npx', ['ng', 'test', '--watch=false'], workspace);
+  console.log('ng lint native');
+  run('npx', ['ng', 'lint', 'native'], workspace);
   console.log('ng build native');
   const modules = bundle('npx', ['ng', 'build', 'native', '--platform', 'ios'], workspace);
   if (latest) {
@@ -380,7 +412,13 @@ async function nxWorkspace(
   if (pm === 'pnpm') run('pnpm', ['approve-builds', '--all'], workspace);
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
   run('npx', ['nx', 'add', '@ng-native/nx@local'], workspace, false);
-  run('npx', ['nx', 'g', '@ng-native/nx:app', 'apps/mobile', '--no-interactive'], workspace, false);
+  // With the linter, so the `lint` target below runs on what `--linter=eslint` installs.
+  run(
+    'npx',
+    ['nx', 'g', '@ng-native/nx:app', 'apps/mobile', '--no-interactive', '--linter=eslint'],
+    workspace,
+    false,
+  );
   // `mobile`, or `@monorepo/mobile` where the root package is scoped, as the TypeScript preset's is.
   const project = readJson(path.join(workspace, 'apps/mobile/package.json')).name;
   if (latest) {
@@ -388,8 +426,8 @@ async function nxWorkspace(
     console.log(`${pm} install, again`);
     install(pm, workspace);
   }
-  console.log('typechecking and testing');
-  run('npx', ['nx', 'run-many', '-t', 'typecheck', 'test', '-p', project], workspace);
+  console.log('typechecking, testing and linting');
+  run('npx', ['nx', 'run-many', '-t', 'typecheck', 'test', 'lint', '-p', project], workspace);
   console.log(`nx export ${project}`);
   const modules = bundle('npx', ['nx', 'export', project, '--platform', 'ios'], workspace);
   if (latest) {

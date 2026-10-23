@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { Route, Router, Routes } from '@angular/router';
+import { DefaultUrlSerializer, type Route, type Router, type Routes } from '@angular/router';
 import { PRESENTED, presentedCommands } from '../router/src/presented-route.ts';
 
 class Bar {}
@@ -17,7 +17,9 @@ const signedIn = () => true;
 const mayRead = () => true;
 const owner = () => true;
 
-const routerWith = (config: Routes) => ({ config }) as unknown as Router;
+const serializer = new DefaultUrlSerializer();
+const routerWith = (config: Routes) =>
+  ({ config, parseUrl: (url: string) => serializer.parse(url) }) as unknown as Router;
 
 const tabs = (): Routes => [
   {
@@ -61,6 +63,41 @@ describe('the route a presented page gets at the root', () => {
     await presentedCommands(router, '/invoices/7');
     await presentedCommands(router, '/invoices/8');
     assert.equal(router.config.length, 2);
+    await presentedCommands(router, '/invoices');
+    assert.equal(router.config.length, 3, 'and once more for a page under another path');
+  });
+
+  it('is made though a route of the primary outlet has the same path', async () => {
+    const router = routerWith([...tabs(), { path: 'invoices/:id', component: List }]);
+    await presentedCommands(router, '/invoices/7');
+    const copy = router.config.at(-1) as Route;
+    assert.equal(copy.outlet, PRESENTED);
+    assert.equal(copy.component, Detail);
+  });
+
+  it('is made from the routes in place when they are reset while lazy children load', async () => {
+    let release: () => void = () => {};
+    const loaded = new Promise<void>((resolve) => (release = resolve));
+    const lazy = (guard: () => boolean): Routes => [
+      {
+        path: '',
+        component: Bar,
+        children: [
+          {
+            path: 'orders',
+            canActivate: [guard],
+            loadChildren: () => loaded.then(() => [{ path: ':id', component: Detail }]),
+          },
+        ],
+      },
+    ];
+    const router = routerWith(lazy(signedIn));
+    const presenting = presentedCommands(router, '/orders/7');
+    router.config = lazy(owner);
+    release();
+    assert.deepEqual(await presenting, [{ outlets: { [PRESENTED]: ['orders', '7'] } }]);
+    assert.equal(router.config.length, 2);
+    assert.deepEqual((router.config.at(-1) as Route).canActivate, [owner]);
   });
 
   it('is the first screen of a tab, for the tab s own url', async () => {

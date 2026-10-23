@@ -40,7 +40,7 @@ export class NativeHeaderItem {
   constructor() {
     const node = inject(ElementRef).nativeElement as EngineNode;
     ownHost(node, this.constructor);
-    const engine = (node.host ?? inject(HostEngine)) as Partial<Engine>;
+    const engine = (node.engine ?? inject(HostEngine)) as Partial<Engine>;
     if (nativePlatform() === 'ios') {
       effect(() => {
         engine.setDefaultStyle?.(node, this.slot() === 'center' ? TITLE_LEAST : undefined);

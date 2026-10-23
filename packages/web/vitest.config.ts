@@ -20,7 +20,7 @@ import { playwright } from '@vitest/browser-playwright';
 import type { CDPSession } from 'playwright';
 import { angular } from '@oxc-angular/vite';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vitest/config';
+import { defineConfig, type Plugin } from 'vitest/config';
 import type { BrowserCommand } from 'vitest/node';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -96,8 +96,23 @@ const tailwind3: BrowserCommand<[classes: string, prefix: string]> = (_, classes
   }
 };
 
+/**
+ * Removes, as Vitest closes, the copy of every module it ran that it leaves in the system temp
+ * directory, as `ngNative()` from `@ng-native/testing/vitest` does for an app's suite (see
+ * `removeModuleCopies` there). `_tmpDir` is Vitest's own and unexported.
+ */
+const removeModuleCopies: Plugin = {
+  name: 'remove-module-copies',
+  configureVitest({ vitest }) {
+    const dir: unknown = (vitest as unknown as { _tmpDir?: unknown })._tmpDir;
+    if (typeof dir !== 'string' || path.dirname(dir) !== path.resolve(tmpdir())) return;
+    vitest.onClose(() => rmSync(dir, { recursive: true, force: true }));
+  },
+};
+
 export default defineConfig({
   plugins: [
+    removeModuleCopies,
     angular({
       workspaceRoot: path.resolve(dirname, '../..'),
       zoneless: true,

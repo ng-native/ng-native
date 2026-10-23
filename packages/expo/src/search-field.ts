@@ -156,7 +156,7 @@ export class SearchField {
     });
     if (this.missing) warnMissing();
     const host =
-      (this.node as { host?: Pick<Engine, 'setEventListener'> }).host ?? inject(HostEngine);
+      (this.node as { engine?: Pick<Engine, 'setEventListener'> }).engine ?? inject(HostEngine);
     const listen = (event: string, handle: (payload: Record<string, unknown>) => void) =>
       host.setEventListener(this.node, event, (raw) =>
         handle((raw as NativeSyntheticEvent<Record<string, unknown>>)?.nativeEvent ?? {}),

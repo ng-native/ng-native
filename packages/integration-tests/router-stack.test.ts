@@ -184,6 +184,58 @@ describe('a native stack driven by the router', () => {
       assert.deepEqual(stack(fabric), ['home', 'user 1']);
     });
 
+    it('decodes an escaped character in the url string, as navigateByUrl does', async () => {
+      assert.equal(await nav.push('/user/a%20b'), true);
+      await idle();
+      assert.equal(router.url, '/user/a%20b');
+      assert.deepEqual(stack(fabric), ['home', 'user a b']);
+    });
+
+    it('reads matrix parameters written into the url string', async () => {
+      assert.equal(await nav.push('/user/1;tab=posts'), true);
+      await idle();
+      assert.equal(router.url, '/user/1;tab=posts');
+      assert.deepEqual(stack(fabric), ['home', 'user 1']);
+    });
+
+    it('keeps matrix parameters named as navigate commands are', async () => {
+      // `navigate` reads an object with `outlets` or `segmentPath` as a command, not as parameters.
+      assert.equal(await nav.push('/user/1;outlets=grid;segmentPath=x'), true);
+      await idle();
+      assert.equal(router.url, '/user/1;outlets=grid;segmentPath=x');
+      assert.deepEqual(stack(fabric), ['home', 'user 1']);
+    });
+
+    it('pops back to a screen pushed with an escaped url string', async () => {
+      await nav.push('/user/a%20b');
+      await nav.push('/user/2');
+      await settle();
+      assert.equal(await nav.popTo('/user/a%20b'), true);
+      await idle();
+      assert.equal(router.url, '/user/a%20b');
+      assert.deepEqual(stack(fabric), ['home', 'user a b']);
+    });
+
+    it('presents and resets with an escaped url string', async () => {
+      assert.equal(await nav.present('/user/a%20b', { as: 'formSheet' }), true);
+      await idle();
+      assert.equal(router.url, '/user/a%20b');
+      assert.deepEqual(stack(fabric).slice(-1), ['user a b']);
+
+      assert.equal(await nav.reset('/user/c%20d'), true);
+      await idle();
+      assert.equal(router.url, '/user/c%20d');
+      assert.deepEqual(stack(fabric), ['user c d']);
+    });
+
+    it('replaces with an escaped url string', async () => {
+      await nav.push('/user/1');
+      assert.equal(await nav.replace('/user/a%20b'), true);
+      await idle();
+      assert.equal(router.url, '/user/a%20b');
+      assert.deepEqual(stack(fabric), ['home', 'user a b']);
+    });
+
     it('updates one screen in place on a route marked with reuseScreen', async () => {
       await nav.push('/photo/1');
       await nav.push('/photo/2');
@@ -480,6 +532,100 @@ describe('a native stack driven by the router', () => {
     });
   });
 
+  /**
+   * `RNSScreenStack` runs a replace, which a reset is too, as a pop of the screen leaving unless
+   * the screen arriving has `replaceAnimation: 'push'`. A pop animates as the screen leaving says,
+   * so a `stackAnimation` named for the screen arriving is never read, on iOS or on Android.
+   */
+  describe('the animation a reset or a replace names', () => {
+    const top = () =>
+      flatten(fabric.committed)
+        .filter((n) => n.viewName === 'RNSScreen')
+        .at(-1)!;
+
+    it('is the one a reset plays, the screen arriving pushed in with it', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.deepEqual(stack(fabric), ['user 2']);
+      assert.equal(top().props['stackAnimation'], 'none');
+      assert.equal(top().props['replaceAnimation'], 'push');
+    });
+
+    it('is the one a replace plays, the screen arriving pushed in with it', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.replace('/user/2', { presentation: { stackAnimation: 'fade' } });
+      await idle();
+      assert.deepEqual(stack(fabric), ['home', 'user 2']);
+      assert.equal(top().props['stackAnimation'], 'fade');
+      assert.equal(top().props['replaceAnimation'], 'push');
+    });
+
+    it('is the one a replace over a modal plays, presented as the modal is', async () => {
+      await nav.present('/modal');
+      await nav.push('/user/1');
+      await idle();
+      await nav.replace('/user/2', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.equal(top().props['stackPresentation'], 'modal');
+      assert.equal(top().props['stackAnimation'], 'none');
+      assert.equal(top().props['replaceAnimation'], 'push');
+    });
+
+    it('gives way to a replaceAnimation the navigation names itself', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2', {
+        presentation: { stackAnimation: 'none', replaceAnimation: 'pop' },
+      });
+      await idle();
+      assert.equal(top().props['replaceAnimation'], 'pop');
+    });
+
+    it('is not there for a reset that names none, which still animates as the screen leaving', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2');
+      await idle();
+      assert.equal(top().props['stackAnimation'], undefined);
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+
+    it('is not read by a reset to a screen kept below, which pops back to that screen', async () => {
+      // The screen is the one already on the stack, so nothing new is put up to carry the
+      // animation, and `RNSScreenStack` pops back to it as the screen leaving says. Making the
+      // named animation play there means committing it onto the screen leaving before that screen
+      // goes; until then, this pins what a reset to a kept screen does.
+      const home = top().reactTag;
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.deepEqual(stack(fabric), ['home']);
+      assert.equal(top().reactTag, home);
+      assert.equal(top().props['stackAnimation'], undefined);
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+
+    it('is not there for a reset that names the default, which animates as a back', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2', { presentation: { stackAnimation: 'default' } });
+      await idle();
+      assert.equal(top().props['stackAnimation'], 'default');
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+
+    it('is not there for a push, which animates as the screen arriving already', async () => {
+      await nav.push('/user/1', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.equal(top().props['stackAnimation'], 'none');
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+  });
+
   describe('a page that throws on its first render', () => {
     const failed = (url: string, extras?: Parameters<NativeNavigation['push']>[1]) =>
       nav.push(url, extras).then(
@@ -698,6 +844,14 @@ describe('a deep link opened beneath its parent screen', () => {
     await idle();
     assert.equal(router.url, '/user/7');
     assert.deepEqual(stack(fabric), ['home', 'user 7']);
+  });
+
+  it('pushes a link with an escaped character as it launches on one, without withLinkParent', async () => {
+    await launch(null, false);
+    arrive('/user/a%20b');
+    await idle();
+    assert.equal(router.url, '/user/a%20b');
+    assert.deepEqual(stack(fabric), ['home', 'user a b']);
   });
 
   it('follows a link that arrives while the app is running', async () => {

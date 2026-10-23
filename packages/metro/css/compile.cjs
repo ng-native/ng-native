@@ -26,6 +26,9 @@ const {
   PER_TURN,
   round,
   withRefusals,
+  mixedToken,
+  OF_A_BOX,
+  color,
 } = require('./values.cjs');
 const {
   translate,
@@ -66,7 +69,7 @@ const pack = (ids, classes, types) => ids * 1_000_000 + classes * 1_000 + types;
  * variable in a divisor, a `min()` - returns null and is refused, because the alternative is a
  * calc engine on device, which is a CSS parser by another name.
  */
-function linear(part, context) {
+function linear(part, context, ofABox = false) {
   const { name, arguments: args } = part.value ?? {};
   if (name !== 'calc' && name !== 'max') return null;
 
@@ -74,11 +77,47 @@ function linear(part, context) {
   if (found.length !== 1) return null;
   const reference = found[0];
 
-  const value =
-    name === 'max'
-      ? floored(meaningful(args), reference, context)
-      : evaluateLinear(meaningful(args), reference, context);
-  return value?.scale ? { reference, adjust: trim(value) } : null;
+  if (name === 'max') {
+    const floor = floored(meaningful(args), reference, context);
+    return floor?.scale ? { reference, adjust: trim(floor) } : null;
+  }
+  const adjust = linearSum(meaningful(args), reference, context, ofABox);
+  return adjust && { reference, adjust };
+}
+
+/** A `calc()` as `scale * var + offset`, with the percentage it is added to where one is of a box. */
+function linearSum(list, reference, context, ofABox) {
+  // Only where a percentage is of a box: anywhere else it is a number, or nothing at all.
+  const { rest, percent } = ofABox ? withoutPercentage(list) : { rest: list };
+  const value = evaluateLinear(rest, reference, context);
+  if (!value?.scale) return null;
+  return { ...trim(value), ...(percent === undefined ? {} : { percent: round(percent) }) };
+}
+
+const isPercentage = (term) => term?.type === 'token' && term.value?.type === 'percentage';
+const NOTHING = { type: 'length', value: { unit: 'px', value: 0 } };
+const isSign = (term) => operator(term) === '+' || operator(term) === '-';
+const multiplied = (list, i) =>
+  operator(list[i - 1]) === '*' || ['*', '/'].includes(operator(list[i + 1]));
+
+/**
+ * A sum with the percentages added in it taken out, and what they come to: `100% - var(--x)` is
+ * `0px - var(--x)` and 100. The device settles the rest to a length, and the engine adds it to
+ * the percentage once the box the percentage is of has been laid out, as it does a written
+ * `calc(100% - 24px)`. A percentage that is multiplied is left in, and refused with the rest.
+ */
+function withoutPercentage(list) {
+  const rest = [];
+  let percent;
+  let sign = 1;
+  list.forEach((term, i) => {
+    if (isSign(term)) sign = operator(term) === '+' ? 1 : -1;
+    if (!isPercentage(term) || multiplied(list, i)) return void rest.push(term);
+    percent = (percent ?? 0) + sign * term.value.value * 100;
+    // The sign before it goes too, or stays in front of nothing where it was the first term.
+    if (isSign(rest.at(-1))) rest.pop();
+  });
+  return { rest: isSign(rest[0]) ? [NOTHING, ...rest] : rest, percent };
 }
 
 /** `max(<linear>, <length>)` in either order: the same value, with a lower bound on it. */
@@ -632,7 +671,9 @@ function deferVar(value, context) {
   if (motion) return motion;
 
   const arithmetic =
-    parts.length === 1 && parts[0]?.type === 'function' ? linear(parts[0], context) : null;
+    parts.length === 1 && parts[0]?.type === 'function'
+      ? linear(parts[0], context, OF_A_BOX.test(property))
+      : null;
   const varPart = arithmetic ? arithmetic.reference : parts.length === 1 ? parts[0] : null;
 
   if (varPart?.type !== 'var') {
@@ -1053,8 +1094,20 @@ function compound(parts, context) {
         }
         if (nested.ancestors?.length) (out.ancestors ??= []).push(...nested.ancestors);
         if (nested.parents?.length) (out.parents ??= []).push(...nested.parents);
-        if (part.kind === 'not') (out.not ??= []).push(...nested.compounds);
-        else if (nested.compounds.length) (out.is ??= []).push(nested.compounds);
+        if (part.kind === 'not') {
+          if (nested.compounds.length) (out.not ??= []).push(...nested.compounds);
+          if (nested.complex.length) {
+            // With `not` beside it, so the engine asks for these only of a compound with a `:not()`.
+            out.not ??= [];
+            (out.notComplex ??= []).push(...nested.complex);
+          }
+        } else if (nested.complex.length) {
+          // One list: the compounds alongside are selectors of one compound each.
+          const alone = nested.compounds.map((one) => ({ compounds: [one], combinators: [] }));
+          // With `is` beside it, so the engine asks for these only of a compound with an `:is()`.
+          out.is ??= [];
+          (out.isComplex ??= []).push([...alone, ...nested.complex]);
+        } else if (nested.compounds.length) (out.is ??= []).push(nested.compounds);
         break;
       }
       case 'pseudo-element':
@@ -1089,6 +1142,222 @@ function isLoneLiteral(parts) {
   const written = meaningful(parts);
   return written.length === 1 && !mentionsVar(written);
 }
+
+/** A rule with each control's state in its selectors as the prop the control keeps it in. */
+function withControlStates(rule) {
+  const selectors = rule.value.selectors.map((written) => written.map(controlState));
+  return { ...rule, value: { ...rule.value, selectors } };
+}
+
+const attribute = (name) => ({ type: 'attribute', namespace: null, name, operation: null });
+
+/**
+ * A control's state as the property the control has it as, which is where an element made for a
+ * browser's `<input>` keeps it: `:checked` is `[checked]`, and `:enabled` is not `[disabled]`.
+ * Through any `:not()` or `:is()` it is written in, and the one compound of a `:host()`.
+ */
+function controlState(part) {
+  if (part.type !== 'pseudo-class') return part;
+  if (part.kind === 'checked' || part.kind === 'indeterminate') return attribute(part.kind);
+  if (part.kind === 'enabled') {
+    return { type: 'pseudo-class', kind: 'not', selectors: [[attribute('disabled')]] };
+  }
+  if (!part.selectors) return part;
+  // `:host()` holds the parts of one compound, where `:is()` holds a list of selectors.
+  if (part.kind === 'host') return { ...part, selectors: part.selectors.map(controlState) };
+  return { ...part, selectors: part.selectors.map((parts) => parts.map(controlState)) };
+}
+
+/**
+ * Take a declaration only a sheet read as a browser reads it has a meaning for: a clip along one
+ * axis, a box that is clipped to nothing or to a band of itself, a box that is not seen, a
+ * table's layout. Answers whether it was one.
+ */
+function asABrowserReads(declaration, out) {
+  return (
+    clippedOnAnAxis(declaration, out) ||
+    clippedToNothing(declaration, out) ||
+    clippedToABand(declaration, out) ||
+    seenOrNot(declaration, out) ||
+    tableLaidOut(declaration, out)
+  );
+}
+
+/**
+ * `table-layout`, in a sheet read as a browser reads it: kept for what lays a table out in
+ * `@ng-native/web-compat`, which gives a `fixed` table columns of one width, and taken off what
+ * native is sent. A value that is a token is left to be refused.
+ */
+function tableLaidOut(declaration, out) {
+  // lightningcss has no parser of its own for it: a custom property by the name it is written.
+  if (declaration.property !== 'custom' || declaration.value.name !== 'table-layout') return false;
+  const [only, ...rest] = declaration.value.value;
+  if (rest.length || only?.type !== 'token' || only.value.type !== 'ident') return false;
+  out.tableLayout = only.value.value === 'fixed' ? 'fixed' : 'auto';
+  return true;
+}
+
+/**
+ * `visibility`, in a sheet read as a browser reads it: kept as it is written, for the engine to
+ * draw a hidden box with no opacity and no touch, which is what hidden is where a box keeps its
+ * room. `collapse` is `hidden` for anything but a table's rows. A value that is a token is left
+ * to be refused.
+ */
+function seenOrNot(declaration, out) {
+  if (declaration.property !== 'visibility' || typeof declaration.value !== 'string') return false;
+  out.visibility = declaration.value === 'visible' ? 'visible' : 'hidden';
+  return true;
+}
+
+/** A `clip` rectangle with nothing in it: four edges that are all the same length. */
+const EMPTY_RECT = /^rect\(\s*(\d+(?:px)?)(?:[\s,]+\1){3}\s*\)$/;
+
+/**
+ * `clip` or `clip-path` that leaves nothing of a box, in a sheet read as a browser reads it: how
+ * a library hides what is for a screen reader alone. Kept as a mark for the engine, which draws
+ * nothing of the box and leaves it there to be read: no other declaration draws a box that is
+ * clipped away, whatever its rule's place in the cascade. Any other clip is left to be refused.
+ */
+function clippedToNothing(declaration, out) {
+  const nothing = emptyClip(declaration) || insetByHalf(declaration);
+  if (nothing) out.clipped = true;
+  return nothing;
+}
+
+/**
+ * `clip-path` that is a band of the box from side to side, in a sheet read as a browser reads
+ * it: `polygon(a 0, b 0, b 100%, a 100%)`, one picture over another cut where a slider is. Kept
+ * as that text, with each edge a percentage, as `clipBand`: for what draws an image through a band
+ * of itself (`@ng-native/web-compat`), and taken off what a view is sent. An edge that is a token
+ * is `tokenedBand`'s. Any other shape, an edge that is a length, and a band of any box but the
+ * border box are left to be refused.
+ */
+function clippedToABand({ property, value }, out) {
+  if (property !== 'clip-path') return false;
+  // No clip: no band, over one a rule before gave the box.
+  if (value?.type === 'none') {
+    out.clipBand = 'none';
+    return true;
+  }
+  if (value?.shape?.type !== 'polygon') return false;
+  if (value.referenceBox !== 'border-box') return false;
+  const points = value.shape.value.points.map(({ x, y }) => `${share(x)} ${share(y)}`);
+  const [, from, to] = BAND.exec(points.join(', ')) ?? [];
+  if (from === undefined) return false;
+  out.clipBand = `polygon(${from}% 0%, ${to}% 0%, ${to}% 100%, ${from}% 100%)`;
+  return true;
+}
+
+/**
+ * `clip-path` that is a band of the box with a token for an edge, in a sheet read as a browser
+ * reads it: a slider sets the token as it is dragged. Left for the engine to settle for the box,
+ * as `band`: each of the two edges a percentage, or a token with what is beside it. Answers
+ * whether it was one; a token anywhere else in the shape, or in a fallback, is left to be refused.
+ */
+function tokenedBand({ property, value }, deferred) {
+  if (property !== 'unparsed' || value?.propertyId?.property !== 'clip-path') return false;
+  const edges = bandEdges(polygonPoints(value.value).map((point) => point.map(bandEdge)));
+  if (!edges) return false;
+  deferred.push({ props: ['clipBand'], band: edges });
+  return true;
+}
+
+/** A band's two edges, where `points` are its four corners as `bandEdge` reads each; or null. */
+function bandEdges(points) {
+  const [from, to] = [points[0]?.[0], points[1]?.[0]];
+  const band = [
+    [from, '0%'],
+    [to, '0%'],
+    [to, '100%'],
+    [from, '100%'],
+  ];
+  return from && to && JSON.stringify(points) === JSON.stringify(band) ? [from, to] : null;
+}
+
+/** The terms of each point of a value that is one `polygon()`, as the parser left it; or none. */
+function polygonPoints(parts) {
+  const [polygon, ...rest] = meaningful(parts);
+  // The box it is a band of, where it is named: the border box alone, as for a band with no token.
+  const box = rest.length === 1 && rest[0].type === 'token' ? rest[0].value : undefined;
+  const boxed = !rest.length || (box?.type === 'ident' && box.value === 'border-box');
+  if (!boxed || polygon?.type !== 'function' || polygon.value.name !== 'polygon') return [];
+  /** @type {unknown[][]} */
+  const points = [[]];
+  for (const part of polygon.value.arguments) {
+    if (isComma(part)) points.push([]);
+    else points[points.length - 1].push(part);
+  }
+  return points.map(meaningful);
+}
+
+/** An edge of a band as written: a percentage, or a token with a percentage or nothing beside it. */
+function bandEdge(term) {
+  if (term.type !== 'var') {
+    const edge = shareOfTerm(term);
+    return edge === '?' ? null : `${edge}%`;
+  }
+  const reference = term.value.name.ident;
+  if (!term.value.fallback) return { reference };
+  const [fallback, ...rest] = meaningful(term.value.fallback);
+  const edge = rest.length ? '?' : shareOfTerm(fallback);
+  return edge === '?' ? null : { reference, fallback: `${edge}%` };
+}
+
+/** A term the parser left as written, read as `share` reads an edge: a bare 0 is one too. */
+function shareOfTerm(term) {
+  if (term?.type !== 'token') return '?';
+  const { type, value } = term.value;
+  if (type === 'number' || type === 'dimension') return value === 0 ? '0' : '?';
+  return share(term.value);
+}
+
+/** A band's four corners, as `share` writes each: the same two edges at the top and the bottom. */
+const BAND = /^([\d.]+) 0, ([\d.]+) 0, \2 100, \1 100$/;
+
+/** An edge of a shape as a percentage of its box: one, or a zero length. `?` for any other. */
+function share(edge) {
+  if (edge.type === 'percentage') return String(Number((edge.value * 100).toFixed(4)));
+  return edge.type === 'dimension' && edge.value.value === 0 ? '0' : '?';
+}
+
+/** `clip: rect()` with nothing in it. The parser has no name for `clip`, and hands its terms over. */
+function emptyClip({ property, value }) {
+  if (property !== 'custom' || value?.name !== 'clip') return false;
+  try {
+    return EMPTY_RECT.test(cssText(value.value, 'clip').trim());
+  } catch {
+    return false;
+  }
+}
+
+/** `clip-path: inset(50%)`: each edge brought in to the middle. */
+function insetByHalf({ property, value }) {
+  if (property !== 'clip-path' || value?.shape?.type !== 'inset') return false;
+  return value.shape.value.rect.every((edge) => edge.type === 'percentage' && edge.value === 0.5);
+}
+
+/**
+ * `overflow-x: hidden`, in a sheet read as a browser reads it: a view clips on both axes or on
+ * neither, so what a library clips along one is clipped. A progress bar's track clips the bar
+ * that slides across it. A list that scrolls down the page, `overflow-y: auto`, is a scroll
+ * overflow, which clips a plain view on both axes and scrolls only a scroll view. Any other value
+ * on one axis is no clipping, which a view has by default.
+ */
+function clippedOnAnAxis(declaration, out) {
+  if (declaration.property !== 'overflow-x' && declaration.property !== 'overflow-y') return false;
+  if (declaration.value === 'hidden' || declaration.value === 'clip') out.overflow = 'hidden';
+  // Down the page is the way a scroll view scrolls.
+  //
+  // ponytail: across is left unclipped, as before. A scroll view has `horizontal` for it; set
+  // that from `overflow-x` if a library scrolls a row of tabs or a wide table this way.
+  else if (declaration.property === 'overflow-y' && SCROLLS.has(declaration.value)) {
+    // `scroll`, as `overflow: auto` is written: a view has no `auto`, and draws what is past it.
+    out.overflow = 'scroll';
+  }
+  return true;
+}
+
+const SCROLLS = new Set(['auto', 'scroll']);
 
 /** The query a rule's dark side is under: native has the app's one scheme, which this reads. */
 const DARK = { feature: 'prefers-color-scheme', value: 'dark' };
@@ -1150,6 +1419,44 @@ function unheld(parts) {
 }
 
 const TRANSFORM_FUNCTIONS = /^(translate|scale|rotate|skew)(X|Y|Z|3d)?$/i;
+
+/** The pseudo-elements a browser draws a box for inside the element, first and last. */
+const GENERATED = new Set(['before', 'after']);
+
+/**
+ * A rule with each `X::before` and `X::after` among its selectors as `X > ::before`: a rule for
+ * an element of that name under X, which is what the engine keeps there for the box. Only for a
+ * sheet compiled with `generated`; any other is refused its pseudo-elements where they are read.
+ */
+function withGeneratedBoxes(rule) {
+  const selectors = rule.value.selectors.map((parts) => {
+    const last = parts.at(-1);
+    if (last?.type !== 'pseudo-element' || !GENERATED.has(last.kind)) return parts;
+    const box = { type: 'type', name: `::${last.kind}` };
+    return [...parts.slice(0, -1), { type: 'combinator', value: 'child' }, box];
+  });
+  return { ...rule, value: { ...rule.value, selectors } };
+}
+
+const isContent = (declaration) =>
+  declaration.property === 'custom' && declaration.value?.name === 'content';
+
+/**
+ * What a `content` makes of a generated box: `none` for no box at all, or the string written,
+ * which the engine draws as the box's text. Null for a value it cannot draw, which is no box and
+ * is reported.
+ *
+ * ponytail: a `content` of anything but one string, an `attr()` or a counter, is no box. Read
+ * each when a library is seen to need one.
+ */
+function contentOf(declaration) {
+  const terms = meaningful(declaration.value.value);
+  const [first] = terms;
+  if (terms.length !== 1 || first.type !== 'token') return null;
+  if (first.value.type === 'string') return first.value.value;
+  const word = first.value.type === 'ident' ? first.value.value : '';
+  return word === 'none' || word === 'normal' ? 'none' : null;
+}
 
 /** A rule with only its declarations that have a `light-dark()` in them, on their dark side. */
 function darkSide(rule) {
@@ -1239,12 +1546,11 @@ function tokensToCompoundParts(tokens, context) {
 }
 
 /**
- * `:is(<compound> *)`: an ancestor test, which is the one combinator worth having in here.
+ * `:is(<compound> *)`: an ancestor test, read as a test of one compound rather than a selector.
  *
  * Tailwind's whole `group-*` family compiles to this shape - `group-data-[size=sm]:w-6` becomes
- * `:is(:where(.group)[data-size="sm"] *)` - and it says nothing a second matching pass is needed
- * for. "Some ancestor matches this compound" is what `:host-context()` already means, and the
- * matcher already walks the tree to answer it.
+ * `:is(:where(.group)[data-size="sm"] *)`. "Some ancestor matches this compound" is what
+ * `:host-context()` already means, and the matcher already walks the tree to answer it.
  *
  * @returns the ancestor compound, or null if this is not that shape.
  */
@@ -1335,7 +1641,7 @@ const SIBLING = new Set(['next-sibling', 'later-sibling']);
  * Moving the sibling out in front keeps the rest of the selector true: a sibling has the same
  * parent and ancestors as the element, so whatever came before the element comes before it.
  * Only one argument is read this way, which is the only form Tailwind writes; a list of them is
- * left to be refused with the other combinators.
+ * a selector the engine matches from the element, as any other argument with a combinator is.
  *
  * @returns the compound's own parts, and the sibling test if there was one.
  */
@@ -1365,32 +1671,95 @@ function siblingArgument(argument) {
 }
 
 /**
- * The arguments of `:is()`, `:where()` or `:not()`, each of which must be a single compound.
- *
- * Any other combinator inside would need a second, independent matching pass rooted at this node,
- * which the matcher has no shape for; it is refused rather than half-implemented.
+ * The arguments of `:is()`, `:where()` or `:not()`: compounds, the ancestor, parent and scoped
+ * forms each read as a test of one compound, and any other selector as the engine's own, which
+ * it matches from the node leftwards as it does a rule: `complex`.
  */
 function functionalPseudo(part, context) {
   if (part.kind !== 'is' && part.kind !== 'where' && part.kind !== 'not') return null;
 
-  const found = { compounds: [], ancestors: [], parents: [] };
+  const found = {
+    compounds: [],
+    ancestors: [],
+    parents: [],
+    complex: /** @type {object[]} */ ([]),
+  };
   let top = { ids: 0, classes: 0, types: 0 };
 
   // `:not()` of a list matches none of it, so an argument that is a list with an ancestor test in
   // it is each of its alternatives, as it is at the top of a selector: see `alternatives`.
   const args = part.kind === 'not' ? part.selectors.flatMap(alternatives) : part.selectors;
   for (const argument of args) {
-    const { list, parts } = functionalArgument(part, argument, context);
-    const built = compound(parts, context);
-    const scope = parts.under && compound(parts.under, context);
-    found[list].push(under(built.compound, scope?.compound));
-    const whole = scope ? sum(built, scope) : built;
+    const { list, parts } = functionalArgument(part, argument);
+    let whole;
+    if (list === 'complex') {
+      whole = complexArgument(parts, context);
+      found.complex.push(whole.selector);
+    } else {
+      const built = compound(parts, context);
+      const scope = parts.under && compound(parts.under, context);
+      found[list].push(under(built.compound, scope?.compound));
+      whole = scope ? sum(built, scope) : built;
+    }
     // The single most specific argument wins, taken whole. Not the maximum of each component
     // independently: `:is(.a, #b)` is as specific as `#b`, not as `#b.a`.
     if (weight(whole) > weight(top)) top = whole;
   }
+  if (found.complex.length) aboveAsComplex(found);
 
   return { ...found, ids: top.ids, classes: top.classes, types: top.types };
+}
+
+/**
+ * An ancestor or parent test beside a selector in one list, as the selector it is, `.p *` or
+ * `.p > *`: either may match, where a test kept apart would be one the node must pass as well.
+ */
+function aboveAsComplex(found) {
+  for (const [list, combinator] of [
+    ['ancestors', 'descendant'],
+    ['parents', 'child'],
+  ]) {
+    for (const above of found[list]) {
+      found.complex.push({ compounds: [above, { classes: [] }], combinators: [combinator] });
+    }
+    found[list] = [];
+  }
+}
+
+/**
+ * A selector of compounds and combinators inside a pseudo-class, as the engine has one, and what
+ * its compounds weigh together.
+ */
+function complexArgument(argument, context) {
+  const compounds = [];
+  const combinators = [];
+  let total = { ids: 0, classes: 0, types: 0 };
+  let current = [];
+  const flush = () => {
+    const built = compound(current, context);
+    compounds.push(built.compound);
+    total = sum(total, built);
+    current = [];
+  };
+  for (const piece of argument) {
+    if (piece.type !== 'combinator') {
+      current.push(piece);
+      continue;
+    }
+    flush();
+    combinators.push(combinatorOf(piece, context));
+  }
+  flush();
+  return { selector: { compounds, combinators }, ...total };
+}
+
+/** A combinator the engine matches, or a refusal of one it has no meaning for. */
+function combinatorOf(piece, context) {
+  if (COMBINATORS.has(piece.value)) return piece.value;
+  throw new CssUnsupported(
+    `${context}: the '${piece.value}' combinator has no meaning here. Descendant, child and ` +
+      `the two sibling combinators are the ones a node's position can answer.`,
+  );
 }
 
 const weight = (built) => pack(built.ids, built.classes, built.types);
@@ -1410,9 +1779,9 @@ function under(tested, scope) {
 
 /**
  * One argument of `:is()`, `:where()` or `:not()`: the compound it tests, and which of the node,
- * its parent or an ancestor it tests it against.
+ * its parent or an ancestor it tests it against, or `complex` for any other selector.
  */
-function functionalArgument(part, argument, context) {
+function functionalArgument(part, argument) {
   const above = part.kind !== 'not';
   const ancestor = above && ancestorArgument(argument);
   if (ancestor) return { list: 'ancestors', parts: ancestor };
@@ -1421,11 +1790,7 @@ function functionalArgument(part, argument, context) {
   const scoped = above && underArgument(argument);
   if (scoped) return { list: 'compounds', parts: scoped };
   if (argument.some((piece) => piece.type === 'combinator')) {
-    throw new CssUnsupported(
-      `${context}: ':${part.kind}()' cannot contain a combinator, only a compound selector, ` +
-        `'<compound> *', which is an ancestor test, '<compound> > *', a parent test, or ` +
-        `'<compound> ~ *', a sibling test.`,
-    );
+    return { list: 'complex', parts: argument };
   }
   return { list: 'compounds', parts: argument };
 }
@@ -1434,99 +1799,84 @@ function functionalArgument(part, argument, context) {
 const RELATION = { null: false, descendant: false, child: true };
 
 /**
- * The arguments of `:has()`: each one compound, a descendant of the node or, after `>`, a child.
- *
- * A longer selector inside would be a second matching pass from every descendant, and a sibling
- * one (`:has(+ x)`, `:has(~ x)`) asks about what comes after the node, which nothing marks it for.
+ * The arguments of `:has()`: compounds all for a descendant, or all for a child after `>`, as a
+ * list of compounds, and otherwise each a selector from the node, `:has(+ .a)` or `:has(.a > .b)`,
+ * as `relative`: its first combinator joins the node to its first compound.
  */
 function hasTest(part, context) {
   const parsed = part.selectors.map((argument) => hasArgument(argument, context));
-  if (new Set(parsed.map((one) => one.child)).size > 1) {
-    throw new CssUnsupported(
-      `${context}: ':has()' takes descendants or children, not a list that mixes the two.`,
-    );
-  }
   // As specific as its most specific argument, taken whole, as `:is()` is.
   const top = parsed.reduce((a, b) => (weigh(b) > weigh(a) ? b : a));
-  const any = parsed.flatMap((one) => one.any);
-  const has = parsed[0].child ? { child: true, any } : { any };
+  const single = parsed.every((one) => one.selector.compounds.length === 1);
+  const leading = new Set(parsed.map((one) => one.leading));
+  let has;
+  if (single && leading.size === 1 && RELATION[parsed[0].leading] !== undefined) {
+    // Each argument's compound, or the compounds an `:is()` in it is split into: see `hasArgument`.
+    const any = parsed.flatMap((one) => one.any ?? [one.selector.compounds[0]]);
+    has = RELATION[parsed[0].leading] ? { child: true, any } : { any };
+  } else {
+    // An argument `hasArgument` split is one compound, so each alternative is a selector of its own.
+    const relative = parsed.flatMap(({ leading, selector, any }) =>
+      (any ?? [null]).map((alternative) => ({
+        compounds: alternative ? [alternative] : selector.compounds,
+        combinators: [leading ?? 'descendant', ...selector.combinators],
+      })),
+    );
+    has = { any: [], relative };
+  }
   return { has, ids: top.ids, classes: top.classes, types: top.types };
 }
 
 const weigh = (built) => pack(built.ids, built.classes, built.types);
 
 /**
- * One argument of `:has()`: its compound, as the compounds it is the union of, and whether it is
- * looked for among children only.
+ * One argument of `:has()`: the combinator it starts with, if any, and the selector after it.
  *
- * An ancestor test among the alternatives of an `:is()` in it is split out as it is at the top
- * of a selector (see `alternatives`), each alternative an argument of its own:
- * `:has(.x:is(.p *, .y))` is `:has(.x:is(.p *), .x.y)`. Kept in one compound it asked for both.
- * The argument stays as specific as written, which is what `:is()` makes each alternative.
+ * An ancestor test among the alternatives of an `:is()` in an argument of one compound is split
+ * out as it is at the top of a selector (see `alternatives`), each alternative a compound of its
+ * own in `any`: `:has(.x:is(.p *, .y))` is `:has(.x:is(.p *), .x.y)`. Kept in one compound it
+ * asked for both. The argument stays as specific as written, which is what `:is()` makes each
+ * alternative.
  */
 function hasArgument(argument, context) {
   // `:has(> x)` is parsed as `:scope > x`, the node itself standing at the front.
   const scoped = argument[0]?.type === 'pseudo-class' && argument[0].kind === 'scope';
-  const leading = scoped && argument[1]?.type === 'combinator' ? argument[1].value : null;
-  const rest = leading ? argument.slice(2) : argument;
-  const child = RELATION[leading];
-  if (child === undefined || rest.some((piece) => piece.type === 'combinator')) {
-    throw new CssUnsupported(
-      `${context}: ':has()' takes one compound selector, for a descendant, or one after '>', ` +
-        `for a child. A longer selector or a sibling one inside it is not supported.`,
-    );
-  }
-  const built = compound(rest, context);
-  if (asksBeneath(built.compound)) {
+  const joined = scoped && argument[1]?.type === 'combinator' ? argument[1] : null;
+  const leading = joined ? combinatorOf(joined, context) : null;
+  const rest = joined ? argument.slice(2) : argument;
+  const built = complexArgument(rest, context);
+  if (built.selector.compounds.some(asksBeneath)) {
     throw new CssUnsupported(
       `${context}: ':has()' inside another ':has()' is not a valid selector, and a browser ` +
         `drops the rule.`,
     );
   }
-  const split = alternatives(rest);
-  const any =
-    split.length > 1 ? split.map((one) => compound(one, context).compound) : [built.compound];
-  return { ...built, any, child };
+  const split = built.selector.compounds.length === 1 ? alternatives(rest) : [rest];
+  const any = split.length > 1 ? split.map((one) => compound(one, context).compound) : undefined;
+  return { ...built, leading, any };
 }
 
 /** Whether a compound, or any compound nested in it, uses `:has()`. */
 function asksBeneath(compound) {
   if (compound.has !== undefined) return true;
-  const nested = [
-    ...(compound.not ?? []),
-    ...(compound.is ?? []).flat(),
-    ...(compound.ancestors ?? []),
-    ...(compound.parents ?? []),
-    ...(compound.hostContext ?? []),
-  ];
-  return nested.some(asksBeneath);
+  return nestedCompounds(compound).some(asksBeneath);
 }
 
-/**
- * `:has()` is read on the node a rule styles, and on a box that node is in: `.card:has(.x)
- * .title`, where the engine has the titles under a card matched again as what is in the card
- * changes. Not on a node beside the one styled, `.card:has(.x) + .title`, or beside a box it is
- * in: nothing under the card is the title then, and nothing restyles it.
- */
-function refuseHasAbove(compounds, combinators, context) {
-  const subject = compounds.at(-1);
-  // From the last sibling combinator back, a compound is beside the node or a box it is in.
-  const beside = combinators.findLastIndex(
-    (joined) => joined === 'next-sibling' || joined === 'later-sibling',
-  );
-  const above = compounds.slice(0, beside + 1).some(asksBeneath);
-  const within = [
-    ...(subject?.ancestors ?? []),
-    ...(subject?.parents ?? []),
-    ...(subject?.hostContext ?? []),
-  ].some(asksBeneath);
-  if (above || within) {
-    throw new CssUnsupported(
-      `${context}: ':has()' is supported on the node the rule styles and on a box it is in, ` +
-        `not on a sibling of either. Put a class on that node from the state it depends on.`,
-    );
-  }
-}
+/** The selectors of more than a compound in a compound's `:is()` and `:not()`. */
+const nestedSelectors = (compound) => [
+  ...(compound.isComplex ?? []).flat(),
+  ...(compound.notComplex ?? []),
+];
+
+/** The compounds nested in one, a `:has()`'s apart. */
+const nestedCompounds = (compound) => [
+  ...(compound.not ?? []),
+  ...(compound.is ?? []).flat(),
+  ...(compound.ancestors ?? []),
+  ...(compound.parents ?? []),
+  ...(compound.hostContext ?? []),
+  ...nestedSelectors(compound).flatMap((selector) => selector.compounds),
+];
 
 const isPlaceholder = (part) => part?.type === 'pseudo-element' && part.kind === 'placeholder';
 
@@ -1621,14 +1971,12 @@ function selector(written, context) {
   };
 
   const flush = () => {
-    const { own, sibling } = siblingTest(current);
+    // After a sibling combinator the two siblings could be in either order, which one selector
+    // cannot say: the test stays in the compound, for the engine to match from the node.
+    const { own, sibling } = SIBLING.has(combinators.at(-1))
+      ? { own: current, sibling: null }
+      : siblingTest(current);
     if (sibling) {
-      if (SIBLING.has(combinators.at(-1))) {
-        throw new CssUnsupported(
-          `${context}: a sibling test inside ':${sibling.kind}()' cannot follow a sibling ` +
-            `combinator: the two siblings could be in either order, which one selector cannot say.`,
-        );
-      }
       // `:is()` counts its argument, which is the sibling's compound; `:where()` counts nothing.
       add(compound(sibling.parts, context), sibling.kind === 'is');
       combinators.push(sibling.combinator);
@@ -1639,20 +1987,14 @@ function selector(written, context) {
 
   for (const part of parts) {
     if (part.type === 'combinator') {
-      if (!COMBINATORS.has(part.value)) {
-        throw new CssUnsupported(
-          `${context}: the '${part.value}' combinator has no meaning here. Descendant, child and ` +
-            `the two sibling combinators are the ones a node's position can answer.`,
-        );
-      }
+      const combinator = combinatorOf(part, context);
       flush();
-      combinators.push(part.value);
+      combinators.push(combinator);
     } else {
       current.push(part);
     }
   }
   flush();
-  refuseHasAbove(compounds, combinators, context);
 
   return {
     compounds,
@@ -1745,7 +2087,8 @@ function derivedToken(parts, context) {
 
 /** A `--x` definition's value, in every form it can be read as. */
 function customToken(name, parts, context) {
-  const value = derivedToken(parts, context) ?? tokenValue(parts, `${context} (${name})`);
+  const value =
+    mixedToken(parts) ?? derivedToken(parts, context) ?? tokenValue(parts, `${context} (${name})`);
   // Tailwind's own slots never hold an animation, and `--tw-inset-shadow: inset 200ms` parses as
   // one named inset: kept, a shadow that is not one would go unreported.
   if (value?.animation && name.startsWith('--tw-')) delete value.animation;
@@ -2542,6 +2885,65 @@ function undrawn(name, context) {
   );
 }
 
+/** A shape's lengths, which react-native-svg takes as numbers or percentages under these names. */
+const SHAPE_LENGTHS = {
+  'stroke-width': 'strokeWidth',
+  'stroke-dashoffset': 'strokeDashoffset',
+};
+const PAINTS = new Set(['fill', 'stroke']);
+
+/**
+ * A declaration that paints an SVG shape, as the props a native shape is drawn with: for a sheet
+ * compiled with `generated`, read as a browser reads a library's, whose `<svg>` is drawn
+ * natively. Answers whether the declaration was one. A paint is kept as written, `none` and
+ * `currentColor` included, for the engine to make the brush of.
+ */
+function shapePaint(declaration, out, deferred, context) {
+  if (declaration.property === 'unparsed') {
+    const name = declaration.value?.propertyId?.property;
+    if (SHAPE_LENGTHS[name]) {
+      // As a length is read, with its fallbacks, and written to the shape's own prop.
+      const read = deferVar({ ...declaration.value, propertyId: { property: 'width' } }, context);
+      deferred.push({ ...read, props: [SHAPE_LENGTHS[name]] });
+      return true;
+    }
+    if (!PAINTS.has(name)) return false;
+    // As a colour is read, with its fallbacks, and written to the paint it is for.
+    const read = deferVar({ ...declaration.value, propertyId: { property: 'color' } }, context);
+    deferred.push({ ...read, props: [name] });
+    return true;
+  }
+  const { property: name, value } = declaration;
+  if (PAINTS.has(name)) {
+    out[name] = value.type === 'none' ? 'none' : paintOf(value.value, context);
+    return true;
+  }
+  if (SHAPE_LENGTHS[name]) {
+    strokeLength(SHAPE_LENGTHS[name], length(value, context), out, deferred);
+    return true;
+  }
+  if (name !== 'stroke-dasharray') return false;
+  // `none` is a dash the shape names as its own and sets to nothing, which react-native-svg
+  // draws solid over a dash it would otherwise take from the group it is in.
+  const dashes = value.type === 'none' ? null : value.value.map((dash) => length(dash, context));
+  strokeLength('strokeDasharray', dashes, out, deferred);
+  return true;
+}
+
+/**
+ * A shape's length as `length` reads it: points, a percentage string, or an `em` left for the
+ * device to settle against the shape's font, as a length of a box is.
+ */
+function strokeLength(prop, value, out, deferred) {
+  delete out[prop];
+  if (value?.__defer) deferred.push({ props: [prop], compute: value.__defer });
+  else if (holdsMarker(value)) deferred.push({ props: [prop], within: value });
+  else out[prop] = value;
+}
+
+const paintOf = (colour, context) =>
+  colour.type === 'currentcolor' ? 'currentColor' : color(colour, context);
+
 /**
  * @param source CSS text.
  * @param context Name used in messages, normally the file and component.
@@ -2555,6 +2957,11 @@ function undrawn(name, context) {
  *   the app's own fails the build, where the mistake is its author's to see. `asset` is given each
  *   font's url and the line of the sheet it is on, and answers the path to require it by: a caller
  *   that joined sheets from several directories resolves each url against its own sheet.
+ *   `generated` reads the sheet as the browser it was written for reads it, for components made
+ *   for one: `::before` and `::after` as boxes of their own with the `content` they are given,
+ *   `visibility`, a clip to nothing, `overflow` along one axis and a control's state, which an
+ *   app's own sheet is told to write another way. An SVG shape's `fill`, `stroke` and stroke lengths
+ *   are kept for a drawing of it, where another sheet is refused them.
  */
 function compileCss(source, context = 'styles', options = {}) {
   const rules = [];
@@ -2637,6 +3044,58 @@ function compileCss(source, context = 'styles', options = {}) {
   }
 
   /**
+   * A declaration only a sheet read as a browser reads it has a meaning for: a generated box's
+   * `content`, reported where it is one no box draws, an SVG shape's paint, or what
+   * `asABrowserReads` takes. Answers whether it was one.
+   */
+  function readAsABrowser(declaration, out, deferred, context) {
+    if (shapePaint(declaration, out, deferred, context)) return true;
+    if (tokenedBand(declaration, deferred)) return true;
+    if (!isContent(declaration)) return asABrowserReads(declaration, out);
+    declareContent(declaration, out, context);
+    return true;
+  }
+
+  /** A generated box's `content`, or `none` and the report of why where it is one no box draws. */
+  function declareContent(declaration, out, context) {
+    const content = contentOf(declaration);
+    out.content = content ?? 'none';
+    if (content !== null) return;
+    const why = 'a generated box draws one string, so it draws none for this';
+    onUnsupported?.(reported(context, "dropped 'content'", why));
+  }
+
+  /**
+   * A declaration a sheet read as a browser reads it has a meaning for, read as `declare` reads
+   * any: a value refused costs only that declaration, reported, and what it writes replaces what
+   * an earlier one left to settle on device. Answers whether it was one.
+   */
+  function readBrowsers(declaration, out, deferred, context) {
+    const before = deferred.length;
+    const written = new Set();
+    const tracked = new Proxy(out, {
+      set(target, key, value) {
+        written.add(key);
+        target[key] = value;
+        return true;
+      },
+    });
+    try {
+      if (!readAsABrowser(declaration, tracked, deferred, context)) return false;
+      supersede(deferred, before, written);
+    } catch (error) {
+      if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
+      // A declaration with a token in it is `unparsed`, named by the property it is for.
+      const name =
+        declaration.property === 'unparsed'
+          ? declaration.value?.propertyId?.property
+          : declaration.property;
+      onUnsupported(reported(context, `dropped '${name}'`, error.message));
+    }
+    return true;
+  }
+
+  /**
    * A part put together once its rule is read, as a transition is from its longhands, or with
    * `onUnsupported` given, the report of why it was dropped. It is reported as the declaration it
    * came from and costs only itself, as that declaration would: what it wrote to `out` before it
@@ -2700,9 +3159,10 @@ function compileCss(source, context = 'styles', options = {}) {
   }
 
   /** Compile one plain style rule into the flat list. */
-  function styleRule(rule) {
-    const context = locationOf(rule);
-    if (rule.type !== 'style') throw refusedAtRule(rule, context);
+  function styleRule(written) {
+    const context = locationOf(written);
+    if (written.type !== 'style') throw refusedAtRule(written, context);
+    const rule = options.generated ? withControlStates(withGeneratedBoxes(written)) : written;
 
     // Compiled once per set of platforms its selectors can apply on, because a declaration one
     // platform ignores is refused only where it could apply there. A selector list is one rule to
@@ -2921,6 +3381,7 @@ function compileCss(source, context = 'styles', options = {}) {
       for (const stated of list ?? []) {
         const declaration = ownToken(stated, raw);
         if (declaration === null) continue;
+        if (options.generated && readBrowsers(declaration, out, deferred, context)) continue;
         if (easedByToken(declaration, out, deferred, context)) continue;
         if (timedByToken(declaration, out, context)) continue;
         const before = deferred.length;
@@ -3054,7 +3515,9 @@ function compileCss(source, context = 'styles', options = {}) {
 
   function compileRule(rule) {
     if (rule.type === 'font-face') {
-      fonts.push(locatedFace(fontFace(rule.value, context), rule));
+      const face = fontFace(rule.value, context);
+      if (face.weightRange) onUnsupported?.(rangeWarning(face, locationOf(rule)));
+      fonts.push(locatedFace(face, rule));
       return [];
     }
     if (rule.type === 'keyframes') {
@@ -3108,8 +3571,16 @@ function compileCss(source, context = 'styles', options = {}) {
     ...(fonts.length ? { fonts } : {}),
     ...(Object.keys(keyframes).length ? { keyframes } : {}),
     ...invalidation(rules),
+    // Said on the sheet as `structural` is: the engine looks for the boxes only where one is.
+    ...(rules.some(drawsABox) ? { generated: true } : {}),
   };
 }
+
+/** Whether a rule is for a generated box, `::before` or `::after`. */
+const drawsABox = (rule) => {
+  const type = rule.compounds[rule.compounds.length - 1]?.type;
+  return type === '::before' || type === '::after';
+};
 
 /** The element that draws a background through its letters. */
 const GRADIENT_TEXT = 'gradient-text';
@@ -3177,6 +3648,22 @@ function fontFace(value, context) {
     ...(Array.isArray(weight) ? { weightRange: weight } : {}),
     ...(style && style !== 'normal' ? { style } : {}),
   };
+}
+
+/**
+ * What a face declared with a weight range draws, which is not what a browser draws: neither
+ * platform picks a variable font's instance by the text's weight. iOS draws its default instance;
+ * Android draws it below 700, and its system font from 700, as React Native registers the file
+ * under one style and asks for its bold one at 700.
+ */
+function rangeWarning(face, location) {
+  const [low, high] = face.weightRange;
+  return (
+    `${location}: @font-face '${face.family}' declares the weight range ${low} ${high}, and a ` +
+    `device does not pick a variable font's weight: iOS draws the font's default instance at ` +
+    `every weight, and Android draws it below 700 and its system font from 700. Declare one ` +
+    `file per weight instead.`
+  );
 }
 
 /**
@@ -3250,18 +3737,14 @@ function asksAboutSiblings(rule) {
 
 /**
  * Whether a compound, or any compound nested in it, asks about a child list: its place in its
- * parent's, or whether its own is empty. `:not(:last-child)` asks as much as `:last-child` does.
+ * parent's, or whether its own is empty, or an element before it, `:is(.a + .b)`.
+ * `:not(:last-child)` asks as much as `:last-child` does.
  */
 function asksAboutPosition(compound) {
   if (compound.nth !== undefined || compound.empty !== undefined) return true;
-  const nested = [
-    ...(compound.not ?? []),
-    ...(compound.is ?? []).flat(),
-    ...(compound.ancestors ?? []),
-    ...(compound.parents ?? []),
-    ...(compound.hostContext ?? []),
-  ];
-  return nested.some(asksAboutPosition);
+  const beside = (selector) => selector.combinators.some((one) => SIBLING.has(one));
+  if (nestedSelectors(compound).some(beside)) return true;
+  return nestedCompounds(compound).some(asksAboutPosition);
 }
 
 /**
@@ -3505,6 +3988,11 @@ const takesUnits = (name) =>
 
 /** Lengths `kindOf` does not name, whose values are one or more lengths. */
 const UNIT_SHORTHANDS = new Set([
+  'vertical-align',
+  'grid-template-columns',
+  'grid-template-rows',
+  'grid-auto-columns',
+  'grid-auto-rows',
   'translate',
   'gap',
   'inset',

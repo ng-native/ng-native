@@ -15,7 +15,7 @@ import {
   untracked,
   type Provider,
 } from '@angular/core';
-import { Keyboard, SCREEN_IN_FRONT, SafeArea } from '@ng-native/device';
+import { KEYBOARD_MOTION, Keyboard, SCREEN_IN_FRONT, SafeArea } from '@ng-native/device';
 import {
   claimHost,
   nativePlatform,
@@ -58,6 +58,9 @@ const FAR = 10_000;
 /** A native view the dock renders for itself, out of the way of the layout. */
 const OUT_OF_FLOW = { position: 'absolute', width: 0, height: 0 };
 
+/** Over the dock, out of the way of the layout, so its bottom edge is the dock's. */
+const OVER_DOCK = { position: 'absolute', top: 0, bottom: 0, left: 0, width: 0 };
+
 type KeyboardMoveEvent = { nativeEvent?: { height?: number } };
 
 /** react-native-keyboard-controller's view that reports the keyboard. See `KeyboardDock`. */
@@ -68,6 +71,19 @@ type KeyboardMoveEvent = { nativeEvent?: { height?: number } };
 export class KeyboardControllerView {
   constructor() {
     registerViewName('keyboard-controller-view', 'KeyboardControllerView');
+    claimHost(inject(ElementRef).nativeElement as HostNode);
+  }
+}
+
+/**
+ * The native view `KEYBOARD_MOTION` names, which reports how far the keyboard covers the dock at
+ * every frame of its motion. See `KeyboardDock`.
+ */
+@Directive({ selector: 'keyboard-motion-view' })
+export class KeyboardMotionView {
+  constructor() {
+    const motion = inject(KEYBOARD_MOTION);
+    if (motion) registerViewName('keyboard-motion-view', motion.viewName);
     claimHost(inject(ElementRef).nativeElement as HostNode);
   }
 }
@@ -103,12 +119,17 @@ export class KeyboardGestureArea {
  * the keyboard, as Messages does, and a short one springs it back up. `keyboardLift` moves
  * content above with it.
  *
- * Without it, and on Android, the bar is padded by as much of the keyboard as covers it, which it
- * learns as the keyboard starts to move; on Android it jumps into place then, rather than moving
- * with the keyboard. A window the system resized for the keyboard already puts it clear, and then
- * it is not padded at all. Android does not use the controller: a dock in a form sheet would be
- * lifted twice, by the sheet and by the keyboard, and the controller adds the system bars as
- * margins around the app's content unless it is told the app is edge-to-edge.
+ * On Android with `@ng-native/expo`'s `provideNativeKeyboard()`, the bar is moved the same way, by
+ * a view of that package's that reports how far the keyboard covers the dock at every frame. It is
+ * measured on screen, so a dock that is not at the bottom of the window, or is in a form sheet
+ * react-native-screens raises with the keyboard, rises only as far as it still must. Android does
+ * not use react-native-keyboard-controller: its view adds the navigation bar as margins around the
+ * whole app's content, which an app drawn edge to edge does not want.
+ *
+ * Otherwise the bar is padded by as much of the keyboard as covers it, which it learns as the
+ * keyboard starts to move; on Android it jumps into place then, rather than moving with the
+ * keyboard. A window the system resized for the keyboard already puts it clear, and then it is not
+ * padded at all.
  *
  * `covered()` is how much of the bottom of the screen the keyboard covers beyond the dock's own
  * place, for content above that keeps clear of it with padding or an inset rather than moving.
@@ -116,22 +137,30 @@ export class KeyboardGestureArea {
 @Component({
   selector: 'keyboard-dock',
   exportAs: 'keyboardDock',
-  imports: [KeyboardControllerView, KeyboardGestureArea, TemplateSlot, View],
+  imports: [KeyboardControllerView, KeyboardGestureArea, KeyboardMotionView, TemplateSlot, View],
   // One slot, stamped in whichever branch applies: two `<ng-content>`s of the same selector would
   // be given the content at compile time, whichever branch renders.
   template: `
     <ng-template #content><ng-content /></ng-template>
     @if (lifts) {
-      <keyboard-controller-view
-        [style]="outOfFlow"
-        (keyboardMoveStart)="onKeyboardMove($event)"
-        (keyboardMoveEnd)="onKeyboardMove($event)"
-      />
-      <keyboard-gesture-area
-        [style]="outOfFlow"
-        [offset]="barHeight()"
-        [textInputNativeID]="inputID()"
-      />
+      @if (motion) {
+        <keyboard-motion-view
+          [style]="overDock"
+          (keyboardMoveStart)="onKeyboardMove($event)"
+          (keyboardMoveEnd)="onKeyboardMove($event)"
+        />
+      } @else {
+        <keyboard-controller-view
+          [style]="outOfFlow"
+          (keyboardMoveStart)="onKeyboardMove($event)"
+          (keyboardMoveEnd)="onKeyboardMove($event)"
+        />
+        <keyboard-gesture-area
+          [style]="outOfFlow"
+          [offset]="barHeight()"
+          [textInputNativeID]="inputID()"
+        />
+      }
       <view
         collapsable="false"
         [style.backgroundColor]="backgroundColor()"
@@ -156,9 +185,17 @@ export class KeyboardDock extends ViewBase {
   private readonly safeArea = inject(SafeArea);
   protected readonly none = {};
   protected readonly outOfFlow = OUT_OF_FLOW;
+  protected readonly overDock = OVER_DOCK;
 
-  /** iOS with the controller: native moves the bar. Read once: neither changes under an app. */
-  protected readonly lifts = nativePlatform() === 'ios' && inject(KEYBOARD_CONTROLLER);
+  /** On Android, the view that reports the keyboard's motion, where the build has one. */
+  protected readonly motion = nativePlatform() === 'android' ? inject(KEYBOARD_MOTION) : null;
+
+  /**
+   * Native moves the bar: on iOS with the controller, on Android with the motion view. Read once:
+   * neither changes under an app.
+   */
+  protected readonly lifts =
+    this.motion !== null || (nativePlatform() === 'ios' && inject(KEYBOARD_CONTROLLER));
 
   private readonly field = contentChild(TextInput, { descendants: true, read: ElementRef });
   private readonly fieldInput = contentChild(TextInput, { descendants: true });
@@ -167,7 +204,10 @@ export class KeyboardDock extends ViewBase {
   private readonly bottomEdge = signal<number | null>(null);
   /** The bar's own height, measured, which the drag that lowers the keyboard starts above. */
   protected readonly barHeight = signal(0);
-  /** The keyboard's height as the controller last reported it, excluding the drag area. */
+  /**
+   * The keyboard's height over the dock as native last reported it: the controller's keyboard
+   * height, excluding the drag area, or the motion view's cover of the dock.
+   */
   private readonly controlled = signal(0);
 
   /** The inset under the bar while the keyboard is down: the home indicator or navigation bar. */
@@ -183,7 +223,8 @@ export class KeyboardDock extends ViewBase {
     if (height === 0) return this.inset();
     const edge = this.bottomEdge();
     if (edge === null || screenY === undefined) return height;
-    return Math.max(0, edge - screenY);
+    // The edge is in the window, and on Android that can start below the status bar.
+    return Math.max(0, edge - (screenY - this.keyboard.windowTop));
   });
 
   /**
@@ -252,15 +293,15 @@ export class KeyboardDock extends ViewBase {
     inject(DestroyRef).onDestroy(() => drive?.stop());
   }
 
-  /** The controller's view, the one whose events carry the keyboard. */
+  /** The controller's or the motion view, the one whose events carry the keyboard. */
   private controllerView(): HostNode {
-    this.source ??= this.node.children.find((child) => child.kind === 'element') ?? this.node;
+    this.source ??= this.node.childList.find((child) => child.nodeKind === 'element') ?? this.node;
     return this.source;
   }
 
   /** The view holding the content, the last of the dock's own. */
   private barView(): HostNode | undefined {
-    return this.node.children.filter((child) => child.kind === 'element').at(-1);
+    return this.node.childList.filter((child) => child.nodeKind === 'element').at(-1);
   }
 
   protected onKeyboardMove(event: unknown): void {

@@ -103,6 +103,17 @@ device and in a browser alike. iOS reports no `Enter` from a single-line field, 
 `$event.nativeEvent.selection`, a `{ start, end }` that changes as the caret moves or a range is
 selected.
 
+Bind `[selection]` to place the caret or select a range from your state: `{ start: 3 }` is a caret
+after the third character, and `{ start: 1, end: 4 }` a range. Whenever the bound selection
+differs from the one native last had, on the first render and after, it goes out with the same
+`setTextAndSelection` command, on iOS and Android alike. As in React Native the binding is
+controlled, so a caret the user moves goes back to the bound one; to let the user move it, update
+your state from `(selectionChange)`.
+
+On Android, `cursorColor` and `selectionHandleColor` follow `selectionColor` unless they are set,
+as React Native's do, so one `selectionColor` tints the caret, the handles and the highlight there,
+as it does on iOS.
+
 `(contentSizeChange)` fires for a multiline field only, as React Native's does, and carries
 `$event.nativeEvent.contentSize`, the `{ width, height }` of the text. Android reports it as the
 text changes. iOS reports it when the field itself changes size, as React

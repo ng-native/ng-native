@@ -38,7 +38,7 @@ import type { ResponderHandlers, WindowFrame } from './engine.ts';
 /** What a host node has to be able to answer. `EngineNode` and a DOM element both can. */
 export interface HostNode {
   /** `element` or `text`, so a caller can tell a node from the words inside it. */
-  readonly kind: string;
+  readonly nodeKind: string;
   /**
    * The props the host is holding for this node.
    *
@@ -46,9 +46,9 @@ export interface HostNode {
    * directive consumes has to stop being an attribute the host writes through.
    */
   props: Record<string, unknown>;
-  /** The text, when `kind` is `text`. Empty otherwise. */
-  text: string;
-  children: readonly HostNode[];
+  /** The text, when `nodeKind` is `text`. Empty otherwise. */
+  nodeText: string;
+  childList: readonly HostNode[];
   parent: HostNode | null;
   /**
    * Set by `claimHost` from every host primitive's constructor, so a host can tell an element a
@@ -66,7 +66,7 @@ export interface HostNode {
    * runs once per element on screen. A host whose nodes cannot carry it leaves it out, and the
    * primitive injects as before.
    */
-  readonly host?: HostEngine;
+  readonly engine?: HostEngine;
 }
 
 /** Something that writes its node's props once it has its inputs. See `HostEngine.settle`. */
@@ -99,6 +99,14 @@ export abstract class HostEngine {
   abstract commit(): boolean;
   /** The node holding focus, or null. Verified to still be attached before it is handed back. */
   abstract get focused(): HostNode | null;
+  /**
+   * The focused node when it is a text field, which is what holds a keyboard; otherwise null. A
+   * view or a pressable takes focus from a hardware keyboard or a D-pad, and has no keyboard to
+   * put away.
+   */
+  abstract get focusedField(): HostNode | null;
+  /** Put the keyboard away: `focusedField`, if there is one, is sent `blur`. */
+  abstract blurFocused(): void;
   /** Turn whatever an app passed as an image source into what the host wants. */
   abstract resolveAsset(value: unknown): unknown;
   /** Turn a colour the app wrote into whatever the host draws with. */
@@ -130,6 +138,13 @@ export abstract class HostEngine {
    * styles.
    */
   adoptScope(_node: HostNode, _like: HostNode | null): void {}
+
+  /**
+   * Keep the drag now under way from the page until the last finger lifts, as a browser does for
+   * a `touchmove` a listener prevented the default of. A host whose page a browser scrolls leaves
+   * it out.
+   */
+  keepDrag?(node: HostNode): void;
 
   /**
    * Take the user to a node: a text input gets the cursor, and anything else is brought on

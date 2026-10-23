@@ -14,8 +14,12 @@ the price of a table of names.
 ## Install
 
 ```sh
-npx expo install @expo/ui
+npx expo install @expo/ui react-dom
 ```
+
+`react-dom` is installed with it at the SDK's version: `@expo/ui` has it as an optional peer,
+and npm otherwise takes the newest `react-dom`, whose React peer the app's React does not meet, so
+every later `npm install` stops with `ERESOLVE`.
 
 ```ts
 import { registerExpoUiViews } from '@ng-native/expo';
@@ -62,8 +66,8 @@ element always are.
 **SwiftUI and Compose lay out their own subtrees.** `<ui-host>` is the bridge from Yoga's layout to
 theirs; every other `ui-*` element must sit inside one, or the control has no size and does not
 appear - which looks exactly like a module that failed to install. `UiHost`'s `matchContents` input
-sizes the host to the SwiftUI content instead of the other way round; `ignoreSafeArea` and
-`useViewportSizeMeasurement` are the other two host-level controls.
+sizes the host to the SwiftUI content instead of the other way round; `ignoreSafeArea` (iOS only)
+and `useViewportSizeMeasurement` are the other two host-level controls.
 
 ## Names, and the typed components
 
@@ -107,14 +111,19 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiRectangle`**, **`UiRoundedRectangle`**, **`UiUnevenRoundedRectangle`**, **`UiCapsule`**,
   **`UiCircle`** and **`UiEllipse`** - SwiftUI's shapes, iOS only, coloured with the
   `foregroundStyle` modifier. **`UiAccessoryWidgetBackground`** is the system's backdrop for a lock
-  screen widget.
-- **`UiLabel`** - a `title` beside an SF Symbol, iOS only. **`UiLink`** opens its `destination`
+  screen widget, for a [widget layout](/packages/expo/live-activity): from `@expo/ui` 57.0.22 it
+  has no view in the app, and `expo-widgets` 57.0.23 or later draws it in the widget.
+- **`UiLabel`** - a `title` beside an SF Symbol, iOS only. `color` colours the symbol alone, and the
+  `foregroundStyle` modifier the title too. **`UiLink`** opens its `destination`
   URL when tapped, showing its `label` or the views written inside it, iOS only.
 - **`UiSlider`**, **`UiStepper`** and **`UiToggle`** - with `valueChanged`, `valueChange` and
   `isOnChange` for what the user did.
 - **`UiTextField`** - its `text` is a `nativeState('')`, which the field writes to on the UI
   thread; `textChange` reports each change.
-- **`UiColorPicker`**, **`UiGauge`** and **`UiProgress`**.
+- **`UiColorPicker`**, **`UiGauge`** and **`UiProgress`**. A gauge's `type` is its `gaugeStyle`:
+  `circular`, `circularCapacity`, `linear`, `linearCapacity` or `automatic`. Its
+  `currentValueLabel`, `minimumValueLabel` and `maximumValueLabel` are drawn as text where SwiftUI
+  puts each.
 - **`UiChart`** - a Swift Charts chart of `data`, iOS only, each point an `x` label or number
   against a `y`, with an optional `color`. `type` is `line`, `point`, `bar`, `area`, `pie` (iOS 17)
   or `rectangle`, and each type takes a style of its own: `lineStyle`, `barStyle`, `pieStyle` and
@@ -124,7 +133,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   the note under its rows. When both a `title` and a header slot are set, `@expo/ui`'s `SectionView`
   draws the `title` and drops the slot; an empty `title=""` counts as unset.
 - **`UiImage`** - an SF Symbol by `systemName`, a symbol or picture in the app's asset catalog by
-  `assetName`, or a picture by `uiImage`, the URL of a file on the device.
+  `assetName`, or a picture by `uiImage`, the URL of a file on the device. A symbol's `size` is a
+  `font` modifier of that many points, which a `font` modifier of your own wins over, and its
+  `color` a `foregroundStyle` modifier.
 - **`UiText`** - a SwiftUI `Text`. Its text is what is written inside it,
   `<ui-text>Us {{ score() }}</ui-text>`, as `<text>` takes its own; `text` sets it too, and wins.
   A `ui-text` nested inside one is a span with its own modifiers, drawn after the text: put text
@@ -139,7 +150,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   date is best asked for behind a button that shows the picker. Without a form, `selection` still
   takes ISO text on iOS. `displayedComponents` is a list of `'date'` and `'hourAndMinute'`; an
   empty list shows nothing on iOS, and the date and time on Android, which has no way to show
-  nothing.
+  nothing. `range`, an optional `start` and an optional `end` as ISO text, limits the dates that
+  can be picked on both: from `start` on, up to `end`, or between the two. `accessibilityLabel` is
+  what VoiceOver reads for it, and TalkBack with `@expo/ui` 57.0.21 or later. `title` is iOS only.
 - **`UiPicker`** - a SwiftUI `Picker` on iOS, Compose's segmented buttons or dropdown menu on
   Android, and a Signal Forms field. `options` draws the choices;
   see [Choices: `UiPicker`](#choices-uipicker) below.
@@ -153,9 +166,15 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   57.0.20 or later in the native build. See
   [The system's close button](#the-systems-close-button) for one in a sheet.
 
-Each input goes straight through to the node as a prop, `modifiers` included -
+Most inputs go straight through to the node as a prop of the same name, `modifiers` included -
 `UiModifier` is one SwiftUI modifier, shaped exactly as `@expo/ui`'s own modifier functions build
-them (`{ $type: 'frame', ... }`). Events are declared as outputs purely for their type: `$event` in
+them (`{ $type: 'frame', ... }`). A few become what the native view reads instead, as `@expo/ui`'s
+own components send them. On iOS, a `ui-image`'s `size` and `color` are `font` and
+`foregroundStyle` modifiers, a `ui-gauge`'s `type` is a `gaugeStyle` modifier and its labels are
+slots, a `ui-label`'s `color` colours its icon, and `accessibilityLabel` on a `ui-menu` or
+`ui-date-picker` is an `accessibilityLabel` modifier; each modifier made this way comes after the
+app's own. A `ui-view-host` takes `modifiers` on Android only, since SwiftUI's view host reads
+none. Events are declared as outputs purely for their type: `$event` in
 a template binding is typed as the native payload, but the output itself is never emitted. Angular
 binds a template's `(dateChange)` to the element's own native event directly, so that is the only
 place it arrives - a programmatic subscription to the output from code never receives anything.
@@ -181,8 +200,9 @@ write the new value back from `(isOnChange)`. A stack without an `alignment` is 
 Without a `spacing`, SwiftUI puts its own default spacing between a stack's children and Compose
 puts none, so give a stack a `spacing` where the gap matters.
 
-`modifiers` go to both platforms as they are written, and the two read different ones. Compose skips
-a modifier it does not know, silently, and knows few of SwiftUI's: `frame`, `font` and
+`modifiers` go to both platforms as they are written, but for a `ui-view-host`'s, which go to
+Android only, and the two read different ones. Compose skips a modifier it does not know, silently,
+and knows few of SwiftUI's: `frame`, `font` and
 `foregroundStyle` do nothing on Android. Even a name both know can read different fields: SwiftUI's
 `padding` takes `leading`, `trailing`, `horizontal`, `vertical` and `all`, while Compose's reads
 only `start`, `top`, `end` and `bottom`. Choose the modifiers by platform, with `nativePlatform()`

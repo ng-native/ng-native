@@ -129,18 +129,20 @@ describe(':is(<compound> > *)', () => {
     assert.equal(s.opacity('grandchild'), 0.5);
   });
 
-  it('is not a form :not() takes, which says so', () => {
+  it('is negated by :not(), a child of anything but the compound', () => {
     const s = scene('.x:not(.p > *) { opacity: 0.5 }');
     assert.equal(s.opacity('child'), undefined);
-    assert.equal(s.reports.length, 1);
-    assert.match(s.reports[0]!, /':not\(\)' cannot contain a combinator/);
+    assert.equal(s.opacity('grandchild'), 0.5);
+    assert.deepEqual(s.reports, []);
   });
 
-  it('still refuses a longer selector inside', () => {
+  it('takes a longer selector inside, as a selector matched from the node', () => {
     // Two compounds over the parent, or a parent of the parent: a longer walk than one ancestor.
+    // What each matches is in css-nested-selector.
     for (const longer of ['.a .b .p > *', '.a > .p > *', '.a ~ .p > *']) {
       const s = scene(`.x:is(${longer}) { opacity: 0.5 }`);
-      assert.equal(s.reports.length, 1, longer);
+      assert.equal(s.opacity('child'), undefined, longer);
+      assert.deepEqual(s.reports, [], longer);
     }
   });
 });

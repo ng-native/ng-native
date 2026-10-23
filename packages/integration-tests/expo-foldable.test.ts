@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
-import { Foldable, type HingeState, type NativeHinge } from '@ng-native/expo/foldable';
+import {
+  Foldable,
+  type ExpoHinge,
+  type ExpoHingeReading,
+  type HingeState,
+  type NativeHinge,
+} from '@ng-native/expo/foldable';
 
 const BOOK: HingeState = {
   posture: 'partially-open',
@@ -49,8 +55,33 @@ function fakeHinge(options: { state?: HingeState; angle?: boolean; angleFrom?: n
   };
 }
 
-function foldableWith(native: NativeHinge | null) {
-  const injector = Injector.create({ providers: [{ provide: Foldable.SOURCE, useValue: native }] });
+function fakeExpoHinge(initial: ExpoHingeReading | null) {
+  const listeners = new Set<(event: { hinge: ExpoHingeReading | null }) => void>();
+  let hinge = initial;
+  const source: ExpoHinge = {
+    getHinge: () => hinge,
+    addHingeListener: (listener) => {
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    },
+  };
+  return {
+    source,
+    change: (next: ExpoHingeReading | null) => {
+      hinge = next;
+      listeners.forEach((listener) => listener({ hinge: next }));
+    },
+    listening: () => listeners.size,
+  };
+}
+
+function foldableWith(native: NativeHinge | null, expoHinge: ExpoHinge | null = null) {
+  const injector = Injector.create({
+    providers: [
+      { provide: Foldable.SOURCE, useValue: native },
+      { provide: Foldable.HINGE, useValue: expoHinge },
+    ],
+  });
   const foldable = runInInjectionContext(injector, () => new Foldable());
   return { foldable, destroy: () => (injector as unknown as { destroy(): void }).destroy() };
 }
@@ -151,5 +182,90 @@ describe('Foldable, on a foldable', () => {
     assert.equal(hinge.listening(), 2);
     destroy();
     assert.equal(hinge.listening(), 0);
+  });
+});
+
+describe('Foldable, reading expo-hinge', () => {
+  it('takes the posture and the angle from the hinge', () => {
+    const postures = [
+      ['closed', 'closed'],
+      ['partiallyOpen', 'partially-open'],
+      ['fullyOpen', 'fully-open'],
+      ['unknown', 'unknown'],
+    ] as const;
+    for (const [status, posture] of postures) {
+      const { foldable } = foldableWith(null, fakeExpoHinge({ angle: 120, status }).source);
+      assert.deepEqual(
+        [foldable.available(), foldable.posture(), foldable.angle()],
+        [true, posture, 120],
+        status,
+      );
+    }
+  });
+
+  it('answers like a phone that does not fold where the device has no hinge', () => {
+    const { foldable } = foldableWith(null, fakeExpoHinge(null).source);
+    assert.deepEqual(
+      [foldable.available(), foldable.posture(), foldable.fold(), foldable.angle()],
+      [false, 'unknown', null, null],
+    );
+  });
+
+  it('follows the hinge as it turns, and as it stops and starts reporting', () => {
+    const hinge = fakeExpoHinge({ angle: 0, status: 'closed' });
+    const { foldable } = foldableWith(null, hinge.source);
+    hinge.change({ angle: 95, status: 'partiallyOpen' });
+    assert.deepEqual([foldable.posture(), foldable.angle()], ['partially-open', 95]);
+    hinge.change(null);
+    assert.deepEqual(
+      [foldable.available(), foldable.posture(), foldable.angle()],
+      [false, 'unknown', null],
+    );
+    hinge.change({ angle: 180, status: 'fullyOpen' });
+    assert.deepEqual(
+      [foldable.available(), foldable.posture(), foldable.angle()],
+      [true, 'fully-open', 180],
+    );
+  });
+
+  it('keeps the fold from expo-foldables, which expo-hinge does not report', () => {
+    const hinge = fakeExpoHinge({ angle: 100, status: 'partiallyOpen' });
+    const foldables = fakeHinge({ state: { ...BOOK, posture: 'fully-open' }, angleFrom: 170 });
+    const { foldable } = foldableWith(foldables.native, hinge.source);
+    assert.deepEqual([foldable.posture(), foldable.angle()], ['partially-open', 100]);
+    assert.deepEqual(foldable.fold()?.bounds, BOOK.fold!.bounds);
+    assert.equal(foldable.book(), true);
+  });
+
+  it('falls back to expo-foldables while expo-hinge reports no hinge', () => {
+    const hinge = fakeExpoHinge(null);
+    const foldables = fakeHinge({ state: BOOK, angleFrom: 127 });
+    const { foldable } = foldableWith(foldables.native, hinge.source);
+    assert.deepEqual(
+      [foldable.available(), foldable.posture(), foldable.angle()],
+      [true, 'partially-open', 127],
+    );
+    hinge.change({ angle: 60, status: 'partiallyOpen' });
+    assert.equal(foldable.angle(), 60);
+    hinge.change(null);
+    assert.equal(foldable.angle(), 127, "expo-foldables' angle, followed all along");
+  });
+
+  it("takes expo-foldables' posture while expo-hinge cannot say", () => {
+    const hinge = fakeExpoHinge({ angle: 3, status: 'unknown' });
+    const foldables = fakeHinge({ state: { posture: 'closed' } });
+    const { foldable } = foldableWith(foldables.native, hinge.source);
+    assert.deepEqual([foldable.posture(), foldable.angle()], ['closed', 3]);
+    hinge.change({ angle: 100, status: 'partiallyOpen' });
+    assert.equal(foldable.posture(), 'partially-open');
+  });
+
+  it('stops listening to both modules when the app is destroyed', () => {
+    const hinge = fakeExpoHinge({ angle: 90, status: 'partiallyOpen' });
+    const foldables = fakeHinge({ state: BOOK, angleFrom: 90 });
+    const { destroy } = foldableWith(foldables.native, hinge.source);
+    assert.deepEqual([hinge.listening(), foldables.listening()], [1, 2]);
+    destroy();
+    assert.deepEqual([hinge.listening(), foldables.listening()], [0, 0]);
   });
 });

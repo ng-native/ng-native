@@ -37,7 +37,7 @@ import {
   type Signal,
   type Type,
 } from '@angular/core';
-import { ColorScheme, DeepLinks, type Scheme } from '@ng-native/device';
+import { ColorScheme, DeepLinks, NATIVE_HISTORY, type Scheme } from '@ng-native/device';
 import {
   NATIVE_HEADER_DEFAULTS,
   NATIVE_TAB_DEFAULTS,
@@ -160,8 +160,10 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
   ];
   if (!parentOf) {
     return [
+      // Kept under the token too, which web-compat's stand-in yields to: see `NATIVE_HISTORY`.
+      { provide: PlatformLocation, useExisting: NATIVE_HISTORY },
       {
-        provide: PlatformLocation,
+        provide: NATIVE_HISTORY,
         useFactory: () => {
           const links = inject(DeepLinks);
           return new NativePlatformLocation({
@@ -182,8 +184,10 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
   }
 
   return [
+    // Kept under the token too, which web-compat's stand-in yields to: see `NATIVE_HISTORY`.
+    { provide: PlatformLocation, useExisting: NATIVE_HISTORY },
     {
-      provide: PlatformLocation,
+      provide: NATIVE_HISTORY,
       // The app launches on the page the link belongs under; the link follows once it is shown.
       // Links while running go through the router below rather than straight into history.
       useFactory: () => {

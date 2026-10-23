@@ -29,7 +29,7 @@ interface Post {
 }
 
 interface ListHandle {
-  window(): readonly { index: number; slot: number; key: unknown; item: Post }[];
+  window(): readonly { index: number; slot: number; key: unknown; item: Post; parked?: boolean }[];
   scrollToIndex(options: { index: number; animated?: boolean }): void;
 }
 
@@ -297,6 +297,63 @@ describe('virtual list with measured rows', () => {
         [80, 80],
       ],
     );
+    unmount();
+  });
+
+  it('measures an item handed a view native already laid out at the same place and size', async () => {
+    const { instance, fabric, row, unmount } = await boot('Measured');
+    instance.separated!.set(true);
+    await settle();
+    // One tall row, below the middle of the window, so the rows above it keep their frames.
+    const heightOf = (id: number) => (id === 10 ? 120 : 75);
+    // Native reports a layout only when a view's frame differs from the last one it reported for
+    // that view, so a pass reports just the rows whose place or size moved.
+    const reported = new Map<number, string>();
+    const layOut = async () => {
+      for (let changed = true; changed;) {
+        changed = false;
+        const rows = instance
+          .list()
+          .window()
+          .filter((r) => !r.parked)
+          .sort((a, b) => a.index - b.index);
+        let y = 0;
+        for (const { item } of rows) {
+          const node = row(item.id)!;
+          const height = heightOf(item.id);
+          const top = y;
+          y += height;
+          if (reported.get(node.reactTag) === `${top}:${height}`) continue;
+          reported.set(node.reactTag, `${top}:${height}`);
+          changed = true;
+          await fireEvent(node, 'layout', { layout: { x: 0, y: top, width: 400, height } });
+        }
+      }
+    };
+    const gaps = () =>
+      flatten(fabric.committed)
+        .filter((n) => n.children.some((child) => child.props['nativeID'] === 'separator'))
+        .map((gap) => [gap.props['top'], gap.props['height']])
+        .sort((a, b) => Number(a[0]) - Number(b[0]));
+    await layOut();
+    // Every item new, and the views handed out last in first out, so the middle row of an odd
+    // window lands where its view's last item was, at the same size.
+    instance.items.set(posts(1000, 200));
+    await settle();
+    await layOut();
+    const window = instance
+      .list()
+      .window()
+      .filter((r) => !r.parked);
+    assert.equal(window.length % 2, 1);
+    assert.deepEqual(
+      gaps(),
+      window.map((r) => [r.index * 75, 75]),
+    );
+    // Items measured before keep their own sizes in a view that held another, until native says.
+    instance.items.set(posts(0, 200));
+    await settle();
+    assert.deepEqual(gaps()[10], [750, 120]);
     unmount();
   });
 

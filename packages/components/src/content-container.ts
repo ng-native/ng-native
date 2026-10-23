@@ -23,7 +23,7 @@ export class ContentContainer implements OnChanges {
   readonly classes = input<string>(undefined, { alias: 'contentContainerClass' });
 
   private readonly node = inject(ElementRef).nativeElement as HostNode;
-  private readonly engine: HostEngine = this.node.host ?? inject(HostEngine);
+  private readonly engine: HostEngine = this.node.engine ?? inject(HostEngine);
 
   ngOnChanges(): void {
     this.engine.adoptScope(this.node, this.classes() ? this.owner() : null);

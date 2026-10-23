@@ -45,17 +45,23 @@ function layoutEasingOf(easing: string | undefined): LayoutEasing | undefined {
  *
  * The overlap is the view's own frame against the keyboard's top edge, so a view that does not
  * reach the bottom of the screen moves only as far as it must. Unlike RN, the frame's top is
- * measured in the window, which is what the keyboard's `screenY` is in: `(layout)` reports it in
- * the parent's coordinates, and on a screen under a navigation bar those start a bar's height
+ * measured in the window, and the keyboard's `screenY` brought into it: `(layout)` reports the top
+ * in the parent's coordinates, and on a screen under a navigation bar those start a bar's height
  * down. RN leaves that to `keyboardVerticalOffset`, and a view that was not told came up short by
- * exactly that much, its bottom edge still behind the keyboard. The overlap never exceeds the
+ * exactly that much, its bottom edge still behind the keyboard. On Android, when React Native's
+ * edge-to-edge flag is off (Expo Go leaves it off), the window starts below the status bar while
+ * `screenY` counts from the top of the screen, so the keyboard's top is taken `Keyboard.windowTop`
+ * higher in the window, or the view comes up short by the status bar; when the flag is on,
+ * `Keyboard.windowTop` is zero. The overlap never exceeds the
  * view's own height either: padding a view by more than it has pushes its content out of it.
  * When the keyboard source reports no `screenY`, the keyboard's height stands in.
  *
  * The adjustment itself animates with the keyboard's own motion, the way RN's own
  * KeyboardAvoidingView does: a keyboard event's `duration` and `easing` configure the next
  * layout animation before the style change that moves this view, so the two run together rather
- * than the padding, height or position jumping to its resting place in one step.
+ * than the padding, height or position jumping to its resting place in one step. Android animates
+ * no layout unless an app turns that on, and reports no duration, so there the view jumps; with
+ * `@ng-native/expo`'s `provideNativeKeyboard()` it follows the keyboard frame by frame instead.
  */
 @Component({
   selector: 'keyboard-avoiding-view',
@@ -98,7 +104,9 @@ export class KeyboardAvoidingView extends ViewBase {
    */
   readonly keyboardVerticalOffset = input(0, { transform: numberOr(0) });
 
-  private readonly keyboard = inject(Keyboard).metrics;
+  private readonly keyboardService = inject(Keyboard);
+  /** Where the keyboard is, at every frame of its motion where the platform says. */
+  private readonly keyboard = this.keyboardService.position;
   private readonly layoutAnimation = inject(LayoutAnimation);
   private readonly frame = signal<Rect | null>(null);
   /** The height before any adjustment, which `height` mode shrinks from. */
@@ -117,7 +125,8 @@ export class KeyboardAvoidingView extends ViewBase {
     // overlap and the height springs back under the keyboard.
     const extent =
       this.behavior() === 'height' ? (this.initialHeight ?? frame.height) : frame.height;
-    const overlap = screenY === undefined ? height - offset : frame.y + extent - (screenY - offset);
+    const top = screenY === undefined ? undefined : screenY - this.keyboardService.windowTop;
+    const overlap = top === undefined ? height - offset : frame.y + extent - (top - offset);
     return Math.min(extent, Math.max(0, overlap));
   });
 
@@ -145,13 +154,14 @@ export class KeyboardAvoidingView extends ViewBase {
 
   constructor() {
     super();
-    // A duration of zero is Android's own keyboard event, which animates itself; there is
-    // nothing to configure alongside it. `appear`/`leave` are turned off because this is an
-    // update to a view already on screen, not one appearing or leaving - RN's own bare
-    // `LayoutAnimation.configureNext({duration, update})` animates nothing else either.
+    // A duration of zero is Android's own keyboard event, which says nothing of the motion; there
+    // is nothing to configure alongside it. Nor where the view follows the motion frame by frame.
+    // `appear`/`leave` are turned off because this is an update to a view already on screen, not
+    // one appearing or leaving - RN's own bare `LayoutAnimation.configureNext({duration, update})`
+    // animates nothing else either.
     effect(() => {
-      const { duration, easing } = this.keyboard();
-      if (!this.enabled() || !duration) return;
+      const { duration, easing } = this.keyboardService.metrics();
+      if (!this.enabled() || !duration || this.keyboardService.followsMotion) return;
       void this.layoutAnimation.animate(() => {}, {
         duration,
         easing: layoutEasingOf(easing),

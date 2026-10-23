@@ -104,13 +104,24 @@ describe('a class no stylesheet mentions', () => {
     );
   });
 
-  it('restyles for every class where a selector reads the class attribute some other way', () => {
-    const s = scene(`${CSS} [class^="pan"] .cell { color: red }`);
-    // The hundred cells the rule is for, under the element whose class list changed.
+  it('restyles where a class changes what a selector reading the whole attribute answers', () => {
+    const s = scene(
+      `${CSS} [class^="pan"] .cell { color: red } [class$="-end"] .cell { opacity: 0.5 }`,
+    );
+    const red = s.props('cell')['color'];
+    // `panel touched` starts with `pan` as `panel` did, and ends as neither test asks.
     assert.equal(
       s.restyled(() => s.engine.addClass(s.panel, 'touched')),
-      100,
+      0,
     );
+    assert.ok(s.restyled(() => s.engine.setClasses(s.panel, 'touched panel')) > 100);
+    assert.notEqual(s.props('cell')['color'], red);
+    assert.ok(s.restyled(() => s.engine.addClass(s.panel, 'at-end')) >= 100);
+    assert.equal(s.props('cell')['opacity'], 0.5);
+    assert.ok(s.restyled(() => s.engine.removeClass(s.panel, 'touched')) >= 100);
+    assert.equal(s.props('cell')['color'], red);
+    assert.ok(s.restyled(() => s.engine.removeClass(s.panel, 'at-end')) >= 100);
+    assert.equal(s.props('cell')['opacity'] ?? 1, 1);
   });
 });
 
@@ -162,7 +173,7 @@ describe('a class named only in :has()', () => {
 
   it('matches what is above it again as a list starts and stops both starting and ending as asked', () => {
     const s = scene(`${CSS} .panel:has([class^="p-"][class$="-fluid"]) { opacity: 0.4 }`);
-    const cell = s.engine.root.children[0]!.children[3]!.children[2]!;
+    const cell = s.engine.root.childList[0]!.childList[3]!.childList[2]!;
     const opacity = () => s.props('panel')['opacity'] ?? 1;
     s.engine.setClasses(cell, 'p-input-fluid');
     s.engine.commit();
@@ -183,7 +194,7 @@ describe('a class named only in :has()', () => {
   it('matches nothing under a box again for a change beneath it', () => {
     // The root of a screen whose overlay opens: a class of its own, and a change beneath it.
     const s = scene(HAS);
-    const cell = s.engine.root.children[0]!.children[3]!.children[2]!;
+    const cell = s.engine.root.childList[0]!.childList[3]!.childList[2]!;
     resetStyleStats();
     s.engine.addClass(cell, 'flag');
     s.engine.addClass(s.panel, 'on');
@@ -195,8 +206,8 @@ describe('a class named only in :has()', () => {
 
   it('matches what is above it again, coming and going', () => {
     const s = scene(HAS);
-    const rows = s.engine.root.children[0]!.children;
-    const cell = rows[3]!.children[2]!;
+    const rows = s.engine.root.childList[0]!.childList;
+    const cell = rows[3]!.childList[2]!;
     s.engine.addClass(cell, 'wide-fluid');
     s.engine.commit();
     assert.equal(s.props('panel')['opacity'], 0.3);
@@ -214,7 +225,7 @@ describe('a class named only in :has()', () => {
     const s = scene(CSS);
     s.engine.setHostSheet(s.panel, sheet(':host:has(.flag) { opacity: 0.2 }'));
     s.engine.commit();
-    const cell = s.panel.children[3]!.children[2]!;
+    const cell = s.panel.childList[3]!.childList[2]!;
     s.engine.addClass(cell, 'flag');
     s.engine.commit();
     assert.equal(s.props('panel')['opacity'], 0.2);
@@ -225,10 +236,10 @@ describe('a class named only in :has()', () => {
 
   it('asks only the box right above the element again for a class :has(> ) names', () => {
     const s = scene(`${CSS} .row:has(> .flag) { opacity: 0.2 }`);
-    const row = s.panel.children[3]!;
+    const row = s.panel.childList[3]!;
     s.engine.setProp(row, 'nativeID', 'picked');
     s.engine.commit();
-    s.engine.addClass(row.children[2]!, 'flag');
+    s.engine.addClass(row.childList[2]!, 'flag');
     // The row, and not the panel or the root, which cannot have the cell as a child.
     assert.deepEqual(
       [row, s.panel, s.engine.root].map((node) => node.hasDirty),
@@ -236,14 +247,14 @@ describe('a class named only in :has()', () => {
     );
     s.engine.commit();
     assert.equal(s.props('picked')['opacity'], 0.2);
-    s.engine.removeClass(row.children[2]!, 'flag');
+    s.engine.removeClass(row.childList[2]!, 'flag');
     s.engine.commit();
     assert.equal(s.props('picked')['opacity'], null);
   });
 
   it('asks every box above again where another rule names the class in :has() too', () => {
     const s = scene(`${CSS} .row:has(> .flag) { color: red } .panel:has(.flag) { opacity: 0.2 }`);
-    const cell = s.panel.children[3]!.children[2]!;
+    const cell = s.panel.childList[3]!.childList[2]!;
     s.engine.addClass(cell, 'flag');
     s.engine.commit();
     assert.equal(s.props('panel')['opacity'], 0.2);
@@ -318,7 +329,7 @@ describe('a class named only as what an element is inside', () => {
   it('restyles as any other where a rule asks from beside the element', () => {
     const s = scene(`${CSS} .first ~ .row { opacity: 0.3 }`);
     const first = s.engine.createElement('view');
-    s.engine.insertBefore(s.panel, first, s.panel.children[0]!);
+    s.engine.insertBefore(s.panel, first, s.panel.childList[0]!);
     s.engine.commit();
     s.engine.addClass(first, 'first');
     s.engine.commit();

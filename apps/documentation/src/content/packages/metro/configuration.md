@@ -133,7 +133,7 @@ naming the library's file, the line and the component, as your own CSS's warning
 are printed when a file is transformed, so a build from a warm cache prints none; start Metro with
 `--clear` to see them again. The rules a library writes for a browser
 and native reads differently - `display: flex` with the row direction a browser gives it, `:hover`,
-`position: fixed` - are the same ones [what CSS reaches a device](/packages/fabric/supported-css)
+`float` - are the same ones [what CSS reaches a device](/packages/fabric/supported-css)
 lists for your own CSS. A component the library writes with `ViewEncapsulation.None`, as Angular
 Material writes every one, has its sheet matched as a global one once it renders, as a browser
 applies it: see [the CSS engine](/packages/fabric/css-engine).

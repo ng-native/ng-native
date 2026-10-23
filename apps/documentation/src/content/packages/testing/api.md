@@ -28,6 +28,12 @@ A string is compiled just in time as the template of a host component, so the te
 it is created or first checked, such as `NG0950` for a required input nobody set, rejects the
 promise.
 
+The fake stands for a development build that has every native view. While something is rendered
+and no `expo` global is set, `render()` sets one whose `getViewConfig` answers for every view, so a
+component that asks the build for a view, as `ui-bottom-sheet` does for the bar its
+`ui-toolbar-item`s go in on iOS, draws what a development build draws. It is removed once nothing
+is rendered, and an `expo` global a test sets is left as it is.
+
 ### `RenderOptions<T>`
 
 | Option                | Type                                   | Default | What it does                                                                                                                                                                                                         |
@@ -126,14 +132,14 @@ Every error says what was looked for and prints the tree. With none: `Unable to 
 text "Bananas".`. With more than one: `Found 2 nodes with role "listitem", and expected one. Use
 getAllByRole if more than one is expected.`
 
-| Query               | Arguments                   | Matches a node when                                                                                                                                                                             |
-| ------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ByRole`            | `(role, { name?, exact? })` | `accessibilityRole` or `role` is `role`; and, given `name`, the node's accessible name matches it: its `accessibilityLabel`, or its text content when it has none, as a screen reader reads it. |
-| `ByText`            | `(text, { exact? })`        | It is a `Paragraph` and its text content matches.                                                                                                                                               |
-| `ByTestId`          | `(testId, { exact? })`      | `testID` or `nativeID` matches.                                                                                                                                                                 |
-| `ByLabelText`       | `(label, { exact? })`       | `accessibilityLabel` matches.                                                                                                                                                                   |
-| `ByPlaceholderText` | `(placeholder, { exact? })` | A text field's or the navigation bar's search field's `placeholder` matches.                                                                                                                    |
-| `ByDisplayValue`    | `(value, { exact? })`       | It is a text field and its `text`, the value `<text-input>` binds its model to, matches.                                                                                                        |
+| Query               | Arguments                                                                     | Matches a node when                                                                                                                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ByRole`            | `(role, { name?, exact?, disabled?, selected?, checked?, busy?, expanded? })` | `accessibilityRole` or `role` is `role`; given `name`, the node's accessible name matches it: its `accessibilityLabel`, or its text content when it has none, as a screen reader reads it; and given a state, the node is in it. |
+| `ByText`            | `(text, { exact? })`                                                          | It is a `Paragraph` and its text content matches.                                                                                                                                                                                |
+| `ByTestId`          | `(testId, { exact? })`                                                        | `testID` or `nativeID` matches.                                                                                                                                                                                                  |
+| `ByLabelText`       | `(label, { exact? })`                                                         | `accessibilityLabel` matches.                                                                                                                                                                                                    |
+| `ByPlaceholderText` | `(placeholder, { exact? })`                                                   | A text field's or the navigation bar's search field's `placeholder` matches.                                                                                                                                                     |
+| `ByDisplayValue`    | `(value, { exact? })`                                                         | It is a text field and its `text`, the value `<text-input>` binds its model to, matches.                                                                                                                                         |
 
 Every query reads the props on the committed nodes, which are the props native was sent: what a
 component writes for `testID`, `id` (as `nativeID`), `accessibilityRole` or `role` (as
@@ -157,6 +163,18 @@ by default commits one without you writing it, the way `<switch>` commits `acces
   and `/^and plums$/` is anchored. Its `lastIndex` is set back to 0 before each test, so one with
   the `g` or `y` flag finds every match, on every call.
 - In `ByRole`, the role itself is always an exact match, and `exact` applies to `name`.
+
+**States** in `ByRole` are read from `accessibilityState`, which the components and the `aria-*`
+attributes write, as React Native Testing Library reads them. A state nothing set is `false` for
+`disabled`, `selected` and `busy`, and unset for `checked` and `expanded`, so `{ checked: false }`
+finds only a node that says it is unchecked. `checked` counts only on a `checkbox`, `radio` or
+`switch`; a node with any other role has no checked state. A `<text-input>` with `editable` false
+is disabled. `checked` can also be `'mixed'`. A `findByRole` with a state waits for the node to
+reach it, which is how a test waits for a button to be enabled again before pressing it:
+
+```ts
+await userEvent.press(await screen.findByRole('button', { name: 'Retry', disabled: false }));
+```
 
 **Hidden elements** are left out, as React Native Testing Library leaves them out by default: a view
 with `accessibilityElementsHidden`, `aria-hidden` or `importantForAccessibility:
@@ -211,9 +229,10 @@ neither there it rejects with `No TextInput or search bar at or under this <view
 A press, by `fireEvent.press` or `fireEvent(node, 'press')`, does nothing at all on a node a finger
 could not reach, as React Native Testing Library decides it from `pointerEvents` on the node as last
 committed: one that is `none` or `box-none` itself, or one under a view that is `none` or
-`box-only`. `pointer-events: none` in CSS commits as the same prop. Nothing is sent and nothing is
-thrown, so a test asserts on what did not happen: the handler never ran. Any other event by name is
-sent as before.
+`box-only`. `pointer-events: none` in CSS commits as the same prop. Views above a
+`ui-bottom-sheet`'s content are not counted, since the sheet's content takes its own touches on a
+device. Nothing is sent and nothing is thrown, so a test asserts on what did not happen: the
+handler never ran. Any other event by name is sent as before.
 
 ### `userEvent`
 
@@ -285,7 +304,7 @@ gesture, or none of that kind.
 function waitFor<T>(callback: () => T | Promise<T>, options?: WaitForOptions): Promise<T>;
 
 interface WaitForOptions {
-  timeout?: number; // 1000
+  timeout?: number; // 1000, or what configure() set
   interval?: number; // 50
 }
 ```
@@ -311,6 +330,27 @@ Resolves once the node, the nodes, or whatever the callback returns have left th
 A callback that throws or returns `null` counts as removed. It rejects at once if the target is
 already gone when it starts, as Testing Library's does, because a wait for something that is
 already absent passes for the wrong reason.
+
+### `configure`
+
+```ts
+function configure(options: { asyncUtilTimeout?: number }): void;
+function resetToDefaults(): void;
+```
+
+`asyncUtilTimeout` is the `timeout` that `waitFor`, every `findBy*` query and
+`waitForElementToBeRemoved` use when a call does not pass one, 1000 by default, as in React Native
+Testing Library. A suite that runs on a slow machine sets it once, in a setup file, rather than on
+every call:
+
+```ts
+import { configure } from '@ng-native/testing';
+
+configure({ asyncUtilTimeout: 3000 });
+```
+
+It holds for every test after it in the same process, until `resetToDefaults()` puts the default
+back. A test that changes it for itself puts it back in `finally`.
 
 ### `settle`
 

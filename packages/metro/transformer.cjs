@@ -14,9 +14,9 @@ const { isAngularDomComponent, domComponentReference } = require('./dom-componen
 const { markdownModule, markdownVersions } = require('./markdown-module.cjs');
 
 /**
- * Expo's transformer, from wherever the app's `expo` has it. pnpm and most npm installs hoist
- * `@expo/metro-config` beside this package, but npm can nest it under `expo` instead, where only
- * `expo` itself can reach it.
+ * Expo's transformer, from the app's `expo`, so it is the SDK the app is on. A copy beside this
+ * package can be another SDK's: pnpm resolves the optional `@expo/metro-config` peer to the newest
+ * release. Only when `expo` cannot be found from the working directory is that copy used.
  */
 function expoTransformer() {
   return expoMetroConfig('babel-transformer');
@@ -25,13 +25,14 @@ function expoTransformer() {
 /** A module of `@expo/metro-config`'s build, found as `expoTransformer` describes. */
 function expoMetroConfig(name) {
   const id = `@expo/metro-config/build/${name}`;
+  let expo;
   try {
-    return require(id);
+    expo = path.dirname(require.resolve('expo/package.json', { paths: [process.cwd()] }));
   } catch (error) {
     if (/** @type {any} */ (error).code !== 'MODULE_NOT_FOUND') throw error;
-    const expo = path.dirname(require.resolve('expo/package.json', { paths: [process.cwd()] }));
-    return require(require.resolve(id, { paths: [expo] }));
+    return require(id);
   }
+  return require(require.resolve(id, { paths: [expo] }));
 }
 
 /**

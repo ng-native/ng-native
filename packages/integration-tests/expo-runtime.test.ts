@@ -20,6 +20,7 @@ const ENTRY_POINTS = [
   'packages/schematics/files/src/main.ts',
   'examples/canary/src/main.ts',
   'examples/habits/src/main.ts',
+  'examples/material/src/main.ts',
   'examples/music/src/main.ts',
   'examples/notes/src/main.ts',
   'examples/runs/src/main.ts',

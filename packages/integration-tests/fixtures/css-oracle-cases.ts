@@ -47,6 +47,11 @@ export interface OracleCase {
    * browser, and the engine's reading of a bound value here.
    */
   bound?: Readonly<Record<string, string>>;
+  /**
+   * Declarations set on the probe as `[style.padding]` sets them: `style.setProperty` in the
+   * browser, and the renderer's `setStyle` here, merged over the cascade as a commit merges them.
+   */
+  inline?: Readonly<Record<string, string>>;
   /** The compiler refuses part of `css` with a warning, for a value native has no form for. */
   warns?: boolean;
 }
@@ -60,6 +65,11 @@ export const EXTRA_KEYS = {
   'border-top-width': 'borderTopWidth',
   'outline-color': 'outlineColor',
   'padding-top': 'paddingTop',
+  'padding-left': 'paddingLeft',
+  'margin-top': 'marginTop',
+  'border-top-left-radius': 'borderTopLeftRadius',
+  'row-gap': 'rowGap',
+  top: 'top',
   opacity: 'opacity',
   'text-decoration-color': 'textDecorationColor',
   display: 'display',
@@ -211,8 +221,9 @@ const CHANNEL_CASES = (
 
 /**
  * A display token in the two-keyword form, or one native has no layout for. Chrome computes
- * `inline flex` as `inline-flex` and `block flow` as `block`, which native reads as flex; a grid,
- * a table, a list item and the old flexbox keep their own value, and native has none of them.
+ * `inline flex` as `inline-flex` and `block flow` as `block`, which native reads as flex or keeps; a
+ * table, a list item and the old flexbox keep their own value, and native has none of them. A grid
+ * is kept, and laid out by the engine.
  */
 const DISPLAY_CASES = [
   'block flex',
@@ -231,6 +242,85 @@ const DISPLAY_CASES = [
   'list-item',
   '-webkit-box',
 ].flatMap((value) => tokenCases(`display: var() of ${value}`, 'display', value, 'none', 'display'));
+
+/** A shorthand in the probe's inline style over a longhand of it a rule sets. */
+function inlineOver(
+  name: string,
+  css: string,
+  inline: Readonly<Record<string, string>>,
+  extra: ExtraProperty,
+): OracleCase {
+  return { name, css, tree: probe({ name: 'view' }), inline, extra: [extra] };
+}
+
+const INLINE_SHORTHAND_CASES: OracleCase[] = [
+  inlineOver(
+    'an inline padding is over a padding-top in a rule',
+    '#probe { padding-top: 4px }',
+    { padding: '10px' },
+    'padding-top',
+  ),
+  inlineOver(
+    'an inline padding is under a padding-top a rule marks important',
+    '#probe { padding-top: 4px !important }',
+    { padding: '10px' },
+    'padding-top',
+  ),
+  inlineOver(
+    'an inline padding-top is over an inline padding before it',
+    '#probe { padding-top: 4px }',
+    { padding: '10px', 'padding-top': '2px' },
+    'padding-top',
+  ),
+  inlineOver(
+    'an inline margin is over a margin-top in a rule',
+    '#probe { margin-top: 4px }',
+    { margin: '10px' },
+    'margin-top',
+  ),
+  inlineOver(
+    'an inline inset is over a top in a rule',
+    '#probe { position: relative; top: 4px }',
+    { inset: '10px' },
+    'top',
+  ),
+  inlineOver(
+    'an inline gap is over a row-gap in a rule',
+    '#probe { row-gap: 4px }',
+    { gap: '10px' },
+    'row-gap',
+  ),
+  inlineOver(
+    'an inline border-width is over a border-top-width in a rule',
+    '#probe { border-style: solid; border-top-width: 4px }',
+    { 'border-width': '10px' },
+    'border-top-width',
+  ),
+  inlineOver(
+    'an inline border-color is over a border-top-color in a rule',
+    '#probe { border-top-color: rgb(1, 0, 0) }',
+    { 'border-color': 'rgb(0, 0, 255)' },
+    'border-top-color',
+  ),
+  inlineOver(
+    'an inline border-radius is over a border-top-left-radius in a rule',
+    '#probe { border-top-left-radius: 4px }',
+    { 'border-radius': '10px' },
+    'border-top-left-radius',
+  ),
+  inlineOver(
+    'an inline padding-inline is over a padding-left in a rule',
+    '#probe { padding-left: 4px }',
+    { 'padding-inline': '10px' },
+    'padding-left',
+  ),
+  inlineOver(
+    'an inline padding is over a padding-inline-end on the left, right to left',
+    '#probe { direction: rtl; padding-inline-end: 4px }',
+    { padding: '10px' },
+    'padding-left',
+  ),
+];
 
 export const CASES: OracleCase[] = [
   {
@@ -1017,6 +1107,7 @@ export const CASES: OracleCase[] = [
   },
   ...DERIVED_SPACE_CASES,
   ...CHANNEL_CASES,
+  ...INLINE_SHORTHAND_CASES,
   {
     name: 'background: var() of a colour token is the background colour',
     css: '#probe { --bg: rgb(1, 0, 0); background: var(--bg) }',

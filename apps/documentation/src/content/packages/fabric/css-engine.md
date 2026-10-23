@@ -34,12 +34,14 @@ file spells out. Each entry, or `styles` itself, can be:
 
 ```ts
 import { Component } from '@angular/core';
+import { View } from '@ng-native/components';
 
 const BOX = '.box { width: 50px; }';
 const TITLE = '.title { font-weight: 600; }';
 
 @Component({
   selector: 'app-card',
+  imports: [View],
   styleUrl: '../shared/cards.css', // shared between files: a stylesheet, not an import
   styles: [
     `
@@ -85,6 +87,13 @@ registered once its last instance is gone, as in a browser with Angular's
 `REMOVE_STYLES_ON_COMPONENT_DESTROY` off, so a component shown and hidden does not restyle every
 node each time. Shadow DOM's sheet stays the component's own, scoped as a shadow root scopes it.
 Angular Material writes every component this way.
+
+An attribute selector reads the node's prop of that name, `[disabled]` its `disabled` prop. A
+package that keeps an element's attributes apart from its props, because the native view reads
+them under other names, hands each one to `engine.keepAttribute(node, name, value)`:
+`@ng-native/web-compat` does this for a drawing's `width` and `fill`. The selector then reads the
+kept attribute over a prop of the same name, nothing about it is committed, and a change to it
+restyles what a prop's change would, a `:has()` above it included. `null` takes it away again.
 
 ## Inheritance is emulated, not real
 

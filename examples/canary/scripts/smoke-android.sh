@@ -21,10 +21,13 @@ adb install -r "$apk" || exit 1
 # One flow at a time, without ANSI: given a directory, Maestro prints nothing until every flow has
 # finished, where given a file it prints each command as it runs. A failing flow stops the walk,
 # so the logs left in the output dir are its own.
+# Through the watch, which ends a Maestro that throws on its main thread and keeps running, and a
+# walk past SMOKE_FLOW_LIMIT seconds, rather than the job waiting out its timeout.
 status=0
 for flow in "$flows"/*.yaml; do
   echo "[$(date +%T)] walking $(basename "$flow")"
-  maestro test --no-ansi "$flow" --test-output-dir "$out" --debug-output "$out" \
+  "$(dirname "$0")/maestro-watch.sh" "$out/console.log" "${SMOKE_FLOW_LIMIT:-720}" -- \
+    maestro test --no-ansi "$flow" --test-output-dir "$out" --debug-output "$out" \
     --flatten-debug-output || { status=$?; break; }
 done
 adb logcat -d > "$out/logcat.txt"

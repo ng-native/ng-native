@@ -107,7 +107,7 @@ export interface ReactNative {
   };
   /** `Version` is a string on iOS, `'26.5'`, and the API level, a number, on Android. */
   Platform: { OS: string; Version?: string | number };
-  /** Optional: only the status bar reads it, for `DeviceInfo`'s `isEdgeToEdge` on Android. */
+  /** Optional: the status bar and keyboard read it, for `DeviceInfo`'s `isEdgeToEdge` on Android. */
   TurboModuleRegistry?: { get(name: string): unknown };
   Share: {
     share(
@@ -140,8 +140,10 @@ export interface ReactNative {
     currentHeight?: number;
     setBarStyle(style: string, animated?: boolean): void;
     setHidden(hidden: boolean, animation?: string): void;
-    setBackgroundColor(color: string, animated?: boolean): void;
-    setTranslucent(translucent: boolean): void;
+    /** Removed in React Native 0.88, with edge-to-edge on every Android app. */
+    setBackgroundColor?(color: string, animated?: boolean): void;
+    /** Removed in React Native 0.88, with `setBackgroundColor`. */
+    setTranslucent?(translucent: boolean): void;
   };
   Linking: {
     getInitialURL(): Promise<string | null>;
@@ -157,6 +159,16 @@ export interface NativeKeyboardEvent {
   readonly duration?: number;
   /** One of `LayoutEasing`'s names; usually `'keyboard'` on iOS, and always on Android, with a zero duration. */
   readonly easing?: string;
+}
+
+/**
+ * React Native's edge-to-edge flag on Android, which its `DeviceInfo` module reports: whether it
+ * treats the app as drawn under the system bars, for its status bar and for where it measures from.
+ */
+export function edgeToEdgeFlag(native: ReactNative): boolean {
+  const info = native.TurboModuleRegistry?.get('DeviceInfo') as
+    { getConstants?(): { isEdgeToEdge?: boolean } } | null | undefined;
+  return info?.getConstants?.().isEdgeToEdge === true;
 }
 
 /**

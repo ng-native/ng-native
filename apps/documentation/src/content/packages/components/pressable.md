@@ -39,7 +39,8 @@ depends on the press state without needing a class:
 
 `<touchable-opacity>` is the same machinery wired to React Native's own default look: it fades to
 `activeOpacity` while pressed and eases back, using a CSS transition rather than a per-frame
-tween, with React Native's own asymmetric timings (150ms in, 250ms out).
+tween, with React Native's own asymmetric timings (150ms in, 250ms out). It eases back to the
+opacity its own classes or style give it, as the press ends, or to 1 when nothing sets one.
 
 ## Props
 

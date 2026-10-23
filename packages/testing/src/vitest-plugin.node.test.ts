@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -59,14 +60,12 @@ describe("a 'use dom' file", () => {
       "import { mountInWebView } from '@ng-native/web/web-view';",
       'export default mountInWebView(Chart);',
     ].join('\n');
-    const out = code(source, '/app/src/web/chart.dom.ts');
+    const file = '/app/src/web/chart.dom.ts';
+    const out = code(source, file);
     assert.doesNotMatch(out, /mountInWebView|a-charting-library/);
     const exports: { default?: { domComponent: string } } = {};
     new Function('exports', out.replace('export default', 'exports.default ='))(exports);
-    assert.equal(
-      exports.default?.domComponent,
-      'chart.dom.ts?file=file:///app/src/web/chart.dom.ts',
-    );
+    assert.equal(exports.default?.domComponent, `chart.dom.ts?file=${pathToFileURL(file).href}`);
   });
 
   it("is left alone when it mounts nothing, which is a React DOM component and Expo's", () => {
@@ -221,8 +220,11 @@ describe("a package a workspace library installed in a copy of its own, through 
     writeFileSync(path.join(dir, 'index.js'), imports);
     writeFileSync(path.join(dir, 'sub.js'), '');
   };
-  const resolve = async (source: string, importer = libraryFile) =>
-    (await server.environments.ssr!.pluginContainer.resolveId(source, importer))?.id;
+  const resolve = async (source: string, importer = libraryFile) => {
+    const id = (await server.environments.ssr!.pluginContainer.resolveId(source, importer))?.id;
+    // Vite returns some package paths with `/`, even on Windows.
+    return id === undefined ? undefined : path.normalize(id);
+  };
 
   before(async () => {
     for (const [dir, name] of [
@@ -262,7 +264,12 @@ describe("a package a workspace library installed in a copy of its own, through 
       JSON.stringify({ name: '@scope/linked', version: '1.0.0', main: 'index.js' }),
     );
     writeFileSync(path.join(linked, 'index.js'), '');
-    symlinkSync(linked, path.join(app, 'node_modules/@scope/linked'));
+    symlinkSync(
+      linked,
+      path.join(app, 'node_modules/@scope/linked'),
+      // A junction on Windows, which needs no privileges; ignored elsewhere.
+      'junction',
+    );
     install(library, '@scope/linked', '1.0.0');
 
     server = await createServer({
@@ -360,5 +367,43 @@ describe('a stand-in module', () => {
     ) as { include: string[]; compilerOptions: { rootDir: string; outDir: string } };
     assert.deepEqual(build.include, ['src']);
     assert.deepEqual(build.compilerOptions, { rootDir: 'src', outDir: 'dist' });
+  });
+});
+
+/**
+ * Vitest copies every module it runs into a directory of its own in the system temp directory, for
+ * the forks pool, and with no `projects` in the config it never removed it: a hundred megabytes
+ * left by each run of an app's suite.
+ */
+describe('a Vitest run', () => {
+  let root: string;
+  before(() => {
+    root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ngn-vitest-run-')));
+    writeFileSync(
+      path.join(root, 'sum.test.ts'),
+      "import { expect, it } from 'vitest';\nit('adds', () => expect(1 + 1).toBe(2));\n",
+    );
+  });
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  it('leaves no copy of the modules it ran in the temp directory', async () => {
+    const { createVitest } = await import('vitest/node');
+    const vitest = await createVitest(
+      'test',
+      { root, config: false, watch: false, pool: 'forks', reporters: [] },
+      { plugins: [ngNative()] },
+    );
+    const copies = (vitest as unknown as { _tmpDir: string })._tmpDir;
+    try {
+      await vitest.start();
+      assert.equal(vitest.state.getCountOfFailedTests(), 0);
+      // The run did copy modules there, so the check below is not of a directory never made.
+      assert.ok(existsSync(path.join(copies, 'ssr')), copies);
+      await vitest.close();
+      assert.equal(existsSync(copies), false, copies);
+    } finally {
+      await vitest.close();
+      rmSync(copies, { recursive: true, force: true });
+    }
   });
 });

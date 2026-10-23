@@ -128,9 +128,9 @@ describe('a border that comes after its colour', () => {
     const { cloneNodeWithNewProps, cloneNodeWithNewChildrenAndProps } = fabric;
     const note = (props: object) => sent.push(props as Record<string, unknown>);
     fabric.cloneNodeWithNewProps = (n, props) => (note(props), cloneNodeWithNewProps(n, props));
-    fabric.cloneNodeWithNewChildrenAndProps = (n, props) => (
+    fabric.cloneNodeWithNewChildrenAndProps = (n, children, props) => (
       note(props),
-      cloneNodeWithNewChildrenAndProps(n, props)
+      cloneNodeWithNewChildrenAndProps(n, children, props)
     );
     engine.setClasses(node, 'box done');
     engine.commit();

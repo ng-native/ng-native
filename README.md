@@ -133,7 +133,8 @@ Analog's file-based routing (`analog`).
 
 ## Requirements
 
-Angular 22, Expo SDK 57 and React Native 0.86 with the New Architecture, on Node 22.18 or later.
+Angular 22, and Expo SDK 57 or 58 (React Native 0.86 or 0.88) with the New Architecture, on Node
+22.18 or later. The template starts on SDK 57.
 
 ## Status
 

@@ -13,7 +13,7 @@ import {
 import { Keyboard } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import { ControlledModel } from './controlled-model.ts';
-import type { TextInputChangePayload } from './events.ts';
+import type { SelectionChangePayload, TextInputChangePayload } from './events.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
 
@@ -103,7 +103,7 @@ export type SubmitBehavior = 'submit' | 'blurAndSubmit' | 'newline';
     '[maxLength]': 'maxLength()',
     '[numberOfLines]': 'numberOfLines()',
     '[rows]': 'rows()',
-    '[selection]': 'selection()',
+    '[selection]': 'resolvedSelection()',
     '[selectionColor]': 'selectionColor()',
     '[selectTextOnFocus]': 'selectTextOnFocus()',
     '[caretHidden]': 'caretHidden()',
@@ -123,8 +123,8 @@ export type SubmitBehavior = 'submit' | 'blurAndSubmit' | 'newline';
     '[textContentType]': 'textContentType()',
     '[autoComplete]': 'autoComplete()',
     '[underlineColorAndroid]': 'underlineColorAndroid()',
-    '[cursorColor]': 'cursorColor()',
-    '[selectionHandleColor]': 'selectionHandleColor()',
+    '[cursorColor]': 'resolvedCursorColor()',
+    '[selectionHandleColor]': 'resolvedSelectionHandleColor()',
     '[textAlignVertical]': 'textAlignVertical()',
     '[importantForAutofill]': 'importantForAutofill()',
     '[showSoftInputOnFocus]': 'showSoftInputOnFocus()',
@@ -133,6 +133,7 @@ export type SubmitBehavior = 'submit' | 'blurAndSubmit' | 'newline';
     '[inlineImagePadding]': 'inlineImagePadding()',
     '[textBreakStrategy]': 'textBreakStrategy()',
     '(change)': 'onNativeChange($event)',
+    '(selectionChange)': 'onNativeSelectionChange($event)',
   },
 })
 export class TextInput extends ViewBase {
@@ -183,7 +184,10 @@ export class TextInput extends ViewBase {
    * as a `<textarea rows>` is. Read by the engine, which sizes the field; never sent to native.
    */
   readonly rows = input(undefined, { transform: optionalNumber });
-  /** The selected range, or the caret when `start` equals `end`. */
+  /**
+   * The selected range, or the caret when `end` is left out or equals `start`. Sent to native
+   * whenever it differs from what native last had, so a caret the user moves goes back to it.
+   */
   readonly selection = input<{ readonly start: number; readonly end?: number }>();
   readonly selectionColor = input<string>();
   /** Select everything on focus. */
@@ -226,9 +230,9 @@ export class TextInput extends ViewBase {
    * Ignored on iOS, where the native field has no such chrome.
    */
   readonly underlineColorAndroid = input<string>('transparent');
-  /** Android: the caret colour. */
+  /** Android: the caret colour. Follows `selectionColor` by default, as RN's does. */
   readonly cursorColor = input<string>();
-  /** Android: the selection handle colour. */
+  /** Android: the selection handle colour. Follows `selectionColor` by default, as RN's does. */
   readonly selectionHandleColor = input<string>();
   /** Android: where text sits in a tall field. */
   readonly textAlignVertical = input<'auto' | 'top' | 'bottom' | 'center'>();
@@ -248,6 +252,24 @@ export class TextInput extends ViewBase {
 
   protected readonly eventCount = signal(0);
 
+  /** RN's normalised selection: an `end` left out is `start`, where iOS would read 0. */
+  protected readonly resolvedSelection = computed(() => {
+    const selection = this.selection();
+    return selection
+      ? { start: selection.start, end: selection.end ?? selection.start }
+      : undefined;
+  });
+
+  // RN's Android defaults, checked against `undefined` as RN does rather than with `??`.
+  protected readonly resolvedCursorColor = computed(() => {
+    const color = this.cursorColor();
+    return color === undefined ? this.selectionColor() : color;
+  });
+  protected readonly resolvedSelectionHandleColor = computed(() => {
+    const color = this.selectionHandleColor();
+    return color === undefined ? this.selectionColor() : color;
+  });
+
   protected readonly resolvedEditable = computed(() =>
     this.disabled() || this.readonly() ? false : this.editable(),
   );
@@ -266,27 +288,22 @@ export class TextInput extends ViewBase {
   private readonly keyboard = inject(Keyboard);
   /** What native last reported, so a value set from code can be told from an echo. */
   private lastNativeText: string | null = null;
+  /**
+   * The selection native last had, sent or reported, so a bound one is sent only when it differs.
+   * Unset to start with, so the first bound selection goes out too.
+   */
+  private lastSelection = { start: -1, end: -1 };
+  /** Moved on every reported selection, so the bound one is compared with it again. */
+  private readonly selectionReports = signal(0);
   private readonly control = new ControlledModel(this.value, 'value');
 
   constructor() {
     super();
-    // RN's layout effect, keyed as RN keys it: the value, and the count every native change
-    // moves on, so a refusal that leaves the value where it was is compared all the same. After
-    // render rather than as an ordinary effect, because an accepted edit only reaches the model
-    // during change detection, and comparing before it has would send the old text back.
-    afterRenderEffect({
-      write: () => {
-        const desired = this.value();
-        const count = this.eventCount();
-        if (this.lastNativeText === null || this.lastNativeText === desired) return;
-        // The `text` prop alone may be ignored as stale, so send it as a command with the count
-        // native expects.
-        this.lastNativeText = desired;
-        this.engine.dispatchCommand(this.node, 'setTextAndSelection', [count, desired, -1, -1]);
-        // Fabric sized the field for the text it had; see `HostEngine.remeasure`.
-        this.engine.remeasure(this.node);
-      },
-    });
+    // RN's layout effect, keyed as RN keys it: the value, the selection, and the count every
+    // native change moves on, so a refusal that leaves the value where it was is compared all the
+    // same. After render rather than as an ordinary effect, because an accepted edit only reaches
+    // the model during change detection, and comparing before it has would send the old text back.
+    afterRenderEffect({ write: () => this.syncWithNative() });
   }
 
   override ngOnChanges(changes: SimpleChanges): void {
@@ -302,7 +319,7 @@ export class TextInput extends ViewBase {
   protected onFocus(): void {
     const { height, screenY } = this.keyboard.metrics();
     if (height > 0 && screenY !== undefined)
-      this.engine.reveal(this.node, { visibleBottom: screenY });
+      this.engine.reveal(this.node, { visibleBottom: screenY - this.keyboard.windowTop });
   }
 
   /** Bring the keyboard up on this field. A view command, so it reaches native directly. */
@@ -342,5 +359,49 @@ export class TextInput extends ViewBase {
     this.control.propose(text);
     this.eventCount.set(native?.eventCount ?? this.eventCount() + 1);
     this.changeText.emit(text);
+  }
+
+  /** Send native the text and selection it does not have, as one `setTextAndSelection`. */
+  private syncWithNative(): void {
+    const desired = this.value();
+    const count = this.eventCount();
+    const selection = this.resolvedSelection();
+    this.selectionReports();
+    const textChanged = this.lastNativeText !== null && this.lastNativeText !== desired;
+    if (!textChanged && !this.differsFromNative(selection)) return;
+    if (textChanged) this.lastNativeText = desired;
+    if (selection) this.lastSelection = selection;
+    // The `text` prop alone may be ignored as stale, so send it as a command with the count
+    // native expects, and the text and bound selection as RN does whichever of them changed.
+    this.engine.dispatchCommand(this.node, 'setTextAndSelection', [
+      count,
+      desired,
+      selection?.start ?? -1,
+      selection?.end ?? -1,
+    ]);
+    // Fabric sized the field for the text it had; see `HostEngine.remeasure`.
+    if (textChanged) this.engine.remeasure(this.node);
+  }
+
+  /**
+   * Whether a bound selection is not the one native last had. The prop alone does not move the
+   * caret: Android has no `selection` prop, and iOS reads it only as the field appears or its
+   * text is replaced.
+   */
+  private differsFromNative(selection: { start: number; end: number } | undefined): boolean {
+    return (
+      selection !== undefined &&
+      (selection.start !== this.lastSelection.start || selection.end !== this.lastSelection.end)
+    );
+  }
+
+  /** What native now has selected, which a bound selection that differs is sent over again. */
+  protected onNativeSelectionChange(
+    event: NativeSyntheticEvent<Partial<SelectionChangePayload>>,
+  ): void {
+    const selection = event.nativeEvent?.selection;
+    if (!selection) return;
+    this.lastSelection = { start: selection.start, end: selection.end };
+    this.selectionReports.update((n) => n + 1);
   }
 }

@@ -431,6 +431,18 @@ describe('playing an animation', () => {
     assert.equal(s.painted('width'), 50, 'the last frame, not the rule');
   });
 
+  it('holds the last frame once script holds it, as `forwards` does, whatever its own fill', () => {
+    // `updateTiming({ fill: 'forwards' })` in the Web Animations API: a dialog that closes holds
+    // each exit animation at its end, so nothing snaps back before the dialog is taken away.
+    const s = scene(css);
+    s.classes('enter');
+    s.tick(50);
+    s.view.playing!.held = true;
+    s.tick(70);
+    assert.equal(s.painted('width'), 50, 'the last frame, not the rule');
+    assert.equal(s.engine.animating, false, 'and nothing is left ticking');
+  });
+
   it('keeps the resting style through the delay, then plays from the first frame', () => {
     const s = scene(`${css} view.late { animation: rise 100ms linear 50ms; }`);
     s.classes('late');

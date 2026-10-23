@@ -113,10 +113,16 @@ export class Accessibility {
   readonly fontScale: Signal<number> = computed(() => this.settings().fontScale);
 
   constructor() {
-    void this.source.current().then((settings) => this.settings.set(settings));
-    const stop = this.source.subscribe((change) =>
-      this.settings.update((current) => ({ ...current, ...change })),
+    let heard: Partial<AccessibilitySettings> = {};
+    // A read that fails leaves the neutral settings, which the change events still correct.
+    this.source.current().then(
+      (settings) => this.settings.set({ ...settings, ...heard }),
+      () => {},
     );
+    const stop = this.source.subscribe((change) => {
+      heard = { ...heard, ...change };
+      this.settings.update((current) => ({ ...current, ...change }));
+    });
     inject(DestroyRef).onDestroy(stop);
   }
 

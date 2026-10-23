@@ -80,6 +80,30 @@ interface Mounted {
 }
 
 const mounted: Mounted[] = [];
+
+/** Expo's runtime global, as far as a render answers for it. */
+const scope = globalThis as { expo?: object };
+/** The `expo` global a render put in place, removed once nothing is rendered. */
+let expoStandIn: object | undefined;
+
+/**
+ * The fake commits any view, so it stands for a build that has every one, and answers Expo's
+ * `getViewConfig` for each as that build would: a component that asks the build whether it has a
+ * view, as `ui-bottom-sheet` does for SwiftUI's toolbar, draws what a development build draws.
+ * Only where there is no `expo` global already, so a test's own stays as the test set it.
+ */
+function standInForExpo(): void {
+  if (scope.expo) return;
+  scope.expo = expoStandIn = { getViewConfig: () => ({}) };
+}
+
+/** Removes the stand-in once nothing is rendered, unless something has replaced it since. */
+function releaseExpo(): void {
+  if (mounted.length === 0 && expoStandIn && scope.expo === expoStandIn) {
+    delete scope.expo;
+    expoStandIn = undefined;
+  }
+}
 /** Which render a node a query returned belongs to, so an event on it reaches the right fake. */
 const owners = new WeakMap<FakeFabricNode, Mounted>();
 
@@ -218,16 +242,24 @@ export async function render<T>(
   const type = isTemplate ? await hostFor(component, options) : component;
   const fabric = createFakeFabric();
   if (!isTemplate) refuseUnknownInputs(type, inputs);
-  const app = mount(1, type, fabric, {
-    ...engine,
-    providers,
-    inputs: isTemplate ? {} : inputs,
-    // As a template would bind them, so an output a host directive forwards is heard, by the name
-    // it is forwarded under, and a name that is no output is refused by Angular, by name.
-    bindings: Object.entries(on ?? {}).map(([name, handler]) =>
-      outputBinding(name, handler as (value: unknown) => void),
-    ),
-  });
+  standInForExpo();
+  let app: ReturnType<typeof mount>;
+  try {
+    app = mount(1, type, fabric, {
+      ...engine,
+      providers,
+      inputs: isTemplate ? {} : inputs,
+      // As a template would bind them, so an output a host directive forwards is heard, by the
+      // name it is forwarded under, and a name that is no output is refused by Angular, by name.
+      bindings: Object.entries(on ?? {}).map(([name, handler]) =>
+        outputBinding(name, handler as (value: unknown) => void),
+      ),
+    });
+  } catch (error) {
+    // Never mounted, so no unmount will take the stand-in away.
+    releaseExpo();
+    throw error;
+  }
   const self: Mounted = {
     fabric,
     engine: app.engine,
@@ -278,7 +310,11 @@ function unmount(target: Mounted): void {
   const at = mounted.indexOf(target);
   if (at === -1) return;
   mounted.splice(at, 1);
-  target.applicationRef.destroy();
+  try {
+    target.applicationRef.destroy();
+  } finally {
+    releaseExpo();
+  }
 }
 
 /**

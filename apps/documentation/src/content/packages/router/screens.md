@@ -148,9 +148,9 @@ showing in front. The error reaches the app's `ErrorHandler` as well as the navi
 
 A page's host element is its screen, so a page can refuse to be swiped away while it holds
 unsaved changes, and hear the attempt to ask about them. On Android the same holds for the Back
-button: while `preventNativeDismiss` is true, Back leaves the screen in place and fires
-`(nativeDismissCancelled)`. `NativeNavigation.back()` still goes back, which is how the page leaves
-once the user has confirmed:
+button and for the header's back arrow: while `preventNativeDismiss` is true, either leaves the
+screen in place and fires `(nativeDismissCancelled)`. `NativeNavigation.back()` still goes back,
+which is how the page leaves once the user has confirmed:
 
 ```ts
 @Component({
@@ -257,6 +257,15 @@ not fit in a URL - `push` versus `replace` versus `reset`, and the full presenta
 screen was opened with - travels as router navigation state, which Angular's own history already
 carries: going back to a screen restores the presentation it was originally given, with no extra
 bookkeeping on your part.
+
+`replace()` and `reset()` take a presentation too. A `stackAnimation` named there is the one the
+new screen arrives with, so `reset('/sign-in', { presentation: { stackAnimation: 'none' } })` lands
+with no animation: the navigation is given `replaceAnimation: 'push'` unless it names a
+`replaceAnimation` of its own. With neither option named, or a `stackAnimation` of `default`, a
+replace or a reset animates as a back from the screen it takes away, as `react-native-screens`
+does. So does a reset to a screen still on the stack, `reset('/')` from a screen pushed over the
+first: that screen is the one kept, not a new one, and the pop back to it animates as the screen
+leaving says.
 
 ## A sideways drag on iOS 26
 

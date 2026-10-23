@@ -23,6 +23,7 @@ import {
   StatusBar,
   androidPermission,
   hardwareBackSource,
+  onWindowFront,
   statusBarSource,
 } from '@ng-native/device';
 import { accessibilitySource } from '../device/src/accessibility.ts';
@@ -294,6 +295,49 @@ describe('the keyboard source', () => {
     stop();
     assert.deepEqual(removed.sort(), ['keyboardDidHide', 'keyboardDidShow']);
   });
+
+  it('says where the window views are measured in starts, below the top of the screen', () => {
+    // React Native reports the keyboard's screenY from the top of the screen, and on Android
+    // measures a view from below the status bar unless its edge-to-edge flag is on, which Expo Go
+    // leaves off while drawing under the bar.
+    const windowTop = (os: string, isEdgeToEdge: boolean) => {
+      const native = {
+        Platform: { OS: os },
+        TurboModuleRegistry: {
+          get: (name: string) =>
+            name === 'DeviceInfo' ? { getConstants: () => ({ isEdgeToEdge }) } : null,
+        },
+        StatusBar: { currentHeight: 33.8 },
+        Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+      };
+      return withNative(native, () => keyboardSource()).windowTop;
+    };
+
+    assert.equal(windowTop('android', false), 33.8, 'a status bar below the top of the screen');
+    assert.equal(windowTop('android', true), 0, 'at the top of the screen, edge to edge');
+    assert.equal(windowTop('ios', false), 0, 'iOS measures from where it reports the keyboard');
+  });
+
+  it('reads the status bar inset again each time, as React Native measures with the current one', () => {
+    // StatusBar.currentHeight is the height at startup; the module's constant follows the bar
+    // being hidden or shown, and a rotation.
+    let height: number | undefined = 33.8;
+    const native = {
+      Platform: { OS: 'android' },
+      TurboModuleRegistry: {
+        get: (name: string) =>
+          name === 'StatusBarManager' ? { getConstants: () => ({ HEIGHT: height }) } : null,
+      },
+      StatusBar: { currentHeight: 33.8 },
+      Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+    };
+    const source = withNative(native, () => keyboardSource());
+    assert.equal(source.windowTop, 33.8);
+    height = 0;
+    assert.equal(source.windowTop, 0, 'the bar hidden since');
+    height = 24;
+    assert.equal(source.windowTop, 24, 'rotated, with a shorter bar');
+  });
 });
 
 describe('the status bar source', () => {
@@ -451,6 +495,30 @@ describe('the status bar source', () => {
       console.warn = warn;
     }
 
+    assert.equal(warnings.length, 2);
+    assert.match(String(warnings[0]), /backgroundColor has no effect/);
+    assert.match(String(warnings[1]), /translucent has no effect/);
+  });
+
+  it('says once that they do nothing on React Native 0.88, which removed both, without throwing', () => {
+    const warnings: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (message: unknown) => warnings.push(message);
+    try {
+      const native = {
+        Platform: { OS: 'android', Version: 34 },
+        TurboModuleRegistry: { get: () => ({ getConstants: () => ({ isEdgeToEdge: false }) }) },
+        StatusBar: { setBarStyle: () => {}, setHidden: () => {} },
+      };
+      withNative(native, () => {
+        const source = statusBarSource();
+        source.setBackgroundColor('#000000', false);
+        source.setBackgroundColor('#ffffff', false);
+        source.setTranslucent(true);
+      });
+    } finally {
+      console.warn = warn;
+    }
     assert.equal(warnings.length, 2);
     assert.match(String(warnings[0]), /backgroundColor has no effect/);
     assert.match(String(warnings[1]), /translucent has no effect/);
@@ -888,5 +956,58 @@ describe('the sharing source', () => {
     assert.deepEqual(shared, [
       { title: undefined, message: 'Check this out\nhttps://example.com' },
     ]);
+  });
+});
+
+describe('the window a status bar claims', () => {
+  const bar = {
+    setBarStyle: () => {},
+    setHidden: () => {},
+    setBackgroundColor: () => {},
+    setTranslucent: () => {},
+  };
+
+  it('is one source for every app on a React Native, so they claim the same bar', () => {
+    const native = { Platform: { OS: 'ios' }, StatusBar: bar };
+    const [first, second] = withNative(native, () => [statusBarSource(), statusBarSource()]);
+    assert.equal(first, second);
+    const other = withNative({ Platform: { OS: 'ios' }, StatusBar: bar }, statusBarSource);
+    assert.notEqual(other, first);
+  });
+
+  it('comes to the front on Android each time an activity resumes', () => {
+    let changed: ((state: string) => void) | undefined;
+    let removed = 0;
+    const native = {
+      Platform: { OS: 'android' },
+      AppState: {
+        currentState: 'active',
+        addEventListener: (_: 'change', handler: (state: string) => void) => {
+          changed = handler;
+          return { remove: () => void removed++ };
+        },
+      },
+    };
+    let fronts = 0;
+    const stop = withNative(native, () => onWindowFront(() => void fronts++));
+    changed?.('background');
+    assert.equal(fronts, 0);
+    changed?.('active');
+    assert.equal(fronts, 1);
+    stop();
+    assert.equal(removed, 1);
+  });
+
+  it('is not listened for on iOS, where a window keeps what it was given', () => {
+    let listened = false;
+    const native = {
+      Platform: { OS: 'ios' },
+      AppState: {
+        currentState: 'active',
+        addEventListener: () => ((listened = true), { remove() {} }),
+      },
+    };
+    withNative(native, () => onWindowFront(() => {}))();
+    assert.equal(listened, false);
   });
 });

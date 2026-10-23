@@ -88,9 +88,14 @@ const { dropHandlers } =
     dropHandlers(prepared: object): void;
   };
 
-const { maybeInitializeFabric } = require('react-native-gesture-handler/src/init.ts') as {
-  maybeInitializeFabric(): void;
-};
+/**
+ * Gesture handler 2 installs its JSI bindings here, once Fabric is up. Gesture handler 3 (Expo SDK
+ * 58) has no such step: `attachHandlers` loads its Reanimated wrapper, which installs them.
+ */
+const { maybeInitializeFabric = () => {} } =
+  require('react-native-gesture-handler/src/init.ts') as {
+    maybeInitializeFabric?(): void;
+  };
 
 const { GestureStateManager } =
   require('react-native-gesture-handler/src/handlers/gestures/gestureStateManager.ts') as {
@@ -193,8 +198,12 @@ export class NativeGesture extends NativeGestureBase {}
 export class GestureRoot {
   constructor() {
     const android = nativePlatform() === 'android';
+    // Gesture handler 3's Android root finds its registry by the native module's id, which the
+    // module puts on the runtime, and throws without one. Gesture handler 2 has neither.
+    const moduleId = (globalThis as { _RNGH_MODULE_ID?: number })._RNGH_MODULE_ID;
     registerViewName('gesture-root', android ? 'RNGestureHandlerRootView' : 'RCTView', {
       flex: 1,
+      ...(android && moduleId !== undefined && { moduleId }),
     });
     claimHost(inject(ElementRef).nativeElement as HostNode);
     // The library does this in its root view's render: it installs the JSI bindings the new

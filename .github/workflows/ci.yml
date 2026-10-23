@@ -40,7 +40,7 @@ jobs:
       # and it takes under a second.
       - run: pnpm run format:check
 
-      - uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5.0.1
+      - uses: nrwl/nx-set-shas@e602fada7ad5987b0f7b1905e7a99ea1c661514c # v5.1.0
 
       # Through Nx, always: `@nx/enforce-module-boundaries` needs the project graph and skips
       # itself with only a warning when there is none, which is silent enforcement of nothing.
@@ -71,7 +71,7 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5.0.1
+      - uses: nrwl/nx-set-shas@e602fada7ad5987b0f7b1905e7a99ea1c661514c # v5.1.0
 
       # Coverage runs the integration and web suites. The remaining test targets include the
       # generators, docs, examples, template, and testing's own Vitest runner checks.
@@ -90,8 +90,9 @@ jobs:
           pnpm --filter @ng-native/testing exec node --import ./runner/register.mjs --test "src/**/*.node.test.ts"
           pnpm --filter @ng-native/web test
 
-  # Every suite, measured: most of CI's time, nearly all of it the native suite, so that suite is
-  # split across four runners. `coverage` below merges what they measured and holds the floor.
+  # Every suite, measured: most of CI's time, nearly all of it the native and web-compat suites,
+  # so those are split across four runners and the rest spread over them (see `sharded` in
+  # scripts/coverage.mjs). `coverage` below merges what they measured and holds the floor.
   coverage-shard:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
@@ -109,8 +110,10 @@ jobs:
       # The browser suite (`packages/web/browser`, run by `pnpm coverage` below) drives a real
       # Chromium, and only Chromium is installed. Cached by Playwright's version, which is what
       # decides the browser build it downloads. The system libraries it needs on Linux are apt
-      # packages rather than part of the cache, so those are installed either way.
-      # Only beside the first shard, which is where the suites that are not split run.
+      # packages rather than part of the cache: installed with the browser where it is not cached,
+      # and taken as the runner's image has them where it is, which ships Google Chrome and its
+      # libraries. Installing them again took nine minutes of a fifteen-minute limit.
+      # Only beside the first shard, which is where the browser suite runs.
       - id: playwright
         if: matrix.shard == 1
         run: echo "version=$(pnpm --filter @ng-native/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
@@ -122,8 +125,6 @@ jobs:
           key: ${{ runner.os }}-chromium-${{ steps.playwright.outputs.version }}
       - if: matrix.shard == 1 && steps.browsers.outputs.cache-hit != 'true'
         run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
-      - if: matrix.shard == 1 && steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm --filter @ng-native/web exec playwright install-deps chromium
 
       # Every suite, always, rather than what changed: the floor is on the merged number, and a
       # change in one package moves the coverage of another.

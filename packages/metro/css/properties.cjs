@@ -22,6 +22,7 @@ const {
 const { backgroundImage } = require('./gradients.cjs');
 const { filter, backgroundSize, backgroundRepeat, backgroundPosition } = require('./filters.cjs');
 const { LOGICAL } = require('./shorthands.cjs');
+const grid = require('./grid.cjs');
 
 const LENGTH = new Set([
   'width',
@@ -171,12 +172,10 @@ function renamed(table, value, property) {
  */
 const KEYWORD_VALUES = {
   position: {
-    allowed: new Set(['relative', 'absolute', 'static']),
-    // Named rather than generic, because "unsupported" leaves the reader to work out the fix.
-    hint:
-      'Yoga has no viewport to fix to and no scroll container to stick within. ' +
-      'Use `position: absolute` inside the element you meant to pin to; for a header that ' +
-      'should stay put, put it outside the scroll view rather than inside it.',
+    // `fixed` and `sticky` are the engine's: Yoga has neither, so a fixed box is committed under
+    // the page it is on, and a sticky one is moved by its scroll view. See fabric's engine.
+    allowed: new Set(['relative', 'absolute', 'static', 'fixed', 'sticky']),
+    hint: 'Native positions a box relative, absolute, static, fixed or sticky.',
   },
   'text-align': {
     allowed: new Set(['auto', 'start', 'end', 'left', 'center', 'right', 'justify']),
@@ -351,6 +350,7 @@ const KEYWORD = new Set([
 ]);
 
 const NUMBER = new Set([
+  'order',
   'opacity',
   'flex-grow',
   'flex-shrink',
@@ -458,19 +458,6 @@ const NO_NATIVE_EQUIVALENT = new Set([
   'empty-cells',
   'grid',
   'grid-template',
-  'grid-template-areas',
-  'grid-template-columns',
-  'grid-template-rows',
-  'grid-auto-flow',
-  'grid-auto-columns',
-  'grid-auto-rows',
-  'grid-area',
-  'grid-column',
-  'grid-row',
-  'justify-items',
-  'justify-self',
-  'place-items',
-  'place-self',
   'columns',
   'column-count',
   'column-width',
@@ -486,7 +473,6 @@ const NO_NATIVE_EQUIVALENT = new Set([
   // it. Yoga has no `order`, and the rest are the browser's own furniture. `white-space` and
   // `text-overflow` are not here: they become the Text component's `numberOfLines` and
   // `ellipsizeMode` props, which is how native truncates (see `truncation` below).
-  'order',
   'appearance',
   'text-wrap',
   'word-wrap',
@@ -525,10 +511,14 @@ function displayName(value, word) {
 }
 
 /**
- * The display values Yoga has: `block` is read as flex above, and the rest have no layout meaning
- * there. `contents` is Yoga's own, and removes the box while keeping its children in the layout.
+ * The display values Yoga has. `contents` is Yoga's own, and removes the box while keeping its
+ * children in the layout.
  */
 const DISPLAY = new Set(['flex', 'none', 'contents']);
+/** The block containers, which the engine lays out as flex and commits as flex. */
+const FLOW_DISPLAYS = new Set(['block', 'flow-root', 'inline-block']);
+/** A grid, which the engine lays out too. */
+const GRID_DISPLAYS = new Set(['grid', 'inline-grid']);
 
 const SIDES = { top: 'Top', right: 'Right', bottom: 'Bottom', left: 'Left' };
 const CORNERS = {
@@ -1420,7 +1410,66 @@ const each = (properties, handler) => properties.map((property) => [property, ha
  * The properties with a form of their own, each with the handler that writes it. A handler takes
  * `(property, value, out, context)`; `translate` tries `FALLBACKS` for a name that is not here.
  */
+/** A grid property the engine reads as text, under the prop it is kept in. */
+const gridText = (prop, read) => (property, value, out) => {
+  out[prop] = read(value, property);
+};
+
+const GRID = [
+  ['grid-template-columns', gridText('gridTemplateColumns', grid.trackList)],
+  ['grid-template-rows', gridText('gridTemplateRows', grid.trackList)],
+  ['grid-template-areas', gridText('gridTemplateAreas', grid.areas)],
+  ['grid-auto-columns', gridText('gridAutoColumns', grid.autoTracks)],
+  ['grid-auto-rows', gridText('gridAutoRows', grid.autoTracks)],
+  [
+    'grid-auto-flow',
+    (property, value, out) => {
+      // As a browser computes it: `row dense` is `dense`, since row is the flow already.
+      const { direction, dense } = value;
+      out.gridAutoFlow = !dense ? direction : direction === 'row' ? 'dense' : `${direction} dense`;
+    },
+  ],
+  // Each shorthand as its longhands, so a later `grid-column-start` replaces only the start.
+  ...['column', 'row'].map((axis) => [
+    `grid-${axis}`,
+    (property, value, out) => {
+      // Both sides read before either is written: one refused is the declaration refused.
+      const sides = [grid.line(value.start, property), grid.line(value.end, property)];
+      [out[camel(`grid-${axis}-start`)], out[camel(`grid-${axis}-end`)]] = sides;
+    },
+  ]),
+  ['grid-column-start', gridText('gridColumnStart', grid.line)],
+  ['grid-column-end', gridText('gridColumnEnd', grid.line)],
+  ['grid-row-start', gridText('gridRowStart', grid.line)],
+  ['grid-row-end', gridText('gridRowEnd', grid.line)],
+  [
+    'grid-area',
+    (property, value, out) => {
+      const side = (key) => grid.line(value[key], property);
+      const sides = [side('rowStart'), side('rowEnd'), side('columnStart'), side('columnEnd')];
+      [out.gridRowStart, out.gridRowEnd, out.gridColumnStart, out.gridColumnEnd] = sides;
+    },
+  ],
+  ['justify-items', gridText('justifyItems', grid.justify)],
+  ['justify-self', gridText('justifySelf', grid.justify)],
+  [
+    'place-items',
+    (property, value, out) => {
+      out.alignItems = alignment('align-items', value.align);
+      out.justifyItems = grid.justify(value.justify, property);
+    },
+  ],
+  [
+    'place-self',
+    (property, value, out) => {
+      out.alignSelf = alignment('align-self', value.align);
+      out.justifySelf = grid.justify(value.justify, property);
+    },
+  ],
+];
+
 const TRANSLATORS = new Map([
+  ...GRID,
   ...each(['white-space', 'text-overflow', 'line-clamp', '-webkit-line-clamp'], truncation),
   [
     'box-orient',
@@ -1443,7 +1492,11 @@ const TRANSLATORS = new Map([
   [
     'vertical-align',
     (property, value, out) => {
-      out.textAlignVertical = renamed(VERTICAL_ALIGN, value, property);
+      // A length is how far over the baseline a box in a line sits, which the engine lays the
+      // line out by: see `onBaseline` in the engine. A percentage is of the line height.
+      const shift = value?.type === 'length' ? length(value, property) : undefined;
+      if (typeof shift === 'number') out.baselineShift = shift;
+      else out.textAlignVertical = renamed(VERTICAL_ALIGN, value, property);
     },
   ],
   [
@@ -1642,18 +1695,30 @@ const TRANSLATORS = new Map([
         out[WEBKIT_BOX] = true;
         return;
       }
-      // A native view stacks its children in a column, which is what a block does with its own.
-      // Reading block as flex is what lets `.d-none` then `.d-md-block` show an element again.
-      // Every native view is a flex item, and a browser computes an inline or inline-block flex
-      // item as block, so those are read the same way. A flow-root is a block that contains its
-      // floats, which a flex item already does.
-      if (['block', 'inline', 'inline-block', 'flow-root'].includes(displayName(value, word))) {
+      // A block container is kept as one: the engine lays it out as a flex column, which stacks
+      // its children as a block does, and settles from the tree what a column does differently
+      // (`flow.ts` in fabric). It commits `flex`, so `.d-none` then `.d-md-block` shows an
+      // element again. An inline-block is a block container too, and sits in a line with others.
+      const written = displayName(value, word);
+      if (FLOW_DISPLAYS.has(written)) {
+        out.display = written;
+        return;
+      }
+      // An inline box has no layout of its own on native, where every view is a box: read as flex,
+      // which is what a browser computes for one that is a flex item.
+      if (written === 'inline') {
         out.display = 'flex';
+        return;
+      }
+      // A grid and a flex box that sit in a line are kept as that: in a block the engine keeps
+      // them at their content's width, and anywhere else they are the grid or flex box they hold.
+      if (GRID_DISPLAYS.has(written) || written === 'inline-flex') {
+        out.display = written;
         return;
       }
       if (!DISPLAY.has(word)) {
         throw new CssUnsupported(
-          `display: ${displayName(value, word)} does not exist on native; only flex, block (read as flex), contents and none do`,
+          `display: ${displayName(value, word)} does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do`,
         );
       }
       out.display = word;
@@ -1729,9 +1794,9 @@ const TRANSLATORS = new Map([
       );
     },
   ],
-  // The shorthand is uniform by definition, so the unsided RN props say it in three keys rather
-  // than nine. A per-side longhand still wins: Yoga reads borderLeftWidth over borderWidth,
-  // exactly as CSS does.
+  // Written side by side, so a per-side longhand from a weaker rule cannot win over it (see
+  // `lineSides`). The engine adds the unsided width and colour where the four sides agree
+  // (`settleUnsidedBorder` in css.ts).
   ['border', (property, value, out) => line(value, 'border', out, property)],
   ...each(['border-top', 'border-right', 'border-bottom', 'border-left'], (property, value, out) =>
     sideBorder(property, [SIDES[property.slice('border-'.length)]], value, out),

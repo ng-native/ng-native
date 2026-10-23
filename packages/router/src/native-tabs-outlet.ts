@@ -521,7 +521,8 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
    * screen's stack answers instead.
    */
   private goBack(): boolean {
-    const first = this.entries[0];
+    const key = this.declared()[0]?.path();
+    const first = this.entries.find((entry) => entry.key === key);
     const selected = this.selected;
     if (!first || !selected || selected === first || !this.router) return false;
     if (!this.isActivated || !isShowing(this.router, selected.route)) return false;
@@ -603,6 +604,11 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private onNativeSelect(selection: TabSelection | undefined): void {
     if (!selection) return;
     this.provenance = selection.provenance;
+
+    // Native answering a request of ours is not a switch to follow. The router made the request,
+    // and an answer that arrives after a later request, such as a cold-start link's, names a tab
+    // the router has already left.
+    if (selection.actionOrigin === 'programmatic-js') return;
 
     const entry = this.readTabs().find(
       (tab) => screenKeyOf(tab.key) === selection.selectedScreenKey,

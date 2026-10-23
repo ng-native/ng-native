@@ -6,6 +6,12 @@ export interface CompileCssOptions {
    * first one throws, so a test never passes on a sheet that quietly lost a rule.
    */
   readonly onUnsupported?: (message: string) => void;
+  /**
+   * Read the sheet as the browser it was written for reads it, as the build reads a library's
+   * stylesheet: `::before` and `::after` as boxes of their own, `visibility`, a clip to nothing and
+   * the rest an app's own sheet is told to write another way.
+   */
+  readonly generated?: boolean;
 }
 
 /**

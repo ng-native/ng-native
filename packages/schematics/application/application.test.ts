@@ -23,6 +23,10 @@ const collection = path.resolve(import.meta.dirname, '../collection.json');
 // The framework packages are released in lockstep with this one, at its version.
 const { version } = require('../package.json') as { version: string };
 const template = path.resolve(import.meta.dirname, '../../../template');
+const native = require('../native-app.cjs') as {
+  ESLINT_CONFIG: string;
+  lintDevDependencies: Record<string, string>;
+};
 
 // Through the manifest: the package's `exports` map would resolve `collection.json` to a `.js`.
 const angular = new SchematicTestRunner(
@@ -102,6 +106,47 @@ describe('ng add', () => {
     assert.equal(project.architect['run-ios'].options.command, 'run:ios');
     assert.equal(project.architect['run-android'].options.command, 'run:android');
     assert.equal(project.architect.test.builder, '@ng-native/schematics:vitest');
+  });
+
+  it('gives the project a typecheck target, which checks templates with ngc', () => {
+    const project = json(tree, 'angular.json').projects.native;
+    assert.deepEqual(project.architect.typecheck, {
+      builder: '@ng-native/schematics:typecheck',
+      options: {},
+    });
+  });
+
+  it('adds no linting unless asked', () => {
+    const project = json(tree, 'angular.json').projects.native;
+    assert.equal(project.architect.lint, undefined);
+    assert.equal(tree.exists('projects/native/eslint.config.mjs'), false);
+    const { devDependencies } = json(tree, 'package.json');
+    for (const name of Object.keys(native.lintDevDependencies)) {
+      assert.equal(devDependencies[name], undefined, name);
+    }
+    const agents = tree.readContent('projects/native/AGENTS.md');
+    assert.doesNotMatch(agents, /ng lint/);
+    assert.match(agents, /Run `ng test native` after a change; it is fast/);
+  });
+
+  it("with --linter=eslint, lints on angular-eslint's builder with the project's own config", async () => {
+    const linted = await runner.runSchematic('ng-add', { linter: 'eslint' }, await webWorkspace());
+    const project = json(linted, 'angular.json').projects.native;
+    assert.deepEqual(project.architect.lint, {
+      builder: '@angular-eslint/builder:lint',
+      options: {
+        eslintConfig: 'projects/native/eslint.config.mjs',
+        lintFilePatterns: ['projects/native/**/*.ts', 'projects/native/**/*.html'],
+      },
+    });
+    assert.equal(linted.readContent('projects/native/eslint.config.mjs'), native.ESLINT_CONFIG);
+    const { devDependencies } = json(linted, 'package.json');
+    for (const [name, range] of Object.entries(native.lintDevDependencies)) {
+      assert.equal(devDependencies[name], range, name);
+    }
+    const agents = linted.readContent('projects/native/AGENTS.md');
+    assert.match(agents, /^ng lint native +# ESLint/m);
+    assert.match(agents, /Run `ng test native` and `ng lint native` after a change/);
   });
 
   it("routes ng generate in the project to this collection first, then Angular's", () => {

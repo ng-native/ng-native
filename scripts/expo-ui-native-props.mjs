@@ -23,7 +23,7 @@ import { appendFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSyn
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expoPackage = path.join(root, 'packages/expo');
@@ -38,45 +38,16 @@ const FORMS = {
 };
 
 /**
- * Divergences already there, as `<element> <prop> <platform>` or `<element> view <platform>`, each
- * to be fixed, stopped or explained in #924. A new one fails. One of these that native declares
- * comes back as `stale`: `expo-ui-native-props.test.ts` fails on it for the version this workspace
- * installs, so the list can't go stale, and a run here only notes it, since an entry can be known
- * for a newer `@expo/ui` than the one it reads.
+ * Divergences that stay, as `<element> <prop> <platform>` or `<element> view <platform>`, each with
+ * the reason it does. A new one fails. One of these that native declares comes back as `stale`:
+ * `expo-ui-native-props.test.ts` fails on it for the version this workspace installs, so the list
+ * can't go stale, and a run here only notes it, since an entry can be known for a newer `@expo/ui`
+ * than the one it reads.
  */
 const KNOWN = new Set([
+  // A widget layout's view. @expo/ui 57.0.22 moved it out of the app, where it had no effect, and
+  // expo-widgets 57.0.23 draws it in the widget extension, which a layout's build compiles it for.
   'accessory-widget-background view ios',
-  'button label android',
-  'button role android',
-  'button systemImage android',
-  'button target android',
-  'button target ios',
-  'date-picker accessibilityLabel android',
-  'date-picker accessibilityLabel ios',
-  'date-picker initialDate ios',
-  'date-picker range android',
-  'date-picker selection android',
-  'date-picker title android',
-  'gauge currentValueLabel ios',
-  'gauge maximumValueLabel ios',
-  'gauge minimumValueLabel ios',
-  'gauge type ios',
-  'host ignoreSafeArea android',
-  'image assetName android',
-  'image color android',
-  'image color ios',
-  'image size android',
-  'image size ios',
-  'image systemName android',
-  'image uiImage android',
-  'label color ios',
-  'menu accessibilityLabel android',
-  'menu accessibilityLabel ios',
-  'menu label android',
-  'menu systemImage android',
-  'slot extraProps android',
-  'toggle label android',
-  'view-host modifiers ios',
 ]);
 
 /** Every file under `directory` whose name ends with `extension`. */
@@ -243,7 +214,10 @@ export async function divergences(
   expoUi,
   source = readFileSync(path.join(expoPackage, 'src/expo-ui-components.ts'), 'utf8'),
 ) {
-  const { EXPO_UI_VIEWS } = await import(path.join(expoPackage, 'src/expo-ui.ts'));
+  // A file path is not a module specifier: Windows reads `C:` as a URL scheme before the loader
+  // ever sees the file.
+  const viewsUrl = pathToFileURL(path.join(expoPackage, 'src/expo-ui.ts')).href;
+  const { EXPO_UI_VIEWS } = await import(viewsUrl);
   const components = componentProps(source);
   const declared = declaredViews(expoUi);
   if (components.size < 10) throw new Error(`Found ${components.size} typed ui-* components.`);

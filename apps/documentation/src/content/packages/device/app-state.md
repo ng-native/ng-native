@@ -11,9 +11,10 @@ down.
 
 ```ts
 import { Component, effect, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { AppState } from '@ng-native/device';
 
-@Component({ selector: 'app-video-player', template: `<view />` })
+@Component({ selector: 'app-video-player', imports: [View], template: `<view />` })
 export class VideoPlayer {
   private readonly appState = inject(AppState);
 

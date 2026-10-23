@@ -166,6 +166,14 @@ export class DeepLinks {
     }
   }
 
+  /**
+   * Follow a path of the app's own as a link to it that arrived from outside is followed: a
+   * library that sets `location.href` to a page of the app goes there the way a link does.
+   */
+  follow(path: string): void {
+    this.listeners.forEach((listener) => this.deliver(listener, path));
+  }
+
   /** Hand a url to whatever else on the device handles it: a browser, Maps, another app. */
   open(url: string): void {
     this.source.open(url);

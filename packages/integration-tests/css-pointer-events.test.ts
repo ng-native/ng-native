@@ -120,7 +120,7 @@ describe('pointer-events: none', () => {
     const { engine, layer, plain, committed } = tree(
       '.layer { pointer-events: none } .deep { pointer-events: auto }',
     );
-    const deep = engine.createElement('view', layer.sheet);
+    const deep = engine.createElement('view', layer.templateSheet);
     engine.addClass(deep, 'deep');
     engine.appendChild(plain, deep);
     engine.commit();
@@ -134,7 +134,7 @@ describe('pointer-events: none', () => {
     engine.commit();
     assert.deepEqual(committed(), { layer: 'none', panel: 'box-none', plain: 'none' });
 
-    const inside = engine.createElement('view', panel.sheet);
+    const inside = engine.createElement('view', panel.templateSheet);
     engine.setProp(inside, 'style', { pointerEvents: 'auto' });
     engine.appendChild(panel, inside);
     engine.commit();
@@ -207,7 +207,7 @@ describe('pointer-events: none', () => {
     const { engine, layer, panel, committed } = tree(
       '.layer { pointer-events: none } .deep { pointer-events: auto }',
     );
-    const deep = engine.createElement('view', layer.sheet);
+    const deep = engine.createElement('view', layer.templateSheet);
     engine.addClass(deep, 'deep');
     engine.appendChild(panel, deep);
     engine.setProp(panel, 'pointerEvents', 'none');
