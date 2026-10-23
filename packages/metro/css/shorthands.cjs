@@ -246,7 +246,8 @@ function line(property, list, context, linear) {
       else {
         oneColour();
         const { colourExpression } = require('./colour-expression.cjs');
-        mixed = { __colour: colourExpression([part], context) };
+        // The line's colour is a prop of its own, which takes `platform-color()` as `color` does.
+        mixed = { __colour: colourExpression([part], context, true) };
       }
       continue;
     }

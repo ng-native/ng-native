@@ -16,7 +16,7 @@ const {
   length,
   meaningful,
   round,
-  wholeColor,
+  tokenColour,
 } = require('./values.cjs');
 
 /** The spaces the device mixes in, which are the ones this compiler also folds a literal mix in. */
@@ -112,13 +112,9 @@ function literal(part, context, named = false) {
 
 /** `literal` where a colour by name is kept: `platform-color()` and a system colour. */
 function namedLiteral(part, context) {
-  if (part.type === 'token' && part.value?.type === 'ident') {
-    return wholeColor(part.value.value, context);
-  }
-  if (part.type === 'function' && part.value?.name === 'platform-color') {
-    return require('./compile.cjs').platformColor(part, context);
-  }
-  return literal(part, context);
+  const word = part.type === 'token' && part.value?.type === 'ident';
+  const platform = part.type === 'function' && part.value?.name === 'platform-color';
+  return word || platform ? tokenColour(part, context) : literal(part, context);
 }
 
 /** `var(--x)`, with a fallback colour if one is written and the var() alternatives it names. */

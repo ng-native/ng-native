@@ -669,3 +669,77 @@ describe('a platform colour written in a text-shadow', () => {
     });
   }
 });
+
+describe('a platform colour written in a border, an outline or a text decoration', () => {
+  /** What a sheet drops as it compiles. */
+  const dropsOf = (css: string): string[] => {
+    const dropped: string[] = [];
+    compileCss(css, 'line.css', { onUnsupported: (message) => dropped.push(message) });
+    return dropped;
+  };
+
+  /** The props `declaration` commits on a view, beside what `color: <colour>` commits. */
+  const lineAndColour = (declaration: string, colour: string) => {
+    const css = `.line { ${declaration}; } .colour { color: ${colour}; }`;
+    assert.deepEqual(dropsOf(css), [], 'nothing dropped');
+    const s = app(css);
+    const lined = s.element('line', 'text');
+    const coloured = s.element('colour', 'text');
+    s.engine.commit();
+    return { line: s.committed(lined), colour: s.committed(coloured)['color'] };
+  };
+
+  for (const [name, colour] of [
+    ['platform-color()', LINK],
+    ['a system colour', 'LinkText'],
+  ]) {
+    for (const [declaration, props] of [
+      [`border: 1px solid ${colour}`, ['borderTopColor', 'borderLeftColor']],
+      [`border-top: 1px solid ${colour}`, ['borderTopColor']],
+      [`outline: 1px solid ${colour}`, ['outlineColor']],
+      [`text-decoration: underline ${colour}`, ['textDecorationColor']],
+    ] as const) {
+      it(`commits ${name} in '${declaration.split(':')[0]}' as color commits it`, () => {
+        const { line, colour: expected } = lineAndColour(declaration, colour);
+        assert.ok(expected !== undefined);
+        for (const prop of props) assert.deepEqual(line[prop], expected, prop);
+        if (props[0] === 'textDecorationColor') {
+          assert.equal(line['textDecorationLine'], 'underline');
+          assert.equal(line['textDecorationStyle'], 'solid');
+        }
+      });
+    }
+  }
+
+  it('still drops a platform colour written in a box-shadow', () => {
+    assert.equal(dropsOf(`.a { box-shadow: 0 1px 2px ${LINK}; }`).length, 1);
+  });
+
+  it('drops a platform colour written in another shorthand without blaming a var()', () => {
+    for (const declaration of [`flex: 1 ${LINK}`, `margin: 1px ${LINK}`]) {
+      const [dropped, ...rest] = dropsOf(`.a { ${declaration}; }`);
+      assert.equal(rest.length, 0);
+      assert.ok(dropped && !/var\(|on device/.test(dropped), dropped);
+    }
+  });
+
+  it('reads the lines and style of a text decoration written with a platform colour', () => {
+    const { line } = lineAndColour(`text-decoration: underline line-through dashed ${LINK}`, LINK);
+    assert.equal(line['textDecorationLine'], 'underline line-through');
+    assert.equal(line['textDecorationStyle'], 'dashed');
+  });
+
+  it('commits a written platform colour beside light-dark() and a token length in a text-shadow', () => {
+    const css =
+      `.a { --r: 3px; text-shadow: 0 1px var(--r) ${LINK}; }` +
+      `.b { text-shadow: 0 1px 2px light-dark(${LINK}, red); }`;
+    assert.deepEqual(dropsOf(css), []);
+    const s = app(css);
+    const a = s.element('a', 'text');
+    const b = s.element('b', 'text');
+    s.engine.commit();
+    assert.equal(s.committed(a)['textShadowRadius'], 3);
+    assert.deepEqual(s.committed(a)['textShadowColor'], PROCESSED_LINK);
+    assert.ok(s.committed(b)['textShadowColor'] !== undefined, 'a colour for the scheme');
+  });
+});
