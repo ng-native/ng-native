@@ -48,8 +48,9 @@ while (( ${#queue} )); do
     # thread is resolved and either:
     #  - Greptile has reviewed the current commit;
     #  - it reviewed an older commit and the PR's own changes are identical (only the base moved).
-    reviews=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" 2>/dev/null | jq -s 'add') || continue
-    reviewed=$(jq -r '[.[]|select(.user.login=="greptile-apps[bot]")]|last|.commit_id // empty' <<<$reviews)
+    reviewed=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" \
+      --jq '.[]|select(.user.login=="greptile-apps[bot]")|.commit_id' 2>/dev/null) || continue
+    lines=(${(f)reviewed}); reviewed=${lines[-1]}
     # A review that adds no comments posts no review object, only a successful "Greptile Review" check run,
     # so the newest commit with one counts too when it is newer than the last review object.
     commits=$(gh api --paginate "$R/pulls/$n/commits?per_page=100" --jq '.[].sha' 2>/dev/null) || continue
@@ -90,8 +91,9 @@ while (( ${#queue} )); do
     # checkout). #1087 broke main by merging on a run from before #1083.
     # The earliest run of any check on this commit: a re-run keeps its first checkout, so a later start
     # time would hide the main it actually tested.
-    started=$(gh api --paginate "$R/commits/$sha/check-runs?filter=all&per_page=100" \
-      --jq '.check_runs[]|select(.name != "Greptile Review")|.started_at' 2>/dev/null | sort | head -1) || continue
+    starts=$(gh api --paginate "$R/commits/$sha/check-runs?filter=all&per_page=100" \
+      --jq '.check_runs[]|select(.name != "Greptile Review")|.started_at' 2>/dev/null) || continue
+    lines=(${(of)starts}); started=${lines[1]}
     [[ -n $started ]] || continue
     tested=$(gh api "$R/commits?sha=main&until=$started&per_page=1" --jq '.[0].sha' 2>/dev/null) || continue
     moved=$(gh api "$R/compare/$tested...main" --jq 'if (.files|length) >= 300 then "*" else .files[].filename end' 2>/dev/null) || continue
