@@ -12,6 +12,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
@@ -77,13 +80,13 @@ describe('declaring a face', () => {
     assert.equal(face('400 400').weightRange, undefined);
   });
 
-  it('says in the build that a face with a weight range draws one weight on a device', () => {
-    const warned = (weight: string) => {
+  it('says in the build that a face with a weight range draws one weight before Expo SDK 58', () => {
+    const warned = (weight: string, expoSdk: number | undefined = 57) => {
       const warnings: string[] = [];
       compileCss(
         `@font-face { font-family: Inter; src: url('./Inter.ttf'); font-weight: ${weight} }`,
         'styles.css',
-        { onUnsupported: (message: string) => warnings.push(message) },
+        { onUnsupported: (message: string) => warnings.push(message), expoSdk },
       );
       return warnings;
     };
@@ -93,9 +96,42 @@ describe('declaring a face', () => {
       warning ?? '',
       /^styles\.css:1: @font-face 'Inter' declares the weight range 200 800/,
     );
+    assert.match(warning ?? '', /Expo SDK 58/);
     assert.match(warning ?? '', /one file per weight/);
     assert.deepEqual(warned('700'), [], 'a face of one weight');
     assert.deepEqual(warned('400 400'), [], 'a range of one weight is that weight');
+    // expo-font 58 registers a variable font so the text's weight picks its instance.
+    assert.deepEqual(warned('200 800', 58), [], 'SDK 58');
+    assert.deepEqual(warned('200 800', 59), [], 'a later SDK');
+  });
+
+  it("reads the Expo SDK from the app's expo when the build does not say it", () => {
+    const warnedIn = (version: string | null) => {
+      const app = mkdtempSync(join(tmpdir(), 'ngn-expo-sdk-'));
+      const cwd = process.cwd();
+      try {
+        if (version) {
+          mkdirSync(join(app, 'node_modules', 'expo'), { recursive: true });
+          const manifest = JSON.stringify({ name: 'expo', version });
+          writeFileSync(join(app, 'node_modules', 'expo', 'package.json'), manifest);
+        }
+        process.chdir(app);
+        const warnings: string[] = [];
+        compileCss(
+          "@font-face { font-family: Inter; src: url('./Inter.ttf'); font-weight: 200 800 }",
+          'styles.css',
+          { onUnsupported: (message: string) => warnings.push(message) },
+        );
+        return warnings.length;
+      } finally {
+        process.chdir(cwd);
+        rmSync(app, { recursive: true, force: true });
+      }
+    };
+    assert.equal(warnedIn('57.0.3'), 1, 'SDK 57');
+    assert.equal(warnedIn('58.0.17'), 0, 'SDK 58');
+    // Without expo there is no expo-font to load a face with at all.
+    assert.equal(warnedIn(null), 0, 'no expo');
   });
 
   it('reads bold in a face as 700, and normal as no weight', () => {

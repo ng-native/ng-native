@@ -3589,7 +3589,7 @@ function compileCss(source, context = 'styles', options = {}) {
   function compileRule(rule) {
     if (rule.type === 'font-face') {
       const face = fontFace(rule.value, context);
-      if (face.weightRange) onUnsupported?.(rangeWarning(face, locationOf(rule)));
+      if (rangeUndrawn(face, options)) onUnsupported?.(rangeWarning(face, locationOf(rule)));
       fonts.push(locatedFace(face, rule));
       return [];
     }
@@ -3725,19 +3725,44 @@ function fontFace(value, context) {
 }
 
 /**
- * What a face declared with a weight range draws, which is not what a browser draws: neither
- * platform picks a variable font's instance by the text's weight. iOS draws its default instance;
- * Android draws it below 700, and its system font from 700, as React Native registers the file
- * under one style and asks for its bold one at 700.
+ * What a face declared with a weight range draws before Expo SDK 58, which is not what a browser
+ * draws. expo-font 57 registers a variable font as its default instance alone: iOS draws that at
+ * every weight, and Android draws it below 700 and its system font from 700. From expo-font 58 the
+ * text's weight picks the instance on both.
  */
 function rangeWarning(face, location) {
   const [low, high] = face.weightRange;
   return (
-    `${location}: @font-face '${face.family}' declares the weight range ${low} ${high}, and a ` +
-    `device does not pick a variable font's weight: iOS draws the font's default instance at ` +
-    `every weight, and Android draws it below 700 and its system font from 700. Declare one ` +
-    `file per weight instead.`
+    `${location}: @font-face '${face.family}' declares the weight range ${low} ${high}, and before ` +
+    `Expo SDK 58 a device does not pick a variable font's weight: iOS draws the font's default ` +
+    `instance at every weight, and Android draws it below 700 and its system font from 700. ` +
+    `Update to Expo SDK 58, or declare one file per weight.`
   );
+}
+
+/** Whether a face declares a range the app's Expo SDK draws one weight of: before SDK 58. */
+function rangeUndrawn(face, options) {
+  return face.weightRange !== undefined && (options.expoSdk ?? appExpoSdk()) < 58;
+}
+
+/**
+ * The app's Expo SDK, read once per working directory from its `expo`. Infinity without one, and
+ * in the docs' preview, which runs this in a page with no file system: no expo means no expo-font
+ * to register a face with, and the preview builds for the SDK the docs are on.
+ */
+const expoSdks = new Map();
+function appExpoSdk() {
+  try {
+    const cwd = process.cwd();
+    if (!expoSdks.has(cwd)) {
+      const manifest = require.resolve('expo/package.json', { paths: [cwd] });
+      const { version } = JSON.parse(require('node:fs').readFileSync(manifest, 'utf8'));
+      expoSdks.set(cwd, Number(String(version).split('.')[0]));
+    }
+    return expoSdks.get(cwd);
+  } catch {
+    return Infinity;
+  }
 }
 
 /**

@@ -90,7 +90,30 @@ stylesheet, or in the component whose styles use them.
 
 ### A variable font
 
-A variable font is one file that covers a range of weights. A device draws one weight from it, so
+A variable font is one file that covers a range of weights. Declare it once, with the range:
+
+```css
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-VariableFont_wght.ttf');
+  font-weight: 100 900;
+}
+```
+
+The face is registered as `Inter-100to900`, a text whose `font-weight` falls in the range is
+pointed at it, and the weight stays on the text for the platform to pick the instance by. A weight
+outside the range takes the face nearest it, as in a browser. From Expo SDK 58:
+
+- **iOS** draws the font's named instance nearest the weight. A weight between two named instances,
+  such as 650, draws one of them.
+- **Android 15 and later** draws the weight from the font's `wght` axis. **Android 10 to 14** draw
+  it at the nearest hundred, 100 to 900.
+- **Android 9 and earlier** draws the font's default instance, made bolder by the platform at a bold
+  weight.
+
+Before Expo SDK 58, expo-font registers only the font's default instance, so the weight picks
+nothing: iOS draws the default instance at every weight, and Android draws it below 700 and its
+system font at 700 and above. The build warns about a face with a range there. On those versions,
 declare one file per weight instead, each with the weight it draws:
 
 ```css
@@ -106,13 +129,6 @@ declare one file per weight instead, each with the weight it draws:
   font-weight: 600;
 }
 ```
-
-A face declared with a range, `font-weight: 100 900`, is kept, registered as `Inter-100to900`, and
-reported in the build, but the platform does not pick an instance from it by the text's
-`font-weight`:
-
-- **iOS** draws the font's default instance at every weight.
-- **Android** draws the font's default instance below 700, and its system font at 700 and above.
 
 Many variable fonts ship their static weights beside the variable file. For one that does not,
 fontTools cuts one:
