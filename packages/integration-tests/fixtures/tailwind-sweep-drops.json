@@ -7836,8 +7836,6 @@
     "outline-[30deg]!"
   ],
   "dropped 'outline-offset': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
-    "-outline-offset-(--x)",
-    "-outline-offset-(--x)!",
     "-outline-offset-[#1a2b3c]",
     "-outline-offset-[#1a2b3c]!",
     "-outline-offset-[0.35]",

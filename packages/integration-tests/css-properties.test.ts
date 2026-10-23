@@ -451,6 +451,38 @@ describe('lengths in units native has no word for', () => {
     assert.throws(() => declarationsOf('outline-offset: 37%'), /outline-offset/);
   });
 
+  it('reads an outline offset worked out with calc(), as Chrome does', () => {
+    assert.deepEqual(declarationsOf('outline-offset: calc(2px * -1)'), { outlineOffset: -2 });
+    assert.deepEqual(declarationsOf('outline-offset: calc(1rem + 2px)'), { outlineOffset: 18 });
+    assert.throws(
+      () => declarationsOf('outline-offset: calc(10% + 2px)'),
+      /'outline-offset' takes a length, not a percentage/,
+    );
+  });
+
+  it("reads Tailwind's negated outline offset of a token on device", () => {
+    const sheet = compileCss(
+      ':root { --x: 3px } .a { outline-offset: calc(var(--x) * -1) }' +
+        ' .b { outline-offset: max(var(--x), 1rem) }',
+      't',
+    );
+    const resolver = new StyleResolver(sheet, { width: 400, height: 800, colorScheme: 'light' });
+    const target = (name: string) =>
+      ({
+        tag: 'view',
+        classes: new Set([name]),
+        props: {},
+        parent: null,
+        children: [],
+        sheet,
+        hostSheet: null,
+        styleCache: null,
+        styleDirty: true,
+      }) as unknown as StyleTarget;
+    assert.equal(resolver.resolve(target('a'), 1).style['outlineOffset'], -3);
+    assert.equal(resolver.resolve(target('b'), 1).style['outlineOffset'], 16);
+  });
+
   it('reads a font size in percent as a share of the inherited one, as an em is', () => {
     // `fontSize: '37%'` is not a value native takes; the size it means is known on device.
     const [rule] = compileCss('view { font-size: 37% }').rules;

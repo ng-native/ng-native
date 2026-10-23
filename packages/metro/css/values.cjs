@@ -1280,4 +1280,5 @@ module.exports = {
   meaningful,
   commaSeparated,
   arithmeticTree,
+  calcLength,
 };

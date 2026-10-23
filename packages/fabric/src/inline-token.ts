@@ -270,7 +270,7 @@ const PLATFORM_NAME = /^(?:'([^'\\]*)'|"([^"\\]*)"|([a-z_][\w-]*))$/i;
  * compile.cjs): its names, which the platform resolves. Undefined for anything else, a call with
  * no name in it included.
  */
-function platformColourOf(text: string): PlatformColour | undefined {
+export function platformColourOf(text: string): PlatformColour | undefined {
   const inside = PLATFORM_COLOR.exec(text)?.[1];
   if (inside === undefined) return undefined;
   const names: string[] = [];

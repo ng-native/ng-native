@@ -463,7 +463,9 @@ commits, and so does a `var()` that falls back to one. The platform resolves suc
 so it has no channels: a `color-mix()`, a relative colour, a gradient or a `box-shadow` worked out
 of the token, or a fade of it such as Tailwind's `bg-accent/50`, is dropped. The build says so where
 the sheet that sets the token also does that, and in development the engine says so on the device,
-naming the token, wherever it is set.
+naming the token, wherever it is set. A colour property in an element's own style,
+`style="color: platform-color(link)"` or `[style.color]`, takes `platform-color()` written out as a
+stylesheet does.
 
 A custom property can hold a font stack (read as its first family, as `font-family` is), a unitless
 line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or bare color channels for

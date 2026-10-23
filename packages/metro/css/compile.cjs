@@ -15,6 +15,7 @@ const {
   shadowsWithColourTokens,
 } = require('./colour-expression.cjs');
 const {
+  calcLength,
   CssUnsupported,
   CURRENT_COLOUR,
   fallbacks,
@@ -2073,11 +2074,26 @@ function addAliased(name, parts, out, deferred, context) {
     deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
     return;
   }
-  if (value?.length === undefined) throw unsupported(name, context);
-  if (typeof value.length === 'string' && value.length.endsWith('%') && NO_PERCENT.has(name)) {
+  const declared = { propertyId: { property: name }, value: parts };
+  // A function of a token or an `env()`, `calc(var(--x) * -1)` as Tailwind negates one: worked
+  // out on device, as a longhand lightningcss parses is with one.
+  if (mentionsVar(withEnvAsVar(declared, context).value)) {
+    addUnparsed({ property: 'unparsed', value: declared }, out, deferred, context);
+    return;
+  }
+  const settled = value?.length ?? calcLength(parts, context);
+  if (NO_PERCENT.has(name) && mentionsPercent(parts)) {
     throw new CssUnsupported(`${context}: '${name}' takes a length, not a percentage`);
   }
-  for (const prop of propsFor(name)) out[prop] = value.length;
+  if (settled === undefined) throw unsupported(name, context);
+  for (const prop of propsFor(name)) out[prop] = settled;
+}
+
+/** Whether unparsed terms hold a percentage, inside a function or not. */
+function mentionsPercent(parts) {
+  return (parts ?? []).some(
+    (part) => part?.value?.type === 'percentage' || mentionsPercent(part?.value?.arguments),
+  );
 }
 
 /**
