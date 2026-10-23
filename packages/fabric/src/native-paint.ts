@@ -77,6 +77,36 @@ function shapeOf(values: PaintValues): string {
   return `${values.opacity === undefined ? '' : 'o'}|${colours.join(',')}|${transform ?? '-'}`;
 }
 
+/** What an entry of a transform is where it moves the view nowhere: a scale is 1, the rest 0. */
+const restingAmount = (property: string): number => (property.startsWith('scale') ? 1 : 0);
+
+/**
+ * Values in the shape of `to`, each at where `from` has it: an opacity or a colour `from` has
+ * none of is where `to` is, and a transform entry it has none of rests the view as it is. A
+ * transform painted whole, a matrix, cannot be eased from somewhere else, and starts at `to`.
+ */
+function startIn(from: PaintValues, to: PaintValues): PaintValues {
+  const colors: Record<string, Rgba> = {};
+  for (const [key, rgba] of Object.entries(to.colors ?? {}))
+    colors[key] = from.colors?.[key] ?? rgba;
+  const ends = to.transform;
+  const starts = Array.isArray(from.transform) ? (from.transform as NumericTransform) : [];
+  const transform = Array.isArray(ends)
+    ? (ends as NumericTransform).map((entry, at) => ({
+        property: entry.property,
+        value:
+          starts[at]?.property === entry.property
+            ? starts[at].value
+            : restingAmount(entry.property),
+      }))
+    : ends;
+  return {
+    opacity: to.opacity === undefined ? undefined : (from.opacity ?? to.opacity),
+    transform,
+    colors,
+  };
+}
+
 export class NativePainter {
   private readonly native: NativeAnimated;
   private readonly touched: Touched | undefined;
@@ -119,8 +149,10 @@ export class NativePainter {
     ended: () => void,
   ): { stop(): void } {
     const { API } = this.native;
-    // Built from where it starts, where that is the same shape; from where it ends otherwise.
-    const graph = this.graphFor(view, tag, shapeOf(from) === shapeOf(to) ? from : to);
+    // Built in the shape it ends in, each value at where it starts: an entry the start has none
+    // of, as a first transform, is at what leaves the view as it is.
+    const start = shapeOf(from) === shapeOf(to) ? from : startIn(from, to);
+    const graph = this.graphFor(view, tag, start);
     const mine = new Map<string, number>();
     const stop = () => {
       for (const [path, id] of mine) {

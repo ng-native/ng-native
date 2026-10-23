@@ -409,3 +409,19 @@ describe('a painted view a native graph once owned an opacity on', () => {
     assert.equal(s.painted()['opacity'], 0.8);
   });
 });
+
+describe('a painted view given its first transform with a transition', () => {
+  it('eases it from where no transform leaves it, rather than jumping there', () => {
+    const s = scene(`${BAR} .bar { transition: transform 150ms linear }`);
+    // A run of opacity changes hands the view to the painter, with no transform yet.
+    for (const opacity of [0.9, 0.8, 0.7, 0.6]) s.tick(50, { opacity });
+    s.tick(50, { opacity: 0.6, ...move(100) });
+    const start = s.rec.named('start').at(-1);
+    assert.ok(start, 'an ease is started');
+    assert.equal((start[3] as { toValue: number }).toValue, 100);
+    // From where no transform leaves the view: the value node starts at nothing.
+    const node = start[2];
+    const created = s.rec.named('create').find(([, tag]) => tag === node)!;
+    assert.equal((created[2] as { value: number }).value, 0);
+  });
+});
