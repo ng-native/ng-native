@@ -156,6 +156,26 @@ react-native-screens draws it inside the tab's stack (a modal as a push, a form 
 sheet), so the bar stays visible under it. It is dismissed there too, so a tab comes back on the
 same page on both platforms.
 
+## Hiding the bar on a pushed page
+
+A detail or editor page pushed in a tab's stack can take the whole window, as UIKit's
+`hidesBottomBarWhenPushed` and SwiftUI's `.toolbar(.hidden, for: .tabBar)` do. Give its header
+`tabBarHidden`:
+
+```html
+<native-header title="Invoice" tabBarHidden />
+```
+
+The bar goes while that page is the one in front of the tab in front. It comes back when the page
+is popped, when another page is pushed over it, when another tab is selected, and when the header
+is removed or `tabBarHidden` turns false. A `[barHidden]` bound on the `<native-tabs-outlet>` wins
+over every page, either way; left unbound, the pages decide. A header outside any tab ignores it.
+
+react-native-screens hides the bar on the tab bar as a whole rather than per screen, so the bar
+disappears and reappears without UIKit's slide: as a push starts, and on iOS as a pop by the back
+button or the swipe finishes (on Android, as it starts). On iOS 18 and later it asks the tab bar
+controller to hide the bar; below iOS 18 it hides the bar's view.
+
 ## Content above the tab bar
 
 A tab's screen runs to the bottom of the window, and the bar is drawn over it: on iOS 26 it floats

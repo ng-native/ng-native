@@ -60,6 +60,10 @@ config for the rest of its life: removing the header commits that config as hidd
 header on the screen takes it over. `[hidden]` does the same for a bar that should go and come
 back with the same header in place.
 
+`tabBarHidden` hides the tab bar, rather than the navigation bar, while the page is in front of
+its tab: see
+[hiding the bar on a pushed page](/packages/router/tabs#hiding-the-bar-on-a-pushed-page).
+
 `<native-header-item>` places arbitrary Angular content - not just text - into one of the bar's
 slots: `left`, `center`/`title`, `right`, `back` (replaces the chevron; needs
 `backButtonInCustomView` on the header), or `searchBar`. `title` is committed as `center`, the

@@ -795,6 +795,7 @@ describe('a stack inside a tab', () => {
     const listening = new Set<() => string | null>();
     const tab: InTab = {
       onLeave: (leave) => (listening.add(leave), () => listening.delete(leave)),
+      hideBar: () => () => {},
     };
     await render(mod['Shell'] as Type<unknown>, {
       providers: [provideNativeRouter(mod['routes'] as Routes), { provide: IN_TAB, useValue: tab }],
