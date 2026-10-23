@@ -82,8 +82,9 @@ Run the merge queue for PRs once they are open:
 
 - **What it waits for:** Greptile's review of the current code with every thread resolved, every check
   green, a clean merge into main, and no release running. Then it squash-merges.
-- **Merge skew:** when main has changed a package the PR also changes since its CI started, the queue
-  merges main into the PR instead, so CI runs again against the main it will land on.
+- **Main moving on:** a PR that merges cleanly is merged on its green run, even when main has changed
+  since CI ran. Only a conflict, or a lockfile change on both sides, sends it back to be updated. When a
+  pair that merged cleanly breaks main between them, fix main forward.
 - **When a PR drops out:** a PR that fails CI or conflicts leaves the queue. Find out why before putting it
   back.
 - **Greptile never approves:** it leaves a commented review with inline P1/P2 comments, or, with nothing

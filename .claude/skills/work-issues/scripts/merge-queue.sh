@@ -29,9 +29,6 @@ open_threads() {
 }
 # Says something about a PR once per run rather than on every pass.
 typeset -A noted
-# The packages (or top-level directories) the file paths on stdin fall in, sorted for comm. Version plans
-# are new files that never clash, so .nx is left out.
-pkgs() { awk -F/ '$1 != ".nx" {print ($1=="packages"||$1=="examples") ? $1"/"$2 : $1}' | sort -u; }
 note() { [[ -n ${noted[$1:$2]} ]] || { echo "#$1 $2"; noted[$1:$2]=1; }; }
 while (( ${#queue} )); do
   for n in $queue; do
@@ -86,25 +83,6 @@ while (( ${#queue} )); do
     # keeps the PR waiting.
     (( $(jq .changed_files <<<$pr) < 3000 )) || { note $n "changes too many files to check its lockfile"; continue; }
     files=$(gh api --paginate "$R/pulls/$n/files?per_page=100" --jq '.[].filename' 2>/dev/null) || continue
-    # Merge skew: green CI only covers the main it ran against. When main has since changed a package this PR
-    # also changes, main is merged into the PR so CI and Greptile run again (a re-run would reuse the old
-    # checkout). #1087 broke main by merging on a run from before #1083.
-    # The earliest run of any check on this commit: a re-run keeps its first checkout, so a later start
-    # time would hide the main it actually tested.
-    starts=$(gh api --paginate "$R/commits/$sha/check-runs?filter=all&per_page=100" \
-      --jq '.check_runs[]|select(.name != "Greptile Review")|.started_at' 2>/dev/null) || continue
-    lines=(${(of)starts}); started=${lines[1]}
-    [[ -n $started ]] || continue
-    tested=$(gh api "$R/commits?sha=main&until=$started&per_page=1" --jq '.[0].sha' 2>/dev/null) || continue
-    moved=$(gh api "$R/compare/$tested...main" --jq 'if (.files|length) >= 300 then "*" else .files[].filename end' 2>/dev/null) || continue
-    if [[ -n $moved ]] && { [[ $moved == "*" ]] || [[ -n $(comm -12 <(pkgs <<<$files) <(pkgs <<<$moved)) ]]; }; then
-      if gh api -X PUT "$R/pulls/$n/update-branch" -f expected_head_sha=$sha >/dev/null 2>&1; then
-        echo "#$n: main changed its packages since CI ran; merged main in for a fresh run"
-      else
-        note $n "main changed its packages since CI ran and merging main in failed; update it by hand"
-      fi
-      continue
-    fi
     if grep -qx pnpm-lock.yaml <<<$files; then
       base=$(gh api "$R/compare/main...$sha" --jq .merge_base_commit.sha 2>/dev/null) || continue
       moved=$(gh api "$R/compare/$base...main" --jq 'if (.files|length) >= 300 then "pnpm-lock.yaml" else .files[].filename end' 2>/dev/null) || continue
