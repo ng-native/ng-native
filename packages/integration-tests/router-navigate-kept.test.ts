@@ -10,7 +10,6 @@ import { PlatformLocation } from '@angular/common';
 import {
   ActivationEnd,
   NavigationCancel,
-  NavigationError,
   NavigationSkipped,
   Router,
   withComponentInputBinding,
