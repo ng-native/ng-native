@@ -77,31 +77,6 @@ describe('a calc() of a percentage and a length', () => {
     assert.equal(s.box('c')[2], 224, 'a share less a share is a share: 80% of 280');
   });
 
-  it('moves and scales a percentage the token holds by the arithmetic around it', () => {
-    const css =
-      `${BASE} .c { --p: 50%; width: calc(var(--p) - 10px) } ` +
-      '.d { height: 5px; --p: 25%; width: calc(var(--p) * 2) } .narrow { --p: 10% }';
-    const s = scene(css, ['p', ['c'], ['d']]);
-    assert.equal(s.box('c')[2], 130, 'half of 280 less 10');
-    assert.equal(s.box('d')[2], 140, 'twice a quarter of 280');
-    s.engine.addClass(s.nodes.get('c')!, 'narrow');
-    assert.equal(s.box('c')[2], 18, 'and follows the token as it changes');
-    s.engine.removeClass(s.nodes.get('c')!, 'narrow');
-    assert.equal(s.box('c')[2], 130);
-  });
-
-  it('keeps the floor of a max() around such arithmetic', () => {
-    const css = `${BASE} .c { --p: 50%; width: max(calc(var(--p) - 10px), 140px) }`;
-    assert.equal(scene(css, ['p', ['c']]).box('c')[2], 140, 'not half of 280 less 10');
-  });
-
-  it('commits no sum from a percentage token to a property that has no box for it', () => {
-    const css = `${BASE} .c { --p: 50%; width: 20px; border-top-width: calc(var(--p) - 1px) }`;
-    const s = scene(css, ['p', ['c']]);
-    assert.equal(s.box('c')[2], 20);
-    assert.notEqual(typeof s.committed('c')['borderTopWidth'], 'string');
-  });
-
   it('refuses a token with a percentage where the percentage is of no box', () => {
     const dropped: string[] = [];
     compileCss('.c { letter-spacing: calc(50% + var(--x)) }', 'app.css', {

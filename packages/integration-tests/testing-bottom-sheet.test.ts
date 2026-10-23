@@ -38,7 +38,7 @@ for (const platform of ['ios', 'android'] as const) {
       registerPlatformComponents(platform);
       registerExpoUiViews(platform);
       await render(Sheet);
-      await userEvent.setup().press(screen.getByRole('button'));
+      await userEvent.setup().press(screen.getByRole('button', { name: 'Tap 0' }));
       assert.ok(screen.getByText('Tap 1'));
     });
 
@@ -56,6 +56,12 @@ describe('an open sheet with an item in its bar', () => {
   it('has the item in the tree on iOS, to press', async () => {
     const { instance } = await render(Sheet);
     await fireEvent(screen.getByTestId('save'), 'buttonPress');
+    assert.equal(instance.saved(), 1);
+  });
+
+  it('has the item there to find by role and press on iOS', async () => {
+    const { instance } = await render(Sheet);
+    await userEvent.press(screen.getByRole('button', { name: 'Save' }));
     assert.equal(instance.saved(), 1);
   });
 

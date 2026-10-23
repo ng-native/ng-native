@@ -472,7 +472,7 @@ mix `var()`s and written values: `padding: var(--y) var(--x)`,
 `border: var(--width) solid var(--colour)`. A token of two to four lengths gives a shorthand of
 four sides or corners a value each, as a component library's design tokens do:
 `padding: var(--list-padding)` of `--list-padding: 0.25rem 0.5rem`, and the same for `margin`,
-`inset`, `border-width` and `border-radius`. A part of such a token can be a token itself,
+`border-width` and `border-radius`. A part of such a token can be a token itself,
 `--content-padding: 0 var(--modal-padding) var(--modal-padding)`, but not a `calc()`. Any other
 length property is unset by such a token, `gap` and `padding-inline` among them.
 `background: var(--surface)` is read as
@@ -513,8 +513,7 @@ does not do there, except a percentage added to a token for the properties below
 `max-w-[calc(100%-2rem)]`. And for `translate`, where the percentage is of the box's own size:
 `translate-x-[calc(100%-2px)]`, which is how a switch's thumb slides over. The length is in
 points or rem, or a token, `calc(100% - var(--handle))`, which is settled where the box is and
-follows the token changing. The percentage can be the token's too: `calc(var(--sidebar) - 1rem)`
-with `--sidebar: 30%`, outside `translate`. Yoga takes a number or a percentage
+follows the token changing. Yoga takes a number or a percentage
 and not their sum, so the engine commits the box with the declaration set aside, reads the box
 the percentage is of, and commits it at what the sum comes to, all in the one task. That is two
 more commits when the box or anything in it changes, and one read on every commit after. A

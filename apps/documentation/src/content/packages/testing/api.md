@@ -147,6 +147,11 @@ component writes for `testID`, `id` (as `nativeID`), `accessibilityRole` or `rol
 by default commits one without you writing it, the way `<switch>` commits `accessibilityRole:
 'switch'`; anything else takes `[accessibilityRole]` directly.
 
+An `@expo/ui` `<ui-button>` commits no accessibility props, and is still a `button`, as SwiftUI's
+and Compose's buttons are to a screen reader: its name is its `label`, or the text inside it. Its
+`role`, such as `destructive`, is SwiftUI's and not one a query finds it by. On iOS, SwiftUI's
+`disabled` modifier makes it disabled.
+
 **Text content** is every `RawText` under the node, in order, joined with nothing between them.
 `<text>and <text>plums</text></text>` commits as one `Paragraph` holding a `RawText` and a nested
 `VirtualText`, and its text content is `and plums`. Only the `Paragraph` is a `ByText` match; the
@@ -230,9 +235,13 @@ A press, by `fireEvent.press` or `fireEvent(node, 'press')`, does nothing at all
 could not reach, as React Native Testing Library decides it from `pointerEvents` on the node as last
 committed: one that is `none` or `box-none` itself, or one under a view that is `none` or
 `box-only`. `pointer-events: none` in CSS commits as the same prop. Views above a
-`ui-bottom-sheet`'s content are not counted, since the sheet's content takes its own touches on a
-device. Nothing is sent and nothing is thrown, so a test asserts on what did not happen: the
-handler never ran. Any other event by name is sent as before.
+`ui-bottom-sheet`'s content and the items in its bar are not counted, since the sheet takes its
+own touches on a device. Nothing is sent and nothing is thrown, so a test asserts on what did not
+happen: the handler never ran. Any other event by name is sent as before.
+
+A press on a `<ui-button>` ends with the event its native button sends, `topButtonPress` on iOS
+and `topButtonPressed` on Android, so its `(buttonPress)` runs. On iOS one that SwiftUI's
+`disabled` modifier turns off sends none.
 
 ### `userEvent`
 

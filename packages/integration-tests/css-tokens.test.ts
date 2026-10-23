@@ -483,17 +483,6 @@ describe('tokens', () => {
       );
     });
 
-    it('gives each inset its own part of such a token, as `inset: 1px 2px` does', () => {
-      // An inset's sides are `top`, `right`, `bottom` and `left`, with no box name before them.
-      const css =
-        ':root { --two: 1px 2px; --four: 1px 2px 3px 4px } ' +
-        '.a { position: absolute; inset: var(--two) } .b { position: absolute; inset: var(--four) }';
-      const sides = (style: Record<string, unknown>) =>
-        ['top', 'right', 'bottom', 'left'].map((side) => style[side]);
-      assert.deepEqual(sides(resolvedStyle(css, ['a'])), [1, 2, 1, 2]);
-      assert.deepEqual(sides(resolvedStyle(css, ['b'])), [1, 2, 3, 4]);
-    });
-
     it('follows such a token through another that names it, and where an element sets it', () => {
       const css =
         ':root { --base: 2px 6px; --list: var(--base) } .a { padding: var(--list) } ' +

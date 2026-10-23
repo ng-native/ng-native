@@ -12,6 +12,7 @@
  */
 import type { FakeFabricNode } from './test-utils.ts';
 import { waitFor, type WaitForOptions } from './wait-for.ts';
+import { expoUiButtonDisabled, expoUiButtonName, isExpoUiButton } from './expo-ui-button.ts';
 
 /** What a query matches against: a whole string (normalised), or a RegExp tested against it. */
 export type Matcher = string | RegExp;
@@ -63,6 +64,15 @@ const has = (node: FakeFabricNode, state: State): boolean =>
   state !== 'checked' || CHECKABLE.has(node.props['accessibilityRole'] ?? node.props['role']);
 
 /**
+ * The roles a query finds the node by: `accessibilityRole` and `role`. `@expo/ui`'s button is a
+ * button, and its `role` is SwiftUI's, which says what the button does (`destructive`).
+ */
+const rolesOf = (node: FakeFabricNode): unknown[] =>
+  isExpoUiButton(node)
+    ? [node.props['accessibilityRole'] ?? 'button']
+    : [node.props['accessibilityRole'], node.props['role']];
+
+/**
  * A state as a screen reader has it: what the committed `accessibilityState` says, which the
  * components and the `aria-*` attributes write. Unset is false for the states that are off until
  * something says otherwise, and stays unset for `checked` and `expanded`, which a node only has
@@ -71,6 +81,7 @@ const has = (node: FakeFabricNode, state: State): boolean =>
  */
 function stateOf(node: FakeFabricNode, state: State): boolean | 'mixed' | undefined {
   if (state === 'disabled' && isTextInput(node) && node.props['editable'] === false) return true;
+  if (state === 'disabled' && isExpoUiButton(node) && expoUiButtonDisabled(node)) return true;
   if (!has(node, state)) return undefined;
   const value = (node.props['accessibilityState'] as Record<string, unknown> | undefined)?.[state];
   return value === true || value === false || value === 'mixed' ? value : UNSET[state];
@@ -189,10 +200,10 @@ export const isSearchBar = (node: FakeFabricNode): boolean => node.viewName === 
 type Query = { describe: string; select: (node: FakeFabricNode) => boolean };
 
 /** What a screen reader reads out: the label, or failing that the text inside. */
-const nameOf = (node: FakeFabricNode): string =>
-  typeof node.props['accessibilityLabel'] === 'string'
-    ? node.props['accessibilityLabel']
-    : textContent(node);
+const nameOf = (node: FakeFabricNode): string => {
+  if (typeof node.props['accessibilityLabel'] === 'string') return node.props['accessibilityLabel'];
+  return isExpoUiButton(node) ? expoUiButtonName(node) : textContent(node);
+};
 
 const QUERIES: { [K in Name]: (...args: QueryArgs[K]) => Query } = {
   Role: (role, options = {}) => ({
@@ -201,7 +212,7 @@ const QUERIES: { [K in Name]: (...args: QueryArgs[K]) => Query } = {
       (options.name === undefined ? '' : ` and name ${show(options.name)}`) +
       describeStates(options),
     select: (node) =>
-      (matches(node.props['accessibilityRole'], role) || matches(node.props['role'], role)) &&
+      rolesOf(node).some((value) => matches(value, role)) &&
       (options.name === undefined || matches(nameOf(node), options.name, options.exact)) &&
       inStates(node, options),
   }),
