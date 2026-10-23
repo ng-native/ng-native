@@ -10000,15 +10000,9 @@
     "underline-offset-auto",
     "underline-offset-auto!"
   ],
-  "dropped 'text-wrap': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "text-balance",
-    "text-balance!",
+  "dropped 'text-wrap': text-wrap: nowrap is not read here. Write white-space: nowrap, which is one line.": [
     "text-nowrap",
-    "text-nowrap!",
-    "text-pretty",
-    "text-pretty!",
-    "text-wrap",
-    "text-wrap!"
+    "text-nowrap!"
   ],
   "dropped 'top': '…' is not a value native can take": [
     "-top-[#1a2b3c]",
@@ -10449,13 +10443,9 @@
     "will-change-transform",
     "will-change-transform!"
   ],
-  "dropped 'word-break': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+  "dropped 'word-break': word-break: break-all has no native equivalent; normal and keep-all, on iOS, are read.": [
     "break-all",
-    "break-all!",
-    "break-keep",
-    "break-keep!",
-    "break-normal",
-    "break-normal!"
+    "break-all!"
   ],
   "dropped 'z-index': '…' is not a value native can take": [
     "-z-[#1a2b3c]",

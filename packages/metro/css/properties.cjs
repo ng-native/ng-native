@@ -488,10 +488,8 @@ const NO_NATIVE_EQUIVALENT = new Set([
   // `text-overflow` are not here: they become the Text component's `numberOfLines` and
   // `ellipsizeMode` props, which is how native truncates (see `truncation` below).
   'appearance',
-  'text-wrap',
   'word-wrap',
   'overflow-wrap',
-  'word-break',
   'line-break',
   'tab-size',
   'text-size-adjust',
@@ -1364,6 +1362,55 @@ function lineClamp(value, context) {
   );
 }
 
+/**
+ * How wrapped text picks its breaks, which native says with a paragraph's props: iOS's
+ * `lineBreakStrategyIOS` and Android's `textBreakStrategy`. `pretty` is iOS's `standard`, the
+ * strategy UILabel and SwiftUI's Text use, which keeps a short word off a line of its own;
+ * `balance` is Android's `balanced`, which evens the lines out. Each value writes both, as one
+ * `text-wrap-style` it is: a later `balance` undoes an earlier `pretty`.
+ */
+const TEXT_WRAP_STYLES = {
+  auto: { lineBreakStrategyIOS: 'none', textBreakStrategy: 'highQuality' },
+  stable: { lineBreakStrategyIOS: 'none', textBreakStrategy: 'highQuality' },
+  pretty: { lineBreakStrategyIOS: 'standard', textBreakStrategy: 'highQuality' },
+  balance: { lineBreakStrategyIOS: 'none', textBreakStrategy: 'balanced' },
+};
+
+/** `text-wrap` and its longhand `text-wrap-style`. The shorthand's `wrap` is the style `auto`. */
+function textWrap(property, value, out, context) {
+  const written = keyword(value, property);
+  const word = property === 'text-wrap' && written === 'wrap' ? 'auto' : written;
+  if (property === 'text-wrap' && word === 'nowrap') {
+    throw new CssUnsupported(
+      `${context}: text-wrap: nowrap is not read here. Write white-space: nowrap, which is one line.`,
+    );
+  }
+  if (!Object.hasOwn(TEXT_WRAP_STYLES, word)) {
+    throw new CssUnsupported(
+      `${context}: ${property}: ${written} is not one native breaks lines by; ` +
+        `${Object.keys(TEXT_WRAP_STYLES).join(', ')} are.`,
+    );
+  }
+  Object.assign(out, TEXT_WRAP_STYLES[word]);
+}
+
+/**
+ * `word-break: keep-all`, which keeps a Korean word whole: iOS's `hangul-word` line-break
+ * strategy. `normal` is the strategy iOS starts with. It shares the prop with `text-wrap`, so of
+ * the two the later declaration wins, where CSS keeps both.
+ */
+const WORD_BREAKS = { normal: 'none', 'keep-all': 'hangul-word' };
+
+function wordBreak(property, value, out, context) {
+  const word = keyword(value, property);
+  if (!Object.hasOwn(WORD_BREAKS, word)) {
+    throw new CssUnsupported(
+      `${context}: word-break: ${word} has no native equivalent; normal and keep-all, on iOS, are read.`,
+    );
+  }
+  out.lineBreakStrategyIOS = WORD_BREAKS[word];
+}
+
 /** The numeric font variants native has. `ordinal`, `slashed-zero` and the fractions it has not. */
 const NUMERIC_VARIANTS = new Set([
   'lining-nums',
@@ -1485,6 +1532,8 @@ const GRID = [
 const TRANSLATORS = new Map([
   ...GRID,
   ...each(['white-space', 'text-overflow', 'line-clamp', '-webkit-line-clamp'], truncation),
+  ...each(['text-wrap', 'text-wrap-style'], textWrap),
+  ['word-break', wordBreak],
   [
     'box-orient',
     (property, value, out) => {

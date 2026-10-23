@@ -1068,7 +1068,8 @@ describe('messages for things that are refused', () => {
 
   it('says native has no equivalent of the layout and text properties it has none of', () => {
     // These said "not mapped yet. React Native may well support it", which sends someone to look.
-    for (const css of ['text-wrap: balance', 'appearance: none', 'word-break: keep-all']) {
+    // `text-wrap` and `word-break: keep-all` are line-break strategies: css-line-break-strategy.test.ts.
+    for (const css of ['appearance: none', 'overflow-wrap: anywhere', 'line-break: strict']) {
       assert.throws(() => declarationsOf(css), /no React Native equivalent/, css);
     }
   });

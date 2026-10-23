@@ -222,7 +222,22 @@ text they do nothing, so put the class on the text itself. `display: -webkit-box
 flex box native already is, laid out along the axis `-webkit-box-orient` names, so the whole
 line-clamp idiom compiles; `-webkit-box-orient` without it is ignored, as a browser ignores it. A
 `[numberOfLines]` bound on the element wins over the stylesheet. The other `white-space` values,
-which keep spaces and line breaks, are dropped. `font-variant-numeric` takes `tabular-nums`,
+which keep spaces and line breaks, are dropped.
+
+Where wrapped text breaks is a paragraph's props too, and these are inherited, as in CSS, so a
+class on a `<view>` reaches the text inside it. `text-wrap: pretty` (or `text-wrap-style: pretty`,
+Tailwind's `text-pretty`) is iOS's `lineBreakStrategyIOS: 'standard'`, the strategy UILabel and
+SwiftUI's `Text` use, which keeps a short word off a last line of its own; without it iOS breaks as
+React Native does, with `none`. `text-wrap: balance` is Android's `textBreakStrategy: 'balanced'`,
+which evens the lines out; iOS has no balanced breaking and draws it as `none`. `wrap`, `auto` and
+`stable` are each platform's default, and `text-wrap: nowrap` is dropped: write `white-space:
+nowrap`. `word-break: keep-all` (Tailwind's `break-keep`) is iOS's `hangul-word`, which keeps a
+Korean word whole, and `word-break: normal` is `none`; as both set `lineBreakStrategyIOS`, the later
+of a `text-wrap` and a `word-break` declaration wins, where CSS keeps both. The other `word-break`
+values are dropped. A `lineBreakStrategyIOS` or `textBreakStrategy` bound on a `<text>` wins over
+the stylesheet.
+
+`font-variant-numeric` takes `tabular-nums`,
 `proportional-nums`, `lining-nums` and `oldstyle-nums`, as `fontVariant`.
 
 `display` takes `flex`, `none`, `contents`, the block containers `block`, `flow-root` and

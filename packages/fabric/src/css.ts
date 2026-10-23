@@ -815,6 +815,9 @@ const INHERITED = new Set([
   'textShadowOffset',
   'textShadowRadius',
   'textShadowColor',
+  // `text-wrap` and `word-break`, which CSS inherits, as the paragraph props they are.
+  'lineBreakStrategyIOS',
+  'textBreakStrategy',
   'selectable',
   // CSS inherits it, and its `none` is the element alone: a descendant's `auto` takes touches
   // again. The engine commits a computed `none` as native's `box-none`, which means that.

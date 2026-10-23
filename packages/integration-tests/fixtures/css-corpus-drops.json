@@ -1,7 +1,7 @@
 {
   "bootstrap": {
     "rules": 2594,
-    "dropped": 577,
+    "dropped": 574,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -64,6 +64,7 @@
       "justifyContent",
       "left",
       "letterSpacing",
+      "lineBreakStrategyIOS",
       "lineHeight",
       "marginBottom",
       "marginLeft",
@@ -308,7 +309,7 @@
         "'visibility' has no React Native equivalent: no style prop of a native view does what it does. Use opacity: 0 to hide a box and keep its space, or display: none to remove it.": 20
       },
       "word-break": {
-        "'word-break' has no React Native equivalent: no style prop of a native view does what it does.": 4
+        "word-break: break-word has no native equivalent; normal and keep-all, on iOS, are read.": 1
       },
       "word-spacing": {
         "'word-spacing' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
@@ -629,7 +630,7 @@
         "'width: unset' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 7
       },
       "word-break": {
-        "'word-break' has no React Native equivalent: no style prop of a native view does what it does.": 1
+        "word-break: break-word has no native equivalent; normal and keep-all, on iOS, are read.": 1
       },
       "word-wrap": {
         "'word-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 2
@@ -894,7 +895,7 @@
   },
   "open-props": {
     "rules": 87,
-    "dropped": 179,
+    "dropped": 175,
     "emitted": [
       "alignItems",
       "aspectRatio",
@@ -938,6 +939,7 @@
       "height",
       "justifyItems",
       "letterSpacing",
+      "lineBreakStrategyIOS",
       "lineHeight",
       "marginBottom",
       "marginLeft",
@@ -957,6 +959,7 @@
       "placeholderTextColor",
       "rowGap",
       "textAlign",
+      "textBreakStrategy",
       "textDecorationColor",
       "touchAction",
       "width"
@@ -1030,9 +1033,6 @@
       },
       "text-underline-offset": {
         "'text-underline-offset' has no React Native equivalent: no style prop of a native view does what it does.": 1
-      },
-      "text-wrap": {
-        "'text-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 4
       },
       "white-space": {
         "white-space: pre is not supported: native text has no switch for how spaces and line breaks are kept. nowrap, read as one line, and normal are.": 1
