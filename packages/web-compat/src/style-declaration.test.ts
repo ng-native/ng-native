@@ -70,6 +70,43 @@ describe('element.style', () => {
     assert.equal(div.props.style.boxShadow, undefined, 'what the style no longer says is gone');
   });
 
+  it('takes a filter a script wrote as functions, and sets it as the list a view reads', async () => {
+    const div = await element();
+    div.style.filter = 'brightness(1.2) blur(2px)';
+    assert.equal(div.style.filter, 'brightness(1.2) blur(2px)');
+    assert.deepEqual(div.props.style.filter, [{ brightness: 1.2 }, { blur: 2 }]);
+    div.style.filter =
+      'contrast(50%) grayscale() hue-rotate(0.5turn) invert(1) opacity(0) saturate(2) sepia(.5)';
+    assert.deepEqual(div.props.style.filter, [
+      { contrast: 0.5 },
+      { grayscale: 1 },
+      { hueRotate: 180 },
+      { invert: 1 },
+      { opacity: 0 },
+      { saturate: 2 },
+      { sepia: 0.5 },
+    ]);
+    div.style.filter = 'drop-shadow(1px 2px 3px red) blur(1rem)';
+    assert.deepEqual(div.props.style.filter, [
+      { dropShadow: { offsetX: 1, offsetY: 2, standardDeviation: 3, color: 'red' } },
+      { blur: 16 },
+    ]);
+    // A browser draws no filter where one part is one native has no form of.
+    div.style.filter = 'url(#shadow) grayscale(50%)';
+    assert.equal(div.style.filter, 'url("#shadow") grayscale(50%)');
+    assert.equal(div.props.style.filter ?? null, null);
+    div.style.filter = 'blur(2px)';
+    div.style.filter = 'none';
+    assert.equal(div.style.filter, 'none');
+    assert.equal(div.props.style.filter ?? null, null);
+    // A word that is no function is no filter, and leaves the one before.
+    div.style.filter = 'brightness';
+    assert.equal(div.style.filter, 'none');
+    div.style.filter = 'blur(2px)';
+    div.style.filter = '';
+    assert.equal(div.props.style.filter, undefined, 'what the style no longer says is gone');
+  });
+
   it('writes a value as the CSSOM serialises it', async () => {
     const div = await element();
     const cases: [string, string, string][] = [

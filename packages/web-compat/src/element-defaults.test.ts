@@ -297,7 +297,7 @@ describe("an HTML element's start under web-compat, as a browser lays it out", (
     await page();
     const document = (globalThis as { document?: any }).document;
     const panel = document.querySelector('[testID="div"]');
-    // A filter comes from a sheet: element.style takes no filter function (see the follow-up).
+    // A filter from a sheet, and below from element.style.
     panel.classList.add('filtered');
     panel.style.top = '10px';
     await settle();
@@ -309,6 +309,7 @@ describe("an HTML element's start under web-compat, as a browser lays it out", (
     panel.classList.remove('unfiltered');
     panel.style.top = '';
     const cases: [string, string, string][] = [
+      ['filter', 'brightness(1.2)', 'none'],
       ['backdropFilter', 'blur(2px)', 'none'],
       ['perspective', '100px', 'none'],
       ['contain', 'paint', 'none'],
