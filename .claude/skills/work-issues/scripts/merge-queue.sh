@@ -29,11 +29,16 @@ open_threads() {
 }
 # Says something about a PR once per run rather than on every pass.
 typeset -A noted
+# The packages (or top-level directories) the file paths on stdin fall in, sorted for comm. Version plans
+# are new files that never clash, so .nx is left out.
+pkgs() { awk -F/ '$1 != ".nx" {print ($1=="packages"||$1=="examples") ? $1"/"$2 : $1}' | sort -u; }
 note() { [[ -n ${noted[$1:$2]} ]] || { echo "#$1 $2"; noted[$1:$2]=1; }; }
 while (( ${#queue} )); do
   for n in $queue; do
     pr=$(gh api $R/pulls/$n 2>/dev/null) || continue
     state=$(jq -r 'if .merged_at then "merged" else .state end' <<<$pr)
+    # An unreadable answer (a full disk, a cut-off reply) keeps the PR queued rather than reading as closed.
+    [[ $state == (open|closed|merged) ]] || continue
     if [[ $state != open ]]; then echo "#$n is $state, done"; queue=(${queue:#$n}); continue; fi
     # A stacked PR waits until its base has merged and GitHub has moved it to main.
     [[ $(jq -r .base.ref <<<$pr) == main ]] || continue
@@ -45,9 +50,16 @@ while (( ${#queue} )); do
     #  - it reviewed an older commit and the PR's own changes are identical (only the base moved).
     reviews=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" 2>/dev/null | jq -s 'add') || continue
     reviewed=$(jq -r '[.[]|select(.user.login=="greptile-apps[bot]")]|last|.commit_id // empty' <<<$reviews)
-    # A review that adds no comments posts no review object, only a finished "Greptile Review" check run.
-    [[ $(gh api "$R/commits/$sha/check-runs?check_name=Greptile%20Review" \
-      --jq '[.check_runs[]|select(.status=="completed")]|length' 2>/dev/null) == <1-> ]] && reviewed=$sha
+    # A review that adds no comments posts no review object, only a successful "Greptile Review" check run,
+    # so the newest commit with one counts too when it is newer than the last review object.
+    commits=$(gh api "$R/pulls/$n/commits?per_page=100" --jq 'reverse|.[].sha' 2>/dev/null) || continue
+    for c in ${(f)commits}; do
+      [[ $c == $reviewed ]] && break
+      if [[ $(gh api "$R/commits/$c/check-runs?check_name=Greptile%20Review" \
+        --jq '[.check_runs[]|select(.conclusion=="success")]|length' 2>/dev/null) == <1-> ]]; then
+        reviewed=$c; break
+      fi
+    done
     if [[ -z $reviewed ]]; then note $n "waits for Greptile's review"; continue; fi
     if [[ $reviewed != $sha ]] && ! { then_=$(own_changes $reviewed) && now=$(own_changes $sha) &&
       [[ -n $then_ && $then_ == $now ]]; }; then
@@ -60,8 +72,8 @@ while (( ${#queue} )); do
     if [[ $ms == dirty ]]; then echo "#$n conflicts with main, skipping"; queue=(${queue:#$n}); continue; fi
     # A run cancelled because a duplicate superseded it (a retarget starts a second set) doesn't count
     # when the same check has another run.
-    runs=$(gh api "$R/commits/$sha/check-runs?per_page=100" \
-      --jq '[.check_runs|group_by(.name)[]|map(.conclusion // "pending")|(map(select(. != "cancelled"))|if length > 0 then . else ["cancelled"] end)[]]|unique|join(",")' 2>/dev/null)
+    checks=$(gh api "$R/commits/$sha/check-runs?per_page=100" 2>/dev/null) || continue
+    runs=$(jq -r '[.check_runs|group_by(.name)[]|map(.conclusion // "pending")|(map(select(. != "cancelled"))|if length > 0 then . else ["cancelled"] end)[]]|unique|join(",")' <<<$checks)
     if [[ $runs == *failure* || $runs == *cancelled* || $runs == *timed_out* ]]; then
       echo "#$n CI failed ($runs), skipping"; queue=(${queue:#$n}); continue
     fi
@@ -73,6 +85,21 @@ while (( ${#queue} )); do
     # keeps the PR waiting.
     (( $(jq .changed_files <<<$pr) < 3000 )) || { note $n "changes too many files to check its lockfile"; continue; }
     files=$(gh api --paginate "$R/pulls/$n/files?per_page=100" --jq '.[].filename' 2>/dev/null) || continue
+    # Merge skew: green CI only covers the main it ran against. When main has since changed a package this PR
+    # also changes, main is merged into the PR so CI and Greptile run again (a re-run would reuse the old
+    # checkout). #1087 broke main by merging on a run from before #1083.
+    started=$(jq -r '[.check_runs[]|select(.name != "Greptile Review")|.started_at]|min // empty' <<<$checks)
+    [[ -n $started ]] || continue
+    tested=$(gh api "$R/commits?sha=main&until=$started&per_page=1" --jq '.[0].sha' 2>/dev/null) || continue
+    moved=$(gh api "$R/compare/$tested...main" --jq 'if (.files|length) >= 300 then "*" else .files[].filename end' 2>/dev/null) || continue
+    if [[ -n $moved ]] && { [[ $moved == "*" ]] || [[ -n $(comm -12 <(pkgs <<<$files) <(pkgs <<<$moved)) ]]; }; then
+      if gh api -X PUT "$R/pulls/$n/update-branch" -f expected_head_sha=$sha >/dev/null 2>&1; then
+        echo "#$n: main changed its packages since CI ran; merged main in for a fresh run"
+      else
+        note $n "main changed its packages since CI ran and merging main in failed; update it by hand"
+      fi
+      continue
+    fi
     if grep -qx pnpm-lock.yaml <<<$files; then
       base=$(gh api "$R/compare/main...$sha" --jq .merge_base_commit.sha 2>/dev/null) || continue
       moved=$(gh api "$R/compare/$base...main" --jq 'if (.files|length) >= 300 then "pnpm-lock.yaml" else .files[].filename end' 2>/dev/null) || continue
