@@ -36,7 +36,7 @@ afterEach(async () => {
 async function start() {
   const { fixture } = await render(App, { globalStyles: sheet as never, ...appConfig });
   snackBar = fixture.componentRef.injector.get(MatSnackBar);
-  // The screen is a lazy route, compiled on its first load here.
+  // The router shows the screen once its first navigation ends.
   await screen.findByText('Tasks', undefined, { timeout: 10_000 });
   await settle();
 }
