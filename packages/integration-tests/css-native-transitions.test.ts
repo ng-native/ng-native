@@ -318,9 +318,20 @@ describe('a transition of a colour', () => {
     s.engine.advanceAnimations();
     s.classes('a up');
     assert.equal(s.started().length, 1);
-    // Native eases its own transform, and the engine's move stays committed before it.
+    // Native eases its own transform, with the engine's move as a constant entry before it.
     assert.deepEqual([s.at(0), s.at(1)], [{ translateY: 0 }, { translateY: -10 }]);
-    const view = s.engine.root.childList[0]!.childList[0]!;
-    assert.deepEqual(view.committed!.props['transform'], [{ translateY: 28 }]);
+    type Config = { type: string; outputRange?: number[]; transforms?: { nodeTag: unknown }[] };
+    const created = new Map(
+      s.rec.named('create').map(([, tag, config]) => [tag, config as Config]),
+    );
+    const transform = [...created.values()].filter((config) => config.type === 'transform').at(-1)!;
+    // Each entry eased on the one clock, in order: the move held where the engine put it.
+    assert.deepEqual(
+      transform.transforms!.map((entry) => created.get(entry.nodeTag)!.outputRange),
+      [
+        [28, 28],
+        [0, -10],
+      ],
+    );
   });
 });
