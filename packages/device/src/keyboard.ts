@@ -7,6 +7,7 @@
  * `@ng-native/expo`'s `provideNativeKeyboard()` adds the duration and curve. See `keyboardSource`.
  */
 import {
+  ApplicationRef,
   DestroyRef,
   InjectionToken,
   Service,
@@ -15,7 +16,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
-import { HostEngine } from '@ng-native/fabric';
+import { HostEngine, nativePlatform, type HostNode } from '@ng-native/fabric';
 import {
   edgeToEdgeFlag,
   reactNative,
@@ -214,6 +215,7 @@ export class Keyboard {
 
   private readonly source = inject(Keyboard.SOURCE);
   private readonly engine = inject(HostEngine, { optional: true });
+  private readonly app = inject(ApplicationRef, { optional: true });
   private readonly current = signal<KeyboardMetrics>({ height: 0 });
   private readonly frame = signal<KeyboardMetrics | null>(null);
 
@@ -235,11 +237,22 @@ export class Keyboard {
   /**
    * How far below the top of the screen the window `measureInWindow` reports in starts: the status
    * bar's height on Android unless React Native's edge-to-edge flag is on, and zero otherwise. The
-   * keyboard's top edge in that window is `screenY` less this. It follows the window's insets,
-   * which change with a rotation, so read it when comparing rather than keeping it.
+   * keyboard's top edge in that window is `screenY` less this. It changes with a rotation, so read
+   * it when comparing rather than keeping it.
+   *
+   * On Android, read from where React Native measures the app's root, which is drawn from the top
+   * of the screen: React Native takes the bar off its measurements as it lays the root out, and keeps
+   * doing so when the bar is hidden or shown later, until the root is laid out again. The bar's
+   * own height stands in where the root has not been measured.
    */
   get windowTop(): number {
-    return this.source.windowTop ?? 0;
+    let top = this.source.windowTop ?? 0;
+    // ponytail: the first root component is taken to start at the top of the screen, as an app's
+    // root does; a root placed lower would read as a window starting higher.
+    const root = this.app?.components[0]?.location.nativeElement as HostNode | undefined;
+    if (root && nativePlatform() === 'android')
+      this.engine?.measure(root, (frame) => (top = -frame.y));
+    return top;
   }
 
   /** Where the keyboard is now: at every frame of its motion where `followsMotion`. */
