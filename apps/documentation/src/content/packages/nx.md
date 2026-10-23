@@ -79,8 +79,9 @@ is left as it is, with a warning naming the two to decide.
 `@nx/expo` infers it as its `@nx/expo:start` executor, which Nx 23 deprecates and warns about on
 every run, so the generator runs the same `expo start` directly. `serve` runs it as well, in place
 of the `expo start --web` `@nx/expo` infers for every Expo app, since the app has no web platform.
-`nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same deprecation
-notice. `typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
+On Nx 23, `nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same
+deprecation notice; Nx 24 infers them as the `expo prebuild` and `eas build` commands.
+`typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
 once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports exists on a fresh
 checkout. It declares `.angular-native/` as its output, so a cache hit restores the sheet too.
 

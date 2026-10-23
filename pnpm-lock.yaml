@@ -1853,13 +1853,13 @@ importers:
         specifier: workspace:*
         version: link:../migrate
       '@nx/devkit':
-        specifier: ^23.0.0
+        specifier: ^23.0.0 || ^24.0.0
         version: 23.2.1(nx@23.2.1(typescript@6.0.3))
       minimatch:
         specifier: ^10.0.0
         version: 10.2.6
       nx:
-        specifier: ^23.0.0
+        specifier: ^23.0.0 || ^24.0.0
         version: 23.2.1(typescript@6.0.3)
       semver:
         specifier: ^7.7.0

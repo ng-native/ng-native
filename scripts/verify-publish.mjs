@@ -425,8 +425,12 @@ async function nxWorkspace(
     ),
   );
   const workspace = path.join(dir, 'monorepo');
-  // What pnpm tells someone stopped by that to run, and every later install fails without it.
-  if (pm === 'pnpm') run('pnpm', ['approve-builds', '--all'], workspace);
+  // What pnpm 11 tells someone stopped by that to run, and every later install fails without it.
+  // A workspace from Nx 24 runs pnpm 10, which only warns about the builds it skipped and has no
+  // `--all`.
+  if (pm === 'pnpm' && Number(run('pnpm', ['--version'], workspace).split('.')[0]) >= 11) {
+    run('pnpm', ['approve-builds', '--all'], workspace);
+  }
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
   run('npx', ['nx', 'add', '@ng-native/nx@local'], workspace, false);
   // With the linter, so the `lint` target below runs on what `--linter=eslint` installs.
@@ -451,12 +455,15 @@ async function nxWorkspace(
   // as written, which one in the TypeScript preset once did not.
   run('npx', ['nx', 'run-many', '-t', 'typecheck', 'test', '-p', library], workspace);
   console.log(`nx export ${project}`);
-  const modules = bundle('npx', ['nx', 'export', project, '--platform', 'ios'], workspace);
+  // Nx 24 prints a task's output only with `--output-style=static` when not on a terminal.
+  const exported = (...args) =>
+    bundle('npx', ['nx', 'export', project, ...args, '--output-style=static'], workspace);
+  const modules = exported('--platform', 'ios');
   if (latest) {
     console.log(`nx export ${project} --platform android`);
-    bundle('npx', ['nx', 'export', project, '--platform', 'android'], workspace);
+    exported('--platform', 'android');
     console.log(`nx export ${project}, for every platform`);
-    bundle('npx', ['nx', 'export', project], workspace);
+    exported();
   }
   console.log(`nx start ${project}`);
   const served = await serve(
