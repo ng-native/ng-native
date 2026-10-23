@@ -465,7 +465,9 @@ of the token, or a fade of it such as Tailwind's `bg-accent/50`, is dropped. The
 the sheet that sets the token also does that, and in development the engine says so on the device,
 naming the token, wherever it is set. A colour property in an element's own style,
 `style="color: platform-color(link)"` or `[style.color]`, takes `platform-color()` written out as a
-stylesheet does.
+stylesheet does. A `text-shadow` takes `platform-color()` or a system colour written out too,
+`text-shadow: 0 1px 2px LinkText`, and as a `var()` fallback, as its colour is a property of its
+own; a `box-shadow` drops one, and the build says so.
 
 A custom property can hold a font stack (read as its first family, as `font-family` is), a unitless
 line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or bare color channels for

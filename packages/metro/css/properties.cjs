@@ -2000,7 +2000,7 @@ const TRANSLATORS = new Map([
         height: length(shadow.yOffset, property),
       };
       out.textShadowRadius = length(shadow.blur, property);
-      out.textShadowColor = color(shadow.color, property);
+      out.textShadowColor = wholeColor(shadow.color, property);
     },
   ],
   [

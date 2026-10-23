@@ -16,6 +16,7 @@ const {
   length,
   meaningful,
   round,
+  wholeColor,
 } = require('./values.cjs');
 
 /** The spaces the device mixes in, which are the ones this compiler also folds a literal mix in. */
@@ -35,19 +36,19 @@ function mentionsVar(term) {
  * Returns the expression the device resolves. A colour with no `var()` in it is settled into a
  * literal here, so the device never mixes what the build could have.
  */
-function colourExpression(terms, context) {
+function colourExpression(terms, context, named = false) {
   const parts = meaningful(terms);
   if (parts.length !== 1) {
     throw new CssUnsupported(`${context}: expected one colour here, not ${parts.length} values`);
   }
   const [part] = parts;
-  if (part.type === 'var') return reference(part, context);
-  if (part.type === 'function') return functionColour(part, context);
-  return { color: literal(part, context) };
+  if (part.type === 'var') return reference(part, context, named);
+  if (part.type === 'function') return functionColour(part, context, named);
+  return { color: literal(part, context, named) };
 }
 
 /** A colour function: `color-mix()`, `rgba()` of token channels, an `hsl()` of tokens. */
-function functionColour(part, context) {
+function functionColour(part, context, named) {
   if (part.value?.name?.toLowerCase() === 'color-mix')
     return mixExpression(part.value.arguments, context);
   if (isRelative(part)) return relativeExpression(part, context);
@@ -60,7 +61,7 @@ function functionColour(part, context) {
         `Put the whole colour in the variable instead.`,
     );
   }
-  return { color: literal(part, context) };
+  return { color: literal(part, context, named) };
 }
 
 /** Whether a colour function is a relative colour: its first word is `from`. */
@@ -95,8 +96,13 @@ function channelsColour(part, context) {
   };
 }
 
-/** A literal colour token: a parsed colour, or a named one lightningcss left as a word. */
-function literal(part, context) {
+/**
+ * A literal colour token: a parsed colour, or a named one lightningcss left as a word. Where
+ * `named`, the colour is a property of its own, which the platform resolves a colour of by name
+ * in: `platform-color()` and a system colour are kept as their names, as `color` keeps them.
+ */
+function literal(part, context, named = false) {
+  if (named) return namedLiteral(part, context);
   if (part.type === 'color') return color(part.value, context);
   if (part.type === 'token' && part.value?.type === 'ident')
     return color(part.value.value, context);
@@ -104,8 +110,19 @@ function literal(part, context) {
   throw new CssUnsupported(`${context}: expected a colour, not '${part.type}'`);
 }
 
+/** `literal` where a colour by name is kept: `platform-color()` and a system colour. */
+function namedLiteral(part, context) {
+  if (part.type === 'token' && part.value?.type === 'ident') {
+    return wholeColor(part.value.value, context);
+  }
+  if (part.type === 'function' && part.value?.name === 'platform-color') {
+    return require('./compile.cjs').platformColor(part, context);
+  }
+  return literal(part, context);
+}
+
 /** `var(--x)`, with a fallback colour if one is written and the var() alternatives it names. */
-function reference(part, context) {
+function reference(part, context, named = false) {
   const name = part.value?.name?.ident;
   const fallback = meaningful(part.value?.fallback);
   const alternatives = [];
@@ -117,7 +134,7 @@ function reference(part, context) {
   return {
     reference: name,
     ...(alternatives.length ? { alternatives } : {}),
-    ...(next.length ? colourFallback(next, `${context} (fallback)`) : {}),
+    ...(next.length ? colourFallback(next, `${context} (fallback)`, named) : {}),
   };
 }
 
@@ -125,9 +142,9 @@ function reference(part, context) {
  * What a `var()` falls back to at the end of its chain: a literal colour, or one made of other
  * tokens, `hsl(var(--h) 100% 50%)`, worked out where it is used.
  */
-function colourFallback(terms, context) {
+function colourFallback(terms, context, named) {
   const fallbackToken = colourToken(terms, context);
-  return fallbackToken ? { fallbackToken } : { fallback: literal(terms[0], context) };
+  return fallbackToken ? { fallbackToken } : { fallback: literal(terms[0], context, named) };
 }
 
 /** A colour made of other tokens, as a `--x` holding it is: an hsl(), channels or a mix. */
@@ -222,13 +239,14 @@ const isTimes = (term) => term?.type === 'token' && term.value?.value === '*';
 /**
  * `box-shadow` with a `var()` in a colour, as the shadow maps Fabric reads, each colour a marker
  * the device fills in: `{ __colour: <expression> }`. Lengths are settled here as for any shadow.
+ * `named` for a `text-shadow`, whose colour is a prop of its own: see `literal`.
  */
-function shadowsWithColourTokens(terms, context) {
-  return commaSeparated(meaningful(terms)).map((shadow) => oneShadow(shadow, context));
+function shadowsWithColourTokens(terms, context, named = false) {
+  return commaSeparated(meaningful(terms)).map((shadow) => oneShadow(shadow, context, named));
 }
 
 /** One shadow of a list, or a whole shadow token standing in for some. */
-function oneShadow(shadow, context) {
+function oneShadow(shadow, context, named) {
   // A whole shadow that is a token, in a list of others: Pico's hover shadow, then its ring.
   if (shadow.length === 1 && shadow[0].type === 'var') return shadowToken(shadow[0], context);
   // `var(--tw-ring-inset,)`: a token that is the word `inset` or nothing, which is what an empty
@@ -245,7 +263,7 @@ function oneShadow(shadow, context) {
     }
   }
   checkLengths(shadow, lengths, context);
-  const expression = shadowColour(colour, slot, context);
+  const expression = shadowColour(colour, slot, context, named);
   return {
     offsetX: lengths[0],
     offsetY: lengths[1],
@@ -261,8 +279,8 @@ function oneShadow(shadow, context) {
  * or the word inset, and what the token holds says which (Tailwind's ring, which has a colour of
  * its own, is the other kind); or currentcolor, which is a shadow's colour when none is written.
  */
-function shadowColour(colour, slot, context) {
-  if (colour.length) return colourExpression(colour, context);
+function shadowColour(colour, slot, context, named) {
+  if (colour.length) return colourExpression(colour, context, named);
   if (slot) return { reference: slot.value.name.ident, orInset: true };
   return { color: 'currentcolor' };
 }

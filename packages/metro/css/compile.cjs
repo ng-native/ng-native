@@ -2229,6 +2229,13 @@ function addCustomWord(name, parts, out, context) {
   translate(name, word, out, context);
 }
 
+/** Whether a raw value is a `text-shadow` with `platform-color()` written in it. */
+const writtenPlatformShadow = (value) =>
+  value?.propertyId?.property === 'text-shadow' &&
+  (value.value ?? []).some(
+    (part) => part?.type === 'function' && part.value?.name === PLATFORM_COLOR,
+  );
+
 /**
  * Whether a raw value has nothing in it for the device to settle. One side of a light-dark() may
  * have no var() left in it, but it is still raw terms, which the path for tokens reads, literal
@@ -2372,7 +2379,9 @@ function addUnparsed(declaration, out, deferred, context) {
     for (const prop of platform.props) out[prop] = platform.value;
     return;
   }
-  if (settledAsWritten(declaration)) {
+  // `text-shadow: 0 1px 2px platform-color(link)`, which lightningcss cannot parse: its colour is
+  // a prop of its own, which takes the names as `color` does.
+  if (settledAsWritten(declaration) && !writtenPlatformShadow(declaration.value)) {
     unparsedValue(declaration.value, out, deferred, context);
     return;
   }

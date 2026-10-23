@@ -363,7 +363,7 @@ function expandShorthand(value, context, linear) {
  */
 function textShadow(parts, context) {
   const { shadowsWithColourTokens } = require('./colour-expression.cjs');
-  const shadows = shadowsWithColourTokens(parts, context);
+  const shadows = shadowsWithColourTokens(parts, context, true);
   if (shadows.length !== 1) {
     throw new CssUnsupported(
       `${context}: native has room for one text-shadow, not ${shadows.length}`,
