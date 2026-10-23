@@ -52,8 +52,8 @@ while (( ${#queue} )); do
     reviewed=$(jq -r '[.[]|select(.user.login=="greptile-apps[bot]")]|last|.commit_id // empty' <<<$reviews)
     # A review that adds no comments posts no review object, only a successful "Greptile Review" check run,
     # so the newest commit with one counts too when it is newer than the last review object.
-    commits=$(gh api "$R/pulls/$n/commits?per_page=100" --jq 'reverse|.[].sha' 2>/dev/null) || continue
-    for c in ${(f)commits}; do
+    commits=$(gh api --paginate "$R/pulls/$n/commits?per_page=100" --jq '.[].sha' 2>/dev/null) || continue
+    for c in ${(Oa)${(f)commits}}; do
       [[ $c == $reviewed ]] && break
       if [[ $(gh api "$R/commits/$c/check-runs?check_name=Greptile%20Review" \
         --jq '[.check_runs[]|select(.conclusion=="success")]|length' 2>/dev/null) == <1-> ]]; then
@@ -88,7 +88,10 @@ while (( ${#queue} )); do
     # Merge skew: green CI only covers the main it ran against. When main has since changed a package this PR
     # also changes, main is merged into the PR so CI and Greptile run again (a re-run would reuse the old
     # checkout). #1087 broke main by merging on a run from before #1083.
-    started=$(jq -r '[.check_runs[]|select(.name != "Greptile Review")|.started_at]|min // empty' <<<$checks)
+    # The earliest run of any check on this commit: a re-run keeps its first checkout, so a later start
+    # time would hide the main it actually tested.
+    started=$(gh api --paginate "$R/commits/$sha/check-runs?filter=all&per_page=100" \
+      --jq '.check_runs[]|select(.name != "Greptile Review")|.started_at' 2>/dev/null | sort | head -1) || continue
     [[ -n $started ]] || continue
     tested=$(gh api "$R/commits?sha=main&until=$started&per_page=1" --jq '.[0].sha' 2>/dev/null) || continue
     moved=$(gh api "$R/compare/$tested...main" --jq 'if (.files|length) >= 300 then "*" else .files[].filename end' 2>/dev/null) || continue
