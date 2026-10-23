@@ -353,6 +353,12 @@ the way a page's `@media (prefers-color-scheme: dark)` rules do. The function ru
 The defaults cover the header's appearance: `userInterfaceStyle`, `backgroundColor`, `color`,
 `blurEffect`, `hideShadow`, `translucent`, the `title*` and `largeTitle*` colors and fonts,
 `largeTitleHideShadow`, `backTitleFontFamily`, `backTitleFontSize` and `backButtonDisplayMode`.
+
+On iOS, `backButtonDisplayMode` has no effect on a header that also sets `backTitleFontFamily`,
+`backTitleFontSize` or `disableBackButtonMenu`, in a screen or in the defaults. Those make
+react-native-screens build its own titled back button, and UIKit then shows the previous screen's
+title whatever the display mode says, so `minimal` does not reduce the button to the chevron.
+`[backTitleVisible]="false"` is not affected: it keeps the chevron alone with those set too.
 What a screen says about itself - its title, whether it has a large title, whether the bar is
 hidden - stays on the screen.
 
