@@ -112,6 +112,16 @@ import {
 import { FontFaces } from './font-faces.ts';
 import { premultipliedStops } from './premultiplied-stops.ts';
 
+/** The lowest node both are in, either of them included, or nothing for two separate trees. */
+function commonAncestor(a: EngineNode, b: EngineNode): EngineNode | null {
+  // Most often `b` is inside `a`, which a walk up from it finds with no set made each move.
+  for (let node: EngineNode | null = b; node; node = node.parent) if (node === a) return a;
+  const above = new Set<EngineNode>();
+  for (let node: EngineNode | null = a; node; node = node.parent) above.add(node);
+  for (let node: EngineNode | null = b; node; node = node.parent) if (above.has(node)) return node;
+  return null;
+}
+
 /**
  * The animation a node's style asks for, with a play state from a rule of its own applied. Both
  * are instructions for this engine and nothing native has heard of them, so they come out of the
@@ -15327,12 +15337,18 @@ export class Engine implements HostEngine {
     return path.reverse();
   }
 
+  /**
+   * Who asks for the touch: the nodes from the root down to `from`, which is the target, or for a
+   * move while a node holds the touch, the lowest node above both it and the target, as React's
+   * responder plugin walks. A node inside the responder never takes the touch back from it.
+   */
   private negotiate(
     target: EngineNode,
     event: ResponderEvent,
     phase: 'Start' | 'Move',
+    from: EngineNode = target,
   ): EngineNode | null {
-    const path = this.pathTo(target);
+    const path = this.pathTo(from);
     const capture = `on${phase}ShouldSetResponderCapture` as const;
     const bubble = `on${phase}ShouldSetResponder` as const;
 
@@ -15400,17 +15416,25 @@ export class Engine implements HostEngine {
       if (elected) this.grant(elected, event);
       return;
     }
-    if (type === TOUCH_MOVE) {
-      if (this.currentResponder) {
-        this.responders.get(this.currentResponder)?.onResponderMove?.(event);
-      } else {
-        const elected = this.negotiate(target, event, 'Move');
-        if (elected) this.grant(elected, event);
-      }
-      return;
-    }
-    if (type === TOUCH_END) this.release(event, false);
+    if (type === TOUCH_MOVE) this.moveResponder(target, event);
+    else if (type === TOUCH_END) this.release(event, false);
     else if (type === TOUCH_CANCEL) this.release(event, true);
+  }
+
+  /**
+   * Asked on every move, not only while nobody holds the touch: a scroll view or a list row's
+   * swipe actions takes a drag from a pressable inside it this way. The responder answering for
+   * itself keeps the touch, as in React. The move then goes to whoever holds the touch after the
+   * asking, the new responder included.
+   */
+  private moveResponder(target: EngineNode, event: ResponderEvent): void {
+    const holder = this.currentResponder;
+    const from = holder ? commonAncestor(holder, target) : target;
+    const elected = from ? this.negotiate(target, event, 'Move', from) : null;
+    if (elected && elected !== holder) this.grant(elected, event);
+    if (this.currentResponder) {
+      this.responders.get(this.currentResponder)?.onResponderMove?.(event);
+    }
   }
 
   // --- events -----------------------------------------------------------

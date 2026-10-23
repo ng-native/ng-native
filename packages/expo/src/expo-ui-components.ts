@@ -277,9 +277,42 @@ export class UiList {
 }
 
 /**
+ * How far a finger goes sideways, and further than it goes down, before a row's swipe actions take
+ * the touch. SwiftUI's own row button still taps at about 20 points and its actions come out by
+ * about 30.
+ */
+const SWIPE_SLOP = 20;
+
+/**
+ * Take a sideways drag from what holds the touch inside the row, as SwiftUI does: its list moves
+ * the row and never taps it. Native sends the app's views inside the row no cancel, since React
+ * Native's touch handler runs beside the list's gestures rather than giving way to them, so the
+ * row's own responder asks for the drag, and a `pressable` that gives it up does not press.
+ */
+function takeSidewaysDrag(): void {
+  const node = inject(ElementRef).nativeElement as HostNode;
+  const engine = node.engine ?? inject(HostEngine);
+  let from: { x: number; y: number } | null = null;
+  const stop = engine.setResponder(node, {
+    onStartShouldSetResponderCapture: (event) => {
+      from = { x: event.nativeEvent.pageX ?? 0, y: event.nativeEvent.pageY ?? 0 };
+      return false;
+    },
+    onMoveShouldSetResponderCapture: (event) => {
+      if (!from) return false;
+      const across = Math.abs((event.nativeEvent.pageX ?? from.x) - from.x);
+      const down = Math.abs((event.nativeEvent.pageY ?? from.y) - from.y);
+      return across >= SWIPE_SLOP && across > down;
+    },
+  });
+  inject(DestroyRef).onDestroy(stop);
+}
+
+/**
  * The system's swipe actions on a list row, iOS only. The first child is the row; the actions go
  * in `<ui-slot name="actions" [extraProps]="{ edge: 'trailing', allowsFullSwipe: true }">`, one
- * slot per edge, as `ui-button`s.
+ * slot per edge, as `ui-button`s. A sideways drag on the row is the swipe's, so a `pressable` in a
+ * `ui-view-host` in the row does not press for it.
  */
 @Component({
   selector: 'ui-swipe-actions',
@@ -289,6 +322,10 @@ export class UiList {
 export class UiSwipeActions {
   protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
+
+  constructor() {
+    if (nativePlatform() !== 'android') takeSidewaysDrag();
+  }
 }
 
 /** What `ui-slider` sends as the thumb moves: its new value. */

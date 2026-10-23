@@ -101,7 +101,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiSwipeActions`** - the system's swipe actions on a list row, iOS only. The first child is
   the row, and each edge's actions are `ui-button`s in a
   `<ui-slot name="actions" [extraProps]="{ edge: 'trailing', allowsFullSwipe: true }">`. A row in
-  a scroll view that also scrolls sideways loses its swipes to that scroll view.
+  a scroll view that also scrolls sideways loses its swipes to that scroll view. A sideways drag
+  on the row is the swipe's, so a `pressable` in a `ui-view-host` in the row does not press for
+  it.
 - **`UiVStack`** and **`UiHStack`** - SwiftUI's stacks, with `alignment` and `spacing`, and
   **`UiSpacer`** for the room left over in one.
 - **`UiZStack`** - SwiftUI's `ZStack`: its children drawn over one another, the first at the back,

@@ -95,6 +95,73 @@ describe('responder negotiation', () => {
     assert.deepEqual(log, ['inner:grant', 'inner:move']);
   });
 
+  it('hands a drag to an ancestor that claims a move, terminating the responder', () => {
+    // React's responder plugin asks on every move, not only while nobody holds the touch: it is
+    // how a scroll view, or a list row's swipe actions, takes a drag from a button inside it.
+    engine.setResponder(inner, handlers('inner'));
+    engine.setResponder(outer, handlers('outer', { onMoveShouldSetResponderCapture: () => true }));
+
+    engine.dispatchEvent(inner, 'topTouchStart', {});
+    engine.dispatchEvent(inner, 'topTouchMove', {});
+    engine.dispatchEvent(inner, 'topTouchEnd', {});
+
+    assert.deepEqual(log, [
+      'inner:grant',
+      'inner:terminate',
+      'outer:grant',
+      'outer:move',
+      'outer:release',
+    ]);
+  });
+
+  it('asks only the nodes above the responder, never one inside it', () => {
+    // React walks from the common ancestor of the responder and the touch's target: a node the
+    // responder holds the touch for does not get to take it back.
+    const leaf = engine.createElement('view');
+    engine.appendChild(inner, leaf);
+    engine.commit();
+    let asked = 0;
+    engine.setResponder(outer, handlers('outer', { onStartShouldSetResponderCapture: () => true }));
+    engine.setResponder(inner, {
+      onMoveShouldSetResponderCapture: () => (asked++, true),
+      onMoveShouldSetResponder: () => (asked++, true),
+    });
+    engine.setResponder(leaf, handlers('leaf', { onMoveShouldSetResponder: () => true }));
+
+    engine.dispatchEvent(leaf, 'topTouchStart', {});
+    engine.dispatchEvent(leaf, 'topTouchMove', {});
+
+    assert.equal(engine.responder, outer);
+    assert.equal(asked, 0, 'inside the responder');
+    assert.deepEqual(log, ['outer:grant', 'outer:move']);
+  });
+
+  it('asks the nodes above both for a move of a finger outside the responder', () => {
+    // A second finger moving on a sibling: the walk starts from what both are in.
+    const sibling = engine.createElement('view');
+    engine.appendChild(outer, sibling);
+    engine.commit();
+    engine.setResponder(inner, handlers('inner'));
+    engine.setResponder(outer, handlers('outer', { onMoveShouldSetResponderCapture: () => true }));
+
+    engine.dispatchEvent(inner, 'topTouchStart', {});
+    engine.dispatchEvent(sibling, 'topTouchMove', {});
+
+    assert.equal(engine.responder, outer);
+    assert.deepEqual(log, ['inner:grant', 'inner:terminate', 'outer:grant', 'outer:move']);
+  });
+
+  it('keeps the responder when it claims the move itself', () => {
+    engine.setResponder(inner, handlers('inner', { onMoveShouldSetResponderCapture: () => true }));
+    engine.setResponder(outer, handlers('outer', { onMoveShouldSetResponder: () => true }));
+
+    engine.dispatchEvent(inner, 'topTouchStart', {});
+    engine.dispatchEvent(inner, 'topTouchMove', {});
+
+    assert.equal(engine.responder, inner);
+    assert.deepEqual(log, ['inner:grant', 'inner:move']);
+  });
+
   it('hands the gesture to a second touch elsewhere, terminating the first responder', () => {
     engine.setResponder(inner, handlers('inner'));
     engine.setResponder(outer, handlers('outer'));
