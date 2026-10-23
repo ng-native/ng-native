@@ -49,7 +49,7 @@ export class LibraryList {
 
 @Component({
   selector: 'x-library-album',
-  imports: [NativeHeader, ScrollView, Text],
+  imports: [NativeHeader, Pressable, ScrollView, Text],
   template: `
     <native-header [title]="album()" backTitle="Library" />
     <scroll-view class="screen" [contentContainerStyle]="page.content">
@@ -57,10 +57,43 @@ export class LibraryList {
       <text class="body">
         Still inside the library tab. The bar is native chrome around this stack, not part of it.
       </text>
+      <pressable class="card" (press)="openNotes()">
+        <text class="button-label">Read the liner notes</text>
+      </pressable>
     </scroll-view>
   `,
 })
 export class LibraryAlbum {
+  private readonly navigation = inject(NativeNavigation);
+
+  /** Bound from the route param by the outlet's input binding. */
+  readonly album = input('');
+
+  protected readonly page = page;
+
+  protected openNotes(): void {
+    void this.navigation.push(['/tabs/library', this.album(), 'notes']);
+  }
+}
+
+/**
+ * A page that hides the tab bar while it is in front, as a reader or a checkout does: the bar
+ * comes back when it is popped.
+ */
+@Component({
+  selector: 'x-library-notes',
+  imports: [NativeHeader, ScrollView, Text],
+  template: `
+    <native-header title="Liner notes" [tabBarHidden]="true" />
+    <scroll-view class="screen" [contentContainerStyle]="page.content">
+      <text class="heading">{{ album() }}</text>
+      <text class="body">
+        The tab bar is hidden while this page is in front, and comes back when it is popped.
+      </text>
+    </scroll-view>
+  `,
+})
+export class LibraryNotes {
   /** Bound from the route param by the outlet's input binding. */
   readonly album = input('');
 

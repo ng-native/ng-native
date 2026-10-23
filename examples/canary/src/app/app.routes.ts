@@ -311,6 +311,10 @@ export const routes: Routes = [
             path: ':album',
             loadComponent: () => import('./tabs/tab-library.ts').then((m) => m.LibraryAlbum),
           },
+          {
+            path: ':album/notes',
+            loadComponent: () => import('./tabs/tab-library.ts').then((m) => m.LibraryNotes),
+          },
         ],
       },
       {
