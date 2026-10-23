@@ -344,6 +344,26 @@ describe("a shape's paint, in a sheet read as a browser reads it", () => {
     });
   });
 
+  it('is taken by a box a drawing holds, and not by one inside that box with the same rules', () => {
+    // `<svg fill="red"><foreignObject><div class="x"><div class="x">`: the outer box is made in
+    // the drawing, as a package makes a text's span, the inner one is not. Each is styled alone.
+    withViews({ ...SHAPES, 'x-box': 'RCTView' }, () => {
+      const { fabric, engine, add } = scene('.ink { fill: #ff0000 } .x { opacity: 0.5 }');
+      const held = add('x-g', add('x-svg', engine.root, 'ink'));
+      const box = (parent: EngineNode) => {
+        const node = engine.createElement('x-box');
+        engine.setClasses(node, 'x');
+        engine.appendChild(parent, node);
+        return node;
+      };
+      box(box(held));
+      engine.commit();
+      const outer = fabric.committed[0]!.children[0]!.children[0]!;
+      assert.deepEqual(outer.props['fill'], { type: 0, payload: engine.color('rgb(255, 0, 0)') });
+      assert.equal(outer.children[0]!.props['fill'], undefined);
+    });
+  });
+
   it('keeps a list naming no paint on a shape that stops naming one, so native lets it go', () => {
     // react-native-svg keeps the list it had where it is sent none, on Android, or an empty one,
     // on iOS: the shape would keep the paint as its own after the rule stopped giving it.

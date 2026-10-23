@@ -4300,12 +4300,12 @@ export class StyleResolver {
     const drawing = node.namespace !== undefined;
     const inline = node.inlineInherits ? inlineInherited(node.props['style'], drawing) : null;
     // Nor one that takes a value from its parent's own style, which two parents differ in, nor
-    // a node of a drawing, which hands down paint another node with its rules does not.
+    // one that takes a drawing's paint, which another node with its rules does not.
     if (
       node.customProperties ||
       inline ||
       node.boundStyle ||
-      drawing ||
+      takesPaint(node) ||
       matched.some(takesParents)
     ) {
       return this.style(node, matched, parentTokens, parentInherited, inline);
