@@ -1,6 +1,6 @@
 ---
 title: NativeScript
-summary: Every iOS and Android API, and UIKit views, from TypeScript through NativeScript.
+summary: Every iOS and Android API, and native views, from TypeScript through NativeScript.
 ---
 
 # NativeScript
@@ -147,8 +147,9 @@ Android loads classes from the APK, so the option does nothing there.
 ## On each platform
 
 On iOS every class, function, constant, protocol, enum and struct in the iOS SDK becomes a global,
-`UIDevice` and `CGRectMake` among them. Enum members become globals too, under their bare names
-(`Center`, `Fill`), so a name like that is taken.
+`UIDevice` and `CGRectMake` among them. Enum members are globals under
+their full C names, `NSTextAlignmentCenter`; the short ones stay on their enum,
+`NSTextAlignment.Center`.
 
 On Android the classpath is reached through its packages: `android.os.Build`, `java.lang.System`,
 `androidx.*`, and the app's own. A top-level package whose name is already a read-only global is
@@ -184,6 +185,7 @@ const runtime: NativeScriptRuntime = {
   install: () => {},
   runOnUI: async (worklet, ...args) => worklet(...args),
   loadFramework: () => true,
+  nativeViewHandle: () => 'a view',
 };
 
 await render(DeviceName, { providers: [{ provide: NativeScript.RUNTIME, useValue: runtime }] });
@@ -197,4 +199,6 @@ that runs them defines the ones they use on `globalThis` first.
 - [`provideNativeScript`](#installing-it): installs the runtime, and loads frameworks.
 - [`NativeScript`](/packages/nativescript/calling-apis): `call()` on the JavaScript thread, and
   `runOnUI()` on the UI thread.
-- [`<ns-view>`](/packages/nativescript/views): a UIView built in TypeScript, in the template.
+- [`<ns-view>`](/packages/nativescript/views): a native view built in TypeScript, in the template.
+- [`androidContext()`](/packages/nativescript/calling-apis#on-android): the Activity to build an
+  Android view with.

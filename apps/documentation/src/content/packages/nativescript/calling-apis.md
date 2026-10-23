@@ -69,10 +69,8 @@ keeps on the main thread. That has consequences for what it can read:
   arguments instead, after the function, as `'AccentColor'` is passed above.
 - Arguments and the return value are copied between the runtimes: numbers, strings, booleans, plain
   objects and arrays. A promise cannot be, so a worklet answers synchronously or not at all.
-- A native object can be passed in as an argument, but not returned: `runOnUI()` rejects a worklet
-  that returns one. NativeScript cannot release a native object handed from the UI runtime to the
-  JavaScript one when the JavaScript reloads, and the app crashes. Return what the JavaScript thread
-  needs from it instead, such as its `text`.
+- A native object can be passed in, and returned. Returned, it is a proxy on the JavaScript thread
+  for an object made on the main thread: read it there, and touch a view only from a worklet.
 - An error it throws rejects the promise `runOnUI()` returns.
 - The functions it calls must be worklets too. A function passed in as an argument is one it can
   hand back to the JavaScript thread but not call.
@@ -124,25 +122,29 @@ worklet. This is the shape for what nothing wraps: a delegate, a completion hand
 
 ## On Android
 
-Android's runtime has no worklet runtime yet, so `runOnUI()` runs the function on the JavaScript
-thread, where `call()` does. That thread has a looper, so an API that only needs one works from
-it, a `Toast` among them. A `View` does not: touching one throws
-`CalledFromWrongThreadException: Only the original thread that created a view hierarchy can touch
-its views`, which `call()` and `runOnUI()` pass on as an error. A callback the platform runs on its
-main thread, such as a `Runnable` posted to the main looper, runs its JavaScript on the JavaScript
-thread, so it cannot touch one either.
+Android has no Worklets UI runtime. `runOnUI()` runs the function on Android's main thread instead,
+in the same JavaScript runtime: the main thread borrows it while the JavaScript thread waits. So the
+function gets the caller's own values rather than copies, and a `View` can be touched in it:
 
-So on Android, NativeScript reaches every non-UI API, and views stay with
-[Expo modules](/guide/native-modules) and the [components](/packages/components).
+```ts
+import { androidContext } from '@ng-native/nativescript';
 
-### Reloading the JavaScript
+protected async toast(): Promise<void> {
+  await this.native.runOnUI((text: string) => {
+    'worklet';
+    android.widget.Toast.makeText(androidContext() as android.content.Context, text, 0).show();
+  }, 'Saved');
+}
+```
 
-On Android, NativeScript installs once per process and does not survive the JavaScript being
-reloaded, by the dev menu, by pressing `r`, or by `expo-updates` applying an update. After a reload,
-calls fail with an error saying the app needs restarting, and the app can crash as NativeScript
-releases objects that belonged to the JavaScript before the reload. Restart the app after a reload;
-Fast Refresh, which does not reload the JavaScript, is unaffected. iOS installs again on every
-reload.
+`androidContext()` is the current Activity, which a view or a dialog is made with. The `'worklet'`
+directive does no harm on Android and lets one function serve both platforms, but the Babel plugin
+still turns the function into a worklet, which drops its `this`: pass state in as arguments, as on
+iOS.
+
+A Java callback the main thread makes, such as a view's click listener, runs on the main thread
+too, so it can update its view. Touching a view anywhere else, in `call()` for example, throws
+`CalledFromWrongThreadException`.
 
 ## Types
 

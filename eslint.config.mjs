@@ -28,6 +28,8 @@ export default tseslint.config(
       '**/dist/**',
       '.claude/**',
       'examples/*/.expo/**',
+      // Typings NativeScript's Android build writes for every class in the SDK, tens of megabytes.
+      'examples/nativescript/types/**',
       // The published starters. Their files are an app's source, copied verbatim into someone
       // else's project, so this workspace's boundary rules do not apply to them. They are verified
       // by being used: `scripts/verify-publish.mjs` publishes to a local registry, generates an

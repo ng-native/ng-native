@@ -104,7 +104,7 @@ async function nativescript(tree, options) {
     tree,
     {
       '@ng-native/nativescript': native.dependencies['@ng-native/components'],
-      '@nativescript/react-native': '^9.1.0',
+      '@nativescript/react-native': '^9.1.2',
       'react-native-worklets': '0.10.1',
     },
     { '@nativescript/types-android': '^9.1.1' },

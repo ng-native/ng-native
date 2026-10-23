@@ -33,8 +33,8 @@ docs](https://docs.nativescript.org/guide/ios-marshalling)). It calls Objective-
 directly, without React Native or per-API wrappers. Angular Native reuses the RN/Expo module
 ecosystem, and reaches an SDK no module wraps through
 [`@ng-native/nativescript`](/packages/nativescript), which embeds that same runtime: every iOS and
-Android API is callable from TypeScript, and a UIView built in TypeScript can be placed in a
-template. On Android it reaches every API but a view's, which still needs a module.
+Android API is callable from TypeScript, and a native view built in TypeScript, a UIView or an
+Android `View`, can be placed in a template.
 
 `@nativescript/angular` is actively maintained: the [NativeScript/angular
 monorepo](https://github.com/NativeScript/angular) tracks current Angular releases, including
@@ -96,8 +96,8 @@ also cover CSS behavior beyond unit tests; see the canary's verify screen and
 - Choose Angular Native for an existing Angular app or a team wanting Angular templates, signals
   and DI with native views and Expo modules.
 - Choose React Native for a team invested in React, where Fabric's ecosystem is largest.
-- Choose NativeScript for an app built entirely on direct native SDK access, Android views
-  included, when that matters more than React Native plugin reuse.
+- Choose NativeScript for an app built entirely on direct native SDK access, when that matters
+  more than React Native plugin reuse.
 - Choose Ionic for a web app that needs installation, or a web team avoiding native build tooling.
 - Choose Flutter when pixel-identical rendering matters more than native controls, or a new team
   has no investment in web, Angular or React ecosystems.

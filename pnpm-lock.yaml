@@ -938,8 +938,8 @@ importers:
         specifier: 22.2.0
         version: 22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)
       '@nativescript/react-native':
-        specifier: 9.1.0
-        version: 9.1.0(expo@57.0.26)(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+        specifier: 9.1.2
+        version: 9.1.2(expo@57.0.26)(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       '@ng-native/components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1917,8 +1917,8 @@ importers:
   packages/nativescript:
     dependencies:
       '@nativescript/react-native':
-        specifier: ^9.1.0
-        version: 9.1.0(expo@57.0.26)(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+        specifier: ^9.1.2
+        version: 9.1.2(expo@57.0.26)(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       '@ng-native/fabric':
         specifier: workspace:*
         version: link:../fabric
@@ -3825,8 +3825,8 @@ packages:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
 
-  '@nativescript/react-native@9.1.0':
-    resolution: {integrity: sha512-fpIvBsy8X9m7N8Kq7LLY8y2DwSgbXe334ANIjAecbX+4YiCy3aRtyXWLKIMS6bEmaKoRMcCAykWGZ4uI+AExJg==}
+  '@nativescript/react-native@9.1.2':
+    resolution: {integrity: sha512-sqgsqg++6etbihWzLeIeSi7OxlmAsEegxz4yHerqCbYBuxyrVnTrtK4vDNnTYbNM+q6u2b0hwDNhX0aOEKTeTw==}
     hasBin: true
     peerDependencies:
       expo: '*'
@@ -10744,7 +10744,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.4
     optional: true
 
-  '@nativescript/react-native@9.1.0(expo@57.0.26)(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)':
+  '@nativescript/react-native@9.1.2(expo@57.0.26)(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)':
     dependencies:
       '@babel/parser': 7.29.9
       '@babel/traverse': 7.29.8

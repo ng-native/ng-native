@@ -1,6 +1,6 @@
 ---
 title: Use NativeScript
-summary: Call iOS and Android platform APIs, and build UIKit views, from TypeScript over JSI.
+summary: Call iOS and Android platform APIs, and build native views, from TypeScript over JSI.
 ---
 
 # Use NativeScript
@@ -111,13 +111,14 @@ protected async tint(): Promise<void> {
 }
 ```
 
-Android's runtime has no worklet runtime yet, so on Android NativeScript reaches every API but a
-view's. [Calling native APIs](/packages/nativescript/calling-apis) covers what a worklet can read,
-how it answers later, and what runs where on each platform.
+On Android, `runOnUI()` runs the function on the main thread too, in the same runtime.
+[Calling native APIs](/packages/nativescript/calling-apis) covers what a worklet can read, how it
+answers later, and what runs where on each platform.
 
-## Show a UIView
+## Show a native view
 
-`<ns-view>` shows a UIView built in a worklet, sized by the template like any other element:
+`<ns-view>` shows a view built in a worklet, sized by the template like any other element. On iOS
+it is a UIView:
 
 ```ts
 import { Component, signal } from '@angular/core';
@@ -154,7 +155,7 @@ export class Studio {
 
 SceneKit is not linked by default, so the route that shows it loads it:
 `provideNativeScript({ frameworks: ['SceneKit'] })`. [Native views](/packages/nativescript/views)
-covers props, lifetime and sizing.
+covers props, lifetime, sizing, and the same on Android with an `android.view.View`.
 
 ## Test it
 

@@ -1,11 +1,12 @@
 ---
 title: Native views
-summary: A UIView built in TypeScript, placed and sized by the template like any other element.
+summary: A UIView or Android View built in TypeScript, sized by the template like any other element.
 ---
 
 # Native views
 
-`<ns-view>` shows a UIView an app builds in TypeScript. The template places and sizes the element
+`<ns-view>` shows a native view an app builds in TypeScript: a UIView on iOS, an `android.view.View`
+on Android. The template places and sizes the element
 like any other view; the UIView fills it.
 
 ```ts
@@ -71,15 +72,10 @@ UIKit holds a delegate or a control's target weakly, so one made in `create` is 
 object takes JavaScript properties beside its native ones, and keeps them as long as it is held.
 
 ```ts
-/** `NSObject.extend`, which the generated iOS types leave out. */
-type Extendable = typeof NSObject & {
-  extend(methods: object, options: { protocols: unknown[] }): typeof NSObject;
-};
-
 const field = nsView<{ placeholder: string }, UITextField>({
   create(props) {
     'worklet';
-    const ReturnKey = (NSObject as Extendable).extend(
+    const ReturnKey = NSObject.extend(
       { textFieldShouldReturn: (view: UITextField) => view.resignFirstResponder() },
       { protocols: [UITextFieldDelegate] },
     );
@@ -93,8 +89,8 @@ const field = nsView<{ placeholder: string }, UITextField>({
 });
 ```
 
-`heldDelegate` is a name of the app's own; any name the class does not use works. Neither it nor
-`NSObject.extend` is in the generated iOS types, hence the two casts.
+`heldDelegate` is a name of the app's own; any name the class does not use works. It is not in
+the class's types, hence the cast.
 
 `create` returns a UIView. What it throws is reported to Angular's `ErrorHandler`, and so is a
 value that is not a UIView, `null` included; either way the element is left empty, and a view it
@@ -112,13 +108,6 @@ element a size, or a size from its container, as `class="h-12"` does above.
 A view with a fixed size of its own, such as a `UISwitch`, stays that size, at the top left of the
 element.
 
-## Hiding one
-
-Hide an `<ns-view>` with `@if`, or `opacity: 0`, and not with `display: none`. A `display: none`
-element has no native view, its own or one inside an element with `display: none`, and when it is
-shown again NativeScript's host does not take the UIView back: the element stays empty. `@if`
-builds a new view when the element comes back.
-
 ## Touches
 
 The UIView takes the touches that land on it, as a view inside any UIKit app does. A drag that
@@ -132,10 +121,28 @@ them beside it, or over it with `position: absolute`.
 
 ## On Android
 
-`<ns-view>` is iOS only. On Android the element is an empty view, and neither function is called:
-NativeScript's Android runtime has no thread to build a view on yet (see
-[On Android](/packages/nativescript/calling-apis#on-android)). A template that shows an `<ns-view>`
-on both platforms puts its Android equivalent beside it under an `@if`.
+On Android `create` returns an `android.view.View`, made with `androidContext()`, the current
+Activity, and both functions run on the main thread:
+
+```ts
+import { androidContext, nsView } from '@ng-native/nativescript';
+
+const badge = nsView<{ title: string }, android.widget.TextView>({
+  create(props) {
+    'worklet';
+    const label = new android.widget.TextView(androidContext() as android.content.Context);
+    label.setText(props.title);
+    return label;
+  },
+  update(label, props) {
+    'worklet';
+    label.setText(props.title);
+  },
+});
+```
+
+The view fills the element, as on iOS. A spec is for one platform: a template that shows a native
+view on both picks one spec or the other, by `NativeScript`'s `platform`.
 
 ## Behind it
 

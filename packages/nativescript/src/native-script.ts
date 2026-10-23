@@ -2,10 +2,8 @@
  * NativeScript's runtime, installed once and reached through one service.
  *
  * `@nativescript/react-native` puts every iOS SDK symbol and every Android class on the JavaScript
- * runtime over JSI. What an app has to do before it can call one differs by platform: iOS installs
- * through the package's `init()`, which also installs into the Worklets UI runtime; Android has no
- * worklet runtime yet (its `installWorkletRuntime` answers false, so `init()` throws there) and
- * installs through the TurboModule alone. This file is that difference, so a component is not.
+ * runtime over JSI. The service installs it, picks the function for the platform the app is on, and
+ * says what is wrong in a build without it, so a component does none of that.
  *
  * ```ts
  * bootstrapApplication(App, { providers: [provideNativeScript()] });
@@ -34,30 +32,42 @@ export type NativeScriptPlatform = 'ios' | 'android';
 /** What the service needs of NativeScript, on the platform the app is on. */
 export interface NativeScriptRuntime {
   readonly platform: NativeScriptPlatform;
-  /** Install the native API on the JavaScript runtime, with its classes as globals. Idempotent. */
+  /** Install the native API on the JavaScript runtime, with iOS's classes as globals. Idempotent. */
   install(): void;
-  /** Run a worklet on the platform's UI thread. */
+  /** Run a worklet on the platform's main thread. */
   runOnUI<A extends unknown[], R>(worklet: (...args: A) => R, ...args: A): Promise<R>;
   /** Load a system framework whose classes the metadata names but the binary does not link. */
   loadFramework(name: string): boolean;
   /**
-   * Why there is no runtime on a platform that should have one: a build without it, Expo Go, or
-   * on Android a JavaScript reload. Read on each use, as installing can set it.
+   * The handle `NativeScriptUIView` shows a view by: a UIView's pointer on iOS, a registry name on
+   * Android. A worklet, so the main thread can be handed it. Throws for a value that is not a view.
    */
+  nativeViewHandle(view: unknown): string;
+  /** Why there is no runtime on a platform that should have one: a build without it, or Expo Go. */
   readonly missing?: Error;
 }
 
-/** The subset of React Native read here, described so `require` has a type. */
-interface ReactNative {
-  Platform: { OS: string };
-  TurboModuleRegistry: { get(name: string): { install(metadataPath: string): boolean } | null };
-}
-
-/** The subset of `@nativescript/react-native`'s default export used on iOS. */
+/** The subset of `@nativescript/react-native`'s default export used here. */
 interface NativeScriptModule {
+  isAvailable(): boolean;
   init(metadataPath?: string, options?: { globals?: boolean }): boolean;
   runOnUI<A extends unknown[], R>(worklet: (...args: A) => R, ...args: A): Promise<R>;
   loadFramework(name: string): boolean;
+  nativeViewHandle(view: unknown): string;
+  androidContext(): unknown;
+}
+
+/** NativeScript's `androidContext`, once a runtime is made: see `androidContext` below. */
+let contextOf: (() => unknown) | null = null;
+
+/**
+ * The Context to build an Android view with, the current Activity, as `new
+ * android.widget.TextView(androidContext())` needs. `null` on iOS, in Node, and before NativeScript
+ * is installed. A function of this package's, so a component file can name it without importing
+ * `@nativescript/react-native`, which Node cannot load.
+ */
+export function androidContext(): unknown {
+  return contextOf?.() ?? null;
 }
 
 const MISSING =
@@ -65,30 +75,22 @@ const MISSING =
   '"@ng-native/nativescript" to the plugins in app.json and rebuild ("npx expo run:ios" or ' +
   '"npx expo run:android"). Expo Go cannot load it.';
 
-const RELOADED =
-  '[angular-native] NativeScript is not installed in this JavaScript runtime: on Android it ' +
-  'installs once per process, and the JavaScript was reloaded since. Restart the app.';
-
 /**
  * The runtime for the platform the app is on, or null where there is none to install: Node, where
  * a test runs, and the web. On a device without the native half, Expo Go among them, it is one
  * that says so as it is used: the rest of the app still runs, and the feature that needs NativeScript
  * fails with what to do about it, as a missing Expo module does.
- *
- * The TurboModule is asked for before the package is required: the package's own entry fetches it
- * with `getEnforcing` as it is evaluated, which Metro reports as fatal before any `catch` here.
  */
 export function nativeScriptRuntime(): NativeScriptRuntime | null {
-  let rn: ReactNative;
+  let platform: string;
   try {
-    rn = require('react-native') as ReactNative;
+    platform = (require('react-native') as { Platform: { OS: string } }).Platform.OS;
   } catch {
     return null;
   }
-  const platform = rn.Platform.OS;
   if (platform !== 'ios' && platform !== 'android') return null;
-  const turbo = rn.TurboModuleRegistry.get('NativeScriptNativeApi');
-  if (!turbo) {
+  const ns = (require('@nativescript/react-native') as { default: NativeScriptModule }).default;
+  if (!ns.isAvailable()) {
     const missing = new Error(MISSING);
     return {
       platform,
@@ -96,76 +98,30 @@ export function nativeScriptRuntime(): NativeScriptRuntime | null {
       install: () => {},
       runOnUI: () => Promise.reject(missing),
       loadFramework: () => true,
+      nativeViewHandle: () => {
+        throw missing;
+      },
     };
   }
-
-  if (platform === 'android') {
-    const runtime: NativeScriptRuntime & { missing?: Error } = {
-      platform,
-      install: () => {
-        turbo.install('');
-        // The module installs once per process, and answers that it is installed when asked again
-        // from the runtime a JavaScript reload makes, which has none of its globals.
-        // ponytail: an upstream bug in @nativescript/react-native 9.1's Android module; this only
-        // says so. Remove once a reload installs again.
-        if (!('java' in globalThis)) runtime.missing = new Error(RELOADED);
-      },
-      // ponytail: Android has no worklet runtime in @nativescript/react-native 9.1, so this runs on
-      // the JavaScript thread. Post to the main looper once the runtime can call back across threads.
-      runOnUI: async (worklet, ...args) => {
-        if (runtime.missing) throw runtime.missing;
-        return worklet(...args);
-      },
-      // Android loads classes from the APK's classpath; there is nothing to load.
-      loadFramework: () => true,
-    };
-    return runtime;
-  }
-
-  const ns = (require('@nativescript/react-native') as { default: NativeScriptModule }).default;
+  contextOf = platform === 'android' ? ns.androidContext : null;
   return {
     platform,
-    // Globals on: `UIDevice.currentDevice` rather than `NativeScript.getClass('UIDevice')`. The
+    // Globals on iOS: `UIDevice.currentDevice` rather than `NativeScript.getClass('UIDevice')`. The
     // package defaults them off so UIKit is not touched from the JavaScript thread by accident;
-    // `runOnUI` is still the way to touch a view.
-    install: () => {
-      const zone = 'Zone' in globalThis;
-      ns.init('', { globals: true });
-      // `installGlobals` makes every enum member a global too, and CloudKit has one named `Zone`.
-      // Angular's zoneless scheduler still checks for zone.js with `typeof Zone`, finds this one
-      // and calls `Zone.root.run` on it, so it goes.
-      // ponytail: the one clash known to break the app; ask upstream not to hoist enum members.
-      if (!zone) delete (globalThis as { Zone?: unknown }).Zone;
-    },
-    runOnUI: (worklet, ...args) =>
-      ns.runOnUI(ui.plain, worklet as (...args: unknown[]) => unknown, ...args) as never,
-    loadFramework: (name) => ns.loadFramework(name),
+    // `runOnUI` is still the way to touch a view. Android's packages are globals either way.
+    install: () => void ns.init('', { globals: platform === 'ios' }),
+    runOnUI: (worklet, ...args) => ns.runOnUI(worklet, ...args),
+    // Android loads classes from the APK's classpath; there is nothing to load.
+    loadFramework: (name) => platform !== 'ios' || ns.loadFramework(name),
+    nativeViewHandle: ns.nativeViewHandle,
   };
 }
 
-/** Runs on the UI runtime. One object so neither is a top-level function: see `nsView`. */
-const ui = {
-  /**
-   * The worklet's answer, refused if it is an Objective-C object. One handed to the JavaScript
-   * thread becomes a proxy there that NativeScript cannot release when that runtime goes, so the
-   * app crashes the next time the JavaScript reloads, by the dev menu or by an update.
-   * ponytail: checks the value itself, not what is inside an array or object of it.
-   */
-  plain(worklet: (...args: unknown[]) => unknown, ...args: unknown[]): unknown {
+/** Where there is no runtime. A worklet, as the runtime's own is; an object, as `nsView` explains. */
+const noRuntime = {
+  nativeViewHandle(view: unknown): string {
     'worklet';
-    const answer = worklet(...args);
-    if (
-      answer !== null &&
-      typeof answer === 'object' &&
-      typeof (answer as { isKindOfClass?: unknown }).isKindOfClass === 'function'
-    ) {
-      throw new Error(
-        `[angular-native] A worklet passed to runOnUI returned a native object (${String(answer)}). ` +
-          'Return plain data instead: a native object handed to the JavaScript thread crashes the ' +
-          'app when the JavaScript reloads.',
-      );
-    }
-    return answer;
+    throw new Error(`[angular-native] No NativeScript runtime to take ${String(view)}'s handle.`);
   },
 };
 
@@ -206,13 +162,18 @@ export class NativeScript {
   }
 
   /**
-   * Run a worklet on the UI thread and answer what it returns. iOS only for now: on Android it runs
-   * on the JavaScript thread. A worklet captures what it reads by value, so pass state as
+   * Run a worklet on the platform's main thread, where views can be touched, and answer what it
+   * returns. On iOS it runs on the Worklets UI runtime and captures what it reads by value; on
+   * Android it borrows this runtime while the JavaScript thread waits. Either way pass state as
    * arguments rather than reading `this` inside it.
    */
   runOnUI<A extends unknown[], R>(worklet: (...args: A) => R, ...args: A): Promise<R | undefined> {
     return this.runtime ? this.runtime.runOnUI(worklet, ...args) : Promise.resolve(undefined);
   }
+
+  /** The handle `<ns-view>` binds for a view; see `NativeScriptRuntime.nativeViewHandle`. */
+  readonly nativeViewHandle: (view: unknown) => string =
+    this.runtime?.nativeViewHandle ?? noRuntime.nativeViewHandle;
 
   /** Load each named system framework (iOS), such as SceneKit. */
   loadFrameworks(names: readonly string[]): void {

@@ -8,7 +8,8 @@ Expo module of its own.
 | --------------------------------- | ----------------------- | -------------------------------------------------------------- |
 | The device's model, system, cores | `src/app/app.ts`        | `call()`, synchronously on the JavaScript thread               |
 | A spinning SceneKit torus (iOS)   | `src/app/torus.ts`      | `<ns-view>` and `nsView()`, built and updated on the UI thread |
-| A `UIAlertController` (iOS)       | `src/app/app.ts`        | `runOnUI()`, answering through `scheduleOnRN`                  |
+| A `TextView` (Android)            | `src/app/badge.ts`      | `<ns-view>` and `nsView()`, with `androidContext()`            |
+| The platform's own alert          | `src/app/app.ts`        | `runOnUI()`: `UIAlertController` or `AlertDialog`              |
 | The setup                         | `src/main.ts`           | `provideNativeScript({ frameworks: ['SceneKit'] })`            |
 | The iOS and Android types         | `src/nativescript.d.ts` | References to both SDKs' declarations                          |
 

@@ -8,8 +8,9 @@ import {
   Text,
   View,
 } from '@ng-native/components';
-import { NativeScript, NsView } from '@ng-native/nativescript';
+import { androidContext, NativeScript, NsView } from '@ng-native/nativescript';
 import { scheduleOnRN } from 'react-native-worklets';
+import { badge } from './badge.ts';
 import { torus } from './torus.ts';
 
 /** A line of what the device says about itself, read through NativeScript. */
@@ -66,6 +67,11 @@ interface Fact {
       border-radius: 12px;
       overflow: hidden;
     }
+    .badge {
+      height: 80px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
     .button {
       padding: 14px;
       border-radius: 12px;
@@ -102,24 +108,28 @@ interface Fact {
                 class="scene"
                 testID="scene"
                 [view]="torus"
-                [props]="{ wireframe: wireframe() }"
+                [props]="{ wireframe: highlighted() }"
               />
-              <view class="panel">
-                <view class="fact">
-                  <text class="label">Wireframe</text>
-                  <switch accessibilityLabel="Wireframe" [(checked)]="wireframe" />
-                </view>
-              </view>
-              <pressable class="button" accessibilityRole="button" (press)="confirm()">
-                <text class="button-text">Ask with a UIAlertController</text>
-              </pressable>
-              <text class="caption" testID="answer">{{ answer() }}</text>
             } @else {
-              <text class="caption">
-                A view built in TypeScript is iOS only: NativeScript's Android runtime cannot run on
-                the thread Android's views live on yet.
-              </text>
+              <ns-view
+                class="badge"
+                testID="badge"
+                [view]="badge"
+                [props]="{ text: 'An android.widget.TextView', highlighted: highlighted() }"
+              />
             }
+            <view class="panel">
+              <view class="fact">
+                <text class="label">{{ ios ? 'Wireframe' : 'Highlighted' }}</text>
+                <switch accessibilityLabel="Highlight" [(checked)]="highlighted" />
+              </view>
+            </view>
+            <pressable class="button" accessibilityRole="button" (press)="confirm()">
+              <text class="button-text"
+                >Ask with {{ ios ? 'a UIAlertController' : 'an AlertDialog' }}</text
+              >
+            </pressable>
+            <text class="caption" testID="answer">{{ answer() }}</text>
           </view>
         </scroll-view>
       </safe-area-view>
@@ -131,7 +141,8 @@ export class App {
 
   protected readonly ios = this.native.platform === 'ios';
   protected readonly torus = torus;
-  protected readonly wireframe = signal(false);
+  protected readonly badge = badge;
+  protected readonly highlighted = signal(false);
   protected readonly answer = signal('');
 
   protected readonly facts: readonly Fact[] = [
@@ -170,35 +181,52 @@ export class App {
     },
   ];
 
-  /** Asks with UIKit's own alert, on the main thread, and shows which button was tapped. */
+  /** Asks with the platform's own alert, on the main thread, and shows which button was tapped. */
   protected async confirm(): Promise<void> {
-    if (!this.ios) return;
+    if (!this.native.platform) return;
     const choice = await new Promise<string>((answer, fail) =>
       this.native
-        .runOnUI(
-          (title: string, reply: (choice: string) => void) => {
-            'worklet';
-            const alert = UIAlertController.alertControllerWithTitleMessagePreferredStyle(
-              title,
-              'Presented by a worklet on the main thread.',
-              UIAlertControllerStyle.Alert,
-            );
-            for (const choice of ['Not now', 'Sounds good']) {
-              alert.addAction(
-                UIAlertAction.actionWithTitleStyleHandler(choice, UIAlertActionStyle.Default, () =>
-                  scheduleOnRN(reply, choice),
-                ),
-              );
-            }
-            let top = UIApplication.sharedApplication.keyWindow!.rootViewController!;
-            while (top.presentedViewController) top = top.presentedViewController;
-            top.presentViewControllerAnimatedCompletion(alert, true, () => {});
-          },
-          'Try NativeScript?',
-          answer,
-        )
+        .runOnUI(this.ios ? ask.onIOS : ask.onAndroid, 'Try NativeScript?', answer)
         .catch(fail),
     );
     this.answer.set(`You chose "${choice}".`);
   }
 }
+
+const CHOICES = ['Not now', 'Sounds good'];
+
+/** The worklets that ask. An object, so hot reloading leaves them worklets: see `nsView`. */
+const ask = {
+  /** UIKit's alert, on the UI runtime: the answer goes back to the JavaScript thread. */
+  onIOS(title: string, reply: (choice: string) => void): void {
+    'worklet';
+    const alert = UIAlertController.alertControllerWithTitleMessagePreferredStyle(
+      title,
+      'Presented by a worklet on the main thread.',
+      UIAlertControllerStyle.Alert,
+    );
+    for (const choice of CHOICES) {
+      alert.addAction(
+        UIAlertAction.actionWithTitleStyleHandler(choice, UIAlertActionStyle.Default, () =>
+          scheduleOnRN(reply, choice),
+        ),
+      );
+    }
+    let top = UIApplication.sharedApplication.keyWindow!.rootViewController!;
+    while (top.presentedViewController) top = top.presentedViewController;
+    top.presentViewControllerAnimatedCompletion(alert, true, () => {});
+  },
+
+  /** Android's dialog, on the main thread in this same runtime, so its listener replies itself. */
+  onAndroid(title: string, reply: (choice: string) => void): void {
+    'worklet';
+    const listener = (choice: string) =>
+      new android.content.DialogInterface.OnClickListener({ onClick: () => reply(choice) });
+    new android.app.AlertDialog.Builder(androidContext() as android.content.Context)
+      .setTitle(title)
+      .setMessage('Presented on the main thread.')
+      .setNegativeButton(CHOICES[0]!, listener(CHOICES[0]!))
+      .setPositiveButton(CHOICES[1]!, listener(CHOICES[1]!))
+      .show();
+  },
+};

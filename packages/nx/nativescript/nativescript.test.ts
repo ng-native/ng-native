@@ -46,7 +46,7 @@ describe('the nativescript generator', () => {
 
     const { dependencies } = readJson(tree, 'package.json');
     assert.ok(dependencies['@ng-native/nativescript']);
-    assert.equal(dependencies['@nativescript/react-native'], '^9.1.0');
+    assert.equal(dependencies['@nativescript/react-native'], '^9.1.2');
     assert.ok(dependencies['react-native-worklets']);
 
     assert.ok(

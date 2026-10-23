@@ -18,6 +18,7 @@ const ios: NativeScriptRuntime = {
   install: () => {},
   runOnUI: async () => undefined as never,
   loadFramework: () => true,
+  nativeViewHandle: () => 'a view',
 };
 
 test('renders in Node, where there is no NativeScript, saying what it could not read', async () => {

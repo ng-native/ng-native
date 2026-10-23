@@ -13,6 +13,7 @@ import { mount } from '@ng-native/platform';
 import { registerPlatformComponents } from '@ng-native/fabric';
 import { createFakeFabric } from '@ng-native/testing';
 import {
+  androidContext,
   NativeScript,
   nativeScriptRuntime,
   provideNativeScript,
@@ -42,13 +43,16 @@ describe('NativeScript', () => {
     ViewOnly = mod['NsViewOnlyFixture'] as Type<unknown>;
     label = mod['label'];
     badge = mod['badge'];
-    // What NativeScript puts on the UI runtime: a view's pointer, here its id.
-    g['interop'] = { handleof: (view: { id: string }) => ({ toHexString: () => `0x${view.id}` }) };
   });
   after(() => {
-    delete g['interop'];
     delete g['__ngNsViews'];
   });
+
+  /** A view's handle as NativeScript gives it, here its id; anything else is refused, as there. */
+  const handleOf = (view: unknown): string => {
+    if (typeof view !== 'object' || view === null || !('id' in view)) throw new Error('not a view');
+    return `0x${(view as { id: string }).id}`;
+  };
 
   const fake = (platform: 'ios' | 'android') => {
     const calls = { installs: 0, frameworks: [] as string[] };
@@ -57,6 +61,7 @@ describe('NativeScript', () => {
       install: () => void calls.installs++,
       runOnUI: async (worklet, ...args) => worklet(...args),
       loadFramework: (name) => (calls.frameworks.push(name), true),
+      nativeViewHandle: handleOf,
     };
     return { runtime, calls };
   };
@@ -184,21 +189,34 @@ describe('NativeScript', () => {
     const before = views.size;
     fixture.spec.set({ create: () => 42 });
     await settle();
-    assert.match(String(errors.at(-1)), /create returned 42, where it returns a UIView/);
+    assert.match(String(errors.at(-1)), /create returned 42, where it returns a view/);
     assert.equal(views.size, before - 1, 'the old view is let go');
     assert.equal(view().props['nativeViewHandle'], null, 'and the element is empty');
   });
 
-  it('commits as a plain view on Android and builds nothing', async () => {
+  it("commits as NativeScript's view on Android too, with the handle of the view create built", async () => {
     registerPlatformComponents('android');
     try {
       const { view, settle } = render(fake('android').runtime);
       await settle();
-      assert.equal(view().viewName, 'RCTView');
-      assert.equal(view().props['nativeViewHandle'], undefined);
+      assert.equal(view().viewName, 'NativeScriptUIView');
+      assert.equal(view().props['nativeViewHandle'], '0xlabel');
     } finally {
       registerPlatformComponents('ios');
     }
+  });
+
+  it('reports a view the runtime has no handle for, and leaves the element empty', async () => {
+    const errors: unknown[] = [];
+    const { fixture, view, settle } = render(fake('ios').runtime, errors);
+    await settle();
+    fixture.spec.set({ create: () => ({ notAView: true }) });
+    await settle();
+    assert.match(
+      String(errors.at(-1)),
+      /create returned \[object Object\], where it returns a view/,
+    );
+    assert.equal(view().props['nativeViewHandle'], null);
   });
 });
 
@@ -222,101 +240,67 @@ describe('nativeScriptRuntime', () => {
       else delete g['require'];
     }
   };
-  const reactNative = (os: string, turbo: object | null) => ({
-    Platform: { OS: os },
-    TurboModuleRegistry: { get: () => turbo },
-  });
+  /** `@nativescript/react-native` as a device has it, recording what it is asked. */
+  const nativeScript = (available = true) => {
+    const calls: unknown[][] = [];
+    const ns = {
+      isAvailable: () => available,
+      init: (...args: unknown[]) => (calls.push(['init', ...args]), true),
+      runOnUI: async (worklet: (...args: unknown[]) => unknown, ...args: unknown[]) =>
+        worklet(...args),
+      loadFramework: (name: string) => (calls.push(['loadFramework', name]), name === 'SceneKit'),
+      nativeViewHandle: (view: unknown) => `handle of ${String(view)}`,
+      androidContext: () => 'the activity',
+    };
+    return { ns, calls };
+  };
+  const on = (os: string, ns: unknown) =>
+    withModules(
+      { 'react-native': { Platform: { OS: os } }, '@nativescript/react-native': { default: ns } },
+      nativeScriptRuntime,
+    );
 
   it('is null in Node and on the web', () => {
     assert.equal(nativeScriptRuntime(), null);
-    assert.equal(
-      withModules({ 'react-native': reactNative('web', null) }, nativeScriptRuntime),
-      null,
-    );
+    assert.equal(on('web', nativeScript().ns), null);
   });
 
   it('says what to do in a build without the native module, and only when used', async () => {
-    const runtime = withModules({ 'react-native': reactNative('ios', null) }, nativeScriptRuntime)!;
+    const runtime = on('ios', nativeScript(false).ns)!;
     assert.match(runtime.missing!.message, /not in this build.*@ng-native\/nativescript.*rebuild/);
     runtime.install();
     await assert.rejects(
       runtime.runOnUI(() => 1),
       runtime.missing,
     );
+    assert.throws(() => runtime.nativeViewHandle({}), runtime.missing);
   });
 
-  it('installs through the module on Android, and says so when a reload left it uninstalled', async () => {
-    const g = globalThis as Record<string, unknown>;
-    let installs = 0;
-    const turbo = { install: () => (installs++, true) };
-    const runtime = withModules(
-      { 'react-native': reactNative('android', turbo) },
-      nativeScriptRuntime,
-    )!;
-    g['java'] = {};
-    try {
-      runtime.install();
-      assert.equal(installs, 1);
-      assert.equal(runtime.missing, undefined);
-      assert.equal(await runtime.runOnUI((a: number) => a + 1, 1), 2);
-    } finally {
-      delete g['java'];
-    }
-    // The module reports it is installed, and the runtime a reload made has none of its globals.
+  it('installs with class globals on iOS, and passes runOnUI and handles to the package', async () => {
+    const { ns, calls } = nativeScript();
+    const runtime = on('ios', ns)!;
     runtime.install();
-    assert.match(runtime.missing!.message, /reloaded/);
-    await assert.rejects(
-      runtime.runOnUI(() => 1),
-      /reloaded/,
-    );
+    assert.deepEqual(calls, [['init', '', { globals: true }]]);
+    assert.equal(await runtime.runOnUI((a: number) => a * 2, 21), 42);
+    assert.equal(runtime.nativeViewHandle('view'), 'handle of view');
+    assert.equal(runtime.loadFramework('SceneKit'), true);
+    assert.equal(runtime.loadFramework('NoSuchKit'), false);
   });
 
-  it('installs with globals on iOS, and leaves no global Zone for Angular to take for zone.js', async () => {
-    const g = globalThis as Record<string, unknown>;
-    const calls: unknown[] = [];
-    const ns = {
-      init: (path: string, options: object) => {
-        calls.push([path, options]);
-        g['Zone'] = 1;
-        return true;
-      },
-      runOnUI: async (worklet: (...args: unknown[]) => unknown, ...args: unknown[]) =>
-        worklet(...args),
-      loadFramework: (name: string) => name === 'SceneKit',
-    };
-    const runtime = withModules(
-      { 'react-native': reactNative('ios', {}), '@nativescript/react-native': { default: ns } },
-      nativeScriptRuntime,
-    )!;
-    try {
-      runtime.install();
-      assert.deepEqual(calls, [['', { globals: true }]]);
-      assert.equal('Zone' in g, false);
-      assert.equal(runtime.loadFramework('SceneKit'), true);
-      assert.equal(await runtime.runOnUI((a: number) => a * 2, 21), 42);
-      // A native object handed to the JavaScript thread crashes the app on the next reload.
-      const view = { isKindOfClass: () => true, toString: () => '<UIView>' };
-      await assert.rejects(
-        runtime.runOnUI(() => view),
-        /returned a native object \(<UIView>\)/,
-      );
-    } finally {
-      delete g['Zone'];
-    }
+  it('installs without class globals on Android, where there are no frameworks to load', () => {
+    const { ns, calls } = nativeScript();
+    const runtime = on('android', ns)!;
+    runtime.install();
+    assert.equal(runtime.loadFramework('SceneKit'), true);
+    assert.deepEqual(calls, [['init', '', { globals: false }]]);
   });
 
-  it('keeps a Zone the app had before installing', () => {
-    const g = globalThis as Record<string, unknown>;
-    const ns = { init: () => true, runOnUI: async () => {}, loadFramework: () => true };
-    g['Zone'] = 'the app’s';
-    try {
-      withModules(
-        { 'react-native': reactNative('ios', {}), '@nativescript/react-native': { default: ns } },
-        nativeScriptRuntime,
-      )!.install();
-      assert.equal(g['Zone'], 'the app’s');
-    } finally {
-      delete g['Zone'];
-    }
+  it("answers Android's context once a runtime is made there, and null elsewhere", () => {
+    on('ios', nativeScript().ns);
+    assert.equal(androidContext(), null, 'none on iOS');
+    on('android', nativeScript().ns);
+    assert.equal(androidContext(), 'the activity');
+    on('ios', nativeScript().ns);
+    assert.equal(androidContext(), null, 'and none once a runtime is made on iOS again');
   });
 });

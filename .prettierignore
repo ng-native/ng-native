@@ -21,6 +21,8 @@ packages/integration-tests/fixtures/tailwind-utilities.css
 packages/integration-tests/fixtures/ng-packagr/
 # Generated from an app's Tailwind entry by its Metro config.
 examples/*/.angular-native/
+# Typings NativeScript's Android build writes for every class in the SDK.
+examples/nativescript/types/
 # Rewritten by the all-contributors bot in its own JSON style each time it adds someone.
 .all-contributorsrc
 # Written by nx release changelog, which leaves a double blank line between sections.
