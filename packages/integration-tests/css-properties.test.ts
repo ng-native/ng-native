@@ -783,6 +783,23 @@ describe('what it refuses, and how it says so', () => {
     assert.throws(() => declarationsOf('caret-color: red'), /not mapped yet/);
   });
 
+  it('says a token in a property it has not mapped is dropped for that, as the value written is', () => {
+    // It said "var() cannot be used in the 'caret-color' shorthand", which caret-color is not.
+    for (const value of ['var(--x)', 'var(--x, red)']) {
+      assert.throws(
+        () => declarationsOf(`caret-color: ${value}`),
+        (error: Error) =>
+          /'caret-color' is not mapped yet/.test(error.message) && !/shorthand/.test(error.message),
+      );
+    }
+    assert.throws(() => declarationsOf('float: var(--x)'), /no React Native equivalent/);
+    assert.throws(() => declarationsOf('-webkit-user-drag: var(--x)'), /vendor-prefixed/);
+  });
+
+  it('still names a shorthand a token cannot be read in', () => {
+    assert.throws(() => declarationsOf('font: var(--x)'), /shorthand/);
+  });
+
   it('names the property of a dropped var() declaration, not the parser shape it arrived in', () => {
     // A value with var() in it reaches the compiler as an `unparsed` declaration, and the drop was
     // reported as "dropped 'unparsed'", naming no property at all.

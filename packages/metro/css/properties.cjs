@@ -2190,6 +2190,12 @@ function translate(property, value, out, context = property) {
   throw unsupported(property, context);
 }
 
+/**
+ * Whether a property is translated when its value is written out: one `translate` has a handler
+ * for, rather than one it refuses whatever the value (see `unsupported`).
+ */
+const translates = (property) => Boolean(ALIASES[property]) || TRANSLATORS.has(property);
+
 /** What to write instead of a property native has no equivalent for, where there is something. */
 const INSTEAD = {
   visibility: 'Use opacity: 0 to hide a box and keep its space, or display: none to remove it.',
@@ -2335,6 +2341,7 @@ function kindOf(property) {
 }
 
 module.exports = {
+  translates,
   FONT_VARIANTS,
   noTextShadow,
   easing,

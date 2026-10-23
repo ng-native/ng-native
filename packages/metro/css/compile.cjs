@@ -33,6 +33,7 @@ const {
 } = require('./values.cjs');
 const {
   translate,
+  translates,
   finishTransition,
   animationTimeWithTokens,
   finishAnimation,
@@ -693,6 +694,8 @@ function deferVar(value, context) {
   // `calc(var(--spacing) * 6)`.
   const declared = kindOf(property);
   const kind = arithmetic && declared === 'lineHeight' ? 'length' : declared;
+  // A property refused whatever its value is refused for that, a token in it included.
+  if (kind === null && !translates(property)) throw unsupported(property, context);
   if (kind === null) {
     throw new CssUnsupported(
       `${context}: var() cannot be used in the '${property}' shorthand, because which native ` +
