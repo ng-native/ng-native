@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Squash-merges each PR once CodeRabbit has approved it (see the approval rule below), every check has
+# Squash-merges each PR once Greptile has reviewed it with nothing left open (see the rule below), every check has
 # passed, it merges cleanly into main, and no release is running. Prints one line per event, so it suits
 # a Monitor.
 #
@@ -38,36 +38,22 @@ while (( ${#queue} )); do
     # A stacked PR waits until its base has merged and GitHub has moved it to main.
     [[ $(jq -r .base.ref <<<$pr) == main ]] || continue
     sha=$(jq -r .head.sha <<<$pr)
-    # CodeRabbit has to have passed the PR's current code. It reviews every pushed commit but won't post a
-    # fresh approval on one it has already reviewed, so any one of these counts, with every review thread
-    # resolved in the last two:
-    #  - its approval is on the current commit;
-    #  - it has reviewed the current commit (with or without a verdict) and left nothing open;
-    #  - its approval is on an older commit and the PR's own changes are identical (only the base moved).
+    # Greptile has to have reviewed the PR's current code. It never approves: it leaves a COMMENTED review
+    # with inline P1/P2 comments, or only a check run when it has none. So the PR passes when every review
+    # thread is resolved and either:
+    #  - Greptile has reviewed the current commit;
+    #  - it reviewed an older commit and the PR's own changes are identical (only the base moved).
     reviews=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" 2>/dev/null | jq -s 'add') || continue
-    approved=$(jq -r '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|select(.state=="APPROVED")|.commit_id' <<<$reviews)
-    reviewed_head=$(jq -r --arg sha $sha '[.[]|select(.user.login=="coderabbitai[bot]" and .commit_id==$sha)]|length' <<<$reviews)
-    # A push with nothing new for it to review gets no review object, but CodeRabbit's summary comment
-    # still records the range it covered, ending at the current commit.
-    if (( reviewed_head == 0 )); then
-      reviewed_head=$(gh api --paginate "$R/issues/$n/comments?per_page=100" \
-        --jq ".[]|select(.user.login==\"coderabbitai[bot]\" and (.body|contains(\"and $sha\")))|.id" 2>/dev/null | wc -l | tr -d ' ')
+    reviewed=$(jq -r '[.[]|select(.user.login=="greptile-apps[bot]")]|last|.commit_id // empty' <<<$reviews)
+    # A review that adds no comments posts no review object, only a finished "Greptile Review" check run.
+    [[ $(gh api "$R/commits/$sha/check-runs?check_name=Greptile%20Review" \
+      --jq '[.check_runs[]|select(.status=="completed")]|length' 2>/dev/null) == <1-> ]] && reviewed=$sha
+    if [[ -z $reviewed ]]; then note $n "waits for Greptile's review"; continue; fi
+    if [[ $reviewed != $sha ]] && ! { then_=$(own_changes $reviewed) && now=$(own_changes $sha) &&
+      [[ -n $then_ && $then_ == $now ]]; }; then
+      note $n "waits for Greptile to review its current commit"; continue
     fi
-    # A "changes requested" verdict on the current commit holds the PR, even with its threads resolved:
-    # a rebutted comment waits for a later push to get a review that doesn't request changes.
-    if [[ $(jq -r '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|"\(.state) \(.commit_id)"' <<<$reviews) == "CHANGES_REQUESTED $sha" ]]; then
-      note $n "has changes requested on its current commit"; continue
-    fi
-    if [[ $approved != $sha ]]; then
-      if (( reviewed_head > 0 )); then
-        [[ $(open_threads $n) == 0 ]] || continue
-      elif [[ -n $approved ]] && then_=$(own_changes $approved) && now=$(own_changes $sha) &&
-        [[ -n $then_ && $then_ == $now ]]; then
-        [[ $(open_threads $n) == 0 ]] || continue
-      else
-        note $n "waits for CodeRabbit to review its current commit"; continue
-      fi
-    fi
+    if [[ $(open_threads $n) != 0 ]]; then note $n "has unresolved review threads"; continue; fi
     # GitHub runs no CI on a PR that conflicts with main, so this comes before the CI check, which would
     # otherwise wait on it forever.
     ms=$(jq -r .mergeable_state <<<$pr)
