@@ -7422,6 +7422,43 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
   }
 
+  /**
+   * End a node's `@keyframes` animation now, as a script's `finish()` or `cancel()` does: at its
+   * end, which is its last frame where it fills forwards and its resting style where it does not,
+   * or with no effect of it at all. Native is stopped where it plays it, and what the view is drawn
+   * at set there too (see `endedNatively`). It stays ended while the node asks for the same one.
+   */
+  endPlaying(node: EngineNode, how: 'finish' | 'cancel'): void {
+    const running = node.playing;
+    // One that never ends has no end to go to: a script is refused it first.
+    if (!running || (how === 'finish' && running.spec.iterations === null)) return;
+    if (running.done) {
+      // Ended already, and held at its last frame by its fill: a cancel lets that go.
+      if (how === 'cancel' && Object.keys(running.values).length) {
+        running.values = {};
+        this.markProps(node, false);
+      }
+      return;
+    }
+    const native = running.native !== undefined;
+    this.stopNative(node, running);
+    running.pausedAt = undefined;
+    if (how === 'finish') {
+      const { spec } = running;
+      const end = running.start + spec.delay + spec.duration * (spec.iterations ?? 1);
+      this.advancePlayer(node, Math.max(this.now(), end));
+    } else {
+      running.values = {};
+      running.done = true;
+      this.playing.delete(node);
+      this.markProps(node, false);
+      this.emitTransition(node, 'topAnimationcancel', running.spec.name);
+    }
+    this.commit();
+    const committed = node.committed;
+    if (native && node.owned && committed) this.setOwned(node, RESET_OWNED, committed.props);
+  }
+
   addClass(node: EngineNode, name: string): void {
     const was = this.classAttribute(node);
     (node.classes ??= new Set()).add(name);

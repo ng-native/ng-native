@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, ElementRef, inject } from '@angular/core';
-import { Engine } from '@ng-native/fabric';
+import { Engine, type NativeAnimated } from '@ng-native/fabric';
 import { cleanup, compileCss, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
@@ -41,12 +41,13 @@ const CSS = `
 `;
 
 /** A pane on a clock the test moves, and what a library holds of it. */
-async function pane() {
+async function pane(nativeAnimated: NativeAnimated | null = null) {
   let now = 1000;
   const app = await render(Pane, {
     providers: [provideWebCompat()],
     globalStyles: compileCss(CSS, 'global') as never,
     now: () => now,
+    nativeAnimated,
   });
   await settle();
   const engine = app.componentRef.injector.get(Engine);
@@ -79,6 +80,100 @@ function watch(promise: Promise<unknown>): { readonly state: string; readonly va
   );
   return seen;
 }
+
+/** React Native's animated module, which plays an animation of opacity and transforms: what it is asked. */
+function animatedModule() {
+  let next = 1;
+  const calls: string[] = [];
+  const none = () => {};
+  const native: NativeAnimated = {
+    generateNewNodeTag: () => next++,
+    generateNewAnimationId: () => next++,
+    API: {
+      startAnimatingNode: () => void calls.push('start'),
+      stopAnimation: () => void calls.push('stop'),
+      createAnimatedNode: none,
+      connectAnimatedNodes: none,
+      disconnectAnimatedNodes: none,
+      connectAnimatedNodeToView: none,
+      disconnectAnimatedNodeFromView: none,
+      dropAnimatedNode: none,
+      addAnimatedEventToView: none,
+      removeAnimatedEventFromView: none,
+      setAnimatedNodeValue: none,
+      flushQueue: none,
+    },
+  };
+  return { native, calls };
+}
+
+describe('finish() and cancel() on the view', () => {
+  const opacity = () => screen.getByTestId('row').props['opacity'] ?? 1;
+
+  it('stop an animation native plays, and draw it at its end or at rest', async () => {
+    const module = animatedModule();
+    const s = await pane(module.native);
+    s.row.classList.add('kept');
+    await settle();
+    assert.deepEqual(module.calls, ['start'], 'played on native');
+    await s.tick(20);
+    s.row.getAnimations()[0].finish();
+    await settle();
+    assert.deepEqual(module.calls, ['start', 'stop']);
+    assert.equal(opacity(), 0, 'at its last frame, which it fills');
+
+    s.row.classList.replace('kept', 'out');
+    await settle();
+    s.row.getAnimations()[0].cancel();
+    await settle();
+    assert.deepEqual(module.calls, ['start', 'stop', 'start', 'stop']);
+    assert.equal(opacity(), 1, 'at rest');
+    await s.tick(200);
+    assert.equal(module.calls.length, 4, 'and not played again while the element asks for it');
+  });
+
+  it('leave alone a run the element started since', async () => {
+    const s = await pane();
+    s.row.classList.add('out');
+    await settle();
+    const [first] = s.row.getAnimations();
+    s.row.classList.remove('out');
+    await settle();
+    s.row.classList.add('out');
+    await settle();
+    first.cancel();
+    await settle();
+    const [second] = s.row.getAnimations();
+    assert.notEqual(second, first);
+    assert.equal(second.playState, 'running');
+    await s.tick(50);
+    assert.equal(opacity(), 0.5, 'played on');
+  });
+
+  it('end one played from JavaScript the same way', async () => {
+    const s = await pane();
+    s.row.classList.add('out');
+    await settle();
+    await s.tick(20);
+    s.row.getAnimations()[0].finish();
+    await settle();
+    assert.equal(opacity(), 1, 'at rest, as it does not fill');
+    await s.tick(20);
+    assert.equal(opacity(), 1, 'and not played on');
+  });
+
+  it('let go of the last frame a fill holds, for a cancel after it has ended', async () => {
+    const s = await pane();
+    s.row.classList.add('kept');
+    await settle();
+    const [animation] = s.row.getAnimations();
+    await s.tick(150);
+    assert.equal(opacity(), 0);
+    animation.cancel();
+    await settle();
+    assert.equal(opacity(), 1);
+  });
+});
 
 describe('getAnimations', () => {
   it('answers for an @keyframes animation with how far it has got, and settles when it ends', async () => {
