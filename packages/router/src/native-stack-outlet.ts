@@ -54,7 +54,7 @@ import {
   type RouterOutletContract,
 } from '@angular/router';
 import { Location, PlatformLocation } from '@angular/common';
-import { NavigationBar, SCREEN_IN_FRONT, StatusBar } from '@ng-native/device';
+import { NavigationBar, OS_VERSION, SCREEN_IN_FRONT, StatusBar } from '@ng-native/device';
 import { bindRouteInputs } from './bind-route-inputs.ts';
 import { NativeBack, isShowing } from './native-back.ts';
 import { navigationIntent, type NativeIntent } from './native-navigation.ts';
@@ -65,7 +65,7 @@ import { markScreenRoute } from './tab-routes.ts';
 import { IN_TAB } from './in-tab.ts';
 import { ownHost } from './own-host.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
-import { HostEngine, type EngineNode } from '@ng-native/fabric';
+import { HostEngine, nativePlatform, type EngineNode } from '@ng-native/fabric';
 import type { ScreenPresentation } from './screen-presentation.ts';
 import { ActivityState } from './screens.ts';
 
@@ -200,6 +200,8 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private held: { own: unknown } | null = null;
   private readonly statusBar = inject(StatusBar);
   private readonly navigationBar = inject(NavigationBar);
+  /** iOS 26 and later, where a screen runs under its navigation bar: see `insetContent`. */
+  private readonly underBar = nativePlatform() === 'ios' && (inject(OS_VERSION) ?? 0) >= 26;
   /** Both bars' claims, as the screens carry them. */
   private readonly systemBars = computed<SystemBarClaim>(() => ({
     ...this.statusBar.forScreens(),
@@ -525,13 +527,16 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   ): { ref: ComponentRef<unknown>; unbind: () => void } {
     let ref: ComponentRef<unknown> | undefined;
     let unbind: (() => void) | undefined;
+    const header = signal(false);
+    const content = this.insetContent(screen);
     try {
       ref = createComponent(component, {
         environmentInjector,
-        elementInjector: this.outletInjector(route, inFront, screen, outlet),
+        elementInjector: this.outletInjector(route, inFront, screen, header, outlet),
         hostElement: screen as Element,
       });
       this.applicationRef.attachView(ref.hostView);
+      if (content) this.followHeader(content, header, ref.injector);
       // Route params onto inputs before the first change detection, not after: a required input
       // read in the template throws NG0950 if it is still unset when the page first renders.
       unbind = this.bindInputs(ref, route);
@@ -894,6 +899,41 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     }
   }
 
+  /**
+   * On iOS 26 and later, the view a page's content commits in, as react-native-screens'
+   * `ScreenStackItem` wraps it in its `SafeAreaView` there. From 4.30 the screen runs under the
+   * navigation bar whether the bar is opaque or not
+   * (`+[RNSScreenStackHeaderConfig screensExtendUnderOpaqueNavigationBar]`), and this view insets
+   * the content below an opaque one. Before 4.30 the screen starts below such a bar, its safe area
+   * is zero at the top, and the view insets by nothing. Null elsewhere: the content commits
+   * straight into the screen.
+   */
+  private insetContent(screen: unknown): EngineNode | null {
+    if (!this.underBar) return null;
+    const content = ownHost(this.renderer.createElement('screen-content')) as EngineNode;
+    this.renderer.appendChild(screen, content);
+    (screen as EngineNode).contentView = content;
+    return content;
+  }
+
+  /**
+   * The top edge while the page's header is shown and not translucent, which a large title on iOS
+   * is, and no edge otherwise, as `getSafeAreaEdges` in `ScreenStackItem` chooses. The view stays
+   * when the header changes, so the content is not made again. Native takes all four edges.
+   */
+  private followHeader(content: EngineNode, header: () => boolean, injector: Injector): void {
+    effect(
+      () =>
+        this.renderer.setProperty(content, 'edges', {
+          top: header(),
+          right: false,
+          bottom: false,
+          left: false,
+        }),
+      { injector },
+    );
+  }
+
   private createScreen(
     presentation?: ScreenPresentation,
     dismissed = (count: number) => this.onNativeDismiss(count),
@@ -1178,6 +1218,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     route: ActivatedRoute,
     inFront: WritableSignal<boolean>,
     screen: unknown,
+    header: WritableSignal<boolean>,
     outlet = this.name,
   ): Injector {
     const outer = this.injector.get(SCREEN_IN_FRONT);
@@ -1193,7 +1234,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
           } satisfies HoldingScreen,
         },
         { provide: ActivatedRoute, useValue: route },
-        { provide: SCREEN_HEADER, useValue: signal(false) },
+        { provide: SCREEN_HEADER, useValue: header },
         {
           provide: ChildrenOutletContexts,
           useValue: this.parentContexts.getOrCreateContext(outlet).children,

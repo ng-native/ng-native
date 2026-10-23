@@ -41,6 +41,9 @@ export const SCREEN_VIEW_NAMES: Record<string, [viewName: string, defaults?: obj
     'RNSScreenStackHeaderSubview',
     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   ],
+  // What a stack page's content commits in on iOS 26 and later, where the screen runs under the
+  // navigation bar: see `insetContent` in `native-stack-outlet.ts`. The fill is `SafeAreaView.tsx`'s.
+  'screen-content': ['RNSSafeAreaView', { flex: 1 }],
   // Insets by what the screen it is in says is covered: a translucent navigation bar, and the tab
   // bar. See `screen-safe-area-view.ts`. The same name on both platforms.
   'screen-safe-area-view': ['RNSSafeAreaView'],

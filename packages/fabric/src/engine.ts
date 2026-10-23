@@ -655,6 +655,12 @@ export interface EngineNode extends HostNode {
   nodeText: string;
   childList: EngineNode[];
   parent: EngineNode | null;
+  /**
+   * A child of this node that holds what is put in it: `appendChild` and `insertBefore` on this
+   * node put the child there instead, so a component's template lands inside a view its owner
+   * placed in the host element. Only the view itself goes in this node.
+   */
+  contentView?: EngineNode;
   listeners: Map<string, Set<(event: unknown) => void>> | null;
 
   /** CSS classes on this node, for selector matching. */
@@ -6049,6 +6055,7 @@ const ENGINE_NODE_FIELDS = {
   structureDirty: true,
   subtreeDirty: true,
   inside: true,
+  contentView: true,
   scrollsOverflow: true,
   engine: true,
 } satisfies Record<keyof EngineNode, true>;
@@ -7695,7 +7702,8 @@ export class Engine implements HostEngine {
     return node;
   }
 
-  appendChild(parent: EngineNode, child: EngineNode): void {
+  appendChild(into: EngineNode, child: EngineNode): void {
+    const parent = into.contentView && into.contentView !== child ? into.contentView : into;
     this.markAdopted(child, parent);
     this.detach(child);
     this.markReturned(child);
@@ -7708,7 +7716,8 @@ export class Engine implements HostEngine {
     this.markTextContent(parent, child);
   }
 
-  insertBefore(parent: EngineNode, child: EngineNode, ref: EngineNode | null): void {
+  insertBefore(into: EngineNode, child: EngineNode, ref: EngineNode | null): void {
+    const parent = into.contentView && into.contentView !== child ? into.contentView : into;
     this.markAdopted(child, parent);
     this.detach(child);
     this.markReturned(child);
