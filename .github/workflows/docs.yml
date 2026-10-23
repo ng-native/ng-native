@@ -47,7 +47,7 @@ jobs:
 
       # The build prerenders every page in a headless Chromium.
       - timeout-minutes: 5
-        run: pnpm --filter documentation exec playwright install --with-deps --only-shell chromium
+        run: pnpm --filter documentation exec playwright install --only-shell chromium
 
       # The site reads the compiler's own sources for its live previews, so it is built in the
       # workspace rather than from published packages.

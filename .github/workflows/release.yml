@@ -38,7 +38,7 @@ jobs:
       - uses: ./.github/actions/setup
       - run: npx nx run-many -t lint typecheck
       - timeout-minutes: 5
-        run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
+        run: pnpm --filter @ng-native/web exec playwright install chromium
       - run: pnpm coverage
 
   # One setup route in a fresh project: ng new with ng add, Nx's angular-monorepo preset with
@@ -108,7 +108,7 @@ jobs:
           echo "//localhost:4873/:_authToken=$token" >> ~/.npmrc
 
       - timeout-minutes: 5
-        run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
+        run: pnpm --filter @ng-native/web exec playwright install chromium
 
       - run: node scripts/verify-publish.mjs --storybook
 
