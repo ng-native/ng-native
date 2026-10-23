@@ -94,6 +94,80 @@ describe('the typed native views', () => {
   });
 });
 
+describe('a symbol s size', () => {
+  const global = globalThis as { expo?: unknown };
+  const before = global.expo;
+  let unmount: (() => void) | undefined;
+  afterEach(() => {
+    unmount?.();
+    unmount = undefined;
+    global.expo = before;
+  });
+
+  /** The native lookup: a symbol it knows is wider than its point size and not as tall. */
+  function stubSymbols() {
+    const asked: unknown[][] = [];
+    const imageSize = (name: string, pointSize: number, weight?: string, scale?: string) => {
+      asked.push([name, pointSize, weight, scale]);
+      return name === 'no.such.symbol' ? null : [pointSize * 1.25, pointSize * 0.75];
+    };
+    global.expo = { modules: { NgNativeSymbol: { imageSize } } };
+    return asked;
+  }
+
+  it('is the box the symbol image takes at that point size, as SwiftUI lays it out', async () => {
+    const asked = stubSymbols();
+    const { app, byId } = await render();
+    unmount = () => app.applicationRef.destroy();
+    assert.equal(byId('heart').props['width'], 40);
+    assert.equal(byId('heart').props['height'], 24);
+    assert.deepEqual(
+      asked.find(([name]) => name === 'heart.fill'),
+      ['heart.fill', 32, 'bold', undefined],
+      'the weight and scale change the image too',
+    );
+    assert.equal(byId('default').props['width'], 30, 'the default size is a point size too');
+    assert.equal(byId('default').props['height'], 18);
+    assert.deepEqual(
+      asked.find(([name]) => name === 'doc.text'),
+      ['doc.text', 17, undefined, 'large'],
+    );
+  });
+
+  it('follows the name and the size, and is square for a name native does not know', async () => {
+    stubSymbols();
+    const { app, byId } = await render();
+    unmount = () => app.applicationRef.destroy();
+    const fixture = app.componentRef.instance as {
+      symbol: { set(name: string): void };
+      symbolSize: { set(size: number): void };
+    };
+    assert.equal(byId('sized').props['width'], 21.25);
+    fixture.symbolSize.set(20);
+    app.applicationRef.tick();
+    assert.equal(byId('sized').props['width'], 25);
+    assert.equal(byId('sized').props['height'], 15);
+    fixture.symbol.set('no.such.symbol');
+    app.applicationRef.tick();
+    assert.equal(byId('sized').props['width'], 20);
+    assert.equal(byId('sized').props['height'], 20);
+  });
+
+  it('is the square without the native lookup, as in Expo Go', async () => {
+    for (const expo of [undefined, { modules: {} }, { modules: { NgNativeSymbol: {} } }]) {
+      global.expo = expo;
+      const { app, byId } = await render();
+      try {
+        assert.equal(byId('heart').props['width'], 32);
+        assert.equal(byId('heart').props['height'], 32);
+        assert.equal(byId('sized').props['width'], 17);
+      } finally {
+        app.applicationRef.destroy();
+      }
+    }
+  });
+});
+
 describe('liquidGlassAvailable', () => {
   const global = globalThis as { expo?: unknown };
   const before = global.expo;

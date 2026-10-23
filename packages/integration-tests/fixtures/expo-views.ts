@@ -22,6 +22,7 @@ import { ExpoSymbol } from '../../expo/src/symbol.ts';
     />
     <expo-symbol nativeID="default" name="star" />
     <expo-symbol nativeID="unsized" name="star" [size]="unset" colors="red" />
+    <expo-symbol nativeID="sized" [name]="symbol()" [size]="symbolSize()" scale="large" />
     <apple-sign-in-button nativeID="plain-apple" />
     <apple-sign-in-button
       nativeID="apple"
@@ -34,5 +35,7 @@ import { ExpoSymbol } from '../../expo/src/symbol.ts';
 })
 export class ExpoViewsFixture {
   readonly presses = signal(0);
+  readonly symbol = signal('doc.text');
+  readonly symbolSize = signal(17);
   readonly unset: number | undefined = undefined;
 }

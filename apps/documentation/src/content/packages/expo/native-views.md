@@ -99,13 +99,13 @@ component over the same element gives it typed inputs, so a template is checked 
 native reads, and does in Angular what the module's React component does first. Import the
 component and keep registering the element:
 
-| Component            | Element                | What it adds                                                                                              |
-| -------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------- |
-| `ExpoImage`          | `expo-image`           | `source` and `contentFit` typed.                                                                          |
-| `ExpoGlass`          | `expo-glass`           | `glassEffectStyle` (`regular`, `clear`, `none`), `tintColor`, `isInteractive`, `colorScheme`.             |
-| `ExpoGlassContainer` | `expo-glass-container` | `spacing`.                                                                                                |
-| `ExpoSymbol`         | `expo-symbol`          | `name`, `type` (`monochrome` unless set), `weight`, `scale`, `colors`, a `size` in points, 24 unless set. |
-| `AppleSignInButton`  | `apple-sign-in-button` | `buttonType` and `buttonStyle` by name. See [Sign in with Apple](/packages/expo/apple-sign-in).           |
+| Component            | Element                | What it adds                                                                                                    |
+| -------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `ExpoImage`          | `expo-image`           | `source` and `contentFit` typed.                                                                                |
+| `ExpoGlass`          | `expo-glass`           | `glassEffectStyle` (`regular`, `clear`, `none`), `tintColor`, `isInteractive`, `colorScheme`.                   |
+| `ExpoGlassContainer` | `expo-glass-container` | `spacing`.                                                                                                      |
+| `ExpoSymbol`         | `expo-symbol`          | `name`, `type` (`monochrome` unless set), `weight`, `scale`, `colors`, a `size` as a point size, 24 unless set. |
+| `AppleSignInButton`  | `apple-sign-in-button` | `buttonType` and `buttonStyle` by name. See [Sign in with Apple](/packages/expo/apple-sign-in).                 |
 
 ```ts
 import { Component } from '@angular/core';
@@ -129,6 +129,14 @@ A symbol's color is its `tintColor`, and `tint-color` in a stylesheet is the dec
 it, so that is how a symbol takes its color from a token and follows a theme:
 `.like { tint-color: var(--color-accent); }` on `<expo-symbol class="like">`. `color` does not tint
 a symbol: it is the color of text. A `tintColor` written on the element wins over the stylesheet.
+
+A symbol's `size` is a point size, as SwiftUI's `.font(.system(size:))` takes it: the symbol draws
+as large as SwiftUI draws it, and its view is the size of the symbol's image at that point size,
+weight and scale, which is wider or taller than `size` for most symbols, as SwiftUI lays an
+`Image(systemName:)` out. A badged symbol, such as `calendar.badge.plus`, differs in width:
+SwiftUI leaves the badge's overhang out of it, and `<expo-symbol>` keeps it in. This takes
+`@ng-native/expo`'s native module, so a development build. In Expo Go the view is `size` points
+square and the symbol is fitted into it, which draws most symbols smaller.
 
 A glass view's corners are its own `border-radius`. Where Liquid Glass is unavailable - before iOS
 26, and on Android - `<expo-glass>` renders as a plain view, and `liquidGlassAvailable()` says
