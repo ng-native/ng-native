@@ -2410,9 +2410,9 @@ function gridLayout(node: EngineNode, props: Record<string, unknown>): void {
     // would leave them to whatever further up is positioned.
     if (node.grid && props['position'] === 'static') props['position'] = 'relative';
   }
-  // A transform makes a box what its absolute boxes are placed against, static or not, and Yoga
-  // knows only positions: see `placesItself`.
-  if (props['position'] === 'static' && transformed(props['transform'])) {
+  // A transform, a filter and the rest make a box what its absolute boxes are placed against,
+  // static or not, and Yoga knows only positions: see `placesItself`.
+  if (props['position'] === 'static' && containsAbsolutes((key) => props[key])) {
     props['position'] = 'relative';
     // Still static to what places it: an inset moves no static box, in a grid or out of one.
     for (const key of INSET_SIDES) if (props[key] !== undefined) delete props[key];
@@ -2977,17 +2977,46 @@ const LAID_OUT_HERE = new Set([
 ]);
 /**
  * Whether a box is what an absolute box in it is placed against: one that is not static, or one
- * with a transform, which CSS makes a containing block however it is positioned.
+ * CSS makes a containing block however it is positioned (see `containsAbsolutes`).
  */
 function placesItself(node: EngineNode): boolean {
-  return readStyle(node, 'position') !== 'static' || transformed(readStyle(node, 'transform'));
+  return (
+    readStyle(node, 'position') !== 'static' || containsAbsolutes((key) => readStyle(node, key))
+  );
 }
 
-/** Whether a transform is one: a list or text of one, and not `none`. */
-const transformed = (transform: unknown): boolean =>
-  Array.isArray(transform)
-    ? transform.length > 0
-    : typeof transform === 'string' && transform !== '' && transform !== 'none';
+/**
+ * Whether a style makes its box the containing block of its absolute boxes, positioned or not: a
+ * transform, a filter, a backdrop filter or a perspective other than `none`, a containment of
+ * layout or paint, or a `will-change` naming one of those or `position`.
+ */
+function containsAbsolutes(style: (key: string) => unknown): boolean {
+  if (CONTAINING_KEYS.some((key) => given(style(key)))) return true;
+  const contain = style('contain');
+  if (typeof contain === 'string' && contain.split(/\s+/).some((word) => CONTAINS.has(word)))
+    return true;
+  const willChange = style('willChange');
+  return (
+    typeof willChange === 'string' &&
+    willChange.split(',').some((name) => WILL_CONTAIN.has(name.trim()))
+  );
+}
+
+/** What makes a box a containing block where it is set to anything but `none`. */
+const CONTAINING_KEYS = ['transform', 'filter', 'backdropFilter', 'perspective'];
+/** The containments that make one: of layout or paint, alone or as `strict` or `content`. */
+const CONTAINS = new Set(['layout', 'paint', 'strict', 'content']);
+/** The properties a `will-change` makes one by naming, as Chrome has it. */
+const WILL_CONTAIN = new Set([
+  ...['transform', 'translate', 'rotate', 'scale', 'perspective'],
+  ...['filter', 'backdrop-filter', 'contain', 'position'],
+]);
+
+/** Whether a value is one: a list or text of one, not `none`, or a number. */
+const given = (value: unknown): boolean =>
+  Array.isArray(value)
+    ? value.length > 0
+    : typeof value === 'number' || (typeof value === 'string' && value !== '' && value !== 'none');
 
 const POSITIONS_HERE = new Set(['static', 'fixed', 'sticky']);
 

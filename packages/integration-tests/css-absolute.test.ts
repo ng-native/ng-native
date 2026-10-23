@@ -415,3 +415,28 @@ describe('an absolute box that is placed from here, on a commit that does not co
     assert.deepEqual(s.box('a'), [80, 40, 40, 20]);
   });
 });
+
+describe('an absolute box in a static box that CSS makes what it is placed against', () => {
+  // Chrome: a filter, a will-change and the rest make a static box an absolute box's containing
+  // block, so it is centred in that box and not in the positioned one above it.
+  const CSS =
+    '.g { position: relative; width: 300px; height: 200px } ' +
+    '.h { position: static; width: 100px; height: 100px; margin-left: 50px } ' +
+    `.f { filter: brightness(1.2) } .a { ${BOX} inset: 0; margin: auto }`;
+
+  it('is centred in a static box with a filter, and in the one above once it has none', () => {
+    const s = scene(CSS, ['g', ['h f', ['a']]]);
+    assert.deepEqual(s.box('a'), [80, 40, 40, 20]);
+    s.engine.setClasses(s.nodes.get('h f')!, 'h');
+    assert.deepEqual(s.box('a'), [130, 90, 40, 20]);
+  });
+
+  it('is centred in a static box with a will-change, and in the one above once it has none', () => {
+    const s = scene(CSS, ['g', ['h', ['a']]]);
+    const h = s.nodes.get('h')!;
+    s.engine.setProp(h, 'style', { willChange: 'transform' });
+    assert.deepEqual(s.box('a'), [80, 40, 40, 20]);
+    s.engine.setProp(h, 'style', { willChange: 'opacity' });
+    assert.deepEqual(s.box('a'), [130, 90, 40, 20]);
+  });
+});
