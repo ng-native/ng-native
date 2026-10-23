@@ -21,5 +21,6 @@ test("keeps the box in a sheet compiled as the build compiles a library's", () =
     onUnsupported: (message) => dropped.push(message),
   });
   assert.deepEqual(dropped, []);
-  assert.ok(sheet.rules.length > 0);
+  assert.equal(sheet.rules.length, 1);
+  assert.deepEqual(sheet.rules[0]!.declarations, { content: '*', color: 'rgb(255, 0, 0)' });
 });
