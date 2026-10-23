@@ -835,6 +835,8 @@ export interface EngineNode extends HostNode {
   owned?: { readonly tag: number; readonly keys: Set<string> };
   /** What native paints on this view with no commit, while it does: see `paintNatively`. */
   paint?: PaintState;
+  /** Props native painted ahead of the shadow node as the painter let go: see `leavePainting`. */
+  unsynced?: ReadonlySet<string>;
   /**
    * The last `transform` built from the individual transform properties, and what it was built
    * from. Reused while the parts are the same objects, so an unrelated change does not re-send it.
@@ -6018,6 +6020,7 @@ const ENGINE_NODE_FIELDS = {
   scrolled: true,
   owned: true,
   paint: true,
+  unsynced: true,
   composedTransform: true,
   bornIn: true,
   boundTransform: true,
@@ -13166,6 +13169,7 @@ export class Engine implements HostEngine {
     payload: Record<string, unknown> | null,
     cloned: boolean,
   ): Record<string, unknown> | null {
+    if (node.unsynced) return this.synced(node, props, payload);
     if (!payload && !node.paint?.sync) return payload;
     const held = this.heldOn(node);
     const runs = this.paintsHere(node, viewName);
@@ -13468,8 +13472,22 @@ export class Engine implements HostEngine {
    */
   private leavePainting(node: EngineNode): void {
     if (!node.paint) return;
+    // What native painted that the shadow node has not got is committed with the view next.
+    if (node.paint.stale.size) node.unsynced = new Set(node.paint.stale);
     this.backToScriptAll(node, []);
     this.stopPainting(node);
+  }
+
+  /** A payload with what native painted before the painter let the view go: see `leavePainting`. */
+  private synced(
+    node: EngineNode,
+    props: Record<string, unknown>,
+    payload: Record<string, unknown> | null,
+  ): Record<string, unknown> {
+    const out = { ...payload };
+    for (const key of node.unsynced!) if (!(key in out)) out[key] = props[key] ?? null;
+    node.unsynced = undefined;
+    return out;
   }
 
   /** Take back from native every clock it eases on a view but those of `keys`. */

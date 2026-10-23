@@ -441,3 +441,17 @@ describe('a painted view a native @keyframes animation starts on', () => {
     assert.equal(s.view.transitions?.get('transform')?.native, undefined, 'none left native');
   });
 });
+
+describe('a painted view an animation of something else starts on', () => {
+  it('brings the shadow node up to what native painted as the painter lets go', () => {
+    const css =
+      `${BAR} @keyframes pulse { from { opacity: 1 } to { opacity: 0.5 } }` +
+      ' .bar.pulse { animation: pulse 1s linear infinite }';
+    const s = scene(css);
+    for (let x = 10; x <= 30; x += 10) s.tick(50, move(x));
+    s.tick(50, move(40));
+    s.classes('bar pulse');
+    // Native drew it at 40: what Fabric holds for the view is there too, for a measurement.
+    assert.deepEqual(s.fabric.committed[0]!.props['transform'], [{ translateX: 40 }]);
+  });
+});
