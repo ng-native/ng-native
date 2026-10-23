@@ -2036,8 +2036,8 @@ function tokenWords(tokens) {
 /**
  * A colour CSS has no property for, `tint-color` or `shadow-color`. lightningcss hands it over as
  * the same raw terms it leaves a `color` with a var() in as, so a colour written out settles here
- * and anything else is read as that `color` is: a platform colour, a relative colour or a mix of
- * a token, a light-dark() side, and a var().
+ * and anything else is read as that `color` is: a platform or system colour, a relative colour or
+ * a mix of a token, a light-dark() side, and a var().
  */
 function addCustomColor(name, parts, out, deferred, context) {
   const value = tokenValue(parts, context);
@@ -2049,11 +2049,6 @@ function addCustomColor(name, parts, out, deferred, context) {
   // The element's text colour, as it is in a `background-color`, which only the device knows.
   if (word?.toLowerCase() === 'currentcolor') {
     deferred.push({ props: propsFor(name), within: CURRENT_COLOUR });
-    return;
-  }
-  // A system colour, `LinkText`, which the colour translator reads by its name.
-  if (word !== null && !CSS_WIDE.has(word)) {
-    addCustomWord(name, parts, out, context);
     return;
   }
   const raw = { propertyId: { property: name }, value: parts };

@@ -88,6 +88,18 @@ describe('a colour CSS has no property for, compiled', () => {
     assert.equal(warnings.length, 1);
     assert.doesNotMatch(warnings[0]!, /not mapped yet/);
   });
+
+  it('drops a word that is no colour, as color does, rather than sending it to native', () => {
+    for (const property of Object.keys(NONSTANDARD)) {
+      for (const word of ['bleu', 'none']) {
+        const colour = compiled(`.c { color: ${word} }`);
+        const { rules, warnings } = compiled(`.c { ${property}: ${word} }`);
+        assert.deepEqual(colour.rules, [], 'color drops it');
+        assert.deepEqual(rules, [], `${property}: ${word}`);
+        assert.match(warnings.join('\n'), /is not a value native can take/);
+      }
+    }
+  });
 });
 
 /** A parent wearing `.p` around a child wearing `.a`, with every warning collected. */
