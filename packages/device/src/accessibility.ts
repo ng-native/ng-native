@@ -57,13 +57,23 @@ export function accessibilitySource(): AccessibilitySource {
   }
 
   const info = native.AccessibilityInfo;
+  // A read that fails is the neutral setting, so the other three still arrive.
+  const read = async (ask: () => Promise<boolean>) => {
+    try {
+      return await ask();
+    } catch {
+      return false;
+    }
+  };
   return {
-    current: async () => ({
-      screenReader: await info.isScreenReaderEnabled(),
-      reduceMotion: await info.isReduceMotionEnabled(),
-      boldText: await info.isBoldTextEnabled(),
-      fontScale: native.PixelRatio.getFontScale(),
-    }),
+    current: async () => {
+      const [screenReader, reduceMotion, boldText] = await Promise.all([
+        read(() => info.isScreenReaderEnabled()),
+        read(() => info.isReduceMotionEnabled()),
+        read(() => info.isBoldTextEnabled()),
+      ]);
+      return { screenReader, reduceMotion, boldText, fontScale: native.PixelRatio.getFontScale() };
+    },
     subscribe: (listener) => {
       const subscriptions = [
         info.addEventListener('screenReaderChanged', (screenReader) => listener({ screenReader })),

@@ -69,6 +69,7 @@ export {
   type PostScriptNames,
   viewNameOf,
   isTextInput,
+  isTextInputView,
   type EngineNode,
   type EngineOptions,
   type EngineStats,

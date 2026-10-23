@@ -10,6 +10,7 @@
  * a node held across an interaction is a snapshot of the frame it was found in; query again to see
  * what changed.
  */
+import { isTextInputView } from '@ng-native/fabric';
 import type { FakeFabricNode } from './test-utils.ts';
 import { waitFor, type WaitForOptions } from './wait-for.ts';
 
@@ -180,8 +181,8 @@ export function textContent(node: FakeFabricNode): string {
   return node.children.map(textContent).join('');
 }
 
-/** A text field under any of the names the platforms register it by. */
-export const isTextInput = (node: FakeFabricNode): boolean => /TextInput/.test(node.viewName);
+/** A text field under either of the names the platforms commit it by. */
+export const isTextInput = (node: FakeFabricNode): boolean => isTextInputView(node.viewName);
 
 /** The navigation bar's search field, which reports text as `topChangeText` with no count. */
 export const isSearchBar = (node: FakeFabricNode): boolean => node.viewName === 'RNSSearchBar';

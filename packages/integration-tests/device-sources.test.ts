@@ -155,6 +155,26 @@ describe('the accessibility source', () => {
     });
   });
 
+  it('keeps the settings it did read when one read fails, or the method is missing', async () => {
+    const rejecting = native();
+    rejecting.AccessibilityInfo.isReduceMotionEnabled = () => Promise.reject(new Error('no'));
+    assert.deepEqual(await withNative(rejecting, () => accessibilitySource().current()), {
+      screenReader: true,
+      reduceMotion: false,
+      boldText: true,
+      fontScale: 1.5,
+    });
+
+    const missing = native() as ReturnType<typeof native> & { AccessibilityInfo: object };
+    delete (missing.AccessibilityInfo as Record<string, unknown>)['isScreenReaderEnabled'];
+    assert.deepEqual(await withNative(missing, () => accessibilitySource().current()), {
+      screenReader: false,
+      reduceMotion: false,
+      boldText: true,
+      fontScale: 1.5,
+    });
+  });
+
   it('reports each change under the name the service reads', async () => {
     const seen: unknown[] = [];
     const stop = withNative(native(), () => accessibilitySource().subscribe((v) => seen.push(v)));
