@@ -90,7 +90,7 @@ const FILLED = { fill: 'black' };
  * ponytail: a drawing's paint that names a token, `fill="var(--ink)"`, is not settled here. Give
  * it the cascade, as a shape's own is in `paintByToken`, if a library is seen to write one.
  */
-function startingPaint(node: EngineNode): Record<string, string> | undefined {
+function startingPaint(node: EngineNode): Record<string, unknown> | undefined {
   if (node.parent?.tag !== 'svg') return undefined;
   const own = attributesOf(node).attrs;
   const drawing = attributesOf(node.parent).attrs;
@@ -98,7 +98,16 @@ function startingPaint(node: EngineNode): Record<string, string> | undefined {
   const stroke = 'stroke' in own ? undefined : drawing['stroke'];
   if (fill === 'black' && stroke === undefined) return FILLED;
   if (fill === undefined && stroke === undefined) return undefined;
-  return { ...(fill !== undefined && { fill }), ...(stroke !== undefined && { stroke }) };
+  return {
+    ...(fill !== undefined && { fill: referenced(fill) }),
+    ...(stroke !== undefined && { stroke: referenced(stroke) }),
+  };
+}
+
+/** A paint that names a gradient in the definitions as the native view takes it: see `painted`. */
+function referenced(paint: string): unknown {
+  const named = NAMED.exec(paint);
+  return named ? { type: 1, brushRef: named[1] } : paint;
 }
 
 const TEXT_PATH = 'textPath';
@@ -612,11 +621,7 @@ function startFilled(node: EngineNode, engine: Engine): void {
   if (node.nodeKind !== 'element' || !Object.hasOwn(SHAPES, node.tag)) return;
   const paint = startingPaint(node);
   const had = node.defaultStyle;
-  if (
-    had === paint ||
-    (had && paint && had['fill'] === paint['fill'] && had['stroke'] === paint['stroke'])
-  )
-    return;
+  if (had === paint || (had && paint && sameProp(had, paint))) return;
   engine.setDefaultStyle(node, paint);
 }
 

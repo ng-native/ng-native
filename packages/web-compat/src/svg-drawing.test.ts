@@ -1780,6 +1780,12 @@ describe('the font of a text in a drawing on Android', () => {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
       <path testID="outlined" d="M0 0h9v9z" />
     </svg>
+    <svg viewBox="0 0 24 24" fill="url(#shade)" stroke="url(#shade)">
+      <defs>
+        <linearGradient id="shade"><stop offset="0" stop-color="red" /></linearGradient>
+      </defs>
+      <path testID="shaded" d="M0 0h9v9z" />
+    </svg>
   `,
 })
 class InkedIcon {
@@ -1799,6 +1805,10 @@ describe('@ng-native/web-compat svg paint attribute', () => {
     assert.equal(fill('outlined'), null);
     assert.ok((screen.getByTestId('outlined').props['propList'] as string[]).includes('fill'));
     assert.deepEqual(screen.getByTestId('outlined').props['stroke'], { type: 2 });
+    // A gradient in the definitions, by its name, as a shape's own reference to one is.
+    const shade = { type: 1, brushRef: 'shade' };
+    assert.deepEqual(fill('shaded'), shade);
+    assert.deepEqual(screen.getByTestId('shaded').props['stroke'], shade);
     app.instance.ink.set('blue');
     await settle();
     assert.deepEqual(fill('bare'), { type: 0, payload: 'blue' });
