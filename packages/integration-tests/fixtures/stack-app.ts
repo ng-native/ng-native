@@ -266,6 +266,19 @@ export const routes: Routes = [
       },
     ],
   },
+  {
+    path: 'lazy-compose',
+    loadChildren: () => [
+      {
+        path: '',
+        component: Compose,
+        children: [
+          { path: '', component: ComposeStart },
+          { path: 'broken', component: Broken },
+        ],
+      },
+    ],
+  },
   { path: 'refused', component: Fine, canActivate: [() => false] },
   { path: 'moved', component: Fine, canActivate: [() => inject(Router).parseUrl('/user/5')] },
   {

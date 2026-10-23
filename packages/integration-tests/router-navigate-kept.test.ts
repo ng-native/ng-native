@@ -363,6 +363,52 @@ describe('a navigation to a url further down the stack that fails or is cancelle
     assert.equal(router.url, '/draft', 'the stack inside the draft takes the Back');
   });
 
+  it('keeps a page under a route with no component as a page after a failure', async () => {
+    const members = mod['members'] as { note: { set(value: string): void } }[];
+    members.length = 0;
+    await nav.push('/member/1');
+    await idle();
+    members[0]!.note.set('edited');
+    await failed(router.navigateByUrl('/broken'));
+    await idle();
+    assert.equal(router.url, '/member/1');
+
+    await nav.push('/user/2');
+    await idle();
+    assert.equal(live['Member'], 1, 'the page pushed from is kept');
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/member/1');
+    assert.deepEqual(stack(fabric).at(-1), 'member edited');
+    assert.equal(created['Member'], 1, 'the same page, not a new one');
+  });
+
+  it('keeps a page in a group of routes as a page after a failure', async () => {
+    await nav.push('/grouped');
+    await idle();
+    await failed(router.navigateByUrl('/broken'));
+    await idle();
+    await nav.push('/user/2');
+    await idle();
+    assert.equal(live['Grouped'], 1, 'the page pushed from is kept');
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/grouped');
+    assert.equal(created['Grouped'], 1, 'the same page, not a new one');
+  });
+
+  it('leaves Back working for a failed page under a screen behind a loadChildren wrapper', async () => {
+    await nav.push('/lazy-compose');
+    await idle();
+    await failed(router.navigateByUrl('/lazy-compose/broken'));
+    await idle();
+    assert.equal(router.url, '/lazy-compose');
+
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/user/1', 'the app stack takes the Back');
+  });
+
   it('leaves no rewind behind for the next navigation to make', async () => {
     await failed(router.navigateByUrl('/compose/broken'));
     await idle();

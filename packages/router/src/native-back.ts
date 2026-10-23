@@ -216,7 +216,12 @@ export function restoreFailedSnapshots(): void {
   inject(DestroyRef).onDestroy(() => events.unsubscribe());
 }
 
-/** Each route the router shows now, with its snapshot, found through the outlets showing them. */
+/**
+ * Each route the router shows now, with its snapshot, found through the outlets showing them.
+ *
+ * A route with no component, a `loadChildren` wrapper or a group, has no outlet of its own: the
+ * router activates its children in its parent's outlets, so they are looked up there.
+ */
 function showingRoutes(
   router: Router,
   contexts: ChildrenOutletContexts,
@@ -225,6 +230,10 @@ function showingRoutes(
   const found = new Map([[state.root, state.snapshot.root]]);
   const visit = (node: ActivatedRouteSnapshot, inside: ChildrenOutletContexts) => {
     for (const child of node.children) {
+      if (!child.component) {
+        visit(child, inside);
+        continue;
+      }
       const context = inside.getContext(child.outlet);
       if (!context?.route) continue;
       found.set(context.route, child);
