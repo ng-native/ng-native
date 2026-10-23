@@ -55,8 +55,14 @@ function lazyKeyboardNative(os: string) {
   return { native, emit };
 }
 
-/** The height a `Keyboard` service reads when it starts after a keyboard opened, on `os`. */
-function heightAfterAnEarlyShow(os: string): number {
+type Sent = [event: string, payload: unknown];
+const SHOW: Sent = ['keyboardDidShow', { endCoordinates: { height: 335, screenY: 456 } }];
+
+/**
+ * The height a `Keyboard` service reads on `os` when it starts after the events `before`, once the
+ * events `after` have arrived.
+ */
+function heightOf(os: string, before: Sent[], after: Sent[] = []): number {
   const { native, emit } = lazyKeyboardNative(os);
   const engine = {
     root: 'root',
@@ -70,14 +76,14 @@ function heightAfterAnEarlyShow(os: string): number {
   let stop = () => {};
   try {
     stop = watchConditions(engine);
-    // The search bar's keyboard opens: React Native sends Did events on both platforms.
-    emit('keyboardDidShow', { endCoordinates: { height: 335, screenY: 456 } });
+    before.forEach(([event, payload]) => emit(event, payload));
     const keyboard = Injector.create({
       providers: [
         { provide: Keyboard.SOURCE, useFactory: keyboardSource, deps: [] },
         { provide: Keyboard, deps: [] },
       ],
     }).get(Keyboard);
+    after.forEach(([event, payload]) => emit(event, payload));
     return keyboard.height();
   } finally {
     stop();
@@ -89,7 +95,14 @@ function heightAfterAnEarlyShow(os: string): number {
 describe('a keyboard opened before the Keyboard service started', () => {
   for (const os of ['ios', 'android']) {
     it(`gives the service its height at once on ${os}`, () => {
-      assert.equal(heightAfterAnEarlyShow(os), 335);
+      // The search bar's keyboard opens: React Native sends Did events on both platforms.
+      assert.equal(heightOf(os, [SHOW]), 335);
     });
   }
+
+  it('gives the service no height once a hide it started during lands on ios', () => {
+    // Between the two, `Keyboard.js` still holds the show.
+    const hide: Sent = ['keyboardWillHide', { endCoordinates: { height: 335, screenY: 791 } }];
+    assert.equal(heightOf('ios', [SHOW, hide], [['keyboardDidHide', {}]]), 0);
+  });
 });
