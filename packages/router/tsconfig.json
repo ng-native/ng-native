@@ -1,5 +1,6 @@
 {
   "extends": "../../tsconfig.published.json",
+  "compilerOptions": { "resolveJsonModule": true },
   "include": ["src"],
   "exclude": ["**/*.generated.ts"]
 }
