@@ -73,6 +73,13 @@ system frameworks the metadata should cover:
 ["@ng-native/nativescript", { "metadata": { "includePods": ["SomeObjCSDK"] } }]
 ```
 
+On Android it also sets `nsFilterMetadata=false` in `gradle.properties`, unless the app sets it
+there. With filtering on, `@nativescript/react-native` adds keep rules to each minified build
+type, and on Expo SDK 58, whose Android Gradle Plugin does not allow that and whose release builds
+are minified by default, the build fails with `UnsupportedOperationException` in
+`nativescript.gradle`. Without filtering, NativeScript's metadata covers the app's whole classpath
+rather than only the classes it uses, so the app is larger; R8 still shrinks the app's own code.
+
 Add the SDKs' types in a declaration file, such as `src/nativescript.d.ts`:
 
 ```ts

@@ -294,14 +294,14 @@ nx g @ng-native/nx:nativescript mobile
 ```
 
 This sets up [NativeScript](/packages/nativescript) in an app: it adds `@ng-native/nativescript`,
-`@nativescript/react-native` and `react-native-worklets` (the version the app's Expo SDK bundles) where the app's dependencies go and
-`@nativescript/types-android` beside them as a dev dependency, adds `@ng-native/nativescript` to the
-config plugins in `app.json`, writes `src/nativescript.d.ts` referencing the iOS and Android SDKs'
-types, and adds `provideNativeScript()` to the providers `mount` is given in `src/main.ts`, joining
-any list it passes already. Running it again changes nothing. A `src/main.ts` it cannot follow,
-or whose providers are not written as a list there, is left as it is, with a warning saying what to
-add by hand. The app needs rebuilding afterwards, as for
-any native module.
+`@nativescript/react-native` and `react-native-worklets` (the version the app's Expo SDK bundles)
+where the app's dependencies go and `@nativescript/types-android` beside them as a dev dependency,
+adds `@ng-native/nativescript` to the config plugins in `app.json`, writes `src/nativescript.d.ts`
+referencing the iOS and Android SDKs' types, and adds `provideNativeScript()` to the providers
+`mount` is given in `src/main.ts`, joining any list it passes already. Running it again changes
+nothing. A `src/main.ts` it cannot follow, or whose providers are not written as a list there, is
+left as it is, with a warning saying what to add by hand. The app needs rebuilding afterwards, as
+for any native module.
 
 ## Options
 
