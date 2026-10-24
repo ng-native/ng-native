@@ -180,6 +180,22 @@ describe('the native keyboard source', () => {
     windowTop = 0;
     assert.equal(source.windowTop, 0, 'and follows it when the status bar changes');
   });
+
+  it("says how far down the screen the app's window starts, as the module reads it each time", () => {
+    // The lower half of a split screen, then the window moved to the top.
+    let top = 474;
+    const native = {
+      addListener: () => ({ remove: () => {} }),
+      windowTopOnScreen: () => top,
+    } as NativeKeyboard;
+    const fallback = { subscribe: () => () => {}, dismiss: () => {} };
+    const source = nativeKeyboardSource(native, fallback);
+    assert.equal(source.screenTop, 474);
+    top = 0;
+    assert.equal(source.screenTop, 0, 'and follows the window when it moves');
+    const older = { addListener: () => ({ remove: () => {} }) } as NativeKeyboard;
+    assert.equal(nativeKeyboardSource(older, fallback).screenTop, 0, 'a build without the method');
+  });
 });
 
 describe('provideNativeKeyboard', () => {

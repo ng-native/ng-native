@@ -55,6 +55,11 @@ export interface NativeKeyboard {
     event: 'onKeyboardMove',
     listener: (frame: NativeKeyboardFrame) => void,
   ): { remove(): void };
+  /**
+   * How far below the top of the screen the app's window starts, in points. A build made before
+   * the module had it has no such method.
+   */
+  windowTopOnScreen?(): number;
 }
 
 /** How long React Native's own event waits for the native one that says the same, in ms. */
@@ -136,6 +141,9 @@ export function nativeKeyboardSource(
     // The module's `screenY` is from the top of the screen as React Native's is.
     get windowTop() {
       return fallback.windowTop;
+    },
+    get screenTop() {
+      return native.windowTopOnScreen?.() ?? 0;
     },
   };
 }

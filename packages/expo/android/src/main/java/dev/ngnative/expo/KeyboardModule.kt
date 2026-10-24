@@ -54,6 +54,17 @@ class KeyboardModule : Module() {
 
     Events("onKeyboardChange", "onKeyboardMove")
 
+    // How far below the top of the screen the app's window starts, in points: not zero in the
+    // lower half of a split screen or in a freeform window. React Native measures a view in the
+    // window and reports the keyboard's top on the screen. Read where it is compared, since the
+    // window can move.
+    Function("windowTopOnScreen") {
+      val decor = appContext.currentActivity?.window?.decorView ?: return@Function 0.0
+      val location = IntArray(2)
+      decor.getLocationOnScreen(location)
+      location[1] / decor.resources.displayMetrics.density.toDouble()
+    }
+
     OnStartObserving {
       observing = true
       watchActivity()

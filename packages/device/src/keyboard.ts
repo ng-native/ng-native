@@ -60,6 +60,12 @@ export interface KeyboardSource {
    * bar. See `keyboardSource`.
    */
   readonly windowTop?: number;
+  /**
+   * How far below the top of the screen the app's window itself starts, in points, for a source
+   * that can read it: the lower half of a split screen, or a freeform window, on Android. Read when
+   * it is compared, as the window can move.
+   */
+  readonly screenTop?: number;
 }
 
 /** The timing a keyboard event carries, when it carries any. */
@@ -244,11 +250,20 @@ export class Keyboard {
    * of the screen: React Native takes the bar off its measurements as it lays the root out, and keeps
    * doing so when the bar is hidden or shown later, until the root is laid out again. The bar's
    * own height stands in where the root has not been measured.
+   *
+   * A window that itself starts below the top of the screen, in a split screen or freeform on
+   * Android, adds its own top, where the source can read it: `provideNativeKeyboard()` from
+   * `@ng-native/expo` can, and React Native alone cannot.
    */
   get windowTop(): number {
+    return this.belowBar() + (this.source.screenTop ?? 0);
+  }
+
+  /** How far the window a view is measured in starts below the top of the app's own window. */
+  private belowBar(): number {
     let top = this.source.windowTop ?? 0;
-    // ponytail: the first root component is taken to start at the top of the screen, as an app's
-    // root does; a root placed lower would read as a window starting higher.
+    // ponytail: the first root component is taken to start at the top of the app's window, as an
+    // app's root does; a root placed lower would read as a window starting higher.
     const root = this.app?.components[0]?.location.nativeElement as HostNode | undefined;
     if (root && nativePlatform() === 'android')
       this.engine?.measure(root, (frame) => (top = -frame.y));

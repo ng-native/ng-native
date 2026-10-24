@@ -36,6 +36,7 @@ async function boot(
   controller = false,
   motion = false,
   windowTop: number | (() => number) = 0,
+  screenTop?: number,
 ) {
   const listeners = new Set<(metrics: KeyboardMetrics) => void>();
   const { native, named, drives } = recorder();
@@ -55,6 +56,7 @@ async function boot(
           get windowTop() {
             return typeof windowTop === 'function' ? windowTop() : windowTop;
           },
+          screenTop,
         },
       },
     ],
@@ -262,6 +264,22 @@ describe('keyboard dock on Android', () => {
     bar = 0;
     await keyboard({ height: 358, screenY: 464 });
     assert.equal(screen.getByTestId('dock').props['paddingBottom'], 358, 'the bar hidden');
+  });
+
+  it('is padded by the whole overlap in the lower half of a split screen', async () => {
+    // The app's window starts 474 points down the screen, under no status bar, and React Native
+    // measures from its top. The keyboard's top is reported from the top of the screen.
+    registerPlatformComponents('android');
+    const { fabric, keyboard, bottom } = await boot('DockedComposer', false, false, 0, 474);
+    fabric.frames.set('View', { x: 0, y: 0, width: 402, height: 400 });
+    await bottom(24);
+    fabric.frames.set('dock', { x: 0, y: 346, width: 402, height: 54 });
+    await fireEvent(screen.getByTestId('dock'), 'layout', {
+      layout: { x: 0, y: 346, width: 402, height: 54 },
+    });
+    await keyboard({ height: 300, screenY: 574 });
+    // The dock's bottom is at 400 in the window, the keyboard's top at 574 - 474 = 100.
+    assert.equal(screen.getByTestId('dock').props['paddingBottom'], 300);
   });
 
   it('stays in flow with react-native-keyboard-controller, whose view adds the navigation bar as margins around the app', async () => {

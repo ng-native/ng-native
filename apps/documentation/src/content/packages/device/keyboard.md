@@ -121,6 +121,10 @@ always the same place:
   status bar, even in an app that draws under the bar. Expo Go draws under the bar with the flag
   off. `windowTop` is then the status bar's height, and zero when the flag is on. It is read
   from the window's current insets on each access, so it follows a rotation.
+- **Android, in the lower half of a split screen or in a freeform window**: the app's window itself
+  starts below the top of the screen, and `windowTop` adds how far with
+  [`provideNativeKeyboard()`](/packages/expo/keyboard) from `@ng-native/expo`. React Native has no
+  way to read it, so in Expo Go, or without that provider, `windowTop` leaves it out.
 
 Take `windowTop` off `screenY` to have the keyboard's top in the window a view was measured in.
 `<keyboard-avoiding-view>`, `<keyboard-dock>` and a `<text-input>` focused with the keyboard up

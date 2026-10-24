@@ -301,6 +301,7 @@ describe('keyboard-avoiding-view under a navigation bar', () => {
     behavior: 'padding' | 'height',
     frame = { y: 116, height: 758 },
     windowTop?: number | (() => number),
+    screenTop?: number,
   ) {
     let emit: (metrics: KeyboardMetrics) => void = () => {};
     const fabric = createFakeFabric();
@@ -314,6 +315,7 @@ describe('keyboard-avoiding-view under a navigation bar', () => {
             get windowTop() {
               return typeof windowTop === 'function' ? windowTop() : windowTop;
             },
+            screenTop,
           },
         },
       ],
@@ -375,6 +377,34 @@ describe('keyboard-avoiding-view under a navigation bar', () => {
     await settle();
     // The keyboard's top is at 474 - 24 = 450 in the window, 348 above the view's bottom at 798.
     assert.equal(avoider().props['paddingBottom'], 348);
+
+    app.applicationRef.destroy();
+  });
+
+  it('pads by the whole overlap in a window that starts part way down the screen', async () => {
+    // The lower half of a split screen on Android: the window starts 474 down the screen, and the
+    // view fills its 400 points.
+    const { app, avoider, emit } = await open('padding', { y: 0, height: 400 }, 0, 474);
+
+    emit({ height: 300, screenY: 574 });
+    await settle();
+
+    // The view's bottom is at 400 in the window, the keyboard's top at 574 - 474 = 100.
+    assert.equal(avoider().props['paddingBottom'], 300);
+
+    app.applicationRef.destroy();
+  });
+
+  it('takes off both the window top and the status bar over it, as in a freeform window', async () => {
+    // The window starts 10 down the screen, under a 24 point status bar that covers 14 of it, and
+    // React Native measures from below the bar.
+    const { app, avoider, emit } = await open('padding', { y: 0, height: 400 }, 14, 10);
+
+    emit({ height: 300, screenY: 224 });
+    await settle();
+
+    // The view's bottom is at 400 in the window, the keyboard's top at 224 - 14 - 10 = 200.
+    assert.equal(avoider().props['paddingBottom'], 200);
 
     app.applicationRef.destroy();
   });
