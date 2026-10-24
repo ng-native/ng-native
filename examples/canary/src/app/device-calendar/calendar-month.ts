@@ -65,7 +65,7 @@ import { Pressable, Text, View } from '@ng-native/components';
             accessibilityRole="button"
             [accessibilityLabel]="labelOf(day)"
             [accessibilityState]="{ selected: day === selected() }"
-            (press)="selected.set(day)"
+            (press)="choose(day)"
           >
             <view class="cal-day-disc">
               <text class="cal-day-number">{{ numberOf(day) }}</text>
@@ -99,7 +99,7 @@ export class CalendarMonth {
   /** The colour of an entry without one of its own. */
   readonly defaultColor = input('#4f46e5');
 
-  /** An arrow moved the grid: the first of the month it shows now. */
+  /** An arrow, or a press on a day outside the month, moved the grid: the first of the month it shows now. */
   readonly monthChange = output<CalendarDate>();
 
   /** The month shown, as any day in it: the selected day's, until an arrow moves it. */
@@ -128,6 +128,12 @@ export class CalendarMonth {
     const moved = addMonths(this.shown(), by);
     this.shown.set(moved);
     this.monthChange.emit(moved);
+  }
+
+  /** A day of the month before or after moves the grid to it, which says so like an arrow does. */
+  protected choose(day: CalendarDate): void {
+    if (!sameMonth(day, this.shown())) this.monthChange.emit(addMonths(day, 0));
+    this.selected.set(day);
   }
 
   protected inMonth(day: CalendarDate): boolean {

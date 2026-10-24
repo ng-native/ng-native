@@ -36,7 +36,7 @@ import { Calendar } from '@ng-native/expo/calendar';
 @Component({
   selector: 'app-this-week',
   template: `
-    @for (event of events(); track event.id) {
+    @for (event of events(); track $index) {
       <text>{{ event.title }}</text>
     }
   `,
@@ -59,9 +59,8 @@ export class ThisWeek {
 ```
 
 `events()` answers each occurrence of a recurring event as an event of its own, so a weekly match
-shows on every week it falls in. The platforms draw the range differently: on iOS an event that
-overlaps it at all is in it, and on Android only an event that starts and ends inside it. To catch
-an event running across either end on Android too, ask for a wider range and keep what overlaps.
+shows on every week it falls in. An event that overlaps the range at all is in it, one running
+across either end included. The occurrences of one recurring event share its `id`.
 
 ## Adding an event
 
@@ -106,7 +105,7 @@ system's own new-event screen instead, for the user to fill in and save.
 - **`pickCalendar()`**: the system's calendar picker, on iOS. `null` if the user cancels it, and on
   Android.
 - **`events(calendars, start, end)`**: the events from `start` to `end` in the calendars given, as
-  handles or ids. On iOS, every event overlapping the range; on Android, those inside it.
+  handles or ids: every event overlapping the range.
 - **`event(id)`** and **`reminder(id)`**: an event or, on iOS, a reminder whose id is already known.
 - **`sources()`**: the accounts the calendars belong to, on iOS.
 
@@ -117,6 +116,14 @@ test.
 The text in iOS's permission dialogs comes from the module's config plugin options:
 `calendarPermission`, `writeOnlyCalendarPermission` and `remindersPermission`. The plugin also adds
 Android's `READ_CALENDAR` and `WRITE_CALENDAR` permissions.
+
+The plugin writes the text for one kind of calendar access on iOS 17 and later: full access by
+default, or write-only access with `writeOnlyAccess: true`. Ask only for the kind the app's config
+has text for. `writePermission` needs `writeOnlyAccess: true`, and `permission` needs it left unset.
+
+```json
+{ "plugins": [["expo-calendar", { "writeOnlyAccess": true }]] }
+```
 
 ## Without the module
 

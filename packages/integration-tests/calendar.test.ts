@@ -119,6 +119,14 @@ describe('Calendar', () => {
     assert.deepEqual(calls, [['getCalendars', 'reminder']]);
   });
 
+  it('reads the calendars of events unless asked for another kind', async () => {
+    // With no kind, the module lists the reminder lists too, and on iOS refuses without reminders
+    // access.
+    const { native, calls } = platform();
+    await calendarWith(native).calendars();
+    assert.deepEqual(calls, [['getCalendars', 'event']]);
+  });
+
   it('lists the events in a range of the calendars given, as handles or ids', async () => {
     const { native, calls } = platform();
     const calendar = calendarWith(native);

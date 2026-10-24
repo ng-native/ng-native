@@ -11,7 +11,7 @@ import {
   type CalendarEntry,
   type CalendarSlotPress,
 } from './calendar-views.ts';
-import { Calendar, EntityTypes } from '@ng-native/expo/calendar';
+import { Calendar } from '@ng-native/expo/calendar';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
 
@@ -87,16 +87,13 @@ function samples(today: CalendarDate): CalendarEntry[] {
           </pressable>
         </view>
         <view [style]="page.row">
-          <pressable class="button" (press)="askWriteOnly()">
-            <text class="button-label">Write-only access</text>
-          </pressable>
           <pressable class="button" (press)="askReminders()">
             <text class="button-label">Reminders</text>
           </pressable>
         </view>
         <text class="hint">
-          Full: {{ calendar.permission.status() }}, write: {{ calendar.writePermission.status() }},
-          reminders: {{ calendar.remindersPermission.status() }}
+          Calendars: {{ calendar.permission.status() }}, reminders:
+          {{ calendar.remindersPermission.status() }}
         </text>
         <text class="hint">{{ deviceInfo() }}</text>
 
@@ -151,7 +148,7 @@ export class DeviceCalendarPage {
       this.status.set(`Calendar access: ${this.calendar.permission.status()}`);
       return;
     }
-    this.calendars.set(await this.calendar.calendars(EntityTypes.EVENT));
+    this.calendars.set(await this.calendar.calendars());
     const sources = this.calendar.sources();
     const fallback = this.calendar.defaultCalendar();
     this.deviceInfo.set(
@@ -166,13 +163,13 @@ export class DeviceCalendarPage {
   }
 
   protected async addDeviceEvent(): Promise<void> {
-    if (!(await this.calendar.writePermission.ensure())) {
-      this.status.set(`Write access: ${this.calendar.writePermission.status()}`);
+    if (!(await this.calendar.permission.ensure())) {
+      this.status.set(`Calendar access: ${this.calendar.permission.status()}`);
       return;
     }
     const target =
       this.calendar.defaultCalendar() ??
-      (await this.calendar.calendars(EntityTypes.EVENT)).find((each) => each.allowsModifications);
+      (await this.calendar.calendars()).find((each) => each.allowsModifications);
     if (!target) {
       this.status.set('No writable calendar');
       return;
@@ -196,12 +193,6 @@ export class DeviceCalendarPage {
     this.added = null;
     this.status.set('Deleted the test event');
     if (this.calendars().length > 0) await this.loadMonth();
-  }
-
-  protected async askWriteOnly(): Promise<void> {
-    this.status.set(
-      `Write-only: ${(await this.calendar.writePermission.request()) ? 'granted' : 'refused'}`,
-    );
   }
 
   protected async askReminders(): Promise<void> {

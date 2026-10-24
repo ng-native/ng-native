@@ -320,6 +320,28 @@ describe('<calendar-month>', () => {
     assert.deepEqual(screen.months, ['2026-11-01', '2026-10-01', '2026-09-01']);
   });
 
+  it('moves the grid to the month of a day pressed outside it, and says so', async () => {
+    const { app, screen } = await show();
+    await fireEvent.press(app.getByLabelText('Sunday 1 November'));
+    assert.ok(app.getByText('November 2026'));
+    assert.equal(screen.selected(), '2026-11-01');
+    assert.deepEqual(screen.months, ['2026-11-01']);
+    await fireEvent.press(app.getByLabelText('Monday 2 November'));
+    assert.deepEqual(screen.months, ['2026-11-01'], 'a day inside the month shown moves nothing');
+  });
+
+  it('dims the days of the months before and after', async () => {
+    const { app } = await show();
+    assert.equal(app.getByLabelText('Monday 28 September').props['opacity'], 0.35);
+    assert.equal(app.getByLabelText('Thursday 1 October').props['opacity'], undefined);
+  });
+
+  it('dots a day for an entry that starts and ends at its midnight', async () => {
+    const { app } = await show([entry('reminder', '2026-10-15', [0, 0], [0, 0])]);
+    assert.ok(app.getByLabelText('Thursday 15 October, 1 event'));
+    assert.ok(app.getByLabelText('Wednesday 14 October'), 'not the day before');
+  });
+
   it('goes to the month of a day selected from outside', async () => {
     const { app, screen } = await show();
     screen.selected.set('2027-01-05');
@@ -392,14 +414,24 @@ describe('<calendar-day>', () => {
     assert.deepEqual(slot!.start, at('2026-10-14', 10, 15));
   });
 
+  it('writes the times on an entry tall enough for them, and only the title on a short one', async () => {
+    const { app } = await show([
+      entry('long', '2026-10-14', [9, 0], [10, 0]),
+      entry('short', '2026-10-14', [12, 0], [12, 15]),
+    ]);
+    assert.ok(app.getByText('9:00 – 10:00'));
+    assert.ok(app.getByText('short'));
+    assert.equal(app.queryByText('12:00 – 12:15'), null);
+  });
+
   it('shows the line at the time now once the clock reaches the day shown', async () => {
-    // The day shown is the 14th, and it is a minute to midnight on the 13th.
-    vi.useFakeTimers({ toFake: ['setInterval', 'Date'], now: at('2026-10-13', 23, 59) });
+    // The day shown is the 14th, and it is noon on the 13th: inside the hours shown, on another day.
+    vi.useFakeTimers({ toFake: ['setInterval', 'Date'], now: at('2026-10-13', 12, 0) });
     try {
       const { app } = await show();
       assert.equal(app.queryByLabelText('Now'), null);
-      // To 07:00 on the 14th, the first hour the fixture shows.
-      vi.advanceTimersByTime(7 * 60 * 60 * 1000 + 60 * 1000);
+      // To 07:01 on the 14th, a minute into the first hour the fixture shows.
+      vi.advanceTimersByTime(19 * 60 * 60 * 1000 + 60 * 1000);
       await app.detectChanges();
       assert.ok(app.getByLabelText('Now'), 'the minute tick found that the 14th is today');
     } finally {

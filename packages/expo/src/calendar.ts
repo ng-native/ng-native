@@ -126,9 +126,12 @@ export class Calendar {
     () => (this.ios() ? this.native!.requestRemindersPermissions() : Promise.resolve(UNAVAILABLE)),
   );
 
-  /** The calendars on the device, of events unless {@link EntityTypes.REMINDER} is asked for. */
-  async calendars(...entityType: Args<'getCalendars'>): Promise<ExpoCalendar[]> {
-    return (await this.native?.getCalendars(...entityType)) ?? [];
+  /**
+   * The calendars on the device, of events unless {@link EntityTypes.REMINDER} is asked for. The
+   * module itself lists both kinds when given none, and on iOS refuses that without reminders access.
+   */
+  async calendars(entityType: ExpoEntityTypes = EntityTypes.EVENT): Promise<ExpoCalendar[]> {
+    return (await this.native?.getCalendars(entityType)) ?? [];
   }
 
   /** The calendar with this id, or null. */
@@ -153,9 +156,8 @@ export class Calendar {
 
   /**
    * The events from `start` to `end` in the calendars given, as handles or their ids, each
-   * occurrence of a recurring event as an event of its own. On iOS an event that overlaps the
-   * range at all is in it; on Android only one that starts and ends inside it, so widen the range
-   * there to catch an event running across either end.
+   * occurrence of a recurring event as an event of its own. An event that overlaps the range at
+   * all is in it, one running across either end included.
    */
   async events(
     calendars: readonly (string | ExpoCalendar)[],
