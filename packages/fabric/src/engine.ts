@@ -15464,8 +15464,8 @@ export class Engine implements HostEngine {
    * `unstable_*EventPriority` constants) is read into the facade but not acted on. Angular's
    * zoneless scheduler already flushes on a microtask, which is soon enough for taps. It stops
    * being soon enough for a controlled TextInput, where the echo has to beat the next
-   * keystroke. `mostRecentEventCount` covers that today by letting native reject a stale write;
-   * a synchronous flush for discrete priority is the fix if it ever stops being enough.
+   * keystroke. The text input's event count covers that today by letting native reject a stale
+   * write; a synchronous flush for discrete priority is the fix if it ever stops being enough.
    *
    * **Nothing thrown here may escape.** Fabric calls this synchronously from C++
    * (`UIManagerBinding::dispatchEventToJS`), often from inside a mounting transaction, and a throw

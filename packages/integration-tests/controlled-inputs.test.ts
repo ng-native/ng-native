@@ -233,6 +233,75 @@ describe('a controlled text input', () => {
     assert.equal(instance.control().value(), 'free');
     assert.deepEqual(fabric.commands, []);
   });
+
+  /*
+   * iOS takes the `text` prop when the count beside it is the one it holds, and then replaces its
+   * text unless the two compare equal, attributes and all. From iOS 26 the text UIKit typed carries
+   * a paragraph style the prop's text lacks, so an echo of the same text replaces it, and the
+   * keystrokes queued behind that replace are lost. So iOS gets the count only with a command,
+   * which compares the strings alone, and the prop stays at 0: what iOS holds before the first
+   * keystroke, so an initial value, or one set from code before anything is typed, still lands.
+   */
+  it('keeps the count it echoes to iOS at 0, so an echo never replaces the typed text', async () => {
+    const { fabric } = await boot('AcceptedInput');
+    fabric.reset();
+
+    await type('h', 1);
+    await type('hi', 2);
+
+    const field = screen.getByTestId('field');
+    assert.equal(field.props['text'], 'hi');
+    assert.equal(field.props['mostRecentEventCount'], 0);
+    assert.deepEqual(fabric.commands, [], 'an echo, so nothing to send');
+  });
+
+  it('sends iOS a value set from code after typing as a command, with the latest count', async () => {
+    const { fabric, instance } = await boot<{ text: { set(value: string): void } }>(
+      'AcceptedInput',
+    );
+    await type('jane@example.co', 15);
+    fabric.reset();
+
+    instance.text.set('');
+    await settle();
+
+    assert.equal(screen.getByTestId('field').props['mostRecentEventCount'], 0);
+    assert.deepEqual(commands(fabric), [['setTextAndSelection', 15, '', -1, -1]]);
+  });
+
+  it('sets a value from code before anything is typed through the prop, at count 0', async () => {
+    const { fabric, instance } = await boot<{ text: { set(value: string): void } }>(
+      'AcceptedInput',
+    );
+    fabric.reset();
+
+    instance.text.set('Ada');
+    await settle();
+
+    const field = screen.getByTestId('field');
+    assert.equal(field.props['text'], 'Ada');
+    assert.equal(field.props['mostRecentEventCount'], 0, 'the count iOS starts at');
+    assert.deepEqual(fabric.commands, []);
+  });
+
+  it('echoes the count to Android as a prop, as RN does', async () => {
+    registerPlatformComponents('android');
+    try {
+      const { fabric } = await boot('AcceptedInput');
+      await type('h', 1);
+      await type('hi', 2);
+      const field = screen.getByTestId('field');
+      assert.equal(field.viewName, 'AndroidTextInput');
+      assert.equal(field.props['mostRecentEventCount'], 2);
+      assert.deepEqual(fabric.commands, []);
+    } finally {
+      cleanup();
+      registerPlatformComponents('ios');
+      for (const [element, viewName] of Object.entries(IOS_VIEW_NAMES)) {
+        registerViewName(element, viewName);
+      }
+    }
+  });
 });
 
 /*

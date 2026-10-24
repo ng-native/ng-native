@@ -21,6 +21,7 @@ import {
   waitFor,
   waitForElementToBeRemoved,
   within,
+  type FakeFabric,
   type FakeFabricNode,
 } from '@ng-native/testing';
 import { ngNative } from '@ng-native/testing/vitest';
@@ -426,6 +427,15 @@ describe('pointerEvents', () => {
 
 describe('events', () => {
   const field = (): FakeFabricNode => screen.getByPlaceholderText('Name');
+  /**
+   * The count native last sent, as the field sends it back with a value set from code: iOS is not
+   * sent it as a prop.
+   */
+  const countAfter = async (instance: Controls, fabric: FakeFabric): Promise<unknown> => {
+    instance.name.set('from code');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return fabric.commands.find((c) => c.name === 'setTextAndSelection')?.args[0];
+  };
 
   it('presses through the responder, by fireEvent or by name', async () => {
     const { instance } = await render(Controls);
@@ -453,9 +463,9 @@ describe('events', () => {
     await fireEvent.changeText(screen.getByTestId('field-wrapper'), 'Ada');
     await fireEvent(field(), 'changeText', 'Ada L');
     assert.equal(instance.name(), 'Ada L');
-    assert.equal(field().props['mostRecentEventCount'], 2);
     assert.ok(screen.getByDisplayValue('Ada L'));
     assert.equal(fabric.commands.length, 0, 'an echo, so no setTextAndSelection');
+    assert.equal(await countAfter(instance, fabric), 2);
   });
 
   it('refuses to change text on something that is not a field', async () => {
@@ -464,11 +474,11 @@ describe('events', () => {
   });
 
   it('types a character at a time, then submits and blurs', async () => {
-    const { instance } = await render(Controls);
+    const { instance, fabric } = await render(Controls);
     await userEvent.type(field(), 'Hi', { submitEditing: true });
     assert.equal(instance.name(), 'Hi');
-    assert.equal(field().props['mostRecentEventCount'], 2, 'one change per character');
     assert.deepEqual(instance.events, ['focus', 'key H', 'key i', 'submit', 'blur']);
+    assert.equal(await countAfter(instance, fabric), 2, 'one change per character');
   });
 
   it('types onto what is already there, and can leave the field focused', async () => {

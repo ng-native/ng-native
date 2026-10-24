@@ -80,16 +80,23 @@ describe('signal forms over native controls', () => {
     assert.ok(errors.length > 0, 'minLength(3) rejected a single character');
   });
 
-  it('echoes mostRecentEventCount so native can reject stale writes', async () => {
+  it('sends a model change with the latest eventCount so native can reject stale writes', async () => {
     // Without this a controlled input fights the cursor: native cannot tell a fresh JS value
     // from one computed before the last few keystrokes. `fireEvent.changeText` only ever sends the
     // next expected count, not an arbitrary jump like this test needs, so it stays a raw emit.
-    assert.equal(find(fabric, 'TextInput').props['mostRecentEventCount'], 0);
-
     fabric.emit(find(fabric, 'TextInput'), 'topChange', { text: 'Ada', eventCount: 7 });
     await settle();
+    fabric.commands.splice(0);
 
-    assert.equal(find(fabric, 'TextInput').props['mostRecentEventCount'], 7);
+    host.data.set({ name: 'Grace', subscribed: false });
+    await settle();
+
+    assert.deepEqual(
+      fabric.commands.map((c) => [c.name, ...c.args]),
+      [['setTextAndSelection', 7, 'Grace', -1, -1]],
+    );
+    // iOS takes the count only with the command; see `controlled-inputs.test.ts`.
+    assert.equal(find(fabric, 'TextInput').props['mostRecentEventCount'], 0);
   });
 
   it('puts the switch back when the model is set back after a flip', async () => {

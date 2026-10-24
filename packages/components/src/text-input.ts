@@ -11,7 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { Keyboard } from '@ng-native/device';
-import type { NativeSyntheticEvent } from '@ng-native/fabric';
+import { type NativeSyntheticEvent, nativePlatform } from '@ng-native/fabric';
 import { ControlledModel } from './controlled-model.ts';
 import type { SelectionChangePayload, TextInputChangePayload } from './events.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
@@ -62,9 +62,15 @@ export type SubmitBehavior = 'submit' | 'blurAndSubmit' | 'newline';
  *
  * The interesting part is the echo. A native text field owns state the user is actively
  * changing, so JS and native disagree constantly. RN's protocol: native reports an `eventCount`
- * with every change, JS passes the most recent one back as a prop, and native ignores a `text`
- * update whose count is stale, meaning the user has typed since. Without it, a controlled input
- * fights the cursor and drops characters under fast typing.
+ * with every change, JS passes the most recent one back, and native ignores a `text` update whose
+ * count is stale, meaning the user has typed since. Without it, a controlled input fights the
+ * cursor and drops characters under fast typing.
+ *
+ * Android gets the count as the `mostRecentEventCount` prop, as RN sends it. iOS does not, past the
+ * 0 it starts at: there a `text` prop with the current count replaces the field's text unless the
+ * two compare equal, attributes and all, and from iOS 26 typed text carries a paragraph style the
+ * prop's text lacks, so an echo of the same text replaces it and drops the keystrokes queued
+ * behind it. Text from code reaches iOS as the command below instead, which carries the count.
  *
  * The other direction is native holding text the app does not: a value set from code after the
  * user has typed, or a keystroke the app refused or rewrote. It is controlled as RN's field is -
@@ -79,7 +85,7 @@ export type SubmitBehavior = 'submit' | 'blurAndSubmit' | 'newline';
   exportAs: 'textInput',
   host: {
     '[text]': 'value()',
-    '[mostRecentEventCount]': 'eventCount()',
+    '[mostRecentEventCount]': 'echoedEventCount()',
     '[multiline]': 'multiline()',
     '[scrollEnabled]': 'scrollEnabled()',
     '[editable]': 'resolvedEditable()',
@@ -251,6 +257,8 @@ export class TextInput extends ViewBase {
   readonly textBreakStrategy = input<'simple' | 'highQuality' | 'balanced'>();
 
   protected readonly eventCount = signal(0);
+  /** The count sent as a prop: the latest on Android, and on iOS the 0 native starts at. */
+  protected readonly echoedEventCount = computed(() => (this.ios ? 0 : this.eventCount()));
 
   /** RN's normalised selection: an `end` left out is `start`, where iOS would read 0. */
   protected readonly resolvedSelection = computed(() => {
@@ -286,6 +294,7 @@ export class TextInput extends ViewBase {
   });
 
   private readonly keyboard = inject(Keyboard);
+  private readonly ios = nativePlatform() === 'ios';
   /** What native last reported, so a value set from code can be told from an echo. */
   private lastNativeText: string | null = null;
   /**

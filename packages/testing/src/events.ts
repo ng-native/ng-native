@@ -78,9 +78,22 @@ function fieldOf(node: FakeFabricNode): FakeFabricNode {
   return field;
 }
 
-/** The count native would send next: one past the last one JS echoed back. */
-const nextCount = (field: FakeFabricNode): number =>
-  Number((currentOf(field) ?? field).props['mostRecentEventCount'] ?? 0) + 1;
+/**
+ * The count each field last sent, keyed by the node's instance handle, which its clones share, so
+ * a field gone from the tree takes its count with it. Native keeps its own as a real field does,
+ * since iOS is not sent it back as a prop.
+ */
+const sentCounts = new WeakMap<object, number>();
+
+/** The count native would send next: one past the last one it sent, or that JS echoed back. */
+function nextCount(field: FakeFabricNode): number {
+  const handle = field.instanceHandle;
+  const sent = typeof handle === 'object' && handle !== null ? sentCounts.get(handle) : undefined;
+  const echoed = Number((currentOf(field) ?? field).props['mostRecentEventCount'] ?? 0);
+  const next = Math.max(sent ?? 0, echoed) + 1;
+  if (typeof handle === 'object' && handle !== null) sentCounts.set(handle, next);
+  return next;
+}
 
 function changeText(field: FakeFabricNode, text: string): void {
   if (isSearchBar(field)) emit(field, 'topChangeText', { text });
