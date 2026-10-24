@@ -264,7 +264,7 @@ describe('a sheet with an @media rule in it', () => {
     });
   }
 
-  it('keeps the pair logical beside a comment, an & in a comment, a string or a url, or nested @media', () => {
+  it('keeps the pair logical beside a comment, an & in a comment, a string or a url, an escaped brace, nested @media or a block left open', () => {
     const pair = 'padding-inline-start: 4px; padding-inline-end: 4px';
     const sheets = [
       `/* a & b */ .a { ${pair} } ${MEDIA}`,
@@ -275,6 +275,8 @@ describe('a sheet with an @media rule in it', () => {
       `@font-face { font-family: F; src: URL( ./f.ttf?v=1&w=2/*x ) } .a { ${pair} } ${MEDIA}`,
       `@media (width > 1px) { @media (height > 1px) { .a { ${pair} } } }`,
       `@layer x { @media (width > 1px) { .a { ${pair} } } }`,
+      `.x\\{ { opacity: 1 } .a { ${pair} } ${MEDIA}`,
+      `.a { ${pair} } ${MEDIA} .c { opacity: 1`,
     ];
     for (const css of sheets) {
       const rule = ruleOf(css)!;
@@ -302,6 +304,7 @@ describe('a sheet with an @media rule in it', () => {
       '/* note */ @media (width > 1px) { .a { .b { opacity: 0.5 } } }',
       '@layer x { @media (width > 1px) { .a { .b { opacity: 0.5 } } } }',
       '.a { & .b { opacity: 0.5 } }',
+      '@layer x, y; .a { .b { opacity: 0.5 } }',
     ];
     for (const css of lowered) {
       const rule = ruleOf(css, 'b');

@@ -4445,9 +4445,9 @@ function vlq(segment) {
  * A sheet sent to `flatten` that did not need it is not only parsed once more: lightningcss's
  * printer folds an equal `padding-inline-start` and `padding-inline-end` into `padding-inline`,
  * which is left and right, so a pair written logical came out physical for the sheet having a
- * `@media` rule in it. A nested sheet kept from it is a rule that silently never matches, so this
- * still errs towards yes: a comment, a string, an unquoted url and an escaped character are
- * stepped over, a `}` with nothing open is yes, and a block left open is yes.
+ * `@media` rule in it. A nested sheet kept from it is a rule that silently never matches, so a
+ * comment, a string, an unquoted url and an escaped character are stepped over, as a brace in one
+ * opens or closes no block.
  */
 function nests(source) {
   // For each open block, whether it is an at-rule's.
@@ -4457,7 +4457,7 @@ function nests(source) {
     const character = source[i];
     if (character === '&') return true;
     if (character === ';' || character === '}') prelude = i + 1;
-    if (character === '}' && open.pop() === undefined) return true;
+    if (character === '}') open.pop();
     if (character !== '{') continue;
     const head = source
       .slice(prelude, i)
@@ -4468,7 +4468,7 @@ function nests(source) {
     open.push(head.startsWith('@'));
     prelude = i + 1;
   }
-  return open.length > 0;
+  return false;
 }
 
 /**
