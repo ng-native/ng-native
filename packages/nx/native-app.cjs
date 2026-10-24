@@ -160,8 +160,15 @@ function vitestConfig(withPaths) {
     .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],');
 }
 
-/** What `vitestConfig(true)` imports, at the range Nx 24 adds for its own Vite configs. */
-const tsconfigPathsDependency = { 'vite-tsconfig-paths': '^5.1.4' };
+/**
+ * What `vitestConfig(true)` imports, at the range Nx 24 adds for its own Vite configs, and Vite at
+ * the range `@ng-native/testing` peers on. Both peer on Vite optionally, so npm installs it for
+ * neither, and an integrated workspace from the `angular-monorepo` preset may have none at its root.
+ */
+const vitestPathsDependencies = {
+  'vite-tsconfig-paths': '^5.1.4',
+  vite: '^6.0.0 || ^7.0.0 || ^8.0.0',
+};
 
 /**
  * The ranges a workspace package's `package.json` lists: the root's own where everything it can
@@ -199,7 +206,7 @@ module.exports = {
   tsconfig,
   typecheckTsconfig,
   vitestConfig,
-  tsconfigPathsDependency,
+  vitestPathsDependencies,
   reuseRootRanges,
   expoCompanions,
 };

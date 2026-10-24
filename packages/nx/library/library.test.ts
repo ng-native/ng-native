@@ -23,6 +23,7 @@ const { addProjectConfiguration, readJson, readProjectConfiguration, updateJson,
 const { library, bases, generatorDefaults } = require('./index.cjs');
 const { componentSource, testSource } = require('../component/sources.cjs');
 const native = require('../native-app.cjs');
+const VITE_RANGE = native.vitestPathsDependencies.vite;
 
 type Options = { directory: string; name?: string; tags?: string; [option: string]: unknown };
 const calls: { base: string; options: Options }[] = [];
@@ -214,6 +215,7 @@ describe('in a workspace with @nx/angular', () => {
     );
     assert.equal(devDependencies.vitest, '~4.1.0');
     assert.equal(devDependencies['vite-tsconfig-paths'], '^5.1.4');
+    assert.equal(devDependencies.vite, VITE_RANGE);
   });
 
   it('takes --name for a project named other than its directory', async () => {

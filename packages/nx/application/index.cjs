@@ -272,7 +272,7 @@ async function application(tree, options) {
   // Added now rather than only when present, because a library generated later is the ordinary
   // case and nothing would come back to add it then.
   if (hasPathAliases(tree, workspaces)) {
-    addDependenciesToPackageJson(tree, {}, native.tsconfigPathsDependency, 'package.json', true);
+    addDependenciesToPackageJson(tree, {}, native.vitestPathsDependencies, 'package.json', true);
   }
   await writeFiles(tree, resolved);
   addProjectConfiguration(tree, projectName, {

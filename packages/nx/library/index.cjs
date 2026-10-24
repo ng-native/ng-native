@@ -330,7 +330,7 @@ async function library(tree, options) {
   await addImports(tree, directory, angular ? {} : typecheckDependencies);
   // `tsconfigPaths()`, which the Vitest config uses to reach the workspace's other libraries.
   if (aliases) {
-    addDependenciesToPackageJson(tree, {}, native.tsconfigPathsDependency, 'package.json', true);
+    addDependenciesToPackageJson(tree, {}, native.vitestPathsDependencies, 'package.json', true);
   }
 
   if (!options.skipFormat) await formatFiles(tree);

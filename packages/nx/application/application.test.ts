@@ -26,6 +26,7 @@ const {
 const { application } = require('./index.cjs');
 const { pnpmGlobs } = require('./workspaces.cjs');
 const native = require('../native-app.cjs');
+const VITE_RANGE = native.vitestPathsDependencies.vite;
 const { registry } = require('../save-exact.cjs') as {
   registry: { versions: (name: string, cwd: string) => Promise<string[]> };
 };
@@ -324,6 +325,24 @@ describe('in an integrated workspace', () => {
     await generate(tree, { directory: 'apps/mobile' });
     assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
     assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], '^5.1.4');
+  });
+
+  it('adds Vite, which @ng-native/testing imports and vite-tsconfig-paths only peers on', async () => {
+    // @nx/vite's required vite peer was what put Vite in the workspace: npm installs no optional
+    // peer, and the app's tests failed with "Cannot find package 'vite'".
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readJson(tree, 'package.json').devDependencies.vite, VITE_RANGE);
+  });
+
+  it('keeps the Vite a workspace already has', async () => {
+    const tree = integrated();
+    updateJson(tree, 'package.json', (manifest) => {
+      manifest.devDependencies.vite = '8.3.5';
+      return manifest;
+    });
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readJson(tree, 'package.json').devDependencies.vite, '8.3.5');
   });
 
   it('stays integrated when pnpm-workspace.yaml only holds settings, as pnpm 11 writes it', async () => {
