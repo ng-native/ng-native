@@ -73,12 +73,16 @@ system frameworks the metadata should cover:
 ["@ng-native/nativescript", { "metadata": { "includePods": ["SomeObjCSDK"] } }]
 ```
 
-On Android it also sets `nsFilterMetadata=false` in `gradle.properties`, unless the app sets it
-there. With filtering on, `@nativescript/react-native` adds keep rules to each minified build
-type, and on Expo SDK 58, whose Android Gradle Plugin does not allow that and whose release builds
-are minified by default, the build fails with `UnsupportedOperationException` in
-`nativescript.gradle`. Without filtering, NativeScript's metadata covers the app's whole classpath
-rather than only the classes it uses, so the app is larger; R8 still shrinks the app's own code.
+On Android it sets two lines in `gradle.properties` that a release build needs on Expo SDK 58,
+where `@nativescript/react-native` cannot otherwise build or run one:
+
+- `android.enableMinifyInReleaseBuilds=false`, in place of the `true` SDK 58's prebuild writes.
+  With R8 on, NativeScript's Gradle script fails the build with `UnsupportedOperationException`,
+  and NativeScript has no keep rules for its own runtime, so R8 renames classes it needs and the app
+  stops at launch. A release APK is larger without R8.
+- `nsSkipStaticBindings=true`. NativeScript's release task that pre-generates Java for named
+  subclasses runs React Native's CLI, which an Expo app does not have. Skipped, those classes are
+  generated on the device as the app starts, as in a debug build.
 
 Add the SDKs' types in a declaration file, such as `src/nativescript.d.ts`:
 
