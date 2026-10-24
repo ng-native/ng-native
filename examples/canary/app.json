@@ -15,6 +15,7 @@
     "userInterfaceStyle": "automatic",
     "plugins": [
       "@ng-native/metro",
+      "expo-calendar",
       "expo-localization",
       "expo-secure-store",
       ["expo-build-properties", { "android": { "minSdkVersion": 26 } }]

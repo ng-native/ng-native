@@ -328,6 +328,10 @@ export const routes: Routes = [
     ],
   },
   { path: 'expo', loadComponent: () => import('./expo/expo.ts').then((m) => m.ExpoPage) },
+  {
+    path: 'calendar-kit',
+    loadComponent: () => import('./calendar/calendar-kit.ts').then((m) => m.CalendarKitPage),
+  },
   { path: 'maps', loadComponent: () => import('./expo/maps.ts').then((m) => m.MapsPage) },
   {
     path: 'language-model',
