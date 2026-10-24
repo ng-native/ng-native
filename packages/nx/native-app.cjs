@@ -13,8 +13,9 @@
  *   import a library at all: Metro reports `Cannot resolve @org/ui`.
  * - `tsconfig.json` also extends the workspace's `tsconfig.base.json` when there is one, which is
  *   where those aliases live, and puts back the Expo settings the workspace's base overrides.
- * - `vitest.config.mts` adds `nxViteTsPaths` when the workspace has `@nx/vite`, for the same
- *   aliases, which Vitest does not read from tsconfig either.
+ * - `vitest.config.mts` adds `vite-tsconfig-paths` when the workspace has path aliases, for the
+ *   same aliases, which Vitest does not read from tsconfig either. It is what Nx 24 writes in its
+ *   own Vite configs: `nxViteTsPaths` from `@nx/vite` is an inert stub there.
  *
  * What does not depend on Nx, the dependencies, `app.json` and bundle identifier among them, is
  * `@ng-native/migrate/native-app.cjs`, which `@ng-native/schematics` builds its apps from too.
@@ -153,11 +154,14 @@ function vitestConfig(withPaths) {
   return template
     .replace(
       "import { defineConfig } from 'vitest/config';",
-      "import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';\n" +
+      "import tsconfigPaths from 'vite-tsconfig-paths';\n" +
         "import { defineConfig } from 'vitest/config';",
     )
-    .replace('plugins: [ngNative()],', 'plugins: [nxViteTsPaths(), ngNative()],');
+    .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],');
 }
+
+/** What `vitestConfig(true)` imports, at the range Nx 24 adds for its own Vite configs. */
+const tsconfigPathsDependency = { 'vite-tsconfig-paths': '^5.1.4' };
 
 /**
  * The ranges a workspace package's `package.json` lists: the root's own where everything it can
@@ -195,6 +199,7 @@ module.exports = {
   tsconfig,
   typecheckTsconfig,
   vitestConfig,
+  tsconfigPathsDependency,
   reuseRootRanges,
   expoCompanions,
 };

@@ -137,8 +137,9 @@ Tailwind generates, as the template's does. Three files differ, each because of 
   is where the path aliases are, and puts back the Expo settings the workspace's base overrides.
   With package-manager workspaces it does so only when that file has a `paths` list: the
   TypeScript preset's has none, and its libraries are linked as packages instead.
-- **`vitest.config.mts`** adds `nxViteTsPaths()` in a workspace with path aliases, since Vitest
-  does not read them from tsconfig either, and adds `@nx/vite` for it if the workspace has none.
+- **`vitest.config.mts`** adds `tsconfigPaths()` from `vite-tsconfig-paths` in a workspace with
+  path aliases, since Vitest does not read them from tsconfig either, and adds
+  `vite-tsconfig-paths` for it if the workspace has none, as Nx 24 does for its own Vite configs.
   The `angular-monorepo` preset does not, and a library generated after the app is the usual case.
 
 ## Where the dependencies go
@@ -159,7 +160,7 @@ every version it allows is one the app accepts. A workspace that saves exact ver
 `defaultSemverRangePrefix: ""` in `.yarnrc.yml`, or `exact = true` in `bunfig.toml`) gets exact
 versions where it has none already: the newest each of the app's ranges allows, as `npm view`
 finds it from the workspace's root, or the lowest when the registry cannot be reached. `@nx/expo`
-and `@nx/vite` take the Nx that is running when the workspace lists Nx at a range.
+takes the Nx that is running when the workspace lists Nx at a range.
 
 ## Native modules a library imports
 

@@ -741,6 +741,86 @@ describe('stop-watching-conditions, through nx migrate, ng update and ng-native-
   });
 });
 
+describe('vitest-tsconfig-paths, through nx migrate, ng update and ng-native-migrate', () => {
+  const generated = [
+    "import { ngNative } from '@ng-native/testing/vitest';",
+    "import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';",
+    "import { defineConfig } from 'vitest/config';",
+    '',
+    'export default defineConfig({',
+    '  plugins: [nxViteTsPaths(), ngNative()],',
+    '});',
+    '',
+  ].join('\n');
+  const files = {
+    'package.json': JSON.stringify({ devDependencies: { nx: '24.0.0' } }, null, 2) + '\n',
+    'apps/mobile/vitest.config.mts': generated,
+    'packages/ui/vitest.config.mts': generated,
+    // A web project's own config, which @ng-native/nx did not write.
+    'apps/web/vitest.config.mts': generated.replace("'@ng-native/testing/vitest'", "'other'"),
+  };
+
+  it('resolves path aliases with vite-tsconfig-paths in the configs @ng-native/nx wrote', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'vitest-tsconfig-paths', '0.18.0');
+    const fixed = generated
+      .replace(
+        "import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';",
+        "import tsconfigPaths from 'vite-tsconfig-paths';",
+      )
+      .replace('nxViteTsPaths()', 'tsconfigPaths()');
+    assert.equal(nx.files['apps/mobile/vitest.config.mts'], fixed);
+    assert.equal(nx.files['packages/ui/vitest.config.mts'], fixed);
+    assert.equal(nx.files['apps/web/vitest.config.mts'], files['apps/web/vitest.config.mts']);
+    assert.deepEqual(JSON.parse(nx.files['package.json'] as string).devDependencies, {
+      nx: '24.0.0',
+      'vite-tsconfig-paths': '^5.1.4',
+    });
+    assert.deepEqual(nx.notes, [
+      'Install vite-tsconfig-paths, which the root package.json now lists.',
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('keeps the vite-tsconfig-paths the workspace lists, and changes nothing the second time', async () => {
+    const listed = {
+      ...files,
+      'package.json': JSON.stringify({ devDependencies: { 'vite-tsconfig-paths': '^6.0.0' } }),
+    };
+    const first = await viaNx(listed, 'vitest-tsconfig-paths');
+    assert.equal(first.files['package.json'], listed['package.json']);
+    assert.deepEqual(first.notes, []);
+    const again = await viaNx(first.files as Record<string, string>, 'vitest-tsconfig-paths');
+    assert.deepEqual(again.files, first.files);
+  });
+
+  it('rewrites a config the workspace formats with double quotes', async () => {
+    const doubled = generated.replace(/'/g, '"');
+    const { files: after } = await viaNx(
+      { ...files, 'apps/mobile/vitest.config.mts': doubled },
+      'vitest-tsconfig-paths',
+    );
+    assert.equal(
+      after['apps/mobile/vitest.config.mts'],
+      doubled
+        .replace(
+          'import { nxViteTsPaths } from "@nx/vite/plugins/nx-tsconfig-paths.plugin";',
+          'import tsconfigPaths from "vite-tsconfig-paths";',
+        )
+        .replace('nxViteTsPaths()', 'tsconfigPaths()'),
+    );
+  });
+
+  it('leaves a workspace with no such config alone', async () => {
+    const { files: after, notes } = await viaNx(
+      { 'package.json': files['package.json'] },
+      'vitest-tsconfig-paths',
+    );
+    assert.equal(after['package.json'], files['package.json']);
+    assert.deepEqual(notes, []);
+  });
+});
+
 describe('ng-native-migrate', () => {
   const app = {
     'package.json': JSON.stringify({ dependencies: { '@ng-native/components': '^0.1.3' } }),

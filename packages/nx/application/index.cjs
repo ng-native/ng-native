@@ -29,7 +29,7 @@ const {
   addDependenciesToPackageJson,
 } = require('@nx/devkit');
 const native = require('../native-app.cjs');
-const { init, workspaceNxVersion } = require('../init/index.cjs');
+const { init } = require('../init/index.cjs');
 const { usesWorkspaces, includeInWorkspaces } = require('./workspaces.cjs');
 const { asSaved } = require('../save-exact.cjs');
 const { registerSyncGenerator } = require('../sync/index.cjs');
@@ -268,12 +268,11 @@ async function application(tree, options) {
       true,
     );
   }
-  // `nxViteTsPaths()`, which the app's Vitest config uses to reach the workspace's libraries.
+  // `tsconfigPaths()`, which the app's Vitest config uses to reach the workspace's libraries.
   // Added now rather than only when present, because a library generated later is the ordinary
   // case and nothing would come back to add it then.
   if (hasPathAliases(tree, workspaces)) {
-    const vite = { '@nx/vite': workspaceNxVersion(tree) };
-    addDependenciesToPackageJson(tree, {}, vite, 'package.json', true);
+    addDependenciesToPackageJson(tree, {}, native.tsconfigPathsDependency, 'package.json', true);
   }
   await writeFiles(tree, resolved);
   addProjectConfiguration(tree, projectName, {
