@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import {
   Crypto,
   CryptoDigestAlgorithm,
@@ -85,7 +86,8 @@ describe('digest algorithms and encodings', () => {
   it('are the module s own enums, so a hash can be asked for without loading the module', () => {
     // The enums live in a file Node cannot load, so their compiled lines are read as text.
     const require = createRequire(import.meta.url);
-    const types = readFileSync(require.resolve('expo-crypto/build/Crypto.types.js'), 'utf8');
+    const root = path.dirname(require.resolve('expo-crypto/package.json'));
+    const types = readFileSync(path.join(root, 'build/Crypto.types.js'), 'utf8');
     const read = (name: string) =>
       Object.fromEntries(
         [...types.matchAll(new RegExp(`${name}\\["(\\w+)"\\] = "([\\w-]+)"`, 'g'))].map(

@@ -36,11 +36,12 @@ const ng = require('@angular/compiler');
 
 /**
  * What every compiled layout defines for itself first, since the extension has none of it:
- * children flattened with the empty ones dropped, as native flattens and skips them, and a value
- * interpolated as Angular interpolates it, with null and undefined as nothing.
+ * children flattened with each empty one kept in its place, as the JSX runtime keeps a `false`:
+ * expo-widgets 58 identifies a view by its position among them, and native skips the empty ones.
+ * And a value interpolated as Angular interpolates it, with null and undefined as nothing.
  */
 const HELPERS =
-  'function ɵflat(list){var out=[];(function add(v){if(Array.isArray(v))v.forEach(add);else if(v!==undefined&&v!==null&&v!==false)out.push(v);})(list);return out.length===0?undefined:out.length===1?out[0]:out;}' +
+  'function ɵflat(list){var out=[];(function add(v){if(Array.isArray(v))v.forEach(add);else out.push(v);})(list);return out.length===0?undefined:out.length===1?out[0]:out;}' +
   'function ɵstr(v){return v===undefined||v===null?"":String(v);}' +
   'function ɵdate(v){var d=v===undefined||v===null?NaN:new Date(v);return isNaN(d)?undefined:d;}' +
   'function ɵrange(v){var l=v&&ɵdate(v.lower),u=v&&ɵdate(v.upper);return l&&u?{lower:l,upper:u}:undefined;}';

@@ -191,6 +191,8 @@ export class BasketCount {
 - [Switching language](/guide/localization-switching) - in the app, and following the system.
 - [Formatting and right to left](/guide/localization-formatting) - dates, numbers, currency, and
   mirroring a layout.
+- [Localization with Transloco](/guide/localization-transloco) - the alternative to `i18n` when
+  the language changes inside the app and must not reload it.
 
 ## What does not work yet
 

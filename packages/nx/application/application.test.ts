@@ -85,6 +85,14 @@ describe('in an integrated workspace', () => {
     assert.match(tree.read('apps/mobile/src/main.ts', 'utf-8')!, /^import 'expo';$/m);
   });
 
+  it('stops watching conditions in main.ts as the app is destroyed', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    assert.match(main, /^ {2}const stopWatching = watchConditions\(app\.engine\);$/m);
+    assert.match(main, /^ {2}app\.applicationRef\.onDestroy\(stopWatching\);$/m);
+  });
+
   it('puts a safe-area-provider above its safe-area-view, which has no insets without one', async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });
@@ -278,15 +286,15 @@ describe('in an integrated workspace', () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });
     const root = readJson(tree, 'package.json');
-    assert.equal(root.dependencies['react-native'], '0.86.3');
+    assert.equal(root.dependencies['react-native'], '0.88.0');
     assert.equal(root.dependencies['@angular/core'], '~22.2.0');
     assert.equal(root.devDependencies['@nx/expo'], '23.2.0');
     // Every dependency, because Expo links only the native modules the app's own package.json
     // names: without react-native-safe-area-context there, Android crashed on RNCSafeAreaView.
     const app = readJson(tree, 'apps/mobile/package.json');
     assert.equal(app.main, 'src/main.ts');
-    assert.equal(app.dependencies['react-native'], '0.86.3');
-    assert.equal(app.dependencies['react-native-safe-area-context'], '~5.7.0');
+    assert.equal(app.dependencies['react-native'], '0.88.0');
+    assert.equal(app.dependencies['react-native-safe-area-context'], '~5.10.1');
     assert.equal(app.dependencies['@angular/core'], '~22.2.0');
   });
 
@@ -297,25 +305,25 @@ describe('in an integrated workspace', () => {
     await generate(tree, { directory: 'apps/mobile' });
     const root = readJson(tree, 'package.json');
     assert.equal(root.devDependencies['react-dom'], root.dependencies.react);
-    assert.match(root.devDependencies['@expo/cli'], /^\^57\./);
+    assert.match(root.devDependencies['@expo/cli'], /^\^58\./);
   });
 
   it("extends the workspace's tsconfig.base.json, where its path aliases are", async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });
     assert.deepEqual(readJson(tree, 'apps/mobile/tsconfig.json').extends, [
-      'expo/tsconfig.base',
+      'expo/tsconfig.base.json',
       '../../tsconfig.base.json',
     ]);
   });
 
-  it('resolves those aliases in tests too, adding @nx/vite when the workspace has none', async () => {
-    // The angular-monorepo preset has no @nx/vite, and a library generated after the app left its
+  it('resolves those aliases in tests too, adding vite-tsconfig-paths when the workspace has none', async () => {
+    // The angular-monorepo preset has no vite-tsconfig-paths, and a library generated after the app left its
     // tests unable to import it: "Cannot find package '@org/ui'".
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });
-    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths\(\)/);
-    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], '23.2.0');
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], '^5.1.4');
   });
 
   it('stays integrated when pnpm-workspace.yaml only holds settings, as pnpm 11 writes it', async () => {
@@ -325,7 +333,7 @@ describe('in an integrated workspace', () => {
     const settings = 'autoInstallPeers: true\nallowBuilds:\n  nx: true\n';
     tree.write('pnpm-workspace.yaml', settings);
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'package.json').dependencies['react-native'], '0.86.3');
+    assert.equal(readJson(tree, 'package.json').dependencies['react-native'], '0.88.0');
     assert.equal(readJson(tree, 'apps/mobile/package.json').name, 'mobile');
     // Only the builds @nx/expo brings are added, which pnpm 11 refuses to install without.
     assert.equal(
@@ -334,14 +342,14 @@ describe('in an integrated workspace', () => {
     );
   });
 
-  it('keeps the @nx/vite a workspace already has', async () => {
+  it('keeps the vite-tsconfig-paths a workspace already has', async () => {
     const tree = integrated();
     updateJson(tree, 'package.json', (manifest) => {
-      manifest.devDependencies['@nx/vite'] = '23.1.0';
+      manifest.devDependencies['vite-tsconfig-paths'] = '^5.0.0';
       return manifest;
     });
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], '23.1.0');
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], '^5.0.0');
   });
 
   it('warns about a pinned dependency npm would refuse to install beside it', async () => {
@@ -469,7 +477,7 @@ describe('in a pnpm workspace', () => {
     await generate(tree, { directory: 'apps/mobile' });
     const app = readJson(tree, 'apps/mobile/package.json');
     assert.equal(app.main, 'src/main.ts');
-    assert.equal(app.dependencies.expo, '~57.0.26');
+    assert.equal(app.dependencies.expo, '~58.0.16');
     assert.equal(app.devDependencies.vitest, '^5.0.0');
     const root = readJson(tree, 'package.json');
     assert.equal(root.dependencies?.expo, undefined);
@@ -503,7 +511,7 @@ describe('in a pnpm workspace', () => {
     await generate(tree, { directory: 'apps/mobile' });
     const app = readJson(tree, 'apps/mobile/package.json');
     assert.equal(app.devDependencies.vitest, '^5.0.0');
-    assert.equal(app.dependencies.react, '19.2.3');
+    assert.equal(app.dependencies.react, '19.3.0');
     assert.equal(
       app.devDependencies['@ng-native/testing'],
       native.devDependencies['@ng-native/testing'],
@@ -582,7 +590,7 @@ describe('in a pnpm workspace', () => {
   it("uses the template's own tsconfig, since there are no path aliases to reach", async () => {
     const tree = pnpmWorkspace();
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'apps/mobile/tsconfig.json').extends, 'expo/tsconfig.base');
+    assert.equal(readJson(tree, 'apps/mobile/tsconfig.json').extends, 'expo/tsconfig.base.json');
   });
 
   it("typechecks against the app's own copy of each @ng-native package, where libraries are links", async () => {
@@ -628,11 +636,11 @@ describe('in a pnpm workspace', () => {
     );
     await generate(tree, { directory: 'apps/mobile' });
     assert.deepEqual(readJson(tree, 'apps/mobile/tsconfig.json').extends, [
-      'expo/tsconfig.base',
+      'expo/tsconfig.base.json',
       '../../tsconfig.base.json',
     ]);
-    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths\(\)/);
-    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], '23.2.0');
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], '^5.1.4');
   });
 
   it("keeps its custom conditions beside Expo's when it extends it", async () => {
@@ -653,7 +661,7 @@ describe('in a pnpm workspace', () => {
     tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { paths: {} } }));
     await generate(tree, { directory: 'apps/mobile' });
     assert.deepEqual(readJson(tree, 'apps/mobile/tsconfig.json').extends, [
-      'expo/tsconfig.base',
+      'expo/tsconfig.base.json',
       '../../tsconfig.base.json',
     ]);
   });
@@ -676,9 +684,9 @@ describe('in a pnpm workspace', () => {
     );
     await generate(tree, { directory: 'apps/mobile' });
     const config = readJson(tree, 'apps/mobile/tsconfig.json');
-    assert.deepEqual(config.extends, ['expo/tsconfig.base', '../../tsconfig.base.json']);
+    assert.deepEqual(config.extends, ['expo/tsconfig.base.json', '../../tsconfig.base.json']);
     assert.deepEqual(config.compilerOptions.customConditions, ['react-native', '@proj/source']);
-    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths\(\)/);
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
   });
 
   it('stops at an extends cycle, and skips a package it cannot read', async () => {
@@ -693,7 +701,7 @@ describe('in a pnpm workspace', () => {
     );
     await generate(tree, { directory: 'apps/mobile' });
     assert.deepEqual(readJson(tree, 'apps/mobile/tsconfig.json').extends, [
-      'expo/tsconfig.base',
+      'expo/tsconfig.base.json',
       '../../tsconfig.base.json',
     ]);
   });
@@ -716,7 +724,7 @@ describe('in a pnpm workspace', () => {
     );
     await generate(tree, { directory: 'apps/mobile' });
     const config = readJson(tree, 'apps/mobile/tsconfig.json');
-    assert.deepEqual(config.extends, ['expo/tsconfig.base', '../../tsconfig.base.json']);
+    assert.deepEqual(config.extends, ['expo/tsconfig.base.json', '../../tsconfig.base.json']);
     assert.deepEqual(config.compilerOptions.customConditions, ['react-native', '@proj/source']);
   });
 
@@ -735,7 +743,7 @@ describe('in a pnpm workspace', () => {
     );
     await generate(tree, { directory: 'apps/mobile' });
     const config = readJson(tree, 'apps/mobile/tsconfig.json');
-    assert.equal(config.extends, 'expo/tsconfig.base');
+    assert.equal(config.extends, 'expo/tsconfig.base.json');
     assert.deepEqual(config.compilerOptions.customConditions, ['react-native', '@proj/source']);
   });
 
@@ -746,9 +754,9 @@ describe('in a pnpm workspace', () => {
       JSON.stringify({ compilerOptions: { composite: true, customConditions: ['@proj/source'] } }),
     );
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'apps/mobile/tsconfig.json').extends, 'expo/tsconfig.base');
-    assert.doesNotMatch(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths/);
-    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], undefined);
+    assert.equal(readJson(tree, 'apps/mobile/tsconfig.json').extends, 'expo/tsconfig.base.json');
+    assert.doesNotMatch(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], undefined);
   });
 
   it("carries the workspace's custom conditions, which its libraries export their source under", async () => {
@@ -783,10 +791,11 @@ describe('in a workspace that saves exact versions', () => {
     '22.0.0',
     '22.2.1',
     '23.0.0',
-    '57.0.26',
-    '57.0.27',
-    '57.0.31',
-    '58.0.0',
+    '58.0.16',
+    '58.0.19',
+    '58.1.13',
+    '58.1.19',
+    '59.0.0',
   ];
   let looked: string[];
   const offline = registry.versions;
@@ -806,14 +815,14 @@ describe('in a workspace that saves exact versions', () => {
     tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
     await generate(tree, { directory: 'apps/mobile' });
     const app = readJson(tree, 'apps/mobile/package.json');
-    assert.equal(app.dependencies.expo, '57.0.31');
+    assert.equal(app.dependencies.expo, '58.0.19');
     assert.equal(app.dependencies['@angular/core'], '22.2.1');
-    assert.equal(app.dependencies.react, '19.2.3');
+    assert.equal(app.dependencies.react, '19.3.0');
     assert.equal(app.devDependencies.typescript, '6.0.9');
     assert.equal(app.devDependencies.vitest, '5.0.9');
     const root = readJson(tree, 'package.json');
     assert.equal(root.devDependencies['@babel/runtime'], '7.29.9');
-    assert.equal(root.devDependencies['react-dom'], '19.2.3');
+    assert.equal(root.devDependencies['react-dom'], '19.3.0');
     // An exact version is already what a lookup would find.
     assert.ok(!looked.includes('react') && !looked.includes('@ng-native/platform'));
   });
@@ -824,7 +833,7 @@ describe('in a workspace that saves exact versions', () => {
     tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
     await generate(tree, { directory: 'apps/mobile' });
     const app = readJson(tree, 'apps/mobile/package.json');
-    assert.equal(app.dependencies.expo, '57.0.26');
+    assert.equal(app.dependencies.expo, '58.0.16');
     assert.equal(app.dependencies['@angular/core'], '22.0.0');
     assert.equal(app.devDependencies.typescript, '6.0.3');
   });
@@ -911,7 +920,7 @@ describe('in a workspace that saves exact versions', () => {
     const tree = integrated();
     tree.write('pnpm-workspace.yaml', "savePrefix: '' # pin everything\n");
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'package.json').dependencies.expo, '57.0.31');
+    assert.equal(readJson(tree, 'package.json').dependencies.expo, '58.0.19');
   });
 
   it('adds @nx/expo at the Nx running, when the workspace lists Nx at a range', async () => {
@@ -924,10 +933,9 @@ describe('in a workspace that saves exact versions', () => {
     await generate(tree, { directory: 'apps/mobile' });
     const root = readJson(tree, 'package.json');
     assert.equal(root.devDependencies['@nx/expo'], NX_VERSION);
-    assert.equal(root.devDependencies['@nx/vite'], NX_VERSION);
   });
 
-  it('adds @nx/vite at the Nx running in a workspace package with path aliases', async () => {
+  it('adds vite-tsconfig-paths in a workspace package with path aliases', async () => {
     const tree = pnpmWorkspace();
     tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
     tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { paths: {} } }));
@@ -936,9 +944,9 @@ describe('in a workspace that saves exact versions', () => {
       devDependencies: { nx: `^${NX_VERSION.split('.')[0]}.0.0` },
     }));
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], NX_VERSION);
-    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths\(\)/);
-    assert.equal(readJson(tree, 'apps/mobile/package.json').dependencies.expo, '57.0.31');
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], '^5.1.4');
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
+    assert.equal(readJson(tree, 'apps/mobile/package.json').dependencies.expo, '58.0.19');
   });
 
   it("keeps its own version where the root's is one the app cannot use", async () => {
@@ -959,11 +967,11 @@ describe('in a workspace that saves exact versions', () => {
     tree.write('.npmrc', 'save-exact=true\n');
     await generate(tree, { directory: 'apps/mobile' });
     const root = readJson(tree, 'package.json');
-    assert.equal(root.dependencies.expo, '57.0.31');
+    assert.equal(root.dependencies.expo, '58.0.19');
     assert.equal(root.dependencies['@angular/core'], '~22.2.0');
     assert.equal(root.devDependencies.vitest, '5.0.9');
-    assert.equal(root.devDependencies['@expo/cli'], '57.0.31');
-    assert.equal(readJson(tree, 'apps/mobile/package.json').dependencies.expo, '57.0.31');
+    assert.equal(root.devDependencies['@expo/cli'], '58.1.19');
+    assert.equal(readJson(tree, 'apps/mobile/package.json').dependencies.expo, '58.0.19');
     assert.ok(!looked.includes('@angular/core'));
   });
 
@@ -978,7 +986,7 @@ describe('in a workspace that saves exact versions', () => {
       const tree = integrated();
       tree.write(file!, content!);
       await generate(tree, { directory: 'apps/mobile' });
-      assert.equal(readJson(tree, 'package.json').dependencies.expo, '57.0.31');
+      assert.equal(readJson(tree, 'package.json').dependencies.expo, '58.0.19');
     });
   }
 
@@ -986,7 +994,7 @@ describe('in a workspace that saves exact versions', () => {
     const tree = integrated();
     tree.write('.npmrc', 'save-exact=false\n');
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'package.json').dependencies.expo, '~57.0.26');
+    assert.equal(readJson(tree, 'package.json').dependencies.expo, '~58.0.16');
     assert.deepEqual(looked, []);
   });
 });

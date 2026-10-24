@@ -356,6 +356,8 @@ const CSS_OF: Record<string, string | readonly string[]> = {
   selectable: 'user-select',
   touchAction: 'touch-action',
   ellipsizeMode: 'text-overflow',
+  lineBreakStrategyIOS: ['text-wrap-style', 'word-break'],
+  textBreakStrategy: 'text-wrap-style',
   textAlignVertical: 'vertical-align',
   baselineShift: 'vertical-align',
   start: 'left',
@@ -733,7 +735,7 @@ function commitAll(sheet: StyleSheet, cases: readonly SweepCase[]): Map<string, 
  * checked where they are read, on the paragraph.
  */
 const TEXT_PROPS =
-  /^(color|font|letterSpacing|lineHeight|textAlign|textDecoration|textTransform|textShadow|writingDirection|numberOfLines|ellipsizeMode|selectable)/;
+  /^(color|font|letterSpacing|lineHeight|textAlign|textDecoration|textTransform|textShadow|writingDirection|numberOfLines|ellipsizeMode|lineBreakStrategyIOS|textBreakStrategy|selectable)/;
 
 /** Props the engine writes that are a component's rather than a style's. */
 const COMPONENT_PROPS = new Set(['nativeID', 'accessible', 'pointerEvents', 'collapsable']);

@@ -365,7 +365,9 @@ function referenceColour({ reference: name, fallback }: Reference): ColourExpres
 function colourFallback(text: string): { fallback: string } | { fallbackToken: TokenValue } {
   const token = tokenFromValue(text);
   if (token?.hsl || token?.deferredColour) return { fallbackToken: token };
-  return { fallback: token?.color ?? fail() };
+  // A platform colour has no channels to mix: refused, as a word is.
+  const colour = token?.color;
+  return { fallback: typeof colour === 'string' ? colour : fail() };
 }
 
 const nextReference = (cursor: Cursor): Reference =>

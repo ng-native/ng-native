@@ -64,9 +64,10 @@ const animations = new WeakMap<RunningAnimation | Transition, WebAnimation>();
  * an animation with no fill at its last frame until the listener has run, so a library that takes
  * the element away then never shows it back at rest.
  *
- * ponytail: `finish()` and `cancel()` settle `finished` and `playState` and leave the frames to
- * the engine: a library calls them as it takes the element away, or puts back the class that
- * ends the animation. `updateTiming` reads the fill alone, and a transition's not at all.
+ * `finish()` and `cancel()` end an `@keyframes` animation on the view as well, native or not.
+ *
+ * ponytail: a transition's `finish()` and `cancel()` settle `finished` and `playState` and leave
+ * its frames to the engine. `updateTiming` reads the fill alone, and a transition's not at all.
  */
 export class WebAnimation {
   readonly animationName?: string;
@@ -236,6 +237,12 @@ export class WebAnimation {
 
   private end(state: 'finished' | 'idle'): void {
     this.ended = state;
+    // Ended on the view too, native's included, while the node still has this run: a cancel of
+    // one already over lets go of the last frame its fill holds.
+    const playing = this.node.playing;
+    if (this.animationName !== undefined && playing && this.onScreen() && this.isOf(playing)) {
+      engineOf(this.node).endPlaying(this.node, state === 'finished' ? 'finish' : 'cancel');
+    }
     this.settle?.(state);
   }
 

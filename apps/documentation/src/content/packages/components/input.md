@@ -167,4 +167,14 @@ giving the view a `nativeID` and the input the same string as `inputAccessoryVie
 no native counterpart to this and the element commits as a plain view, so content placed inside it
 simply sits inert rather than floating above the keyboard.
 
+On iOS one bar goes with one field: when the bar appears, it attaches to the first `<text-input>`
+in the window whose `inputAccessoryViewID` names it, so a form with a bar under every field needs
+one `<input-accessory-view>`, with its own `nativeID`, per field.
+
+A bar written inside a `<scroll-view>` is still drawn above the keyboard, outside the scroll view,
+so on iOS a tap on it that no control takes, on a disabled button or the space between two, leaves
+the keyboard up, whatever `keyboardShouldPersistTaps` says. React Native's own scroll view
+dismisses the keyboard for that tap. On Android the element is a plain view in the scroll view, and
+a tap on it counts as any other.
+
 <!-- api: InputAccessoryView -->

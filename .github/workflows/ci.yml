@@ -109,10 +109,9 @@ jobs:
 
       # The browser suite (`packages/web/browser`, run by `pnpm coverage` below) drives a real
       # Chromium, and only Chromium is installed. Cached by Playwright's version, which is what
-      # decides the browser build it downloads. The system libraries it needs on Linux are apt
-      # packages rather than part of the cache: installed with the browser where it is not cached,
-      # and taken as the runner's image has them where it is, which ships Google Chrome and its
-      # libraries. Installing them again took nine minutes of a fifteen-minute limit.
+      # decides the browser build it downloads. The system libraries it needs on Linux are taken as
+      # the runner's image has them, which ships Google Chrome and its libraries: installing them
+      # again with `--with-deps` is apt from a mirror that has taken five to nine minutes.
       # Only beside the first shard, which is where the browser suite runs.
       - id: playwright
         if: matrix.shard == 1
@@ -123,8 +122,11 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-chromium-${{ steps.playwright.outputs.version }}
+      # Seconds. Its own limit, so a stalled download fails this step, named, and a re-run costs
+      # minutes, rather than leaving the tests what is left of the job's.
       - if: matrix.shard == 1 && steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
+        timeout-minutes: 5
+        run: pnpm --filter @ng-native/web exec playwright install chromium
 
       # Every suite, always, rather than what changed: the floor is on the merged number, and a
       # change in one package moves the coverage of another.
@@ -206,7 +208,10 @@ jobs:
 
       - uses: ./.github/actions/setup
 
+      # Each step has a limit of its own, well inside the job's, so a stall ends at the step that
+      # stalled, named in the log as timed out, and not as the whole job cancelled.
       - name: Start a local registry
+        timeout-minutes: 3
         run: |
           npx --yes verdaccio@6.10.5 --config verdaccio.yaml --listen 4873 > verdaccio.log 2>&1 &
           for _ in $(seq 1 60); do curl -sf localhost:4873/-/ping > /dev/null && break; sleep 1; done
@@ -217,10 +222,13 @@ jobs:
           echo "//localhost:4873/:_authToken=$token" >> ~/.npmrc
 
       # `--web` checks a browser app on `@ng-native/web` in Chromium, through this workspace's
-      # Playwright.
-      - run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
+      # Playwright. Without `--with-deps`, as in the coverage job: the runner's image has the
+      # libraries Chromium needs.
+      - timeout-minutes: 5
+        run: pnpm --filter @ng-native/web exec playwright install chromium
 
-      - run: node scripts/verify-publish.mjs --web
+      - timeout-minutes: 8
+        run: node scripts/verify-publish.mjs --web
 
       - if: failure()
         run: cat verdaccio.log

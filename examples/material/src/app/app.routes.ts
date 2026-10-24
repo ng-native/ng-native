@@ -1,5 +1,4 @@
 import type { Routes } from '@angular/router';
+import { TasksPage } from './tasks/tasks-page.ts';
 
-export const routes: Routes = [
-  { path: '', loadComponent: () => import('./tasks/tasks-page.ts').then((m) => m.TasksPage) },
-];
+export const routes: Routes = [{ path: '', component: TasksPage }];

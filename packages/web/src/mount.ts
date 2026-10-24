@@ -57,7 +57,7 @@ import {
   ɵsetLocaleId as setLocaleId,
 } from '@angular/core';
 import { HostEngine } from '@ng-native/fabric';
-import { ColorScheme, Direction, HardwareBack, Screen, StatusBar } from '@ng-native/device';
+import { ColorScheme, Direction, HardwareBack, OS, Screen, StatusBar } from '@ng-native/device';
 import {
   browserColorSchemeSource,
   browserDirectionSource,
@@ -237,6 +237,8 @@ function hostProviders(
           { provide: Direction.SOURCE, useValue: browserDirectionSource(view) },
         ]
       : []),
+    // The engine renders as iOS here, so the off-device fallback would say iOS too.
+    { provide: OS, useValue: 'web' },
     // A tab has no hardware back button, so this is the same inert fallback
     // `hardwareBackSource()`'s own off-device branch answers with, provided here so the browser
     // host says so itself rather than relying on that branch.

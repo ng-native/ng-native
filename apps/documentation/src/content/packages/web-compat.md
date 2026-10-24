@@ -29,12 +29,12 @@ npm install @ng-native/web-compat @ng-native/icons
 npx expo install react-native-svg
 ```
 
-| Package                | Needed                 | What it enables                                                                |
-| ---------------------- | ---------------------- | ------------------------------------------------------------------------------ |
-| `@ng-native/icons`     | Yes, a peer dependency | `<svg>` and `<canvas>`, drawn with the views `@ng-native/icons` draws with     |
-| `react-native-svg`     | For anything drawn     | The native views. Without it a drawing shows nothing, as an icon does          |
-| `react-native-webview` | Optional, `>=13.16.1`  | An `<iframe>` as a native web view. Without it a frame is an emulated document |
-| `expo-document-picker` | Optional, `^57.0.0`    | A file input's `click()` opening the system's file picker                      |
+| Package                | Needed                           | What it enables                                                                |
+| ---------------------- | -------------------------------- | ------------------------------------------------------------------------------ |
+| `@ng-native/icons`     | Yes, a peer dependency           | `<svg>` and `<canvas>`, drawn with the views `@ng-native/icons` draws with     |
+| `react-native-svg`     | For anything drawn               | The native views. Without it a drawing shows nothing, as an icon does          |
+| `react-native-webview` | Optional, `>=13.16.1`            | An `<iframe>` as a native web view. Without it a frame is an emulated document |
+| `expo-document-picker` | Optional, `^57.0.0` or `^58.0.0` | A file input's `click()` opening the system's file picker                      |
 
 react-native-svg's JavaScript is never imported: the package commits its native views directly,
 as `@ng-native/icons` does. An app with an `<iframe>` installs the web view:

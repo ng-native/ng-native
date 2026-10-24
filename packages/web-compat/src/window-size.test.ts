@@ -29,7 +29,7 @@ afterEach(cleanup);
 const SIZE = { width: 390, height: 844, colorScheme: 'light' as const };
 
 /** An app that asked for the package, with a keyboard the test moves. */
-async function page(providers: unknown[] = [provideWebCompat()]) {
+async function page(providers: unknown[] = [provideWebCompat()], windowTop = () => 0) {
   let move: (metrics: KeyboardMetrics) => void = () => {};
   let listening = false;
   const source = {
@@ -39,6 +39,9 @@ async function page(providers: unknown[] = [provideWebCompat()]) {
       return () => void (listening = false);
     },
     dismiss: () => {},
+    get windowTop() {
+      return windowTop();
+    },
   };
   const app = await render(Page, {
     providers: [...(providers as never[]), { provide: Keyboard.SOURCE, useValue: source }],
@@ -98,6 +101,24 @@ async function page(providers: unknown[] = [provideWebCompat()]) {
 }
 
 describe('the window and the keyboard', () => {
+  it("ends at the keyboard's top in the window, where the window starts below the screen's top", async () => {
+    // Android with React Native's edge-to-edge flag off measures the app from below the status
+    // bar, while the keyboard's screenY counts from the top of the screen.
+    let top = 24;
+    const s = await page(undefined, () => top);
+    try {
+      await s.keyboard({ height: 336, screenY: 532 });
+      assert.equal(globals.innerHeight, 508);
+      assert.deepEqual(s.bodyStyle(), { top: 0, bottom: 336 });
+      // The status bar hidden: the window starts at the top of the screen.
+      top = 0;
+      await s.keyboard({ height: 300, screenY: 544 });
+      assert.equal(globals.innerHeight, 544);
+    } finally {
+      s.stopListening();
+    }
+  });
+
   it('ends at the top of the keyboard while it is up, and tells a resize listener once', async () => {
     const s = await page();
     try {

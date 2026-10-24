@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Squash-merges each PR once CodeRabbit has approved it (see the approval rule below), every check has
+# Squash-merges each PR once Greptile has reviewed it with nothing left open (see the rule below), every check has
 # passed, it merges cleanly into main, and no release is running. Prints one line per event, so it suits
 # a Monitor.
 #
@@ -34,48 +34,44 @@ while (( ${#queue} )); do
   for n in $queue; do
     pr=$(gh api $R/pulls/$n 2>/dev/null) || continue
     state=$(jq -r 'if .merged_at then "merged" else .state end' <<<$pr)
+    # An unreadable answer (a full disk, a cut-off reply) keeps the PR queued rather than reading as closed.
+    [[ $state == (open|closed|merged) ]] || continue
     if [[ $state != open ]]; then echo "#$n is $state, done"; queue=(${queue:#$n}); continue; fi
     # A stacked PR waits until its base has merged and GitHub has moved it to main.
     [[ $(jq -r .base.ref <<<$pr) == main ]] || continue
     sha=$(jq -r .head.sha <<<$pr)
-    # CodeRabbit has to have passed the PR's current code. It reviews every pushed commit but won't post a
-    # fresh approval on one it has already reviewed, so any one of these counts, with every review thread
-    # resolved in the last two:
-    #  - its approval is on the current commit;
-    #  - it has reviewed the current commit (with or without a verdict) and left nothing open;
-    #  - its approval is on an older commit and the PR's own changes are identical (only the base moved).
-    reviews=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" 2>/dev/null | jq -s 'add') || continue
-    approved=$(jq -r '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|select(.state=="APPROVED")|.commit_id' <<<$reviews)
-    reviewed_head=$(jq -r --arg sha $sha '[.[]|select(.user.login=="coderabbitai[bot]" and .commit_id==$sha)]|length' <<<$reviews)
-    # A push with nothing new for it to review gets no review object, but CodeRabbit's summary comment
-    # still records the range it covered, ending at the current commit.
-    if (( reviewed_head == 0 )); then
-      reviewed_head=$(gh api --paginate "$R/issues/$n/comments?per_page=100" \
-        --jq ".[]|select(.user.login==\"coderabbitai[bot]\" and (.body|contains(\"and $sha\")))|.id" 2>/dev/null | wc -l | tr -d ' ')
-    fi
-    # A "changes requested" verdict on the current commit holds the PR, even with its threads resolved:
-    # a rebutted comment waits for a later push to get a review that doesn't request changes.
-    if [[ $(jq -r '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|"\(.state) \(.commit_id)"' <<<$reviews) == "CHANGES_REQUESTED $sha" ]]; then
-      note $n "has changes requested on its current commit"; continue
-    fi
-    if [[ $approved != $sha ]]; then
-      if (( reviewed_head > 0 )); then
-        [[ $(open_threads $n) == 0 ]] || continue
-      elif [[ -n $approved ]] && then_=$(own_changes $approved) && now=$(own_changes $sha) &&
-        [[ -n $then_ && $then_ == $now ]]; then
-        [[ $(open_threads $n) == 0 ]] || continue
-      else
-        note $n "waits for CodeRabbit to review its current commit"; continue
+    # Greptile has to have reviewed the PR's current code. It never approves: it leaves a COMMENTED review
+    # with inline P1/P2 comments, or only a check run when it has none. So the PR passes when every review
+    # thread is resolved and either:
+    #  - Greptile has reviewed the current commit;
+    #  - it reviewed an older commit and the PR's own changes are identical (only the base moved).
+    reviewed=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" \
+      --jq '.[]|select(.user.login=="greptile-apps[bot]")|.commit_id' 2>/dev/null) || continue
+    lines=(${(f)reviewed}); reviewed=${lines[-1]}
+    # A review that adds no comments posts no review object, only a successful "Greptile Review" check run,
+    # so the newest commit with one counts too when it is newer than the last review object.
+    commits=$(gh api --paginate "$R/pulls/$n/commits?per_page=100" --jq '.[].sha' 2>/dev/null) || continue
+    for c in ${(Oa)${(f)commits}}; do
+      [[ $c == $reviewed ]] && break
+      if [[ $(gh api "$R/commits/$c/check-runs?check_name=Greptile%20Review" \
+        --jq '[.check_runs[]|select(.conclusion=="success")]|length' 2>/dev/null) == <1-> ]]; then
+        reviewed=$c; break
       fi
+    done
+    if [[ -z $reviewed ]]; then note $n "waits for Greptile's review"; continue; fi
+    if [[ $reviewed != $sha ]] && ! { then_=$(own_changes $reviewed) && now=$(own_changes $sha) &&
+      [[ -n $then_ && $then_ == $now ]]; }; then
+      note $n "waits for Greptile to review its current commit"; continue
     fi
+    if [[ $(open_threads $n) != 0 ]]; then note $n "has unresolved review threads"; continue; fi
     # GitHub runs no CI on a PR that conflicts with main, so this comes before the CI check, which would
     # otherwise wait on it forever.
     ms=$(jq -r .mergeable_state <<<$pr)
     if [[ $ms == dirty ]]; then echo "#$n conflicts with main, skipping"; queue=(${queue:#$n}); continue; fi
     # A run cancelled because a duplicate superseded it (a retarget starts a second set) doesn't count
     # when the same check has another run.
-    runs=$(gh api "$R/commits/$sha/check-runs?per_page=100" \
-      --jq '[.check_runs|group_by(.name)[]|map(.conclusion // "pending")|(map(select(. != "cancelled"))|if length > 0 then . else ["cancelled"] end)[]]|unique|join(",")' 2>/dev/null)
+    checks=$(gh api "$R/commits/$sha/check-runs?per_page=100" 2>/dev/null) || continue
+    runs=$(jq -r '[.check_runs|group_by(.name)[]|map(.conclusion // "pending")|(map(select(. != "cancelled"))|if length > 0 then . else ["cancelled"] end)[]]|unique|join(",")' <<<$checks)
     if [[ $runs == *failure* || $runs == *cancelled* || $runs == *timed_out* ]]; then
       echo "#$n CI failed ($runs), skipping"; queue=(${queue:#$n}); continue
     fi

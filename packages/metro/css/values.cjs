@@ -569,7 +569,6 @@ function tokenValue(parts, context) {
   if (part?.value?.type === 'string') {
     return { keyword: JSON.stringify(part.value.value), family: part.value.value };
   }
-
   const out = {};
 
   const attempt = (kind, fn) => {
@@ -582,7 +581,7 @@ function tokenValue(parts, context) {
   };
 
   attempt('length', () => length(part.value ?? part, context));
-  attempt('color', () => color(part.value ?? part, context));
+  attempt('color', () => tokenColour(part, context));
   attempt('keyword', () => keyword(part.value ?? part, context));
   // Not a length or a time: `13px` read as 13 scaled a box thirteen times, where a browser drops
   // the declaration.
@@ -593,6 +592,19 @@ function tokenValue(parts, context) {
   Object.assign(out, functionForms(part), variantForm(out.keyword));
 
   return Object.keys(out).length ? out : null;
+}
+
+/**
+ * A token's colour. A platform colour, `platform-color(link)` or a system colour such as
+ * `LinkText`, is held by name as a colour property holds it; a use site that works a colour out
+ * of one drops it, as it has no channels (see `isPlatformColour` in the engine's css.ts).
+ */
+function tokenColour(part, context) {
+  if (part.type === 'function' && part.value?.name === 'platform-color') {
+    return require('./compile.cjs').platformColor(part, context);
+  }
+  const system = SYSTEM_COLOURS[systemColour(part.value?.type === 'ident' && part.value.value)];
+  return system ? { platformColor: [...system] } : color(part.value ?? part, context);
 }
 
 /** The forms a function, or a timing word, can be read as: a filter, a transform or a curve. */
@@ -709,6 +721,11 @@ function drawnSolid(context, style) {
     `${context}: native has one border style for the whole box, so a '${style}' side is ` +
       `drawn solid, native's default.`,
   );
+}
+
+/** What native does not do of a declaration whose rest is kept: reported, or thrown in a strict compile. */
+function refusePart(message) {
+  refuse(message);
 }
 
 /** A strict compile, with no `report`, throws even when run from within a lenient one. */
@@ -1248,6 +1265,7 @@ module.exports = {
   OF_A_BOX,
   CssUnsupported,
   withRefusals,
+  refusePart,
   drawnSolid,
   fallbackChain,
   fallbacks,
@@ -1266,6 +1284,8 @@ module.exports = {
   CURRENT_COLOUR,
   PER_TURN,
   meaningful,
+  tokenColour,
   commaSeparated,
   arithmeticTree,
+  calcLength,
 };

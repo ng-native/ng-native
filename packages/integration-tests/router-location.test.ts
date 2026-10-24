@@ -100,6 +100,18 @@ describe('native platform location', () => {
     assert.equal(location.href, '/b');
   });
 
+  it('lists the navigation id of every entry, the ones ahead included', () => {
+    location.replaceState({ navigationId: 1 }, '', '/');
+    location.pushState({ navigationId: 2 }, '', '/a');
+    location.pushState({ other: true }, '', '/b');
+    location.pushState({ navigationId: 4 }, '', '/c');
+    location.back();
+    location.back();
+    location.replaceState({ navigationId: 5 }, '', '/a');
+
+    assert.deepEqual([...location.ɵnavigationIds()].sort(), [1, 4, 5]);
+  });
+
   it('ignores a rewind past the start, or forward', () => {
     location.pushState(null, '', '/a');
     location.pushState(null, '', '/b');

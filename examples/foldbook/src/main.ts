@@ -10,7 +10,7 @@ import { App } from './app/app.ts';
 
 registerPlatformComponents(Platform.OS);
 
-AppRegistry.registerRunnable('main', ({ rootTag }: { rootTag: number | string }) => {
+AppRegistry.registerRunnable('main', ({ rootTag }) => {
   const app = mount(Number(rootTag), App, getFabricUIManager(), {
     // Colours, as the integers the platform wants.
     processColor,
@@ -27,5 +27,6 @@ AppRegistry.registerRunnable('main', ({ rootTag }: { rootTag: number | string })
   // Re-resolves the conditions when the device rotates or the theme changes. A rotation dirties
   // no component and no binding, so without this nothing re-renders and `dark:` stops following
   // the system switch.
-  watchConditions(app.engine);
+  const stopWatching = watchConditions(app.engine);
+  app.applicationRef.onDestroy(stopWatching);
 });

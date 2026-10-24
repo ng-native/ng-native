@@ -41,13 +41,12 @@ describe('the generated app', () => {
     assert.equal(native.vitestConfig(false), templateFile('vitest.config.mts'));
   });
 
-  it("adds Nx's tsconfig path resolution to it when there are", () => {
+  it('adds vite-tsconfig-paths to it when there are, as Nx 24 writes its own Vite configs', () => {
+    // nxViteTsPaths from @nx/vite is an inert stub from Nx 24: an app's test importing a library
+    // failed with "Cannot find package '@org/ui'".
     const config = native.vitestConfig(true);
-    assert.match(
-      config,
-      /import \{ nxViteTsPaths \} from '@nx\/vite\/plugins\/nx-tsconfig-paths\.plugin';/,
-    );
-    assert.match(config, /plugins: \[nxViteTsPaths\(\), ngNative\(\)\],/);
+    assert.match(config, /import tsconfigPaths from 'vite-tsconfig-paths';/);
+    assert.match(config, /plugins: \[tsconfigPaths\(\), ngNative\(\)\],/);
   });
 
   it("applies the template's Metro preset around withNxMetro, so it can wrap Nx's resolver", () => {
@@ -67,7 +66,7 @@ describe('the generated app', () => {
 
   it("extends the workspace base after Expo's, and puts Expo's settings back", () => {
     const config = native.tsconfig('../../tsconfig.base.json');
-    assert.deepEqual(config.extends, ['expo/tsconfig.base', '../../tsconfig.base.json']);
+    assert.deepEqual(config.extends, ['expo/tsconfig.base.json', '../../tsconfig.base.json']);
     assert.deepEqual(config.compilerOptions.lib, ['DOM', 'ESNext']);
     assert.equal(config.compilerOptions.allowImportingTsExtensions, true);
     assert.equal(config.compilerOptions.noEmit, true);

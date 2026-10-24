@@ -8,8 +8,9 @@
  * - It inlines. Vitest hands `node_modules` straight to Node by default, which would mean an
  *   `@ng-native/*` package's `.ts` source reaching a runtime that refuses to strip types under
  *   `node_modules`, and `@angular/*` reaching it unlinked. Inlined, both come through the plugin.
- * - It adds a setup file with the globals Angular reads as it is first evaluated, and runs ES
- *   modules without the CommonJS variables Vitest otherwise injects into them.
+ * - It adds a setup file with the globals Angular reads as it is first evaluated, and one that
+ *   leaves `Intl` with only the constructors Hermes has (`hermes-intl.mjs`, unless `intl: 'node'`),
+ *   and runs ES modules without the CommonJS variables Vitest otherwise injects into them.
  * - It stubs assets. With no `require`, an app's `require('./logo.png')` would throw; it becomes
  *   `{ testUri }` instead. And it stands in for the gesture and animation entry points, whose
  *   React Native source Node cannot load (`STAND_INS`).
@@ -40,6 +41,7 @@ import {
 } from './compile.mjs';
 
 const SETUP = fileURLToPath(new URL('./setup.mjs', import.meta.url));
+const HERMES_INTL = fileURLToPath(new URL('./hermes-intl.mjs', import.meta.url));
 
 /**
  * Entry points a test gets a stand-in for, because what they import is React Native source that
@@ -270,7 +272,7 @@ function removeModuleCopies(vitest) {
 const cleaned = new WeakSet();
 
 /**
- * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false }} [options]
+ * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false, intl?: 'hermes' | 'node' }} [options]
  * @returns {import('vitest/config').Plugin}
  */
 export function ngNative(options = {}) {
@@ -297,7 +299,10 @@ export function ngNative(options = {}) {
       root = config.root;
     },
     // Once for each project; the directory is the Vitest instance's, so it is removed once.
-    configureVitest({ vitest }) {
+    configureVitest({ vitest, project }) {
+      // Ahead of the app's own setup files, which `config` can only add after: a polyfill there
+      // that installs only what `Intl` lacks then sees it lacking, as it does on a device.
+      if (options.intl !== 'node') project.config.setupFiles.unshift(HERMES_INTL);
       if (cleaned.has(vitest)) return;
       cleaned.add(vitest);
       removeModuleCopies(vitest);

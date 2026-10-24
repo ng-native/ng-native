@@ -80,7 +80,8 @@ if (bench === 'react') {
     // Rotation, a theme switch, and the user asking for less motion. None of them changes a
     // component or a binding, so nothing would be dirty and nothing would re-render; the engine
     // re-resolves and commits on its own.
-    watchConditions(app.engine);
+    const stopWatching = watchConditions(app.engine);
+    app.applicationRef.onDestroy(stopWatching);
     // The Tailwind screen's utilities after the canary's own sheet, where its entry would put them.
     app.engine.addGlobalSheet(tailwind);
   });

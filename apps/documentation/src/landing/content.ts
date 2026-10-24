@@ -40,8 +40,8 @@ export const CREATE_COMMAND = 'npx create-expo-app@latest my-app --template @ng-
 export const STATUS = {
   stage: 'Alpha',
   angular: '22',
-  expo: 'SDK 57',
-  reactNative: '0.86',
+  expo: 'SDK 58',
+  reactNative: '0.88',
   platforms: ['iOS', 'Android', 'Web'],
   license: 'MIT',
 } as const;

@@ -52,6 +52,21 @@ so `choose()` logs a console error naming the fix rather than showing a list som
 nobody could ever reach - reach for a select built on your own control or an action-sheet-shaped
 list instead for anything longer.
 
+`choose(title, choices, { message })` adds the smaller line under the title that says what a
+choice does, such as the explanation under a destructive one. On iOS it is the action sheet's
+message, shown under the title; on Android it is the dialog's message, between the title and the
+buttons.
+
+```ts
+const choice = await this.dialogs.choose(
+  'Delete Appointment?',
+  [{ label: 'Delete', style: 'destructive' }],
+  {
+    message: 'This will permanently delete this appointment. This cannot be undone.',
+  },
+);
+```
+
 `notify(message, options?)` says something small and transient: a toast on Android. iOS has no such
 affordance and this does nothing there, rather than putting up a modal alert for something that did
 not warrant interrupting anyone - an app that needs to be seen on both platforms wants `tell()`
@@ -60,9 +75,10 @@ instead.
 ## Off a device and on the web
 
 Off a device `tell()` and `confirm()` resolve immediately (`confirm()` to `false`), `ask()` and
-`choose()` resolve to `null`, and `notify()` does nothing, because there is no platform dialog
-underneath any of them. There is no equivalent to a native action sheet or Android toast on the web;
-`tell()` and `confirm()` are the two most likely to want a web fallback of their own.
+`choose()` resolve to `null` without showing anything, a `message` included, and `notify()` does
+nothing, because there is no platform dialog underneath any of them. There is no equivalent to a
+native action sheet or Android toast on the web; `tell()` and `confirm()` are the two most likely to
+want a web fallback of their own.
 
 ## Reference
 

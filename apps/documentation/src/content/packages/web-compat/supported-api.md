@@ -248,7 +248,10 @@ sight as a drag does, shows the move late. One in a line of inline boxes moves a
   it moves the value to where the finger is, with `input` as it moves and `change` as the finger
   lifts. Material's slider is built on one.
 - A `<select>` shows its chosen `<option>`, has `value`, `selectedIndex`, `options` and `add()`,
-  and opens a list of its options when it or its label is pressed.
+  and opens a list of its options when it or its label is pressed. An option that is disabled, or
+  is in a disabled `<optgroup>`, cannot be chosen, and choosing the option it shows says no
+  `input` or `change`. Of two options of one value, the one chosen by place, by a press or by
+  `selected` is the one it keeps.
 - `checked` is the state a click, a script or a binding sets, and a radio checked unchecks the rest
   of its group.
 - A control has `validity`, `willValidate`, `validationMessage`, `checkValidity()`,

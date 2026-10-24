@@ -6,14 +6,17 @@
  * does not take, is ignored on device with at most a log line. Reading the installed version's
  * types means a React Native upgrade that renames or drops one fails a test here.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const ROOT = dirname(require.resolve('react-native/package.json'));
 
-/** The declaration files the style and component props are in. */
+/**
+ * The declaration files the style and component props are in. From React Native 0.88 the hand-written
+ * ones are under `types_DEPRECATED`, beside the generated types that are now the default.
+ */
 const FILES = [
   'Libraries/StyleSheet/StyleSheetTypes.d.ts',
   'Libraries/Image/ImageResizeMode.d.ts',
@@ -50,7 +53,10 @@ export function reactNativeProps(): ReactNativeProps {
 }
 
 function read(): ReactNativeProps {
-  const source = FILES.map((file) => readFileSync(join(ROOT, file), 'utf8')).join('\n');
+  const source = FILES.map((file) => {
+    const moved = join(ROOT, 'types_DEPRECATED', file);
+    return readFileSync(existsSync(moved) ? moved : join(ROOT, file), 'utf8');
+  }).join('\n');
   const aliases = new Map<string, string>();
   for (const [, name, type] of source.matchAll(/export type (\w+)\s*=\s*([^;]+);/g)) {
     aliases.set(name!, type!);

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import {
   FlipType,
   ImageEditor,
@@ -120,10 +121,8 @@ describe('save formats and flips', () => {
   it('are the module s own enums, so an edit can be written without loading the module', () => {
     // The module ships its enums as TypeScript source for Metro, so the declarations are read.
     const require = createRequire(import.meta.url);
-    const types = readFileSync(
-      require.resolve('expo-image-manipulator/build/ImageManipulator.types.d.ts'),
-      'utf8',
-    );
+    const root = path.dirname(require.resolve('expo-image-manipulator/package.json'));
+    const types = readFileSync(path.join(root, 'build/ImageManipulator.types.d.ts'), 'utf8');
     const read = (name: string) => {
       const body = new RegExp(`enum ${name} \\{([^}]*)\\}`).exec(types)?.[1] ?? '';
       return Object.fromEntries(

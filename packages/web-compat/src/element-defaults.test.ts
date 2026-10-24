@@ -252,7 +252,10 @@ const props = (id: string) => screen.getByTestId(id).props as Record<string, unk
 const page = async (providers = [provideWebCompat()]) => {
   await render(Laid, {
     providers,
-    globalStyles: compileCss('[testID="laid-out"] { display: flex }', 'global'),
+    globalStyles: compileCss(
+      '[testID="laid-out"] { display: flex } .filtered { filter: brightness(1.2) } .unfiltered { filter: none }',
+      'global',
+    ),
   });
   await settle();
 };
@@ -286,6 +289,55 @@ describe("an HTML element's start under web-compat, as a browser lays it out", (
     panel.style.transform = 'none';
     await settle();
     assert.equal(props('div')['position'], 'static', 'and static again with none');
+  });
+
+  it('is the box an absolute element in it is placed against for what else CSS makes one', async () => {
+    // A filter, a backdrop filter, a perspective, a containment of layout or paint, and a
+    // will-change that names one of those, a transform or a position, as Chrome has it.
+    await page();
+    const document = (globalThis as { document?: any }).document;
+    const panel = document.querySelector('[testID="div"]');
+    // A filter from a sheet, and below from element.style.
+    panel.classList.add('filtered');
+    panel.style.top = '10px';
+    await settle();
+    assert.equal(props('div')['position'], 'relative', 'filter: brightness(1.2)');
+    assert.equal(props('div')['top'] ?? undefined, undefined, 'filtered, not moved by its top');
+    panel.classList.replace('filtered', 'unfiltered');
+    await settle();
+    assert.equal(props('div')['position'], 'static', 'static again with filter: none');
+    panel.classList.remove('unfiltered');
+    panel.style.top = '';
+    const cases: [string, string, string][] = [
+      ['filter', 'brightness(1.2)', 'none'],
+      ['backdropFilter', 'blur(2px)', 'none'],
+      ['perspective', '100px', 'none'],
+      ['contain', 'paint', 'none'],
+      ['contain', 'layout style', 'size'],
+      ['contain', 'strict', 'none'],
+      ['contain', 'content', 'inline-size'],
+      ['willChange', 'transform', 'auto'],
+      ['willChange', 'opacity, filter', 'opacity'],
+      ['willChange', 'perspective', 'scroll-position'],
+      ['willChange', 'backdrop-filter', 'auto'],
+      ['willChange', 'contain', 'auto'],
+      ['willChange', 'translate', 'auto'],
+      ['willChange', 'position', 'auto'],
+    ];
+    for (const [key, value, none] of cases) {
+      const name = `${key}: ${value}`;
+      panel.style[key] = value;
+      panel.style.top = '10px';
+      await settle();
+      assert.equal(props('div')['position'], 'relative', name);
+      assert.equal(props('div')['top'] ?? undefined, undefined, `${name}, not moved by its top`);
+      panel.style[key] = none;
+      await settle();
+      assert.equal(props('div')['position'], 'static', `static again with ${key}: ${none}`);
+      panel.style[key] = '';
+      panel.style.top = '';
+      await settle();
+    }
   });
 
   it("leaves a position the element is given, and the engine's own views", async () => {

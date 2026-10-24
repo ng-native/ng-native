@@ -19,17 +19,17 @@
     "@ng-native/expo": "workspace:*",
     "@ng-native/fabric": "workspace:*",
     "@ng-native/platform": "workspace:*",
-    "expo": "~57.0.26",
+    "expo": "~58.0.16",
     "expo-foldables": "^0.1.0",
-    "expo-modules-core": "~57.0.20",
-    "react": "19.2.3",
-    "react-native": "0.86.3"
+    "expo-modules-core": "~58.0.23",
+    "react": "19.3.0",
+    "react-native": "0.88.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@ng-native/metro": "workspace:*",
     "@ng-native/testing": "workspace:*",
-    "@types/react": "~19.2.4",
+    "@types/react": "~19.3.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
   },

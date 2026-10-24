@@ -12,6 +12,7 @@ import type { Conditions, TokenValue } from '@ng-native/fabric';
 import { accessibilitySource } from './accessibility.ts';
 import { colorSchemeSource } from './color-scheme.ts';
 import { directionSource } from './direction.ts';
+import { recordKeyboard } from './keyboard.ts';
 import { screenSource } from './screen.ts';
 import { reactNative } from './react-native.ts';
 
@@ -88,6 +89,8 @@ export function watchConditions<Node>(
   engine: Resolves<Node>,
   options: WatchOptions = {},
 ): () => void {
+  // Not a condition, but this is what runs at startup: see `recordKeyboard`.
+  recordKeyboard();
   const screen = screenSource();
   const colors = colorSchemeSource();
   const accessibility = accessibilitySource();

@@ -72,14 +72,41 @@ it('reads the scheme the source reports', () => {
 The same `providers` work in `render()`, for a component that injects the service. See
 [Testing with services](/packages/testing/testing-services).
 
-## The OS version
+## The OS and its version
 
-`OS_VERSION` is the major version of the operating system the app runs on, for a default that
-follows what the platform draws in that version: `26` on iOS 26.5, and the API level on Android.
-It is `null` on the web and in a test, and a test that wants a version provides one:
+`OS` is the operating system the app runs on: `'ios'` or `'android'`, from `Platform.OS`, and
+`'web'` in the web host. In a test it is the platform the test renders as, `'ios'` unless it
+called `registerPlatformComponents('android')`.
+
+A stand-alone `mount` from `@ng-native/web` provides `'web'` in its root injector. An island
+(`mount(el, C, { injector })` or `<ng-native-island>`) provides it only in the island's own
+injector, so a root service of the host app that injects `OS` reads `'ios'` there, the default off
+a device. A host app that uses islands and has such services provides it in its own
+`bootstrapApplication` providers: `{ provide: OS, useValue: 'web' }`.
+
+`OS_VERSION` is the major version of that operating system, for a default that follows what the
+platform draws in that version: `26` on iOS 26.5, and the API level on Android. It is `null` on
+the web and in a test.
+
+A feature that needs a version of one OS checks both, since an Android API level is a number
+too. A service injects them rather than importing `Platform` from `react-native`, which a Vitest
+spec cannot load:
 
 ```ts
-providers: [{ provide: OS_VERSION, useValue: 26 }];
+@Service()
+export class Assistant {
+  // Apple Foundation Models need iOS 26.
+  readonly available = inject(OS) === 'ios' && (inject(OS_VERSION) ?? 0) >= 26;
+}
+```
+
+A test provides the OS and version it wants, to check the gate both ways:
+
+```ts
+providers: [
+  { provide: OS, useValue: 'android' },
+  { provide: OS_VERSION, useValue: 36 },
+];
 ```
 
 ## The services

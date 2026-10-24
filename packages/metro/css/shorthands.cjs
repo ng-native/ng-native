@@ -246,7 +246,8 @@ function line(property, list, context, linear) {
       else {
         oneColour();
         const { colourExpression } = require('./colour-expression.cjs');
-        mixed = { __colour: colourExpression([part], context) };
+        // The line's colour is a prop of its own, which takes `platform-color()` as `color` does.
+        mixed = { __colour: colourExpression([part], context, true) };
       }
       continue;
     }
@@ -363,7 +364,7 @@ function expandShorthand(value, context, linear) {
  */
 function textShadow(parts, context) {
   const { shadowsWithColourTokens } = require('./colour-expression.cjs');
-  const shadows = shadowsWithColourTokens(parts, context);
+  const shadows = shadowsWithColourTokens(parts, context, true);
   if (shadows.length !== 1) {
     throw new CssUnsupported(
       `${context}: native has room for one text-shadow, not ${shadows.length}`,

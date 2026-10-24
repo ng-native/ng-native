@@ -1,4 +1,10 @@
-import { isTextInput, type EngineNode, type HostEngine, type HostNode } from '@ng-native/fabric';
+import {
+  isTextInput,
+  viewNameOf,
+  type EngineNode,
+  type HostEngine,
+  type HostNode,
+} from '@ng-native/fabric';
 
 export type KeyboardShouldPersistTaps = 'always' | 'never' | 'handled';
 
@@ -20,9 +26,9 @@ export function dismissKeyboardOnTap(
 ): () => void {
   let dismissing = false;
 
-  /** A keyboard is up for an input, and the tap is not on a text input. */
+  /** A keyboard is up for an input, and the tap is not on a text input or above the keyboard. */
   const tapDismisses = (target: EngineNode): boolean =>
-    engine.focusedField !== null && !isTextInput(target);
+    engine.focusedField !== null && !isTextInput(target) && !inAccessoryBar(target);
 
   // RN's `_observedScrollSinceBecomingResponder`: a touch that scrolled was a drag, and a drag
   // through the content is reading it, so its release leaves the keyboard up.
@@ -48,4 +54,17 @@ export function dismissKeyboardOnTap(
     stopScroll();
     stopResponder();
   };
+}
+
+/**
+ * Whether the tap is on an `input-accessory-view` or inside one. On iOS the bar is drawn above the
+ * keyboard, outside the scroll view it is written in, so a tap on it is not a tap outside the field,
+ * as UIKit has it. React Native's `ScrollView.js` dismisses the keyboard for it all the same. On
+ * Android the element is a plain view, inside the scroll view on screen too.
+ */
+function inAccessoryBar(target: EngineNode): boolean {
+  for (let at: EngineNode | null = target; at; at = at.parent) {
+    if (viewNameOf(at) === 'InputAccessoryView') return true;
+  }
+  return false;
 }

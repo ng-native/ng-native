@@ -320,6 +320,81 @@ describe("a shape's paint, in a sheet read as a browser reads it", () => {
     });
   });
 
+  it("is handed down from a box around the drawing, as Material's icon button gives its icon", () => {
+    // `<button class="btn"><svg><path/></svg></button>` with `.btn { fill: currentColor }`: a
+    // browser hands `fill` down through every element, not a drawing's alone.
+    withViews({ ...SHAPES, 'x-box': 'RCTView' }, () => {
+      const { fabric, engine, add } = scene('.btn { fill: currentColor }');
+      const button = engine.createElement('x-box');
+      engine.setClasses(button, 'btn');
+      engine.appendChild(engine.root, button);
+      add('x-path', add('x-svg', button));
+      const icon = engine.createElement('x-path');
+      engine.appendChild(button, icon);
+      engine.commit();
+      const [box] = fabric.committed;
+      const [svg, iconShape] = box!.children;
+      assert.deepEqual(svg!.children[0]!.props, { fill: { type: 2 }, propList: ['fill'] });
+      // An icon's shape is left to react-native-svg, as it always has been.
+      assert.deepEqual(iconShape!.props, {});
+      // And lets it go with the rule.
+      engine.setClasses(button, '');
+      engine.commit();
+      assert.equal(fabric.committed[0]!.children[0]!.children[0]!.props['fill'] ?? null, null);
+    });
+  });
+
+  it('is taken by a box a drawing holds, and not by one inside that box with the same rules', () => {
+    // `<svg fill="red"><foreignObject><div class="x"><div class="x">`: the outer box is made in
+    // the drawing, as a package makes a text's span, the inner one is not. Each is styled alone.
+    withViews({ ...SHAPES, 'x-box': 'RCTView' }, () => {
+      const { fabric, engine, add } = scene('.ink { fill: #ff0000 } .x { opacity: 0.5 }');
+      const held = add('x-g', add('x-svg', engine.root, 'ink'));
+      const box = (parent: EngineNode) => {
+        const node = engine.createElement('x-box');
+        engine.setClasses(node, 'x');
+        engine.appendChild(parent, node);
+        return node;
+      };
+      box(box(held));
+      engine.commit();
+      const outer = fabric.committed[0]!.children[0]!.children[0]!;
+      assert.deepEqual(outer.props['fill'], { type: 0, payload: engine.color('rgb(255, 0, 0)') });
+      assert.equal(outer.children[0]!.props['fill'], undefined);
+    });
+  });
+
+  it("is taken by what a package makes in a drawing, and not by an icon's shape beside it, in either order", () => {
+    // Both match the same rules under the same inherited values, so a style one worked out must
+    // not be shared with the other: which is styled first would decide the paint of both.
+    for (const iconFirst of [true, false]) {
+      withViews({ ...SHAPES, 'x-box': 'RCTView' }, () => {
+        const { fabric, engine, add } = scene('.btn { fill: #ff0000 }');
+        const button = engine.createElement('x-box');
+        engine.setClasses(button, 'btn');
+        engine.appendChild(engine.root, button);
+        const icon = () => {
+          const shape = engine.createElement('x-path');
+          engine.setProp(shape, 'propList', ['fillRule']);
+          engine.appendChild(button, shape);
+        };
+        if (iconFirst) icon();
+        // A node no namespace names, made in the drawing, as HTML in a `<foreignObject>` is.
+        const made = engine.createElement('x-path');
+        engine.appendChild(add('x-svg', button), made);
+        if (!iconFirst) icon();
+        engine.commit();
+        const [box] = fabric.committed;
+        const [svg, iconShape] = iconFirst
+          ? [box!.children[1]!, box!.children[0]!]
+          : [box!.children[0]!, box!.children[1]!];
+        const red = { type: 0, payload: engine.color('rgb(255, 0, 0)') };
+        assert.deepEqual(svg.children[0]!.props['fill'], red, `icon first: ${iconFirst}`);
+        assert.deepEqual(iconShape.props, { propList: ['fillRule'] }, `icon first: ${iconFirst}`);
+      });
+    }
+  });
+
   it('keeps a list naming no paint on a shape that stops naming one, so native lets it go', () => {
     // react-native-svg keeps the list it had where it is sent none, on Android, or an empty one,
     // on iOS: the shape would keep the paint as its own after the rule stopped giving it.

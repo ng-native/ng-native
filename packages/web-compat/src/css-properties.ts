@@ -87,7 +87,7 @@ defineGrammars({
   'aspect-ratio-value': 'auto || <ratio>',
   'page-size':
     '<nn-length>{1,2} | auto | [ A5 | A4 | A3 | B5 | B4 | JIS-B5 | JIS-B4 | letter | legal | ledger ] || [ portrait | landscape ]',
-  'filter-value': 'none | [ <url> | any-function() ]+',
+  'filter-value': 'none | [ <url> | <any-function> ]+',
   'transform-value': 'none | <any-function>+',
 });
 

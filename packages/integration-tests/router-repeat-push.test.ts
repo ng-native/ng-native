@@ -216,6 +216,124 @@ it('goes back to the lower of two screens at one url after a query changed it in
   assert.deepEqual(texts(), [first], 'the A the query was set on');
 });
 
+it("goes back to the older of a screen's two entries when the other screen at its url is newer", async () => {
+  const app = await render(mod['RepeatShell'] as Type<unknown>, {
+    providers: [provideNativeRouter(mod['repeatRoutes'] as Routes)],
+  });
+  const nav = app.componentRef.injector.get(NativeNavigation);
+  const router = app.componentRef.injector.get(Router);
+  const location = app.componentRef.injector.get(PlatformLocation);
+  const turns = async () => {
+    for (let turn = 0; turn < 6; turn++) await settle();
+  };
+  const screens = () =>
+    flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen').length;
+  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
+
+  for (const url of ['/a?tab=1', '/b', '/a', '/c']) {
+    await nav.push(url);
+    await turns();
+  }
+  assert.deepEqual(historyOf(app), ['/a', '/a?tab=1', '/b', '/a', '/c']);
+  assert.equal(screens(), 4, 'A, with its query in place, B, a second A and C');
+
+  location.historyGo!(-4);
+  await turns();
+  assert.equal(router.url, '/a');
+  assert.deepEqual(historyOf(app), ['/a']);
+  assert.equal(screens(), 1);
+  assert.deepEqual(texts(), [first], "the A of the first entry, the query's own screen");
+
+  location.historyGo!(1);
+  await turns();
+  assert.equal(router.url, '/a?tab=1', 'and forward again to the query on the same screen');
+  assert.deepEqual(texts(), [first]);
+});
+
+for (const [offset, url] of [
+  [-4, '/a'],
+  [-3, '/a?tab=1'],
+] as const) {
+  it(`goes back to either of a screen's two entries after a back to the newer one, ${url}`, async () => {
+    const app = await render(mod['RepeatShell'] as Type<unknown>, {
+      providers: [provideNativeRouter(mod['repeatRoutes'] as Routes)],
+    });
+    const nav = app.componentRef.injector.get(NativeNavigation);
+    const location = app.componentRef.injector.get(PlatformLocation);
+    const turns = async () => {
+      for (let turn = 0; turn < 6; turn++) await settle();
+    };
+    const screens = () =>
+      flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen').length;
+    const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+    const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
+
+    await nav.push('/a?tab=1');
+    await nav.push('/b');
+    await turns();
+    nav.back();
+    await turns();
+    assert.deepEqual(texts(), [first], 'back on the first A, at its query');
+    for (const url of ['/b', '/a', '/c']) {
+      await nav.push(url);
+      await turns();
+    }
+    assert.deepEqual(historyOf(app), ['/a', '/a?tab=1', '/b', '/a', '/c']);
+    assert.equal(screens(), 4);
+
+    location.historyGo!(offset);
+    await turns();
+    assert.equal(app.componentRef.injector.get(Router).url, url);
+    assert.equal(screens(), 1);
+    assert.deepEqual(texts(), [first], 'the A whose entry it is, the back to it included');
+  });
+}
+
+it('keeps only the entries history still holds for a screen whose query is replaced again and again', async () => {
+  const app = await render(mod['RepeatShell'] as Type<unknown>, {
+    providers: [provideNativeRouter(mod['repeatRoutes'] as Routes)],
+  });
+  const nav = app.componentRef.injector.get(NativeNavigation);
+  const router = app.componentRef.injector.get(Router);
+  const location = app.componentRef.injector.get(PlatformLocation);
+  const turns = async () => {
+    for (let turn = 0; turn < 6; turn++) await settle();
+  };
+  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
+
+  for (let page = 1; page <= 20; page++) {
+    await router.navigateByUrl(`/a?page=${page}`, { replaceUrl: true });
+    await router.navigateByUrl(`/a?skip=${page}`, { skipLocationChange: true });
+  }
+  // What the strategy keeps for the first A, read because a list's length shows in no output.
+  const strategy = router.routeReuseStrategy as unknown as {
+    handles: Map<string, unknown[]>;
+    shownIn: WeakMap<object, readonly unknown[]>;
+    entryOf: WeakMap<object, readonly unknown[]>;
+  };
+  const skipped = router.lastSuccessfulNavigation()!.id;
+  const showing = router.routerState.snapshot.root.firstChild!;
+  assert.deepEqual(strategy.shownIn.get(showing), [skipped - 1, skipped], 'while it is in front');
+
+  await nav.push('/b');
+  await turns();
+  const kept = [...strategy.handles.values()].flat() as object[];
+  assert.equal(kept.length, 1, 'the first A, covered by B');
+  assert.deepEqual(strategy.entryOf.get(kept[0]!), [router.lastSuccessfulNavigation()!.id - 2]);
+
+  for (const url of ['/a', '/c']) {
+    await nav.push(url);
+    await turns();
+  }
+  assert.deepEqual(historyOf(app), ['/a?page=20', '/b', '/a', '/c']);
+  location.historyGo!(-3);
+  await turns();
+  assert.equal(router.url, '/a?page=20');
+  assert.deepEqual(texts(), [first], 'the A whose one entry it is');
+});
+
 it('goes back to the lower of two screens at one url after a query changed it without an entry', async () => {
   const app = await render(mod['RepeatShell'] as Type<unknown>, {
     providers: [provideNativeRouter(mod['repeatRoutes'] as Routes)],

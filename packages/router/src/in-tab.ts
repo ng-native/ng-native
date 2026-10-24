@@ -7,8 +7,10 @@
  * beneath. On Android react-native-screens draws it inside the tab's own stack, a modal as a push
  * and a form sheet as a bottom sheet, so the bar stays in reach; it is dismissed there too, so a
  * tab comes back on the same page on both platforms.
+ *
+ * A page can also ask for the tab bar to be hidden while it shows: see `NativeHeader.tabBarHidden`.
  */
-import { InjectionToken } from '@angular/core';
+import { InjectionToken, type Signal } from '@angular/core';
 
 export interface InTab {
   /**
@@ -17,6 +19,12 @@ export interface InTab {
    * nothing. Answers the unsubscribe.
    */
   onLeave(leave: () => string | null): () => void;
+  /**
+   * Hides the bar while `hidden` reads true, unless the outlet's own `[barHidden]` says otherwise.
+   * `hidden` reads false while its page is behind, in this tab or because another tab is in front.
+   * Answers the withdrawal.
+   */
+  hideBar(hidden: Signal<boolean>): () => void;
 }
 
 export const IN_TAB = new InjectionToken<InTab>('ng-native.router.in-tab');

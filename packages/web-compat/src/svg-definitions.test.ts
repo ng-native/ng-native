@@ -164,4 +164,35 @@ describe('@ng-native/web-compat, what a drawing defines', () => {
     await settle();
     assert.equal(view(arrow).props['opacity'] ?? null, null);
   });
+
+  it('draws a line of more points than it is wide thinned, as written for a script, and again at a new scale', async () => {
+    const { svg, make, view } = await drawing();
+    svg.setAttribute('width', '300');
+    svg.setAttribute('height', '100');
+    svg.setAttribute('viewBox', '0 0 300 100');
+    const group = make('g', { transform: 'translate(10,5)' });
+    const points = Array.from(
+      { length: 3000 },
+      (_, at) => `${at ? 'L' : 'M'} ${(at / 10).toFixed(1)} ${at % 7}`,
+    );
+    const d = points.join(' ');
+    const line = make('path', { d, fill: 'none', stroke: '#2caffe' }, group);
+    await settle();
+    const drawn = () => String(view(line).props['d']);
+    assert.ok(drawn().length < d.length / 3, `${drawn().length} of ${d.length}`);
+    assert.equal(line.getAttribute('d'), d, 'read back as written');
+    // Set again, as every attribute of the path sets what it draws.
+    line.setAttribute('stroke-width', '2');
+    await settle();
+    assert.ok(drawn().length < d.length / 3);
+    // Made twice as wide, it is drawn with columns half as wide.
+    const thinner = drawn().length;
+    group.setAttribute('transform', 'translate(10,5) scale(2)');
+    await settle();
+    assert.ok(drawn().length > thinner * 1.5, `${drawn().length} against ${thinner}`);
+    // Turned, it is drawn as written: a column across is no use.
+    group.setAttribute('transform', 'rotate(90)');
+    await settle();
+    assert.equal(drawn(), d);
+  });
 });

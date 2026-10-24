@@ -46,7 +46,7 @@ Vitest's default `include` finds `*.test.ts` and `*.spec.ts` anywhere in the app
 is Vitest's default, `node`. Do not switch it to `jsdom`: there is no DOM to emulate, and giving
 Angular a `document` only invites it to reach for one.
 
-`ngNative()` takes two options. `inline` is for an Angular library of your own choosing that
+`ngNative()` takes three options. `inline` is for an Angular library of your own choosing that
 ships partial-compiled (see [under the hood](#under-the-hood)):
 
 ```ts
@@ -61,6 +61,28 @@ the app draws:
 
 ```ts
 ngNative({ inline: [/\/node_modules\/@my-org\//], libraryStyles: ['@my-org/ui'] });
+```
+
+### `Intl`
+
+Hermes, the engine an app runs on, has `Intl.Collator`, `Intl.DateTimeFormat` and
+`Intl.NumberFormat`, and none of `Intl.DisplayNames`, `Intl.DurationFormat`, `Intl.ListFormat`,
+`Intl.Locale`, `Intl.PluralRules`, `Intl.RelativeTimeFormat` and `Intl.Segmenter`. Node has all of
+them, so tests run without those seven: code that builds one throws a `TypeError` in its test,
+as it does on a device, rather than passing.
+Both `ngNative()` and `@ng-native/testing/register` remove them. The three Hermes has are Node's
+own, so an option Hermes does not support on them, such as `notation: 'compact'` on iOS, still
+works in a test.
+
+An app that polyfills them keeps its polyfill: import it in a Vitest setup file, or in a module
+given to `node --import`, as the app's entry file imports it on a device. `ngNative()` removes them
+ahead of the app's own setup files, so a polyfill that installs only what `Intl` lacks sees them
+missing, as it does on Hermes. Under `node --import`, import the polyfill after
+`@ng-native/testing/register` for the same reason; one installed before it is kept as well. For
+Node's full `Intl` in Vitest instead, give `intl: 'node'`:
+
+```ts
+ngNative({ intl: 'node' });
 ```
 
 ## node:test

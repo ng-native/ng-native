@@ -101,7 +101,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiSwipeActions`** - the system's swipe actions on a list row, iOS only. The first child is
   the row, and each edge's actions are `ui-button`s in a
   `<ui-slot name="actions" [extraProps]="{ edge: 'trailing', allowsFullSwipe: true }">`. A row in
-  a scroll view that also scrolls sideways loses its swipes to that scroll view.
+  a scroll view that also scrolls sideways loses its swipes to that scroll view. A sideways drag
+  on the row is the swipe's, so a `pressable` in a `ui-view-host` in the row does not press for
+  it.
 - **`UiVStack`** and **`UiHStack`** - SwiftUI's stacks, with `alignment` and `spacing`, and
   **`UiSpacer`** for the room left over in one.
 - **`UiZStack`** - SwiftUI's `ZStack`: its children drawn over one another, the first at the back,
@@ -454,7 +456,8 @@ whichever view it is inside.
 
 - **`open`** - whether the sheet is on screen. Setting it true presents the sheet and setting it
   false dismisses it. A swipe down dismisses it too, as do a tap outside the sheet and the back
-  button on Android, and each writes false back, so bind it both ways: `[(open)]`.
+  button on Android, and each writes false back, so bind it both ways: `[(open)]`. With
+  `interactiveDismissDisabled` none of them does.
 - **`fitToContents`** - the sheet is as tall as its content. Without it the sheet rests at half
   the screen's height and drags up to all of it. Whether a sheet is sized to its content is read as
   it opens, so a change to this while the sheet is open applies the next time.
@@ -475,6 +478,22 @@ whichever view it is inside.
   CSS colours the sheet the same way, from a class, a stylesheet, a Tailwind utility or `[style]`,
   and follows a token or a theme change. The input wins over CSS. With neither, the system draws
   the sheet as it does by default.
+- **`interactiveDismissDisabled`** - the user cannot dismiss the sheet, and only setting `open`
+  false closes it. On iOS this is SwiftUI's `interactiveDismissDisabled`: a swipe down takes the
+  sheet to its smallest detent and no further, and a tap outside it does nothing. On Android a
+  swipe, the back button and a tap outside the sheet are all turned off, as `@expo/ui`'s own sheet
+  does it. Compose's sheet has no way to keep the drag between its half and full heights without
+  the swipe that dismisses it, so on Android that drag is off too.
+- **`backgroundInteraction`** - whether the screen behind the sheet takes touches, **on iOS 16.4
+  and later only**: SwiftUI's `presentationBackgroundInteraction`. `'enabled'` always,
+  `'disabled'` never, `'automatic'` as the system decides, and `{ upThrough: 'medium' }` (any
+  `UiPresentationDetent`) while the sheet rests at that detent or below it, which should be one of
+  its `detents`. Unset, SwiftUI decides. **Android has no equivalent**: Compose's sheet is shown in
+  a window of its own over the screen, and the screen takes no touch while it shows.
+- **`modifiers`** - more SwiftUI modifiers, **on iOS only**, put after the sheet's own on the
+  `ui-group` around its content, which is where SwiftUI reads presentation modifiers from:
+  `presentationCornerRadius`, for one. They apply to the content as well. Android takes no notice
+  of them.
 - **`dismissed`** - the sheet has finished closing, whether the user dismissed it or `open` was set
   false. It is emitted after the sheet has slid away, which is when another sheet or a dialog can
   be presented.
@@ -543,6 +562,24 @@ has slid away. The grabber is SwiftUI's `presentationDragIndicator` modifier and
 `showDragHandle` prop. Inside the element the sheet is wrapped as `@expo/ui`'s own component wraps
 it: a `ui-host`, the sheet, on iOS a `ui-group` carrying the presentation modifiers, and a
 `ui-view-host` holding one view around the content.
+
+A map with a sheet resting over it, which stays up and leaves the map to be panned while it is at
+half height, is a sheet that cannot be dismissed and lets the screen behind it take touches up
+through that detent:
+
+```html
+<expo-map style="flex: 1" />
+<ui-bottom-sheet
+  [(open)]="stops"
+  [detents]="['medium', 'large']"
+  interactiveDismissDisabled
+  [backgroundInteraction]="{ upThrough: 'medium' }"
+>
+  <app-route-stops />
+</ui-bottom-sheet>
+```
+
+On Android the same sheet stays up, but the map behind it cannot be panned while it shows.
 
 The sheet's own native events stop at the component. A `(dismiss)` listener on a view around it
 hears nothing from the sheet.

@@ -46,7 +46,7 @@ A package resolves only what it declares: there is no hoisted root that answers 
 import a package forgot to declare fails here rather than on someone else's machine.
 `pnpm-workspace.yaml` pins the React Native native modules with `overrides`, because a native
 module has to exist exactly once in a build: a second copy of Reanimated is a second copy of its
-native side, and it silently does nothing. The versions are the ones Expo SDK 57 bundles, which
+native side, and it silently does nothing. The versions are the ones Expo SDK 58 bundles, which
 `npx expo install --check` verifies.
 
 A package with React Native among its dependencies declares `@babel/core` 7 as a devDependency,

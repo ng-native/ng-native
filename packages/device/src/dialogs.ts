@@ -38,6 +38,7 @@ export interface NativeDialogs {
   actionSheet?(
     options: {
       title?: string;
+      message?: string;
       options: string[];
       cancelButtonIndex: number;
       destructiveButtonIndex?: number;
@@ -114,8 +115,16 @@ export class Dialogs {
    *
    * An action sheet on iOS and a dialog on Android, because that is what each platform means by
    * this. A `cancel` choice is where the platform puts cancel rather than in the list.
+   *
+   * `message` is the smaller line under the title, the one that says what a destructive choice
+   * does: the action sheet's message on iOS and the dialog's message on Android.
    */
-  choose(title: string, choices: readonly Choice[]): Promise<number | null> {
+  choose(
+    title: string,
+    choices: readonly Choice[],
+    options: { message?: string } = {},
+  ): Promise<number | null> {
+    const { message } = options;
     const cancelAt = choices.findIndex((choice) => choice.style === 'cancel');
     const destructiveAt = choices.findIndex((choice) => choice.style === 'destructive');
 
@@ -130,6 +139,7 @@ export class Dialogs {
         this.native.actionSheet(
           {
             title,
+            ...(message !== undefined ? { message } : {}),
             options: labels,
             cancelButtonIndex: cancelIndex,
             ...(destructiveAt >= 0 ? { destructiveButtonIndex: destructiveAt } : {}),
@@ -164,7 +174,7 @@ export class Dialogs {
             '`ui-select` or an `action-sheet`-shaped list for anything longer.',
         );
       }
-      this.native.alert(title, undefined, buttons);
+      this.native.alert(title, message, buttons);
     });
   }
 

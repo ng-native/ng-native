@@ -17,9 +17,12 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Injector } from '@angular/core';
+import { Injector, type ProviderToken, ɵINJECTOR_SCOPE as INJECTOR_SCOPE } from '@angular/core';
+import { registerPlatformComponents } from '@ng-native/fabric';
 import {
   ColorScheme,
+  OS,
+  OS_VERSION,
   StatusBar,
   androidPermission,
   hardwareBackSource,
@@ -31,7 +34,7 @@ import { appStateSource } from '../device/src/app-state.ts';
 import { colorSchemeSource } from '../device/src/color-scheme.ts';
 import { deepLinkSource } from '../device/src/deep-links.ts';
 import { directionSource } from '../device/src/direction.ts';
-import { keyboardSource } from '../device/src/keyboard.ts';
+import { Keyboard, keyboardSource } from '../device/src/keyboard.ts';
 import { screenSource } from '../device/src/screen.ts';
 import { sharingSource } from '../device/src/sharing.ts';
 
@@ -152,6 +155,26 @@ describe('the accessibility source', () => {
     });
   });
 
+  it('keeps the settings it did read when one read fails, or the method is missing', async () => {
+    const rejecting = native();
+    rejecting.AccessibilityInfo.isReduceMotionEnabled = () => Promise.reject(new Error('no'));
+    assert.deepEqual(await withNative(rejecting, () => accessibilitySource().current()), {
+      screenReader: true,
+      reduceMotion: false,
+      boldText: true,
+      fontScale: 1.5,
+    });
+
+    const missing = native() as ReturnType<typeof native> & { AccessibilityInfo: object };
+    delete (missing.AccessibilityInfo as Record<string, unknown>)['isScreenReaderEnabled'];
+    assert.deepEqual(await withNative(missing, () => accessibilitySource().current()), {
+      screenReader: false,
+      reduceMotion: false,
+      boldText: true,
+      fontScale: 1.5,
+    });
+  });
+
   it('reports each change under the name the service reads', async () => {
     const seen: unknown[] = [];
     const stop = withNative(native(), () => accessibilitySource().subscribe((v) => seen.push(v)));
@@ -193,12 +216,14 @@ describe('the accessibility source', () => {
 
 describe('the keyboard source', () => {
   /** A fake `react-native` on one platform, keeping every keyboard handler it is given. */
-  function keyboardOn(os: string) {
+  function keyboardOn(os: string, up?: { height: number; screenY: number }) {
     const handlers = new Map<string, (event: unknown) => void>();
     const removed: string[] = [];
     const native = {
       Platform: { OS: os },
       Keyboard: {
+        // React Native's own record of the last show or hide it heard, from `Keyboard.js`.
+        metrics: () => up,
         dismiss: () => {},
         addListener: (event: string, handler: (e: unknown) => void) => {
           handlers.set(event, handler);
@@ -222,11 +247,15 @@ describe('the keyboard source', () => {
     // RN's own KeyboardAvoidingView listens for the Will events on iOS: the Did events arrive
     // once the keyboard has landed, and a layout that waits for them moves after it, not with it.
     const { handlers, removed, seen, stop, fire } = keyboardOn('ios');
-    assert.deepEqual(
-      [...handlers.keys()].sort(),
-      ['keyboardWillChangeFrame', 'keyboardWillHide', 'keyboardWillShow'],
-      'no Did events on iOS',
-    );
+    const all = [
+      'keyboardDidHide',
+      'keyboardDidShow',
+      'keyboardWillChangeFrame',
+      'keyboardWillHide',
+      'keyboardWillShow',
+    ];
+    // The Did events only until the first Will event, for a keyboard already moving.
+    assert.deepEqual([...handlers.keys()].sort(), all);
 
     fire('keyboardWillShow', {
       endCoordinates: { height: 291, screenY: 500 },
@@ -245,6 +274,7 @@ describe('the keyboard source', () => {
       duration: 250,
       easing: 'easeIn',
     });
+    fire('keyboardDidHide', frame(335, 791));
 
     assert.deepEqual(seen, [
       { height: 291, screenY: 500, duration: 250, easing: 'easeOut' },
@@ -252,11 +282,7 @@ describe('the keyboard source', () => {
       { height: 0, duration: 250, easing: 'easeIn' },
     ]);
     stop();
-    assert.deepEqual(removed.sort(), [
-      'keyboardWillChangeFrame',
-      'keyboardWillHide',
-      'keyboardWillShow',
-    ]);
+    assert.deepEqual(removed.sort(), all);
   });
 
   it('on iOS, ignores a frame change while the keyboard is down', () => {
@@ -294,6 +320,102 @@ describe('the keyboard source', () => {
     ]);
     stop();
     assert.deepEqual(removed.sort(), ['keyboardDidHide', 'keyboardDidShow']);
+  });
+
+  it('on iOS, reports a keyboard already up when it starts listening', () => {
+    // React Native's `Keyboard.js` has kept the last show it heard, and nothing else will say
+    // the keyboard is up until it next moves.
+    const { seen, stop, fire } = keyboardOn('ios', { height: 335, screenY: 456 });
+    assert.deepEqual(seen, [{ height: 335, screenY: 456 }], 'no motion, so no timing');
+
+    // Up, so a frame change while it stays up is the keyboard changing size.
+    fire('keyboardWillChangeFrame', frame(291, 500));
+    assert.deepEqual(seen.at(-1), { height: 291, screenY: 500, duration: 250, easing: 'keyboard' });
+    stop();
+  });
+
+  it('on Android, reports a keyboard already up when it starts listening', () => {
+    const { seen, stop } = keyboardOn('android', { height: 291, screenY: 500 });
+    assert.deepEqual(seen, [{ height: 291, screenY: 500 }]);
+    stop();
+  });
+
+  it('gives a Keyboard service started over a keyboard already up its height at once', () => {
+    const native = {
+      Platform: { OS: 'ios' },
+      Keyboard: {
+        metrics: () => ({ height: 335, screenY: 456 }),
+        dismiss: () => {},
+        addListener: () => ({ remove: () => {} }),
+      },
+    };
+    const keyboard = withNative(native, () =>
+      Injector.create({
+        providers: [
+          { provide: Keyboard.SOURCE, useFactory: keyboardSource, deps: [] },
+          { provide: Keyboard, deps: [] },
+        ],
+      }).get(Keyboard),
+    );
+    assert.equal(keyboard.height(), 335);
+    assert.equal(keyboard.visible(), true);
+    assert.deepEqual(keyboard.metrics(), { height: 335, screenY: 456 });
+  });
+
+  it('reports nothing at the start while the keyboard is down', () => {
+    for (const os of ['ios', 'android']) {
+      const { seen, stop, fire } = keyboardOn(os);
+      assert.deepEqual(seen, [], os);
+      if (os === 'ios') {
+        fire('keyboardWillChangeFrame', frame(335, 791));
+        assert.deepEqual(seen, [], 'a frame change while down is still ignored');
+      }
+      stop();
+    }
+  });
+
+  it('on iOS, reports a keyboard hiding as it starts listening once the hide lands', () => {
+    // Started after keyboardWillHide: `Keyboard.js` keeps the show until keyboardDidHide.
+    const { seen, stop, fire } = keyboardOn('ios', { height: 335, screenY: 456 });
+    assert.deepEqual(seen, [{ height: 335, screenY: 456 }]);
+    fire('keyboardDidHide', frame(335, 791));
+    assert.deepEqual(seen.at(-1), { height: 0 });
+    fire('keyboardWillChangeFrame', frame(335, 791));
+    assert.equal(seen.length, 2, 'down, so a frame change is ignored');
+    stop();
+  });
+
+  it('on iOS, reports a keyboard showing as it starts listening once the show lands', () => {
+    // Started after keyboardWillShow: `Keyboard.js` records nothing until keyboardDidShow.
+    const { seen, stop, fire } = keyboardOn('ios');
+    fire('keyboardDidShow', frame(335, 456));
+    assert.deepEqual(seen, [{ height: 335, screenY: 456 }], 'landed, so no timing');
+    fire('keyboardWillChangeFrame', frame(291, 500));
+    assert.deepEqual(seen.at(-1), { height: 291, screenY: 500, duration: 250, easing: 'keyboard' });
+    stop();
+  });
+
+  it('on iOS, leaves the Did events to the Will events once one is heard', () => {
+    // A hide that interrupts a show can land the show after the hide began, and the other way
+    // round, so a Did event after a Will event is stale.
+    const hiding = keyboardOn('ios', { height: 335, screenY: 456 });
+    hiding.fire('keyboardWillHide', frame(335, 791));
+    hiding.fire('keyboardDidShow', frame(335, 456));
+    hiding.fire('keyboardDidHide', frame(335, 791));
+    assert.deepEqual(hiding.seen, [
+      { height: 335, screenY: 456 },
+      { height: 0, duration: 250, easing: 'keyboard' },
+    ]);
+    hiding.stop();
+
+    const showing = keyboardOn('ios');
+    showing.fire('keyboardWillShow', frame(291, 500));
+    showing.fire('keyboardDidHide', frame(291, 791));
+    showing.fire('keyboardDidShow', frame(291, 500));
+    assert.deepEqual(showing.seen, [
+      { height: 291, screenY: 500, duration: 250, easing: 'keyboard' },
+    ]);
+    showing.stop();
   });
 
   it('says where the window views are measured in starts, below the top of the screen', () => {
@@ -1009,5 +1131,50 @@ describe('the window a status bar claims', () => {
     };
     withNative(native, () => onWindowFront(() => {}))();
     assert.equal(listened, false);
+  });
+});
+
+describe('the OS and its version', () => {
+  /*
+   * What a service gates a feature on, and what each reads by default: the factories rather than
+   * a provider, from a root injector with nothing provided.
+   */
+  const fromRoot = <T>(token: ProviderToken<T>) =>
+    Injector.create({ providers: [{ provide: INJECTOR_SCOPE, useValue: 'root' }] }).get(token);
+
+  it('is iOS and its major version on iOS', () => {
+    const native = { Platform: { OS: 'ios', Version: '26.5' } };
+    assert.equal(
+      withNative(native, () => fromRoot(OS)),
+      'ios',
+    );
+    assert.equal(
+      withNative(native, () => fromRoot(OS_VERSION)),
+      26,
+    );
+  });
+
+  it('is Android and its API level on Android, whatever platform the engine was told', () => {
+    // The engine's platform is still iOS here: `Platform.OS` is what the device says it is.
+    const native = { Platform: { OS: 'android', Version: 35 } };
+    assert.equal(
+      withNative(native, () => fromRoot(OS)),
+      'android',
+    );
+    assert.equal(
+      withNative(native, () => fromRoot(OS_VERSION)),
+      35,
+    );
+  });
+
+  it('follows the platform the engine renders as off a device, with no version', () => {
+    assert.equal(fromRoot(OS), 'ios');
+    assert.equal(fromRoot(OS_VERSION), null);
+    registerPlatformComponents('android');
+    try {
+      assert.equal(fromRoot(OS), 'android');
+    } finally {
+      registerPlatformComponents('ios');
+    }
   });
 });

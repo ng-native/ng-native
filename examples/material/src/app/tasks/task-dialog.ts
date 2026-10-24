@@ -31,7 +31,7 @@ import type { NewTask, Priority } from './task-list.ts';
   template: `
     <h2 mat-dialog-title>New task</h2>
     <mat-dialog-content>
-      <mat-form-field hideRequiredMarker>
+      <mat-form-field>
         <mat-label>Title</mat-label>
         <input matInput testID="task-title" [formField]="task.title" />
         <mat-error>A task needs a title</mat-error>

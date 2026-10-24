@@ -42,9 +42,7 @@ describe('the props typed ui-* components send', () => {
   it('are each declared by the installed @expo/ui, or known', async () => {
     const { found, stale } = await divergences(installed);
     assert.deepEqual(found, []);
-    // Known for a newer @expo/ui only: 57.0.22 and later have no AccessoryWidgetBackgroundView in
-    // the app, for the reason beside it in KNOWN. Bumping the pinned version past it empties this.
-    assert.deepEqual(stale, ['accessory-widget-background view ios']);
+    assert.deepEqual(stale, []);
   });
 
   it("fails on a view host whose native view declares no form of matchContents, as in #910's", async () => {

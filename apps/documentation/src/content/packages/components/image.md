@@ -45,6 +45,21 @@ gives no intrinsic size, and the image is sized by layout alone.
 <image [source]="art" [style.width.px]="120" />
 ```
 
+Insets do not size such an image. Placed with `position: absolute` and `top`, `right`, `bottom` and
+`left` all 0, it keeps the picture's own size, drawn from the box's top-left corner, as an `<img>`
+does in a browser and React Native's `Image` does with `StyleSheet.absoluteFill`. A picture larger
+than the box spills past it, and one whose top-left corner is transparent can look as if nothing
+drew. To fill the box, give the image a width and height of `100%` as well.
+
+```css
+.picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+```
+
 `defaultSource` shows until `source` loads. Android also reads `loadingIndicatorSource`, an image
 shown in place of the loading indicator, `resizeMethod` (how a large image is scaled down while
 decoding) and `resizeMultiplier`. iOS reads `capInsets`, the edges of a stretchable image that

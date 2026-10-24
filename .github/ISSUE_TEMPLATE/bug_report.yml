@@ -21,7 +21,7 @@ body:
     id: expo-rn-versions
     attributes:
       label: Expo SDK and React Native versions
-      placeholder: 'Expo SDK 57, React Native 0.86.3'
+      placeholder: 'Expo SDK 58, React Native 0.88.0'
     validations:
       required: true
 

@@ -45,6 +45,7 @@ import {
   nativePlatform,
   onFontsRegistered,
   onFontsSettled,
+  platformColourOf,
   reportUnboundFormsInput,
   styleSheetOf,
   type EngineNode,
@@ -102,7 +103,16 @@ const styleValue = (value: unknown): unknown =>
 const declaredValue = (key: string, value: unknown): unknown =>
   key === 'fontFamily' && typeof value === 'string'
     ? (firstFamily(value) ?? value)
-    : styleValue(value);
+    : (platformColour(key, value) ?? styleValue(value));
+
+const COLOUR_KEY = /color$/i;
+
+/**
+ * `platform-color(link)` in a colour property, as the stylesheet holds it: the names, which the
+ * engine gives the platform's shape. Written as text, native reads no colour from it.
+ */
+const platformColour = (key: string, value: unknown): unknown =>
+  typeof value === 'string' && COLOUR_KEY.test(key) ? platformColourOf(value) : undefined;
 
 /**
  * A bound custom property's name, as it was written. Angular 22 compiles `[style.--tint]` to

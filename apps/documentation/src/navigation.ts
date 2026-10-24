@@ -95,6 +95,7 @@ export const GUIDE: NavSection = {
         { path: 'guide/localization-loading', title: 'Loading a language' },
         { path: 'guide/localization-switching', title: 'Switching language' },
         { path: 'guide/localization-formatting', title: 'Formatting and RTL' },
+        { path: 'guide/localization-transloco', title: 'Using Transloco' },
       ],
     },
     { path: 'guide/deployment', title: 'Deployment' },

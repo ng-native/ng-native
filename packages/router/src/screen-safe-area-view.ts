@@ -23,7 +23,9 @@
  *
  * Android's bar is above the page rather than over it, and its view insets the top by the status
  * bar all the same. So under a header that is shown and not translucent the top edge is left
- * alone there, and the page starts under the bar as it does on iOS.
+ * alone there, and the page starts under the bar as it does on iOS. On iOS 26 and later the stack
+ * already commits a page in a view that insets it below such a bar, so the top edge is left alone
+ * there too, rather than counting the bar twice.
  *
  * **The insets are applied as margin, not padding.** Whatever is beneath the inset shows through
  * it, so a panel whose background has to reach the edge of the screen puts that background on a
@@ -34,6 +36,7 @@
  * insets by nothing.
  */
 import { Component, ElementRef, computed, inject, input } from '@angular/core';
+import { OS_VERSION } from '@ng-native/device';
 import { nativePlatform, type EngineNode } from '@ng-native/fabric';
 import { ownHost } from './own-host.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
@@ -55,7 +58,14 @@ export class ScreenSafeAreaView {
 
   /** Whether the screen has a bar the page starts below. See `screen-header.ts`. */
   private readonly header = inject(SCREEN_HEADER, { optional: true });
-  private readonly android = nativePlatform() === 'android';
+  /**
+   * Whether the top under such a bar is the screen's to inset already: Android's view, which the
+   * page starts below, and iOS 26 and later, where the stack commits the page in a view that
+   * insets it (`insetContent` in `native-stack-outlet.ts`) and a second would count the bar twice.
+   */
+  private readonly topTaken =
+    nativePlatform() === 'android' ||
+    (nativePlatform() === 'ios' && (inject(OS_VERSION) ?? 0) >= 26);
 
   /** Which edges to inset. Absent insets all four. */
   readonly edges = input<readonly ScreenSafeAreaEdge[]>();
@@ -66,8 +76,7 @@ export class ScreenSafeAreaView {
    */
   protected readonly resolvedEdges = computed(() => {
     const edges = this.edges() ?? ALL;
-    // Android insets the top by the status bar whatever is above the page, and a bar is.
-    const covered = this.android && this.header?.() ? 'top' : null;
+    const covered = this.topTaken && this.header?.() ? 'top' : null;
     return Object.fromEntries(
       ALL.map((edge) => [edge, edge !== covered && edges.includes(edge)]),
     ) as Record<ScreenSafeAreaEdge, boolean>;

@@ -213,7 +213,7 @@ describe('in a workspace with @nx/angular', () => {
       native.devDependencies['@ng-native/testing'],
     );
     assert.equal(devDependencies.vitest, '~4.1.0');
-    assert.equal(devDependencies['@nx/vite'], '23.2.0');
+    assert.equal(devDependencies['vite-tsconfig-paths'], '^5.1.4');
   });
 
   it('takes --name for a project named other than its directory', async () => {
@@ -326,7 +326,7 @@ describe('in the TypeScript preset', () => {
     const tree = tsPreset();
     await generate(tree, { directory: 'packages/ui' });
     assert.equal(tree.read('packages/ui/vitest.config.mts', 'utf-8'), native.vitestConfig(false));
-    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], undefined);
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], undefined);
   });
 
   it('keeps the tests out of the build, and typechecks them in a project reference of their own', async () => {

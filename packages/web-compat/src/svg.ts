@@ -79,9 +79,34 @@ export function drawingElement(engine: Engine, name: string, drawn: boolean): En
  * What a shape with no fill of its own is filled with, and every shape in it that has none:
  * black, which is where SVG starts. Given to what is written straight into the drawing, as a
  * default under any stylesheet: the native shapes take a fill from the one they are in, and
- * the drawing itself has none to give.
+ * the drawing's native view has none to give.
  */
 const FILLED = { fill: 'black' };
+
+/** The paint a drawing's own attributes give the shapes in it: see `drawingPaint`. */
+const DRAWING_PAINT = ['fill', 'stroke', 'stroke-width'];
+const DRAWING_PAINT_PROPS = ['fill', 'stroke', 'strokeWidth', 'propList'];
+
+/**
+ * Give an `<svg>` its paint attributes, `fill="none" stroke="currentColor"` as Lucide's icons
+ * have, as a paint of its own, as a group's are: the engine hands it down to its shapes over
+ * what the drawing inherits from a box around it, and under a rule for the drawing itself, as
+ * a browser ranks an attribute. Kept off the native view, which draws no paint of its own.
+ *
+ * ponytail: a drawing's paint that names a token, `fill="var(--ink)"`, is not handed down.
+ * Give it the cascade, as a shape's own is in `paintByToken`, if a library is seen to write one.
+ */
+function drawingPaint(node: EngineNode, attrs: Readonly<Record<string, string>>, engine: Engine) {
+  const written: Record<string, string> = {};
+  for (const name of DRAWING_PAINT) if (attrs[name] !== undefined) written[name] = attrs[name];
+  const color = (colour: string) => engine.color(colour);
+  const props = drawable('path', written, nativeProps('path', written, { color }));
+  for (const key of DRAWING_PAINT_PROPS) {
+    const value = props[key];
+    if (!sameProp(node.props[key], value)) engine.setProp(node, key, value);
+    if (value !== undefined) engine.keepAsAttribute(node, key);
+  }
+}
 
 const TEXT_PATH = 'textPath';
 
@@ -733,6 +758,7 @@ function setShape(
     // Its own size is a default, as a browser has an attribute under any rule of a stylesheet.
     const props = drawAgain(node, engine);
     engine.setDefaultStyle(node, { ...proportioned(props), ...sizeOf(shape.attrs) });
+    if (DRAWING_PAINT.includes(name)) drawingPaint(node, shape.attrs, engine);
     redrawLongPathsUnder(node, engine, (path) => drawLater(path, engine));
   } else {
     drawLater(node, engine);

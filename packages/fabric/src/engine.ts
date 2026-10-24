@@ -42,6 +42,7 @@ import {
   type TokenValue,
   isGenerated,
   noteGeneratedBoxes,
+  settleUnsidedBorder,
 } from './css.ts';
 import { applyAria } from './aria-props.ts';
 import { STYLED_ELEMENTS } from './element-styles.ts';
@@ -52,6 +53,7 @@ import {
   interpolate,
   readsInheritedColour,
   sample,
+  parseColor,
   step,
   steppedKeys,
   tracksOf,
@@ -81,7 +83,8 @@ import {
   type SetValues,
   type StaticTransform,
 } from './native-drive.ts';
-import type { DrivenChannels } from './scroll-animation.ts';
+import { amount, type DrivenChannels } from './scroll-animation.ts';
+import { NativePainter, type PaintValues, type Rgba } from './native-paint.ts';
 
 export type FabricNode = { readonly __fabricNode: unique symbol } | object;
 
@@ -108,6 +111,16 @@ import {
 } from './flow.ts';
 import { FontFaces } from './font-faces.ts';
 import { premultipliedStops } from './premultiplied-stops.ts';
+
+/** The lowest node both are in, either of them included, or nothing for two separate trees. */
+function commonAncestor(a: EngineNode, b: EngineNode): EngineNode | null {
+  // Most often `b` is inside `a`, which a walk up from it finds with no set made each move.
+  for (let node: EngineNode | null = b; node; node = node.parent) if (node === a) return a;
+  const above = new Set<EngineNode>();
+  for (let node: EngineNode | null = a; node; node = node.parent) above.add(node);
+  for (let node: EngineNode | null = b; node; node = node.parent) if (above.has(node)) return node;
+  return null;
+}
 
 /**
  * The animation a node's style asks for, with a play state from a rule of its own applied. Both
@@ -181,6 +194,140 @@ const SPEC_FIELDS = [
   'direction',
   'timeline',
 ] as const satisfies readonly (keyof AnimationSpec)[];
+
+/**
+ * A view whose paint native sets with no commit: see `Engine.paintNatively`. The shadow node
+ * Fabric holds for it can be behind what it paints, by the keys in `stale`.
+ */
+interface PaintState {
+  /** The props native paints on the view. */
+  readonly keys: Set<string>;
+  /** Those native has a newer value of than the shadow node. */
+  readonly stale: Set<string>;
+  /** Set to commit what is stale with the next merge, whatever changed. */
+  sync?: true;
+  /** Set where a transform painted is a move by a share of the box: see `repaintShares`. */
+  shares?: true;
+}
+
+/** No key: what a view holds with no graph of the driver's connected to it. */
+const NO_KEYS: ReadonlySet<string> = new Set();
+
+/** How soon after one change of paint the next makes a run of them: see `paintedAgain`. */
+const PAINT_RUN_MS = 1000;
+/** How long a view native paints is left alone before its shadow node is brought up to date. */
+const PAINT_QUIET_MS = 500;
+
+const SHARED_SIDE: Readonly<Record<string, 2 | 3>> = { translateX: 2, translateY: 3 };
+
+/**
+ * A transform as native's transform node takes it, each entry's amount a number, and a move by a
+ * share of the box the points it is of the box `boxOf` answers. Null for one it cannot take: a
+ * matrix, or a share of a box with no size yet.
+ */
+function paintedTransform(
+  value: unknown,
+  boxOf: () => readonly number[] | undefined,
+): { property: string; value: number }[] | null {
+  const list = typeof value === 'string' ? transformList(value) : value;
+  if (!Array.isArray(list)) return null;
+  const out: { property: string; value: number }[] = [];
+  for (const entry of list) {
+    const pairs = Object.entries((entry ?? {}) as Record<string, unknown>);
+    if (pairs.length !== 1) return null;
+    const [property, raw] = pairs[0]!;
+    const flat = property === 'matrix' ? flatMatrix(raw) : null;
+    if (flat) {
+      out.push(...flat);
+      continue;
+    }
+    const points = amount(property, raw) ?? shareInPoints(property, raw, boxOf);
+    if (points === null || !Number.isFinite(points)) return null;
+    out.push({ property, value: points });
+  }
+  return out;
+}
+
+/** Where each number of a flat matrix is in React Native's sixteen, by column. */
+const FLAT = { a: 0, b: 1, c: 4, d: 5, e: 12, f: 13 } as const;
+/** What the rest of a flat matrix's sixteen are. */
+const FLAT_REST: readonly [number, number][] = [
+  [2, 0],
+  [3, 0],
+  [6, 0],
+  [7, 0],
+  [8, 0],
+  [9, 0],
+  [10, 1],
+  [11, 0],
+  [14, 0],
+  [15, 1],
+];
+
+/**
+ * A matrix in two dimensions as the move, turn, skew and scale it is, in that order, as CSS
+ * decomposes one: numbers native's transform node takes. Null for one in three dimensions, or
+ * one that flattens the view to a line, which are painted whole.
+ *
+ * A matrix painted whole is a list in a list, and Android's `overrideBySynchronousMountProps`,
+ * which puts what native last set back over each commit carrying a transform, copies back only
+ * the numbers and strings of each entry: the matrix comes back as nothing, and the view is drawn
+ * where it was never moved.
+ */
+function flatMatrix(raw: unknown): { property: string; value: number }[] | null {
+  if (!Array.isArray(raw) || raw.length !== 16 || !raw.every(Number.isFinite)) return null;
+  const m = raw as number[];
+  if (FLAT_REST.some(([at, value]) => m[at] !== value)) return null;
+  const [a, b, c, d] = [m[FLAT.a]!, m[FLAT.b]!, m[FLAT.c]!, m[FLAT.d]!];
+  const scaleX = Math.hypot(a, b);
+  if (scaleX === 0) return null;
+  const [cos, sin] = [a / scaleX, b / scaleX];
+  const shear = cos * c + sin * d;
+  const scaleY = cos * (d - sin * shear) - sin * (c - cos * shear);
+  if (scaleY === 0) return null;
+  return [
+    { property: 'translateX', value: m[FLAT.e]! },
+    { property: 'translateY', value: m[FLAT.f]! },
+    { property: 'rotate', value: Math.atan2(sin, cos) },
+    { property: 'skewX', value: Math.atan(shear / scaleY) },
+    { property: 'scaleX', value: scaleX },
+    { property: 'scaleY', value: scaleY },
+  ];
+}
+
+/** Whether a transform moves by a share of the box, which `paintedTransform` makes points of. */
+function sharesBox(value: unknown): boolean {
+  return (typeof value === 'string' ? value : JSON.stringify(value)).includes('%');
+}
+
+/** A transform as a commit carries it, a list, for native to be given whole. */
+function literalTransform(value: unknown): readonly unknown[] {
+  if (typeof value === 'string') return transformOf(value);
+  return Array.isArray(value) ? value : [];
+}
+
+/** Whether there is anything to paint in a set of values. */
+function hasPaint(values: PaintValues): boolean {
+  if (values.opacity !== undefined || values.transform !== undefined) return true;
+  return Object.keys(values.colors ?? {}).length > 0;
+}
+
+/** A move by a share of the box, `translateX(-40%)`, as the points it is of the box. */
+function shareInPoints(
+  property: string,
+  raw: unknown,
+  boxOf: () => readonly number[] | undefined,
+): number | null {
+  const side = SHARED_SIDE[property];
+  if (!side || typeof raw !== 'string' || !raw.endsWith('%')) return null;
+  const box = boxOf();
+  return box ? (box[side]! * Number.parseFloat(raw)) / 100 : null;
+}
+
+/** As Animated does: a view native paints is kept, or there is no view for it to paint. */
+function keptForPaint(node: EngineNode, props: Record<string, unknown>): void {
+  if (node.paint && props['collapsable'] === undefined) props['collapsable'] = false;
+}
 
 /** A node's scroll-driven animation: what it plays, what drives it, and the frame it commits. */
 interface ScrollAnimation {
@@ -518,6 +665,12 @@ export interface EngineNode extends HostNode {
   nodeText: string;
   childList: EngineNode[];
   parent: EngineNode | null;
+  /**
+   * A child of this node that holds what is put in it: `appendChild` and `insertBefore` on this
+   * node put the child there instead, so a component's template lands inside a view its owner
+   * placed in the host element. Only the view itself goes in this node.
+   */
+  contentView?: EngineNode;
   listeners: Map<string, Set<(event: unknown) => void>> | null;
 
   /** CSS classes on this node, for selector matching. */
@@ -696,6 +849,10 @@ export interface EngineNode extends HostNode {
    * changes again: see `Touched`. A view made again has another tag, and starts with none.
    */
   owned?: { readonly tag: number; readonly keys: Set<string> };
+  /** What native paints on this view with no commit, while it does: see `paintNatively`. */
+  paint?: PaintState;
+  /** Props native painted ahead of the shadow node as the painter let go: see `leavePainting`. */
+  unsynced?: ReadonlySet<string>;
   /**
    * The last `transform` built from the individual transform properties, and what it was built
    * from. Reused while the parts are the same objects, so an unrelated change does not re-send it.
@@ -2269,9 +2426,9 @@ function gridLayout(node: EngineNode, props: Record<string, unknown>): void {
     // would leave them to whatever further up is positioned.
     if (node.grid && props['position'] === 'static') props['position'] = 'relative';
   }
-  // A transform makes a box what its absolute boxes are placed against, static or not, and Yoga
-  // knows only positions: see `placesItself`.
-  if (props['position'] === 'static' && transformed(props['transform'])) {
+  // A transform, a filter and the rest make a box what its absolute boxes are placed against,
+  // static or not, and Yoga knows only positions: see `placesItself`.
+  if (props['position'] === 'static' && containsAbsolutes((key) => props[key])) {
     props['position'] = 'relative';
     // Still static to what places it: an inset moves no static box, in a grid or out of one.
     for (const key of INSET_SIDES) if (props[key] !== undefined) delete props[key];
@@ -2510,7 +2667,8 @@ const sameEntries = (a: unknown, b: readonly unknown[]): boolean =>
 /**
  * Take off what is read here and is no style of a native view: `order`, by the container in
  * `inOrder`, `justify-self`, by the block a box is in, `table-layout`, by what lays a table out,
- * and the band a library's sheet clips a box to, by what draws an image through it. The band is
+ * the band a library's sheet clips a box to, by what draws an image through it, and what makes a
+ * box what its absolute boxes are placed against, by `containsAbsolutes`. The band is
  * `clipBand`: `clipPath` is the clip path a react-native-svg shape names, which reaches native.
  */
 function notNative(props: Record<string, unknown>): void {
@@ -2518,6 +2676,7 @@ function notNative(props: Record<string, unknown>): void {
   if (props['justifySelf'] !== undefined) delete props['justifySelf'];
   if (props['tableLayout'] !== undefined) delete props['tableLayout'];
   if (props['clipBand'] !== undefined) delete props['clipBand'];
+  for (const key of CONTAINING_ONLY) if (props[key] !== undefined) delete props[key];
 }
 
 /**
@@ -2822,6 +2981,8 @@ function mixedValues(
 const SIZE_KEYS = new Set([
   ...['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'flexBasis'],
 ]);
+/** What makes a box a containing block that no native view has a style for: `containsAbsolutes`. */
+const CONTAINING_ONLY = ['willChange', 'contain', 'perspective', 'backdropFilter'];
 /**
  * What only the engine reads, whatever it is set to: no native view lays out by any of them, or
  * draws by `visibility`, a clip to nothing (`seenByCss`) or a clip to a band (`notNative`).
@@ -2833,20 +2994,50 @@ const LAID_OUT_HERE = new Set([
   'clipped',
   'tableLayout',
   'clipBand',
+  ...CONTAINING_ONLY,
 ]);
 /**
  * Whether a box is what an absolute box in it is placed against: one that is not static, or one
- * with a transform, which CSS makes a containing block however it is positioned.
+ * CSS makes a containing block however it is positioned (see `containsAbsolutes`).
  */
 function placesItself(node: EngineNode): boolean {
-  return readStyle(node, 'position') !== 'static' || transformed(readStyle(node, 'transform'));
+  return (
+    readStyle(node, 'position') !== 'static' || containsAbsolutes((key) => readStyle(node, key))
+  );
 }
 
-/** Whether a transform is one: a list or text of one, and not `none`. */
-const transformed = (transform: unknown): boolean =>
-  Array.isArray(transform)
-    ? transform.length > 0
-    : typeof transform === 'string' && transform !== '' && transform !== 'none';
+/**
+ * Whether a style makes its box the containing block of its absolute boxes, positioned or not: a
+ * transform, a filter, a backdrop filter or a perspective other than `none`, a containment of
+ * layout or paint, or a `will-change` naming one of those or `position`.
+ */
+function containsAbsolutes(style: (key: string) => unknown): boolean {
+  if (CONTAINING_KEYS.some((key) => given(style(key)))) return true;
+  const contain = style('contain');
+  if (typeof contain === 'string' && contain.split(/\s+/).some((word) => CONTAINS.has(word)))
+    return true;
+  const willChange = style('willChange');
+  return (
+    typeof willChange === 'string' &&
+    willChange.split(',').some((name) => WILL_CONTAIN.has(name.trim()))
+  );
+}
+
+/** What makes a box a containing block where it is set to anything but `none`. */
+const CONTAINING_KEYS = ['transform', 'filter', 'backdropFilter', 'perspective'];
+/** The containments that make one: of layout or paint, alone or as `strict` or `content`. */
+const CONTAINS = new Set(['layout', 'paint', 'strict', 'content']);
+/** The properties a `will-change` makes one by naming, as Chrome has it. */
+const WILL_CONTAIN = new Set([
+  ...['transform', 'translate', 'rotate', 'scale', 'perspective'],
+  ...['filter', 'backdrop-filter', 'contain', 'position'],
+]);
+
+/** Whether a value is one: a list or text of one, not `none`, or a number. */
+const given = (value: unknown): boolean =>
+  Array.isArray(value)
+    ? value.length > 0
+    : typeof value === 'number' || (typeof value === 'string' && value !== '' && value !== 'none');
 
 const POSITIONS_HERE = new Set(['static', 'fixed', 'sticky']);
 
@@ -4849,8 +5040,11 @@ const FONT_REFRESH_STEP = 0.006;
 /** The views that take a cursor, on either platform. */
 const TEXT_INPUTS = new Set(['TextInput', 'AndroidTextInput']);
 
+/** Whether a view name is a text input's, for a committed view, which has a name and no node. */
+export const isTextInputView = (viewName: string): boolean => TEXT_INPUTS.has(viewName);
+
 /** Whether a node commits as a text input, the view that takes a cursor, on either platform. */
-export const isTextInput = (node: ViewNameNode): boolean => TEXT_INPUTS.has(viewNameOf(node));
+export const isTextInput = (node: ViewNameNode): boolean => isTextInputView(viewNameOf(node));
 
 /**
  * Android's horizontal scroll view and the view that holds its content. RN's `ScrollView.js`
@@ -5374,6 +5568,30 @@ const EASED_COLOURS = new Set([
 ]);
 const NATIVELY_EASED = new Set(['opacity', 'transform', ...EASED_COLOURS]);
 
+const SIDE_COLOURS = ['borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'];
+
+/**
+ * Ease a view's unsided border colour with its four sides where they ease alike: Android dashes
+ * a rounded border only from `borderColor`, and only while every side equals it. Asked of what
+ * the view is committed with, which the element's own sides can make uniform too.
+ */
+function unsidedBorderTrack(
+  tracks: Map<string, readonly TrackPoint[]>,
+  props: Record<string, unknown>,
+): void {
+  if (tracks.has('borderColor')) return;
+  const [top, ...rest] = SIDE_COLOURS.map((key) => tracks.get(key));
+  if (!top || rest.some((track) => !sameTrack(track, top))) return;
+  const settled = { ...props };
+  settleUnsidedBorder(settled);
+  if (settled['borderColor'] !== undefined) tracks.set('borderColor', top);
+}
+
+const sameTrack = (one: readonly TrackPoint[] | undefined, other: readonly TrackPoint[]) =>
+  one !== undefined &&
+  one.length === other.length &&
+  one.every((point, at) => point.value === other[at]!.value);
+
 /** What a node that hands its background colour over has handed so far: nothing. */
 const UNREPORTED = Symbol('unreported');
 
@@ -5854,6 +6072,8 @@ const ENGINE_NODE_FIELDS = {
   playing: true,
   scrolled: true,
   owned: true,
+  paint: true,
+  unsynced: true,
   composedTransform: true,
   bornIn: true,
   boundTransform: true,
@@ -5882,6 +6102,7 @@ const ENGINE_NODE_FIELDS = {
   structureDirty: true,
   subtreeDirty: true,
   inside: true,
+  contentView: true,
   scrollsOverflow: true,
   engine: true,
 } satisfies Record<keyof EngineNode, true>;
@@ -6578,6 +6799,8 @@ export interface EngineStats {
   worstRenderMs: number;
   createdNodes: number;
   clonedNodes: number;
+  /** Changes of paint native was given in place of a commit: see `paintNatively`. */
+  paintedNatively: number;
 }
 
 const FRAME_BUDGET_MS = 8;
@@ -6651,6 +6874,7 @@ export class Engine implements HostEngine {
     worstRenderMs: 0,
     createdNodes: 0,
     clonedNodes: 0,
+    paintedNatively: 0,
   };
 
   private eventsRegistered = false;
@@ -6744,6 +6968,8 @@ export class Engine implements HostEngine {
       this.styles.onUndefinedToken = (name, props, on) =>
         this.reportUndefinedToken(name, props, on);
       this.styles.onUnreadDisplay = (name, value) => this.reportUnreadDisplay(name, value);
+      this.styles.onPlatformColour = (name, props, on) =>
+        this.reportPlatformColour(name, props, on);
     }
     this.now = options.now ?? (() => globalThis.performance?.now?.() ?? Date.now());
     this.onDirty = options.onDirty;
@@ -6753,6 +6979,12 @@ export class Engine implements HostEngine {
     this.resolveAssetSource = options.resolveAssetSource ?? ((value) => value);
     this.scrollDriver = options.nativeAnimated
       ? new NativeScrollDriver(options.nativeAnimated, (view, tag, keys) =>
+          this.touchedNatively(view as EngineNode, tag, keys),
+        )
+      : null;
+    // The painter's graph takes the props it paints from commits as any graph does: see `Touched`.
+    this.painter = options.nativeAnimated
+      ? new NativePainter(options.nativeAnimated, (view, tag, keys) =>
           this.touchedNatively(view as EngineNode, tag, keys),
         )
       : null;
@@ -7244,6 +7476,43 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
   }
 
+  /**
+   * End a node's `@keyframes` animation now, as a script's `finish()` or `cancel()` does: at its
+   * end, which is its last frame where it fills forwards and its resting style where it does not,
+   * or with no effect of it at all. Native is stopped where it plays it, and what the view is drawn
+   * at set there too (see `endedNatively`). It stays ended while the node asks for the same one.
+   */
+  endPlaying(node: EngineNode, how: 'finish' | 'cancel'): void {
+    const running = node.playing;
+    // One that never ends has no end to go to: a script is refused it first.
+    if (!running || (how === 'finish' && running.spec.iterations === null)) return;
+    if (running.done) {
+      // Ended already, and held at its last frame by its fill: a cancel lets that go.
+      if (how === 'cancel' && Object.keys(running.values).length) {
+        running.values = {};
+        this.markProps(node, false);
+      }
+      return;
+    }
+    const native = running.native !== undefined;
+    this.stopNative(node, running);
+    running.pausedAt = undefined;
+    if (how === 'finish') {
+      const { spec } = running;
+      const end = running.start + spec.delay + spec.duration * (spec.iterations ?? 1);
+      this.advancePlayer(node, Math.max(this.now(), end));
+    } else {
+      running.values = {};
+      running.done = true;
+      this.playing.delete(node);
+      this.markProps(node, false);
+      this.emitTransition(node, 'topAnimationcancel', running.spec.name);
+    }
+    this.commit();
+    const committed = node.committed;
+    if (native && node.owned && committed) this.setOwned(node, RESET_OWNED, committed.props);
+  }
+
   addClass(node: EngineNode, name: string): void {
     const was = this.classAttribute(node);
     (node.classes ??= new Set()).add(name);
@@ -7517,7 +7786,8 @@ export class Engine implements HostEngine {
     return node;
   }
 
-  appendChild(parent: EngineNode, child: EngineNode): void {
+  appendChild(into: EngineNode, child: EngineNode): void {
+    const parent = into.contentView && into.contentView !== child ? into.contentView : into;
     this.markAdopted(child, parent);
     this.detach(child);
     this.markReturned(child);
@@ -7530,7 +7800,8 @@ export class Engine implements HostEngine {
     this.markTextContent(parent, child);
   }
 
-  insertBefore(parent: EngineNode, child: EngineNode, ref: EngineNode | null): void {
+  insertBefore(into: EngineNode, child: EngineNode, ref: EngineNode | null): void {
+    const parent = into.contentView && into.contentView !== child ? into.contentView : into;
     this.markAdopted(child, parent);
     this.detach(child);
     this.markReturned(child);
@@ -8568,13 +8839,17 @@ export class Engine implements HostEngine {
     this.quietly.clear();
     this.loudly.clear();
     this.holders = undefined;
+    const sent = this.rootsSent;
+    this.paintedInstead = false;
     this.commitAsAsked();
+    if (this.paintedOnly(sent)) return false;
     // Each a layout of the engine's, which an app of plain flex has asked for none of.
     if (!this.paintOnly && this.asked & LAYOUTS) this.settleLayout();
     this.paintOnly = false;
     this.changesHeld = true;
 
     this.countCommit(now() - started);
+    if (this.paintedNodes.size) this.repaintShares();
 
     this.flushTransitionEvents();
     this.reportPaint();
@@ -8585,6 +8860,17 @@ export class Engine implements HostEngine {
     if (this.awaitingKeyframes.size) this.settleKeyframes();
     if (facesAdded) this.rematchFonts();
     this.blurHidden();
+    return true;
+  }
+
+  /**
+   * Whether a commit sent native nothing, every change in it being paint native was given
+   * directly: see `paintNatively`. Nothing was laid out, so nothing is read back.
+   */
+  private paintedOnly(sentBefore: number): boolean {
+    if (this.rootsSent !== sentBefore || !this.paintedInstead) return false;
+    this.paintOnly = false;
+    this.flushTransitionEvents();
     return true;
   }
 
@@ -9017,11 +9303,22 @@ export class Engine implements HostEngine {
       // What that found resized is the transitions themselves, at the frame they are eased to.
       this.movesOthers = false;
     }
-    for (const handle of handles) this.fabric.appendChildToSet(set, handle);
     this.clearFlags(this.root);
+    // The same views as the last commit, where what changed was painted by native instead: as
+    // before otherwise, since a commit of nothing new is what has a box read back again.
+    if (this.paintedInstead && this.sentHandles && sameHandles(handles, this.sentHandles)) return;
+    this.sentHandles = handles;
+    this.rootsSent++;
+    for (const handle of handles) this.fabric.appendChildToSet(set, handle);
     this.announceCommit();
     this.fabric.completeRoot(this.rootTag, set);
   }
+
+  /** The views the last `completeRoot` was given, and how many there have been. */
+  private sentHandles: FabricNode[] | null = null;
+  /** Set in a commit where a change was given to native to paint in place of being committed. */
+  private paintedInstead = false;
+  private rootsSent = 0;
 
   /** The fixed boxes each page, or the root, is committed with. */
   private readonly fixedIn = new Map<EngineNode, Set<EngineNode>>();
@@ -11273,6 +11570,8 @@ export class Engine implements HostEngine {
     const field = TEXT_INPUTS.has(viewName);
     if (field) fieldStyled(viewName, style, this.fontScale);
     const merged = composeTransform(node, this.eased(node, style));
+    // From the sides as committed: the element's own, and each frame of a transition.
+    settleUnsidedBorder(merged);
     // On iOS: Android's field says the baseline of the line it is sized and centred by.
     if (field) centreSingleLine(viewName, merged, this.fontScale, isOnBaseline(node, viewName));
     // After a transition, which eases the basis as the basis it was written as.
@@ -11309,6 +11608,7 @@ export class Engine implements HostEngine {
       if (merged['maxHeight'] !== undefined) leastWins(merged, 'Height');
       if (merged['maxWidth'] !== undefined) leastWins(merged, 'Width');
     }
+    keptForPaint(node, merged);
     return merged;
   }
 
@@ -12064,6 +12364,9 @@ export class Engine implements HostEngine {
     for (const node of [...this.easedNatively]) {
       if (this.topOf(node) !== this.root) this.stopEased(node);
     }
+    for (const node of [...this.paintedNodes]) {
+      if (this.topOf(node) !== this.root) this.stopPainting(node);
+    }
   }
 
   /** Every node whose animation native is playing, with no frame of it in JavaScript. */
@@ -12150,6 +12453,7 @@ export class Engine implements HostEngine {
     if (count !== -1 && !(Number.isInteger(count) && count > 0)) return false;
     const length = Math.max(2, Math.round((spec.duration * span) / NATIVE_FRAME) + 1);
     const frames = Array.from({ length }, (_, i) => i / (length - 1));
+    this.leavePainting(node);
     const native = this.scrollDriver.play(
       node,
       channels,
@@ -12207,6 +12511,27 @@ export class Engine implements HostEngine {
     if (!running.done && running.pausedAt === undefined) this.playing.add(node);
   }
 
+  /** Each animation started on a node held unseen (see `hold`), to be played once it is let go. */
+  private readonly startsUnheld = new WeakSet<RunningAnimation>();
+
+  /**
+   * Play an animation started on a node held unseen, once it is let go: its clock starts here, as
+   * a browser starts it as it first paints the element. Not where it was paused meanwhile, nor a
+   * second time where it was run again while held, which plays it here already.
+   */
+  private playUnheld(
+    node: EngineNode,
+    current: RunningAnimation,
+    spec: AnimationSpec,
+    props: Record<string, unknown>,
+  ): void {
+    if (!this.startsUnheld.delete(current) || spec.paused) return;
+    current.start = this.now();
+    if (current.pausedAt === undefined && !this.playing.has(node)) {
+      this.playSomewhere(node, current, props);
+    }
+  }
+
   /** Start the clock on an animation, unless the node is already playing this one. */
   private startPlaying(
     node: EngineNode,
@@ -12242,6 +12567,7 @@ export class Engine implements HostEngine {
       this.emitTransition(node, 'topAnimationstart', spec.name);
       return;
     }
+    this.playUnheld(node, current, spec, props);
     // A view made again is another view: the one native was moving is gone. And one whose
     // important declarations changed is moving what it now must not, or not what it now may.
     if (node.committed === null || pinsChanged(node, current)) this.backToScript(node, current);
@@ -12258,7 +12584,10 @@ export class Engine implements HostEngine {
     started: RunningAnimation,
     props: Record<string, unknown>,
   ): void {
-    if (this.layPlayed(node, started)) this.laidPlayed.push({ node, running: started });
+    // A browser starts it as it first paints the element: a graph native plays would set its
+    // opacity over the hold's. See `playUnheld`.
+    if (node.held) this.startsUnheld.add(started);
+    else if (this.layPlayed(node, started)) this.laidPlayed.push({ node, running: started });
     else if (!this.playNatively(node, started, props)) this.playing.add(node);
   }
 
@@ -12795,7 +13124,11 @@ export class Engine implements HostEngine {
       const clock = `${eased.duration} ${eased.easing.join()}`;
       clocks.set(clock, [...(clocks.get(clock) ?? []), key]);
     }
-    for (const keys of clocks.values()) this.playEased(node, state, keys, props);
+    for (const keys of clocks.values()) {
+      // Eased on the graph native already paints the view by, or from here: never on a second.
+      if (node.paint) this.easePainted(node, state, keys, props);
+      else this.playEased(node, state, keys, props);
+    }
   }
 
   private playEased(
@@ -12837,6 +13170,7 @@ export class Engine implements HostEngine {
         ] as const;
       }),
     );
+    unsidedBorderTrack(tracks, props);
     const spec: AnimationSpec = {
       name: '',
       duration: first.duration,
@@ -12924,6 +13258,398 @@ export class Engine implements HostEngine {
     }
     clock.stop();
     this.forgetEased(node);
+  }
+
+  private readonly painter: NativePainter | null;
+  /** The views native paints, for letting go of those that leave the tree. */
+  private readonly paintedNodes = new Set<EngineNode>();
+  /** When each prop a view paints with last changed: see `paintedAgain`. */
+  private readonly paintChanges = new WeakMap<EngineNode, Map<string, number>>();
+  private quietTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Give native the paint a commit would carry, where it is all that changed: a view whose
+   * transform, opacity or background is changed again and again, a progress bar stepped every
+   * 50ms, is painted by a native animated graph and leaves nothing to commit. Answers what is
+   * left of `payload` to commit.
+   *
+   * The first change of a prop is committed as any other. The second within `PAINT_RUN_MS` is
+   * committed too, with `collapsable: false` so the view is kept for native to paint, and from
+   * the next native paints it. The shadow node falls behind what is drawn; it is brought up to
+   * date with the next commit of the view for anything else, once the view has been left alone
+   * for `PAINT_QUIET_MS`, and before anything measures where it is drawn.
+   *
+   * A view a graph of native's has set a transform or an opacity on before is left to
+   * `setOwned`, which sets each later change of those on native: see `Touched`.
+   */
+  private paintNatively(
+    node: EngineNode,
+    viewName: string,
+    props: Record<string, unknown>,
+    payload: Record<string, unknown> | null,
+    cloned: boolean,
+  ): Record<string, unknown> | null {
+    if (node.unsynced) return this.synced(node, props, payload);
+    if (!payload && !node.paint?.sync) return payload;
+    const held = this.heldOn(node);
+    const runs = this.paintsHere(node, viewName);
+    const state = node.paint;
+    if (!state) return runs ? this.startPainting(node, props, payload) : payload;
+    const { changed, inRun } = this.paintRun(node, state, payload, runs);
+    if (changed) this.paintNow(node, state, props, held);
+    else if (!state.sync) return payload;
+    return this.leftOver(node, state, props, payload, held, cloned || !inRun);
+  }
+
+  /** The props other graphs of native's set on a view now. */
+  private heldOn(node: EngineNode): ReadonlySet<string> {
+    return this.scrollDriver?.held(node) ?? NO_KEYS;
+  }
+
+  /**
+   * What is left to commit of a payload native was given: nothing, where all it changed is
+   * painted in a run, and otherwise all of it, with what native painted ahead of the shadow node.
+   */
+  private leftOver(
+    node: EngineNode,
+    state: PaintState,
+    props: Record<string, unknown>,
+    payload: Record<string, unknown> | null,
+    held: ReadonlySet<string>,
+    commits: boolean,
+  ): Record<string, unknown> | null {
+    const others = Object.keys(payload ?? {}).some((key) => !state.keys.has(key) || held.has(key));
+    if (commits || others || state.sync) return this.withStale(state, props, payload);
+    return this.leftToNative(node, state, props, payload!);
+  }
+
+  /** Set on native what a view paints, of the props no other graph of native's holds. */
+  private paintNow(
+    node: EngineNode,
+    state: PaintState,
+    props: Record<string, unknown>,
+    held: ReadonlySet<string>,
+  ): void {
+    const keys = held.size ? [...state.keys].filter((key) => !held.has(key)) : state.keys;
+    const { values, refused } = this.paintValues(node, keys, (key) =>
+      this.paintedValue(node, key, props),
+    );
+    // A colour native cannot take is committed: no graph owns a colour.
+    for (const key of refused) state.keys.delete(key);
+    state.shares = values.shares;
+    if (!hasPaint(values)) return;
+    this.painter!.paint(node, node.committed!.tag, values);
+    this.stats.paintedNatively++;
+  }
+
+  /**
+   * Whether a run of changes can hand a view to native: a plain view no animation of native's
+   * plays. A transition native plays is played on the painter's graph from then on, and a prop
+   * another graph holds now is committed as before (`heldOn`).
+   */
+  private paintsHere(node: EngineNode, viewName: string): boolean {
+    if (!this.painter || viewName !== DEFAULT_VIEW || node.committed === null) return false;
+    return !node.playing?.native && !node.scrolled;
+  }
+
+  /** Have native paint a view, with no props yet: `paintRun` adds them. */
+  private paintFrom(node: EngineNode): PaintState {
+    // One graph a view: the setter's, which `setOwned` connected, goes as the painter's comes.
+    this.scrollDriver?.forget(node);
+    const state: PaintState = { keys: new Set(), stale: new Set() };
+    node.paint = state;
+    this.paintedNodes.add(node);
+    return state;
+  }
+
+  /**
+   * Whether a payload changes paint native could paint, and whether each such change is in a
+   * run, where a run can hand the view over. Takes on each prop in a run, and each a graph of
+   * native's has set on the view, which a commit no longer changes (see `Touched`).
+   * A change in no run is committed as well as painted: a fade a press starts and a transition
+   * that ends are a commit each, as they were, and the shadow node is never behind for them.
+   */
+  private paintRun(
+    node: EngineNode,
+    state: PaintState,
+    payload: Record<string, unknown> | null,
+    runs: boolean,
+  ): { changed: boolean; inRun: boolean } {
+    let changed = false;
+    let inRun = runs;
+    for (const key in payload) {
+      if (!NATIVELY_EASED.has(key)) continue;
+      changed = true;
+      const again = runs && this.paintedAgain(node, key);
+      if (!again) inRun = false;
+      if (again || this.owns(node, key)) state.keys.add(key);
+    }
+    return { changed, inRun };
+  }
+
+  /**
+   * Nothing to commit of a change native has painted: the view keeps its shadow node, and its
+   * committed props are what the next change is measured from.
+   */
+  private leftToNative(
+    node: EngineNode,
+    state: PaintState,
+    props: Record<string, unknown>,
+    payload: Record<string, unknown>,
+  ): null {
+    for (const key in payload) state.stale.add(key);
+    node.committed = { ...node.committed!, props };
+    this.paintedInstead = true;
+    this.quietLater();
+    return null;
+  }
+
+  /** A payload with what native painted ahead of the shadow node, which it brings up to date. */
+  private withStale(
+    state: PaintState,
+    props: Record<string, unknown>,
+    payload: Record<string, unknown> | null,
+  ): Record<string, unknown> | null {
+    state.sync = undefined;
+    if (!state.stale.size) return payload;
+    const out = { ...payload };
+    for (const key of state.stale) if (!(key in out)) out[key] = props[key] ?? null;
+    state.stale.clear();
+    return out;
+  }
+
+  /** Have native paint a view from the next change, where this one is the second of a run. */
+  private startPainting(
+    node: EngineNode,
+    props: Record<string, unknown>,
+    payload: Record<string, unknown> | null,
+  ): Record<string, unknown> | null {
+    const keys: string[] = [];
+    for (const key in payload) {
+      if (NATIVELY_EASED.has(key) && this.paintedAgain(node, key)) keys.push(key);
+    }
+    if (!keys.length) return payload;
+    const state = this.paintFrom(node);
+    for (const key of keys) state.keys.add(key);
+    if (props['collapsable'] !== undefined) return payload;
+    props['collapsable'] = false;
+    return { ...payload, collapsable: false };
+  }
+
+  /**
+   * Whether a change of a prop a view paints with is the second of a run, soon after the last.
+   * Two at the same moment are one: an animation's last frame and the style it rests at.
+   */
+  private paintedAgain(node: EngineNode, key: string): boolean {
+    const now = this.now();
+    const changes = this.paintChanges.get(node) ?? new Map<string, number>();
+    this.paintChanges.set(node, changes);
+    const last = changes.get(key);
+    if (last === now) return false;
+    changes.set(key, now);
+    return last !== undefined && now - last < PAINT_RUN_MS;
+  }
+
+  /** What a view paints for a key: where a transition native eases it is going, if it is. */
+  private paintedValue(node: EngineNode, key: string, props: Record<string, unknown>): unknown {
+    const eased = node.transitions?.get(key);
+    return eased?.native ? eased.to : props[key];
+  }
+
+  /**
+   * What native is to paint for these keys, and those it cannot take: a colour it cannot
+   * parse. A transform the transform node cannot take, a matrix or a move by a share of a box
+   * with no size yet, is painted whole (`PaintValues.transform`).
+   */
+  private paintValues(
+    node: EngineNode,
+    keys: Iterable<string>,
+    valueOf: (key: string) => unknown,
+  ): { values: PaintValues & { shares?: true }; refused: string[] } {
+    const values: PaintValues & { shares?: true } = {};
+    const colors: Record<string, Rgba> = {};
+    const refused: string[] = [];
+    for (const key of keys) {
+      const value = valueOf(key) ?? null;
+      if (key === 'opacity') {
+        if (value !== null && typeof value !== 'number') refused.push(key);
+        else values.opacity = this.touchedOpacity(node, value ?? 1);
+      } else if (key === 'transform') {
+        Object.assign(values, this.transformPainted(node, value));
+      } else {
+        const rgba = value === null ? ([0, 0, 0, 0] as const) : parseColor(value);
+        if (rgba) colors[key] = rgba;
+        else refused.push(key);
+      }
+    }
+    values.colors = colors;
+    return { values, refused };
+  }
+
+  /**
+   * An opacity as native is to paint it: no lower than what still takes a touch, on a view that
+   * takes presses, as a commit sends it (`stillTouched`).
+   */
+  private touchedOpacity(node: EngineNode, opacity: number): number {
+    if (!this.responders.has(node)) return opacity;
+    return stillTouched({ opacity, pointerEvents: node.committed?.props['pointerEvents'] })[
+      'opacity'
+    ] as number;
+  }
+
+  /** A transform as native is to paint it, and whether it is a share of the view's box. */
+  private transformPainted(
+    node: EngineNode,
+    value: unknown,
+  ): { transform: NonNullable<PaintValues['transform']>; shares?: true } {
+    const list = value === null ? [] : paintedTransform(value, () => this.boxOf(node));
+    if (!list) return { transform: { literal: literalTransform(value) } };
+    return sharesBox(value) ? { transform: list, shares: true } : { transform: list };
+  }
+
+  /**
+   * Paint again each view painted with a move by a share of its box, after a commit that can
+   * have resized it: the points it was painted with are a share of the box it had.
+   */
+  private repaintShares(): void {
+    for (const node of this.paintedNodes) {
+      const state = node.paint!;
+      if (!state.shares || !node.committed || !this.painter!.paints(node)) continue;
+      if (node.transitions?.get('transform')?.native) continue;
+      const held = this.heldOn(node);
+      if (held.has('transform')) continue;
+      const props = node.committed.props;
+      const keys = [...state.keys].filter((key) => !held.has(key));
+      const { values } = this.paintValues(node, keys, (key) => this.paintedValue(node, key, props));
+      this.painter!.paint(node, node.committed.tag, values);
+    }
+  }
+
+  /**
+   * Ease a transition on the graph native paints the view by, from where native has it: a
+   * transition aimed somewhere else every 50ms is a value eased on native each time, with no
+   * commit to start it. One native cannot ease this way is eased from JavaScript, and each of
+   * its frames is painted.
+   */
+  private easePainted(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    keys: readonly string[],
+    props: Record<string, unknown>,
+  ): void {
+    const tag = node.committed?.tag;
+    const paint = node.paint!;
+    if (!this.painter?.eases || tag === undefined) return;
+    if (INDIVIDUAL_TRANSFORMS.some((key) => props[key] !== undefined)) return;
+    // A prop the graph has none of builds it again, which stops what it eases: each of those is
+    // taken back by JavaScript from where it has got to first, so none is left native's.
+    if (keys.some((key) => !paint.keys.has(key))) this.backToScriptAll(node, keys);
+    for (const key of keys) paint.keys.add(key);
+    const ends = this.easedEnds(node, state, keys, props);
+    if (!ends) return;
+    const first = state.get(keys[0]!)!;
+    const length = Math.max(2, Math.round(first.duration / NATIVE_FRAME) + 1);
+    const frames = Array.from({ length }, (_, i) => bezier(first.easing, i / (length - 1)));
+    const clock: { keys: readonly string[]; stop(): void } = { keys, stop: () => undefined };
+    for (const key of keys) state.get(key)!.native = clock;
+    this.easedNatively.add(node);
+    const eased = this.painter.ease(node, tag, ends.from, ends.to, frames, () =>
+      this.endedEased(node, clock),
+    );
+    clock.stop = () => eased.stop();
+  }
+
+  /**
+   * Where a transition on a view native paints starts and ends, as native eases them: null
+   * where either is not numbers, which is eased from JavaScript and each frame painted.
+   */
+  private easedEnds(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    keys: readonly string[],
+    props: Record<string, unknown>,
+  ): { from: PaintValues; to: PaintValues } | null {
+    const at = (end: 'current' | 'to') => (key: string) =>
+      keys.includes(key) ? state.get(key)![end] : this.paintedValue(node, key, props);
+    const ends = [at('current'), at('to')].map((valueOf) =>
+      this.paintValues(node, node.paint!.keys, valueOf),
+    );
+    const numbers = ends.every(
+      ({ values, refused }) => !refused.length && Array.isArray(values.transform ?? []),
+    );
+    return numbers ? { from: ends[0]!.values, to: ends[1]!.values } : null;
+  }
+
+  /** Whether a graph of native's has set a prop on the view the node is committed as. */
+  private owns(node: EngineNode, key: string): boolean {
+    const owned = node.owned;
+    return !!owned && owned.tag === node.committed?.tag && owned.keys.has(key);
+  }
+
+  /**
+   * Let the painter go, for a graph of an animation to move the view: one graph moves a view,
+   * and what the painter eased goes on from JavaScript.
+   */
+  private leavePainting(node: EngineNode): void {
+    if (!node.paint) return;
+    // What native painted that the shadow node has not got is committed with the view next.
+    if (node.paint.stale.size) node.unsynced = new Set(node.paint.stale);
+    this.backToScriptAll(node, []);
+    this.stopPainting(node);
+  }
+
+  /** A payload with what native painted before the painter let the view go: see `leavePainting`. */
+  private synced(
+    node: EngineNode,
+    props: Record<string, unknown>,
+    payload: Record<string, unknown> | null,
+  ): Record<string, unknown> {
+    const out = { ...payload };
+    for (const key of node.unsynced!) if (!(key in out)) out[key] = props[key] ?? null;
+    node.unsynced = undefined;
+    return out;
+  }
+
+  /** Take back from native every clock it eases on a view but those of `keys`. */
+  private backToScriptAll(node: EngineNode, keys: readonly string[]): void {
+    const clocks = new Set<EasedNatively>();
+    for (const [key, eased] of node.transitions ?? []) {
+      if (eased.native && !keys.includes(key)) clocks.add(eased.native);
+    }
+    for (const clock of clocks) this.backToScriptEased(node, clock, this.now());
+  }
+
+  /** Native no longer paints a view, which has left the tree. */
+  private stopPainting(node: EngineNode): void {
+    this.painter?.release(node);
+    node.paint = undefined;
+    this.paintedNodes.delete(node);
+  }
+
+  /** Bring every view native paints up to date in the shadow tree, once they are left alone. */
+  private quietLater(): void {
+    if (this.quietTimer !== null) clearTimeout(this.quietTimer);
+    this.quietTimer = setTimeout(() => {
+      this.quietTimer = null;
+      this.commitPainted();
+    }, PAINT_QUIET_MS);
+  }
+
+  /**
+   * Commit what native painted ahead of the shadow tree, on every view it paints: where a view
+   * is drawn takes in the transform of each view its native view is in, which is not always
+   * one of its parents here (a hoisted or fixed box is committed elsewhere).
+   */
+  private commitPainted(): void {
+    const behind: EngineNode[] = [];
+    for (const each of this.paintedNodes) {
+      if (!each.paint?.stale.size) continue;
+      each.paint.sync = true;
+      behind.push(each);
+    }
+    if (!behind.length) return;
+    this.touch(behind);
+    this.commit();
   }
 
   /** A graph of native's was connected to a view: see `Touched`. */
@@ -13301,9 +14027,11 @@ export class Engine implements HostEngine {
     // is here only because something beneath it moved has the props it had.
     const propsMoved = node.propsDirty || styleChanged;
     const props = propsMoved ? this.mergeProps(node, viewName) : previous.props;
-    const propsPayload = propsMoved ? this.propsPayload(node, previous.props, props) : null;
-    if (this.asked & LAYOUTS) this.noteHow(node, propsPayload);
+    const payload = propsMoved ? this.propsPayload(node, previous.props, props) : null;
+    if (this.asked & LAYOUTS) this.noteHow(node, payload);
     const childrenChanged = this.childrenMoved(node, childHandles, previous.childHandles);
+    // What native was given to paint is left out of the clone: see `paintNatively`.
+    const propsPayload = this.paintNatively(node, viewName, props, payload, childrenChanged);
     if (this.notesMoves)
       this.noteClone(node, propsPayload, childrenChanged, childHandles, previous);
     let handle = previous.handle;
@@ -13447,7 +14175,7 @@ export class Engine implements HostEngine {
   ): Record<string, unknown> | null {
     const payload = diffProps(previous, props);
     if (payload) borderColoursAgain(payload, props);
-    if (payload && node.owned) this.setOwned(node, payload, props);
+    if (payload && node.owned && !node.paint) this.setOwned(node, payload, props);
     // A frame of a transform is committed with no layout settled after it: see `composeSticky`.
     if (payload && node.sticky?.drive && 'transform' in payload) {
       this.composeSticky(node, props['transform']);
@@ -14239,6 +14967,27 @@ export class Engine implements HostEngine {
     );
   }
 
+  private readonly platformColours = new Set<string>();
+
+  /**
+   * Said once per token and props: a colour worked out of a token that holds a platform colour,
+   * which has no channels to work with, is dropped. The compiler says so where one sheet holds
+   * both; a token set in one sheet, or bound, and read in another is only known here.
+   */
+  private reportPlatformColour(name: string, props: readonly string[], on?: string): void {
+    const report = `${name} ${props.join(',')} ${on ?? ''}`;
+    if (this.platformColours.has(report)) return;
+    this.platformColours.add(report);
+    const where = on === undefined ? props.join(', ') : `${props.join(', ')}, bound on <${on}>,`;
+    console.warn(
+      `[angular-native] ${where} works a colour out of var(${name}), which holds a platform` +
+        ` colour (platform-color() or a system colour). The platform resolves that by name and` +
+        ` it has no channels to mix, fade or draw in a gradient or a shadow, so the declaration` +
+        ` is dropped. Use var(${name}) on its own, where a colour property takes it whole, or a` +
+        ` colour written out.`,
+    );
+  }
+
   private readonly unreadDisplays = new Set<string>();
 
   /**
@@ -14442,6 +15191,8 @@ export class Engine implements HostEngine {
    * overlay would believe it and place itself in the corner.
    */
   measure(node: EngineNode, into: (frame: WindowFrame) => void): void {
+    // Where it is drawn takes in every transform above it, which the shadow nodes must have.
+    if (this.paintedNodes.size) this.commitPainted();
     const handle = node.committed?.handle;
     if (handle) this.measureHandle(handle, into);
   }
@@ -14591,12 +15342,18 @@ export class Engine implements HostEngine {
     return path.reverse();
   }
 
+  /**
+   * Who asks for the touch: the nodes from the root down to `from`, which is the target, or for a
+   * move while a node holds the touch, the lowest node above both it and the target, as React's
+   * responder plugin walks. A node inside the responder never takes the touch back from it.
+   */
   private negotiate(
     target: EngineNode,
     event: ResponderEvent,
     phase: 'Start' | 'Move',
+    from: EngineNode = target,
   ): EngineNode | null {
-    const path = this.pathTo(target);
+    const path = this.pathTo(from);
     const capture = `on${phase}ShouldSetResponderCapture` as const;
     const bubble = `on${phase}ShouldSetResponder` as const;
 
@@ -14664,17 +15421,25 @@ export class Engine implements HostEngine {
       if (elected) this.grant(elected, event);
       return;
     }
-    if (type === TOUCH_MOVE) {
-      if (this.currentResponder) {
-        this.responders.get(this.currentResponder)?.onResponderMove?.(event);
-      } else {
-        const elected = this.negotiate(target, event, 'Move');
-        if (elected) this.grant(elected, event);
-      }
-      return;
-    }
-    if (type === TOUCH_END) this.release(event, false);
+    if (type === TOUCH_MOVE) this.moveResponder(target, event);
+    else if (type === TOUCH_END) this.release(event, false);
     else if (type === TOUCH_CANCEL) this.release(event, true);
+  }
+
+  /**
+   * Asked on every move, not only while nobody holds the touch: a scroll view or a list row's
+   * swipe actions takes a drag from a pressable inside it this way. The responder answering for
+   * itself keeps the touch, as in React. The move then goes to whoever holds the touch after the
+   * asking, the new responder included.
+   */
+  private moveResponder(target: EngineNode, event: ResponderEvent): void {
+    const holder = this.currentResponder;
+    const from = holder ? commonAncestor(holder, target) : target;
+    const elected = from ? this.negotiate(target, event, 'Move', from) : null;
+    if (elected && elected !== holder) this.grant(elected, event);
+    if (this.currentResponder) {
+      this.responders.get(this.currentResponder)?.onResponderMove?.(event);
+    }
   }
 
   // --- events -----------------------------------------------------------

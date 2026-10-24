@@ -1,5 +1,14 @@
-import { Component, DestroyRef, inject, input, signal } from '@angular/core';
-import type { Routes } from '@angular/router';
+import {
+  Component,
+  DestroyRef,
+  inject,
+  input,
+  signal,
+  type OnInit,
+  type Signal,
+} from '@angular/core';
+import { ActivatedRoute, Router, type Routes } from '@angular/router';
+import { SCREEN_IN_FRONT } from '@ng-native/device';
 import { Text } from '../../components/src/text.ts';
 import { NativeStackOutlet } from '../../router/src/native-stack-outlet.ts';
 import { reuseScreen } from '../../router/src/native-stack-reuse-strategy.ts';
@@ -76,7 +85,21 @@ export class Modal {}
   imports: [NativeStackOutlet],
   template: `<native-stack-outlet />`,
 })
-export class Compose {}
+export class Compose {
+  constructor() {
+    track('Compose');
+    composeInFront.push(inject(SCREEN_IN_FRONT));
+    composeRoutes.push(inject(ActivatedRoute));
+  }
+}
+
+/** Whether the guard of the `gated` route lets a navigation in. */
+export const gate = { open: true };
+
+/** Whether each `Compose` created is the screen in front, oldest first. */
+export const composeInFront: Signal<boolean>[] = [];
+/** The route of each `Compose` created, oldest first. */
+export const composeRoutes: ActivatedRoute[] = [];
 
 @Component({ selector: 'x-compose-start', imports: [Text], template: `<text>start</text>` })
 export class ComposeStart {}
@@ -90,6 +113,15 @@ export class Broken {
   protected readonly missing = undefined as unknown as () => string;
   constructor() {
     track('Broken');
+  }
+}
+
+/** A page that sends the app on elsewhere as it is created, as a sign-in check in ngOnInit does. */
+@Component({ selector: 'x-redirecting', imports: [Text], template: `<text>redirecting</text>` })
+export class Redirecting implements OnInit {
+  private readonly router = inject(Router);
+  ngOnInit(): void {
+    void this.router.navigateByUrl('/user/9');
   }
 }
 
@@ -176,6 +208,9 @@ export class Room {
 })
 export class WrappedBar {}
 
+/** The rewind a router's navigation is waiting to make, from the outlet copy these screens use. */
+export { pendingRewind } from '../../router/src/native-stack-outlet.ts';
+
 export const routes: Routes = [
   { path: '', component: Home },
   {
@@ -220,6 +255,51 @@ export const routes: Routes = [
     children: [
       { path: '', component: ComposeStart },
       { path: 'step', component: ComposeStep },
+      { path: 'broken', component: Broken },
+      { path: 'redirecting', component: Redirecting },
     ],
+  },
+  {
+    path: 'draft',
+    component: Compose,
+    children: [
+      { path: '', component: ComposeStart },
+      { path: 'step', component: ComposeStep },
+      {
+        path: 'nested',
+        component: Compose,
+        children: [
+          { path: '', component: ComposeStart },
+          { path: 'step', component: ComposeStep },
+          { path: 'broken', component: Broken },
+        ],
+      },
+    ],
+  },
+  {
+    path: 'lazy-compose',
+    loadChildren: () => [
+      {
+        path: '',
+        component: Compose,
+        children: [
+          { path: '', component: ComposeStart },
+          { path: 'broken', component: Broken },
+        ],
+      },
+    ],
+  },
+  { path: 'refused', component: Fine, canActivate: [() => false] },
+  { path: 'gated', component: Fine, canActivate: [() => gate.open] },
+  { path: 'moved', component: Fine, canActivate: [() => inject(Router).parseUrl('/user/5')] },
+  {
+    path: 'moved-broken',
+    component: Fine,
+    canActivate: [() => inject(Router).parseUrl('/broken')],
+  },
+  {
+    path: 'moved-refused',
+    component: Fine,
+    canActivate: [() => inject(Router).parseUrl('/refused')],
   },
 ];

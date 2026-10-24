@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/nx",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "description": "Nx generators for Angular Native: nx add, an Expo app project whose targets run it, and native libraries and components.",
   "keywords": [
     "angular",
@@ -42,12 +42,12 @@
   },
   "dependencies": {
     "@ng-native/migrate": "workspace:*",
-    "@nx/devkit": "^23.0.0",
+    "@nx/devkit": "^23.0.0 || ^24.0.0",
     "minimatch": "^10.0.0",
     "semver": "^7.7.0"
   },
   "peerDependencies": {
-    "nx": "^23.0.0"
+    "nx": "^23.0.0 || ^24.0.0"
   },
   "devDependencies": {
     "@types/semver": "^7.7.0",

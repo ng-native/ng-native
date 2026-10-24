@@ -755,6 +755,89 @@ describe('the typed SwiftUI list', () => {
   });
 });
 
+describe('a pressable row with swipe actions', () => {
+  const all = (n: readonly FakeFabricNode[]): FakeFabricNode[] =>
+    n.flatMap((x) => [x, ...all(x.children)]);
+  let fabric: FakeFabric;
+  let app: ReturnType<typeof mount>;
+  let opened: () => number;
+
+  beforeEach(async () => {
+    const mod = await compileFixture('fixtures/expo-ui.ts');
+    registerExpoUiViews('ios');
+    fabric = createFakeFabric();
+    app = mount(1, mod['ExpoUiSwipeRowFixture'] as Type<unknown>, fabric);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    opened = () => (app.componentRef.instance as { opened(): number }).opened();
+    // The row's size, so the press is kept or given up by its bounds and not a fallback distance.
+    fabric.emit(byTestId('row'), 'topLayout', { layout: { x: 0, y: 0, width: 360, height: 56 } });
+  });
+
+  afterEach(() => app.applicationRef.destroy());
+
+  const byTestId = (id: string) => all(fabric.committed).find((n) => n.props['testID'] === id)!;
+  /** A touch on the row's title, where native's hit test lands, at a point on the screen. */
+  const touch = (type: string, x: number, y = 300) => {
+    const at = { pageX: x, pageY: y, locationX: x, locationY: 20, identifier: 0 };
+    const touches = type === 'topTouchEnd' ? [] : [at];
+    fabric.emit(byTestId('title'), type, { ...at, touches, changedTouches: [at] });
+  };
+  const drag = (xs: readonly number[], ys: readonly number[] = xs.map(() => 300)) => {
+    touch('topTouchStart', xs[0]!, ys[0]);
+    for (let i = 1; i < xs.length; i++) touch('topTouchMove', xs[i]!, ys[i]);
+    touch('topTouchEnd', xs.at(-1)!, ys.at(-1));
+    app.applicationRef.tick();
+  };
+
+  it('does not press for a swipe that brings out the actions', () => {
+    // The report: a swipe to the left over 180 points, all of it inside the 360 point row, so its
+    // bounds alone keep the press. SwiftUI moves the row and never taps it, and native sends the
+    // views inside it no cancel.
+    drag([300, 280, 240, 180, 120]);
+    assert.equal(opened(), 0);
+  });
+
+  it('does not press for a swipe to the right either', () => {
+    drag([60, 80, 120, 200]);
+    assert.equal(opened(), 0);
+  });
+
+  it('still presses for a tap, and for one that wanders a little', () => {
+    drag([200, 200]);
+    drag([200, 205, 212]);
+    assert.equal(opened(), 2);
+  });
+
+  it('still presses for a drag down the row more than across it', () => {
+    drag([200, 225], [290, 320]);
+    assert.equal(opened(), 1);
+  });
+
+  it('presses for the next tap after a swipe', () => {
+    drag([300, 200, 120]);
+    drag([200, 200]);
+    assert.equal(opened(), 1);
+  });
+
+  it('leaves a row on Android alone, where SwiftUI is not drawing it', async () => {
+    app.applicationRef.destroy();
+    registerPlatformComponents('android');
+    try {
+      const mod = await compileFixture('fixtures/expo-ui.ts');
+      fabric = createFakeFabric();
+      app = mount(1, mod['ExpoUiSwipeRowFixture'] as Type<unknown>, fabric);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      fabric.emit(byTestId('row'), 'topLayout', {
+        layout: { x: 0, y: 0, width: 360, height: 56 },
+      });
+      drag([300, 240, 180]);
+      assert.equal(opened(), 1);
+    } finally {
+      registerPlatformComponents('ios');
+    }
+  });
+});
+
 describe('a SwiftUI section', () => {
   const all = (n: readonly FakeFabricNode[]): FakeFabricNode[] =>
     n.flatMap((x) => [x, ...all(x.children)]);

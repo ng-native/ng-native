@@ -15,6 +15,7 @@ const {
   shadowsWithColourTokens,
 } = require('./colour-expression.cjs');
 const {
+  calcLength,
   CssUnsupported,
   CURRENT_COLOUR,
   fallbacks,
@@ -26,12 +27,14 @@ const {
   PER_TURN,
   round,
   withRefusals,
+  refusePart,
   mixedToken,
   OF_A_BOX,
   color,
 } = require('./values.cjs');
 const {
   translate,
+  translates,
   finishTransition,
   animationTimeWithTokens,
   finishAnimation,
@@ -43,10 +46,11 @@ const {
   propsFor,
   camel,
   ALIASES,
+  AXIS_SHORTHANDS,
 } = require('./properties.cjs');
 const { deferGradient, GRADIENTS } = require('./gradients.cjs');
 const { calcWithTokens, motionWithTokens } = require('./token-arithmetic.cjs');
-const { undrawnOnIos } = require('./filters.cjs');
+const { filter, undrawnOnIos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
 
 /** Angular's emulated encapsulation marker, which we strip: scoping is per rule set already. */
@@ -691,6 +695,8 @@ function deferVar(value, context) {
   // `calc(var(--spacing) * 6)`.
   const declared = kindOf(property);
   const kind = arithmetic && declared === 'lineHeight' ? 'length' : declared;
+  // A property refused whatever its value is refused for that, a token in it included.
+  if (kind === null && !translates(property)) throw unsupported(property, context);
   if (kind === null) {
     throw new CssUnsupported(
       `${context}: var() cannot be used in the '${property}' shorthand, because which native ` +
@@ -2034,18 +2040,25 @@ function tokenWords(tokens) {
 }
 
 /**
- * A colour CSS has no property for, such as `tint-color`. Read like a token's value, which is the
- * same token list: a colour settles here, a var() is looked up on device. False when it is neither.
+ * A colour CSS has no property for, `tint-color` or `shadow-color`. lightningcss hands it over as
+ * the same raw terms it leaves a `color` with a var() in as, so a colour written out settles here
+ * and anything else is read as that `color` is: a platform or system colour, a relative colour or
+ * a mix of a token, a light-dark() side, and a var().
  */
 function addCustomColor(name, parts, out, deferred, context) {
   const value = tokenValue(parts, context);
   if (value?.color !== undefined) {
     out[camel(name)] = value.color;
-    return true;
+    return;
   }
-  if (!value?.alias) return false;
-  deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
-  return true;
+  const word = onlyWord(meaningful(parts));
+  // The element's text colour, as it is in a `background-color`, which only the device knows.
+  if (word?.toLowerCase() === 'currentcolor') {
+    deferred.push({ props: propsFor(name), within: CURRENT_COLOUR });
+    return;
+  }
+  const raw = { propertyId: { property: name }, value: parts };
+  addUnparsed({ property: 'unparsed', value: raw }, out, deferred, context);
 }
 
 /** The clamps, which lightningcss does not parse and which take a number of lines. */
@@ -2065,11 +2078,26 @@ function addAliased(name, parts, out, deferred, context) {
     deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
     return;
   }
-  if (value?.length === undefined) throw unsupported(name, context);
-  if (typeof value.length === 'string' && value.length.endsWith('%') && NO_PERCENT.has(name)) {
+  const declared = { propertyId: { property: name }, value: parts };
+  // A function of a token or an `env()`, `calc(var(--x) * -1)` as Tailwind negates one: worked
+  // out on device, as a longhand lightningcss parses is with one.
+  if (mentionsVar(withEnvAsVar(declared, context).value)) {
+    addUnparsed({ property: 'unparsed', value: declared }, out, deferred, context);
+    return;
+  }
+  const settled = value?.length ?? calcLength(parts, context);
+  if (NO_PERCENT.has(name) && mentionsPercent(parts)) {
     throw new CssUnsupported(`${context}: '${name}' takes a length, not a percentage`);
   }
-  for (const prop of propsFor(name)) out[prop] = value.length;
+  if (settled === undefined) throw unsupported(name, context);
+  for (const prop of propsFor(name)) out[prop] = settled;
+}
+
+/** Whether unparsed terms hold a percentage, inside a function or not. */
+function mentionsPercent(parts) {
+  return (parts ?? []).some(
+    (part) => part?.value?.type === 'percentage' || mentionsPercent(part?.value?.arguments),
+  );
 }
 
 /**
@@ -2132,7 +2160,10 @@ function addCustom(declaration, out, tokens, deferred, context) {
     return;
   }
 
-  if (kindOf(name) === 'color' && addCustomColor(name, parts, out, deferred, context)) return;
+  if (kindOf(name) === 'color') {
+    addCustomColor(name, parts, out, deferred, context);
+    return;
+  }
 
   if (ALIASES[name] || kindOf(name) === 'length') {
     addAliased(name, parts, out, deferred, context);
@@ -2148,6 +2179,28 @@ function addCustom(declaration, out, tokens, deferred, context) {
 
   refuseSlottedTouchAction(name, parts, context);
   addCustomWord(name, parts, out, context);
+}
+
+/**
+ * `padding-horizontal: 12px` as the declaration of the CSS property it is the one-value form of,
+ * `padding-inline: 12px`, so it takes every value that does and lands on the same edges. A value
+ * with a `var()` or an `env()` in it is what lightningcss makes of that property with one, and
+ * any other is read again as written. Any other declaration is returned as it is.
+ */
+function axisAsCss(declaration, context) {
+  const name = declaration.property === 'custom' ? declaration.value?.name : undefined;
+  if (!Object.hasOwn(AXIS_SHORTHANDS, name ?? '')) return declaration;
+  const property = AXIS_SHORTHANDS[name];
+  const parts = declaration.value.value ?? [];
+  if (meaningful(parts).length !== 1) {
+    throw new CssUnsupported(
+      `${context}: '${name}' takes one value, as React Native's own does. Write '${property}' ` +
+        `for a different value on each side.`,
+    );
+  }
+  const value = { propertyId: { property }, value: parts };
+  if (mentionsVar(withEnvAsVar(value, context).value)) return { property: 'unparsed', value };
+  return reparsed(property, cssText(parts, context), context);
 }
 
 /**
@@ -2178,6 +2231,48 @@ function addCustomWord(name, parts, out, context) {
   }
   if (word === null) throw unsupported(name, context);
   translate(name, word, out, context);
+}
+
+/**
+ * The shorthands whose colour part is a prop of its own, which takes `platform-color()` as `color`
+ * does. A `box-shadow`'s colour is not one, and refuses it.
+ */
+const NAMED_COLOUR_SHORTHAND =
+  /^(text-shadow|border(-(top|right|bottom|left|inline|block)(-(start|end))?)?|outline|text-decoration)$/;
+
+/** Whether a raw value is one of those shorthands with `platform-color()` written in it. */
+const writtenPlatformColour = (value) =>
+  NAMED_COLOUR_SHORTHAND.test(value?.propertyId?.property ?? '') &&
+  (value.value ?? []).some(
+    (part) => part?.type === 'function' && part.value?.name === PLATFORM_COLOR,
+  );
+
+/** The styles a text decoration's line is drawn in. */
+const DECORATION_STYLES = new Set(['solid', 'double', 'dotted', 'dashed', 'wavy']);
+
+/** One term of a written-out `text-decoration`, into the lines, style and colour it sets. */
+function decorationTerm(part, found, context) {
+  const word = part.type === 'token' && part.value?.type === 'ident' && part.value.value;
+  if (part.type === 'function' && part.value?.name === PLATFORM_COLOR) {
+    found.color = platformColor(part, context);
+  } else if (DECORATION_STYLES.has(word)) found.style = word;
+  else if (word === 'none') return;
+  else if (word) found.line.push(word);
+  else throw new CssUnsupported(`${context}: could not read 'text-decoration'`);
+}
+
+/**
+ * `text-decoration: underline platform-color(link)`, which lightningcss cannot parse, read from its
+ * terms as the shorthand is: lines, a style, solid unless one is written, and the colour, a prop
+ * of its own, which takes the names as `color` does. False for any other property.
+ */
+function writtenTextDecoration(value, out, context) {
+  if (value.propertyId.property !== 'text-decoration') return false;
+  const found = { line: [], style: 'solid', color: undefined };
+  for (const part of meaningful(value.value)) decorationTerm(part, found, context);
+  translate('text-decoration', { line: found.line, style: found.style }, out, context);
+  out.textDecorationColor = found.color;
+  return true;
 }
 
 /**
@@ -2323,9 +2418,15 @@ function addUnparsed(declaration, out, deferred, context) {
     for (const prop of platform.props) out[prop] = platform.value;
     return;
   }
+  // `text-shadow: 0 1px 2px platform-color(link)` or `border: 1px solid platform-color(link)`,
+  // which lightningcss cannot parse: the colour is a prop of its own, which takes the names as
+  // `color` does.
   if (settledAsWritten(declaration)) {
-    unparsedValue(declaration.value, out, deferred, context);
-    return;
+    if (!writtenPlatformColour(declaration.value)) {
+      unparsedValue(declaration.value, out, deferred, context);
+      return;
+    }
+    if (writtenTextDecoration(declaration.value, out, context)) return;
   }
   const property = declaration.value?.propertyId?.property;
   if (animationTimeWithTokens(property, declaration.value.value ?? [], out, context)) return;
@@ -2580,6 +2681,7 @@ function termText(part, context) {
  * has no standard for, so a plain keyword is recovered rather than refusing them sight unseen.
  */
 function addDeclaration(declaration, out, tokens, deferred, context) {
+  declaration = axisAsCss(declaration, context);
   if (declaration.property === 'custom') {
     addCustom(declaration, out, tokens, deferred, context);
     return;
@@ -2623,6 +2725,83 @@ function addDeclaration(declaration, out, tokens, deferred, context) {
       delete out[key];
     }
   }
+}
+
+/**
+ * One declaration of a rule in a sheet read as a browser reads it: as `addDeclaration` has it, or
+ * one of the properties that make a box the containing block of the absolute boxes in it, for the
+ * engine alone (`heldForTheEngine`). An app's own sheet is refused them, and places such a box
+ * against one it gives a position.
+ */
+function addBrowsersDeclaration(declaration, out, tokens, deferred, context) {
+  if (!heldForTheEngine(declaration, out, context)) {
+    addDeclaration(declaration, out, tokens, deferred, context);
+  }
+}
+
+/** What native does not do of each property `heldForTheEngine` keeps, where the value does it. */
+const NOT_DRAWN = {
+  perspective: 'native gives the boxes in it no perspective',
+  'backdrop-filter': 'native draws no backdrop filter',
+  contain: 'native contains neither the size nor the paint of a box',
+};
+/** The containments native does not do: of size, which lays a box out as if it were empty, and of paint, which clips it. */
+const NOT_CONTAINED = new Set(['size', 'inline-size', 'paint', 'strict', 'content']);
+
+/**
+ * `will-change`, `contain`, `perspective` and `backdrop-filter`, which can make a box what the
+ * absolute boxes in it are placed against however it is positioned, as a transform does. Kept for
+ * the engine, which reads that from them and sends none of them to a native view: `will-change`
+ * and `contain` as the words written, `perspective` as its length and `backdrop-filter` as the
+ * list `filter` is, each or `none`, as a value set on an element is. What native does not do of a
+ * value is reported and the value kept. A value with a token in it is refused. Answers whether it
+ * was one.
+ */
+function heldForTheEngine(declaration, out, context) {
+  const { property, value } = declaration;
+  const name =
+    property === 'custom'
+      ? value?.name
+      : property === 'unparsed'
+        ? value?.propertyId?.property
+        : property;
+  if (!['will-change', 'contain', 'perspective', 'backdrop-filter'].includes(name)) return false;
+  if (property === 'unparsed' || (property === 'custom' && mentionsVar(value.value))) {
+    throw new CssUnsupported(`${context}: '${name}' made of tokens is not read. Write the value.`);
+  }
+  const kept = keptValue(name, value, context);
+  if (leftOut(name, kept)) refusePart(`${context}: ${NOT_DRAWN[name]}.`);
+  out[camel(name)] = kept;
+  return true;
+}
+
+/** Whether native leaves out something a value `heldForTheEngine` keeps does. */
+function leftOut(name, kept) {
+  if (name === 'contain') return kept.split(' ').some((word) => NOT_CONTAINED.has(word));
+  // A `will-change` is a hint: there is nothing more to it that a box would show.
+  return name !== 'will-change' && kept !== 'none';
+}
+
+/** The value `heldForTheEngine` keeps of one of its properties. */
+function keptValue(name, value, context) {
+  if (name === 'backdrop-filter') return value?.type === 'none' ? 'none' : filter(value, context);
+  if (name === 'perspective') return keptPerspective(value, context);
+  // A `will-change` is a list, its names between commas.
+  const words = meaningful(value.value).filter(
+    (term) => name !== 'will-change' || term.value?.type !== 'comma',
+  );
+  if (!words.length || words.some((term) => term.type !== 'token' || term.value.type !== 'ident')) {
+    throw new CssUnsupported(`${context}: could not read '${name}'`);
+  }
+  return words.map((term) => term.value.value).join(name === 'will-change' ? ', ' : ' ');
+}
+
+/** A `perspective`: `none`, or its length in points. */
+function keptPerspective(value, context) {
+  if (value?.type === 'none') return 'none';
+  const points = value?.type === 'length' ? length(value.value, context) : undefined;
+  if (typeof points === 'number') return points;
+  throw new CssUnsupported(`${context}: 'perspective' is read in px or rem`);
 }
 
 /** Whether a structured value has a length in it that only the device can settle. */
@@ -2973,6 +3152,8 @@ function compileCss(source, context = 'styles', options = {}) {
   /** The platforms this sheet is built for: the one Metro is bundling, or both when it is not said. */
   const targets = NATIVE.includes(options.platform) ? [options.platform] : NATIVE;
   let order = 0;
+  /** The tokens each declaration reads, for `reportPlatformColourReads` once the sheet is read. */
+  const reads = [];
   /**
    * The sheet's cascade layers, in the order each was first named, and the one being compiled.
    * A rule carries its layer until the whole sheet is read, since a later `@layer a, b;` cannot
@@ -3037,9 +3218,18 @@ function compileCss(source, context = 'styles', options = {}) {
       // The whole rule: a slot can be set after the declaration that reads it.
       assertVariantsKnown(tokens, deferred, 0);
       supersede(deferred, before, written);
+      noteReads(name, tokens, deferred.slice(before), context);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
       onUnsupported(reported(context, `dropped '${name}'`, error.message));
+    }
+  }
+
+  /** What a declaration reads, kept for `reportPlatformColourReads` where there is one to tell. */
+  function noteReads(name, tokens, added, context) {
+    const token = String(name).startsWith('--') ? tokens?.[name] : undefined;
+    if (onUnsupported && (token || added.length)) {
+      reads.push({ name, context, token, deferred: added });
     }
   }
 
@@ -3365,6 +3555,7 @@ function compileCss(source, context = 'styles', options = {}) {
     const { declarations, importantDeclarations } = rule.value.declarations;
     const tokens = {};
     const deferred = [];
+    const adds = options.generated ? addBrowsersDeclaration : addDeclaration;
 
     /** Translate one list of declarations, collecting tokens and deferred values as it goes. */
     const build = (list, sides) => {
@@ -3385,8 +3576,7 @@ function compileCss(source, context = 'styles', options = {}) {
         if (easedByToken(declaration, out, deferred, context)) continue;
         if (timedByToken(declaration, out, context)) continue;
         const before = deferred.length;
-        const add = (one) =>
-          declare(one, out, tokens, deferred, context, addDeclaration, platforms);
+        const add = (one) => declare(one, out, tokens, deferred, context, adds, platforms);
         declareOrAnimate(declaration, add, context);
         for (let i = before; i < deferred.length; i++) deferred[i].props.forEach(sides.wrote);
       }
@@ -3516,7 +3706,7 @@ function compileCss(source, context = 'styles', options = {}) {
   function compileRule(rule) {
     if (rule.type === 'font-face') {
       const face = fontFace(rule.value, context);
-      if (face.weightRange) onUnsupported?.(rangeWarning(face, locationOf(rule)));
+      if (rangeUndrawn(face, options)) onUnsupported?.(rangeWarning(face, locationOf(rule)));
       fonts.push(locatedFace(face, rule));
       return [];
     }
@@ -3565,6 +3755,7 @@ function compileCss(source, context = 'styles', options = {}) {
   // A rule names its layer by its place in the sheet's list of them. The engine gives each name
   // one place among every sheet's layers, as a document has one order for them all.
   for (const rule of rules) if (rule.layer) rule.layer = rule.layer.index;
+  reportPlatformColourReads(rules, reads, onUnsupported);
   return {
     rules,
     ...(layers.all.length ? { layers: layers.all.map((one) => one.path) } : {}),
@@ -3651,19 +3842,44 @@ function fontFace(value, context) {
 }
 
 /**
- * What a face declared with a weight range draws, which is not what a browser draws: neither
- * platform picks a variable font's instance by the text's weight. iOS draws its default instance;
- * Android draws it below 700, and its system font from 700, as React Native registers the file
- * under one style and asks for its bold one at 700.
+ * What a face declared with a weight range draws before Expo SDK 58, which is not what a browser
+ * draws. expo-font 57 registers a variable font as its default instance alone: iOS draws that at
+ * every weight, and Android draws it below 700 and its system font from 700. From expo-font 58 the
+ * text's weight picks the instance on both.
  */
 function rangeWarning(face, location) {
   const [low, high] = face.weightRange;
   return (
-    `${location}: @font-face '${face.family}' declares the weight range ${low} ${high}, and a ` +
-    `device does not pick a variable font's weight: iOS draws the font's default instance at ` +
-    `every weight, and Android draws it below 700 and its system font from 700. Declare one ` +
-    `file per weight instead.`
+    `${location}: @font-face '${face.family}' declares the weight range ${low} ${high}, and before ` +
+    `Expo SDK 58 a device does not pick a variable font's weight: iOS draws the font's default ` +
+    `instance at every weight, and Android draws it below 700 and its system font from 700. ` +
+    `Update to Expo SDK 58, or declare one file per weight.`
   );
+}
+
+/** Whether a face declares a range the app's Expo SDK draws one weight of: before SDK 58. */
+function rangeUndrawn(face, options) {
+  return face.weightRange !== undefined && (options.expoSdk ?? appExpoSdk()) < 58;
+}
+
+/**
+ * The app's Expo SDK, read once per working directory from its `expo`. Infinity without one, and
+ * in the docs' preview, which runs this in a page with no file system: no expo means no expo-font
+ * to register a face with, and the preview builds for the SDK the docs are on.
+ */
+const expoSdks = new Map();
+function appExpoSdk() {
+  try {
+    const cwd = process.cwd();
+    if (!expoSdks.has(cwd)) {
+      const manifest = require.resolve('expo/package.json', { paths: [cwd] });
+      const { version } = JSON.parse(require('node:fs').readFileSync(manifest, 'utf8'));
+      expoSdks.set(cwd, Number(String(version).split('.')[0]));
+    }
+    return expoSdks.get(cwd);
+  } catch {
+    return Infinity;
+  }
 }
 
 /**
@@ -3757,6 +3973,92 @@ function asksAboutPosition(compound) {
  * declaration can name iOS's colour and Android's.
  */
 const PLATFORM_COLOR = 'platform-color';
+
+/**
+ * Says where a sheet works a colour out of a token it sets to a platform colour: a `color-mix()`,
+ * a relative colour, a gradient or a shadow of `var(--accent)` where `--accent:
+ * platform-color(link)`. The platform resolves that colour by name, so it has no channels to work
+ * with, and the engine drops the declaration where the token holds one. The engine says so too,
+ * in development, for a token set in one sheet and read in another, which only it can see.
+ */
+function reportPlatformColourReads(rules, reads, onUnsupported) {
+  if (!reads.length) return;
+  const { held, set } = platformColourTokens(rules);
+  if (!held.size) return;
+  for (const { name, context, token, deferred } of reads) {
+    const worked = token ? [token.shadow, token.deferredColour] : deferred.map(workedColour);
+    const found = referencesIn(worked, set).find((reference) => held.has(reference));
+    if (!found) continue;
+    onUnsupported(
+      reported(
+        context,
+        `'${name}' is dropped on device`,
+        `it works a colour out of var(${found}), which holds a platform colour (platform-color() ` +
+          `or a system colour). The platform resolves that by name, so it has no channels to ` +
+          `mix, fade or draw in a gradient or a shadow. Use var(${found}) on its own in a colour property, or a colour written out.`,
+      ),
+    );
+  }
+}
+
+/**
+ * The tokens a sheet sets to a platform colour, and those set to one of them, through their own
+ * token or, where the sheet doesn't set that, their fallback. Also every token the sheet sets.
+ */
+function platformColourTokens(rules) {
+  const tokens = rules.flatMap((rule) => Object.entries(rule.tokens ?? {}));
+  const set = new Set(tokens.map(([name]) => name));
+  const held = new Set();
+  const holds = (token) => {
+    if (token?.color?.platformColor) return true;
+    if (token?.alias === undefined) return false;
+    return set.has(token.alias) ? held.has(token.alias) : holds(token.fallback);
+  };
+  for (let size = -1; size !== held.size;) {
+    size = held.size;
+    for (const [name, token] of tokens) if (holds(token)) held.add(name);
+  }
+  return { held, set };
+}
+
+/**
+ * The part of a deferred declaration that works a colour out of its tokens, or null where it
+ * takes a token whole: `color: var(--x)`, a light-dark() side of one, a line's `var()`.
+ */
+function workedColour(entry) {
+  const whole = (value) => value?.__colour && 'reference' in value.__colour;
+  if (entry.kind !== undefined) return entry.adjust?.alpha === undefined ? null : entry;
+  if (entry.within !== undefined) return whole(entry.within) ? null : entry.within;
+  if (entry.line?.colour) return entry.line.colour;
+  return entry.gradient ?? null;
+}
+
+const NAMING_KEYS = new Set(['reference', 'alias']);
+
+/** Every token a compiled value reads, at any depth. */
+function referencesIn(value, set, out = []) {
+  if (Array.isArray(value)) {
+    for (const part of value) referencesIn(part, set, out);
+  } else if (value && typeof value === 'object') {
+    // Of `var(--a, var(--b))`, the first token the sheet sets; all of them where it sets none.
+    const read = firstSet(value, set);
+    if (read) {
+      out.push(read);
+      return out;
+    }
+    for (const [key, part] of Object.entries(value)) {
+      if (typeof part === 'string' && NAMING_KEYS.has(key)) out.push(part);
+      else if (key === 'alternatives' && Array.isArray(part)) out.push(...part);
+      else referencesIn(part, set, out);
+    }
+  }
+  return out;
+}
+
+function firstSet(value, set) {
+  if (!Array.isArray(value.alternatives)) return undefined;
+  return [value.reference, ...value.alternatives].find((name) => set.has(name));
+}
 
 /** The declaration a `platform-color()` value produces, or null if this is not one. */
 function asPlatformColor(value, context) {
@@ -4155,4 +4457,5 @@ module.exports = {
   linear,
   markUnitless,
   opacityOf,
+  platformColor,
 };

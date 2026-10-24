@@ -13,6 +13,7 @@ import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing
 import { provideNativeRouter, withSvgIcons } from '../router/src/provide-native-router.ts';
 import type { TabIcon } from '../router/src/native-tab.ts';
 import { registerScreenComponents } from '../router/src/screens.ts';
+import { SCREENS_VERSION } from '../router/src/screens-version.ts';
 import { compileFixture } from './compile.ts';
 
 let mod: Record<string, unknown>;
@@ -67,6 +68,8 @@ async function start(renderer: boolean, platform: 'ios' | 'android' = 'ios') {
         mod['routes'] as Routes,
         ...(renderer ? [withSvgIcons(FakeSvgRenderer)] : []),
       ),
+      // The template form these assert; router-tab-template-icon.test.ts covers 4.29 and later.
+      { provide: SCREENS_VERSION, useValue: '4.26.2' },
     ],
   });
   await idle();
