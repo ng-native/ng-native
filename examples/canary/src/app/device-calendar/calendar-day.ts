@@ -19,10 +19,7 @@ import {
   type CalendarEntry,
   type DayEntry,
 } from './calendar-dates.ts';
-import type { PressEvent } from './pressable.ts';
-import { Pressable } from './pressable.ts';
-import { Text } from './text.ts';
-import { View } from './view.ts';
+import { Pressable, Text, View, type PressEvent } from '@ng-native/components';
 
 /** `(slotPress)`: an empty stretch of the timeline was pressed. */
 export interface CalendarSlotPress {

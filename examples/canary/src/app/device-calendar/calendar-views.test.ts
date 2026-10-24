@@ -1,5 +1,5 @@
 /**
- * `<calendar-month>` and `<calendar-day>`, from `@ng-native/components/calendar`, and the date
+ * `<calendar-month>` and `<calendar-day>`, and the date
  * arithmetic they are drawn from.
  *
  * The month is a whole number of weeks from the week start, with a dot for each colour on a day;
@@ -8,10 +8,12 @@
  * a press on an entry or on an empty stretch, as the minute under the finger.
  */
 import assert from 'node:assert/strict';
-import { after, before, describe, it, mock } from 'node:test';
-import type { Type } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { cleanup, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
+import { afterAll, describe, it, vi } from 'vitest';
 import {
+  CalendarDay,
+  CalendarMonth,
   addDays,
   addMonths,
   colorsByDay,
@@ -22,8 +24,7 @@ import {
   monthGrid,
   type CalendarEntry,
   type CalendarSlotPress,
-} from '@ng-native/components/calendar';
-import { compileFixture } from './compile.ts';
+} from './calendar-views.ts';
 
 const at = (day: string, hour: number, minute = 0) => {
   const [y, m, d] = day.split('-').map(Number);
@@ -178,6 +179,41 @@ describe('the entries on a day', () => {
   });
 });
 
+/** A month to pick a day from, and that day's timeline below it, as an app puts them together. */
+@Component({
+  selector: 'x-calendar-views',
+  imports: [CalendarDay, CalendarMonth],
+  template: `
+    <calendar-month
+      [(selected)]="selected"
+      (monthChange)="months.push($event)"
+      [entries]="entries()"
+      [today]="today()"
+      [weekStart]="weekStart()"
+      locale="en-GB"
+    />
+    <calendar-day
+      [day]="selected()"
+      [entries]="entries()"
+      [startHour]="7"
+      [endHour]="22"
+      [hourHeight]="60"
+      locale="en-GB"
+      (entryPress)="pressed.push($event.id)"
+      (slotPress)="slots.push($event)"
+    />
+  `,
+})
+class CalendarViews {
+  readonly selected = signal('2026-10-14');
+  readonly months: string[] = [];
+  readonly today = signal('2026-10-13');
+  readonly weekStart = signal<0 | 1>(1);
+  readonly entries = signal<readonly CalendarEntry[]>([]);
+  readonly pressed: string[] = [];
+  readonly slots: CalendarSlotPress[] = [];
+}
+
 interface Screen {
   selected: { (): string; set(value: string): void };
   today: { set(value: string): void };
@@ -209,14 +245,10 @@ async function touchAt(node: FakeFabricNode, y: number): Promise<void> {
   });
 }
 
-let mod: Record<string, unknown>;
-before(async () => {
-  mod = await compileFixture('fixtures/calendar-views.ts');
-});
-after(cleanup);
+afterAll(cleanup);
 
 async function show(entries: readonly CalendarEntry[] = []) {
-  const app = await render(mod['CalendarViews'] as Type<unknown>);
+  const app = await render(CalendarViews);
   const screen = app.instance as Screen;
   screen.entries.set(entries);
   await app.detectChanges();
@@ -362,16 +394,16 @@ describe('<calendar-day>', () => {
 
   it('shows the line at the time now once the clock reaches the day shown', async () => {
     // The day shown is the 14th, and it is a minute to midnight on the 13th.
-    mock.timers.enable({ apis: ['setInterval', 'Date'], now: at('2026-10-13', 23, 59) });
+    vi.useFakeTimers({ toFake: ['setInterval', 'Date'], now: at('2026-10-13', 23, 59) });
     try {
       const { app } = await show();
       assert.equal(app.queryByLabelText('Now'), null);
       // To 07:00 on the 14th, the first hour the fixture shows.
-      mock.timers.tick(7 * 60 * 60 * 1000 + 60 * 1000);
+      vi.advanceTimersByTime(7 * 60 * 60 * 1000 + 60 * 1000);
       await app.detectChanges();
       assert.ok(app.getByLabelText('Now'), 'the minute tick found that the 14th is today');
     } finally {
-      mock.timers.reset();
+      vi.useRealTimers();
     }
   });
 

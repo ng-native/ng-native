@@ -153,19 +153,6 @@ describe('the entry points Metro has to resolve', () => {
     assert.doesNotMatch(barrel, /markdown|'marked'/, 'the barrel never reaches marked');
   });
 
-  it('reaches the calendar views from their own entry, the same file on every platform', () => {
-    for (const platform of ['ios', 'android', 'web']) {
-      assert.equal(
-        path.relative(
-          root,
-          resolve(context(from), '@ng-native/components/calendar', platform).filePath,
-        ),
-        'packages/components/src/calendar.ts',
-        platform,
-      );
-    }
-  });
-
   it('gives a browser build its own entry where a device needs a native library', () => {
     // One import in an app, two graphs: React Native's on a device, a React-free one in a
     // browser, which could not load React Native's Flow source if it tried.

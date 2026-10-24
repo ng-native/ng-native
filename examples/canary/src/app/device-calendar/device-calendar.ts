@@ -10,7 +10,7 @@ import {
   type CalendarDate,
   type CalendarEntry,
   type CalendarSlotPress,
-} from '@ng-native/components/calendar';
+} from './calendar-views.ts';
 import { Calendar, EntityTypes } from '@ng-native/expo/calendar';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
@@ -41,14 +41,14 @@ function samples(today: CalendarDate): CalendarEntry[] {
 }
 
 /**
- * `@ng-native/components/calendar` over sample entries and, once allowed, the device's own
+ * The month and day views over sample entries and, once allowed, the device's own
  * events from `@ng-native/expo/calendar`. A tap on an empty slot adds a local entry there.
  */
 @Component({
-  selector: 'x-calendar-kit',
+  selector: 'x-device-calendar',
   imports: [CalendarDay, CalendarMonth, NativeHeader, Pressable, ScrollView, Text, View],
   template: `
-    <native-header title="Calendar kit" />
+    <native-header title="Device calendar" />
     <scroll-view class="screen">
       <view [style]="page.content">
         <calendar-month
@@ -112,7 +112,7 @@ function samples(today: CalendarDate): CalendarEntry[] {
     </scroll-view>
   `,
 })
-export class CalendarKitPage {
+export class DeviceCalendarPage {
   protected readonly calendar = inject(Calendar);
   protected readonly page = page;
   protected readonly today = dayOf(new Date());

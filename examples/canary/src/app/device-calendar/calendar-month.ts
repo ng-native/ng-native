@@ -12,9 +12,7 @@ import {
   type CalendarEntry,
   type WeekStart,
 } from './calendar-dates.ts';
-import { Pressable } from './pressable.ts';
-import { Text } from './text.ts';
-import { View } from './view.ts';
+import { Pressable, Text, View } from '@ng-native/components';
 
 /**
  * A month as a grid of days: the month's name with arrows to the one before and after, the

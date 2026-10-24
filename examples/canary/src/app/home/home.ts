@@ -263,8 +263,8 @@ export class Home {
     },
     { path: '/expo', title: 'Expo modules', blurb: 'haptics, clipboard, files, and an Expo view' },
     {
-      path: '/calendar-kit',
-      title: 'Calendar kit',
+      path: '/device-calendar',
+      title: 'Device calendar',
       blurb: 'month and day views, over the device calendars',
     },
     { path: '/maps', title: 'Maps', blurb: 'expo-maps, with markers and a camera move' },

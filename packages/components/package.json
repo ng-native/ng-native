@@ -21,7 +21,6 @@
       "browser": "./src/animations-web.ts",
       "default": "./src/animations.ts"
     },
-    "./calendar": "./src/calendar.ts",
     "./gestures": {
       "browser": "./src/gestures-web.ts",
       "default": "./src/gestures.ts"
@@ -50,10 +49,6 @@
         "types": "./dist/animations.d.ts",
         "browser": "./dist/animations-web.js",
         "default": "./dist/animations.js"
-      },
-      "./calendar": {
-        "types": "./dist/calendar.d.ts",
-        "default": "./dist/calendar.js"
       },
       "./gestures": {
         "types": "./dist/gestures.d.ts",

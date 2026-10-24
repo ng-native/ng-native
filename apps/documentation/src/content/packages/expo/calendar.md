@@ -7,8 +7,7 @@ summary: The calendars on the device, and the events and reminders in them.
 
 `Calendar` reads and writes the user's own calendars, the ones the system Calendar app shows,
 bound to `expo-calendar`: iCloud, Google, Exchange and local calendars, their events and, on iOS,
-their reminders. To show events on screen, put them in a
-[month or day view](/packages/components/calendar).
+their reminders.
 
 The service uses the module's object API. A calendar, an event, a reminder and an attendee are
 handles, each with its own `update()` and `delete()`, and a calendar makes its own events with

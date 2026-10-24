@@ -147,7 +147,6 @@ export const PACKAGES: NavSection = {
         { path: 'packages/components/html-elements', title: 'HTML elements' },
         { path: 'packages/components/image', title: 'Image' },
         { path: 'packages/components/markdown', title: 'Markdown' },
-        { path: 'packages/components/calendar', title: 'Calendar' },
         { path: 'packages/components/activity-indicator', title: 'Activity indicator' },
         { path: 'packages/components/input', title: 'Text input', group: 'Input' },
         { path: 'packages/components/switch', title: 'Switch' },
