@@ -86,6 +86,26 @@ export class AcceptedInput {
   readonly text = signal('');
 }
 
+/** A field restyled after typing, by a bound style or by a class. */
+@Component({
+  selector: 'x-restyled-input',
+  imports: [TextInput],
+  styles: ['.loud { font-size: 24px }'],
+  template: `<text-input
+    nativeID="field"
+    [(value)]="text"
+    [multiline]="multiline()"
+    [style.color]="color()"
+    [class.loud]="loud()"
+  />`,
+})
+export class RestyledInput {
+  readonly text = signal('');
+  readonly multiline = signal(true);
+  readonly color = signal('black');
+  readonly loud = signal(false);
+}
+
 /** Nothing bound, so the field keeps what is typed. */
 @Component({
   selector: 'x-free-input',

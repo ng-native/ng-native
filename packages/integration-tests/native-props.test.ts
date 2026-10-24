@@ -70,7 +70,10 @@ describe('a prop the native view does not declare', () => {
         ...source.matchAll(/write\('([a-zA-Z_]+)'/g),
       ].map((match) => match[1]!);
       for (const name of names) {
-        if (!written.has(name) && !['style', 'styleOverride', 'intrinsicSize'].includes(name)) {
+        if (
+          !written.has(name) &&
+          !['style', 'styleOverride', 'intrinsicSize', 'latestEventCount'].includes(name)
+        ) {
           missing.push(`${file}: ${name}`);
         }
       }

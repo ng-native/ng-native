@@ -615,6 +615,8 @@ const ENGINE_PROPS = new Set<string>([
   'disabled',
   'intrinsicSize',
   'styleOverride',
+  // A text field's latest event count, committed as `mostRecentEventCount`: see `echoedEventCount`.
+  'latestEventCount',
   ...Object.values(EVENT_OPT_IN_PROPS),
   ...Object.values(VIEW_EVENT_OPT_IN_PROPS).flatMap((props) => Object.values(props)),
 ]);
@@ -4383,6 +4385,72 @@ function fitsWidth(node: EngineNode): boolean {
 function alignMultiline(viewName: string, props: Record<string, unknown>): void {
   if (viewName !== 'AndroidTextInput' || props['multiline'] !== true) return;
   props['textAlignVertical'] ??= 'top';
+}
+
+/** The props React Native builds a text field's text attributes from, as `BaseTextProps` reads them. */
+const TEXT_ATTRIBUTES = [
+  'color',
+  'backgroundColor',
+  'opacity',
+  'fontFamily',
+  'fontSize',
+  'fontStyle',
+  'fontWeight',
+  'fontVariant',
+  'fontVariationSettings',
+  'allowFontScaling',
+  'maxFontSizeMultiplier',
+  'dynamicTypeRamp',
+  'letterSpacing',
+  'lineHeight',
+  'textAlign',
+  'writingDirection',
+  'direction',
+  'lineBreakStrategyIOS',
+  'lineBreakModeIOS',
+  'textDecorationLine',
+  'textDecorationColor',
+  'textDecorationStyle',
+  'textShadowColor',
+  'textShadowOffset',
+  'textShadowRadius',
+  'textTransform',
+];
+
+/**
+ * The prop a text field that echoes its text puts its latest event count in, for
+ * `echoedEventCount` to commit as `mostRecentEventCount`. It never reaches native.
+ */
+const LATEST_EVENT_COUNT = 'latestEventCount';
+
+/**
+ * The event count a text field that echoes its text is committed with: the latest on Android, and
+ * on iOS 0, the count native starts at, but for a commit that changes a multiline field's text
+ * style, which carries the latest.
+ *
+ * iOS takes the `text` prop only with the count it holds, and then replaces the field's text unless
+ * the two compare equal, attributes and all. UIKit gives an empty field's first typed text a
+ * paragraph style whose line break strategy differs from the one RN compares it with, so an echo
+ * of that very text replaces it, and the keystrokes queued behind the replace are lost. Text from
+ * code goes as `setTextAndSelection` instead, which carries the count. A restyle still needs the
+ * replace on a multiline field: a single-line one restyles its text from its new default
+ * attributes, a multiline one only takes them for what is typed next.
+ *
+ * A field that sets `mostRecentEventCount` itself, and never echoes, is left as it is.
+ */
+function echoedEventCount(
+  viewName: string,
+  props: Record<string, unknown>,
+  previous: Readonly<Record<string, unknown>> | undefined,
+): void {
+  const latest = props[LATEST_EVENT_COUNT];
+  if (latest === undefined) return;
+  delete props[LATEST_EVENT_COUNT];
+  const restyled =
+    props['multiline'] === true &&
+    previous !== undefined &&
+    TEXT_ATTRIBUTES.some((key) => !Object.is(previous[key], props[key]));
+  props['mostRecentEventCount'] = viewName !== 'TextInput' || restyled ? latest : 0;
 }
 
 /** The props of a run of text that change how tall its line is drawn. */
@@ -11574,6 +11642,7 @@ export class Engine implements HostEngine {
     settleUnsidedBorder(merged);
     // On iOS: Android's field says the baseline of the line it is sized and centred by.
     if (field) centreSingleLine(viewName, merged, this.fontScale, isOnBaseline(node, viewName));
+    if (field) echoedEventCount(viewName, merged, node.committed?.props);
     // After a transition, which eases the basis as the basis it was written as.
     basisAsSize(node, merged);
     // Each asked of the key it reads first, here and in `engineLayout`: it is asked of every node

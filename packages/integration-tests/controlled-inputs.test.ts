@@ -236,9 +236,10 @@ describe('a controlled text input', () => {
 
   /*
    * iOS takes the `text` prop when the count beside it is the one it holds, and then replaces its
-   * text unless the two compare equal, attributes and all. From iOS 26 the text UIKit typed carries
-   * a paragraph style the prop's text lacks, so an echo of the same text replaces it, and the
-   * keystrokes queued behind that replace are lost. So iOS gets the count only with a command,
+   * text unless the two compare equal, attributes and all. From iOS 26 an empty field's first typed
+   * text carries a paragraph style RN does not compare equal to the prop's text, so an echo of the
+   * same text replaces it, and the keystrokes queued behind that replace are lost. So iOS gets the
+   * count only with a command,
    * which compares the strings alone, and the prop stays at 0: what iOS holds before the first
    * keystroke, so an initial value, or one set from code before anything is typed, still lands.
    */
@@ -301,6 +302,58 @@ describe('a controlled text input', () => {
         registerViewName(element, viewName);
       }
     }
+  });
+});
+
+/*
+ * iOS takes the `text` prop only with the count it holds, so with the count held at 0 a style
+ * change after typing would not reach the text already in the field. A single-line field restyles
+ * its text from the new default attributes on its own; a multiline one only when its text is
+ * replaced. So the commit that changes a multiline field's text style carries the latest count.
+ */
+describe('an iOS text input restyled after typing', () => {
+  type Restyled = {
+    multiline: { set(value: boolean): void };
+    color: { set(value: string): void };
+    loud: { set(value: boolean): void };
+  };
+  const type = (text: string, eventCount: number) =>
+    fireEvent(screen.getByTestId('field'), 'change', { text, eventCount });
+  const count = () => screen.getByTestId('field').props['mostRecentEventCount'];
+
+  it('sends a multiline field the latest count with a bound style, and 0 with the next echo', async () => {
+    const { instance } = await boot<Restyled>('RestyledInput');
+    await type('h', 1);
+    await type('hi', 2);
+    assert.equal(count(), 0);
+
+    instance.color.set('red');
+    await settle();
+    assert.equal(count(), 2, 'the restyle is applied to the typed text');
+
+    await type('hi!', 3);
+    assert.equal(count(), 0, 'an echo is not');
+    assert.equal(screen.getByTestId('field').props['latestEventCount'], undefined, 'never sent');
+  });
+
+  it('sends a multiline field the latest count with a class that changes its text style', async () => {
+    const { instance } = await boot<Restyled>('RestyledInput');
+    await type('hi', 1);
+
+    instance.loud.set(true);
+    await settle();
+    assert.equal(count(), 1);
+  });
+
+  it('keeps a single-line field at 0, which restyles its own text', async () => {
+    const { instance } = await boot<Restyled>('RestyledInput');
+    instance.multiline.set(false);
+    await settle();
+    await type('hi', 1);
+
+    instance.color.set('red');
+    await settle();
+    assert.equal(count(), 0);
   });
 });
 
