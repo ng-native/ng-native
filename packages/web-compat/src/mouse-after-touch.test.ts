@@ -137,4 +137,14 @@ describe('@ng-native/web-compat, the mouse a touch is', () => {
     await turn();
     assert.deepEqual(heard, []);
   });
+
+  it('is not heard above an element that stops it, as the drag handle of a chart does', async () => {
+    const { document, element, heard, hear, send } = await page();
+    element.addEventListener('touchstart', (event: Dom) => event.stopPropagation());
+    hear(document.getElementById('outer'), 'touchstart', 'outer ');
+    hear(document, 'touchstart', 'document ');
+    send('Start', 10);
+    assert.deepEqual(heard, []);
+    send('End', 10);
+  });
 });

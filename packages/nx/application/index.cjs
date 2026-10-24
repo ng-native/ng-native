@@ -29,7 +29,7 @@ const {
   addDependenciesToPackageJson,
 } = require('@nx/devkit');
 const native = require('../native-app.cjs');
-const { init, workspaceNxVersion } = require('../init/index.cjs');
+const { init } = require('../init/index.cjs');
 const { usesWorkspaces, includeInWorkspaces } = require('./workspaces.cjs');
 const { asSaved } = require('../save-exact.cjs');
 const { registerSyncGenerator } = require('../sync/index.cjs');
@@ -42,8 +42,13 @@ function names(tree, options) {
   // A workspace package is named for the workspace's scope, as Nx names its own.
   const projectName = workspaces && scope ? `${scope}/${name}` : name;
   const bundleIdentifier = options.bundleIdentifier ?? native.bundleIdentifier(name, scope);
-  return { directory, name, projectName, workspaces, bundleIdentifier };
+  const lint = options.linter === 'eslint';
+  return { directory, name, projectName, workspaces, bundleIdentifier, lint };
 }
+
+/** The app's dev dependencies: with `--linter=eslint`, ESLint and the plugin as well. */
+const devDependencies = (lint) =>
+  lint ? { ...native.devDependencies, ...native.lintDevDependencies } : native.devDependencies;
 
 /**
  * Whether the workspace's `tsconfig.base.json` is where its libraries' path aliases live, or will.
@@ -125,7 +130,7 @@ function metroPort(tree) {
   return port;
 }
 
-function targets(directory, port, oneCopy) {
+function targets(directory, port, oneCopy, lint) {
   const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: directory, command } });
   const own = port === DEFAULT_PORT ? '' : ` --port ${port}`;
   // `expo run:ios` and `expo run:android` build the port into the app, so a later app's has to be
@@ -143,6 +148,7 @@ function targets(directory, port, oneCopy) {
       outputs: ['{projectRoot}/.angular-native'],
     },
     test: { ...run('vitest run'), cache: true, inputs: ['default', '^production'] },
+    ...(lint && { lint: { ...run('eslint .'), cache: true, inputs: ['default', '^production'] } }),
     start: { ...run(`expo start${own}`), continuous: true },
     serve: { ...run(`expo start${own}`), continuous: true },
     ...runs,
@@ -150,13 +156,14 @@ function targets(directory, port, oneCopy) {
 }
 
 /** The Commands section of the app's `AGENTS.md`, as this workspace runs them. */
-function commands(name) {
+function commands(name, lint) {
   const rows = [
     [`nx start ${name}`, 'Metro; press i or a for a simulator, or scan the QR code with Expo Go'],
     [`nx run ${name}:run-ios`, 'the iOS simulator'],
     [`nx run ${name}:run-android`, 'the Android emulator'],
     [`nx test ${name}`, 'Vitest, in Node against a fake native layer: no simulator needed'],
     [`nx typecheck ${name}`, 'TypeScript, without emitting'],
+    ...(lint ? [[`nx lint ${name}`, 'ESLint: what compiles but does nothing on a device']] : []),
   ];
   const width = Math.max(...rows.map(([command]) => command.length)) + 2;
   return [
@@ -165,7 +172,10 @@ function commands(name) {
     '```',
     '',
     '`src/main.ts` mounts the root component, `src/app/app.ts`. ' +
-      `Run \`nx test ${name}\` and \`nx typecheck ${name}\` after a change; both are fast.`,
+      (lint
+        ? `Run \`nx test ${name}\`, \`nx typecheck ${name}\` and \`nx lint ${name}\` after a change; ` +
+          'all three are fast.'
+        : `Run \`nx test ${name}\` and \`nx typecheck ${name}\` after a change; both are fast.`),
   ].join('\n');
 }
 
@@ -186,14 +196,15 @@ function listed(manifest) {
   return Object.keys({ ...manifest.dependencies, ...manifest.devDependencies });
 }
 
-async function writeFiles(tree, { directory, projectName, workspaces, bundleIdentifier }) {
+async function writeFiles(tree, { directory, projectName, workspaces, bundleIdentifier, lint }) {
   const file = (name, content) => tree.write(joinPathFragments(directory, name), content);
   for (const name of native.SOURCE_FILES) file(name, native.sourceFile(name));
   file('app.json', native.appJson(projectName, bundleIdentifier));
-  file('AGENTS.md', native.agentsFile(commands(projectName)));
+  file('AGENTS.md', native.agentsFile(commands(projectName, lint)));
   file('CLAUDE.md', '@AGENTS.md\n');
   file('metro.config.js', native.METRO_CONFIG);
   file('.gitignore', native.GITIGNORE);
+  if (lint) file('eslint.config.mjs', native.ESLINT_CONFIG);
 
   const base = hasPathAliases(tree, workspaces);
   const workspaceBase = base ? `${offsetFromRoot(directory)}tsconfig.base.json` : undefined;
@@ -210,7 +221,7 @@ async function writeFiles(tree, { directory, projectName, workspaces, bundleIden
     const root = readJson(tree, 'package.json');
     Object.assign(manifest, {
       dependencies: await appDependencies(tree, root, native.dependencies),
-      devDependencies: await appDependencies(tree, root, native.devDependencies),
+      devDependencies: await appDependencies(tree, root, devDependencies(lint)),
     });
   } else {
     manifest.dependencies = native.prebuildPins(root);
@@ -228,11 +239,11 @@ function ignoreExpo(tree) {
 
 /**
  * @param {import('@nx/devkit').Tree} tree
- * @param {{ directory: string, name?: string, bundleIdentifier?: string, tags?: string, skipInstall?: boolean, skipFormat?: boolean }} options
+ * @param {{ directory: string, name?: string, bundleIdentifier?: string, tags?: string, linter?: 'eslint' | 'none', skipInstall?: boolean, skipFormat?: boolean }} options
  */
 async function application(tree, options) {
   const resolved = names(tree, options);
-  const { directory, projectName, workspaces } = resolved;
+  const { directory, projectName, workspaces, lint } = resolved;
   const problem = native.bundleIdentifierProblem(resolved.bundleIdentifier);
   if (problem) throw new Error(problem);
   if (tree.exists(joinPathFragments(directory, 'package.json'))) {
@@ -244,22 +255,24 @@ async function application(tree, options) {
   if (workspaces) {
     includeInWorkspaces(tree, directory);
   } else {
-    for (const problem of native.conflicts(readJson(tree, 'package.json'))) logger.warn(problem);
+    const linter = options.linter;
+    for (const problem of native.conflicts(readJson(tree, 'package.json'), { linter })) {
+      logger.warn(problem);
+    }
     const existing = listed(readJson(tree, 'package.json'));
     addDependenciesToPackageJson(
       tree,
       await asSaved(tree, native.dependencies, existing),
-      await asSaved(tree, native.devDependencies, existing),
+      await asSaved(tree, devDependencies(lint), existing),
       'package.json',
       true,
     );
   }
-  // `nxViteTsPaths()`, which the app's Vitest config uses to reach the workspace's libraries.
+  // `tsconfigPaths()`, which the app's Vitest config uses to reach the workspace's libraries.
   // Added now rather than only when present, because a library generated later is the ordinary
   // case and nothing would come back to add it then.
   if (hasPathAliases(tree, workspaces)) {
-    const vite = { '@nx/vite': workspaceNxVersion(tree) };
-    addDependenciesToPackageJson(tree, {}, vite, 'package.json', true);
+    addDependenciesToPackageJson(tree, {}, native.vitestPathsDependencies, 'package.json', true);
   }
   await writeFiles(tree, resolved);
   addProjectConfiguration(tree, projectName, {
@@ -270,7 +283,7 @@ async function application(tree, options) {
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean),
-    targets: targets(directory, port, linksLibraries(tree, workspaces)),
+    targets: targets(directory, port, linksLibraries(tree, workspaces), lint),
   });
 
   ignoreExpo(tree);
@@ -279,7 +292,9 @@ async function application(tree, options) {
   if (!options.skipFormat) await formatFiles(tree);
   logger.info(
     `Created ${directory}. nx start ${projectName} runs Metro; nx run ${projectName}:run-ios, ` +
-      `nx test ${projectName}, nx typecheck ${projectName}, nx export ${projectName}.`,
+      `nx test ${projectName}, nx typecheck ${projectName}, ` +
+      (lint ? `nx lint ${projectName}, ` : '') +
+      `nx export ${projectName}.`,
   );
   if (options.skipInstall) return initTask;
   return runTasksInSerial(initTask, () => installPackagesTask(tree, true));

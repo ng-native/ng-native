@@ -8,8 +8,15 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { ErrorHandler, Injector, type Provider, type Type } from '@angular/core';
-import { HostEngine, type Engine } from '@ng-native/fabric';
+import {
+  ErrorHandler,
+  Injector,
+  runInInjectionContext,
+  signal,
+  type Provider,
+  type Type,
+} from '@angular/core';
+import { Engine, HostEngine } from '@ng-native/fabric';
 import {
   COMPACT_WIDTH,
   Accessibility,
@@ -19,6 +26,7 @@ import {
   Direction,
   HardwareBack,
   Keyboard,
+  SCREEN_IN_FRONT,
   SafeArea,
   Screen,
   type KeyboardMetrics,
@@ -29,7 +37,7 @@ import {
 } from '@ng-native/device';
 import * as device from '@ng-native/device';
 import { reactNative } from '../device/src/react-native.ts';
-import { cleanup, injectService } from '@ng-native/testing';
+import { cleanup, createFakeFabric, injectService } from '@ng-native/testing';
 import { appStateSource } from '../device/src/app-state.ts';
 import { deepLinkSource } from '../device/src/deep-links.ts';
 import { colorSchemeSource } from '../device/src/color-scheme.ts';
@@ -129,6 +137,81 @@ describe('the keyboard', () => {
     (injector as Injector & { destroy(): void }).destroy();
     assert.equal(stopped, true, 'and the motion is let go with the service');
   });
+
+  /*
+   * React Native's `Keyboard.dismiss()` blurs the field its own `TextInput` component recorded as
+   * focused in `TextInputState`, and a `text-input` here is the native component with no
+   * `TextInput.js` around it: nothing is ever recorded, so that call alone blurs nothing on a
+   * device. The engine knows the focused field from native's own focus events.
+   */
+  describe('dismissed', () => {
+    function scene() {
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1);
+      const field = engine.createElement('text-input');
+      const box = engine.createElement('view');
+      engine.setProp(box, 'focusable', true);
+      engine.appendChild(engine.root, field);
+      engine.appendChild(engine.root, box);
+      engine.commit();
+      let dismissed = 0;
+      const keyboard = build(Keyboard, [
+        { provide: HostEngine, useValue: engine },
+        {
+          provide: Keyboard.SOURCE,
+          useValue: { subscribe: () => () => {}, dismiss: () => dismissed++ },
+        },
+      ]);
+      const focus = (on = fabric.committed[0]!) => fabric.emit(on, 'topFocus', {});
+      const remove = () => {
+        engine.removeChild(engine.root, field);
+        engine.commit();
+      };
+      return {
+        fabric,
+        keyboard,
+        focus,
+        remove,
+        box: () => fabric.committed[1]!,
+        dismissed: () => dismissed,
+      };
+    }
+
+    it('blurs the field that has the keyboard', () => {
+      const s = scene();
+      s.focus();
+      s.keyboard.dismiss();
+      assert.deepEqual(s.fabric.commands, [{ viewName: 'TextInput', name: 'blur', args: [] }]);
+      assert.equal(s.dismissed(), 1, 'and still tells the platform source');
+    });
+
+    it('sends nothing when no field has the keyboard', () => {
+      const s = scene();
+      s.keyboard.dismiss();
+      assert.deepEqual(s.fabric.commands, []);
+      assert.equal(s.dismissed(), 1);
+    });
+
+    // A view takes focus from a hardware keyboard or a D-pad, and has no `blur` command to take.
+    it('sends nothing when what has the focus is not a text input', () => {
+      const s = scene();
+      s.focus(s.box());
+      s.keyboard.dismiss();
+      assert.deepEqual(s.fabric.commands, []);
+      assert.equal(s.dismissed(), 1);
+    });
+
+    // The field is out of the tree before its view is gone, so there is nothing left to blur.
+    // That is why the docs say to call it while the field is still on screen.
+    it('sends nothing once the focused field has left the tree', () => {
+      const s = scene();
+      s.focus();
+      s.remove();
+      s.keyboard.dismiss();
+      assert.deepEqual(s.fabric.commands, []);
+      assert.equal(s.dismissed(), 1);
+    });
+  });
 });
 
 describe('the back button', () => {
@@ -147,6 +230,41 @@ describe('the back button', () => {
     assert.equal(handler!(), true, 'the platform asks, and this answers');
     stop();
     assert.equal(handler, null, 'and lets go');
+  });
+
+  it("asks a handler only while the caller's screen is in front, as it is when pressed", () => {
+    let handler: (() => boolean) | null = null;
+    const back = build(HardwareBack, [
+      {
+        provide: HardwareBack.SOURCE,
+        useValue: { subscribe: (fn: () => boolean) => ((handler = fn), () => {}) },
+      },
+    ]);
+    const inFront = signal(true);
+    let asked = 0;
+    const screen = Injector.create({
+      providers: [{ provide: SCREEN_IN_FRONT, useValue: inFront }],
+    });
+    runInInjectionContext(screen, () => back.handle(() => (asked++, true)));
+
+    inFront.set(false);
+    assert.equal(handler!(), false, 'a covered screen leaves the press to the platform');
+    assert.equal(asked, 0);
+    inFront.set(true);
+    assert.equal(handler!(), true, 'and is asked again once it is in front');
+    assert.equal(asked, 1);
+  });
+
+  it('asks a handler subscribed where no screen is provided, as an app root is', () => {
+    let handler: (() => boolean) | null = null;
+    const back = build(HardwareBack, [
+      {
+        provide: HardwareBack.SOURCE,
+        useValue: { subscribe: (fn: () => boolean) => ((handler = fn), () => {}) },
+      },
+    ]);
+    runInInjectionContext(Injector.create({ providers: [] }), () => back.handle(() => true));
+    assert.equal(handler!(), true);
   });
 });
 

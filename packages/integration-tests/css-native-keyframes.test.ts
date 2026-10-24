@@ -296,6 +296,119 @@ describe('a @keyframes animation of opacity and transforms', () => {
   });
 });
 
+describe('a @keyframes animation native plays, ended by a script', () => {
+  // What `finish()` and `cancel()` of the Web Animations API ask: native stops, and the view is
+  // drawn at the end, or with no effect of the animation at all, as a browser draws it.
+  it('is stopped and drawn at its last frame on finish, where it fills', () => {
+    const s = scene('.a { opacity: 0.8; animation: fade 400ms linear forwards }');
+    s.later(100);
+    s.engine.endPlaying(s.view, 'finish');
+    assert.equal(s.rec.named('stop').length, 1, 'stopped on native');
+    assert.equal(s.at(0.5), null, 'and let go');
+    assert.equal(s.props()['opacity'], 1);
+    assert.deepEqual(s.rec.painted(s.engine.tagOf(s.view)), { opacity: 1 }, 'set on native too');
+    assert.deepEqual(s.events, ['animationstart', 'animationend']);
+    assert.equal(s.engine.animating, false);
+  });
+
+  it('is stopped and drawn at its resting style on finish, where it does not fill', () => {
+    const s = scene('.a { opacity: 0.8; animation: fade 400ms linear }');
+    s.engine.endPlaying(s.view, 'finish');
+    assert.equal(s.rec.named('stop').length, 1);
+    assert.equal(s.props()['opacity'], 0.8);
+    assert.deepEqual(s.rec.painted(s.engine.tagOf(s.view)), { opacity: 0.8 });
+    assert.deepEqual(s.events, ['animationstart', 'animationend']);
+  });
+
+  it('is stopped and drawn with no effect of it on cancel, fill or not, and stays so', () => {
+    const s = scene('.a { opacity: 0.8; animation: fade 400ms linear forwards }');
+    s.later(100);
+    s.engine.endPlaying(s.view, 'cancel');
+    assert.equal(s.rec.named('stop').length, 1);
+    assert.equal(s.at(0.5), null);
+    assert.equal(s.props()['opacity'], 0.8);
+    assert.deepEqual(s.rec.painted(s.engine.tagOf(s.view)), { opacity: 0.8 });
+    assert.deepEqual(s.events, ['animationstart', 'animationcancel']);
+    // Still asked for by its rule, it is not started again, as a browser leaves it cancelled.
+    s.engine.setClasses(s.view, 'a');
+    s.later(500);
+    assert.equal(s.started().length, 1);
+    assert.equal(s.props()['opacity'], 0.8);
+  });
+
+  it('lets go of the last frame its fill holds on cancel, once it has ended', () => {
+    const s = scene('.a { opacity: 0.8; animation: fade 400ms linear forwards }');
+    s.finish(s.started()[0]!.id);
+    assert.equal(s.props()['opacity'], 1);
+    s.engine.endPlaying(s.view, 'cancel');
+    assert.equal(s.props()['opacity'], 0.8);
+    assert.deepEqual(s.events, ['animationstart', 'animationend'], 'nothing to cancel by now');
+  });
+
+  it('has native drawn at rest on cancel where that is the frame it was committed at', () => {
+    // The commit changes nothing then, and native has moved the view since.
+    const s = scene('.a { opacity: 0; animation: fade 400ms linear }');
+    s.later(100);
+    s.engine.endPlaying(s.view, 'cancel');
+    assert.equal(s.props()['opacity'], 0);
+    assert.deepEqual(s.rec.painted(s.engine.tagOf(s.view)), { opacity: 0 });
+  });
+
+  it('is cancelled once: not again when the element stops asking for it', () => {
+    const s = scene('.a { animation: fade 400ms linear }');
+    s.engine.endPlaying(s.view, 'cancel');
+    s.engine.setClasses(s.view, '');
+    s.engine.commit();
+    assert.deepEqual(s.events, ['animationstart', 'animationcancel']);
+  });
+
+  it('is left playing on finish where it never ends, which a script is refused', () => {
+    const s = scene('.a { animation: spin 1s linear infinite }');
+    s.engine.endPlaying(s.view, 'finish');
+    assert.equal(s.rec.named('stop').length, 0);
+    assert.deepEqual(s.at(0.5), { rotate: round(Math.PI) });
+  });
+
+  it('ends one that waits before it starts, played from JavaScript, after its delay', () => {
+    const s = scene('.a { opacity: 0.8; animation: fade 400ms linear 1s both }');
+    s.engine.endPlaying(s.view, 'finish');
+    assert.equal(s.props()['opacity'], 1, 'at its last frame, past the delay');
+    assert.deepEqual(s.events, ['animationstart', 'animationend']);
+  });
+
+  it('is not played on from JavaScript after a cancel', () => {
+    const s = scene('.a { opacity: 0.8; animation: fade 400ms linear 1s both }');
+    assert.equal(s.engine.animating, true, 'played from JavaScript, as it waits');
+    s.engine.endPlaying(s.view, 'cancel');
+    s.later(1200);
+    assert.equal(s.props()['opacity'], 0.8);
+    assert.equal(s.engine.animating, false);
+  });
+
+  it('is played again once the element asks for it anew after a cancel', () => {
+    const s = scene('.a { animation: fade 400ms linear }');
+    s.engine.endPlaying(s.view, 'cancel');
+    s.engine.setClasses(s.view, '');
+    s.engine.commit();
+    s.engine.setClasses(s.view, 'a');
+    s.engine.commit();
+    assert.equal(s.started().length, 2);
+  });
+
+  it('ends one paused, and played from JavaScript, the same way', () => {
+    const s = scene(
+      '.a { opacity: 0.8; animation: fade 1s linear forwards } .held { animation-play-state: paused }',
+    );
+    s.engine.setClasses(s.view, 'a held');
+    s.later(250);
+    s.engine.endPlaying(s.view, 'finish');
+    assert.equal(s.props()['opacity'], 1);
+    s.later(250);
+    assert.equal(s.props()['opacity'], 1, 'and not played on from where it was paused');
+    assert.equal(s.engine.animating, false);
+  });
+});
+
 describe('a @keyframes animation against an important declaration', () => {
   /**
    * An important declaration is above the animation in the cascade, so native is not handed the

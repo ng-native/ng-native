@@ -60,14 +60,12 @@ describe("a 'use dom' file", () => {
       "import { mountInWebView } from '@ng-native/web/web-view';",
       'export default mountInWebView(Chart);',
     ].join('\n');
-    const out = code(source, '/app/src/web/chart.dom.ts');
+    const file = '/app/src/web/chart.dom.ts';
+    const out = code(source, file);
     assert.doesNotMatch(out, /mountInWebView|a-charting-library/);
     const exports: { default?: { domComponent: string } } = {};
     new Function('exports', out.replace('export default', 'exports.default ='))(exports);
-    assert.equal(
-      exports.default?.domComponent,
-      'chart.dom.ts?file=file:///app/src/web/chart.dom.ts',
-    );
+    assert.equal(exports.default?.domComponent, `chart.dom.ts?file=${pathToFileURL(file).href}`);
   });
 
   it("is left alone when it mounts nothing, which is a React DOM component and Expo's", () => {
@@ -222,8 +220,11 @@ describe("a package a workspace library installed in a copy of its own, through 
     writeFileSync(path.join(dir, 'index.js'), imports);
     writeFileSync(path.join(dir, 'sub.js'), '');
   };
-  const resolve = async (source: string, importer = libraryFile) =>
-    (await server.environments.ssr!.pluginContainer.resolveId(source, importer))?.id;
+  const resolve = async (source: string, importer = libraryFile) => {
+    const id = (await server.environments.ssr!.pluginContainer.resolveId(source, importer))?.id;
+    // Vite returns some package paths with `/`, even on Windows.
+    return id === undefined ? undefined : path.normalize(id);
+  };
 
   before(async () => {
     for (const [dir, name] of [
@@ -263,7 +264,12 @@ describe("a package a workspace library installed in a copy of its own, through 
       JSON.stringify({ name: '@scope/linked', version: '1.0.0', main: 'index.js' }),
     );
     writeFileSync(path.join(linked, 'index.js'), '');
-    symlinkSync(linked, path.join(app, 'node_modules/@scope/linked'));
+    symlinkSync(
+      linked,
+      path.join(app, 'node_modules/@scope/linked'),
+      // A junction on Windows, which needs no privileges; ignored elsewhere.
+      'junction',
+    );
     install(library, '@scope/linked', '1.0.0');
 
     server = await createServer({
@@ -379,6 +385,53 @@ describe('a Vitest run', () => {
     );
   });
   after(() => rmSync(root, { recursive: true, force: true }));
+
+  /** Runs `intl.test.ts`, which passes when `Intl.RelativeTimeFormat` is `expected`. */
+  async function intlRun(
+    expected: string,
+    options?: Parameters<typeof ngNative>[0],
+    setupFiles: string[] = [],
+  ) {
+    writeFileSync(
+      path.join(root, 'intl.test.ts'),
+      "import { expect, it } from 'vitest';\n" +
+        `it('has it or not', () => expect(typeof Intl.RelativeTimeFormat).toBe('${expected}'));\n`,
+    );
+    const { createVitest } = await import('vitest/node');
+    const vitest = await createVitest(
+      'test',
+      { root, config: false, watch: false, reporters: [], include: ['intl.test.ts'], setupFiles },
+      { plugins: [ngNative(options)] },
+    );
+    try {
+      await vitest.start();
+      return vitest.state.getCountOfFailedTests();
+    } finally {
+      await vitest.close();
+      rmSync(path.join(root, 'intl.test.ts'), { force: true });
+    }
+  }
+
+  it('runs without the Intl constructors Hermes lacks', async () => {
+    assert.equal(await intlRun('undefined'), 0);
+  });
+
+  it("keeps Node's Intl for intl: 'node', for an app that polyfills what Hermes lacks", async () => {
+    assert.equal(await intlRun('function', { intl: 'node' }), 0);
+  });
+
+  it("keeps a polyfill the app's own setup file installs where Intl lacks one", async () => {
+    const polyfill = path.join(root, 'polyfill.ts');
+    writeFileSync(
+      polyfill,
+      "if (!('RelativeTimeFormat' in Intl)) Object.assign(Intl, { RelativeTimeFormat: class {} });\n",
+    );
+    try {
+      assert.equal(await intlRun('function', {}, [polyfill]), 0);
+    } finally {
+      rmSync(polyfill, { force: true });
+    }
+  });
 
   it('leaves no copy of the modules it ran in the temp directory', async () => {
     const { createVitest } = await import('vitest/node');

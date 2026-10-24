@@ -185,7 +185,9 @@ branch a stacked PR depends on) show only the fix, its tests and the version pla
 - Turn step 5's WIP commit and what followed into the PR's commits (`git commit --amend`, or
   `git reset --soft <base>` and commit again), each with a sentence-case summary: no `feat:`/`fix:`
   prefix, no co-author trailer.
-- When main has moved since step 0, rebase onto it and run the affected tests again.
+- When the branch conflicts with main, or both it and main have changed `pnpm-lock.yaml` since its
+  base, rebase onto main and run the affected tests again. Otherwise it needs no rebase, however far
+  main has moved.
 - Before pushing, check that no release is running. A merge while a release runs breaks its push.
   `gh api 'repos/ng-native/ng-native/actions/workflows/release.yml/runs?per_page=1' --jq '.workflow_runs[0].status'`
   must print `completed`.

@@ -81,7 +81,12 @@ function app(root: string, withNative: boolean): void {
   };
   const link = (name: string, dir = packageDir(name)) => {
     mkdirSync(path.dirname(path.join(root, 'node_modules', name)), { recursive: true });
-    symlinkSync(realpathSync(dir), path.join(root, 'node_modules', name), 'dir');
+    symlinkSync(
+      realpathSync(dir),
+      path.join(root, 'node_modules', name),
+      // A junction on Windows, which needs no privileges; ignored elsewhere.
+      'junction',
+    );
   };
 
   const ngc = path.join(packageDir('@angular/compiler-cli'), 'bundles/src/bin/ngc.js');

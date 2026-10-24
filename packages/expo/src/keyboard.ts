@@ -104,6 +104,15 @@ export function nativeKeyboardSource(
         clearTimeout(waiting);
         report({ ...metricsOf(change), duration: change.duration, easing: change.easing });
       });
+      // A motion watching began part way through sends its frames and end but not its change,
+      // which went before: where its last frame left the keyboard is reported at the end, as a
+      // jump, unless something already said so.
+      let reached: KeyboardMetrics | null = null;
+      const frames = native.addListener('onKeyboardMove', (frame) => {
+        if (!('end' in frame)) reached = metricsOf(frame);
+        else if (reached && (last === null || Math.abs(reached.height - last) >= SAME_HEIGHT))
+          report({ ...reached, duration: 0 });
+      });
       const stop = fallback.subscribe((metrics) => {
         clearTimeout(waiting);
         waiting = setTimeout(() => {
@@ -113,6 +122,7 @@ export function nativeKeyboardSource(
       return () => {
         clearTimeout(waiting);
         subscription.remove();
+        frames.remove();
         stop();
       };
     },
@@ -123,6 +133,10 @@ export function nativeKeyboardSource(
       return () => subscription.remove();
     },
     dismiss: () => fallback.dismiss(),
+    // The module's `screenY` is from the top of the screen as React Native's is.
+    get windowTop() {
+      return fallback.windowTop;
+    },
   };
 }
 

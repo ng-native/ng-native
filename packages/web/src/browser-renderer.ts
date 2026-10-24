@@ -15,11 +15,10 @@
  *
  * `setStyle`/`removeStyle` do one thing beyond the real DOM write: they keep `node.props['style']`
  * in sync as a plain object, mirroring `NativeRenderer`'s own `OWN_STYLES`-owned-object trick.
- * Three components read `this.node.props['style']` directly rather than going through the
- * engine - `touchable-opacity.ts` (the resting opacity a fade eases back to),
- * `image-background.ts` (the outer view's width/height, copied onto the absolutely-filled
- * image), `animated-style.ts` (the style an animation frame merges into) - and without this they
- * would read whatever was there before Angular's *first* style write, forever.
+ * Two components read `this.node.props['style']` directly rather than going through the
+ * engine - `image-background.ts` (the outer view's width/height, copied onto the
+ * absolutely-filled image), `animated-style.ts` (the style an animation frame merges into) - and
+ * without this they would read whatever was there before Angular's *first* style write, forever.
  */
 import {
   RendererStyleFlags2,
@@ -28,7 +27,7 @@ import {
   type RendererFactory2,
 } from '@angular/core';
 import { reportUnboundFormsInput } from '@ng-native/fabric';
-import { letBrowserNodesPassAsNodes, type BrowserNode } from './dom-node.ts';
+import { letBrowserNodesPassAsDomNodes, type BrowserNode } from './dom-node.ts';
 import type { BrowserEngine } from './browser-engine.ts';
 import { dashCase } from './css-units.ts';
 import { writeStyleKey } from './native-style.ts';
@@ -293,7 +292,7 @@ export class BrowserRendererFactory implements RendererFactory2 {
     this.engine = engine;
     this.document = document;
     this.renderer = new BrowserRenderer(engine, document);
-    letBrowserNodesPassAsNodes();
+    letBrowserNodesPassAsDomNodes();
   }
 
   /**

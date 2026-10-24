@@ -57,6 +57,8 @@ export interface ReactNative {
   };
   Keyboard: {
     dismiss(): void;
+    /** Where the last show `Keyboard.js` heard put the keyboard, or nothing once it hid. */
+    metrics?(): { height: number; screenY: number } | null | undefined;
     addListener(
       event:
         | 'keyboardDidShow'
@@ -75,6 +77,7 @@ export interface ReactNative {
     showActionSheetWithOptions(
       options: {
         title?: string;
+        message?: string;
         options: string[];
         cancelButtonIndex: number;
         destructiveButtonIndex?: number;
@@ -107,7 +110,7 @@ export interface ReactNative {
   };
   /** `Version` is a string on iOS, `'26.5'`, and the API level, a number, on Android. */
   Platform: { OS: string; Version?: string | number };
-  /** Optional: only the status bar reads it, for `DeviceInfo`'s `isEdgeToEdge` on Android. */
+  /** Optional: the status bar and keyboard read it, for `DeviceInfo`'s `isEdgeToEdge` on Android. */
   TurboModuleRegistry?: { get(name: string): unknown };
   Share: {
     share(
@@ -159,6 +162,16 @@ export interface NativeKeyboardEvent {
   readonly duration?: number;
   /** One of `LayoutEasing`'s names; usually `'keyboard'` on iOS, and always on Android, with a zero duration. */
   readonly easing?: string;
+}
+
+/**
+ * React Native's edge-to-edge flag on Android, which its `DeviceInfo` module reports: whether it
+ * treats the app as drawn under the system bars, for its status bar and for where it measures from.
+ */
+export function edgeToEdgeFlag(native: ReactNative): boolean {
+  const info = native.TurboModuleRegistry?.get('DeviceInfo') as
+    { getConstants?(): { isEdgeToEdge?: boolean } } | null | undefined;
+  return info?.getConstants?.().isEdgeToEdge === true;
 }
 
 /**

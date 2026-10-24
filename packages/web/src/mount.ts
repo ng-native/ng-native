@@ -35,6 +35,7 @@
  */
 import {
   APP_BOOTSTRAP_LISTENER,
+  ApplicationInitStatus,
   ApplicationRef,
   DOCUMENT,
   PLATFORM_ID,
@@ -56,7 +57,7 @@ import {
   ɵsetLocaleId as setLocaleId,
 } from '@angular/core';
 import { HostEngine } from '@ng-native/fabric';
-import { ColorScheme, Direction, HardwareBack, Screen, StatusBar } from '@ng-native/device';
+import { ColorScheme, Direction, HardwareBack, OS, Screen, StatusBar } from '@ng-native/device';
 import {
   browserColorSchemeSource,
   browserDirectionSource,
@@ -236,6 +237,8 @@ function hostProviders(
           { provide: Direction.SOURCE, useValue: browserDirectionSource(view) },
         ]
       : []),
+    // The engine renders as iOS here, so the off-device fallback would say iOS too.
+    { provide: OS, useValue: 'web' },
     // A tab has no hardware back button, so this is the same inert fallback
     // `hardwareBackSource()`'s own off-device branch answers with, provided here so the browser
     // host says so itself rather than relying on that branch.
@@ -281,6 +284,7 @@ function mountAlone(
     ],
     platformInjector as EnvironmentInjector,
   );
+  runInitializers(injector);
   setLocaleId(injector.get(LOCALE_ID) || 'en-US');
 
   const componentRef = createComponent(component, {
@@ -318,6 +322,17 @@ function mountAlone(
       applicationRef.destroy();
     },
   };
+}
+
+/**
+ * The app initializers, before the root component exists, as the native `mount()` runs them (see
+ * its `runInitializers` for why through `ApplicationInitStatus`): a promise is started, not awaited,
+ * and a failed one reaches the `ErrorHandler`. A copy, as this package cannot import the platform.
+ */
+function runInitializers(injector: EnvironmentInjector): void {
+  const status = injector.get(ApplicationInitStatus);
+  (status as unknown as { runInitializers(): void }).runInitializers();
+  status.donePromise.catch((error: unknown) => injector.get(ErrorHandler).handleError(error));
 }
 
 /**

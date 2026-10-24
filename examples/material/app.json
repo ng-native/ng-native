@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Material",
+    "slug": "material-example",
+    "scheme": "material",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.material"
+    },
+    "android": {
+      "package": "dev.angularnative.material"
+    },
+    "plugins": ["@ng-native/metro"]
+  }
+}

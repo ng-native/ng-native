@@ -1,0 +1,59 @@
+{
+  "name": "@ng-native/eslint-plugin",
+  "version": "0.18.0",
+  "description": "ESLint rules for Angular Native: the DOM events, HTML controls and browser APIs that compile but do nothing on a device.",
+  "keywords": [
+    "angular",
+    "react-native",
+    "angular-native",
+    "eslint",
+    "eslint-plugin",
+    "angular-eslint"
+  ],
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "angular-eslint": "^22.0.0",
+    "eslint": "^9.0.0 || ^10.0.0",
+    "typescript-eslint": "^8.0.0"
+  },
+  "devDependencies": {
+    "angular-eslint": "^22.6.0",
+    "eslint": "^10.11.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.1"
+  },
+  "nx": {
+    "tags": [
+      "scope:eslint-plugin",
+      "layer:build"
+    ],
+    "implicitDependencies": [
+      "@ng-native/components"
+    ]
+  },
+  "scripts": {
+    "test": "node --test \"*.test.ts\""
+  },
+  "license": "MIT",
+  "homepage": "https://ng-native.com/packages/eslint-plugin",
+  "bugs": {
+    "url": "https://github.com/ng-native/ng-native/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ng-native/ng-native.git",
+    "directory": "packages/eslint-plugin"
+  },
+  "files": [
+    "*.mjs",
+    "!*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

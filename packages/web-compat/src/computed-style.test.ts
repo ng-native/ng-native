@@ -22,6 +22,7 @@ type Dom = any;
       z-index: 3 !important;
       --gap: 3px;
       --tone: blue;
+      --accent: platform-color(link, '?attr/colorAccent');
     }
   `,
   template: `<div id="box" class="box"><span id="in">x</span></div>`,
@@ -140,6 +141,11 @@ describe('getComputedStyle', () => {
     assert.equal(computed(box).getPropertyValue('--gap'), '3px');
     assert.equal(computed(inner).getPropertyValue('--tone'), 'blue');
     assert.equal(computed(box).getPropertyValue('--none'), '');
+    // A colour the platform resolves, as the call that names it.
+    assert.equal(
+      computed(box).getPropertyValue('--accent'),
+      'platform-color(link, "?attr/colorAccent")',
+    );
   });
 
   it('lists its properties by index, and has no text and no priorities', async () => {

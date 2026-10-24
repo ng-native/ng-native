@@ -22,6 +22,9 @@ const { resolve } = require('metro-resolver') as {
 
 const root = path.resolve(import.meta.dirname, '../..');
 
+/** A path under the repository written as the POSIX path the assertions name. */
+const underRoot = (file: string) => path.relative(root, file).split(path.sep).join('/');
+
 /** What Metro's `PackageCache` hands the resolver: subpath exports are driven entirely by this. */
 function packageForModule(absolutePath: string) {
   let dir =
@@ -85,7 +88,7 @@ function context(from: string) {
 // this against a real resolver rather than a hoisted node_modules that answers everything.
 const from = path.join(root, 'examples/canary/src/app/app.ts');
 const resolved = (specifier: string) =>
-  path.relative(root, resolve(context(from), specifier, 'ios').filePath);
+  underRoot(resolve(context(from), specifier, 'ios').filePath);
 
 describe('the entry points Metro has to resolve', () => {
   it('maps a bare package to its barrel', () => {
@@ -141,10 +144,7 @@ describe('the entry points Metro has to resolve', () => {
     // `marked` is an optional peer as well, and the same file on every platform.
     for (const platform of ['ios', 'android', 'web']) {
       assert.equal(
-        path.relative(
-          root,
-          resolve(context(from), '@ng-native/components/markdown', platform).filePath,
-        ),
+        underRoot(resolve(context(from), '@ng-native/components/markdown', platform).filePath),
         'packages/components/src/markdown.ts',
         platform,
       );
@@ -170,7 +170,7 @@ describe('the entry points Metro has to resolve', () => {
     // One import in an app, two graphs: React Native's on a device, a React-free one in a
     // browser, which could not load React Native's Flow source if it tried.
     const on = (platform: string, specifier: string) =>
-      path.relative(root, resolve(context(from), specifier, platform).filePath);
+      underRoot(resolve(context(from), specifier, platform).filePath);
     for (const name of ['animations', 'gestures', 'reanimated']) {
       const specifier = `@ng-native/components/${name}`;
       for (const platform of ['ios', 'android']) {
@@ -179,7 +179,7 @@ describe('the entry points Metro has to resolve', () => {
       assert.equal(on('web', specifier), `packages/components/src/${name}-web.ts`);
       // Node has no `browser` condition either, so this suite's own imports see the native entry.
       assert.equal(
-        path.relative(root, realpathSync(createRequire(from).resolve(specifier))),
+        underRoot(realpathSync(createRequire(from).resolve(specifier))),
         `packages/components/src/${name}.ts`,
       );
     }
@@ -201,7 +201,7 @@ describe('the entry points Metro has to resolve', () => {
     const lenient = { ...context(from), unstable_logWarning: (m: string) => warnings.push(m) };
     const past = resolve(lenient, '@ng-native/expo/src/battery.ts', 'ios');
 
-    assert.match(path.relative(root, past.filePath), /packages\/expo\/src\/battery\.ts$/);
+    assert.match(underRoot(past.filePath), /packages\/expo\/src\/battery\.ts$/);
     assert.equal(warnings.length, 1, 'it says so, at least');
 
     // Node refuses it: `./src/battery.ts` is not in the map.

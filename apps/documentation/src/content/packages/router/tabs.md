@@ -43,6 +43,15 @@ that platform logs a warning naming the tab's path. The fuller inputs also take 
 image drawn either as-authored or as a tinted template mask; `icon` and `selectedIcon` must be the
 same kind of image, since native carries one icon type for both states.
 
+On Android, a tab can be added after start behind an `@if`, but not taken away again: its item
+stays in the bottom navigation bar, still tappable, and opens a blank page, and adding the tab back
+then shows its item twice. The router takes the tab out of the bar it commits, but React Native
+drops that removal before it reaches react-native-screens' Android tab bar. The fix is an open
+pull request,
+[react-native-screens#4812](https://github.com/software-mansion/react-native-screens/pull/4812).
+Until a release has it, keep a tab a user can lose declared on Android, and have its page say why
+there is nothing there.
+
 Neither platform's tab bar draws SVG, so an icon written as SVG markup, such as an `@ng-icons` icon,
 is drawn once into an image by a renderer the app provides. `SvgImages` from `@ng-native/icons` is
 one:
@@ -96,9 +105,9 @@ On iOS 27 not on the tab's first visit, though: the outlet builds a tab's screen
 activates it, after native has selected the tab, so that first time the field is shown but not
 focused. Every later visit focuses it. iOS 26 focuses it on the first visit too.
 
-Both need iOS 26.1 and react-native-screens 4.29 or later, beyond the 4.26 Expo SDK 57 installs;
-older ones ignore them, and Android has no such tab. Native reads the role once, as the tab is
-created, so bind a value that does not change, and a bar has one search tab at most.
+Both need iOS 26.1 and react-native-screens 4.29 or later, which Expo SDK 58 installs and SDK 57
+does not; older ones ignore them, and Android has no such tab. Native reads the role once, as the
+tab is created, so bind a value that does not change, and a bar has one search tab at most.
 
 Which build the app is decides whether the role is needed at all. Linked against the iOS 26 SDK,
 as Expo Go and an app built with Xcode 26 are, UIKit keeps its older behavior and a plain
@@ -146,6 +155,27 @@ comes in front it is dismissed, and returning to its tab returns to the page ben
 react-native-screens draws it inside the tab's stack (a modal as a push, a form sheet as a bottom
 sheet), so the bar stays visible under it. It is dismissed there too, so a tab comes back on the
 same page on both platforms.
+
+## Hiding the bar on a pushed page
+
+A detail or editor page pushed in a tab's stack can take the whole window, as UIKit's
+`hidesBottomBarWhenPushed` and SwiftUI's `.toolbar(.hidden, for: .tabBar)` do. Give its header
+`tabBarHidden`:
+
+```html
+<native-header title="Invoice" tabBarHidden />
+```
+
+The bar goes while that page is the one in front of the tab in front. It comes back when the page
+is popped, when another page is pushed over it, when another tab is selected, and when the header
+is removed or `tabBarHidden` turns false. A `[barHidden]` bound on the `<native-tabs-outlet>` wins
+over every page, either way; left unbound, the pages decide. A header outside any tab ignores it.
+
+react-native-screens hides the bar on the tab bar as a whole rather than per screen, so the bar
+disappears and reappears without UIKit's slide. It disappears as a push starts. On a pop by the
+header's back button on iOS, it comes back once the slide has finished; on a pop by Android's back
+button, as the pop starts. On iOS 18 and later react-native-screens asks the tab bar controller to
+hide the bar; below iOS 18 it hides the bar's view.
 
 ## Content above the tab bar
 

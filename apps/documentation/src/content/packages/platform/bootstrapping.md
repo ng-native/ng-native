@@ -23,7 +23,8 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
     resolveAssetSource: (value) => Image.resolveAssetSource(value as never),
   });
 
-  watchConditions(app.engine);
+  const stopWatching = watchConditions(app.engine);
+  app.applicationRef.onDestroy(stopWatching);
 });
 ```
 
@@ -81,6 +82,9 @@ queries against on rotation or a system theme change. Without calling `watchCond
 `dark:` and any responsive layout only ever renders whatever `conditions` was at mount time.
 `watchConditions` also re-measures every text when the system text size changes; without it a
 text keeps the size it was first measured at, and its glyphs are clipped once they grow.
+`watchConditions` returns a function that stops it. Pass that to `applicationRef.onDestroy`, as
+the template does: Android destroys the app when it recreates the activity, after mounting a new
+one, and the old app's watch would otherwise keep running.
 
 ## What is in the injector
 

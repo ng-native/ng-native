@@ -21,7 +21,7 @@ registerExpoView('expo-image', 'ExpoImage');
 // The seek slider on the Now Playing screen is a real SwiftUI/Compose control.
 registerExpoUiViews(Platform.OS as 'ios' | 'android');
 
-AppRegistry.registerRunnable('main', ({ rootTag }: { rootTag: number | string }) => {
+AppRegistry.registerRunnable('main', ({ rootTag }) => {
   const app = mount(Number(rootTag), App, getFabricUIManager(), {
     processColor,
     globalStyles: tailwind,
@@ -32,5 +32,6 @@ AppRegistry.registerRunnable('main', ({ rootTag }: { rootTag: number | string })
   });
 
   // A theme switch changes what `dark:` matches, and nothing in the app is dirty when it happens.
-  watchConditions(app.engine);
+  const stopWatching = watchConditions(app.engine);
+  app.applicationRef.onDestroy(stopWatching);
 });

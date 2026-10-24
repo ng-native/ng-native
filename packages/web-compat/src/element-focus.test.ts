@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, inject } from '@angular/core';
 import { TextInput } from '@ng-native/components';
-import { cleanup, render, settle } from '@ng-native/testing';
+import { Engine } from '@ng-native/fabric';
+import { cleanup, render, screen, settle, userEvent } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 /** What a library sees of an element or a document: loosely typed, as its own code would be. */
@@ -20,11 +21,12 @@ type Dom = any;
       <button id="one">One</button>
       <button id="two">Two</button>
       <button id="off" disabled>Off</button>
-      <div id="plain"></div>
+      <div id="plain" testID="plain"></div>
+      <img id="picture" testID="picture" src="https://example.test/a.png" />
       <div id="held" tabindex="-1"></div>
       <a id="bare">Bare</a>
       <a id="link" href="/somewhere">Link</a>
-      <text-input id="field" />
+      <text-input id="field" testID="field" />
       <button id="reachable" disabled tabindex="0">Reachable</button>
       <text-input id="closed" disabled />
     </div>
@@ -39,7 +41,11 @@ afterEach(cleanup);
 const page = async () => {
   const app = await render(Page, { providers: [provideWebCompat()] });
   await settle();
-  return { document: app.fixture.componentInstance.document as Dom, fabric: app.fabric };
+  return {
+    document: app.fixture.componentInstance.document as Dom,
+    fabric: app.fabric,
+    engine: app.componentRef.injector.get(Engine),
+  };
 };
 
 /** The active element by its id: a node in a failed assertion is printed with the whole engine. */
@@ -56,6 +62,50 @@ function hear(element: Dom): string[] {
 }
 
 describe('focus on what is not a text field', () => {
+  it('brings what it focuses into sight only in answer to a touch, and not where told not to', async () => {
+    // A library focuses a panel as its page is built, a question or a focus trap: a screen that
+    // opens part way down for it has moved for nobody. A form that sends its user to the field
+    // to put right does so as its button is pressed.
+    const { document, engine, fabric } = await page();
+    const revealed: string[] = [];
+    const reveal = engine.reveal.bind(engine);
+    engine.reveal = (node: Dom) => void revealed.push(node.id);
+    try {
+      const held = document.getElementById('held');
+      held.focus();
+      assert.deepEqual(revealed, [], 'as the page is built');
+      held.blur();
+      const one = document.getElementById('one');
+      const quiet = () => held.focus({ preventScroll: true });
+      one.addEventListener('click', quiet);
+      await userEvent.press(screen.getByText('One'));
+      assert.deepEqual(revealed, [], 'told not to scroll');
+      held.blur();
+      one.removeEventListener('click', quiet);
+      one.addEventListener('click', () => held.focus());
+      await userEvent.press(screen.getByText('One'));
+      assert.deepEqual(revealed, ['held'], 'in answer to the press');
+      // Nor as what holds it scrolls: the page is where the finger moved it.
+      held.blur();
+      revealed.length = 0;
+      const plain = document.getElementById('plain');
+      plain.style.overflow = 'auto';
+      await settle();
+      plain.addEventListener('scroll', () => held.focus());
+      fabric.emit(screen.getByTestId('plain'), 'topScroll', { contentOffset: { x: 0, y: 40 } });
+      assert.equal(active(document), 'held', 'focused all the same');
+      assert.deepEqual(revealed, [], 'as it scrolls');
+      // Nor as a picture loads, which is no answer to anyone either.
+      held.blur();
+      document.getElementById('picture').addEventListener('load', () => held.focus());
+      fabric.emit(screen.getByTestId('picture'), 'topLoad', { source: { width: 4, height: 4 } });
+      assert.equal(active(document), 'held', 'focused as it loads');
+      assert.deepEqual(revealed, [], 'as it loads');
+    } finally {
+      engine.reveal = reveal;
+    }
+  });
+
   it('is taken by what can be focused, with its events, and is the active element', async () => {
     const { document } = await page();
     const one = document.getElementById('one');
@@ -213,6 +263,41 @@ describe('focus on what is not a text field', () => {
     assert.equal(active(document), 'field');
     fabric.emit(native, 'topBlur');
     assert.equal(active(document), 'body');
+  });
+
+  it("tells a field's listener of focus and blur with an event it can stop, as it is of any other", async () => {
+    // A combobox closes its list on the input's blur, calls preventDefault on the event and reads
+    // whether it was stopped.
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    const heard: unknown[] = [];
+    for (const type of ['focus', 'blur']) {
+      field.addEventListener(type, (event: Dom) => {
+        event.preventDefault();
+        heard.push([event.type, event.cancelable, event.defaultPrevented]);
+      });
+    }
+    fabric.emit(screen.getByTestId('field'), 'topFocus');
+    fabric.emit(screen.getByTestId('field'), 'topBlur');
+    assert.deepEqual(heard, [
+      ['focus', true, true],
+      ['blur', true, true],
+    ]);
+    // And of a button's, which a script moves the focus to and from.
+    heard.length = 0;
+    const one = document.getElementById('one');
+    for (const type of ['focus', 'blur']) {
+      one.addEventListener(type, (event: Dom) => {
+        event.preventDefault();
+        heard.push([event.type, event.cancelable, event.defaultPrevented]);
+      });
+    }
+    one.focus();
+    one.blur();
+    assert.deepEqual(heard, [
+      ['focus', true, true],
+      ['blur', true, true],
+    ]);
   });
 
   it('is heard of on the document and the body, focusin and focusout, as a focus monitor listens', async () => {

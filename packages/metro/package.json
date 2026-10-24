@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/metro",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "description": "Metro transformer and config preset for Angular Native: Angular AOT through oxc, the linker, and the build-time CSS compiler.",
   "keywords": [
     "angular",
@@ -67,7 +67,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
-    "@expo/metro-config": "~57.0.12",
+    "@expo/metro-config": "~58.0.15",
     "marked": "^18.0.14",
     "typescript": "~6.0.3"
   }

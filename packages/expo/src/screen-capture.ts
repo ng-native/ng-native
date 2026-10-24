@@ -63,7 +63,7 @@ export class ScreenCapture {
         const loaded = present(expo);
         if (!loaded) return expo;
         // One per module, so every app the runtime mounts holds the same keys.
-        return sharedBySource(loaded, () => ({
+        return sharedBySource(ScreenCapture, loaded, () => ({
           ...loaded,
           onWindowFront,
           preventAgain: async () => {
@@ -81,7 +81,11 @@ export class ScreenCapture {
   private readonly native = inject(ScreenCapture.SOURCE);
   private readonly count = signal(0);
   /** Every app's keys: the window is the runtime's, not an app's. */
-  private readonly window = sharedBySource(this.native, () => new CaptureWindow(this.native));
+  private readonly window = sharedBySource(
+    CaptureWindow,
+    this.native,
+    () => new CaptureWindow(this.native),
+  );
   /** This app, among the apps holding keys. */
   private readonly owner = {};
 

@@ -14,6 +14,7 @@
  * later task, so an event has to be awaited before the tree it changed can be read.
  */
 import { currentOf, ownerOf, settle } from './render.ts';
+import { expoUiButtonDisabled, expoUiButtonPress, isExpoUiButton } from './expo-ui-button.ts';
 import { flatten, isSearchBar, isTextInput, withParents } from './queries.ts';
 import type { FakeFabricNode } from './test-utils.ts';
 
@@ -51,11 +52,17 @@ function touch(node: FakeFabricNode, phase: 'start' | 'end'): Record<string, unk
 /**
  * Whether a finger could reach the node, by RNTL's reading of `pointerEvents` on the node as last
  * committed: not when it is `none` or `box-none` itself, nor under a `none` or `box-only` view.
+ *
+ * The walk stops at a view committed with `layoutRoot`: `@expo/ui`'s view host for content
+ * presented in its own window, a sheet's or a popover's, which takes its content's touches itself,
+ * so what is around it, such as the sheet's `pointerEvents: 'none'` host, has no say. So does
+ * SwiftUI's sheet, for the toolbar items it presents with that content.
  */
 function touchable(node: FakeFabricNode): boolean {
   withParents(ownerOf(node).fabric.committed);
   let blocking = 'box-none';
   for (let at: FakeFabricNode | null = currentOf(node) ?? node; at; at = at.parent ?? null) {
+    if (at.props['layoutRoot'] === true || /ExpoUI_BottomSheetView$/.test(at.viewName)) return true;
     const pointerEvents = at.props['pointerEvents'];
     if (pointerEvents === 'none' || pointerEvents === blocking) return false;
     blocking = 'box-only';
@@ -80,10 +87,20 @@ function changeText(field: FakeFabricNode, text: string): void {
   else emit(field, 'topChange', { text, eventCount: nextCount(field) });
 }
 
+/**
+ * The finger lifting: the touch's end, and on `@expo/ui`'s button the press SwiftUI or Compose
+ * fires for it, which a disabled one does not.
+ */
+function release(node: FakeFabricNode): void {
+  emit(node, 'topTouchEnd', touch(node, 'end'));
+  const current = currentOf(node) ?? node;
+  if (isExpoUiButton(current) && !expoUiButtonDisabled(current)) emit(node, expoUiButtonPress());
+}
+
 async function press(node: FakeFabricNode): Promise<void> {
   if (!touchable(node)) return;
   emit(node, 'topTouchStart', touch(node, 'start'));
-  emit(node, 'topTouchEnd', touch(node, 'end'));
+  release(node);
   await settle();
 }
 
@@ -178,7 +195,7 @@ async function hold(node: FakeFabricNode, duration: number): Promise<void> {
   emit(node, 'topTouchStart', touch(node, 'start'));
   await settle();
   if (duration) await sleep(duration);
-  emit(node, 'topTouchEnd', touch(node, 'end'));
+  release(node);
   await settle();
 }
 

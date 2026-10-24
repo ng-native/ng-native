@@ -31,12 +31,12 @@ const dependencies = {
   ...Object.fromEntries(FRAMEWORK.map((name) => [name, version])),
   '@angular/common': '^22.0.0',
   '@angular/core': '^22.0.0',
-  expo: '~57.0.26',
-  'expo-status-bar': '~57.0.1',
-  'expo-system-ui': '~57.0.4',
-  react: '19.2.3',
-  'react-native': '0.86.3',
-  'react-native-safe-area-context': '~5.7.0',
+  expo: '~58.0.16',
+  'expo-status-bar': '~58.0.3',
+  'expo-system-ui': '~58.0.6',
+  react: '19.3.0',
+  'react-native': '0.88.0',
+  'react-native-safe-area-context': '~5.10.1',
 };
 
 /** @type {Record<string, string>} */
@@ -47,10 +47,34 @@ const devDependencies = {
   '@angular/compiler-cli': '^22.0.0',
   '@babel/core': '^7.29.7',
   '@ng-native/testing': version,
-  '@types/react': '~19.2.2',
+  '@types/react': '~19.3.0',
   typescript: '~6.0.3',
   vitest: '^5.0.0',
 };
+
+/**
+ * What `--linter=eslint` adds beside `devDependencies`: `@ng-native/eslint-plugin` and what it runs
+ * on, angular-eslint for the templates and typescript-eslint for the code.
+ *
+ * @type {Record<string, string>}
+ */
+const lintDevDependencies = {
+  '@ng-native/eslint-plugin': version,
+  'angular-eslint': '^22.0.0',
+  eslint: '^10.0.0',
+  'typescript-eslint': '^8.0.0',
+};
+
+/** The app's `eslint.config.mjs`, with `--linter=eslint`. */
+const ESLINT_CONFIG = `import ngNative from '@ng-native/eslint-plugin';
+
+// The DOM events, HTML controls and browser APIs that compile but do nothing on a device. See
+// https://ng-native.com/packages/eslint-plugin for each rule.
+export default [
+  { ignores: ['.expo/', 'ios/', 'android/', 'dist/'] },
+  ...ngNative.configs.recommended,
+];
+`;
 
 /**
  * The app's own `.gitignore`: the lines of the template's that are about the app's directory. The
@@ -180,10 +204,11 @@ function prebuildPins(root) {
 
 /**
  * Where what a workspace already has can be older than what a new app is given: `@ng-native/testing`
- * installs Vitest 5 but its plugin runs on 4, which `ng new` 22.1 and the Nx preset still start on.
- * The range here is that package's `vitest` peer, and a test holds the two together.
+ * installs Vitest 5 but its plugin runs on 4, which `ng new` 22.1 and the Nx preset still start on,
+ * and `@ng-native/eslint-plugin` runs on the ESLint 9 the Nx preset still starts on. Each range here
+ * is that package's peer, and a test holds the two together.
  */
-const accepted = { vitest: '^4.0.8 || ^5.0.0' };
+const accepted = { vitest: '^4.0.8 || ^5.0.0', eslint: '^9.0.0 || ^10.0.0' };
 
 /**
  * Why an existing dependency would stop this app installing or running, as a sentence each.
@@ -195,12 +220,18 @@ const accepted = { vitest: '^4.0.8 || ^5.0.0' };
  * generator.
  *
  * @param {{ dependencies?: Record<string, string>, devDependencies?: Record<string, string> }} manifest
+ * @param {{ linter?: 'eslint' | 'none' }} [options] with `eslint`, the lint packages are judged too
  * @returns {string[]}
  */
-function conflicts(manifest) {
+function conflicts(manifest, { linter = 'none' } = {}) {
   const existing = { ...manifest.dependencies, ...manifest.devDependencies };
   const problems = [];
-  for (const [name, installed] of Object.entries({ ...dependencies, ...devDependencies })) {
+  const lint = linter === 'eslint' ? lintDevDependencies : {};
+  for (const [name, installed] of Object.entries({
+    ...dependencies,
+    ...devDependencies,
+    ...lint,
+  })) {
     const range = existing[name];
     const wanted = accepted[name] ?? installed;
     if (!range || name.startsWith('@ng-native/')) continue;
@@ -217,6 +248,8 @@ function conflicts(manifest) {
 module.exports = {
   dependencies,
   devDependencies,
+  lintDevDependencies,
+  ESLINT_CONFIG,
   GITIGNORE,
   appJson,
   bundleIdentifier,

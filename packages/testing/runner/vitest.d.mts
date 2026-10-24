@@ -11,6 +11,12 @@ export interface NgNativeOptions {
    * list the Metro preset takes as `libraryStyles`, so a test draws what the app draws.
    */
   libraryStyles?: string[] | false;
+  /**
+   * Which `Intl` a test runs with. `'hermes'`, the default, has only the constructors Hermes has
+   * (`Collator`, `DateTimeFormat` and `NumberFormat`), so code that builds another throws in a test
+   * as it does on a device. `'node'` keeps all of Node's, for an app whose tests rely on them.
+   */
+  intl?: 'hermes' | 'node';
 }
 
 /** Compile Angular for Vitest: AOT for decorated sources, the linker for partial-compiled packages. */

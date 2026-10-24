@@ -375,4 +375,18 @@ describe('a class a stylesheet does mention', () => {
       assert.deepEqual(s.props('cell')['color'], before, selector);
     }
   });
+
+  it('is held and let go with nothing under it styled again', () => {
+    const s = scene(CSS);
+    assert.equal(
+      s.restyled(() => s.engine.hold(s.panel, true)),
+      0,
+    );
+    assert.equal(s.props('panel')['opacity'], 0);
+    assert.equal(
+      s.restyled(() => s.engine.hold(s.panel, false)),
+      0,
+    );
+    assert.equal(s.props('panel')['opacity'], 1);
+  });
 });

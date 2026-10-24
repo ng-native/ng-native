@@ -26,7 +26,8 @@
  * than views, and they are a later opt-in rather than the primary API.
  */
 import { Component, DestroyRef, ElementRef, computed, effect, inject, input } from '@angular/core';
-import { ColorScheme, OS_VERSION } from '@ng-native/device';
+import { ColorScheme, OS_VERSION, SCREEN_IN_FRONT } from '@ng-native/device';
+import { IN_TAB } from './in-tab.ts';
 import { NATIVE_HEADER_DEFAULTS } from './native-bar-defaults.ts';
 import { NATIVE_HEADER_PALETTE } from './native-header-palette.ts';
 import type { EngineNode } from '@ng-native/fabric';
@@ -119,10 +120,16 @@ export class NativeHeader {
 
   constructor() {
     ownHost(inject(ElementRef).nativeElement as EngineNode, this.constructor);
+    const destroyRef = inject(DestroyRef);
+    const tab = inject(IN_TAB, { optional: true });
+    if (tab) {
+      const inFront = inject(SCREEN_IN_FRONT);
+      destroyRef.onDestroy(tab.hideBar(computed(() => inFront() && !!this.tabBarHidden())));
+    }
     const above = this.above;
     if (!above) return;
     effect(() => above.set(!this.hidden() && !this.isTranslucent()));
-    inject(DestroyRef).onDestroy(() => above.set(false));
+    destroyRef.onDestroy(() => above.set(false));
   }
 
   /**
@@ -220,6 +227,13 @@ export class NativeHeader {
   readonly blurEffect = input<BlurEffect>();
   /** Hide the bar entirely, keeping the screen's gestures and safe areas. */
   readonly hidden = input(undefined, { transform: optionalBoolean });
+  /**
+   * Hide the tab bar while this page is the one in front of its tab, as UIKit's
+   * `hidesBottomBarWhenPushed` does: on a detail page pushed in a tab's stack, say. The bar goes
+   * as the page is pushed and comes back as it is popped, without UIKit's slide. Outside a tab it
+   * does nothing, and `<native-tabs-outlet [barHidden]>` overrides it when bound.
+   */
+  readonly tabBarHidden = input(undefined, { transform: optionalBoolean });
   /** Drop the hairline under the bar. */
   readonly hideShadow = input(undefined, { transform: optionalBoolean });
   /** Let content scroll under the bar rather than starting below it. */

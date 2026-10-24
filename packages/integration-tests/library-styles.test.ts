@@ -894,12 +894,19 @@ describe("an @ng-native package's own components, installed from npm", () => {
     );
   });
 
-  it('gives <touchable-opacity> its resting opacity and fade, with no libraryStyles', () => {
+  it('gives <touchable-opacity> its pressed opacity and fade, with no libraryStyles', () => {
     const { code, warnings } = published('touchable-opacity.js');
     assert.deepEqual(warnings, []);
-    const rules = attached(code).rules;
+    const rules = attached(code).rules as {
+      declarations: Record<string, unknown>;
+      deferred?: { props: string[] }[];
+    }[];
     assert.ok(
-      rules.some((rule) => 'opacity' in (rule.declarations as Record<string, unknown>)),
+      rules.some((rule) => rule.deferred?.some((d) => d.props.includes('opacity'))),
+      JSON.stringify(rules),
+    );
+    assert.ok(
+      rules.some((rule) => '$transition' in rule.declarations),
       JSON.stringify(rules),
     );
   });

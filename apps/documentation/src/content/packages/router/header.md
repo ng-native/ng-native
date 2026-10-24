@@ -60,6 +60,10 @@ config for the rest of its life: removing the header commits that config as hidd
 header on the screen takes it over. `[hidden]` does the same for a bar that should go and come
 back with the same header in place.
 
+`tabBarHidden` hides the tab bar, rather than the navigation bar, while the page is in front of
+its tab: see
+[hiding the bar on a pushed page](/packages/router/tabs#hiding-the-bar-on-a-pushed-page).
+
 `<native-header-item>` places arbitrary Angular content - not just text - into one of the bar's
 slots: `left`, `center`/`title`, `right`, `back` (replaces the chevron; needs
 `backButtonInCustomView` on the header), or `searchBar`. `title` is committed as `center`, the
@@ -349,6 +353,12 @@ the way a page's `@media (prefers-color-scheme: dark)` rules do. The function ru
 The defaults cover the header's appearance: `userInterfaceStyle`, `backgroundColor`, `color`,
 `blurEffect`, `hideShadow`, `translucent`, the `title*` and `largeTitle*` colors and fonts,
 `largeTitleHideShadow`, `backTitleFontFamily`, `backTitleFontSize` and `backButtonDisplayMode`.
+
+On iOS, `backButtonDisplayMode` has no effect on a header that also sets `backTitleFontFamily`,
+`backTitleFontSize` or `disableBackButtonMenu`, in a screen or in the defaults. Those make
+react-native-screens build its own titled back button, and UIKit then shows the previous screen's
+title whatever the display mode says, so `minimal` does not reduce the button to the chevron.
+`[backTitleVisible]="false"` is not affected: it keeps the chevron alone with those set too.
 What a screen says about itself - its title, whether it has a large title, whether the bar is
 hidden - stays on the screen.
 

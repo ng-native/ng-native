@@ -19,6 +19,7 @@ type Dom = any;
       testID="size"
       id="size"
       [value]="size()"
+      [style.color]="color()"
       (input)="heard.push('input')"
       (change)="heard.push('change:' + $any($event.target).value)"
     >
@@ -33,10 +34,40 @@ type Dom = any;
 class Sizes {
   readonly document: Dom = inject(DOCUMENT);
   readonly size = signal('m');
+  readonly color = signal('rgb(20, 20, 20)');
+  readonly heard: string[] = [];
+}
+
+@Component({
+  selector: 'x-plans',
+  template: `
+    <select
+      testID="plan"
+      id="plan"
+      (change)="heard.push('change:' + $any($event.target).selectedIndex)"
+    >
+      <optgroup label="Retired" disabled>
+        <option value="old">Old</option>
+      </optgroup>
+      <option value="">Pick one</option>
+      <option value="pro">Pro, monthly</option>
+      <option value="pro">Pro, yearly</option>
+    </select>
+  `,
+})
+class Plans {
+  readonly document: Dom = inject(DOCUMENT);
   readonly heard: string[] = [];
 }
 
 afterEach(cleanup);
+
+const plans = async () => {
+  const app = await render(Plans, { providers: [provideWebCompat()] });
+  await settle();
+  const document = app.instance.document;
+  return { instance: app.instance, select: document.getElementById('plan') };
+};
 
 const sizes = async () => {
   const app = await render(Sizes, { providers: [provideWebCompat()] });
@@ -99,6 +130,129 @@ describe('a select', () => {
     await userEvent.press(screen.getByTestId('size'));
     await userEvent.press(screen.getByTestId('option-l'));
     assert.equal(select.value, 'm');
+  });
+
+  it('says nothing when the option it shows is pressed again, and closes', async () => {
+    const { instance, select } = await sizes();
+    await userEvent.press(screen.getByTestId('size'));
+    await userEvent.press(screen.getByTestId('option-m'));
+    assert.equal(select.value, 'm');
+    assert.deepEqual(instance.heard, [], 'nothing changed, as a browser says nothing then');
+    assert.equal(screen.queryByTestId('option-m'), null);
+  });
+
+  it('chooses nothing in a disabled group, and does not show one of its options first', async () => {
+    const { instance, select } = await plans();
+    assert.equal(select.selectedIndex, 1, 'the first option that can be chosen');
+    await userEvent.press(screen.getByTestId('plan'));
+    await userEvent.press(screen.getByTestId('option-old'));
+    assert.deepEqual([select.selectedIndex, instance.heard], [1, []]);
+  });
+
+  it('tells two options of one value apart, set by place, pressed or selected', async () => {
+    const { instance, select } = await plans();
+    select.selectedIndex = 3;
+    assert.deepEqual([select.selectedIndex, select.value], [3, 'pro']);
+    assert.deepEqual(shown(select), ['pro']);
+    assert.equal(select.options[3].selected, true);
+    assert.equal(select.options[2].selected, false);
+    // The other option of the value changing its own leaves the one chosen as it is.
+    select.options[2].value = 'basic';
+    assert.deepEqual([select.selectedIndex, select.value], [3, 'pro']);
+    select.options[2].value = 'pro';
+    select.options[2].selected = true;
+    assert.equal(select.selectedIndex, 2);
+    await userEvent.press(screen.getByTestId('plan'));
+    await userEvent.press(screen.getAllByTestId('option-pro')[1]!);
+    assert.deepEqual([select.selectedIndex, instance.heard], [3, ['change:3']]);
+    // A value set by a script is the first option of it, as a browser has it.
+    select.value = 'pro';
+    assert.equal(select.selectedIndex, 2);
+  });
+
+  it('chooses again once the option chosen of two of one value is taken out', async () => {
+    const { select } = await plans();
+    select.selectedIndex = 3;
+    select.options[3].remove();
+    assert.deepEqual([select.selectedIndex, select.value], [1, ''], 'not the other of its value');
+  });
+
+  it('chooses again once the option chosen is taken out of a group put in whole', async () => {
+    const { select } = await plans();
+    const document = select.ownerDocument;
+    const group = document.createElement('optgroup');
+    for (const text of ['Team, monthly', 'Team, yearly']) {
+      group.appendChild(Object.assign(document.createElement('option'), { value: 'team', text }));
+    }
+    select.appendChild(group);
+    select.selectedIndex = 5;
+    group.lastChild.remove();
+    assert.deepEqual([select.selectedIndex, select.value], [1, '']);
+    assert.deepEqual(shown(select), ['']);
+  });
+
+  it('closes its list on a press outside it, choosing nothing', async () => {
+    const { instance, select } = await sizes();
+    await userEvent.press(screen.getByTestId('size'));
+    // The layer the list is on is everything outside it.
+    await userEvent.press(screen.getByTestId('option-s').parent!.parent!);
+    await settle();
+    assert.equal(screen.queryByTestId('option-s'), null);
+    assert.deepEqual([select.value, instance.heard], ['m', []]);
+  });
+
+  it('opens its list under itself, where the page it is put in starts below a header', async () => {
+    const app = await render(Sizes, { providers: [provideWebCompat()] });
+    await settle();
+    const document = app.instance.document;
+    // The page starts 100 points down the window, under a header; the select is 300 down.
+    document.body.setAttribute('nativeID', 'body');
+    document.getElementById('size').setAttribute('nativeID', 'size-view');
+    app.fabric.frames.set('body', { x: 0, y: 100, width: 400, height: 700 });
+    app.fabric.frames.set('size-view', { x: 20, y: 300, width: 120, height: 36 });
+    await settle();
+    await userEvent.press(screen.getByTestId('size'));
+    await settle();
+    const list = screen.getByTestId('option-s').parent!;
+    assert.deepEqual(
+      [list.props['top'], list.props['left'], list.props['minWidth']],
+      [240, 20, 120],
+    );
+  });
+
+  it('draws its list light under dark text, and dark under light text', async () => {
+    const { instance } = await sizes();
+    const panel = () => screen.getByTestId('option-s').parent!.props['backgroundColor'];
+    await userEvent.press(screen.getByTestId('size'));
+    await settle();
+    assert.equal(panel(), '#ffffff');
+    await userEvent.press(screen.getByTestId('option-m'));
+    instance.color.set('rgb(250, 250, 250)');
+    await settle();
+    await userEvent.press(screen.getByTestId('size'));
+    await settle();
+    assert.equal(panel(), '#262626');
+  });
+
+  it('shows its option on the middle of its line, with no background of its own', async () => {
+    const { select } = await sizes();
+    assert.equal(screen.getByTestId('size').props['justifyContent'], 'center');
+    // The option shown, as it is committed.
+    assert.equal(select.options[1].committed?.props['backgroundColor'], 'transparent');
+  });
+
+  it('opens its list with nothing reported: its options are text of its own making', async () => {
+    const said: string[] = [];
+    const { error } = console;
+    console.error = (...all: unknown[]) => void said.push(all.map(String).join(' '));
+    try {
+      await sizes();
+      await userEvent.press(screen.getByTestId('size'));
+      await settle();
+    } finally {
+      console.error = error;
+    }
+    assert.deepEqual(said, []);
   });
 
   it('opens no list while it is disabled', async () => {

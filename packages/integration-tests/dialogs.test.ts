@@ -211,6 +211,53 @@ describe('offering a choice', () => {
     );
     assert.deepEqual(labels, ['Camera', 'Not now']);
   });
+
+  describe('with a message under the title', () => {
+    const message = 'This will permanently delete this appointment. This cannot be undone.';
+    const remove = [{ label: 'Delete', style: 'destructive' }] as const;
+
+    /** React Native's own modules, recording what each dialog was handed. */
+    function reactNative(os: string) {
+      const calls = { sheet: null as Record<string, unknown> | null, alert: [] as unknown[] };
+      return {
+        calls,
+        Platform: { OS: os },
+        Alert: { alert: (...args: unknown[]) => void (calls.alert = args) },
+        ActionSheetIOS: {
+          showActionSheetWithOptions: (options: Record<string, unknown>) =>
+            void (calls.sheet = options),
+        },
+        ToastAndroid: { show: () => {}, SHORT: 0, LONG: 1 },
+      };
+    }
+
+    it("hands it to iOS's action sheet, which shows it under the title", () => {
+      const native = reactNative('ios');
+      const dialogs = serviceWith(Dialogs.SOURCE, dialogSource(native), () => new Dialogs());
+
+      void dialogs.choose('Delete Appointment?', remove, { message });
+      assert.equal(native.calls.sheet?.['title'], 'Delete Appointment?');
+      assert.equal(native.calls.sheet?.['message'], message);
+    });
+
+    it('leaves the action sheet without one when none is given', () => {
+      const native = reactNative('ios');
+      const dialogs = serviceWith(Dialogs.SOURCE, dialogSource(native), () => new Dialogs());
+
+      void dialogs.choose('Delete Appointment?', remove);
+      assert.equal(native.calls.sheet?.['title'], 'Delete Appointment?');
+      assert.equal('message' in native.calls.sheet!, false);
+    });
+
+    it("is the Android dialog's message", () => {
+      const native = reactNative('android');
+      const dialogs = serviceWith(Dialogs.SOURCE, dialogSource(native), () => new Dialogs());
+
+      void dialogs.choose('Delete Appointment?', remove, { message });
+      assert.equal(native.calls.sheet, null, 'no action sheet on Android');
+      assert.deepEqual(native.calls.alert.slice(0, 2), ['Delete Appointment?', message]);
+    });
+  });
 });
 
 describe('saying something small', () => {

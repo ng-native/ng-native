@@ -290,6 +290,66 @@ describe('a transition of a colour', () => {
     assert.deepEqual(s.events, ['start backgroundColor', 'end backgroundColor']);
   });
 
+  it('eases a uniform border unsided where only the element gives its sides', () => {
+    const s = scene(
+      '.a { border-style: dashed; border-radius: 16px; transition: border-color 200ms linear }',
+    );
+    const sides = (colour: string) => ({
+      borderWidth: 4,
+      ...Object.fromEntries(
+        ['Top', 'Right', 'Bottom', 'Left'].map((side) => [`border${side}Color`, colour]),
+      ),
+    });
+    s.engine.setProp(s.view, 'style', sides('rgb(255, 0, 0)'));
+    s.engine.commit();
+    s.engine.setProp(s.view, 'style', sides('rgb(0, 0, 255)'));
+    s.engine.commit();
+    assert.equal(s.started().length, 1);
+    const half = s.at(0.5);
+    for (const part of ['r', 'g', 'b', 'a']) {
+      assert.equal(half[`borderColor.${part}`], half[`borderTopColor.${part}`], part);
+    }
+    assert.ok(half['borderColor.r']! > 0 && half['borderColor.b']! > 0, 'halfway, not an end');
+  });
+
+  it('drives no unsided colour where the widths differ, which native draws side by side', () => {
+    const s = scene(
+      '.a { border: dashed rgb(255, 0, 0); border-width: 1px 2px; ' +
+        'transition: border-color 200ms linear } .a.on { border-color: rgb(0, 0, 255) }',
+    );
+    s.classes('a on');
+    assert.equal(s.started().length, 1);
+    assert.notEqual(s.at(0.5)['borderTopColor.r'], undefined);
+    assert.equal(s.at(0.5)['borderColor.r'], undefined);
+  });
+
+  it('eases a uniform border unsided with its sides, which Android dashes a rounded one from', () => {
+    const s = scene(
+      '.a { border: 4px dashed rgb(255, 0, 0); border-radius: 16px; ' +
+        'transition: border-color 200ms linear } .a.on { border-color: rgb(0, 0, 255) }',
+    );
+    s.classes('a on');
+    assert.equal(s.started().length, 1);
+    const half = s.at(0.5);
+    for (const side of ['Top', 'Right', 'Bottom', 'Left']) {
+      for (const part of ['r', 'g', 'b', 'a']) {
+        const key = `border${side}Color.${part}`;
+        assert.equal(half[`borderColor.${part}`], half[key], key);
+      }
+    }
+    assert.ok(half['borderColor.r']! > 0 && half['borderColor.b']! > 0, 'halfway, not an end');
+  });
+
+  it('leaves the unsided colour alone where only some sides ease, to end alike', () => {
+    const s = scene(
+      '.a { border: 4px dashed rgb(0, 0, 255); border-top-color: rgb(255, 0, 0); ' +
+        'transition: border-color 200ms linear } .a.on { border-top-color: rgb(0, 0, 255) }',
+    );
+    s.classes('a on');
+    assert.equal(s.started().length, 1);
+    assert.equal(s.at(0.5)['borderColor.r'], undefined);
+  });
+
   it('shares a clock with an opacity that starts with it and eases alike', () => {
     const s = scene(
       '.a { opacity: 1; background-color: rgb(0, 0, 0); transition: all 200ms linear } ' +
@@ -299,5 +359,39 @@ describe('a transition of a colour', () => {
     assert.equal(s.started().length, 1);
     assert.equal(s.at(1)['opacity'], 0.5);
     assert.equal(s.at(1)['backgroundColor.b'], 30);
+  });
+
+  it('is eased natively where the view is moved by a transform of its own beside it, the move kept', () => {
+    // A label offset in a line: the offset is a move before its transform, which the native
+    // ease carries, so the label neither jumps by the offset nor is eased from JavaScript.
+    const css =
+      '.row { display: flex; flex-direction: row; flex-wrap: wrap }' +
+      ' .a { position: relative; top: 28px; transition: transform 200ms linear }' +
+      ' .a.up { transform: translateY(-10px) }';
+    const s = scene(css);
+    const row = s.engine.createElement('view');
+    s.engine.setClasses(row, 'row');
+    s.engine.appendChild(s.engine.root, row);
+    s.engine.removeChild(s.engine.root, s.view);
+    s.engine.appendChild(row, s.view);
+    s.engine.commit();
+    s.engine.advanceAnimations();
+    s.classes('a up');
+    assert.equal(s.started().length, 1);
+    // Native eases its own transform, with the engine's move as a constant entry before it.
+    assert.deepEqual([s.at(0), s.at(1)], [{ translateY: 0 }, { translateY: -10 }]);
+    type Config = { type: string; outputRange?: number[]; transforms?: { nodeTag: unknown }[] };
+    const created = new Map(
+      s.rec.named('create').map(([, tag, config]) => [tag, config as Config]),
+    );
+    const transform = [...created.values()].filter((config) => config.type === 'transform').at(-1)!;
+    // Each entry eased on the one clock, in order: the move held where the engine put it.
+    assert.deepEqual(
+      transform.transforms!.map((entry) => created.get(entry.nodeTag)!.outputRange),
+      [
+        [28, 28],
+        [0, -10],
+      ],
+    );
   });
 });

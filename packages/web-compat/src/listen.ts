@@ -1,14 +1,14 @@
-import type { Engine, EngineNode } from '@ng-native/fabric';
+import { isTextInput, type Engine, type EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { activate, ancestry, clickElement, disabled } from './activation.ts';
 import { canvasCreated, setCanvasSize } from './canvas.ts';
 import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './document.ts';
-import { isTextField } from './element-focus.ts';
 import { giveDefaults, giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
 import { nativeEvent } from './event-classes.ts';
 import { inPassiveListener, listen, type Heard } from './events.ts';
 import {
   FIELD_EVENTS,
+  caretColor,
   createField,
   isField,
   keyOf,
@@ -16,13 +16,15 @@ import {
   setField,
   wasRefused,
 } from './field.ts';
-import { fenceUnder } from './fieldset.ts';
+import { fenceUnder, legendInserted, legendRemoved } from './fieldset.ts';
 import { implicitSubmit } from './form.ts';
 import { setChecked } from './form-controls.ts';
 import { buildAs, holdIconBox, setMarkup } from './html.ts';
+import { imageCreated, setImage } from './image.ts';
 import { inlineStyle } from './inline-style.ts';
 import { labelPress, setLabel } from './label.ts';
 import { MOUSE_OF_TOUCH, TOUCH_EVENTS, asMouse, heardTouch } from './mouse-after-touch.ts';
+import { setRange, slideRange } from './range.ts';
 import { styleMade } from './runtime-style.ts';
 import {
   createSelect,
@@ -33,12 +35,25 @@ import {
   setSelect,
 } from './select.ts';
 import { engineOf } from './window.ts';
+import { noteTouch } from './touch-place.ts';
+import { headerMoved, putInPage, topMoved, windowTop } from './window-size.ts';
 import { together } from './mutation-observer.ts';
 import { frameAttributeSet, frameCreated } from './frame.ts';
 import { setFrameView } from './frame-view.ts';
 import { keepTaken } from './node-members.ts';
 import { setSvg, stopChanged, svgInserted, svgNamed, wordsInSpans } from './svg.ts';
 import { styleShape } from './svg-box.ts';
+import { shapeUnder } from './svg-hit.ts';
+import { hoverElsewhere, hoverTouched } from './svg-hover.ts';
+import { isDrawn, shapeInserted, takesTouches } from './svg-touch.ts';
+import {
+  columnsSpanned,
+  rowsSpanned,
+  spanColumns,
+  spanRows,
+  tableInserted,
+  tableRemoved,
+} from './table.ts';
 
 /** Markup that is an icon's drawing, as `@ng-icons/core` binds it to a `<template>`. */
 const ICON_MARKUP = /^\s*<svg[\s>]/i;
@@ -46,20 +61,32 @@ const ICON_MARKUP = /^\s*<svg[\s>]/i;
 /** Elements whose own component already turns a touch into a press. */
 const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
 
-/** The native event a listener's own element is being told, while it is told it. */
+/** The native event a listener's own element is being told, while it is told it, and its name. */
 let current: unknown;
+let currentName: string | undefined;
 
 /** The native event an element's listener is being told now: see `listenAnywhere`. */
 export const delivering = (): unknown => current;
 
-/** Tell an element's listener of a native event, which is the one being delivered until it is told. */
-function deliverAs<T>(event: unknown, tell: () => T): T {
-  const outer = current;
-  current = event;
+/**
+ * Whether a listener is being told of something the user did: a touch, a key, an edit, each told
+ * by a way of its own with no name, or what native says by a name that is one of `ACTIONS`. A
+ * scroll and a picture loading are no answer to anyone.
+ */
+export const deliveringAnAction = (): boolean =>
+  current !== undefined && (currentName === undefined || ACTIONS.has(currentName));
+
+/**
+ * Tell an element's listener of a native event, which is the one being delivered until it is
+ * told, under the name a listener hears it by where that is known.
+ */
+function deliverAs<T>(event: unknown, tell: () => T, name?: string): T {
+  const [outer, outerName] = [current, currentName];
+  [current, currentName] = [event, name];
   try {
     return tell();
   } finally {
-    current = outer;
+    [current, currentName] = [outer, outerName];
   }
 }
 
@@ -91,6 +118,16 @@ const SETTERS: Readonly<
     setChecked(node, on(value));
     engine.setProp(node, 'checked', on(value) ? '' : null);
     return true;
+  },
+  // A table cell across several columns, and one down several rows: see `table.ts`. Kept as
+  // the attribute too, which a library reads back.
+  colspan(node, value, engine) {
+    spanColumns(node, columnsSpanned(value), engine);
+    return false;
+  },
+  rowspan(node, value, engine) {
+    spanRows(node, rowsSpanned(value), engine);
+    return false;
   },
   hidden(node, value, engine) {
     engine.setProp(node, 'hidden', value === false ? null : value);
@@ -167,22 +204,39 @@ export const webListen: RendererExtension = {
     if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
     // A canvas is given the group what it draws goes in: see `canvas.ts`.
     if (documentOf(engine)) canvasCreated(node, engine);
+    // An image is the platform's image view: see `image.ts`.
+    imageCreated(node, engine);
     // A web view, or a document of its own: see `frame-view.ts` and `frame.ts`.
     frameCreated(node, engine);
+    // The window starts under a screen's navigation header: see `underHeader`.
+    if (node.tag === 'screen' && documentOf(engine)) underHeader(node, engine);
   },
-  // What a select shows, and whether a field is in a disabled fieldset, follow where an option
-  // and a field are put: see `select.ts` and `fieldset.ts`. What a drawing's own elements are
-  // given as they are put in it goes with them as the engine takes them out: see `svg.ts` and
-  // `hearRemovals`.
+  // What a select shows, whether a field is in a disabled fieldset, where a legend sits on its
+  // fieldset's border and a table's columns follow where an option, a field, a legend and a row
+  // or a cell are put: see `select.ts`, `fieldset.ts` and `table.ts`. What a drawing's own
+  // elements are given as they are put in it goes with them as the engine takes them out: see
+  // `svg.ts` and `hearRemovals`.
   inserted(node, parent, engine) {
     if (!documentOf(engine)) return;
     optionInserted(node, parent, engine);
+    legendInserted(node, parent, engine);
     if (node.tag === 'legend' && parent.tag === 'fieldset') fenceUnder(parent, engine);
     else fenceUnder(node, engine);
     svgInserted(node, parent, engine);
+    // A row or a cell: its table's columns are counted again. See `table.ts`.
+    tableInserted(node, engine);
+    // A screen made apart, or what holds one: the window starts under its header.
+    putInPage(engine);
+    shapeInserted(node, parent, engine);
   },
   removed(node, engine) {
     optionRemoved(node, engine);
+    // The table a row or a cell was in: see `table.ts`.
+    tableRemoved(node, engine);
+    legendRemoved(node, engine);
+    // A screen, or what one is in: the window starts under the header of another.
+    if (node.tag === 'screen') headerMoved(engine, node, undefined);
+    else topMoved(engine);
   },
   set(node, name, value, engine) {
     // By the name HTML has it, as a template may write it in capitals.
@@ -194,11 +248,18 @@ export const webListen: RendererExtension = {
       return true;
     }
     if (!documentOf(engine)) return false;
+    // A range's bounds keep its value within them: see `range.ts`.
+    if (setRange(node, attribute, value, engine)) return true;
+    // An image's `src`, `alt` and size, kept as written as well: see `image.ts`.
+    if (setImage(node, attribute, value, engine)) {
+      keepTaken(node, attribute, value);
+      return true;
+    }
     // A checkbox, a radio or a button an input is takes a press, and a label's `for` its
     // control's: both are kept as written as well.
     checkControl(node, name, value, engine);
     setLabel(node, name, value, engine);
-    const own = SETTERS[name];
+    const own = SETTERS[name] ?? SETTERS[attribute];
     // A canvas's size is the grid it draws on, and an attribute of a shape in a drawing is what
     // it draws: see `setCanvasSize` and `setSvg`.
     const took = own
@@ -213,11 +274,13 @@ export const webListen: RendererExtension = {
   style(node, name, value, engine) {
     if (!documentOf(engine)) return undefined;
     if (node.tag === 'stop') stopChanged(node, engine);
-    if (styleShape(node, name, value, engine)) return {};
+    if (styleShape(node, name, value, engine) || caretColor(node, name, value, engine)) return {};
     return inlineStyle(node, name, value);
   },
   // Kept as `addEventListener` keeps a listener, so what a script sends reaches a template's too.
-  listen(target, eventName, callback, engine) {
+  // With the options a script gave `Renderer2.listen`: CDK's drag and drop keeps a drag from the
+  // page with a `touchmove` listener on the document that says it is not passive.
+  listen(target, eventName, callback, engine, options) {
     const document = documentOf(engine);
     if (!document) return undefined;
     const on = listenedOn(target, document);
@@ -228,7 +291,7 @@ export const webListen: RendererExtension = {
       (node
         ? engine.setEventListener(target as EngineNode, topLevel(eventName), heard)
         : undefined);
-    return listen(on, eventName, callback, undefined, attach) ?? (() => {});
+    return listen(on, eventName, callback, options, attach) ?? (() => {});
   },
 };
 
@@ -263,7 +326,47 @@ export function listenNatively(
   if (anywhere || target === document.body || target === (document as unknown)) {
     return listenAnywhere(engine, eventName, callback);
   }
-  return listenOn(engine, target, eventName, callback);
+  if (!TOUCHED.has(eventName) || !isDrawn(target))
+    return listenOn(engine, target, eventName, callback);
+  // A shape, or a drawing, with a listener for a touch takes one: see `svg-touch.ts`.
+  const stop =
+    listenOn(engine, target, eventName, callback) ??
+    engine.setEventListener(target, topLevel(eventName), callback);
+  const taken = takesTouches(target, engine);
+  return () => {
+    taken();
+    stop();
+  };
+}
+
+/** What a listener listens to that a touch on a shape is told as. */
+const TOUCHED = new Set([
+  ...['click', 'contextmenu', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel'],
+  ...['touchstart', 'touchmove', 'touchend', 'touchcancel', 'mousedown', 'mouseup'],
+  ...['mouseover', 'mouseout', 'mouseenter', 'mouseleave'],
+]);
+
+/**
+ * Where a touch that starts on a drawing, or on a shape in one, is taken to be: the shape under
+ * the finger that listens, found by the boxes shapes are drawn in, as a browser finds a text by
+ * its letters' boxes and native by their ink. See `shapeUnder`. The mouse goes over what it is
+ * taken to be on once every listener has heard the touch start, as a browser sends the mouse
+ * events of a tap after its touch events, and goes nowhere for a touch a listener cancels: see
+ * `svg-hover.ts`.
+ */
+export function touchTarget(engine: Engine): (target: EngineNode, event: unknown) => EngineNode {
+  return (target, event) => {
+    const { x, y } = pointOf({ nativeEvent: event });
+    const drawn = isDrawn(target);
+    const taken = (drawn && shapeUnder(target, x, y)) || target;
+    queueMicrotask(() => {
+      if (cancelled.has(event as object)) return;
+      const at = { clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y };
+      if (drawn) hoverTouched(engine, taken, at);
+      else hoverElsewhere(engine, taken, at);
+    });
+    return taken;
+  };
 }
 
 /**
@@ -282,16 +385,18 @@ function listenOn(
   if (field === KEY_PRESS) return listenToKeys(engine, target, eventName, callback);
   if (field) return listenToNative(engine, target, eventName, field, callback);
   if (POINTER_EVENTS.has(eventName)) return onTouch(engine, target, eventName, callback);
-  const native = NATIVE_NAMES[eventName];
+  const native =
+    (target.tag === 'img' ? IMAGE_EVENTS[eventName] : undefined) ?? NATIVE_NAMES[eventName];
   if (native) return listenToNative(engine, target, eventName, native, callback);
   if (eventName !== 'click' || PRESSABLES.has(target.tag)) return undefined;
   return onTouch(engine, target, 'click', callback);
 }
 
 /**
- * `change` on an input: the end of editing for a text field, and a press for a checkbox or a
- * radio. Which it is goes by its type, which a binding sets after the listener is added, so both
- * are listened for and the one that is the input's own at the time is told.
+ * `input` and `change` on an input: an edit and the end of editing for a text field, and for a
+ * checkbox, a radio or a range what a press or a finger changed. Which it is goes by its type,
+ * which a binding sets after the listener is added, so both are listened for and the one that is
+ * the input's own at the time is told.
  */
 function listenToChange(
   engine: Engine,
@@ -299,14 +404,14 @@ function listenToChange(
   eventName: string,
   callback: Heard,
 ): (() => void) | undefined {
-  if (target.tag !== 'input' || eventName !== 'change') return undefined;
+  if (target.tag !== 'input' || (eventName !== 'change' && eventName !== 'input')) return undefined;
   const tell = (field: boolean) => (event: unknown) => {
-    if (isField(target) !== field) return;
-    deliverAs(event, () => callback(dom('change', target, event)));
+    if (isField(target) !== field || wasRefused(event)) return;
+    deliverAs(event, () => callback(dom(eventName, target, event)));
   };
   const stops = [
-    engine.setEventListener(target, FIELD_EVENTS['change']!, tell(true)),
-    engine.setEventListener(target, 'topChange', tell(false)),
+    engine.setEventListener(target, FIELD_EVENTS[eventName]!, tell(true)),
+    engine.setEventListener(target, topLevel(eventName), tell(false)),
   ];
   return () => stops.forEach((stop) => stop());
 }
@@ -398,7 +503,9 @@ function listenToNative(
   callback: Heard,
 ): () => void {
   const tell = (event: unknown) =>
-    wasRefused(event) ? undefined : deliverAs(event, () => callback(dom(eventName, target, event)));
+    wasRefused(event)
+      ? undefined
+      : deliverAs(event, () => callback(dom(eventName, target, event)), eventName);
   if (MOUSE_OF_TOUCH.has(eventName)) {
     // The mouse a touch is, told as a browser tells it: see `mouse-after-touch.ts`.
     return engine.setEventListener(target, native, (event) => {
@@ -472,6 +579,14 @@ const NATIVE_NAMES: Readonly<Record<string, string>> = {
   blur: 'topBlur',
 };
 
+/** What native says by name that is the user's own doing: all of it but a scroll. */
+const ACTIONS: ReadonlySet<string> = new Set(
+  Object.keys(NATIVE_NAMES).filter((name) => name !== 'scroll'),
+);
+
+/** What native says of an image's picture: see `image.ts`. */
+const IMAGE_EVENTS: Readonly<Record<string, string>> = { load: 'topLoad', error: 'topError' };
+
 /** The events a touch is delivered as, beside the `click` its release is. */
 const POINTER_EVENTS = new Set([
   ...['pointerdown', 'pointermove', 'pointerup', 'pointercancel'],
@@ -500,6 +615,19 @@ const capturing = new WeakSet<EngineNode>();
 
 /** Whether a touch is on the node, and so every move of it comes to the node's listeners. */
 export const hasCapture = (node: EngineNode): boolean => capturing.has(node);
+
+/**
+ * Hear how tall the navigation header over a screen is, which the screen says as it is laid out
+ * and as its header changes: the window starts under it. See `windowTop`.
+ */
+function underHeader(screen: EngineNode, engine: Engine): void {
+  headerMoved(engine, screen, 0);
+  engine.setEventListener(screen, 'topHeaderHeightChange', (event) => {
+    const height = (event as { nativeEvent?: { headerHeight?: unknown } }).nativeEvent
+      ?.headerHeight;
+    if (typeof height === 'number') headerMoved(engine, screen, height);
+  });
+}
 
 /** Where on the screen a touch is. */
 function pointOf(event: unknown): { x: number; y: number } {
@@ -559,6 +687,8 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
       menu = false;
       down = pointOf(event);
       tell('pointerdown', event);
+      // After the pointer event, as a browser moves a range input and says so: see `range.ts`.
+      slideRange(node, 'down', down.x);
       if (listeners.get('contextmenu')?.size) hold(event);
     },
     onResponderMove: (event) => {
@@ -568,16 +698,21 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
         dragged = true;
       }
       tell('pointermove', event);
+      slideRange(node, 'move', at.x);
     },
     onResponderRelease: (event) => {
       over('pointerup', event);
+      slideRange(node, 'up', 0);
       // A hold that opened a menu is not a press as well, nor is a drag: a list moved under a
       // finger is not the option it was lifted from.
       const at = pointOf(event);
       dragged ||= Math.hypot(at.x - down.x, at.y - down.y) > SLOP;
       if (!disabled(node) && !menu && !dragged) tell('click', event);
     },
-    onResponderTerminate: (event) => over('pointercancel', event),
+    onResponderTerminate: (event) => {
+      over('pointercancel', event);
+      slideRange(node, 'up', 0);
+    },
   });
   touched.set(node, (entry = { listeners, stop }));
   return entry;
@@ -615,24 +750,27 @@ function bubble(from: EngineNode, event: Bubbling, type: string): void {
   }
 }
 
-/** The inputs a press does something on: see `activation.ts`. */
-const PRESSED_INPUTS = new Set(['checkbox', 'radio', 'submit', 'image', 'reset']);
+/**
+ * The inputs a press does something on: see `activation.ts`. And a range, which a finger moves:
+ * see `range.ts`.
+ */
+const PRESSED_INPUTS = new Set(['checkbox', 'radio', 'submit', 'image', 'reset', 'range']);
 
 /**
- * A checkbox, a radio or a button an input is, which a library keeps out of sight under one it
- * draws: it takes the touch, and what a press on it does is in `activation.ts`. Of any other
- * type, or of none, it lets the touch go again.
+ * A checkbox, a radio, a range or a button an input is, which a library keeps out of sight under
+ * one it draws: it takes the touch, and what a press on it does is in `activation.ts`. Of any
+ * other type, or of none, it lets the touch go again.
  */
 function checkControl(node: EngineNode, name: string, value: unknown, engine: Engine): void {
   if (name !== 'type' || node.tag !== 'input') return;
-  if (PRESSED_INPUTS.has(String(value))) takesPress(engine, node);
+  if (PRESSED_INPUTS.has(String(value).toLowerCase())) takesPress(engine, node);
   else letGoOfPress(node);
 }
 
 // A label's control clicked as `click()` clicks it. One typed into is focused instead, and a
 // select opens its list, as a press on it does.
 labelPress.click = (control) => {
-  if (isTextField(control)) return false;
+  if (isTextInput(control)) return false;
   if (isSelect(control)) {
     if (!disabled(control)) pressSelect(control, engineOf(control));
     return true;
@@ -679,40 +817,59 @@ function onTouch(engine: Engine, node: EngineNode, type: string, listener: Liste
 
 interface Touch {
   identifier?: number;
+  /** The view the finger came down on, by its tag. */
+  target?: unknown;
   pageX?: number;
   pageY?: number;
 }
 
-/** A touch as a DOM `Touch` reads: the page and the client both, with no window to scroll. */
-const asTouch = (touch: Touch): object => ({
-  ...touch,
-  clientX: touch.pageX ?? 0,
-  clientY: touch.pageY ?? 0,
-});
+/**
+ * A touch as a DOM `Touch` reads: the page and the client both, with no window to scroll, from
+ * the top of the window, which is `top` down the screen.
+ */
+const asTouch = (touch: Touch, top: number): object => {
+  const y = (touch.pageY ?? 0) - top;
+  return { ...touch, pageY: y, clientX: touch.pageX ?? 0, clientY: y };
+};
 
 /** A list of touches, which a library reads one of by its place: `touches.item(0)`. */
-const touchList = (touches: readonly Touch[] | undefined): object[] => {
-  const list = (touches ?? []).map(asTouch);
+const touchList = (touches: readonly Touch[] | undefined, top: number): object[] => {
+  const list = (touches ?? []).map((touch) => asTouch(touch, top));
   return Object.assign(list, { item: (index: number) => list[index] ?? null });
 };
 
 /**
- * Where a touch is, as a DOM event says it: the finger that changed at the page and the client,
- * and the fingers down as `touches`.
+ * Whether a finger is on the view an event is sent to: by what it says it is on, or where it says
+ * nothing and is the only finger down, as a touch this package sends may, that one.
  */
-export function touchFields(native: unknown): Record<string, unknown> {
-  const said = native as
-    { pageX?: number; pageY?: number; touches?: Touch[]; changedTouches?: Touch[] } | undefined;
+const onTarget = (touch: Touch, said: { target?: unknown; touches?: Touch[] }): boolean =>
+  touch.target === undefined && said.touches?.length === 1
+    ? said.target !== undefined
+    : touch.target === said.target;
+
+/**
+ * Where a touch is, as a DOM event says it: the finger that changed at the page and the client,
+ * the fingers down as `touches`, and as `targetTouches` those of them that came down on the view
+ * the changed one did, which is where the event is sent. CDK's drag and drop reads where a drag
+ * starts from `targetTouches`. Native says where on the screen, and the window starts `top` down
+ * it, under a navigation header: see `windowTop`.
+ */
+export function touchFields(native: unknown, top: number): Record<string, unknown> {
+  const said = native as (Touch & { touches?: Touch[]; changedTouches?: Touch[] }) | undefined;
   if (!said) return {};
   const x = said.pageX ?? 0;
-  const y = said.pageY ?? 0;
+  const y = (said.pageY ?? 0) - top;
   return {
     clientX: x,
     clientY: y,
     pageX: x,
     pageY: y,
-    touches: touchList(said.touches),
-    changedTouches: touchList(said.changedTouches),
+    touches: touchList(said.touches, top),
+    targetTouches: touchList(
+      said.touches?.filter((touch) => onTarget(touch, said)),
+      top,
+    ),
+    changedTouches: touchList(said.changedTouches, top),
   };
 }
 
@@ -766,8 +923,10 @@ export const wasCancelled = (native: object): boolean => cancelled.has(native);
 function domFields(type: string, target: EngineNode, event: unknown): Record<string, unknown> {
   // What native said, which every element the event goes up through is told of.
   const native = (event as { nativeEvent?: object } | undefined)?.nativeEvent;
+  // Before a listener is told of a touch and measures: see `touch-place.ts`.
+  noteTouch(engineOf(target), type, event);
   return {
-    ...touchFields(native),
+    ...touchFields(native, windowTop(engineOf(target))),
     // The key a field says was pressed: see `field.ts`.
     ...keyOf(native as { key?: unknown } | undefined),
     type,

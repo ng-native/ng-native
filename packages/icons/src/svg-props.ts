@@ -363,7 +363,12 @@ export function viewBoxProps(viewBox: string | undefined): Record<string, unknow
   return { minX, minY, vbWidth, vbHeight, align: 'xMidYMid', meetOrSlice: 0 };
 }
 
-const TRANSFORM = /([a-zA-Z]+)\s*\(([^)]*)\)/g;
+/**
+ * One function of a `transform`: its name, from the start of a word, and what is in its brackets,
+ * which stop at the next `(`. A run of letters, or of `a(`, that never closes is then tried once,
+ * not again from each place in it.
+ */
+const TRANSFORM = /\b([a-zA-Z]+)\s*\(([^()]*)\)/g;
 
 /**
  * A `transform` attribute as a 2x3 matrix, which is the only form native takes.

@@ -135,6 +135,49 @@ export class ExpoUiListFixture {
   readonly level = signal(0);
 }
 
+/**
+ * A list row drawn with the app's own views, as a jobs list draws its rows: a pressable in a view
+ * host, the trigger of a context menu, with swipe actions.
+ */
+@Component({
+  selector: 'expo-ui-swipe-row-fixture',
+  imports: [
+    Pressable,
+    Text,
+    UiButton,
+    UiContextMenu,
+    UiHost,
+    UiList,
+    UiSlot,
+    UiSwipeActions,
+    UiViewHost,
+  ],
+  template: `
+    <ui-host [style]="{ flex: 1 }">
+      <ui-list>
+        <ui-swipe-actions>
+          <ui-context-menu>
+            <ui-slot name="trigger">
+              <ui-view-host [matchContents]="true">
+                <pressable testID="row" (press)="opened.set(opened() + 1)"
+                  ><text testID="title">Fix the boiler</text></pressable
+                >
+              </ui-view-host>
+            </ui-slot>
+            <ui-slot name="items"><ui-button label="Edit" /></ui-slot>
+          </ui-context-menu>
+          <ui-slot name="actions" [extraProps]="{ edge: 'trailing', allowsFullSwipe: true }">
+            <ui-button label="Delete" role="destructive" />
+          </ui-slot>
+        </ui-swipe-actions>
+      </ui-list>
+    </ui-host>
+  `,
+})
+export class ExpoUiSwipeRowFixture {
+  readonly opened = signal(0);
+}
+
 /** The rest of the typed SwiftUI controls, and `expo-image`, as a settings screen uses them. */
 @Component({
   selector: 'expo-ui-controls-fixture',

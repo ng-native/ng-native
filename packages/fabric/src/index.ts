@@ -40,7 +40,7 @@ export { EngineIntersectionObserver, installDeferTriggers } from './defer-trigge
 export { installNodeGlobal } from './node-global.ts';
 export { nextFrame } from './next-frame.ts';
 export { faceName, registeredFaces } from './font-faces.ts';
-export { firstFamily, tokenFromValue } from './inline-token.ts';
+export { firstFamily, platformColourOf, tokenFromValue } from './inline-token.ts';
 export { layOutGrid, type Edges, type GridItem, type GridLayout, type Rect } from './grid.ts';
 export { isBlockContainer, planFlow, type FlowKey, type FlowPlan, type FlowTree } from './flow.ts';
 export {
@@ -55,6 +55,7 @@ export {
   fontsRegistered,
   fontsSettled,
   markComponentHost,
+  markPage,
   scrollsOverflow,
   nativePlatform,
   onFontsRegistered,
@@ -67,6 +68,8 @@ export {
   type ViewNameOptions,
   type PostScriptNames,
   viewNameOf,
+  isTextInput,
+  isTextInputView,
   type EngineNode,
   type EngineOptions,
   type EngineStats,

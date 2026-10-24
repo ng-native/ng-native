@@ -31,7 +31,12 @@ const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
 /** The motion view's name, as `@ng-native/expo` would provide it. */
 const MOTION_VIEW = 'ViewManagerAdapter_NgNativeKeyboard';
 
-async function boot(name = 'DockedComposer', controller = false, motion = false) {
+async function boot(
+  name = 'DockedComposer',
+  controller = false,
+  motion = false,
+  windowTop: number | (() => number) = 0,
+) {
   const listeners = new Set<(metrics: KeyboardMetrics) => void>();
   const { native, named, drives } = recorder();
   const rendered = await render(mod[name] as Type<unknown>, {
@@ -47,6 +52,9 @@ async function boot(name = 'DockedComposer', controller = false, motion = false)
             return () => listeners.delete(listener);
           },
           dismiss: () => {},
+          get windowTop() {
+            return typeof windowTop === 'function' ? windowTop() : windowTop;
+          },
         },
       },
     ],
@@ -217,6 +225,43 @@ describe('keyboard dock on Android', () => {
       layout: { x: 0, y: 520, width: 402, height: 54 },
     });
     assert.equal(screen.getByTestId('dock').props['paddingBottom'], 0);
+  });
+
+  it('is padded by the whole overlap where the window starts below the status bar', async () => {
+    // React Native measures from below a 34 point status bar here, and reports the keyboard's top
+    // from the top of the screen.
+    registerPlatformComponents('android');
+    const { fabric, keyboard, bottom } = await boot('DockedComposer', false, false, 34);
+    await bottom(24);
+    fabric.frames.set('dock', { x: 0, y: 744, width: 402, height: 54 });
+    await fireEvent(screen.getByTestId('dock'), 'layout', {
+      layout: { x: 0, y: 744, width: 402, height: 54 },
+    });
+    await keyboard({ height: 358, screenY: 474 });
+    // The dock's bottom is at 798 in the window, the keyboard's top at 474 - 34 = 440.
+    assert.equal(screen.getByTestId('dock').props['paddingBottom'], 358);
+  });
+
+  it('stays on the keyboard when the status bar is hidden while it is up', async () => {
+    // Expo Go on Android: hiding the bar moves nothing on the screen, and React Native keeps
+    // measuring from below where the bar was, its root 24 points up, until the root is laid out
+    // again. The bar's own height, which the platform reports at once, is 0 by then.
+    registerPlatformComponents('android');
+    let bar = 24;
+    const { fabric, keyboard, bottom } = await boot('DockedComposer', false, false, () => bar);
+    // The app's root, drawn from the top of the screen and measured from below the bar.
+    fabric.frames.set('View', { x: 0, y: -24, width: 402, height: 874 });
+    await bottom(24);
+    fabric.frames.set('dock', { x: 0, y: 744, width: 402, height: 54 });
+    await fireEvent(screen.getByTestId('dock'), 'layout', {
+      layout: { x: 0, y: 744, width: 402, height: 54 },
+    });
+    await keyboard({ height: 358, screenY: 464 });
+    // The dock's bottom is at 798 in the window, 822 on the screen; the keyboard's top at 464.
+    assert.equal(screen.getByTestId('dock').props['paddingBottom'], 358);
+    bar = 0;
+    await keyboard({ height: 358, screenY: 464 });
+    assert.equal(screen.getByTestId('dock').props['paddingBottom'], 358, 'the bar hidden');
   });
 
   it('stays in flow with react-native-keyboard-controller, whose view adds the navigation bar as margins around the app', async () => {

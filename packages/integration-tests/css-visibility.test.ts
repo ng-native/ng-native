@@ -232,3 +232,148 @@ describe('a box clipped to nothing in a stylesheet read as a browser reads it', 
     assert.equal(s.reports.length, 1);
   });
 });
+
+describe('a box clipped to a band in a stylesheet read as a browser reads it', () => {
+  // One picture over another, cut where a before-and-after slider is: the picture on top is
+  // clipped to a band of itself from side to side. The band is kept for what draws an image
+  // through it, and no native view is sent it.
+  const BAND = 'clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%)';
+  const compiled = (declaration: string, generated = true) => {
+    const reports: string[] = [];
+    const sheet = compileCss(`.top { position: absolute; ${declaration} }`, 'library.css', {
+      generated,
+      onUnsupported: (message: string) => reports.push(message),
+    });
+    const declarations = sheet.rules[0]?.declarations ?? {};
+    return { sheet, reports, clipBand: declarations['clipBand'] };
+  };
+
+  it('is kept as the band it is, in a library sheet', () => {
+    const band = compiled(BAND);
+    assert.deepEqual(
+      [band.clipBand, band.reports],
+      ['polygon(0% 0%, 50% 0%, 50% 100%, 0% 100%)', []],
+    );
+    // Written another way: an edge that is part of a point, a zero that is a share, and the box
+    // it is a band of named.
+    const written = compiled(
+      'clip-path: polygon(25% 0%, 75.5% 0, 75.5% 100%, 25% 100%) border-box',
+    );
+    assert.deepEqual(
+      [written.clipBand, written.reports],
+      ['polygon(25% 0%, 75.5% 0%, 75.5% 100%, 25% 100%)', []],
+    );
+  });
+
+  it('is no band for clip-path: none, which ends one a rule before gave the box', () => {
+    const none = compiled('clip-path: none');
+    assert.deepEqual([none.clipBand, none.reports], ['none', []]);
+  });
+
+  it("is refused in an app's own stylesheet, as before", () => {
+    const { clipBand, reports } = compiled(BAND, false);
+    assert.equal(clipBand, undefined);
+    assert.equal(reports.length, 1);
+    assert.match(reports[0]!, /dropped 'clip-path'/);
+  });
+
+  describe('with an edge that is a token, settled for the box as a browser substitutes it', () => {
+    const TOKENED = 'clip-path: polygon(0 0, var(--x, 50%) 0, var(--x, 50%) 100%, 0 100%)';
+    const banded = (declaration: string, rule = '') => {
+      const { sheet, reports } = compiled(`${declaration}${rule}`);
+      const engine = new Engine(createFakeFabric(), 1, { globalStyles: sheet as never });
+      const view = engine.createElement('view');
+      engine.setClasses(view, 'top');
+      engine.appendChild(engine.root, view);
+      engine.commit();
+      return { engine, view, reports, band: () => view.styleCache?.style['clipBand'] };
+    };
+    const band = (from: string, to: string) =>
+      `polygon(${from}% 0%, ${to}% 0%, ${to}% 100%, ${from}% 100%)`;
+
+    it('is the fallback where the token is not set', () => {
+      const { band: clipBand, reports } = banded(TOKENED);
+      assert.deepEqual([clipBand(), reports], [band('0', '50'), []]);
+    });
+
+    it("is the token's where a rule sets it", () => {
+      assert.equal(banded(TOKENED, '; --x: 30%').band(), band('0', '30'));
+    });
+
+    it('moves as a script sets the token, and goes back to the fallback as it is taken away', () => {
+      const { engine, view, band: clipBand } = banded(TOKENED);
+      engine.setCustomProperty(view, '--x', '72.5%');
+      engine.commit();
+      assert.equal(clipBand(), band('0', '72.5'));
+      engine.setCustomProperty(view, '--x', '');
+      engine.commit();
+      assert.equal(clipBand(), band('0', '50'));
+    });
+
+    it('takes a token past the left edge, and an explicit border-box', () => {
+      // A slider dragged past the start sets its token below zero: the picture is cut off whole.
+      assert.equal(banded(TOKENED, '; --x: -10%').band(), band('0', '-10'));
+      assert.equal(banded(`${TOKENED} border-box`).band(), band('0', '50'));
+      const { clipBand, reports } = compiled(`${TOKENED} content-box`);
+      assert.deepEqual([clipBand, reports.length], [undefined, 1], 'and refuses any other box');
+    });
+
+    it('takes a token for either edge, each the same at the top and the bottom', () => {
+      const both =
+        'clip-path: polygon(var(--a) 0, var(--b, 80%) 0, var(--b, 80%) 100%, var(--a) 100%)';
+      assert.equal(banded(both, '; --a: 20%').band(), band('20', '80'));
+    });
+
+    it('is no band where the token is no share of the box, or is unset with nothing beside it', () => {
+      assert.equal(banded(TOKENED, '; --x: 40px').band(), undefined);
+      const bare = 'clip-path: polygon(0 0, var(--x) 0, var(--x) 100%, 0 100%)';
+      assert.equal(banded(bare).band(), undefined);
+    });
+
+    it('is refused where the two ends of an edge are not the same', () => {
+      const { clipBand, reports } = compiled(
+        'clip-path: polygon(0 0, var(--x, 50%) 0, var(--y, 50%) 100%, 0 100%)',
+      );
+      assert.equal(clipBand, undefined);
+      assert.equal(reports.length, 1);
+    });
+  });
+
+  for (const other of [
+    'polygon(0 0, 100% 0, 50% 100%)',
+    'polygon(0 0, 40px 0, 40px 100%, 0 100%)',
+    'polygon(0 0, 50% 0, 60% 100%, 0 100%)',
+    'polygon(0 10%, 50% 10%, 50% 100%, 0 100%)',
+    'polygon(0 0, calc(50% + 2px) 0, calc(50% + 2px) 100%, 0 100%)',
+    'polygon(0 0, 50% 0, 50% 100%, 0 100%) content-box',
+    'inset(10%)',
+  ]) {
+    it(`refuses any other shape: ${other}`, () => {
+      const { clipBand, reports } = compiled(`clip-path: ${other}`);
+      assert.equal(clipBand, undefined);
+      assert.equal(reports.length, 1);
+    });
+  }
+
+  it('is sent to no native view, and kept for the engine', () => {
+    const { sheet } = compiled(BAND);
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'top');
+    engine.appendChild(engine.root, view);
+    // A drawing's shape names the clip path it uses by a prop of that name, which native reads.
+    const shape = engine.createElement('view');
+    engine.setProp(shape, 'clipPath', 'c');
+    engine.appendChild(engine.root, shape);
+    engine.commit();
+    const [banded, clipped] = fabric.committed;
+    assert.equal(banded!.props['position'], 'absolute');
+    assert.deepEqual(
+      Object.keys(banded!.props).filter((key) => /^clip/.test(key)),
+      [],
+    );
+    assert.equal(view.styleCache?.style['clipBand'], 'polygon(0% 0%, 50% 0%, 50% 100%, 0% 100%)');
+    assert.equal(clipped!.props['clipPath'], 'c');
+  });
+});

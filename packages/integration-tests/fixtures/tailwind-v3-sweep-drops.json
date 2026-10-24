@@ -388,6 +388,7 @@
     "!accent-[#1a2b3c]",
     "!accent-[#1a2b3c]/[0.3]",
     "!accent-[rgb(10,20,30)]",
+    "!accent-[var(--x)]",
     "!accent-amber-100",
     "!accent-auto",
     "!accent-brand",
@@ -397,6 +398,7 @@
     "accent-[#1a2b3c]",
     "accent-[#1a2b3c]/[0.3]",
     "accent-[rgb(10,20,30)]",
+    "accent-[var(--x)]",
     "accent-amber-100",
     "accent-auto",
     "accent-brand",
@@ -425,10 +427,6 @@
     "accent-[37%]",
     "accent-[3]",
     "accent-[calc(1rem+2px)]"
-  ],
-  "dropped 'accent-color': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!accent-[var(--x)]",
-    "accent-[var(--x)]"
   ],
   "dropped 'animation': '…' is not a value native can take": [
     "!animate-[#1a2b3c]",
@@ -1629,6 +1627,7 @@
     "!caret-[#1a2b3c]",
     "!caret-[#1a2b3c]/[0.3]",
     "!caret-[rgb(10,20,30)]",
+    "!caret-[var(--x)]",
     "!caret-amber-100",
     "!caret-brand",
     "!caret-brand-soft",
@@ -1637,15 +1636,12 @@
     "caret-[#1a2b3c]",
     "caret-[#1a2b3c]/[0.3]",
     "caret-[rgb(10,20,30)]",
+    "caret-[var(--x)]",
     "caret-amber-100",
     "caret-brand",
     "caret-brand-soft",
     "caret-red-500/50",
     "caret-sky-600"
-  ],
-  "dropped 'caret-color': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!caret-[var(--x)]",
-    "caret-[var(--x)]"
   ],
   "dropped 'clear': '…' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": [
     "!clear-both",
@@ -1905,6 +1901,7 @@
     "!fill-[#1a2b3c]",
     "!fill-[#1a2b3c]/[0.3]",
     "!fill-[rgb(10,20,30)]",
+    "!fill-[var(--x)]",
     "!fill-amber-50",
     "!fill-brand",
     "!fill-brand-soft",
@@ -1914,16 +1911,13 @@
     "fill-[#1a2b3c]",
     "fill-[#1a2b3c]/[0.3]",
     "fill-[rgb(10,20,30)]",
+    "fill-[var(--x)]",
     "fill-amber-50",
     "fill-brand",
     "fill-brand-soft",
     "fill-none",
     "fill-red-500/50",
     "fill-sky-600"
-  ],
-  "dropped 'fill': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!fill-[var(--x)]",
-    "fill-[var(--x)]"
   ],
   "dropped 'flex-basis': '…' is not a value native can take": [
     "!basis-[#1a2b3c]",
@@ -2485,7 +2479,9 @@
     "leading-[rgb(10,20,30)]"
   ],
   "dropped 'list-style-image': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+    "!list-image-[var(--x)]",
     "!list-image-none",
+    "list-image-[var(--x)]",
     "list-image-none"
   ],
   "dropped 'list-style-image': '…' is not a value native can take": [
@@ -2510,10 +2506,6 @@
     "list-image-[calc(1rem+2px)]",
     "list-image-[rgb(10,20,30)]"
   ],
-  "dropped 'list-style-image': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!list-image-[var(--x)]",
-    "list-image-[var(--x)]"
-  ],
   "dropped 'list-style-position': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
     "!list-inside",
     "!list-outside",
@@ -2521,9 +2513,11 @@
     "list-outside"
   ],
   "dropped 'list-style-type': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+    "!list-[var(--x)]",
     "!list-decimal",
     "!list-disc",
     "!list-none",
+    "list-[var(--x)]",
     "list-decimal",
     "list-disc",
     "list-none"
@@ -2549,10 +2543,6 @@
     "list-[3]",
     "list-[calc(1rem+2px)]",
     "list-[rgb(10,20,30)]"
-  ],
-  "dropped 'list-style-type': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!list-[var(--x)]",
-    "list-[var(--x)]"
   ],
   "dropped 'margin-bottom': '…' is not a value native can take": [
     "!mb-[#1a2b3c]",
@@ -3360,6 +3350,7 @@
     "!scroll-mb-[37%]",
     "!scroll-mb-[3]",
     "!scroll-mb-[calc(1rem+2px)]",
+    "!scroll-mb-[var(--x)]",
     "!scroll-mb-gutter",
     "!scroll-my-0",
     "!scroll-my-12",
@@ -3370,6 +3361,7 @@
     "!scroll-my-[37%]",
     "!scroll-my-[3]",
     "!scroll-my-[calc(1rem+2px)]",
+    "!scroll-my-[var(--x)]",
     "!scroll-my-gutter",
     "-scroll-mb-32",
     "-scroll-mb-[13px]",
@@ -3384,6 +3376,7 @@
     "scroll-mb-[37%]",
     "scroll-mb-[3]",
     "scroll-mb-[calc(1rem+2px)]",
+    "scroll-mb-[var(--x)]",
     "scroll-mb-gutter",
     "scroll-my-0",
     "scroll-my-12",
@@ -3394,13 +3387,8 @@
     "scroll-my-[37%]",
     "scroll-my-[3]",
     "scroll-my-[calc(1rem+2px)]",
+    "scroll-my-[var(--x)]",
     "scroll-my-gutter"
-  ],
-  "dropped 'scroll-margin-bottom': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-mb-[var(--x)]",
-    "!scroll-my-[var(--x)]",
-    "scroll-mb-[var(--x)]",
-    "scroll-my-[var(--x)]"
   ],
   "dropped 'scroll-margin-inline-end': '…' is not a value native can take": [
     "!scroll-me-[#1a2b3c]",
@@ -3424,6 +3412,7 @@
     "!scroll-me-[37%]",
     "!scroll-me-[3]",
     "!scroll-me-[calc(1rem+2px)]",
+    "!scroll-me-[var(--x)]",
     "!scroll-me-gutter",
     "-scroll-me-32",
     "-scroll-me-[13px]",
@@ -3436,11 +3425,8 @@
     "scroll-me-[37%]",
     "scroll-me-[3]",
     "scroll-me-[calc(1rem+2px)]",
+    "scroll-me-[var(--x)]",
     "scroll-me-gutter"
-  ],
-  "dropped 'scroll-margin-inline-end': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-me-[var(--x)]",
-    "scroll-me-[var(--x)]"
   ],
   "dropped 'scroll-margin-inline-start': '…' is not a value native can take": [
     "!scroll-ms-[#1a2b3c]",
@@ -3464,6 +3450,7 @@
     "!scroll-ms-[37%]",
     "!scroll-ms-[3]",
     "!scroll-ms-[calc(1rem+2px)]",
+    "!scroll-ms-[var(--x)]",
     "!scroll-ms-gutter",
     "-scroll-ms-32",
     "-scroll-ms-[13px]",
@@ -3476,11 +3463,8 @@
     "scroll-ms-[37%]",
     "scroll-ms-[3]",
     "scroll-ms-[calc(1rem+2px)]",
+    "scroll-ms-[var(--x)]",
     "scroll-ms-gutter"
-  ],
-  "dropped 'scroll-margin-inline-start': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-ms-[var(--x)]",
-    "scroll-ms-[var(--x)]"
   ],
   "dropped 'scroll-margin-left': '…' is not a value native can take": [
     "!scroll-ml-[#1a2b3c]",
@@ -3514,6 +3498,7 @@
     "!scroll-ml-[37%]",
     "!scroll-ml-[3]",
     "!scroll-ml-[calc(1rem+2px)]",
+    "!scroll-ml-[var(--x)]",
     "!scroll-ml-gutter",
     "!scroll-mx-0",
     "!scroll-mx-12",
@@ -3524,6 +3509,7 @@
     "!scroll-mx-[37%]",
     "!scroll-mx-[3]",
     "!scroll-mx-[calc(1rem+2px)]",
+    "!scroll-mx-[var(--x)]",
     "!scroll-mx-gutter",
     "-scroll-ml-32",
     "-scroll-ml-[13px]",
@@ -3538,6 +3524,7 @@
     "scroll-ml-[37%]",
     "scroll-ml-[3]",
     "scroll-ml-[calc(1rem+2px)]",
+    "scroll-ml-[var(--x)]",
     "scroll-ml-gutter",
     "scroll-mx-0",
     "scroll-mx-12",
@@ -3548,13 +3535,8 @@
     "scroll-mx-[37%]",
     "scroll-mx-[3]",
     "scroll-mx-[calc(1rem+2px)]",
+    "scroll-mx-[var(--x)]",
     "scroll-mx-gutter"
-  ],
-  "dropped 'scroll-margin-left': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-ml-[var(--x)]",
-    "!scroll-mx-[var(--x)]",
-    "scroll-ml-[var(--x)]",
-    "scroll-mx-[var(--x)]"
   ],
   "dropped 'scroll-margin-right': '…' is not a value native can take": [
     "!scroll-mr-[#1a2b3c]",
@@ -3588,6 +3570,7 @@
     "!scroll-mr-[37%]",
     "!scroll-mr-[3]",
     "!scroll-mr-[calc(1rem+2px)]",
+    "!scroll-mr-[var(--x)]",
     "!scroll-mr-gutter",
     "!scroll-mx-0",
     "!scroll-mx-12",
@@ -3598,6 +3581,7 @@
     "!scroll-mx-[37%]",
     "!scroll-mx-[3]",
     "!scroll-mx-[calc(1rem+2px)]",
+    "!scroll-mx-[var(--x)]",
     "!scroll-mx-gutter",
     "-scroll-mr-32",
     "-scroll-mr-[13px]",
@@ -3612,6 +3596,7 @@
     "scroll-mr-[37%]",
     "scroll-mr-[3]",
     "scroll-mr-[calc(1rem+2px)]",
+    "scroll-mr-[var(--x)]",
     "scroll-mr-gutter",
     "scroll-mx-0",
     "scroll-mx-12",
@@ -3622,13 +3607,8 @@
     "scroll-mx-[37%]",
     "scroll-mx-[3]",
     "scroll-mx-[calc(1rem+2px)]",
+    "scroll-mx-[var(--x)]",
     "scroll-mx-gutter"
-  ],
-  "dropped 'scroll-margin-right': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-mr-[var(--x)]",
-    "!scroll-mx-[var(--x)]",
-    "scroll-mr-[var(--x)]",
-    "scroll-mx-[var(--x)]"
   ],
   "dropped 'scroll-margin-top': '…' is not a value native can take": [
     "!scroll-mt-[#1a2b3c]",
@@ -3662,6 +3642,7 @@
     "!scroll-mt-[37%]",
     "!scroll-mt-[3]",
     "!scroll-mt-[calc(1rem+2px)]",
+    "!scroll-mt-[var(--x)]",
     "!scroll-mt-gutter",
     "!scroll-my-0",
     "!scroll-my-12",
@@ -3672,6 +3653,7 @@
     "!scroll-my-[37%]",
     "!scroll-my-[3]",
     "!scroll-my-[calc(1rem+2px)]",
+    "!scroll-my-[var(--x)]",
     "!scroll-my-gutter",
     "-scroll-mt-32",
     "-scroll-mt-[13px]",
@@ -3686,6 +3668,7 @@
     "scroll-mt-[37%]",
     "scroll-mt-[3]",
     "scroll-mt-[calc(1rem+2px)]",
+    "scroll-mt-[var(--x)]",
     "scroll-mt-gutter",
     "scroll-my-0",
     "scroll-my-12",
@@ -3696,13 +3679,8 @@
     "scroll-my-[37%]",
     "scroll-my-[3]",
     "scroll-my-[calc(1rem+2px)]",
+    "scroll-my-[var(--x)]",
     "scroll-my-gutter"
-  ],
-  "dropped 'scroll-margin-top': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-mt-[var(--x)]",
-    "!scroll-my-[var(--x)]",
-    "scroll-mt-[var(--x)]",
-    "scroll-my-[var(--x)]"
   ],
   "dropped 'scroll-margin': '…' is not a value native can take": [
     "!scroll-m-[#1a2b3c]",
@@ -3726,6 +3704,7 @@
     "!scroll-m-[37%]",
     "!scroll-m-[3]",
     "!scroll-m-[calc(1rem+2px)]",
+    "!scroll-m-[var(--x)]",
     "!scroll-m-gutter",
     "-scroll-m-32",
     "-scroll-m-[13px]",
@@ -3738,11 +3717,8 @@
     "scroll-m-[37%]",
     "scroll-m-[3]",
     "scroll-m-[calc(1rem+2px)]",
+    "scroll-m-[var(--x)]",
     "scroll-m-gutter"
-  ],
-  "dropped 'scroll-margin': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-m-[var(--x)]",
-    "scroll-m-[var(--x)]"
   ],
   "dropped 'scroll-padding-bottom': '…' is not a value native can take": [
     "!scroll-pb-[#1a2b3c]",
@@ -3772,6 +3748,7 @@
     "!scroll-pb-[37%]",
     "!scroll-pb-[3]",
     "!scroll-pb-[calc(1rem+2px)]",
+    "!scroll-pb-[var(--x)]",
     "!scroll-pb-gutter",
     "!scroll-py-0",
     "!scroll-py-12",
@@ -3782,6 +3759,7 @@
     "!scroll-py-[37%]",
     "!scroll-py-[3]",
     "!scroll-py-[calc(1rem+2px)]",
+    "!scroll-py-[var(--x)]",
     "!scroll-py-gutter",
     "scroll-pb-0",
     "scroll-pb-12",
@@ -3792,6 +3770,7 @@
     "scroll-pb-[37%]",
     "scroll-pb-[3]",
     "scroll-pb-[calc(1rem+2px)]",
+    "scroll-pb-[var(--x)]",
     "scroll-pb-gutter",
     "scroll-py-0",
     "scroll-py-12",
@@ -3802,13 +3781,8 @@
     "scroll-py-[37%]",
     "scroll-py-[3]",
     "scroll-py-[calc(1rem+2px)]",
+    "scroll-py-[var(--x)]",
     "scroll-py-gutter"
-  ],
-  "dropped 'scroll-padding-bottom': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-pb-[var(--x)]",
-    "!scroll-py-[var(--x)]",
-    "scroll-pb-[var(--x)]",
-    "scroll-py-[var(--x)]"
   ],
   "dropped 'scroll-padding-inline-end': '…' is not a value native can take": [
     "!scroll-pe-[#1a2b3c]",
@@ -3830,6 +3804,7 @@
     "!scroll-pe-[37%]",
     "!scroll-pe-[3]",
     "!scroll-pe-[calc(1rem+2px)]",
+    "!scroll-pe-[var(--x)]",
     "!scroll-pe-gutter",
     "scroll-pe-0",
     "scroll-pe-12",
@@ -3840,11 +3815,8 @@
     "scroll-pe-[37%]",
     "scroll-pe-[3]",
     "scroll-pe-[calc(1rem+2px)]",
+    "scroll-pe-[var(--x)]",
     "scroll-pe-gutter"
-  ],
-  "dropped 'scroll-padding-inline-end': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-pe-[var(--x)]",
-    "scroll-pe-[var(--x)]"
   ],
   "dropped 'scroll-padding-inline-start': '…' is not a value native can take": [
     "!scroll-ps-[#1a2b3c]",
@@ -3866,6 +3838,7 @@
     "!scroll-ps-[37%]",
     "!scroll-ps-[3]",
     "!scroll-ps-[calc(1rem+2px)]",
+    "!scroll-ps-[var(--x)]",
     "!scroll-ps-gutter",
     "scroll-ps-0",
     "scroll-ps-12",
@@ -3876,11 +3849,8 @@
     "scroll-ps-[37%]",
     "scroll-ps-[3]",
     "scroll-ps-[calc(1rem+2px)]",
+    "scroll-ps-[var(--x)]",
     "scroll-ps-gutter"
-  ],
-  "dropped 'scroll-padding-inline-start': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-ps-[var(--x)]",
-    "scroll-ps-[var(--x)]"
   ],
   "dropped 'scroll-padding-left': '…' is not a value native can take": [
     "!scroll-pl-[#1a2b3c]",
@@ -3910,6 +3880,7 @@
     "!scroll-pl-[37%]",
     "!scroll-pl-[3]",
     "!scroll-pl-[calc(1rem+2px)]",
+    "!scroll-pl-[var(--x)]",
     "!scroll-pl-gutter",
     "!scroll-px-0",
     "!scroll-px-12",
@@ -3920,6 +3891,7 @@
     "!scroll-px-[37%]",
     "!scroll-px-[3]",
     "!scroll-px-[calc(1rem+2px)]",
+    "!scroll-px-[var(--x)]",
     "!scroll-px-gutter",
     "scroll-pl-0",
     "scroll-pl-12",
@@ -3930,6 +3902,7 @@
     "scroll-pl-[37%]",
     "scroll-pl-[3]",
     "scroll-pl-[calc(1rem+2px)]",
+    "scroll-pl-[var(--x)]",
     "scroll-pl-gutter",
     "scroll-px-0",
     "scroll-px-12",
@@ -3940,13 +3913,8 @@
     "scroll-px-[37%]",
     "scroll-px-[3]",
     "scroll-px-[calc(1rem+2px)]",
+    "scroll-px-[var(--x)]",
     "scroll-px-gutter"
-  ],
-  "dropped 'scroll-padding-left': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-pl-[var(--x)]",
-    "!scroll-px-[var(--x)]",
-    "scroll-pl-[var(--x)]",
-    "scroll-px-[var(--x)]"
   ],
   "dropped 'scroll-padding-right': '…' is not a value native can take": [
     "!scroll-pr-[#1a2b3c]",
@@ -3976,6 +3944,7 @@
     "!scroll-pr-[37%]",
     "!scroll-pr-[3]",
     "!scroll-pr-[calc(1rem+2px)]",
+    "!scroll-pr-[var(--x)]",
     "!scroll-pr-gutter",
     "!scroll-px-0",
     "!scroll-px-12",
@@ -3986,6 +3955,7 @@
     "!scroll-px-[37%]",
     "!scroll-px-[3]",
     "!scroll-px-[calc(1rem+2px)]",
+    "!scroll-px-[var(--x)]",
     "!scroll-px-gutter",
     "scroll-pr-0",
     "scroll-pr-12",
@@ -3996,6 +3966,7 @@
     "scroll-pr-[37%]",
     "scroll-pr-[3]",
     "scroll-pr-[calc(1rem+2px)]",
+    "scroll-pr-[var(--x)]",
     "scroll-pr-gutter",
     "scroll-px-0",
     "scroll-px-12",
@@ -4006,13 +3977,8 @@
     "scroll-px-[37%]",
     "scroll-px-[3]",
     "scroll-px-[calc(1rem+2px)]",
+    "scroll-px-[var(--x)]",
     "scroll-px-gutter"
-  ],
-  "dropped 'scroll-padding-right': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-pr-[var(--x)]",
-    "!scroll-px-[var(--x)]",
-    "scroll-pr-[var(--x)]",
-    "scroll-px-[var(--x)]"
   ],
   "dropped 'scroll-padding-top': '…' is not a value native can take": [
     "!scroll-pt-[#1a2b3c]",
@@ -4042,6 +4008,7 @@
     "!scroll-pt-[37%]",
     "!scroll-pt-[3]",
     "!scroll-pt-[calc(1rem+2px)]",
+    "!scroll-pt-[var(--x)]",
     "!scroll-pt-gutter",
     "!scroll-py-0",
     "!scroll-py-12",
@@ -4052,6 +4019,7 @@
     "!scroll-py-[37%]",
     "!scroll-py-[3]",
     "!scroll-py-[calc(1rem+2px)]",
+    "!scroll-py-[var(--x)]",
     "!scroll-py-gutter",
     "scroll-pt-0",
     "scroll-pt-12",
@@ -4062,6 +4030,7 @@
     "scroll-pt-[37%]",
     "scroll-pt-[3]",
     "scroll-pt-[calc(1rem+2px)]",
+    "scroll-pt-[var(--x)]",
     "scroll-pt-gutter",
     "scroll-py-0",
     "scroll-py-12",
@@ -4072,13 +4041,8 @@
     "scroll-py-[37%]",
     "scroll-py-[3]",
     "scroll-py-[calc(1rem+2px)]",
+    "scroll-py-[var(--x)]",
     "scroll-py-gutter"
-  ],
-  "dropped 'scroll-padding-top': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-pt-[var(--x)]",
-    "!scroll-py-[var(--x)]",
-    "scroll-pt-[var(--x)]",
-    "scroll-py-[var(--x)]"
   ],
   "dropped 'scroll-padding': '…' is not a value native can take": [
     "!scroll-p-[#1a2b3c]",
@@ -4100,6 +4064,7 @@
     "!scroll-p-[37%]",
     "!scroll-p-[3]",
     "!scroll-p-[calc(1rem+2px)]",
+    "!scroll-p-[var(--x)]",
     "!scroll-p-gutter",
     "scroll-p-0",
     "scroll-p-12",
@@ -4110,11 +4075,8 @@
     "scroll-p-[37%]",
     "scroll-p-[3]",
     "scroll-p-[calc(1rem+2px)]",
+    "scroll-p-[var(--x)]",
     "scroll-p-gutter"
-  ],
-  "dropped 'scroll-padding': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!scroll-p-[var(--x)]",
-    "scroll-p-[var(--x)]"
   ],
   "dropped 'scroll-snap-align': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "!snap-align-none",
@@ -4171,6 +4133,7 @@
     "!stroke-[#1a2b3c]",
     "!stroke-[#1a2b3c]/[0.3]",
     "!stroke-[rgb(10,20,30)]",
+    "!stroke-[var(--x)]",
     "!stroke-amber-100",
     "!stroke-brand",
     "!stroke-brand-soft",
@@ -4180,16 +4143,13 @@
     "stroke-[#1a2b3c]",
     "stroke-[#1a2b3c]/[0.3]",
     "stroke-[rgb(10,20,30)]",
+    "stroke-[var(--x)]",
     "stroke-amber-100",
     "stroke-brand",
     "stroke-brand-soft",
     "stroke-none",
     "stroke-red-500/50",
     "stroke-sky-800"
-  ],
-  "dropped 'stroke': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!stroke-[var(--x)]",
-    "stroke-[var(--x)]"
   ],
   "dropped 'table-layout': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
     "!table-auto",
@@ -4253,6 +4213,7 @@
     "!indent-[37%]",
     "!indent-[3]",
     "!indent-[calc(1rem+2px)]",
+    "!indent-[var(--x)]",
     "!indent-gutter",
     "-indent-32",
     "-indent-[13px]",
@@ -4265,11 +4226,8 @@
     "indent-[37%]",
     "indent-[3]",
     "indent-[calc(1rem+2px)]",
+    "indent-[var(--x)]",
     "indent-gutter"
-  ],
-  "dropped 'text-indent': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!indent-[var(--x)]",
-    "indent-[var(--x)]"
   ],
   "dropped 'text-underline-offset': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
     "!underline-offset-0",
@@ -4307,15 +4265,9 @@
     "underline-offset-[var(--x)]",
     "underline-offset-auto"
   ],
-  "dropped 'text-wrap': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "!text-balance",
+  "dropped 'text-wrap': text-wrap: nowrap is not read here. Write white-space: nowrap, which is one line.": [
     "!text-nowrap",
-    "!text-pretty",
-    "!text-wrap",
-    "text-balance",
-    "text-nowrap",
-    "text-pretty",
-    "text-wrap"
+    "text-nowrap"
   ],
   "dropped 'top': '…' is not a value native can take": [
     "!inset-y-[#1a2b3c]",
@@ -4648,13 +4600,9 @@
     "will-change-scroll",
     "will-change-transform"
   ],
-  "dropped 'word-break': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
+  "dropped 'word-break': word-break: break-all has no native equivalent; normal and keep-all, on iOS, are read.": [
     "!break-all",
-    "!break-keep",
-    "!break-normal",
-    "break-all",
-    "break-keep",
-    "break-normal"
+    "break-all"
   ],
   "dropped 'z-index': '…' is not a value native can take": [
     "!-z-[13px]",

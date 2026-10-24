@@ -46,11 +46,13 @@ jobs:
       - uses: ./.github/actions/setup
 
       # The build prerenders every page in a headless Chromium.
-      - run: pnpm --filter documentation exec playwright install --with-deps --only-shell chromium
+      - timeout-minutes: 5
+        run: pnpm --filter documentation exec playwright install --only-shell chromium
 
       # The site reads the compiler's own sources for its live previews, so it is built in the
       # workspace rather than from published packages.
-      - run: pnpm nx build documentation
+      - timeout-minutes: 8
+        run: pnpm nx build documentation
 
       # The branch decides the kind of deployment: the production branch (main, set on the
       # project) is the site itself, and any other is a preview at <branch>.<project>.pages.dev.
@@ -58,6 +60,7 @@ jobs:
       # which pnpm refuses. A Dependabot pull request gets Dependabot's secrets, which have no
       # Cloudflare token, so it is built, to check a bump, and not deployed.
       - id: deploy
+        timeout-minutes: 5
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -62,17 +62,170 @@ const answered = new WeakSet<object>();
 
 type Constructor = abstract new (...args: never[]) => object;
 
-export function letBrowserNodesPassAsNodes(): void {
-  const node = (globalThis as { Node?: Constructor }).Node;
-  if (typeof node !== 'function' || answered.has(node)) return;
-  answered.add(node);
-  const own = node[Symbol.hasInstance];
-  Object.defineProperty(node, Symbol.hasInstance, {
+export function letBrowserNodesPassAsDomNodes(): void {
+  const scope = globalThis as { Node?: Constructor; Element?: Constructor };
+  letPass(scope.Node, (value) => made.has(value as object));
+  letPass(
+    scope.Element,
+    (value) => made.has(value as object) && (value as BrowserNode).nodeKind === 'element',
+  );
+  letBrowserNodesBeObserved();
+}
+
+function letPass(target: Constructor | undefined, ours: (value: unknown) => boolean): void {
+  if (typeof target !== 'function' || answered.has(target)) return;
+  answered.add(target);
+  const own = target[Symbol.hasInstance];
+  Object.defineProperty(target, Symbol.hasInstance, {
     configurable: true,
     value(this: Constructor, value: unknown): boolean {
-      return (this === node && made.has(value as object)) || own.call(this, value);
+      return (this === target && ours(value)) || own.call(this, value);
     },
   });
+}
+
+function unwrap(target: unknown): unknown {
+  return made.has(target as object) ? (target as BrowserNode).el : target;
+}
+
+const observedBy = new WeakMap<
+  BrowserNode,
+  Set<{ moveTo(node: BrowserNode, from: Element, to: Element): boolean }>
+>();
+
+function letBrowserNodesBeObserved(): void {
+  const scope = globalThis as { IntersectionObserver?: typeof IntersectionObserver };
+  const Native = scope.IntersectionObserver;
+  if (typeof Native !== 'function' || answered.has(Native)) return;
+  const asSeen = (wrapped: WeakMap<Element, BrowserNode>, entry: IntersectionObserverEntry) => {
+    const node = wrapped.get(entry.target);
+    if (!node) return entry;
+    return {
+      time: entry.time,
+      rootBounds: entry.rootBounds,
+      boundingClientRect: entry.boundingClientRect,
+      intersectionRect: entry.intersectionRect,
+      intersectionRatio: entry.intersectionRatio,
+      isIntersecting: entry.isIntersecting,
+      target: node,
+    } as unknown as IntersectionObserverEntry;
+  };
+  class Observer extends Native {
+    private wrapped = new WeakMap<Element, BrowserNode>();
+
+    constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+      super(
+        (entries, observer) =>
+          callback(
+            entries.map((entry) => asSeen((observer as Observer).wrapped, entry)),
+            observer,
+          ),
+        options,
+      );
+    }
+
+    override observe(target: Element): void {
+      const el = unwrap(target) as Element;
+      if (el !== target) {
+        const node = target as unknown as BrowserNode;
+        this.wrapped.set(el, node);
+        let observers = observedBy.get(node);
+        if (!observers) observedBy.set(node, (observers = new Set()));
+        observers.add(this);
+      } else this.wrapped.delete(el);
+      super.observe(el);
+    }
+
+    override unobserve(target: Element): void {
+      const el = unwrap(target) as Element;
+      this.wrapped.delete(el);
+      super.unobserve(el);
+    }
+
+    override disconnect(): void {
+      this.wrapped = new WeakMap();
+      super.disconnect();
+    }
+
+    override takeRecords(): IntersectionObserverEntry[] {
+      return super.takeRecords().map((entry) => asSeen(this.wrapped, entry));
+    }
+
+    moveTo(node: BrowserNode, from: Element, to: Element): boolean {
+      if (this.wrapped.get(from) !== node) return false;
+      this.unobserve(from);
+      this.observe(to);
+      this.wrapped.set(to, node);
+      return true;
+    }
+  }
+  answered.add(Observer);
+  scope.IntersectionObserver = Observer;
+}
+
+interface Added {
+  readonly type: string;
+  readonly listener: EventListenerOrEventListenerObject;
+  readonly options: AddEventListenerOptions | boolean | undefined;
+  readonly capture: boolean;
+  /** What the element was given: `listener`, or for a `once` one, a wrapper that forgets it. */
+  readonly registered: EventListenerOrEventListenerObject;
+  readonly forget: () => void;
+}
+
+const addedTo = new WeakMap<BrowserNode, Added[]>();
+
+const captures = (options: EventListenerOptions | boolean | undefined) =>
+  typeof options === 'boolean' ? options : options?.capture === true;
+
+function addEventListener(
+  this: BrowserNode,
+  type: string,
+  listener: EventListenerOrEventListenerObject,
+  options?: AddEventListenerOptions | boolean,
+): void {
+  const capture = captures(options);
+  let added = addedTo.get(this);
+  if (!added) addedTo.set(this, (added = []));
+  if (added.some((a) => a.type === type && a.listener === listener && a.capture === capture)) {
+    return;
+  }
+  const signal = typeof options === 'object' ? options.signal : undefined;
+  if (signal?.aborted) return;
+  const list = added;
+  const forget = () => {
+    const at = list.indexOf(entry);
+    if (at !== -1) list.splice(at, 1);
+    signal?.removeEventListener('abort', forget);
+  };
+  // A `once` listener is forgotten before it runs, so a swap never brings it back: not when it
+  // stops the event, and not when it swaps the element itself.
+  const registered =
+    typeof options === 'object' && options.once === true
+      ? function (this: EventTarget, event: Event) {
+          forget();
+          if (typeof listener === 'function') listener.call(this, event);
+          else listener.handleEvent(event);
+        }
+      : listener;
+  const entry: Added = { type, listener, options, capture, registered, forget };
+  list.push(entry);
+  signal?.addEventListener('abort', forget);
+  this.el.addEventListener(type, registered, options);
+}
+
+function removeEventListener(
+  this: BrowserNode,
+  type: string,
+  listener: EventListenerOrEventListenerObject,
+  options?: EventListenerOptions | boolean,
+): void {
+  const capture = captures(options);
+  const added = addedTo
+    .get(this)
+    ?.find((a) => a.type === type && a.listener === listener && a.capture === capture);
+  this.el.removeEventListener(type, added?.registered ?? listener, options);
+  added?.forget();
 }
 
 /**
@@ -80,7 +233,10 @@ export function letBrowserNodesPassAsNodes(): void {
  * property (NG0303) unless `name in element` is true, and every binding on an element here goes to
  * `setProperty`, whatever its name.
  */
-const anyProperty = new Proxy({}, { has: (_, name) => typeof name === 'string' });
+const anyProperty = new Proxy(
+  { addEventListener, removeEventListener },
+  { has: (_, name) => typeof name === 'string' },
+);
 
 /**
  * The SVG names whose `fill`/`stroke` need a seeded `props` entry from the moment they are
@@ -180,11 +336,23 @@ export function makeAnchorNode(comment: Comment): BrowserNode {
   return node;
 }
 
-/** Puts `el` in place of the element `node` wraps, so `nodeOf` finds the node from either. */
+/**
+ * Puts `el` in place of the element `node` wraps, so `nodeOf` finds the node from either, and moves
+ * the listeners and observations added through `node` from the old element to `el`.
+ */
 export function rebindElement(node: BrowserNode, el: Element): void {
-  registry.delete(node.el);
+  const old = node.el as Element;
+  registry.delete(old);
   (node as { el: Element | Text | Comment }).el = el;
   registry.set(el, node);
+  for (const added of addedTo.get(node) ?? []) {
+    old.removeEventListener(added.type, added.registered, added.capture);
+    el.addEventListener(added.type, added.registered, added.options);
+  }
+  const observers = observedBy.get(node);
+  for (const observer of observers ?? []) {
+    if (!observer.moveTo(node, old, el)) observers!.delete(observer);
+  }
 }
 
 /** The `BrowserNode` a real DOM node was created with, or `null` for one this package did not make. */

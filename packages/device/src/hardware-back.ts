@@ -7,8 +7,12 @@
  * bottom of a navigation stack that means backgrounding the app rather than closing it, so a user
  * who backs out of the first screen finds the app where they left it.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import { reactNative } from './react-native.ts';
+import { SCREEN_IN_FRONT } from './screen-in-front.ts';
+
+/** Angular's NG0203, `inject()` called outside an injection context. */
+const NO_INJECTION_CONTEXT = -203;
 
 export interface HardwareBackSource {
   subscribe(listener: () => boolean): () => void;
@@ -38,9 +42,22 @@ export class HardwareBack {
 
   /**
    * Handle the back press. React Native runs the most recently added handler first, so a screen
-   * that subscribes on mount outranks the one below it. Returns an unsubscribe.
+   * that subscribes on mount outranks the one below it. Called in a screen's injection context, as
+   * from its constructor, the handler is asked only while that screen is in front: a screen pushed
+   * or presented over it gets the press. Returns an unsubscribe.
    */
   handle(handler: () => boolean): () => void {
-    return this.source.subscribe(handler);
+    const inFront = callerInFront();
+    return this.source.subscribe(() => (inFront?.() ?? true) && handler());
+  }
+}
+
+/** Whether the screen the caller is on is in front, or null where nothing says: outside an injection context, or one with no screen. */
+function callerInFront(): Signal<boolean> | null {
+  try {
+    return inject(SCREEN_IN_FRONT, { optional: true });
+  } catch (error) {
+    if ((error as { code?: number }).code !== NO_INJECTION_CONTEXT) throw error;
+    return null;
   }
 }

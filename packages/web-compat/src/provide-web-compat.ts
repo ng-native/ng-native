@@ -4,24 +4,28 @@ import {
   DOCUMENT,
   Injector,
   RendererFactory2,
+  effect,
   inject,
   makeEnvironmentProviders,
   provideEnvironmentInitializer,
   type EnvironmentProviders,
 } from '@angular/core';
 import { Engine, extendNodes } from '@ng-native/fabric';
-import { DeepLinks, NATIVE_HISTORY } from '@ng-native/device';
+import { DeepLinks, Keyboard, NATIVE_HISTORY } from '@ng-native/device';
 import { extendRenderer } from '@ng-native/platform';
 import { documentFor } from './document.ts';
 import { loadFramesWith, type FrameLoader } from './frame.ts';
 import { registerFrameViews, showFramesAs, type FrameMode } from './frame-view.ts';
 import { StillLocation } from './location.ts';
 import { detectedRoot, installLocation, openPage } from './page-address.ts';
-import { webListen } from './listen.ts';
+import { touchTarget, webListen } from './listen.ts';
 import { registerCanvas } from './canvas.ts';
+import { registerImage } from './image.ts';
 import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
 import { forgetCommits } from './commit-watch.ts';
+import { forgetLooks } from './intersection-observer.ts';
+import { forgetBands } from './image-band.ts';
 import { eventHandlerMembers } from './event-handlers.ts';
 import { pickWith } from './file-input.ts';
 import { focusMembers, passOverToldBlurs } from './element-focus.ts';
@@ -37,7 +41,9 @@ import { scrollingMembers } from './scrolling.ts';
 import { selectorMembers } from './selector-members.ts';
 import { registerSvg } from './svg.ts';
 import { treeMembers } from './tree-members.ts';
-import { installWindow, windowOf } from './window.ts';
+import { cancelAnimations } from './web-animation.ts';
+import { engineOf, installWindow, windowOf } from './window.ts';
+import { keyboardMoved, windowHeight } from './window-size.ts';
 
 /** How many apps in the process asked for it: nodes share one prototype, and globals are global. */
 let apps = 0;
@@ -47,31 +53,38 @@ let removeWindow: (() => void) | undefined;
 const documents: unknown[] = [];
 let original: PropertyDescriptor | undefined;
 
+/** The engines of the apps that asked, up or gone: a node of one keeps the members. */
+const asked = new WeakSet<Engine>();
+/** The node members, and what answers for a node of an app that asked once none is up. */
+let members: PropertyDescriptorMap | undefined;
+let removeLeft: (() => void) | undefined;
+
 /** Add what every app shares: the node members and the renderer's listeners. */
 function install(engine: Engine): void {
+  removeLeft?.();
+  removeLeft = undefined;
   const core = Object.getPrototypeOf(engine.root) as CoreNode;
   // Read now: once extended, the prototype's listeners are this package's.
-  const { addEventListener, removeEventListener } = core;
+  const { addEventListener, removeEventListener, getAnimations } = core;
+  // The properties of HTML elements over the rest: see `html-members.ts`.
+  members = withHtmlMembers({
+    // `onclick` and the rest: see `event-handlers.ts`.
+    ...eventHandlerMembers,
+    ...nodeMembers({ addEventListener, removeEventListener, getAnimations }),
+    ...treeMembers,
+    ...characterDataMembers,
+    ...relationMembers,
+    ...attributeMembers,
+    ...markupMembers,
+    ...htmlMethods,
+    ...selectorMembers,
+    ...geometryMembers,
+    ...scrollingMembers,
+    // `focus()`, `blur()` and `click()`: see `element-focus.ts`.
+    ...focusMembers,
+  });
   removals = [
-    // The properties of HTML elements over the rest: see `html-members.ts`.
-    extendNodes(
-      withHtmlMembers({
-        // `onclick` and the rest: see `event-handlers.ts`.
-        ...eventHandlerMembers,
-        ...nodeMembers({ addEventListener, removeEventListener }),
-        ...treeMembers,
-        ...characterDataMembers,
-        ...relationMembers,
-        ...attributeMembers,
-        ...markupMembers,
-        ...htmlMethods,
-        ...selectorMembers,
-        ...geometryMembers,
-        ...scrollingMembers,
-        // `focus()`, `blur()` and `click()`: see `element-focus.ts`.
-        ...focusMembers,
-      }),
-    ),
+    extendNodes(members),
     extendRenderer(webListen),
     registerElements(),
     // The drawing's own elements, as react-native-svg's native views: see `svg.ts`.
@@ -79,6 +92,8 @@ function install(engine: Engine): void {
     // A canvas, drawn by the same views, and the globals its drawing is asked about by: see
     // `canvas.ts`.
     registerCanvas(),
+    // An image, as the platform's image view: see `image.ts`.
+    registerImage(),
     // An iframe's native web view, and Angular's `Location` where no router gives one: see
     // `frame-view.ts` and `page-address.ts`.
     registerFrameViews(),
@@ -86,12 +101,49 @@ function install(engine: Engine): void {
   ];
 }
 
-/** Take away all of it, the globals too: no app that asked is up. */
-function uninstall(): void {
+/**
+ * Take away all of it, the globals too: no app that asked is up. A node of one of those apps
+ * still has the members: see `leftFor`.
+ */
+function uninstall(engine: Engine): void {
   for (const remove of removals) remove();
   removals = [];
   removeWindow?.();
   removeWindow = undefined;
+  if (members) removeLeft = extendNodes(leftFor(members, Object.getPrototypeOf(engine.root)));
+}
+
+/**
+ * The node members for after the last app that asked has gone: each answers for a node of one
+ * of those apps, as an element out of the document still answers in a browser, and is what the
+ * engine has for any other. A library's timer fires after its app is torn down, a ripple that
+ * fades or a class a field adds, and has something to call.
+ *
+ * ponytail: a member that reads a global the package gave the window finds it gone. Keep that
+ * global for such nodes too if a library's late timer is seen to throw on one.
+ */
+function leftFor(all: PropertyDescriptorMap, core: object): PropertyDescriptorMap {
+  const left: PropertyDescriptorMap = {};
+  for (const name of Object.keys(all)) {
+    const ours = all[name]!;
+    const theirs = inherited(core, name);
+    const of = (node: object) => (asked.has(engineOf(node as never)) ? ours : theirs);
+    left[name] = {
+      get(this: object) {
+        const one = of(this);
+        return one?.get ? one.get.call(this) : one?.value;
+      },
+      set(this: object, value: unknown) {
+        const one = of(this);
+        if (one?.set) one.set.call(this, value);
+        // One that is only read keeps its value, as a browser's does outside strict code.
+        else if (!one?.get && one?.writable !== false) {
+          Object.defineProperty(this, name, { value, writable: true, configurable: true });
+        }
+      },
+    };
+  }
+  return left;
 }
 
 /** Make the global `document` the one given, or what was there before any app, for none. */
@@ -100,6 +152,46 @@ function setGlobalDocument(document: unknown): void {
   if (document !== undefined) globals.document = document;
   else if (original) Object.defineProperty(globalThis, 'document', original);
   else delete globals.document;
+}
+
+/** What `from` has by a name, its own or from further up, as reading it finds it. */
+function inherited(from: object, name: string): PropertyDescriptor | undefined {
+  for (let at: object | null = from; at; at = Object.getPrototypeOf(at)) {
+    const found = Object.getOwnPropertyDescriptor(at, name);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** A listener a library gave the stand-in document before any app was up. */
+interface Early {
+  readonly type: string;
+  readonly listener: unknown;
+  readonly options: unknown;
+}
+
+/** The stand-in document's own listening, as `before-modules.js` keeps it. */
+interface StandIns {
+  readonly listeners: readonly Early[];
+  /** The app documents it was handed to, told of what it is given and has taken off after. */
+  readonly handedTo: Set<unknown>;
+}
+
+/**
+ * Give an app's document what the stand-in document was given before any app was up, and what it
+ * is given or has taken off while the app is up: a library keeps the document it listened on.
+ * Answers what stops it, as the app goes.
+ */
+function handEarlyListeners(document: unknown): () => void {
+  const standIns = (original?.value as { addEventListener?: { standIns?: StandIns } } | undefined)
+    ?.addEventListener?.standIns;
+  if (!standIns) return () => {};
+  const listen = (document as { addEventListener(...args: unknown[]): void }).addEventListener;
+  for (const { type, listener, options } of standIns.listeners) {
+    listen.call(document, type, listener, options);
+  }
+  standIns.handedTo.add(document);
+  return () => void standIns.handedTo.delete(document);
 }
 
 /** How `provideWebCompat` is set up. */
@@ -186,17 +278,30 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       const engine = inject(Engine);
       if (apps === 0) install(engine);
       apps++;
+      asked.add(engine);
       removeWindow ??= installWindow();
       // A library reads the global as often as the injected one. The newest app up has it.
       if (!documents.length) original = Object.getOwnPropertyDescriptor(globalThis, 'document');
       const document = documentFor(engine);
       documents.push(document);
       setGlobalDocument(document);
+      // What a library listened for on the document as its module loaded: see `before-modules.js`.
+      const unhand = handEarlyListeners(document);
       const forgetRenderer = setAttributesWith(
         engine,
         inject(RendererFactory2).createRenderer(null, null),
       );
       const leaveWindow = windowOf(engine);
+      // The window ends at the top of the keyboard while it is up: see `window-size.ts`. Where the
+      // keyboard is going, which it is said to be as it starts to move. Ended with the app. Its
+      // `screenY` counts from the top of the screen, and the window can start below that.
+      const keyboard = inject(Keyboard);
+      effect(() => {
+        const { height, screenY } = keyboard.metrics();
+        const top =
+          screenY === undefined ? windowHeight(engine) - height : screenY - keyboard.windowTop;
+        keyboardMoved(engine, height > 0 ? top : undefined);
+      });
       // A field's blur is told at once, and native's answer to it passed over: see `element-focus.ts`.
       const heedBlurs = passOverToldBlurs(engine);
       const unwatchStyles = watchStyles(engine);
@@ -213,21 +318,32 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       });
       // Where a file input's click finds the system's file picker: see `file-input.ts`.
       const forgetPicker = pickWith(engine, injector);
+      // An element a library moves while a finger is on it keeps its touch: see `Engine`.
+      engine.holdMovesUnderFinger(true);
+      // A touch on a drawing is on the shape a browser finds under the finger: see `listen.ts`.
+      engine.setTouchTarget(touchTarget(engine));
       inject(DestroyRef).onDestroy(() => {
+        engine.holdMovesUnderFinger(false);
+        engine.setTouchTarget(null);
         forgetPicker();
         closePage();
         forgetFrameMode();
         forgetFrames();
         unwatchStyles();
+        // Each `finished` it still owed, before its commits go: see `web-animation.ts`.
+        cancelAnimations(engine);
         // What an observer still watching in it heard of its commits: see `commit-watch.ts`.
         forgetCommits(engine);
+        unhand();
+        forgetLooks();
+        forgetBands(engine);
         forgetRenderer();
         leaveWindow();
         heedBlurs();
         // In whatever order the apps go: the newest still up, or what was there before any.
         documents.splice(documents.indexOf(document), 1);
         setGlobalDocument(documents.at(-1));
-        if (--apps === 0) uninstall();
+        if (--apps === 0) uninstall(engine);
       });
     }),
   ]);

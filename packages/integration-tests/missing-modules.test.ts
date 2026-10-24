@@ -16,12 +16,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { afterEach, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import {
-  runInInjectionContext,
-  type Injector,
-  type InjectionToken,
-  type Type,
-} from '@angular/core';
+import { Injector, runInInjectionContext, type InjectionToken, type Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { cleanup, createFakeFabric, injectService } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -293,6 +288,28 @@ describe('a service whose module is missing', () => {
       assert.equal(app.get(Tracking).available, false);
       assert.throws(() => app.get(Network).status(), fixes('expo-network', 'ios'));
       assert.throws(() => app.get(AppInfo).version, fixes('expo-application', 'ios'));
+    });
+  });
+
+  it('lets Foldable read expo-hinge without asking for expo-foldables', () => {
+    on('ios', () => {
+      const expoHinge = {
+        getHinge: () => ({ angle: 90, status: 'partiallyOpen' as const }),
+        addHingeListener: () => ({ remove() {} }),
+      };
+      const injector = Injector.create({
+        parent: app,
+        providers: [
+          { provide: Foldable.SOURCE, useValue: factoryOf(Foldable.SOURCE)() },
+          { provide: Foldable.HINGE, useValue: expoHinge },
+        ],
+      });
+      const foldable = runInInjectionContext(injector, () => new Foldable());
+      assert.deepEqual(
+        [foldable.available(), foldable.posture(), foldable.angle(), foldable.fold()],
+        [true, 'partially-open', 90, null],
+      );
+      assert.equal(foldable.book(), false);
     });
   });
 

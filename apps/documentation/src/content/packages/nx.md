@@ -28,12 +28,12 @@ targets from its `app.json`, `metro.config.js` and `package.json`, so there is n
 reimplement.
 
 It does not run `@nx/expo:init`, which installs Expo itself at the SDK `@nx/expo` was released
-against. On Nx 23.2 that is SDK 56, with a `react-dom` that asks for React 19.3; an Angular Native
-app needs SDK 57 and React 19.2.3, and npm refuses to install the two side by side. It adds the
-two things `init` would have that the app does need, at the app's versions: `react-dom` at the
-app's React, because `@nx/expo` depends on `@nx/react` and npm would otherwise take its
-`react-dom` peer at 19.3 and refuse every later install, and `@expo/cli`, which `nx prebuild` loads
-from the workspace root.
+against. On Nx 23.2 that is SDK 56; an Angular Native app needs SDK 58 and React 19.3.0, and npm
+refuses to install the two side by side. It adds the two things `init` would have that the app does
+need, at the app's versions: `react-dom` at the app's React, because `@nx/expo` depends on
+`@nx/react` and npm would otherwise take its `react-dom` peer at the newest release, which asks for
+a newer React, and refuse every later install, and `@expo/cli`, which `nx prebuild` loads from the
+workspace root.
 
 With package-manager workspaces it adds `expo`, `react` and `react-native` at the root as well,
 at the app's versions, in place of `@expo/cli`. The package manager resolves `@nx/expo`'s `expo`
@@ -71,6 +71,7 @@ is left as it is, with a warning naming the two to decide.
 | `nx build mobile`       | `@nx/expo`     | an EAS build, on Expo's machines                                |
 | `nx test mobile`        | `project.json` | `vitest run`, through [`@ng-native/testing`](/packages/testing) |
 | `nx typecheck mobile`   | `project.json` | `ngc --noEmit`, which checks the templates as well as the code  |
+| `nx lint mobile`        | `project.json` | `eslint .`, with `--linter=eslint` only                         |
 
 `typecheck` and `test` are the two `@nx/expo` does not provide. Expo's `tsconfig` sets `noEmit`, and
 `@nx/js` disables its own inferred `typecheck` for a project that does, so the generator writes one.
@@ -78,8 +79,9 @@ is left as it is, with a warning naming the two to decide.
 `@nx/expo` infers it as its `@nx/expo:start` executor, which Nx 23 deprecates and warns about on
 every run, so the generator runs the same `expo start` directly. `serve` runs it as well, in place
 of the `expo start --web` `@nx/expo` infers for every Expo app, since the app has no web platform.
-`nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same deprecation
-notice. `typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
+On Nx 23, `nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same
+deprecation notice; Nx 24 infers them as the `expo prebuild` and `eas build` commands.
+`typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
 once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports exists on a fresh
 checkout. It declares `.angular-native/` as its output, so a cache hit restores the sheet too.
 
@@ -135,8 +137,9 @@ Tailwind generates, as the template's does. Three files differ, each because of 
   is where the path aliases are, and puts back the Expo settings the workspace's base overrides.
   With package-manager workspaces it does so only when that file has a `paths` list: the
   TypeScript preset's has none, and its libraries are linked as packages instead.
-- **`vitest.config.mts`** adds `nxViteTsPaths()` in a workspace with path aliases, since Vitest
-  does not read them from tsconfig either, and adds `@nx/vite` for it if the workspace has none.
+- **`vitest.config.mts`** adds `tsconfigPaths()` from `vite-tsconfig-paths` in a workspace with
+  path aliases, since Vitest does not read them from tsconfig either, and adds
+  `vite-tsconfig-paths` for it if the workspace has none, as Nx 24 does for its own Vite configs.
   The `angular-monorepo` preset does not, and a library generated after the app is the usual case.
 
 ## Where the dependencies go
@@ -157,7 +160,7 @@ every version it allows is one the app accepts. A workspace that saves exact ver
 `defaultSemverRangePrefix: ""` in `.yarnrc.yml`, or `exact = true` in `bunfig.toml`) gets exact
 versions where it has none already: the newest each of the app's ranges allows, as `npm view`
 finds it from the workspace's root, or the lowest when the registry cannot be reached. `@nx/expo`
-and `@nx/vite` take the Nx that is running when the workspace lists Nx at a range.
+takes the Nx that is running when the workspace lists Nx at a range.
 
 ## Native modules a library imports
 
@@ -287,11 +290,14 @@ warning saying what to add by hand.
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),
-`--bundleIdentifier`, `--tags`, `--skipInstall` and `--skipFormat`, which leaves the generated files
-unformatted. `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`;
-it defaults to `com.<scope>.<name>`, from the workspace's npm scope and the app's name with
-anything but letters and digits removed, where `expo prebuild` would otherwise use
-`com.anonymous.<name>`.
+`--bundleIdentifier`, `--tags`, `--linter`, `--skipInstall` and `--skipFormat`, which leaves the
+generated files unformatted. `--linter=eslint` adds an `eslint.config.mjs` with
+[`@ng-native/eslint-plugin`](/packages/eslint-plugin)'s recommended rules, its four packages and a
+`lint` target; `--linter=none`, the default, adds none of them.
+
+`--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`; it defaults to
+`com.<scope>.<name>`, from the workspace's npm scope and the app's name with anything but letters
+and digits removed, where `expo prebuild` would otherwise use `com.anonymous.<name>`.
 
 ## Upgrading
 

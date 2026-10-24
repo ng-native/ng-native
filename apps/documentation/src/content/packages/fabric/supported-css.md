@@ -222,7 +222,22 @@ text they do nothing, so put the class on the text itself. `display: -webkit-box
 flex box native already is, laid out along the axis `-webkit-box-orient` names, so the whole
 line-clamp idiom compiles; `-webkit-box-orient` without it is ignored, as a browser ignores it. A
 `[numberOfLines]` bound on the element wins over the stylesheet. The other `white-space` values,
-which keep spaces and line breaks, are dropped. `font-variant-numeric` takes `tabular-nums`,
+which keep spaces and line breaks, are dropped.
+
+Where wrapped text breaks is a paragraph's props too, and these are inherited, as in CSS, so a
+class on a `<view>` reaches the text inside it. `text-wrap: pretty` (or `text-wrap-style: pretty`,
+Tailwind's `text-pretty`) is iOS's `lineBreakStrategyIOS: 'standard'`, the strategy UILabel and
+SwiftUI's `Text` use, which keeps a short word off a last line of its own; without it iOS breaks as
+React Native does, with `none`. `text-wrap: balance` is Android's `textBreakStrategy: 'balanced'`,
+which evens the lines out; iOS has no balanced breaking and draws it as `none`. `wrap`, `auto` and
+`stable` are each platform's default, and `text-wrap: nowrap` is dropped: write `white-space:
+nowrap`. `word-break: keep-all` (Tailwind's `break-keep`) is iOS's `hangul-word`, which keeps a
+Korean word whole, and `word-break: normal` is `none`; as both set `lineBreakStrategyIOS`, the later
+of a `text-wrap` and a `word-break` declaration wins, where CSS keeps both. The other `word-break`
+values are dropped. A `lineBreakStrategyIOS` or `textBreakStrategy` bound on a `<text>` wins over
+the stylesheet.
+
+`font-variant-numeric` takes `tabular-nums`,
 `proportional-nums`, `lining-nums` and `oldstyle-nums`, as `fontVariant`.
 
 `display` takes `flex`, `none`, `contents`, the block containers `block`, `flow-root` and
@@ -416,9 +431,20 @@ direction: `-start` and `-end` are Yoga's start and end edges, which swap in a r
 layout, and a pair written with one value (`inset-inline: 0`) is simply both sides. They compile
 to the edges every native view reads, not to React Native's own `insetInlineStart` and
 `marginBlock` spellings: those are aliases that some views, `<safe-area-view>` among them, never
-apply, so a class on one did nothing. One difference from the browser: where a start or end edge
-meets a physical one (`inset-inline-start` and `left` on the same element), the start or end
-edge wins, whichever was written last.
+apply, so a class on one did nothing. Where a start or end edge meets the physical one it lands on
+(`inset-inline-start` and `left` on the same element, left to right), the later or stronger
+declaration wins, as in a browser.
+
+React Native's own axis shorthands, which a binding sets as `[style.paddingHorizontal]`, have a
+spelling here too: `padding-horizontal`, `padding-vertical`, `margin-horizontal` and
+`margin-vertical`. Each takes one value, and compiles exactly as `padding-inline`, `padding-block`,
+`margin-inline` or `margin-block` with that value does: to both edges of its axis. So the cascade
+settles it against the edges as it settles any shorthand, where React Native would always prefer
+the edge: a later or stronger `padding-left` or `padding-inline-start` overrides it on that edge,
+and it overrides an earlier or weaker one. A second value is dropped with a warning; write
+`padding-inline` for a different value on each side. A browser has none of these properties, so
+the [web host](/packages/web) ignores them: a sheet that also runs there writes `padding-inline`
+and the rest.
 
 `border-style` is likewise one value for all four sides: a native border has one style, so the sides
 that are drawn are all drawn in it, and a second drawn style on one side is not one native can give
@@ -442,6 +468,22 @@ in `border: 1px solid color-mix(in srgb, var(--tint) 35%, transparent)`; with th
 is no border, as on the web. `currentColor` as a side of such a mix, written or held by a token, is
 the text color where the mix is used. A `border-width` with no color anywhere is drawn black,
 native's default, and the web host draws it black too.
+
+A custom property can hold a platform colour, `--accent: platform-color(link, "?attr/colorAccent")`,
+or a system colour such as `LinkText`, in any sheet, in a `@media` rule such as
+`prefers-color-scheme: dark`, or bound with `[style.--accent]`. `var(--accent)` in a colour
+property (`color`, `background-color`, a border color, `outline-color`, `text-decoration-color`,
+`tint-color`, `shadow-color` or a `text-shadow`'s color) commits what the colour written there
+commits, and so does a `var()` that falls back to one. The platform resolves such a colour by name,
+so it has no channels: a `color-mix()`, a relative colour, a gradient or a `box-shadow` worked out
+of the token, or a fade of it such as Tailwind's `bg-accent/50`, is dropped. The build says so where
+the sheet that sets the token also does that, and in development the engine says so on the device,
+naming the token, wherever it is set. A colour property in an element's own style,
+`style="color: platform-color(link)"` or `[style.color]`, takes `platform-color()` written out as a
+stylesheet does. In a stylesheet, the shorthands whose colour is a property of its own take
+`platform-color()` or a system colour written out too, and as a `var()` fallback: `text-shadow`,
+`border` and its sides, `outline` and `text-decoration`, as in
+`border: 1px solid platform-color(link)`. A `box-shadow` drops one, and the build says so.
 
 A custom property can hold a font stack (read as its first family, as `font-family` is), a unitless
 line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or bare color channels for
@@ -535,7 +577,9 @@ Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are t
 [Animation](/packages/fabric/animation).
 
 `tint-color` is native's own, with no counterpart on the web: the color an image is drawn in, and
-the color of an SF Symbol. It takes a token as any color does.
+the color of an SF Symbol. It takes the values `color` takes: a token, `platform-color()`, a
+relative color or a `color-mix()`, `light-dark()`, and `currentColor`, which is the element's text
+color. `shadow-color` takes the same.
 
 ## A sheet read as a browser reads it
 
@@ -556,7 +600,21 @@ write another way:
   opacity of a view is the opacity of everything in it.
 - `clip: rect()` with nothing in it, and `clip-path: inset(50%)`, draw nothing of the box over
   any rule that draws it - no background, shadow, border, outline or minimum size - and leave it
-  there for a screen reader. Any other clip is dropped with a warning, as everywhere.
+  there for a screen reader.
+- `clip-path: polygon(a 0, b 0, b 100%, a 100%)`, a band of the box from side to side with `a` and
+  `b` percentages, is kept for [`@ng-native/web-compat`](/packages/web-compat), which draws an
+  `<img>` through the band: one picture over another, cut where a before-and-after slider is. No
+  native view is sent it, and without that package nothing is drawn of it. A band with an edge
+  that is a length or a token, and any other polygon, is dropped with a warning.
+- Any other clip is dropped with a warning, as everywhere.
+- `will-change`, `contain`, `perspective` and `backdrop-filter` make a `position: static` box the
+  one an absolute box inside it is placed against, as in a browser: a `will-change` naming
+  `transform`, `translate`, `rotate`, `scale`, `perspective`, `filter`, `backdrop-filter`,
+  `contain` or `position`, a `contain` of `layout`, `paint`, `strict` or `content`, and a
+  `perspective` or `backdrop-filter` other than `none`. No native view is sent them. Native draws
+  no perspective and no backdrop filter, and contains neither the size nor the paint of a box,
+  which is said with a warning. Any of the four whose value reads a token is dropped with a
+  warning.
 - `overflow-x` or `overflow-y` of `hidden` or `clip` clips both axes, since a view clips on both or
   on neither. `overflow-y: auto` or `scroll` is `overflow: scroll`, which also clips both axes: the
   box scrolls only where the element is a `<scroll-view>`, and a plain view does not. Any other
@@ -571,12 +629,13 @@ These are dropped with a warning that says so, not declarations that quietly do 
 - `float`
 - `subgrid`, and the `grid` and `grid-template` shorthands
 - `list-style`
-- Table layout: `table-layout`, `border-collapse`, `caption-side`, `empty-cells`
+- Table layout: `table-layout`, `border-collapse`, `caption-side`, `empty-cells`. A library's
+  sheet read as a browser's keeps `table-layout`, for `@ng-native/web-compat`'s tables
 - Multi-column layout
-- `will-change`
-- `contain`
+- `will-change` and `contain`, which a sheet read as a browser's keeps for placing absolute boxes,
+  above
 - CSS counters
-- `clip-path`
+- `clip-path`, other than the shapes a sheet read as a browser reads it keeps, above
 
 ## What a warning says
 

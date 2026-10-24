@@ -1,6 +1,8 @@
 /**
  * A Metro config that reads the sheets of the `libraries` it names, and of the app's `sources`, as
- * a browser does. The transformer's cache version changes with both.
+ * a browser does, and resolves `@ng-icons/core` to `@ng-native/web-compat/ng-icons`, whose
+ * `NgIcon` draws natively. The transformer's cache version changes with both. Wrap the config
+ * last, so a resolver another helper set is the one this goes through.
  */
 export function withWebCompat<T extends object>(config: T, options: WebCompatOptions): T;
 
@@ -18,4 +20,12 @@ export interface WebCompatOptions {
 }
 
 /** The same for Vitest, as a Vite plugin: `plugins: [ngNative(), webCompat({ libraries })]`. */
-export function webCompat(options: WebCompatOptions): { name: string; enforce: 'pre' };
+export function webCompat(options: WebCompatOptions): {
+  name: string;
+  enforce: 'pre';
+  resolveId(
+    source: string,
+    importer: string | undefined,
+    options: object,
+  ): Promise<{ id: string } | null>;
+};

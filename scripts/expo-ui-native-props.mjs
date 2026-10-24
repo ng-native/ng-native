@@ -23,7 +23,7 @@ import { appendFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSyn
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expoPackage = path.join(root, 'packages/expo');
@@ -214,7 +214,10 @@ export async function divergences(
   expoUi,
   source = readFileSync(path.join(expoPackage, 'src/expo-ui-components.ts'), 'utf8'),
 ) {
-  const { EXPO_UI_VIEWS } = await import(path.join(expoPackage, 'src/expo-ui.ts'));
+  // A file path is not a module specifier: Windows reads `C:` as a URL scheme before the loader
+  // ever sees the file.
+  const viewsUrl = pathToFileURL(path.join(expoPackage, 'src/expo-ui.ts')).href;
+  const { EXPO_UI_VIEWS } = await import(viewsUrl);
   const components = componentProps(source);
   const declared = declaredViews(expoUi);
   if (components.size < 10) throw new Error(`Found ${components.size} typed ui-* components.`);

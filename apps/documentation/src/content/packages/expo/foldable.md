@@ -5,9 +5,9 @@ summary: The hinge of a foldable phone, its posture, angle and fold, as signals.
 
 # Foldables
 
-`Foldable` reads the hinge of a foldable device, an iPhone Duo or an Android foldable, through
-`expo-foldables`: how far it is open, the angle, and where the fold crosses the app's window. A
-layout can then keep content off the fold, or split into two panes either side of it.
+`Foldable` reads the hinge of a foldable device, an iPhone Duo or an Android foldable: how far it is
+open, the angle, and where the fold crosses the app's window. A layout can then keep content off the
+fold, or split into two panes either side of it.
 
 ## Install
 
@@ -15,12 +15,26 @@ layout can then keep content off the fold, or split into two panes either side o
 npx expo install expo-foldables
 ```
 
+On Expo SDK 58, install Expo's own `expo-hinge` as well:
+
+```sh
+npx expo install expo-hinge expo-foldables
+```
+
 ```ts
 import { Foldable } from '@ng-native/expo/foldable';
 ```
 
-On iOS it needs Xcode 27.1 or newer, for the iPhone Duo's `UIHinge`. Expo Go can't load it, so use
-a development build.
+The posture and the angle come from `expo-hinge` when it is installed and reports a hinge, and from
+`expo-foldables` otherwise. `expo-hinge` does not say where the fold crosses the window, so `fold`,
+`separating`, `book` and `tabletop` come from `expo-foldables` only; with `expo-hinge` alone they
+are null or false. `expo-hinge` reports a hinge on Android 11 or newer, and on iOS 27.1 or newer in
+an app built with the iOS 27.1 SDK. On Android it never reports `'closed'`: a closed device has an
+`angle` near `0`, and while the window does not span the fold the posture comes from
+`expo-foldables`, which reads a closed device from its angle.
+
+On iOS both need Xcode 27.1 or newer, for the iPhone Duo's `UIHinge`. Expo Go can't load them, so
+use a development build.
 
 ## Two panes either side of the fold
 
@@ -84,14 +98,15 @@ Everything is a signal, so a template or a `computed()` follows the device as it
 ## Without a hinge
 
 On a phone that does not fold, on the web and in a test, `Foldable` answers like a phone: not
-available, `'unknown'`, no fold and no angle. On iOS and Android without `expo-foldables`
-installed, injecting it does not throw; a call, or a read of a value only the module knows,
-throws an error that says what to install.
+available, `'unknown'`, no fold and no angle. On iOS and Android with neither `expo-hinge` nor
+`expo-foldables` installed, injecting it does not throw; a call, or a read of a value only the
+module knows, throws an error that says what to install.
 
 ## Testing
 
-`Foldable.SOURCE` stands in for the hinge:
+`Foldable.SOURCE` stands in for `expo-foldables`, and `Foldable.HINGE` for `expo-hinge`:
 
 ```ts
-{ provide: Foldable.SOURCE, useValue: fakeHinge }
+{ provide: Foldable.SOURCE, useValue: fakeFoldables },
+{ provide: Foldable.HINGE, useValue: { getHinge: () => hinge, addHingeListener: (listener) => subscription } },
 ```

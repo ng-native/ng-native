@@ -53,6 +53,10 @@ has one scroll view for both axes and changes it in place.
 else happens with the tap, `'handled'` lets whatever was tapped handle it first and only dismisses
 if nothing did, and `'always'` never dismisses at all.
 
+A tap on another `<text-input>` never dismisses, under any of the three: the field takes the focus
+and the keyboard stays up, so moving from one field of a form to the next takes one tap, as in
+React Native.
+
 ## Sticky headers
 
 `stickyHeaderIndices` pins children of the content to the top while the rest scroll under them,

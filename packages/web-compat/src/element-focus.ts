@@ -1,9 +1,10 @@
-import { viewNameOf, type Engine, type EngineNode } from '@ng-native/fabric';
+import { isTextInput, type Engine, type EngineNode } from '@ng-native/fabric';
 import { clickElement, disabled } from './activation.ts';
 import { eventPath } from './document.ts';
 import { dispatch, newEvent } from './events.ts';
 import { isFileInput, pickFiles } from './file-input.ts';
 import { attributeOf } from './element-tree.ts';
+import { deliveringAnAction } from './listen.ts';
 import { engineOf } from './window.ts';
 
 /**
@@ -23,13 +24,6 @@ import { engineOf } from './window.ts';
  * the next focus or blur. Check what native says if one is seen to matter.
  */
 
-/** The platform's text field, which takes the cursor and gives it up when native says so. */
-const TEXT_FIELDS = new Set(['TextInput', 'AndroidTextInput']);
-
-/** Whether an element is the platform's text field. */
-export const isTextField = (node: EngineNode): boolean =>
-  node.nodeKind === 'element' && TEXT_FIELDS.has(viewNameOf(node));
-
 /** What takes the focus with no `tabindex` written. */
 const FOCUSED_UNASKED = new Set(['button', 'input', 'select', 'textarea', 'summary', 'iframe']);
 
@@ -44,7 +38,7 @@ const nameOf = (node: EngineNode): string =>
  * the state it announces, which is where its `disabled` input goes.
  */
 function isDisabled(node: EngineNode): boolean {
-  if (isTextField(node)) {
+  if (isTextInput(node)) {
     const state = node.props['accessibilityState'] as { disabled?: unknown } | undefined;
     if (state?.disabled === true) return true;
   }
@@ -77,7 +71,7 @@ function tell(engine: Engine, node: EngineNode, type: 'topFocus' | 'topBlur'): v
 
 /** Take the focus off what has it, with its blur, and tell native to blur a field. */
 function giveUpFocus(engine: Engine, node: EngineNode): void {
-  if (isTextField(node)) {
+  if (isTextInput(node)) {
     blurredAhead.add(node);
     engine.dispatchCommand(node, 'blur');
   }
@@ -134,13 +128,13 @@ export function loseFocusMoving(node: EngineNode): void {
 }
 
 /** Focus an element as `focus()` does: see above. */
-function focus(node: EngineNode): void {
+function focus(node: EngineNode, options?: { preventScroll?: unknown }): void {
   const engine = engineOf(node);
   if (engine.focused === node || isDisabled(node)) return;
   const had = engine.focused;
-  if (isTextField(node)) {
+  if (isTextInput(node)) {
     // A field after a field is native's to move; after a button, the button blurs here.
-    if (had && !isTextField(had)) giveUpFocus(engine, had);
+    if (had && !isTextInput(had)) giveUpFocus(engine, had);
     engine.focus(node);
     tell(engine, node, 'topFocus');
     return;
@@ -149,16 +143,23 @@ function focus(node: EngineNode): void {
     if (had) giveUpFocus(engine, had);
     tell(engine, node, 'topFocus');
   }
-  // Brought into sight, as a browser scrolls to what it focuses: see `Engine.focus`.
-  engine.focus(node);
+  // Brought into sight, as a browser scrolls to what it focuses (see `Engine.focus`), but only
+  // in answer to a touch, a key or an edit, not as what holds it scrolls, and not where the
+  // caller says `preventScroll`: a library focuses a
+  // panel as its page is built, a question or a focus trap, and a screen that opens part way
+  // down for it has moved for nobody.
+  //
+  // ponytail: a focus from a timer or a promise a touch started is not in answer to it here.
+  // Carry the touch through to those if a form is seen not to scroll to what it sends to.
+  if (!options?.preventScroll && deliveringAnAction()) engine.focus(node);
 }
 
 const method = (value: (this: EngineNode) => unknown) => ({ value, writable: true });
 
 /** The members, for every node. */
 export const focusMembers: PropertyDescriptorMap = {
-  focus: method(function () {
-    focus(this);
+  focus: method(function (options?: { preventScroll?: unknown }) {
+    focus(this, options);
   }),
   blur: method(function () {
     const engine = engineOf(this);

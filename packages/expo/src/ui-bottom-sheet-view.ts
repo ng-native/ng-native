@@ -13,6 +13,12 @@
 import { Component, ElementRef, inject, input, output } from '@angular/core';
 import { type NativeSyntheticEvent, keepNativeView } from '@ng-native/fabric';
 
+/** How Compose's sheet may be dismissed other than by a swipe, as `@expo/ui` names it. */
+export interface UiModalBottomSheetProperties {
+  readonly shouldDismissOnBackPress?: boolean;
+  readonly shouldDismissOnClickOutside?: boolean;
+}
+
 /** What SwiftUI's sheet sends when the user dismisses it: that it is no longer presented. */
 export type UiBottomSheetPresentedEvent = NativeSyntheticEvent<{ readonly isPresented: boolean }>;
 
@@ -25,6 +31,8 @@ export type UiBottomSheetPresentedEvent = NativeSyntheticEvent<{ readonly isPres
     '[showDragHandle]': 'showDragHandle()',
     '[containerColor]': 'containerColor()',
     '[skipPartiallyExpanded]': 'skipPartiallyExpanded()',
+    '[sheetGesturesEnabled]': 'sheetGesturesEnabled()',
+    '[properties]': 'properties()',
   },
 })
 export class UiBottomSheetView {
@@ -38,6 +46,10 @@ export class UiBottomSheetView {
   readonly containerColor = input<unknown>();
   /** Compose: the sheet opens at its full height rather than resting at half the screen's. */
   readonly skipPartiallyExpanded = input<boolean>();
+  /** Compose: whether the sheet can be dragged, between its heights and down to dismiss it. */
+  readonly sheetGesturesEnabled = input<boolean>();
+  /** Compose: whether the back button and a tap outside the sheet dismiss it. */
+  readonly properties = input<UiModalBottomSheetProperties>();
   /** SwiftUI: the user dismissed the sheet, or it was presented by something other than the prop. */
   readonly isPresentedChange = output<UiBottomSheetPresentedEvent>();
   /** SwiftUI: the sheet has finished dismissing, whoever dismissed it. */

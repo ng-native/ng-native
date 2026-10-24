@@ -1,7 +1,12 @@
 {
   "platforms": ["apple", "android"],
   "apple": {
-    "modules": ["LiveActivityTapsModule", "ExpoUIModifiersModule", "SearchFieldModule"],
+    "modules": [
+      "LiveActivityTapsModule",
+      "ExpoUIModifiersModule",
+      "SearchFieldModule",
+      "SymbolImageSizeModule"
+    ],
     "appDelegateSubscribers": ["LiveActivityTapsObserver"]
   },
   "android": {

@@ -23,8 +23,10 @@ const { engineNodeTag } = require('./engine-node-tag.cjs');
 const { libraryTypecheckDeclarationMap } = require('./library-typecheck-declaration-map.cjs');
 const { nativeTypecheckTarget } = require('./native-typecheck-target.cjs');
 const { splitStoreAndPlayer } = require('./split-store-and-player.cjs');
+const { stopWatchingConditions } = require('./stop-watching-conditions.cjs');
 const { syncAppVersions } = require('./sync-app-versions.cjs');
 const { trackingAvailableGetter } = require('./tracking-available-getter.cjs');
+const { vitestTsconfigPaths } = require('./vitest-tsconfig-paths.cjs');
 const { version } = require('./package.json');
 
 /** @type {Migration[]} */
@@ -80,6 +82,20 @@ const migrations = [
     version: '0.17.1',
     description: 'Give each Angular Native project in angular.json a typecheck target, run by ngc.',
     run: nativeTypecheckTarget,
+  },
+  {
+    name: 'stop-watching-conditions',
+    version: '0.17.2',
+    description:
+      "Keep what watchConditions returns in each app's entry point and stop it as the app is destroyed.",
+    run: stopWatchingConditions,
+  },
+  {
+    name: 'vitest-tsconfig-paths',
+    version: '0.18.1',
+    description:
+      "Resolve the workspace's path aliases in Nx Vitest configs with vite-tsconfig-paths, as nxViteTsPaths does nothing from Nx 24.",
+    run: vitestTsconfigPaths,
   },
 ];
 

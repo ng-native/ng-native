@@ -84,7 +84,16 @@ class KeyboardModule : Module() {
     val activity = appContext.currentActivity ?: return
     activity.runOnUiThread {
       if (watcher == null && observing) {
-        watcher = KeyboardWatcher.watch(activity.window.decorView, listener)
+        val current =
+          KeyboardWatcher.watch(activity.window.decorView, listener) ?: return@runOnUiThread
+        watcher = current
+        // A keyboard already up, and still, sends nothing until it next moves: report it as one
+        // that starts and ends at once, as the watcher reports a jump. One that is moving reports
+        // itself through the rest of its motion.
+        if (current.inset > 0 && !current.moving) {
+          listener.onKeyboardStart(current.inset, 0)
+          listener.onKeyboardEnd(current.inset)
+        }
       }
     }
   }

@@ -95,6 +95,7 @@ export const GUIDE: NavSection = {
         { path: 'guide/localization-loading', title: 'Loading a language' },
         { path: 'guide/localization-switching', title: 'Switching language' },
         { path: 'guide/localization-formatting', title: 'Formatting and RTL' },
+        { path: 'guide/localization-transloco', title: 'Using Transloco' },
       ],
     },
     { path: 'guide/deployment', title: 'Deployment' },
@@ -262,6 +263,11 @@ export const PACKAGES: NavSection = {
         { path: 'packages/testing/api', title: 'API reference' },
         { path: 'packages/testing/end-to-end', title: 'End-to-end tests' },
       ],
+    },
+    {
+      path: 'packages/eslint-plugin',
+      title: 'ESLint',
+      summary: 'What compiles and does nothing on a device',
     },
     {
       path: 'packages/tailwind',

@@ -28,6 +28,12 @@ A string is compiled just in time as the template of a host component, so the te
 it is created or first checked, such as `NG0950` for a required input nobody set, rejects the
 promise.
 
+The fake stands for a development build that has every native view. While something is rendered
+and no `expo` global is set, `render()` sets one whose `getViewConfig` answers for every view, so a
+component that asks the build for a view, as `ui-bottom-sheet` does for the bar its
+`ui-toolbar-item`s go in on iOS, draws what a development build draws. It is removed once nothing
+is rendered, and an `expo` global a test sets is left as it is.
+
 ### `RenderOptions<T>`
 
 | Option                | Type                                   | Default | What it does                                                                                                                                                                                                         |
@@ -141,6 +147,11 @@ component writes for `testID`, `id` (as `nativeID`), `accessibilityRole` or `rol
 by default commits one without you writing it, the way `<switch>` commits `accessibilityRole:
 'switch'`; anything else takes `[accessibilityRole]` directly.
 
+An `@expo/ui` `<ui-button>` commits no accessibility props, and is still a `button`, as SwiftUI's
+and Compose's buttons are to a screen reader: its name is its `label`, or the text inside it. Its
+`role`, such as `destructive`, is SwiftUI's and not one a query finds it by. On iOS, SwiftUI's
+`disabled` modifier makes it disabled.
+
 **Text content** is every `RawText` under the node, in order, joined with nothing between them.
 `<text>and <text>plums</text></text>` commits as one `Paragraph` holding a `RawText` and a nested
 `VirtualText`, and its text content is `and plums`. Only the `Paragraph` is a `ByText` match; the
@@ -223,9 +234,14 @@ neither there it rejects with `No TextInput or search bar at or under this <view
 A press, by `fireEvent.press` or `fireEvent(node, 'press')`, does nothing at all on a node a finger
 could not reach, as React Native Testing Library decides it from `pointerEvents` on the node as last
 committed: one that is `none` or `box-none` itself, or one under a view that is `none` or
-`box-only`. `pointer-events: none` in CSS commits as the same prop. Nothing is sent and nothing is
-thrown, so a test asserts on what did not happen: the handler never ran. Any other event by name is
-sent as before.
+`box-only`. `pointer-events: none` in CSS commits as the same prop. Views above a
+`ui-bottom-sheet`'s content and the items in its bar are not counted, since the sheet takes its
+own touches on a device. Nothing is sent and nothing is thrown, so a test asserts on what did not
+happen: the handler never ran. Any other event by name is sent as before.
+
+A press on a `<ui-button>` ends with the event its native button sends, `topButtonPress` on iOS
+and `topButtonPressed` on Android, so its `(buttonPress)` runs. On iOS one that SwiftUI's
+`disabled` modifier turns off sends none.
 
 ### `userEvent`
 

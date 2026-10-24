@@ -28,6 +28,12 @@ allowance for the bar. React Native measures in the parent's coordinates instead
 header's height has to go in `keyboardVerticalOffset`; here it would be counted twice. Use
 `keyboardVerticalOffset` only for extra room you want left above the keyboard.
 
+On Android, when React Native's edge-to-edge flag is off (Expo Go leaves it off), the window React
+Native measures in starts below the status bar, while the keyboard's position counts from the top of
+the screen. The view takes the bar's height off the keyboard's position then, from
+[`Keyboard.windowTop`](/packages/device/keyboard#comparing-the-keyboard-with-a-view), which is zero
+when the flag is on, so the status bar needs no `keyboardVerticalOffset` either.
+
 The overlap never exceeds the view's own height, so a view the keyboard covers entirely is padded
 or shrunk to nothing rather than past it.
 

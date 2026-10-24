@@ -41,13 +41,19 @@ describe('the generated app', () => {
     assert.equal(native.vitestConfig(false), templateFile('vitest.config.mts'));
   });
 
-  it("adds Nx's tsconfig path resolution to it when there are", () => {
-    const config = native.vitestConfig(true);
-    assert.match(
-      config,
-      /import \{ nxViteTsPaths \} from '@nx\/vite\/plugins\/nx-tsconfig-paths\.plugin';/,
+  it("adds Vite at the range @ng-native/testing peers on, as the tests' config imports it", () => {
+    const testing = JSON.parse(
+      readFileSync(path.resolve(import.meta.dirname, '../testing/package.json'), 'utf8'),
     );
-    assert.match(config, /plugins: \[nxViteTsPaths\(\), ngNative\(\)\],/);
+    assert.equal(native.vitestPathsDependencies.vite, testing.peerDependencies.vite);
+  });
+
+  it('adds vite-tsconfig-paths to it when there are, as Nx 24 writes its own Vite configs', () => {
+    // nxViteTsPaths from @nx/vite is an inert stub from Nx 24: an app's test importing a library
+    // failed with "Cannot find package '@org/ui'".
+    const config = native.vitestConfig(true);
+    assert.match(config, /import tsconfigPaths from 'vite-tsconfig-paths';/);
+    assert.match(config, /plugins: \[tsconfigPaths\(\), ngNative\(\)\],/);
   });
 
   it("applies the template's Metro preset around withNxMetro, so it can wrap Nx's resolver", () => {
@@ -67,7 +73,7 @@ describe('the generated app', () => {
 
   it("extends the workspace base after Expo's, and puts Expo's settings back", () => {
     const config = native.tsconfig('../../tsconfig.base.json');
-    assert.deepEqual(config.extends, ['expo/tsconfig.base', '../../tsconfig.base.json']);
+    assert.deepEqual(config.extends, ['expo/tsconfig.base.json', '../../tsconfig.base.json']);
     assert.deepEqual(config.compilerOptions.lib, ['DOM', 'ESNext']);
     assert.equal(config.compilerOptions.allowImportingTsExtensions, true);
     assert.equal(config.compilerOptions.noEmit, true);
@@ -185,6 +191,22 @@ describe('conflicts', () => {
       devDependencies: { vitest: '~4.1.0' },
     });
     assert.deepEqual(problems, []);
+  });
+
+  it('accepts the ESLint range @ng-native/eslint-plugin does with a linter, and names one older', () => {
+    const plugin = JSON.parse(
+      readFileSync(new URL('../eslint-plugin/package.json', import.meta.url), 'utf8'),
+    );
+    assert.equal(native.accepted.eslint, plugin.peerDependencies.eslint);
+    const linter = 'eslint';
+    assert.deepEqual(native.conflicts({ devDependencies: { eslint: '^9.8.0' } }, { linter }), []);
+    // A workspace's own ESLint is its business unless the app is to be linted.
+    assert.deepEqual(native.conflicts({ devDependencies: { eslint: '^8.57.0' } }), []);
+    const [problem] = native.conflicts({ devDependencies: { eslint: '^8.57.0' } }, { linter });
+    assert.match(
+      problem,
+      /eslint is \^8\.57\.0 here, and Angular Native needs \^9\.0\.0 \|\| \^10\.0\.0/,
+    );
   });
 
   it("accepts the Vitest range @ng-native/testing's plugin does, and names one older", () => {

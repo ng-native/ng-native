@@ -80,6 +80,34 @@ describe('moving between fields with the keyboard up', () => {
     assert.deepEqual(scroll?.args, [0, 300 + (520 + 44 + 16 - 538), true]);
   });
 
+  it('scrolls the field clear of the keyboard where the window starts below the status bar', async () => {
+    // React Native measures from below a 34 point status bar here, and reports the keyboard's top
+    // from the top of the screen: 474 there is 440 in the window.
+    const listeners = new Set<(metrics: KeyboardMetrics) => void>();
+    const { fabric } = await render(mod['FieldsOnPage'] as Type<unknown>, {
+      providers: [
+        {
+          provide: Keyboard.SOURCE,
+          useValue: {
+            subscribe: (listener: (metrics: KeyboardMetrics) => void) => {
+              listeners.add(listener);
+              return () => listeners.delete(listener);
+            },
+            dismiss: () => {},
+            windowTop: 34,
+          },
+        },
+      ],
+    });
+    for (const listener of listeners) listener({ height: 358, screenY: 474 });
+    fabric.frames.set('page', { x: 0, y: 0, width: 400, height: 798 });
+    fabric.frames.set('View', { x: 0, y: -300, width: 400, height: 2000 });
+    fabric.frames.set('postcode', { x: 16, y: 420, width: 368, height: 44 });
+    await fireEvent(screen.getByTestId('postcode'), 'focus', {});
+    const scroll = fabric.commands.find((command) => command.name === 'scrollTo');
+    assert.deepEqual(scroll?.args, [0, 300 + (420 + 44 + 16 - 440), true]);
+  });
+
   it('scrolls the page for a field inside a sideways carousel on it', async () => {
     const listeners = new Set<(metrics: KeyboardMetrics) => void>();
     const { fabric } = await render(mod['FieldInCarousel'] as Type<unknown>, {

@@ -85,6 +85,73 @@ describe('parsing an icon', () => {
     assert.equal(text.children[1]!.children[0]!.text, '<hot>');
     assert.deepEqual(root!.children[1]!.children, [], 'and nothing between other elements');
   });
+
+  it('reads markup that never closes in time that grows with its length', () => {
+    // Each took seconds at a quarter of this length, and longer on Hermes, which has no regex
+    // compiler; read once, each takes a few milliseconds.
+    const size = 400_000;
+    for (const [shape, markup] of [
+      ['a word with no `=`', `<svg ${'a'.repeat(size)}>`],
+      ['a name with no `>`', `<a${'b'.repeat(size)}`],
+      ['space with no name', `<${' '.repeat(size)}`],
+      ['tags with no `>`', '<a'.repeat(size / 2)],
+      ['comments with no `-->`', '<!--'.repeat(size / 4)],
+      ['instructions with no `?>`', '<?'.repeat(size / 2)],
+      ['character data with no `]]>`', '<![CDATA['.repeat(size / 9)],
+    ]) {
+      const start = performance.now();
+      parseSvg(markup!);
+      const took = performance.now() - start;
+      assert.ok(took < 500, `${shape}: ${Math.round(took)}ms`);
+    }
+  });
+
+  it('keeps an attribute after a space, a tab or a line break', () => {
+    const root = parseSvg('<svg\tfill="none"\nstroke="red" width="2"><path d="M0 0"/></svg>');
+    assert.deepEqual(root?.attrs, { fill: 'none', stroke: 'red', width: '2' });
+  });
+
+  it('leaves out an element nested deeper than an icon nests, and what is in it', () => {
+    const depth = 5000;
+    const root = parseSvg(
+      `<svg>${'<g>'.repeat(depth)}<path d="M0 0"/>${'</g>'.repeat(depth)}<circle r="1"/></svg>`,
+    );
+    let deepest = 0;
+    for (let node = root?.children[0]; node; node = node.children[0]) deepest++;
+    assert.equal(deepest, 31, 'the root and 31 levels under it');
+    assert.deepEqual(
+      root?.children.map((child) => child.tag),
+      ['g', 'circle'],
+      'and the element after it is where it was',
+    );
+  });
+});
+
+describe('an icon drawn from markup the app was given', () => {
+  after(cleanup);
+
+  it('draws markup nested thousands deep without overflowing the stack', async () => {
+    registerSvgComponents();
+    const mod = await compileFixture('fixtures/icon-markup.ts');
+    const { instance } = await render<{ markup: { set(value: string): void } }>(
+      mod['IconMarkupHost'] as Type<{ markup: { set(value: string): void } }>,
+    );
+    const depth = 5000;
+    const errors: unknown[] = [];
+    const error = console.error;
+    console.error = (...args: unknown[]) => errors.push(args);
+    try {
+      instance.markup.set(
+        `<svg>${'<g>'.repeat(depth)}<path d="M0 0"/>${'</g>'.repeat(depth)}<circle r="1"/></svg>`,
+      );
+      await settle();
+    } finally {
+      console.error = error;
+    }
+    assert.deepEqual(errors, []);
+    const views = flatten([screen.getByTestId('given')]).map((view) => view.viewName);
+    assert.ok(views.includes('RNSVGCircle'), 'the element after the nesting is drawn');
+  });
 });
 
 describe('translating a gradient and a text', () => {
@@ -530,6 +597,20 @@ describe('translating an icon', () => {
       [2, 0, 0, 2, 10, 0],
       'applied right to left, as SVG composes a list',
     );
+  });
+
+  it('reads a transform with nothing between its functions, and one that never closes in time', () => {
+    assert.deepEqual(transformMatrix('translate(10,0)scale(2)'), [2, 0, 0, 2, 10, 0]);
+    const size = 400_000;
+    for (const [shape, transform] of [
+      ['a word with no `(`', 'a'.repeat(size)],
+      ['brackets with no `)`', 'a('.repeat(size / 2)],
+    ]) {
+      const start = performance.now();
+      transformMatrix(transform!);
+      const took = performance.now() - start;
+      assert.ok(took < 500, `${shape}: ${Math.round(took)}ms`);
+    }
   });
 });
 

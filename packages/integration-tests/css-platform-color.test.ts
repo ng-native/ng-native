@@ -128,6 +128,10 @@ describe('compiling a platform colour', () => {
     assert.deepEqual(declarationsOf('border-top-color: platform-color(separator)'), {
       borderTopColor: { platformColor: ['separator'] },
     });
+    // A colour CSS has no property for, which lightningcss hands over unparsed.
+    assert.deepEqual(declarationsOf('tint-color: platform-color(link, "?attr/colorAccent")'), {
+      tintColor: { platformColor: ['link', '?attr/colorAccent'] },
+    });
   });
 
   it('refuses one with no name, which could only be a colour that never resolves', () => {
@@ -149,6 +153,9 @@ describe('resolving one on a device', () => {
 
     const node = getByTestId('label');
     assert.deepEqual(node.props['color'], { processed: { semantic: ['label'] } });
+    assert.deepEqual(getByTestId('symbol').props['tintColor'], {
+      processed: { semantic: ['link'] },
+    });
   });
 
   it('names the resource Android reads instead', async () => {
@@ -161,5 +168,8 @@ describe('resolving one on a device', () => {
 
     const node = getByTestId('label');
     assert.deepEqual(node.props['color'], { processed: { resource_paths: ['label'] } });
+    assert.deepEqual(getByTestId('symbol').props['tintColor'], {
+      processed: { resource_paths: ['link'] },
+    });
   });
 });

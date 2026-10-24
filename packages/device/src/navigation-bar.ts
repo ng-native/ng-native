@@ -60,14 +60,15 @@ interface NativeNavigationBar {
 const NONE: NavigationBarSource = { setStyle: () => {}, setHidden: () => {} };
 
 export function navigationBarSource(): NavigationBarSource {
-  if (reactNative()?.Platform?.OS !== 'android') return NONE;
+  // Copies: with no bar to share, each app claims its own.
+  if (reactNative()?.Platform?.OS !== 'android') return { ...NONE };
   const modules = (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo?.modules;
   const native = modules?.['ExpoNavigationBar'] as NativeNavigationBar | undefined;
   // Without the module a claim changes nothing, so it does not ride on the screens either, where
   // react-native-screens would hide the bar the next time one appears.
-  if (!native) return NONE;
+  if (!native) return { ...NONE };
   // One per module, so every app the runtime mounts claims the same bar.
-  return sharedBySource(native, () => ({
+  return sharedBySource(navigationBarSource, native, () => ({
     setStyle: (style) => void native.setStyle?.(style)?.catch(() => {}),
     setHidden: (hidden) => void native.setHidden?.(hidden)?.catch(() => {}),
     screensSetBar: true,
@@ -91,7 +92,11 @@ export class NavigationBar {
   /** This app, among the apps claiming the bar: its scheme is what an `auto` style it claims follows. */
   private readonly owner: Owner = { scheme: inject(ColorScheme) };
   /** Every app's claims on this bar: the window is the runtime's, not an app's. */
-  private readonly window = sharedBySource(this.source, () => new NavigationBarWindow(this.source));
+  private readonly window = sharedBySource(
+    NavigationBarWindow,
+    this.source,
+    () => new NavigationBarWindow(this.source),
+  );
 
   /** What is actually showing: every claim in order, later ones winning per property. */
   readonly state: Signal<NavigationBarState> = this.window.state;

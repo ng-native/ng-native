@@ -24,6 +24,9 @@ interface Fixture {
   readonly detents: Writable<readonly unknown[] | undefined>;
   readonly second: Writable<string>;
   readonly background: Writable<string | undefined>;
+  readonly undismissable: Writable<boolean>;
+  readonly interaction: Writable<unknown>;
+  readonly modifiers: Writable<readonly { $type: string; [key: string]: unknown }[] | undefined>;
   dismissed(): number;
   heard(): number;
 }
@@ -469,6 +472,8 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     const sheet = named(/ExpoUI_BottomSheetView$/)!;
     assert.equal('showDragHandle' in sheet.props, false);
     assert.equal('skipPartiallyExpanded' in sheet.props, false);
+    assert.equal('sheetGesturesEnabled' in sheet.props, false);
+    assert.equal('properties' in sheet.props, false);
   });
 
   it('gives the sheet its background colour as a presentation background, converted as any colour', async () => {
@@ -513,6 +518,119 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     instance.background.set('');
     await pass();
     assert.equal(background(), undefined, 'an empty colour is none');
+  });
+});
+
+describe('a bottom sheet on iOS that the user cannot dismiss, or that lets the screen behind it be used', () => {
+  it('stays up against a swipe where interactive dismissal is disabled, and goes again once it is not', async () => {
+    const { every, instance, pass } = await boot('ios');
+    instance.open.set(true);
+    await pass();
+    const dismissal = () =>
+      modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['interactiveDismissDisabled'];
+    assert.equal(dismissal(), undefined, 'SwiftUI decides, as it does for any sheet');
+
+    instance.undismissable.set(true);
+    await pass();
+    assert.deepEqual(dismissal(), { $type: 'interactiveDismissDisabled', isDisabled: true });
+    assert.ok(modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationDetents'], 'and the rest');
+
+    instance.undismissable.set(false);
+    await pass();
+    assert.equal(dismissal(), undefined, 'a swipe dismisses it again');
+  });
+
+  it('is undismissable as it opens, sized to its content or not', async () => {
+    for (const fit of [false, true]) {
+      const { every, instance, pass } = await boot('ios');
+      instance.fit.set(fit);
+      instance.undismissable.set(true);
+      instance.open.set(true);
+      await pass();
+      assert.deepEqual(
+        modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['interactiveDismissDisabled'],
+        { $type: 'interactiveDismissDisabled', isDisabled: true },
+        fit ? 'fitted' : 'at its detents',
+      );
+    }
+  });
+
+  for (const [given, expected] of [
+    ['automatic', { interactionType: 'automatic' }],
+    ['enabled', { interactionType: 'enabled' }],
+    ['disabled', { interactionType: 'disabled' }],
+    [{ upThrough: 'medium' }, { interactionType: 'enabledUpThrough', detent: 'medium' }],
+    [
+      { upThrough: { height: 200 } },
+      { interactionType: 'enabledUpThrough', detent: { height: 200 } },
+    ],
+    [
+      { upThrough: { fraction: 0.4 } },
+      { interactionType: 'enabledUpThrough', detent: { fraction: 0.4 } },
+    ],
+  ] as const) {
+    it(`lets the screen behind it take touches as @expo/ui says it: ${JSON.stringify(given)}`, async () => {
+      const { every, instance, pass } = await boot('ios');
+      instance.detents.set(['medium', 'large']);
+      instance.interaction.set(given);
+      instance.open.set(true);
+      await pass();
+      const interaction = () =>
+        modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationBackgroundInteraction'];
+      assert.deepEqual(interaction(), { $type: 'presentationBackgroundInteraction', ...expected });
+
+      instance.interaction.set(undefined);
+      await pass();
+      assert.equal(interaction(), undefined, 'cleared, SwiftUI decides again');
+    });
+  }
+
+  it('follows a background interaction changed while it is open', async () => {
+    const { every, instance, pass } = await boot('ios');
+    instance.open.set(true);
+    await pass();
+    const interaction = () =>
+      modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationBackgroundInteraction'];
+    assert.equal(interaction(), undefined);
+    instance.interaction.set({ upThrough: 'medium' });
+    await pass();
+    assert.equal(interaction()?.['interactionType'], 'enabledUpThrough');
+    instance.interaction.set('disabled');
+    await pass();
+    assert.deepEqual(interaction(), {
+      $type: 'presentationBackgroundInteraction',
+      interactionType: 'disabled',
+    });
+  });
+
+  it('puts the modifiers it is given beside its own, on the group SwiftUI reads them from', async () => {
+    const { every, instance, pass } = await boot('ios');
+    instance.undismissable.set(true);
+    instance.modifiers.set([{ $type: 'presentationCornerRadius', cornerRadius: 24 }]);
+    instance.open.set(true);
+    await pass();
+    const types = () =>
+      ((every(/ExpoUI_GroupView$/)[0]!.props['modifiers'] ?? []) as { $type: string }[]).map(
+        (modifier) => modifier.$type,
+      );
+    assert.deepEqual(types(), [
+      'presentationDetents',
+      'presentationDragIndicator',
+      'interactiveDismissDisabled',
+      'presentationCornerRadius',
+    ]);
+    assert.deepEqual(modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['presentationCornerRadius'], {
+      $type: 'presentationCornerRadius',
+      cornerRadius: 24,
+    });
+
+    instance.modifiers.set(undefined);
+    await pass();
+    assert.deepEqual(types(), [
+      'presentationDetents',
+      'presentationDragIndicator',
+      'interactiveDismissDisabled',
+    ]);
   });
 });
 
@@ -767,6 +885,67 @@ describe('a bottom sheet on Android, which Compose shows while it is in the tree
       undefined,
       'Material colours it again',
     );
+  });
+});
+
+describe('a bottom sheet on Android that the user cannot dismiss', () => {
+  it('turns off the swipe, the back button and a tap outside, and turns them on again', async () => {
+    const { named, instance, pass } = await boot('android');
+    instance.open.set(true);
+    await pass();
+    const sheet = () => named(/ExpoUI_ModalBottomSheetView$/)!.props;
+    assert.equal(sheet()['sheetGesturesEnabled'], true);
+    assert.deepEqual(sheet()['properties'], {
+      shouldDismissOnBackPress: true,
+      shouldDismissOnClickOutside: true,
+    });
+
+    instance.undismissable.set(true);
+    await pass();
+    assert.equal(sheet()['sheetGesturesEnabled'], false);
+    assert.deepEqual(sheet()['properties'], {
+      shouldDismissOnBackPress: false,
+      shouldDismissOnClickOutside: false,
+    });
+
+    // Committed as true rather than left out: a prop left out keeps its old native value.
+    instance.undismissable.set(false);
+    await pass();
+    assert.equal(sheet()['sheetGesturesEnabled'], true);
+    assert.deepEqual(sheet()['properties'], {
+      shouldDismissOnBackPress: true,
+      shouldDismissOnClickOutside: true,
+    });
+  });
+
+  it('is undismissable as it opens', async () => {
+    const { named, instance, pass } = await boot('android');
+    instance.undismissable.set(true);
+    instance.open.set(true);
+    await pass();
+    const sheet = named(/ExpoUI_ModalBottomSheetView$/)!.props;
+    assert.equal(sheet['sheetGesturesEnabled'], false);
+    assert.deepEqual(sheet['properties'], {
+      shouldDismissOnBackPress: false,
+      shouldDismissOnClickOutside: false,
+    });
+  });
+
+  it('commits nothing for a background interaction or for SwiftUI modifiers', async () => {
+    const committed = async (set: boolean) => {
+      const { every, instance, pass } = await boot('android');
+      if (set) {
+        instance.interaction.set({ upThrough: 'medium' });
+        instance.modifiers.set([{ $type: 'presentationCornerRadius', cornerRadius: 24 }]);
+      }
+      instance.open.set(true);
+      await pass();
+      return JSON.stringify(every(/ExpoUI_/).map((n) => [n.viewName, n.props]));
+    };
+    const without = await committed(false);
+    const given = await committed(true);
+    assert.equal(given, without);
+    assert.equal(given.includes('modifiers'), false);
   });
 });
 

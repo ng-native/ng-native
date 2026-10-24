@@ -44,7 +44,7 @@ export class KeepAwake {
         );
         if (!expo) return null;
         // One per module, so every app the runtime mounts holds the same screen.
-        return sharedBySource(expo, () => ({
+        return sharedBySource(KeepAwake, expo, () => ({
           activate: (tag) => expo.activateKeepAwakeAsync(tag),
           deactivate: (tag) => expo.deactivateKeepAwake(tag),
           onWindowFront,
@@ -55,7 +55,11 @@ export class KeepAwake {
 
   private readonly native = inject(KeepAwake.SOURCE);
   /** Every app's holds: the screen is the runtime's, not an app's. */
-  private readonly window = sharedBySource(this.native, () => new KeepAwakeWindow(this.native));
+  private readonly window = sharedBySource(
+    KeepAwakeWindow,
+    this.native,
+    () => new KeepAwakeWindow(this.native),
+  );
   /** This app's holds not yet released, which go with it. */
   private readonly own = new Set<() => void>();
 

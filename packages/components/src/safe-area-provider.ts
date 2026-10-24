@@ -22,6 +22,7 @@
  * `[reportInsets]="false"`, so its geometry stays out of the app-wide `SafeArea` while it is up.
  */
 import {
+  ApplicationRef,
   Component,
   DestroyRef,
   ElementRef,
@@ -67,18 +68,25 @@ export class SafeAreaProvider {
 
     const area = inject(SafeArea);
     const engine = inject(Engine, { optional: true });
+    const app = inject(ApplicationRef);
     const stop = inject(Renderer2).listen(
       host,
       'insetsChange',
       (event: { nativeEvent?: InsetsChange }) => {
         const change = event?.nativeEvent;
         if (!change || !this.reportInsets()) return;
-        area.report(change.insets, change.frame);
+        area.report(change.insets, change.frame, this);
         // Also published to the stylesheet, where a padding that clears the home indicator
         // belongs. `env()` on the web; a seeded custom property here.
         engine?.updateTokens(insetTokens(change.insets));
       },
     );
-    inject(DestroyRef).onDestroy(stop);
+    inject(DestroyRef).onDestroy(() => {
+      stop();
+      // The whole app going takes `SafeArea` and the stylesheet with it: a restyle and a commit
+      // of a tree on its way out would be all this did.
+      if (app.injector.destroyed) return;
+      if (area.withdraw(this)) engine?.updateTokens(insetTokens(area.insets()));
+    });
   }
 }

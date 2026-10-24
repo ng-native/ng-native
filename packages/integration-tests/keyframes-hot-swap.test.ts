@@ -52,6 +52,7 @@ function app(globalCss: string, options: { inScroll?: boolean } = {}) {
 
   return {
     engine,
+    spinner,
     /** First render of each component, by id, with its CSS, in that order. */
     mount(sheets: Record<string, string>, encapsulation = EMULATED): void {
       for (const [id, css] of Object.entries(sheets)) {
@@ -268,6 +269,22 @@ describe('a finished animation holding its last frame, when its @keyframes are d
 
     s.swap('pulser', 'view { padding: 1px }');
     assert.equal(s.opacity(), 1);
+  });
+});
+
+describe('a finished animation script holds at its last frame, when its @keyframes are edited', () => {
+  it('holds the edited last frame, as one with a forwards fill does', () => {
+    const s = app(`
+      view { opacity: 1 }
+      .spinner { animation: pulse 100ms linear }
+    `);
+    s.mount({ pulser: '@keyframes pulse { from { opacity: 0.25 } to { opacity: 0.75 } }' });
+    s.spinner.playing!.held = true;
+    s.tick(150);
+    assert.equal(s.opacity(), 0.75, 'held where it ended');
+
+    s.swap('pulser', '@keyframes pulse { from { opacity: 0.25 } to { opacity: 0.5 } }');
+    assert.equal(s.opacity(), 0.5, 'the last of the edited frames');
   });
 });
 

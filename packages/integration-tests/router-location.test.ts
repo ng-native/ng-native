@@ -87,6 +87,42 @@ describe('native platform location', () => {
     assert.deepEqual(popped, []);
   });
 
+  it('rewinds to an earlier entry without a popstate, keeping the ones ahead as forward', () => {
+    location.pushState({ step: 1 }, '', '/a');
+    location.pushState({ step: 2 }, '', '/b');
+    location.pushState({ step: 3 }, '', '/a');
+
+    location.ɵrewind(2);
+    assert.equal(location.href, '/a');
+    assert.deepEqual(location.getState(), { step: 1 });
+    assert.deepEqual(popped, [], 'the router is on that url already');
+    location.forward();
+    assert.equal(location.href, '/b');
+  });
+
+  it('lists the navigation id of every entry, the ones ahead included', () => {
+    location.replaceState({ navigationId: 1 }, '', '/');
+    location.pushState({ navigationId: 2 }, '', '/a');
+    location.pushState({ other: true }, '', '/b');
+    location.pushState({ navigationId: 4 }, '', '/c');
+    location.back();
+    location.back();
+    location.replaceState({ navigationId: 5 }, '', '/a');
+
+    assert.deepEqual([...location.ɵnavigationIds()].sort(), [1, 4, 5]);
+  });
+
+  it('ignores a rewind past the start, or forward', () => {
+    location.pushState(null, '', '/a');
+    location.pushState(null, '', '/b');
+    location.back();
+
+    location.ɵrewind(2);
+    assert.equal(location.href, '/a');
+    location.ɵrewind(-1);
+    assert.equal(location.href, '/a');
+  });
+
   it('stops notifying once a listener unsubscribes', () => {
     const stop = location.onPopState(() => popped.push('second'));
     stop();

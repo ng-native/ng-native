@@ -93,11 +93,13 @@ export class HorizontalScroll {}
 
 @Component({
   selector: 'x-keyboard-taps',
-  imports: [ScrollView, TextInput, View, Text],
+  imports: [ScrollView, TextInput, View, Text, Pressable],
   template: `
     <scroll-view nativeID="never">
       <text-input nativeID="field" />
+      <view><text-input nativeID="next" /></view>
       <view nativeID="elsewhere"><text>tap here</text></view>
+      <pressable nativeID="button" (press)="pressed.push('button')"><text>button</text></pressable>
     </scroll-view>
     <scroll-view nativeID="always" keyboardShouldPersistTaps="always">
       <text-input nativeID="field2" />
@@ -107,6 +109,7 @@ export class HorizontalScroll {}
 })
 export class KeyboardTaps {
   readonly scroll = viewChild.required(ScrollView);
+  readonly pressed: string[] = [];
 }
 
 /**
@@ -238,6 +241,7 @@ export class Switches {
   template: `
     <scroll-view nativeID="handled" keyboardShouldPersistTaps="handled">
       <text-input nativeID="field3" />
+      <view><text-input nativeID="next3" /></view>
       <pressable nativeID="button3"><text>button</text></pressable>
       <view nativeID="elsewhere3"><text>tap here</text></view>
     </scroll-view>

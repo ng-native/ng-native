@@ -16,7 +16,10 @@
  * @ng-native/nx`, and tests and bundles each. Both install with npm, which refuses a peer range it
  * cannot satisfy where pnpm only warns. They take minutes, so the release workflow runs them and
  * CI does not. `--generators=angular` or `--generators=nx` runs one of the two and skips the
- * template, which is how the release workflow runs them side by side.
+ * template, which is how the release workflow runs them side by side. Each runs the commands its
+ * docs page gives beyond the app: `ng generate component` and `ng run native:typecheck`, or
+ * `@ng-native/nx:library`, `:component` and `:tailwind`. `--generators=manual` follows the manual
+ * setup guide instead, from its own code blocks, through `expo prebuild`.
  *
  * `--scenario=<name>` runs one of `SCENARIOS` below instead, for the weekly workflow in
  * `latest.yml`: a workspace made the way a user makes one, on the newest versions its ranges
@@ -42,6 +45,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
   rmSync,
 } from 'node:fs';
@@ -63,23 +67,18 @@ if (unread.length) {
   );
 }
 
-/** Every package that would go to npm, plus the template. */
+/**
+ * Every package that would go to npm, plus the template: each under `packages/` its manifest does
+ * not mark private, so a new package is checked from the day it is added.
+ */
 const PUBLISHED = [
-  'packages/analog',
-  'packages/components',
-  'packages/device',
-  'packages/expo',
-  'packages/fabric',
-  'packages/icons',
-  'packages/metro',
-  'packages/migrate',
-  'packages/nx',
-  'packages/platform',
-  'packages/router',
-  'packages/schematics',
-  'packages/tailwind',
-  'packages/testing',
-  'packages/web',
+  ...readdirSync(path.join(root, 'packages'))
+    .sort()
+    .map((name) => `packages/${name}`)
+    .filter((dir) => {
+      const manifest = path.join(root, dir, 'package.json');
+      return existsSync(manifest) && JSON.parse(readFileSync(manifest, 'utf8')).private !== true;
+    }),
   'template',
 ];
 
@@ -204,6 +203,7 @@ function check(app, { pm = 'pnpm', latest = false } = {}) {
     console.log(`${pm} install, again`);
     install(pm, app);
   }
+  assertOneCopy(app, pm);
 
   console.log('typechecking');
   run('npx', ['tsc', '-p', 'tsconfig.json', '--noEmit'], app);
@@ -213,6 +213,35 @@ function check(app, { pm = 'pnpm', latest = false } = {}) {
   // partial-compiled packages there, which inside this workspace are symlinked source instead.
   console.log('testing');
   run(pm, ['test'], app);
+
+  // ESLint set up as the eslint-plugin docs page tells an app from the template to, from the
+  // registry: clean on the template's own source, and failing on a file that does what the rules
+  // are there to catch.
+  console.log('adding ESLint as its docs page says, and linting');
+  // `@local`, the tag `publishAll` gives what it publishes here.
+  const lint = ['eslint', 'typescript-eslint', 'angular-eslint', '@ng-native/eslint-plugin@local'];
+  run(pm, [pm === 'npm' ? 'install' : 'add', '--save-dev', ...lint], app);
+  writeFileSync(
+    path.join(app, 'eslint.config.mjs'),
+    "import ngNative from '@ng-native/eslint-plugin';\n\n" +
+      "export default [{ ignores: ['.expo/', 'ios/', 'android/', 'dist/'] }, ...ngNative.configs.recommended];\n",
+  );
+  run('npx', ['eslint', '.'], app);
+  const probe = path.join(app, 'src/app/lint-probe.ts');
+  writeFileSync(
+    probe,
+    "import { Component } from '@angular/core';\n" +
+      "@Component({ selector: 'app-probe', template: '<pressable (click)=\"go()\" />' })\n" +
+      'export class Probe { go() {} }\n',
+  );
+  try {
+    run('npx', ['eslint', '.'], app);
+    throw new Error('lint passed a (click) on a <pressable>: the rules did not run');
+  } catch (error) {
+    if (!String(error.stdout ?? error.message).includes('@ng-native/no-dom-events')) throw error;
+  } finally {
+    rmSync(probe);
+  }
 
   console.log('bundling');
   const modules = bundle(
@@ -306,13 +335,34 @@ async function angularWorkspace(dir, { latest = false } = {}) {
     run('npx', ['--yes', '@angular/cli@22', 'new', 'web', '--defaults', '--skip-git'], dir, false),
   );
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
-  run('npx', ['ng', 'add', '@ng-native/schematics@local', '--skip-confirmation'], workspace, false);
+  // With the linter, so `ng lint native` below runs on what `--linter=eslint` installs.
+  run(
+    'npx',
+    ['ng', 'add', '@ng-native/schematics@local', '--skip-confirmation', '--linter=eslint'],
+    workspace,
+    false,
+  );
   if (latest) {
     console.log('npm install, again');
     install('npm', workspace);
   }
+  assertOneCopy(workspace, 'npm');
+  // The command the schematics page gives, run where it says: the component has to land beside
+  // the app's own, where the tests and typecheck below then compile it.
+  console.log('ng generate component profile-card, from projects/native');
+  run(
+    'npx',
+    ['ng', 'generate', 'component', 'profile-card'],
+    path.join(workspace, 'projects/native'),
+  );
+  const generated = path.join(workspace, 'projects/native/src/app/profile-card/profile-card.ts');
+  if (!existsSync(generated)) throw new Error(`ng generate component wrote no ${generated}`);
   console.log('testing the web app and the native one');
   run('npx', ['ng', 'test', '--watch=false'], workspace);
+  console.log('ng run native:typecheck');
+  run('npx', ['ng', 'run', 'native:typecheck'], workspace);
+  console.log('ng lint native');
+  run('npx', ['ng', 'lint', 'native'], workspace);
   console.log('ng build native');
   const modules = bundle('npx', ['ng', 'build', 'native', '--platform', 'ios'], workspace);
   if (latest) {
@@ -375,27 +425,45 @@ async function nxWorkspace(
     ),
   );
   const workspace = path.join(dir, 'monorepo');
-  // What pnpm tells someone stopped by that to run, and every later install fails without it.
-  if (pm === 'pnpm') run('pnpm', ['approve-builds', '--all'], workspace);
+  // What pnpm 11 tells someone stopped by that to run, and every later install fails without it.
+  // A workspace from Nx 24 runs pnpm 10, which only warns about the builds it skipped and has no
+  // `--all`.
+  if (pm === 'pnpm' && Number(run('pnpm', ['--version'], workspace).split('.')[0]) >= 11) {
+    run('pnpm', ['approve-builds', '--all'], workspace);
+  }
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
   run('npx', ['nx', 'add', '@ng-native/nx@local'], workspace, false);
-  run('npx', ['nx', 'g', '@ng-native/nx:app', 'apps/mobile', '--no-interactive'], workspace, false);
+  // With the linter, so the `lint` target below runs on what `--linter=eslint` installs.
+  run(
+    'npx',
+    ['nx', 'g', '@ng-native/nx:app', 'apps/mobile', '--no-interactive', '--linter=eslint'],
+    workspace,
+    false,
+  );
   // `mobile`, or `@monorepo/mobile` where the root package is scoped, as the TypeScript preset's is.
   const project = readJson(path.join(workspace, 'apps/mobile/package.json')).name;
+  const library = addNativeLibrary(workspace, project);
   if (latest) {
     addLibrary(workspace, preset, pm);
     console.log(`${pm} install, again`);
     install(pm, workspace);
   }
-  console.log('typechecking and testing');
-  run('npx', ['nx', 'run-many', '-t', 'typecheck', 'test', '-p', project], workspace);
+  assertOneCopy(workspace, pm);
+  console.log('typechecking, testing and linting');
+  run('npx', ['nx', 'run-many', '-t', 'typecheck', 'test', 'lint', '-p', project], workspace);
+  // Its own targets, before anything imports it: a library the generator wrote has to pass them
+  // as written, which one in the TypeScript preset once did not.
+  run('npx', ['nx', 'run-many', '-t', 'typecheck', 'test', '-p', library], workspace);
   console.log(`nx export ${project}`);
-  const modules = bundle('npx', ['nx', 'export', project, '--platform', 'ios'], workspace);
+  // Nx 24 prints a task's output only with `--output-style=static` when not on a terminal.
+  const exported = (...args) =>
+    bundle('npx', ['nx', 'export', project, ...args, '--output-style=static'], workspace);
+  const modules = exported('--platform', 'ios');
   if (latest) {
     console.log(`nx export ${project} --platform android`);
-    bundle('npx', ['nx', 'export', project, '--platform', 'android'], workspace);
+    exported('--platform', 'android');
     console.log(`nx export ${project}, for every platform`);
-    bundle('npx', ['nx', 'export', project], workspace);
+    exported();
   }
   console.log(`nx start ${project}`);
   const served = await serve(
@@ -415,6 +483,72 @@ async function nxWorkspace(
 
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const writeJson = (file, value) => writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+
+/**
+ * The library commands the Nx page gives: `@ng-native/nx:library`, a component in it, and Tailwind
+ * across the app and the library. Returns the library's project name, `kit` or `@monorepo/kit`.
+ */
+function addNativeLibrary(workspace, app) {
+  console.log('nx g @ng-native/nx:library packages/kit, :component in it, and :tailwind on both');
+  run('npx', ['nx', 'g', '@ng-native/nx:library', 'packages/kit', '--no-interactive'], workspace);
+  const root = path.join(workspace, 'packages/kit');
+  const library = readJson(
+    path.join(root, existsSync(path.join(root, 'project.json')) ? 'project.json' : 'package.json'),
+  ).name;
+  run(
+    'npx',
+    [
+      'nx',
+      'g',
+      '@ng-native/nx:component',
+      'profile-card',
+      '--project',
+      library,
+      '--no-interactive',
+    ],
+    workspace,
+  );
+  run(
+    'npx',
+    ['nx', 'g', '@ng-native/nx:tailwind', app, '--library', library, '--no-interactive'],
+    workspace,
+  );
+  return library;
+}
+
+/**
+ * What has to be in a workspace once: a second `@angular/core` or `react-native` fails at runtime,
+ * far from the cause, and a second `expo` means part of the build is on another SDK, as Metro's
+ * Babel transformer once was in a pnpm workspace.
+ */
+const ONE_COPY = ['@angular/core', 'react', 'react-native', 'expo'];
+
+function assertOneCopy(workspace, pm) {
+  for (const name of ONE_COPY) {
+    const versions = new Set();
+    if (pm === 'pnpm') {
+      // `node_modules/.pnpm/<name with + for />@<version>_<peers>`, one directory per copy.
+      const prefix = `${name.replace('/', '+')}@`;
+      for (const entry of readdirSync(path.join(workspace, 'node_modules/.pnpm'))) {
+        if (entry.startsWith(prefix)) versions.add(/^[^_(]+/.exec(entry.slice(prefix.length))[0]);
+      }
+    } else {
+      let out;
+      try {
+        out = run('npm', ['ls', name, '--all', '--parseable'], workspace);
+      } catch (error) {
+        // npm ls exits non-zero over any peer complaint in the tree, and still lists the paths.
+        out = String(error.stdout ?? '');
+      }
+      for (const dir of out.split('\n').filter(Boolean)) {
+        versions.add(readJson(path.join(dir, 'package.json')).version);
+      }
+    }
+    if (versions.size > 1) {
+      throw new Error(`${name} is installed at ${[...versions].join(' and ')}; there must be one`);
+    }
+  }
+}
 
 /** A component in a workspace library, drawn with the framework's own elements. */
 const GREETING = `import { Component, input } from '@angular/core';
@@ -901,6 +1035,115 @@ async function checkStorybook(page, url) {
   );
 }
 
+const MANUAL_SETUP = path.join(root, 'apps/documentation/src/content/guide/manual-setup.md');
+
+/**
+ * The manual setup guide, followed from its own code blocks: its shell commands run as written,
+ * and each file written from the block that names it in its first line. `newestSdk` drops the
+ * guide's `@sdk-<n>` pin, as someone adding the framework to an app they already have is on
+ * whatever `create-expo-app` gave them, and the guide says that SDK works too.
+ */
+async function manualApp(dir, { newestSdk = false } = {}) {
+  const guide = readFileSync(MANUAL_SETUP, 'utf8');
+  const blocks = [...guide.matchAll(/^```(\w+)\n([\s\S]*?)^```$/gm)].map(([, lang, code]) => ({
+    lang,
+    code,
+  }));
+  const shell = (start) => {
+    const block = blocks.find(({ lang, code }) => lang === 'sh' && code.startsWith(start));
+    if (!block) throw new Error(`the guide has no sh block starting ${JSON.stringify(start)}`);
+    return block.code;
+  };
+  /** The block whose first line is `// <file>` or `/* <file> *\/`, without that line. */
+  const file = (name) => {
+    const block = blocks.find(({ code }) => code.split('\n')[0].includes(` ${name}`));
+    if (!block) throw new Error(`the guide has no block for ${name}`);
+    return block.code.slice(block.code.indexOf('\n') + 1);
+  };
+  const json = (start) => {
+    const block = blocks.find(({ lang, code }) => lang === 'json' && code.startsWith(start));
+    if (!block) throw new Error(`the guide has no json block starting ${JSON.stringify(start)}`);
+    return JSON.parse(block.code);
+  };
+
+  let create = shell('npx create-expo-app');
+  if (newestSdk) create = create.replace(/(blank-typescript)@sdk-\d+/, '$1');
+  console.log(`\nthe manual setup guide, from:\n${create}`);
+  const app = path.join(dir, 'my-app');
+  upstream(app, () => run('sh', ['-ec', create], dir, false));
+  writeFileSync(path.join(app, '.npmrc'), `registry=${REGISTRY}\n`);
+
+  console.log('installing the framework packages as the guide does');
+  run('sh', ['-ec', shell('npm install @angular/core')], app, false);
+  run('sh', ['-ec', shell('npx expo install react-native-safe-area-context')], app, false);
+  assertOneCopy(app, 'npm');
+
+  writeFileSync(path.join(app, 'metro.config.js'), file('metro.config.js'));
+  const manifest = readJson(path.join(app, 'app.json'));
+  manifest.expo.plugins = [...(manifest.expo.plugins ?? []), ...json('{\n  "expo"').expo.plugins];
+  writeJson(path.join(app, 'app.json'), manifest);
+  const tsconfig = JSON.parse(file('tsconfig.json'));
+  Object.assign(tsconfig, json('{\n  "angularCompilerOptions"'));
+  writeJson(path.join(app, 'tsconfig.json'), tsconfig);
+  mkdirSync(path.join(app, 'src/app'), { recursive: true });
+  writeFileSync(path.join(app, 'src/main.ts'), file('src/main.ts'));
+  writeFileSync(path.join(app, 'src/app/app.ts'), file('src/app/app.ts'));
+
+  // The Tailwind step's blocks are edits to the two files above, applied as the guide words them.
+  console.log('adding Tailwind as the guide does');
+  run('sh', ['-ec', shell('npm install @ng-native/tailwind')], app, false);
+  writeFileSync(path.join(app, 'src/styles.css'), file('src/styles.css'));
+  const tailwindConfig = blocks.find(
+    ({ code }) => code.startsWith('// metro.config.js') && code.includes('withTailwind'),
+  )?.code;
+  if (!tailwindConfig) throw new Error('the guide has no metro.config.js block with withTailwind');
+  const config = file('metro.config.js');
+  writeFileSync(
+    path.join(app, 'metro.config.js'),
+    config.slice(0, config.indexOf('\nmodule.exports')) +
+      '\n' +
+      tailwindConfig.slice(tailwindConfig.indexOf('\n') + 1),
+  );
+  // The guide's second `src/main.ts` block: its imports, then the mount options it says go beside
+  // `processColor`.
+  const mainEdit = blocks
+    .filter(({ code }) => code.startsWith('// src/main.ts'))[1]
+    ?.code.split('\n')
+    .slice(1)
+    .filter((line) => line.trim() && !line.trim().startsWith('//'));
+  if (!mainEdit) throw new Error('the guide has no second src/main.ts block for Tailwind');
+  const imports = mainEdit.filter((line) => line.startsWith('import '));
+  const options = mainEdit.filter((line) => !line.startsWith('import '));
+  const main = path.join(app, 'src/main.ts');
+  replaceIn(
+    main,
+    "import { App } from './app/app.ts';",
+    ["import { App } from './app/app.ts';", ...imports].join('\n'),
+  );
+  replaceIn(
+    main,
+    'processColor,',
+    ['processColor,', ...options.map((line) => `    ${line.trim()}`)].join('\n'),
+  );
+
+  // The guide's order: Metro makes the Tailwind sheet before the first typecheck needs it.
+  console.log('bundling for every platform');
+  const modules = bundle(
+    'npx',
+    ['expo', 'export', '--platform', 'all', '--output-dir', path.join(app, 'dist')],
+    app,
+  );
+  console.log('ngc, as "Checking templates" says');
+  run('npm', ['install', '--save-dev', '@angular/compiler-cli'], app);
+  run('sh', ['-ec', `npx ${shell('ngc ')}`], app);
+  // Where the config plugin runs, which no bundle does: it failed on a new SDK once while every
+  // bundle still built. `--no-install` leaves CocoaPods out, which only a Mac has.
+  console.log('expo prebuild');
+  run('npx', ['expo', 'prebuild', '--no-install'], app, true, { CI: '1' });
+  const served = await serve('npx', ['expo', 'start', '--port', '8095'], app, 8095);
+  return `${modules} modules, and expo start builds ${served}`;
+}
+
 /**
  * The weekly checks against the newest versions each setup's ranges allow, one CI job each. `app`
  * is where the native app ends up, which is where its versions are read from.
@@ -926,6 +1169,8 @@ const SCENARIOS = {
     run: (dir) => nxWorkspace(dir, { preset: 'ts', pm: 'npm', latest: true, port: 8094 }),
   },
   web: { app: 'web', run: webApp },
+  'manual-npm': { app: 'my-app', run: (dir) => manualApp(dir) },
+  'manual-newest-sdk': { app: 'my-app', run: (dir) => manualApp(dir, { newestSdk: true }) },
 };
 
 function templateScenario(dir, pm) {
@@ -994,6 +1239,7 @@ if (scenario !== undefined && !SCENARIOS[scenario]) {
 const GENERATORS = {
   angular: ['ng add @ng-native/schematics', angularWorkspace],
   nx: ['nx g @ng-native/nx:app', nxWorkspace],
+  manual: ['the manual setup guide', manualApp],
 };
 const generators = process.argv.find((arg) => /^--generators(=|$)/.test(arg));
 const onlyGenerator = generators?.split('=')[1];

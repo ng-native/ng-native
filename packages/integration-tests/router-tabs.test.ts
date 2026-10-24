@@ -28,6 +28,7 @@ import { registerScreenComponents } from '../router/src/screens.ts';
 import { registerPlatformComponents } from '@ng-native/fabric';
 import { markTabRoute } from '../router/src/tab-routes.ts';
 import { tabIconProps } from '../router/src/native-tab.ts';
+import { SCREENS_VERSION } from '../router/src/screens-version.ts';
 import {
   cleanup,
   fireEvent,
@@ -173,6 +174,8 @@ describe('native tabs outlet', () => {
           provide: ErrorHandler,
           useValue: { handleError: (error: unknown) => reported.push(error) },
         },
+        // The template form these assert; router-tab-template-icon.test.ts covers 4.29 and later.
+        { provide: SCREENS_VERSION, useValue: '4.26.2' },
       ],
     });
     fabric = app.fabric;

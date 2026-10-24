@@ -10,9 +10,9 @@
  *
  * ## What is faithfully reproduced
  *
- * The whole negotiation: capture pre-emption, bubble election, termination requests, and a
- * scroll view taking over a drag mid-press (`notifyScroll`, the counterpart of `engine.ts`'s
- * `cancelPressForScroll`). `pressable.test.ts`-equivalent scenarios - a pressable nested in a
+ * The whole negotiation: capture pre-emption, bubble election, a node above the responder taking
+ * the touch on a move, termination requests, and a scroll view taking over a drag mid-press
+ * (`notifyScroll`, the counterpart of `engine.ts`'s `cancelPressForScroll`). `pressable.test.ts`-equivalent scenarios - a pressable nested in a
  * scroll view nested in a dialog - behave the same on both platforms because this is the same
  * algorithm, not a different one that happens to agree on simple cases.
  *
@@ -37,6 +37,15 @@
  */
 import { SyntheticEvent, type ResponderEvent, type ResponderHandlers } from '@ng-native/fabric';
 import { type BrowserNode, pathTo } from './dom-node.ts';
+
+/** The lowest node both are in, either of them included. Mirrors `engine.ts`. */
+function commonAncestor(a: BrowserNode, b: BrowserNode): BrowserNode | null {
+  for (let node: BrowserNode | null = b; node; node = node.parent) if (node === a) return a;
+  const above = new Set<BrowserNode>();
+  for (let node: BrowserNode | null = a; node; node = node.parent) above.add(node);
+  for (let node: BrowserNode | null = b; node; node = node.parent) if (above.has(node)) return node;
+  return null;
+}
 
 export class ResponderSystem {
   private readonly responders = new WeakMap<BrowserNode, ResponderHandlers>();
@@ -67,8 +76,9 @@ export class ResponderSystem {
     target: BrowserNode,
     event: ResponderEvent,
     phase: 'Start' | 'Move',
+    from: BrowserNode = target,
   ): BrowserNode | null {
-    const path = pathTo(target);
+    const path = pathTo(from);
     const capture = `on${phase}ShouldSetResponderCapture` as const;
     const bubble = `on${phase}ShouldSetResponder` as const;
 
@@ -112,16 +122,18 @@ export class ResponderSystem {
       if (elected) this.grant(elected, event);
       return;
     }
-    if (type === 'topTouchMove') {
-      if (this.current) this.responders.get(this.current)?.onResponderMove?.(event);
-      else {
-        const elected = this.negotiate(target, event, 'Move');
-        if (elected) this.grant(elected, event);
-      }
-      return;
-    }
-    if (type === 'topTouchEnd') this.release(event, false);
+    if (type === 'topTouchMove') this.move(target, event);
+    else if (type === 'topTouchEnd') this.release(event, false);
     else if (type === 'topTouchCancel') this.release(event, true);
+  }
+
+  /** Asked on every move, from above both the responder and the target. Mirrors `engine.ts`. */
+  private move(target: BrowserNode, event: ResponderEvent): void {
+    const holder = this.current;
+    const from = holder ? commonAncestor(holder, target) : target;
+    const elected = from ? this.negotiate(target, event, 'Move', from) : null;
+    if (elected && elected !== holder) this.grant(elected, event);
+    if (this.current) this.responders.get(this.current)?.onResponderMove?.(event);
   }
 
   /** A scroll container moved under the finger. Cancels a press inside it; see the file doc. */

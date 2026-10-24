@@ -18,6 +18,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { TopClaim, onWindowFront, sharedBySource } from '@ng-native/device';
+import { nativePlatform } from '@ng-native/fabric';
 import { expoModule, present } from './native.ts';
 
 export interface NativeBrightness {
@@ -43,19 +44,57 @@ export class Brightness {
         // Missing from the build: the stand-in, to say so when it is used.
         if (!present(expo)) return expo as never;
         // One per module, so every app the runtime mounts sets the same screen.
-        return sharedBySource(expo, () => ({
-          get: () => expo.getBrightnessAsync(),
-          set: (level) => expo.setBrightnessAsync(level),
-          restore: () => expo.restoreSystemBrightnessAsync(),
-          onWindowFront,
-        }));
+        return sharedBySource(Brightness, expo, () => {
+          if (nativePlatform() === 'android') {
+            return {
+              get: () => expo.getBrightnessAsync(),
+              set: (level) => expo.setBrightnessAsync(level),
+              restore: () => expo.restoreSystemBrightnessAsync(),
+              onWindowFront,
+            };
+          }
+          // iOS has no level of the app's own: `setBrightnessAsync` sets the screen's, which stays
+          // after the app until the device locks, and `restoreSystemBrightnessAsync` does nothing
+          // there. So the level the screen had before the first set is read, and set again. One
+          // queue, so a set asked for while a restore runs reads that level after it is back.
+          let before: number | null = null;
+          let holding = false;
+          let queue: Promise<unknown> = Promise.resolve();
+          const inTurn = (step: () => Promise<void>): Promise<void> => {
+            const turn = queue.then(step);
+            queue = turn.catch(() => {});
+            return turn;
+          };
+          return {
+            get: () => expo.getBrightnessAsync(),
+            set: (level) =>
+              inTurn(async () => {
+                if (!holding) {
+                  before = await expo.getBrightnessAsync().catch(() => null);
+                  holding = true;
+                }
+                await expo.setBrightnessAsync(level);
+              }),
+            restore: () =>
+              inTurn(async () => {
+                if (!holding) return;
+                holding = false;
+                if (before !== null) await expo.setBrightnessAsync(before);
+              }),
+            onWindowFront,
+          };
+        });
       },
     },
   );
 
   private readonly native = inject(Brightness.SOURCE);
   /** Every app's levels: the screen is the runtime's, not an app's. */
-  private readonly window = sharedBySource(this.native, () => new BrightnessWindow(this.native));
+  private readonly window = sharedBySource(
+    BrightnessWindow,
+    this.native,
+    () => new BrightnessWindow(this.native),
+  );
   private readonly current = this.window.current;
   /** This app, among the apps setting the level. */
   private readonly owner = {};
@@ -130,8 +169,16 @@ class BrightnessWindow {
   }
 
   restore(): void {
-    void this.native
+    const native = this.native;
+    void native
       ?.restore()
-      .then(() => this.native?.get().then((level) => this.current.set(level)));
+      .then(() => native.get())
+      .then(
+        (level) => {
+          // A level set while the restore ran is the one showing, not the one read back.
+          if (untracked(this.levels.claims.all).length === 0) this.current.set(level);
+        },
+        () => {},
+      );
   }
 }

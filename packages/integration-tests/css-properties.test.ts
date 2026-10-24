@@ -451,6 +451,38 @@ describe('lengths in units native has no word for', () => {
     assert.throws(() => declarationsOf('outline-offset: 37%'), /outline-offset/);
   });
 
+  it('reads an outline offset worked out with calc(), as Chrome does', () => {
+    assert.deepEqual(declarationsOf('outline-offset: calc(2px * -1)'), { outlineOffset: -2 });
+    assert.deepEqual(declarationsOf('outline-offset: calc(1rem + 2px)'), { outlineOffset: 18 });
+    assert.throws(
+      () => declarationsOf('outline-offset: calc(10% + 2px)'),
+      /'outline-offset' takes a length, not a percentage/,
+    );
+  });
+
+  it("reads Tailwind's negated outline offset of a token on device", () => {
+    const sheet = compileCss(
+      ':root { --x: 3px } .a { outline-offset: calc(var(--x) * -1) }' +
+        ' .b { outline-offset: max(var(--x), 1rem) }',
+      't',
+    );
+    const resolver = new StyleResolver(sheet, { width: 400, height: 800, colorScheme: 'light' });
+    const target = (name: string) =>
+      ({
+        tag: 'view',
+        classes: new Set([name]),
+        props: {},
+        parent: null,
+        children: [],
+        sheet,
+        hostSheet: null,
+        styleCache: null,
+        styleDirty: true,
+      }) as unknown as StyleTarget;
+    assert.equal(resolver.resolve(target('a'), 1).style['outlineOffset'], -3);
+    assert.equal(resolver.resolve(target('b'), 1).style['outlineOffset'], 16);
+  });
+
   it('reads a font size in percent as a share of the inherited one, as an em is', () => {
     // `fontSize: '37%'` is not a value native takes; the size it means is known on device.
     const [rule] = compileCss('view { font-size: 37% }').rules;
@@ -489,6 +521,10 @@ describe('logical properties', () => {
     'paddingBlock',
     'paddingBlockStart',
     'paddingBlockEnd',
+    'marginHorizontal',
+    'marginVertical',
+    'paddingHorizontal',
+    'paddingVertical',
   ];
 
   /** Every prop a rule would write, settled now or on device. */
@@ -526,18 +562,42 @@ describe('logical properties', () => {
     assert.deepEqual(writes('padding-block: var(--x) 2px'), ['paddingBottom', 'paddingTop']);
   });
 
-  it('never writes one of the names only some views read', () => {
-    const properties = ['inset', 'margin', 'padding'].flatMap((box) =>
-      ['inline', 'block'].flatMap((axis) => [
-        `${box}-${axis}`,
-        `${box}-${axis}-start`,
-        `${box}-${axis}-end`,
-      ]),
+  it("reads React Native's horizontal and vertical as the two sides of that axis", () => {
+    assert.deepEqual(
+      declarationsOf('padding-horizontal: 12px'),
+      declarationsOf('padding-left: 12px; padding-right: 12px'),
     );
+    assert.deepEqual(
+      declarationsOf('padding-vertical: 1rem'),
+      declarationsOf('padding-top: 1rem; padding-bottom: 1rem'),
+    );
+    assert.deepEqual(
+      declarationsOf('margin-horizontal: 10%'),
+      declarationsOf('margin-left: 10%; margin-right: 10%'),
+    );
+    assert.deepEqual(
+      declarationsOf('margin-vertical: auto'),
+      declarationsOf('margin-top: auto; margin-bottom: auto'),
+    );
+    assert.deepEqual(writes('padding-horizontal: var(--x)'), ['paddingLeft', 'paddingRight']);
+    assert.deepEqual(writes('margin-vertical: var(--x)'), ['marginTop', 'marginBottom']);
+  });
+
+  it('never writes one of the names only some views read', () => {
+    const properties = [
+      ...['inset', 'margin', 'padding'].flatMap((box) =>
+        ['inline', 'block'].flatMap((axis) => [
+          `${box}-${axis}`,
+          `${box}-${axis}-start`,
+          `${box}-${axis}-end`,
+        ]),
+      ),
+      ...['margin', 'padding'].flatMap((box) => [`${box}-horizontal`, `${box}-vertical`]),
+    ];
     const values = ['4px', '4px 8px', 'var(--x)', 'var(--x) var(--y)', 'calc(var(--x) * 2)'];
     for (const property of properties) {
       for (const value of values) {
-        if (property.endsWith('-start') || property.endsWith('-end')) {
+        if (/-(start|end|horizontal|vertical)$/.test(property)) {
           if (value.includes(' ') && !value.startsWith('calc')) continue;
         }
         const written = writes(`${property}: ${value}`);
@@ -721,6 +781,23 @@ describe('what it refuses, and how it says so', () => {
     // `caret-color` is a real RN prop on a text input, reached through a prop rather than a style;
     // nothing here translates it, and saying so is not the same as saying native cannot do it.
     assert.throws(() => declarationsOf('caret-color: red'), /not mapped yet/);
+  });
+
+  it('says a token in a property it has not mapped is dropped for that, as the value written is', () => {
+    // It said "var() cannot be used in the 'caret-color' shorthand", which caret-color is not.
+    for (const value of ['var(--x)', 'var(--x, red)']) {
+      assert.throws(
+        () => declarationsOf(`caret-color: ${value}`),
+        (error: Error) =>
+          /'caret-color' is not mapped yet/.test(error.message) && !/shorthand/.test(error.message),
+      );
+    }
+    assert.throws(() => declarationsOf('float: var(--x)'), /no React Native equivalent/);
+    assert.throws(() => declarationsOf('-webkit-user-drag: var(--x)'), /vendor-prefixed/);
+  });
+
+  it('still names a shorthand a token cannot be read in', () => {
+    assert.throws(() => declarationsOf('font: var(--x)'), /shorthand/);
   });
 
   it('names the property of a dropped var() declaration, not the parser shape it arrived in', () => {
@@ -1008,7 +1085,8 @@ describe('messages for things that are refused', () => {
 
   it('says native has no equivalent of the layout and text properties it has none of', () => {
     // These said "not mapped yet. React Native may well support it", which sends someone to look.
-    for (const css of ['text-wrap: balance', 'appearance: none', 'word-break: keep-all']) {
+    // `text-wrap` and `word-break: keep-all` are line-break strategies: css-line-break-strategy.test.ts.
+    for (const css of ['appearance: none', 'overflow-wrap: anywhere', 'line-break: strict']) {
       assert.throws(() => declarationsOf(css), /no React Native equivalent/, css);
     }
   });

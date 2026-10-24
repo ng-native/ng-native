@@ -14,6 +14,7 @@ import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import {
   Engine,
+  markPage,
   registerPlatformComponents,
   registerViewName,
   type EngineNode,
@@ -321,6 +322,20 @@ describe('a fixed box that stays in place', () => {
   it('measures right and bottom from the screen too', () => {
     const css = `${OFF} .c { position: fixed; right: 16px; bottom: 20px; width: 50px; height: 30px }`;
     assert.deepEqual(laidOut(css, ['off', ['c']]).box('c'), [334, 750, 50, 30]);
+  });
+
+  it('is placed against a view marked as the page of what is in it', () => {
+    // A layer over the app that ends above the keyboard, say: what is fixed in it ends there.
+    const css =
+      '.layer { position: absolute; top: 40px; left: 0; right: 0; bottom: 300px }' +
+      ' .c { position: fixed; left: 0; bottom: 20px; width: 50px; height: 30px }';
+    assert.deepEqual(laidOut(css, ['layer', ['c']]).box('c'), [0, 750, 50, 30]);
+    const marked = laidOut(css, ['layer', ['c']]);
+    markPage(marked.nodes.get('layer')!);
+    assert.deepEqual(marked.box('c'), [0, 450, 50, 30]);
+    // And follows it as it is given another size: the keyboard going away.
+    marked.engine.setProp(marked.nodes.get('layer')!, 'style', { bottom: 0 });
+    assert.deepEqual(marked.box('c'), [0, 750, 50, 30]);
   });
 
   it('takes a percentage of the screen', () => {

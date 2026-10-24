@@ -124,6 +124,32 @@ describe('a bottom sheet in a strictly checked template, through ngc', () => {
     );
   });
 
+  it('takes the dismissal, background interaction and modifiers SwiftUI has, and no other', () => {
+    assert.equal(
+      check(`<ui-bottom-sheet
+        [(open)]="open"
+        interactiveDismissDisabled
+        [backgroundInteraction]="{ upThrough: 'medium' }"
+        [modifiers]="[{ $type: 'presentationCornerRadius', cornerRadius: 24 }]"
+      />`),
+      '',
+    );
+    assert.equal(
+      check(
+        `<ui-bottom-sheet [(open)]="open" [interactiveDismissDisabled]="true" backgroundInteraction="enabled" />`,
+      ),
+      '',
+    );
+    assert.match(
+      check(`<ui-bottom-sheet [(open)]="open" backgroundInteraction="sometimes" />`),
+      /is not assignable to type/,
+    );
+    assert.match(
+      check(`<ui-bottom-sheet [(open)]="open" [backgroundInteraction]="{ upThrough: 'small' }" />`),
+      /is not assignable to type/,
+    );
+  });
+
   it('takes a toolbar item with a placement SwiftUI has, and a button that closes', () => {
     const sheet = (placement: string, role: string) =>
       check(

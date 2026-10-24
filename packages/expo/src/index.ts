@@ -96,6 +96,7 @@ export {
   type UiModifier,
   UiBottomSheet,
   type UiBottomSheetViewFunctions,
+  type UiBottomSheetBackgroundInteraction,
   type UiPresentationDetent,
   UiGroup,
   UiNavigationStack,

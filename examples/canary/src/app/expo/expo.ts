@@ -91,7 +91,9 @@ export class ExpoPage {
   /** Native takes a list of candidates, so both spellings are one. */
   protected readonly remote = [{ uri: 'https://picsum.photos/seed/angular-native/900/500' }];
   /** A `require()`d asset is an id until something resolves it; expo-image wants it resolved. */
-  protected readonly local = [Image.resolveAssetSource(require('../../../assets/local.png'))];
+  protected readonly local = [
+    Image.resolveAssetSource(require('../../../assets/local.png')),
+  ].filter((source) => source !== undefined);
 
   protected readonly changes = this.clipboard.changes;
   protected readonly status = signal('Nothing copied yet.');

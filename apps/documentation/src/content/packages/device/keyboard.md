@@ -28,7 +28,13 @@ export class Composer {
 
 `metrics` is everything the platform said, for a layout that needs the animation `duration` or
 `easing` too. `height` and `visible` are the common case, derived from `metrics`. `dismiss()` puts
-the keyboard away, as tapping outside a field would.
+the keyboard away, as tapping outside a field would: the `text-input` that has the focus is sent
+`blur`, which on iOS resigns it as first responder and on Android clears its focus and hides the
+keyboard. A view or a pressable that has the focus, from a hardware keyboard or a D-pad, holds no
+keyboard and is left as it is. A `search-field` or an `@expo/ui` text field does not tell the
+engine it has the focus, so `dismiss()` does not put its keyboard away. Call it while that field is
+still on screen. Once its view has been removed there is nothing left
+to send `blur` to, and Android, unlike iOS, does not take the keyboard down with the field.
 
 ## When it changes
 
@@ -104,11 +110,37 @@ keyboard. A bar that should stay on the keyboard exactly belongs in a
 [`<keyboard-dock>`](/packages/components/keyboard-avoiding-view#a-bar-that-rides-the-keyboard),
 which native moves.
 
+## Comparing the keyboard with a view
+
+`metrics().screenY` is the keyboard's top edge from the top of the screen, on both platforms. A
+view's frame from `measureInWindow` is counted from the top of the window, and the two are not
+always the same place:
+
+- **iOS**: the window starts at the top of the screen, and `windowTop` is zero.
+- **Android**: when React Native's edge-to-edge flag is off, React Native measures from below the
+  status bar, even in an app that draws under the bar. Expo Go draws under the bar with the flag
+  off. `windowTop` is then the status bar's height, and zero when the flag is on. It is read
+  from the window's current insets on each access, so it follows a rotation.
+
+Take `windowTop` off `screenY` to have the keyboard's top in the window a view was measured in.
+`<keyboard-avoiding-view>`, `<keyboard-dock>` and a `<text-input>` focused with the keyboard up
+already do; without it, each comes up short by the status bar's height on Android.
+
+```ts
+const keyboard = inject(Keyboard);
+const top = computed(() => {
+  const { screenY } = keyboard.metrics();
+  return screenY === undefined ? undefined : screenY - keyboard.windowTop;
+});
+```
+
 ## Off a device and on the web
 
-Off a device `metrics` stays at `{ height: 0 }` forever and `dismiss()` does nothing, because there
-is no `Keyboard` module underneath it. There is no software keyboard concept on the web in the same
-shape; `Keyboard` is a native-only service.
+Off a device `metrics` stays at `{ height: 0 }` forever, because there is no `Keyboard` module
+underneath it. `dismiss()` still blurs the focused field, so a test can see it sent as a `blur`
+command in the fake Fabric's `commands`. There is no software keyboard concept on the web in the
+same shape; `Keyboard` is a native-only service. Called on the web all the same, `dismiss()` blurs
+a focused `text-input` and leaves the focus on anything else, such as the button that was clicked.
 
 ## Reference
 

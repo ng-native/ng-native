@@ -46,23 +46,26 @@ import {
   NavigationEnd,
   NavigationError,
   PRIMARY_OUTLET,
+  ROUTER_CONFIGURATION,
   Router,
   createUrlTreeFromSnapshot,
+  type ActivatedRouteSnapshot,
   type Data,
   type RouterOutletContract,
 } from '@angular/router';
 import { Location, PlatformLocation } from '@angular/common';
-import { NavigationBar, SCREEN_IN_FRONT, StatusBar } from '@ng-native/device';
+import { NavigationBar, OS_VERSION, SCREEN_IN_FRONT, StatusBar } from '@ng-native/device';
 import { bindRouteInputs } from './bind-route-inputs.ts';
-import { NativeBack, isShowing } from './native-back.ts';
+import { NativeBack, isShowing, restoreSnapshot } from './native-back.ts';
 import { navigationIntent, type NativeIntent } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
 import { PRESENTED, withoutPresented } from './presented-route.ts';
+import { poppingTo } from './popping-to.ts';
 import { markScreenRoute } from './tab-routes.ts';
 import { IN_TAB } from './in-tab.ts';
 import { ownHost } from './own-host.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
-import { HostEngine, type EngineNode } from '@ng-native/fabric';
+import { HostEngine, nativePlatform, type EngineNode } from '@ng-native/fabric';
 import type { ScreenPresentation } from './screen-presentation.ts';
 import { ActivityState } from './screens.ts';
 
@@ -77,10 +80,24 @@ interface StackEntry {
   unbind: () => void;
   /** How the screen was put on screen, for a push from it to follow. */
   presentation?: ScreenPresentation;
+  /** The history entries putting it on screen added: none where it skipped or replaced one. */
+  entries?: 0 | 1;
   /** The navigation that put this screen on the stack, until that navigation ends. */
   activatedIn?: number;
   /** The navigation that covered this screen, until that navigation ends. */
   detachedIn?: number;
+  /**
+   * The router's context for this outlet, and the route's snapshot, as the last navigation to cover
+   * this screen found them. One that fails puts them back: the router changes both on the way, and
+   * puts back only its own state.
+   */
+  covered?: {
+    navigation: number;
+    children: ChildrenOutletContexts;
+    snapshot: ActivatedRouteSnapshot;
+    /** The url the app showed before that navigation, whose history entry is this screen's. */
+    url: string | undefined;
+  };
   /** Whether this screen is the one in front, for what it holds: see `SCREEN_IN_FRONT`. */
   inFront: WritableSignal<boolean>;
 }
@@ -94,6 +111,25 @@ interface StackEntry {
  * push inside that stack must see it as a pushed screen, not one to present over.
  */
 const presented = new WeakMap<object, number>();
+
+/**
+ * The history entries, per router, that the navigation in flight took screens off for. A
+ * navigation back to a screen holding a stack of its own drops screens in both stacks, and the
+ * rewind to its entry goes back over all of them, once.
+ */
+const rewinds = new WeakMap<object, Rewind>();
+
+interface Rewind {
+  navigation: number;
+  steps: number;
+  /** The url the screen gone back to showed when it was covered, if known. */
+  url?: string;
+}
+
+/** The rewind a router's navigation in flight is waiting to make, if any. Exposed for tests. */
+export function pendingRewind(router: object): Rewind | undefined {
+  return rewinds.get(router);
+}
 
 /** What every screen needs to fill the stack, the same five keys RNSScreen itself expects. */
 const FILL = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 } as const;
@@ -161,6 +197,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * `RouterOutletContract` directly, which is how its own tests drive it.
    */
   private readonly router = inject(Router, { optional: true });
+  private readonly routerConfig = inject(ROUTER_CONFIGURATION, { optional: true });
   /** For a refused back to reach the screen as native's own report would. */
   private readonly engine = inject(HostEngine, { optional: true });
 
@@ -172,6 +209,8 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private held: { own: unknown } | null = null;
   private readonly statusBar = inject(StatusBar);
   private readonly navigationBar = inject(NavigationBar);
+  /** iOS 26 and later, where a screen runs under its navigation bar: see `insetContent`. */
+  private readonly underBar = nativePlatform() === 'ios' && (inject(OS_VERSION) ?? 0) >= 26;
   /** Both bars' claims, as the screens carry them. */
   private readonly systemBars = computed<SystemBarClaim>(() => ({
     ...this.statusBar.forScreens(),
@@ -184,6 +223,17 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * succeeds: one that fails leaves the stack as it was.
    */
   private superseded: { entries: StackEntry[]; navigation: number } | null = null;
+  /**
+   * The screens a navigation back to `kept`, further down, took off the stack, kept until it
+   * succeeds as superseded ones are: one that fails puts them back, and `kept` as it was.
+   */
+  private popped: {
+    navigation: number;
+    entries: StackEntry[];
+    kept: StackEntry;
+    snapshot: ActivatedRouteSnapshot;
+    detachedIn: number | undefined;
+  } | null = null;
 
   protected readonly fill = { flex: 1 };
 
@@ -196,11 +246,8 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     // Android's back button, and `NativeNavigation.back()`. Declining at the bottom of the stack
     // is deliberate: the outlet this one sits in gets its turn, and when none takes it the
     // platform backgrounds the app, which is what a user expects, rather than the app swallowing
-    // the press and appearing stuck.
-    //
-    // Not yet verified on a device: whether react-native-screens' own Android back handling
-    // (`nativeBackButtonDismissalEnabled`) also pops the screen, which would make one press pop
-    // twice. If a back press ever skips a screen on Android, look here first.
+    // the press and appearing stuck. react-native-screens' Android stack leaves the button to JS;
+    // its header's back arrow comes through `onHeaderBack`.
     const back = this.back;
     const unsubscribeBack = back.handle((from) =>
       from === 'button' && this.refusesButton() ? true : this.goBack(),
@@ -220,8 +267,10 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     });
     // Optional for the same reason as the router: the outlet's own tests stand one in without it.
     const navigations = this.router?.events?.subscribe((event) => {
-      if (event instanceof NavigationEnd) this.settle(event.id);
-      else if (event instanceof NavigationError) this.rollBack(event.id);
+      // A cancel after activation is one the router does not undo: a page it created navigated.
+      if (event instanceof NavigationEnd || event instanceof NavigationCancel) {
+        this.settle(event.id);
+      } else if (event instanceof NavigationError) this.rollBack(event.id);
     });
 
     const carryAll = (claim: SystemBarClaim) => {
@@ -246,11 +295,12 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       unsubscribeBack();
       unsubscribeStack();
       navigations?.unsubscribe();
-      for (const entry of this.entries) {
+      for (const entry of [...this.entries, ...(this.popped?.entries ?? [])]) {
         entry.unbind();
         entry.ref.destroy();
       }
       this.entries.length = 0;
+      this.popped = null;
       // Only while it is this outlet's: a page kept by the reuse strategy takes its outlets'
       // registrations with it, and gets them back as it is attached, before what was over it goes.
       if (this.parentContexts.getContext(this.name)?.outlet === this) {
@@ -461,6 +511,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       detached: false,
       unbind,
       presentation,
+      entries: this.entriesAdded(),
       activatedIn: navigation,
       inFront,
     });
@@ -485,13 +536,16 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   ): { ref: ComponentRef<unknown>; unbind: () => void } {
     let ref: ComponentRef<unknown> | undefined;
     let unbind: (() => void) | undefined;
+    const header = signal(false);
+    const content = this.insetContent(screen);
     try {
       ref = createComponent(component, {
         environmentInjector,
-        elementInjector: this.outletInjector(route, inFront, screen, outlet),
+        elementInjector: this.outletInjector(route, inFront, screen, header, outlet),
         hostElement: screen as Element,
       });
       this.applicationRef.attachView(ref.hostView);
+      if (content) this.followHeader(content, header, ref.injector);
       // Route params onto inputs before the first change detection, not after: a required input
       // read in the template throws NG0950 if it is still unset when the page first renders.
       unbind = this.bindInputs(ref, route);
@@ -533,6 +587,16 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     if (!entry) throw new Error('[angular-native] outlet is not activated, nothing to detach');
     entry.detached = true;
     entry.detachedIn = this.navigationId();
+    const context = this.parentContexts.getContext(this.name);
+    entry.covered =
+      context && entry.detachedIn !== undefined
+        ? {
+            navigation: entry.detachedIn,
+            children: context.children,
+            snapshot: entry.route.snapshot,
+            url: this.previousUrl(),
+          }
+        : undefined;
     entry.inFront.set(false);
     // `ChangeDetectorRef.detach`, not `ApplicationRef.detachView`. The latter calls
     // `renderDetachView` and pulls the view's nodes out of the tree, which is exactly what we
@@ -566,11 +630,12 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       });
       this.applicationRef.attachView(ref.hostView);
     } else {
-      for (const above of this.entries.splice(index + 1)) this.drop(above);
+      const entry = this.entries[index]!;
+      const above = this.entries.splice(index + 1);
+      if (above.length) this.pop(entry, above);
       if (this.currentIntent()?.stack === 'reset') {
         this.supersede(this.entries.slice(0, index), this.navigationId());
       }
-      const entry = this.entries[index]!;
       entry.detached = false;
       entry.inFront.set(true);
       entry.route = route;
@@ -690,12 +755,113 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     this.superseded = { entries, navigation };
   }
 
+  /**
+   * Take `above` off the stack for a navigation back to `kept`: at once when there is no navigation
+   * to wait for, and otherwise once it has succeeded. They stay on the native stack until then, and
+   * the navigation ends before anything commits, so native sees one change or none.
+   */
+  private pop(kept: StackEntry, above: StackEntry[]): void {
+    this.rewindAfter(above, kept.covered?.url);
+    const navigation = this.navigationId();
+    if (navigation === undefined) {
+      for (const entry of above) this.drop(entry);
+      return;
+    }
+    // The router has moved the route on to the navigation's snapshot already.
+    const snapshot = kept.covered?.snapshot ?? kept.route.snapshot;
+    this.popped = { navigation, entries: above, kept, snapshot, detachedIn: kept.detachedIn };
+  }
+
+  /** Take out for good what a navigation that succeeded popped. */
+  private dropPopped(navigation: number): void {
+    if (this.popped?.navigation !== navigation) return;
+    for (const entry of this.popped.entries) this.drop(entry);
+    this.popped = null;
+  }
+
+  /** Put back what a navigation that failed popped, and the screen it went back to as it was. */
+  private unpop(navigation: number): void {
+    const popped = this.popped;
+    if (popped?.navigation !== navigation) return;
+    this.popped = null;
+    const { kept } = popped;
+    restoreSnapshot(kept.route, popped.snapshot);
+    kept.detached = true;
+    kept.detachedIn = popped.detachedIn;
+    kept.inFront.set(false);
+    kept.ref.hostView.detach();
+    this.entries.push(...popped.entries);
+  }
+
+  /** The history entries the navigation in flight adds: none where it skips or replaces one. */
+  private entriesAdded(): 0 | 1 {
+    const extras = this.router?.getCurrentNavigation()?.extras;
+    return extras?.skipLocationChange || extras?.replaceUrl ? 0 : 1;
+  }
+
+  /**
+   * A navigation the history did not drive went back to a screen kept further down, taking
+   * `dropped` screens off: a back has already moved the history, and a navigation that skips the
+   * location change leaves it where it is. `url` is the one the screen gone back to was showing.
+   */
+  private rewindAfter(dropped: readonly StackEntry[], url: string | undefined): void {
+    const navigation = this.router?.getCurrentNavigation();
+    if (!navigation || navigation.trigger === 'popstate' || navigation.extras.skipLocationChange) {
+      return;
+    }
+    // A router that resolves a cancelled navigation by computing how far to go in history counts
+    // its own entries, and a rewind it did not make would put that count out of step.
+    if (this.routerConfig?.canceledNavigationResolution === 'computed') return;
+    // A screen restored from another outlet has no count here, and is taken to have added one.
+    const added = dropped.reduce((total, entry) => total + (entry.entries ?? 1), 0);
+    const pending = rewinds.get(this.router!);
+    // An outlet inside the screen gone back to activates after the one holding it, so the last
+    // url is the innermost screen's, the one whose entry is furthest back.
+    if (pending?.navigation === navigation.id) {
+      pending.steps += added;
+      pending.url = url;
+    } else {
+      const steps = added + this.entriesAdded();
+      rewinds.set(this.router!, { navigation: navigation.id, steps, url });
+    }
+  }
+
+  /**
+   * Back to the kept screen's own entry, when it is the one that far back, with no popstate: the
+   * router is there already. The entry keeps its state, the screen's presentation with it, and
+   * takes the navigation's id, as the router writes one into the entry a back reaches. A stack in
+   * a tab whose history went through another tab has that tab's entry there, and is left as it is.
+   *
+   * A navigation to another page under the kept screen, such as a step in a stack inside it, finds
+   * the url that screen was showing there instead. The page's own entry stays, and the entries of
+   * the screens taken off between the two go.
+   */
+  private rewind({ navigation, steps, url }: Rewind): void {
+    const history = this.history;
+    if (!(history instanceof NativePlatformLocation)) return;
+    const behind = this.historyUrl(-steps);
+    if (behind !== this.router!.url) {
+      if (url !== undefined && behind === url) history.ɵdropBehind(steps - 1);
+      return;
+    }
+    history.ɵrewind(steps);
+    const state = history.getState();
+    const own = state && typeof state === 'object' ? state : {};
+    history.replaceState({ ...own, navigationId: navigation }, '', history.ɵurlAt(0)!);
+  }
+
   /** A navigation succeeded: what it superseded goes, and what it did is no longer undoable. */
   private settle(navigation: number): void {
+    const pending = this.router && rewinds.get(this.router);
+    if (pending?.navigation === navigation) {
+      rewinds.delete(this.router!);
+      this.rewind(pending);
+    }
     if (this.superseded?.navigation === navigation) {
       for (const entry of this.superseded.entries) this.remove(entry);
       this.superseded = null;
     }
+    this.dropPopped(navigation);
     for (const entry of this.entries) {
       if (entry.activatedIn === navigation) entry.activatedIn = undefined;
       if (entry.detachedIn === navigation) entry.detachedIn = undefined;
@@ -710,11 +876,27 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * stack inside it. That one goes, with everything in it, and the screen it covered carries on.
    */
   private rollBack(navigation: number): void {
+    if (this.router && rewinds.get(this.router)?.navigation === navigation) {
+      rewinds.delete(this.router);
+    }
     if (this.superseded?.navigation === navigation) this.superseded = null;
+    this.unpop(navigation);
     for (const entry of this.entries.filter((candidate) => candidate.activatedIn === navigation)) {
       this.remove(entry);
     }
     this.uncover(navigation);
+    this.recover(navigation);
+  }
+
+  /**
+   * Give the router's context for this outlet back the outlet contexts of the top screen, which the
+   * navigation took when it covered that screen: the next navigation finds the outlets inside the
+   * screen through them.
+   */
+  private recover(navigation: number): void {
+    const covered = this.top?.covered;
+    const context = this.parentContexts.getContext(this.name);
+    if (context && covered?.navigation === navigation) context.children = covered.children;
   }
 
   /**
@@ -741,6 +923,41 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     }
   }
 
+  /**
+   * On iOS 26 and later, the view a page's content commits in, as react-native-screens'
+   * `ScreenStackItem` wraps it in its `SafeAreaView` there. From 4.30 the screen runs under the
+   * navigation bar whether the bar is opaque or not
+   * (`+[RNSScreenStackHeaderConfig screensExtendUnderOpaqueNavigationBar]`), and this view insets
+   * the content below an opaque one. Before 4.30 the screen starts below such a bar, its safe area
+   * is zero at the top, and the view insets by nothing. Null elsewhere: the content commits
+   * straight into the screen.
+   */
+  private insetContent(screen: unknown): EngineNode | null {
+    if (!this.underBar) return null;
+    const content = ownHost(this.renderer.createElement('screen-content')) as EngineNode;
+    this.renderer.appendChild(screen, content);
+    (screen as EngineNode).contentView = content;
+    return content;
+  }
+
+  /**
+   * The top edge while the page's header is shown and not translucent, which a large title on iOS
+   * is, and no edge otherwise, as `getSafeAreaEdges` in `ScreenStackItem` chooses. The view stays
+   * when the header changes, so the content is not made again. Native takes all four edges.
+   */
+  private followHeader(content: EngineNode, header: () => boolean, injector: Injector): void {
+    effect(
+      () =>
+        this.renderer.setProperty(content, 'edges', {
+          top: header(),
+          right: false,
+          bottom: false,
+          left: false,
+        }),
+      { injector },
+    );
+  }
+
   private createScreen(
     presentation?: ScreenPresentation,
     dismissed = (count: number) => this.onNativeDismiss(count),
@@ -761,6 +978,11 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       (event: { nativeEvent?: { dismissCount?: number } }) =>
         dismissed(event?.nativeEvent?.dismissCount ?? 1),
     );
+    // Android's header back arrow pops the screen natively unless this is off, and then it ignores
+    // `preventNativeDismiss`, as its Back button does. Off, it is sent here instead, and goes the
+    // way Back does: react-navigation's native stack turns it off for the same reason.
+    this.renderer.setProperty(screen, 'nativeBackButtonDismissalEnabled', false);
+    this.renderer.listen(screen, 'headerBackButtonClicked', () => this.onHeaderBack(screen));
     // Every key is a prop `RNSScreen` already declares, spelled the way the codegen spec spells
     // it, so this forwards rather than translates. Set before the screen joins the stack: the
     // native side reads the presentation as it mounts.
@@ -831,6 +1053,22 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private refusesButton(): boolean {
     if (this.entries.length < 2 || !this.isShowing()) return false;
     return this.refuseBack(this.top!.screen);
+  }
+
+  /**
+   * Android's header back arrow on `screen`: refused where the screen refuses, as Back is, and
+   * otherwise a step back, or the presented page dismissed when the screen is that page's.
+   * react-native-screens sends the arrow of a stack's first screen on the screen the stack sits
+   * in, which holds the top screen's refusal for it.
+   */
+  private onHeaderBack(screen: unknown): void {
+    if (screen === this.presentedPage?.screen) {
+      if (!this.refuseBack(screen)) this.dismissPresentedPage();
+      return;
+    }
+    // A tab behind keeps its top screen, but nobody can tap its arrow: like Back, it is not asked.
+    if (screen !== this.top?.screen || !this.isShowing()) return;
+    if (!this.refuseBack(screen)) this.goBack();
   }
 
   /** Refuses Android's Back for a screen that sets `preventNativeDismiss`, and tells its page. */
@@ -919,7 +1157,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       this.location.historyGo(-steps);
       return;
     }
-    void this.router!.navigateByUrl(url, { replaceUrl: true });
+    void this.navigateDownTo(below!);
   }
 
   /**
@@ -944,7 +1182,20 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       this.location.historyGo(-steps);
       return arrived;
     }
-    return this.router!.navigateByUrl(url, { replaceUrl: true });
+    return this.navigateDownTo(this.entries[index]!);
+  }
+
+  /**
+   * Send the router to `entry` by a navigation that replaces the entry, for a pop the history
+   * behind cannot make. With the same url on the stack twice, the reuse strategy is told which of
+   * the screens at it this is.
+   */
+  private navigateDownTo(entry: StackEntry): Promise<boolean> {
+    const router = this.router!;
+    poppingTo.set(router, entry.ref);
+    return router.navigateByUrl(this.urlOf(entry), { replaceUrl: true }).finally(() => {
+      if (poppingTo.get(router) === entry.ref) poppingTo.delete(router);
+    });
   }
 
   /** Whether the navigation that happens next succeeds. */
@@ -958,6 +1209,12 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
         events.unsubscribe();
       });
     });
+  }
+
+  /** The url the app showed before the navigation in flight, as the router writes it. */
+  private previousUrl(): string | undefined {
+    const previous = this.router?.getCurrentNavigation()?.previousNavigation?.finalUrl;
+    return previous && this.router!.serializeUrl(previous);
   }
 
   /** The url a screen was showing when it was covered, rebuilt from its own route snapshot. */
@@ -991,6 +1248,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     route: ActivatedRoute,
     inFront: WritableSignal<boolean>,
     screen: unknown,
+    header: WritableSignal<boolean>,
     outlet = this.name,
   ): Injector {
     const outer = this.injector.get(SCREEN_IN_FRONT);
@@ -1006,7 +1264,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
           } satisfies HoldingScreen,
         },
         { provide: ActivatedRoute, useValue: route },
-        { provide: SCREEN_HEADER, useValue: signal(false) },
+        { provide: SCREEN_HEADER, useValue: header },
         {
           provide: ChildrenOutletContexts,
           useValue: this.parentContexts.getOrCreateContext(outlet).children,

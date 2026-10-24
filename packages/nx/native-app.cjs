@@ -13,8 +13,9 @@
  *   import a library at all: Metro reports `Cannot resolve @org/ui`.
  * - `tsconfig.json` also extends the workspace's `tsconfig.base.json` when there is one, which is
  *   where those aliases live, and puts back the Expo settings the workspace's base overrides.
- * - `vitest.config.mts` adds `nxViteTsPaths` when the workspace has `@nx/vite`, for the same
- *   aliases, which Vitest does not read from tsconfig either.
+ * - `vitest.config.mts` adds `vite-tsconfig-paths` when the workspace has path aliases, for the
+ *   same aliases, which Vitest does not read from tsconfig either. It is what Nx 24 writes in its
+ *   own Vite configs: `nxViteTsPaths` from `@nx/vite` is an inert stub there.
  *
  * What does not depend on Nx, the dependencies, `app.json` and bundle identifier among them, is
  * `@ng-native/migrate/native-app.cjs`, which `@ng-native/schematics` builds its apps from too.
@@ -33,10 +34,10 @@ const { dependencies, devDependencies, accepted } = shared;
  */
 const expoCompanions = {
   'react-dom': dependencies.react,
-  '@expo/cli': '^57.0.27',
+  '@expo/cli': '^58.1.14',
   '@babel/runtime': '^7.20.0',
   '@babel/core': devDependencies['@babel/core'],
-  '@expo/metro': '~56.0.2',
+  '@expo/metro': '~58.0.0',
 };
 
 /**
@@ -98,13 +99,13 @@ function tsconfig(workspaceBase, conditions = []) {
   const customConditions = ['react-native', ...conditions.filter((c) => c !== 'react-native')];
   if (!workspaceBase) {
     if (customConditions.length > 1) compilerOptions.customConditions = customConditions;
-    return { extends: 'expo/tsconfig.base', compilerOptions, angularCompilerOptions };
+    return { extends: 'expo/tsconfig.base.json', compilerOptions, angularCompilerOptions };
   }
   // The workspace's base is written for a web build or for emitting declarations, and wins over
   // Expo's where they overlap. These are Expo's, restored: without `DOM` and `ESNext` the framework
   // packages' own source, which the app compiles, fails to typecheck.
   return {
-    extends: ['expo/tsconfig.base', workspaceBase],
+    extends: ['expo/tsconfig.base.json', workspaceBase],
     compilerOptions: {
       ...compilerOptions,
       noEmit: true,
@@ -122,7 +123,7 @@ function tsconfig(workspaceBase, conditions = []) {
 }
 
 /** The `@ng-native` packages with entry points beside their main one, each published in `dist`. */
-const WITH_ENTRY_POINTS = ['components', 'expo', 'platform', 'web'];
+const WITH_ENTRY_POINTS = ['components', 'expo', 'platform', 'web', 'web-compat'];
 
 /** `nx typecheck` in a workspace whose libraries are the package manager's links. */
 const TYPECHECK_ONE_COPY = TYPECHECK.replace('tsconfig.json', 'tsconfig.typecheck.json');
@@ -153,11 +154,21 @@ function vitestConfig(withPaths) {
   return template
     .replace(
       "import { defineConfig } from 'vitest/config';",
-      "import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';\n" +
+      "import tsconfigPaths from 'vite-tsconfig-paths';\n" +
         "import { defineConfig } from 'vitest/config';",
     )
-    .replace('plugins: [ngNative()],', 'plugins: [nxViteTsPaths(), ngNative()],');
+    .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],');
 }
+
+/**
+ * What `vitestConfig(true)` imports, at the range Nx 24 adds for its own Vite configs, and Vite at
+ * the range `@ng-native/testing` peers on. Both peer on Vite optionally, so npm installs it for
+ * neither, and an integrated workspace from the `angular-monorepo` preset may have none at its root.
+ */
+const vitestPathsDependencies = {
+  'vite-tsconfig-paths': '^5.1.4',
+  vite: '^6.0.0 || ^7.0.0 || ^8.0.0',
+};
 
 /**
  * The ranges a workspace package's `package.json` lists: the root's own where everything it can
@@ -195,6 +206,7 @@ module.exports = {
   tsconfig,
   typecheckTsconfig,
   vitestConfig,
+  vitestPathsDependencies,
   reuseRootRanges,
   expoCompanions,
 };

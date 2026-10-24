@@ -2,12 +2,21 @@
  * What a library's HTML element starts as before any stylesheet, as a browser's own stylesheet
  * has it: sized `content-box`, a block where HTML has one, and a button or a select sized whole.
  * Only in an app that asked for the package, only for HTML's elements, and under every style an
- * app or a library writes.
+ * app or a library writes. And as a browser lays it out: `static`, so an absolute element is
+ * placed against the nearest one that says `relative`; a flex item that gives up room down to
+ * its content; and a button's label in the middle of it.
  */
 import assert from 'node:assert/strict';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, inject } from '@angular/core';
-import { cleanup, render, screen, settle, type FakeFabricNode } from '@ng-native/testing';
+import {
+  cleanup,
+  compileCss,
+  render,
+  screen,
+  settle,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 /** What a library sees of an element: loosely typed, as its own code would be against the DOM. */
@@ -210,5 +219,180 @@ describe('the same template in an app that did not ask', () => {
       table: { testID: 'table' },
       input: { testID: 'input' },
     });
+  });
+});
+
+@Component({ selector: 'x-chip', template: '<ng-content />' })
+class Chip {}
+
+@Component({
+  selector: 'x-laid',
+  imports: [Chip],
+  template: `
+    <div testID="div"><span testID="span">Words</span></div>
+    <x-chip testID="custom">Chip</x-chip>
+    <div style="display: flex; height: 50px">
+      <div testID="column-item">Item</div>
+      <div testID="column-unlimited" style="min-height: 0">Item</div>
+    </div>
+    <div testID="row" style="display: flex; flex-direction: row">
+      <div testID="item" style="width: 400px">Item</div>
+      <x-chip testID="custom-item" style="width: 400px">Chip</x-chip>
+      <view testID="view-item" style="width: 400px"></view>
+    </div>
+    <div testID="placed" style="position: relative"></div>
+    <view testID="view"></view>
+    <button testID="button">Save</button>
+    <button testID="laid-out">Laid out</button>
+  `,
+})
+class Laid {}
+
+const props = (id: string) => screen.getByTestId(id).props as Record<string, unknown>;
+const page = async (providers = [provideWebCompat()]) => {
+  await render(Laid, {
+    providers,
+    globalStyles: compileCss(
+      '[testID="laid-out"] { display: flex } .filtered { filter: brightness(1.2) } .unfiltered { filter: none }',
+      'global',
+    ),
+  });
+  await settle();
+};
+
+describe("an HTML element's start under web-compat, as a browser lays it out", () => {
+  // A library's custom element, named to the build.
+  const globals = globalThis as { ɵngNativeBrowserElements?: Set<string> };
+  beforeEach(() => void (globals.ɵngNativeBrowserElements = new Set(['x-chip'])));
+  afterEach(() => void delete globals.ɵngNativeBrowserElements);
+
+  it('is static, an HTML element and a custom element alike, as a browser has it', async () => {
+    await page();
+    for (const id of ['div', 'span', 'custom', 'button']) {
+      assert.equal(props(id)['position'], 'static', id);
+    }
+  });
+
+  it('is the box an absolute element in it is placed against where it is transformed', async () => {
+    // A transform makes a box the containing block of what is absolute in it, static or not: a
+    // panel that scales in holds its own absolute arrow. Native knows only positions.
+    await page();
+    const document = (globalThis as { document?: any }).document;
+    const panel = document.querySelector('[testID="div"]');
+    panel.style.transform = 'translateX(0)';
+    await settle();
+    assert.equal(props('div')['position'], 'relative');
+    // And not moved by an inset, which a browser takes for nothing on a static box.
+    panel.style.top = '10px';
+    await settle();
+    assert.equal(props('div')['top'] ?? undefined, undefined, 'not moved by its top');
+    panel.style.transform = 'none';
+    await settle();
+    assert.equal(props('div')['position'], 'static', 'and static again with none');
+  });
+
+  it('is the box an absolute element in it is placed against for what else CSS makes one', async () => {
+    // A filter, a backdrop filter, a perspective, a containment of layout or paint, and a
+    // will-change that names one of those, a transform or a position, as Chrome has it.
+    await page();
+    const document = (globalThis as { document?: any }).document;
+    const panel = document.querySelector('[testID="div"]');
+    // A filter from a sheet, and below from element.style.
+    panel.classList.add('filtered');
+    panel.style.top = '10px';
+    await settle();
+    assert.equal(props('div')['position'], 'relative', 'filter: brightness(1.2)');
+    assert.equal(props('div')['top'] ?? undefined, undefined, 'filtered, not moved by its top');
+    panel.classList.replace('filtered', 'unfiltered');
+    await settle();
+    assert.equal(props('div')['position'], 'static', 'static again with filter: none');
+    panel.classList.remove('unfiltered');
+    panel.style.top = '';
+    const cases: [string, string, string][] = [
+      ['filter', 'brightness(1.2)', 'none'],
+      ['backdropFilter', 'blur(2px)', 'none'],
+      ['perspective', '100px', 'none'],
+      ['contain', 'paint', 'none'],
+      ['contain', 'layout style', 'size'],
+      ['contain', 'strict', 'none'],
+      ['contain', 'content', 'inline-size'],
+      ['willChange', 'transform', 'auto'],
+      ['willChange', 'opacity, filter', 'opacity'],
+      ['willChange', 'perspective', 'scroll-position'],
+      ['willChange', 'backdrop-filter', 'auto'],
+      ['willChange', 'contain', 'auto'],
+      ['willChange', 'translate', 'auto'],
+      ['willChange', 'position', 'auto'],
+    ];
+    for (const [key, value, none] of cases) {
+      const name = `${key}: ${value}`;
+      panel.style[key] = value;
+      panel.style.top = '10px';
+      await settle();
+      assert.equal(props('div')['position'], 'relative', name);
+      assert.equal(props('div')['top'] ?? undefined, undefined, `${name}, not moved by its top`);
+      panel.style[key] = none;
+      await settle();
+      assert.equal(props('div')['position'], 'static', `static again with ${key}: ${none}`);
+      panel.style[key] = '';
+      panel.style.top = '';
+      await settle();
+    }
+  });
+
+  it("leaves a position the element is given, and the engine's own views", async () => {
+    await page();
+    assert.equal(props('placed')['position'], 'relative');
+    assert.equal(props('view')['position'] ?? 'relative', 'relative');
+  });
+
+  it('gives up room as a flex item wider than its row, as a browser has it', async () => {
+    // Its content is narrower than its width, so its automatic minimum leaves it free to shrink.
+    await page();
+    for (const id of ['item', 'custom-item']) {
+      assert.equal(props(id)['flexShrink'], 1, id);
+    }
+    assert.equal(props('view-item')['flexShrink'] ?? 0, 0, 'and a native view keeps its size');
+  });
+
+  it('gives up no room in the body, which is a block as a browser has it', async () => {
+    // What a library puts in the body is in its flow, and a block's flow shrinks nothing: two
+    // boxes there were squeezed to no height in a window that had room for them.
+    await page();
+    const document = (globalThis as { document?: any }).document;
+    const box = document.createElement('div');
+    box.style.height = '100px';
+    document.body.appendChild(box);
+    await settle();
+    // As committed: held unseen for a frame, it is in no query yet.
+    assert.equal(box.committed?.props['flexShrink'] ?? 0, 0);
+  });
+
+  it('stops at its content as it gives up room, which min-height: 0 lets it past', async () => {
+    // Down a column too short for both, a browser shrinks neither below its words, whose minimum
+    // is `min-height: auto`; one given a minimum of nothing gives up its room.
+    await page();
+    assert.equal(props('column-item')['flexShrink'], 0, 'kept at its content');
+    assert.equal(props('column-unlimited')['flexShrink'], 1, 'free to shrink');
+  });
+
+  it("has a button's label in the middle of it, until a stylesheet lays the button out", async () => {
+    // A browser's button is an inline block with `align-content: center`: taller than its
+    // label, the label is in the middle. One a stylesheet makes a flex box is laid out as it says.
+    await page();
+    assert.equal(props('button')['justifyContent'], 'center');
+    assert.equal(props('laid-out')['justifyContent'] ?? null, null);
+  });
+
+  it('is none of it in an app that did not ask for the package', async () => {
+    const { error } = console;
+    console.error = () => {};
+    try {
+      await page([]);
+    } finally {
+      console.error = error;
+    }
+    assert.equal(props('div')['position'] ?? undefined, undefined);
+    assert.equal(props('item')['flexShrink'] ?? 0, 0);
   });
 });

@@ -23,6 +23,10 @@ const collection = path.resolve(import.meta.dirname, '../collection.json');
 // The framework packages are released in lockstep with this one, at its version.
 const { version } = require('../package.json') as { version: string };
 const template = path.resolve(import.meta.dirname, '../../../template');
+const native = require('../native-app.cjs') as {
+  ESLINT_CONFIG: string;
+  lintDevDependencies: Record<string, string>;
+};
 
 // Through the manifest: the package's `exports` map would resolve `collection.json` to a `.js`.
 const angular = new SchematicTestRunner(
@@ -70,6 +74,12 @@ describe('ng add', () => {
     assert.match(tree.readContent('projects/native/src/main.ts'), /^import 'expo';$/m);
   });
 
+  it('stops watching conditions in main.ts as the app is destroyed', () => {
+    const main = tree.readContent('projects/native/src/main.ts');
+    assert.match(main, /^ {2}const stopWatching = watchConditions\(app\.engine\);$/m);
+    assert.match(main, /^ {2}app\.applicationRef\.onDestroy\(stopWatching\);$/m);
+  });
+
   it('writes an AGENTS.md with the commands this workspace runs, and a CLAUDE.md that reads it', () => {
     const agents = tree.readContent('projects/native/AGENTS.md');
     assert.match(agents, /^ng run native:run-ios +# the iOS simulator$/m);
@@ -83,9 +93,9 @@ describe('ng add', () => {
     // offers to install into the project if expo, react or react-native is missing.
     const manifest = json(tree, 'projects/native/package.json');
     assert.equal(manifest.main, 'src/main.ts');
-    assert.equal(manifest.dependencies['react-native'], '0.86.3');
-    assert.equal(manifest.dependencies['react-native-safe-area-context'], '~5.7.0');
-    assert.equal(manifest.dependencies['expo-status-bar'], '~57.0.1');
+    assert.equal(manifest.dependencies['react-native'], '0.88.0');
+    assert.equal(manifest.dependencies['react-native-safe-area-context'], '~5.10.1');
+    assert.equal(manifest.dependencies['expo-status-bar'], '~58.0.3');
   });
 
   it('registers the project with targets that run Expo and the tests', () => {
@@ -112,6 +122,39 @@ describe('ng add', () => {
     });
   });
 
+  it('adds no linting unless asked', () => {
+    const project = json(tree, 'angular.json').projects.native;
+    assert.equal(project.architect.lint, undefined);
+    assert.equal(tree.exists('projects/native/eslint.config.mjs'), false);
+    const { devDependencies } = json(tree, 'package.json');
+    for (const name of Object.keys(native.lintDevDependencies)) {
+      assert.equal(devDependencies[name], undefined, name);
+    }
+    const agents = tree.readContent('projects/native/AGENTS.md');
+    assert.doesNotMatch(agents, /ng lint/);
+    assert.match(agents, /Run `ng test native` after a change; it is fast/);
+  });
+
+  it("with --linter=eslint, lints on angular-eslint's builder with the project's own config", async () => {
+    const linted = await runner.runSchematic('ng-add', { linter: 'eslint' }, await webWorkspace());
+    const project = json(linted, 'angular.json').projects.native;
+    assert.deepEqual(project.architect.lint, {
+      builder: '@angular-eslint/builder:lint',
+      options: {
+        eslintConfig: 'projects/native/eslint.config.mjs',
+        lintFilePatterns: ['projects/native/**/*.ts', 'projects/native/**/*.html'],
+      },
+    });
+    assert.equal(linted.readContent('projects/native/eslint.config.mjs'), native.ESLINT_CONFIG);
+    const { devDependencies } = json(linted, 'package.json');
+    for (const [name, range] of Object.entries(native.lintDevDependencies)) {
+      assert.equal(devDependencies[name], range, name);
+    }
+    const agents = linted.readContent('projects/native/AGENTS.md');
+    assert.match(agents, /^ng lint native +# ESLint/m);
+    assert.match(agents, /Run `ng test native` and `ng lint native` after a change/);
+  });
+
   it("routes ng generate in the project to this collection first, then Angular's", () => {
     const project = json(tree, 'angular.json').projects.native;
     assert.deepEqual(project.cli.schematicCollections, [
@@ -133,8 +176,8 @@ describe('ng add', () => {
 
   it("adds the app's dependencies and keeps every version the workspace already had", async () => {
     const manifest = json(tree, 'package.json');
-    assert.equal(manifest.dependencies.expo, '~57.0.26');
-    assert.equal(manifest.dependencies['react-native'], '0.86.3');
+    assert.equal(manifest.dependencies.expo, '~58.0.16');
+    assert.equal(manifest.dependencies['react-native'], '0.88.0');
     assert.equal(manifest.dependencies['@ng-native/platform'], version);
     assert.equal(manifest.devDependencies['@ng-native/testing'], version);
 

@@ -1,5 +1,10 @@
 import { Component, input, signal } from '@angular/core';
-import { UiBottomSheet, type UiPresentationDetent } from '../../expo/src/expo-ui-components.ts';
+import {
+  UiBottomSheet,
+  type UiBottomSheetBackgroundInteraction,
+  type UiModifier,
+  type UiPresentationDetent,
+} from '../../expo/src/expo-ui-components.ts';
 
 // The class as this file's templates have it, for a test to provide its `SOURCE`.
 export { UiBottomSheet };
@@ -28,6 +33,9 @@ export class SheetRow {
         [detents]="detents()"
         [showDragIndicator]="grabber()"
         [backgroundColor]="background()"
+        [interactiveDismissDisabled]="undismissable()"
+        [backgroundInteraction]="interaction()"
+        [modifiers]="modifiers()"
         (dismissed)="dismissed.set(dismissed() + 1)"
       >
         <sheet-row testID="first" label="One" />
@@ -43,6 +51,9 @@ export class ExpoUiBottomSheetFixture {
   readonly detents = signal<readonly UiPresentationDetent[] | undefined>(undefined);
   readonly second = signal('Two');
   readonly background = signal<string | undefined>(undefined);
+  readonly undismissable = signal(false);
+  readonly interaction = signal<UiBottomSheetBackgroundInteraction | undefined>(undefined);
+  readonly modifiers = signal<readonly UiModifier[] | undefined>(undefined);
   readonly dismissed = signal(0);
   /** The sheet's native events, as a listener around it hears them. */
   readonly heard = signal(0);
