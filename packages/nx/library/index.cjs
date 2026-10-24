@@ -328,10 +328,9 @@ async function library(tree, options) {
   });
 
   await addImports(tree, directory, angular ? {} : typecheckDependencies);
-  // `nxViteTsPaths()`, which the Vitest config uses to reach the workspace's other libraries.
+  // `tsconfigPaths()`, which the Vitest config uses to reach the workspace's other libraries.
   if (aliases) {
-    const vite = { '@nx/vite': workspaceNxVersion(tree) };
-    addDependenciesToPackageJson(tree, {}, vite, 'package.json', true);
+    addDependenciesToPackageJson(tree, {}, native.vitestPathsDependencies, 'package.json', true);
   }
 
   if (!options.skipFormat) await formatFiles(tree);

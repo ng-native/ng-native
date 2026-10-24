@@ -41,13 +41,19 @@ describe('the generated app', () => {
     assert.equal(native.vitestConfig(false), templateFile('vitest.config.mts'));
   });
 
-  it("adds Nx's tsconfig path resolution to it when there are", () => {
-    const config = native.vitestConfig(true);
-    assert.match(
-      config,
-      /import \{ nxViteTsPaths \} from '@nx\/vite\/plugins\/nx-tsconfig-paths\.plugin';/,
+  it("adds Vite at the range @ng-native/testing peers on, as the tests' config imports it", () => {
+    const testing = JSON.parse(
+      readFileSync(path.resolve(import.meta.dirname, '../testing/package.json'), 'utf8'),
     );
-    assert.match(config, /plugins: \[nxViteTsPaths\(\), ngNative\(\)\],/);
+    assert.equal(native.vitestPathsDependencies.vite, testing.peerDependencies.vite);
+  });
+
+  it('adds vite-tsconfig-paths to it when there are, as Nx 24 writes its own Vite configs', () => {
+    // nxViteTsPaths from @nx/vite is an inert stub from Nx 24: an app's test importing a library
+    // failed with "Cannot find package '@org/ui'".
+    const config = native.vitestConfig(true);
+    assert.match(config, /import tsconfigPaths from 'vite-tsconfig-paths';/);
+    assert.match(config, /plugins: \[tsconfigPaths\(\), ngNative\(\)\],/);
   });
 
   it("applies the template's Metro preset around withNxMetro, so it can wrap Nx's resolver", () => {

@@ -1,7 +1,7 @@
 {
   "generators": {
     "sync-app-versions": {
-      "version": "0.17.1",
+      "version": "0.18.0",
       "description": "Move the @ng-native packages each project's own package.json lists to the new version.",
       "implementation": "./migrations/run.cjs#sync-app-versions"
     },
@@ -44,6 +44,11 @@
       "version": "0.17.2",
       "description": "Keep what watchConditions returns in each app's entry point and stop it as the app is destroyed.",
       "implementation": "./migrations/run.cjs#stop-watching-conditions"
+    },
+    "vitest-tsconfig-paths": {
+      "version": "0.18.1",
+      "description": "Resolve the workspace's path aliases in Nx Vitest configs with vite-tsconfig-paths, as nxViteTsPaths does nothing from Nx 24.",
+      "implementation": "./migrations/run.cjs#vitest-tsconfig-paths"
     }
   }
 }

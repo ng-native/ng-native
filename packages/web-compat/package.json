@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/web-compat",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "description": "Opt-in DOM compatibility for Angular Native, so component libraries written for the browser can render as native views.",
   "keywords": [
     "angular",

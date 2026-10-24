@@ -1,7 +1,0 @@
----
-__default__: patch
----
-
-New package @ng-native/eslint-plugin reports what compiles but does nothing on a device: a DOM event such as (click) or (keydown) on an HTML element or an element from @ng-native/components, a window, document or body listener, the same in a host object or a @HostListener, Angular's routerLink, an HTML control such as `<button>`, `<input>` or `<img>`, an element name with a capital such as `<View>`, a DOM member read off a nativeElement, an import from @angular/platform-browser, @angular/animations or zone.js, provideZoneChangeDetection, provideHttpClient, and a read of document, localStorage, sessionStorage, indexedDB, location, history, matchMedia or getComputedStyle, directly or through window or globalThis. Each report names what to use instead, and a file that starts with 'use dom' is skipped. eslint --fix renames (click) to (press) on a pressable and an element name to its lowercase one, and the editor offers (changeText) for (input) on a text input and provideNativeHttpClient for provideHttpClient. Its recommended config lints .ts and .html files through angular-eslint.
-
-The @ng-native/nx application generator and @ng-native/schematics' ng add and application schematic take --linter=eslint, which adds an eslint.config.mjs with the recommended config, the plugin and what it runs on, and an nx lint or ng lint target. The default, --linter=none, adds none of them, and the template is unchanged.

@@ -2233,12 +2233,47 @@ function addCustomWord(name, parts, out, context) {
   translate(name, word, out, context);
 }
 
-/** Whether a raw value is a `text-shadow` with `platform-color()` written in it. */
-const writtenPlatformShadow = (value) =>
-  value?.propertyId?.property === 'text-shadow' &&
+/**
+ * The shorthands whose colour part is a prop of its own, which takes `platform-color()` as `color`
+ * does. A `box-shadow`'s colour is not one, and refuses it.
+ */
+const NAMED_COLOUR_SHORTHAND =
+  /^(text-shadow|border(-(top|right|bottom|left|inline|block)(-(start|end))?)?|outline|text-decoration)$/;
+
+/** Whether a raw value is one of those shorthands with `platform-color()` written in it. */
+const writtenPlatformColour = (value) =>
+  NAMED_COLOUR_SHORTHAND.test(value?.propertyId?.property ?? '') &&
   (value.value ?? []).some(
     (part) => part?.type === 'function' && part.value?.name === PLATFORM_COLOR,
   );
+
+/** The styles a text decoration's line is drawn in. */
+const DECORATION_STYLES = new Set(['solid', 'double', 'dotted', 'dashed', 'wavy']);
+
+/** One term of a written-out `text-decoration`, into the lines, style and colour it sets. */
+function decorationTerm(part, found, context) {
+  const word = part.type === 'token' && part.value?.type === 'ident' && part.value.value;
+  if (part.type === 'function' && part.value?.name === PLATFORM_COLOR) {
+    found.color = platformColor(part, context);
+  } else if (DECORATION_STYLES.has(word)) found.style = word;
+  else if (word === 'none') return;
+  else if (word) found.line.push(word);
+  else throw new CssUnsupported(`${context}: could not read 'text-decoration'`);
+}
+
+/**
+ * `text-decoration: underline platform-color(link)`, which lightningcss cannot parse, read from its
+ * terms as the shorthand is: lines, a style, solid unless one is written, and the colour, a prop
+ * of its own, which takes the names as `color` does. False for any other property.
+ */
+function writtenTextDecoration(value, out, context) {
+  if (value.propertyId.property !== 'text-decoration') return false;
+  const found = { line: [], style: 'solid', color: undefined };
+  for (const part of meaningful(value.value)) decorationTerm(part, found, context);
+  translate('text-decoration', { line: found.line, style: found.style }, out, context);
+  out.textDecorationColor = found.color;
+  return true;
+}
 
 /**
  * Whether a raw value has nothing in it for the device to settle. One side of a light-dark() may
@@ -2383,11 +2418,15 @@ function addUnparsed(declaration, out, deferred, context) {
     for (const prop of platform.props) out[prop] = platform.value;
     return;
   }
-  // `text-shadow: 0 1px 2px platform-color(link)`, which lightningcss cannot parse: its colour is
-  // a prop of its own, which takes the names as `color` does.
-  if (settledAsWritten(declaration) && !writtenPlatformShadow(declaration.value)) {
-    unparsedValue(declaration.value, out, deferred, context);
-    return;
+  // `text-shadow: 0 1px 2px platform-color(link)` or `border: 1px solid platform-color(link)`,
+  // which lightningcss cannot parse: the colour is a prop of its own, which takes the names as
+  // `color` does.
+  if (settledAsWritten(declaration)) {
+    if (!writtenPlatformColour(declaration.value)) {
+      unparsedValue(declaration.value, out, deferred, context);
+      return;
+    }
+    if (writtenTextDecoration(declaration.value, out, context)) return;
   }
   const property = declaration.value?.propertyId?.property;
   if (animationTimeWithTokens(property, declaration.value.value ?? [], out, context)) return;

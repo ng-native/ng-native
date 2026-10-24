@@ -1284,6 +1284,7 @@ module.exports = {
   CURRENT_COLOUR,
   PER_TURN,
   meaningful,
+  tokenColour,
   commaSeparated,
   arithmeticTree,
   calcLength,
