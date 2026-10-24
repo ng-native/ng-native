@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 const { createTreeWithEmptyWorkspace } = require('@nx/devkit/testing') as {
   createTreeWithEmptyWorkspace: () => Tree;
 };
-const { readJson, updateJson } = require('@nx/devkit') as typeof import('@nx/devkit');
+const { logger, readJson, updateJson } = require('@nx/devkit') as typeof import('@nx/devkit');
 const { application } = require('../application/index.cjs');
 const { nativescript } = require('./index.cjs');
 const { registry } = require('../save-exact.cjs') as {
@@ -74,6 +74,38 @@ describe('the nativescript generator', () => {
       tree.read('apps/mobile/src/main.ts', 'utf-8')!,
       /providers: \[provideNativeScript\(\), provideRouter\(\[\]\)\]/,
     );
+  });
+
+  it('leaves providers it cannot add to alone, and says what to add', async () => {
+    // Adding a second providers key would drop the app's own: the last key wins.
+    const tree = await app();
+    const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    const named = main.replace('processColor,\n', 'processColor,\n    providers: appProviders,\n');
+    tree.write('apps/mobile/src/main.ts', named);
+    const warnings: string[] = [];
+    const warn = logger.warn;
+    logger.warn = (message: string) => warnings.push(message);
+    try {
+      await run(tree);
+    } finally {
+      logger.warn = warn;
+    }
+    assert.equal(tree.read('apps/mobile/src/main.ts', 'utf-8'), named);
+    assert.match(warnings.join('\n'), /add provideNativeScript\(\) to the providers/);
+  });
+
+  it("adds the worklets Expo's SDK bundles: 0.13.0 on 58, 0.10.1 on 57", async () => {
+    const tree = await app();
+    await run(tree);
+    assert.equal(readJson(tree, 'package.json').dependencies['react-native-worklets'], '0.13.0');
+
+    const older = await app();
+    updateJson(older, 'package.json', (manifest) => {
+      manifest.dependencies.expo = '~57.0.26';
+      return manifest;
+    });
+    await run(older);
+    assert.equal(readJson(older, 'package.json').dependencies['react-native-worklets'], '0.10.1');
   });
 
   it('leaves a providers list outside mount alone', async () => {

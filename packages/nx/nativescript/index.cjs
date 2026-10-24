@@ -17,6 +17,7 @@ const {
   installPackagesTask,
   joinPathFragments,
   logger,
+  readJson,
 } = require('@nx/devkit');
 const native = require('../native-app.cjs');
 const { usesWorkspaces } = require('../application/workspaces.cjs');
@@ -26,6 +27,10 @@ const TYPES =
   '/// <reference types="@nativescript/react-native/types/ios" />\n' +
   '/// <reference types="@nativescript/types-android" />\n';
 const PROVIDER = 'provideNativeScript()';
+
+/** The `react-native-worklets` each Expo SDK bundles, by its major; the template's SDK otherwise. */
+const WORKLETS = { 57: '0.10.1', 58: '0.13.0' };
+const worklets = (expo) => WORKLETS[/\d+/.exec(expo ?? '')?.[0]] ?? WORKLETS[58];
 
 function byHand(file, what) {
   logger.warn(`Could not update ${file}: ${what}`);
@@ -76,6 +81,10 @@ function addProvider(tree, root) {
   // Only a providers list inside the call: one elsewhere in the file is not the app's.
   const call = main.slice(open, end);
   const listed = /(\bproviders:\s*\[)/.exec(call);
+  // A second providers key would replace the app's own, so one that is not a list is left alone.
+  if (!listed && /\bproviders\s*[:,}]/.test(call)) {
+    return byHand(file, `add ${PROVIDER} to the providers mount is given.`);
+  }
   const edited = listed
     ? call.replace(listed[0], `${listed[1]}${PROVIDER}, `)
     : call.replace(
@@ -105,7 +114,7 @@ async function nativescript(tree, options) {
     {
       '@ng-native/nativescript': native.dependencies['@ng-native/components'],
       '@nativescript/react-native': '^9.1.2',
-      'react-native-worklets': '0.10.1',
+      'react-native-worklets': worklets(readJson(tree, manifest).dependencies?.expo),
     },
     { '@nativescript/types-android': '^9.1.1' },
     manifest,

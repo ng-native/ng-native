@@ -19,18 +19,18 @@
     "@ng-native/fabric": "workspace:*",
     "@ng-native/nativescript": "workspace:*",
     "@ng-native/platform": "workspace:*",
-    "expo": "~57.0.26",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-worklets": "0.10.1"
+    "expo": "~58.0.16",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@nativescript/types-android": "9.1.1",
     "@ng-native/metro": "workspace:*",
     "@ng-native/testing": "workspace:*",
-    "@types/react": "~19.2.4",
+    "@types/react": "~19.3.0",
     "typescript": "~6.0.3",
     "vite": "^8.3.1",
     "vitest": "^5.0.2"

@@ -10,7 +10,7 @@ import { App } from './app/app.ts';
 
 registerPlatformComponents(Platform.OS);
 
-AppRegistry.registerRunnable('main', ({ rootTag }: { rootTag: number | string }) => {
+AppRegistry.registerRunnable('main', ({ rootTag }) => {
   const app = mount(Number(rootTag), App, getFabricUIManager(), {
     processColor,
     conditions: currentConditions(),
@@ -18,5 +18,6 @@ AppRegistry.registerRunnable('main', ({ rootTag }: { rootTag: number | string })
     // SceneKit is not linked into the app, so it is loaded for the torus.
     providers: [provideNativeScript({ frameworks: ['SceneKit'] })],
   });
-  watchConditions(app.engine);
+  const stopWatching = watchConditions(app.engine);
+  app.applicationRef.onDestroy(stopWatching);
 });
