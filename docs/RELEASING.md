@@ -56,12 +56,20 @@ migration goes into the table on that page.
 
 ## Each release
 
-Run **Release** from the Actions tab, on `main`, once CI is green there. Its input is either an exact
-version (`0.1.0` for the first) or a bump. Releases are plain `0.x` versions on npm's `latest` tag,
-which is what `create-expo-app --template @ng-native/template` resolves: `minor` for a release with
-a breaking change, since under `0.x` a minor is the breaking bump, and `patch` otherwise.
+Run **Release** from the Actions tab, on `main`, once CI is green there. Its inputs are a bump,
+picked from `minor` and `patch`, and an optional exact version, which takes precedence over the bump
+when given. Releases are plain `0.x` versions on npm's `latest` tag, which is what
+`create-expo-app --template @ng-native/template` resolves: `minor` for a release with a breaking
+change, since under `0.x` a minor is the breaking bump, and `patch` otherwise.
 
-The workflow first builds the canary natively for iOS and Android (`native.yml`). Each release build
+Its first job, `validate`, checks the inputs before anything slow starts
+(`scripts/release-version.mjs`). An exact version must be a plain semver version (`0.19.0`, or a
+prerelease such as `0.19.0-rc.0`, with no `v`), on the major already released, so `1.0.0` fails
+while releases are `0.x`, and above the highest version any package has on npm. The one exception is
+the highest version itself while `main` is still on an older one, which is a release that failed part
+way through (see below). Every other job waits for it.
+
+The workflow then builds the canary natively for iOS and Android (`native.yml`). Each release build
 is then launched, iOS on a simulator and Android on an emulator, and driven through a short Maestro
 flow (`examples/canary/.maestro/release`), so an app that builds but crashes at launch fails there,
 as it does on every pull request. Beside it, the
@@ -94,7 +102,8 @@ pass, it runs the same gate CI does, then:
 
 If it fails before publishing, nothing has left the runner: fix it and run it again. If it fails part
 way through publishing, run it again with the same exact version (not a bump): packages already on
-npm at that version are skipped, and the rest are published.
+npm at that version are skipped, and the rest are published. `validate` lets that version through
+again because the `Release <version>` commit, pushed only after publishing, is not on `main` yet.
 
 ## Checking distribution locally
 

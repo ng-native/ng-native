@@ -4,10 +4,16 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'An exact version (0.1.0) or a bump (minor for a breaking change, patch otherwise)'
+      bump:
+        description: 'The bump: minor for a breaking change, patch otherwise'
+        type: choice
+        options: [minor, patch]
         required: true
         default: minor
+      version:
+        description: 'An exact version instead (0.19.0), above the latest on npm and on the same major. Overrides the bump.'
+        required: false
+        default: ''
 
 # One release at a time: two would race for the same version.
 concurrency:
@@ -21,15 +27,37 @@ permissions:
   id-token: write
 
 jobs:
+  # The inputs, checked against npm before any slow job starts: see scripts/release-version.mjs.
+  # Only Node, no install, so a refused version fails in seconds.
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - id: version
+        # Through the environment, so a typed version is never read as shell.
+        env:
+          BUMP: ${{ inputs.bump }}
+          VERSION: ${{ inputs.version }}
+        run: node scripts/release-version.mjs "$BUMP" "$VERSION"
+
   # Both native builds, on the commit being released, as every ready pull request and main has
   # them: see native.yml.
   native:
+    needs: validate
     if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/native.yml
 
   # The same gate CI runs, on exactly the commit being released. Its own job, so it runs beside
   # the slow checks rather than after them.
   verify:
+    needs: validate
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -48,6 +76,7 @@ jobs:
   # minutes.
   generators:
     name: generators (${{ matrix.generator }})
+    needs: validate
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -90,6 +119,7 @@ jobs:
   # `storybook build` and checked in Chromium. It installs the Storybook and Vite versions the page
   # states, so a new Storybook release cannot fail ours.
   storybook:
+    needs: validate
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -116,7 +146,7 @@ jobs:
         run: cat verdaccio.log
 
   release:
-    needs: [native, verify, generators, storybook]
+    needs: [validate, native, verify, generators, storybook]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
@@ -132,12 +162,14 @@ jobs:
 
       - name: Version
         id: version
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           # Lockstep: every package and the template move to the same version, in one commit and
           # one tag. `--preid` only matters for a bump; an exact version already carries it.
-          npx nx release version '${{ inputs.version }}' --preid alpha
+          npx nx release version "$VERSION" --preid alpha
           version=$(node -p "require('./packages/fabric/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
           # nx migrate and ng update run a migration when the upgrade crosses its version, so the
