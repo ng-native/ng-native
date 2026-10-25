@@ -21,19 +21,22 @@ includes it, by someone who owns the `@ng-native` scope on npm. The release publ
 OIDC, and npm can only trust the workflow with a package that already exists, so CI cannot create
 one: 0.18.2 stopped part way through publishing on `@ng-native/nativescript`, its first release.
 
-1. **Publish a placeholder** from the package's directory, logged in with `npm login`: a version
-   below every release, such as `0.0.0`. Set it in `package.json` for this publish only, and don't
-   commit it. npm points `latest` at it until the next release moves `latest` on.
+1. **Publish an empty placeholder**, logged in with `npm login`, from a scratch directory holding
+   only a `package.json`, not from the package's own: a version below every release, and nothing
+   that could be installed by mistake. npm points `latest` at it until the release moves `latest`
+   on.
 
    ```sh
+   mkdir placeholder && cd placeholder
+   echo '{ "name": "@ng-native/<name>", "version": "0.0.0" }' > package.json
    npm publish --access public
    ```
 
 2. **Configure its trusted publisher**, on the package's settings page on npmjs.com as above, or
-   with npm 11.10 or later:
+   with `npm trust` (npm 11.19 has it), which needs `--allow-publish` and asks to confirm:
 
    ```sh
-   npm trust github @ng-native/<name> --repo ng-native/ng-native --file release.yml
+   npm trust github @ng-native/<name> --repo ng-native/ng-native --file release.yml --allow-publish
    ```
 
 Release's `validate` job refuses to start until both are done (see below). A dry run checks the

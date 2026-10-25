@@ -190,12 +190,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     // The packages `nx release` versions, so the two lists cannot drift apart.
     const { release } = JSON.parse(readFileSync(path.join(root, 'nx.json'), 'utf8'));
-    const idToken = await githubIdToken();
-    if (!idToken) console.warn('Not on GitHub Actions: only checking that each package exists.');
+    const onActions = Boolean(await githubIdToken());
+    if (!onActions) console.warn('Not on GitHub Actions: only checking that each package exists.');
     const packages = [];
     for (const name of release.projects) {
       const versions = versionsOnNpm(name);
-      const trusted = idToken && versions.length ? await trustedOnNpm(name, idToken) : undefined;
+      // A fresh ID token for each exchange, as `npm publish` fetches one for each package.
+      const trusted =
+        onActions && versions.length ? await trustedOnNpm(name, await githubIdToken()) : undefined;
       packages.push({ name, versions, trusted });
     }
     checkPublishing(packages);
