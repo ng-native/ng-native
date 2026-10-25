@@ -6,12 +6,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 const script = new URL('../../scripts/release-version.mjs', import.meta.url);
-const { compare, releaseVersion } = (await import(script.href)) as {
+const { checkPublishing, compare, releaseVersion } = (await import(script.href)) as {
+  checkPublishing(packages: { name: string; versions: string[]; trusted?: boolean }[]): void;
   compare(a: string, b: string): number;
   releaseVersion(bump: string, exact: string, published: string[], current: string): string;
 };
 
-// What npm has, across every package: one never published adds nothing.
+// What npm has, across every package.
 const published = ['0.0.1', '0.17.0', '0.17.1', '0.18.0', '0.18.1'];
 
 describe('the version a release takes', () => {
@@ -72,6 +73,58 @@ describe('the version a release takes', () => {
     assert.throws(
       () => releaseVersion('minor', '0.19.0-rc.1', [...published, '0.19.0-rc.2'], '0.18.1'),
       /not above 0\.19\.0-rc\.2/,
+    );
+  });
+});
+
+describe('the packages a release publishes', () => {
+  it('passes when each exists and trusts the workflow, or its trust was not checked', () => {
+    checkPublishing([
+      { name: '@ng-native/fabric', versions: ['0.0.1', '0.18.1'], trusted: true },
+      { name: '@ng-native/router', versions: ['0.18.1'] },
+    ]);
+  });
+
+  it('refuses a package that has never been published', () => {
+    assert.throws(
+      () =>
+        checkPublishing([
+          { name: '@ng-native/fabric', versions: ['0.18.1'], trusted: true },
+          { name: '@ng-native/nativescript', versions: [] },
+        ]),
+      {
+        message:
+          '@ng-native/nativescript has never been published, so npm cannot trust this workflow to publish it. Publish a placeholder of it by hand and configure its trusted publisher: see "Adding a package" in docs/RELEASING.md.',
+      },
+    );
+  });
+
+  it('refuses a package whose trusted publisher is not this workflow', () => {
+    assert.throws(
+      () =>
+        checkPublishing([{ name: '@ng-native/nativescript', versions: ['0.0.0'], trusted: false }]),
+      {
+        message:
+          'npm doesn\'t trust this workflow to publish @ng-native/nativescript. Configure its trusted publisher (repository ng-native/ng-native, workflow release.yml): see "Adding a package" in docs/RELEASING.md.',
+      },
+    );
+  });
+
+  it('names every package that would fail, one per line', () => {
+    assert.throws(
+      () =>
+        checkPublishing([
+          { name: '@ng-native/a', versions: [] },
+          { name: '@ng-native/b', versions: ['0.18.1'], trusted: true },
+          { name: '@ng-native/c', versions: ['0.0.0'], trusted: false },
+        ]),
+      (error: Error) => {
+        const lines = error.message.split('\n');
+        assert.equal(lines.length, 2);
+        assert.match(lines[0], /^@ng-native\/a has never been published/);
+        assert.match(lines[1], /trust this workflow to publish @ng-native\/c\./);
+        return true;
+      },
     );
   });
 });

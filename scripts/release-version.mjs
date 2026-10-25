@@ -8,6 +8,13 @@
  * version on disk: `main` gets the release commit only once every package is published, so that is
  * a release that failed part way through, run again with the same version to finish it.
  *
+ * It also refuses a release that would stop part way through publishing: one with a package that
+ * has never been published, or whose trusted publisher on npmjs.com doesn't name this workflow.
+ * npm can only publish through OIDC to a package that exists and trusts the workflow, and it
+ * otherwise publishes with no credentials at all, which npm answers with a 404. On GitHub Actions
+ * the trust is checked by asking npm for each package's publish token, as `npm publish` does, and
+ * throwing the token away; elsewhere only that each package exists.
+ *
  * Usage:
  *
  *   node scripts/release-version.mjs <bump> [exact version]
@@ -109,6 +116,28 @@ export function releaseVersion(bump, exact, published, current) {
   return exact;
 }
 
+/**
+ * The reasons the packages cannot all be published, from each one's versions on npm and whether
+ * npm trusts this workflow to publish it (undefined when that wasn't checked). Throws them, one per
+ * line, when there are any.
+ */
+export function checkPublishing(packages) {
+  const reasons = packages.flatMap(({ name, versions, trusted }) => {
+    if (!versions.length) {
+      return [
+        `${name} has never been published, so npm cannot trust this workflow to publish it. Publish a placeholder of it by hand and configure its trusted publisher: see "Adding a package" in docs/RELEASING.md.`,
+      ];
+    }
+    if (trusted === false) {
+      return [
+        `npm doesn't trust this workflow to publish ${name}. Configure its trusted publisher (repository ng-native/ng-native, workflow release.yml): see "Adding a package" in docs/RELEASING.md.`,
+      ];
+    }
+    return [];
+  });
+  if (reasons.length) throw new Error(reasons.join('\n'));
+}
+
 /** The versions `name` has on npm: none before its first publish. */
 function versionsOnNpm(name) {
   try {
@@ -126,24 +155,69 @@ function versionsOnNpm(name) {
   }
 }
 
+/**
+ * The ID token GitHub Actions gives this job for npm, or undefined outside Actions or without the
+ * `id-token: write` permission.
+ */
+async function githubIdToken() {
+  const { ACTIONS_ID_TOKEN_REQUEST_URL: url, ACTIONS_ID_TOKEN_REQUEST_TOKEN: token } = process.env;
+  if (!url || !token) return undefined;
+  const request = new URL(url);
+  request.searchParams.append('audience', 'npm:registry.npmjs.org');
+  const response = await fetch(request, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error(`GitHub refused an ID token for npm: ${response.status}.`);
+  return (await response.json()).value;
+}
+
+/**
+ * Whether npm trusts the workflow behind `idToken` to publish `name`: the exchange `npm publish`
+ * makes for its publish token. The token is never read, so it cannot reach the log.
+ */
+async function trustedOnNpm(name, idToken) {
+  const response = await fetch(
+    `https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/${name.replace('/', '%2f')}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${idToken}` } },
+  );
+  await response.body?.cancel();
+  // npm being down says nothing about the trust, so it fails the check rather than answering it.
+  if (response.status >= 500)
+    throw new Error(`npm failed the check for ${name}: ${response.status}.`);
+  return response.ok;
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [bump = '', exact = ''] = process.argv.slice(2);
-  // The packages `nx release` versions, so the two lists cannot drift apart.
-  const { release } = JSON.parse(readFileSync(path.join(root, 'nx.json'), 'utf8'));
-  const published = release.projects.flatMap(versionsOnNpm);
-  // Every package moves in lockstep, so any one's version is the last finished release.
-  const { version: current } = JSON.parse(
-    readFileSync(path.join(root, 'packages/fabric/package.json'), 'utf8'),
-  );
   try {
-    const version = releaseVersion(bump, exact, published, current);
+    // The packages `nx release` versions, so the two lists cannot drift apart.
+    const { release } = JSON.parse(readFileSync(path.join(root, 'nx.json'), 'utf8'));
+    const idToken = await githubIdToken();
+    if (!idToken) console.warn('Not on GitHub Actions: only checking that each package exists.');
+    const packages = [];
+    for (const name of release.projects) {
+      const versions = versionsOnNpm(name);
+      const trusted = idToken && versions.length ? await trustedOnNpm(name, idToken) : undefined;
+      packages.push({ name, versions, trusted });
+    }
+    checkPublishing(packages);
+    // Every package moves in lockstep, so any one's version is the last finished release.
+    const { version: current } = JSON.parse(
+      readFileSync(path.join(root, 'packages/fabric/package.json'), 'utf8'),
+    );
+    const version = releaseVersion(
+      bump,
+      exact,
+      packages.flatMap(({ versions }) => versions),
+      current,
+    );
     console.log(version);
     if (process.env['GITHUB_OUTPUT']) {
       appendFileSync(process.env['GITHUB_OUTPUT'], `version=${version}\n`);
     }
   } catch (error) {
-    // An annotation, so the reason shows on the run's summary page.
-    console.error(process.env['GITHUB_ACTIONS'] ? `::error::${error.message}` : error.message);
+    // Annotations, so each reason shows on the run's summary page.
+    for (const line of error.message.split('\n')) {
+      console.error(process.env['GITHUB_ACTIONS'] ? `::error::${line}` : line);
+    }
     process.exitCode = 1;
   }
 }
