@@ -39,8 +39,10 @@ pids() {
 zmodload zsh/system; : >> "$STOPPED.lock"
 stop() {
   local -a p=($(pids)); (( ${#p} )) || return
-  kill -STOP $p 2>/dev/null
-  local fd; zsystem flock -f fd -- "$STOPPED.lock"; print -l $p >> "$STOPPED"; zsystem flock -u $fd
+  # Recorded first, so a pid is never stopped without a record that resumes it.
+  local fd; zsystem flock -f fd -- "$STOPPED.lock" || return
+  print -l $p >> "$STOPPED" && kill -STOP $p 2>/dev/null
+  zsystem flock -u $fd
 }
 resume() {
   local fd; zsystem flock -f fd -- "$STOPPED.lock"
