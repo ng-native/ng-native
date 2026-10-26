@@ -36,7 +36,11 @@ pids() {
 # Every pid stopped is recorded, and resuming continues those as well as the current trees: a process that
 # left the trees while stopped would otherwise stay stopped for good.
 stop() { local -a p=($(pids)); (( ${#p} )) && { kill -STOP $p 2>/dev/null; print -l $p >> $STOPPED; } }
-resume() { { pids; cat $STOPPED 2>/dev/null } | sort -u | xargs -r kill -CONT 2>/dev/null; : > $STOPPED; }
+# The file is moved aside before it is read, so a pid another instance records meanwhile is kept for next time.
+resume() {
+  local taken=$STOPPED.$$; mv $STOPPED $taken 2>/dev/null
+  { pids; cat $taken 2>/dev/null } | sort -u | xargs -r kill -CONT 2>/dev/null; rm -f $taken
+}
 
 resume
 while true; do
