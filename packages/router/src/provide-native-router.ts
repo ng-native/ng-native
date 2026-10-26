@@ -56,6 +56,7 @@ import {
   intentOf,
 } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
+import { refuseScreensUnderFullScreen } from './refuse-screens-under-full-screen.ts';
 import { SVG_ICON_RENDERER, type SvgIconRenderer } from './svg-icons.ts';
 import { NativeStackReuseStrategy } from './native-stack-reuse-strategy.ts';
 import { ROUTE_PARKING, type ParkedPage } from './route-parking.ts';
@@ -160,6 +161,7 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
     provideEnvironmentInitializer(carryIntentAcrossRedirects),
     provideEnvironmentInitializer(discardFailedEntries),
     provideEnvironmentInitializer(restoreFailedSnapshots),
+    provideEnvironmentInitializer(refuseScreensUnderFullScreen),
     provideEnvironmentInitializer(keepHistoryAcrossReloads),
   ];
   if (!parentOf) {

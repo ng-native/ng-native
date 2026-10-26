@@ -227,6 +227,14 @@ push names itself wins, so `push('/detail', { presentation: { stackPresentation:
 'fullScreenModal' } })` covers everything, and `stackPresentation: 'push'` pushes onto the stack
 under the modal, out of sight until the modal closes.
 
+On iOS, a screen a tab's own stack presents as `fullScreenModal` takes the app's stack out of the
+window, and that stack shows nothing new until the modal closes. So from such a modal, a
+`present()`, a `push()` or a router navigation that would put a screen on the app's stack (a
+top-level route, or a page of another tab presented over the bar) resolves `false` and leaves the
+url and the screens as they were. Close the modal first, or present it as a sheet, which leaves
+the app's stack in the window. A navigation inside the tab's stack, to another tab, or a
+`replace()` or `reset()` goes ahead. Android does not refuse it.
+
 A presented screen that should push inside itself, with a header and a back button, is a stack
 of its own: a route whose component is a `<native-stack-outlet>`, with the screens it pushes as
 its children.

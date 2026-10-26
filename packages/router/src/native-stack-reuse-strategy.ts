@@ -75,6 +75,15 @@ function keyOf(route: ActivatedRouteSnapshot): string {
   return JSON.stringify(levels);
 }
 
+/** Whether a navigation to `future` keeps the route showing `curr`: see `shouldReuseRoute`. */
+export function sameScreen(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
+  if (future.routeConfig !== curr.routeConfig) return false;
+  const config = curr.routeConfig;
+  return (
+    !isScreenRoute(config) || config?.data?.[REUSE_SCREEN] === true || keyOf(future) === keyOf(curr)
+  );
+}
+
 function injectorHere(): Injector | null {
   try {
     return inject(Injector);
@@ -241,12 +250,7 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
    * parent that is only layout is reused as before, so its stack keeps what is in it.
    */
   override shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
-    if (future.routeConfig !== curr.routeConfig) return false;
-    const config = curr.routeConfig;
-    const reuse =
-      !isScreenRoute(config) ||
-      config?.data?.[REUSE_SCREEN] === true ||
-      keyOf(future) === keyOf(curr);
+    const reuse = sameScreen(future, curr);
     if (reuse) {
       this.reused.add(future);
       this.showing(future, curr);

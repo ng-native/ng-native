@@ -33,6 +33,10 @@ export interface PoppableStack {
   popTo(url: string): Promise<boolean> | null;
   /** Take every screen under the top off at once, or false when it is showing only that one. */
   dropUnderTop(): boolean;
+  /** The route of the screen on top, or null when it has none in front. */
+  top(): ActivatedRoute | null;
+  /** The route of the first screen this stack presents `fullScreenModal`, or null for none. */
+  fullScreen(): ActivatedRoute | null;
 }
 
 /**
@@ -109,6 +113,16 @@ export class NativeBack {
       const index = this.stacks.indexOf(stack);
       if (index !== -1) this.stacks.splice(index, 1);
     };
+  }
+
+  /** The routes of the screens the stacks present `fullScreenModal`. */
+  fullScreens(): ActivatedRoute[] {
+    return this.stacks.flatMap((stack) => stack.fullScreen() ?? []);
+  }
+
+  /** Whether `route` is the screen on top of a stack. */
+  onTopOfStack(route: ActivatedRoute): boolean {
+    return this.stacks.some((stack) => stack.top() === route);
   }
 
   /** Pop the innermost stack in front that is deeper than one screen, to its first. */

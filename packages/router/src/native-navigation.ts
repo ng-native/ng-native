@@ -208,6 +208,9 @@ export class NativeNavigation {
    * native header and no automatic safe-area insets: it needs its own way out, and its own
    * `safe-area-view`. A sheet can also be dragged away, but `fullScreenModal` cannot, and with
    * `gestureEnabled: false` neither can.
+   *
+   * On iOS, from a screen a tab's stack presents `fullScreenModal`, a screen for the app's own
+   * stack cannot show, and this resolves false: see `refuse-screens-under-full-screen.ts`.
    */
   present(commands: NavigationCommands, options: PresentOptions = {}): Promise<boolean> {
     if (this.firstNavigationRunning()) {
