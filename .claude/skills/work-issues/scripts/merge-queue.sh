@@ -47,7 +47,8 @@ while (( ${#queue} )); do
     #  - one reviewed an older commit and the PR's own changes are identical (only the base moved).
     reviewed=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" \
       --jq '.[]|select(.user.type=="Bot")|.commit_id' 2>/dev/null) || continue
-    lines=(${(f)reviewed}); reviewed=${lines[-1]}
+    # Any bot's review of the current commit is enough, even when another bot later reviewed an older one.
+    lines=(${(f)reviewed}); (( ${lines[(Ie)$sha]} )) && reviewed=$sha || reviewed=${lines[-1]}
     # A Greptile review that adds no comments posts no review object, only a successful "Greptile Review" check run,
     # so the newest commit with one counts too when it is newer than the last review object.
     commits=$(gh api --paginate "$R/pulls/$n/commits?per_page=100" --jq '.[].sha' 2>/dev/null) || continue
