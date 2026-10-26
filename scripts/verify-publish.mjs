@@ -527,11 +527,15 @@ function assertOneCopy(workspace, pm) {
   for (const name of ONE_COPY) {
     const versions = new Set();
     if (pm === 'pnpm') {
-      // `node_modules/.pnpm/<name with + for />@<version>_<peers>`, one directory per copy.
-      const prefix = `${name.replace('/', '+')}@`;
-      for (const entry of readdirSync(path.join(workspace, 'node_modules/.pnpm'))) {
-        if (entry.startsWith(prefix)) versions.add(/^[^_(]+/.exec(entry.slice(prefix.length))[0]);
+      // Keys `  '<name>@<version>':` and `  <name>@<version>(<peers>):` in the lockfile. Not
+      // `node_modules/.pnpm`: pnpm leaves a copy an earlier install resolved there, linked to
+      // nothing, after a later one pins another version.
+      const lockfile = readFileSync(path.join(workspace, 'pnpm-lock.yaml'), 'utf8');
+      for (const [, version] of lockfile.matchAll(new RegExp(`^  '?${name}@([^(':]+)`, 'gm'))) {
+        versions.add(version);
       }
+      // A lockfile format this cannot read must not pass as one copy.
+      if (versions.size === 0) throw new Error(`${name} is not in ${workspace}/pnpm-lock.yaml`);
     } else {
       let out;
       try {
