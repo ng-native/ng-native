@@ -34,14 +34,19 @@ pids() {
 }
 
 # Every pid stopped is recorded, and resuming continues those as well as the current trees: a process that
-# left the trees while stopped would otherwise stay stopped for good.
-stop() { local -a p=($(pids)); (( ${#p} )) && { kill -STOP $p 2>/dev/null; print -l $p >> $STOPPED; } }
-# The file is moved aside before it is read, so a pid another instance records meanwhile is kept for next time.
-resume() {
-  local taken=$STOPPED.$$; mv $STOPPED $taken 2>/dev/null
-  { pids; cat $taken 2>/dev/null } | sort -u | xargs -r kill -CONT 2>/dev/null; rm -f $taken
+# left the trees while stopped would otherwise stay stopped for good. The record is locked, so a pid another
+# instance records while one resumes is kept for next time.
+zmodload zsh/system; : >> "$STOPPED.lock"
+stop() {
+  local -a p=($(pids)); (( ${#p} )) || return
+  kill -STOP $p 2>/dev/null
+  local fd; zsystem flock -f fd -- "$STOPPED.lock"; print -l $p >> "$STOPPED"; zsystem flock -u $fd
 }
-
+resume() {
+  local fd; zsystem flock -f fd -- "$STOPPED.lock"
+  { pids; cat -- "$STOPPED" 2>/dev/null } | sort -u | xargs -r kill -CONT 2>/dev/null; : > "$STOPPED"
+  zsystem flock -u $fd
+}
 resume
 while true; do
   comp=$(vm_stat | awk '/page size of/ {page=$(NF-1)} /occupied by compressor/ {gsub("\\.","",$5); printf "%.2f", $5*page/1073741824}')
