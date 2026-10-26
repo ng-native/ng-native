@@ -97,6 +97,9 @@ async function devServer(root: string, adjust?: (config: Record<string, unknown>
     path.join(workspace, 'node_modules'),
     path.join(workspace, 'node_modules/.pnpm/node_modules'),
   ];
+  // Crawl and watch with Node, not the shared watchman daemon: a stuck daemon would hang the server
+  // with no timeout, and every temp app would leave a watch behind.
+  resolver['useWatchman'] = false;
   resolver['resolveRequest'] = (context: object, name: string, platform: string) =>
     name.startsWith('.') || path.isAbsolute(name) || REAL.test(name)
       ? resolve({ ...context, resolveRequest: resolve }, name, platform)

@@ -69,6 +69,9 @@ async function build(root: string, store: object, platform: string, dev = false)
     maxWorkers: 1,
     watchFolders: [root, path.resolve(import.meta.dirname, '../..')],
   });
+  // Crawl with Node, not the shared watchman daemon: a stuck daemon would hang the build with no
+  // timeout, and every temp app would leave a watch behind.
+  (config['resolver'] as { useWatchman?: boolean }).useWatchman = false;
   (config['resolver'] as { resolveRequest?: unknown }).resolveRequest = (
     context: object,
     name: string,

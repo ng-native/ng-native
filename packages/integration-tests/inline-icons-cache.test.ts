@@ -45,6 +45,9 @@ async function releaseBuild(root: string, cache: string): Promise<string> {
     watchFolders: [root, path.resolve(import.meta.dirname, '../..')],
   });
   // Only the app's own files: anything a package would bring in is left out of the bundle.
+  // Crawl with Node, not the shared watchman daemon: a stuck daemon would hang the build with no
+  // timeout, and every temp app would leave a watch behind.
+  (config['resolver'] as { useWatchman?: boolean }).useWatchman = false;
   (config['resolver'] as { resolveRequest?: unknown }).resolveRequest = (
     context: object,
     name: string,
