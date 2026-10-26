@@ -38,7 +38,10 @@ const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 let Sheet: Type<Fixture>;
 /** The component as the fixture compiled it: the class whose token its sheets inject. */
-let UiBottomSheet: { readonly SOURCE: InjectionToken<unknown> };
+let UiBottomSheet: {
+  readonly SOURCE: InjectionToken<unknown>;
+  readonly TOOLBAR: InjectionToken<boolean>;
+};
 let Defaults: Type<{ readonly open: Writable<boolean> }>;
 let Styled: Type<StyledFixture>;
 
@@ -81,7 +84,7 @@ function fakeHide() {
 
 async function boot<T = Fixture>(
   platform: 'ios' | 'android',
-  options: { fixture?: Type<T>; functions?: unknown } = {},
+  options: { fixture?: Type<T>; functions?: unknown; toolbar?: boolean } = {},
 ) {
   registerPlatformComponents(platform);
   registerExpoUiViews(platform);
@@ -90,6 +93,10 @@ async function boot<T = Fixture>(
     conditions: { width: 390, height: 844, colorScheme: 'light' },
     providers: [
       { provide: UiBottomSheet.SOURCE, useValue: 'functions' in options ? options.functions : {} },
+      // Whether the build has SwiftUI's toolbar; left out, the component asks as it does on a device.
+      ...(options.toolbar === undefined
+        ? []
+        : [{ provide: UiBottomSheet.TOOLBAR, useValue: options.toolbar }]),
     ],
     // Marks what went through the engine's colour conversion, which is RN's `processColor`.
     processColor: (value) => `processed ${String(value)}`,
@@ -604,7 +611,7 @@ describe('a bottom sheet on iOS that the user cannot dismiss, or that lets the s
   });
 
   it('puts the modifiers it is given beside its own, on the group SwiftUI reads them from', async () => {
-    const { every, instance, pass } = await boot('ios');
+    const { every, instance, pass } = await boot('ios', { toolbar: false });
     instance.undismissable.set(true);
     instance.modifiers.set([{ $type: 'presentationCornerRadius', cornerRadius: 24 }]);
     instance.open.set(true);
@@ -631,6 +638,57 @@ describe('a bottom sheet on iOS that the user cannot dismiss, or that lets the s
       'presentationDragIndicator',
       'interactiveDismissDisabled',
     ]);
+  });
+
+  it('puts the modifiers it is given inside the navigation stack, which resets the safe area', async () => {
+    const { every, instance, pass } = await boot('ios', { toolbar: true });
+    const ignore = { $type: 'ignoreSafeArea', regions: 'all', edges: 'bottom' };
+    const corner = { $type: 'presentationCornerRadius', cornerRadius: 0 };
+    instance.modifiers.set([ignore, corner]);
+    instance.open.set(true);
+    await pass();
+    const group = () => every(/ExpoUI_GroupView$/)[0]!;
+    const layers = () => every(/ExpoUI_ZStackView$/)[0]!;
+    const types = (node: FakeFabricNode) =>
+      ((node.props['modifiers'] ?? []) as { $type: string }[]).map((modifier) => modifier.$type);
+    assert.ok(
+      every(/ExpoUI_NavigationStackView$/)[0],
+      'a build with the toolbar stacks the content',
+    );
+    assert.ok(
+      group().children.some((child) => /NavigationStackView$/.test(child.viewName)),
+      'the group is outside the stack',
+    );
+    assert.deepEqual(
+      types(group()),
+      ['presentationDetents', 'presentationDragIndicator'],
+      'the sheet s own stay on the group',
+    );
+    assert.deepEqual(
+      layers().props['modifiers'],
+      [ignore, corner],
+      'and the given ones are inside',
+    );
+
+    instance.modifiers.set([corner]);
+    await pass();
+    assert.deepEqual(layers().props['modifiers'], [corner], 'a change is followed');
+
+    instance.modifiers.set(undefined);
+    await pass();
+    assert.equal(layers().props['modifiers'], null, 'and none is left once they go');
+    assert.deepEqual(types(group()), ['presentationDetents', 'presentationDragIndicator']);
+  });
+
+  it('puts the modifiers it is given on the group where it is sized to its content', async () => {
+    const { every, instance, pass } = await boot('ios', { toolbar: true });
+    const ignore = { $type: 'ignoreSafeArea', regions: 'all', edges: 'bottom' };
+    instance.fit.set(true);
+    instance.modifiers.set([ignore]);
+    instance.open.set(true);
+    await pass();
+    assert.equal(every(/ExpoUI_NavigationStackView$/).length, 0, 'there is no stack to reset it');
+    assert.deepEqual(modifiersOf(every(/ExpoUI_GroupView$/)[0]!)['ignoreSafeArea'], ignore);
   });
 });
 

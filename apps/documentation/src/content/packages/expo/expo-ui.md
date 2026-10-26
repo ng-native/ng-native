@@ -490,10 +490,13 @@ whichever view it is inside.
   `UiPresentationDetent`) while the sheet rests at that detent or below it, which should be one of
   its `detents`. Unset, SwiftUI decides. **Android has no equivalent**: Compose's sheet is shown in
   a window of its own over the screen, and the screen takes no touch while it shows.
-- **`modifiers`** - more SwiftUI modifiers, **on iOS only**, put after the sheet's own on the
-  `ui-group` around its content, which is where SwiftUI reads presentation modifiers from:
-  `presentationCornerRadius`, for one. They apply to the content as well. Android takes no notice
-  of them.
+- **`modifiers`** - more SwiftUI modifiers, **on iOS only**: presentation modifiers such as
+  `presentationCornerRadius`, and modifiers for the content such as `ignoreSafeArea`. Where the
+  build has SwiftUI's toolbar and the sheet is not sized to its content, the content is in a
+  `ui-navigation-stack`, which sets up the safe area again for what is inside it, so the modifiers
+  go on the `ui-zstack` inside the stack. There a content modifier such as `background` or
+  `padding` applies below the sheet's bar, where it has one. Otherwise they go after the sheet's
+  own on the `ui-group` around its content. Android takes no notice of them.
 - **`dismissed`** - the sheet has finished closing, whether the user dismissed it or `open` was set
   false. It is emitted after the sheet has slid away, which is when another sheet or a dialog can
   be presented.

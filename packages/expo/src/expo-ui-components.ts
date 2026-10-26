@@ -1681,7 +1681,7 @@ function windowWidth(): Signal<number | undefined> {
             <ui-group [modifiers]="presentation()">
               @if (stacked()) {
                 <ui-navigation-stack>
-                  <ui-zstack>
+                  <ui-zstack [modifiers]="modifiers()">
                     <ui-toolbar [modifiers]="inlineTitle">
                       <ui-spacer />
                       <ui-slot name="content"><ng-content select="ui-toolbar-item" /></ui-slot>
@@ -1806,9 +1806,13 @@ export class UiBottomSheet {
    */
   readonly backgroundInteraction = input<UiBottomSheetBackgroundInteraction>();
   /**
-   * More SwiftUI modifiers, iOS only, after the sheet's own on the `ui-group` around its content,
-   * where SwiftUI reads presentation modifiers from: `presentationCornerRadius`, for one. They
-   * apply to the content too. Android takes no notice of them.
+   * More SwiftUI modifiers, iOS only, for presentation modifiers such as `presentationCornerRadius`
+   * and for ones that apply to the content, such as `ignoreSafeArea`. Where the content is in a
+   * navigation stack (the build has SwiftUI's toolbar and the sheet is not sized to its content)
+   * they are on the `ui-zstack` inside that stack, since the stack sets up the safe area again for
+   * what is inside it, and a content modifier such as `background` or `padding` applies below the
+   * sheet's bar, where it has one. Otherwise they are after the sheet's own on the `ui-group`
+   * around its content. Android takes no notice of them.
    */
   readonly modifiers = input<readonly UiModifier[]>();
   /**
@@ -1892,7 +1896,7 @@ export class UiBottomSheet {
       ? [{ $type: 'interactiveDismissDisabled', isDisabled: true }]
       : []),
     ...this.interaction(),
-    ...(this.modifiers() ?? []),
+    ...(this.stacked() ? [] : (this.modifiers() ?? [])),
   ]);
 
   /** Whether the screen behind the sheet takes touches, in `@expo/ui`'s shape, where one is set. */
