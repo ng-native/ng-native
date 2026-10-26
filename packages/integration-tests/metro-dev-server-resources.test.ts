@@ -76,7 +76,8 @@ function write(root: string, files: Record<string, string>): void {
   }
 }
 
-type Update = { added?: { module: [number, string] }[]; modified: { module: [number, string] }[] };
+type Module = { module: [number, string]; sourceURL: string };
+type Update = { added?: Module[]; modified: Module[] };
 
 /** A dev server for `root`, as `npx expo start` runs one, listening on a free port. */
 async function devServer(root: string, adjust?: (config: Record<string, unknown>) => void) {
@@ -126,8 +127,13 @@ async function devServer(root: string, adjust?: (config: Record<string, unknown>
       if (!response.ok) throw new Error(`bundle request failed (${response.status}): ${text}`);
       return text;
     },
-    /** A device's `/hot` socket, registered for the bundle: `next()` is the next update with modules in it. */
-    async hot(): Promise<{ next(): Promise<Update> }> {
+    /**
+     * A device's `/hot` socket, registered for the bundle: `next(file)` is the next update with that
+     * file's module in it (a resource's module is its component's, so `list.html` is `list`). An
+     * update for an earlier edit can still arrive while it waits (a watcher may report one write
+     * twice), and is skipped.
+     */
+    async hot(): Promise<{ next(file: string): Promise<Update> }> {
       const socket = new WebSocket(`ws://127.0.0.1:${port}/hot`);
       sockets.push(socket);
       const waiting: ((message: { type: string; body: unknown }) => void)[] = [];
@@ -155,10 +161,14 @@ async function devServer(root: string, adjust?: (config: Record<string, unknown>
       socket.send(JSON.stringify({ type: 'register-entrypoints', entryPoints: [bundleUrl] }));
       await registered;
       return {
-        next: () =>
+        next: (file) =>
           until((message) => {
-            const body = message.body as Update | undefined;
-            return message.type === 'update' && body?.modified.length ? body : undefined;
+            if (message.type !== 'update') return undefined;
+            const body = message.body as Update;
+            const carries = body.modified.some(({ sourceURL }) =>
+              new URL(sourceURL).pathname.startsWith(`/${file}.bundle`),
+            );
+            return carries ? body : undefined;
           }),
       };
     },
@@ -299,7 +309,7 @@ export class Other {}
       const hot = await server.hot();
 
       write(root, { 'list.html': '<native-header title="SECOND_TITLE" />' });
-      const update = await hot.next();
+      const update = await hot.next('list');
       const carried = update.modified.map(({ module }) => module[1]);
       assert.ok(
         carried.some(
@@ -332,12 +342,12 @@ export class Other {}
       const hot = await server.hot();
 
       write(root, { 'list.html': '<native-header title="SECOND_TITLE" />' });
-      app.apply(await hot.next());
+      app.apply(await hot.next('list'));
       assert.match(app.shown(), /SECOND_TITLE/);
       assert.deepEqual(app.reloads, []);
 
       write(root, { 'helper.ts': `export const label = 'second';\n` });
-      app.apply(await hot.next());
+      app.apply(await hot.next('helper'));
       assert.deepEqual(app.reloads, ['list.ts'], 'the swap kept the resources it applied');
       assert.ok(app.logs.includes('[angular-native] hmr reload: a dependency changed list.ts'));
     } finally {
@@ -361,11 +371,11 @@ export class Other {}
       write(root, {
         'list.ts': LIST_WITH_HELPER(`templateUrl: './items.html'`, 'count() { return 1; }'),
       });
-      app.apply(await hot.next());
+      app.apply(await hot.next('list'));
       assert.deepEqual(app.reloads, [], 'the new method is patched onto the live class');
 
       write(root, { 'helper.ts': `export const label = 'second';\n` });
-      app.apply(await hot.next());
+      app.apply(await hot.next('helper'));
       assert.deepEqual(app.reloads, ['list.ts'], 'the patch kept the resources it applied');
       assert.ok(app.logs.includes('[angular-native] hmr reload: a dependency changed list.ts'));
     } finally {
