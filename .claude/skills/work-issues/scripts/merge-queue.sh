@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Squash-merges each PR once Greptile has reviewed it with nothing left open (see the rule below), every check has
+# Squash-merges each PR once a review bot has reviewed it with nothing left open (see the rule below), every check has
 # passed, it merges cleanly into main, and no release is running. Prints one line per event, so it suits
 # a Monitor.
 #
@@ -40,15 +40,15 @@ while (( ${#queue} )); do
     # A stacked PR waits until its base has merged and GitHub has moved it to main.
     [[ $(jq -r .base.ref <<<$pr) == main ]] || continue
     sha=$(jq -r .head.sha <<<$pr)
-    # Greptile has to have reviewed the PR's current code. It never approves: it leaves a COMMENTED review
-    # with inline P1/P2 comments, or only a check run when it has none. So the PR passes when every review
-    # thread is resolved and either:
-    #  - Greptile has reviewed the current commit;
-    #  - it reviewed an older commit and the PR's own changes are identical (only the base moved).
+    # A review bot (Greptile, CodeRabbit, cubic or any other; which one doesn't matter) has to have reviewed
+    # the PR's current code. Some never approve, leaving a COMMENTED review with inline comments, so the PR
+    # passes when every review thread is resolved and either:
+    #  - a bot has reviewed the current commit;
+    #  - one reviewed an older commit and the PR's own changes are identical (only the base moved).
     reviewed=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" \
-      --jq '.[]|select(.user.login=="greptile-apps[bot]")|.commit_id' 2>/dev/null) || continue
+      --jq '.[]|select(.user.type=="Bot")|.commit_id' 2>/dev/null) || continue
     lines=(${(f)reviewed}); reviewed=${lines[-1]}
-    # A review that adds no comments posts no review object, only a successful "Greptile Review" check run,
+    # A Greptile review that adds no comments posts no review object, only a successful "Greptile Review" check run,
     # so the newest commit with one counts too when it is newer than the last review object.
     commits=$(gh api --paginate "$R/pulls/$n/commits?per_page=100" --jq '.[].sha' 2>/dev/null) || continue
     for c in ${(Oa)${(f)commits}}; do
@@ -58,10 +58,10 @@ while (( ${#queue} )); do
         reviewed=$c; break
       fi
     done
-    if [[ -z $reviewed ]]; then note $n "waits for Greptile's review"; continue; fi
+    if [[ -z $reviewed ]]; then note $n "waits for a bot's review"; continue; fi
     if [[ $reviewed != $sha ]] && ! { then_=$(own_changes $reviewed) && now=$(own_changes $sha) &&
       [[ -n $then_ && $then_ == $now ]]; }; then
-      note $n "waits for Greptile to review its current commit"; continue
+      note $n "waits for a bot to review its current commit"; continue
     fi
     if [[ $(open_threads $n) != 0 ]]; then note $n "has unresolved review threads"; continue; fi
     # GitHub runs no CI on a PR that conflicts with main, so this comes before the CI check, which would

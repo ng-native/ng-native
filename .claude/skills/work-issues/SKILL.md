@@ -80,18 +80,18 @@ Run the merge queue for PRs once they are open:
 .claude/skills/work-issues/scripts/merge-queue.sh <pr> <pr> ...
 ```
 
-- **What it waits for:** Greptile's review of the current code with every thread resolved, every check
+- **What it waits for:** a review bot's review of the current code with every thread resolved, every check
   green, a clean merge into main, and no release running. Then it squash-merges.
 - **Main moving on:** a PR that merges cleanly is merged on its green run, even when main has changed
   since CI ran. Only a conflict, or a lockfile change on both sides, sends it back to be updated. When a
   pair that merged cleanly breaks main between them, fix main forward.
 - **When a PR drops out:** a PR that fails CI or conflicts leaves the queue. Find out why before putting it
   back.
-- **Greptile never approves:** it leaves a commented review with inline P1/P2 comments, or, with nothing
-  to say, only a finished "Greptile Review" check run. So the queue merges when Greptile has reviewed the
-  current commit, or an older commit whose own changes the current one leaves identical (a pure rebase),
-  with every review thread resolved and CI green. A PR whose newest commit Greptile hasn't reviewed yet
-  waits. It reviews each push on its own; `@greptileai review` isn't needed.
+- **Any review bot counts:** Greptile, CodeRabbit, cubic or another; which one reviews doesn't matter, and
+  none has to approve (Greptile never does: it leaves a commented review, or, with nothing to say, only a
+  finished "Greptile Review" check run). So the queue merges when a bot has reviewed the current commit, or
+  an older commit whose own changes the current one leaves identical (a pure rebase), with every review
+  thread resolved and CI green. A PR whose newest commit no bot has reviewed yet waits.
 - **Review comments on a PR:** send them back to the agent that wrote it; it has the context.
 - **CI failures:** send those back to the same agent. Re-run a failed job only once the failure is shown not
   to be the PR's. A re-run reuses its run's checkout, so it never picks up a fix main has gained since: when
