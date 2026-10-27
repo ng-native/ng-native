@@ -291,6 +291,18 @@ describe('iframe as a web view', () => {
     assert.equal(heard[0].source, window.parent);
   });
 
+  it('hears a message from a sender with no web origin as from null, not from the frame', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    await framed(document, { src: 'https://video.example/embed' });
+    const node = view(fabric);
+    const messages = await heard(() => fabric.emit(node, 'topMessage', { url: 'null', data: 'x' }));
+    assert.deepEqual(
+      messages.map((each) => each.origin),
+      ['null'],
+    );
+  });
+
   it('hears a message the page posts to its parent, from the frame and its origin', async () => {
     installWebView();
     const { document, fabric } = await page();

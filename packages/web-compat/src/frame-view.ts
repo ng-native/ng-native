@@ -576,7 +576,9 @@ function receive(view: FrameView, event: { data?: unknown; url?: string }): void
  */
 function senderOf(view: FrameView, url: string | undefined): string {
   if (view.opaque || !url || /^about:/i.test(url)) return originOf(view);
-  return parseUrl(url)?.origin ?? originOf(view);
+  // One the platform could not say as a URL, such as an opaque frame's `null`, is no web origin:
+  // never the frame's own, which the app trusts.
+  return parseUrl(url)?.origin ?? 'null';
 }
 
 /** Let a navigation go ahead, where the platform holds it until it is told: iOS, every time. */
