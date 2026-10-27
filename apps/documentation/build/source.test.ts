@@ -1,5 +1,6 @@
 import path from 'node:path';
 import url from 'node:url';
+import { resolveConfig } from 'vite';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { highlight } from './markdown.ts';
 import { source } from './source.ts';
@@ -30,5 +31,15 @@ describe("an example's source", () => {
   test('is highlighted in the language its excerpt names', async () => {
     const { text, html } = await load('src/examples/settings.ts', '?excerpt');
     expect(html).toBe(await highlight(text, 'html'));
+  });
+});
+
+describe('a file outside what the server may read', () => {
+  test('is refused, as Vite refuses a request for it', async () => {
+    const plugin = source();
+    const config = await resolveConfig({ root: documentation, configFile: false }, 'serve');
+    (plugin.configResolved as (config: unknown) => void)(config);
+    const outside = path.join(path.parse(documentation).root, 'etc', 'hosts');
+    await expect((plugin.load as Load)(`${outside}?source`)).rejects.toThrow(/may not read/);
   });
 });

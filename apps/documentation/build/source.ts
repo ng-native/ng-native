@@ -9,7 +9,7 @@
  * same kind of block, and at build time for the same reason: the site should not ship a syntax
  * highlighter to render text that was already known at build time.
  */
-import type { Plugin } from 'vite';
+import { isFileLoadingAllowed, type Plugin, type ResolvedConfig } from 'vite';
 import { excerpt, withoutMarkers } from './excerpt.ts';
 import { highlight } from './markdown.ts';
 
@@ -18,13 +18,21 @@ const SUFFIX = '?source';
 const EXCERPT = '?excerpt';
 
 export function source(): Plugin {
+  let config: ResolvedConfig | undefined;
   return {
     name: 'angular-native-docs-source',
     enforce: 'pre',
+    configResolved(resolved) {
+      config = resolved;
+    },
     async load(id) {
       const suffix = [SUFFIX, EXCERPT].find((end) => id.endsWith(end));
       if (!suffix) return undefined;
       const file = id.slice(0, -suffix.length);
+      // A request names the file, so it is held to what the server may read, as `?raw` is.
+      if (config && !isFileLoadingAllowed(config, file)) {
+        throw new Error(`The server may not read ${file}.`);
+      }
       const text = await import('node:fs/promises').then((fs) => fs.readFile(file, 'utf8'));
       const region = suffix === EXCERPT ? excerpt(text) : undefined;
       const shown = region ? region.text : trimLicenceHeader(withoutMarkers(text));
