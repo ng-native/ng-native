@@ -100,6 +100,9 @@ export function exampleSources(workspaceRoot: string): Plugin {
         const [slug = '', ...rest] = id.slice(FILE.length + 1, -FILE_SUFFIX.length).split('/');
         const root = rootOf(slug);
         const file = rest.join('/');
+        // Only a file the index lists: the id is a request's, and `..` in it would climb out.
+        if (!sourceFiles(root).includes(file))
+          throw new Error(`${file} is not a source file of ${slug}.`);
         this.addWatchFile(path.join(root, file));
         return `export default ${JSON.stringify(await highlightFile(root, file))};\n`;
       }
