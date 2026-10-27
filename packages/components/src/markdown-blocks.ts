@@ -368,24 +368,28 @@ function share(previous: unknown, next: unknown): unknown {
 
 function shareArray(previous: readonly unknown[], next: readonly unknown[]): readonly unknown[] {
   const out = next.slice();
+  // Each pair is compared once: the passes below meet at the same position, and comparing a
+  // changed block again in each of them made a nested one cost three times as much a level.
+  const compared = new Set<number>();
+  const shareAt = (was: number, at: number): unknown => {
+    if (was === at) {
+      if (compared.has(at)) return out[at];
+      compared.add(at);
+    }
+    return (out[at] = share(previous[was], out[at]));
+  };
   let start = 0;
   while (start < out.length && start < previous.length) {
-    const kept = share(previous[start], out[start]);
-    if (kept !== previous[start]) break;
-    out[start++] = kept;
+    if (shareAt(start, start) !== previous[start]) break;
+    start++;
   }
   let end = 0;
   while (end < out.length - start && end < previous.length - start) {
-    const at = out.length - 1 - end;
     const was = previous.length - 1 - end;
-    const kept = share(previous[was], out[at]);
-    if (kept !== previous[was]) break;
-    out[at] = kept;
+    if (shareAt(was, out.length - 1 - end) !== previous[was]) break;
     end++;
   }
-  for (let i = start; i < out.length - end && i < previous.length - end; i++) {
-    out[i] = share(previous[i], out[i]);
-  }
+  for (let i = start; i < out.length - end && i < previous.length - end; i++) shareAt(i, i);
   const same = out.length === previous.length && out.every((one, i) => one === previous[i]);
   return same ? previous : out;
 }
