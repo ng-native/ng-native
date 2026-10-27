@@ -9,6 +9,7 @@ import { dispatch, listen, newEvent, report, unlisten } from './events.ts';
 import { detached, treeOf } from './html-tree.ts';
 import { domError } from './dom-error.ts';
 import { webOrigin } from './page-address.ts';
+import { nameRecordOf, XHTML } from './qualified-name.ts';
 import { parseUrl } from './parse-url.ts';
 import { own, type Reflection } from './reflect.ts';
 import { descendants } from './in-document.ts';
@@ -188,6 +189,10 @@ const watched = new WeakMap<Engine, () => void>();
 export function frameCreated(node: EngineNode, engine: Engine): void {
   // A web view is a page of its own: see `frame-view.ts`.
   if (node.tag !== 'iframe') return;
+  // Only HTML's iframe is one: an `<iframe>` in a drawing, MathML or another namespace is an
+  // element of no meaning, and its srcdoc is no page.
+  const html = !node.namespace && (nameRecordOf(node)?.namespace ?? XHTML) === XHTML;
+  if (!html) return keepPlainFrame(node);
   if (!loaders.has(engine)) return keepPlainFrame(node);
   if (frameViewCreated(node, engine) || watched.has(engine)) return;
   const { appendChild, insertBefore, removeChild } = engine;

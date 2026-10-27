@@ -168,6 +168,17 @@ describe('iframe as a web view', () => {
     assert.deepEqual(referrer(), [{ name: 'Referer', value: 'https://shop.example/orders/' }]);
   });
 
+  it('makes a web view of an HTML iframe only, not one of the same name in a drawing', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const svg = '<svg><iframe srcdoc="<script>1</script>"></iframe></svg>';
+    const math = '<math><iframe srcdoc="<script>2</script>"></iframe></math>';
+    document.body.innerHTML = svg + math;
+    document.body.appendChild(document.createElementNS('urn:x', 'iframe'));
+    await settle();
+    assert.equal(fabric.find('RNCWebView'), undefined, fabric.render());
+  });
+
   it('shows srcdoc as HTML with the page as its base, and about:blank as an empty page', async () => {
     installWebView();
     const { document, fabric } = await page();
