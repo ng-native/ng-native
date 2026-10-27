@@ -502,7 +502,8 @@ function withParkedRoute(config) {
         if (!Array.isArray(urls) || !urls.every((page) => typeof page?.url === 'string')) {
           return answer(400, 'null');
         }
-        parked.set(app, { urls: JSON.stringify(urls), at: Date.now() });
+        // Kept as sent: writing it out again can throw on what JSON.parse read, and crash the server.
+        parked.set(app, { urls: body, at: Date.now() });
         answer(204, '');
       });
     };

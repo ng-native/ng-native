@@ -1323,6 +1323,14 @@ describe('the history a reload parks with the dev server', () => {
     assert.equal((await request('GET', route)).body, 'null', 'a later cold start finds nothing');
   });
 
+  it('keeps a history nested too deeply to write out again, as it was sent', async () => {
+    const { request } = serverOf();
+    const deep = 32_000;
+    const pages = `[{"url":"/","presentation":${'['.repeat(deep)}${']'.repeat(deep)}}]`;
+    assert.equal((await request('POST', route, pages)).status, 204);
+    assert.equal((await request('GET', route)).body, pages);
+  });
+
   it('hands a history to a GET alone, so a probe does not take it from the app', async () => {
     const { request } = serverOf();
     const pages = JSON.stringify([{ url: '/about' }]);
