@@ -88,6 +88,12 @@ describe('the generated stylesheet module', () => {
     });
   });
 
+  it('keeps an entry name that breaks a line inside the header comment', () => {
+    const module = compileSheetModule('.p-4 { padding: 16px }', 'a\nthrow 1;\u2028throw 2;.css');
+    assert.equal(module.split(/[\n\u2028]/)[0], '// Generated from a throw 1; throw 2;.css. Edit the Tailwind entry, not this.');
+    assert.ok(styleOf(evaluate(module), 'p-4'));
+  });
+
   it('reads the sheet as a browser does under the classes named, and not anywhere else', () => {
     // Components written for a browser and styled by the app's own Tailwind sheet: a flex
     // container under them is a row, `::before` draws a box, and one axis of overflow is a

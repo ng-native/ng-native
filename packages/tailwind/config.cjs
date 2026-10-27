@@ -259,7 +259,9 @@ function compileSheetModule(css, context = 'tailwind', paths, browser) {
     imports.push(`import font${imports.length} from ${file};\n`);
     return `font${imports.length - 1}`;
   });
-  return `// Generated from ${path.basename(context)}. Edit the Tailwind entry, not this.\n${imports.join('')}export default ${literal};\n`;
+  // On one line, whatever the entry is called: a line break in the name would end the comment.
+  const entry = path.basename(context).replace(/[\r\n\u2028\u2029]/g, ' ');
+  return `// Generated from ${entry}. Edit the Tailwind entry, not this.\n${imports.join('')}export default ${literal};\n`;
 }
 
 /** Faces already reported unreadable, once a process: the sheet is rebuilt on every class written. */
