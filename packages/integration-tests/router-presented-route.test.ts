@@ -5,7 +5,21 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { DefaultUrlSerializer, type Route, type Router, type Routes } from '@angular/router';
+import {
+  createEnvironmentInjector,
+  inject,
+  InjectionToken,
+  Injector,
+  runInInjectionContext,
+  type EnvironmentInjector,
+} from '@angular/core';
+import {
+  DefaultUrlSerializer,
+  type CanActivateFn,
+  type Route,
+  type Router,
+  type Routes,
+} from '@angular/router';
 import { PRESENTED, presentedCommands } from '../router/src/presented-route.ts';
 
 class Bar {}
@@ -18,6 +32,7 @@ const mayRead = () => true;
 const owner = () => true;
 
 const serializer = new DefaultUrlSerializer();
+const ROOT = createEnvironmentInjector([], Injector.NULL as EnvironmentInjector);
 const routerWith = (config: Routes) =>
   ({ config, parseUrl: (url: string) => serializer.parse(url) }) as unknown as Router;
 
@@ -44,32 +59,60 @@ const tabs = (): Routes => [
 ];
 
 describe('the route a presented page gets at the root', () => {
+  it("runs an ancestor's guard with the providers down to its route, not a page's below", async () => {
+    const POLICY = new InjectionToken<string>('policy');
+    const seen: string[] = [];
+    const strict: CanActivateFn = () => (seen.push(inject(POLICY)), true);
+    const router = routerWith([
+      {
+        path: 'admin',
+        component: Stack,
+        canActivate: [strict],
+        providers: [{ provide: POLICY, useValue: 'strict' }],
+        children: [
+          { path: 'users', component: List, providers: [{ provide: POLICY, useValue: 'lenient' }] },
+        ],
+      },
+    ]);
+    const root = createEnvironmentInjector([], Injector.NULL as EnvironmentInjector);
+    await presentedCommands(router, '/admin/users', root);
+    const copy = router.config.at(-1) as Route;
+    // As Angular runs a route's guards: in an injector made of the route's providers.
+    const scope = createEnvironmentInjector(copy.providers ?? [], root);
+    for (const guard of copy.canActivate ?? []) {
+      runInInjectionContext(scope, () => (guard as CanActivateFn)(null!, null!));
+    }
+    assert.deepEqual(seen, ['strict']);
+  });
+
   it('is the page under its whole path, with the guards, providers and data above it', async () => {
     const router = routerWith(tabs());
-    assert.deepEqual(await presentedCommands(router, '/invoices/7'), [
+    assert.deepEqual(await presentedCommands(router, '/invoices/7', ROOT), [
       { outlets: { [PRESENTED]: ['invoices', '7'] } },
     ]);
     const copy = router.config.at(-1) as Route;
     assert.equal(copy.outlet, PRESENTED);
     assert.equal(copy.path, 'invoices/:id');
     assert.equal(copy.component, Detail, 'the page, and neither the bar nor the tab s stack');
-    assert.deepEqual(copy.canActivate, [signedIn, mayRead, owner]);
+    // signedIn is run with the providers down to its route's, which the copy's are not: see below.
+    assert.equal(copy.canActivate?.length, 3);
+    assert.deepEqual(copy.canActivate?.slice(1), [mayRead, owner]);
     assert.deepEqual(copy.providers, [{ provide: 'feature', useValue: 'invoices' }]);
     assert.deepEqual(copy.data, { section: 'billing', kind: 'detail' });
   });
 
   it('is made once for a path, however many times a page of it is presented', async () => {
     const router = routerWith(tabs());
-    await presentedCommands(router, '/invoices/7');
-    await presentedCommands(router, '/invoices/8');
+    await presentedCommands(router, '/invoices/7', ROOT);
+    await presentedCommands(router, '/invoices/8', ROOT);
     assert.equal(router.config.length, 2);
-    await presentedCommands(router, '/invoices');
+    await presentedCommands(router, '/invoices', ROOT);
     assert.equal(router.config.length, 3, 'and once more for a page under another path');
   });
 
   it('is made though a route of the primary outlet has the same path', async () => {
     const router = routerWith([...tabs(), { path: 'invoices/:id', component: List }]);
-    await presentedCommands(router, '/invoices/7');
+    await presentedCommands(router, '/invoices/7', ROOT);
     const copy = router.config.at(-1) as Route;
     assert.equal(copy.outlet, PRESENTED);
     assert.equal(copy.component, Detail);
@@ -92,7 +135,7 @@ describe('the route a presented page gets at the root', () => {
       },
     ];
     const router = routerWith(lazy(signedIn));
-    const presenting = presentedCommands(router, '/orders/7');
+    const presenting = presentedCommands(router, '/orders/7', ROOT);
     router.config = lazy(owner);
     release();
     assert.deepEqual(await presenting, [{ outlets: { [PRESENTED]: ['orders', '7'] } }]);
@@ -102,7 +145,7 @@ describe('the route a presented page gets at the root', () => {
 
   it('is the first screen of a tab, for the tab s own url', async () => {
     const router = routerWith(tabs());
-    await presentedCommands(router, '/invoices');
+    await presentedCommands(router, '/invoices', ROOT);
     assert.equal((router.config.at(-1) as Route).component, List);
     assert.equal((router.config.at(-1) as Route).path, 'invoices');
   });
@@ -121,7 +164,7 @@ describe('the route a presented page gets at the root', () => {
       },
     ]);
     for (const id of ['7', '8']) {
-      assert.deepEqual(await presentedCommands(router, `/orders/${id}`), [
+      assert.deepEqual(await presentedCommands(router, `/orders/${id}`, ROOT), [
         { outlets: { [PRESENTED]: ['orders', id] } },
       ]);
     }
@@ -143,7 +186,7 @@ describe('the route a presented page gets at the root', () => {
       },
     ]) {
       const router = routerWith([{ path: 'lazy', loadChildren }] as Routes);
-      assert.equal(await presentedCommands(router, '/lazy/1'), null);
+      assert.equal(await presentedCommands(router, '/lazy/1', ROOT), null);
       assert.equal(router.config.length, 1);
     }
   });
@@ -160,7 +203,7 @@ describe('the route a presented page gets at the root', () => {
       ],
     ] as Routes[]) {
       const router = routerWith(config);
-      assert.equal(await presentedCommands(router, '/admin/1'), null);
+      assert.equal(await presentedCommands(router, '/admin/1', ROOT), null);
       assert.equal(router.config.length, config.length, 'and adds nothing');
     }
   });
@@ -174,7 +217,11 @@ describe('the route a presented page gets at the root', () => {
     ] as Routes[]) {
       const router = routerWith(config);
       const path = `/${config[0]!.path === '**' ? 'anything' : (config[0]!.path ?? 'x')}/1`;
-      assert.equal(await presentedCommands(router, path), null, JSON.stringify(config[0]!.path));
+      assert.equal(
+        await presentedCommands(router, path, ROOT),
+        null,
+        JSON.stringify(config[0]!.path),
+      );
       assert.equal(router.config.length, 1, 'and adds nothing');
     }
   });
