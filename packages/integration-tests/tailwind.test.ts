@@ -455,6 +455,12 @@ describe('flattening Tailwind for the engine', () => {
     assert.match(out, /box-shadow:\s*0 10px 15px -3px/, 'the rule that reads it declared it');
   });
 
+  it('reads a var() name as text, not as a pattern', () => {
+    // `--a**` made the self-reference check build an invalid pattern, which threw.
+    const out = flattenTailwind('.x { color: var(--a**, red) }');
+    assert.match(out, /color: red/);
+  });
+
   it('falls back when a custom property was reset to `initial`', () => {
     // `--tw-shadow-color: initial` is how Tailwind says "nobody has set a shadow colour". A
     // custom property holding `initial` is guaranteed-invalid, so `var()` takes its fallback -

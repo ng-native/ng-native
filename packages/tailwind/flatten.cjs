@@ -213,7 +213,7 @@ function nextVar(css, from) {
  * one.
  */
 function selfReferential(value, name) {
-  return new RegExp(`var\\(\\s*${name.replace(/[-]/g, '\\-')}\\s*[,)]`).test(value);
+  return new RegExp(`var\\(\\s*${name.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')}\\s*[,)]`).test(value);
 }
 
 /** Split `--x, fallback` at the first comma that is not inside parentheses. */
