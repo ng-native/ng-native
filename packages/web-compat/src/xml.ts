@@ -47,16 +47,33 @@ class NotWellFormed extends Error {}
 
 const isDeclaration = (name: string): boolean => name === 'xmlns' || name.startsWith('xmlns:');
 
-/** The namespaces where an element is: those it is in, with those its attributes declare. */
-function declared(
-  outer: ReadonlyMap<string, string | null>,
+/**
+ * Puts an element's declarations into the namespaces in force, answering what they shadowed so
+ * its end can put that back. One table with an undo list, not a copy per element: a copy makes
+ * deep markup declaring a prefix at every level quadratic.
+ */
+function declare(
+  namespaces: Map<string, string | null>,
   attributes: readonly [string, string][],
-): Map<string, string | null> {
-  const namespaces = new Map(outer);
+): Shadowed {
+  const shadowed: [string, string | null | undefined][] = [];
   for (const [name, value] of attributes) {
-    if (isDeclaration(name)) namespaces.set(name === 'xmlns' ? '' : name.slice(6), value || null);
+    if (!isDeclaration(name)) continue;
+    const prefix = name === 'xmlns' ? '' : name.slice(6);
+    shadowed.push([prefix, namespaces.get(prefix)]);
+    namespaces.set(prefix, value || null);
   }
-  return namespaces;
+  return shadowed;
+}
+
+type Shadowed = readonly [string, string | null | undefined][];
+
+function undeclare(namespaces: Map<string, string | null>, shadowed: Shadowed): void {
+  for (let at = shadowed.length - 1; at >= 0; at--) {
+    const [prefix, namespace] = shadowed[at];
+    if (namespace === undefined) namespaces.delete(prefix);
+    else namespaces.set(prefix, namespace);
+  }
 }
 
 /** The namespace of a name: its prefix's, or for an element with none, the default one. */
@@ -97,8 +114,8 @@ function decode(text: string): string {
 interface Open {
   readonly node: XmlNode | XmlTarget;
   readonly name: string;
-  /** The namespaces declared for each prefix where this element is, '' the default. */
-  readonly namespaces: ReadonlyMap<string, string | null>;
+  /** The declarations this element's own shadowed, put back at its end. */
+  readonly shadowed: Shadowed;
 }
 
 /** Parse markup into an empty made document. Answers whether it was well-formed. */
@@ -129,6 +146,12 @@ class Parser {
   #at = 0;
   #rooted = false;
   readonly #stack: Open[];
+  /** The namespaces declared for each prefix where the parser is, '' the default. */
+  readonly #namespaces = new Map<string, string | null>([
+    ['xml', XML],
+    ['xmlns', XMLNS],
+    ['', null],
+  ]);
 
   readonly markup: string;
   readonly document: XmlTarget;
@@ -136,12 +159,7 @@ class Parser {
   constructor(markup: string, document: XmlTarget) {
     this.markup = markup;
     this.document = document;
-    const namespaces = new Map<string, string | null>([
-      ['xml', XML],
-      ['xmlns', XMLNS],
-      ['', null],
-    ]);
-    this.#stack = [{ node: document, name: '', namespaces }];
+    this.#stack = [{ node: document, name: '', shadowed: [] }];
   }
 
   get #rest(): string {
@@ -264,7 +282,8 @@ class Parser {
       throw new NotWellFormed('The document has more than one element.');
     }
     const attributes = this.#attributes(name);
-    const namespaces = declared(this.#open.namespaces, attributes);
+    const namespaces = this.#namespaces;
+    const shadowed = declare(namespaces, attributes);
     const node = this.document.createElementNS(namespaceOf(namespaces, name, true), name);
     for (const [attribute, value] of attributes) {
       const namespace = isDeclaration(attribute)
@@ -276,10 +295,11 @@ class Parser {
     if (this.#stack.length === 1) this.#rooted = true;
     if (this.#rest.startsWith('/>')) {
       this.#at += 2;
+      undeclare(namespaces, shadowed);
       return;
     }
     this.#at++;
-    this.#stack.push({ node, name, namespaces });
+    this.#stack.push({ node, name, shadowed });
   }
 
   /** An element's attributes, by name and value, up to the end of its start tag. */
@@ -321,6 +341,6 @@ class Parser {
     if (this.#stack.length === 1 || this.#open.name !== name) {
       throw new NotWellFormed(`</${name}> does not close the element that is open.`);
     }
-    this.#stack.pop();
+    undeclare(this.#namespaces, this.#stack.pop()!.shadowed);
   }
 }
