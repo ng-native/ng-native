@@ -1,5 +1,6 @@
 import {
   markComponentHost,
+  nativePlatform,
   registerViewName,
   type Engine,
   type EngineNode,
@@ -114,6 +115,11 @@ interface FrameView {
   /** The URL of the page in the view, as it last said. */
   url: string;
   size: Record<string, number | string>;
+  /** The source last given the view, and whether the page it names has not said it loaded yet. */
+  shown: string;
+  loading: boolean;
+  /** Messages for an origin, held while the page that has it loads: see `postMessage`. */
+  readonly held: (() => void)[];
 }
 
 const modes = new WeakMap<Engine, FrameMode>();
@@ -210,6 +216,9 @@ export function frameViewCreated(node: EngineNode, engine: Engine): boolean {
     fullscreen: { allow: false, attribute: false },
     url: 'about:blank',
     size: {},
+    shown: JSON.stringify({ html: '' }),
+    loading: false,
+    held: [],
   } as unknown as FrameView;
   (view as { window: object }).window = windowFor(view);
   views.set(node, view);
@@ -221,6 +230,8 @@ export function frameViewCreated(node: EngineNode, engine: Engine): boolean {
   const loaded = (event: unknown) => {
     const url = nativeOf<{ url?: string }>(event).url;
     if (url) view.url = url;
+    view.loading = false;
+    for (const send of view.held.splice(0)) send();
     (node as unknown as { dispatchEvent(event: unknown): boolean }).dispatchEvent(newEvent('load'));
   };
   engine.setEventListener(node, 'topLoadingFinish', loaded);
@@ -263,7 +274,10 @@ const leftOutBy =
   };
 
 const showSource: Take = (view, _, engine) => {
-  engine.setProp(view.node, 'newSource', sourceOf(view));
+  const source = sourceOf(view);
+  const shown = JSON.stringify(source);
+  if (shown !== view.shown) Object.assign(view, { shown, loading: true });
+  engine.setProp(view.node, 'newSource', source);
   if (view.opaque && view.srcdoc === null && view.src !== null) {
     warnOnce(
       'opaque',
@@ -392,8 +406,19 @@ function sourceOf(view: FrameView): Record<string, unknown> {
     const baseUrl = srcdocBase(view);
     return baseUrl ? { html: view.srcdoc, baseUrl } : { html: view.srcdoc };
   }
-  const url = view.src ? parseUrl(view.src, base)?.href : undefined;
+  const parsed = view.src ? parseUrl(view.src, base) : undefined;
+  const url = parsed?.href;
   if (!url || url === 'about:blank') return { html: '' };
+  // react-native-webview on iOS hands a URL with no host, such as a data: one, to loadFileURL,
+  // which throws for anything but a file: URL and takes the app down with it.
+  if (nativePlatform() === 'ios' && !parsed!.host && parsed!.protocol !== 'file:') {
+    warnOnce(
+      'hostless',
+      `an <iframe>'s src of ${parsed!.protocol} is shown as an empty page on iOS: ` +
+        'react-native-webview there loads only a web address or a file.',
+    );
+    return { html: '' };
+  }
   const referrer = referrerOf(view.referrerPolicy, base, url);
   return referrer ? { uri: url, headers: [{ name: 'Referer', value: referrer }] } : { uri: url };
 }
@@ -526,16 +551,21 @@ function windowFor(view: FrameView): object {
       const wanted = JSON.stringify(target === '*' ? null : origin);
       const own = origin === pageOrigin(engine);
       const json = JSON.stringify({ data: message }) ?? '{}';
-      engine.dispatchCommand(node, 'injectJavaScript', [
-        // The source is set after: a browser's event takes none but a window or a port.
-        `(function () { var at = window.location; if (${wanted} !== null && at.origin !== ` +
-          `${wanted} && !(${own} && !/^https?:$/.test(at.protocol))) return; ` +
-          `var data = JSON.parse(${JSON.stringify(json)}).data; ` +
-          `var event = new MessageEvent('message', { data: data, ` +
-          `origin: ${JSON.stringify(pageOrigin(engine))} }); ` +
-          `Object.defineProperty(event, 'source', { value: window.parent }); ` +
-          `window.dispatchEvent(event); })(); true;`,
-      ]);
+      const send = () =>
+        engine.dispatchCommand(node, 'injectJavaScript', [
+          // The source is set after: a browser's event takes none but a window or a port.
+          `(function () { var at = window.location; if (${wanted} !== null && at.origin !== ` +
+            `${wanted} && !(${own} && !/^https?:$/.test(at.protocol))) return; ` +
+            `var data = JSON.parse(${JSON.stringify(json)}).data; ` +
+            `var event = new MessageEvent('message', { data: data, ` +
+            `origin: ${JSON.stringify(pageOrigin(engine))} }); ` +
+            `Object.defineProperty(event, 'source', { value: window.parent }); ` +
+            `window.dispatchEvent(event); })(); true;`,
+        ]);
+      // While a new page loads the one before is still in the view, and a page of no web origin
+      // there would pass for one of the app's: what is for an origin waits for the new page.
+      if (target !== '*' && view.loading) view.held.push(send);
+      else send();
     },
     focus() {
       engine.dispatchCommand(node, 'requestFocus');
@@ -576,9 +606,12 @@ function receive(view: FrameView, event: { data?: unknown; url?: string }): void
  */
 function senderOf(view: FrameView, url: string | undefined): string {
   if (view.opaque || !url || /^about:/i.test(url)) return originOf(view);
-  // One the platform could not say as a URL, such as an opaque frame's `null`, is no web origin:
-  // never the frame's own, which the app trusts.
-  return parseUrl(url)?.origin ?? 'null';
+  const parsed = parseUrl(url);
+  if (parsed) return parsed.origin;
+  // Android says `null` for a page of no web origin. The frame's own page is one where it is at
+  // `about:`, as srcdoc with no base loads; under a page at a web address it is a frame inside
+  // that page, which is never the frame the app trusts.
+  return /^about:/i.test(view.url) ? originOf(view) : 'null';
 }
 
 /** Let a navigation go ahead, where the platform holds it until it is told: iOS, every time. */

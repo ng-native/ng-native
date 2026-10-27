@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { Component, DOCUMENT, inject } from '@angular/core';
-import { registerViewName } from '@ng-native/fabric';
+import { registerPlatformComponents, registerViewName } from '@ng-native/fabric';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { provideWebCompat, type WebCompatOptions } from './index.ts';
 import { framesHeard } from './frame-view.ts';
@@ -179,6 +179,25 @@ describe('iframe as a web view', () => {
     assert.equal(fabric.find('RNCWebView'), undefined, fabric.render());
   });
 
+  it('shows a src with no host as an empty page on iOS, where the web view throws on one', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { src: 'data:text/html,<p>x</p>' });
+    assert.deepEqual(view(fabric).props['newSource'], { html: '' });
+    assert.ok(
+      warnings.some((each) => each.includes('data:')),
+      warnings.join('\n'),
+    );
+    registerPlatformComponents('android');
+    try {
+      iframe.setAttribute('src', 'data:text/html,<p>y</p>');
+      await settle();
+      assert.deepEqual(view(fabric).props['newSource'], { uri: 'data:text/html,<p>y</p>' });
+    } finally {
+      registerPlatformComponents('ios');
+    }
+  });
+
   it('shows srcdoc as HTML with the page as its base, and about:blank as an empty page', async () => {
     installWebView();
     const { document, fabric } = await page();
@@ -289,6 +308,39 @@ describe('iframe as a web view', () => {
     assert.deepEqual(JSON.parse(JSON.stringify(heard[0].data)), { play: true });
     assert.equal(heard[0].origin, 'https://shop.example');
     assert.equal(heard[0].source, window.parent);
+  });
+
+  it('holds a message for its own origin until the page srcdoc gives the frame has loaded', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { src: 'data:text/html,<p>theirs</p>' });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'data:text/html,<p>theirs</p>' });
+    iframe.setAttribute('srcdoc', '<p>ours</p>');
+    await settle();
+    // The page before is still in the view: it is not who the message is for.
+    iframe.contentWindow.postMessage('secret', '/');
+    iframe.contentWindow.postMessage('anyone', '*');
+    assert.equal(sent(fabric).length, 1, 'only the one for anyone');
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'about:blank' });
+    assert.equal(sent(fabric).length, 2);
+    assert.match(String(sent(fabric)[1]!.args[0]), /secret/);
+    // Once it has loaded, one is sent at once.
+    iframe.contentWindow.postMessage('again', '/');
+    assert.equal(sent(fabric).length, 3);
+  });
+
+  it('hears null from a srcdoc page with no base as from the frame, as Android says it', async () => {
+    installWebView();
+    const { document, fabric } = await page({ url: 'exp://127.0.0.1:8081/--/' });
+    await framed(document, { srcdoc: '<p>ours</p>' });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'about:blank' });
+    const messages = await heard(() =>
+      fabric.emit(view(fabric), 'topMessage', { url: 'null', data: 'x' }),
+    );
+    assert.deepEqual(
+      messages.map((each) => each.origin),
+      ['exp://127.0.0.1:8081'],
+    );
   });
 
   it('hears a message from a sender with no web origin as from null, not from the frame', async () => {
@@ -403,6 +455,7 @@ describe('iframe as a web view', () => {
     installWebView();
     const { document, fabric } = await page({ url: 'exp://127.0.0.1:8081/--/' });
     const iframe = await framed(document, { srcdoc: '<p>Hi</p>' });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'about:blank' });
     const sent = () => fabric.commands.filter((each) => each.name === 'injectJavaScript');
     // Expo Go's address, whose origin the page reads as its scheme and host.
     iframe.contentWindow.postMessage('hello', 'exp://127.0.0.1:8081');
@@ -421,7 +474,10 @@ describe('iframe as a web view', () => {
     // Before it has loaded, the frame is at the page it is going to, not the app's.
     iframe.contentWindow.postMessage('secret', '/');
     assert.equal(sent().length, 0);
+    // Held until the page it is for has loaded.
     iframe.contentWindow.postMessage('hello', 'https://video.example');
+    assert.equal(sent().length, 0);
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'https://video.example/embed' });
     assert.equal(sent().length, 1);
   });
 
@@ -431,6 +487,8 @@ describe('iframe as a web view', () => {
     const iframe = await framed(document, { srcdoc: '<p>Hi</p>' });
     const sent = () => fabric.commands.filter((each) => each.name === 'injectJavaScript');
     iframe.contentWindow.postMessage('secret', '/');
+    assert.equal(sent().length, 0, 'not while the page before it is still in the view');
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'about:blank' });
     assert.equal(sent().length, 1);
     const heard: Dom[] = [];
     const deliverAt = (location: { origin: string; protocol: string }) =>
@@ -501,6 +559,7 @@ describe('iframe as a web view', () => {
     fabric.emit(view(fabric), 'topLoadingFinish', { url: 'https://video.example/embed' });
     iframe.setAttribute('srcdoc', '<p>Hi</p>');
     await settle();
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'about:blank' });
     const messages = await heard(() =>
       fabric.emit(view(fabric), 'topMessage', { url: 'about:srcdoc', data: 'hi' }),
     );
@@ -535,6 +594,7 @@ describe('iframe as a web view', () => {
     installWebView();
     const { document, fabric } = await page();
     const iframe = await framed(document, { sandbox: 'allow-scripts', srcdoc: '<p>Hi</p>' });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'about:blank' });
     const origins = async () =>
       (
         await heard(() =>
@@ -555,6 +615,7 @@ describe('iframe as a web view', () => {
       html: '<p>Hi</p>',
       baseUrl: 'https://shop.example/orders/',
     });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'https://shop.example/orders/' });
     iframe.contentWindow.postMessage('secret', '/');
     assert.equal(sent(fabric).length, 2);
     assert.deepEqual(await origins(), ['https://shop.example']);
@@ -685,6 +746,7 @@ describe('iframe as a web view', () => {
     });
     iframe.removeAttribute('srcdoc');
     await settle();
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'https://video.example/embed' });
     iframe.contentWindow.postMessage('secret', 'https://shop.example');
     assert.equal(sent(fabric).length, 0);
     iframe.contentWindow.postMessage('hello', 'https://video.example');
