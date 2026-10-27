@@ -377,12 +377,54 @@ const SWITCH_HANDLERS: Record<string, Handler> = {
   },
 };
 
+/** How an `<img>` fits a picture for each resizeMode, as `background-size` does below. */
+const FIT: Record<string, string> = { cover: 'cover', contain: 'contain', stretch: 'fill' };
+const MODES = new WeakMap<object, string | undefined>();
+/** The `<img>` each image paints with, where its source names a referrer policy. */
+const PICTURES = new WeakMap<object, HTMLImageElement>();
+
+/**
+ * A source's `Referrer-Policy`, which `image.ts` gives as a header as React Native does. A
+ * background is fetched with the page's policy whatever this says, so a source with one is
+ * painted with an `<img>` that sends what it asks for instead.
+ */
+function referrerPolicyOf(value: unknown): string | undefined {
+  const source = Array.isArray(value) ? value[0] : value;
+  const headers = (source as { headers?: Record<string, unknown> } | null)?.headers;
+  const policy = headers?.['Referrer-Policy'];
+  return typeof policy === 'string' && policy ? policy : undefined;
+}
+
+function paintWithImg(n: BrowserNode, uri: string | undefined, policy: string | undefined): void {
+  let img = PICTURES.get(n);
+  if (!uri || !policy) {
+    img?.remove();
+    PICTURES.delete(n);
+    return;
+  }
+  if (!img) {
+    img = el(n).ownerDocument.createElement('img');
+    img.alt = '';
+    img.setAttribute('aria-hidden', 'true');
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
+    el(n).appendChild(img);
+    PICTURES.set(n, img);
+  }
+  img.style.objectFit = FIT[MODES.get(n) ?? 'cover'] ?? 'none';
+  // Before the src, which starts the fetch.
+  img.referrerPolicy = policy;
+  img.src = uri;
+}
+
 /** `image.ts`'s own props. `image` paints with `background-image`; see `elements.ts`. */
 const IMAGE_HANDLERS: Record<string, Handler> = {
   source: (n, v, c) => {
     const uri = sourceUri(c ? undefined : v);
-    setStyleProp(n, 'background-image', uri ? `url("${cssEscape(uri)}")` : '', !uri);
-    if (uri) watchImageLoad(n, uri);
+    const policy = c ? undefined : referrerPolicyOf(v);
+    const background = uri && !policy ? `url("${cssEscape(uri)}")` : '';
+    setStyleProp(n, 'background-image', background, !background);
+    paintWithImg(n, uri, policy);
+    if (uri) watchImageLoad(n, uri, policy);
   },
   resizeMode: (n, v, c) => {
     const size: Record<string, string> = {
@@ -391,6 +433,9 @@ const IMAGE_HANDLERS: Record<string, Handler> = {
       stretch: '100% 100%',
     };
     const mode = typeof v === 'string' ? v : undefined;
+    MODES.set(n, c ? undefined : mode);
+    const img = PICTURES.get(n);
+    if (img) img.style.objectFit = FIT[mode ?? 'cover'] ?? 'none';
     setStyleProp(n, 'background-size', mode ? (size[mode] ?? 'auto') : '', c || !mode);
     setStyleProp(n, 'background-repeat', mode === 'repeat' ? 'repeat' : 'no-repeat', c);
     setStyleProp(n, 'background-position', 'center', c);
@@ -433,7 +478,7 @@ const IMAGE_HANDLERS: Record<string, Handler> = {
  */
 const IMAGE_LOADS = new WeakMap<object, string>();
 
-function watchImageLoad(node: BrowserNode, uri: string): void {
+function watchImageLoad(node: BrowserNode, uri: string, policy?: string): void {
   IMAGE_LOADS.set(node, uri);
   const el = node.el as Element;
   const view = el.ownerDocument.defaultView;
@@ -444,6 +489,7 @@ function watchImageLoad(node: BrowserNode, uri: string): void {
   };
   probe.addEventListener('load', settle('load'));
   probe.addEventListener('error', settle('error'));
+  if (policy) probe.referrerPolicy = policy;
   probe.src = uri;
 }
 
