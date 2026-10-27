@@ -296,6 +296,11 @@ for (const lazy of [true, false]) {
         'secret.page.ts': page('Secret', { canMatch: [() => true, () => false] }),
         'observed.page.ts': page('Secret', { canMatch: [() => of(false)] }),
         'open.page.ts': page('About', { canMatch: [async () => true, () => of(true)] }),
+        // The policy a guard reads is the page's own, as Angular runs canMatch in a route's providers.
+        'policed.page.ts': page('About', {
+          providers: [{ provide: GREETING, useValue: 'allowed' }],
+          canMatch: [() => inject(GREETING as never, { optional: true }) === 'allowed'],
+        }),
         'failing.page.ts': page('Secret', {
           canMatch: [
             () => ({
@@ -347,6 +352,8 @@ for (const lazy of [true, false]) {
       await go('/observed');
       assert.equal(top(), 'missing');
       await go('/open');
+      assert.equal(top(), 'about');
+      await go('/policed');
       assert.equal(top(), 'about');
     });
 

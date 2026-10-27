@@ -13,7 +13,13 @@
  * `fileRoutes` and one routed by `@ng-native/analog` without being renamed. Nothing here imports
  * Analog: the routes are made here, as plain `@angular/router` routes.
  */
-import { EnvironmentInjector, inject, runInInjectionContext, type Type } from '@angular/core';
+import {
+  createEnvironmentInjector,
+  EnvironmentInjector,
+  inject,
+  runInInjectionContext,
+  type Type,
+} from '@angular/core';
 import {
   UrlSegment,
   type CanMatchFn,
@@ -370,8 +376,14 @@ function pageRoute(
 ): Route {
   if (at.path === '' && !children) at = { ...at, pathMatch: 'full' };
   if (!page.lazy) {
-    const { canMatch, ...own } = ownRoute(page, page.load(), children, options);
-    return { ...at, ...(canMatch ? { canMatch } : {}), children: [own] };
+    // The page's providers go up with its guards, which Angular runs in a route's own providers.
+    const { canMatch, providers, ...own } = ownRoute(page, page.load(), children, options);
+    return {
+      ...at,
+      ...(canMatch ? { canMatch } : {}),
+      ...(providers ? { providers } : {}),
+      children: [own],
+    };
   }
   const load = loaderOf(page);
   const loadChildren = async () => {
@@ -407,12 +419,19 @@ async function passes(
   injector: EnvironmentInjector,
   args: Parameters<CanMatchFn>,
 ): Promise<GuardResult> {
-  const guards = (meta as { canMatch?: CanMatchFn[] } | undefined)?.canMatch ?? [];
-  for (const guard of guards) {
-    const result = await firstOf(runInInjectionContext(injector, () => guard(...args)));
-    if (result !== true) return result as GuardResult;
+  const { canMatch: guards = [], providers } = (meta ?? {}) as Route;
+  if (!guards.length) return true;
+  // In the page's providers, as Angular runs an eager page's guards.
+  const scoped = providers ? createEnvironmentInjector(providers, injector) : injector;
+  try {
+    for (const guard of guards as CanMatchFn[]) {
+      const result = await firstOf(runInInjectionContext(scoped, () => guard(...args)));
+      if (result !== true) return result as GuardResult;
+    }
+    return true;
+  } finally {
+    if (scoped !== injector) scoped.destroy();
   }
-  return true;
 }
 
 /** A guard's result, from an Observable's first value or a promise as from a value. */
