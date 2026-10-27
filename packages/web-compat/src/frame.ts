@@ -78,6 +78,8 @@ interface Frame {
   /** Counted up by each navigation, so that a load that is no longer wanted is dropped. */
   navigation: number;
   live: boolean;
+  /** How many frames it is inside, the page's own being 1. */
+  readonly depth: number;
   /** Told when the element is given another `width` or `height`: its `matchMedia` lists. */
   readonly resized: Set<() => void>;
   /** What its `matchMedia` listeners are told by, each ended as the frame closes. */
@@ -85,6 +87,14 @@ interface Frame {
 }
 
 const frames = new WeakMap<EngineNode, Frame>();
+/** The depth of the frame each frame document is in. */
+const depths = new WeakMap<object, number>();
+/**
+ * Deeper than this, a frame stays blank: a page that frames itself, or a chain of pages that do,
+ * would otherwise load for ever.
+ * ponytail: a depth only, not a browser's count of frames in a page as well.
+ */
+const DEEPEST = 10;
 /** Each frame document's URL, which a fragment changes in place. */
 const addresses = new WeakMap<object, string>();
 /** Each frame's documents, as they are or were. */
@@ -268,11 +278,13 @@ function open(element: EngineNode, engine: Engine): void {
     url: 'about:blank',
     navigation: 0,
     live: true,
+    depth: (depths.get((element as Dom).ownerDocument) ?? 0) + 1,
     resized: new Set(),
     watching: new Set(),
   } as unknown as Frame;
   (frame as { window: Members }).window = windowFor(frame);
   frame.document = blankDocument(frame);
+  depths.set(frame.document, frame.depth);
   frames.set(element, frame);
   attributesChanged(element, true);
 }
@@ -303,6 +315,7 @@ function closeFramesIn(document: Members): void {
 export function attributesChanged(element: EngineNode, inserting = false): void {
   const frame = frames.get(element);
   if (!frame) return;
+  if (frame.depth > DEEPEST) return inserting ? loaded(frame) : undefined;
   const dom = element as Dom;
   if (dom.hasAttribute('srcdoc')) {
     navigate(frame, { srcdoc: dom.getAttribute('srcdoc') ?? '' });
@@ -356,6 +369,7 @@ function navigate(frame: Frame, to: { url: string } | { srcdoc: string }): void 
     // What cannot be read is a blank page, and not the one the frame was at before.
     frame.url = response ? (response.url ?? url) : 'about:blank';
     frame.document = response ? documentOfResponse(frame, response) : blankDocument(frame);
+    depths.set(frame.document, frame.depth);
     loaded(frame);
   })();
   pending.add(settled);

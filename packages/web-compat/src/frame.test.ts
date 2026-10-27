@@ -66,6 +66,19 @@ async function framed(document: Dom, attributes: Record<string, string>): Promis
 }
 
 describe('iframe', () => {
+  it('stops a page that frames itself at a depth, as a browser does', async () => {
+    let loads = 0;
+    const document = await page((url) => {
+      loads++;
+      // So that, without a limit, the test ends rather than framing forever.
+      if (loads > 200) return undefined;
+      return url.endsWith('/self.html') ? { body: '<iframe src="self.html"></iframe>' } : read(url);
+    });
+    await framed(document, { src: 'https://shop.example/self.html' });
+    for (let wait = 0; wait < 300; wait++) await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(loads <= 20, `${loads} loads`);
+  });
+
   it("goes where its document's location is set, as its window's is", async () => {
     const document = await page();
     const iframe = await framed(document, { src: 'https://shop.example/frame.html' });
