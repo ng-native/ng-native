@@ -278,7 +278,7 @@ function open(element: EngineNode, engine: Engine): void {
     url: 'about:blank',
     navigation: 0,
     live: true,
-    depth: (depths.get((element as Dom).ownerDocument) ?? 0) + 1,
+    depth: (depths.get((element as Dom).ownerDocument ?? {}) ?? 0) + 1,
     resized: new Set(),
     watching: new Set(),
   } as unknown as Frame;
@@ -315,7 +315,6 @@ function closeFramesIn(document: Members): void {
 export function attributesChanged(element: EngineNode, inserting = false): void {
   const frame = frames.get(element);
   if (!frame) return;
-  if (frame.depth > DEEPEST) return inserting ? loaded(frame) : undefined;
   const dom = element as Dom;
   if (dom.hasAttribute('srcdoc')) {
     navigate(frame, { srcdoc: dom.getAttribute('srcdoc') ?? '' });
@@ -344,6 +343,7 @@ export function frameAttributeSet(node: EngineNode, name: string): void {
 
 /** Go somewhere: the document is replaced once what is there has been read, and `load` sent. */
 function navigate(frame: Frame, to: { url: string } | { srcdoc: string }): void {
+  if (frame.depth > DEEPEST) return;
   const navigation = ++frame.navigation;
   const settled = (async () => {
     let response: FrameResponse | undefined;

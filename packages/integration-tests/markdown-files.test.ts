@@ -12,7 +12,11 @@ import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
 import { lexer, type Token } from 'marked';
-import { markdownBlocks } from '../components/src/markdown-blocks.ts';
+import {
+  markdownBlocks,
+  shareBlocks,
+  type MarkdownBlock,
+} from '../components/src/markdown-blocks.ts';
 import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
@@ -229,5 +233,28 @@ describe('importing a .md file', () => {
       .map((node) => node.props['text'])
       .join('');
     assert.equal(text, 'What changed');
+  });
+});
+
+/** A quote in a quote, `depth` deep, round a text; each block counts the times it is compared. */
+function nested(depth: number, text: string, count: { reads: number }): MarkdownBlock[] {
+  const counted = (block: Record<string, unknown>, kind: string) =>
+    Object.defineProperty(block, 'kind', {
+      enumerable: true,
+      get: () => (count.reads++, kind),
+    });
+  let blocks: unknown[] = [counted({ text }, 'paragraph')];
+  for (let level = 0; level < depth; level++) blocks = [counted({ blocks }, 'quote')];
+  return blocks as MarkdownBlock[];
+}
+
+describe('shareBlocks', () => {
+  it('compares each changed block once, however deeply it nests', () => {
+    const count = { reads: 0 };
+    const previous = nested(12, 'before', count);
+    const next = nested(12, 'after', { reads: 0 });
+    const shared = shareBlocks(previous, next);
+    assert.notEqual(shared, previous);
+    assert.ok(count.reads < 100, `${count.reads} comparisons for 13 blocks`);
   });
 });
