@@ -69,7 +69,7 @@ function element(node: Dom, inherited: string | null): string {
   const namespace = node.namespaceURI;
   const local = node.localName ?? node.tag;
   const tag = node.prefix ? `${node.prefix}:${local}` : local;
-  const declared = namespace !== inherited && !node.prefix ? ` xmlns="${namespace ?? ''}"` : '';
+  const declared = namespace !== inherited && !node.prefix ? ` xmlns="${escapeAttribute(namespace ?? '')}"` : '';
   const open = `<${tag}${declared}${attributesOf(node)}`;
   const children = inDocument(node);
   if (children.length === 0) {

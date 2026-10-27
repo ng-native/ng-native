@@ -322,6 +322,15 @@ describe('XMLSerializer', () => {
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0"/><a xlink:href="#q"/></svg>',
     );
   });
+
+  it('escapes the namespace it declares as it does any attribute value', async () => {
+    const document = await page();
+    const made = document.createElementNS('urn:"><x a="', 'e');
+    assert.equal(
+      new (globalThis as Dom).XMLSerializer().serializeToString(made),
+      '<e xmlns="urn:&quot;&gt;&lt;x a=&quot;"/>',
+    );
+  });
 });
 
 describe("A table's parts", () => {
