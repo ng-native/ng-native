@@ -76,6 +76,14 @@ export function imageCreated(node: EngineNode, engine: Engine): void {
   watchBand(node, engine);
 }
 
+/** Whether an SVG image waits to be put where it loads before it is fetched: see `held`. */
+function hold(node: EngineNode): boolean {
+  if (!held.has(node) && !parsingApart() && scripting(node)) return false;
+  if (!held.has(node)) holding++;
+  held.add(node);
+  return true;
+}
+
 /** Something put in a parent: each SVG image held in it is fetched, now that it is somewhere it loads. */
 export function imageInserted(node: EngineNode, engine: Engine): void {
   if (!holding || parsingApart() || !scripting(node) || node.nodeKind !== 'element') return;
@@ -130,11 +138,7 @@ function show(node: EngineNode, picture: Picture, value: unknown, engine: Engine
   if (uri && DRAWN.test(uri)) {
     // A drawing is drawn whole: see `image-band.ts`.
     unband(node, engine);
-    if (parsingApart() || held.has(node) || !scripting(node)) {
-      if (!held.has(node)) holding++;
-      held.add(node);
-      return;
-    }
+    if (hold(node)) return;
     return draw(node, uri, engine);
   }
   // On the picture in its band, where it is drawn through one.

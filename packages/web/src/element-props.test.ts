@@ -72,11 +72,12 @@ describe('image', () => {
   it('paints with an img that sends no referrer where the source asks for none', () => {
     const { el, style, set } = scene('image');
     const probes: HTMLImageElement[] = [];
-    const Image = window.Image;
-    (window as { Image: unknown }).Image = class extends Image {
+    const host = window as unknown as { Image: typeof globalThis.Image };
+    const Image = host.Image;
+    host.Image = class extends Image {
       constructor() {
         super();
-        probes.push(this);
+        probes.push(this as HTMLImageElement);
       }
     };
     try {
@@ -99,7 +100,7 @@ describe('image', () => {
       assert.equal(el.querySelector('img'), null);
       assert.equal(style.backgroundImage, 'url("https://example.com/b.png")');
     } finally {
-      (window as { Image: unknown }).Image = Image;
+      host.Image = Image;
     }
   });
 
