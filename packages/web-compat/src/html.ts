@@ -76,10 +76,26 @@ const contextOf = (node: EngineNode): EngineNode =>
  * Whether scripts run where a node is: not in a document `document.implementation` made, nor
  * in a template's content. Where they do not, a `<noscript>` holds markup.
  */
-function scripting(node: EngineNode): boolean {
+export function scripting(node: EngineNode): boolean {
   let top = node;
   while (top.parent) top = top.parent;
   return !inert.has(top) && !madeDocumentOf(top);
+}
+
+let apart = 0;
+/**
+ * Whether markup is being parsed where nothing it names loads: a template's content, a made
+ * document, or what `setHTML` parses before it sanitizes. See `image.ts`.
+ */
+export const parsingApart = (): boolean => apart > 0;
+
+export function parseApart<T>(parse: () => T): T {
+  apart++;
+  try {
+    return parse();
+  } finally {
+    apart--;
+  }
 }
 
 /**
@@ -93,11 +109,15 @@ function parseInto(
   scripted: EngineNode,
   engine: Engine,
 ): void {
-  const parsed = parseFragment(contextOf(context), markup, {
-    treeAdapter: treeOf(engine),
-    scriptingEnabled: scripting(scripted),
-  });
-  for (const node of detached(parsed, engine)) settle(node, into, engine);
+  const parse = () => {
+    const parsed = parseFragment(contextOf(context), markup, {
+      treeAdapter: treeOf(engine),
+      scriptingEnabled: scripting(scripted),
+    });
+    for (const node of detached(parsed, engine)) settle(node, into, engine);
+  };
+  if (scripting(into)) parse();
+  else parseApart(parse);
 }
 
 /** Markup parsed as the content of `context`, built in a fragment of its own. */
@@ -300,16 +320,19 @@ export function domParser(engine: () => Engine | undefined): new () => object {
       const implementation = page && (documentOf(page)?.['implementation'] as Implementation);
       if (!page || !implementation) return { body: null, head: null, contentType: type };
       const markup = String(args[0] ?? '');
-      if (type !== 'text/html') {
-        const xml = implementation.createDocument(null, null, null) as Made;
-        xml.contentType = type;
-        parseXml(markup, xml as unknown as XmlTarget);
-        return xml;
-      }
-      const made = implementation.createHTMLDocument() as Made;
-      made.contentType = type;
-      if (made.body) fillDocument(made, markup, page);
-      return made;
+      // A document with no window: nothing in it loads.
+      return parseApart(() => {
+        if (type !== 'text/html') {
+          const xml = implementation.createDocument(null, null, null) as Made;
+          xml.contentType = type;
+          parseXml(markup, xml as unknown as XmlTarget);
+          return xml;
+        }
+        const made = implementation.createHTMLDocument() as Made;
+        made.contentType = type;
+        if (made.body) fillDocument(made, markup, page);
+        return made;
+      });
     }
   };
 }

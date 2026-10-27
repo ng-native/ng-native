@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { ApplicationRef, Component, signal } from '@angular/core';
+import { ApplicationRef, Component, DOCUMENT, inject, signal } from '@angular/core';
 import { registeredViewName } from '@ng-native/fabric';
 import { cleanup, compileCss, fireEvent, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
@@ -42,6 +42,11 @@ afterEach(cleanup);
 const document = (): Dom => (globalThis as Dom).document;
 
 const SHEET = '.small { width: 10px; height: 10px; object-fit: cover }';
+
+@Component({ selector: 'x-page', template: '' })
+class Page {
+  readonly document = inject(DOCUMENT) as any;
+}
 
 const pictures = async () => {
   const app = await render(Pictures, {
@@ -228,6 +233,35 @@ describe('an image', () => {
       assert.equal(after.children.length, 0);
       assert.deepEqual(after.props['source'], [{ uri: 'https://example.test/band.jpg' }]);
       assert.equal(app.instance.seen.length, 2, 'and says nothing of it');
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
+  it('fetches an SVG picture parsed where nothing loads only once it is put in the page', async () => {
+    const asked: string[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = ((url: string) => {
+      asked.push(new URL(String(url)).pathname);
+      return new Promise(() => {});
+    }) as never;
+    try {
+      const app = await render(Page, { providers: [provideWebCompat()] });
+      await settle();
+      const document = app.fixture.componentInstance.document;
+      const template = document.createElement('template');
+      template.innerHTML = '<img src="/template.svg">';
+      new document.defaultView.DOMParser().parseFromString('<img src="/parsed.svg">', 'text/html');
+      document.createElement('div').setHTML('<p><img src="/sanitized-out.svg"></p>', {
+        sanitizer: { removeElements: ['img'] },
+      });
+      await settle();
+      assert.deepEqual(asked, []);
+      document.body.appendChild(template.content);
+      // Parsed apart and then put in the element, as a browser's setHTML is.
+      document.createElement('div').setHTML('<img src="/set.svg">');
+      await settle();
+      assert.deepEqual(asked.sort(), ['/set.svg', '/template.svg']);
     } finally {
       globalThis.fetch = real;
     }

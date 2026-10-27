@@ -20,7 +20,7 @@ import { fenceUnder, legendInserted, legendRemoved } from './fieldset.ts';
 import { implicitSubmit } from './form.ts';
 import { setChecked } from './form-controls.ts';
 import { buildAs, holdIconBox, setMarkup } from './html.ts';
-import { imageCreated, setImage } from './image.ts';
+import { imageCreated, imageInserted, setImage } from './image.ts';
 import { inlineStyle } from './inline-style.ts';
 import { labelPress, setLabel } from './label.ts';
 import { MOUSE_OF_TOUCH, TOUCH_EVENTS, asMouse, heardTouch } from './mouse-after-touch.ts';
@@ -228,6 +228,8 @@ export const webListen: RendererExtension = {
     // A screen made apart, or what holds one: the window starts under its header.
     putInPage(engine);
     shapeInserted(node, parent, engine);
+    // An SVG image parsed where nothing loads is fetched once it is put where it would be.
+    imageInserted(node, engine);
   },
   removed(node, engine) {
     optionRemoved(node, engine);

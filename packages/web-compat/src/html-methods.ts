@@ -1,5 +1,5 @@
 import type { EngineNode } from '@ng-native/fabric';
-import { contentOf, fragmentOf, templateOf } from './html.ts';
+import { contentOf, fragmentOf, parseApart, templateOf } from './html.ts';
 import { HTML_NAMESPACE, SVG_NAMESPACE } from './html-tree.ts';
 import { isFragment } from './document-fragment.ts';
 import { sanitize } from './sanitizer.ts';
@@ -67,9 +67,12 @@ function contextBeside(node: Dom): Dom | null {
 /** Markup parsed as the content of `context` and sanitized as the method says. */
 function parsed(markup: unknown, options: unknown, context: Dom, safe: boolean): EngineNode {
   const engine = engineOf(context);
-  const fragment = fragmentOf(markup, context, engine);
-  sanitize(fragment, options, safe, engine);
-  return fragment;
+  // Apart, as a browser parses it in a document of its own: nothing loads before it is sanitized.
+  return parseApart(() => {
+    const fragment = fragmentOf(markup, context, engine);
+    sanitize(fragment, options, safe, engine);
+    return fragment;
+  });
 }
 
 type Place = 'append' | 'prepend';

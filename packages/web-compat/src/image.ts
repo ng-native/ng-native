@@ -6,9 +6,9 @@ import {
 } from '@ng-native/fabric';
 import { parseFragment, serializeOuter, type DefaultTreeAdapterMap } from 'parse5';
 import { documentOf } from './document.ts';
-import { setMarkup } from './html.ts';
+import { parsingApart, scripting, setMarkup } from './html.ts';
 import { showSource, unband, watchBand } from './image-band.ts';
-import { keptOwn } from './in-document.ts';
+import { descendants, keptOwn } from './in-document.ts';
 import { parseUrl } from './parse-url.ts';
 import {
   own,
@@ -76,6 +76,17 @@ export function imageCreated(node: EngineNode, engine: Engine): void {
   watchBand(node, engine);
 }
 
+/** Something put in a parent: each SVG image held in it is fetched, now that it is somewhere it loads. */
+export function imageInserted(node: EngineNode, engine: Engine): void {
+  if (!holding || parsingApart() || !scripting(node) || node.nodeKind !== 'element') return;
+  for (const each of [node, ...descendants(node)]) {
+    if (!held.delete(each)) continue;
+    holding--;
+    const uri = pictures.get(each)?.uri;
+    if (uri && DRAWN.test(uri)) draw(each, uri, engine);
+  }
+}
+
 /** What native says of a picture that has loaded: its size, as `{ source: { width, height } }`. */
 function loaded(node: EngineNode, event: unknown, engine: Engine): void {
   const picture = pictures.get(node);
@@ -98,6 +109,15 @@ const DRAWN = /\.svg(?:[?#]|$)/i;
 const drawings = new WeakMap<EngineNode, EngineNode>();
 /** The images made a plain view for a drawing, which are image views again without one. */
 const hosting = new WeakSet<EngineNode>();
+/**
+ * The SVG images parsed where nothing loads, not fetched until one is put where it would be: a
+ * browser fetches nothing for a template's content or a made document, nor for what `setHTML`
+ * sanitizes away.
+ * ponytail: counted, so a page that holds none looks at nothing it inserts; one held and then
+ * collected keeps the count up, which costs a look at each insertion, not a fetch.
+ */
+const held = new WeakSet<EngineNode>();
+let holding = 0;
 
 /** Show a `src`, or nothing for none: another picture is another size, unknown until it loads. */
 function show(node: EngineNode, picture: Picture, value: unknown, engine: Engine): void {
@@ -110,6 +130,11 @@ function show(node: EngineNode, picture: Picture, value: unknown, engine: Engine
   if (uri && DRAWN.test(uri)) {
     // A drawing is drawn whole: see `image-band.ts`.
     unband(node, engine);
+    if (parsingApart() || held.has(node) || !scripting(node)) {
+      if (!held.has(node)) holding++;
+      held.add(node);
+      return;
+    }
     return draw(node, uri, engine);
   }
   // On the picture in its band, where it is drawn through one.
