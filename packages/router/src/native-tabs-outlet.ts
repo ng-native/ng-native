@@ -110,6 +110,25 @@ interface TabEntry {
   readonly leaving: Set<() => string | null>;
 }
 
+/** What `tabSelectionPrevented` carries: the tab tapped, which native left unselected. */
+interface TabSelectionPrevented {
+  readonly preventedScreenKey: string;
+  readonly provenance: number;
+}
+
+/** Whether activating a route, or a page under it, runs a guard. */
+function guardedAt(route: ActivatedRoute | null): boolean {
+  if (!route) return false;
+  const guards = (config: Route | null) =>
+    !!config && !!(config.canActivate?.length || config.canActivateChild?.length);
+  const snapshot = route.snapshot as Partial<ActivatedRoute['snapshot']> | undefined;
+  if (snapshot?.pathFromRoot?.some((each) => guards(each.routeConfig))) return true;
+  for (let below = snapshot?.firstChild; below; below = below.firstChild) {
+    if (guards(below.routeConfig)) return true;
+  }
+  return false;
+}
+
 /** What `tabSelected` carries. Only these fields matter here; the rest is diagnostics. */
 interface TabSelection {
   readonly selectedScreenKey: string;
@@ -198,6 +217,20 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
       this.host.nativeElement,
       'tabSelected',
       (event: { nativeEvent?: TabSelection }) => this.onNativeSelect(event?.nativeEvent),
+    );
+    // A tap on a tab native was told not to select: see `guardSelection`. The router decides.
+    this.renderer.listen(
+      this.host.nativeElement,
+      'tabSelectionPrevented',
+      (event: { nativeEvent?: TabSelectionPrevented }) => {
+        const prevented = event?.nativeEvent;
+        if (!prevented) return;
+        this.onNativeSelect({
+          selectedScreenKey: prevented.preventedScreenKey,
+          provenance: prevented.provenance,
+          actionOrigin: 'user',
+        });
+      },
     );
 
     // An `@if` that takes a tab away and brings it back makes a new element: its page follows it
@@ -365,6 +398,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     if (!entry?.ref) throw new Error('[angular-native] outlet is not activated, nothing to detach');
     entry.detached = true;
     entry.inFront.set(false);
+    this.guardSelection(entry, guardedAt(entry.route));
     // As in the stack outlet: stop change detection without unmounting the views.
     entry.ref.hostView.detach();
     return entry.ref;
@@ -500,10 +534,21 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   }
 
   /** Remember where this tab is, and tell native to show it. */
+  /**
+   * Whether native selects a tab on a tap or leaves that to the router. A tab kept from a visit
+   * behind a guard is left to it: native would show the page it holds before the guard has run,
+   * and only take it back once the guard said no. One in front, or with no guard, native selects.
+   * react-native-screens before 4.30 has no such prop, and selects as before.
+   */
+  private guardSelection(entry: TabEntry, guarded: boolean): void {
+    this.renderer.setProperty(entry.tab.screen, 'preventNativeSelection', guarded);
+  }
+
   private select(entry: TabEntry): void {
     const left = this.selected;
     if (left && left !== entry) this.leave(left);
     this.selected = entry;
+    this.guardSelection(entry, false);
     for (const other of this.entries) other.inFront.set(other === entry);
     entry.url = this.router?.url ?? entry.url;
     this.request(entry);
