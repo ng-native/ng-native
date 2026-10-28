@@ -166,15 +166,24 @@ function scopes(
   return scopeOf;
 }
 
-/** A guard run in `scope`: a function in its injection context, a class as an instance from it. */
+const NOT_FOUND = {};
+
+/**
+ * A guard run in `scope` as Angular runs one: a class or token as what `scope` gives for it, a
+ * function in its injection context.
+ */
 function scoped(guard: unknown, kind: string, scope: () => EnvironmentInjector): unknown {
-  const method = (guard as { prototype?: Record<string, unknown> }).prototype?.[kind];
-  return (...args: unknown[]) =>
-    typeof method === 'function'
-      ? (scope().get(guard as never) as Record<string, (...a: unknown[]) => unknown>)[kind]!(
-          ...args,
-        )
-      : runInInjectionContext(scope(), () => (guard as (...a: unknown[]) => unknown)(...args));
+  return (...args: unknown[]) => {
+    const injector = scope();
+    const found = injector.get(guard as never, NOT_FOUND as never) as unknown;
+    const value = (found === NOT_FOUND ? guard : found) as Record<string, unknown>;
+    const method = value[kind];
+    return typeof method === 'function'
+      ? (method as (...a: unknown[]) => unknown).apply(value, args)
+      : runInInjectionContext(injector, () =>
+          (value as unknown as (...a: unknown[]) => unknown)(...args),
+        );
+  };
 }
 
 /**

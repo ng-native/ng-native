@@ -12,7 +12,7 @@ Fixes from a security review.
 - `@ng-native/web-compat`: an SVG `<img>` in a template's content, a `DOMParser` document or markup `setHTML` is sanitizing is not fetched until it is put in a document that loads it.
 - `@ng-native/web-compat`: an emulated frame more than ten frames deep stays blank, so a page that frames itself no longer loads without end.
 - `@ng-native/web-compat`: `DOMParser` parses XML that declares a namespace prefix on every level of deep nesting in time that grows with the declarations instead of with their square.
-- `@ng-native/router`: native tabs leave a tap on a tab that was visited and sits behind an activation guard to the router: the tab is selected once the guard agrees, instead of showing its kept page while the guard runs. This needs react-native-screens 4.30 or later; earlier versions select at once as before.
+- `@ng-native/router`: native tabs leave a tap on a tab that was visited and sits behind a `canActivate`, `canActivateChild` or `canMatch` guard to the router: the tab is selected once the guard agrees, instead of showing its kept page while the guard runs. This needs react-native-screens 4.30 or later; earlier versions select at once as before.
 - `@ng-native/router`: a page `present()` shows over another tab runs each guard of the routes above it with the providers down to that route, not with the page's own.
 - `@ng-native/router`: `fileRoutes` runs a page's `canMatch` guards with the providers in its `routeMeta`, eager or lazy, as Angular runs a route's guards with its own providers.
 - `@ng-native/components`: the Markdown component compares each changed block once when a new `source` arrives, where deeply nested blocks such as quotes inside quotes cost three times more for every level.

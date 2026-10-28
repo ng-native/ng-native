@@ -92,6 +92,7 @@ describe('image', () => {
       assert.equal(img.getAttribute('src'), 'https://example.com/a.png');
       assert.equal(img.referrerPolicy, 'no-referrer');
       assert.equal(img.style.objectFit, 'contain');
+      assert.equal(img.style.borderRadius, 'inherit', 'rounded as the image is');
       assert.deepEqual(
         probes.map((probe) => probe.referrerPolicy),
         ['no-referrer'],

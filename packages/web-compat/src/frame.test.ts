@@ -79,6 +79,19 @@ describe('iframe', () => {
     assert.ok(loads <= 20, `${loads} loads`);
   });
 
+  it('is not opened for an iframe of another namespace, put in after an HTML one', async () => {
+    const asked: string[] = [];
+    const document = await page((url) => (asked.push(url), read(url)));
+    await framed(document, {});
+    document.body.innerHTML += '<svg><iframe src="https://shop.example/frame.html"></iframe></svg>';
+    const math = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'iframe');
+    math.setAttribute('srcdoc', '<p id="here">Hello</p>');
+    document.body.appendChild(math);
+    for (let wait = 0; wait < 20; wait++) await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(asked, []);
+    assert.equal(math.contentDocument ?? null, null);
+  });
+
   it("goes where its document's location is set, as its window's is", async () => {
     const document = await page();
     const iframe = await framed(document, { src: 'https://shop.example/frame.html' });

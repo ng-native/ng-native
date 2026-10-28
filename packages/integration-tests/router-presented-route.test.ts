@@ -85,6 +85,27 @@ describe('the route a presented page gets at the root', () => {
     assert.deepEqual(seen, ['strict']);
   });
 
+  it("runs an ancestor's guard given as a token, from the providers down to its route", async () => {
+    const GUARD = new InjectionToken<{ canActivate(): boolean }>('guard');
+    const seen: string[] = [];
+    const router = routerWith([
+      {
+        path: 'admin',
+        component: Stack,
+        canActivate: [GUARD],
+        providers: [{ provide: GUARD, useValue: { canActivate: () => (seen.push('ran'), true) } }],
+        children: [{ path: 'users', component: List, providers: [{ provide: 'x', useValue: 1 }] }],
+      },
+    ]);
+    await presentedCommands(router, '/admin/users', ROOT);
+    const copy = router.config.at(-1) as Route;
+    const scope = createEnvironmentInjector(copy.providers ?? [], ROOT);
+    for (const guard of copy.canActivate ?? []) {
+      runInInjectionContext(scope, () => (guard as CanActivateFn)(null!, null!));
+    }
+    assert.deepEqual(seen, ['ran']);
+  });
+
   it('is the page under its whole path, with the guards, providers and data above it', async () => {
     const router = routerWith(tabs());
     assert.deepEqual(await presentedCommands(router, '/invoices/7', ROOT), [

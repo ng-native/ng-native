@@ -192,6 +192,13 @@ const WATCHED = ['appendChild', 'insertBefore', 'removeChild'] as const;
 const watched = new WeakMap<Engine, () => void>();
 
 /**
+ * Whether an iframe is HTML's. Only it is one: an `<iframe>` in a drawing, MathML or another
+ * namespace is an element of no meaning, and its srcdoc is no page.
+ */
+const htmlFrame = (node: EngineNode): boolean =>
+  !node.namespace && (nameRecordOf(node)?.namespace ?? XHTML) === XHTML;
+
+/**
  * An iframe has been made in an app that asked for the package: from then until the app is gone
  * its engine's children are watched, for an iframe coming into a page or going out of one. An
  * engine that never made one is never watched.
@@ -199,10 +206,7 @@ const watched = new WeakMap<Engine, () => void>();
 export function frameCreated(node: EngineNode, engine: Engine): void {
   // A web view is a page of its own: see `frame-view.ts`.
   if (node.tag !== 'iframe') return;
-  // Only HTML's iframe is one: an `<iframe>` in a drawing, MathML or another namespace is an
-  // element of no meaning, and its srcdoc is no page.
-  const html = !node.namespace && (nameRecordOf(node)?.namespace ?? XHTML) === XHTML;
-  if (!html) return keepPlainFrame(node);
+  if (!htmlFrame(node)) return keepPlainFrame(node);
   if (!loaders.has(engine)) return keepPlainFrame(node);
   if (frameViewCreated(node, engine) || watched.has(engine)) return;
   const { appendChild, insertBefore, removeChild } = engine;
@@ -243,7 +247,7 @@ function* iframesIn(node: EngineNode): Generator<EngineNode> {
 function connected(node: EngineNode, engine: Engine): void {
   if (node.nodeKind !== 'element') return;
   for (const element of iframesIn(node)) {
-    if (isFrameView(element)) continue;
+    if (isFrameView(element) || !htmlFrame(element)) continue;
     // Once all a script puts in is in, each in its turn, still where it was put.
     afterTogether(() => {
       if (frames.has(element) || !windowedDocumentOf(element)) return;

@@ -90,6 +90,29 @@ describe('a tab added after start', () => {
     assert.equal(pageOf('beta').length, 1, 'the page is in the tab that is in the bar');
   });
 
+  it('leaves a tap on a kept tab behind a guard to the router, on the screen made again', async () => {
+    cleanup();
+    const [bar] = mod['routes'] as Routes;
+    const children = bar!.children!.map((child) =>
+      child.path === 'beta' ? { ...child, canMatch: [() => true] } : child,
+    );
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [provideNativeRouter([{ ...bar!, children }])],
+    });
+    fabric = app.fabric;
+    await idle();
+    const beta = () => host().children.find((screen) => screen.props['screenKey'] === 'beta')!;
+    await tap('beta');
+    await tap('home');
+    assert.equal(beta().props['preventNativeSelection'], true, 'kept, behind a canMatch guard');
+
+    betaEnabled.set(false);
+    await idle();
+    betaEnabled.set(true);
+    await idle();
+    assert.equal(beta().props['preventNativeSelection'], true, 'and on the screen made again');
+  });
+
   it('shows the page of the tab in front, taken away and added again while it is showing', async () => {
     await tap('beta');
     betaEnabled.set(false);

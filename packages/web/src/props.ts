@@ -406,7 +406,8 @@ function paintWithImg(n: BrowserNode, uri: string | undefined, policy: string | 
     img = el(n).ownerDocument.createElement('img');
     img.alt = '';
     img.setAttribute('aria-hidden', 'true');
-    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
+    img.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;pointer-events:none';
     el(n).appendChild(img);
     PICTURES.set(n, img);
   }

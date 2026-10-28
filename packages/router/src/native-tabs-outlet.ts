@@ -116,11 +116,12 @@ interface TabSelectionPrevented {
   readonly provenance: number;
 }
 
-/** Whether activating a route, or a page under it, runs a guard. */
+/** Whether matching or activating a route, or a page under it, runs a guard. */
 function guardedAt(route: ActivatedRoute | null): boolean {
   if (!route) return false;
   const guards = (config: Route | null) =>
-    !!config && !!(config.canActivate?.length || config.canActivateChild?.length);
+    !!config &&
+    !!(config.canActivate?.length || config.canActivateChild?.length || config.canMatch?.length);
   const snapshot = route.snapshot as Partial<ActivatedRoute['snapshot']> | undefined;
   if (snapshot?.pathFromRoot?.some((each) => guards(each.routeConfig))) return true;
   for (let below = snapshot?.firstChild; below; below = below.firstChild) {
@@ -505,6 +506,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private move(entry: TabEntry, tab: NativeTab): void {
     if (entry.tab === tab) return;
     entry.tab = tab;
+    this.guardSelection(entry, entry.detached && guardedAt(entry.route));
     if (entry.ref) this.renderer.appendChild(tab.screen, entry.ref.location.nativeElement);
   }
 
