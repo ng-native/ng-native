@@ -195,8 +195,11 @@ const watched = new WeakMap<Engine, () => void>();
  * Whether an iframe is HTML's. Only it is one: an `<iframe>` in a drawing, MathML or another
  * namespace is an element of no meaning, and its srcdoc is no page.
  */
-const htmlFrame = (node: EngineNode): boolean =>
-  !node.namespace && (nameRecordOf(node)?.namespace ?? XHTML) === XHTML;
+const htmlFrame = (node: EngineNode): boolean => {
+  // A record of no namespace, as `createElementNS(null, ...)` makes, is none, not HTML's.
+  const record = nameRecordOf(node);
+  return !node.namespace && (record ? record.namespace : XHTML) === XHTML;
+};
 
 /**
  * An iframe has been made in an app that asked for the package: from then until the app is gone

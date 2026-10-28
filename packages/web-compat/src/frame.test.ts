@@ -87,6 +87,9 @@ describe('iframe', () => {
     const math = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'iframe');
     math.setAttribute('srcdoc', '<p id="here">Hello</p>');
     document.body.appendChild(math);
+    const none = document.createElementNS(null, 'iframe');
+    none.setAttribute('src', 'https://shop.example/quirky.html');
+    document.body.appendChild(none);
     for (let wait = 0; wait < 20; wait++) await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(asked, []);
     assert.equal(math.contentDocument ?? null, null);
