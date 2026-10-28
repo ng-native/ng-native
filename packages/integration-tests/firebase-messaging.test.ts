@@ -227,6 +227,39 @@ describe('FirebaseMessaging', () => {
     assert.deepEqual(firebase.registered, ['a1b2'], 'reading it registers nothing');
   });
 
+  it('keeps the newest FID when reads on coming back settle out of order', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, comeBack } = setup(firebase.native, native);
+    await messaging.register();
+    const reads: ((id: string) => void)[] = [];
+    firebase.native.getInstallationId = () => new Promise((resolve) => reads.push(resolve));
+
+    await comeBack();
+    await comeBack();
+    reads[1]!('fid-new');
+    await settle();
+    reads[0]!('fid-old');
+    await settle();
+    assert.equal(messaging.installationId(), 'fid-new');
+  });
+
+  it('keeps the FID a registration answered over a read on coming back that started before it', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, comeBack } = setup(firebase.native, native);
+    await messaging.register();
+    let stale: ((id: string) => void) | undefined;
+    firebase.native.getInstallationId = () => new Promise((resolve) => (stale = resolve));
+    await comeBack();
+
+    firebase.native.getInstallationId = async () => 'fid-registered';
+    assert.equal(await messaging.register(), 'fid-registered');
+    stale!('fid-old');
+    await settle();
+    assert.equal(messaging.installationId(), 'fid-registered');
+  });
+
   it('reads nothing on coming back before the app registered', async () => {
     const firebase = fakeFirebase();
     const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });

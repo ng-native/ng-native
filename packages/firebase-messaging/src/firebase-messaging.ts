@@ -71,6 +71,8 @@ export class FirebaseMessaging {
   private readonly os = inject(OS);
   private readonly id = signal<string | null>(null);
   private registered = false;
+  /** Counts FID reads, so one that settles after a newer one does not overwrite it. */
+  private reads = 0;
 
   /** The FID, each time a registration answers; null until one has. For the app's backend. */
   readonly installationId: Signal<string | null> = this.id.asReadonly();
@@ -112,10 +114,7 @@ export class FirebaseMessaging {
   private readAgain(): void {
     const native = this.native;
     if (!native || !this.registered) return;
-    native
-      .getInstallationId()
-      .then((id) => this.id.set(id))
-      .catch((failure: unknown) => this.errors.handleError(failure));
+    this.read(native).catch((failure: unknown) => this.errors.handleError(failure));
   }
 
   private async registerWith(apnsToken: string | null): Promise<string | null> {
@@ -123,8 +122,13 @@ export class FirebaseMessaging {
     if (!native) return null;
     await native.register(apnsToken);
     this.registered = true;
+    return this.read(native);
+  }
+
+  private async read(native: NativeFirebaseMessaging): Promise<string> {
+    const read = ++this.reads;
     const id = await native.getInstallationId();
-    this.id.set(id);
+    if (read === this.reads) this.id.set(id);
     return id;
   }
 }
