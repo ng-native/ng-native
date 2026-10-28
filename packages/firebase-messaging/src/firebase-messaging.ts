@@ -26,6 +26,10 @@
  * can also replace the FID by itself, so each time the app comes back to the front the FID is read
  * again, and `installationId` follows it.
  *
+ * `unregister()` deletes the installation, so FCM answers `UNREGISTERED` for its FID, for an app
+ * whose pushes belong to the signed-in user to call on sign-out. It stops both until `register()`
+ * runs again, which registers a new FID.
+ *
  * Without the native module (Expo Go, the web host, a test that provides nothing) every call
  * answers null.
  */
@@ -48,6 +52,8 @@ export interface NativeFirebaseMessaging {
   getInstallationId(): Promise<string>;
   /** Registers the installation with FCM. iOS needs the APNs token as hex; Android ignores it. */
   register(apnsToken: string | null): Promise<void>;
+  /** Deletes the installation, and with it the FID's registration. */
+  unregister(): Promise<void>;
 }
 
 @Service()
@@ -70,19 +76,23 @@ export class FirebaseMessaging {
   private readonly errors = inject(ErrorHandler);
   private readonly os = inject(OS);
   private readonly id = signal<string | null>(null);
-  private registered = false;
+  private readonly registered = signal(false);
   /** Counts FID reads, so one that settles after a newer one does not overwrite it. */
   private reads = 0;
+  /** Counts unregisters, so a registration in flight across one does not undo it. */
+  private unregisters = 0;
 
   /** The FID, each time a registration answers; null until one has. For the app's backend. */
   readonly installationId: Signal<string | null> = this.id.asReadonly();
 
   constructor() {
     // A rolled APNs token is one FCM does not have, and pushes stop arriving until it does. A
-    // registration that fails goes to the ErrorHandler, since nothing awaits it.
+    // registration that fails goes to the ErrorHandler, since nothing awaits it. Nothing touches
+    // Notifications until a registration, so a test's partial fake of it constructs this.
     effect(() => {
+      if (!this.registered()) return;
       const token = this.notifications.devicePushToken();
-      if (!token || !this.registered) return;
+      if (!token) return;
       this.registerWith(this.os === 'ios' ? token.data : null).catch((failure: unknown) =>
         this.errors.handleError(failure),
       );
@@ -105,6 +115,19 @@ export class FirebaseMessaging {
     return token ? this.registerWith(token.data) : null;
   }
 
+  /**
+   * Deletes this installation, so FCM answers `UNREGISTERED` for its FID, and clears
+   * `installationId`. Nothing registers again until `register()` does, with a new FID.
+   */
+  async unregister(): Promise<void> {
+    this.registered.set(false);
+    this.unregisters++;
+    // A read still in flight answers the deleted FID.
+    this.reads++;
+    this.id.set(null);
+    await this.native?.unregister();
+  }
+
   /** The FID, without registering it. Null without the native module. */
   async getInstallationId(): Promise<string | null> {
     return (await this.native?.getInstallationId()) ?? null;
@@ -113,15 +136,17 @@ export class FirebaseMessaging {
   /** Firebase replaces an FID it can no longer use without saying so to JavaScript. */
   private readAgain(): void {
     const native = this.native;
-    if (!native || !this.registered) return;
+    if (!native || !this.registered()) return;
     this.read(native).catch((failure: unknown) => this.errors.handleError(failure));
   }
 
   private async registerWith(apnsToken: string | null): Promise<string | null> {
     const native = this.native;
     if (!native) return null;
+    const unregisters = this.unregisters;
     await native.register(apnsToken);
-    this.registered = true;
+    if (unregisters !== this.unregisters) return null;
+    this.registered.set(true);
     return this.read(native);
   }
 

@@ -31,6 +31,11 @@ public class FirebaseMessagingModule: Module {
       await MainActor.run { Messaging.messaging().apnsToken = token }
       try await Messaging.messaging().register()
     }
+
+    AsyncFunction("unregister") { () async throws in
+      try await Self.configure()
+      try await Installations.installations().delete()
+    }
   }
 
   /** Configures Firebase on first use unless the app has; without the plist, configure() aborts. */

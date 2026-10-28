@@ -32,6 +32,31 @@ development build, not Expo Go.
 }
 ```
 
+Expo copies each file into the app at prebuild, and prebuild fails when one is missing. When the
+files are not in the repository (each developer supplies their own, or EAS provides them as file
+environment variables), set each path in `app.config.js` only when its file is there:
+
+```js
+const { existsSync } = require('node:fs');
+
+const file = (variable, path) => process.env[variable] ?? (existsSync(path) ? path : undefined);
+
+module.exports = ({ config }) => ({
+  ...config,
+  ios: {
+    ...config.ios,
+    googleServicesFile: file('GOOGLE_SERVICE_INFO_PLIST', './GoogleService-Info.plist'),
+  },
+  android: {
+    ...config.android,
+    googleServicesFile: file('GOOGLE_SERVICES_JSON', './google-services.json'),
+  },
+});
+```
+
+A build without the file runs, and `register()` rejects with the code `ERR_NO_FIREBASE_CONFIG` on
+iOS and Android.
+
 The plugin turns on FCM registration by installation ID, which both platforms leave off. On iOS it
 also turns off Firebase's app delegate proxy, which would take over the push methods
 `expo-notifications` already handles, and gives the `GoogleUtilities` pod modules in the Podfile,
@@ -72,7 +97,27 @@ export class Push {
 - `getInstallationId()` answers the FID without registering it.
 
 Without the native module, in Expo Go, on the web host or in a test that provides nothing, every
-call answers null. A test provides a fake through `FirebaseMessaging.SOURCE`.
+call answers null. A test provides a fake through `FirebaseMessaging.SOURCE`. Until `register()`
+runs, the service reads nothing from `Notifications`, so a test's fake of `Notifications` needs only
+the members the test uses.
+
+## Unregister
+
+When the app's pushes belong to the signed-in user, call `unregister()` on sign-out. Otherwise the
+backend still holds the FID against the old user, and their pushes keep arriving after someone else
+signs in on the same device.
+
+```ts
+async signOut(): Promise<void> {
+  await this.messaging.unregister();
+  await this.auth.signOut();
+}
+```
+
+`unregister()` deletes the installation, so FCM answers `UNREGISTERED` for its FID, and sets
+`installationId` to null. A roll of the push token or a return to the front registers and reads
+nothing until `register()` runs again, which registers a new FID for the effect to send to the
+backend.
 
 ## Send from a backend
 
@@ -87,4 +132,5 @@ curl -X POST "https://fcm.googleapis.com/v1/projects/$PROJECT_ID/messages:send" 
 ```
 
 A response of `404` with `UNREGISTERED` means the installation is not registered: the app has not
-called `register()` yet, or it was uninstalled, and the backend can drop that FID.
+called `register()` yet, it called `unregister()`, or it was uninstalled, and the backend can drop
+that FID.

@@ -49,11 +49,13 @@ function fakeNotifications(token: DevicePushToken, granted = true) {
 
 function fakeFirebase(ids = ['fid-1']) {
   const registered: (string | null)[] = [];
+  let deleted = 0;
   const native: NativeFirebaseMessaging = {
     register: async (apnsToken) => void registered.push(apnsToken),
     getInstallationId: async () => ids[Math.min(registered.length, ids.length) - 1] ?? ids[0]!,
+    unregister: async () => void deleted++,
   };
-  return { native, registered };
+  return { native, registered, deleted: () => deleted };
 }
 
 let root: EnvironmentInjector;
@@ -295,6 +297,105 @@ describe('FirebaseMessaging', () => {
     firebase.native.getInstallationId = async () => 'fid-new';
     await comeBack();
     assert.equal(messaging.installationId(), 'fid-1');
+  });
+
+  it('deletes the installation on unregister, and clears the FID', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging } = setup(firebase.native, native);
+    await messaging.register();
+
+    await messaging.unregister();
+    assert.equal(firebase.deleted(), 1);
+    assert.equal(messaging.installationId(), null);
+  });
+
+  it('neither registers on a roll nor reads on coming back once unregistered', async () => {
+    const firebase = fakeFirebase();
+    const notifications = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, flush, comeBack } = setup(firebase.native, notifications.native);
+    await messaging.register();
+    await messaging.unregister();
+    let reads = 0;
+    firebase.native.getInstallationId = async () => (reads++, 'fid-new');
+
+    notifications.roll({ type: 'ios', data: 'c3d4' });
+    await flush();
+    await comeBack();
+    assert.deepEqual(firebase.registered, ['a1b2']);
+    assert.equal(reads, 0);
+    assert.equal(messaging.installationId(), null);
+  });
+
+  it('keeps the FID cleared over a read on coming back that started before unregistering', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, comeBack } = setup(firebase.native, native);
+    await messaging.register();
+    let stale: ((id: string) => void) | undefined;
+    firebase.native.getInstallationId = () => new Promise((resolve) => (stale = resolve));
+    await comeBack();
+
+    await messaging.unregister();
+    stale!('fid-1');
+    await settle();
+    assert.equal(messaging.installationId(), null);
+  });
+
+  it('stays unregistered when unregister runs while a registration is in flight', async () => {
+    const firebase = fakeFirebase();
+    const notifications = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, flush } = setup(firebase.native, notifications.native);
+    let answer: (() => void) | undefined;
+    let calls = 0;
+    firebase.native.register = () => (calls++, new Promise<void>((resolve) => (answer = resolve)));
+    const registering = messaging.register();
+    await settle();
+
+    await messaging.unregister();
+    answer!();
+    assert.equal(await registering, null);
+    notifications.roll({ type: 'ios', data: 'c3d4' });
+    await flush();
+    assert.equal(messaging.installationId(), null);
+    assert.equal(calls, 1, 'a roll after unregistering registers nothing');
+  });
+
+  it('registers again after unregistering, and sets the new FID', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging } = setup(firebase.native, native);
+    await messaging.register();
+    await messaging.unregister();
+
+    firebase.native.getInstallationId = async () => 'fid-2';
+    assert.equal(await messaging.register(), 'fid-2');
+    assert.equal(messaging.installationId(), 'fid-2');
+  });
+
+  it('constructs over a Notifications fake without devicePushToken, as a test provides', async () => {
+    const handled: unknown[] = [];
+    const injector = createEnvironmentInjector(
+      [
+        { provide: FirebaseMessaging.SOURCE, useValue: null },
+        { provide: Notifications, useValue: {} },
+        {
+          provide: ErrorHandler,
+          useValue: { handleError: (error: unknown) => handled.push(error) },
+        },
+      ],
+      root,
+    );
+    try {
+      const messaging = runInInjectionContext(injector, () => new FirebaseMessaging());
+      root.get(ApplicationRef).tick();
+      await settle();
+      await messaging.unregister();
+      assert.deepEqual(handled, []);
+      assert.equal(messaging.installationId(), null);
+    } finally {
+      injector.destroy();
+    }
   });
 
   it('does not register on a roll the app never asked to register for', async () => {
