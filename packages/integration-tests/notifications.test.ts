@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
-import type { DevicePushToken, NotificationResponse } from 'expo-notifications';
+import type { DevicePushToken, Notification, NotificationResponse } from 'expo-notifications';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import {
@@ -18,6 +18,8 @@ import {
   type NativeNotifications,
 } from '@ng-native/expo/notifications';
 import { serviceWith } from './injected.ts';
+
+const presentedOne = { request: { identifier: 'p', content: {} } };
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -66,7 +68,7 @@ function platform(
     cancelAllScheduledNotificationsAsync: record('cancelAllScheduledNotificationsAsync'),
     getAllScheduledNotificationsAsync: record('getAllScheduledNotificationsAsync', ['s']),
     getNextTriggerDateAsync: record('getNextTriggerDateAsync', 1_000),
-    getPresentedNotificationsAsync: record('getPresentedNotificationsAsync', ['p']),
+    getPresentedNotificationsAsync: record('getPresentedNotificationsAsync', [presentedOne]),
     dismissNotificationAsync: record('dismissNotificationAsync'),
     dismissAllNotificationsAsync: record('dismissAllNotificationsAsync'),
     getBadgeCountAsync: record('getBadgeCountAsync', 4),
@@ -259,7 +261,7 @@ describe('the rest of the module', () => {
       schedule: 'scheduled-1',
       scheduled: ['s'],
       next: 1_000,
-      presented: ['p'],
+      presented: [presentedOne],
       badge: 4,
       channels: ['c'],
       channel: 'channel',
@@ -285,7 +287,9 @@ describe('the rest of the module', () => {
       ['setNotificationCategoryAsync', 'message', [{ identifier: 'reply', buttonTitle: 'Reply' }]],
     ]);
     assert.deepEqual(called('setBadgeCountAsync'), [['setBadgeCountAsync', 2]]);
-    assert.deepEqual(called('setNotificationHandler'), [['setNotificationHandler', handler]]);
+    const [[, installed]] = called('setNotificationHandler') as [[string, typeof handler]];
+    assert.equal(installed.handleNotification.length, 1, 'wrapped to fill in a push s data');
+    assert.deepEqual(Object.keys(installed), Object.keys(handler));
     for (const [name, arg] of [
       ['cancelAllScheduledNotificationsAsync'],
       ['dismissNotificationAsync', 'p1'],
@@ -405,6 +409,182 @@ describe('push tokens', () => {
 
     native.emit('pushToken', { type: 'ios', data: 'rolled-token' });
     assert.deepEqual(n.devicePushToken(), { type: 'ios', data: 'rolled-token' });
+  });
+});
+
+describe("a push's data on iOS", () => {
+  // expo-notifications on iOS fills content.data for a push only from userInfo.body, which is
+  // where Expo's push service puts it. FCM and plain APNs put the sender's keys at the top of
+  // userInfo, so they reach JS only as trigger.payload.
+  const fcm = (id: string, content: object = { title: 'Hi', data: null }) => ({
+    request: {
+      identifier: id,
+      content,
+      trigger: {
+        type: 'push',
+        payload: {
+          aps: { alert: { body: 'Hi' } },
+          url: 'myapp://item?id=1',
+          'gcm.message_id': '1',
+          'google.c.a.e': '1',
+          'google.c.sender.id': '2',
+          // FCM's image, from the message's apns.fcm_options.
+          fcm_options: { image: 'https://example.com/a.png' },
+        },
+      },
+    },
+  });
+  const sent = { url: 'myapp://item?id=1' };
+  const tapped = (id: string) => ({ notification: fcm(id), actionIdentifier: 'default' });
+
+  it('is content.data for one that arrives, is tapped, or launched the app', async () => {
+    const native = platform(tapped('launch') as never);
+    const n = serviceOn(native);
+    await settle();
+    assert.deepEqual(n.response()?.notification.request.content.data, sent);
+
+    native.emit('received', fcm('a'));
+    assert.deepEqual(n.latest()?.request.content.data, sent);
+    native.emit('response', tapped('b'));
+    assert.deepEqual(n.take()?.notification.request.content.data, sent);
+  });
+
+  it('is content.data for one on screen, and for the foreground handler', async () => {
+    const native = Object.assign(platform(), {
+      getPresentedNotificationsAsync: async () => [fcm('a', { title: 'Hi' })],
+    });
+    const n = serviceOn(native);
+    assert.deepEqual((await n.presented())[0]?.request.content.data, sent);
+
+    const seen: unknown[] = [];
+    n.setHandler({
+      handleNotification: async (notification) => {
+        seen.push(notification.request.content.data);
+        return {} as never;
+      },
+      handleError: (id, error) => {
+        const info = (error as { info?: { notification: Notification } } | undefined)?.info;
+        seen.push(info ? info.notification.request.content.data : id);
+      },
+    });
+    const [, installed] = native.calls.find(([name]) => name === 'setNotificationHandler')!;
+    const handler = installed as {
+      handleNotification(n: unknown): Promise<unknown>;
+      handleError(id: string, error: unknown): void;
+    };
+    await handler.handleNotification(fcm('b'));
+    // What expo-notifications passes when the handler took too long: a NotificationTimeoutError.
+    const timedOut = Object.assign(new Error('timed out'), {
+      info: { id: 'c', notification: fcm('c') },
+    });
+    handler.handleError('c', timedOut);
+    // Its own errors are CodedErrors, whose info is declared but unset.
+    const unavailable = Object.assign(new Error('unavailable'), {
+      code: 'ERR_UNAVAILABLE',
+      info: undefined,
+    });
+    handler.handleError('d', unavailable);
+    // And whatever the app's handleNotification rejected with is passed on as it is.
+    handler.handleError('e', 'not an error');
+    handler.handleError('f', undefined);
+    assert.deepEqual(seen, [sent, sent, 'd', 'e', 'f']);
+  });
+
+  it('keeps the callbacks of a handler that is a class, and their this', async () => {
+    const calls: unknown[] = [];
+    class Handler {
+      readonly name = 'mine';
+      async handleNotification(notification: Notification) {
+        calls.push([this.name, notification.request.content.data]);
+        return {} as never;
+      }
+      handleSuccess(id: string) {
+        calls.push([this.name, 'success', id]);
+      }
+      handleError(id: string) {
+        calls.push([this.name, 'error', id]);
+      }
+    }
+    const native = platform();
+    serviceOn(native).setHandler(new Handler());
+    const [, installed] = native.calls.find(([name]) => name === 'setNotificationHandler')!;
+    const handler = installed as {
+      handleNotification(n: unknown): Promise<unknown>;
+      handleSuccess?(id: string): void;
+      handleError?(id: string, error: unknown): void;
+    };
+    await handler.handleNotification(fcm('a'));
+    handler.handleSuccess?.('a');
+    handler.handleError?.('b', new Error('failed'));
+    assert.deepEqual(calls, [
+      ['mine', sent],
+      ['mine', 'success', 'a'],
+      ['mine', 'error', 'b'],
+    ]);
+  });
+
+  it('leaves a handler without an error callback without one', () => {
+    const native = platform();
+    serviceOn(native).setHandler({ handleNotification: async () => ({}) as never });
+    const [, installed] = native.calls.find(([name]) => name === 'setNotificationHandler')!;
+    assert.equal((installed as { handleError?: unknown }).handleError, undefined);
+  });
+
+  it("leaves out the keys Expo's push service adds, when the module found no data", () => {
+    // What Expo's service sends besides aps, as in expo-notifications' own iOS tests. The module
+    // takes only an object body as content.data.
+    const expo = { experienceId: '@me/app', projectId: 'f192', scopeKey: '@me/app' };
+    const native = platform();
+    const n = serviceOn(native);
+    for (const [payload, data] of [
+      [{ aps: {}, body: 'plain string body', ...expo }, { body: 'plain string body' }],
+      [{ aps: {}, ...expo }, {}],
+      [{ aps: {}, experienceId: '@me/app', projectId: 'f192' }, {}],
+      [{ aps: {}, scopeKey: '@me/app', projectId: 'f192' }, {}],
+      // From any other sender, a projectId is the sender's own, and so is a key FCM's only contain.
+      [
+        { aps: {}, projectId: 'p1', 'app.google.id': 'g' },
+        { projectId: 'p1', 'app.google.id': 'g' },
+      ],
+    ] as const) {
+      native.emit('received', {
+        request: { identifier: 'e', content: { data: null }, trigger: { type: 'push', payload } },
+      });
+      assert.deepEqual(n.latest()?.request.content.data, data);
+    }
+  });
+
+  it("leaves Expo's own push, Android's and a local one as the module made them", () => {
+    const native = platform();
+    const n = serviceOn(native);
+    const expo = {
+      request: {
+        identifier: 'e',
+        content: { data: sent },
+        trigger: { type: 'push', payload: { aps: {}, body: sent, experienceId: '@me/app' } },
+      },
+    };
+    const android = {
+      request: {
+        identifier: 'd',
+        content: { data: sent },
+        trigger: { type: 'push', remoteMessage: { data: sent } },
+      },
+    };
+    const androidWithoutData = {
+      request: {
+        identifier: 'n',
+        content: { data: null },
+        trigger: { type: 'push', remoteMessage: { data: {} } },
+      },
+    };
+    const local = {
+      request: { identifier: 'l', content: { data: null }, trigger: { type: 'timeInterval' } },
+    };
+    for (const one of [expo, android, androidWithoutData, local]) {
+      native.emit('received', one);
+      assert.deepEqual(n.latest(), one, one.request.identifier);
+    }
   });
 });
 

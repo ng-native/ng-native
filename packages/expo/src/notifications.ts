@@ -148,8 +148,12 @@ export class Notifications {
     const live = present(native);
     if (!live) return;
     const subscriptions = [
-      live.addNotificationReceivedListener((notification) => this.received.set(notification)),
-      live.addNotificationResponseReceivedListener((response) => this.responded.set(response)),
+      live.addNotificationReceivedListener((notification) =>
+        this.received.set(withPushData(notification)),
+      ),
+      live.addNotificationResponseReceivedListener((response) =>
+        this.responded.set(respondedWithPushData(response)),
+      ),
       // Android drops notifications when too many arrive at once while the app is not running;
       // this is the only word that any went missing.
       live.addNotificationsDroppedListener(() => this.drops.update((count) => count + 1)),
@@ -165,7 +169,9 @@ export class Notifications {
     void live
       .getLastNotificationResponseAsync()
       .then((response) => {
-        if (response && this.responded() === null) this.responded.set(response);
+        if (response && this.responded() === null) {
+          this.responded.set(respondedWithPushData(response));
+        }
       })
       .catch(() => {});
   }
@@ -238,7 +244,7 @@ export class Notifications {
 
   /** The notifications in the notification centre that are the app's. */
   async presented(): Promise<Notification[]> {
-    return (await this.native?.getPresentedNotificationsAsync()) ?? [];
+    return ((await this.native?.getPresentedNotificationsAsync()) ?? []).map(withPushData);
   }
 
   async dismiss(identifier: string): Promise<void> {
@@ -330,8 +336,26 @@ export class Notifications {
    * What a notification that arrives while the app is in front does: shown, silent, with a sound
    * or a badge. Without a handler, it is not shown. Null removes the handler.
    */
-  setHandler(...handler: Args<'setNotificationHandler'>): void {
-    this.native?.setNotificationHandler(...handler);
+  setHandler(handler: Args<'setNotificationHandler'>[0]): void {
+    // Each callback is called on the handler itself, so one defined on a class keeps its this.
+    this.native?.setNotificationHandler(
+      handler && {
+        handleNotification: (notification) =>
+          handler.handleNotification(withPushData(notification)),
+        ...(handler.handleSuccess && { handleSuccess: (id) => handler.handleSuccess?.(id) }),
+        ...(handler.handleError && {
+          handleError: (id, error) => {
+            // A timeout's error carries the notification the handler did not answer for in time.
+            // Anything else is passed on as it is, even a value the app's own handler rejected
+            // with that is not an object.
+            if (error instanceof Object && 'info' in error && error.info?.notification) {
+              error.info = { ...error.info, notification: withPushData(error.info.notification) };
+            }
+            handler.handleError?.(id, error);
+          },
+        }),
+      },
+    );
   }
 
   /**
@@ -397,6 +421,43 @@ export class Notifications {
   async unregisterTask(name: string): Promise<void> {
     await this.native?.unregisterTaskAsync(name);
   }
+}
+
+/** What APNs and FCM put in an iOS payload, besides the sender's own keys. */
+const PUSH_SERVICE_KEYS = new Set(['aps', 'fcm_options']);
+
+/** What Expo's push service adds, and so only ever left out of one of its pushes. */
+const EXPO_PUSH_KEYS = new Set(['experienceId', 'projectId', 'scopeKey']);
+
+/**
+ * A push's own keys as `content.data`, on iOS as on Android.
+ *
+ * On iOS, `expo-notifications` reads a push's data only from an object under `userInfo.body`,
+ * which is where Expo's push service puts it. FCM and a plain APNs payload put the sender's keys at
+ * the top of `userInfo`, so `content.data` is null and the keys are only on the trigger's
+ * `payload`. When the module found no data, those keys become it, without the ones the push
+ * services add: `aps`, FCM's `fcm_options` and `gcm.` and `google.` keys, and Expo's on one of its
+ * pushes. Android's
+ * trigger has no `payload`, so it is left as it is.
+ */
+function withPushData(notification: Notification): Notification {
+  const { content, trigger } = notification.request;
+  const payload = trigger && 'payload' in trigger ? trigger.payload : undefined;
+  if (content.data != null || !payload) return notification;
+  const expo = 'experienceId' in payload || 'scopeKey' in payload;
+  const data = Object.fromEntries(
+    Object.entries(payload).filter(
+      ([key]) =>
+        !PUSH_SERVICE_KEYS.has(key) &&
+        !(expo && EXPO_PUSH_KEYS.has(key)) &&
+        !/^(gcm|google)\./.test(key),
+    ),
+  );
+  return { ...notification, request: { ...notification.request, content: { ...content, data } } };
+}
+
+function respondedWithPushData(response: NotificationResponse): NotificationResponse {
+  return { ...response, notification: withPushData(response.notification) };
 }
 
 /**

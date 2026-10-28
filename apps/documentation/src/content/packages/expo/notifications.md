@@ -279,6 +279,13 @@ Put the route in the push payload's `data` field on the server side - `{ to: '/p
 `Notifications.take()` exists for: the response that launched the app arrived before this effect
 was listening, and `take()` still returns it once.
 
+A push sent through FCM or straight to APNs carries its keys at the top of the iOS payload rather
+than under `body`, where `expo-notifications` looks for them. On iOS, when the module found no data,
+`Notifications` puts those keys in `content.data`, without the ones the push services add: `aps`,
+FCM's `fcm_options` and its `gcm.` and `google.` keys, and on a push from Expo's service its
+`experienceId`, `projectId` and `scopeKey`. So `content.data` reads the same whichever service sent
+the push, and the same as on Android. The whole payload stays on `request.trigger.payload`.
+
 ### Sending a test push
 
 With an Expo push token in hand, [Expo's push notification tool](https://expo.dev/notifications)
