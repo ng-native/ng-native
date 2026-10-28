@@ -81,6 +81,8 @@ export class FirebaseMessaging {
   private reads = 0;
   /** Counts unregisters, so a registration in flight across one does not undo it. */
   private unregisters = 0;
+  /** Native registrations and deletions, run one at a time in call order. */
+  private queue: Promise<unknown> = Promise.resolve();
 
   /** The FID, each time a registration answers; null until one has. For the app's backend. */
   readonly installationId: Signal<string | null> = this.id.asReadonly();
@@ -107,12 +109,15 @@ export class FirebaseMessaging {
    */
   async register(): Promise<string | null> {
     if (!this.native) return null;
+    const unregisters = this.unregisters;
     // Android needs no token, and asking for one would fetch FCM's deprecated registration token.
     if (this.os !== 'ios') {
-      return (await this.notifications.permission.ensure()) ? this.registerWith(null) : null;
+      return (await this.notifications.permission.ensure())
+        ? this.registerWith(null, unregisters)
+        : null;
     }
     const token = await this.notifications.getDevicePushToken();
-    return token ? this.registerWith(token.data) : null;
+    return token ? this.registerWith(token.data, unregisters) : null;
   }
 
   /**
@@ -125,7 +130,8 @@ export class FirebaseMessaging {
     // A read still in flight answers the deleted FID.
     this.reads++;
     this.id.set(null);
-    await this.native?.unregister();
+    const native = this.native;
+    if (native) await this.inTurn(() => native.unregister());
   }
 
   /** The FID, without registering it. Null without the native module. */
@@ -140,14 +146,24 @@ export class FirebaseMessaging {
     this.read(native).catch((failure: unknown) => this.errors.handleError(failure));
   }
 
-  private async registerWith(apnsToken: string | null): Promise<string | null> {
+  /** Answers null, and registers nothing more, once an unregister has run since `unregisters`. */
+  private async registerWith(
+    apnsToken: string | null,
+    unregisters = this.unregisters,
+  ): Promise<string | null> {
     const native = this.native;
-    if (!native) return null;
-    const unregisters = this.unregisters;
-    await native.register(apnsToken);
+    if (!native || unregisters !== this.unregisters) return null;
+    await this.inTurn(() => native.register(apnsToken));
     if (unregisters !== this.unregisters) return null;
     this.registered.set(true);
-    return this.read(native);
+    const id = await this.read(native);
+    return unregisters === this.unregisters ? id : null;
+  }
+
+  private inTurn<T>(call: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(call);
+    this.queue = run.catch(() => undefined);
+    return run;
   }
 
   private async read(native: NativeFirebaseMessaging): Promise<string> {

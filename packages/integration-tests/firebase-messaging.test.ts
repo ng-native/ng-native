@@ -352,13 +352,65 @@ describe('FirebaseMessaging', () => {
     const registering = messaging.register();
     await settle();
 
-    await messaging.unregister();
+    const unregistering = messaging.unregister();
     answer!();
+    await unregistering;
     assert.equal(await registering, null);
     notifications.roll({ type: 'ios', data: 'c3d4' });
     await flush();
     assert.equal(messaging.installationId(), null);
     assert.equal(calls, 1, 'a roll after unregistering registers nothing');
+  });
+
+  it('answers null from a register whose FID read was in flight across unregister', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging } = setup(firebase.native, native);
+    let answer: ((id: string) => void) | undefined;
+    firebase.native.getInstallationId = () => new Promise((resolve) => (answer = resolve));
+    const registering = messaging.register();
+    await settle();
+
+    await messaging.unregister();
+    answer!('fid-1');
+    assert.equal(await registering, null);
+    assert.equal(messaging.installationId(), null);
+  });
+
+  it('registers nothing when unregister runs while register waits for the APNs token', async () => {
+    const firebase = fakeFirebase();
+    const notifications = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    let answer: ((token: DevicePushToken) => void) | undefined;
+    (notifications.native as { getDevicePushTokenAsync: unknown }).getDevicePushTokenAsync = () =>
+      new Promise((resolve) => (answer = resolve));
+    const { messaging } = setup(firebase.native, notifications.native);
+    const registering = messaging.register();
+    await settle();
+
+    await messaging.unregister();
+    answer!({ type: 'ios', data: 'a1b2' });
+    assert.equal(await registering, null);
+    assert.deepEqual(firebase.registered, []);
+  });
+
+  it('runs a register called during unregister only once the deletion is done', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging } = setup(firebase.native, native);
+    await messaging.register();
+    const order: string[] = [];
+    let deleted: (() => void) | undefined;
+    firebase.native.unregister = () =>
+      new Promise<void>((resolve) => (deleted = () => (order.push('delete'), resolve())));
+    firebase.native.register = async () => void order.push('register');
+
+    const unregistering = messaging.unregister();
+    const registering = messaging.register();
+    await settle();
+    deleted!();
+    await unregistering;
+    await registering;
+    assert.deepEqual(order, ['delete', 'register']);
   });
 
   it('registers again after unregistering, and sets the new FID', async () => {
