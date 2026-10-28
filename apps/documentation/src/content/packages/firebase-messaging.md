@@ -66,7 +66,9 @@ export class Push {
   APNs token `Notifications` reports. It answers null without the permission.
 - `installationId` is the FID each registration answers. Once it has registered, when the platform
   rolls the push token while the app runs, the installation is registered again with the new token
-  and this is set again, so an effect on it keeps the backend up to date.
+  and this is set again, so an effect on it keeps the backend up to date. Firebase can also replace
+  the FID by itself, so once registered, the FID is read again each time the app comes back to the
+  front, and this follows it.
 - `getInstallationId()` answers the FID without registering it.
 
 Without the native module, in Expo Go, on the web host or in a test that provides nothing, every

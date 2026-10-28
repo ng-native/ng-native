@@ -22,12 +22,15 @@
  * FCM rejects a send to an FID with `UNREGISTERED` until `register()` has run. On iOS FCM delivers
  * over APNs, so registering takes the APNs token `Notifications` reports; on Android it needs no
  * token. Either way it asks for the notification permission first. When the platform rolls the
- * push token, the installation is registered again, and `installationId` is set again.
+ * push token, the installation is registered again, and `installationId` is set again. Firebase
+ * can also replace the FID by itself, so each time the app comes back to the front the FID is read
+ * again, and `installationId` follows it.
  *
  * Without the native module (Expo Go, the web host, a test that provides nothing) every call
  * answers null.
  */
 import {
+  DestroyRef,
   ErrorHandler,
   InjectionToken,
   Service,
@@ -37,6 +40,7 @@ import {
   type Signal,
 } from '@angular/core';
 import { OS } from '@ng-native/device';
+import { Permission } from '@ng-native/expo';
 import { Notifications } from '@ng-native/expo/notifications';
 
 /** The native module's functions. A test provides a fake. */
@@ -81,6 +85,8 @@ export class FirebaseMessaging {
         this.errors.handleError(failure),
       );
     });
+    const stop = inject(Permission.FOREGROUND)?.(() => this.readAgain());
+    if (stop) inject(DestroyRef).onDestroy(stop);
   }
 
   /**
@@ -100,6 +106,16 @@ export class FirebaseMessaging {
   /** The FID, without registering it. Null without the native module. */
   async getInstallationId(): Promise<string | null> {
     return (await this.native?.getInstallationId()) ?? null;
+  }
+
+  /** Firebase replaces an FID it can no longer use without saying so to JavaScript. */
+  private readAgain(): void {
+    const native = this.native;
+    if (!native || !this.registered) return;
+    native
+      .getInstallationId()
+      .then((id) => this.id.set(id))
+      .catch((failure: unknown) => this.errors.handleError(failure));
   }
 
   private async registerWith(apnsToken: string | null): Promise<string | null> {

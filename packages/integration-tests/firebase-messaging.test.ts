@@ -16,6 +16,7 @@ import {
 } from '@angular/core';
 import type { DevicePushToken } from 'expo-notifications';
 import { OS } from '@ng-native/device';
+import { Permission } from '@ng-native/expo';
 import { Notifications, type NativeNotifications } from '@ng-native/expo/notifications';
 import { FirebaseMessaging, type NativeFirebaseMessaging } from '@ng-native/firebase-messaging';
 import { mount } from '@ng-native/platform';
@@ -67,14 +68,22 @@ function setup(
   firebase: NativeFirebaseMessaging | null,
   notifications: NativeNotifications | null,
   os: 'ios' | 'android' = 'ios',
-): { messaging: FirebaseMessaging; flush: () => Promise<void>; handled: unknown[] } {
+) {
   const handled: unknown[] = [];
+  const foreground = new Set<() => void>();
   const injector = createEnvironmentInjector(
     [
       { provide: FirebaseMessaging.SOURCE, useValue: firebase },
       { provide: Notifications.SOURCE, useValue: notifications },
       { provide: Notifications, useFactory: () => new Notifications() },
       { provide: OS, useValue: os },
+      {
+        provide: Permission.FOREGROUND,
+        useValue: (listener: () => void) => (
+          foreground.add(listener),
+          () => void foreground.delete(listener)
+        ),
+      },
       { provide: ErrorHandler, useValue: { handleError: (error: unknown) => handled.push(error) } },
     ],
     root,
@@ -84,7 +93,12 @@ function setup(
     root.get(ApplicationRef).tick();
     await settle();
   };
-  return { messaging, flush, handled };
+  /** The app coming back to the front. */
+  const comeBack = async () => {
+    foreground.forEach((listener) => listener());
+    await settle();
+  };
+  return { messaging, flush, handled, comeBack, destroy: () => injector.destroy() };
 }
 
 describe('FirebaseMessaging', () => {
@@ -199,6 +213,55 @@ describe('FirebaseMessaging', () => {
     notifications.roll({ type: 'ios', data: 'c3d4' });
     await flush();
     assert.deepEqual(handled, [refused]);
+  });
+
+  it('reads the FID again when the app comes back to the front, for one Firebase replaced', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, comeBack } = setup(firebase.native, native);
+    await messaging.register();
+
+    firebase.native.getInstallationId = async () => 'fid-new';
+    await comeBack();
+    assert.equal(messaging.installationId(), 'fid-new');
+    assert.deepEqual(firebase.registered, ['a1b2'], 'reading it registers nothing');
+  });
+
+  it('reads nothing on coming back before the app registered', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, comeBack } = setup(firebase.native, native);
+    let reads = 0;
+    firebase.native.getInstallationId = async () => (reads++, 'fid-1');
+
+    await comeBack();
+    assert.equal(reads, 0);
+    assert.equal(messaging.installationId(), null);
+  });
+
+  it('hands a failed read on coming back to the ErrorHandler, and keeps the FID it had', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, comeBack, handled } = setup(firebase.native, native);
+    await messaging.register();
+    const refused = new Error('SERVICE_NOT_AVAILABLE');
+    firebase.native.getInstallationId = async () => Promise.reject(refused);
+
+    await comeBack();
+    assert.deepEqual(handled, [refused]);
+    assert.equal(messaging.installationId(), 'fid-1');
+  });
+
+  it('stops listening for the app coming back once its injector is destroyed', async () => {
+    const firebase = fakeFirebase();
+    const { native } = fakeNotifications({ type: 'ios', data: 'a1b2' });
+    const { messaging, comeBack, destroy } = setup(firebase.native, native);
+    await messaging.register();
+    destroy();
+
+    firebase.native.getInstallationId = async () => 'fid-new';
+    await comeBack();
+    assert.equal(messaging.installationId(), 'fid-1');
   });
 
   it('does not register on a roll the app never asked to register for', async () => {
