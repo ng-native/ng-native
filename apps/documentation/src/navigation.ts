@@ -247,6 +247,11 @@ export const PACKAGES: NavSection = {
       ],
     },
     {
+      path: 'packages/firebase-messaging',
+      title: 'Firebase Messaging',
+      summary: 'Push by Firebase Installation ID, through FCM',
+    },
+    {
       path: 'packages/testing',
       title: 'Testing',
       summary: 'Testing Library for native components, with no device involved',

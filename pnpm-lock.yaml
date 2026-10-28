@@ -1629,6 +1629,28 @@ importers:
 
   packages/fabric: {}
 
+  packages/firebase-messaging:
+    dependencies:
+      expo:
+        specifier: ^57.0.0 || ^58.0.0
+        version: 58.0.17(@babel/core@7.29.7)(expo-widgets@58.0.22)(react-native-webview@14.0.1(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+      expo-notifications:
+        specifier: ^57.0.0 || ^58.0.0
+        version: 58.1.6(expo@58.0.17)(react-native@0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+    devDependencies:
+      '@angular/core':
+        specifier: 22.2.0
+        version: 22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)
+      '@babel/core':
+        specifier: ^7.29.7
+        version: 7.29.7
+      '@ng-native/expo':
+        specifier: workspace:*
+        version: link:../expo
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
   packages/icons:
     dependencies:
       '@ng-icons/core':
@@ -1722,6 +1744,9 @@ importers:
       '@ng-native/fabric':
         specifier: workspace:*
         version: link:../fabric
+      '@ng-native/firebase-messaging':
+        specifier: workspace:*
+        version: link:../firebase-messaging
       '@ng-native/icons':
         specifier: workspace:*
         version: link:../icons

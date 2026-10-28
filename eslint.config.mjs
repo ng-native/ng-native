@@ -106,6 +106,13 @@ export default tseslint.config(
               bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
             },
             {
+              // `@ng-native/firebase-messaging` registers the APNs token `Notifications` reports,
+              // so it may import `@ng-native/expo`, and only that.
+              sourceTag: 'layer:expo-addon',
+              onlyDependOnLibsWithTags: ['layer:runtime', 'layer:device', 'scope:expo'],
+              bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
+            },
+            {
               // A package that presents the engine to code written for another host. It sits on
               // the platform as well as the engine, to extend the renderer, on the icons for the
               // props react-native-svg's views read, which a library's drawing is drawn by, and on

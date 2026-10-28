@@ -1,0 +1,88 @@
+---
+title: Firebase Messaging
+summary: The app's Firebase Installation ID, registered with FCM, for a backend to send push to.
+---
+
+# Firebase Messaging
+
+`@ng-native/firebase-messaging` registers the app's Firebase Installation ID (FID) with Firebase
+Cloud Messaging, so a backend can send a push to it with the `fid` target of FCM's HTTP v1 API. FCM
+rejects a send to an FID with `UNREGISTERED` until the installation is registered.
+
+Push notifications are shown and tapped through `Notifications` in
+[`@ng-native/expo`](/packages/expo/notifications), as with any other push. This package only adds
+the registration.
+
+## Install
+
+```sh
+npx expo install @ng-native/firebase-messaging expo-notifications
+```
+
+Add the plugin and Firebase's config files to `app.json`, then rebuild the app. It needs a
+development build, not Expo Go.
+
+```json
+{
+  "expo": {
+    "plugins": ["@ng-native/firebase-messaging"],
+    "ios": { "googleServicesFile": "./GoogleService-Info.plist" },
+    "android": { "googleServicesFile": "./google-services.json" }
+  }
+}
+```
+
+The plugin turns on FCM registration by installation ID, which both platforms leave off. On iOS it
+also turns off Firebase's app delegate proxy, which would take over the push methods
+`expo-notifications` already handles, and gives the `GoogleUtilities` pod modules in the Podfile,
+which Firebase's Swift pods need to link as static libraries.
+
+## Register
+
+```ts
+import { Service, effect, inject } from '@angular/core';
+import { FirebaseMessaging } from '@ng-native/firebase-messaging';
+
+@Service()
+export class Push {
+  private readonly messaging = inject(FirebaseMessaging);
+  private readonly api = inject(Api);
+
+  constructor() {
+    effect(() => {
+      const fid = this.messaging.installationId();
+      if (fid) void this.api.savePushTarget(fid);
+    });
+  }
+
+  enable(): Promise<string | null> {
+    return this.messaging.register();
+  }
+}
+```
+
+- `register()` asks for the notification permission when it has not been answered, registers the
+  installation with FCM and answers its FID. On iOS FCM delivers over APNs, so it registers with the
+  APNs token `Notifications` reports. It answers null without the permission.
+- `installationId` is the FID each registration answers. Once it has registered, when the platform
+  rolls the push token while the app runs, the installation is registered again with the new token
+  and this is set again, so an effect on it keeps the backend up to date.
+- `getInstallationId()` answers the FID without registering it.
+
+Without the native module, in Expo Go, on the web host or in a test that provides nothing, every
+call answers null. A test provides a fake through `FirebaseMessaging.SOURCE`.
+
+## Send from a backend
+
+A backend sends to the FID with FCM's HTTP v1 `messages.send`, authorized with an OAuth 2.0 token
+for a service account of the Firebase project:
+
+```bash
+curl -X POST "https://fcm.googleapis.com/v1/projects/$PROJECT_ID/messages:send" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "message": { "fid": "'"$FID"'", "notification": { "title": "Hello", "body": "From FCM" } } }'
+```
+
+A response of `404` with `UNREGISTERED` means the installation is not registered: the app has not
+called `register()` yet, or it was uninstalled, and the backend can drop that FID.

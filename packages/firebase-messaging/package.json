@@ -1,0 +1,76 @@
+{
+  "name": "@ng-native/firebase-messaging",
+  "version": "0.18.2",
+  "description": "Firebase Cloud Messaging by installation ID for Angular Native: registers the app's Firebase Installation ID with FCM, for a backend that sends through FCM's HTTP v1 API.",
+  "keywords": [
+    "angular",
+    "react-native",
+    "angular-native",
+    "expo",
+    "firebase",
+    "fcm",
+    "push-notifications",
+    "ios",
+    "android"
+  ],
+  "type": "module",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "@angular/core": "^22.0.0",
+    "@ng-native/expo": "workspace:*",
+    "expo": "^57.0.0 || ^58.0.0",
+    "expo-notifications": "^57.0.0 || ^58.0.0"
+  },
+  "nx": {
+    "tags": [
+      "scope:firebase-messaging",
+      "layer:expo-addon"
+    ]
+  },
+  "scripts": {
+    "build": "ngc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "license": "MIT",
+  "homepage": "https://ng-native.com/packages/firebase-messaging",
+  "bugs": {
+    "url": "https://github.com/ng-native/ng-native/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ng-native/ng-native.git",
+    "directory": "packages/firebase-messaging"
+  },
+  "files": [
+    "dist",
+    "app.plugin.cjs",
+    "expo-module.config.json",
+    "ios",
+    "android/build.gradle",
+    "android/src"
+  ],
+  "devDependencies": {
+    "@angular/core": "22.2.0",
+    "@babel/core": "^7.29.7",
+    "@ng-native/expo": "workspace:*",
+    "typescript": "~6.0.3"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json",
+    "./app.plugin.cjs": "./app.plugin.cjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./app.plugin.cjs": "./app.plugin.cjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

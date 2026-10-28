@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.ngnative.firebasemessaging'
+version = '1.0.0'
+
+android {
+  namespace "dev.ngnative.firebasemessaging"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // The version the reporter's FID registration was built on; FirebaseInstallations comes with it.
+  implementation 'com.google.firebase:firebase-messaging:25.1.2'
+}

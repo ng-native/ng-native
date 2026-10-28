@@ -57,6 +57,7 @@
       "@ng-native/eslint-plugin",
       "@ng-native/expo",
       "@ng-native/fabric",
+      "@ng-native/firebase-messaging",
       "@ng-native/icons",
       "@ng-native/metro",
       "@ng-native/migrate",
