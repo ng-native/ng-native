@@ -4,8 +4,15 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { inject, type Provider, type Type } from '@angular/core';
-import { Router, withComponentInputBinding, type Route, type Routes } from '@angular/router';
+import { inject, InjectionToken, type Provider, type Type } from '@angular/core';
+import {
+  Router,
+  withAutoCleanupInjectors,
+  withComponentInputBinding,
+  type Route,
+  type RouterFeatures,
+  type Routes,
+} from '@angular/router';
 import {
   cleanup,
   fireEvent,
@@ -73,9 +80,12 @@ async function idle(): Promise<void> {
 }
 
 /** Renders the shell over `routes`, and reads what the screen on top says. */
-async function start(routes: Routes, providers: Provider[] = []) {
+async function start(routes: Routes, providers: Provider[] = [], features: RouterFeatures[] = []) {
   const app = await render(component('Shell'), {
-    providers: [provideNativeRouter(routes, withComponentInputBinding()), ...providers],
+    providers: [
+      provideNativeRouter(routes, withComponentInputBinding(), ...features),
+      ...providers,
+    ],
   });
   const router = app.componentRef.injector.get(Router);
   const fabric: FakeFabric = app.fabric;
@@ -363,6 +373,35 @@ for (const lazy of [true, false]) {
       await go('/failing').catch(() => false);
       assert.equal(top(), 'home');
       assert.equal(failing.unsubscribed, true);
+    });
+
+    it("shares the instance a canMatch guard got from the page's providers with the page", async () => {
+      const SESSION = new InjectionToken<object>('session');
+      const seen: Record<string, unknown[]> = {};
+      const record = (name: string) => () => ((seen[name] ??= []).push(inject(SESSION)), true);
+      const meta = {
+        providers: [{ provide: SESSION, useFactory: () => ({}) }],
+        canMatch: [record('canMatch')],
+        resolve: { session: record('resolve') },
+      };
+      const files = { 'index.page.ts': page('Home'), 'about.page.ts': page('About', meta) };
+      const routes = () => fileRoutes(lazy ? context(eager(files, './')) : eager(files));
+      const { go } = await start(routes());
+      for (const url of ['/about', '/', '/about']) assert.equal(await go(url), true);
+      assert.equal(seen['canMatch']?.length, 2);
+      assert.equal(seen['resolve']?.length, 2);
+      for (const session of [...seen['canMatch']!, ...seen['resolve']!]) {
+        assert.equal(session, seen['resolve']![0], 'one instance, as the route has one injector');
+      }
+
+      // An injector Angular destroys when the page is left is made again for the next visit.
+      cleanup();
+      for (const name in seen) delete seen[name];
+      const again = await start(routes(), [], [withAutoCleanupInjectors()]);
+      for (const url of ['/about', '/', '/about']) assert.equal(await again.go(url), true);
+      const [first, second] = seen['resolve']!;
+      assert.notEqual(first, second, 'a new instance after the page was left');
+      assert.deepEqual(seen['canMatch'], [first, second], 'shared with the guard on each visit');
     });
 
     it('redirects from a page with redirectTo and no component, matching its whole path', async () => {

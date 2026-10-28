@@ -15,12 +15,17 @@
  */
 import {
   createEnvironmentInjector,
+  DestroyRef,
   EnvironmentInjector,
   inject,
+  NgModuleFactory,
   runInInjectionContext,
+  type Injector,
+  type NgModuleRef,
   type Type,
 } from '@angular/core';
 import {
+  ROUTES,
   UrlSegment,
   type CanMatchFn,
   type GuardResult,
@@ -386,16 +391,79 @@ function pageRoute(
     };
   }
   const load = loaderOf(page);
+  const scope = scopeOf();
   const loadChildren = async () => {
-    const { canMatch: _matchedAbove, ...own } = ownRoute(page, await load(), children, options);
-    return [own];
+    const {
+      canMatch: _matchedAbove,
+      providers,
+      ...own
+    } = ownRoute(page, await load(), children, options);
+    return providers ? new PageFactory(own, (parent) => scope(parent, providers)) : [own];
   };
   if (page.markdown) return { ...at, loadChildren };
   const canMatch: CanMatchFn = (...args) => {
     const injector = inject(EnvironmentInjector);
-    return load().then((module) => passes((module as PageModule)?.routeMeta, injector, args));
+    return load().then((module) => {
+      const meta = (module as PageModule)?.routeMeta as Route | undefined;
+      return passes(
+        meta?.canMatch,
+        meta?.providers ? scope(injector, meta.providers) : injector,
+        args,
+      );
+    });
   };
   return { ...at, canMatch: [canMatch], loadChildren };
+}
+
+/**
+ * The injector a lazy page's `routeMeta` providers make under each injector its route is matched
+ * in. Angular makes a route's injector before its `canMatch` guards run, and a lazy page's
+ * providers are not known until it loads, so the guards make it and the page's routes are loaded
+ * into it: the guards, the page and its resolvers share one instance of each, as for an eager page.
+ * It is made again after Angular destroys it.
+ */
+function scopeOf(): (
+  parent: EnvironmentInjector,
+  providers: NonNullable<Route['providers']>,
+) => EnvironmentInjector {
+  const made = new WeakMap<EnvironmentInjector, EnvironmentInjector>();
+  return (parent, providers) => {
+    let scope = made.get(parent);
+    if (!scope) {
+      scope = createEnvironmentInjector(providers, parent);
+      made.set(parent, scope);
+      scope.get(DestroyRef).onDestroy(() => made.delete(parent));
+    }
+    return scope;
+  };
+}
+
+/**
+ * A lazy page's routes loaded as Angular loads an NgModule's, into an injector of their own, which
+ * is under the page's `scopeOf` injector. Angular destroys the one it is given, and the page's
+ * with it. `NgModuleFactory` is deprecated, but a factory is the one thing `loadChildren` answers
+ * with that Angular loads routes into an injector from.
+ */
+class PageFactory extends NgModuleFactory<unknown> {
+  readonly moduleType = Object as Type<unknown>;
+  private readonly route: Route;
+  private readonly scope: (parent: EnvironmentInjector) => EnvironmentInjector;
+
+  constructor(route: Route, scope: (parent: EnvironmentInjector) => EnvironmentInjector) {
+    super();
+    this.route = route;
+    this.scope = scope;
+  }
+
+  create(parent: Injector | null): NgModuleRef<unknown> {
+    const scope = this.scope(parent as EnvironmentInjector);
+    const injector = createEnvironmentInjector(
+      [{ provide: ROUTES, multi: true, useValue: [this.route] }],
+      scope,
+    );
+    injector.get(DestroyRef).onDestroy(() => scope.destroy());
+    return { injector } as NgModuleRef<unknown>;
+  }
 }
 
 /**
@@ -413,25 +481,20 @@ function loaderOf(page: Page): () => Promise<unknown> {
       }));
 }
 
-/** Runs a loaded page's `canMatch` guards in turn, until one says other than `true`. */
+/**
+ * Runs a loaded page's `canMatch` guards in turn, in its providers' injector as Angular runs an
+ * eager page's, until one says other than `true`.
+ */
 async function passes(
-  meta: RouteMeta | undefined,
+  guards: Route['canMatch'] = [],
   injector: EnvironmentInjector,
   args: Parameters<CanMatchFn>,
 ): Promise<GuardResult> {
-  const { canMatch: guards = [], providers } = (meta ?? {}) as Route;
-  if (!guards.length) return true;
-  // In the page's providers, as Angular runs an eager page's guards.
-  const scoped = providers ? createEnvironmentInjector(providers, injector) : injector;
-  try {
-    for (const guard of guards as CanMatchFn[]) {
-      const result = await firstOf(runInInjectionContext(scoped, () => guard(...args)));
-      if (result !== true) return result as GuardResult;
-    }
-    return true;
-  } finally {
-    if (scoped !== injector) scoped.destroy();
+  for (const guard of guards as CanMatchFn[]) {
+    const result = await firstOf(runInInjectionContext(injector, () => guard(...args)));
+    if (result !== true) return result as GuardResult;
   }
+  return true;
 }
 
 /** A guard's result, from an Observable's first value or a promise as from a value. */
