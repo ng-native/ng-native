@@ -18,7 +18,10 @@ nx start mobile
 import the workspace's Angular libraries, and they are compiled ahead of time into its bundle with
 the rest of its code. In a workspace with package-manager workspaces and a scoped root package, as
 the TypeScript preset has, each project is named for the scope the way Nx names its own:
-`nx start @org/mobile`, and `@org/ui` for a library, in the commands below as well.
+`nx start @org/mobile`, and `@org/ui` for a library, in the commands below as well. `@org` stands
+for the workspace's own scope, the part before `/` in the `name` of its root `package.json`:
+`create-nx-workspace acme --preset=ts` names it `@acme/source`, so the app is `@acme/mobile`.
+`nx show projects` lists the names.
 
 ## What nx add does
 
@@ -226,7 +229,8 @@ so a workspace that has changed it keeps the `.js` imports `@nx/js` writes.
 In the TypeScript preset `nx typecheck @org/ui` checks the library's templates as well as its code,
 as an app's does: the generator writes `tsconfig.typecheck.json` beside `tsconfig.lib.json` and a
 `typecheck` target that runs `ngc` on it, in place of the `tsc` `@nx/js` infers, and adds
-`@angular/compiler-cli` to the library's dev dependencies. A misspelled input or a binding of the
+`@angular/compiler-cli` to the library's dev dependencies, with the app's Babel 7 `@babel/core`
+beside it so the Babel 8 the compiler depends on does not answer React Native's peer. A misspelled input or a binding of the
 wrong type in a library component fails the target.
 
 It adds `@ng-native/components`, `@ng-native/testing` and Vitest where the library's dependencies

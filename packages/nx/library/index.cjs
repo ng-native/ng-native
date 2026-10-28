@@ -108,9 +108,15 @@ const imports = {
   },
 };
 
-/** What `nx typecheck` runs for a library in the TypeScript preset: `ngc`, which reads templates. */
+/**
+ * What `nx typecheck` runs for a library in the TypeScript preset: `ngc`, which reads templates.
+ * `@babel/core` is the app's Babel 7: `@angular/compiler-cli` depends on Babel 8, which would
+ * otherwise answer the `@babel/core` peer of React Native's codegen in the library, giving it its
+ * own copies of `react-native` and `expo`, and pnpm 10 a "Failed to create bin" warning per install.
+ */
 const typecheckDependencies = {
   '@angular/compiler-cli': native.devDependencies['@angular/compiler-cli'],
+  '@babel/core': native.devDependencies['@babel/core'],
 };
 
 function projectAt(tree, root) {

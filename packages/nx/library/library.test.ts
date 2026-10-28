@@ -357,6 +357,9 @@ describe('in the TypeScript preset', () => {
     });
     assert.deepEqual(manifest.devDependencies, {
       '@angular/compiler-cli': native.devDependencies['@angular/compiler-cli'],
+      // Babel 7, as the app has: without it the Babel 8 that `@angular/compiler-cli` depends on
+      // answers React Native's `@babel/core` peer here, and pnpm 10 warns on every install.
+      '@babel/core': native.devDependencies['@babel/core'],
       '@ng-native/testing': native.devDependencies['@ng-native/testing'],
       vitest: native.devDependencies.vitest,
     });
