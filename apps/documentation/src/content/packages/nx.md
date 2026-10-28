@@ -230,8 +230,8 @@ In the TypeScript preset `nx typecheck @org/ui` checks the library's templates a
 as an app's does: the generator writes `tsconfig.typecheck.json` beside `tsconfig.lib.json` and a
 `typecheck` target that runs `ngc` on it, in place of the `tsc` `@nx/js` infers, and adds
 `@angular/compiler-cli` to the library's dev dependencies, with the app's Babel 7 `@babel/core`
-beside it so the Babel 8 the compiler depends on does not answer React Native's peer. A misspelled input or a binding of the
-wrong type in a library component fails the target.
+beside it so the Babel 8 the compiler depends on does not answer React Native's peer. A misspelled
+input or a binding of the wrong type in a library component fails the target.
 
 It adds `@ng-native/components`, `@ng-native/testing` and Vitest where the library's dependencies
 go: its own `package.json` in the TypeScript preset, and the root's otherwise. It takes `--name`,
