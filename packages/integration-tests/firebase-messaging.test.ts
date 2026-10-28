@@ -15,6 +15,7 @@ import {
   type Type,
 } from '@angular/core';
 import type { DevicePushToken } from 'expo-notifications';
+import { OS } from '@ng-native/device';
 import { Notifications, type NativeNotifications } from '@ng-native/expo/notifications';
 import { FirebaseMessaging, type NativeFirebaseMessaging } from '@ng-native/firebase-messaging';
 import { mount } from '@ng-native/platform';
@@ -65,6 +66,7 @@ before(async () => {
 function setup(
   firebase: NativeFirebaseMessaging | null,
   notifications: NativeNotifications | null,
+  os: 'ios' | 'android' = 'ios',
 ): { messaging: FirebaseMessaging; flush: () => Promise<void>; handled: unknown[] } {
   const handled: unknown[] = [];
   const injector = createEnvironmentInjector(
@@ -72,6 +74,7 @@ function setup(
       { provide: FirebaseMessaging.SOURCE, useValue: firebase },
       { provide: Notifications.SOURCE, useValue: notifications },
       { provide: Notifications, useFactory: () => new Notifications() },
+      { provide: OS, useValue: os },
       { provide: ErrorHandler, useValue: { handleError: (error: unknown) => handled.push(error) } },
     ],
     root,
@@ -96,13 +99,36 @@ describe('FirebaseMessaging', () => {
     assert.equal(messaging.installationId(), 'fid-1');
   });
 
-  it('registers with no APNs token on Android', async () => {
+  it("registers on Android without fetching FCM's deprecated registration token", async () => {
     const firebase = fakeFirebase();
-    const { native } = fakeNotifications({ type: 'android', data: 'fcm-token' });
-    const { messaging } = setup(firebase.native, native);
+    const { native, asked } = fakeNotifications({ type: 'android', data: 'fcm-token' });
+    const { messaging } = setup(firebase.native, native, 'android');
 
     assert.equal(await messaging.register(), 'fid-1');
     assert.deepEqual(firebase.registered, [null]);
+    assert.deepEqual(asked, []);
+  });
+
+  it('does not register on Android without the notification permission', async () => {
+    const firebase = fakeFirebase();
+    const { native, asked } = fakeNotifications({ type: 'android', data: 'fcm-token' }, false);
+    const { messaging } = setup(firebase.native, native, 'android');
+
+    assert.equal(await messaging.register(), null);
+    assert.deepEqual(firebase.registered, []);
+    assert.deepEqual(asked, ['permission'], 'it asked, and was refused');
+  });
+
+  it('registers again on Android when the token rolls, with no APNs token', async () => {
+    const firebase = fakeFirebase(['fid-1', 'fid-2']);
+    const notifications = fakeNotifications({ type: 'android', data: 'fcm-token' });
+    const { messaging, flush } = setup(firebase.native, notifications.native, 'android');
+    await messaging.register();
+
+    notifications.roll({ type: 'android', data: 'fcm-token-2' });
+    await flush();
+    assert.deepEqual(firebase.registered, [null, null]);
+    assert.equal(messaging.installationId(), 'fid-2');
   });
 
   it('does not register without the notification permission', async () => {

@@ -20,9 +20,9 @@
  * ```
  *
  * FCM rejects a send to an FID with `UNREGISTERED` until `register()` has run. On iOS FCM delivers
- * over APNs, so registering takes the APNs token `Notifications` reports; asking for it asks for
- * the notification permission first, on both platforms. When the platform rolls that token, the
- * installation is registered again with the new one, and `installationId` is set again.
+ * over APNs, so registering takes the APNs token `Notifications` reports; on Android it needs no
+ * token. Either way it asks for the notification permission first. When the platform rolls the
+ * push token, the installation is registered again, and `installationId` is set again.
  *
  * Without the native module (Expo Go, the web host, a test that provides nothing) every call
  * answers null.
@@ -36,8 +36,8 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
+import { OS } from '@ng-native/device';
 import { Notifications } from '@ng-native/expo/notifications';
-import type { DevicePushToken } from 'expo-notifications';
 
 /** The native module's functions. A test provides a fake. */
 export interface NativeFirebaseMessaging {
@@ -64,6 +64,7 @@ export class FirebaseMessaging {
   private readonly native = inject(FirebaseMessaging.SOURCE);
   private readonly notifications = inject(Notifications);
   private readonly errors = inject(ErrorHandler);
+  private readonly os = inject(OS);
   private readonly id = signal<string | null>(null);
   private registered = false;
 
@@ -76,7 +77,9 @@ export class FirebaseMessaging {
     effect(() => {
       const token = this.notifications.devicePushToken();
       if (!token || !this.registered) return;
-      this.registerWith(token).catch((failure: unknown) => this.errors.handleError(failure));
+      this.registerWith(this.os === 'ios' ? token.data : null).catch((failure: unknown) =>
+        this.errors.handleError(failure),
+      );
     });
   }
 
@@ -86,8 +89,12 @@ export class FirebaseMessaging {
    */
   async register(): Promise<string | null> {
     if (!this.native) return null;
+    // Android needs no token, and asking for one would fetch FCM's deprecated registration token.
+    if (this.os !== 'ios') {
+      return (await this.notifications.permission.ensure()) ? this.registerWith(null) : null;
+    }
     const token = await this.notifications.getDevicePushToken();
-    return token ? this.registerWith(token) : null;
+    return token ? this.registerWith(token.data) : null;
   }
 
   /** The FID, without registering it. Null without the native module. */
@@ -95,10 +102,10 @@ export class FirebaseMessaging {
     return (await this.native?.getInstallationId()) ?? null;
   }
 
-  private async registerWith(token: DevicePushToken): Promise<string | null> {
+  private async registerWith(apnsToken: string | null): Promise<string | null> {
     const native = this.native;
     if (!native) return null;
-    await native.register(token.type === 'ios' ? token.data : null);
+    await native.register(apnsToken);
     this.registered = true;
     const id = await native.getInstallationId();
     this.id.set(id);

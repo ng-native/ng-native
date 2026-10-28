@@ -1644,6 +1644,9 @@ importers:
       '@babel/core':
         specifier: ^7.29.7
         version: 7.29.7
+      '@ng-native/device':
+        specifier: workspace:*
+        version: link:../device
       '@ng-native/expo':
         specifier: workspace:*
         version: link:../expo
