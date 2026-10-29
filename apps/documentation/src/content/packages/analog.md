@@ -414,7 +414,8 @@ test('opens on the home page', async () => {
 ```
 
 The `ngNative()` plugin makes each `.md` file the module Metro makes of it. `@analogjs/router`
-ships partial-compiled code, which the plugin links only for the packages it is told about:
+ships partial-compiled code, which the plugin links as it does any package that lists
+`@angular/core` as a peer, so the config needs nothing more:
 
 ```ts
 // vitest.config.mts
@@ -422,7 +423,7 @@ import { ngNative } from '@ng-native/testing/vitest';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [ngNative({ inline: [/\/node_modules\/@analogjs\//] })],
+  plugins: [ngNative()],
 });
 ```
 

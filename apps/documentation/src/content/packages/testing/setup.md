@@ -46,8 +46,11 @@ Vitest's default `include` finds `*.test.ts` and `*.spec.ts` anywhere in the app
 is Vitest's default, `node`. Do not switch it to `jsdom`: there is no DOM to emulate, and giving
 Angular a `document` only invites it to reach for one.
 
-`ngNative()` takes three options. `inline` is for an Angular library of your own choosing that
-ships partial-compiled (see [under the hood](#under-the-hood)):
+`ngNative()` takes three options. `inline` is for an Angular library whose `package.json` does not
+list `@angular/core` as a dependency or a peer: one that does is processed already (see
+[under the hood](#under-the-hood)). Your patterns are added to those and to any
+`test.server.deps.inline` list in the config, and `test.server.deps.inline: true` still inlines
+every package:
 
 ```ts
 ngNative({ inline: [/\/node_modules\/@my-org\//] });
@@ -153,9 +156,12 @@ and the Vitest plugin and the Node hook each fix all three the same way:
   have to be linked before they can run. The Angular linker runs over every file that has them, as
   it does in Metro.
 - **`node_modules`.** Vitest normally hands a dependency straight to Node, which would bypass both
-  steps above, so `ngNative()` tells it to process `@angular/*`, `@ng-native/*` and `@ng-icons/*`
-  itself. Node refuses to strip types from any `.ts` file under `node_modules`, so the Node hook
-  strips them itself for every `.ts` file there, decorated or not.
+  steps above, and would give an Angular library Node's own copy of `@angular/core`, a second
+  instance beside the test's: its `inject()` would then fail with NG0203 in an injection context
+  the test set up. So `ngNative()` tells Vitest to process `@angular/*`, `@ng-native/*`,
+  `@ng-icons/*` and every package that lists `@angular/core` as a dependency or a peer itself.
+  Node refuses to strip types from any `.ts` file under `node_modules`, so the Node hook strips
+  them itself for every `.ts` file there, decorated or not.
 
 Both also install the globals the Metro preset installs as polyfills, before `@angular/core` is
 first evaluated: the animation globals Angular looks for to decide whether `animate.enter` and
@@ -192,7 +198,9 @@ However, the Angular Linker has not processed the library such that JIT compilat
 ```
 
 A partial-compiled library reached the runtime without being linked. Under Vitest, that means the
-package is not one Vitest processes itself: add it to `ngNative({ inline: [...] })`. Under
+package is not one Vitest processes itself, because its `package.json` does not list
+`@angular/core`: add it to `ngNative({ inline: [...] })`. An `NG0203` error from a library's
+`inject()` call, in a test that does set up an injection context, has the same cause and fix. Under
 `node:test`, it means the hook is not loaded, so check that `--import @ng-native/testing/register`
 is in the script and comes before `--test`.
 

@@ -2,8 +2,9 @@ import type { Plugin } from 'vitest/config';
 
 export interface NgNativeOptions {
   /**
-   * More packages for Vitest to process rather than hand to Node, for an Angular library that
-   * ships partial-compiled. `@angular/*`, `@ng-native/*` and `@ng-icons/*` are always included.
+   * More packages for Vitest to process rather than hand to Node, for an Angular library whose
+   * `package.json` does not list `@angular/core`. `@angular/*`, `@ng-native/*`, `@ng-icons/*` and
+   * every package that lists `@angular/core` as a dependency or a peer are always included.
    */
   inline?: (string | RegExp)[];
   /**

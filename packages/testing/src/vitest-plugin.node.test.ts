@@ -454,3 +454,135 @@ describe('a Vitest run', () => {
     }
   });
 });
+
+/**
+ * An Angular library in `node_modules` that `ngNative()` was not told about. Vitest handed it to
+ * Node, whose `@angular/core` is a second instance beside the one the test loads through the
+ * plugin, so the library's `inject()` found no injection context: NG0203, as with
+ * `injectQuery()` from `@tanstack/angular-query-experimental`.
+ */
+describe('an Angular library in node_modules', () => {
+  let root: string;
+
+  /** An `inject()` helper, as `injectQuery()` is. */
+  const helper =
+    "import { inject, InjectionToken } from '@angular/core';\n" +
+    "export const GREETING = new InjectionToken('GREETING');\n" +
+    'export function injectGreeting() {\n  return inject(GREETING);\n}\n';
+
+  /** A test that calls the helper of `library` in a field initializer. */
+  const helperTest = (library: string) =>
+    "import { Injector } from '@angular/core';\n" +
+    `import { GREETING, injectGreeting } from '${library}';\n` +
+    "import { expect, it } from 'vitest';\n" +
+    'class Greeter {\n  readonly greeting = injectGreeting();\n}\n' +
+    "it('injects from the library in a field initializer', () => {\n" +
+    '  const injector = Injector.create({\n' +
+    "    providers: [{ provide: GREETING, useValue: 'hello' }, { provide: Greeter, deps: [] }],\n" +
+    '  });\n' +
+    "  expect(injector.get(Greeter).greeting).toBe('hello');\n" +
+    '});\n';
+
+  /** Installs `name` in the app's `node_modules`, with `manifest` merged into its package.json. */
+  function install(name: string, manifest: object, source: string) {
+    const dir = path.join(root, 'node_modules', name);
+    mkdirSync(dir);
+    writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name,
+        version: '1.0.0',
+        type: 'module',
+        exports: './index.js',
+        ...manifest,
+      }),
+    );
+    writeFileSync(path.join(dir, 'index.js'), source);
+  }
+
+  before(() => {
+    root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ngn-angular-library-')));
+    mkdirSync(path.join(root, 'node_modules', '@angular'), { recursive: true });
+    symlinkSync(
+      realpathSync(path.join(import.meta.dirname, '..', 'node_modules', '@angular', 'core')),
+      path.join(root, 'node_modules', '@angular', 'core'),
+      'dir',
+    );
+    install('greeting-lib', { peerDependencies: { '@angular/core': '>=20' } }, helper);
+    // One that imports `@angular/core` without saying so: only an app's own `inline` reaches it.
+    install('undeclared-lib', {}, helper);
+    // A service shipped partial-compiled, which runs only once the linker has been over it.
+    install(
+      'shout-lib',
+      { dependencies: { '@angular/core': '>=20' } },
+      "import * as i0 from '@angular/core';\n" +
+        'export class Shout {\n' +
+        "  text = 'HELLO';\n" +
+        "  static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: '12.0.0', version: '22.0.0', ngImport: i0, type: Shout, deps: [], target: i0.ɵɵFactoryTarget.Injectable });\n" +
+        "  static ɵprov = i0.ɵɵngDeclareInjectable({ minVersion: '12.0.0', version: '22.0.0', ngImport: i0, type: Shout, providedIn: 'root' });\n" +
+        '}\n',
+    );
+  });
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  /**
+   * Runs `source` as a test file, with the app's own `server.deps.inline` if given, and returns
+   * the errors it failed with, loading it included.
+   */
+  async function run(source: string, inline?: true | RegExp[]): Promise<string[]> {
+    writeFileSync(path.join(root, 'library.test.ts'), source);
+    const { createVitest } = await import('vitest/node');
+    const vitest = await createVitest(
+      'test',
+      { root, config: false, watch: false, reporters: [], include: ['library.test.ts'] },
+      {
+        plugins: [ngNative()],
+        ...(inline === undefined ? {} : { test: { server: { deps: { inline } } } }),
+      },
+    );
+    try {
+      await vitest.start();
+      const files = vitest.state.getFiles();
+      assert.equal(files.length, 1);
+      const errors = files
+        .flatMap((file) => [
+          ...(file.result?.errors ?? []),
+          ...file.tasks.flatMap((task) => task.result?.errors ?? []),
+        ])
+        .map((error) => error.message);
+      // With no error, the test did run and pass.
+      if (errors.length === 0) assert.equal(vitest.state.getCountOfFailedTests(), 0);
+      if (errors.length === 0) assert.equal(files[0].tasks[0]?.result?.state, 'pass');
+      return errors;
+    } finally {
+      await vitest.close();
+      rmSync(path.join(root, 'library.test.ts'), { force: true });
+    }
+  }
+
+  it("shares the test's @angular/core, so its inject() runs in the test's injection context", async () => {
+    assert.deepEqual(await run(helperTest('greeting-lib')), []);
+  });
+
+  it('links a partial-compiled library that depends on @angular/core', async () => {
+    const test =
+      "import { Injector } from '@angular/core';\n" +
+      "import { Shout } from 'shout-lib';\n" +
+      "import { expect, it } from 'vitest';\n" +
+      "it('injects the library service', () => {\n" +
+      "  expect(Injector.create({ providers: [Shout] }).get(Shout).text).toBe('HELLO');\n" +
+      '});\n';
+    assert.deepEqual(await run(test), []);
+  });
+
+  it("keeps the app's own inline list beside the plugin's", async () => {
+    assert.deepEqual(
+      await run(helperTest('undeclared-lib'), [/\/node_modules\/undeclared-lib\//]),
+      [],
+    );
+  });
+
+  it('keeps inline: true, which inlines every package', async () => {
+    assert.deepEqual(await run(helperTest('undeclared-lib'), true), []);
+  });
+});

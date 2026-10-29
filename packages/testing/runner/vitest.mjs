@@ -7,7 +7,8 @@
  *   partial-compiled package through the linker (see `compile.mjs`), before Vite strips types.
  * - It inlines. Vitest hands `node_modules` straight to Node by default, which would mean an
  *   `@ng-native/*` package's `.ts` source reaching a runtime that refuses to strip types under
- *   `node_modules`, and `@angular/*` reaching it unlinked. Inlined, both come through the plugin.
+ *   `node_modules`, `@angular/*` reaching it unlinked, and an Angular library loading a second
+ *   `@angular/core` of its own. Inlined, all of them come through the plugin.
  * - It adds a setup file with the globals Angular reads as it is first evaluated, and one that
  *   leaves `Intl` with only the constructors Hermes has (`hermes-intl.mjs`, unless `intl: 'node'`),
  *   and runs ES modules without the CommonJS variables Vitest otherwise injects into them.
@@ -73,15 +74,63 @@ export function standIn(name, from = import.meta.url) {
   return existsSync(source) ? source : fileURLToPath(new URL(`../dist/${name}.js`, from));
 }
 
+/** @type {Map<string, boolean>} */
+const angularDirs = new Map();
+
 /**
- * ponytail: inlining is by package name, so a third-party Angular library other than these has
- * to be named in `inline` by the app. Linking whatever turns out to be partial-compiled would
- * mean inlining every dependency, which is slower and breaks CommonJS packages.
+ * Whether the package a directory is in lists `@angular/core` as a dependency or a peer: the
+ * nearest `package.json` with a `name`, since a package's dist can hold one with only a `type`.
+ *
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function dependsOnAngular(dir) {
+  let found = angularDirs.get(dir);
+  if (found === undefined) {
+    const own = manifest(dir);
+    const parent = path.dirname(dir);
+    found = own?.name
+      ? ['dependencies', 'peerDependencies'].some((field) =>
+          Object.hasOwn(own[field] ?? {}, '@angular/core'),
+        )
+      : parent !== dir && !dir.endsWith('/node_modules') && dependsOnAngular(parent);
+    angularDirs.set(dir, found);
+  }
+  return found;
+}
+
+/**
+ * Every file of an installed package that depends on `@angular/core`, as a pattern for Vitest's
+ * `server.deps.inline`, which only calls `test` on it.
+ *
+ * Handed to Node, such a package imports Node's own instance of `@angular/core`, a second one
+ * beside the instance the test loads through this plugin: its `inject()` then sees no injection
+ * context (NG0203) and its tokens match no provider. Inlined, it shares the test's instance and
+ * goes through the linker if it ships partial-compiled.
+ *
+ * The pattern itself matches nothing, so a copy of it that lost `test` inlines nothing more.
+ */
+class AngularLibraries extends RegExp {
+  constructor() {
+    super('(?!)');
+  }
+
+  /** @param {string} id */
+  test(id) {
+    const file = id.split('?')[0];
+    return file.includes('/node_modules/') && dependsOnAngular(path.dirname(file));
+  }
+}
+
+/**
+ * Inlined by name as well, whatever their manifests say: `@angular/core` lists no dependency on
+ * itself.
  */
 const INLINE = [
   /\/node_modules\/@angular\//,
   /\/node_modules\/@ng-native\//,
   /\/node_modules\/@ng-icons\//,
+  new AngularLibraries(),
 ];
 
 /**
@@ -292,7 +341,11 @@ export function ngNative(options = {}) {
         // requires `react-native`, whose Flow source nothing in a test can parse. Off, a module
         // sees what it sees under Node itself.
         injectCjsGlobals: false,
-        server: { deps: { inline: [...INLINE, ...(options.inline ?? [])] } },
+        // Added to the app's own list. An app that inlines everything already has these, and a
+        // list merged into its `true` would no longer mean everything.
+        ...(config?.test?.server?.deps?.inline === true
+          ? {}
+          : { server: { deps: { inline: [...INLINE, ...(options.inline ?? [])] } } }),
       },
     }),
     configResolved(config) {
