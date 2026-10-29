@@ -2619,6 +2619,17 @@ function sharesRow(node: EngineNode): boolean {
 }
 
 /**
+ * Whether an item grows into what its row has left over, by a `flex-grow` or React Native's own
+ * `flex`. React Native's Yoga gives a row as wide as its content all the room it could have
+ * where any item grows, as though the room were the row's; a browser gives it none.
+ */
+function growsInRow(node: EngineNode): boolean {
+  const grow = readStyle(node, 'flexGrow') ?? readStyle(node, 'flex');
+  const row = node.parent;
+  return typeof grow === 'number' && grow > 0 && row?.nodeKind === 'element' && isRow(row);
+}
+
+/**
  * Whether a box in the flow is as wide as a share of the box it is in: a percentage. One out of
  * the flow is a share of a box it has no part in the width of, a focus ring over a chip.
  */
@@ -3041,6 +3052,11 @@ const LAID_OUT_HERE = new Set([
   ...CONTAINING_ONLY,
 ]);
 /**
+ * The keys a number asks something by: the ones the engine alone reads, and a growth, which a
+ * row as wide as its content is fitted for (see `growsInRow`). Any other number asks nothing.
+ */
+const ASKED_AS_NUMBER: ReadonlySet<string> = new Set([...LAID_OUT_HERE, 'flex', 'flexGrow']);
+/**
  * Whether a box is what an absolute box in it is placed against: one that is not static, or one
  * CSS makes a containing block however it is positioned (see `containsAbsolutes`).
  */
@@ -3103,8 +3119,8 @@ const SHARES = MIXED_SIZES | SHARED_WIDTHS | SHARED_HEIGHTS;
  * - a layout CSS has and Yoga has not: a block or a grid, a box in a line, a position that is
  *   not a native view's, a size that is a keyword, an automatic minimum;
  * - a percentage with a length added, `calc(100% - 32px)`, which Yoga has no value for;
- * - a width that is a share of its box, which is fitted where that box is as wide as its
- *   content;
+ * - a width that is a share of its box, or a share of a row's room left over, which is fitted
+ *   where that box is as wide as its content;
  * - a height that is a share of its box, which is held at its content's height where it is as
  *   tall as its content;
  * - a transition or an animation, which native lays out where nothing else in its commit
@@ -3116,6 +3132,9 @@ function asks(key: string, value: unknown): number {
   // A transition or an animation, as each of their declarations is kept: `$transition`.
   if (key.startsWith('$')) return TRANSITIONS;
   if (typeof value === 'string') return asksByText(key, value);
+  if (key === 'flexGrow' || key === 'flex') {
+    return typeof value === 'number' && value > 0 ? SHARED_WIDTHS : 0;
+  }
   if (LAID_OUT_HERE.has(key)) return CSS_LAYOUT;
   // A move by a share with a length added is inside a transform's own list of values, and
   // nothing else's: see `takeMixedTranslate`.
@@ -3203,9 +3222,9 @@ function styleAsks(style: unknown): number {
   }
   for (const key in style) {
     const value = (style as Record<string, unknown>)[key];
-    // A number asks for nothing but by a key the engine alone reads, as in `Engine.setProp`: told
+    // A number asks for nothing but by a key in `ASKED_AS_NUMBER`, as in `Engine.setProp`: told
     // here without the call, as most declarations are numbers.
-    if (typeof value !== 'number' || LAID_OUT_HERE.has(key)) asked |= asks(key, value);
+    if (typeof value !== 'number' || ASKED_AS_NUMBER.has(key)) asked |= asks(key, value);
   }
   return asked;
 }
@@ -3220,6 +3239,7 @@ function lateAsks(late: DeferredDeclaration): number {
   let asked = 0;
   for (const prop of late.props) {
     if (prop === 'display' || prop === 'position' || LAID_OUT_HERE.has(prop)) asked |= CSS_LAYOUT;
+    if (prop === 'flexGrow') asked |= SHARED_WIDTHS;
     if (prop.startsWith('$')) asked |= TRANSITIONS;
   }
   const text = JSON.stringify(late);
@@ -8290,9 +8310,9 @@ export class Engine implements HostEngine {
     } else {
       if (node.props[key] === value) return;
       node.props[key] = value;
-      // A number asks for nothing but by a key the engine alone reads: see `asks`.
+      // A number asks for nothing but by a key in `ASKED_AS_NUMBER`: see `asks`.
       // `askedBy`, written out: this runs for every prop Angular writes.
-      if ((typeof value !== 'number' || LAID_OUT_HERE.has(key)) && this.asked !== EVERYTHING) {
+      if ((typeof value !== 'number' || ASKED_AS_NUMBER.has(key)) && this.asked !== EVERYTHING) {
         const bits =
           key === 'style' || key === STYLE_OVERRIDE ? styleAsks(value) : asks(key, value);
         if (bits & ~this.asked) this.want(bits);
@@ -8456,8 +8476,10 @@ export class Engine implements HostEngine {
     if (this.asked !== EVERYTHING) {
       const style = node.props['style'] as Record<string, unknown> | undefined;
       const value = key === undefined ? style : style?.[key];
-      // A number asks for nothing but by a key the engine alone reads: see `asks`.
-      if (typeof value !== 'number' || LAID_OUT_HERE.has(key!)) this.askedBy(key ?? 'style', value);
+      // A number asks for nothing but by a key in `ASKED_AS_NUMBER`: see `asks`.
+      if (typeof value !== 'number' || ASKED_AS_NUMBER.has(key!)) {
+        this.askedBy(key ?? 'style', value);
+      }
     }
     // As `setProp` restyles for a new style object: a child that takes one of its values, an
     // `inherit`, follows the one changed in place too.
@@ -9868,7 +9890,9 @@ export class Engine implements HostEngine {
   private checkAsked(node: EngineNode, merged: Record<string, unknown>): void {
     const missed = this.asked & CSS_LAYOUT ? [] : this.unaskedLayout(node, merged);
     if (!(this.asked & MIXED_SIZES) && takeMixed(node, { ...merged })) missed.push('a sum');
-    if (!(this.asked & SHARED_WIDTHS) && sharesWidth(node)) missed.push('a share');
+    if (!(this.asked & SHARED_WIDTHS) && (sharesWidth(node) || growsInRow(node))) {
+      missed.push('a share');
+    }
     if (missed.length) throw new Error(`Laid out by what nothing asked for: ${missed.join(', ')}`);
   }
 
@@ -9994,7 +10018,7 @@ export class Engine implements HostEngine {
     if (this.sitsInLine(node) || (this.fits.has(node) && this.fitsContent(node))) {
       this.refitted(node);
     }
-    if (!sharesWidth(node)) return;
+    if (!sharesWidth(node) && !growsInRow(node)) return;
     // The box it is a share of, or one further up that this one is as wide as: each box between
     // has no width of its own, and is as wide as the one it is in.
     for (let around = node.parent; around?.nodeKind === 'element'; around = around.parent) {
@@ -10433,7 +10457,8 @@ export class Engine implements HostEngine {
       const shares =
         typeof readStyle(child, 'flex') === 'number' ||
         isNoBasis(basis) ||
-        (isShare(basis) && isRow(node));
+        (isShare(basis) && isRow(node)) ||
+        growsInRow(child);
       if (typeof width === 'string' || shares || isShare(readStyle(child, 'minWidth'))) {
         found.push(child);
       }

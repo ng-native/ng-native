@@ -272,6 +272,13 @@ from a basis of nothing, as `flex-1` cells do. The engine commits such a box wit
 reads its width back, and commits it at that width, which the percentage and the shares are then
 of. It costs the box two more commits when something in it changes.
 
+A row that is as wide as its content, such as one with `align-self: flex-start` in a column or an
+item of another row, is as wide as its items when one of them grows, as in a browser: a tray of
+tabs that are each `flex: 1` hugs the tabs. Yoga, as React Native configures it, gives such a row
+all the room it could have once any item has a `flex-grow` or a React Native `flex` above 0. The
+engine fits the row the same way, with the items' growth set aside, at the same cost. Once the row
+is stretched, by `align-self: stretch` or a width, the items share all of it.
+
 Only margins in points collapse. Beside a percentage margin in the same container every margin stays
 as written, because a percentage is of a width nothing knows before layout. In a flex container or a
 grid an inline-level box is an item like any other, as a browser has it. `.d-none` followed by

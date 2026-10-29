@@ -28,7 +28,10 @@ knowing about, because both fail silently if you write around them instead of th
   parses numeric strings back into numbers for the second, because Fabric wants `fontSize` and a
   plain `10`. A _static_ `style="flex: 1"` attribute - not a binding - arrives as one whole string
   through `setAttribute`, and gets the same treatment: without it, a static `style` attribute would
-  hand Fabric a string where it expects an object, and it drops the whole thing.
+  hand Fabric a string where it expects an object, and it drops the whole thing. A `flex` of
+  several values, a keyword or a basis (`flex: 1 1 auto`, `flex: none`, `flex: 30%`) is committed
+  as the `flexGrow`, `flexShrink` and `flexBasis` a stylesheet makes of it, since Fabric reads
+  none of them; one number, `flex: 1`, stays React Native's own `flex` in every form.
 - **Events map by name.** `(touchEnd)` becomes Fabric's `topTouchEnd`. There is no alias for
   `(press)`: `onPress` is not a native event, React Native's own `Pressable` synthesizes it from the
   touch responder system in JavaScript. `Pressable` in `@ng-native/components` does the same
