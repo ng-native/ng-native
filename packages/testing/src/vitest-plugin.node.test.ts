@@ -483,21 +483,25 @@ describe('an Angular library in node_modules', () => {
     "  expect(injector.get(Greeter).greeting).toBe('hello');\n" +
     '});\n';
 
-  /** Installs `name` in the app's `node_modules`, with `manifest` merged into its package.json. */
+  /**
+   * Installs `name` in the app's `node_modules`, with `manifest` merged into its package.json. The
+   * source sits in `fesm2022`, beside a package.json with only a `type`, as a built library ships.
+   */
   function install(name: string, manifest: object, source: string) {
     const dir = path.join(root, 'node_modules', name);
-    mkdirSync(dir);
+    mkdirSync(path.join(dir, 'fesm2022'), { recursive: true });
     writeFileSync(
       path.join(dir, 'package.json'),
       JSON.stringify({
         name,
         version: '1.0.0',
         type: 'module',
-        exports: './index.js',
+        exports: './fesm2022/index.js',
         ...manifest,
       }),
     );
-    writeFileSync(path.join(dir, 'index.js'), source);
+    writeFileSync(path.join(dir, 'fesm2022', 'package.json'), JSON.stringify({ type: 'module' }));
+    writeFileSync(path.join(dir, 'fesm2022', 'index.js'), source);
   }
 
   before(() => {
