@@ -1836,6 +1836,27 @@
     }
   },
   {
+    "name": "background: gradients over var() take the token as the colour",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(8, 0, 0)"
+    }
+  },
+  {
+    "name": "background: gradients over var() fall back to a written colour when the token is unset",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(10, 0, 0)"
+    }
+  },
+  {
+    "name": "background: gradients over var() of an unset token unset a weaker background-color",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
     "name": "background: var() of an unset token with no fallback unsets a weaker background-color",
     "expected": {
       "color": "rgb(0, 0, 0)",

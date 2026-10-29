@@ -1134,6 +1134,23 @@ export const CASES: OracleCase[] = [
     tree: probe({ classes: ['c'] }),
   },
   {
+    name: 'background: gradients over var() take the token as the colour',
+    css:
+      '.outer { --bg: rgb(8, 0, 0) } #probe { background-color: rgb(9, 0, 0) } ' +
+      '#probe.c { background: linear-gradient(180deg, #ffffff33 0%, #ffffff00 67.7%), var(--bg) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ classes: ['c'] })] },
+  },
+  {
+    name: 'background: gradients over var() fall back to a written colour when the token is unset',
+    css: '#probe { background: linear-gradient(red, blue), radial-gradient(red, blue), var(--missing, rgb(10, 0, 0)) }',
+    tree: probe(),
+  },
+  {
+    name: 'background: gradients over var() of an unset token unset a weaker background-color',
+    css: '#probe { background-color: rgb(11, 0, 0) } #probe.c { background: linear-gradient(red, blue), var(--missing) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
     name: 'background: var() of an unset token with no fallback unsets a weaker background-color',
     css: '#probe { background-color: rgb(7, 0, 0) } #probe.c { background: var(--missing) }',
     tree: probe({ classes: ['c'] }),

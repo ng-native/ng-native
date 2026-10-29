@@ -1288,4 +1288,5 @@ module.exports = {
   commaSeparated,
   arithmeticTree,
   calcLength,
+  cssText,
 };

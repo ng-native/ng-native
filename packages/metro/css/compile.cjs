@@ -31,6 +31,7 @@ const {
   mixedToken,
   OF_A_BOX,
   color,
+  cssText: writtenText,
 } = require('./values.cjs');
 const {
   translate,
@@ -734,6 +735,38 @@ const backgroundLayers = () => ({
   props: ['backgroundColor', 'experimental_backgroundImage'],
   layers: true,
 });
+
+/**
+ * `background: linear-gradient(...), var(--primary)`: layers written out over a token's colour, as
+ * design systems in the shadcn family write their buttons. The token is the whole of the last
+ * layer, where only a colour can be, so the shorthand is split here: the layers before it are read
+ * as `background` reads them, colour aside, and the token is `background-color`'s, read on device.
+ * False for any other value, a token in another place included, which is refused as before.
+ *
+ * ponytail: a token that is unset or no colour unsets only the colour, as `background: var()`
+ * does, where Chrome finds the whole shorthand invalid and draws no image either.
+ */
+function layersOverToken(value, out, deferred, context) {
+  if (value?.propertyId?.property !== 'background') return false;
+  const parts = value.value ?? [];
+  const comma = parts.findLastIndex(
+    (part) => part.type === 'token' && part.value?.type === 'comma',
+  );
+  const last = meaningful(parts.slice(comma + 1));
+  const above = parts.slice(0, comma);
+  if (comma < 0 || last.length !== 1 || last[0].type !== 'var') return false;
+  // The token's layer is a colour alone, which `transparent` stands in for until the device reads
+  // the token, so the layers are read exactly as the same shorthand with the colour written out.
+  // Text is null for a layer with a token in it, or a term that cannot be written back.
+  const text = writtenText(above);
+  const typed = text === null ? null : reparsed('background', `${text}, transparent`, context);
+  if (typed?.property !== 'background') return false;
+  const layers = {};
+  translate('background', typed.value, layers, context);
+  Object.assign(out, layers);
+  deferred.push(deferVar({ propertyId: { property: 'background-color' }, value: last }, context));
+  return true;
+}
 
 /** The motion a token can be read into whole, and the key and token form each reads it as. */
 const MOTION_FROM_TOKEN = {
@@ -2428,21 +2461,28 @@ function addUnparsed(declaration, out, deferred, context) {
     }
     if (writtenTextDecoration(declaration.value, out, context)) return;
   }
-  const property = declaration.value?.propertyId?.property;
-  if (animationTimeWithTokens(property, declaration.value.value ?? [], out, context)) return;
+  if (!layersOverToken(declaration.value, out, deferred, context)) {
+    addWithTokens(declaration.value, out, deferred, context);
+  }
+}
+
+/** A raw value with a token in it, taken apart where its shape allows and deferred whole where not. */
+function addWithTokens(value, out, deferred, context) {
+  const property = value?.propertyId?.property;
+  if (animationTimeWithTokens(property, value.value ?? [], out, context)) return;
   // Before a shorthand is taken apart, which gives every part of it the one fallback.
-  const sided = sidedFallback(declaration.value, context);
+  const sided = sidedFallback(value, context);
   if (sided) {
     deferred.push(...sided);
     return;
   }
-  const expanded = expandShorthand(declaration.value, context, linear);
+  const expanded = expandShorthand(value, context, linear);
   if (expanded) {
     Object.assign(out, expanded.declarations);
     deferred.push(...expanded.deferred);
     return;
   }
-  deferred.push(deferVar(declaration.value, context));
+  deferred.push(deferVar(value, context));
 }
 
 const SIDES = ['Top', 'Right', 'Bottom', 'Left'];

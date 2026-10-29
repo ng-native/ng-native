@@ -264,3 +264,134 @@ describe('background: var()', () => {
     assert.equal(background(), undefined);
   });
 });
+
+/** The props a sheet commits to its one `.a` view. */
+function committedProps(css: string) {
+  const sheet = compileCss(css, 'background', { onUnsupported: () => {} });
+  const fabric = createFakeFabric();
+  const engine = new Engine(fabric, 1);
+  const node = engine.createElement('view', sheet);
+  engine.addClass(node, 'a');
+  engine.appendChild(engine.root, node);
+  engine.commit();
+  return fabric.committed[0]!.props;
+}
+
+describe('background: gradients over a var() colour', () => {
+  const SHEEN = 'linear-gradient(180deg, #ffffff33 0%, #ffffff00 67.7%)';
+
+  it('splits into the gradients as the image and the token as the colour', () => {
+    const { background, image, warnings } = tree(
+      `.p { --primary: #615fff } .a { background: ${SHEEN}, var(--primary) }`,
+      ['p'],
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(background(), 'rgb(97, 95, 255)');
+    assert.deepEqual(
+      image(),
+      committedProps(`.a { background: ${SHEEN}, #615fff }`)['experimental_backgroundImage'],
+    );
+    assert.equal((image() as unknown[]).length, 1);
+  });
+
+  it('commits what the shorthand with the colour written out commits', () => {
+    const layered = `${SHEEN} no-repeat center / 50% 2px, radial-gradient(red, rgb(0 0 0 / .5))`;
+    assert.deepEqual(
+      committedProps(`.a { --c: #00f; background: ${layered}, var(--c) }`),
+      committedProps(`.a { background: ${layered}, #00f }`),
+    );
+    // A layer of no image is placed as one, as the token's own layer is.
+    assert.deepEqual(
+      committedProps('.a { --c: #00f; background: none 10px 10px, var(--c) }'),
+      committedProps('.a { background: none 10px 10px, #00f }'),
+    );
+    // Over what a weaker rule set: the shorthand says all of a background.
+    const weaker =
+      '.a { background-color: #f00; background-image: linear-gradient(blue, green); ' +
+      'background-size: 10px 10px; background-repeat: repeat-x } ';
+    assert.deepEqual(
+      committedProps(`${weaker} .a { --c: #00f; background: ${SHEEN}, var(--c) }`),
+      committedProps(`${weaker} .a { background: ${SHEEN}, #00f }`),
+    );
+  });
+
+  it('follows a token set on the element, and takes the fallback until it is set', () => {
+    const { engine, node, background, image } = tree(
+      `.a { background: ${SHEEN}, radial-gradient(red, blue), var(--primary, #000) }`,
+    );
+    assert.equal(background(), 'rgb(0, 0, 0)');
+    assert.equal((image() as unknown[]).length, 2, 'both layers');
+    engine.setCustomProperty(node, '--primary', 'rgb(0, 128, 0)');
+    engine.commit();
+    assert.equal(background(), 'rgb(0, 128, 0)');
+    engine.setCustomProperty(node, '--primary', null);
+    engine.commit();
+    assert.equal(background(), 'rgb(0, 0, 0)', 'the fallback again once the token goes');
+  });
+
+  it('follows a token on the parent, and unsets the colour when it goes away', () => {
+    const { engine, outer, background } = tree(
+      `.p { --c: #f00 } .q { --c: #0f0 } .a { background-color: #00f } ` +
+        `.a { background: ${SHEEN}, var(--c) }`,
+      ['p'],
+    );
+    assert.equal(background(), 'rgb(255, 0, 0)');
+    engine.removeClass(outer, 'p');
+    engine.addClass(outer, 'q');
+    engine.commit();
+    assert.equal(background(), 'rgb(0, 255, 0)');
+    engine.removeClass(outer, 'q');
+    engine.commit();
+    assert.equal(background() ?? null, null, 'the declaration wins the cascade and is unset');
+  });
+
+  it('gives way to a later background-color in the rule, and stands over an earlier one', () => {
+    const later = tree(`.a { --c: #00f; background: ${SHEEN}, var(--c); background-color: #0f0 }`);
+    assert.equal(later.background(), 'rgb(0, 255, 0)');
+    const earlier = tree(
+      `.a { background-color: #0f0; --c: #00f; background: ${SHEEN}, var(--c) }`,
+    );
+    assert.equal(earlier.background(), 'rgb(0, 0, 255)');
+    const important = tree(
+      `.a { --c: #00f; background: ${SHEEN}, var(--c) !important } .a { background-color: #0f0 }`,
+    );
+    assert.equal(important.background(), 'rgb(0, 0, 255)', 'important, over a later rule');
+  });
+
+  it('still drops a token anywhere but the whole of the last layer', () => {
+    for (const value of [
+      'linear-gradient(var(--c), red), #fff',
+      'linear-gradient(var(--c), red), var(--c)',
+      `var(--c), ${SHEEN}`,
+      `${SHEEN}, var(--c) no-repeat`,
+      `${SHEEN} no-repeat var(--c), var(--c)`,
+      'url(a.png), var(--c)',
+    ]) {
+      const { background, image, warnings } = tree(`.a { --c: #00f; background: ${value} }`);
+      assert.equal(warnings.length, 1, value);
+      assert.match(warnings[0]!, /dropped 'background': 'background' mixes var\(\)/, value);
+      assert.equal(background(), undefined, value);
+      assert.equal(image(), undefined, value);
+    }
+    // A layer native cannot paint drops the whole declaration, the colour with it.
+    const conic = tree('.a { --c: #00f; background: conic-gradient(red, blue), var(--c) }');
+    assert.deepEqual(conic.warnings.length, 1);
+    assert.match(conic.warnings[0]!, /a conic-gradient has no native equivalent/);
+    assert.equal(conic.background(), undefined);
+    assert.equal(conic.image(), undefined);
+    // The longhand is no shorthand of layers and a colour, and is left as it was.
+    const longhand = tree(`.a { --c: #00f; background-image: ${SHEEN}, var(--c) }`);
+    assert.equal(longhand.warnings.length, 1);
+    assert.match(longhand.warnings[0]!, /dropped 'background-image'/);
+  });
+
+  it('leaves a gradient with a token as the last layer to the gradients, as before', () => {
+    const { engine, node, image, warnings } = tree(
+      `.a { background: ${SHEEN}, linear-gradient(var(--c), red) }`,
+    );
+    assert.deepEqual(warnings, []);
+    engine.setCustomProperty(node, '--c', 'rgb(0, 0, 255)');
+    engine.commit();
+    assert.equal((image() as unknown[]).length, 2);
+  });
+});
