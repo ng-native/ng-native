@@ -101,6 +101,48 @@ async function chainTo(
 }
 
 /**
+ * Every public `Route` field, and whether the page's copy keeps it, so a field Angular adds fails
+ * the type check here until it is decided.
+ *
+ * Left out: `path`, `pathMatch` and `outlet`, which the copy sets itself; `children` and
+ * `loadChildren`, as the page has none (`chainTo` only ends at a route without them); `matcher`
+ * and `redirectTo`, which `taken` never follows; `canMatch`, which stops the search; `canLoad`,
+ * which guards `loadChildren`.
+ */
+export const PAGE_FIELDS = {
+  title: true,
+  path: false,
+  pathMatch: false,
+  matcher: false,
+  component: true,
+  loadComponent: true,
+  redirectTo: false,
+  outlet: false,
+  canActivate: true,
+  canMatch: false,
+  canActivateChild: true,
+  canDeactivate: true,
+  canLoad: false,
+  data: true,
+  resolve: true,
+  resources: true,
+  children: false,
+  loadChildren: false,
+  runGuardsAndResolvers: true,
+  providers: true,
+} as const satisfies Record<keyof Route, boolean>;
+
+/** The page's own route: the fields `PAGE_FIELDS` keeps, and nothing else. */
+function pageOf(route: Route): Route {
+  const page: Record<string, unknown> = {};
+  for (const [field, kept] of Object.entries(PAGE_FIELDS)) {
+    const value = (route as Record<string, unknown>)[field];
+    if (kept && value !== undefined) page[field] = value;
+  }
+  return page as Route;
+}
+
+/**
  * The page's route as a root route of the presented outlet, under its whole path, inside a copy of
  * each route it sat inside: their guards, providers, resolvers and data, and not their components,
  * as the tab bar and the tab's stack are not what is presented. Angular makes one injector for each
@@ -119,8 +161,8 @@ function presentedCopy(chain: readonly Route[]): Route {
   return chain.reduceRight<Route | undefined>((inside, route, level) => {
     const own: Route =
       level === last
-        ? // Not the injector Angular made for it in its tab, which is under that tab's routes.
-          ({ ...route, _injector: undefined } as Route)
+        ? // Public fields only, so nothing Angular made for it in its tab carries over.
+          pageOf(route)
         : {
             providers: route.providers,
             canActivate: route.canActivate,
