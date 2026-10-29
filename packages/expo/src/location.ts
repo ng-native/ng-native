@@ -11,10 +11,11 @@
  * A `position` signal, which a one-off `current()` and a running `start()` both write to. Nothing
  * is watched until `start`, and the accuracy is explicit, for the same reason a sensor's interval
  * is: GPS at navigation accuracy is a battery the user notices. Both ask for the foreground
- * permission first, and do nothing without it.
+ * permission first, and do nothing without it. Geocoding asks for it too, except on iOS, whose
+ * geocoder does not need it; on Android `expo-location` refuses to geocode without it.
  */
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { expoModule } from './native.ts';
+import { currentPlatform, expoModule } from './native.ts';
 import { Permission, UNAVAILABLE, type PermissionResponse } from './permissions.ts';
 
 /** How precise, in Expo's order: `lowest` is kilometres, `navigation` is metres and a hot GPS. */
@@ -90,6 +91,11 @@ export class Location {
 
   private readonly native = inject(Location.SOURCE);
   private readonly latest = signal<Position | null>(null);
+  /**
+   * Whether geocoding asks for the permission first: everywhere but iOS, whose geocoder needs
+   * none. On Android `expo-location` refuses to geocode without it.
+   */
+  private readonly geocodingAsks = currentPlatform() !== 'ios';
 
   /** The foreground permission, which `current()` and `start()` ask for themselves. */
   readonly permission = Permission.of(
@@ -110,20 +116,26 @@ export class Location {
 
   /**
    * The places an address could be, best match first, from the platform's own geocoder. Empty
-   * for an address it does not know, without the permission, and where the source has no
-   * geocoder, as off a device. An app built without `expo-location` throws `MissingModuleError`.
+   * for an address it does not know, and where the source has no geocoder, as off a device. On
+   * iOS it asks for no permission. Elsewhere it asks for the foreground permission first and is
+   * empty without it, since `expo-location` refuses to geocode on Android without it. An app
+   * built without `expo-location` throws `MissingModuleError`.
    */
   async geocode(address: string): Promise<Coordinates[]> {
-    if (!this.native?.geocodeAsync || !(await this.permission.ensure())) return [];
+    if (!this.native?.geocodeAsync || !(await this.mayGeocode())) return [];
     const found = await this.native.geocodeAsync(address);
     return found.map(({ latitude, longitude }) => ({ latitude, longitude }));
   }
 
-  /** The addresses at a point. Empty, and throwing, where `geocode` is. */
+  /** The addresses at a point. Empty, asking first, and throwing, where `geocode` is. */
   async reverseGeocode(coordinates: Coordinates): Promise<Address[]> {
-    if (!this.native?.reverseGeocodeAsync || !(await this.permission.ensure())) return [];
+    if (!this.native?.reverseGeocodeAsync || !(await this.mayGeocode())) return [];
     const { latitude, longitude } = coordinates;
     return [...(await this.native.reverseGeocodeAsync({ latitude, longitude }))];
+  }
+
+  private mayGeocode(): Promise<boolean> {
+    return this.geocodingAsks ? this.permission.ensure() : Promise.resolve(true);
   }
 
   /** Follow the position into the signal. Resolves to the function that stops. */

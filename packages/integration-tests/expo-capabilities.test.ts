@@ -214,12 +214,54 @@ describe('the location', () => {
     assert.deepEqual(asked, ['10 Downing Street', { latitude: 51.5, longitude: -0.12 }]);
   });
 
-  it('answers no places without the permission, the module, or a geocoder in the source', async () => {
-    const refused = location(DENIED).native;
-    const geocoder = { geocodeAsync: async () => [{ latitude: 1, longitude: 2 }] };
-    const without = serviceWith(Location.SOURCE, { ...refused, ...geocoder }, () => new Location());
-    assert.deepEqual(await without.geocode('anywhere'), []);
+  /** A location service made on `os`, as `Platform.OS` names it, over a refused permission. */
+  function geocoderOn(os: string) {
+    const asked: string[] = [];
+    const native: NativeLocation = {
+      ...location(UNDETERMINED).native,
+      requestForegroundPermissionsAsync: async () => {
+        asked.push('permission');
+        return DENIED;
+      },
+      geocodeAsync: async (address) => {
+        asked.push(address);
+        return [{ latitude: 1, longitude: 2 }];
+      },
+      reverseGeocodeAsync: async () => {
+        asked.push('reverse');
+        return [{ city: 'Leeds' }] as never;
+      },
+    };
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      if (id === 'react-native') return { Platform: { OS: os } };
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    try {
+      return { asked, service: serviceWith(Location.SOURCE, native, () => new Location()) };
+    } finally {
+      delete host['require'];
+    }
+  }
 
+  it('geocodes on iOS without asking for the permission, which CLGeocoder does not need', async () => {
+    const { asked, service } = geocoderOn('ios');
+    assert.deepEqual(await service.geocode('LS6 1BJ'), [{ latitude: 1, longitude: 2 }]);
+    const [address] = await service.reverseGeocode({ latitude: 1, longitude: 2 });
+    assert.equal(address?.city, 'Leeds');
+    assert.deepEqual(asked, ['LS6 1BJ', 'reverse'], 'no prompt');
+  });
+
+  it('asks for the permission before geocoding on Android, where expo-location refuses without it', async () => {
+    for (const os of ['android', 'web']) {
+      const { asked, service } = geocoderOn(os);
+      assert.deepEqual(await service.geocode('LS6 1BJ'), [], os);
+      assert.deepEqual(await service.reverseGeocode({ latitude: 1, longitude: 2 }), [], os);
+      assert.deepEqual(asked, ['permission', 'permission'], `no geocode refused on ${os}`);
+    }
+  });
+
+  it('answers no places without the permission, the module, or a geocoder in the source', async () => {
     const absent = serviceWith(Location.SOURCE, null, () => new Location());
     assert.deepEqual(await absent.geocode('anywhere'), []);
     assert.deepEqual(await absent.reverseGeocode({ latitude: 1, longitude: 2 }), []);

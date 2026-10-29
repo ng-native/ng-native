@@ -81,9 +81,11 @@ by the module's config plugin.
 ## An address and a point
 
 `geocode(address)` answers the places an address could be, best match first, from the platform's
-own geocoder, and `reverseGeocode(coordinates)` the addresses at a point. Both ask for the
-foreground permission as `current()` does, and answer an empty list without it, for an address the
-geocoder does not know, and off a device. In an app built without `expo-location` they throw
+own geocoder, and `reverseGeocode(coordinates)` the addresses at a point. On iOS they ask for no
+permission, since Apple's geocoder does not need one. On Android they ask for the foreground
+permission as `current()` does, and answer an empty list without it, because `expo-location`
+refuses to geocode there without it. Both answer an empty list for an address the geocoder does
+not know, and off a device. In an app built without `expo-location` they throw
 `MissingModuleError`, as the rest of the service does.
 
 ```ts
