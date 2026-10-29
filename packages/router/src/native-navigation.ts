@@ -13,7 +13,7 @@
  * No decorators, so tests can import it at runtime and so it can be provided with `useClass`,
  * exactly as `NativePlatformLocation` and `NativeStackReuseStrategy` are.
  */
-import { DestroyRef, EnvironmentInjector, inject } from '@angular/core';
+import { DestroyRef, inject } from '@angular/core';
 import {
   NavigationCancel,
   NavigationCancellationCode,
@@ -176,8 +176,6 @@ function ended(event: unknown): event is { readonly id: number } {
 
 export class NativeNavigation {
   private readonly router = inject(Router);
-  // Absent only where the service is made outside an app, as a unit test makes it.
-  private readonly injector = inject(EnvironmentInjector, { optional: true }) ?? undefined;
   private readonly outlets = inject(NativeBack);
 
   /**
@@ -419,7 +417,7 @@ export class NativeNavigation {
     // A tab in front of a bar a screen covers is behind that screen just the same.
     if (!this.outlets.inTabBehind(path) && !this.outlets.coveredTabAt(path)) return null;
     const query = typeof commands === 'string' ? this.queryOf(commands, extras) : {};
-    return presentedCommands(this.router, path, this.injector).then(
+    return presentedCommands(this.router, path).then(
       (presented) =>
         presented && {
           commands: presented,
