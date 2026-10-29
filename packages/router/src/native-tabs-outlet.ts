@@ -511,6 +511,8 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private move(entry: TabEntry, tab: NativeTab): void {
     if (entry.tab === tab) return;
     entry.tab = tab;
+    // A new screen, which has yet to appear.
+    entry.shown.set(false);
     this.hearShown(entry);
     this.guardSelection(entry, entry.detached && guardedAt(entry.route));
     if (entry.ref) this.renderer.appendChild(tab.screen, entry.ref.location.nativeElement);

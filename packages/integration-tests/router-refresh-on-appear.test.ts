@@ -107,6 +107,21 @@ describe('a refresh control refreshing as its screen mounts, on iOS', () => {
     assert.equal(control(fabric, 'detail').props['refreshing'], false, 'and stops when told');
   });
 
+  it('stays off at appear when loading ended before it, then follows refreshing', async () => {
+    const { app, navigation } = await boot();
+    await navigation.push(['/detail']);
+    await settle();
+    const fabric = app.fabric;
+    loading.detail.set(false);
+    await settle();
+
+    await emit(fabric, screenOf(fabric, 'detail'), 'topAppear');
+    assert.equal(control(fabric, 'detail').props['refreshing'], false, 'nothing to show');
+    loading.detail.set(true);
+    await settle();
+    assert.equal(control(fabric, 'detail').props['refreshing'], true);
+  });
+
   it('follows refreshing at once on a screen that has appeared', async () => {
     loading.detail.set(false);
     const { app, navigation } = await boot();
@@ -178,6 +193,55 @@ describe('a refresh control refreshing as its screen mounts, on iOS', () => {
 
     await emit(fabric, tabOf(fabric, 'library'), 'topDidAppear');
     assert.equal(control(fabric, 'library').props['refreshing'], true);
+  });
+
+  it('hears a remade tab from when it is made, before the router navigates to it', async () => {
+    // Native selects a tab on a tap and shows its screen before JS is told.
+    const { app } = await boot();
+    const libraryTab = mod['libraryTab'] as WritableSignal<boolean>;
+    libraryTab.set(false);
+    await settle();
+    libraryTab.set(true);
+    await settle();
+    const fabric = app.fabric;
+    const tabs = flatten(fabric.committed).filter((node) => node.viewName === 'RNSTabsScreenIOS');
+    await emit(fabric, tabs[1]!, 'topDidAppear');
+    await app.componentRef.injector.get(Router).navigateByUrl('/library');
+    await settle();
+
+    assert.equal(control(fabric, 'library').props['refreshing'], true);
+  });
+
+  it('waits again for a tab an @if remade after it had appeared', async () => {
+    const { app } = await boot();
+    const router = app.componentRef.injector.get(Router);
+    await router.navigateByUrl('/library');
+    await settle();
+    const fabric = app.fabric;
+    await emit(fabric, tabOf(fabric, 'library'), 'topDidAppear');
+    await router.navigateByUrl('/home');
+    await settle();
+    const libraryTab = mod['libraryTab'] as WritableSignal<boolean>;
+    libraryTab.set(false);
+    await settle();
+    libraryTab.set(true);
+    await settle();
+    await router.navigateByUrl('/library');
+    await settle();
+
+    assert.equal(control(fabric, 'library').props['refreshing'], false, 'the new screen not shown');
+    await emit(fabric, tabOf(fabric, 'library'), 'topDidAppear');
+    assert.equal(control(fabric, 'library').props['refreshing'], true);
+  });
+
+  it('is not shown by a didAppear from a view inside the tab, such as a nested tab', async () => {
+    const { app } = await boot();
+    await app.componentRef.injector.get(Router).navigateByUrl('/library');
+    await settle();
+    const fabric = app.fabric;
+
+    await emit(fabric, control(fabric, 'library'), 'topDidAppear');
+    assert.equal(control(fabric, 'library').props['refreshing'], false);
   });
 
   it('begins at once on a view no outlet shows', async () => {

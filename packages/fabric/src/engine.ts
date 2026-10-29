@@ -455,6 +455,8 @@ export const DIRECT_EVENTS: ReadonlySet<string> = new Set([
   'topNativeDismissCancelled',
   'topWillAppear',
   'topAppear',
+  // A tab screen's, which a tab inside it would otherwise hand to the tab around it.
+  'topDidAppear',
   'topWillDisappear',
   'topDisappear',
   'topHeaderHeightChange',
