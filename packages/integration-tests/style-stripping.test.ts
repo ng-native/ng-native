@@ -19,14 +19,8 @@ const component = (styles: string, extra = '') =>
     'export class A {}',
   ].join('\n');
 
-/** What the compiled component definition still carries, ignoring the rest of the module. */
-const definition = (code: string) => {
-  const at = code.indexOf('ɵɵdefineComponent(');
-  return code.slice(
-    at,
-    code.indexOf('ɵnativeStyles') === -1 ? undefined : code.indexOf('ɵnativeStyles'),
-  );
-};
+/** What the compiled component definition still carries: the call, and what follows it. */
+const definition = (code: string) => code.slice(code.indexOf('ɵɵdefineComponent('));
 
 describe('stripping the emitted CSS', () => {
   it('drops it from a release build, keeping the compiled sheet', () => {

@@ -999,16 +999,45 @@ ${SWAP}
  * file, the line and the reason, instead of doing nothing without a word.
  */
 function styleBlock(src, filename, components, resources, platform, warn) {
-  const blocks = [];
+  const sheets = [];
 
   for (const component of components ?? []) {
     const parts = componentParts(component, resources, filename, src);
     const css = parts.map((part) => part.text).join('\n');
     const sheet = componentSheet(css, filename, component.className, platform, parts, warn);
-    if (sheet) blocks.push(`${component.className}["ɵnativeStyles"] = ${literal(sheet)};`);
+    if (sheet) sheets.push({ className: component.className, sheet });
   }
 
-  return blocks.length ? `\n${blocks.join('\n')}\n` : '';
+  return sheets;
+}
+
+/**
+ * Put each sheet on its class as the class is defined, so a module that reads one at its top level
+ * (`export const theme = styleSheetOf(ThemeStyles)`) finds it. The sheet is set on the definition
+ * the class's own `ɵcmp = ɵɵdefineComponent({ type: X, ... })` returns, through its `type`, as
+ * `withLibrarySheets` does. A component whose definition is not found that way (the module does not
+ * parse, or the call is not the shape the compiler writes) gets a statement after the module's
+ * code instead, which is late for a module-scope read but still in time for any render.
+ */
+function withSheets(code, filename, sheets) {
+  if (!sheets.length) return code;
+  const wanted = new Map(sheets.map(({ className, sheet }) => [className, sheet]));
+  const declarations = componentDeclarations(code, filename, 'ɵɵdefineComponent') ?? [];
+  let out = code;
+  for (const declared of declarations.sort((a, b) => b.start - a.start)) {
+    if (!wanted.has(declared.type)) continue;
+    const call = out.slice(declared.start, declared.end);
+    const sheet = literal(wanted.get(declared.type));
+    wanted.delete(declared.type);
+    out =
+      out.slice(0, declared.start) +
+      `((d) => ((d.type["ɵnativeStyles"] = ${sheet}), d))(${call})` +
+      out.slice(declared.end);
+  }
+  const late = [...wanted].map(
+    ([className, sheet]) => `${className}["ɵnativeStyles"] = ${literal(sheet)};`,
+  );
+  return late.length ? `${out}\n${late.join('\n')}\n` : out;
 }
 
 /**
@@ -1540,16 +1569,19 @@ function transformAngular(src, filename, options = {}) {
       };
     }
     const warn = buildWarnings();
-    const styles = styleBlock(src, filename, components, resources, platform, warn);
+    const sheets = styleBlock(src, filename, components, resources, platform, warn);
     const { quiet, hmr } = hotParts(src, filename, components, resources, options, warn);
     // Components copied into the app from a library written for a browser: see `browserElements`.
     const named = isBrowserSource(filename, options.projectRoot) ? browserElements(src) : '';
     // Dev keeps the emitted CSS: the bundle size does not matter there, and the HMR path is
     // easier to reason about when the compiler's output is untouched.
-    const compiled =
-      options.dev === true ? result.code : stripComponentStyles(result.code, filename);
+    const compiled = withSheets(
+      options.dev === true ? result.code : stripComponentStyles(result.code, filename),
+      filename,
+      sheets,
+    );
     return {
-      code: edges + quiet + compiled + styles + hmr + named,
+      code: edges + quiet + compiled + hmr + named,
       dependencies,
       map: result.map,
       // The resource imports are prepended, so everything the map describes has moved down by
