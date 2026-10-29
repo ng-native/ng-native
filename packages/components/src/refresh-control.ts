@@ -3,12 +3,14 @@ import {
   Directive,
   DestroyRef,
   afterEveryRender,
+  computed,
   effect,
   inject,
   input,
   model,
   signal,
 } from '@angular/core';
+import { SCREEN_SHOWN } from '@ng-native/device';
 import { Engine, type EngineNode, nativePlatform } from '@ng-native/fabric';
 import { SwipeRefreshLayout } from './swipe-refresh-layout.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
@@ -24,6 +26,12 @@ import { ViewBase } from './view-base.ts';
  * `setNativeRefreshing`; so does this. If the app never sets `refreshing` after a pull, the
  * spinner is stopped again, which is what RN's documentation warns about.
  *
+ * On iOS a control that is already refreshing when its page is pushed, or when its tab is first
+ * shown, starts spinning once the screen has appeared (`SCREEN_SHOWN`). Begun any earlier,
+ * native moves the content down by the spinner's height under a large title, and the gap stays
+ * after the spinner stops, and on scroll views of screens shown after it. React Native's own
+ * `RefreshControl` leaves that gap.
+ *
  * On Android the swipe layout has to be the scroll view's *parent*, as RN's `ScrollView.js` makes
  * it, with the layout half of the scroll view's style moved onto it. It is written as a child all
  * the same, like on iOS, and moved into place after each pass; see `SwipeRefreshLayout`.
@@ -31,7 +39,7 @@ import { ViewBase } from './view-base.ts';
 @Directive({
   selector: 'refresh-control',
   host: {
-    '[refreshing]': 'refreshing()',
+    '[refreshing]': 'committedRefreshing()',
     '[progressViewOffset]': 'progressViewOffset()',
     '[tintColor]': 'tintColor()',
     '[title]': 'title()',
@@ -67,6 +75,11 @@ export class RefreshControl extends ViewBase implements AfterViewChecked {
   readonly size = input<'default' | 'large'>();
 
   private readonly nativeRefreshing = signal<boolean | null>(null);
+
+  private readonly shown = nativePlatform() === 'ios' ? inject(SCREEN_SHOWN) : null;
+  protected readonly committedRefreshing = computed(
+    () => this.refreshing() && (this.shown?.() ?? true),
+  );
 
   /** Android only: what moves this control's node to wrap the scroll view. */
   private readonly wrap =

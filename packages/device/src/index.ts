@@ -75,6 +75,7 @@ export {
   type NavigationBarStyle,
 } from './navigation-bar.ts';
 export { SCREEN_IN_FRONT } from './screen-in-front.ts';
+export { SCREEN_SHOWN } from './screen-shown.ts';
 export { NATIVE_HISTORY } from './native-history.ts';
 export { OS } from './os.ts';
 export { OS_VERSION } from './os-version.ts';

@@ -335,6 +335,11 @@ views are detached from change detection, so read it in a root effect (`effect(f
 with the environment injector) to act while covered. `<keyboard-dock>` uses it to let the keyboard
 go.
 
+`SCREEN_SHOWN`, beside it, is false from a screen's creation until native says the screen has
+appeared, and true from then on. It is combined the same way, so a page in a tab's stack counts as
+shown once its screen, its tab and the screen the tabs are on have all appeared. On iOS,
+`<refresh-control>` waits for it before it starts spinning.
+
 ## Above every screen
 
 A sheet or a modal is presented above the app's root view, so a toast positioned absolutely at the

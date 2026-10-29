@@ -37,6 +37,7 @@ import {
   type EnvironmentInjector,
   type OnInit,
   type Type,
+  type Signal,
   type WritableSignal,
 } from '@angular/core';
 import {
@@ -54,7 +55,13 @@ import {
   type RouterOutletContract,
 } from '@angular/router';
 import { Location, PlatformLocation } from '@angular/common';
-import { NavigationBar, OS_VERSION, SCREEN_IN_FRONT, StatusBar } from '@ng-native/device';
+import {
+  NavigationBar,
+  OS_VERSION,
+  SCREEN_IN_FRONT,
+  SCREEN_SHOWN,
+  StatusBar,
+} from '@ng-native/device';
 import { bindRouteInputs } from './bind-route-inputs.ts';
 import { NativeBack, isShowing, restoreSnapshot } from './native-back.ts';
 import { navigationIntent, type NativeIntent } from './native-navigation.ts';
@@ -541,10 +548,13 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     let ref: ComponentRef<unknown> | undefined;
     let unbind: (() => void) | undefined;
     const header = signal(false);
+    // See `SCREEN_SHOWN`. Listened for before the screen is committed, so the first is heard.
+    const shown = signal(false);
+    this.renderer.listen(screen, 'appear', () => shown.set(true));
     try {
       ref = createComponent(component, {
         environmentInjector,
-        elementInjector: this.outletInjector(route, inFront, screen, header, outlet),
+        elementInjector: this.outletInjector(route, inFront, screen, header, shown, outlet),
         hostElement: screen as Element,
       });
       this.applicationRef.attachView(ref.hostView);
@@ -1238,21 +1248,24 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
 
   /**
    * What a page is created with: its route, its screen, the outlet contexts its own outlets
-   * register in, and whether its screen is in front - which is this screen's own say and, for a stack inside a
-   * screen of another, that screen's too.
+   * register in, and whether its screen is in front and has been shown - which is this screen's own
+   * say and, for a stack inside a screen of another, that screen's too.
    */
   private outletInjector(
     route: ActivatedRoute,
     inFront: WritableSignal<boolean>,
     screen: unknown,
     header: WritableSignal<boolean>,
+    shown: Signal<boolean>,
     outlet = this.name,
   ): Injector {
     const outer = this.injector.get(SCREEN_IN_FRONT);
+    const outerShown = this.injector.get(SCREEN_SHOWN);
     return Injector.create({
       parent: this.injector,
       providers: [
         { provide: SCREEN_IN_FRONT, useValue: computed(() => outer() && inFront()) },
+        { provide: SCREEN_SHOWN, useValue: computed(() => outerShown() && shown()) },
         {
           provide: HOLDING_SCREEN,
           useValue: {

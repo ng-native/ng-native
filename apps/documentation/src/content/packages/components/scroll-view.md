@@ -188,6 +188,12 @@ iOS also reads `tintColor`, `title` and `titleColor` for a label under the spinn
 (`'default'` or `'large'`) and `enabled` (whether pulling does anything at all, default true).
 `progressViewOffset` sets how far from the top the spinner sits, on both platforms.
 
+A page can start with `refreshing` true, to show cached data while it reloads. On iOS, under a
+`<native-stack-outlet>` or `<native-tabs-outlet>`, the spinner then starts once the screen has
+appeared (`SCREEN_SHOWN`), so on a pushed page it shows as the push finishes. Started earlier,
+UIKit leaves a gap the spinner's height under a large title, which React Native's own
+`RefreshControl` shows too.
+
 On Android the native swipe layout has to be the scroll view's _parent_, not its child, or a pull
 does nothing. It is still written as a child, as on iOS, and moved into place: the committed tree
 has `AndroidSwipeRefreshLayout` where the scroll view was, with the scroll view inside it. The

@@ -50,7 +50,7 @@ import {
   type Signal,
   type WritableSignal,
 } from '@angular/core';
-import { SCREEN_IN_FRONT } from '@ng-native/device';
+import { SCREEN_IN_FRONT, SCREEN_SHOWN } from '@ng-native/device';
 import {
   ActivatedRoute,
   ChildrenOutletContexts,
@@ -106,6 +106,8 @@ interface TabEntry {
   unbind: () => void;
   /** Whether this tab is the one showing, for what its screens hold: see `SCREEN_IN_FRONT`. */
   readonly inFront: WritableSignal<boolean>;
+  /** Whether this tab's screen has appeared: see `SCREEN_SHOWN`. */
+  readonly shown: WritableSignal<boolean>;
   /** What the tab's stacks dismiss when another tab comes in front: see `IN_TAB`. */
   readonly leaving: Set<() => string | null>;
 }
@@ -467,7 +469,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
         this.move(known, tab);
         continue;
       }
-      this.entries.push({
+      const entry: TabEntry = {
         tab,
         key,
         url: '',
@@ -476,8 +478,11 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
         detached: false,
         unbind: () => {},
         inFront: signal(false),
+        shown: signal(false),
         leaving: new Set(),
-      });
+      };
+      this.entries.push(entry);
+      this.hearShown(entry);
       // The reuse strategy detaches a tab whole, and has only the route to go on.
       // A path can have multiple route configs selected by canMatch (for example an iPad split
       // layout and an iPhone stack). Mark every variant: the reuse strategy sees the config
@@ -506,8 +511,14 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private move(entry: TabEntry, tab: NativeTab): void {
     if (entry.tab === tab) return;
     entry.tab = tab;
+    this.hearShown(entry);
     this.guardSelection(entry, entry.detached && guardedAt(entry.route));
     if (entry.ref) this.renderer.appendChild(tab.screen, entry.ref.location.nativeElement);
+  }
+
+  /** Before the screen is committed, so its first `willAppear` is heard. */
+  private hearShown(entry: TabEntry): void {
+    this.renderer.listen(entry.tab.screen, 'didAppear', () => entry.shown.set(true));
   }
 
   /**
@@ -762,6 +773,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
    */
   private outletInjector(route: ActivatedRoute, entry: TabEntry): Injector {
     const outer = this.injector.get(SCREEN_IN_FRONT);
+    const outerShown = this.injector.get(SCREEN_SHOWN);
     const tab: InTab = {
       onLeave: (leave) => (entry.leaving.add(leave), () => entry.leaving.delete(leave)),
       hideBar: (hidden) => {
@@ -778,6 +790,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
       parent: this.injector,
       providers: [
         { provide: SCREEN_IN_FRONT, useValue: computed(() => outer() && entry.inFront()) },
+        { provide: SCREEN_SHOWN, useValue: computed(() => outerShown() && entry.shown()) },
         { provide: IN_TAB, useValue: tab },
         { provide: ActivatedRoute, useValue: route },
         {
