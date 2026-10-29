@@ -375,7 +375,7 @@ for (const lazy of [true, false]) {
       assert.equal(failing.unsubscribed, true);
     });
 
-    it("shares the instance a canMatch guard got from the page's providers with the page", async () => {
+    it("shares the instance a canMatch guard got from the page's providers with its resolvers", async () => {
       const SESSION = new InjectionToken<object>('session');
       const seen: Record<string, unknown[]> = {};
       const record = (name: string) => () => ((seen[name] ??= []).push(inject(SESSION)), true);
@@ -401,7 +401,9 @@ for (const lazy of [true, false]) {
       for (const url of ['/about', '/', '/about']) assert.equal(await again.go(url), true);
       const [first, second] = seen['resolve']!;
       assert.notEqual(first, second, 'a new instance after the page was left');
-      assert.deepEqual(seen['canMatch'], [first, second], 'shared with the guard on each visit');
+      assert.equal(seen['canMatch']?.length, 2);
+      assert.equal(seen['canMatch']![0], first, 'shared with the guard on the first visit');
+      assert.equal(seen['canMatch']![1], second, 'shared with the guard on the second visit');
     });
 
     it('redirects from a page with redirectTo and no component, matching its whole path', async () => {
