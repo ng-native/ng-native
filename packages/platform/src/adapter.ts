@@ -209,7 +209,7 @@ function longhands(key: string, value: unknown): [string, string][] | typeof REF
 
 /** A number as `flex` takes a grow or a shrink: no sign, and no unit. */
 const FACTOR = /^\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
-/** A number with a sign of either kind, which no basis is but a unitless zero. */
+/** A number with a sign of either kind: one alone is React Native's own `flex`. */
 const BARE_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
 
 /**
@@ -223,16 +223,16 @@ function flexLonghands(value: unknown): [string, string][] | typeof REFUSED | nu
   if (typeof value !== 'string' || /var\(/i.test(value)) return null;
   const parts = cssValues(value);
   if (parts.length === 1 && BARE_NUMBER.test(parts[0]!)) return null;
-  const word = parts.length === 1 ? FLEX_WORDS[parts[0]!.toLowerCase()] : undefined;
+  const word = parts.length === 1 ? FLEX_WORDS.get(parts[0]!.toLowerCase()) : undefined;
   const flex = word ?? (parts.length ? flexValues(parts) : null);
   return flex ? flexOf(...flex) : REFUSED;
 }
 
-/** The keywords `flex` takes, as their grow, shrink and basis. */
-const FLEX_WORDS: Record<string, [string, string, string]> = {
-  none: ['0', '0', 'auto'],
-  auto: ['1', '1', 'auto'],
-};
+/** The keywords `flex` takes, as their grow, shrink and basis: no other name, `constructor` say. */
+const FLEX_WORDS = new Map<string, [string, string, string]>([
+  ['none', ['0', '0', 'auto']],
+  ['auto', ['1', '1', 'auto']],
+]);
 
 /**
  * The grow, shrink and basis of `flex`'s values, one or more: a grow and a shrink beside a basis
@@ -257,9 +257,16 @@ function flexValues(parts: readonly string[]): [string, string, string] | null {
   return [grow ?? '1', shrink ?? '1', basis ?? '0%'];
 }
 
-/** Whether a value is a basis: no bare number but a zero after a grow and a shrink, nor negative. */
+/**
+ * A basis as a style takes one: `auto`, a percentage, a length in a unit a style reads (`px` and
+ * `rem` as points, the others measured where they are used) or a `calc()`. Not negative, and not
+ * `content`, which the stylesheet refuses too.
+ */
+const BASIS = /^(auto|\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?(%|px|rem|em|vw|vh|vmin|vmax)|calc\(.*\))$/i;
+
+/** Whether a value is a basis: a unitless zero only after a grow and a shrink, as CSS has it. */
 const isBasis = (part: string, afterShrink: boolean): boolean =>
-  part === '0' ? afterShrink : !BARE_NUMBER.test(part) && !part.startsWith('-');
+  part === '0' ? afterShrink : BASIS.test(part);
 
 const flexOf = (grow: string, shrink: string, basis: string): [string, string][] => [
   ['flexGrow', grow],

@@ -437,7 +437,7 @@ import { View } from '../components/src/view.ts';
 @Component({
   selector: 'x-flex-refused',
   imports: [View],
-  template: '<view nativeID="sheet" class="f"></view><view nativeID="many" class="f" style="flex: 1 2 3px 4"></view><view nativeID="negative" class="f" style="flex: 1 -10px"></view>',
+  template: '<view nativeID="sheet" class="f"></view><view nativeID="many" class="f" style="flex: 1 2 3px 4"></view><view nativeID="negative" class="f" style="flex: 1 -10px"></view><view nativeID="word" class="f" style="flex: constructor"></view><view nativeID="banana" class="f" style="flex: 1 banana"></view>',
   styles: '.f { flex: 2 0 5px; }',
 })
 export class FlexRefused {}
@@ -450,9 +450,13 @@ export class FlexRefused {}
       const sheet = styleOf(fabric, 'sheet', FLEX);
       assert.deepEqual(styleOf(fabric, 'many', FLEX), sheet);
       assert.deepEqual(styleOf(fabric, 'negative', FLEX), sheet);
-      assert.equal(warnings.length, 2, warnings.join('\n'));
+      assert.deepEqual(styleOf(fabric, 'word', FLEX), sheet, 'a name on Object.prototype');
+      assert.deepEqual(styleOf(fabric, 'banana', FLEX), sheet, 'a basis that is no length');
+      assert.equal(warnings.length, 4, warnings.join('\n'));
       assert.match(warnings[0]!, /flex: 1 2 3px 4.*<view>.*dropped/);
       assert.match(warnings[1]!, /flex: 1 -10px.*<view>.*dropped/);
+      assert.match(warnings[2]!, /flex: constructor.*<view>.*dropped/);
+      assert.match(warnings[3]!, /flex: 1 banana.*<view>.*dropped/);
     } finally {
       mock.restoreAll();
     }
