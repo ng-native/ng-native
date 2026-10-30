@@ -907,6 +907,62 @@ describe('the language model source', () => {
     ]);
   });
 
+  it("answers the turn's tool calls through the session, and ignores another turn's", async () => {
+    const calls: unknown[] = [];
+    const listeners: Record<string, ((event: never) => void)[]> = {};
+    let removed = 0;
+    const session = {
+      streamResponse: async (prompt: string, requestId: string) => {
+        calls.push(['streamResponse', prompt, typeof requestId]);
+        const emit = (event: object) => listeners['toolCall']!.forEach((l) => l(event as never));
+        emit({ requestId: 'someone-else', callId: 'x', toolName: 'lookUp', arguments: {} });
+        emit({ requestId, callId: 'c1', toolName: 'lookUp', arguments: { query: 'tide' } });
+        emit({ requestId, callId: 'c2', toolName: 'broken', arguments: {} });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return 'High tide at six.';
+      },
+      resolveToolCall: (id: string, output: string) => calls.push(['resolve', id, output]),
+      rejectToolCall: (id: string, error: string) => {
+        calls.push(['reject', id, error]);
+        throw new Error('The call has already timed out');
+      },
+      addListener: (event: string, listener: (event: never) => void) => {
+        (listeners[event] ??= []).push(listener);
+        return { remove: () => void (removed += 1) };
+      },
+    };
+    const llm = {
+      ExpoLocalLlmModule: { getAvailability: () => 'available', addListener: () => ({}) },
+      createLLMSession: (config: unknown) => (calls.push(['createLLMSession', config]), session),
+    };
+    const source = withModules({ 'expo-local-llm': llm }, () =>
+      defaultSource(LanguageModel.SOURCE),
+    )!;
+    const tools = [{ name: 'lookUp', description: 'Look up', parameters: {} }];
+    const seen: unknown[] = [];
+    const text = await source.session({ tools }).stream(
+      'When is high tide?',
+      () => {},
+      async (call) => {
+        seen.push(call);
+        if (call.tool === 'broken') throw new Error('No such table');
+        return 'six';
+      },
+    );
+    assert.equal(text, 'High tide at six.');
+    assert.deepEqual(seen, [
+      { id: 'c1', tool: 'lookUp', arguments: { query: 'tide' } },
+      { id: 'c2', tool: 'broken', arguments: {} },
+    ]);
+    assert.deepEqual(calls, [
+      ['createLLMSession', { tools }],
+      ['streamResponse', 'When is high tide?', 'string'],
+      ['resolve', 'c1', 'six'],
+      ['reject', 'c2', 'No such table'],
+    ]);
+    assert.equal(removed, 2, 'the token and tool call listeners are removed once the turn ends');
+  });
+
   it('is inert with expo-local-llm installed but its native module not linked', () => {
     // The package catches `requireNativeModule` itself and exports null: Expo Go, or an app that
     // installed it without rebuilding.

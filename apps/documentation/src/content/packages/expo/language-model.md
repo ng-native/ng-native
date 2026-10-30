@@ -12,7 +12,9 @@ Foundation Models, the model behind Apple Intelligence; on Android it is Gemini 
 bundled with the app, there is no API key, and the prompt and the answer never leave the device.
 
 It answers in three ways: `generate()` for the whole answer at once, `generateObject()` for an
-answer shaped by a schema, and `stream()` for an answer a template shows as it is written.
+answer shaped by a schema, and `stream()` for an answer a template shows as it is written. Each of
+those is a conversation of its own; `session()` keeps one going across turns, with tools the model
+can call to fetch what it needs.
 
 ## Requirements
 
@@ -166,6 +168,104 @@ answer always fits it. On Android `generateObject()` rejects: `expo-local-llm` d
 structured answer there yet. A malformed schema rejects before reaching the model, with the field
 paths that are wrong.
 
+## A conversation, with tools
+
+`session()` returns a `LanguageModelSession`: a conversation in which each turn sees the turns
+before it. `stream()` gives the reply as a `LanguageModelStream`, the same as the one-shot
+`stream()`, and `respond()` resolves to the whole reply.
+
+The context window is small, so an app cannot paste its data into the prompt. Give the session
+tools instead, and the model calls them for what it needs. `defineTool()` types the handler's
+arguments from `parameters`:
+
+```ts
+import { inject } from '@angular/core';
+import { defineTool } from '@ng-native/expo/language-model';
+
+export const listItemsDue = defineTool({
+  name: 'listItemsDue',
+  description: 'The items due between two dates',
+  parameters: {
+    from: { type: 'string', description: 'The first day, as YYYY-MM-DD' },
+    to: { type: 'string', description: 'The last day, as YYYY-MM-DD' },
+  },
+  handler: ({ from, to }) => inject(ItemsApi).due(from, to),
+});
+```
+
+A parameter is a `string` (optionally with `enum`), a `number` or a `boolean`, and on iOS the
+model's decoding is constrained to the declaration, so every argument arrives with its type. The
+handler runs in the session's injection context, so it can `inject()`. A string it returns goes to
+the model as it is, and anything else as JSON. When it throws or rejects, the model is told the
+call failed. A handler gets 30 seconds unless `toolTimeout` says otherwise.
+
+```ts
+import { Component, inject, signal } from '@angular/core';
+import { Pressable, Text, TextInput, View } from '@ng-native/components';
+import { LanguageModel, type LanguageModelStream } from '@ng-native/expo/language-model';
+
+@Component({
+  selector: 'app-assistant',
+  imports: [Pressable, Text, TextInput, View],
+  template: `
+    @for (entry of chat.transcript(); track $index) {
+      @if (entry.kind === 'prompt' || entry.kind === 'response') {
+        <text>{{ entry.text }}</text>
+      }
+    }
+    @if (reply(); as stream) {
+      @if (stream.status() === 'streaming') {
+        <text>{{ stream.toolCalls().length > 0 ? 'Looking it up...' : stream.text() }}</text>
+      }
+      @if (stream.error(); as error) {
+        <text>{{ error }}</text>
+      }
+    }
+    <text-input [(value)]="prompt" placeholder="Ask about your records" />
+    <pressable (press)="ask()"><text>Send</text></pressable>
+  `,
+})
+export class Assistant {
+  private readonly model = inject(LanguageModel);
+  protected readonly chat = this.model.session({
+    instructions: 'You help the user understand their records. Use the tools for any data.',
+    tools: [listItemsDue],
+  });
+  protected readonly prompt = signal('');
+  protected readonly reply = signal<LanguageModelStream | null>(null);
+
+  protected ask(): void {
+    this.reply.set(this.chat.stream(this.prompt()));
+    this.prompt.set('');
+  }
+}
+```
+
+- **One turn at a time.** Starting a turn cancels the one still running, and the new one starts
+  once that has stopped. `cancel()` stops the running turn.
+- **`transcript`** is the conversation as plain JSON: the instructions, then for each finished turn
+  its `prompt`, any `toolCall` and `toolOutput` entries, and its `response`. A turn joins it when
+  it finishes. A cancelled or failed turn does not, because the model leaves it out of its context
+  too. It is a record of the conversation, to show or store; a session cannot be started from one
+  yet.
+- **`toolCalls`**, on the session and on each reply, lists the tool calls running now, for a
+  "Looking it up" state.
+- **Release.** The session belongs to the injector of the injection context it is made in, such as
+  the component above, and is released when that is destroyed. Pass `injector` to choose another.
+  Made outside an injection context, it lives until the app is destroyed. `release()` ends it
+  sooner; later turns fail.
+- **Availability.** Each turn is refused like any other call while the model is unavailable: the
+  reply fails at once with a `LanguageModelUnavailableError`.
+- **The context window.** Every turn stays in the model's context, so a long conversation outgrows
+  it. The turn then fails with a `LanguageModelContextExceededError`, whose `transcript` is the
+  conversation up to that turn. Start a new session with a summary of it in `instructions`, which
+  you can write with `generate()`.
+- **A structured answer** is not part of a session: use the one-shot `generateObject()`, giving it
+  what it needs from the conversation in the prompt.
+- **Android.** `expo-local-llm` does not support tools on Android and refuses a session that has
+  any. The reply fails with that error, whose `code` is `ERR_TOOL_NOT_SUPPORTED`. A session without
+  tools works there as on iOS.
+
 ## Availability
 
 `availability` is a signal of the platform's answer, and `available` is whether it is
@@ -224,13 +324,13 @@ go to a server.
   or document fails.
 - **Guardrails.** Apple's model refuses some categories of prompt, such as interpreting personal
   health data. A refusal arrives as an error.
-- **One conversation per call.** Each call is a fresh session, so the model does not remember the
-  previous prompt. Carry what it needs in the prompt.
-- **What is not wrapped.** `expo-local-llm` also offers multi-turn sessions and tool calling (iOS
-  only); this service does not expose them yet.
+- **One conversation per call.** `generate()`, `generateObject()` and `stream()` each start a fresh
+  session, so the model does not remember the previous prompt. Use `session()` for a conversation.
 - **Android is less proven.** `expo-local-llm`'s Android side is built on a beta Google SDK and,
   by its own account, not yet validated on a device.
 
 ## Reference
 
 <!-- api: LanguageModel -->
+
+<!-- api: LanguageModelSession -->

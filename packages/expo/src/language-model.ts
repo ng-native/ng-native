@@ -11,20 +11,42 @@
  * ask(prompt: string) { this.answer.set(this.model.stream(prompt)); }
  * ```
  *
- * Every call is a conversation of its own: a session is made, asked once and released, so one
- * prompt never sees the last one. The module runs one stream at a time, so starting a stream
- * cancels the one before it.
+ * `generate`, `generateObject` and `stream` are each a conversation of their own: a session is
+ * made, asked once and released, so one prompt never sees the last one. Starting a stream cancels
+ * the one before it. `session()` keeps a conversation going across turns, with tools the model
+ * can call.
  */
 import {
   DestroyRef,
   InjectionToken,
+  Injector,
   Service,
   computed,
   inject,
   signal,
   type Signal,
 } from '@angular/core';
+import {
+  LanguageModelSession,
+  liveStream,
+  nativeConfig,
+  type LanguageModelSessionOptions,
+  type LanguageModelToolCall,
+} from './language-model-session.ts';
 import { expoModule, present } from './native.ts';
+
+export {
+  LanguageModelContextExceededError,
+  LanguageModelSession,
+  defineTool,
+  type LanguageModelSessionOptions,
+  type LanguageModelTool,
+  type LanguageModelToolArguments,
+  type LanguageModelToolCall,
+  type LanguageModelToolParameter,
+  type LanguageModelToolParameters,
+  type LanguageModelTranscriptEntry,
+} from './language-model-session.ts';
 
 /**
  * What `expo-local-llm` reports, plus `notInstalled` for an app without the module or a build
@@ -71,13 +93,28 @@ export interface GenerateOptions {
 /** A structured answer's shape: `expo-local-llm`'s own schema, a field per property. */
 export type LanguageModelSchema = import('expo-local-llm').Schema;
 
-type SessionConfig = import('expo-local-llm').SessionConfig;
+/** A session's configuration, with tools as declarations: their handlers stay in JavaScript. */
+export type NativeSessionConfig = Omit<import('expo-local-llm').SessionConfig, 'tools'> & {
+  tools?: import('expo-local-llm').ToolConfig[];
+};
 
-/** The slice of an `expo-local-llm` session this needs, with its token event unwrapped. */
+type SessionConfig = NativeSessionConfig;
+
+/** A tool call the model made, answered with the tool's output or a rejection. */
+export type NativeToolCall = LanguageModelToolCall;
+
+/** The slice of an `expo-local-llm` session this needs, with its events unwrapped. */
 export interface NativeLanguageSession {
   respond(prompt: string): Promise<string>;
-  /** Resolves with the whole text, or the text so far when cancelled; rejects on failure. */
-  stream(prompt: string, onText: (textSoFar: string) => void): Promise<string>;
+  /**
+   * Resolves with the whole text, or the text so far when cancelled; rejects on failure. A tool
+   * call is answered with what `onToolCall` resolves to, or fails with what it rejects with.
+   */
+  stream(
+    prompt: string,
+    onText: (textSoFar: string) => void,
+    onToolCall?: (call: NativeToolCall) => Promise<string>,
+  ): Promise<string>;
   cancel(): Promise<void>;
   release(): void;
 }
@@ -111,6 +148,8 @@ export interface LanguageModelStream {
   readonly status: Signal<LanguageModelStreamStatus>;
   /** The failure's message while `status` is `failed`, otherwise null. */
   readonly error: Signal<string | null>;
+  /** The tool calls running now, in a session with tools. Always empty for a one-shot stream. */
+  readonly toolCalls: Signal<readonly LanguageModelToolCall[]>;
   /** The final text (the partial text if cancelled). Rejects if the stream fails. */
   readonly result: Promise<string>;
   /** Stop generating. The text so far is kept. Does nothing once the stream has ended. */
@@ -145,15 +184,33 @@ export class LanguageModel {
             module.addListener('downloadProgress', (event) => listener(event.progress)),
           download: () => module.downloadModel(),
           session: (config) => {
-            const session = llm.createLLMSession(config);
+            // The module strips handlers before the native side sees them, so declarations are
+            // enough; tool calls are answered through the `toolCall` event instead.
+            const session = llm.createLLMSession(config as import('expo-local-llm').SessionConfig);
             return {
               respond: (prompt) => session.respond(prompt),
-              stream: async (prompt, onText) => {
+              stream: async (prompt, onText, onToolCall) => {
+                // Tags the turn, so a late call from a cancelled one is not answered for this.
+                const requestId = `ng-native-${++requests}`;
                 const tokens = session.addListener('token', (event) => onText(event.accumulated));
+                const calls = onToolCall
+                  ? session.addListener('toolCall', (event) => {
+                      if (event.requestId !== requestId) return;
+                      const { callId: id, toolName: tool, arguments: args } = event;
+                      // Answering throws once the turn has been cancelled or the session
+                      // released, when the model has stopped waiting.
+                      onToolCall({ id, tool, arguments: args }).then(
+                        (output) => quietly(() => session.resolveToolCall(id, output)),
+                        (failure: unknown) =>
+                          quietly(() => session.rejectToolCall(id, messageOf(failure))),
+                      );
+                    })
+                  : null;
                 try {
-                  return await session.streamResponse(prompt);
+                  return await session.streamResponse(prompt, requestId);
                 } finally {
                   tokens.remove();
+                  calls?.remove();
                 }
               },
               cancel: () => session.cancelStream(),
@@ -166,6 +223,7 @@ export class LanguageModel {
   );
 
   private readonly native = inject(LanguageModel.SOURCE);
+  private readonly injector = inject(Injector);
   private readonly state = signal<LanguageModelAvailability>(this.read());
   private readonly progress = signal<number | null>(null);
   private streaming: LanguageModelStream | null = null;
@@ -206,7 +264,7 @@ export class LanguageModel {
 
   /** The whole answer at once. Rejects with the platform's reason when the model is unavailable. */
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    return this.once(config(options), prompt);
+    return this.once(nativeConfig(options), prompt);
   }
 
   /**
@@ -218,7 +276,10 @@ export class LanguageModel {
     schema: LanguageModelSchema,
     options: GenerateOptions = {},
   ): Promise<T> {
-    const text = await this.once({ ...config(options), responseFormat: 'json', schema }, prompt);
+    const text = await this.once(
+      { ...nativeConfig(options), responseFormat: 'json', schema },
+      prompt,
+    );
     return JSON.parse(text) as T;
   }
 
@@ -230,56 +291,35 @@ export class LanguageModel {
   stream(prompt: string, options: GenerateOptions = {}): LanguageModelStream {
     this.streaming?.cancel();
 
-    const text = signal('');
-    const status = signal<LanguageModelStreamStatus>('streaming');
-    const error = signal<string | null>(null);
     let session: NativeLanguageSession | null = null;
-    let cancelled = false;
-
-    const fail = (failure: unknown): never => {
-      status.set('failed');
-      error.set(failure instanceof Error ? failure.message : String(failure));
-      throw failure;
-    };
-
-    let result: Promise<string>;
-    try {
-      this.refuseUnlessAvailable();
-      const running = this.native!.session(config(options));
-      session = running;
-      result = running
-        .stream(prompt, (soFar) => text.set(soFar))
-        .then((final) => {
-          text.set(final);
-          status.set(cancelled ? 'cancelled' : 'done');
-          return final;
-        }, fail)
-        .finally(() => running.release());
-    } catch (refusal) {
-      result = Promise.reject(refusal);
-      try {
-        fail(refusal);
-      } catch {
-        // Recorded on the signals at once, so a template shows the reason on its first render.
-      }
-    }
-    // Handled here so a stream whose result nobody awaits is not an unhandled rejection; anyone
-    // who does await it still sees the failure.
-    result.catch(() => {});
-
-    const stream: LanguageModelStream = {
-      text: text.asReadonly(),
-      status: status.asReadonly(),
-      error: error.asReadonly(),
-      result,
-      cancel: () => {
-        if (status() !== 'streaming' || !session) return;
-        cancelled = true;
-        void session.cancel();
+    const stream = liveStream(
+      (onText) => {
+        this.refuseUnlessAvailable();
+        const running = this.native!.session(nativeConfig(options));
+        session = running;
+        return running.stream(prompt, onText).finally(() => running.release());
       },
-    };
+      () => void session?.cancel(),
+    );
     this.streaming = session ? stream : null;
     return stream;
+  }
+
+  /**
+   * A conversation that keeps its context across turns, with tools the model can call. Each
+   * turn is refused like any call while the model is unavailable. Released when
+   * `options.injector`, or the injection context this is called in, is destroyed.
+   */
+  session(options: LanguageModelSessionOptions = {}): LanguageModelSession {
+    const injector = options.injector ?? callerInjector() ?? this.injector;
+    return new LanguageModelSession(
+      {
+        refuseUnlessAvailable: () => this.refuseUnlessAvailable(),
+        create: (sessionConfig) => this.native!.session(sessionConfig),
+      },
+      options,
+      injector,
+    );
   }
 
   private async once(sessionConfig: SessionConfig, prompt: string): Promise<string> {
@@ -308,13 +348,25 @@ function known(value: string): LanguageModelAvailability {
   return REPORTED.has(value) ? (value as LanguageModelAvailability) : 'unknown';
 }
 
-/** Only the keys that were given, so the native side sees its own defaults for the rest. */
-function config({ instructions, ...sampling }: GenerateOptions): SessionConfig {
-  const options = Object.fromEntries(
-    Object.entries(sampling).filter(([, value]) => value !== undefined),
-  );
-  return {
-    ...(instructions === undefined ? {} : { instructions }),
-    ...(Object.keys(options).length === 0 ? {} : { options }),
-  };
+let requests = 0;
+
+/** The injector of the injection context this is called in, or null outside one. */
+function callerInjector(): Injector | null {
+  try {
+    return inject(Injector);
+  } catch {
+    return null;
+  }
+}
+
+function messageOf(failure: unknown): string {
+  return failure instanceof Error ? failure.message : String(failure);
+}
+
+function quietly(answer: () => void): void {
+  try {
+    answer();
+  } catch {
+    // See the caller.
+  }
 }

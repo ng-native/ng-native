@@ -212,6 +212,7 @@ describe('streaming an answer', () => {
     assert.equal(stream.text(), 'The moon pulls the sea.');
     assert.equal(stream.status(), 'done');
     assert.equal(stream.error(), null);
+    assert.deepEqual(stream.toolCalls(), [], 'a one-shot stream has no tools');
     assert.deepEqual(fake.log, [
       ['session', { instructions: 'Be brief.' }],
       ['stream', 0, 'the tides'],
