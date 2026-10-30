@@ -43,6 +43,9 @@ class AddressSearchModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("NgNativeAddressSearch")
 
+    // Only MapKit sends it: the geocoder answers once. Declared so listening is the same on both.
+    Events("onSuggestions")
+
     AsyncFunction("complete") Coroutine { session: Int, query: String, options: AddressSearchOptions ->
       val search = searches.getOrPut(session) { Search() }
       val ask = synchronized(search) { ++search.asked }
@@ -76,6 +79,7 @@ class AddressSearchModule : Module() {
 
     AsyncFunction("end") { session: Int ->
       searches.remove(session)
+      Unit
     }
 
     OnDestroy {

@@ -24,8 +24,12 @@ public final class AddressSearchModule: Module {
   public func definition() -> ModuleDefinition {
     Name("NgNativeAddressSearch")
 
+    Events("onSuggestions")
+
     AsyncFunction("complete") { (session: Int, query: String, options: AddressSearchOptions, promise: Promise) in
-      let search = self.searches[session] ?? AddressCompleter(session: session)
+      let search = self.searches[session] ?? AddressCompleter(session: session) { [weak self] update in
+        self?.sendEvent("onSuggestions", update)
+      }
       self.searches[session] = search
       search.complete(query, options: options, promise: promise)
     }.runOnQueue(.main)
@@ -47,7 +51,8 @@ public final class AddressSearchModule: Module {
     }.runOnQueue(.main)
 
     AsyncFunction("end") { (session: Int) in
-      self.searches.removeValue(forKey: session)?.cancel()
+      let search = self.searches.removeValue(forKey: session)
+      search?.cancel()
     }.runOnQueue(.main)
 
     OnDestroy {
@@ -95,14 +100,20 @@ final class AddressCompleter: NSObject, MKLocalSearchCompleterDelegate {
   private let session: Int
   private let completer = MKLocalSearchCompleter()
   private var pending: Promise?
+  /// The latest query. The completer can still report on an older fragment until it is given
+  /// this one, while a country's region is being found.
+  private var pendingQuery: String?
+  /// Called with what MapKit reports after the query was answered.
+  private let onUpdate: ([String: Any]) -> Void
   /// Counts the queries asked, so a country's region found late applies only to the latest.
   private var asked = 0
   /// Counts the answers given, which a suggestion's id carries.
   private var generation = 0
   private var answered: [MKLocalSearchCompletion] = []
 
-  init(session: Int) {
+  init(session: Int, onUpdate: @escaping ([String: Any]) -> Void) {
     self.session = session
+    self.onUpdate = onUpdate
     super.init()
     completer.delegate = self
     completer.resultTypes = .address
@@ -112,6 +123,7 @@ final class AddressCompleter: NSObject, MKLocalSearchCompleterDelegate {
     // A newer query settles the one before: JavaScript keeps only the latest answer.
     pending?.resolve([[String: Any]]())
     pending = promise
+    pendingQuery = query
     asked += 1
     let ask = asked
     completer.resultTypes = options.pointsOfInterest ? [.address, .pointOfInterest] : .address
@@ -135,14 +147,17 @@ final class AddressCompleter: NSObject, MKLocalSearchCompleterDelegate {
     completer.cancel()
     pending?.resolve([[String: Any]]())
     pending = nil
+    pendingQuery = nil
     answered = []
   }
 
   func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+    guard completer.queryFragment == pendingQuery else { return }
     answer(completer.results)
   }
 
   func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+    guard completer.queryFragment == pendingQuery else { return }
     // A fragment nothing matches is no suggestions, not a failure.
     if (error as? MKError)?.code == .placemarkNotFound {
       answer([])
@@ -152,20 +167,25 @@ final class AddressCompleter: NSObject, MKLocalSearchCompleterDelegate {
     pending = nil
   }
 
-  /// Settles the pending query with `results`, which ids now name. An update with no query
-  /// waiting, a refinement after the answer, is left for the next query to read.
+  /// Settles the pending query with `results`, which ids now name. MapKit can report more than
+  /// once for a query, and its first report can be the fragment before's, since it reads as this
+  /// one's: the rest go to JavaScript as updates, so the last word is the one that shows.
   private func answer(_ results: [MKLocalSearchCompletion]) {
-    guard let pending else { return }
-    self.pending = nil
     generation += 1
     answered = results
-    pending.resolve(results.enumerated().map { index, completion in
+    let suggestions = results.enumerated().map { index, completion in
       [
         "id": "\(session):\(generation):\(index)",
         "title": completion.title,
         "subtitle": completion.subtitle,
       ]
-    })
+    }
+    if let pending {
+      self.pending = nil
+      pending.resolve(suggestions)
+    } else if let pendingQuery {
+      onUpdate(["session": session, "query": pendingQuery, "suggestions": suggestions])
+    }
   }
 
   /// Looks only in `region` from iOS 18, and first in it before.

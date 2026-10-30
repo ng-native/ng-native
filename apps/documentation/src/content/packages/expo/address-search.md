@@ -1,6 +1,6 @@
 ---
 title: Address search
-summary: Postal addresses that match what someone has typed so far, and the parts of the one they pick.
+summary: Postal addresses that match a partial query, and the parts of the one picked.
 ---
 
 # Address search
@@ -101,9 +101,11 @@ After the query changes, resolve one of the new suggestions.
 
 - **iOS:** MapKit's `MKLocalSearchCompleter`, which completes partial addresses as the query
   changes and waits while the query is still changing. `MKLocalSearch` looks up the picked
-  suggestion. A full postcode such as `LS6 1BJ` suggests the postcode itself rather than the
-  houses in it, and resolves with an empty `line1`. A street suggestion can resolve with only the
-  first part of its postcode (`LS6`), so a form should let the person finish it.
+  suggestion. MapKit can answer a query more than once, and the suggestions follow its latest
+  answer, so a list can change once more after typing stops. A full postcode such as `LS6 1BJ`
+  suggests the postcode itself rather than the houses in it, and resolves with an empty `line1`.
+  A street suggestion can resolve with only the first part of its postcode (`LS6`), so a form
+  should let the person finish it.
 - **Android:** the platform's `Geocoder`, asked once the query has not changed for 300 ms. It
   answers whole addresses that match the query rather than completions, so a partial street name
   finds less than on iOS. It goes to the network for each lookup. On a device with no geocoder,

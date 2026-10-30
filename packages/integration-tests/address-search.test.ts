@@ -20,6 +20,7 @@ import {
   AddressSearch,
   type AddressSearchOptions,
   type AddressSuggestion,
+  type AddressSuggestionsUpdate,
   type NativeAddressSearch,
   type PostalAddress,
 } from '@ng-native/expo/address-search';
@@ -55,7 +56,12 @@ function fakeNative() {
   }[] = [];
   const ended: number[] = [];
   const resolved: string[] = [];
+  const listeners = new Set<(update: AddressSuggestionsUpdate) => void>();
   const native: NativeAddressSearch = {
+    addListener: (_, listener) => {
+      listeners.add(listener);
+      return { remove: () => void listeners.delete(listener) };
+    },
     complete: (session, query, options) => {
       asked.push({ session, query, options });
       return new Promise((answer, fail) => pending.push({ answer, fail }));
@@ -66,7 +72,8 @@ function fakeNative() {
     },
     end: (session) => void ended.push(session),
   };
-  return { native, asked, pending, ended, resolved };
+  const update = (change: AddressSuggestionsUpdate) => listeners.forEach((call) => call(change));
+  return { native, asked, pending, ended, resolved, listeners, update };
 }
 
 let root: EnvironmentInjector;
@@ -214,6 +221,53 @@ describe('AddressSearch', () => {
     fake.pending[0]!.answer([hydePark(22)]);
     await settle();
     assert.deepEqual(suggestions(), []);
+  });
+
+  it('takes the platform’s later answer for the current query, over the one it gave first', async () => {
+    const fake = fakeNative();
+    const { query, suggestions, flush } = setup(fake.native);
+    query.set('22 Hyde Park');
+    await flush();
+    const { session } = fake.asked[0]!;
+    fake.pending[0]!.answer([hydePark(1)]);
+    await settle();
+    fake.update({ session, query: '22 Hyde Park', suggestions: [hydePark(22)] });
+    assert.deepEqual(suggestions(), [hydePark(22)]);
+  });
+
+  it('ignores a later answer for another search, an older query, or a cleared one', async () => {
+    const fake = fakeNative();
+    const { query, suggestions, flush } = setup(fake.native);
+    query.set('LS6');
+    await flush();
+    const { session } = fake.asked[0]!;
+    fake.pending[0]!.answer([hydePark(22)]);
+    await settle();
+
+    fake.update({ session: session + 1, query: 'LS6', suggestions: [hydePark(1)] });
+    fake.update({ session, query: 'LS', suggestions: [hydePark(2)] });
+    assert.deepEqual(suggestions(), [hydePark(22)]);
+
+    query.set('');
+    await flush();
+    fake.update({ session, query: 'LS6', suggestions: [hydePark(3)] });
+    assert.deepEqual(suggestions(), []);
+  });
+
+  it('stops listening when the search ends, and works with a module that has no events', async () => {
+    const fake = fakeNative();
+    const { destroy } = setup(fake.native);
+    assert.equal(fake.listeners.size, 1);
+    destroy();
+    assert.equal(fake.listeners.size, 0);
+
+    const { addListener: _, ...plain } = fake.native;
+    const { query, suggestions, flush } = setup(plain);
+    query.set('LS6');
+    await flush();
+    fake.pending[0]!.answer([hydePark(22)]);
+    await settle();
+    assert.deepEqual(suggestions(), [hydePark(22)]);
   });
 
   it('reports no failure that arrives after the search ended', async () => {

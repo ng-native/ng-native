@@ -68,8 +68,21 @@ export interface AddressSearchOptions {
   readonly pointsOfInterest?: boolean;
 }
 
+/** Suggestions the platform found after it answered `complete`, or better ones. */
+export interface AddressSuggestionsUpdate {
+  readonly session: number;
+  /** The query they are for. */
+  readonly query: string;
+  readonly suggestions: AddressSuggestion[];
+}
+
 /** This package's native address search module. A test provides a stand-in. */
 export interface NativeAddressSearch {
+  /** MapKit can answer a query more than once. Android's geocoder answers once. */
+  addListener?(
+    event: 'onSuggestions',
+    listener: (update: AddressSuggestionsUpdate) => void,
+  ): { remove(): void };
   /**
    * The suggestions for `query` in a search that `session` numbers. A newer query in the same
    * session settles the one before with no suggestions.
@@ -139,9 +152,16 @@ export class AddressSearch {
     const session = ++sessions;
     let latest = 0;
     let ended = false;
+    let current = '';
+    const updates = native.addListener?.('onSuggestions', (update) => {
+      if (update.session === session && update.query === current) {
+        suggestions.set(update.suggestions);
+      }
+    });
     effect(() => {
       const text = query().trim();
       const asked = ++latest;
+      current = text;
       if (!text) {
         suggestions.set([]);
         return;
@@ -159,6 +179,7 @@ export class AddressSearch {
     });
     inject(DestroyRef).onDestroy(() => {
       ended = true;
+      updates?.remove();
       native.end(session);
     });
     return suggestions.asReadonly();
