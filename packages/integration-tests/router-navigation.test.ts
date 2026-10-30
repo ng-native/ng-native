@@ -334,11 +334,30 @@ describe('the helpers the router is built from', () => {
     assert.equal(optionalBoolean(''), true);
   });
 
-  it("claims a host and takes the directive's inputs off it, so they are not sent as props", () => {
-    const node = { props: { title: 'Inbox', testID: 'bar' } } as { props: Record<string, unknown> };
-    ownHost(node, { ɵcmp: { inputs: { title: 'title' } } });
-    assert.deepEqual(node.props, { testID: 'bar' });
+  it("claims a host and takes the component's inputs off it, by the name a template writes", async () => {
+    const { Owned } = (await compileFixture('fixtures/own-host.ts')) as { Owned: Type<unknown> };
+    const props = {
+      title: 'Inbox',
+      caption: 'Hi',
+      hidden: '',
+      value: 1,
+      label: 'kept',
+      testID: 'bar',
+    };
+    const node = { props: { ...props } };
+    ownHost(node, Owned);
+    // `label` is the aliased input's class property, not a name a template can write.
+    assert.deepEqual(node.props, { label: 'kept', testID: 'bar' });
     assert.equal((node as { claimed?: true }).claimed, true);
+  });
+
+  it('fails loudly on a type that is not a component, rather than leaving its props behind', async () => {
+    const { OwnedDirective } = (await compileFixture('fixtures/own-host.ts')) as {
+      OwnedDirective: Type<unknown>;
+    };
+    const node = { props: { title: 'Inbox' } };
+    assert.throws(() => ownHost(node, OwnedDirective), /OwnedDirective is not a component/);
+    assert.throws(() => ownHost({ props: {} }, class Plain {}), /Plain is not a component/);
   });
 
   it("gives a tab's selected icon the selected icon's own image", () => {
