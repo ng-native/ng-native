@@ -29,6 +29,13 @@ export interface HeaderBarEntry {
 /** One per header, which provides it to the items written in it. */
 export class HeaderBarButtons {
   private readonly entries = signal<readonly HeaderBarEntry[]>([]);
+  /** Counts the moves `noteOrder` found, which nothing else about the tree tells a signal of. */
+  private readonly moves = signal(0);
+  /** The entries as last read from the tree. */
+  private readonly written = computed(() => {
+    this.moves();
+    return inTreeOrder(this.entries());
+  });
 
   /** `headerLeftBarButtonItems`, or undefined when the side has none. */
   readonly left = computed(() => this.side('left'));
@@ -41,8 +48,23 @@ export class HeaderBarButtons {
     return () => this.entries.update((all) => all.filter((each) => each !== entry));
   }
 
-  /** Tells the item native names that it was tapped. */
+  /**
+   * Reads the entries' order again, for after a render. A `@for` moves an item without touching
+   * anything the lists depend on, and one inside a component of the header moves it after the
+   * header's bindings have run. The lists change only for a move: a new list is a new prop, and
+   * native builds the bar's items again from it.
+   */
+  noteOrder(): void {
+    if (!this.left() && !this.right()) return;
+    const written = this.written();
+    if (inTreeOrder(written).some((entry, i) => entry !== written[i])) {
+      this.moves.update((moves) => moves + 1);
+    }
+  }
+
+  /** Tells the item native names that it was tapped. An event with no id names none. */
   pressed(buttonId: unknown): void {
+    if (typeof buttonId !== 'string') return;
     this.entries()
       .find((entry) => entry.button()?.['buttonId'] === buttonId)
       ?.press();
@@ -51,7 +73,7 @@ export class HeaderBarButtons {
   private side(side: 'left' | 'right'): BarButtonConfig[] | undefined {
     const items: BarButtonConfig[] = [];
     let index = 0;
-    for (const entry of inTreeOrder(this.entries())) {
+    for (const entry of this.written()) {
       if (entry.side() !== side || entry.hidden()) continue;
       const button = entry.button();
       if (button) items.push({ ...button, index });

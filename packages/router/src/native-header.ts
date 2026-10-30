@@ -25,7 +25,16 @@
  * `headerRightBarButtonItems` are not inputs: they are data the header's own `native-header-item`s
  * give it, those that are a symbol or a title rather than a view (`header-bar-buttons.ts`).
  */
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  afterEveryRender,
+  computed,
+  effect,
+  inject,
+  input,
+} from '@angular/core';
 import { ColorScheme, OS_VERSION, SCREEN_IN_FRONT } from '@ng-native/device';
 import { IN_TAB } from './in-tab.ts';
 import { NATIVE_HEADER_DEFAULTS } from './native-bar-defaults.ts';
@@ -128,6 +137,7 @@ export class NativeHeader {
   constructor() {
     const node = ownHost(inject(ElementRef).nativeElement as EngineNode, this.constructor);
     const destroyRef = inject(DestroyRef);
+    afterEveryRender(() => this.barButtons.noteOrder());
     const engine = node.engine ?? inject(HostEngine);
     destroyRef.onDestroy(
       engine.setEventListener(node, 'topPressHeaderBarButtonItem', (event) =>

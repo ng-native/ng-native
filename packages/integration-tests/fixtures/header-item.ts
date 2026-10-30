@@ -65,7 +65,11 @@ export class HeaderItemStyled {}
         (press)="closed = closed + 1"
       />
       <native-header-item systemImageName="gear" accessibilityLabel="Settings" />
-      <native-header-item type="right" accessibilityLabel="Edit the property">
+      <native-header-item
+        type="right"
+        accessibilityLabel="Edit the property"
+        (press)="edited = edited + 1"
+      >
         <text>Edit</text>
       </native-header-item>
       @if (filtering()) {
@@ -104,6 +108,41 @@ export class HeaderBarButtonsHost {
   readonly starred = signal(false);
   readonly tint = signal<string | undefined>(undefined);
   closed = 0;
+  edited = 0;
   filtered = 0;
   saved = 0;
+}
+
+/** Bar buttons a component of the header repeats, whose view refreshes after the header's. */
+@Component({
+  selector: 'x-repeated-actions',
+  imports: [NativeHeaderItem],
+  template: `
+    @for (name of names(); track name) {
+      <native-header-item type="right" [title]="name" />
+    }
+  `,
+})
+export class RepeatedActions {
+  readonly names = input.required<readonly string[]>();
+}
+
+/** The same buttons repeated in the page's template and inside a component of the header. */
+@Component({
+  selector: 'x-header-moved-buttons',
+  imports: [NativeHeader, NativeHeaderItem, RepeatedActions],
+  template: `
+    <native-header title="Moved">
+      @for (name of leading(); track name) {
+        <native-header-item type="left" [title]="name" />
+      }
+      <x-repeated-actions [names]="trailing()" />
+    </native-header>
+    <text>{{ label() }}</text>
+  `,
+})
+export class HeaderMovedButtons {
+  readonly leading = signal<readonly string[]>(['One', 'Two']);
+  readonly trailing = signal<readonly string[]>(['Three', 'Four']);
+  readonly label = signal('Same');
 }

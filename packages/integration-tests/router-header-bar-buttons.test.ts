@@ -14,6 +14,12 @@ import { cleanup, fireEvent, render, type FakeFabric } from '@ng-native/testing'
 import { registerScreenComponents } from '../router/src/screens.ts';
 import { compileFixture } from './compile.ts';
 
+interface Moved {
+  readonly leading: WritableSignal<readonly string[]>;
+  readonly trailing: WritableSignal<readonly string[]>;
+  readonly label: WritableSignal<string>;
+}
+
 interface Host {
   readonly filtering: WritableSignal<boolean>;
   readonly shared: WritableSignal<boolean>;
@@ -23,6 +29,7 @@ interface Host {
   readonly starred: WritableSignal<boolean>;
   readonly tint: WritableSignal<string | undefined>;
   closed: number;
+  edited: number;
   filtered: number;
   saved: number;
 }
@@ -31,11 +38,13 @@ type Entry = Record<string, unknown>;
 
 describe('native header bar buttons', () => {
   let HostType: Type<Host>;
+  let MovedType: Type<Moved>;
 
   before(async () => {
     registerScreenComponents();
     const mod = await compileFixture('fixtures/header-item.ts');
     HostType = mod['HeaderBarButtonsHost'] as Type<Host>;
+    MovedType = mod['HeaderMovedButtons'] as Type<Moved>;
   });
 
   afterEach(() => cleanup());
@@ -131,6 +140,13 @@ describe('native header bar buttons', () => {
     assert.deepEqual([instance.closed, instance.filtered, instance.saved], [1, 0, 1]);
   });
 
+  // A view's entry has no button, so its id reads as undefined too.
+  it('takes an event with no id for no item, a view with a press included', async () => {
+    const { config, instance } = await boot();
+    await fireEvent(config(), 'pressHeaderBarButtonItem', {});
+    assert.deepEqual([instance.closed, instance.edited, instance.saved], [0, 0, 0]);
+  });
+
   it('commits a change to an entry, and keeps its id', async () => {
     const { instance, pass, right } = await boot();
     const id = right()![1]!['buttonId'];
@@ -187,6 +203,45 @@ describe('native header bar buttons', () => {
     await pass();
     assert.equal(right()!.length, 1);
     assert.equal(views(fabric).length, 3);
+  });
+
+  describe('moved by a @for', () => {
+    async function bootMoved() {
+      const app = await render(MovedType);
+      const config = () => app.fabric.find('RNSScreenStackHeaderConfig')!;
+      const titles = (prop: string) =>
+        (config().props[prop] as Entry[]).map((entry) => [entry['index'], entry['title']]);
+      return { ...app, instance: app.instance as Moved, config, titles };
+    }
+
+    it('follows a move in the template the header is written in', async () => {
+      const { instance, detectChanges, titles } = await bootMoved();
+      instance.leading.set(['Two', 'One']);
+      await detectChanges();
+      assert.deepEqual(titles('headerLeftBarButtonItems'), [
+        [0, 'Two'],
+        [1, 'One'],
+      ]);
+    });
+
+    it('follows a move inside a component of the header, which refreshes after it', async () => {
+      const { instance, detectChanges, titles } = await bootMoved();
+      instance.trailing.set(['Four', 'Three']);
+      await detectChanges();
+      assert.deepEqual(titles('headerRightBarButtonItems'), [
+        [0, 'Four'],
+        [1, 'Three'],
+      ]);
+    });
+
+    // A new list is a new prop, and native builds the bar's items again from it.
+    it('keeps the same list through a pass that moved nothing', async () => {
+      const { instance, detectChanges, config } = await bootMoved();
+      const list = config().props['headerRightBarButtonItems'];
+      instance.label.set('Changed');
+      await detectChanges();
+      assert.equal(config().props['headerRightBarButtonItems'], list);
+    });
   });
 
   it('says on Android, once, that only iOS draws them', async () => {
