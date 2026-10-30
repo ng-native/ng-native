@@ -99,6 +99,8 @@ is organized into one entry point per module.
 - [Location](/packages/expo/location) - a position signal, filled once or followed continuously.
 - [Maps](/packages/expo/maps) - `<expo-map>`, Apple Maps on iOS and Google Maps on Android, with
   markers and taps.
+- [Address search](/packages/expo/address-search) - postal addresses that match a partial query, and
+  the parts of the one picked.
 - [Biometrics](/packages/expo/biometrics) - Face ID, Touch ID and fingerprint unlock.
 - [Sign in with Apple](/packages/expo/apple-sign-in) - Apple's sign-in sheet and its approved
   button.

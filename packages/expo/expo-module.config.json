@@ -5,7 +5,8 @@
       "LiveActivityTapsModule",
       "ExpoUIModifiersModule",
       "SearchFieldModule",
-      "SymbolImageSizeModule"
+      "SymbolImageSizeModule",
+      "AddressSearchModule"
     ],
     "appDelegateSubscribers": ["LiveActivityTapsObserver"]
   },
@@ -13,7 +14,8 @@
     "modules": [
       "dev.ngnative.expo.OngoingNotificationModule",
       "dev.ngnative.expo.SearchFieldModule",
-      "dev.ngnative.expo.KeyboardModule"
+      "dev.ngnative.expo.KeyboardModule",
+      "dev.ngnative.expo.AddressSearchModule"
     ]
   }
 }

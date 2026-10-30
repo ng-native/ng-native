@@ -229,6 +229,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/player', title: 'Video and audio player' },
         { path: 'packages/expo/location', title: 'Location', group: 'Location and identity' },
         { path: 'packages/expo/maps', title: 'Maps' },
+        { path: 'packages/expo/address-search', title: 'Address search' },
         { path: 'packages/expo/biometrics', title: 'Biometrics' },
         { path: 'packages/expo/apple-sign-in', title: 'Sign in with Apple' },
         { path: 'packages/expo/tracking', title: 'Tracking' },

@@ -20,6 +20,7 @@
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./address-search": "./src/address-search.ts",
     "./app-info": "./src/app-info.ts",
     "./apple-sign-in": "./src/apple-sign-in.ts",
     "./assets": "./src/assets.ts",
@@ -79,6 +80,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./address-search": {
+        "types": "./dist/address-search.d.ts",
+        "default": "./dist/address-search.js"
       },
       "./app-info": {
         "types": "./dist/app-info.d.ts",
