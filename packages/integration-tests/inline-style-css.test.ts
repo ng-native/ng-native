@@ -347,7 +347,21 @@ export class Grammar {}
 
 describe('a flex in a style', () => {
   const FLEX = ['flex', 'flexGrow', 'flexShrink', 'flexBasis'];
-  const VALUES = ['1 1 auto', '2 3', '1 0 10px', '30%', '2 25%', 'none', 'auto', '1 1 0'];
+  const VALUES = [
+    '1 1 auto',
+    '2 3',
+    '1 0 10px',
+    '30%',
+    '2 25%',
+    'none',
+    'auto',
+    '1 1 0',
+    // A zero of any spelling, and a length with a sign or an exponent, as a browser reads them.
+    '1 1 0.0',
+    '1 1 -0',
+    '1 1 +10px',
+    '1 1 1e2px',
+  ];
 
   it('is the grow, shrink and basis a stylesheet makes of it', async () => {
     const pairs = VALUES.map(

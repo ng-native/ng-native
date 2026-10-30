@@ -241,16 +241,15 @@ const FLEX_WORDS = new Map<string, [string, string, string]>([
 function flexValues(parts: readonly string[]): [string, string, string] | null {
   let grow: string | undefined;
   let shrink: string | undefined;
-  let basis: string | undefined;
+  let basis: string | null | undefined;
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i]!;
     if (FACTOR.test(part) && grow === undefined) {
       grow = String(Number(part));
       if (FACTOR.test(parts[i + 1] ?? '')) shrink = String(Number(parts[++i]));
-    } else if (basis === undefined && isBasis(part, shrink !== undefined)) {
-      basis = part;
     } else {
-      return null;
+      basis = basis === undefined ? basisOf(part, shrink !== undefined) : null;
+      if (basis === null) return null;
     }
   }
   // A basis alone grows and shrinks by 1, and a grow alone starts from nothing.
@@ -258,15 +257,24 @@ function flexValues(parts: readonly string[]): [string, string, string] | null {
 }
 
 /**
- * A basis as a style takes one: `auto`, a percentage, a length in a unit a style reads (`px` and
- * `rem` as points, the others measured where they are used) or a `calc()`. Not negative, and not
- * `content`, which the stylesheet refuses too.
+ * A length as a basis takes one: a percentage, or a unit a style reads (`px` and `rem` as points,
+ * the others measured where they are used). Not negative.
  */
-const BASIS = /^(auto|\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?(%|px|rem|em|vw|vh|vmin|vmax)|calc\(.*\))$/i;
+const BASIS_LENGTH = /^\+?((?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|px|rem|em|vw|vh|vmin|vmax)$/i;
 
-/** Whether a value is a basis: a unitless zero only after a grow and a shrink, as CSS has it. */
-const isBasis = (part: string, afterShrink: boolean): boolean =>
-  part === '0' ? afterShrink : BASIS.test(part);
+/**
+ * A value as the basis a style reads, or null for one that is no basis: `auto`, a `calc()`, a
+ * length written as a style reads it (`+1e2px` is `100px`), or a unitless zero of any spelling,
+ * `0.0` say, only after a grow and a shrink, as CSS has it. Not `content`, which the stylesheet
+ * refuses too.
+ */
+function basisOf(part: string, afterShrink: boolean): string | null {
+  if (BARE_NUMBER.test(part)) return afterShrink && Number(part) === 0 ? '0' : null;
+  const length = BASIS_LENGTH.exec(part);
+  if (length) return `${Number(length[1])}${length[2]!.toLowerCase()}`;
+  if (/^auto$/i.test(part)) return 'auto';
+  return /^calc\(.*\)$/i.test(part) ? part : null;
+}
 
 const flexOf = (grow: string, shrink: string, basis: string): [string, string][] => [
   ['flexGrow', grow],
