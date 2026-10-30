@@ -169,6 +169,25 @@ export type Fonts = FontRegistry;
 export async function loadFonts(
   ...sheets: readonly (SheetWithFonts | null | undefined)[]
 ): Promise<void> {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) warnIfASheetIsNull(sheets);
   if (!sheets.some((sheet) => sheet?.fonts?.length)) return;
   await new FontRegistry(expoFonts()).loadSheet(...sheets);
+}
+
+declare const __DEV__: boolean | undefined;
+
+let warnedSheetNull = false;
+
+/**
+ * A `null` sheet is what a lookup that failed hands over - `styleSheetOf()` on a class with no
+ * compiled sheet - so its faces never load and nothing says why. `undefined` is left alone, as an
+ * optional sheet. Said once, in development.
+ */
+function warnIfASheetIsNull(sheets: readonly (SheetWithFonts | null | undefined)[]): void {
+  if (warnedSheetNull || !sheets.includes(null)) return;
+  warnedSheetNull = true;
+  console.warn(
+    '[angular-native] loadFonts() was given a null sheet, so no @font-face from it is loaded. ' +
+      'A null there is what styleSheetOf() returns for a class with no compiled sheet.',
+  );
 }

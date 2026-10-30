@@ -1021,6 +1021,26 @@ function warnIfAnimationsAreOff(): void {
 
 declare const __DEV__: boolean | undefined;
 
+let warnedGlobalStylesNull = false;
+
+/**
+ * `globalStyles: null` given outright, rather than left out. The engine takes either as "no global
+ * sheet", but nobody writes a null there: it is what a lookup that failed, such as `styleSheetOf()`
+ * on a class with no sheet, hands over, and it shows up only later as `var()` warnings and faces
+ * that never load. Said once, in development.
+ */
+function warnIfGlobalStylesIsNull(options: EngineOptions): void {
+  if (options.globalStyles !== null) return;
+  if (warnedGlobalStylesNull) return;
+  warnedGlobalStylesNull = true;
+  console.warn(
+    '[angular-native] mount() was given `globalStyles: null`, so the app mounts with no global ' +
+      'sheet: its custom properties, @font-face and :root rules apply nowhere. A null there is ' +
+      'what styleSheetOf() returns for a class with no compiled sheet; leave the option out if ' +
+      'no global sheet is meant.',
+  );
+}
+
 /**
  * The reload the HMR block falls back to when a change is more than a template.
  *
@@ -1252,6 +1272,7 @@ export function mount(
     installReloadHook();
     installHotEpoch();
     calmDevBanner();
+    warnIfGlobalStylesIsNull(options);
   }
   installDeferTriggers();
   installNodeGlobal();

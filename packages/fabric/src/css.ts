@@ -6466,6 +6466,34 @@ export function faded(value: unknown, fraction: number): unknown {
 export const NATIVE_STYLES = 'ɵnativeStyles';
 
 export function styleSheetOf(type: unknown): StyleSheet | null {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) warnIfSheetArrivesLater(type);
   const sheet = (type as Record<string, unknown> | null)?.[NATIVE_STYLES];
   return (sheet as StyleSheet | undefined) ?? null;
+}
+
+declare const __DEV__: boolean | undefined;
+
+const askedBeforeSheet = new WeakSet<object>();
+
+/**
+ * `static sheet = styleSheetOf(Self)` is initialised before the compiler's own `ɵcmp` static, which
+ * is what the build hangs the sheet on, so it reads `null`, or a styled base class's sheet, however
+ * many styles the component declares. From inside the class that looks the same as a class with no
+ * sheet of its own, which rightly reads `null` or draws with its base class's sheet, so the answer
+ * waits until the class has finished: one that has its own sheet by then was read too early.
+ */
+function warnIfSheetArrivesLater(type: unknown): void {
+  if (typeof type !== 'function' || Object.hasOwn(type, NATIVE_STYLES)) return;
+  if (askedBeforeSheet.has(type)) return;
+  askedBeforeSheet.add(type);
+  queueMicrotask(() => {
+    if (!Object.hasOwn(type, NATIVE_STYLES)) return;
+    const name = type.name || 'a class';
+    console.warn(
+      `[angular-native] styleSheetOf(${name}) was read too early to see the sheet of ${name}, as ` +
+        `in a static field of its own class, which runs before Angular defines the component ` +
+        `and its compiled sheet is attached, and it read null or a base class's sheet. Read it ` +
+        `after the class instead, in a module-scope const or a static getter.`,
+    );
+  });
 }

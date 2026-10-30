@@ -52,6 +52,12 @@ the bundler ships the file - a plain path would be a font that is simply missing
 with nothing anywhere to say why. `loadFonts()` takes any number of compiled sheets and does
 nothing at all when none of them declare a face, so bootstrap can call it unconditionally.
 
+`styleSheetOf()` reads `null`, or a styled base class's sheet, from a static field of the
+component's own class (`static sheet = styleSheetOf(GlobalStyles)`), because that runs before the
+build attaches the sheet. Read it after the class instead, in a module-scope `const` or a static getter. A
+development build warns about that call, and about a `null` sheet given to `loadFonts()` or as
+`globalStyles` to `mount()`.
+
 A face that names several files, as an icon font's own stylesheet does for browsers of different
 ages, is registered from its TrueType or OpenType file: the one with `format('truetype')` or
 `format('opentype')`, or with no format a name ending `.ttf` or `.otf`. A face with neither is
