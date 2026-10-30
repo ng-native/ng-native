@@ -22,15 +22,16 @@
  * before it has a header.
  *
  * Props are the `RNSScreenStackHeaderConfig` codegen spec. `headerLeftBarButtonItems` and
- * `headerRightBarButtonItems` are deliberately absent: native bar button items are data rather
- * than views, and they are a later opt-in rather than the primary API.
+ * `headerRightBarButtonItems` are not inputs: they are data the header's own `native-header-item`s
+ * give it, those that are a symbol or a title rather than a view (`header-bar-buttons.ts`).
  */
 import { Component, DestroyRef, ElementRef, computed, effect, inject, input } from '@angular/core';
 import { ColorScheme, OS_VERSION, SCREEN_IN_FRONT } from '@ng-native/device';
 import { IN_TAB } from './in-tab.ts';
 import { NATIVE_HEADER_DEFAULTS } from './native-bar-defaults.ts';
 import { NATIVE_HEADER_PALETTE } from './native-header-palette.ts';
-import type { EngineNode } from '@ng-native/fabric';
+import { HEADER_BAR_BUTTONS, HeaderBarButtons } from './header-bar-buttons.ts';
+import { HostEngine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
 import { ownHost } from './own-host.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
 import { nativePlatform } from '@ng-native/fabric';
@@ -72,7 +73,10 @@ export type HeaderInterfaceStyle = 'unspecified' | 'light' | 'dark';
 @Component({
   selector: 'native-header',
   template: '<ng-content />',
+  providers: [HEADER_BAR_BUTTONS],
   host: {
+    '[headerLeftBarButtonItems]': 'barButtons.left()',
+    '[headerRightBarButtonItems]': 'barButtons.right()',
     '[title]': 'title()',
     '[titleColor]': 'resolvedTitleColor()',
     '[titleFontFamily]': 'titleFontFamily() ?? defaults().titleFontFamily',
@@ -118,9 +122,20 @@ export class NativeHeader {
   /** Told whether this is a bar the page starts below. See `screen-header.ts`. */
   private readonly above = inject(SCREEN_HEADER, { optional: true });
 
+  /** The items written in this header that are native bar buttons. */
+  protected readonly barButtons = inject(HeaderBarButtons);
+
   constructor() {
-    ownHost(inject(ElementRef).nativeElement as EngineNode, this.constructor);
+    const node = ownHost(inject(ElementRef).nativeElement as EngineNode, this.constructor);
     const destroyRef = inject(DestroyRef);
+    const engine = node.engine ?? inject(HostEngine);
+    destroyRef.onDestroy(
+      engine.setEventListener(node, 'topPressHeaderBarButtonItem', (event) =>
+        this.barButtons.pressed(
+          (event as NativeSyntheticEvent<{ buttonId?: unknown }>)?.nativeEvent?.buttonId,
+        ),
+      ),
+    );
     const tab = inject(IN_TAB, { optional: true });
     if (tab) {
       const inFront = inject(SCREEN_IN_FRONT);

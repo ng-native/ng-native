@@ -51,3 +51,59 @@ export class HeaderItemInComponent {
   template: `<native-header-item type="title" class="wide"><text>Ada</text></native-header-item>`,
 })
 export class HeaderItemStyled {}
+
+/** A sheet's bar as UIKit apps draw it: Close on the left, a prominent Save on the right. */
+@Component({
+  selector: 'x-header-bar-buttons',
+  imports: [NativeHeader, NativeHeaderItem, NoteActions],
+  template: `
+    <native-header title="New property">
+      <native-header-item
+        type="left"
+        systemImageName="xmark"
+        accessibilityLabel="Close"
+        (press)="closed = closed + 1"
+      />
+      <native-header-item systemImageName="gear" accessibilityLabel="Settings" />
+      <native-header-item type="right" accessibilityLabel="Edit the property">
+        <text>Edit</text>
+      </native-header-item>
+      @if (filtering()) {
+        <native-header-item
+          type="right"
+          systemImageName="line.3.horizontal.decrease"
+          [tintColor]="tint()"
+          [sharesBackground]="false"
+          (press)="filtered = filtered + 1"
+        />
+      }
+      <x-note-actions [shown]="shared()" />
+      <native-header-item
+        type="right"
+        [title]="saveTitle()"
+        barButtonItemStyle="prominent"
+        hidesSharedBackground
+        [disabled]="saving()"
+        [hidden]="saveHidden()"
+        (press)="saved = saved + 1"
+      />
+      <native-header-item type="right" systemImageName="star">
+        @if (starred()) {
+          <text>Starred</text>
+        }
+      </native-header-item>
+    </native-header>
+  `,
+})
+export class HeaderBarButtonsHost {
+  readonly filtering = signal(true);
+  readonly shared = signal(false);
+  readonly saving = signal(false);
+  readonly saveHidden = signal(false);
+  readonly saveTitle = signal<string | undefined>('Save');
+  readonly starred = signal(false);
+  readonly tint = signal<string | undefined>(undefined);
+  closed = 0;
+  filtered = 0;
+  saved = 0;
+}

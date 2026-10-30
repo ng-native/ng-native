@@ -70,6 +70,42 @@ slots: `left`, `center`/`title`, `right`, `back` (replaces the chevron; needs
 one spelling Android's header takes. Press handling is the ordinary responder system, so a
 `pressable` inside one works like anywhere else.
 
+### Bar buttons
+
+On iOS, an item at the `left` or the `right` with nothing written in it and a `systemImageName` or
+a `title` is a native bar button rather than a view, drawn by UIKit as a `UIBarButtonItem`, as the
+system's own buttons are:
+
+```html
+<native-header title="New property">
+  <native-header-item
+    type="left"
+    systemImageName="xmark"
+    accessibilityLabel="Close"
+    (press)="close()"
+  />
+  <native-header-item
+    type="right"
+    title="Save"
+    barButtonItemStyle="prominent"
+    [disabled]="saving()"
+    (press)="save()"
+  />
+</native-header>
+```
+
+Its inputs are `<native-toolbar-item>`'s. `systemImageName` is an SF Symbol, sized and tinted by
+the bar as the system's own buttons are, and a button with a symbol and no title needs an
+`accessibilityLabel` for VoiceOver to say. `barButtonItemStyle="prominent"` is the filled style iOS
+26 gives a screen's main action, `tintColor` overrides the header's `color` for one button, and
+`disabled` does what it says. On iOS 26 the buttons beside one another share one glass
+background: `hidesSharedBackground` draws a button with none, and `[sharesBackground]="false"`
+gives it glass of its own. `(press)` is a tap on the button.
+
+Bar buttons and items with content can share a side, in the order they are written. An item with
+anything written in it, an `@if` included, stays a view. `hidden` leaves any item out of the bar.
+Android's header has no bar buttons: it draws nothing for one, and says so once in development.
+
 <!-- api: NativeHeaderItem -->
 
 ## Search
