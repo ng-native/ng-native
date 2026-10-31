@@ -215,18 +215,25 @@ async function hold(node: FakeFabricNode, duration: number): Promise<void> {
   await settle();
 }
 
+/** The text each command a field can be sent puts in it. */
+const TEXT_OF_COMMAND: Readonly<Record<string, (args: readonly unknown[]) => unknown>> = {
+  setTextAndSelection: (args) => args[1],
+  setText: (args) => args[0],
+  clearText: () => '',
+};
+
 /**
  * The text a field shows once a keystroke is handled, which the next key is typed into: the text
  * the app last put back with a command since `since`, as a field that refuses or rewrites the
- * keystroke does (`setTextAndSelection`, or a search bar's `setText`), or else the text typed.
+ * keystroke does (`setTextAndSelection`, or a search bar's `setText` or `clearText`), or else the
+ * text typed.
  */
 function shownText(field: FakeFabricNode, typed: string, since: number): string {
   const { commands } = ownerOf(field).fabric;
   for (let i = commands.length - 1; i >= since; i--) {
     const { node, name, args } = commands[i]!;
     if (node?.reactTag !== field.reactTag) continue;
-    const text =
-      name === 'setTextAndSelection' ? args[1] : name === 'setText' ? args[0] : undefined;
+    const text = Object.hasOwn(TEXT_OF_COMMAND, name) ? TEXT_OF_COMMAND[name]!(args) : undefined;
     if (typeof text === 'string') return text;
   }
   return typed;

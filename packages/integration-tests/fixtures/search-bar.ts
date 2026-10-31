@@ -49,3 +49,22 @@ export class SearchReset {
     this.query.set(query.length > 2 ? '' : query);
   }
 }
+
+/** A search that clears the field from code once the query is longer than two characters. */
+@Component({
+  selector: 'x-search-clear',
+  imports: [NativeSearchBar],
+  template: `<native-search-bar
+    placeholder="Search"
+    [query]="query()"
+    (queryChange)="clearPast($event)"
+  />`,
+})
+export class SearchClear {
+  readonly query = signal('');
+  readonly bar = viewChild.required(NativeSearchBar);
+  clearPast(query: string): void {
+    if (query.length > 2) this.bar().clear();
+    this.query.set(query.length > 2 ? '' : query);
+  }
+}

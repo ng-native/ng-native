@@ -52,6 +52,19 @@ describe('native search bar', () => {
     assert.equal((instance as { query(): string }).query(), 'd');
   });
 
+  it('types the next key into the field the app cleared with clearText', async () => {
+    const mod = await compileFixture('fixtures/search-bar.ts');
+    const { fabric, instance } = await render(mod['SearchClear'] as Type<unknown>);
+
+    await userEvent.type(fabric.find('RNSSearchBar')!, 'abcd');
+
+    assert.ok(
+      fabric.commands.some((command) => command.name === 'clearText'),
+      'control: the field is cleared with clearText',
+    );
+    assert.equal((instance as { query(): string }).query(), 'd');
+  });
+
   it('is found by the placeholder it draws, as a text field is', async () => {
     const { fabric, instance } = await render(Host);
 
