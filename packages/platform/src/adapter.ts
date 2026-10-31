@@ -95,7 +95,103 @@ const styleValue = (value: unknown): unknown =>
       ? parseFloat(value)
       : REM.test(value)
         ? parseFloat(value) * 16
-        : value;
+        : (absoluteCalc(value) ?? value);
+
+/** A number in a `calc()`, and its unit: `px` and `rem` are lengths, and none a number. */
+const CALC_LITERAL = /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(px|rem)?(?![\w%.])/iy;
+const CALC_SPACE = /[ \t\n\r\f]*/y;
+
+/** A `calc()` term or sum as what it comes to, and whether it is a length or a number. */
+interface Calculated {
+  readonly value: number;
+  readonly length: boolean;
+}
+
+/**
+ * A `calc()` of lengths in `px` or `rem` and numbers, with + - * / and brackets, that comes to a
+ * length, as the points a stylesheet works it out to when the app is built. Native reads no
+ * `calc()`, and drops the text. Undefined for any other: one that comes to a number, which is no
+ * length, a percentage with a length added, which the engine finishes against its box, and a unit
+ * measured where it is used, `em` or `vw`, are left as written.
+ */
+function absoluteCalc(text: string): number | undefined {
+  if (!/^calc\(/i.test(text)) return undefined;
+  const cursor = { text, at: 0 };
+  const result = calcTerm(cursor);
+  return result?.length && cursor.at === text.length && Number.isFinite(result.value)
+    ? result.value
+    : undefined;
+}
+
+/** A bracket or a `calc()`, its sum and its closing bracket. */
+function calcBracket(cursor: { text: string; at: number }): Calculated | undefined {
+  const open = /(?:calc)?\(/iy;
+  open.lastIndex = cursor.at;
+  if (!open.test(cursor.text)) return undefined;
+  cursor.at = open.lastIndex;
+  const sum = calcSum(cursor);
+  skipCalcSpace(cursor);
+  if (!sum || cursor.text[cursor.at] !== ')') return undefined;
+  cursor.at++;
+  return sum;
+}
+
+/** A number, a length, or a bracket. */
+function calcTerm(cursor: { text: string; at: number }): Calculated | undefined {
+  skipCalcSpace(cursor);
+  CALC_LITERAL.lastIndex = cursor.at;
+  const literal = CALC_LITERAL.exec(cursor.text);
+  if (!literal) return calcBracket(cursor);
+  cursor.at = CALC_LITERAL.lastIndex;
+  const unit = literal[2]?.toLowerCase();
+  return { value: Number(literal[1]) * (unit === 'rem' ? 16 : 1), length: unit !== undefined };
+}
+
+/** Terms multiplied and divided, as CSS types them: a length times a number, or over one. */
+function calcProduct(cursor: { text: string; at: number }): Calculated | undefined {
+  let left = calcTerm(cursor);
+  for (;;) {
+    const before = cursor.at;
+    skipCalcSpace(cursor);
+    const op = cursor.text[cursor.at];
+    if (!left || (op !== '*' && op !== '/')) {
+      // The whitespace is the sum's to read: it is what tells a sign from a negative number.
+      cursor.at = before;
+      return left;
+    }
+    cursor.at++;
+    const right = calcTerm(cursor);
+    if (!right || (left.length && right.length) || (op === '/' && right.length)) return undefined;
+    left =
+      op === '*'
+        ? { value: left.value * right.value, length: left.length || right.length }
+        : { value: left.value / right.value, length: left.length };
+  }
+}
+
+/** Products added and taken away: of one type, with whitespace either side of the sign. */
+function calcSum(cursor: { text: string; at: number }): Calculated | undefined {
+  let left = calcProduct(cursor);
+  for (;;) {
+    const before = cursor.at;
+    skipCalcSpace(cursor);
+    const op = cursor.text[cursor.at];
+    if (!left || (op !== '+' && op !== '-')) return left;
+    if (cursor.at === before || !/[ \t\n\r\f]/.test(cursor.text[cursor.at + 1] ?? '')) {
+      return undefined;
+    }
+    cursor.at++;
+    const right = calcProduct(cursor);
+    if (!right || right.length !== left.length) return undefined;
+    left = { value: left.value + (op === '+' ? right.value : -right.value), length: left.length };
+  }
+}
+
+function skipCalcSpace(cursor: { text: string; at: number }): void {
+  CALC_SPACE.lastIndex = cursor.at;
+  CALC_SPACE.test(cursor.text);
+  cursor.at = CALC_SPACE.lastIndex;
+}
 /**
  * A `font-family` is a stack, quoted or not, where native takes one family by name: the first,
  * unquoted, as a stylesheet rule commits it. Left as written, `'Inter-Bold'` names no font.
