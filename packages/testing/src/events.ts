@@ -217,16 +217,17 @@ async function hold(node: FakeFabricNode, duration: number): Promise<void> {
 
 /**
  * The text a field shows once a keystroke is handled, which the next key is typed into: the text
- * the app last put back with `setTextAndSelection` since `since`, as a field that refuses or
- * rewrites the keystroke does, or else the text typed.
+ * the app last put back with a command since `since`, as a field that refuses or rewrites the
+ * keystroke does (`setTextAndSelection`, or a search bar's `setText`), or else the text typed.
  */
 function shownText(field: FakeFabricNode, typed: string, since: number): string {
   const { commands } = ownerOf(field).fabric;
   for (let i = commands.length - 1; i >= since; i--) {
     const { node, name, args } = commands[i]!;
-    if (node?.reactTag === field.reactTag && name === 'setTextAndSelection') {
-      if (typeof args[1] === 'string') return args[1];
-    }
+    if (node?.reactTag !== field.reactTag) continue;
+    const text =
+      name === 'setTextAndSelection' ? args[1] : name === 'setText' ? args[0] : undefined;
+    if (typeof text === 'string') return text;
   }
   return typed;
 }

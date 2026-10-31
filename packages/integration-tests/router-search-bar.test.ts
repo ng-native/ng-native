@@ -42,6 +42,16 @@ describe('native search bar', () => {
     assert.equal((instance as { query(): string }).query(), 'oak');
   });
 
+  it('types the next key into the query the app put back with setText', async () => {
+    const mod = await compileFixture('fixtures/search-bar.ts');
+    const { fabric, instance } = await render(mod['SearchReset'] as Type<unknown>);
+
+    await userEvent.type(fabric.find('RNSSearchBar')!, 'abcd');
+
+    // `abc` is cleared, and `d` is typed into the empty field the app put back.
+    assert.equal((instance as { query(): string }).query(), 'd');
+  });
+
   it('is found by the placeholder it draws, as a text field is', async () => {
     const { fabric, instance } = await render(Host);
 
