@@ -289,8 +289,10 @@ timestamp }`. A "task" is one `setTimeout(0)`, which is when change detection ru
 
 Typing starts from the field's committed `text`, so it appends to what is already there. A field
 with `maxLength` stops emitting past it, the way native truncates before `onChangeText` ever fires
-rather than delivering the extra characters for a handler to reject. The `topBlur` at the end of
-`type` is what marks a Signal Forms field touched.
+rather than delivering the extra characters for a handler to reject. Each character is typed into
+the text the field shows: when the app refuses or rewrites a keystroke and puts its own text back,
+the next character is added to that text, as it is on a device. The `topBlur` at the end of `type`
+is what marks a Signal Forms field touched.
 
 ### `gestureOf`
 

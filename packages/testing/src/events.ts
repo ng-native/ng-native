@@ -195,7 +195,10 @@ export interface UserEvent {
   press(node: FakeFabricNode): Promise<void>;
   /** A finger held for `duration` ms (500, the long-press delay, by default). */
   longPress(node: FakeFabricNode, options?: { duration?: number }): Promise<void>;
-  /** Focus the field, then one change per character, each with the next `eventCount`. */
+  /**
+   * Focus the field, then one change per character, each with the next `eventCount`, typed into
+   * the text the field shows: after a key the app refused or rewrote, the text it put back.
+   */
   type(node: FakeFabricNode, text: string, options?: TypeOptions): Promise<void>;
   /** Focus the field, empty it, and blur. */
   clear(node: FakeFabricNode): Promise<void>;
@@ -210,6 +213,22 @@ async function hold(node: FakeFabricNode, duration: number): Promise<void> {
   if (duration) await sleep(duration);
   release(node);
   await settle();
+}
+
+/**
+ * The text a field shows once a keystroke is handled, which the next key is typed into: the text
+ * the app last put back with `setTextAndSelection` since `since`, as a field that refuses or
+ * rewrites the keystroke does, or else the text typed.
+ */
+function shownText(field: FakeFabricNode, typed: string, since: number): string {
+  const { commands } = ownerOf(field).fabric;
+  for (let i = commands.length - 1; i >= since; i--) {
+    const { node, name, args } = commands[i]!;
+    if (node?.reactTag === field.reactTag && name === 'setTextAndSelection') {
+      if (typeof args[1] === 'string') return args[1];
+    }
+  }
+  return typed;
 }
 
 async function endEditing(field: FakeFabricNode, text: string): Promise<void> {
@@ -233,10 +252,12 @@ const user: UserEvent = {
       // `maxLength` is enforced natively: the field never calls back with text past it, so a key
       // pressed once the limit is reached is swallowed the same way it would be on a device.
       if (value.length >= limit) continue;
-      value += key;
+      const typed = value + key;
+      const since = ownerOf(field).fabric.commands.length;
       emit(field, 'topKeyPress', { key });
-      changeText(field, value);
+      changeText(field, typed);
       await settle();
+      value = shownText(field, typed, since);
     }
     if (options.submitEditing) emit(field, 'topSubmitEditing', { text: value });
     if (!options.skipBlur) await endEditing(field, value);
