@@ -570,6 +570,29 @@ export class CalcRefused {}
     }
   });
 
+  it('reads a bound one with CSS whitespace around it, and not with a no-break space', async () => {
+    const mod = await build(
+      'calc-padded',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-calc-padded',
+  imports: [View],
+  template: \`
+    <view nativeID="padded" [style.width]="' calc(3 * 4px)\\t'"></view>
+    <view nativeID="nbsp" [style.width]="'calc(3 * 4px)\\u00a0'"></view>
+  \`,
+})
+export class CalcPadded {}
+`,
+    );
+    const { fabric } = await render(mod['CalcPadded'] as Type<unknown>);
+    assert.equal(styleOf(fabric, 'padded', ['width'])['width'], 12);
+    // A no-break space is no CSS whitespace: the value is no calc() at all.
+    assert.equal(styleOf(fabric, 'nbsp', ['width'])['width'], 'calc(3 * 4px)\u00a0');
+  });
+
   it('is a length from a binding, and follows it', async () => {
     const mod = await build(
       'calc-bound',

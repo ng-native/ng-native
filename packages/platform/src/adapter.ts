@@ -100,6 +100,8 @@ const styleValue = (value: unknown): unknown =>
 /** A number in a `calc()`, and its unit: `px` and `rem` are lengths, and none a number. */
 const CALC_LITERAL = /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(px|rem)?(?![\w%.])/iy;
 const CALC_SPACE = /[ \t\n\r\f]*/y;
+/** CSS whitespace at either end, and no other: a no-break space is part of the value. */
+const CSS_PADDING = /^[ \t\n\r\f]+|[ \t\n\r\f]+$/g;
 
 /** A `calc()` term or sum as what it comes to, and whether it is a length or a number. */
 interface Calculated {
@@ -114,7 +116,9 @@ interface Calculated {
  * length, a percentage with a length added, which the engine finishes against its box, and a unit
  * measured where it is used, `em` or `vw`, are left as written.
  */
-function absoluteCalc(text: string): number | undefined {
+function absoluteCalc(value: string): number | undefined {
+  // CSS whitespace either side is no part of the value, as a bound `' calc(…) '` has it.
+  const text = value.replace(CSS_PADDING, '');
   if (!/^calc\(/i.test(text)) return undefined;
   const cursor = { text, at: 0 };
   const result = calcTerm(cursor);
