@@ -476,3 +476,136 @@ export class FlexRefused {}
     }
   });
 });
+
+describe('an absolute calc() in a style', () => {
+  const KEYS = ['flexGrow', 'flexShrink', 'flexBasis', 'width', 'height', 'minWidth'];
+  KEYS.push('marginTop', 'marginRight', 'paddingRight');
+  const DECLARATIONS = [
+    'flex: 1 1 calc(10px + 10px)',
+    'flex-basis: calc(10px + 10px)',
+    'width: calc(2 * 1rem)',
+    'height: calc((2px + 3px) * 2)',
+    'min-width: calc(10px / 4)',
+    'margin: calc(1px + 1px) calc(8px - 2px)',
+    'padding-right: calc(1rem - 4px)',
+    // A share of the box with a length added is the engine's to finish, from a style as from a
+    // stylesheet.
+    'width: calc(100% - 10px)',
+  ];
+
+  it('is the length a stylesheet makes of it', async () => {
+    const pairs = DECLARATIONS.map(
+      (declaration, i) =>
+        `<view nativeID="sheet${i}" class="c${i}"></view><view nativeID="attribute${i}" style="${declaration}"></view>`,
+    ).join('');
+    const rules = DECLARATIONS.map((declaration, i) => `.c${i} { ${declaration}; }`).join(' ');
+    const mod = await build(
+      'calc',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-calc',
+  imports: [View],
+  template: '${pairs}',
+  styles: '${rules}',
+})
+export class Calc {}
+`,
+    );
+    const { fabric } = await render(mod['Calc'] as Type<unknown>);
+    DECLARATIONS.forEach((declaration, i) => {
+      const sheet = styleOf(fabric, `sheet${i}`, KEYS);
+      if (!declaration.includes('%')) {
+        assert.ok(
+          Object.values(sheet).some((value) => typeof value === 'number'),
+          `control: the stylesheet's ${declaration}`,
+        );
+      }
+      assert.deepEqual(styleOf(fabric, `attribute${i}`, KEYS), sheet, declaration);
+    });
+  });
+
+  it('leaves one that comes to no length as written, where a stylesheet refuses it', async () => {
+    const REFUSED = [
+      'calc(10px+10px)',
+      'calc(10px * 2px)',
+      'calc(2 / 1px * 3px)',
+      'calc(3)',
+      'calc(1px / 0)',
+      // Chrome refuses a length added to a number too. The build makes a number of it.
+      'calc(1px + 2)',
+    ];
+    const views = REFUSED.map(
+      (value, i) =>
+        `<view nativeID="sheet${i}" class="r${i}"></view><view nativeID="attribute${i}" style="width: ${value}"></view>`,
+    ).join('');
+    const rules = REFUSED.map((value, i) => `.r${i} { width: ${value}; }`).join(' ');
+    const mod = await build(
+      'calc-refused',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-calc-refused',
+  imports: [View],
+  template: '${views}',
+  styles: '${rules}',
+})
+export class CalcRefused {}
+`,
+    );
+    mock.method(console, 'warn', () => {});
+    try {
+      const { fabric } = await render(mod['CalcRefused'] as Type<unknown>);
+      REFUSED.forEach((value, i) => {
+        const sheet = styleOf(fabric, `sheet${i}`, ['width'])['width'];
+        if (!value.endsWith(' 2)')) {
+          assert.notEqual(typeof sheet, 'number', `control: the stylesheet's width: ${value}`);
+        }
+        assert.equal(styleOf(fabric, `attribute${i}`, ['width'])['width'], value);
+      });
+    } finally {
+      mock.restoreAll();
+    }
+  });
+
+  it('is a length from a binding, and follows it', async () => {
+    const mod = await build(
+      'calc-bound',
+      `
+import { Component, signal } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-calc-bound',
+  imports: [View],
+  template: \`
+    <view nativeID="calc" [style.flex]="flex()" [style.width]="width()"></view>
+    <view nativeID="points" [style.flex]="flexPoints()" [style.width]="widthPoints()"></view>
+  \`,
+})
+export class CalcBound {
+  readonly flex = signal('1 1 calc(10px + 10px)');
+  readonly width = signal('calc(3 * 4px)');
+  readonly flexPoints = signal('1 1 20px');
+  readonly widthPoints = signal('12px');
+}
+`,
+    );
+    type Bound = { set(value: string): void };
+    const { fabric, instance } = await render(
+      mod['CalcBound'] as Type<Record<'flex' | 'width' | 'flexPoints' | 'widthPoints', Bound>>,
+    );
+    const keys = ['flexBasis', 'height', 'width'];
+    const points = styleOf(fabric, 'points', keys);
+    assert.equal(points['width'], 12, 'control: the points written out');
+    assert.deepEqual(styleOf(fabric, 'calc', keys), points);
+
+    instance.flex.set('1 1 calc(1rem / 2)');
+    instance.width.set('calc(10px - 15px)');
+    instance.flexPoints.set('1 1 8px');
+    instance.widthPoints.set('-5px');
+    await settle();
+    assert.deepEqual(styleOf(fabric, 'calc', keys), styleOf(fabric, 'points', keys));
+  });
+});
