@@ -529,6 +529,8 @@ export class Calc {}
   it('leaves one that comes to no length as written, where a stylesheet refuses it', async () => {
     const REFUSED = [
       'calc(10px+10px)',
+      'calc(10px+ 10px)',
+      'calc(10px +10px)',
       'calc(10px * 2px)',
       'calc(2 / 1px * 3px)',
       'calc(3)',
