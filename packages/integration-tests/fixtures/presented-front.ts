@@ -48,6 +48,9 @@ export class Library {}
 @Component({ selector: 'x-album', imports: [Text], template: `<text>album</text>` })
 export class Album {}
 
+@Component({ selector: 'x-new-album', imports: [Text], template: `<text>new album</text>` })
+export class NewAlbum {}
+
 /** A page that throws on its first render, which fails the navigation to it. */
 @Component({ selector: 'x-broken', imports: [Text], template: `<text>{{ title() }}</text>` })
 export class Broken {
@@ -72,6 +75,7 @@ export const routes: Routes = [
         children: [
           { path: '', component: Library },
           { path: 'broken', component: Broken },
+          { path: 'new', component: NewAlbum },
           { path: ':id', component: Album },
         ],
       },

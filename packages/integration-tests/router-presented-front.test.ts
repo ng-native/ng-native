@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import { ErrorHandler, type Signal, type Type } from '@angular/core';
 import { Router, type Route, type Routes } from '@angular/router';
-import { cleanup, render, settle } from '@ng-native/testing';
+import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
 import { compileFixture } from './compile.ts';
@@ -66,6 +66,26 @@ describe('the tab under a presented screen', () => {
     await settle();
     assert.equal(router.url, '/home');
     assert.equal(home.inFront(), true);
+  });
+});
+
+describe('a page presented after one whose route has a parameter', () => {
+  // The copies go to the root's presented outlet as pages are presented, and the router matches
+  // them in that order: `library/:id`, made first, would take `/library/new` too.
+  it('is the page its url names in its tab, not the one the parameter matched', async () => {
+    const { router, navigation } = await boot();
+    await navigation.present('/library/7', { as: 'formSheet' });
+    await settle();
+    assert.ok(screen.queryByText('album'), 'control: the album is presented');
+    navigation.back();
+    await settle();
+    await settle();
+
+    await navigation.present('/library/new', { as: 'formSheet' });
+    await settle();
+    assert.equal(router.url, '/home(presented:library/new)');
+    assert.ok(screen.queryByText('new album'), 'the page of library/new');
+    assert.equal(screen.queryByText('album'), null, 'not the album with id "new"');
   });
 });
 

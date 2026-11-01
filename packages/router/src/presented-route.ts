@@ -223,7 +223,17 @@ export async function presentedCommands(router: Router, path: string): Promise<u
   const copied = router.config.some(
     (route) => route.outlet === PRESENTED && route.path === copy.path,
   );
-  if (!copied) router.config.push(copy);
+  if (!copied) {
+    // The router matches the copies in their order, which is the order pages were presented in: a
+    // copy that would take this url too (`library/:id` for `library/new`) goes after this one.
+    const taking = router.config.findIndex(
+      (route) =>
+        route.outlet === PRESENTED &&
+        taken({ ...route, outlet: undefined }, segments) === segments.length,
+    );
+    if (taking === -1) router.config.push(copy);
+    else router.config.splice(taking, 0, copy);
+  }
   return [{ outlets: { [PRESENTED]: parsed.flatMap(segmentCommands) } }];
 }
 
