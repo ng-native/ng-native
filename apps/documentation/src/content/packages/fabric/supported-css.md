@@ -387,7 +387,13 @@ back from native, so on a host with none it stays where it is written.
 container's main axis a box is that size already. Across it, where a box stretches, it stops
 stretching and sits at the start, as in a browser, unless the container's `align-items` or its own
 `align-self` already places it. `max-content` is read as `fit-content` on a width or a height,
-and on `max-width` or `max-height` caps a box that would fill its container at its content.
+and on `max-width` or `max-height` caps a box that would fill its container at its content. Under
+a percentage the box is the smaller of the two.
+A box out of the flow that is as wide as its content by `width: fit-content` or a cap stays so
+between a `left` and a `right`, where Yoga would stretch it: the engine fits it within the room
+they leave, reading its width back, at the cost of two more commits when something in it changes.
+A `flex-basis` of a percentage in such a box, or in any box that is fitted, is a share of the
+width it comes to, as in a browser; `0%` stays at the item's content.
 `min-content` is dropped with a warning, as is `fit-content` on `min-width`, `max-width`,
 `min-height` and `max-height`.
 

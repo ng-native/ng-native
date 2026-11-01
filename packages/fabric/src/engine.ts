@@ -1741,8 +1741,11 @@ function capAtContent(props: Record<string, unknown>, size: string, cap: string)
   if (props[cap] !== 'max-content') return false;
   delete props[cap];
   const own = props[size];
-  const fills = own == null || own === 'auto' || (typeof own === 'string' && own.endsWith('%'));
+  const share = isPercent(own);
+  const fills = own == null || own === 'auto' || share;
   if (fills) props[size] = 'fit-content';
+  // No bigger than its content and no bigger than the share: the smaller of the two.
+  if (share) props[cap] = own;
   return fills || own === 'fit-content';
 }
 
@@ -2596,8 +2599,9 @@ function asCommitted(
 
 /**
  * Whether a box out of the flow is as wide as what it holds: it has no width, and no inset on
- * each side to be stretched between. A browser shrinks it to fit, a panel in the body among
- * them, where Yoga takes a percentage inside it as one of the room.
+ * each side to be stretched between, or is written as wide as its content between them. A
+ * browser shrinks it to fit, a panel in the body among them, where Yoga takes a percentage
+ * inside it as one of the room.
  *
  * ponytail: the room it is fitted within is the box it is placed in, and not that less its
  * inset. Take the inset off if a panel placed far across the screen is ever too wide.
@@ -2605,8 +2609,24 @@ function asCommitted(
 function shrunkOutOfFlow(node: EngineNode): boolean {
   if (!OUT_OF_FLOW.has(readStyle(node, 'position') as string)) return false;
   if (hasOwnWidth(node)) return false;
+  return fitsWidth(node) || !betweenInsets(node);
+}
+
+/** Whether a box has an inset on each side. */
+function betweenInsets(node: EngineNode): boolean {
   const set = (...keys: string[]) => keys.some((key) => readStyle(node, key) != null);
-  return !(set('left', 'start') && set('right', 'end'));
+  return set('left', 'start') && set('right', 'end');
+}
+
+/**
+ * Whether a box out of the flow is written as wide as its content between two insets. Yoga
+ * stretches it between them whatever it holds, so it is fitted whatever it holds, measured with
+ * its end free (`setAsideToFit`).
+ */
+function fitsBetweenInsets(node: EngineNode): boolean {
+  return (
+    OUT_OF_FLOW.has(readStyle(node, 'position') as string) && fitsWidth(node) && betweenInsets(node)
+  );
 }
 
 /**
@@ -2832,6 +2852,10 @@ function setAsideToFit(node: EngineNode, props: Record<string, unknown>): void {
   pictureWide(node, props);
   // A field with its share set aside is as wide as its own size makes it, as its content.
   columnsWide(props, node.props[FIELD_SIZE]);
+  if (fitsBetweenInsets(node)) {
+    delete props['right'];
+    delete props['end'];
+  }
 }
 
 /** A box fitted to its content: the width that came to, and the least it may be. */
@@ -3498,8 +3522,9 @@ const sizedByContent = (props: Record<string, unknown>): boolean =>
  */
 function contentSized(props: Record<string, unknown>): void {
   if (typeof props['width'] === 'string') delete props['width'];
-  // The least it may be, as a share, is of a width not known yet either.
+  // The least and the most it may be, as shares, are of a width not known yet either.
   if (isShare(props['minWidth'])) delete props['minWidth'];
+  if (isShare(props['maxWidth'])) delete props['maxWidth'];
   delete props['flex'];
   delete props['flexGrow'];
   if (isNoBasis(props['flexBasis'])) delete props['flexBasis'];
@@ -4428,8 +4453,9 @@ const INLINE_ROWS = new Set(['inline-flex', 'inline-block', 'inline-grid']);
 
 /**
  * `flex-basis: 50%` in a box that is as wide as its content, or in a column as tall as its
- * content, which CSS reads as the item's own content: there is no size yet to take a share of. Yoga takes it of nothing, so the item is
- * as narrow as it can be made, and a chip's words wrap. No basis is sent.
+ * content, which CSS reads as the item's own content while that box is sized: there is no size
+ * yet to take a share of. Yoga takes it of nothing, so the item is as narrow as it can be made,
+ * and a chip's words wrap. No basis is sent until the box is fitted (`settleFits`).
  *
  * ponytail: a box in a line with no width of its own, or a row that is `fit-content` or capped
  * at its content. One sized by its content some other way, a grid track say, is left to Yoga;
@@ -4446,12 +4472,19 @@ function percentBasis(node: EngineNode, props: Record<string, unknown>): void {
     if (props['minHeight'] === 'auto' && !definiteHeight(parent)) delete props['flexBasis'];
     return;
   }
-  if (fitsWidth(parent)) delete props['flexBasis'];
+  // A row fitted already has a size to take a share of. A share of nothing is no size: tabs that
+  // are each `flex: 1 1 0%` keep the width of their words, which cannot get narrower.
+  if (parent.fit?.width !== undefined && isSizedBasis(props['flexBasis'])) return;
+  if (rowOfItsContent(parent)) delete props['flexBasis'];
+}
+
+/** Whether a row is written as wide as its content, or sits in a line with no width of its own. */
+function rowOfItsContent(row: EngineNode): boolean {
+  if (fitsWidth(row)) return true;
   // Only where it sits in a line: an item of a flex container is as wide as that makes it.
-  else if (INLINE_ROWS.has(readStyle(parent, 'display') as string) && inALine(parent)) {
-    const width = readStyle(parent, 'width');
-    if (width == null || width === 'auto') delete props['flexBasis'];
-  }
+  if (!INLINE_ROWS.has(readStyle(row, 'display') as string) || !inALine(row)) return false;
+  const width = readStyle(row, 'width');
+  return width == null || width === 'auto';
 }
 
 /**
@@ -10044,7 +10077,9 @@ export class Engine implements HostEngine {
 
   /** Have a box fitted to its content again, and the item of a row it is a share of. */
   private noteFits(node: EngineNode): void {
-    const fits = this.fits.has(node) ? this.fitsContent(node) : this.restyledToFit(node);
+    const fits = this.fits.has(node)
+      ? this.fitsContent(node)
+      : this.restyledToFit(node) || fitsBetweenInsets(node);
     if (this.sitsInLine(node) || fits) this.refitted(node);
     if (!sharesWidth(node) && !growsInRow(node)) return;
     // The box it is a share of, or one further up that this one is as wide as: each box between
@@ -10313,7 +10348,7 @@ export class Engine implements HostEngine {
       return false;
     }
     if (this.fitStands(node, fit)) return false;
-    if (this.sizedByRoom(node).length) return true;
+    if (this.sizedByRoom(node).length || fitsBetweenInsets(node)) return true;
     fit.dirty = false;
     this.unfit(node, true);
     return false;
@@ -10332,7 +10367,7 @@ export class Engine implements HostEngine {
       fit.width = undefined;
       for (const each of inside) each.fitOff = true;
       // One that grows into its row is measured without its share, as what is in it is.
-      if (sharesRow(node)) node.fitOff = true;
+      if (sharesRow(node) || fitsBetweenInsets(node)) node.fitOff = true;
       this.touch([node, ...inside, ...this.ungrow(fit)]);
     }
     this.commitTree();
@@ -10377,7 +10412,7 @@ export class Engine implements HostEngine {
   private fittedWidth(node: EngineNode): { width: number; grown: EngineNode[] } {
     this.flowStyles.clear();
     const box = this.boxOf(node);
-    const within = Math.min(box?.[2] ?? 0, this.roomIn(node.parent));
+    const within = Math.min(box?.[2] ?? 0, this.fitRoom(node));
     // An item of a row is as wide as it was laid out with its shares set aside, and no wider
     // than the row: what reaches past it, a drawer waiting off to one side, is no part of it.
     if (!this.sitsInLine(node)) return { width: within, grown: [] };
@@ -10466,9 +10501,25 @@ export class Engine implements HostEngine {
   /** The room a fitted box is in now, as its parent was last laid out. */
   private roomOf(node: EngineNode): number {
     this.flowStyles.clear();
-    const room = this.roomIn(node.parent);
+    const room = this.fitRoom(node);
     this.flowStyles.clear();
     return room;
+  }
+
+  /** The most a fitted box can be: what it is in, or what its insets and margins leave of it. */
+  private fitRoom(node: EngineNode): number {
+    if (!fitsBetweenInsets(node)) return this.roomIn(node.parent);
+    const style = withOwnSizes(node, this.flowStyle(node));
+    const whole = this.boxesFor(node, style['position'])?.against[2];
+    if (whole === undefined) return Infinity;
+    const taken = (...keys: string[]) => resolveLength(firstOf(style, keys), whole) ?? 0;
+    return (
+      whole -
+      taken('left', 'start') -
+      taken('right', 'end') -
+      taken('marginLeft', 'marginStart', 'marginHorizontal', 'margin') -
+      taken('marginRight', 'marginEnd', 'marginHorizontal', 'margin')
+    );
   }
 
   /** Stop fitting a box, and commit it again as written where it had been given a width. */
@@ -10842,6 +10893,7 @@ export class Engine implements HostEngine {
     // Its sizes always; its insets where it is placed by the box it is placed against, which a
     // fixed box is not: those are worked out against its page above.
     const sized = withOwnSizes(node, style);
+    capAtContent(sized, 'width', 'maxWidth');
     Object.assign(resolved, shareOfBlock(sized, against, by === against));
     for (const axis of ABSOLUTE_AXES) {
       const [room, size, width] = [against[axis.size]!, box[axis.size]!, against[2]!];

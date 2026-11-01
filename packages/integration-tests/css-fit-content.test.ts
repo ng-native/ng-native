@@ -122,7 +122,8 @@ describe('max-content', () => {
       const props = s.props();
       assert.equal(props['alignSelf'], 'flex-start', width);
       assert.equal('width' in props, false, width);
-      assert.equal('maxWidth' in props, false, width);
+      // Under a share, the smaller of the two: the share stays as the most it can be.
+      assert.equal(props['maxWidth'], width.includes('%') ? '100%' : undefined, width);
       assert.deepEqual(s.reports, [], width);
     }
   });
