@@ -584,6 +584,7 @@ import { View } from '../components/src/view.ts';
   template: \`
     <view nativeID="padded" [style.width]="' calc(3 * 4px)\\t'"></view>
     <view nativeID="nbsp" [style.width]="'calc(3 * 4px)\\u00a0'"></view>
+    <view nativeID="attribute" [attr.style]="'width: calc(3 * 4px)\\u00a0'"></view>
   \`,
 })
 export class CalcPadded {}
@@ -593,6 +594,7 @@ export class CalcPadded {}
     assert.equal(styleOf(fabric, 'padded', ['width'])['width'], 12);
     // A no-break space is no CSS whitespace: the value is no calc() at all.
     assert.equal(styleOf(fabric, 'nbsp', ['width'])['width'], 'calc(3 * 4px)\u00a0');
+    assert.equal(styleOf(fabric, 'attribute', ['width'])['width'], 'calc(3 * 4px)\u00a0');
   });
 
   it('is a length from a binding, and follows it', async () => {

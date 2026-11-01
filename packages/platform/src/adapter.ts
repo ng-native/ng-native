@@ -240,10 +240,7 @@ function parseStyleAttribute(css: string): Record<string, unknown> {
     const name = declaration.slice(0, at).trim();
     // `!important` comes off as Angular takes it off a bound value, which `setStyle` reads alike.
     // ponytail: neither is ranked above a rule's own `!important`, as a browser ranks it.
-    const value = declaration
-      .slice(at + 1)
-      .replace(IMPORTANT, '')
-      .trim();
+    const value = cssTrim(declaration.slice(at + 1).replace(IMPORTANT, ''));
     // A custom property keeps its name, which is case-sensitive, and its text for the engine.
     // Any other is left as written, for `setStyle` to read as it reads a bound one.
     if (name) out[name.startsWith('--') ? name : styleKey(name)] = value;
