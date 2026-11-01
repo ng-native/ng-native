@@ -66,6 +66,41 @@ export class RefusedInput {
   }
 }
 
+/** A field that takes what is typed and moves the caret, with no text in the command. */
+@Component({
+  selector: 'x-caret-input',
+  imports: [TextInput],
+  template: '<text-input nativeID="field" [value]="text()" (changeText)="accept($event)" />',
+})
+export class CaretInput {
+  readonly text = signal('');
+  readonly control = viewChild.required(TextInput);
+
+  protected accept(text: string): void {
+    this.text.set(text);
+    this.control().setSelection(0);
+  }
+}
+
+/** Typing in the first field rewrites the second, which has its own text. */
+@Component({
+  selector: 'x-mirrored-inputs',
+  imports: [TextInput],
+  template: `
+    <text-input nativeID="field" [value]="text()" (changeText)="accept($event)" />
+    <text-input nativeID="mirror" [value]="mirror()" (changeText)="mirror.set($event)" />
+  `,
+})
+export class MirroredInputs {
+  readonly text = signal('');
+  readonly mirror = signal('');
+
+  protected accept(text: string): void {
+    this.text.set(text);
+    this.mirror.set(`mirror of ${text}`);
+  }
+}
+
 @Component({
   selector: 'x-shouting-input',
   imports: [TextInput],

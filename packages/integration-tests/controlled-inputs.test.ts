@@ -250,6 +250,33 @@ describe('a controlled text input', () => {
     assert.equal(instance.control().value(), 'free');
   });
 
+  it('keeps the typed text when the app only moves the caret, through userEvent', async () => {
+    const { fabric, instance } = await boot<{ text(): string }>('CaretInput');
+
+    await userEvent.type(screen.getByTestId('field'), 'ab');
+
+    assert.ok(
+      fabric.commands.some(({ args }) => args[1] === null),
+      'control: a command with no text',
+    );
+    assert.equal(instance.text(), 'ab');
+  });
+
+  it('keeps the typed text when the app rewrites another field, through userEvent', async () => {
+    const { fabric, instance } = await boot<{ text(): string }>('MirroredInputs');
+    // The field only sends commands once it has reported text of its own.
+    fireEvent.changeText(screen.getByTestId('mirror'), 'own');
+    await settle();
+
+    await userEvent.type(screen.getByTestId('field'), 'ab');
+
+    assert.ok(
+      fabric.commands.some(({ args }) => args[1] === 'mirror of a'),
+      'control: a command to the other field',
+    );
+    assert.equal(instance.text(), 'ab');
+  });
+
   /*
    * iOS takes the `text` prop when the count beside it is the one it holds, and then replaces its
    * text unless the two compare equal, attributes and all. From iOS 26 an empty field's first typed
