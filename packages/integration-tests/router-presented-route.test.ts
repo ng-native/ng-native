@@ -114,6 +114,37 @@ describe('the copies of presented pages, in the order the router matches them', 
   });
 });
 
+describe('the copy of a presented page, while it is being made', () => {
+  const copiesIn = (router: Router) => router.config.filter((route) => route.outlet === PRESENTED);
+
+  it('is added once when the same page is presented twice at once', async () => {
+    const router = routerWith(tabs());
+    await Promise.all([
+      presentedCommands(router, '/invoices/7'),
+      presentedCommands(router, '/invoices/7'),
+    ]);
+    assert.equal(copiesIn(router).length, 1);
+  });
+
+  it('comes from the routes the router has, whenever they are reset', async () => {
+    // Past every await a call goes through, so one reset lands between each two of them.
+    for (let ticks = 0; ticks < 40; ticks++) {
+      const router = routerWith(tabs());
+      const resetRoutes = tabs();
+      const presenting = presentedCommands(router, '/invoices/7');
+      for (let tick = 0; tick < ticks; tick++) await Promise.resolve();
+      router.config = resetRoutes;
+      await presenting;
+      for (const copy of copiesIn(router)) {
+        assert.equal(router.config, resetRoutes, `reset after ${ticks} ticks`);
+        assert.ok(router.config.includes(copy));
+        const provided = copy.children![0]!.providers;
+        assert.equal(provided, resetRoutes[0]!.children![1]!.providers, `after ${ticks} ticks`);
+      }
+    }
+  });
+});
+
 describe('the route a presented page gets at the root', () => {
   it('is the page under its whole path, inside a copy of each route above it', async () => {
     const router = routerWith(tabs());

@@ -219,6 +219,9 @@ export async function presentedCommands(router: Router, path: string): Promise<u
   // Routes reset while lazy children loaded: the copy is made from the routes the router has.
   if (router.config !== config) return presentedCommands(router, path);
   if (!chain || chain === STOP) return null;
+  const order = await orderIn(config, chain);
+  if (router.config !== config) return presentedCommands(router, path);
+  // Nothing awaited from here, so a call for the same page cannot add its copy a second time.
   const copy = presentedCopy(chain);
   const copied = router.config.some(
     (route) => route.outlet === PRESENTED && route.path === copy.path,
@@ -227,7 +230,6 @@ export async function presentedCommands(router: Router, path: string): Promise<u
     // The router matches the copies in their order, so they keep the one their routes have in the
     // tab, not the one their pages were presented in: `library/:id` presented before `library/new`
     // would take `/library/new` too.
-    const order = await orderIn(config, chain);
     precedence.set(copy, order);
     const after = router.config.findIndex((route) => {
       const other = precedence.get(route);
