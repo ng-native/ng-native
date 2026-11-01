@@ -446,6 +446,25 @@ describe('keyboard-avoiding-view under a navigation bar', () => {
     app.applicationRef.destroy();
   });
 
+  it('shrinks from the height it had before padding when it changes from padding to height', async () => {
+    // A view sized by its content grows by its padding. Without a `screenY`, the keyboard's height
+    // is the overlap, so the padded height would read as one to shrink from.
+    const { fabric, app, avoider, emit } = await open('padding', { y: 116, height: 300 });
+    emit({ height: 200 });
+    await settle();
+    assert.equal(avoider().props['paddingBottom'], 200, 'control: it pads by the keyboard');
+
+    fabric.frames.set('avoider', { x: 0, y: 116, width: 402, height: 500 });
+    fabric.emit(avoider(), 'topLayout', { layout: { x: 0, y: 0, width: 402, height: 500 } });
+    await settle();
+    app.componentRef.setInput('behavior', 'height');
+    await settle();
+
+    assert.equal(avoider().props['height'], 300 - 200);
+
+    app.applicationRef.destroy();
+  });
+
   it('never pads a view by more than its own height', async () => {
     // A short view low on the screen: the keyboard covers all of it and then some.
     const { app, avoider, emit } = await open('padding', { y: 780, height: 94 });
