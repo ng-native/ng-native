@@ -174,9 +174,12 @@ export class KeyboardAvoidingView extends ViewBase {
   protected onLayout(event: NativeSyntheticEvent<{ layout?: Rect }>): void {
     const layout = event.nativeEvent?.layout;
     if (!layout) return;
+    // Only a layout of the view as it is unshrunk counts as the natural height. The keyboard can be
+    // up at the first one already: the view has not shrunk then, as it had no frame to shrink.
+    const adjusted = this.avoidance();
+    const shrunk = adjusted !== undefined && 'height' in adjusted;
     this.frame.set({ ...layout, y: this.windowTop(layout.y) });
-    // Only a layout that the keyboard did not cause counts as the natural height.
-    if (this.overlap() === 0) this.initialHeight = layout.height;
+    if (!shrunk) this.initialHeight = layout.height;
   }
 
   /**
