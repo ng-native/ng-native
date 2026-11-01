@@ -54,7 +54,8 @@ Then:
 
 ## 3. The gates
 
-All of these, on the current head, checked again immediately before merging:
+All of these, on the current head, checked again immediately before merging. A `gh` call that fails
+or is rate limited proves nothing: stop and ask again, and do not merge on it.
 
 - `review-change` has run on this pull request, and on the changed lines of any fix pushed since,
   with nothing it introduced left at medium or above.
