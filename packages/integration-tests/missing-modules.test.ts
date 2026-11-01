@@ -511,6 +511,21 @@ describe('loadFonts without expo-font', () => {
     assert.ok(!evaluated.includes('expo-font'), `expo-font was evaluated: ${evaluated.join(', ')}`);
   });
 
+  it('resolves a sheet with no face without reaching for expo-font', async () => {
+    const evaluated: string[] = [];
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      evaluated.push(id);
+      throw new Error(`unexpected require of ${id}`);
+    };
+    try {
+      await loadFonts({ fonts: [] }, {});
+    } finally {
+      delete host['require'];
+    }
+    assert.deepEqual(evaluated, []);
+  });
+
   it('loads through expo-font on the web, which registers its module only once evaluated', async () => {
     const loaded: unknown[] = [];
     const host = globalThis as Record<string, unknown>;

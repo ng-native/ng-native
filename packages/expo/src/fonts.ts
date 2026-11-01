@@ -127,6 +127,7 @@ export class FontRegistry {
    * immediately, so calling it unconditionally at bootstrap costs nothing.
    */
   async loadSheet(...sheets: readonly (SheetWithFonts | null | undefined)[]): Promise<void> {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) warnIfASheetIsNull(sheets);
     const faces = sheets.flatMap((sheet) => [...(sheet?.fonts ?? [])]);
     if (!faces.length) return;
     await this.load(registrationsFor(faces));
@@ -169,9 +170,9 @@ export type Fonts = FontRegistry;
 export async function loadFonts(
   ...sheets: readonly (SheetWithFonts | null | undefined)[]
 ): Promise<void> {
-  if (typeof __DEV__ !== 'undefined' && __DEV__) warnIfASheetIsNull(sheets);
-  if (!sheets.some((sheet) => sheet?.fonts?.length)) return;
-  await new FontRegistry(expoFonts()).loadSheet(...sheets);
+  // Sheets with no face never reach for `expo-font`, so a missing one does not reject them.
+  const declaresFaces = sheets.some((sheet) => sheet?.fonts?.length);
+  await new FontRegistry(declaresFaces ? expoFonts() : null).loadSheet(...sheets);
 }
 
 declare const __DEV__: boolean | undefined;
@@ -187,7 +188,7 @@ function warnIfASheetIsNull(sheets: readonly (SheetWithFonts | null | undefined)
   if (warnedSheetNull || !sheets.includes(null)) return;
   warnedSheetNull = true;
   console.warn(
-    '[angular-native] loadFonts() was given a null sheet, so no @font-face from it is loaded. ' +
+    '[angular-native] a null sheet was given to loadFonts() or loadSheet(), so no @font-face from it is loaded. ' +
       'A null there is what styleSheetOf() returns for a class with no compiled sheet.',
   );
 }

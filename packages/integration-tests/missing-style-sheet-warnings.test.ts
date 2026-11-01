@@ -266,6 +266,6 @@ describe('loadFonts() given a null sheet', () => {
       await loadFonts(null);
     });
     assert.equal(said.length, 1, said.join('\n'));
-    assert.match(said[0]!, /loadFonts\(\) was given a null sheet/);
+    assert.match(said[0]!, /a null sheet was given to loadFonts\(\) or loadSheet\(\)/);
   });
 });
