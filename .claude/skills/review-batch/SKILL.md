@@ -20,7 +20,13 @@ short. Leave out drafts and any pull request whose base is not main, which bots 
 merges, and say so in the report.
 Work through in this order: anything already green and small first, then by number, and a pull
 request that will conflict with another after the one it conflicts with. Check that no Release run
-is in progress before each merge (`gh run list --workflow=release --limit 1 --json status`).
+is queued or running before each merge:
+
+```sh
+gh run list --workflow=release --limit 20 --json status --jq '[.[]|select(.status!="completed")]|length'
+```
+
+A dry run and a real release run in separate concurrency groups, so the newest run alone can miss one.
 
 ## 2. For each pull request
 
@@ -57,11 +63,11 @@ All of these, on the current head, checked again immediately before merging:
 - A bot has reviewed this head: the `CodeRabbit` check is not pending, and a bot's review has
   `commit.oid` equal to the head (`gh pr view <n> --json reviews,headRefOid`). `reviewDecision` alone
   does not show this, because an approval of an older commit stays after a push.
-- No unresolved review threads:
+- No unresolved review threads. This prints the id of each one, and nothing when there are none:
 
   ```sh
-  gh api graphql -F n=<n> -f query='query($n:Int!){repository(owner:"ng-native",name:"ng-native"){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}' \
-    --jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved|not)]|length'
+  gh api graphql --paginate -F n=<n> -f query='query($n:Int!,$endCursor:String){repository(owner:"ng-native",name:"ng-native"){pullRequest(number:$n){reviewThreads(first:100,after:$endCursor){nodes{id isResolved} pageInfo{hasNextPage endCursor}}}}}' \
+    --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved|not)|.id'
   ```
 
 - `mergeable` is `MERGEABLE`. It reads `UNKNOWN` for a short while after another merge: wait and ask
@@ -77,10 +83,10 @@ main has moved; rebase only on a conflict.
 
 ## 4. Pushing to a contributor's branch
 
-Check `maintainerCanModify` first. If it is false, leave the findings as a comment and move on.
+If `maintainerCanModify` is false in the first command below, leave the findings as a comment and move on.
 
 ```sh
-gh pr view <n> --json headRepositoryOwner,headRepository,headRefName
+gh pr view <n> --json maintainerCanModify,headRepositoryOwner,headRepository,headRefName
 git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
   push https://github.com/<owner>/<repository>.git HEAD:<head ref>
 ```
