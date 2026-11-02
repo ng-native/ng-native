@@ -141,6 +141,28 @@ describe('native header bar menus and spacers', () => {
       assert.deepEqual(instance.chosen, ['name']);
     });
 
+    // Native keeps the id of each action it drew, so a tap can arrive after the menu changed.
+    it('takes a tap left over from an action the menu no longer has for no choice', async () => {
+      const { left, menuOf, choose, instance, pass } = await boot();
+      const menu = menuOf(left()![0]);
+      const gone = menu.items[1]!['menuId'];
+      const stays = menu.items[2]!.items[1]!.items[0]!['menuId'];
+      instance.menu.set({
+        items: [
+          {
+            type: 'submenu',
+            title: 'More',
+            items: [{ type: 'action', id: 'deeper', title: 'Deeper' }],
+          },
+        ],
+      });
+      await pass();
+      await choose(gone);
+      assert.deepEqual(instance.chosen, []);
+      await choose(stays);
+      assert.deepEqual(instance.chosen, ['deeper']);
+    });
+
     it('is a plain button again once the menu goes, and a tap left over is no choice', async () => {
       const { left, menuOf, choose, config, instance, pass } = await boot();
       const id = menuOf(left()![0]).items[0]!['menuId'];
@@ -148,7 +170,15 @@ describe('native header bar menus and spacers', () => {
       await pass();
       assert.equal('menu' in left()![0]!, false);
       assert.equal(typeof left()![0]!['buttonId'], 'string');
-      await choose(id);
+      const error = console.error;
+      const logged: unknown[] = [];
+      console.error = (...args: unknown[]) => void logged.push(args);
+      try {
+        await choose(id);
+      } finally {
+        console.error = error;
+      }
+      assert.deepEqual(logged, []);
       assert.deepEqual(instance.chosen, []);
       await fireEvent(config(), 'pressHeaderBarButtonItem', {
         buttonId: left()![0]!['buttonId'],

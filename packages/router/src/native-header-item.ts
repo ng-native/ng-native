@@ -237,8 +237,10 @@ export class NativeHeaderItem implements AfterContentInit {
   });
 
   private chooseFrom(menuId: string): void {
-    if (this.menu() && menuId.startsWith(this.menuIdPrefix)) {
-      this.menuSelect.emit(menuId.slice(this.menuIdPrefix.length));
+    const menu = this.menu();
+    const id = menuId.slice(this.menuIdPrefix.length);
+    if (menu && menuId.startsWith(this.menuIdPrefix) && hasAction(menu, id)) {
+      this.menuSelect.emit(id);
     }
   }
 
@@ -266,6 +268,11 @@ function nativeMenu(menu: HeaderMenu, prefix: string): BarButtonConfig {
       return { ...action, ...symbol, menuId: `${prefix}${id}` };
     }),
   };
+}
+
+/** Whether a menu still has an action. Native can report one it drew before the menu changed. */
+function hasAction(menu: HeaderMenu, id: string): boolean {
+  return menu.items.some((item) => (item.type === 'action' ? item.id === id : hasAction(item, id)));
 }
 
 /** Says once, in development, that Android's header has no bar buttons to draw. */
