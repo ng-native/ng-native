@@ -6532,12 +6532,20 @@ export function faded(value: unknown, fraction: number): unknown {
 export const NATIVE_STYLES = 'ɵnativeStyles';
 
 export function styleSheetOf(type: unknown): StyleSheet | null {
-  if (typeof __DEV__ !== 'undefined' && __DEV__) warnIfSheetArrivesLater(type);
+  // A browser bundler defines no `__DEV__`, so `ngDevMode` stands in for it there, and
+  // Angular reads it as undefined for development. Metro inlines
+  // `__DEV__`, which folds the second operand away in a release build.
+  if (
+    (typeof __DEV__ !== 'undefined' && __DEV__) ||
+    (typeof __DEV__ === 'undefined' && (typeof ngDevMode === 'undefined' || ngDevMode))
+  )
+    warnIfSheetArrivesLater(type);
   const sheet = (type as Record<string, unknown> | null)?.[NATIVE_STYLES];
   return (sheet as StyleSheet | undefined) ?? null;
 }
 
 declare const __DEV__: boolean | undefined;
+declare const ngDevMode: unknown;
 
 const askedBeforeSheet = new WeakSet<object>();
 

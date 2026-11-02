@@ -8,18 +8,28 @@ import { describe, it } from 'node:test';
 import { FontRegistry } from '@ng-native/expo/fonts';
 
 /** Runs `body` with `__DEV__` as given and `console.warn` captured, restoring both. */
-async function warnings(dev: boolean, body: () => unknown): Promise<string[]> {
-  const global = globalThis as { __DEV__?: boolean };
+async function warnings(
+  dev: boolean | undefined,
+  body: () => unknown,
+  ngDev = true,
+): Promise<string[]> {
+  const global = globalThis as { __DEV__?: boolean; ngDevMode?: unknown };
+  const hadNgDev = 'ngDevMode' in global;
+  const previousNgDev = global.ngDevMode;
   const hadDev = '__DEV__' in global;
   const previousDev = global.__DEV__;
   const warn = console.warn;
   const said: string[] = [];
   console.warn = (...args: unknown[]) => void said.push(args.map(String).join(' '));
   try {
-    global.__DEV__ = dev;
+    if (dev === undefined) delete global.__DEV__;
+    else global.__DEV__ = dev;
+    global.ngDevMode = ngDev;
     await body();
   } finally {
     console.warn = warn;
+    if (hadNgDev) global.ngDevMode = previousNgDev;
+    else delete global.ngDevMode;
     if (hadDev) global.__DEV__ = previousDev;
     else delete global.__DEV__;
   }
@@ -30,6 +40,7 @@ describe('FontRegistry.loadSheet() given a null sheet', () => {
   it('says nothing in a release build, or for a sheet or undefined', async () => {
     const registry = new FontRegistry(null);
     assert.deepEqual(await warnings(false, () => registry.loadSheet(null)), []);
+    assert.deepEqual(await warnings(undefined, () => registry.loadSheet(null), false), []);
     assert.deepEqual(await warnings(true, () => registry.loadSheet({}, undefined)), []);
   });
 

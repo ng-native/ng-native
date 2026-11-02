@@ -18,21 +18,31 @@ import { compileSource } from './compile.ts';
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
 /** Runs `body` with `__DEV__` as given and `console.warn` captured, restoring both. */
-async function warnings(dev: boolean | undefined, body: () => unknown): Promise<string[]> {
-  const global = globalThis as { __DEV__?: boolean };
+async function warnings(
+  dev: boolean | undefined,
+  body: () => unknown,
+  ngDev?: boolean | null,
+): Promise<string[]> {
+  const global = globalThis as { __DEV__?: boolean; ngDevMode?: unknown };
   const hadDev = '__DEV__' in global;
   const previousDev = global.__DEV__;
+  const hadNgDev = 'ngDevMode' in global;
+  const previousNgDev = global.ngDevMode;
   const warn = console.warn;
   const said: string[] = [];
   console.warn = (...args: unknown[]) => void said.push(args.map(String).join(' '));
   try {
     if (dev === undefined) delete global.__DEV__;
     else global.__DEV__ = dev;
+    if (ngDev === null) delete global.ngDevMode;
+    else if (ngDev !== undefined) global.ngDevMode = ngDev;
     await body();
   } finally {
     console.warn = warn;
     if (hadDev) global.__DEV__ = previousDev;
     else delete global.__DEV__;
+    if (hadNgDev) global.ngDevMode = previousNgDev;
+    else delete global.ngDevMode;
   }
   return said.filter((message) => message.startsWith('[angular-native]'));
 }
@@ -110,12 +120,17 @@ let compiles = 0;
 /** A fresh module each time, so each run defines its classes anew, with the warnings it says. */
 async function compiled(
   dev: boolean | undefined,
+  ngDev?: boolean | null,
 ): Promise<{ said: string[]; mod: Record<string, unknown> }> {
   let mod: Record<string, unknown> = {};
   const name = `missing-style-sheet-${compiles++}`;
-  const said = await warnings(dev, async () => {
-    mod = await compileSource(COMPONENTS, fixture(`${name}.ts`), fixture(`${name}.generated.ts`));
-  });
+  const said = await warnings(
+    dev,
+    async () => {
+      mod = await compileSource(COMPONENTS, fixture(`${name}.ts`), fixture(`${name}.generated.ts`));
+    },
+    ngDev,
+  );
   return { said, mod };
 }
 
@@ -192,7 +207,23 @@ describe('styleSheetOf() in a static field of its own class', () => {
 
   it('says nothing in a release build', async () => {
     assert.deepEqual((await compiled(false)).said, []);
-    assert.deepEqual((await compiled(undefined)).said, []);
+    assert.deepEqual((await compiled(undefined, false)).said, []);
+  });
+
+  it('warns in a browser build, which defines no __DEV__, when ngDevMode is on', async () => {
+    const { said } = await compiled(undefined, true);
+    const about = said.filter((message) => message.includes('styleSheetOf(A)'));
+    assert.equal(about.length, 1, said.join('\n'));
+  });
+
+  it('warns when neither __DEV__ nor ngDevMode is defined, as Angular reads that as development', async () => {
+    const { said } = await compiled(undefined, null);
+    const about = said.filter((message) => message.includes('styleSheetOf(A)'));
+    assert.equal(about.length, 1, said.join('\n'));
+  });
+
+  it('leaves __DEV__ in charge where it is defined, whatever ngDevMode says', async () => {
+    assert.deepEqual((await compiled(false, true)).said, []);
   });
 });
 
@@ -239,7 +270,10 @@ describe('mount() given globalStyles: null', () => {
   it('says nothing in a release build', async () => {
     const Root = await root();
     assert.deepEqual(await warnings(false, () => mounted(Root, { globalStyles: null })), []);
-    assert.deepEqual(await warnings(undefined, () => mounted(Root, { globalStyles: null })), []);
+    assert.deepEqual(
+      await warnings(undefined, () => mounted(Root, { globalStyles: null }), false),
+      [],
+    );
   });
 
   it('warns once in development', async () => {
@@ -256,7 +290,8 @@ describe('mount() given globalStyles: null', () => {
 describe('loadFonts() given a null sheet', () => {
   it('says nothing in a release build, or for a sheet or undefined', async () => {
     assert.deepEqual(await warnings(false, () => loadFonts(null)), []);
-    assert.deepEqual(await warnings(undefined, () => loadFonts(null)), []);
+    assert.deepEqual(await warnings(undefined, () => loadFonts(null), false), []);
+    assert.deepEqual(await warnings(false, () => loadFonts(null), true), []);
     assert.deepEqual(await warnings(true, () => loadFonts({}, undefined)), []);
   });
 

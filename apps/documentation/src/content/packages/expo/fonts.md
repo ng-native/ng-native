@@ -56,7 +56,8 @@ nothing at all when none of them declare a face, so bootstrap can call it uncond
 component's own class (`static sheet = styleSheetOf(GlobalStyles)`), because that runs before the
 build attaches the sheet. Read it after the class instead, in a module-scope `const` or a static
 getter. A development build warns about that call, and about a `null` sheet given to `loadFonts()`
-or as `globalStyles` to `mount()`.
+or `loadSheet()`, in a browser build as well as on a device. A `null` given as `globalStyles` to
+`mount()` from `@ng-native/platform` warns on a device only.
 
 A face that names several files, as an icon font's own stylesheet does for browsers of different
 ages, is registered from its TrueType or OpenType file: the one with `format('truetype')` or

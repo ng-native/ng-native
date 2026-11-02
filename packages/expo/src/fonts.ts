@@ -127,7 +127,7 @@ export class FontRegistry {
    * immediately, so calling it unconditionally at bootstrap costs nothing.
    */
   async loadSheet(...sheets: readonly (SheetWithFonts | null | undefined)[]): Promise<void> {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) warnIfASheetIsNull(sheets);
+    if (isDevelopmentBuild()) warnIfASheetIsNull(sheets);
     const faces = sheets.flatMap((sheet) => [...(sheet?.fonts ?? [])]);
     if (!faces.length) return;
     await this.load(registrationsFor(faces));
@@ -176,6 +176,13 @@ export async function loadFonts(
 }
 
 declare const __DEV__: boolean | undefined;
+declare const ngDevMode: unknown;
+
+/** `__DEV__` where Metro defines it, and `ngDevMode` in a browser bundle, which defines none. */
+function isDevelopmentBuild(): boolean {
+  if (typeof __DEV__ !== 'undefined') return __DEV__;
+  return typeof ngDevMode === 'undefined' || !!ngDevMode;
+}
 
 let warnedSheetNull = false;
 
