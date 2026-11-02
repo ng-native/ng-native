@@ -15,6 +15,7 @@
       "dev.ngnative.expo.OngoingNotificationModule",
       "dev.ngnative.expo.SearchFieldModule",
       "dev.ngnative.expo.KeyboardModule",
+      "dev.ngnative.expo.TabBarModule",
       "dev.ngnative.expo.AddressSearchModule"
     ]
   }

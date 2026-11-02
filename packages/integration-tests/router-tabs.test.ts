@@ -317,6 +317,31 @@ describe('native tabs outlet', () => {
     assert.equal(outlet.selectedKey, 'search');
   });
 
+  it('keeps one bar probe after the page on iOS, through a new page and a moved one', async () => {
+    const isProbe = (node: FakeFabricNode) => node.children[0]?.viewName === 'RNSSafeAreaView';
+    const assertProbeLast = () => {
+      for (const screen of tabScreens(fabric).filter((each) => each.children.length > 0)) {
+        assert.equal(screen.children.filter(isProbe).length, 1);
+        assert.ok(isProbe(screen.children.at(-1)!));
+      }
+    };
+    outlet.activateWith(routeFor(library), env);
+    await settle();
+    assertProbeLast();
+
+    outlet.deactivate();
+    outlet.activateWith(routeFor(library), env);
+    await settle();
+    assertProbeLast();
+
+    // A page of an earlier outlet, attached to a tab this one has not opened.
+    const ref = outlet.detach();
+    outlet.attach(ref, routeFor(search));
+    await settle();
+    assert.equal(tabScreens(fabric).filter((each) => each.children.length > 0).length, 2);
+    assertProbeLast();
+  });
+
   it('keeps every bar item while route components are deactivated and replaced', async () => {
     outlet.activateWith(routeFor(library), env);
     await settle();

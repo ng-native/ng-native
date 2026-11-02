@@ -25,6 +25,11 @@ export interface InTab {
    * Answers the withdrawal.
    */
   hideBar(hidden: Signal<boolean>): () => void;
+  /**
+   * Counts the bar as covered while `covering` reads true, for what `TabBarInsets` answers: on iOS
+   * a page presented in the tab's stack is over the whole window. Answers the withdrawal.
+   */
+  coverBar(covering: Signal<boolean>): () => void;
 }
 
 export const IN_TAB = new InjectionToken<InTab>('ng-native.router.in-tab');

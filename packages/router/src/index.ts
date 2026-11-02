@@ -57,6 +57,7 @@ export {
 } from './native-tab.ts';
 export { NativeTabsOutlet } from './native-tabs-outlet.ts';
 export { ScreenSafeAreaView, type ScreenSafeAreaEdge } from './screen-safe-area-view.ts';
+export { TabBarInsets } from './tab-bar-insets.ts';
 export { TabSafeAreaView, type TabSafeAreaEdge } from './tab-safe-area-view.ts';
 export { NativeStackReuseStrategy, reuseScreen } from './native-stack-reuse-strategy.ts';
 export {

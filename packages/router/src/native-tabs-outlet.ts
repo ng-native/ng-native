@@ -50,7 +50,14 @@ import {
   type Signal,
   type WritableSignal,
 } from '@angular/core';
-import { SCREEN_IN_FRONT, SCREEN_SHOWN } from '@ng-native/device';
+import { SCREEN_IN_FRONT, SCREEN_SHOWN, SafeArea } from '@ng-native/device';
+import {
+  HostEngine,
+  nativePlatform,
+  type Engine,
+  type EngineNode,
+  type NativeSyntheticEvent,
+} from '@ng-native/fabric';
 import {
   ActivatedRoute,
   ChildrenOutletContexts,
@@ -67,6 +74,7 @@ import { NativeBack, isShowing } from './native-back.ts';
 import { optionalBoolean } from './transforms.ts';
 import { NativeTab, screenKeyOf } from './native-tab.ts';
 import { ownHost } from './own-host.ts';
+import { TabBarInsets, nativeTabBar, withdrawable } from './tab-bar-insets.ts';
 import { markTabRoute } from './tab-routes.ts';
 import { IN_TAB, type InTab } from './in-tab.ts';
 import { PRESENTED, taken, withoutPresented } from './presented-route.ts';
@@ -92,6 +100,8 @@ function reaches(routes: readonly Route[], segments: readonly string[]): boolean
   });
 }
 
+const BOTTOM_EDGE = { top: false, right: false, bottom: true, left: false };
+
 interface TabEntry {
   /** The element in the bar now: an `@if` can take it away and bring another back. */
   tab: NativeTab;
@@ -108,8 +118,16 @@ interface TabEntry {
   readonly inFront: WritableSignal<boolean>;
   /** Whether this tab's screen has appeared: see `SCREEN_SHOWN`. */
   readonly shown: WritableSignal<boolean>;
+  /** iOS: what the tab's probe measures, in points. See `probeBar`. */
+  readonly barInset: WritableSignal<number>;
+  probe: EngineNode | null;
   /** What the tab's stacks dismiss when another tab comes in front: see `IN_TAB`. */
   readonly leaving: Set<() => string | null>;
+}
+
+/** What a `layout` event carries. */
+interface LayoutEvent {
+  readonly layout?: { readonly height: number };
 }
 
 /** What `tabSelectionPrevented` carries: the tab tapped, which native left unselected. */
@@ -180,6 +198,8 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private readonly declared = contentChildren(NativeTab);
   private readonly entries: TabEntry[] = [];
   private selected: TabEntry | null = null;
+  /** `selected`, for what follows it. */
+  private readonly front = signal<TabEntry | null>(null);
   /** The provenance of the last state native told us about. Starts before native's first. */
   private provenance = 0;
 
@@ -197,6 +217,10 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   protected readonly hidesBar = computed(
     () => this.barHidden() ?? [...this.barRequests()].some((hidden) => hidden()),
   );
+  /** What pages have put over the bar: see `InTab.coverBar`. */
+  private readonly barCovers = signal<ReadonlySet<Signal<boolean>>>(new Set());
+  /** Android: how tall the bar is, in points. See `TabBarModule` in `@ng-native/expo`. */
+  private readonly barHeight = signal(0);
   /** The colour of the selected item. iOS. */
   readonly tintColor = input<string | number>();
   /** Behind the tabs, where a screen does not paint. */
@@ -263,9 +287,14 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
       coveredAt: (url) => this.coveredAt(url),
     });
 
+    const unwatchBar = this.watchBar();
+    const withdrawBar = inject(TabBarInsets).add(this.visibleBar());
+
     inject(DestroyRef).onDestroy(() => {
       unsubscribeBack();
       unsubscribeBar();
+      unwatchBar();
+      withdrawBar();
       following?.unsubscribe();
       for (const entry of this.entries) {
         entry.unbind();
@@ -363,6 +392,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
       // content wrapper that arrives without its `collapsable: false` is flattened for good and
       // its children end up parented to a scroll view that allows exactly one.
       ref.changeDetectorRef.detectChanges();
+      this.probeBar(entry);
     } catch (error) {
       this.abandon(entry, ref, content);
       this.errors.handleError(error);
@@ -416,6 +446,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
       this.renderer.appendChild(entry.tab.screen, ref.location.nativeElement);
       this.applicationRef.attachView(ref.hostView);
       entry.ref = ref;
+      this.probeBar(entry);
     }
 
     entry.route = route;
@@ -479,6 +510,8 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
         unbind: () => {},
         inFront: signal(false),
         shown: signal(false),
+        barInset: signal(0),
+        probe: null,
         leaving: new Set(),
       };
       this.entries.push(entry);
@@ -516,6 +549,79 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     this.hearShown(entry);
     this.guardSelection(entry, entry.detached && guardedAt(entry.route));
     if (entry.ref) this.renderer.appendChild(tab.screen, entry.ref.location.nativeElement);
+    this.probeBar(entry);
+  }
+
+  /**
+   * What the bar covers of the bottom of the window now: nothing while it is hidden, or while a
+   * screen outside the tabs is in front of them.
+   *
+   * On iOS a screen's bottom inset stays at the window's own with no bar along that edge: a bar
+   * hidden, or an iPad's at the top. Only the tab in front reads the bar at all.
+   */
+  private visibleBar(): Signal<number> {
+    const inFront = this.injector.get(SCREEN_IN_FRONT);
+    const safeArea = inject(SafeArea);
+    const ios = nativePlatform() === 'ios';
+    return computed(() => {
+      if (!inFront() || this.hidesBar()) return 0;
+      if (!ios) return this.barHeight();
+      if ([...this.barCovers()].some((covering) => covering())) return 0;
+      const inset = this.front()?.barInset() ?? 0;
+      return inset > safeArea.insets().bottom ? inset : 0;
+    });
+  }
+
+  /**
+   * Android: follow the bar's height through this package's native half, where a build has it.
+   * The host's first layout is the sign that the view is there to ask about. Answers the stop.
+   */
+  private watchBar(): () => void {
+    const native = nativePlatform() === 'android' ? nativeTabBar() : undefined;
+    if (!native) return () => {};
+    const host = this.host.nativeElement as EngineNode;
+    const engine = (host.engine ?? inject(HostEngine)) as Partial<Engine>;
+    let watching: number | null = null;
+    const heard = native.addListener?.('onTabBarHeight', (change) => {
+      if (change.host === watching) this.barHeight.set(change.height);
+    });
+    this.renderer.listen(host, 'layout', () => {
+      watching = engine.tagOf?.(host) ?? null;
+      if (watching !== null) void native.watch?.(watching)?.catch(() => {});
+    });
+    return () => {
+      heard?.remove();
+      if (watching !== null) void native.unwatch?.(watching)?.catch(() => {});
+    };
+  }
+
+  /**
+   * iOS: `SafeAreaView` is the only thing that reads the inset UIKit gives a screen for the bar, so
+   * a tab holds one of no size, which its wrapper's layout reports, bottom edge only. It has to
+   * follow the page: native searches a screen's first child for the scroll view a repeated tap
+   * scrolls to the top, and for the stack it pops to the root.
+   */
+  private probeBar(entry: TabEntry): void {
+    if (nativePlatform() !== 'ios') return;
+    entry.probe ??= this.createProbe(entry);
+    this.renderer.appendChild(entry.tab.screen, entry.probe);
+  }
+
+  private createProbe(entry: TabEntry): EngineNode {
+    const probe = ownHost(this.renderer.createElement('view')) as EngineNode;
+    this.renderer.setStyle(probe, 'position', 'absolute');
+    this.renderer.setStyle(probe, 'left', 0);
+    this.renderer.setStyle(probe, 'bottom', 0);
+    this.renderer.setStyle(probe, 'width', 0);
+    const inset = ownHost(this.renderer.createElement('tab-safe-area-view'));
+    this.renderer.setProperty(inset, 'edges', BOTTOM_EDGE);
+    this.renderer.setStyle(inset, 'height', 0);
+    this.renderer.appendChild(probe, inset);
+    this.renderer.listen(probe, 'layout', (event: NativeSyntheticEvent<LayoutEvent>) => {
+      const height = event?.nativeEvent?.layout?.height;
+      if (height !== undefined) entry.barInset.set(height);
+    });
+    return probe;
   }
 
   /** Before the screen is committed, so its first `willAppear` is heard. */
@@ -563,6 +669,9 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     const left = this.selected;
     if (left && left !== entry) this.leave(left);
     this.selected = entry;
+    // A tab just opened has yet to read the bar it comes in front under, which is the same bar.
+    if (left && entry.barInset() === 0) entry.barInset.set(left.barInset());
+    this.front.set(entry);
     this.guardSelection(entry, false);
     for (const other of this.entries) other.inFront.set(other === entry);
     entry.url = this.router?.url ?? entry.url;
@@ -778,15 +887,8 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     const outerShown = this.injector.get(SCREEN_SHOWN);
     const tab: InTab = {
       onLeave: (leave) => (entry.leaving.add(leave), () => entry.leaving.delete(leave)),
-      hideBar: (hidden) => {
-        this.barRequests.update((requests) => new Set(requests).add(hidden));
-        return () =>
-          this.barRequests.update((requests) => {
-            const rest = new Set(requests);
-            rest.delete(hidden);
-            return rest;
-          });
-      },
+      hideBar: (hidden) => withdrawable(this.barRequests, hidden),
+      coverBar: (covering) => withdrawable(this.barCovers, covering),
     };
     return Injector.create({
       parent: this.injector,

@@ -218,6 +218,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
 
   private readonly errors = inject(ErrorHandler);
   private readonly back = inject(NativeBack);
+  private readonly tab = inject(IN_TAB, { optional: true });
   /** The screen this stack sits in, when it is a stack inside a page of another. */
   private readonly holder = inject(HOLDING_SCREEN, { optional: true });
   /** What the holder's own `preventNativeDismiss` was, while this stack's top screen refuses. */
@@ -305,7 +306,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
 
     const unhold = this.holder ? this.holdRefusals(this.holder) : undefined;
     const unpresent = this.takePresentedPages(back);
-    const unleave = inject(IN_TAB, { optional: true })?.onLeave(() => this.dismissPresented());
+    const unleave = this.tab?.onLeave(() => this.dismissPresented());
 
     inject(DestroyRef).onDestroy(() => {
       unleave?.();
@@ -550,6 +551,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     const inFront = signal(true);
     const { ref, unbind } = this.createPage(component, route, environmentInjector, screen, inFront);
     this.carrySystemBars(screen, untracked(this.systemBars));
+    this.coverBar(ref, inFront, presentation);
     // The page's own host style, including any `position` or inset it declared, has now landed
     // on the screen: put the stack's fill back over it. Per-key, through `setStyle`, so whatever
     // else the page's style set - a background colour, say - still merges and stays.
@@ -572,6 +574,16 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     };
     this.entries.push(entry);
     this.askGuardsOfPresented(entry);
+  }
+
+  /** A page presented in a tab's stack covers the tab's bar for as long as it is in front. */
+  private coverBar(
+    ref: ComponentRef<unknown>,
+    inFront: Signal<boolean>,
+    presentation: ScreenPresentation | undefined,
+  ): void {
+    if (!this.tab || (presentation?.stackPresentation ?? 'push') === 'push') return;
+    ref.onDestroy(this.tab.coverBar(inFront));
   }
 
   /** `askGuardsFirst` for a screen presented on this stack. A pushed screen is left to native. */

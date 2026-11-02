@@ -233,6 +233,59 @@ A scroll view that fills the tab can usually do without: on iOS, with
 included. Android has no equivalent, so there the last rows scroll under the bar unless the
 content is padded.
 
+## An overlay above the tab bar
+
+`<tab-safe-area-view>` works inside a tab. An overlay at the root of the app, beside the root
+`<native-stack-outlet>` so that it stays up through navigation, is in no tab: a toast host, a
+snackbar, a floating button. `TabBarInsets.bottom` tells it how much of the bottom of the window
+the bar covers now, in points. It reads from anywhere, and it is a signal, so the overlay moves as
+the bar does:
+
+```ts
+import { Component, computed, inject } from '@angular/core';
+import { View } from '@ng-native/components';
+import { SafeArea } from '@ng-native/device';
+import { TabBarInsets } from '@ng-native/router';
+
+@Component({
+  selector: 'x-toast-host',
+  imports: [View],
+  template: `<view class="absolute left-4 right-4" [style.bottom]="lift()"><ng-content /></view>`,
+})
+export class ToastHost {
+  private readonly safeArea = inject(SafeArea);
+  private readonly bar = inject(TabBarInsets);
+
+  protected readonly lift = computed(() =>
+    Math.max(this.safeArea.insets().bottom, this.bar.bottom()),
+  );
+}
+```
+
+Take the larger of the two rather than their sum: the value already includes the home indicator or
+the system navigation bar the tab bar reaches over.
+
+It is 0 with no bar along the bottom of the window:
+
+- in an app with no tabs, and once a `<native-tabs-outlet>` is destroyed
+- while `[barHidden]` or a page's `tabBarHidden` hides the bar, and `[barHidden]` wins as it does
+  on the bar itself
+- while a page pushed or presented outside the tabs is in front of them, sheets included
+- on iOS, while a page presented in a tab's own stack is in front, since it is over the whole
+  window. On Android that page is drawn inside the tab and the bar stays, so the value does too.
+- on an iPad with the bar at the top of the window
+
+With a tabs outlet inside a tab of another, it is the taller of the bars showing.
+
+On iOS it needs a `<safe-area-provider>` in the app, as `SafeArea` does, to tell an iPad's bar at
+the top from one along the bottom.
+
+On Android the height comes from the native half of `@ng-native/expo`, so the app needs that package
+installed and a new development build. **In Expo Go on Android `bottom` stays 0**, because Expo Go
+cannot load it. An overlay there sits at the safe-area inset and draws over the bar.
+
+<!-- api: TabBarInsets -->
+
 ## Pushing into another tab
 
 `NativeNavigation.push('/items/1')` from another tab selects the Items tab and pushes the page
