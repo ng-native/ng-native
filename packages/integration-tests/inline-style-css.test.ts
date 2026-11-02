@@ -527,7 +527,7 @@ export class Calc {}
     });
   });
 
-  it('leaves one that comes to no length as written, where a stylesheet refuses it', async () => {
+  it('drops one that comes to no length, as a stylesheet does, and says so', async () => {
     const REFUSED = [
       'calc(10px+10px)',
       'calc(10px+ 10px)',
@@ -535,8 +535,6 @@ export class Calc {}
       'calc(10px * 2px)',
       'calc(2 / 1px * 3px)',
       'calc(3)',
-      'calc(1px / 0)',
-      // Chrome refuses a length added to a number too. The build makes a number of it.
       'calc(1px + 2)',
     ];
     const views = REFUSED.map(
@@ -558,15 +556,17 @@ import { View } from '../components/src/view.ts';
 export class CalcRefused {}
 `,
     );
-    mock.method(console, 'warn', () => {});
+    const warnings: string[] = [];
+    mock.method(console, 'warn', (message: string) => warnings.push(message));
     try {
-      const { fabric } = await render(mod['CalcRefused'] as Type<unknown>);
+      const { fabric } = await render(mod['CalcRefused'] as Type<unknown>, { dev: true });
       REFUSED.forEach((value, i) => {
-        const sheet = styleOf(fabric, `sheet${i}`, ['width'])['width'];
-        if (!value.endsWith(' 2)')) {
-          assert.notEqual(typeof sheet, 'number', `control: the stylesheet's width: ${value}`);
-        }
-        assert.equal(styleOf(fabric, `attribute${i}`, ['width'])['width'], value);
+        assert.equal(styleOf(fabric, `sheet${i}`, ['width'])['width'], undefined, value);
+        assert.equal(styleOf(fabric, `attribute${i}`, ['width'])['width'], undefined, value);
+        assert.ok(
+          warnings.some((message) => message.includes(`width: ${value}, in a style on <view>`)),
+          `no warning for ${value}: ${warnings.join('\n')}`,
+        );
       });
     } finally {
       mock.restoreAll();
@@ -630,9 +630,9 @@ export class CalcBound {
     assert.deepEqual(styleOf(fabric, 'calc', keys), points);
 
     instance.flex.set('1 1 calc(1rem / 2)');
-    instance.width.set('calc(10px - 15px)');
+    instance.width.set('calc(15px - 10px)');
     instance.flexPoints.set('1 1 8px');
-    instance.widthPoints.set('-5px');
+    instance.widthPoints.set('5px');
     await settle();
     assert.deepEqual(styleOf(fabric, 'calc', keys), styleOf(fabric, 'points', keys));
   });
@@ -771,42 +771,50 @@ export class MathRows {
     assert.equal(styleOf(fabric, 'bound0', ['padding'])['padding'], 18);
   });
 
-  it('leaves what CSS refuses, or the engine cannot work out, as written', async () => {
+  it('drops what CSS refuses and says so, and leaves what cannot be worked out as written', async () => {
     const REFUSED: [string, string][] = [
       ['width', 'calc(3)'],
       ['width', 'calc(1 + 1)'],
       ['width', 'calc(1px + 2)'],
       ['width', 'calc(50% + 2)'],
-      ['width', 'calc(1em + 1vw)'],
-      ['width', 'calc(50% + 1em)'],
       ['width', 'calc(1em * 1em)'],
       ['width', 'calc(1 / 1em)'],
-      ['width', 'calc(1px / 0)'],
       ['width', 'min(1px, 2)'],
-      ['width', 'min(1em, 2px)'],
-      ['width', 'min(1em, 2vw)'],
-      ['width', 'min(50%, 1px)'],
-      ['width', 'min(1em + 1px, 2em)'],
-      ['width', 'clamp(1px, 2px)'],
-      ['width', 'clamp(1px, 2px, 3px, 4px)'],
-      ['width', 'min()'],
-      ['width', 'calc(1px, 2px)'],
-      ['width', 'calc(2, 1px)'],
-      ['width', 'min(1px + 50%, 2px)'],
+      ['width', 'min(1px + 50%, 2)'],
       ['width', 'calc(1deg + 1deg)'],
       ['width', 'calc(1px + 1deg)'],
-      ['width', 'calc(1foo)'],
       ['opacity', 'calc(1px)'],
       ['opacity', 'calc(50% + 1)'],
       ['color', 'calc(1px + 1px)'],
       ['flexGrow', 'calc(50%)'],
       ['aspectRatio', 'calc(1px)'],
       ['fontWeight', 'calc(1px)'],
-      ['flexGrow', 'calc(1 / 0)'],
     ];
-    const views = REFUSED.map(
-      ([key], i) => `<view nativeID="r${i}" [style.${key}]="rows[${i}]"></view>`,
-    ).join('');
+    const LEFT: [string, string][] = [
+      ['width', 'calc(1em + 1vw)'],
+      ['width', 'calc(50% + 1em)'],
+      ['width', 'calc(1px / 0)'],
+      ['width', 'min(1em, 2px)'],
+      ['width', 'min(1em, 2vw)'],
+      ['width', 'min(50%, 1px)'],
+      ['width', 'min(1em + 1px, 2em)'],
+      ['width', 'min(1px + 50%, 2px)'],
+      // Not read here, and not said to be refused: CSS has both of these.
+      ['width', 'calc(1cm + 1px)'],
+      ['width', 'calc(var(--x) + 2)'],
+      ['width', 'calc(2 + 1px + var(--x))'],
+      ['scale', 'calc(1 + 1)'],
+      ['flexGrow', 'calc(1 / 0)'],
+      // A shape the reader gives up on, which is not a type it can name.
+      ['width', 'clamp(1px, 2px)'],
+      ['width', 'min()'],
+      ['width', 'calc(1px, 2px)'],
+      ['width', 'calc(1foo)'],
+    ];
+    const rows = [...REFUSED, ...LEFT];
+    const views = rows
+      .map(([key], i) => `<view nativeID="r${i}" [style.${key}]="rows[${i}]"></view>`)
+      .join('');
     const mod = await build(
       'math-refused',
       `
@@ -818,14 +826,28 @@ import { View } from '../components/src/view.ts';
   template: '${views}',
 })
 export class MathRefused {
-  readonly rows = ${JSON.stringify(REFUSED.map(([, value]) => value))};
+  readonly rows = ${JSON.stringify(rows.map(([, value]) => value))};
 }
 `,
     );
-    const { fabric } = await render(mod['MathRefused'] as Type<unknown>);
-    REFUSED.forEach(([key, value], i) => {
-      assert.equal(styleOf(fabric, `r${i}`, [key])[key], value, `${key}: ${value}`);
-    });
+    const warnings: string[] = [];
+    mock.method(console, 'warn', (message: string) => warnings.push(message));
+    try {
+      const { fabric } = await render(mod['MathRefused'] as Type<unknown>, { dev: true });
+      const name = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+      rows.forEach(([key, value], i) => {
+        const refused = i < REFUSED.length;
+        const expected = refused ? undefined : value;
+        assert.equal(styleOf(fabric, `r${i}`, [key])[key], expected, `${key}: ${value}`);
+        assert.equal(
+          warnings.some((message) => message.includes(`${name(key)}: ${value},`)),
+          refused,
+          `the warning for ${key}: ${value}`,
+        );
+      });
+    } finally {
+      mock.restoreAll();
+    }
   });
 
   it('drops a transform CSS refuses', async () => {
@@ -837,6 +859,7 @@ export class MathRefused {
       'rotate(calc(1px + 1px))',
       'translateX(calc(1 + 1))',
       'translateX(calc(1deg + 1deg))',
+      'translateX(calc(1px + 2))',
       // Chrome reads this one, and the stylesheet refuses it: no form holds it.
       'translateX(calc(50% + 1px))',
       'translateX(calc(1px)',
@@ -860,10 +883,23 @@ export class MathTransform {
 }
 `,
     );
-    const { fabric } = await render(mod['MathTransform'] as Type<unknown>);
-    REFUSED.forEach((value, i) => {
-      assert.equal(styleOf(fabric, `r${i}`, ['transform'])['transform'], undefined, value);
-    });
+    const warnings: string[] = [];
+    mock.method(console, 'warn', (message: string) => warnings.push(message));
+    try {
+      const { fabric } = await render(mod['MathTransform'] as Type<unknown>, { dev: true });
+      REFUSED.forEach((value, i) => {
+        assert.equal(styleOf(fabric, `r${i}`, ['transform'])['transform'], undefined, value);
+      });
+      const said = (value: string) => warnings.some((message) => message.includes(value));
+      assert.ok(said('rotate(calc(1 + 1))'), warnings.join('\n'));
+      assert.ok(said('translateX(calc(1px + 2))'), warnings.join('\n'));
+      assert.ok(said('scale(calc(1px + 1px))'), warnings.join('\n'));
+      assert.ok(said('translateX(calc(1deg + 1deg))'), warnings.join('\n'));
+      assert.ok(!said('translateX(calc(50% + 1px))'), 'Chrome reads it: nothing to refuse');
+      assert.ok(!said('scale(1em)'), 'not a math function');
+    } finally {
+      mock.restoreAll();
+    }
   });
 
   it('follows a binding through each kind of value and takes the last one out', async () => {

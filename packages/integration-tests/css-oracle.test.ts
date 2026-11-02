@@ -116,6 +116,11 @@ const KEPT_DISPLAY: ReadonlySet<string> = new Set([
 const NATIVE_INITIAL: Partial<Record<ExtraProperty, unknown>> = {
   'border-top-width': 0,
   'padding-top': 0,
+  'padding-left': 0,
+  'row-gap': 0,
+  'outline-width': 0,
+  'max-width': 'none',
+  'flex-basis': 'auto',
   opacity: 1,
   'pointer-events': 'auto',
 };

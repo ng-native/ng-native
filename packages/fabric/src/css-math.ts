@@ -26,6 +26,12 @@ export const fail = (): never => {
   throw UNREADABLE;
 };
 
+/** Thrown where CSS has no type for the text, which it refuses, and caught by `whole` too. */
+const REFUSED = new Error('a math function CSS refuses');
+const refuse = (): never => {
+  throw REFUSED;
+};
+
 export function match(cursor: Cursor, pattern: RegExp): RegExpExecArray | null {
   pattern.lastIndex = cursor.at;
   const found = pattern.exec(cursor.text);
@@ -54,7 +60,7 @@ export function whole<T>(text: string, read: (cursor: Cursor) => T): T | undefin
     match(cursor, SPACE);
     return cursor.at === text.length ? value : undefined;
   } catch (error) {
-    if (error === UNREADABLE) return undefined;
+    if (error === UNREADABLE || error === REFUSED) return undefined;
     throw error;
   }
 }
@@ -85,7 +91,7 @@ function sum<T>(cursor: Cursor, reader: MathReader<T>): T {
     const op = peekOperator(cursor, '+-') as '+' | '-' | undefined;
     if (!op) return value;
     const [left, right] = [cursor.text[cursor.at - 1]!, cursor.text[cursor.at + 1] ?? ''];
-    if (!ONE_SPACE.test(left) || !ONE_SPACE.test(right)) fail();
+    if (!ONE_SPACE.test(left) || !ONE_SPACE.test(right)) refuse();
     cursor.at++;
     match(cursor, SPACE);
     value = reader.combine(op, value, product(cursor, reader));
@@ -190,7 +196,7 @@ function addedRelative(a: MathValue['relative'], b: MathValue['relative']): Math
 
 /** A sum: a percentage takes a length and the other way round, and nothing else mixes. */
 function added(left: MathValue, right: MathValue): MathValue {
-  if (left.type !== right.type && !(sized(left) && sized(right))) fail();
+  if (left.type !== right.type && !(sized(left) && sized(right))) refuse();
   const relative = addedRelative(left.relative, right.relative);
   const percent = left.percent + right.percent;
   // A percentage and a relative unit are two things to measure, and no form holds both.
@@ -213,6 +219,7 @@ function compared(side: MathValue): number {
 
 /** The lesser or greater of two sides of one type and one unit: no other can be compared here. */
 function extreme(op: 'min' | 'max', left: MathValue, right: MathValue): MathValue {
+  if (left.type !== right.type && !(sized(left) && sized(right))) refuse();
   if (left.type !== right.type || left.relative?.unit !== right.relative?.unit) fail();
   const [a, b] = [compared(left), compared(right)];
   return (op === 'min') === a <= b ? left : right;
@@ -224,9 +231,9 @@ const FOLDED: MathReader<MathValue> = {
     if (op === 'min' || op === 'max') return extreme(op, left, right);
     if (op === '+') return added(left, right);
     if (op === '-') return added(left, scaled(right, -1));
-    if (op === '/') return right.type === 'number' ? scaled(left, 1 / right.value) : fail();
+    if (op === '/') return right.type === 'number' ? scaled(left, 1 / right.value) : refuse();
     if (left.type === 'number') return scaled(right, left.value);
-    return right.type === 'number' ? scaled(left, right.value) : fail();
+    return right.type === 'number' ? scaled(left, right.value) : refuse();
   },
 };
 
@@ -269,8 +276,34 @@ export function mathValue(text: string): MathValue | undefined {
   return value && allFinite(value) ? value : undefined;
 }
 
-/** A math function that comes to a number, as text; any other text as it is. */
+/**
+ * Whether CSS has no type for a math function: a length added to a number, say. Not a function this
+ * reads no further, of a unit or a name it does not know, which CSS may well take.
+ */
+export function mathRefused(text: string): boolean {
+  if (!MATH_FUNCTION.test(text) || nestsTooDeep(text)) return false;
+  try {
+    const cursor = { text, at: 0 };
+    match(cursor, SPACE);
+    readMath(cursor, FOLDED);
+    return false;
+  } catch (error) {
+    if (error === REFUSED) return true;
+    if (error === UNREADABLE) return false;
+    throw error;
+  }
+}
+
+/** A math function that comes to a number, no less than 0, as `flex` takes one; any other text as it is. */
 export function mathNumberText(text: string): string {
   const math = mathValue(text);
-  return math?.type === 'number' ? String(rounded(math.value)) : text;
+  return math?.type === 'number' ? String(Math.max(rounded(math.value), 0)) : text;
 }
+
+/**
+ * The props CSS has nothing below zero for, by the style keys both forms of them land in. A math
+ * function that comes out below zero on one is clamped to 0, where a negative written out is
+ * refused. `packages/metro/css/properties.cjs` holds the same list for a stylesheet.
+ */
+export const NEVER_NEGATIVE =
+  /^(?:(?:min|max)?(?:Width|Height)|width|height|padding.*|fontSize|lineHeight|border.*(?:Width|Radius)|outlineWidth|gap|rowGap|columnGap|flexBasis|flexGrow|flexShrink|aspectRatio|opacity)$/;

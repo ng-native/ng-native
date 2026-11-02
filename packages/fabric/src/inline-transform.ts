@@ -15,6 +15,7 @@ import {
   MATH_FUNCTION,
   SPACE,
   match,
+  mathRefused,
   mathValue,
   rounded,
   type MathValue,
@@ -144,7 +145,10 @@ function closing(text: string, from: number): number {
 }
 
 /** Each function and its arguments, or undefined where anything else is in the value. */
-function readCalls(value: string): { name: string; args: Argument[] }[] | undefined {
+function readCalls(
+  value: string,
+  read: (name: string, raw: string) => Argument | undefined = argument,
+): { name: string; args: Argument[] }[] | undefined {
   const calls: { name: string; args: Argument[] }[] = [];
   const cursor = { text: value, at: 0 };
   for (;;) {
@@ -156,13 +160,31 @@ function readCalls(value: string): { name: string; args: Argument[] }[] | undefi
     const end = closing(value, cursor.at);
     if (end === -1) return undefined;
     const raw = argumentsIn(value.slice(cursor.at, end));
-    const args = raw.map((part) => argument(name, part));
+    const args = raw.map((part) => read(name, part));
     if (!raw.length || args.includes(undefined)) return undefined;
     calls.push({ name, args: args as Argument[] });
     cursor.at = end + 1;
   }
   const flat = calls.every(({ name, args }) => !(name in THREE_D) || onAView(name, args));
   return calls.length && flat ? calls : undefined;
+}
+
+/** Whether an argument is a math function CSS refuses here: of no type, or not the function's. */
+function refusedArgument(name: string, raw: string): boolean {
+  if (mathRefused(raw)) return true;
+  const math = MATH_FUNCTION.test(raw) ? mathValue(raw) : undefined;
+  const slot = slotOf(name);
+  return !!math && math.type !== slot && !(slot === 'length' && math.type === 'percentage');
+}
+
+/** Whether a math function in a transform's arguments is one CSS refuses. */
+export function transformMathRefused(value: string): boolean {
+  let refused = false;
+  readCalls(value, (name, raw) => {
+    refused ||= refusedArgument(name, raw);
+    return argument(name, raw);
+  });
+  return refused;
 }
 
 /**

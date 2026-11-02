@@ -1464,6 +1464,27 @@ function finishBox(out, context) {
   out.flexDirection = BOX_AXIS[orient ?? 'horizontal'];
 }
 
+/**
+ * The props CSS has nothing below zero for, by the style keys both forms of them land in. The same
+ * list as `NEVER_NEGATIVE` in `packages/fabric/src/css-math.ts`, for what the device works out.
+ */
+const NEVER_NEGATIVE =
+  /^(?:(?:min|max)?(?:Width|Height)|width|height|padding.*|fontSize|lineHeight|border.*(?:Width|Radius)|outlineWidth|gap|rowGap|columnGap|flexBasis|flexGrow|flexShrink|aspectRatio|opacity)$/;
+
+/**
+ * A math function below zero on a prop that takes nothing below it is 0. lightningcss folds one to
+ * a plain negative, so this is every negative left: `markWritten` has refused those written out.
+ * A sum with a percentage in it comes out on device, where the engine clamps it.
+ */
+function clampNegatives(out) {
+  for (const prop of Object.keys(out)) {
+    if (!NEVER_NEGATIVE.test(prop)) continue;
+    const value = out[prop];
+    if (value < 0) out[prop] = 0;
+    else if (typeof value === 'string' && /^-[\d.]+%$/.test(value)) out[prop] = '0%';
+  }
+}
+
 /** `[property, handler]` for each of several properties that one handler reads. */
 const each = (properties, handler) => properties.map((property) => [property, handler]);
 
@@ -2400,6 +2421,8 @@ module.exports = {
   finishAnimation,
   frameEasing,
   finishBox,
+  clampNegatives,
+  NEVER_NEGATIVE,
   unsupported,
   kindOf,
   propsFor,

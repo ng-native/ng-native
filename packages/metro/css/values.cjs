@@ -67,6 +67,13 @@ function length(value, context) {
     case 'dimension': {
       const { unit, value: n } = value.value ?? value;
       if (unit === 'px') return round(n);
+      // Tagged by `markWritten` in compile.cjs: a negative, which the property has no value for.
+      if (unit === '__negative') {
+        throw new CssUnsupported(
+          `${context}: takes nothing below zero, so a browser drops '${round(n)}' written out. ` +
+            `A math function that comes out below zero is clamped to 0.`,
+        );
+      }
       // Tagged by `markUnitless` in compile.cjs: a bare number, which a browser drops.
       if (unit === '__unitless') {
         throw new CssUnsupported(
@@ -86,7 +93,8 @@ function length(value, context) {
       );
     }
     case 'calc': {
-      const { offset, unit, factor } = evaluateCalc(value.value, context);
+      const { offset, unit, factor, number } = evaluateCalc(value.value, context);
+      if (number) throw noType(context);
       if (!unit) return round(offset);
       if (unit === '%') return mixed(factor, offset, context);
       return { __defer: { unit, factor: round(factor), offset: round(offset) } };
@@ -158,11 +166,11 @@ function evaluateCalc(node, context) {
     case 'product':
       return node.value.map((part) => evaluateCalc(part, context)).reduce(product(context));
     case 'number':
-      return { offset: node.value };
+      return { offset: node.value, number: true };
     case 'min':
     case 'max':
     case 'clamp':
-      return { offset: extremum(node, context) };
+      return extremum(node, context);
     case 'value': {
       const resolved = length(node.value, context);
       if (typeof resolved === 'number') return { offset: resolved };
@@ -178,8 +186,16 @@ function evaluateCalc(node, context) {
   }
 }
 
+/** A number where a length goes, or the two together, which CSS has no type for. */
+const noType = (context) =>
+  new CssUnsupported(
+    `${context}: calc() of a length and a number, which a browser drops. A number can multiply ` +
+      `or divide a length, and only a length can be added to a length.`,
+  );
+
 /** Add two linear terms. Two different relative units would need a calc engine on device. */
 const sum = (context) => (a, b) => {
+  if (Boolean(a.number) !== Boolean(b.number)) throw noType(context);
   if (a.unit && b.unit && a.unit !== b.unit) {
     throw new CssUnsupported(
       `${context}: calc() can combine one relative unit with absolute lengths, not ` +
@@ -206,7 +222,7 @@ const product = (context) => (a, b) => {
 
 /** `min()`, `max()` or `clamp()`, folded. Only over absolute lengths: the comparison happens here. */
 function extremum(node, context) {
-  const values = node.value.map((part) => {
+  const terms = node.value.map((part) => {
     const term = evaluateCalc(part, context);
     if (term.unit) {
       throw new CssUnsupported(
@@ -214,10 +230,22 @@ function extremum(node, context) {
           `device, and there is no expression evaluator there. Only absolute lengths fold.`,
       );
     }
-    return term.offset;
+    return term;
   });
-  if (node.type === 'min') return Math.min(...values);
-  if (node.type === 'max') return Math.max(...values);
+  const number = terms.every((term) => term.number);
+  if (!number && terms.some((term) => term.number)) throw noType(context);
+  return {
+    offset: extreme(
+      node.type,
+      terms.map((term) => term.offset),
+    ),
+    ...(number ? { number } : {}),
+  };
+}
+
+function extreme(type, values) {
+  if (type === 'min') return Math.min(...values);
+  if (type === 'max') return Math.max(...values);
   const [low, preferred, high] = values;
   return Math.max(low, Math.min(preferred, high));
 }

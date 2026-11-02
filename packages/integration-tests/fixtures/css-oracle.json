@@ -1,5 +1,1341 @@
 [
   {
+    "name": "a rule's width: calc(1px - 5px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1px - 5px), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a rule's width: min(-1px, 2px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "an inline width: min(-1px, 2px), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1rem - 20px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1rem - 20px), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1em - 20px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1em - 20px), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1em - 5em), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1em - 5em), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1vw - 100vw), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1vw - 100vw), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a rule's flex-basis: calc(0% - 10%), read as flex-basis",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0%"
+    }
+  },
+  {
+    "name": "an inline flex-basis: calc(0% - 10%), read as flex-basis, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0%"
+    }
+  },
+  {
+    "name": "a rule's height: calc(1px - 5px), read as height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "height": "0px"
+    }
+  },
+  {
+    "name": "an inline height: calc(1px - 5px), read as height, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "height": "0px"
+    }
+  },
+  {
+    "name": "a rule's min-height: calc(-2px - 3px), read as min-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "min-height": "0px"
+    }
+  },
+  {
+    "name": "an inline min-height: calc(-2px - 3px), read as min-height, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "min-height": "0px"
+    }
+  },
+  {
+    "name": "a rule's max-width: calc(1px - 5px), read as max-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "an inline max-width: calc(1px - 5px), read as max-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "a rule's padding-left: calc(1px - 5px), read as padding-left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "an inline padding-left: calc(1px - 5px), read as padding-left, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "a rule's padding: calc(1px - 5px), read as padding-top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "an inline padding: calc(1px - 5px), read as padding-top, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "a rule's padding: 1px calc(1px - 5px), read as padding-left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "an inline padding: 1px calc(1px - 5px), read as padding-left, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "a rule's font-size: calc(0px - 5px), read as font-size",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "0px"
+    }
+  },
+  {
+    "name": "an inline font-size: calc(0px - 5px), read as font-size, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "0px"
+    }
+  },
+  {
+    "name": "a rule's font-size: calc(1em - 2em), read as font-size",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "0px"
+    }
+  },
+  {
+    "name": "an inline font-size: calc(1em - 2em), read as font-size, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "0px"
+    }
+  },
+  {
+    "name": "a rule's border-left-width: calc(0px - 1px), read as border-left-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-left-width": "0px"
+    }
+  },
+  {
+    "name": "an inline border-left-width: calc(0px - 1px), read as border-left-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-left-width": "0px"
+    }
+  },
+  {
+    "name": "a rule's border-top-left-radius: calc(0px - 1px), read as border-top-left-radius",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "0px"
+    }
+  },
+  {
+    "name": "an inline border-top-left-radius: calc(0px - 1px), read as border-top-left-radius, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "0px"
+    }
+  },
+  {
+    "name": "a rule's border-radius: calc(0px - 1px), read as border-top-left-radius",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "0px"
+    }
+  },
+  {
+    "name": "an inline border-radius: calc(0px - 1px), read as border-top-left-radius, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "0px"
+    }
+  },
+  {
+    "name": "a rule's outline-width: calc(0px - 1px), read as outline-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "outline-width": "0px"
+    }
+  },
+  {
+    "name": "an inline outline-width: calc(0px - 1px), read as outline-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "outline-width": "0px"
+    }
+  },
+  {
+    "name": "a rule's row-gap: calc(0px - 1px), read as row-gap",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "row-gap": "0px"
+    }
+  },
+  {
+    "name": "an inline row-gap: calc(0px - 1px), read as row-gap, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "row-gap": "0px"
+    }
+  },
+  {
+    "name": "a rule's gap: calc(0px - 1px), read as row-gap",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "row-gap": "0px"
+    }
+  },
+  {
+    "name": "an inline gap: calc(0px - 1px), read as row-gap, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "row-gap": "0px"
+    }
+  },
+  {
+    "name": "a rule's flex-basis: calc(0px - 1px), read as flex-basis",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0px"
+    }
+  },
+  {
+    "name": "an inline flex-basis: calc(0px - 1px), read as flex-basis, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0px"
+    }
+  },
+  {
+    "name": "a rule's flex-grow: calc(1 - 2), read as flex-grow",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "0"
+    }
+  },
+  {
+    "name": "an inline flex-grow: calc(1 - 2), read as flex-grow, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "0"
+    }
+  },
+  {
+    "name": "a rule's flex-shrink: calc(1 - 2), read as flex-shrink",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "0"
+    }
+  },
+  {
+    "name": "an inline flex-shrink: calc(1 - 2), read as flex-shrink, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "0"
+    }
+  },
+  {
+    "name": "a rule's flex: calc(1 - 2), read as flex-grow",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "0"
+    }
+  },
+  {
+    "name": "an inline flex: calc(1 - 2), read as flex-grow, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "0"
+    }
+  },
+  {
+    "name": "a rule's flex: calc(1 - 2), read as flex-shrink",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "1"
+    }
+  },
+  {
+    "name": "an inline flex: calc(1 - 2), read as flex-shrink, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "1"
+    }
+  },
+  {
+    "name": "a rule's flex: 1 calc(1 - 2) 0px, read as flex-shrink",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "0"
+    }
+  },
+  {
+    "name": "an inline flex: 1 calc(1 - 2) 0px, read as flex-shrink, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "0"
+    }
+  },
+  {
+    "name": "a rule's flex: 1 1 calc(1px - 2px), read as flex-basis",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0px"
+    }
+  },
+  {
+    "name": "an inline flex: 1 1 calc(1px - 2px), read as flex-basis, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0px"
+    }
+  },
+  {
+    "name": "a rule's line-height: calc(1 - 2), read as line-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "0px"
+    }
+  },
+  {
+    "name": "an inline line-height: calc(1 - 2), read as line-height, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "0px"
+    }
+  },
+  {
+    "name": "a rule's line-height: calc(1px - 2px), read as line-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "0px"
+    }
+  },
+  {
+    "name": "an inline line-height: calc(1px - 2px), read as line-height, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "0px"
+    }
+  },
+  {
+    "name": "a rule's line-height: calc(1em - 2em), read as line-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "0px"
+    }
+  },
+  {
+    "name": "an inline line-height: calc(1em - 2em), read as line-height, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "0px"
+    }
+  },
+  {
+    "name": "a rule's aspect-ratio: calc(1 - 2), read as aspect-ratio",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "0 / 1"
+    }
+  },
+  {
+    "name": "an inline aspect-ratio: calc(1 - 2), read as aspect-ratio, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "0 / 1"
+    }
+  },
+  {
+    "name": "a rule's opacity: calc(1 - 2), read as opacity",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0"
+    }
+  },
+  {
+    "name": "an inline opacity: calc(1 - 2), read as opacity, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0"
+    }
+  },
+  {
+    "name": "a rule's margin-left: calc(1px - 5px), read as margin-left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-left": "-4px"
+    }
+  },
+  {
+    "name": "an inline margin-left: calc(1px - 5px), read as margin-left, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-left": "-4px"
+    }
+  },
+  {
+    "name": "a rule's margin-top: calc(1em - 20px), read as margin-top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-top": "-4px"
+    }
+  },
+  {
+    "name": "an inline margin-top: calc(1em - 20px), read as margin-top, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-top": "-4px"
+    }
+  },
+  {
+    "name": "a rule's top: calc(1px - 5px), read as top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "top": "-4px"
+    }
+  },
+  {
+    "name": "an inline top: calc(1px - 5px), read as top, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "top": "-4px"
+    }
+  },
+  {
+    "name": "a negative in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "a negative in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "a negative share in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "a negative share in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "a negative in flex-basis, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "auto"
+    }
+  },
+  {
+    "name": "a negative in flex-basis, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "auto"
+    }
+  },
+  {
+    "name": "a calc() below zero in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "a calc() below zero in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "a calc() below zero in flex-basis, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0px"
+    }
+  },
+  {
+    "name": "a calc() below zero in flex-basis, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0px"
+    }
+  },
+  {
+    "name": "a rule's max-width: var(--x, -4px), read as max-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "an inline max-width: var(--x, -4px), read as max-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "a rule's max-width: var(--x, var(--y, -4px)), read as max-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "an inline max-width: var(--x, var(--y, -4px)), read as max-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "a rule's max-width: var(--x, calc(1px - 5px)), read as max-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "an inline max-width: var(--x, calc(1px - 5px)), read as max-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "a rule's width: -4px, read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: -10%, read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's min-height: -4px, read as min-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "min-height": "7px"
+    }
+  },
+  {
+    "name": "a rule's padding-left: -2px, read as padding-left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "7px"
+    }
+  },
+  {
+    "name": "a rule's padding: 1px -5px, read as padding-top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "7px"
+    }
+  },
+  {
+    "name": "a rule's font-size: -5px, read as font-size",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "7px"
+    }
+  },
+  {
+    "name": "a rule's border-left-width: -1px, read as border-left-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-left-width": "7px"
+    }
+  },
+  {
+    "name": "a rule's border-radius: -1px, read as border-top-left-radius",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "7px"
+    }
+  },
+  {
+    "name": "a rule's row-gap: -1px, read as row-gap",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "row-gap": "7px"
+    }
+  },
+  {
+    "name": "a rule's gap: -1px, read as row-gap",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "row-gap": "7px"
+    }
+  },
+  {
+    "name": "a rule's flex-basis: -1px, read as flex-basis",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "7px"
+    }
+  },
+  {
+    "name": "a rule's flex-grow: -1, read as flex-grow",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "7"
+    }
+  },
+  {
+    "name": "a rule's flex-shrink: -1, read as flex-shrink",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "7"
+    }
+  },
+  {
+    "name": "a rule's flex: -1, read as flex-grow",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "7"
+    }
+  },
+  {
+    "name": "a rule's line-height: -1, read as line-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "7px"
+    }
+  },
+  {
+    "name": "a rule's line-height: -1px, read as line-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "7px"
+    }
+  },
+  {
+    "name": "a rule's aspect-ratio: -1, read as aspect-ratio",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "7 / 1"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1px + 2), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1px + 2), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(2 + 1px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc(2 + 1px), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1px - 2), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1px - 2), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1px + 0), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1px + 0), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1px + 2 * 3), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1px + 2 * 3), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: calc((1px + 2) * 3), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc((1px + 2) * 3), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1px * 2 + 3), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1px * 2 + 3), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1em + 2), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1em + 2), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(50% + 2), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: calc(50% + 2), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: min(1px, 2), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: min(1px, 2), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: max(2, 1px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: max(2, 1px), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: clamp(1px, 2, 3px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: clamp(1px, 2, 3px), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's padding-left: calc(1px + 2), read as padding-left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "7px"
+    }
+  },
+  {
+    "name": "an inline padding-left: calc(1px + 2), read as padding-left, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "7px"
+    }
+  },
+  {
+    "name": "a rule's margin: calc(1px + 2), read as margin-top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-top": "7px"
+    }
+  },
+  {
+    "name": "an inline margin: calc(1px + 2), read as margin-top, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-top": "7px"
+    }
+  },
+  {
+    "name": "a rule's font-size: calc(1px + 2), read as font-size",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "7px"
+    }
+  },
+  {
+    "name": "an inline font-size: calc(1px + 2), read as font-size, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "7px"
+    }
+  },
+  {
+    "name": "a rule's line-height: calc(1px + 2), read as line-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "7px"
+    }
+  },
+  {
+    "name": "an inline line-height: calc(1px + 2), read as line-height, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "7px"
+    }
+  },
+  {
+    "name": "a rule's transform: translateX(calc(1px + 2)), read as transform",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(1, 0, 0, 1, 7, 0)"
+    }
+  },
+  {
+    "name": "an inline transform: translateX(calc(1px + 2)), read as transform, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(1, 0, 0, 1, 7, 0)"
+    }
+  },
+  {
+    "name": "a rule's width: calc(2 * 3px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "6px"
+    }
+  },
+  {
+    "name": "an inline width: calc(2 * 3px), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "6px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(6px / 2), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "3px"
+    }
+  },
+  {
+    "name": "an inline width: calc(6px / 2), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "3px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1px + 2px * 4), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "9px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1px + 2px * 4), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "9px"
+    }
+  },
+  {
+    "name": "a rule's width: calc(1px + (2 * 4px)), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "9px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1px + (2 * 4px)), read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "9px"
+    }
+  },
+  {
+    "name": "a calc() below zero in width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a calc() below zero in width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in a width in width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in a width in width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "tokens below zero in width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "tokens below zero in width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in padding-left, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in padding-left, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in padding, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in padding, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in font-size, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in font-size, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "0px"
+    }
+  },
+  {
+    "name": "an em token below zero in width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "an em token below zero in width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
+    "name": "a token below zero in margin-left, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-left": "-4px"
+    }
+  },
+  {
+    "name": "a token below zero in margin-left, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-left": "-4px"
+    }
+  },
+  {
+    "name": "a number token in padding-left, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "a number token in padding-left, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "0px"
+    }
+  },
+  {
+    "name": "a number given its unit in padding-left, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "5px"
+    }
+  },
+  {
+    "name": "a number given its unit in padding-left, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "5px"
+    }
+  },
+  {
     "name": "an inline width: min(10px, 20px)",
     "expected": {
       "color": "rgb(0, 0, 0)",

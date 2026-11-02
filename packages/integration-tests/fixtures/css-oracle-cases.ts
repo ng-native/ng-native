@@ -62,11 +62,13 @@ export const EXTRA_KEYS = {
   'text-shadow': 'textShadowRadius',
   'border-top-color': 'borderTopColor',
   'border-left-color': 'borderLeftColor',
+  'border-left-width': 'borderLeftWidth',
   'border-top-width': 'borderTopWidth',
   'outline-color': 'outlineColor',
   'padding-top': 'paddingTop',
   'padding-left': 'paddingLeft',
   'margin-top': 'marginTop',
+  'margin-left': 'marginLeft',
   'border-top-left-radius': 'borderTopLeftRadius',
   'row-gap': 'rowGap',
   top: 'top',
@@ -82,6 +84,10 @@ export const EXTRA_KEYS = {
   'text-decoration-style': 'textDecorationStyle',
   'pointer-events': 'pointerEvents',
   width: 'width',
+  height: 'height',
+  'min-height': 'minHeight',
+  'max-width': 'maxWidth',
+  'flex-basis': 'flexBasis',
   'line-height': 'lineHeight',
   'flex-grow': 'flexGrow',
   'flex-shrink': 'flexShrink',
@@ -473,7 +479,226 @@ const SIGN_SPACE_CASES = (
   extra: ['padding-top'],
 }));
 
+/** A rule of the probe's that a declaration refused leaves in place. */
+const heldBy = (property: string): string =>
+  ({
+    'flex-grow': '7',
+    'flex-shrink': '7',
+    flex: '7',
+    'aspect-ratio': '7',
+    opacity: '0.7',
+    transform: 'translateX(7px)',
+  })[property] ?? '7px';
+
+/** What a border or an outline needs to have a width at all. */
+const DRAWN = 'border-left-style: solid; outline-style: solid;';
+
+/** A declaration of the probe, written in a rule, over a weaker rule of the same property. */
+const inRule = (
+  property: string,
+  value: string,
+  measured: ExtraProperty,
+  warns: boolean,
+): OracleCase => ({
+  name: `a rule's ${property}: ${value}, read as ${measured}`,
+  css:
+    `#probe { display: block; font-size: 16px; ${DRAWN} ${property}: ${heldBy(property)} } ` +
+    `#probe.c { ${property}: ${value} }`,
+  tree: probe({ name: 'view', classes: ['c'] }),
+  extra: [measured],
+  ...(warns ? { warns } : {}),
+});
+
+/** The same declaration in the probe's inline style, over the same weaker rule. */
+const inStyle = (property: string, value: string, measured: ExtraProperty): OracleCase => ({
+  name: `an inline ${property}: ${value}, read as ${measured}, over a rule`,
+  css: `#probe { display: block; font-size: 16px; ${DRAWN} ${property}: ${heldBy(property)} }`,
+  tree: probe({ name: 'view' }),
+  inline: { [property]: value },
+  extra: [measured],
+});
+
+/**
+ * A math function that comes out below zero, where the property takes nothing below it: clamped to
+ * 0, where a negative written out is refused. A property that takes a negative keeps it.
+ */
+const MATH_RANGE_CASES = (
+  [
+    ['width', 'calc(1px - 5px)', 'width'],
+    ['width', 'min(-1px, 2px)', 'width'],
+    ['width', 'calc(1rem - 20px)', 'width'],
+    ['width', 'calc(1em - 20px)', 'width'],
+    ['width', 'calc(1em - 5em)', 'width'],
+    ['width', 'calc(1vw - 100vw)', 'width'],
+    ['flex-basis', 'calc(0% - 10%)', 'flex-basis'],
+    ['height', 'calc(1px - 5px)', 'height'],
+    ['min-height', 'calc(-2px - 3px)', 'min-height'],
+    ['max-width', 'calc(1px - 5px)', 'max-width'],
+    ['padding-left', 'calc(1px - 5px)', 'padding-left'],
+    ['padding', 'calc(1px - 5px)', 'padding-top'],
+    ['padding', '1px calc(1px - 5px)', 'padding-left'],
+    ['font-size', 'calc(0px - 5px)', 'font-size'],
+    ['font-size', 'calc(1em - 2em)', 'font-size'],
+    ['border-left-width', 'calc(0px - 1px)', 'border-left-width'],
+    ['border-top-left-radius', 'calc(0px - 1px)', 'border-top-left-radius'],
+    ['border-radius', 'calc(0px - 1px)', 'border-top-left-radius'],
+    ['outline-width', 'calc(0px - 1px)', 'outline-width'],
+    ['row-gap', 'calc(0px - 1px)', 'row-gap'],
+    ['gap', 'calc(0px - 1px)', 'row-gap'],
+    ['flex-basis', 'calc(0px - 1px)', 'flex-basis'],
+    ['flex-grow', 'calc(1 - 2)', 'flex-grow'],
+    ['flex-shrink', 'calc(1 - 2)', 'flex-shrink'],
+    ['flex', 'calc(1 - 2)', 'flex-grow'],
+    ['flex', 'calc(1 - 2)', 'flex-shrink'],
+    ['flex', '1 calc(1 - 2) 0px', 'flex-shrink'],
+    ['flex', '1 1 calc(1px - 2px)', 'flex-basis'],
+    ['line-height', 'calc(1 - 2)', 'line-height'],
+    ['line-height', 'calc(1px - 2px)', 'line-height'],
+    ['line-height', 'calc(1em - 2em)', 'line-height'],
+    ['aspect-ratio', 'calc(1 - 2)', 'aspect-ratio'],
+    ['opacity', 'calc(1 - 2)', 'opacity'],
+    ['margin-left', 'calc(1px - 5px)', 'margin-left'],
+    ['margin-top', 'calc(1em - 20px)', 'margin-top'],
+    ['top', 'calc(1px - 5px)', 'top'],
+  ] as const
+).flatMap(([property, value, measured]): OracleCase[] => [
+  inRule(property, value, measured, false),
+  inStyle(property, value, measured),
+]);
+
+/** A negative written out, which the same properties refuse, unlike a math function. */
+const WRITTEN_NEGATIVE_CASES = (
+  [
+    ['width', '-4px', 'width'],
+    ['width', '-10%', 'width'],
+    ['min-height', '-4px', 'min-height'],
+    ['padding-left', '-2px', 'padding-left'],
+    ['padding', '1px -5px', 'padding-top'],
+    ['font-size', '-5px', 'font-size'],
+    ['border-left-width', '-1px', 'border-left-width'],
+    ['border-radius', '-1px', 'border-top-left-radius'],
+    ['row-gap', '-1px', 'row-gap'],
+    ['gap', '-1px', 'row-gap'],
+    ['flex-basis', '-1px', 'flex-basis'],
+    ['flex-grow', '-1', 'flex-grow'],
+    ['flex-shrink', '-1', 'flex-shrink'],
+    ['flex', '-1', 'flex-grow'],
+    ['line-height', '-1', 'line-height'],
+    ['line-height', '-1px', 'line-height'],
+    ['aspect-ratio', '-1', 'aspect-ratio'],
+  ] as const
+).map(([property, value, measured]) => inRule(property, value, measured, true));
+
+/**
+ * A math function that CSS types as nothing: a length and a number do not add, and do not compare.
+ * Both the rule and the inline style are refused, and leave the weaker rule. The last four are the
+ * same terms in a shape that is a length.
+ */
+const MATH_TYPE_CASES = [
+  ...(
+    [
+      ['width', 'calc(1px + 2)', 'width'],
+      ['width', 'calc(2 + 1px)', 'width'],
+      ['width', 'calc(1px - 2)', 'width'],
+      ['width', 'calc(1px + 0)', 'width'],
+      ['width', 'calc(1px + 2 * 3)', 'width'],
+      ['width', 'calc((1px + 2) * 3)', 'width'],
+      ['width', 'calc(1px * 2 + 3)', 'width'],
+      ['width', 'calc(1em + 2)', 'width'],
+      ['width', 'calc(50% + 2)', 'width'],
+      ['width', 'min(1px, 2)', 'width'],
+      ['width', 'max(2, 1px)', 'width'],
+      ['width', 'clamp(1px, 2, 3px)', 'width'],
+      ['padding-left', 'calc(1px + 2)', 'padding-left'],
+      ['margin', 'calc(1px + 2)', 'margin-top'],
+      ['font-size', 'calc(1px + 2)', 'font-size'],
+      ['line-height', 'calc(1px + 2)', 'line-height'],
+      ['transform', 'translateX(calc(1px + 2))', 'transform'],
+    ] as const
+  ).flatMap(([property, value, measured]): OracleCase[] => [
+    inRule(property, value, measured, true),
+    inStyle(property, value, measured),
+  ]),
+  ...(
+    ['calc(2 * 3px)', 'calc(6px / 2)', 'calc(1px + 2px * 4)', 'calc(1px + (2 * 4px))'] as const
+  ).flatMap((value): OracleCase[] => [
+    inRule('width', value, 'width', false),
+    inStyle('width', value, 'width'),
+  ]),
+];
+
+/** A calc() of a token, by the name of what it is in, its value and how the property uses it. */
+const tokenRow = (
+  name: string,
+  property: string,
+  value: string,
+  measured: ExtraProperty,
+  use: string,
+): OracleCase[] =>
+  tokenCases(`${name} in ${property}`, property, value, heldBy(property), measured, { use });
+
+/** Arithmetic with a token in it comes out where it is used, so that is where it is clamped. */
+const TOKEN_RANGE_CASES = [
+  ...tokenRow('a calc() below zero', 'width', 'calc(1px - 5px)', 'width', 'var(--t)'),
+  ...tokenRow('a token below zero in a width', 'width', '1px', 'width', 'calc(var(--t) - 5px)'),
+  ...tokenRow('tokens below zero', 'width', '1px', 'width', 'calc(var(--t) - var(--t) * 5)'),
+  ...tokenRow('a token below zero', 'padding-left', '1px', 'padding-left', 'calc(var(--t) - 5px)'),
+  ...tokenRow('a token below zero', 'padding', '1px', 'padding-left', 'calc(var(--t) - 5px)'),
+  ...tokenRow('a token below zero', 'font-size', '1px', 'font-size', 'calc(var(--t) - 5px)'),
+  ...tokenRow('an em token below zero', 'width', '1em', 'width', 'calc(var(--t) - 20px)'),
+  ...tokenRow('a token below zero', 'margin-left', '1px', 'margin-left', 'calc(var(--t) - 5px)'),
+];
+
+/**
+ * A number token added to a length: invalid where it is used, so the declaration is unset, and the
+ * weaker rule goes with it. A number given its unit before the sum is a length.
+ */
+const TOKEN_TYPE_CASES = [
+  ...tokenRow('a number token', 'padding-left', '1', 'padding-left', 'calc(var(--t) + 2px)'),
+  ...tokenRow(
+    'a number given its unit',
+    'padding-left',
+    '2',
+    'padding-left',
+    'calc(var(--t) * 2px + 1px)',
+  ),
+];
+
+/**
+ * A negative written out in a token, used whole where nothing below zero is taken: invalid where it
+ * is used, so the declaration is unset, which `none` and `auto` tell from 0. A token that is a
+ * math function is clamped instead.
+ */
+const TOKEN_NEGATIVE_CASES = [
+  ...tokenRow('a negative', 'max-width', '-4px', 'max-width', 'var(--t)'),
+  ...tokenRow('a negative share', 'max-width', '-10%', 'max-width', 'var(--t)'),
+  ...tokenRow('a negative', 'flex-basis', '-4px', 'flex-basis', 'var(--t)'),
+  ...tokenRow('a calc() below zero', 'max-width', 'calc(1px - 5px)', 'max-width', 'var(--t)'),
+  ...tokenRow('a calc() below zero', 'flex-basis', 'calc(1px - 5px)', 'flex-basis', 'var(--t)'),
+  // `opacity` takes a negative and clamps it, written out or not.
+  ...tokenRow('a negative', 'opacity', '-1', 'opacity', 'var(--t)'),
+  inRule('opacity', 'var(--x, -1)', 'opacity', false),
+  inStyle('opacity', 'var(--x, -1)', 'opacity'),
+  // A property's name in any case.
+  inRule('WIDTH', '-4px', 'width', true),
+  inRule('Padding-Left', '-2px', 'padding-left', true),
+  inRule('WIDTH', 'calc(1px - 5px)', 'width', false),
+  // The same as the fallback of a token nothing sets.
+  ...['var(--x, -4px)', 'var(--x, var(--y, -4px))', 'var(--x, calc(1px - 5px))'].flatMap(
+    (value): OracleCase[] => [
+      inRule('max-width', value, 'max-width', false),
+      inStyle('max-width', value, 'max-width'),
+    ],
+  ),
+];
+
 export const CASES: OracleCase[] = [
+  ...MATH_RANGE_CASES,
+  ...TOKEN_NEGATIVE_CASES,
+  ...WRITTEN_NEGATIVE_CASES,
+  ...MATH_TYPE_CASES,
+  ...TOKEN_RANGE_CASES,
+  ...TOKEN_TYPE_CASES,
   ...INLINE_MATH_CASES,
   ...SIGN_SPACE_CASES,
   {

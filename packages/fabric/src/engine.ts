@@ -13,6 +13,7 @@ import {
   boundRelativeLength,
   CSS_SPACE,
   isNegativeLineHeight,
+  isRefusedMath,
   faded,
   fills,
   inlineInherited,
@@ -8615,8 +8616,14 @@ export class Engine implements HostEngine {
 
   /** Whether a bound value is one CSS has none of, which is dropped with a warning. */
   private refusedBound(node: EngineNode, prop: string, text: string): boolean {
-    if (!isNegativeLineHeight(prop, text)) return false;
-    this.reportDroppedDeclaration('line-height', text, node.tag, 'it is negative');
+    const why = isNegativeLineHeight(prop, text)
+      ? 'it is negative'
+      : isRefusedMath(prop, text)
+        ? 'its math comes to no type it takes'
+        : undefined;
+    if (why === undefined) return false;
+    const name = prop.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+    this.reportDroppedDeclaration(name, text, node.tag, why);
     return true;
   }
 

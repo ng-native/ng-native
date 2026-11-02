@@ -14,7 +14,15 @@ import {
   mixColours,
 } from './color-mix.ts';
 import { type BackgroundLayers, backgroundLayers } from './background-layers.ts';
-import { mathValue, rounded, type MathValue } from './css-math.ts';
+import { transformMathRefused } from './inline-transform.ts';
+import {
+  MATH_FUNCTION,
+  mathRefused,
+  mathValue,
+  NEVER_NEGATIVE,
+  rounded,
+  type MathValue,
+} from './css-math.ts';
 import { ELEMENT_STYLES } from './element-styles.ts';
 import { type Channel, relativeColour } from './relative-colour.ts';
 import type { Keyframe } from './transition.ts';
@@ -283,6 +291,8 @@ export interface TokenValue {
    * number. Settled on the node that defines it, as an `hsl` one is.
    */
   readonly deferredCalc?: readonly CalcMarker[];
+  /** Worked out from `deferredCalc`: below zero it is clamped where used, not invalid there. */
+  readonly fromMath?: true;
   /**
    * Defined as another token, `var(--name)`. Resolved on the node that defines it, against the
    * tokens in scope there, and passed down resolved - which is what a browser does.
@@ -4814,7 +4824,7 @@ export class StyleResolver {
   ): unknown {
     const { unit, factor, offset = 0, multiple } = declaration.compute!;
     if (unit !== 'em') return this.viewportLength(unit, factor) + offset;
-    if (multiple && !offset) return { multiple: factor } satisfies LineHeightMultiple;
+    if (multiple && !offset) return { multiple: Math.max(factor, 0) } satisfies LineHeightMultiple;
     // The font size in scope. On `font-size` itself that is the inherited size rather than the
     // one being computed, which is what makes a nested `1.5em` compound as on the web.
     const base = declaration.props.includes('fontSize')
@@ -5207,7 +5217,7 @@ function calcToken(
       token = { ...token, length: `${Math.round(value * 100000) / 1000}%` };
     }
   }
-  return token;
+  return token && { ...token, fromMath: true };
 }
 
 /**
@@ -5372,7 +5382,25 @@ function referenced(
   const base = CHANNEL_KINDS.has(declaration.kind!)
     ? fromChannels(value, declaration.alpha, tokens, declaration.space)
     : value;
-  return declaration.adjust ? adjusted(base, declaration.adjust) : base;
+  return usedAs(declaration, token, base);
+}
+
+/** A token's value as the declaration uses it: moved by its arithmetic, or unset where invalid. */
+function usedAs(declaration: DeferredDeclaration, token: TokenValue | undefined, value: unknown) {
+  if (declaration.adjust) return adjusted(value, declaration.adjust);
+  // A fallback that is a math function is a `fallbackToken`, and one written out is not.
+  const math = token ? token.fromMath : declaration.fallbackToken;
+  return !math && invalidNegative(value, declaration.props) ? undefined : value;
+}
+
+/**
+ * Whether a token or a fallback used whole, and written out, is a negative on props with nothing
+ * below zero: invalid where it is used, so the declaration is unset, where a math function is
+ * clamped.
+ */
+function invalidNegative(value: unknown, props: readonly string[]): boolean {
+  const negative = typeof value === 'number' ? value < 0 : /^-[\d.]+%$/.test(String(value));
+  return negative && props.every((prop) => NEVER_NEGATIVE.test(prop));
 }
 
 /**
@@ -5472,6 +5500,10 @@ function formFor(token: TokenValue, declaration: DeferredDeclaration): unknown {
   return declaration.adjust ? undefined : new EachSide(token.lengths);
 }
 
+/** Whether arithmetic that needed the node came out below what `prop` takes, which is 0. */
+const belowZero = (prop: string, value: unknown): boolean =>
+  typeof value === 'number' && value < 0 && NEVER_NEGATIVE.test(prop);
+
 /** What a deferred declaration settled to, written to one of its props. */
 function writeSettled(
   own: Record<string, unknown>,
@@ -5481,7 +5513,7 @@ function writeSettled(
   layers: BackgroundLayers | undefined,
 ): void {
   const one = settled instanceof EachSide ? settled.at(declaration.props, prop) : settled;
-  const value = one ?? declaration.unset;
+  const value = belowZero(prop, one) ? 0 : (one ?? declaration.unset);
   if (declaration.layers) writeLayer(own, prop, value, layers);
   else write(own, prop, value, declaration.line !== undefined);
 }
@@ -5688,17 +5720,52 @@ export function boundMath(prop: string, text: string): number | string | undefin
   if (takesNumber || math.type === 'number') return numberFrom(prop, kind, math);
   if (math.relative || math.type === 'angle') return undefined;
   if (kind !== 'length' && kind !== 'lineHeight' && kind !== 'keyword') return undefined;
+  return lengthFrom(prop, math);
+}
+
+/** A number as `prop` takes it: no less than 0 where it has nothing below that. */
+const inRange = (prop: string, value: number): number =>
+  NEVER_NEGATIVE.test(prop) ? Math.max(value, 0) : value;
+
+/** Points, a percentage, or the two, which the engine finishes and clamps against its box. */
+function lengthFrom(prop: string, math: MathValue): number | string {
   const points = rounded(math.value);
-  if (!math.percent) return points;
+  if (!math.percent) return inRange(prop, points);
   const share = rounded(math.percent);
-  return points ? `calc(${share}% + ${points}px)` : `${share}%`;
+  if (points) return `calc(${share}% + ${points}px)`;
+  return `${inRange(prop, share)}%`;
+}
+
+/** Told first, as this is asked of every text in a style, a transform moved by a finger included. */
+const HOLDS_MATH = /(?:calc|min|max|clamp)\(/i;
+
+/** The kinds of prop a math function of another type is no value of, whatever the prop. */
+const TYPED_KINDS: ReadonlySet<TokenKind> = new Set([
+  'length',
+  'lineHeight',
+  'number',
+  'weight',
+  'color',
+]);
+
+/**
+ * Whether a math function in a bound declaration is one CSS refuses: it has no type, or one `prop`
+ * does not take. Not one that cannot be worked out here, `min(50%, 100px)`, or holds a `var()`.
+ */
+export function isRefusedMath(prop: string, text: string): boolean {
+  if (!HOLDS_MATH.test(text) || /var\(/i.test(text)) return false;
+  if (prop === 'transform') return transformMathRefused(text);
+  if (!MATH_FUNCTION.test(text)) return false;
+  if (mathRefused(text)) return true;
+  if (!mathValue(text) || !TYPED_KINDS.has(boundKind(prop))) return false;
+  return boundMath(prop, text) === undefined && boundRelativeLength(prop, text) === null;
 }
 
 /** A math function where `prop` takes a number, which `opacity` may write as a percentage. */
 function numberFrom(prop: string, kind: TokenKind, math: MathValue): number | string | undefined {
   const share = prop === 'opacity' && math.type === 'percentage';
   if (math.type !== 'number' && !share) return undefined;
-  const value = rounded(share ? math.percent / 100 : math.value);
+  const value = inRange(prop, rounded(share ? math.percent / 100 : math.value));
   if (kind === 'weight') return String(value);
   if (kind !== 'number') return undefined;
   return prop === 'zIndex' ? Math.round(value) : value;

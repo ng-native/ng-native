@@ -42,6 +42,7 @@ const {
   noTextShadow,
   frameEasing,
   finishBox,
+  clampNegatives,
   unsupported,
   kindOf,
   propsFor,
@@ -2398,7 +2399,7 @@ function unparsedValue(value, out, deferred, context) {
     );
   }
   // A bare number `markUnitless` tagged, which lightningcss hands over as an unknown dimension.
-  const bare = parts.find((part) => part.value?.unit === '__unitless');
+  const bare = parts.find((part) => /^__(?:unitless|negative)$/.test(part.value?.unit));
   if (bare) length({ type: 'dimension', value: bare.value }, context);
   const text = parts.map((part) => part.value?.value ?? part.value?.name ?? part.type).join(' ');
   throw new CssUnsupported(`${context}: '${property}: ${text}' is not a value native can take`);
@@ -3630,6 +3631,7 @@ function compileCss(source, context = 'styles', options = {}) {
         delete out['$animation'];
       }
       finishBox(out, context);
+      clampNegatives(out);
       return written;
     };
 
@@ -3690,6 +3692,7 @@ function compileCss(source, context = 'styles', options = {}) {
       declare(declaration, declarations, {}, deferred, context, addFrameDeclaration, targets);
     }
     finishBox(declarations, context);
+    clampNegatives(declarations);
     const easing = frameEasing(declarations, context);
     return (frame.selectors ?? []).map((selector) => ({
       offset: keyframeOffset(selector),
@@ -3699,7 +3702,7 @@ function compileCss(source, context = 'styles', options = {}) {
     }));
   }
 
-  const flattened = flatten(source, context, options.recover === true);
+  const flattened = flatten(markNegatives(source), context, options.recover === true);
   let parsed;
   try {
     parsed = lightning.transform({
@@ -4322,6 +4325,39 @@ function markUnitless(code) {
     (whole, before, name, colon, value) =>
       takesUnits(name) ? `${before}${name}${colon}${tagBareNumbers(value)}` : whole,
   );
+}
+
+/**
+ * Each negative written out on a property with nothing below zero, tagged with a unit of its own
+ * so it reaches the compiler as what it is. A browser drops `width: -4px` and clamps
+ * `calc(1px - 5px)`, and lightningcss folds the second to the first, so they are told apart here,
+ * in the text, before it does: nesting is lowered by the same fold.
+ */
+function markNegatives(code) {
+  return code.replace(
+    /\/\*.*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|([{;](?:\s|\/\*.*?\*\/)*)([a-z][a-z-]*)(\s*:)([^;{}]*)/gs,
+    (whole, before, name, colon, value) =>
+      NEVER_NEGATIVE_NAME.test(name) ? `${before}${name}${colon}${tagNegatives(value)}` : whole,
+  );
+}
+
+/** The properties of `NEVER_NEGATIVE`, as a sheet names them, and the shorthands of them. */
+const NEVER_NEGATIVE_NAME =
+  /^(?:(?:min-|max-)?(?:width|height|inline-size|block-size)|padding(?:-.+)?|font-size|line-height|border(?:-(?:top|right|bottom|left|inline|block)(?:-start|-end)?)?|border(?:-.+)?-(?:width|radius)|outline(?:-width)?|gap|row-gap|column-gap|grid-(?:row-|column-)?gap|flex|flex-basis|flex-grow|flex-shrink|aspect-ratio)$/;
+
+const NEGATIVE = /^-(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
+
+/** A value's negatives at its top level, other than -0, with the unit that says they were written. */
+function tagNegatives(value) {
+  let depth = 0;
+  let out = '';
+  for (const token of value.split(/(\s+|,|\(|\))/)) {
+    if (token === '(') depth++;
+    else if (token === ')') depth--;
+    const negative = depth === 0 && NEGATIVE.test(token) && parseFloat(token) !== 0;
+    out += negative ? `${parseFloat(token)}__negative` : token;
+  }
+  return out;
 }
 
 /** Whether a property's bare numbers other than 0 are an error: every length but line-height. */
