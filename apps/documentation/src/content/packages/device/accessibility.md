@@ -46,8 +46,8 @@ for Settings, so it is read at startup and again when the app comes back rather 
 `announce(message)` says something to a screen reader that no focus change would have said: a list
 that reordered, a search that returned nothing - changes a sighted user sees and a screen reader
 would miss. `accessibilityLiveRegion` and `aria-live` on a view do this on Android only, as in React
-Native, and do nothing on iOS, so content that must be announced on both platforms calls `announce()`
-on iOS.
+Native, and do nothing on iOS, so content that must be announced on both platforms calls
+`announce()` on iOS.
 
 Text itself follows a change of the system text size while the app runs, with nothing injected:
 `watchConditions(app.engine)`, which the app template calls at bootstrap, measures every `<text>`
