@@ -656,6 +656,62 @@
     }
   },
   {
+    "name": "a negative in opacity, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0"
+    }
+  },
+  {
+    "name": "a negative in opacity, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0"
+    }
+  },
+  {
+    "name": "a rule's opacity: var(--x, -1), read as opacity",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0"
+    }
+  },
+  {
+    "name": "an inline opacity: var(--x, -1), read as opacity, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0"
+    }
+  },
+  {
+    "name": "a rule's WIDTH: -4px, read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's Padding-Left: -2px, read as padding-left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "7px"
+    }
+  },
+  {
+    "name": "a rule's WIDTH: calc(1px - 5px), read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "0px"
+    }
+  },
+  {
     "name": "a rule's max-width: var(--x, -4px), read as max-width",
     "expected": {
       "color": "rgb(0, 0, 0)",

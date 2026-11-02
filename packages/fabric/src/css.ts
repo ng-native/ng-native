@@ -5400,7 +5400,8 @@ function usedAs(declaration: DeferredDeclaration, token: TokenValue | undefined,
  */
 function invalidNegative(value: unknown, props: readonly string[]): boolean {
   const negative = typeof value === 'number' ? value < 0 : /^-[\d.]+%$/.test(String(value));
-  return negative && props.every((prop) => NEVER_NEGATIVE.test(prop));
+  // `opacity` takes any number and clamps it, so a negative is no less valid there.
+  return negative && props.every((prop) => prop !== 'opacity' && NEVER_NEGATIVE.test(prop));
 }
 
 /**

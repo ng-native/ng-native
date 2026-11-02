@@ -4335,9 +4335,11 @@ function markUnitless(code) {
  */
 function markNegatives(code) {
   return code.replace(
-    /\/\*.*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|([{;](?:\s|\/\*.*?\*\/)*)([a-z][a-z-]*)(\s*:)([^;{}]*)/gs,
+    /\/\*.*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|([{;](?:\s|\/\*.*?\*\/)*)([a-z][a-z-]*)(\s*:)([^;{}]*)/gis,
     (whole, before, name, colon, value) =>
-      NEVER_NEGATIVE_NAME.test(name) ? `${before}${name}${colon}${tagNegatives(value)}` : whole,
+      NEVER_NEGATIVE_NAME.test(name?.toLowerCase())
+        ? `${before}${name}${colon}${tagNegatives(value)}`
+        : whole,
   );
 }
 
