@@ -524,14 +524,17 @@ length property is unset by such a token, `gap` and `padding-inline` among them.
 `background-color`, the one part of that shorthand native has, and so are
 `rgba(var(--channels), <alpha>)`, `color-mix()`, `light-dark()` and a relative colour of a token
 written there. A token is read as one value, so one that is no colour unsets it: an unset token, a
-length, `none`, and also a gradient, a `url()`, or a colour beside an image, `rgb(1 2 3) none`,
+length, `none`, and also a gradient in a stylesheet's token, a `url()`, or a colour beside an image,
+`rgb(1 2 3) none`,
 where a browser reads the token as the whole shorthand and paints the colour and the image. With
 anything written beside the token, `background: var(--surface) none`, the shorthand is refused.
 Layers written out over a token's colour,
 `background: linear-gradient(#ffffff33, #ffffff00), var(--primary)`, are read as the shorthand
 with the colour written, and the token as its `background-color`, as long as the token is all
-of the last layer and no other layer has one. An unset token, or one that is no colour, unsets
-only the colour and leaves the gradients drawn, where a browser draws neither.
+of the last layer and no other layer has one. A token that is unset, or a word that is no part of a
+background, makes the whole shorthand invalid, as in a browser, so the gradients go with the
+colour. A gradient set as the token on an element is drawn as one more layer under the written
+ones.
 `flex: var(--grow)` is `flex: <number>`: it grows by the token, shrinks by 1, and starts from a
 basis of 0, once the token is set. With no token it is `flex`'s initial value, `0 1 auto`, whatever
 a weaker rule set, as on the web, where a `var()` that cannot be substituted gives the property its

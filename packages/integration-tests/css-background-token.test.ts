@@ -395,3 +395,102 @@ describe('background: gradients over a var() colour', () => {
     assert.equal((image() as unknown[]).length, 2);
   });
 });
+
+describe('a background token that is no colour, as Chrome reads it', () => {
+  const LAYERED = '.a { background: linear-gradient(red, blue), var(--x) }';
+  const held = (text: string) => {
+    const scene = tree(LAYERED);
+    scene.engine.setCustomProperty(scene.node, '--x', text);
+    scene.engine.commit();
+    return scene;
+  };
+  const count = (value: unknown) => (value as unknown[] | undefined)?.length ?? 0;
+
+  it('draws the layers over a token that is a colour', () => {
+    const { image, background } = held('rgb(1, 2, 3)');
+    assert.equal(count(image()), 1);
+    assert.equal(background(), 'rgb(1, 2, 3)');
+  });
+
+  for (const [why, css] of [
+    ['unset', LAYERED],
+    [
+      'unset, over a weaker image',
+      `.a { background-image: linear-gradient(lime, red) } ${LAYERED}`,
+    ],
+  ] as const) {
+    it(`draws neither for a token ${why}`, () => {
+      const { engine, image, background } = tree(css);
+      engine.commit();
+      assert.equal(count(image()), 0);
+      assert.equal(background() ?? undefined, undefined);
+    });
+  }
+
+  it('draws neither for a word that is no part of a background', () => {
+    const { image, background } = held('notacolour');
+    assert.equal(count(image()), 0);
+    assert.equal(background() ?? undefined, undefined);
+  });
+
+  it('draws the layers over a length or none, which a last layer can be', () => {
+    for (const token of ['10px', 'none']) {
+      const { image, background } = held(token);
+      assert.equal(count(image()), 1, token);
+      assert.equal(background() ?? undefined, undefined, token);
+    }
+  });
+
+  it('draws a gradient the token holds as one more layer, under the written ones', () => {
+    const { image, background } = held('linear-gradient(to right, red, blue)');
+    const directions = (image() as { direction: { value: number } }[]).map(
+      (each) => each.direction.value,
+    );
+    assert.deepEqual(directions, [180, 90]);
+    assert.equal(background() ?? undefined, undefined);
+  });
+
+  it('takes the colour under a gradient the token holds', () => {
+    const { image, background } = held('linear-gradient(to right, red, blue), rgb(1, 2, 3)');
+    assert.equal(count(image()), 2);
+    assert.equal(background(), 'rgb(1, 2, 3)');
+  });
+
+  it('follows the token from a gradient to a colour and away', () => {
+    const { engine, node, image, background } = held('linear-gradient(to right, red, blue)');
+    engine.setCustomProperty(node, '--x', 'rgb(1, 2, 3)');
+    engine.commit();
+    assert.equal(count(image()), 1);
+    assert.equal(background(), 'rgb(1, 2, 3)');
+    engine.setCustomProperty(node, '--x', null);
+    engine.commit();
+    assert.equal(count(image()), 0);
+    assert.equal(background() ?? undefined, undefined);
+  });
+
+  it('leaves an important image another rule declares', () => {
+    const { engine, image } = tree(
+      `${LAYERED} .a { background-image: linear-gradient(to right, lime, red) !important }`,
+    );
+    engine.commit();
+    assert.equal(count(image()), 1);
+  });
+
+  it('keeps its image over a later rule when it is important', () => {
+    const { engine, node, image } = tree(
+      '.a { background: linear-gradient(red, blue), var(--x) !important } ' +
+        '.a { background-image: linear-gradient(to right, lime, red) }',
+    );
+    engine.setCustomProperty(node, '--x', 'rgb(1, 2, 3)');
+    engine.commit();
+    assert.equal((image() as { direction: { value: number } }[])[0]!.direction.value, 180);
+  });
+
+  it('unsets a weaker image under background: var() of an unset token', () => {
+    const { engine, image } = tree(
+      '.a { background-image: linear-gradient(red, blue) } .a { background: var(--x) }',
+    );
+    engine.commit();
+    assert.equal(count(image()), 0);
+  });
+});

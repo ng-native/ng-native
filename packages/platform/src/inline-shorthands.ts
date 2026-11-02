@@ -317,7 +317,10 @@ function layersOverToken(layers: readonly string[], on: string): Reading {
   const images = backgroundLayers(layers.slice(0, -1).join(','));
   const token = backgroundToken(layers.at(-1)!, on);
   if (!images || images.color !== undefined || !token) return NO_BACKGROUND;
-  return { set: background(TRANSPARENT, images.images).slice(1), deferred: token };
+  return {
+    set: background(TRANSPARENT, images.images).slice(2),
+    deferred: { ...token, props: ['backgroundColor', IMAGE], layers: true, over: images.images },
+  };
 }
 
 function readBackground(text: string, on: string): Reading {

@@ -194,6 +194,19 @@ function readFrom(property: ExtraProperty, style: Record<string, unknown>): stri
   return keys[property] ?? [EXTRA_KEYS[property]];
 }
 
+/** A list of gradients here, and their text in the browser: each has its one layer. */
+function assertGradients(style: Record<string, unknown>, browser: string): void {
+  const drawn = (style['experimental_backgroundImage'] as unknown[] | undefined)?.length ?? 0;
+  assert.equal(drawn, browser.match(/gradient\(/g)?.length ?? 0, 'background-image');
+}
+
+/** One family by name here, and the whole stack, quoted where it needs to be, in the browser. */
+function assertFamily(style: Record<string, unknown>, browser: string): void {
+  // Chrome quotes a family that needs it, and escapes a quote or a backslash inside.
+  const quoted = /^"((?:\\.|[^"\\])*)"/.exec(browser)?.[1]?.replace(/\\(.)/g, '$1');
+  assert.equal(style['fontFamily'], quoted ?? browser.split(',')[0], 'font-family');
+}
+
 /** One of a case's extra properties against what the browser computed for it. */
 function assertExtra(property: ExtraProperty, style: Record<string, unknown>, browser: string) {
   if (property === 'display') {
@@ -209,13 +222,8 @@ function assertExtra(property: ExtraProperty, style: Record<string, unknown>, br
     assert.equal(style['display'] ?? 'flex', kept, property);
     return;
   }
-  // One family by name here, and the whole stack, quoted where it needs to be, in the browser.
-  if (property === 'font-family') {
-    // Chrome quotes a family that needs it, and escapes a quote or a backslash inside.
-    const quoted = /^"((?:\\.|[^"\\])*)"/.exec(browser)?.[1]?.replace(/\\(.)/g, '$1');
-    assert.equal(style['fontFamily'], quoted ?? browser.split(',')[0], property);
-    return;
-  }
+  if (property === 'background-image') return assertGradients(style, browser);
+  if (property === 'font-family') return assertFamily(style, browser);
   // A length is a number of points here, and `2px` in the browser. An unset one is native's
   // initial value, as the browser reports its own.
   const read = readFrom(property, style).map((key) => style[key]);

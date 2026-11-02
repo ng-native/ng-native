@@ -369,6 +369,11 @@ export interface DeferredDeclaration {
    */
   readonly layers?: true;
   /**
+   * `background: linear-gradient(...), var(--x)`: the layers written over the token, which are
+   * drawn with it, or not at all where it makes the shorthand invalid.
+   */
+  readonly over?: readonly object[];
+  /**
    * `inherit`, written for these props: each is the parent's value for it, or nothing where the
    * parent has none.
    */
@@ -5531,24 +5536,28 @@ function writeSettled(
 ): void {
   const one = settled instanceof EachSide ? settled.at(declaration.props, prop) : settled;
   const value = clamped(prop, one) ?? declaration.unset;
-  if (declaration.layers) writeLayer(own, prop, value, layers);
+  if (declaration.layers) writeLayer(own, prop, value, layers, declaration.over);
   else write(own, prop, value, declaration.line !== undefined);
 }
 
 /**
- * One prop of a `background: var()`, whose token may hold the images as well as the colour. The
- * image is written only where the token holds one: a token that is a colour leaves an image
- * another rule declared as it is. Each prop is ranked in the cascade by itself, so an image a
- * later rule declares, or an important one, is not written over by the token's.
+ * One prop of a `background: var()`, whose token may hold the images as well as the colour. A
+ * token that is a colour leaves an image another rule declared as it is, and one that fits no
+ * part of a background makes the shorthand invalid, which unsets the image with the colour.
+ * Layers written over the token are drawn above what it holds. Each prop is ranked in the cascade
+ * by itself, so an image a later rule declares, or an important one, is not written over.
  */
 function writeLayer(
   own: Record<string, unknown>,
   prop: string,
   value: unknown,
   layers: BackgroundLayers | undefined,
+  over: readonly object[] | undefined,
 ): void {
   if (prop !== BACKGROUND_IMAGE) write(own, prop, layers?.color ?? value, false);
-  else if (layers) own[prop] = layers.images;
+  else if (layers) own[prop] = [...(over ?? []), ...layers.images];
+  else if (value === undefined) delete own[prop];
+  else if (over) own[prop] = over;
 }
 
 const BACKGROUND_IMAGE = 'experimental_backgroundImage';
@@ -5566,8 +5575,11 @@ function layersOf(
 ): BackgroundLayers | undefined {
   if (!declaration.layers) return undefined;
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
-  const text = firstSet(names, tokens)?.keyword;
-  return text && /gradient\(/i.test(text) ? backgroundLayers(text) : undefined;
+  const token = firstSet(names, tokens);
+  const text = token?.keyword;
+  if (text && /gradient\(/i.test(text)) return backgroundLayers(text);
+  // A length is the last layer's position, and `none` its image: valid, and no colour or image.
+  return token?.length !== undefined || text?.toLowerCase() === 'none' ? { images: [] } : undefined;
 }
 
 const BOUND_NUMBERS = new Set([
