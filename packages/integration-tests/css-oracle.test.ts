@@ -120,6 +120,7 @@ const NATIVE_INITIAL: Partial<Record<ExtraProperty, unknown>> = {
   'row-gap': 0,
   'outline-width': 0,
   'max-width': 'none',
+  'line-height': 'normal',
   'flex-basis': 'auto',
   opacity: 1,
   'pointer-events': 'auto',

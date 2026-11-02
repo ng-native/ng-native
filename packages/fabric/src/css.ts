@@ -5388,8 +5388,9 @@ function referenced(
 /** A token's value as the declaration uses it: moved by its arithmetic, or unset where invalid. */
 function usedAs(declaration: DeferredDeclaration, token: TokenValue | undefined, value: unknown) {
   if (declaration.adjust) return adjusted(value, declaration.adjust);
-  // A fallback that is a math function is a `fallbackToken`, and one written out is not.
-  const math = token ? token.fromMath : declaration.fallbackToken;
+  // A fallback that is a math function is a `fallbackToken`, and one written out is not. Only in
+  // a unit the node decides is the two the same, so that one is read as math.
+  const math = token ? token.fromMath : declaration.fallbackToken || isDeferredLength(value);
   return !math && invalidNegative(value, declaration.props) ? undefined : value;
 }
 
@@ -5399,10 +5400,22 @@ function usedAs(declaration: DeferredDeclaration, token: TokenValue | undefined,
  * clamped.
  */
 function invalidNegative(value: unknown, props: readonly string[]): boolean {
-  const negative = typeof value === 'number' ? value < 0 : /^-[\d.]+%$/.test(String(value));
   // `opacity` takes any number and clamps it, so a negative is no less valid there.
-  return negative && props.every((prop) => prop !== 'opacity' && NEVER_NEGATIVE.test(prop));
+  return (
+    isNegative(value) && props.every((prop) => prop !== 'opacity' && NEVER_NEGATIVE.test(prop))
+  );
 }
+
+/** Below zero: a number, a percentage, a length still to be worked out, or any of several. */
+function isNegative(value: unknown): boolean {
+  if (typeof value === 'number') return value < 0;
+  if (value instanceof EachSide) return value.lengths.some(isNegative);
+  const pending = (value as { __defer?: DeferredEm } | null)?.__defer;
+  return pending ? pending.factor < 0 : isPercentage(value) && parseFloat(value) < 0;
+}
+
+const isPercentage = (value: unknown): value is string =>
+  typeof value === 'string' && value.endsWith('%');
 
 /**
  * What a display keyword is laid out as: flex, none, contents, or one of the block containers,
@@ -5501,9 +5514,12 @@ function formFor(token: TokenValue, declaration: DeferredDeclaration): unknown {
   return declaration.adjust ? undefined : new EachSide(token.lengths);
 }
 
-/** Whether arithmetic that needed the node came out below what `prop` takes, which is 0. */
-const belowZero = (prop: string, value: unknown): boolean =>
-  typeof value === 'number' && value < 0 && NEVER_NEGATIVE.test(prop);
+/** Arithmetic that came out below what `prop` takes, which is 0, or a percentage of 0. */
+const clamped = (prop: string, value: unknown): unknown => {
+  if (!NEVER_NEGATIVE.test(prop)) return value;
+  if (typeof value === 'number') return Math.max(value, 0);
+  return isPercentage(value) && value.startsWith('-') ? '0%' : value;
+};
 
 /** What a deferred declaration settled to, written to one of its props. */
 function writeSettled(
@@ -5514,7 +5530,7 @@ function writeSettled(
   layers: BackgroundLayers | undefined,
 ): void {
   const one = settled instanceof EachSide ? settled.at(declaration.props, prop) : settled;
-  const value = belowZero(prop, one) ? 0 : (one ?? declaration.unset);
+  const value = clamped(prop, one) ?? declaration.unset;
   if (declaration.layers) writeLayer(own, prop, value, layers);
   else write(own, prop, value, declaration.line !== undefined);
 }

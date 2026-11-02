@@ -634,8 +634,9 @@ const tokenRow = (
   value: string,
   measured: ExtraProperty,
   use: string,
+  { set = '' } = {},
 ): OracleCase[] =>
-  tokenCases(`${name} in ${property}`, property, value, heldBy(property), measured, { use });
+  tokenCases(`${name} in ${property}`, property, value, heldBy(property) + set, measured, { use });
 
 /** Arithmetic with a token in it comes out where it is used, so that is where it is clamped. */
 const TOKEN_RANGE_CASES = [
@@ -675,6 +676,17 @@ const TOKEN_NEGATIVE_CASES = [
   ...tokenRow('a negative', 'flex-basis', '-4px', 'flex-basis', 'var(--t)'),
   ...tokenRow('a calc() below zero', 'max-width', 'calc(1px - 5px)', 'max-width', 'var(--t)'),
   ...tokenRow('a calc() below zero', 'flex-basis', 'calc(1px - 5px)', 'flex-basis', 'var(--t)'),
+  ...tokenRow('a negative zero share', 'max-width', '-0%', 'max-width', 'var(--t)'),
+  ...tokenRow('a negative in ems', 'max-width', '-1em', 'max-width', 'var(--t)'),
+  ...tokenRow('a zero in ems', 'max-width', '0em', 'max-width', 'var(--t)'),
+  ...tokenRow('a share', 'max-width', '10%', 'max-width', 'var(--t)'),
+  ...tokenRow('a negative side', 'padding', '4px -1px', 'padding-top', 'var(--t)'),
+  ...tokenRow('a negative multiple', 'line-height', '-1', 'line-height', 'var(--t)'),
+  ...tokenRow('a share below zero', 'max-width', 'calc(1% - 11%)', 'max-width', 'var(--t)'),
+  ...tokenRow('a share below zero', 'flex-basis', 'calc(1% - 11%)', 'flex-basis', 'var(--t)'),
+  ...tokenRow('a share from a token', 'max-width', 'calc(var(--b) * -1)', 'max-width', 'var(--t)', {
+    set: '; --b: 10%',
+  }),
   // `opacity` takes a negative and clamps it, written out or not.
   ...tokenRow('a negative', 'opacity', '-1', 'opacity', 'var(--t)'),
   inRule('opacity', 'var(--x, -1)', 'opacity', false),
@@ -684,12 +696,17 @@ const TOKEN_NEGATIVE_CASES = [
   inRule('Padding-Left', '-2px', 'padding-left', true),
   inRule('WIDTH', 'calc(1px - 5px)', 'width', false),
   // The same as the fallback of a token nothing sets.
-  ...['var(--x, -4px)', 'var(--x, var(--y, -4px))', 'var(--x, calc(1px - 5px))'].flatMap(
-    (value): OracleCase[] => [
-      inRule('max-width', value, 'max-width', false),
-      inStyle('max-width', value, 'max-width'),
-    ],
-  ),
+  ...[
+    'var(--x, -4px)',
+    'var(--x, var(--y, -4px))',
+    'var(--x, calc(1px - 5px))',
+    'var(--x, -0%)',
+  ].flatMap((value): OracleCase[] => [
+    inRule('max-width', value, 'max-width', false),
+    inStyle('max-width', value, 'max-width'),
+  ]),
+  inRule('max-width', 'var(--x, calc(1em - 2em))', 'max-width', false),
+  inRule('max-width', 'var(--x, calc(20px - 2em))', 'max-width', false),
 ];
 
 export const CASES: OracleCase[] = [

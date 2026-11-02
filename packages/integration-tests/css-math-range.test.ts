@@ -31,6 +31,12 @@ describe('a math function below zero in a stylesheet', () => {
     assert.match(warnings[0]!, /width/);
   });
 
+  it('is refused written out after a nested rule, keeping the value before it', () => {
+    const { sheet, warnings } = compiled('.a { width: 7px; .b { color: red } width: -4px }');
+    assert.match(warnings[0]!, /nothing below zero/);
+    assert.equal(sheet.rules[0].declarations.width, 7);
+  });
+
   it('leaves a negative in quoted text alone, in a selector and in a value', () => {
     const { sheet, warnings } = compiled(
       `[data-note="x; width: -4px more"] { height: 4px } .b { font-family: 'a; width: -4px' }`,

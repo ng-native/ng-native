@@ -656,6 +656,150 @@
     }
   },
   {
+    "name": "a negative zero share in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0%"
+    }
+  },
+  {
+    "name": "a negative zero share in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0%"
+    }
+  },
+  {
+    "name": "a negative in ems in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "a negative in ems in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "none"
+    }
+  },
+  {
+    "name": "a zero in ems in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "a zero in ems in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "a share in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "10%"
+    }
+  },
+  {
+    "name": "a share in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "10%"
+    }
+  },
+  {
+    "name": "a negative side in padding, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "a negative side in padding, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "a negative multiple in line-height, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "normal"
+    }
+  },
+  {
+    "name": "a negative multiple in line-height, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "normal"
+    }
+  },
+  {
+    "name": "a share below zero in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0%"
+    }
+  },
+  {
+    "name": "a share below zero in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0%"
+    }
+  },
+  {
+    "name": "a share below zero in flex-basis, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0%"
+    }
+  },
+  {
+    "name": "a share below zero in flex-basis, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-basis": "0%"
+    }
+  },
+  {
+    "name": "a share from a token in max-width, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0%"
+    }
+  },
+  {
+    "name": "a share from a token in max-width, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0%"
+    }
+  },
+  {
     "name": "a negative in opacity, in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",
@@ -753,6 +897,38 @@
   },
   {
     "name": "an inline max-width: var(--x, calc(1px - 5px)), read as max-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "a rule's max-width: var(--x, -0%), read as max-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0%"
+    }
+  },
+  {
+    "name": "an inline max-width: var(--x, -0%), read as max-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0%"
+    }
+  },
+  {
+    "name": "a rule's max-width: var(--x, calc(1em - 2em)), read as max-width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "max-width": "0px"
+    }
+  },
+  {
+    "name": "a rule's max-width: var(--x, calc(20px - 2em)), read as max-width",
     "expected": {
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
