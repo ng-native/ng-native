@@ -2250,6 +2250,14 @@
     }
   },
   {
+    "name": "inline font: 12px inherit over #probe { font-size: 30px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "30px"
+    }
+  },
+  {
     "name": "inline text-decoration: underline dotted rgb(255, 0, 0) over #probe { text-decoration: line-through }",
     "expected": {
       "color": "rgb(0, 0, 0)",

@@ -316,6 +316,7 @@ const INLINE_VALUE_SHORTHAND_CASES: OracleCase[] = [
     'text',
   ),
   inlineValue({ font: 'italic 700 14px/2 Georgia, serif' }, '#probe { }', TYPE, 'text'),
+  inlineValue({ font: '12px inherit' }, '#probe { font-size: 30px }', ['font-size'], 'text'),
   inlineValue(
     { 'text-decoration': 'underline dotted rgb(255, 0, 0)' },
     '#probe { text-decoration: line-through }',

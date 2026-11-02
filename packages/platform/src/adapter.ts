@@ -173,9 +173,20 @@ function sideOf(key: string, side: number): string {
   return `${key}${SIDES[side]!}`;
 }
 
-/** More values than a shorthand takes, or a corner of two radii, which native has none of. */
+/** Whether a value has a `/` outside its brackets: `4px/8px`, and not `calc(8px / 2)`. */
+function slashed(part: string): boolean {
+  let depth = 0;
+  for (const char of part) {
+    if (char === '(') depth++;
+    else if (char === ')') depth--;
+    else if (char === '/' && depth === 0) return true;
+  }
+  return false;
+}
+
+/** More values than a shorthand takes, or a `/`: a corner of two radii, which native has none of. */
 const tooMany = (key: string, parts: readonly string[]): boolean =>
-  parts.length > (key === 'gap' ? 2 : 4) || parts.includes('/');
+  parts.length > (key === 'gap' ? 2 : 4) || parts.some(slashed);
 
 /**
  * A shorthand written with a value for each side, `padding: 4px 8px`, as the longhands native
@@ -190,8 +201,8 @@ function longhands(key: string, value: unknown): [string, string][] | typeof REF
   if (key === 'flex') return flexLonghands(value);
   if (!SHORTHANDS.has(key) || typeof value !== 'string' || /var\(/i.test(value)) return null;
   const parts = cssValues(value);
-  if (parts.length < 2) return null;
   if (tooMany(key, parts)) return REFUSED;
+  if (parts.length < 2) return null;
   const [first, second = first, third = first, fourth = second] = parts as [string, ...string[]];
   if (key === 'gap')
     return [

@@ -194,8 +194,8 @@ some shorthands than a stylesheet. `border`, its sides and logical sides, `outli
 A line takes a token beside written parts, `border: 1px solid var(--c)`, and a `background` takes
 one as all of it or as its last layer. In these, `background` is a color or linear gradients, with
 no position, size, repeat or `url()`, and no token in a gradient. `box-shadow` takes a token only
-as all of it, and lengths in `px` or `rem` only. `font` has no `small-caps`, stretch, keyword size
-or system font.
+as all of it, lengths in `px` or `rem` only, and a color written out, not a `color-mix()`. `font`
+has no `small-caps`, stretch, keyword size or system font.
 A value outside that is dropped, with a warning in development.
 
 `skewX()` and `skewY()` are drawn on iOS only. React Native on Android breaks a transform down into

@@ -303,6 +303,19 @@ describe('changing or taking away a shorthand in a style', () => {
     assert.deepEqual(drawn(props()), sheetProps('box-shadow: var(--s)', '--s: 1px 2px red'));
   });
 
+  it('keeps a division inside a calc() in a corner', () => {
+    const { renderer, node, props } = scene('.a { }');
+    renderer.setStyle(node, 'border-radius', 'calc(8px / 2) 2px');
+    assert.equal(props()['borderTopLeftRadius'], 4);
+    assert.equal(props()['borderTopRightRadius'], 2);
+  });
+
+  it('keeps a family of a reserved word when it is quoted', () => {
+    const { renderer, node, props } = scene('.a { }', 'text');
+    renderer.setStyle(node, 'font', '12px "inherit"');
+    assert.equal(props()['fontFamily'], 'inherit');
+  });
+
   it('reads a line in capitals', () => {
     assert.deepEqual(boundProps('border: 2PX SOLID RED'), sheetProps('border: 2px solid red'));
   });
@@ -393,6 +406,14 @@ describe('a value a shorthand does not take', () => {
     ['text-decoration: underline var(--c)', 'text'],
     ['border-radius: 1px 2px 3px 4px 5px'],
     ['border-radius: 4px / 8px'],
+    ['border-radius: 4px 8px/2px'],
+    ['border-radius: 4px/8px'],
+    ['box-shadow: 1px 1px color-mix(in srgb, red 50%, blue)'],
+    ['box-shadow: 1px 1px rgb(from red r g b)'],
+    ['box-shadow: 1px 1px platform-color(systemBlue)'],
+    ['font: 12px inherit', 'text'],
+    ['font: 12px Arial, INITIAL', 'text'],
+    ['font: 12px default', 'text'],
     ['box-shadow: 1px red 1px'],
     ['background: linear-gradient(red, blue), red, var(--a)'],
     ['text-decoration: none underline', 'text'],
@@ -430,12 +451,14 @@ describe('a value a shorthand does not take', () => {
     assert.deepEqual(without(drawn(props())), {});
   });
 
-  it('draws a shadow of no colour in the colour of the text', () => {
-    const { renderer, node, props } = scene('.a { color: red }');
-    renderer.setStyle(node, 'box-shadow', '1px 1px');
-    const [shadow] = props()['boxShadow'] as { color: string }[];
-    assert.equal(colour(shadow!.color), colour('red'));
-  });
+  for (const value of ['1px 1px', '1px 1px currentColor']) {
+    it(`draws box-shadow: ${value} in the colour of the text`, () => {
+      const { renderer, node, props } = scene('.a { color: red }');
+      renderer.setStyle(node, 'box-shadow', value);
+      const [shadow] = props()['boxShadow'] as { color: string }[];
+      assert.equal(colour(shadow!.color), colour('red'));
+    });
+  }
 
   it('says a side written in a style only the whole box has is drawn solid', (t) => {
     const warn = mock.method(console, 'warn', () => {});

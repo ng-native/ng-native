@@ -20,7 +20,8 @@ import {
  * `text-decoration`. A token is read where a stylesheet reads one that native can tell the part of:
  * in a line of written parts, as the colour under a `background`, or as all of it. A `background`
  * has no position, size, repeat, `url()` or token in a gradient, and its gradients are those
- * `backgroundLayers` reads. A `box-shadow` has no relative length, and a token only as all of it. A `font` has no
+ * `backgroundLayers` reads. A `box-shadow` has no relative length, no colour worked out on the node, and a token only as all
+ * of it. A `font` has no
  * `small-caps`, stretch, keyword size or system font. Anything else is dropped with a warning.
  */
 export interface ReadShorthand {
@@ -227,6 +228,10 @@ interface Shadow {
   readonly inset: boolean;
 }
 
+/** A colour a shadow's list can carry, which the node does not work out: no function of tokens. */
+const isShadowColour = (part: string): boolean =>
+  /^currentcolor$/i.test(part) || !!parseColor(part);
+
 /** The parts of a shadow: lengths, together, with `inset` and a colour either side. */
 function shadowParts(text: string) {
   const out = { lengths: [] as number[], inset: false, color: undefined as string | undefined };
@@ -236,7 +241,7 @@ function shadowParts(text: string) {
     if (length !== undefined && ended) return undefined;
     if (length !== undefined) out.lengths.push(length);
     else if (/^inset$/i.test(part) && !out.inset) out.inset = true;
-    else if (out.color === undefined && !hasToken(part) && isColour(part)) out.color = part;
+    else if (out.color === undefined && isShadowColour(part)) out.color = part;
     else return undefined;
     ended ||= length === undefined && out.lengths.length > 0;
   }
@@ -330,6 +335,8 @@ const FONT_STYLE = /^(?:normal|italic|oblique)$/i;
 const FONT_WEIGHT = /^(?:normal|bold|\d+(?:\.\d+)?)$/i;
 const FONT_SIZE = /^(?:(?:\d*\.)?\d+(?:px|rem|em|vw|vh|vmin|vmax)|0)$/i;
 const NO_FONT = 'a font is a size and a family, after a style and a weight';
+/** The words no family takes unquoted, which CSS keeps for itself. */
+const RESERVED_FAMILY = /^(?:inherit|initial|unset|revert|revert-layer|default)$/i;
 
 /** A weight as a stylesheet writes one: a word `normal`, and any other as its number's text. */
 const fontWeight = (word: string): string =>
@@ -357,7 +364,8 @@ function readFont(text: string): Reading {
   const [size, height] = (parts[at] ?? '').split('/');
   const family = parts.slice(at + 1).join(' ');
   const first = family ? firstFamily(family) : undefined;
-  if (!size || first === undefined) return NO_FONT;
+  const reserved = splitLayers(family).some((name) => RESERVED_FAMILY.test(name));
+  if (!size || first === undefined || reserved) return NO_FONT;
   return {
     set: [
       ['fontSize', size],
