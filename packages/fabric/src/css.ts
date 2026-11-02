@@ -5564,13 +5564,20 @@ function writeLayer(
   over: DeferredDeclaration['over'],
 ): void {
   if (prop === 'backgroundColor') write(own, prop, layers?.color ?? value, false);
-  else if (layers) {
-    const { images } = layers;
-    const held = prop === BACKGROUND_IMAGE ? images : images.map(() => BACKGROUND_PLACING[prop]);
-    const written = over?.[BACKGROUND_IMAGE]?.length ? over[prop] : undefined;
-    own[prop] = [...(written ?? []), ...held];
-  } else if (value === undefined) delete own[prop];
+  else if (layers) own[prop] = layerList(prop, layers.images, over);
+  else if (value === undefined) delete own[prop];
   else if (over?.[prop]) own[prop] = over[prop];
+}
+
+/** One prop's list for a token's images: what is written over them, then what each takes. */
+function layerList(
+  prop: string,
+  images: readonly object[],
+  over: DeferredDeclaration['over'],
+): unknown[] {
+  const held = prop === BACKGROUND_IMAGE ? images : images.map(() => BACKGROUND_PLACING[prop]);
+  const written = over?.[BACKGROUND_IMAGE]?.length ? over[prop] : undefined;
+  return [...(written ?? []), ...held];
 }
 
 const BACKGROUND_IMAGE = 'experimental_backgroundImage';
@@ -5596,10 +5603,13 @@ function layersOf(
   const token = firstSet(names, tokens) ?? (fallback && substitutedIn(fallback, tokens));
   const text = token?.keyword;
   if (text && /gradient\(/i.test(text)) return backgroundLayers(text);
-  // Valid, with no colour or image to draw.
-  return token?.length !== undefined || LAST_LAYER_WORDS.test(text ?? '')
-    ? { images: [] }
-    : undefined;
+  return token && isEmptyLastLayer(token) ? { images: [] } : undefined;
+}
+
+/** Whether a token is valid as a last layer with no colour or image: a position or such words. */
+function isEmptyLastLayer(token: TokenValue): boolean {
+  if (token.length !== undefined || token.lengths?.length === 2) return true;
+  return LAST_LAYER_WORDS.test(token.keyword ?? token.family ?? '');
 }
 
 const BOUND_NUMBERS = new Set([

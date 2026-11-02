@@ -3982,6 +3982,30 @@
     }
   },
   {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of 10px 20px",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of 10px 20px 30px",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, center no-repeat) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
     "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, center) with --x of null",
     "expected": {
       "color": "rgb(0, 0, 0)",

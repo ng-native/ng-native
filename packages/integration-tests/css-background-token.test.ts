@@ -520,10 +520,18 @@ describe('a background token that is no colour, as Chrome reads it', () => {
     }
   });
 
+  it('draws the layers over two lengths, a position, and neither over three', () => {
+    assert.equal(count(held('10px 20px').image()), 1);
+    assert.equal(count(held('10px 20px 30px').image()), 0);
+  });
+
   it('draws the layers over such a word in a stylesheet, and as a fallback', () => {
     for (const css of [
       '.p { --x: center } .a { background: linear-gradient(red, blue), var(--x) }',
       '.a { background: linear-gradient(red, blue), var(--x, center) }',
+      '.a { background: linear-gradient(red, blue), var(--x, center no-repeat) }',
+      '.p { --x: center no-repeat } .a { background: linear-gradient(red, blue), var(--x) }',
+      '.p { --x: 10px 20px } .a { background: linear-gradient(red, blue), var(--x) }',
       '.a { background: linear-gradient(red, blue), var(--x, var(--y, no-repeat)) }',
     ]) {
       assert.equal(count(tree(css, ['p']).image()), 1, css);
