@@ -250,7 +250,9 @@ describe('a controlled text input', () => {
     assert.equal(instance.control().value(), 'free');
   });
 
-  it('keeps the typed text when the app only moves the caret, through userEvent', async () => {
+  // A text field inserts at the caret, so after setSelection(0) the next key goes before the first.
+  // Where a device puts it follows from that; this has not been run on a device.
+  it('types the next key at the caret the app moved, through userEvent', async () => {
     const { fabric, instance } = await boot<{ text(): string }>('CaretInput');
 
     await userEvent.type(screen.getByTestId('field'), 'ab');
@@ -259,7 +261,59 @@ describe('a controlled text input', () => {
       fabric.commands.some(({ args }) => args[1] === null),
       'control: a command with no text',
     );
-    assert.equal(instance.text(), 'ab');
+    assert.equal(instance.text(), 'ba');
+  });
+
+  it('replaces the selection the app made with the next key, through userEvent', async () => {
+    const { instance } = await boot<{ text(): string }>('SelectingInput');
+
+    await userEvent.type(screen.getByTestId('field'), 'abc');
+
+    assert.equal(instance.text(), 'c');
+  });
+
+  it('lets a key replace the selection in a field at its maxLength, through userEvent', async () => {
+    const { instance } = await boot<{ text(): string }>('SelectingLimitedInput');
+
+    await userEvent.type(screen.getByTestId('field'), 'ab');
+
+    assert.equal(instance.text(), 'b');
+  });
+
+  // iOS sets a rewritten text and keeps a collapsed caret its distance from the end of the old text
+  // (`_setAttributedString` in RCTTextInputComponentView.mm), so the caret stays at the start.
+  it('keeps the caret in place when the app rewrites the text, through userEvent', async () => {
+    const { instance } = await boot<{ text(): string }>('UpperCaretInput');
+
+    await userEvent.type(screen.getByTestId('field'), 'ab');
+
+    assert.equal(instance.text(), 'BA');
+  });
+
+  it('moves the caret with the text a rewrite removes, through userEvent', async () => {
+    const { instance } = await boot<{ text(): string }>('LettersCaretInput');
+
+    // The 1 goes in after the a, is dropped, and the caret that was before it is now before the a.
+    await userEvent.type(screen.getByTestId('field'), 'a1b');
+
+    assert.equal(instance.text(), 'ba');
+  });
+
+  it('keeps the caret in the text when a rewrite removes more than sits before it', async () => {
+    const { instance } = await boot<{ text(): string }>('LettersStartInput');
+
+    // The 1 goes in at the start and is dropped again: the caret stays at 0, not before the end.
+    await userEvent.type(screen.getByTestId('field'), 'ab1c');
+
+    assert.equal(instance.text(), 'cba');
+  });
+
+  it('swallows a key too long for what maxLength has left, through userEvent', async () => {
+    const { instance } = await boot<{ text(): string }>('SelectingLimitedInput');
+
+    await userEvent.type(screen.getByTestId('field'), 'a\u{1F600}');
+
+    assert.equal(instance.text(), 'a');
   });
 
   it('keeps the typed text when the app rewrites another field, through userEvent', async () => {

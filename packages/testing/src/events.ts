@@ -197,7 +197,8 @@ export interface UserEvent {
   longPress(node: FakeFabricNode, options?: { duration?: number }): Promise<void>;
   /**
    * Focus the field, then one change per character, each with the next `eventCount`, typed into
-   * the text the field shows: after a key the app refused or rewrote, the text it put back.
+   * the text the field shows, at its caret: after a key the app refused or rewrote, the text it put
+   * back, and after `setSelection()`, where it moved the caret to.
    */
   type(node: FakeFabricNode, text: string, options?: TypeOptions): Promise<void>;
   /** Focus the field, empty it, and blur. */
@@ -215,28 +216,54 @@ async function hold(node: FakeFabricNode, duration: number): Promise<void> {
   await settle();
 }
 
-/** The text each command a field can be sent puts in it. */
-const TEXT_OF_COMMAND: Readonly<Record<string, (args: readonly unknown[]) => unknown>> = {
-  setTextAndSelection: (args) => args[1],
-  setText: (args) => args[0],
-  clearText: () => '',
+/** What a field shows and where its selection sits, as `start` and `end` offsets into `text`. */
+interface Shown {
+  text: string;
+  start: number;
+  end: number;
+}
+
+/** How a command a field can be sent changes what it shows. */
+const APPLY_COMMAND: Readonly<Record<string, (shown: Shown, args: readonly unknown[]) => Shown>> = {
+  // `(eventCount, text, start, end)`: a `null` text leaves the text, a negative `start` the caret.
+  setTextAndSelection: (shown, [, text, start, end]) => {
+    const next = typeof text === 'string' ? text : shown.text;
+    if (typeof start !== 'number' || start < 0) {
+      if (typeof text !== 'string') return shown;
+      // iOS keeps the caret its distance from the end of the old text when it sets a new one.
+      const caret = Math.max(0, text.length - (shown.text.length - shown.start));
+      return { text, start: caret, end: caret };
+    }
+    const to = typeof end === 'number' && end >= 0 ? end : start;
+    return {
+      text: next,
+      start: Math.min(start, next.length),
+      end: Math.min(Math.max(to, start), next.length),
+    };
+  },
+  setText: (_, [text]) => ({
+    text: String(text),
+    start: String(text).length,
+    end: String(text).length,
+  }),
+  clearText: () => ({ text: '', start: 0, end: 0 }),
 };
 
 /**
- * The text a field shows once a keystroke is handled, which the next key is typed into: the text
- * the app last put back with a command since `since`, as a field that refuses or rewrites the
- * keystroke does (`setTextAndSelection`, or a search bar's `setText` or `clearText`), or else the
- * text typed.
+ * What a field shows once a keystroke is handled, which the next key is typed into: what the app
+ * last put back with a command since `since`, as a field that refuses or rewrites the keystroke
+ * or moves the caret does (`setTextAndSelection`, or a search bar's `setText` or `clearText`), or
+ * else the text typed with the caret after it.
  */
-function shownText(field: FakeFabricNode, typed: string, since: number): string {
+function shownAfter(field: FakeFabricNode, typed: Shown, since: number): Shown {
   const { commands } = ownerOf(field).fabric;
-  for (let i = commands.length - 1; i >= since; i--) {
+  let shown = typed;
+  for (let i = since; i < commands.length; i++) {
     const { node, name, args } = commands[i]!;
-    if (node?.reactTag !== field.reactTag) continue;
-    const text = Object.hasOwn(TEXT_OF_COMMAND, name) ? TEXT_OF_COMMAND[name]!(args) : undefined;
-    if (typeof text === 'string') return text;
+    if (node?.reactTag !== field.reactTag || !Object.hasOwn(APPLY_COMMAND, name)) continue;
+    shown = APPLY_COMMAND[name]!(shown, args);
   }
-  return typed;
+  return shown;
 }
 
 async function endEditing(field: FakeFabricNode, text: string): Promise<void> {
@@ -255,18 +282,22 @@ const user: UserEvent = {
     await settle();
     const maxLength = field.props['maxLength'];
     const limit = typeof maxLength === 'number' ? maxLength : Infinity;
-    let value = String((currentOf(field) ?? field).props['text'] ?? '');
+    const start = String((currentOf(field) ?? field).props['text'] ?? '');
+    let shown: Shown = { text: start, start: start.length, end: start.length };
     for (const key of text) {
       // `maxLength` is enforced natively: the field never calls back with text past it, so a key
       // pressed once the limit is reached is swallowed the same way it would be on a device.
-      if (value.length >= limit) continue;
-      const typed = value + key;
+      if (shown.text.length - (shown.end - shown.start) + key.length > limit) continue;
+      // A key goes in at the caret, replacing a selection, as a text field does.
+      const typed = shown.text.slice(0, shown.start) + key + shown.text.slice(shown.end);
+      const caret = shown.start + key.length;
       const since = ownerOf(field).fabric.commands.length;
       emit(field, 'topKeyPress', { key });
       changeText(field, typed);
       await settle();
-      value = shownText(field, typed, since);
+      shown = shownAfter(field, { text: typed, start: caret, end: caret }, since);
     }
+    const value = shown.text;
     if (options.submitEditing) emit(field, 'topSubmitEditing', { text: value });
     if (!options.skipBlur) await endEditing(field, value);
     else await settle();

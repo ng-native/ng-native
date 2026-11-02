@@ -82,6 +82,87 @@ export class CaretInput {
   }
 }
 
+/** A field that selects everything it holds after each change. */
+@Component({
+  selector: 'x-selecting-input',
+  imports: [TextInput],
+  template: '<text-input nativeID="field" [value]="text()" (changeText)="accept($event)" />',
+})
+export class SelectingInput {
+  readonly text = signal('');
+  readonly control = viewChild.required(TextInput);
+
+  protected accept(text: string): void {
+    this.text.set(text);
+    this.control().setSelection(0, text.length);
+  }
+}
+
+/** The same, in a field that holds one character. */
+@Component({
+  selector: 'x-selecting-limited-input',
+  imports: [TextInput],
+  template:
+    '<text-input nativeID="field" [maxLength]="1" [value]="text()" (changeText)="accept($event)" />',
+})
+export class SelectingLimitedInput {
+  readonly text = signal('');
+  readonly control = viewChild.required(TextInput);
+
+  protected accept(text: string): void {
+    this.text.set(text);
+    this.control().setSelection(0, text.length);
+  }
+}
+
+/** A field that upper-cases what is typed and then puts the caret at the start. */
+@Component({
+  selector: 'x-upper-caret-input',
+  imports: [TextInput],
+  template: '<text-input nativeID="field" [value]="text()" (changeText)="accept($event)" />',
+})
+export class UpperCaretInput {
+  readonly text = signal('');
+  readonly control = viewChild.required(TextInput);
+
+  protected accept(text: string): void {
+    this.text.set(text.toUpperCase());
+    this.control().setSelection(0);
+  }
+}
+
+/** A field that drops what is not a letter and puts the caret after the first character. */
+@Component({
+  selector: 'x-letters-caret-input',
+  imports: [TextInput],
+  template: '<text-input nativeID="field" [value]="text()" (changeText)="accept($event)" />',
+})
+export class LettersCaretInput {
+  readonly text = signal('');
+  readonly control = viewChild.required(TextInput);
+
+  protected accept(text: string): void {
+    this.text.set(text.replace(/[^a-z]/g, ''));
+    this.control().setSelection(1);
+  }
+}
+
+/** A field that drops what is not a letter and puts the caret at the start. */
+@Component({
+  selector: 'x-letters-start-input',
+  imports: [TextInput],
+  template: '<text-input nativeID="field" [value]="text()" (changeText)="accept($event)" />',
+})
+export class LettersStartInput {
+  readonly text = signal('');
+  readonly control = viewChild.required(TextInput);
+
+  protected accept(text: string): void {
+    this.text.set(text.replace(/[^a-z]/g, ''));
+    this.control().setSelection(0);
+  }
+}
+
 /** Typing in the first field rewrites the second, which has its own text. */
 @Component({
   selector: 'x-mirrored-inputs',

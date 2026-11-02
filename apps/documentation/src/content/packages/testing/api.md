@@ -287,12 +287,16 @@ timestamp }`. A "task" is one `setTimeout(0)`, which is when change detection ru
 | `userEvent.type(node, text, options)`     | `topFocus`; a task; then for each character, `topKeyPress` `{ key }` and `topChange` `{ text, eventCount }` with the text so far, and a task; then `topSubmitEditing` `{ text }` if `submitEditing`; then, unless `skipBlur`, `topEndEditing` `{ text }` and `topBlur`; a task.                          |
 | `userEvent.clear(node)`                   | `topFocus`, `topChange` `{ text: '', eventCount }`; a task; `topEndEditing` `{ text: '' }`, `topBlur`; a task.                                                                                                                                                                                           |
 
-Typing starts from the field's committed `text`, so it appends to what is already there. A field
-with `maxLength` stops emitting past it, the way native truncates before `onChangeText` ever fires
-rather than delivering the extra characters for a handler to reject. Each character is typed into
-the text the field shows: when the app refuses or rewrites a keystroke and puts its own text back,
-the next character is added to that text, as it is on a device. The `topBlur` at the end of `type`
-is what marks a Signal Forms field touched.
+Typing starts from the field's committed `text` with the caret after it, so it appends to what is
+already there. A key goes in at the caret and replaces a selection. When the app moves the caret or
+the selection with `setSelection()` (a `setTextAndSelection` command), the next character goes
+there. When the app puts different text back without a selection, the caret keeps its distance
+from the end of the old text, as an iOS field does. A field with `maxLength` stops emitting past it
+(a key that does not fit in what is left is dropped whole), the way native truncates before
+`onChangeText` ever fires rather than delivering the extra characters for a handler to reject. Each
+character is typed into the text the field shows: when the app refuses or rewrites a keystroke and
+puts its own text back, the next character is added to that text, as it is on a device. The
+`topBlur` at the end of `type` is what marks a Signal Forms field touched.
 
 ### `gestureOf`
 
