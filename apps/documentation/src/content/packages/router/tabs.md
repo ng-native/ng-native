@@ -260,7 +260,8 @@ inside the Invoices tab's. A service one of those routes provides is one instanc
 the page and the page's resolvers, as in the tab, though not the instance the tab itself has. Their
 `canDeactivate` guards run when the page is dismissed, as they do when the tab's route is left,
 though with no component to pass them, and their `runGuardsAndResolvers` decides when their guards
-and resolvers run again.
+and resolvers run again. A guard that fails there, as one that reads its component does, is
+reported to the app's `ErrorHandler` and lets the page go.
 While it is up the url names it beside where the app is, `/home(presented:invoices/7)`, and a
 back, or the swipe that dismisses a sheet, returns to `/home`.
 

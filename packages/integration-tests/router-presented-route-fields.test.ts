@@ -114,7 +114,9 @@ describe('the presented copy of a route above the page', () => {
   for (const [field, value] of Object.entries(KEPT_ABOVE)) {
     it(`carries ${field}`, async () => {
       const { tab } = await copiesOf({ path: 'album', component: Page }, { [field]: value });
-      assert.strictEqual(tab[field], value);
+      // Wrapped, as the guard is given no component there: router-presented-guards.test.ts.
+      if (field === 'canDeactivate') assert.equal((tab[field] as unknown[]).length, 1);
+      else assert.strictEqual(tab[field], value);
     });
   }
 

@@ -160,6 +160,14 @@ interface HoldingScreen {
   refusalChanged(): void;
 }
 
+/** Whether a route has a `canDeactivate` guard of its own. */
+const guards = (route: ActivatedRouteSnapshot): boolean =>
+  !!route.routeConfig?.canDeactivate?.length;
+
+/** Whether leaving a route runs a guard: its own, or one of a route showing inside it. */
+const guardsBelow = (route: ActivatedRouteSnapshot): boolean =>
+  guards(route) || route.children.some(guardsBelow);
+
 /** Whether a screen refuses a native dismissal, as its page bound it. */
 const refuses = (screen: unknown): boolean =>
   (screen as Partial<EngineNode> | undefined)?.props?.['preventNativeDismiss'] === true;
@@ -213,7 +221,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   /** The screen this stack sits in, when it is a stack inside a page of another. */
   private readonly holder = inject(HOLDING_SCREEN, { optional: true });
   /** What the holder's own `preventNativeDismiss` was, while this stack's top screen refuses. */
-  private held: { own: unknown } | null = null;
+  private held: { own: unknown; written: boolean } | null = null;
   private readonly statusBar = inject(StatusBar);
   private readonly navigationBar = inject(NavigationBar);
   /** iOS 26 and later, where a screen runs under its navigation bar: see `insetContent`. */
@@ -410,6 +418,42 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       inFront,
       stopBack,
     };
+    const guarded = route.snapshot.pathFromRoot.some(guards);
+    this.askGuardsFirst(
+      this.presentedPage,
+      () => guarded,
+      () => this.dismissPresentedPage(),
+    );
+  }
+
+  /**
+   * A presented screen a `canDeactivate` guard decides for: native never dismisses it, and an
+   * attempt goes to the router, where the guards answer. A screen native has dismissed does not
+   * come back, and a guard that refused would hold the router on a page nobody can see. So the
+   * screen refuses, and leaves as any page does when the router takes it off the stack.
+   *
+   * A refusal bound on the page is the page's: it hears the attempt, and the guards are not asked.
+   * A value the outlet writes is taken out of the screen's `writes`, which tells the two apart.
+   */
+  private askGuardsFirst(
+    { screen, ref }: StackEntry,
+    guarded: () => boolean,
+    dismiss: () => unknown,
+  ): void {
+    const writes = (screen as Partial<EngineNode>).writes;
+    // After every render, as a binding can let go of the value and a child route can arrive, for
+    // as long as the page lasts.
+    afterEveryRender(
+      () => {
+        if (refuses(screen) || !guarded()) return;
+        this.renderer.setProperty(screen, 'preventNativeDismiss', true);
+        writes?.delete('preventNativeDismiss');
+      },
+      { injector: ref.injector },
+    );
+    this.renderer.listen(screen, 'nativeDismissCancelled', () => {
+      if (refuses(screen) && !writes?.has('preventNativeDismiss')) dismiss();
+    });
   }
 
   /** The router left the presented page: take it off the stack. */
@@ -515,7 +559,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     const pending = this.navigationId() === navigation ? navigation : undefined;
     if (intent?.stack === 'reset') this.supersede(this.entries.slice(), pending);
     else if (intent?.stack === 'replace' && this.top) this.supersede([this.top], pending);
-    this.entries.push({
+    const entry: StackEntry = {
       route,
       ref,
       screen,
@@ -525,7 +569,20 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       entries: this.entriesAdded(),
       activatedIn: navigation,
       inFront,
-    });
+    };
+    this.entries.push(entry);
+    this.askGuardsOfPresented(entry);
+  }
+
+  /** `askGuardsFirst` for a screen presented on this stack. A pushed screen is left to native. */
+  private askGuardsOfPresented(entry: StackEntry): void {
+    if (this.entries.length < 2) return;
+    if ((entry.presentation?.stackPresentation ?? 'push') === 'push') return;
+    this.askGuardsFirst(
+      entry,
+      () => guardsBelow(entry.route.snapshot),
+      () => this.onNativeDismiss(1),
+    );
   }
 
   /**
@@ -1119,10 +1176,15 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private holdRefusal(holder: HoldingScreen): void {
     // A stack in a tab behind is inside the same screen, and has no say in it.
     if (!refuses(this.top?.screen) || !this.isShowing()) return this.release(holder);
-    if (refuses(holder.screen)) return;
+    const node = holder.screen as EngineNode;
+    // A refusal held only so the guards are asked gives way: this one is the page's.
+    if (refuses(holder.screen) && node.writes?.has('preventNativeDismiss')) return;
     // ponytail: the holder's own binding is read when the top screen starts refusing. One that
     // turns true while it does is put back as it was then; bind the refusal in one of the two.
-    this.held = { own: (holder.screen as EngineNode).props?.['preventNativeDismiss'] };
+    this.held = {
+      own: node.props?.['preventNativeDismiss'],
+      written: !!node.writes?.has('preventNativeDismiss'),
+    };
     this.renderer.setProperty(holder.screen, 'preventNativeDismiss', true);
     holder.refusalChanged();
   }
@@ -1131,6 +1193,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private release(holder: HoldingScreen): void {
     if (!this.held) return;
     this.renderer.setProperty(holder.screen, 'preventNativeDismiss', this.held.own ?? false);
+    if (!this.held.written) (holder.screen as EngineNode).writes?.delete('preventNativeDismiss');
     this.held = null;
     holder.refusalChanged();
   }

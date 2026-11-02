@@ -188,6 +188,17 @@ A page that should not be shown at all, a record that no longer exists, can call
 appears, from an `effect()` in its constructor: a back asked for while the navigation is still
 putting the page up waits for it, then goes.
 
+A presented screen refuses a native dismissal the same way when leaving it would run a
+`canDeactivate` guard, and the guard answers: a swipe it allows dismisses the screen, and one it
+refuses leaves the screen up. That is a guard on the screen's route or on a route showing inside
+it, and for a [page of another tab](/packages/router/tabs), a guard on a route above it too. A page
+that also binds `preventNativeDismiss` hears `(nativeDismissCancelled)` for those attempts, even
+while its binding is false, and while the binding is true the guard is not asked.
+
+On Android this covers the Back button and the header's back arrow but not dragging a `formSheet`
+down, which dismisses the sheet whatever a guard says. Pushed screens are not held: on iOS, a swipe
+back from one is not stopped by its guard.
+
 ## Presented screens have no header
 
 A presented screen (`present()`) is shown outside the stack's own navigation controller - the same

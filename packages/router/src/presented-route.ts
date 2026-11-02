@@ -9,8 +9,11 @@
  * navigation, so the page's guards, resolvers, lazy component and params are what they are in its
  * tab, and a back goes through history as any other does.
  */
+import { ErrorHandler, inject, type ProviderToken } from '@angular/core';
 import {
   PRIMARY_OUTLET,
+  type CanDeactivate,
+  type CanDeactivateFn,
   type NavigationExtras,
   type Route,
   type Router,
@@ -169,6 +172,52 @@ export const ANCESTOR_FIELDS = {
   providers: true,
 } as const satisfies Record<keyof Route, boolean>;
 
+/** Anything a route's `canDeactivate` lists: a function, or the token of a guard class. */
+type DeactivateGuard = CanDeactivateFn<unknown> | ProviderToken<CanDeactivate<unknown>>;
+
+/** The first value of a guard's observable, or its error, as a promise. */
+function firstOf(answer: Subscribable): Promise<unknown> {
+  let running: { unsubscribe(): void } | undefined;
+  return new Promise((next, error) => {
+    running = answer.subscribe({ next, error, complete: () => next(true) });
+  }).finally(() => running?.unsubscribe());
+}
+
+interface Subscribable {
+  subscribe(observer: {
+    next(value: unknown): void;
+    error(error: unknown): void;
+    complete(): void;
+  }): { unsubscribe(): void };
+}
+
+/**
+ * A guard of a route above the page, for the page's copy. The tab's component is not presented, so
+ * the guard is given null, and one that reads it fails where it works in the tab. A failure is
+ * reported and lets the page go: the guard cannot have looked at what it guards, and a navigation
+ * that fails would fail on every attempt, with the page stuck up.
+ */
+function withoutItsComponent(guard: DeactivateGuard): CanDeactivateFn<unknown> {
+  return (component, route, state, next) => {
+    const errors = inject(ErrorHandler);
+    const letGo = (error: unknown): boolean => {
+      errors.handleError(error);
+      return true;
+    };
+    try {
+      const own = inject(guard as ProviderToken<CanDeactivate<unknown>>, { optional: true });
+      const answer: unknown = own
+        ? own.canDeactivate(component, route, state, next)
+        : (guard as CanDeactivateFn<unknown>)(component, route, state, next);
+      const running = answer as Partial<Subscribable & Promise<unknown>> | null | undefined;
+      if (running?.subscribe) return firstOf(running as Subscribable).catch(letGo) as never;
+      return running?.then ? (running as Promise<never>).catch(letGo) : (answer as never);
+    } catch (error) {
+      return letGo(error);
+    }
+  };
+}
+
 /** The fields of `route` that `fields` keeps, and nothing else. */
 function keptOf(route: Route, fields: Record<keyof Route, boolean>): Route {
   const kept: Record<string, unknown> = {};
@@ -177,6 +226,15 @@ function keptOf(route: Route, fields: Record<keyof Route, boolean>): Route {
     if (keep && value !== undefined) kept[field] = value;
   }
   return kept as Route;
+}
+
+/** The fields `ANCESTOR_FIELDS` keeps of a route above the page, for its copy. */
+function keptAbove(route: Route): Route {
+  const kept = keptOf(route, ANCESTOR_FIELDS);
+  if (kept.canDeactivate) {
+    kept.canDeactivate = (kept.canDeactivate as DeactivateGuard[]).map(withoutItsComponent);
+  }
+  return kept;
 }
 
 /**
@@ -199,9 +257,7 @@ function presentedCopy(chain: readonly Route[]): Route {
   return chain.reduceRight<Route | undefined>((inside, route, level) => {
     // Public fields only, so nothing Angular made for a route in its tab carries over.
     const own: Route =
-      level === last
-        ? keptOf(route, PAGE_FIELDS)
-        : { ...keptOf(route, ANCESTOR_FIELDS), children: [inside!] };
+      level === last ? keptOf(route, PAGE_FIELDS) : { ...keptAbove(route), children: [inside!] };
     return { ...own, path: level ? '' : path, pathMatch: undefined, outlet: PRESENTED };
   }, undefined)!;
 }
