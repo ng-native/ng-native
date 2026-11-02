@@ -75,8 +75,9 @@ per node. Define your tokens that way and the switch reaches them.
 On native, `hover:` means the pressed state: `:hover` is dropped with a build warning there and
 always will be - there is no pointer cascade to answer it - but a hover style and a press style ask
 the same design question. The native preset points the variant at `:active` (set by the engine while
-a touch is down) and also `data-hover`, for the one native device with a real pointer - an iPad with
-a trackpad, which React Native's pointer events do report. `press:` and `hovered:` name one half
+a touch is down) and also `data-hover`, for a real pointer - a trackpad, a mouse or a pencil, which
+React Native's pointer events report once an app
+[turns them on](/packages/platform/renderer#pointer-events). `press:` and `hovered:` name one half
 each, for a component that wants to be precise rather than portable.
 
 On the web, `hover:` keeps the real `:hover` as well as `:active` and `data-hover`, so a class

@@ -16,6 +16,7 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
+  s.dependency 'React-Core'
   # `@expo/ui` is an optional peer. Where the app depends on it, which is when Expo links its pod,
   # the modifiers it is given are built. Read from the app's package.json, the nearest above its
   # Podfile: resolving the package finds a copy the app does not depend on, in a workspace's root

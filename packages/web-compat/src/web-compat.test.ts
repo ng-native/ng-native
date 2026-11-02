@@ -1687,6 +1687,17 @@ describe('@ng-native/web-compat buttons and links', () => {
     assert.equal(node.props['data-hover'], undefined);
   });
 
+  it('does not mark a button for a finger, which is no hover', async () => {
+    await render(Links, { providers: [provideWebCompat()] });
+    const node = globals.document.querySelector('button');
+    const button = screen.getByTestId('button');
+    await fireEvent(button, 'topPointerEnter', { pointerType: 'touch' });
+    assert.equal(node.props['data-hover'], undefined);
+    await fireEvent(button, 'topPointerEnter', { pointerType: 'mouse' });
+    await fireEvent(button, 'topPointerLeave', { pointerType: 'touch' });
+    assert.equal(node.props['data-hover'], true);
+  });
+
   it('leaves a data-hover the app writes on a button as it wrote it, a pointer over or not', async () => {
     await render(Links, { providers: [provideWebCompat()] });
     const node = globals.document.querySelector('button');

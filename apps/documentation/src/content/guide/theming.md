@@ -61,8 +61,9 @@ Diagnostics prevent unsupported styles from silently doing nothing.
 `hover:` variant instead matches `:active`, which the engine sets on touched views and their
 ancestors, letting hover classes express touch engagement.
 
-`data-hover` supports iPad trackpads through React Native's W3C pointer events. Components must
-listen for these events and set the attribute themselves. Phones never send them, so the variant
+`data-hover` is for a trackpad, a mouse or a pencil, through React Native's W3C pointer events,
+which are off until an app [turns them on](/packages/platform/renderer#pointer-events). Components
+must listen for these events and set the attribute themselves. Without a pointer the variant
 remains a press state.
 
 ```css

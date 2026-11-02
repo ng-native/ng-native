@@ -32,7 +32,7 @@ const expoSource = fileURLToPath(new URL('../expo/', import.meta.url));
 const deviceSource = fileURLToPath(new URL('../device/', import.meta.url));
 const manifest = JSON.parse(readFileSync(path.join(expoSource, 'package.json'), 'utf8'));
 const entryPoints = Object.keys(manifest.exports as Record<string, unknown>)
-  .filter((key) => key !== './package.json')
+  .filter((key) => key !== './package.json' && key !== './app.plugin.cjs')
   .map((key) => `@ng-native/expo${key.slice(1)}`);
 
 /** What `Battery`'s source answers with no battery to read. */

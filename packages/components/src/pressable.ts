@@ -15,7 +15,7 @@ import {
   type Signal,
   booleanAttribute,
 } from '@angular/core';
-import { nativePlatform, type NativeSyntheticEvent } from '@ng-native/fabric';
+import { isTouchPointer, nativePlatform, type NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Insets, TouchEvent } from './events.ts';
 import { numberOr, optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
@@ -380,17 +380,18 @@ export abstract class TouchableBase extends ViewBase {
    * says no, and two props on every paragraph on screen is not a cost worth paying for a hover
    * state a label has no use for.
    *
-   * Never true on a phone, which sends no pointer events at all. This is the one thing an iPad
-   * with a trackpad has that a phone does not.
+   * Native sends pointer events only in an app that turned them on (the `pointerEvents` option
+   * of `@ng-native/expo`'s config plugin), and then for a finger as well, entering what it lands
+   * on and leaving as it lifts. That is not hover, so `hovered` stays false on a phone.
    */
   private hoverIfNeeded(): void {
     if (this.stopHover || !this.measures()) return;
-    const enter = this.engine.setEventListener(this.node, 'topPointerEnter', () =>
-      this.hovered.set(true),
-    );
-    const leave = this.engine.setEventListener(this.node, 'topPointerLeave', () =>
-      this.hovered.set(false),
-    );
+    const enter = this.engine.setEventListener(this.node, 'topPointerEnter', (event) => {
+      if (!isTouchPointer(event)) this.hovered.set(true);
+    });
+    const leave = this.engine.setEventListener(this.node, 'topPointerLeave', (event) => {
+      if (!isTouchPointer(event)) this.hovered.set(false);
+    });
     this.stopHover = () => {
       enter();
       leave();

@@ -574,10 +574,10 @@ const EVENT_OPT_IN_PROPS: Record<string, string> = {
   /*
    * Hover, which exists on this platform after all.
    *
-   * React Native implements the W3C pointer events, and on iPadOS a connected trackpad or mouse
-   * produces them: `onPointerEnter` and `onPointerLeave` fire as the cursor crosses a view. A
-   * phone never sends them, so this costs a phone two props and nothing else, and it is what
-   * makes a hover style reachable on the one device that has a pointer.
+   * React Native implements the W3C pointer events, off unless an app turns them on (the
+   * `pointerEvents` option of `@ng-native/expo`'s config plugin). A connected trackpad or mouse
+   * then produces them: `onPointerEnter` and `onPointerLeave` fire as the cursor crosses a view.
+   * Without the option native never sends them, so this costs an app two props and nothing else.
    */
   topPointerEnter: 'onPointerEnter',
   topPointerLeave: 'onPointerLeave',
@@ -5949,6 +5949,18 @@ const DEFER_TRIGGER_EVENTS: Readonly<Record<string, readonly string[]>> = {
   focusin: ['topFocus'],
 };
 
+/**
+ * Whether a pointer event came from a finger. With native pointer events on, a touch enters what
+ * it lands on and leaves as it lifts, which is not hover: a mouse, a trackpad or a pencil is.
+ */
+export function isTouchPointer(event: unknown): boolean {
+  return (event as PointerNativeEvent | null)?.nativeEvent?.pointerType === 'touch';
+}
+
+interface PointerNativeEvent {
+  readonly nativeEvent?: { readonly pointerType?: unknown };
+}
+
 /** Each trigger listener's teardowns, by DOM event name. Off the node, which rarely has one. */
 const triggerListeners = new WeakMap<
   object,
@@ -5987,7 +5999,7 @@ function reportHover(host: HostEngine): void {
   if (hoverReported || !(host instanceof Engine) || !host.dev) return;
   hoverReported = true;
   console.warn(
-    '[angular-native] @defer (on hover) fires when a pointer enters the trigger, which takes a trackpad or a mouse (an iPad, or an Android device with one), or when the trigger takes focus. On a phone it waits for focus alone; add another trigger, such as on interaction or on viewport.',
+    '[angular-native] @defer (on hover) fires when a pointer enters the trigger, which takes a trackpad, a mouse or a pencil and the pointerEvents option of the @ng-native/expo config plugin, or when the trigger takes focus. Otherwise it waits for focus alone; add another trigger, such as on interaction or on viewport.',
   );
 }
 
@@ -6203,8 +6215,14 @@ class RetainedNode {
     if (!byType) byListener.set(listener, (byType = new Map()));
     if (byType.has(type)) return;
     if (type === 'mouseenter') reportHover(this.engine);
+    const heard =
+      type === 'mouseenter'
+        ? (event: unknown) => {
+            if (!isTouchPointer(event)) listener(event);
+          }
+        : listener;
     const stops = events.map((event) =>
-      this.engine.setEventListener(this as unknown as EngineNode, event, listener),
+      this.engine.setEventListener(this as unknown as EngineNode, event, heard),
     );
     byType.set(type, () => {
       for (const stop of stops) stop();

@@ -8,7 +8,7 @@
       "SymbolImageSizeModule",
       "AddressSearchModule"
     ],
-    "appDelegateSubscribers": ["LiveActivityTapsObserver"]
+    "appDelegateSubscribers": ["LiveActivityTapsObserver", "PointerEventsObserver"]
   },
   "android": {
     "modules": [

@@ -83,6 +83,17 @@ describe('@defer on a DOM trigger', () => {
     assert.equal(said.length, 1, said.join('\n'));
   });
 
+  it('waits on hover through a finger entering, and loads for a mouse', async () => {
+    const { getByTestId, getByText, queryByText } = await renderTriggers();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await fireEvent(getByTestId('hover-target'), 'pointerEnter', { pointerType: 'touch' });
+    await settle();
+    assert.equal(queryByText('hover loaded'), null);
+    await fireEvent(getByTestId('hover-target'), 'pointerEnter', { pointerType: 'mouse' });
+    await settle();
+    assert.ok(getByText('hover loaded'));
+  });
+
   it('loads on viewport once the trigger is scrolled into view, and not before', async () => {
     const { fabric, getByTestId, getByText, queryByText } = await renderTriggers();
     fabric.frames.set('ScrollView', { x: 0, y: 0, width: 400, height: 800 });

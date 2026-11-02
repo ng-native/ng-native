@@ -496,7 +496,7 @@ export class Home {
     },
     {
       name: 'hover:  press:',
-      body: 'The press state on touch; real hover on an iPad trackpad.',
+      body: 'The press state on touch; real hover with a trackpad, once you turn it on.',
       example: 'bg-red-600 hover:bg-red-700',
     },
     {

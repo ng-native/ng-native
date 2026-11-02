@@ -85,13 +85,31 @@ they do in a browser. The three triggers Angular registers on an element rather 
 | Trigger                    | Fires when                                                                                                                                       |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `on interaction` / `(ref)` | A touch lifts on the trigger or anything inside it, or the trigger takes focus (a keyboard or a screen reader reaching it).                      |
-| `on hover` / `(ref)`       | A pointer enters the trigger, which takes a trackpad or a mouse on an iPad or an Android device, or the trigger takes focus.                     |
+| `on hover` / `(ref)`       | A pointer enters the trigger, which takes [pointer events](#pointer-events) and a trackpad, a mouse or a pencil, or the trigger takes focus.     |
 | `on viewport` / `(ref)`    | Any part of the trigger is inside the window and inside every scroll view around it, checked as it is laid out and as those scroll views scroll. |
 
-A phone has no pointer, so there `on hover` waits for focus alone; in development the first
-`on hover` in an app logs a warning saying so. Pair it with another trigger, such as
-`on hover; on interaction`. `on viewport` honors a `threshold` option; `rootMargin` is not applied,
-and the root is always the window.
+Without a pointer `on hover` waits for focus alone, and a finger does not count as one; in
+development the first `on hover` in an app logs a warning saying so. Pair it with another trigger,
+such as `on hover; on interaction`. `on viewport` honors a `threshold` option; `rootMargin` is not
+applied, and the root is always the window.
+
+### Pointer events
+
+React Native's W3C pointer events are off by default on iOS and Android, so `Pressable.hovered` and
+`@defer (on hover)` hear nothing from a trackpad, a mouse or a pencil until an app turns them on
+with the config plugin in `@ng-native/expo`:
+
+```json
+{
+  "expo": {
+    "plugins": [["@ng-native/expo", { "pointerEvents": true }]]
+  }
+}
+```
+
+The option is read as the app launches, so it takes `npx expo prebuild` and a new development build,
+and has no effect in Expo Go. It turns on the whole of React Native's pointer handling for the app:
+every touch goes through it too. A finger's pointer events do not set `hovered` or fire `on hover`.
 
 ```html
 <pressable #more><text>Show reviews</text></pressable>

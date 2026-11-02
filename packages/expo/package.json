@@ -70,6 +70,7 @@
     "./video": "./src/video.ts",
     "./watch": "./src/watch.ts",
     "./widget": "./src/widget.ts",
+    "./app.plugin.cjs": "./app.plugin.cjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -281,6 +282,7 @@
         "types": "./dist/widget.d.ts",
         "default": "./dist/widget.js"
       },
+      "./app.plugin.cjs": "./app.plugin.cjs",
       "./package.json": "./package.json"
     }
   },
@@ -539,6 +541,7 @@
   },
   "files": [
     "dist",
+    "app.plugin.cjs",
     "ios",
     "android/build.gradle",
     "android/src",

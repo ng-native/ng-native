@@ -1,4 +1,5 @@
 import {
+  isTouchPointer,
   registeredViewName,
   registerViewName,
   scrollsOverflow,
@@ -69,13 +70,13 @@ export function giveRole(node: EngineNode, engine: Engine): boolean {
   // ponytail: on the elements a pointer is aimed at. A stylesheet's `:hover` on any other
   // element never matches; track every element with a hover rule if a library needs it.
   // One the app wrote is the app's, and left as it is.
-  engine.setEventListener(node, 'topPointerEnter', () => {
-    if (node.props['data-hover'] != null) return;
+  engine.setEventListener(node, 'topPointerEnter', (event) => {
+    if (isTouchPointer(event) || node.props['data-hover'] != null) return;
     hovered.add(node);
     engine.setProp(node, 'data-hover', true);
   });
-  engine.setEventListener(node, 'topPointerLeave', () => {
-    if (hovered.delete(node)) engine.setProp(node, 'data-hover', null);
+  engine.setEventListener(node, 'topPointerLeave', (event) => {
+    if (!isTouchPointer(event) && hovered.delete(node)) engine.setProp(node, 'data-hover', null);
   });
   return true;
 }
