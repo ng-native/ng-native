@@ -431,9 +431,12 @@ export abstract class ViewBase {
   readonly ariaValueText = input<string>(undefined, { alias: 'aria-valuetext' });
   /** Custom actions a screen reader can invoke; each arrives as `(accessibilityAction)`. */
   readonly accessibilityActions = input<readonly AccessibilityAction[]>();
-  /** Android: announce changes to this view's content without focus moving to it. */
+  /**
+   * Android: announce changes to this view's content without focus moving to it. iOS has no live
+   * regions, as in React Native: call `announce()` on `Accessibility` from `@ng-native/device`.
+   */
   readonly accessibilityLiveRegion = input<AccessibilityLiveRegion>();
-  /** `aria-live`. */
+  /** `aria-live`. Android only: see `accessibilityLiveRegion`. */
   readonly ariaLive = input<AccessibilityLiveRegion>(undefined, { alias: 'aria-live' });
   /** iOS: hide this view and its children from assistive technologies. */
   readonly accessibilityElementsHidden = input<boolean>(undefined, { transform: optionalBoolean });
