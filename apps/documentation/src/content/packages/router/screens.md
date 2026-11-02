@@ -338,13 +338,40 @@ the swipe at the edge alone unless `fullScreenSwipeEnabled` is set.
 
 ## Whether a screen is in front
 
-`SCREEN_IN_FRONT` from `@ng-native/device` is a signal that is true while the screen something is on
-is the one showing, and false while another screen is pushed over it, presented from it, or while
-its tab is not selected. The stack and tab outlets provide it for every screen they show, combined
-with the screen they are themselves on; outside an outlet it is always true. A covered screen's
-views are detached from change detection, so read it in a root effect (`effect(fn, { injector })`
-with the environment injector) to act while covered. `<keyboard-dock>` uses it to let the keyboard
-go.
+`injectPageFocused()` from `@ng-native/router` is a signal that is true while the screen something
+is on is the one showing, and false while another screen is pushed over it, presented from it, or
+while its tab is not selected. The stack and tab outlets provide it for every screen they show,
+combined with the screen they are themselves on; outside an outlet it is always true. Covered pages
+stay mounted, so it is how a page stops work nobody can see:
+
+```ts
+import { effect, inject } from '@angular/core';
+import { AppState } from '@ng-native/device';
+import { injectPageFocused } from '@ng-native/router';
+
+export class Dashboard {
+  private readonly focused = injectPageFocused();
+  private readonly appState = inject(AppState);
+
+  constructor() {
+    effect((onCleanup) => {
+      if (!this.focused() || !this.appState.active()) return;
+      const timer = setInterval(() => this.reload(), 60_000);
+      onCleanup(() => clearInterval(timer));
+    });
+  }
+
+  private reload(): void {
+    // Fetch what the page shows.
+  }
+}
+```
+
+It does not follow the app going to the background, which is why the example reads `AppState` from
+`@ng-native/device` too.
+
+It reads `SCREEN_IN_FRONT` from `@ng-native/device`, which a package with no router uses directly.
+`<keyboard-dock>` uses it to let the keyboard go.
 
 `SCREEN_SHOWN`, beside it, is false from a screen's creation until native says the screen has
 appeared, and true from then on. It is combined the same way, so a page in a tab's stack counts as

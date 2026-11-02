@@ -147,7 +147,9 @@ into it, the same as any other input.
 Native holds the current selection, not your app - a tap is round-tripped through the router as a
 real navigation, so the URL and the bar never disagree, and each tab keeps its own screen (and its
 own stack, if it has one) mounted while another tab is in front. Returning to a tab returns to
-wherever it was left, because the outlet remembers each tab's own url.
+wherever it was left, because the outlet remembers each tab's own url. A page in a tab behind keeps
+running: stop what only matters while it shows with
+[`injectPageFocused()`](/packages/router/screens#whether-a-screen-is-in-front).
 
 A sheet or modal presented in a tab's own stack is the exception. On iOS it covers the whole
 window, the bar included, so it cannot stay up while its tab is behind another: when another tab

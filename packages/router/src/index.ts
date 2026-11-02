@@ -91,3 +91,4 @@ export {
   type MarkdownPageFile,
 } from './markdown-page.ts';
 export { FullWindowOverlay } from './full-window-overlay.ts';
+export { injectPageFocused } from './page-focused.ts';
