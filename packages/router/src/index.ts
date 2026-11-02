@@ -34,7 +34,13 @@ export {
   NATIVE_HEADER_PALETTE,
   type HeaderColors,
 } from './native-header-palette.ts';
-export { NativeHeaderItem, type HeaderItemType } from './native-header-item.ts';
+export {
+  NativeHeaderItem,
+  type HeaderItemType,
+  type HeaderMenu,
+  type HeaderMenuAction,
+  type HeaderSubmenu,
+} from './native-header-item.ts';
 export { NativeToolbar, NativeToolbarItem, type ToolbarItemType } from './native-toolbar.ts';
 export { NativeSearchBar, type SearchBarPlacement } from './native-search-bar.ts';
 export { NativeStackOutlet } from './native-stack-outlet.ts';

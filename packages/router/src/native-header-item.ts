@@ -20,6 +20,14 @@
  * commits nothing and the header commits it in `headerLeftBarButtonItems` or
  * `headerRightBarButtonItems`, in its place among the side's items as written. iOS only: Android's
  * header ignores those props, and draws nothing for the item.
+ *
+ * A bar button with a `[menu]` opens a native `UIMenu` on a tap and reports the action chosen, and an
+ * item with a `[spacing]` is a fixed gap of that many points between the buttons either side:
+ *
+ * ```html
+ * <native-header-item type="right" systemImageName="ellipsis" [menu]="more" (menuSelect)="run($event)" />
+ * <native-header-item type="right" [spacing]="12" />
+ * ```
  */
 import {
   type AfterContentInit,
@@ -36,13 +44,46 @@ import {
 import { type Engine, type EngineNode, HostEngine, nativePlatform } from '@ng-native/fabric';
 import { HeaderBarButtons, type BarButtonConfig } from './header-bar-buttons.ts';
 import { ownHost } from './own-host.ts';
-import { optionalBoolean } from './transforms.ts';
+import { optionalBoolean, optionalNumber } from './transforms.ts';
 
 /**
  * The bar slots. `title` and `center` are the same place: iOS draws both as the title view, and
  * `title` is committed as `center`, the only spelling Android's header knows.
  */
 export type HeaderItemType = 'back' | 'left' | 'center' | 'title' | 'right' | 'searchBar';
+
+/** One entry of a bar button's menu. `(menuSelect)` reports its `id`. */
+export interface HeaderMenuAction {
+  readonly type: 'action';
+  readonly id: string;
+  readonly title: string;
+  /** An SF Symbol name. */
+  readonly systemImageName?: string;
+  /** Whether the action shows as chosen. */
+  readonly state?: 'on' | 'off' | 'mixed';
+  readonly disabled?: boolean;
+  readonly destructive?: boolean;
+  readonly hidden?: boolean;
+}
+
+/** A menu inside a bar button's menu, or with `displayInline` a section of it. */
+export interface HeaderSubmenu {
+  readonly type: 'submenu';
+  readonly title: string;
+  /** An SF Symbol name. */
+  readonly systemImageName?: string;
+  readonly items: HeaderMenu['items'];
+  readonly displayInline?: boolean;
+  /** Keep one of the items' `state` on at a time. */
+  readonly singleSelection?: boolean;
+  readonly destructive?: boolean;
+}
+
+/** What a bar button opens. */
+export interface HeaderMenu {
+  readonly title?: string;
+  readonly items: readonly (HeaderMenuAction | HeaderSubmenu)[];
+}
 
 /**
  * A title item's least size on iOS, under any the app gives it. react-native-screens makes the
@@ -93,6 +134,7 @@ export class NativeHeaderItem implements AfterContentInit {
           hidden: computed(() => this.hidden() === true),
           button: this.button,
           press: () => this.press.emit(),
+          choose: (menuId) => this.chooseFrom(menuId),
         }),
       );
     }
@@ -135,14 +177,25 @@ export class NativeHeaderItem implements AfterContentInit {
   readonly disabled = input(undefined, { transform: optionalBoolean });
   /** What a screen reader says for a button with a symbol and no title, or for an item's view. */
   readonly accessibilityLabel = input<string>();
+  /** What a tap on the bar button opens, instead of sending `(press)`. */
+  readonly menu = input<HeaderMenu>();
+  /** A gap of this many points in the bar, with no button. iOS only, as bar buttons are. */
+  readonly spacing = input(undefined, {
+    // `null` too, which `numberAttribute` makes NaN, as the usual way to bind no spacing.
+    transform: (value: unknown) => optionalNumber(value ?? undefined),
+  });
 
   /** The bar button was tapped. Content written in the item handles its own presses. */
   readonly press = output<void>();
+  /** An action of the `menu` was tapped: its `id`. */
+  readonly menuSelect = output<string>();
 
   /** Whether anything is written in the element, which keeps it a view. */
   private readonly hasContent = signal(false);
 
   private readonly buttonId = `native-header-item-${created++}`;
+  /** What starts the id native hands back with a tap on each action of this item's menu. */
+  private readonly menuIdPrefix = `${this.buttonId}/`;
 
   /** The side of the bar the item is in, which native defaults to the left. */
   private readonly side = computed(() => {
@@ -154,15 +207,22 @@ export class NativeHeaderItem implements AfterContentInit {
     () =>
       !this.hasContent() &&
       this.side() !== null &&
-      (this.systemImageName() !== undefined || this.title() !== undefined),
+      (this.systemImageName() !== undefined ||
+        this.title() !== undefined ||
+        this.spacing() !== undefined),
   );
 
   /** The item as `RNSBarButtonItem.mm` reads it, with nothing unset in it. */
   private readonly button = computed((): BarButtonConfig | null => {
     if (!this.isBarButton()) return null;
+    const spacing = this.spacing();
+    if (spacing !== undefined) return { spacing };
     const tint = this.tintColor();
+    const menu = this.menu();
     const config: Record<string, unknown> = {
-      buttonId: this.buttonId,
+      // Native sends a press for an entry with an id, and then opens a menu only on a long press.
+      buttonId: menu ? undefined : this.buttonId,
+      menu: menu && nativeMenu(menu, this.menuIdPrefix),
       title: this.title(),
       sfSymbolName: this.systemImageName(),
       variant: this.barButtonItemStyle(),
@@ -176,6 +236,12 @@ export class NativeHeaderItem implements AfterContentInit {
     return config;
   });
 
+  private chooseFrom(menuId: string): void {
+    if (this.menu() && menuId.startsWith(this.menuIdPrefix)) {
+      this.menuSelect.emit(menuId.slice(this.menuIdPrefix.length));
+    }
+  }
+
   /**
    * Content is projected by the time this runs. Control flow written in the element counts too,
    * as the anchor it leaves, so an item whose content is only behind an `@if` stays a view.
@@ -185,14 +251,31 @@ export class NativeHeaderItem implements AfterContentInit {
   }
 }
 
+/**
+ * A menu as `RNSBarButtonItem.mm` reads it, which takes an item with a `menuId` for an action and
+ * one without for a submenu.
+ */
+function nativeMenu(menu: HeaderMenu, prefix: string): BarButtonConfig {
+  return {
+    ...menu,
+    items: menu.items.map((item) => {
+      const { systemImageName, ...rest } = item;
+      const symbol = systemImageName === undefined ? {} : { sfSymbolName: systemImageName };
+      if (rest.type === 'submenu') return { ...nativeMenu(rest, prefix), ...symbol };
+      const { id, ...action } = rest;
+      return { ...action, ...symbol, menuId: `${prefix}${id}` };
+    }),
+  };
+}
+
 /** Says once, in development, that Android's header has no bar buttons to draw. */
 function warnIfAndroid(): void {
   if (typeof ngDevMode !== 'undefined' && !ngDevMode) return;
   if (nativePlatform() !== 'android' || warnedAndroid) return;
   warnedAndroid = true;
   console.warn(
-    '[angular-native] A <native-header-item> with a systemImageName or a title and no content is ' +
-      'a native bar button, which only iOS draws. Write the button inside the item, as a ' +
-      '<pressable>, for one Android shows too.',
+    '[angular-native] A <native-header-item> with a systemImageName, a title or a spacing and no ' +
+      'content is a native bar button, with any menu it has, which only iOS draws. Write the ' +
+      'button inside the item, as a <pressable>, for one Android shows too.',
   );
 }

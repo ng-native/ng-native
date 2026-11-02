@@ -106,6 +106,74 @@ Bar buttons and items with content can share a side, in the order they are writt
 anything written in it, an `@if` included, stays a view. `hidden` leaves any item out of the bar.
 Android's header has no bar buttons: it draws nothing for one, and says so once in development.
 
+### Bar button menus
+
+A bar button with a `[menu]` opens a native `UIMenu` on a tap, instead of sending `(press)`, and
+`(menuSelect)` reports the `id` of the action chosen. It still needs a `systemImageName` or a
+`title` to draw:
+
+```ts
+import { Component, computed, signal } from '@angular/core';
+import { NativeHeader, NativeHeaderItem, type HeaderMenu } from '@ng-native/router';
+
+@Component({
+  imports: [NativeHeader, NativeHeaderItem],
+  template: `
+    <native-header title="Notes">
+      <native-header-item
+        type="right"
+        systemImageName="ellipsis"
+        accessibilityLabel="More"
+        [menu]="more()"
+        (menuSelect)="run($event)"
+      />
+    </native-header>
+  `,
+})
+export class Notes {
+  protected readonly byDate = signal(true);
+
+  protected readonly more = computed((): HeaderMenu => ({
+    items: [
+      {
+        type: 'submenu',
+        title: 'Sort',
+        systemImageName: 'arrow.up.arrow.down',
+        items: [
+          { type: 'action', id: 'date', title: 'Date', state: this.byDate() ? 'on' : 'off' },
+          { type: 'action', id: 'name', title: 'Name', state: this.byDate() ? 'off' : 'on' },
+        ],
+      },
+      { type: 'action', id: 'delete', title: 'Delete', destructive: true },
+    ],
+  }));
+
+  protected run(id: string): void {
+    if (id === 'date' || id === 'name') this.byDate.set(id === 'date');
+  }
+}
+```
+
+An action takes `systemImageName`, `state` (`on`, `off` or `mixed`), `disabled`, `destructive` and
+`hidden`. A submenu takes `systemImageName`, `destructive`, `singleSelection` and `displayInline`,
+which draws its items as a section of the menu rather than behind a row of their own. Any change to
+a side's bar buttons, a menu's included, builds that side's items again, so a change made while a
+menu is open can close it.
+
+### Spacing bar buttons
+
+An item with a `[spacing]` is a fixed gap of that many points, with no button, where it is written
+among the side's items, and `hidden` takes it away. Android draws nothing for it, as for a bar
+button:
+
+```html
+<native-header-item type="right" systemImageName="plus" accessibilityLabel="Add" (press)="add()" />
+<native-header-item type="right" [spacing]="12" />
+<native-header-item type="right" title="Done" (press)="done()" />
+```
+
+The header has no flexible spacer: UIKit sets the sides of a navigation bar apart itself.
+
 <!-- api: NativeHeaderItem -->
 
 ## Search

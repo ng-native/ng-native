@@ -1,6 +1,10 @@
 import { Component, input, signal } from '@angular/core';
 import { NativeHeader } from '../../router/src/native-header.ts';
-import { NativeHeaderItem, type HeaderItemType } from '../../router/src/native-header-item.ts';
+import {
+  NativeHeaderItem,
+  type HeaderItemType,
+  type HeaderMenu,
+} from '../../router/src/native-header-item.ts';
 
 @Component({
   selector: 'x-header-item-host',
@@ -145,4 +149,69 @@ export class HeaderMovedButtons {
   readonly leading = signal<readonly string[]>(['One', 'Two']);
   readonly trailing = signal<readonly string[]>(['Three', 'Four']);
   readonly label = signal('Same');
+}
+
+/** A bar button that opens a menu beside a plain one, a spacer between them. */
+@Component({
+  selector: 'x-header-menu-host',
+  imports: [NativeHeader, NativeHeaderItem],
+  template: `
+    <native-header title="Menus">
+      <native-header-item
+        type="left"
+        systemImageName="ellipsis"
+        accessibilityLabel="More"
+        [menu]="menu()"
+        [disabled]="disabled()"
+        (press)="pressed = pressed + 1"
+        (menuSelect)="chosen.push($event)"
+      />
+      <native-header-item
+        type="right"
+        systemImageName="gear"
+        [menu]="settings()"
+        (menuSelect)="otherChosen.push($event)"
+      />
+      <native-header-item type="right" [spacing]="gap()" />
+      <native-header-item type="right" title="Save" (press)="saved = saved + 1" />
+      <native-header-item type="right" [spacing]="filled()">
+        <text>Filled</text>
+      </native-header-item>
+    </native-header>
+  `,
+})
+export class HeaderMenuHost {
+  readonly menu = signal<HeaderMenu | undefined>({
+    title: 'Sort',
+    items: [
+      { type: 'action', id: 'name', title: 'Name', systemImageName: 'textformat', state: 'on' },
+      { type: 'action', id: 'trash', title: 'Delete', destructive: true, disabled: true },
+      {
+        type: 'submenu',
+        title: 'More',
+        systemImageName: 'folder',
+        singleSelection: true,
+        items: [
+          { type: 'action', id: 'deep', title: 'Deep', hidden: true },
+          {
+            type: 'submenu',
+            title: 'Inline',
+            displayInline: true,
+            destructive: true,
+            items: [{ type: 'action', id: 'deeper', title: 'Deeper' }],
+          },
+        ],
+      },
+    ],
+  });
+  readonly settings = signal<HeaderMenu | undefined>({
+    items: [{ type: 'action', id: 'name', title: 'Name' }],
+  });
+  readonly disabled = signal(false);
+  readonly gap = signal<number | null | undefined>(12);
+  readonly filled = signal<number | undefined>(4);
+  readonly chosen: string[] = [];
+  readonly otherChosen: string[] = [];
+  pressed = 0;
+  saved = 0;
 }

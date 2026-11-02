@@ -24,6 +24,8 @@ export interface HeaderBarEntry {
   /** The item's config while it is a bar button, null while it is a custom view. */
   readonly button: Signal<BarButtonConfig | null>;
   readonly press: () => void;
+  /** Tells the item native names an action of its menu, if the id is one of its own. */
+  readonly choose: (menuId: string) => void;
 }
 
 /** One per header, which provides it to the items written in it. */
@@ -68,6 +70,12 @@ export class HeaderBarButtons {
     this.entries()
       .find((entry) => entry.button()?.['buttonId'] === buttonId)
       ?.press();
+  }
+
+  /** Tells the item whose menu it was that one of its actions was tapped. */
+  choose(menuId: unknown): void {
+    if (typeof menuId !== 'string') return;
+    for (const entry of this.entries()) entry.choose(menuId);
   }
 
   private side(side: 'left' | 'right'): BarButtonConfig[] | undefined {

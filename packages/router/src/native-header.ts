@@ -146,6 +146,13 @@ export class NativeHeader {
         ),
       ),
     );
+    destroyRef.onDestroy(
+      engine.setEventListener(node, 'topPressHeaderBarButtonMenuItem', (event) =>
+        this.barButtons.choose(
+          (event as NativeSyntheticEvent<{ menuId?: unknown }>)?.nativeEvent?.menuId,
+        ),
+      ),
+    );
     const tab = inject(IN_TAB, { optional: true });
     if (tab) {
       const inFront = inject(SCREEN_IN_FRONT);
