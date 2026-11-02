@@ -5543,7 +5543,7 @@ function writeSettled(
 ): void {
   const one = settled instanceof EachSide ? settled.at(declaration.props, prop) : settled;
   const value = clamped(prop, one) ?? declaration.unset;
-  if (declaration.layers) writeLayer(own, prop, value, layers, declaration.over?.[prop]);
+  if (declaration.layers) writeLayer(own, prop, value, layers, declaration.over);
   else write(own, prop, value, declaration.line !== undefined);
 }
 
@@ -5552,27 +5552,32 @@ function writeSettled(
  * token that is a colour leaves an image another rule declared as it is, and one that fits no
  * part of a background makes the shorthand invalid, which unsets the image with the colour.
  * Layers written over the token are drawn above what it holds, whose images take the initial
- * place, as a native list shorter than the images starts again from its first. Each prop is ranked
- * in the cascade by itself, so an image a later rule declares, or an important one, is not written
- * over.
+ * place, as a native list shorter than the images starts again from its first, and a written layer
+ * that paints nothing leaves no place ahead of them. Each prop is ranked in the cascade by itself,
+ * so an image a later rule declares, or an important one, is not written over.
  */
 function writeLayer(
   own: Record<string, unknown>,
   prop: string,
   value: unknown,
   layers: BackgroundLayers | undefined,
-  over: readonly unknown[] | undefined,
+  over: DeferredDeclaration['over'],
 ): void {
   if (prop === 'backgroundColor') write(own, prop, layers?.color ?? value, false);
   else if (layers) {
     const { images } = layers;
     const held = prop === BACKGROUND_IMAGE ? images : images.map(() => BACKGROUND_PLACING[prop]);
-    own[prop] = [...(over ?? []), ...held];
+    const written = over?.[BACKGROUND_IMAGE]?.length ? over[prop] : undefined;
+    own[prop] = [...(written ?? []), ...held];
   } else if (value === undefined) delete own[prop];
-  else if (over) own[prop] = over;
+  else if (over?.[prop]) own[prop] = over[prop];
 }
 
 const BACKGROUND_IMAGE = 'experimental_backgroundImage';
+
+/** The words a last layer can be with no colour: its image of `none`, position, repeat and boxes. */
+const LAST_LAYER_WORDS =
+  /^(?:(?:none|center|left|right|top|bottom|repeat|no-repeat|repeat-x|repeat-y|space|round|scroll|fixed|local|border-box|padding-box|content-box|text)(?:\s+|$))+$/i;
 
 /**
  * The gradients a `background: var()` reads where its token is no colour: see `backgroundLayers`.
@@ -5587,11 +5592,14 @@ function layersOf(
 ): BackgroundLayers | undefined {
   if (!declaration.layers) return undefined;
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
-  const token = firstSet(names, tokens) ?? declaration.fallbackLayer;
+  const fallback = declaration.fallbackLayer;
+  const token = firstSet(names, tokens) ?? (fallback && substitutedIn(fallback, tokens));
   const text = token?.keyword;
   if (text && /gradient\(/i.test(text)) return backgroundLayers(text);
-  // A length is the last layer's position, and `none` its image: valid, and no colour or image.
-  return token?.length !== undefined || text?.toLowerCase() === 'none' ? { images: [] } : undefined;
+  // Valid, with no colour or image to draw.
+  return token?.length !== undefined || LAST_LAYER_WORDS.test(text ?? '')
+    ? { images: [] }
+    : undefined;
 }
 
 const BOUND_NUMBERS = new Set([

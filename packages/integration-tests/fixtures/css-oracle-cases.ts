@@ -362,6 +362,18 @@ const BACKGROUND_TOKEN_CASES: OracleCase[] = [
   backgroundOver(`${GRADIENT}, var(--x, none)`, 'notacolour'),
   backgroundOver(`${GRADIENT}, var(--x, rgb(1, 2, 3))`, null),
   backgroundOver('var(--x)', null),
+  backgroundOver(`${GRADIENT}, var(--x)`, 'center'),
+  backgroundOver(`${GRADIENT}, var(--x)`, 'no-repeat'),
+  backgroundOver(`${GRADIENT}, var(--x)`, 'center no-repeat'),
+  backgroundOver(`${GRADIENT}, var(--x)`, 'border-box'),
+  backgroundOver(`${GRADIENT}, var(--x)`, 'center notacolour'),
+  backgroundOver(`${GRADIENT}, var(--x, center)`, null),
+  backgroundOver(`${GRADIENT}, var(--x, calc(var(--y, 5px) * 2))`, null),
+  backgroundOver(`${GRADIENT}, var(--x, calc(var(--y) * 2))`, null),
+  backgroundOver(
+    'none 20px 20px / 10px 10px no-repeat, var(--x)',
+    'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))',
+  ),
 ];
 
 const INLINE_SHORTHAND_CASES: OracleCase[] = [

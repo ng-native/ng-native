@@ -3942,6 +3942,78 @@
     }
   },
   {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of no-repeat",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center no-repeat",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of border-box",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center notacolour",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, center) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, calc(var(--y, 5px) * 2)) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, calc(var(--y) * 2)) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: none 20px 20px / 10px 10px no-repeat, var(--x) with --x of linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none, linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))"
+    }
+  },
+  {
     "name": "background: var() of a colour token is the background colour",
     "expected": {
       "color": "rgb(0, 0, 0)",

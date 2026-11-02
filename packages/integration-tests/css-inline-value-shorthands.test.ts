@@ -272,10 +272,21 @@ describe('a background over a token in a style', () => {
   });
 
   it('keeps the gradients over a fallback that is a valid last layer', () => {
-    for (const fallback of ['none', '10px', 'var(--y, none)']) {
+    for (const fallback of [
+      'none',
+      '10px',
+      'var(--y, none)',
+      'center',
+      'calc(var(--y, 5px) * 2)',
+    ]) {
       const { props } = bound(`${GRADIENT}, var(--x, ${fallback})`, {});
       assert.equal((props()['experimental_backgroundImage'] as object[]).length, 1, fallback);
     }
+  });
+
+  it('keeps the gradients over a token that is a word a last layer can be', () => {
+    const { props } = bound(`${GRADIENT}, var(--x)`, { '--x': 'no-repeat' });
+    assert.equal((props()['experimental_backgroundImage'] as object[]).length, 1);
   });
 
   it('draws neither over a token that is unset, as a stylesheet does not', () => {

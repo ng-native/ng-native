@@ -511,6 +511,49 @@ describe('a background token that is no colour, as Chrome reads it', () => {
     }
   });
 
+  it('draws the layers over the words a last layer can be', () => {
+    const words =
+      'none center Left right top bottom repeat no-repeat repeat-x repeat-y space round scroll ' +
+      'fixed local border-box padding-box content-box text';
+    for (const word of [...words.split(' '), 'center no-repeat']) {
+      assert.equal(count(held(word).image()), 1, word);
+    }
+  });
+
+  it('draws the layers over such a word in a stylesheet, and as a fallback', () => {
+    for (const css of [
+      '.p { --x: center } .a { background: linear-gradient(red, blue), var(--x) }',
+      '.a { background: linear-gradient(red, blue), var(--x, center) }',
+      '.a { background: linear-gradient(red, blue), var(--x, var(--y, no-repeat)) }',
+    ]) {
+      assert.equal(count(tree(css, ['p']).image()), 1, css);
+    }
+  });
+
+  it('draws neither for a word beside a word that is no part of a background', () => {
+    assert.equal(count(held('center notacolour').image()), 0);
+    assert.equal(count(held('notacolour center').image()), 0);
+    assert.equal(count(held('centerleft').image()), 0);
+  });
+
+  it('works out a fallback made of a token, which is a valid last layer or invalid', () => {
+    const css = '.a { background: linear-gradient(red, blue), var(--x, calc(var(--gap) * 2)) }';
+    const { engine, node, image } = tree(css);
+    assert.equal(count(image()), 0, 'nothing to work it out from');
+    engine.setCustomProperty(node, '--gap', '5px');
+    engine.commit();
+    assert.equal(count(image()), 1);
+    engine.setCustomProperty(node, '--gap', 'red');
+    engine.commit();
+    assert.equal(count(image()), 0, 'no length to multiply');
+    engine.setCustomProperty(node, '--gap', '5px');
+    engine.commit();
+    assert.equal(count(image()), 1);
+    engine.setCustomProperty(node, '--gap', null);
+    engine.commit();
+    assert.equal(count(image()), 0, 'and again when it goes away');
+  });
+
   it('reads the token before a fallback, and goes back to the fallback without it', () => {
     const { engine, node, image } = tree(
       '.a { background: linear-gradient(red, blue), var(--x, none) }',
@@ -536,6 +579,18 @@ describe('a background token that is no colour, as Chrome reads it', () => {
     engine.setCustomProperty(node, '--x', 'rgb(1, 2, 3)');
     engine.commit();
     assert.equal(committed('Position').length, 1, 'no image of the token, nothing to place');
+  });
+
+  it('gives a token gradient under an unpainted layer the place of its own layer', () => {
+    const { engine, node, committed } = placed(
+      '.a { background: none 20px 20px / 10px 10px no-repeat, var(--x) }',
+    );
+    engine.setCustomProperty(node, '--x', 'linear-gradient(to right, red, blue)');
+    engine.commit();
+    assert.equal(committed('Image').length, 1);
+    assert.deepEqual(committed('Position'), [{ left: '0%', top: '0%' }]);
+    assert.deepEqual(committed('Size'), [{ x: 'auto', y: 'auto' }]);
+    assert.deepEqual(committed('Repeat'), [{ x: 'repeat', y: 'repeat' }]);
   });
 
   it('leaves a background-size another rule declares, which repeats for every layer', () => {
