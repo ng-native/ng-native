@@ -74,10 +74,14 @@ export const EXTRA_KEYS = {
   'text-decoration-color': 'textDecorationColor',
   display: 'display',
   'font-family': 'fontFamily',
+  'font-size': 'fontSize',
+  'font-style': 'fontStyle',
+  'font-weight': 'fontWeight',
+  'outline-width': 'outlineWidth',
+  'text-decoration-line': 'textDecorationLine',
+  'text-decoration-style': 'textDecorationStyle',
   'pointer-events': 'pointerEvents',
   width: 'width',
-  'font-size': 'fontSize',
-  'font-weight': 'fontWeight',
   'line-height': 'lineHeight',
   'flex-grow': 'flexGrow',
   'flex-shrink': 'flexShrink',
@@ -261,6 +265,70 @@ function inlineOver(
 ): OracleCase {
   return { name, css, tree: probe({ name: 'view' }), inline, extra: [extra] };
 }
+
+/** One shorthand set on the probe over `css`, each extra as Chrome computes it. */
+const inlineValue = (
+  inline: Readonly<Record<string, string>>,
+  css: string,
+  extra: readonly ExtraProperty[],
+  name = 'view',
+): OracleCase => ({
+  name: `inline ${Object.entries(inline)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('; ')} over ${css}`,
+  css,
+  tree: probe({ name }),
+  inline,
+  extra,
+});
+
+const LINE = ['border-top-width', 'border-top-color', 'border-left-color'] as const;
+const TYPE = ['font-size', 'font-family', 'font-weight', 'font-style'] as const;
+const DECORATION = [
+  'text-decoration-line',
+  'text-decoration-style',
+  'text-decoration-color',
+] as const;
+
+const INLINE_VALUE_SHORTHAND_CASES: OracleCase[] = [
+  inlineValue({ border: '2px solid rgb(255, 0, 0)' }, '#probe { color: blue }', LINE),
+  inlineValue({ border: '2px solid' }, '#probe { color: blue; border-color: lime }', LINE),
+  inlineValue({ border: 'none' }, '#probe { border: 4px solid lime }', ['border-top-width']),
+  inlineValue({ 'border-top': '2px solid rgb(255, 0, 0)' }, '#probe { border-top-color: lime }', [
+    'border-top-width',
+    'border-top-color',
+  ]),
+  inlineValue({ outline: '2px solid rgb(255, 0, 0)' }, '#probe { }', [
+    'outline-width',
+    'outline-color',
+  ]),
+  inlineValue({ background: 'rgb(255, 0, 0)' }, '#probe { background-color: lime }', []),
+  inlineValue({ background: 'var(--x)' }, '#probe { --x: red; background-color: lime }', []),
+  inlineValue(
+    { background: 'linear-gradient(red, blue), var(--x)' },
+    '#probe { --x: red; background-color: lime }',
+    [],
+  ),
+  inlineValue(
+    { font: 'bold 12px Arial' },
+    '#probe { font-size: 30px; font-style: italic }',
+    TYPE,
+    'text',
+  ),
+  inlineValue({ font: 'italic 700 14px/2 Georgia, serif' }, '#probe { }', TYPE, 'text'),
+  inlineValue(
+    { 'text-decoration': 'underline dotted rgb(255, 0, 0)' },
+    '#probe { text-decoration: line-through }',
+    DECORATION,
+    'text',
+  ),
+  inlineValue(
+    { 'text-decoration': 'underline' },
+    '#probe { color: blue; text-decoration-color: lime }',
+    DECORATION,
+    'text',
+  ),
+];
 
 const INLINE_SHORTHAND_CASES: OracleCase[] = [
   inlineOver(
@@ -1192,6 +1260,7 @@ export const CASES: OracleCase[] = [
   ...DERIVED_SPACE_CASES,
   ...CHANNEL_CASES,
   ...INLINE_SHORTHAND_CASES,
+  ...INLINE_VALUE_SHORTHAND_CASES,
   {
     name: 'background: var() of a colour token is the background colour',
     css: '#probe { --bg: rgb(1, 0, 0); background: var(--bg) }',

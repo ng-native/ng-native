@@ -34,6 +34,7 @@ import {
 } from '@angular/core';
 import { installDateParse } from './date-parse.ts';
 import { inertImplementation } from './inert-document.ts';
+import { cssValues, MIXED_SHORTHANDS, type ReadShorthand } from './inline-shorthands.ts';
 import { PLATFORM_NATIVE_ID } from './platform-id.ts';
 import {
   boundMath,
@@ -155,32 +156,26 @@ function parseStyleAttribute(css: string): Record<string, unknown> {
 }
 
 const SIDES = ['Top', 'Right', 'Bottom', 'Left'] as const;
-const SHORTHANDS = new Set(['padding', 'margin', 'inset', 'gap', 'flex']);
-
-/** CSS whitespace, which a no-break space is not. */
-const CSS_SPACE = /[ \t\n\r\f]/;
-
-/** The values in `text`, split on CSS whitespace outside parentheses: `4px calc(2px + 2px)` is two. */
-function cssValues(text: string): string[] {
-  const parts: string[] = [];
-  let part = '';
-  let depth = 0;
-  for (const char of text) {
-    if (depth === 0 && CSS_SPACE.test(char)) {
-      if (part) parts.push(part);
-      part = '';
-      continue;
-    }
-    if (char === '(') depth++;
-    else if (char === ')') depth = Math.max(0, depth - 1);
-    part += char;
-  }
-  if (part) parts.push(part);
-  return parts;
-}
+const CORNERS = ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'] as const;
+/** The shorthands of one value for each side or corner, which is the side's where one is written. */
+const FOUR_SIDED = new Set(['padding', 'margin', 'inset', 'borderWidth', 'borderColor']);
+const SHORTHANDS = new Set([...FOUR_SIDED, 'gap', 'flex', 'borderRadius']);
 
 /** A shorthand with more values than it takes, which a browser drops whole. */
 const REFUSED = 'refused';
+
+/** The prop a side or a corner of a shorthand is: `borderWidth` of the top is `borderTopWidth`. */
+function sideOf(key: string, side: number): string {
+  if (key === 'inset') return SIDES[side]!.toLowerCase();
+  if (key === 'borderRadius') return `border${CORNERS[side]!}Radius`;
+  if (key === 'borderWidth') return `border${SIDES[side]!}Width`;
+  if (key === 'borderColor') return `border${SIDES[side]!}Color`;
+  return `${key}${SIDES[side]!}`;
+}
+
+/** More values than a shorthand takes, or a corner of two radii, which native has none of. */
+const tooMany = (key: string, parts: readonly string[]): boolean =>
+  parts.length > (key === 'gap' ? 2 : 4) || parts.includes('/');
 
 /**
  * A shorthand written with a value for each side, `padding: 4px 8px`, as the longhands native
@@ -188,25 +183,22 @@ const REFUSED = 'refused';
  * takes as it is, and for a value holding a `var()`, whose count is only known once it is settled.
  * `REFUSED` for more values than the shorthand takes.
  *
- * ponytail: `padding`, `margin`, `inset`, `gap` and `flex`, the ones written this way in a style. A
- * stylesheet has every shorthand; add one here when a style needs it.
+ * ponytail: these and the ones `inline-shorthands.ts` reads, the ones written this way in a style.
+ * A stylesheet has every shorthand; add one here when a style needs it.
  */
 function longhands(key: string, value: unknown): [string, string][] | typeof REFUSED | null {
   if (key === 'flex') return flexLonghands(value);
   if (!SHORTHANDS.has(key) || typeof value !== 'string' || /var\(/i.test(value)) return null;
   const parts = cssValues(value);
   if (parts.length < 2) return null;
-  if (parts.length > (key === 'gap' ? 2 : 4)) return REFUSED;
+  if (tooMany(key, parts)) return REFUSED;
   const [first, second = first, third = first, fourth = second] = parts as [string, ...string[]];
   if (key === 'gap')
     return [
       ['rowGap', first],
       ['columnGap', second],
     ];
-  return [first, second, third, fourth].map((part, side) => [
-    key === 'inset' ? SIDES[side]!.toLowerCase() : `${key}${SIDES[side]!}`,
-    part,
-  ]);
+  return [first, second, third, fourth].map((part, side) => [sideOf(key, side), part]);
 }
 
 /** A number as `flex` takes a grow or a shrink: no sign, and no unit. */
@@ -481,6 +473,8 @@ class NativeRenderer implements Renderer2 {
    * takes. False for any other declaration, which is set as it is.
    */
   private setShorthand(el: EngineNode, key: string, value: unknown): boolean {
+    const mixed = MIXED_SHORTHANDS.get(key);
+    if (mixed) return this.setMixedShorthand(el, key, value, mixed);
     if (!SHORTHANDS.has(key)) return false;
     const sides = longhands(key, value);
     this.dropLonghands(el, key, sides === REFUSED ? null : sides);
@@ -503,6 +497,42 @@ class NativeRenderer implements Renderer2 {
     return true;
   }
 
+  /**
+   * A shorthand of parts of different kinds, set as what a stylesheet makes of it, or dropped for
+   * a value it does not take. False for a value that is no text, which a style object writes as
+   * native reads it, `boxShadow` as a list say.
+   */
+  private setMixedShorthand(
+    el: EngineNode,
+    key: string,
+    value: unknown,
+    read: (text: string, on: string) => ReadShorthand | string,
+  ): boolean {
+    if (typeof value !== 'string' && typeof value !== 'number') return false;
+    const text = cssTrim(String(value).replace(IMPORTANT, ''));
+    const reading = read(text, el.tag);
+    const longhands = typeof reading === 'string' ? null : reading.set;
+    this.dropLonghands(el, key, longhands);
+    this.dropDeclaration(el, key);
+    if (typeof reading === 'string') {
+      this.engine.reportDroppedDeclaration(key, text, el.tag, reading);
+      return true;
+    }
+    (writtenAs.get(el) ?? writtenAs.set(el, new Map()).get(el)!).set(
+      key,
+      longhands!.map(([side]) => side),
+    );
+    for (const [side, part] of longhands!) this.setStyle(el, side, part);
+    if (reading.deferred) this.engine.setBoundDeclaration(el, key, reading.deferred);
+    if (reading.drawnSolid && this.engine.dev) {
+      console.warn(
+        `[angular-native] ${key}: native has one border style for the whole box, so a ` +
+          `'${reading.drawnSolid}' side is drawn solid.`,
+      );
+    }
+    return true;
+  }
+
   removeStyle(el: EngineNode, style: string, _flags?: RendererStyleFlags2): void {
     if (style.startsWith('--')) {
       this.engine.setCustomProperty(el, customPropertyName(style), null);
@@ -510,7 +540,7 @@ class NativeRenderer implements Renderer2 {
     }
     if (extensions.length && this.restyled(el, style, null)) return;
     const key = styleKey(style);
-    if (SHORTHANDS.has(key)) this.dropLonghands(el, key, null);
+    if (SHORTHANDS.has(key) || MIXED_SHORTHANDS.has(key)) this.dropLonghands(el, key, null);
     this.dropDeclaration(el, key);
   }
 
@@ -537,7 +567,11 @@ class NativeRenderer implements Renderer2 {
   }
 
   /** Takes out the longhands `key` was written as, but for the ones it is about to be again. */
-  private dropLonghands(el: EngineNode, key: string, next: [string, string][] | null): void {
+  private dropLonghands(
+    el: EngineNode,
+    key: string,
+    next: readonly (readonly [string, unknown])[] | null,
+  ): void {
     const written = writtenAs.get(el);
     const sides = written?.get(key);
     if (!sides) return;

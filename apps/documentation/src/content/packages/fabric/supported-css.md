@@ -188,6 +188,16 @@ mode checks each style value and logs NG0318 for one that is not a string or a n
 the binding changes. For a transform that follows a signal frame by frame, that is a warning a
 frame.
 
+A `style` attribute or a `[style]` binding has no compiler to read it, so it takes fewer forms of
+some shorthands than a stylesheet. `border`, its sides and logical sides, `outline`, `box-shadow`,
+`background`, `font` and `text-decoration` are read into the same props a stylesheet gives them.
+A line takes a token beside written parts, `border: 1px solid var(--c)`, and a `background` takes
+one as all of it or as its last layer. In these, `background` is a color or linear gradients, with
+no position, size, repeat or `url()`, and no token in a gradient. `box-shadow` takes a token only
+as all of it, and lengths in `px` or `rem` only. `font` has no `small-caps`, stretch, keyword size
+or system font.
+A value outside that is dropped, with a warning in development.
+
 `skewX()` and `skewY()` are drawn on iOS only. React Native on Android breaks a transform down into
 the rotation, scale and translation an Android view has, and a view has no skew, so `skewX()` is
 left out and `skewY()` comes out as a rotation. A skew is refused the way a filter iOS does not draw

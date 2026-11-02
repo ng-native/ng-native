@@ -324,7 +324,9 @@ export function parseColor(value: unknown): [number, number, number, number] | n
     return [part(0), part(1), part(2), alpha];
   }
 
-  const named = NAMED_COLORS[value.toLowerCase()];
+  const named = Object.hasOwn(NAMED_COLORS, value.toLowerCase())
+    ? NAMED_COLORS[value.toLowerCase()]
+    : undefined;
   return named ? [...named] : parseHued(value);
 }
 

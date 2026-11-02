@@ -2161,6 +2161,115 @@
     }
   },
   {
+    "name": "inline border: 2px solid rgb(255, 0, 0) over #probe { color: blue }",
+    "expected": {
+      "color": "rgb(0, 0, 255)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "2px",
+      "border-top-color": "rgb(255, 0, 0)",
+      "border-left-color": "rgb(255, 0, 0)"
+    }
+  },
+  {
+    "name": "inline border: 2px solid over #probe { color: blue; border-color: lime }",
+    "expected": {
+      "color": "rgb(0, 0, 255)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "2px",
+      "border-top-color": "rgb(0, 0, 255)",
+      "border-left-color": "rgb(0, 0, 255)"
+    }
+  },
+  {
+    "name": "inline border: none over #probe { border: 4px solid lime }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "0px"
+    }
+  },
+  {
+    "name": "inline border-top: 2px solid rgb(255, 0, 0) over #probe { border-top-color: lime }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "2px",
+      "border-top-color": "rgb(255, 0, 0)"
+    }
+  },
+  {
+    "name": "inline outline: 2px solid rgb(255, 0, 0) over #probe { }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "outline-width": "2px",
+      "outline-color": "rgb(255, 0, 0)"
+    }
+  },
+  {
+    "name": "inline background: rgb(255, 0, 0) over #probe { background-color: lime }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(255, 0, 0)"
+    }
+  },
+  {
+    "name": "inline background: var(--x) over #probe { --x: red; background-color: lime }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(255, 0, 0)"
+    }
+  },
+  {
+    "name": "inline background: linear-gradient(red, blue), var(--x) over #probe { --x: red; background-color: lime }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(255, 0, 0)"
+    }
+  },
+  {
+    "name": "inline font: bold 12px Arial over #probe { font-size: 30px; font-style: italic }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "12px",
+      "font-family": "Arial",
+      "font-weight": "700",
+      "font-style": "normal"
+    }
+  },
+  {
+    "name": "inline font: italic 700 14px/2 Georgia, serif over #probe { }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "14px",
+      "font-family": "Georgia, serif",
+      "font-weight": "700",
+      "font-style": "italic"
+    }
+  },
+  {
+    "name": "inline text-decoration: underline dotted rgb(255, 0, 0) over #probe { text-decoration: line-through }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-decoration-line": "underline",
+      "text-decoration-style": "dotted",
+      "text-decoration-color": "rgb(255, 0, 0)"
+    }
+  },
+  {
+    "name": "inline text-decoration: underline over #probe { color: blue; text-decoration-color: lime }",
+    "expected": {
+      "color": "rgb(0, 0, 255)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-decoration-line": "underline",
+      "text-decoration-style": "solid",
+      "text-decoration-color": "rgb(0, 0, 255)"
+    }
+  },
+  {
     "name": "background: var() of a colour token is the background colour",
     "expected": {
       "color": "rgb(0, 0, 0)",

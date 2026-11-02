@@ -25,7 +25,7 @@ const SIDES: Readonly<Record<string, number>> = {
 };
 
 /** Split at the commas that are not inside brackets. */
-function split(text: string): string[] {
+export function splitLayers(text: string): string[] {
   const parts: string[] = [];
   let depth = 0;
   let from = 0;
@@ -65,7 +65,7 @@ function stop(text: string): { color: string; position: string | null } | undefi
 function linear(layer: string): object | undefined {
   const inside = /^linear-gradient\((.*)\)$/is.exec(layer)?.[1];
   if (inside === undefined) return undefined;
-  const parts = split(inside);
+  const parts = splitLayers(inside);
   const angle = direction(parts[0]!);
   const stops = (angle === undefined ? parts : parts.slice(1)).map(stop);
   if (stops.length < 2 || stops.some((each) => each === undefined)) return undefined;
@@ -78,7 +78,7 @@ function linear(layer: string): object | undefined {
 
 /** The layers a background's text holds, or nothing where any of it is not read. */
 export function backgroundLayers(text: string): BackgroundLayers | undefined {
-  const layers = split(text.trim());
+  const layers = splitLayers(text.trim());
   const last = layers.at(-1)!;
   const color = parseColor(last) ? last : undefined;
   const images = (color === undefined ? layers : layers.slice(0, -1)).map(linear);

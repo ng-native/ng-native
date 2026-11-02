@@ -5989,6 +5989,10 @@ function reportHover(host: HostEngine): void {
 const BOUND_TOKEN =
   /^[ \t\n\r\f]*(?:var|color-mix)\(|^[ \t\n\r\f]*[a-z]+\([ \t\n\r\f]*from[ \t\n\r\f]/i;
 
+/** A bound `currentColor`, which the node fills in, as a rule's is. */
+const CURRENT_COLOUR_TEXT = /^[ \t\n\r\f]*currentcolor[ \t\n\r\f]*$/i;
+const CURRENT_COLOUR_MARKER = { __colour: { color: 'currentcolor' } };
+
 /**
  * A bound value kept as a declaration the cascade settles: a `var()`, a colour made of tokens, or
  * a relative length.
@@ -6007,6 +6011,9 @@ function boundRead(prop: string, text: string, on: string): DeferredDeclaration 
 }
 
 function boundFrom(prop: string, text: string, on: string): DeferredDeclaration | null {
+  if (CURRENT_COLOUR_TEXT.test(text) && prop !== 'color' && /color$/i.test(prop)) {
+    return { props: [prop], on, within: CURRENT_COLOUR_MARKER };
+  }
   if (BOUND_TOKEN.test(text)) return boundDeclaration(prop, tokenFromValue(text), on);
   if (prop !== 'transform') return boundRelativeLength(prop, text, on);
   const within = measuredTransform(text);
@@ -8567,6 +8574,14 @@ export class Engine implements HostEngine {
     const bound = text === undefined || refused ? null : boundRead(prop, text, node.tag);
     if (bound || had) this.keepBound(node, prop, bound);
     return bound !== null || refused;
+  }
+
+  /**
+   * Bind what a value set on a node comes to where it is no one value of one prop: a shorthand
+   * read as the renderer reads it. Taken out as a bound style is, with `setBoundStyle` and `null`.
+   */
+  setBoundDeclaration(node: EngineNode, prop: string, declaration: DeferredDeclaration): void {
+    this.keepBound(node, prop, declaration);
   }
 
   /** Keep a bound declaration for the cascade to settle, or forget the one kept, with `null`. */

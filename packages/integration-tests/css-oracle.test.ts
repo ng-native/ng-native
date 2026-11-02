@@ -121,6 +121,7 @@ const NATIVE_INITIAL: Partial<Record<ExtraProperty, unknown>> = {
 };
 
 const UNITLESS: ReadonlySet<ExtraProperty> = new Set([
+  'font-weight',
   'opacity',
   'flex-grow',
   'flex-shrink',
