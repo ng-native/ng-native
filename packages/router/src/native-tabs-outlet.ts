@@ -585,11 +585,12 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     const heard = native.addListener?.('onTabBarHeight', (change) => {
       if (change.host === watching) this.barHeight.set(change.height);
     });
-    this.renderer.listen(host, 'layout', () => {
+    const unlisten = this.renderer.listen(host, 'layout', () => {
       watching = engine.tagOf?.(host) ?? null;
       if (watching !== null) void native.watch?.(watching)?.catch(() => {});
     });
     return () => {
+      unlisten();
       heard?.remove();
       if (watching !== null) void native.unwatch?.(watching)?.catch(() => {});
     };
