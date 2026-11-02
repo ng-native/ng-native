@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import type { Type } from '@angular/core';
+import type { Provider, Type } from '@angular/core';
 import { DeepLinks, type DeepLinkSource } from '@ng-native/device';
 import { cleanup, compileCss, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
 import {
@@ -18,6 +18,7 @@ import {
   type Token,
   type TokenizerAndRendererExtension,
 } from 'marked';
+import { linkSchemeSet, linkTarget } from '../components/src/markdown-blocks.ts';
 import { MarkdownStream } from '../components/src/markdown-stream.ts';
 import { compileFixture } from './compile.ts';
 
@@ -26,6 +27,7 @@ interface Screen {
   tokens: { set(value: readonly Token[] | undefined): void };
   classes: { set(value: Record<string, string>): void };
   streaming: { set(value: boolean): void };
+  linkSchemes: { set(value: readonly string[] | undefined): void };
   presses: { href: string; title: string | null }[];
   prevent: boolean;
 }
@@ -46,7 +48,7 @@ after(cleanup);
 
 async function show(
   source: string,
-  options: { globalStyles?: ReturnType<typeof compileCss> } = {},
+  options: { globalStyles?: ReturnType<typeof compileCss>; providers?: Provider[] } = {},
 ) {
   const opened: string[] = [];
   const links: DeepLinkSource = {
@@ -55,8 +57,8 @@ async function show(
     open: (url) => void opened.push(url),
   };
   const app = await render(mod['MarkdownScreen'] as Type<unknown>, {
-    providers: [{ provide: DeepLinks.SOURCE, useValue: links }],
     ...options,
+    providers: [{ provide: DeepLinks.SOURCE, useValue: links }, ...(options.providers ?? [])],
   });
   const screen = app.instance as Screen;
   screen.source.set(source);
@@ -238,6 +240,175 @@ describe('links', () => {
     const { named, opened } = await show('[mail](mailto:a@b.c) [call](tel:123)');
     for (const link of named('VirtualText')) await fireEvent.press(link);
     assert.deepEqual(opened, ['mailto:a@b.c', 'tel:123']);
+  });
+});
+
+describe("links in the app's own schemes", () => {
+  const provide = (...schemes: string[]) =>
+    (mod['provideMarkdownLinkSchemes'] as (...one: string[]) => Provider)(...schemes);
+  const press = async (ctx: Awaited<ReturnType<typeof show>>) => {
+    for (const link of ctx.named('VirtualText')) await fireEvent.press(link);
+  };
+
+  it('draws an unlisted scheme as its text, and a listed one as a link that is reported, never opened', async () => {
+    const plain = await show('[item](myapp:item/42)');
+    assert.equal(plain.named('VirtualText').length, 0);
+
+    const ctx = await show('Open [item](myapp:item/42 "Item")');
+    ctx.screen.linkSchemes.set(['myapp']);
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 1);
+    await press(ctx);
+    assert.deepEqual(ctx.screen.presses, [{ href: 'myapp:item/42', title: 'Item' }]);
+    assert.deepEqual(ctx.opened, [], 'a listed scheme is the app to route, even if not prevented');
+  });
+
+  it('reads schemes without regard to case, and with or without a colon', async () => {
+    const ctx = await show('[a](MyApp:one) [b](MYAPP:two) [c](other:x)');
+    ctx.screen.linkSchemes.set([' MyApp: ']);
+    await ctx.app.detectChanges();
+    await press(ctx);
+    assert.deepEqual(
+      ctx.screen.presses.map((one) => one.href),
+      ['MyApp:one', 'MYAPP:two'],
+    );
+    assert.deepEqual(ctx.opened, []);
+  });
+
+  it('keeps http, https, mailto and tel opening, however they are listed', async () => {
+    const ctx = await show('[a](https://example.com) [b](mailto:a@b.c) [c](tel:1) [d](myapp:x)');
+    ctx.screen.linkSchemes.set(['https', 'MAILTO', 'tel', 'myapp']);
+    await ctx.app.detectChanges();
+    await press(ctx);
+    assert.deepEqual(ctx.opened, ['https://example.com', 'mailto:a@b.c', 'tel:1']);
+    assert.equal(ctx.screen.presses.length, 4);
+  });
+
+  it('still draws javascript, data, vbscript and file as text when only other schemes are listed', async () => {
+    const ctx = await show('x');
+    ctx.screen.linkSchemes.set(['myapp', 'javascriptx']);
+    await ctx.app.detectChanges();
+    for (const href of [
+      'javascript:alert(1)',
+      ' JavaScript:alert(1)',
+      'java\tscript:alert(1)',
+      'javascript&#58;alert(1)',
+      'data:text/html,x',
+      'vbscript:x',
+      'file:///etc/passwd',
+      '&#160;javascript:alert(1)',
+    ]) {
+      ctx.screen.source.set(`before [click](<${href}>) after`);
+      await ctx.app.detectChanges();
+      assert.equal(textOf(ctx.blocks()[0]!), 'before click after', href);
+      assert.equal(ctx.named('VirtualText').length, 0, href);
+    }
+  });
+
+  it('draws again when the list gains a scheme, and as text when it loses one', async () => {
+    const ctx = await show('[a](one:x) [b](two:y)');
+    const links = () => ctx.named('VirtualText').length;
+    assert.equal(links(), 0);
+    ctx.screen.linkSchemes.set(['one']);
+    await ctx.app.detectChanges();
+    assert.equal(links(), 1);
+    ctx.screen.linkSchemes.set(['one', 'two']);
+    await ctx.app.detectChanges();
+    assert.equal(links(), 2);
+    ctx.screen.linkSchemes.set(['two']);
+    await ctx.app.detectChanges();
+    assert.equal(links(), 1);
+    ctx.screen.linkSchemes.set(undefined);
+    await ctx.app.detectChanges();
+    assert.equal(links(), 0);
+    assert.equal(textOf(ctx.blocks()[0]!), 'a b');
+  });
+
+  it('follows a change of the list for tokens lexed already', async () => {
+    const ctx = await show('');
+    ctx.screen.tokens.set(lexer('[a](one:x)'));
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 0);
+    ctx.screen.linkSchemes.set(['one']);
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 1);
+    ctx.screen.linkSchemes.set([]);
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 0);
+  });
+
+  it('reaches links in headings, quotes, lists, table cells and emphasis', async () => {
+    const ctx = await show(
+      '# [h](one:h)\n\n> [q](one:q)\n\n- [l](one:l)\n\n| [t](one:t) |\n| --- |\n| [c](one:c) |\n\n**[s](one:s)** ~~[d](one:d)~~',
+    );
+    ctx.screen.linkSchemes.set(['one']);
+    await ctx.app.detectChanges();
+    const links = ctx
+      .named('VirtualText')
+      .filter((node) => node.props['accessibilityRole'] === 'link');
+    assert.equal(links.length, 7);
+  });
+
+  it('draws kept blocks again when the list changes while streaming', async () => {
+    const ctx = await show('');
+    ctx.screen.streaming.set(true);
+    ctx.screen.source.set('[a](one:x)\n\n[b](one:y) tail');
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 0);
+    ctx.screen.linkSchemes.set(['one']);
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 2, 'the kept block and the last one');
+    ctx.screen.source.set('[a](one:x)\n\n[b](one:y) tail more');
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 2);
+    ctx.screen.linkSchemes.set([]);
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 0, 'a block kept from before is drawn as text');
+    ctx.screen.linkSchemes.set(['one']);
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 2);
+  });
+
+  it('takes the app-wide list from the provider', async () => {
+    const ctx = await show('[a](myapp:one) [b](other:two)', {
+      providers: [provide('myapp')],
+    });
+    await press(ctx);
+    assert.deepEqual(
+      ctx.screen.presses.map((one) => one.href),
+      ['myapp:one'],
+    );
+    assert.deepEqual(ctx.opened, []);
+  });
+
+  it("lets the input replace the provider's list, an empty one included", async () => {
+    const ctx = await show('[a](myapp:one) [b](other:two)', {
+      providers: [provide('myapp')],
+    });
+    assert.equal(ctx.named('VirtualText').length, 1);
+    ctx.screen.linkSchemes.set(['other']);
+    await ctx.app.detectChanges();
+    await press(ctx);
+    assert.deepEqual(
+      ctx.screen.presses.map((one) => one.href),
+      ['other:two'],
+    );
+    ctx.screen.linkSchemes.set([]);
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 0, 'set to none, the provider is not added');
+    ctx.screen.linkSchemes.set(undefined);
+    await ctx.app.detectChanges();
+    assert.equal(ctx.named('VirtualText').length, 1, 'unset, the provider applies again');
+  });
+
+  it('normalises a list: case, a colon, and what cannot be a scheme', () => {
+    assert.deepEqual(
+      [...linkSchemeSet([' MyApp:', 'my-app+x.y', '', '1bad', 'a b', 'x:y'])],
+      ['myapp', 'my-app+x.y'],
+    );
+    assert.equal(linkTarget('myapp:x', linkSchemeSet(['myapp'])), 'myapp:x');
+    assert.equal(linkTarget('myapp:x'), null);
+    assert.equal(linkTarget('javascript:x', linkSchemeSet(['myapp'])), null);
   });
 });
 

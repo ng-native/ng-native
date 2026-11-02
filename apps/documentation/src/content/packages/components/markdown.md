@@ -66,8 +66,9 @@ The document can come from anywhere, a server or a person, so nothing in it runs
 - **Raw HTML** is drawn as the text it is written as. `<b>bold</b>` shows its tags.
 - **Links** are followed only to `http`, `https`, `mailto`, `tel` and relative targets. Any other
   scheme, such as `javascript:`, `data:`, `vbscript:` or `file:`, is drawn as the link's text, with
-  nothing to press. The scheme is read the way a URL parser reads it, so spaces, tabs and control
-  characters in it change nothing.
+  nothing to press, unless the app lists it, see
+  [Links in your own scheme](#links-in-your-own-scheme). The scheme is read the way a URL parser
+  reads it, so spaces, tabs and control characters in it change nothing.
 - **Images** load only over `http` and `https`. Anything else is drawn as its alt text.
 
 HTML entities marked leaves in the text, such as `&amp;`, `&rarr;`, `&eacute;` and `&#39;`, are
@@ -104,6 +105,61 @@ export class Help {
 ```
 
 In the browser host nothing is opened by default, so handle `(linkPress)` there.
+
+### Links in your own scheme
+
+A link such as `[item 42](myapp:item/42)` is drawn as plain text, since `myapp` is not a scheme
+`<markdown>` follows. List the schemes your app routes itself and those links are drawn as links
+and reported through `(linkPress)`, like a relative one. A listed scheme is never opened by
+`<markdown>`, even when no handler calls `preventDefault()`: routing it is the app's job.
+
+Set the list on one document with `linkSchemes`, or for every `<markdown>` in the app with
+`provideMarkdownLinkSchemes`:
+
+```ts
+import { Component, inject } from '@angular/core';
+import { Markdown, type MarkdownLinkPress } from '@ng-native/components/markdown';
+import { NativeNavigation } from '@ng-native/router';
+
+@Component({
+  selector: 'app-item-notes',
+  imports: [Markdown],
+  template: `
+    <markdown [source]="notes" [linkSchemes]="['myapp']" (linkPress)="follow($event)" />
+  `,
+})
+export class ItemNotes {
+  private readonly navigation = inject(NativeNavigation);
+  protected readonly notes = 'Open [item 42](myapp:item/42) or [the site](https://example.com).';
+
+  protected follow(link: MarkdownLinkPress): void {
+    if (!link.href.startsWith('myapp:')) return;
+    link.preventDefault();
+    void this.navigation.push('/' + link.href.slice('myapp:'.length));
+  }
+}
+```
+
+```ts
+import type { ApplicationConfig } from '@angular/core';
+import { provideMarkdownLinkSchemes } from '@ng-native/components/markdown';
+
+export const appConfig: ApplicationConfig = {
+  providers: [provideMarkdownLinkSchemes('myapp', 'myapp-staging')],
+};
+```
+
+- A scheme is matched without regard to case, and `'myapp:'` is the same as `'myapp'`. An entry that
+  cannot be a scheme is ignored.
+- When `linkSchemes` is set, it replaces the provider's list for that `<markdown>`, even when it
+  is empty, so `[linkSchemes]="[]"` turns the app-wide list off for one document. Left unset, the
+  provider's list applies.
+- Listing `http`, `https`, `mailto` or `tel` changes nothing: those are still opened on press, and a
+  scheme listed beside them is not.
+- Only the listed schemes are added. `javascript:`, `data:`, `vbscript:` and `file:` are drawn as
+  text unless you list them, and a link listed here is yours to vet before you act on it.
+- Give `linkSchemes` a new array to change the list. A document on screen is drawn again when the
+  list gains or loses a scheme, a streaming one included.
 
 ## Styling
 

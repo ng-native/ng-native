@@ -18,6 +18,7 @@ import type { MarkdownBlock } from '../../components/src/markdown-blocks.ts';
       [tokens]="tokens()"
       [streaming]="streaming()"
       [classes]="classes()"
+      [linkSchemes]="linkSchemes()"
       (linkPress)="pressed($event)"
     />
   `,
@@ -27,6 +28,7 @@ export class MarkdownScreen {
   readonly tokens = signal<readonly Token[] | undefined>(undefined);
   readonly classes = signal<MarkdownClasses>({});
   readonly streaming = signal(false);
+  readonly linkSchemes = signal<readonly string[] | undefined>(undefined);
   readonly presses: { href: string; title: string | null }[] = [];
   prevent = false;
 
@@ -50,3 +52,6 @@ export class MarkdownColumnsScreen {
   });
   readonly columns = viewChild.required(MarkdownColumns);
 }
+
+/** The provider, from the same compiled copy of `<markdown>` the screen uses. */
+export { provideMarkdownLinkSchemes } from '../../components/src/markdown.ts';

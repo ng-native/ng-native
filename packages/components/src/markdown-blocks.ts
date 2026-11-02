@@ -118,19 +118,47 @@ export function schemeOf(url: string): string | null {
 const LINK_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
 const IMAGE_SCHEMES = new Set(['http', 'https']);
 
+/** The schemes an app lists for `<markdown>` to draw links in, lowercased. See {@link linkSchemeSet}. */
+export type AppLinkSchemes = ReadonlySet<string>;
+
+/** No app scheme: what a document is drawn with when the app lists none. */
+export const NO_APP_SCHEMES: AppLinkSchemes = new Set();
+
+const SCHEME_NAME = /^[a-z][a-z0-9+.-]*$/;
+
 /**
- * A link's target if it may be followed: `http`, `https`, `mailto`, `tel`, or relative, which is
- * the app's to resolve. Anything else, `javascript:`, `data:`, `vbscript:` and `file:` among
- * them, is null, and the link is drawn as its text. The scheme is read after the trim, so
- * whitespace the trim strips cannot hide one.
+ * The set of schemes an app lists, as {@link linkTarget} reads them. Each is trimmed, lowercased
+ * and stripped of one trailing colon, so `'MyApp:'` and `'myapp'` are the same; an entry that
+ * cannot be a scheme is dropped.
  */
-export function linkTarget(href: string): string | null {
-  const target = href.trim();
-  const scheme = schemeOf(target);
-  return scheme === null || LINK_SCHEMES.has(scheme) ? target : null;
+export function linkSchemeSet(schemes: readonly string[]): AppLinkSchemes {
+  const set = new Set<string>();
+  for (const one of schemes) {
+    const name = one.trim().toLowerCase().replace(/:$/, '');
+    if (SCHEME_NAME.test(name)) set.add(name);
+  }
+  return set.size ? set : NO_APP_SCHEMES;
 }
 
-/** Whether `href` is absolute in a scheme a link may be followed to, and so is opened on press. */
+/**
+ * A link's target if it may be drawn as a link: `http`, `https`, `mailto`, `tel`, a scheme the app
+ * listed in `appSchemes`, or relative, which is the app's to resolve. Anything else,
+ * `javascript:`, `data:`, `vbscript:` and `file:` among them, is null, and the link is drawn as
+ * its text. The scheme is read after the trim, so whitespace the trim strips cannot hide one.
+ */
+export function linkTarget(
+  href: string,
+  appSchemes: AppLinkSchemes = NO_APP_SCHEMES,
+): string | null {
+  const target = href.trim();
+  const scheme = schemeOf(target);
+  return scheme === null || LINK_SCHEMES.has(scheme) || appSchemes.has(scheme) ? target : null;
+}
+
+/**
+ * Whether `href` is absolute in one of the built-in schemes a link is followed to, and so is
+ * opened on press. A scheme the app listed is drawn as a link but never opens here.
+ */
 export function opensOnPress(href: string): boolean {
   const scheme = schemeOf(href.trim());
   return scheme !== null && LINK_SCHEMES.has(scheme);
@@ -164,39 +192,42 @@ function hrefOf(token: Token): string | null {
 
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
-/** The blocks a document of `tokens` is drawn as. */
-export function markdownBlocks(tokens: readonly Token[]): MarkdownBlock[] {
-  return tokens.flatMap(block);
+/** The blocks a document of `tokens` is drawn as, with links in `appSchemes` drawn as links too. */
+export function markdownBlocks(
+  tokens: readonly Token[],
+  appSchemes: AppLinkSchemes = NO_APP_SCHEMES,
+): MarkdownBlock[] {
+  return tokens.flatMap((token) => block(token, appSchemes));
 }
 
 /** What each kind of block token is drawn as. A kind not here is drawn as its source text. */
-const BLOCKS: Readonly<Record<string, (token: Token) => MarkdownBlock[]>> = {
-  heading: (token) => {
+const BLOCKS: Readonly<Record<string, (token: Token, app: AppLinkSchemes) => MarkdownBlock[]>> = {
+  heading: (token, app) => {
     const heading = token as Tokens.Heading;
     const depth = Math.min(Math.max(heading.depth, 1), 6);
-    const children = trimmedEnd(inlines(heading.tokens));
+    const children = trimmedEnd(inlines(heading.tokens, app));
     return [{ kind: 'heading', element: HEADINGS[depth - 1]!, children }];
   },
-  paragraph: (token) => paragraphs((token as Tokens.Paragraph).tokens),
-  text: (token) => {
+  paragraph: (token, app) => paragraphs((token as Tokens.Paragraph).tokens, app),
+  text: (token, app) => {
     const text = token as Tokens.Text;
     return text.tokens
-      ? paragraphs(text.tokens)
+      ? paragraphs(text.tokens, app)
       : [{ kind: 'paragraph', children: [plain(softBreaks(text.text))] }];
   },
-  blockquote: (token) => [
-    { kind: 'blockquote', children: markdownBlocks((token as Tokens.Blockquote).tokens) },
+  blockquote: (token, app) => [
+    { kind: 'blockquote', children: markdownBlocks((token as Tokens.Blockquote).tokens, app) },
   ],
-  list: (token) => [list(token as Tokens.List)],
+  list: (token, app) => [list(token as Tokens.List, app)],
   code: (token) => [{ kind: 'code', text: indented((token as Tokens.Code).text) }],
   hr: () => [{ kind: 'hr' }],
-  table: (token) => {
+  table: (token, app) => {
     const table = token as Tokens.Table;
     return [
       {
         kind: 'table',
-        header: table.header.map((cell) => inlines(cell.tokens)),
-        rows: table.rows.map((row) => row.map((cell) => inlines(cell.tokens))),
+        header: table.header.map((cell) => inlines(cell.tokens, app)),
+        rows: table.rows.map((row) => row.map((cell) => inlines(cell.tokens, app))),
       },
     ];
   },
@@ -206,9 +237,9 @@ const BLOCKS: Readonly<Record<string, (token: Token) => MarkdownBlock[]>> = {
   checkbox: () => [],
 };
 
-function block(token: Token): MarkdownBlock[] {
+function block(token: Token, app: AppLinkSchemes): MarkdownBlock[] {
   const draw = Object.hasOwn(BLOCKS, token.type) ? BLOCKS[token.type]! : null;
-  return draw ? draw(token) : literal(token.raw ?? '');
+  return draw ? draw(token, app) : literal(token.raw ?? '');
 }
 
 /**
@@ -225,14 +256,14 @@ function literal(text: string): MarkdownBlock[] {
   return trimmed.trim() ? [{ kind: 'paragraph', children: [{ kind: 'text', text: trimmed }] }] : [];
 }
 
-function list(token: Tokens.List): MarkdownBlock {
+function list(token: Tokens.List, app: AppLinkSchemes): MarkdownBlock {
   const start = typeof token.start === 'number' ? token.start : 1;
   return {
     kind: 'list',
     element: token.ordered ? 'ol' : 'ul',
     items: token.items.map((item, index) => ({
       marker: item.task ? (item.checked ? '☑' : '☐') : token.ordered ? `${start + index}.` : '•',
-      children: markdownBlocks(item.tokens),
+      children: markdownBlocks(item.tokens, app),
     })),
   };
 }
@@ -242,7 +273,7 @@ function list(token: Tokens.List): MarkdownBlock {
  * and the text either side of it a paragraph each. An image whose address is refused, and one
  * inside a link or an emphasis, is its alt text instead.
  */
-function paragraphs(tokens: readonly Token[]): MarkdownBlock[] {
+function paragraphs(tokens: readonly Token[], app: AppLinkSchemes): MarkdownBlock[] {
   const out: MarkdownBlock[] = [];
   let run: MarkdownInline[] = [];
   const flush = () => {
@@ -255,7 +286,7 @@ function paragraphs(tokens: readonly Token[]): MarkdownBlock[] {
     const href = token.type === 'image' ? hrefOf(token) : null;
     const src = href === null ? null : imageSource(href);
     if (src === null) {
-      run.push(...inline(token));
+      run.push(...inline(token, app));
       continue;
     }
     flush();
@@ -279,8 +310,8 @@ function trimmedEnd(runs: MarkdownInline[]): MarkdownInline[] {
   return text ? [...runs.slice(0, -1), { kind: 'text', text }] : runs.slice(0, -1);
 }
 
-function inlines(tokens: readonly Token[] | undefined): MarkdownInline[] {
-  return (tokens ?? []).flatMap(inline);
+function inlines(tokens: readonly Token[] | undefined, app: AppLinkSchemes): MarkdownInline[] {
+  return (tokens ?? []).flatMap((token) => inline(token, app));
 }
 
 /**
@@ -295,16 +326,16 @@ function plain(text: string): MarkdownInline {
   return { kind: 'text', text: decodeEntities(text) };
 }
 
-function emphasis(token: Token): MarkdownInline[] {
+function emphasis(token: Token, app: AppLinkSchemes): MarkdownInline[] {
   const kind = token.type as 'strong' | 'em' | 'del';
-  return [{ kind, children: inlines((token as Tokens.Strong).tokens) }];
+  return [{ kind, children: inlines((token as Tokens.Strong).tokens, app) }];
 }
 
 /** What each kind of inline token is drawn as. A kind not here is drawn as its source text. */
-const INLINES: Readonly<Record<string, (token: Token) => MarkdownInline[]>> = {
-  text: (token) => {
+const INLINES: Readonly<Record<string, (token: Token, app: AppLinkSchemes) => MarkdownInline[]>> = {
+  text: (token, app) => {
     const text = token as Tokens.Text;
-    return text.tokens ? inlines(text.tokens) : [plain(softBreaks(text.text))];
+    return text.tokens ? inlines(text.tokens, app) : [plain(softBreaks(text.text))];
   },
   escape: (token) => [plain((token as Tokens.Escape).text)],
   strong: emphasis,
@@ -312,11 +343,11 @@ const INLINES: Readonly<Record<string, (token: Token) => MarkdownInline[]>> = {
   del: emphasis,
   codespan: (token) => [{ kind: 'code', text: (token as Tokens.Codespan).text }],
   br: () => [{ kind: 'text', text: '\n' }],
-  link: (token) => {
+  link: (token, app) => {
     const link = token as Tokens.Link;
-    const children = inlines(link.tokens);
+    const children = inlines(link.tokens, app);
     const decoded = hrefOf(link);
-    const href = decoded === null ? null : linkTarget(decoded);
+    const href = decoded === null ? null : linkTarget(decoded, app);
     if (href === null) return children;
     const title = link.title ? decodeEntities(link.title) : null;
     return [{ kind: 'link', href, title, children }];
@@ -326,9 +357,9 @@ const INLINES: Readonly<Record<string, (token: Token) => MarkdownInline[]>> = {
   checkbox: () => [],
 };
 
-function inline(token: Token): MarkdownInline[] {
+function inline(token: Token, app: AppLinkSchemes): MarkdownInline[] {
   const draw = Object.hasOwn(INLINES, token.type) ? INLINES[token.type]! : null;
-  if (draw) return draw(token);
+  if (draw) return draw(token, app);
   return token.raw ? [{ kind: 'text', text: token.raw }] : [];
 }
 

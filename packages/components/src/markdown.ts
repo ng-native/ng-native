@@ -12,12 +12,14 @@
 import {
   Component,
   Injector,
+  InjectionToken,
   booleanAttribute,
   computed,
   inject,
   input,
   linkedSignal,
   output,
+  type Provider,
 } from '@angular/core';
 import { DeepLinks } from '@ng-native/device';
 import { nativePlatform } from '@ng-native/fabric';
@@ -26,9 +28,11 @@ import type { ImageLoadEvent, LayoutEvent } from './events.ts';
 import { Image } from './image.ts';
 import {
   blockKey,
+  linkSchemeSet,
   markdownBlocks,
   opensOnPress,
   shareBlocks,
+  type AppLinkSchemes,
   type MarkdownBlock,
   type MarkdownElement,
   type MarkdownInline,
@@ -52,6 +56,28 @@ export interface MarkdownLinkPress {
   readonly title: string | null;
   /** Keep the link from being opened, to handle it in the app instead. */
   preventDefault(): void;
+}
+
+/**
+ * The schemes, beyond `http`, `https`, `mailto` and `tel`, that every `<markdown>` draws links in
+ * unless its own `linkSchemes` is set. See `provideMarkdownLinkSchemes`.
+ */
+export const MARKDOWN_LINK_SCHEMES = new InjectionToken<readonly string[]>(
+  'MARKDOWN_LINK_SCHEMES',
+  { providedIn: 'root', factory: () => [] },
+);
+
+/**
+ * Make links in the app's own schemes links in every `<markdown>`, such as `myapp:item/42`:
+ * drawn as links and reported through `(linkPress)`, and never opened by default. A
+ * `[linkSchemes]` input on one `<markdown>` replaces this list for that one.
+ *
+ * ```ts
+ * providers: [provideMarkdownLinkSchemes('myapp')]
+ * ```
+ */
+export function provideMarkdownLinkSchemes(...schemes: readonly string[]): Provider {
+  return { provide: MARKDOWN_LINK_SCHEMES, useValue: schemes };
 }
 
 const ELEMENTS: readonly MarkdownElement[] = [
@@ -116,6 +142,12 @@ function imageBlocks(
  *
  * A pressed link is `(linkPress)`. An absolute target is then opened with `DeepLinks.open` unless
  * a handler calls `preventDefault()`; a relative one is only reported, for the app to route.
+ *
+ * A link in the app's own scheme, `myapp:item/42`, is drawn as plain text unless the scheme is
+ * listed in `linkSchemes`, or app-wide with `provideMarkdownLinkSchemes`. A listed scheme is drawn
+ * as a link and reported through `(linkPress)`, and is never opened: the app routes it. The input
+ * replaces the provider's list when it is set, even to an empty one. Schemes are matched without
+ * regard to case, and the list is read as a value: give a new array to change it.
  */
 @Component({
   selector: 'markdown',
@@ -263,6 +295,12 @@ export class Markdown {
    * See the class note.
    */
   readonly streaming = input(false, { transform: booleanAttribute });
+  /**
+   * Schemes besides `http`, `https`, `mailto` and `tel` whose links are drawn as links and
+   * reported through `(linkPress)`, never opened. Replaces `provideMarkdownLinkSchemes` when set.
+   * See the class note.
+   */
+  readonly linkSchemes = input<readonly string[]>();
   /** A class for an element, in place of its default. See the class note. */
   readonly classes = input<MarkdownClasses>({});
   /** A link was pressed. See the class note. */
@@ -276,20 +314,32 @@ export class Markdown {
    * chunk to the next, so its blocks are not converted or compared again; a source lexed whole
    * makes new tokens, and so new blocks.
    */
-  private readonly streamed = new WeakMap<Token, readonly MarkdownBlock[]>();
+  private streamed = new WeakMap<Token, readonly MarkdownBlock[]>();
+  /** The schemes `streamed` was converted with; its blocks are stale once they change. */
+  private streamedFor: AppLinkSchemes | undefined;
+
+  private readonly providedSchemes = inject(MARKDOWN_LINK_SCHEMES);
+
+  /** The schemes links are drawn in, the same set while the list reads the same. */
+  private readonly appSchemes = computed(
+    () => linkSchemeSet(this.linkSchemes() ?? this.providedSchemes),
+    { equal: (a, b) => a.size === b.size && [...a].every((scheme) => b.has(scheme)) },
+  );
+
+  private readonly lexed = computed(() => {
+    const tokens = this.tokens();
+    if (tokens) return { tokens, streamed: false };
+    const streamed = this.streaming();
+    return { tokens: this.lex(this.source() ?? '', streamed), streamed };
+  });
 
   /** The document's blocks, with each one that did not change kept, so it is not drawn again. */
   protected readonly blocks = linkedSignal({
-    source: () => {
-      const tokens = this.tokens();
-      if (tokens) return { tokens, streamed: false };
-      const streamed = this.streaming();
-      return { tokens: this.lex(this.source() ?? '', streamed), streamed };
-    },
-    computation: ({ tokens, streamed }, previous?: { value: readonly MarkdownBlock[] }) =>
+    source: () => ({ ...this.lexed(), schemes: this.appSchemes() }),
+    computation: ({ tokens, streamed, schemes }, previous?: { value: readonly MarkdownBlock[] }) =>
       streamed
-        ? this.streamedBlocks(tokens, previous?.value)
-        : shareBlocks(previous?.value, markdownBlocks(tokens)),
+        ? this.streamedBlocks(tokens, previous?.value, schemes)
+        : shareBlocks(previous?.value, markdownBlocks(tokens, schemes)),
   });
 
   private readonly classOf = computed(() => ({ ...DEFAULT_CLASSES, ...this.classes() }));
@@ -341,7 +391,12 @@ export class Markdown {
   private streamedBlocks(
     tokens: readonly Token[],
     previous: readonly MarkdownBlock[] | undefined,
+    schemes: AppLinkSchemes,
   ): readonly MarkdownBlock[] {
+    if (this.streamedFor !== schemes) {
+      this.streamed = new WeakMap();
+      this.streamedFor = schemes;
+    }
     const kept: MarkdownBlock[] = [];
     let at = 0;
     for (; at < tokens.length; at++) {
@@ -350,7 +405,7 @@ export class Markdown {
       kept.push(...blocks);
     }
     const rest = tokens.slice(at);
-    const converted = rest.map((token) => markdownBlocks([token]));
+    const converted = rest.map((token) => markdownBlocks([token], schemes));
     // The blocks drawn after the kept ones, when those are still the ones drawn first.
     const drawn = !kept.length || previous?.[kept.length - 1] === kept.at(-1);
     const was = drawn ? previous?.slice(kept.length) : undefined;
