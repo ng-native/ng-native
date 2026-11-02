@@ -14,6 +14,7 @@ import {
   mixColours,
 } from './color-mix.ts';
 import { type BackgroundLayers, backgroundLayers } from './background-layers.ts';
+import { mathValue, rounded, type MathValue } from './css-math.ts';
 import { ELEMENT_STYLES } from './element-styles.ts';
 import { type Channel, relativeColour } from './relative-colour.ts';
 import type { Keyframe } from './transition.ts';
@@ -5586,6 +5587,15 @@ export function boundDeclaration(
   };
 }
 
+const measuredCompute = (
+  { unit, factor }: { unit: RelativeUnit; factor: number },
+  offset: number,
+): DeferredDeclaration['compute'] => ({
+  unit,
+  factor: rounded(factor),
+  ...(offset ? { offset: rounded(offset) } : {}),
+});
+
 /** A CSS number: `1.5`, `+1.5`, `.5`, `1e0`, `-2`. */
 const CSS_NUMBER = String.raw`[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?`;
 
@@ -5618,6 +5628,11 @@ export function boundRelativeLength(
 ): DeferredDeclaration | null {
   const kind = boundKind(prop);
   if (kind !== 'length' && kind !== 'lineHeight') return null;
+  const math = mathValue(text);
+  if (math) {
+    const compute = mathCompute(prop, kind, math);
+    return compute ? { props: [prop], ...(on === undefined ? {} : { on }), compute } : null;
+  }
   const relative = RELATIVE_LENGTH.exec(text);
   if (relative) {
     const unit = relative[2]!.toLowerCase() as RelativeUnit;
@@ -5636,6 +5651,57 @@ export function boundRelativeLength(
     ...(on === undefined ? {} : { on }),
     compute: { unit: 'em', factor: Number(unitless[1]), multiple: true },
   };
+}
+
+/**
+ * What a math function comes to where it takes the node to measure, as a rule compiles it: a
+ * relative unit with its points added, a share of the font size where a percentage is one, or a
+ * `line-height` with no unit.
+ */
+function mathCompute(
+  prop: string,
+  kind: TokenKind,
+  math: MathValue,
+): DeferredDeclaration['compute'] | undefined {
+  if (math.type === 'number') {
+    if (kind !== 'lineHeight') return undefined;
+    return { unit: 'em', factor: rounded(math.value), multiple: true };
+  }
+  const ofFont = prop === 'fontSize' || kind === 'lineHeight';
+  const measured =
+    math.relative ??
+    (ofFont && math.percent ? { unit: 'em' as const, factor: math.percent / 100 } : null);
+  return measured ? measuredCompute(measured, math.value) : undefined;
+}
+
+/**
+ * A math function in a bound declaration, as the value of a style when the node is not needed to
+ * work it out: a number where `prop` takes one, a length in points, a percentage, or a percentage
+ * and a length, which the engine finishes against its box. Undefined for a value `prop` does not
+ * take, and for any other text.
+ */
+export function boundMath(prop: string, text: string): number | string | undefined {
+  const math = mathValue(text);
+  if (!math) return undefined;
+  const kind = boundKind(prop);
+  const takesNumber = kind === 'number' || kind === 'weight';
+  if (takesNumber || math.type === 'number') return numberFrom(prop, kind, math);
+  if (math.relative || math.type === 'angle') return undefined;
+  if (kind !== 'length' && kind !== 'lineHeight' && kind !== 'keyword') return undefined;
+  const points = rounded(math.value);
+  if (!math.percent) return points;
+  const share = rounded(math.percent);
+  return points ? `calc(${share}% + ${points}px)` : `${share}%`;
+}
+
+/** A math function where `prop` takes a number, which `opacity` may write as a percentage. */
+function numberFrom(prop: string, kind: TokenKind, math: MathValue): number | string | undefined {
+  const share = prop === 'opacity' && math.type === 'percentage';
+  if (math.type !== 'number' && !share) return undefined;
+  const value = rounded(share ? math.percent / 100 : math.value);
+  if (kind === 'weight') return String(value);
+  if (kind !== 'number') return undefined;
+  return prop === 'zIndex' ? Math.round(value) : value;
 }
 
 /** A bound colour made of tokens, worked out where it is used; null for any other value. */

@@ -1,5 +1,365 @@
 [
   {
+    "name": "an inline width: min(10px, 20px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "10px"
+    }
+  },
+  {
+    "name": "an inline width: max(10px, 20px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "20px"
+    }
+  },
+  {
+    "name": "an inline width: clamp(10px, 20px, 30px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "20px"
+    }
+  },
+  {
+    "name": "an inline width: clamp(10px, 50px, 30px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "30px"
+    }
+  },
+  {
+    "name": "an inline width: clamp(10px, 5px, 30px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "10px"
+    }
+  },
+  {
+    "name": "an inline width: min(10px, 2rem, 5px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "5px"
+    }
+  },
+  {
+    "name": "an inline width: calc(min(10px, 20px) + 1px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "11px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1em + 2px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "18px"
+    }
+  },
+  {
+    "name": "an inline width: min(1em, 2em)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "16px"
+    }
+  },
+  {
+    "name": "an inline width: calc((1em + 1rem) * 2)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "64px"
+    }
+  },
+  {
+    "name": "an inline width: calc(1em + 1em)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "32px"
+    }
+  },
+  {
+    "name": "an inline font-size: calc(1em + 2px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "18px"
+    }
+  },
+  {
+    "name": "an inline font-size: calc(150%)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "24px"
+    }
+  },
+  {
+    "name": "an inline padding-top: calc(1em + 2px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "18px"
+    }
+  },
+  {
+    "name": "an inline padding: calc(1em + 2px)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "18px"
+    }
+  },
+  {
+    "name": "an inline opacity: calc(1 / 2)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0.5"
+    }
+  },
+  {
+    "name": "an inline opacity: calc(50%)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0.5"
+    }
+  },
+  {
+    "name": "an inline opacity: min(1, 0.5)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0.5"
+    }
+  },
+  {
+    "name": "an inline flex-grow: calc(1 + 1)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "2"
+    }
+  },
+  {
+    "name": "an inline flex-shrink: calc(1 + 1)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "2"
+    }
+  },
+  {
+    "name": "an inline flex: calc(1 + 1)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "2"
+    }
+  },
+  {
+    "name": "an inline flex: calc(1 + 1) 1 0px",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "2"
+    }
+  },
+  {
+    "name": "an inline flex: 1 calc(1 + 1) 10px",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "2"
+    }
+  },
+  {
+    "name": "an inline aspect-ratio: calc(16 / 9)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "1.77778 / 1"
+    }
+  },
+  {
+    "name": "an inline line-height: calc(1 + 1)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "32px"
+    }
+  },
+  {
+    "name": "an inline line-height: calc(150%)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "24px"
+    }
+  },
+  {
+    "name": "an inline font-weight: calc(300 + 400)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-weight": "700"
+    }
+  },
+  {
+    "name": "an inline z-index: calc(3 / 2)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "2"
+    }
+  },
+  {
+    "name": "an inline transform: translateX(calc(1px + 1px))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(1, 0, 0, 1, 2, 0)"
+    }
+  },
+  {
+    "name": "an inline transform: translate(calc(1px + 1px), calc(1rem * 2))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(1, 0, 0, 1, 2, 32)"
+    }
+  },
+  {
+    "name": "an inline transform: scale(calc(1 + 1))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(2, 0, 0, 2, 0, 0)"
+    }
+  },
+  {
+    "name": "an inline transform: rotate(calc(10deg + 20deg))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(0.866025, 0.5, -0.5, 0.866025, 0, 0)"
+    }
+  },
+  {
+    "name": "an inline transform: rotate(calc(1turn / 4))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(0, 1, -1, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "an inline transform: translateX(calc(1em + 1px))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(1, 0, 0, 1, 17, 0)"
+    }
+  },
+  {
+    "name": "an inline transform: translateX(1em)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "transform": "matrix(1, 0, 0, 1, 16, 0)"
+    }
+  },
+  {
+    "name": "a plus with it in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "4px"
+    }
+  },
+  {
+    "name": "a minus with it in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "1px"
+    }
+  },
+  {
+    "name": "a bracket before a sign in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "5px"
+    }
+  },
+  {
+    "name": "a function before a sign in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "3px"
+    }
+  },
+  {
+    "name": "a product with none in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "4px"
+    }
+  },
+  {
+    "name": "a clamp() in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "4px"
+    }
+  },
+  {
+    "name": "a plus with none in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "a plus with none after in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "a plus with none before in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "a minus with none after in a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
     "name": "specificity: a class beats a type",
     "expected": {
       "color": "rgb(2, 0, 0)",

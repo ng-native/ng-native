@@ -6,11 +6,24 @@
  *
  * The shapes are the build-time conversion's and no more (`deferCalcToken`, `deferHslToken`,
  * `deferChannelsToken` and `deferMixToken` in `@ng-native/metro/css/compile.cjs`): `calc()`,
- * `min()` or `max()` of numbers, lengths in `px` or `rem`, angles, times and `var()`, with + - * /
+ * `min()`, `max()` or `clamp()` of numbers, lengths in `px` or `rem`, angles, times and `var()`, with + - * /
  * and brackets; an `hsl()` with a `var()` for a channel; `rgb()` or `hsl()` of one channels token,
  * with an alpha written or tokened; and a `color-mix()` of any of these colours, tokens and
  * colours written out. Anything else is undefined, as a stylesheet refuses it.
  */
+import {
+  LITERAL,
+  MATH_FUNCTION,
+  SPACE,
+  expect,
+  fail,
+  match,
+  readMath,
+  take,
+  whole,
+  type Cursor,
+  type MathReader,
+} from './css-math.ts';
 import { MIX_SPACES, type HueMethod, type MixSpace } from './color-mix.ts';
 import type { Channel } from './relative-colour.ts';
 import type { ColourExpression, HslChannel, TokenValue } from './css.ts';
@@ -20,22 +33,14 @@ type Marker = NonNullable<TokenValue['deferredCalc']>[number];
 type Expression = Marker['expression'];
 type Alpha = Extract<NonNullable<TokenValue['deferredColour']>, { channels: unknown }>['alpha'];
 
-interface Cursor {
-  readonly text: string;
-  at: number;
-}
-
 /** A `var()`: the token it names, and the text of its fallback, read as its slot wants it. */
 interface Reference {
   readonly reference: string;
   readonly fallback?: string;
 }
 
-/** CSS whitespace, and no other: a no-break space is part of a word, as it is in a browser. */
-const SPACE = /[ \t\n\r\f]*/y;
 const FUNCTION = /([a-z][a-z-]*)\([ \t\n\r\f]*/iy;
 const VAR = /var\([ \t\n\r\f]*(--[\w-]+)[ \t\n\r\f]*/iy;
-const LITERAL = /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|[a-z]+)?/iy;
 const WORD = /[^ \t\n\r\f,/()]+/y;
 /**
  * A `color-mix()` or a relative colour, the only shapes `mixToken` keeps. Any other colour function
@@ -60,7 +65,6 @@ const PER_UNIT: Readonly<Record<string, number>> = {
 const PERCENTAGE = /([+-]?(?:\d+\.?\d*|\.\d+))%/y;
 const HUE_UNITS: ReadonlySet<string> = new Set(['', 'deg', 'grad', 'rad', 'turn']);
 const HUE_METHODS: ReadonlySet<string> = new Set(['shorter', 'longer', 'increasing', 'decreasing']);
-const MATH: ReadonlySet<string> = new Set(['calc', 'min', 'max']);
 const SPACES: Readonly<Record<string, 'rgb' | 'hsl'>> = {
   rgb: 'rgb',
   rgba: 'rgb',
@@ -71,45 +75,6 @@ const SPACES: Readonly<Record<string, 'rgb' | 'hsl'>> = {
 /** The space a colour function's channels are in, and none for a name every object has. */
 const colourSpace = (fn: string): 'rgb' | 'hsl' | undefined =>
   Object.hasOwn(SPACES, fn) ? SPACES[fn] : undefined;
-
-/** Thrown where the text stops being one of the shapes, and caught by `whole`. */
-const UNREADABLE = new Error('not a token made of others');
-const fail = (): never => {
-  throw UNREADABLE;
-};
-
-function match(cursor: Cursor, pattern: RegExp): RegExpExecArray | null {
-  pattern.lastIndex = cursor.at;
-  const found = pattern.exec(cursor.text);
-  if (found) cursor.at = pattern.lastIndex;
-  return found;
-}
-
-/** Whether the next character, past any space, is `char`; taken, with the space after it, if so. */
-function take(cursor: Cursor, char: string): boolean {
-  match(cursor, SPACE);
-  if (cursor.text[cursor.at] !== char) return false;
-  cursor.at++;
-  match(cursor, SPACE);
-  return true;
-}
-
-function expect(cursor: Cursor, char: string): void {
-  if (!take(cursor, char)) fail();
-}
-
-/** The whole text as `read` reads it, or undefined when it is not that shape. */
-function whole<T>(text: string, read: (cursor: Cursor) => T): T | undefined {
-  const cursor = { text, at: 0 };
-  try {
-    const value = read(cursor);
-    match(cursor, SPACE);
-    return cursor.at === text.length ? value : undefined;
-  } catch (error) {
-    if (error === UNREADABLE) return undefined;
-    throw error;
-  }
-}
 
 /** A `var()` from its name on, to the bracket that closes it. */
 function reference(cursor: Cursor, name: string): Reference {
@@ -144,39 +109,23 @@ const unitsOf =
   (unit: string): number | undefined =>
     unit === '%' ? (kind === 'number' ? 0.01 : undefined) : PER_UNIT[unit];
 
-function sum(cursor: Cursor, kind: Marker['kind']): Expression {
-  let value = product(cursor, kind);
-  for (let op; (op = (['+', '-'] as const).find((char) => take(cursor, char)));) {
-    value = [op, value, product(cursor, kind)];
-  }
-  return value;
-}
-
-function product(cursor: Cursor, kind: Marker['kind']): Expression {
-  let value = factor(cursor, kind);
-  for (let op; (op = (['*', '/'] as const).find((char) => take(cursor, char)));) {
-    value = [op, value, factor(cursor, kind)];
-  }
-  return value;
-}
-
-function factor(cursor: Cursor, kind: Marker['kind']): Expression {
-  if (take(cursor, '(')) {
-    const value = sum(cursor, kind);
-    expect(cursor, ')');
-    return value;
-  }
+/** A token, or a number, length, angle or time, read as a slot of `kind` counts it. */
+function leaf(cursor: Cursor, kind: Marker['kind']): Expression {
   const name = match(cursor, VAR)?.[1];
   if (name) {
     const value = leafFallback(reference(cursor, name).fallback, kind);
     return value === undefined ? { reference: name } : { reference: name, fallback: value };
   }
-  const fn = match(cursor, FUNCTION)?.[1];
-  if (fn) return math(cursor, fn, kind);
   const value = literal(cursor, unitsOf(kind));
   // A percentage, kept apart from a bare number, as `literal` in the compiler keeps it.
   return cursor.text[cursor.at - 1] === '%' ? { percentage: value } : value;
 }
+
+/** Arithmetic of tokens, read into the tree the cascade works out where they are set. */
+const tokenArithmetic = (kind: Marker['kind']): MathReader<Expression> => ({
+  leaf: (cursor) => leaf(cursor, kind),
+  combine: (op, left, right) => [op, left, right],
+});
 
 /**
  * A `var()` fallback in arithmetic, as its slot reads it: another `var()` or arithmetic of its
@@ -185,7 +134,7 @@ function factor(cursor: Cursor, kind: Marker['kind']): Expression {
  */
 function leafFallback(text: string | undefined, kind: Marker['kind']): Expression | undefined {
   if (text !== undefined && NESTED.test(text)) {
-    return whole(cssTrim(text), (cursor) => factor(cursor, kind)) ?? fail();
+    return whole(cssTrim(text), (cursor) => readMath(cursor, tokenArithmetic(kind))) ?? fail();
   }
   const token = fallbackToken(text);
   if (kind !== 'length') return numberFallback(token, kind);
@@ -205,22 +154,11 @@ function numberFallback(
   return percentage ? { percentage: token.number! } : token?.number;
 }
 
-/** The rest of a `calc()`, or of a `min()` or `max()` of sums, once its name is read. */
-function math(cursor: Cursor, fn: string, kind: Marker['kind']): Expression {
-  const name = fn.toLowerCase();
-  if (!MATH.has(name)) fail();
-  const sides = [sum(cursor, kind)];
-  while (name !== 'calc' && take(cursor, ',')) sides.push(sum(cursor, kind));
-  expect(cursor, ')');
-  return sides.reduce((a, b) => [name as 'min' | 'max', a, b]);
-}
-
 /** Arithmetic of tokens, read as a length and as a number, whichever each reading makes of it. */
 function calcToken(text: string): TokenValue | undefined {
+  if (!MATH_FUNCTION.test(text)) return undefined;
   const markers = (['length', 'number'] as const).flatMap((kind): Marker[] => {
-    const expression = whole(text, (cursor) =>
-      math(cursor, (match(cursor, FUNCTION) ?? fail())[1]!, kind),
-    );
+    const expression = whole(text, (cursor) => readMath(cursor, tokenArithmetic(kind)));
     return expression === undefined ? [] : [{ expression, kind }];
   });
   return markers.length ? { deferredCalc: markers } : undefined;
@@ -532,20 +470,30 @@ function srgbExpression(cursor: Cursor) {
   };
 }
 
-/** The functions a channel is worked out with: arithmetic, and the least, the most or between. */
-const CHANNEL_MATH: ReadonlySet<string> = new Set(['calc', 'min', 'max', 'clamp']);
+/** A number or a keyword: a percentage or an angle stands alone, outside arithmetic. */
+function channelLeaf(cursor: Cursor, keywords: readonly string[]): Channel {
+  const found = match(cursor, LITERAL);
+  if (found) return found[2] ? fail() : Number(found[1]);
+  return channelOperand(cursor, keywords);
+}
+
+/** The arithmetic a channel is worked out with: of numbers, keywords and bracketed sums. */
+const channelArithmetic = (keywords: readonly string[]): MathReader<Channel> => ({
+  leaf: (cursor) => channelLeaf(cursor, keywords),
+  combine: (op, left, right) => [op, left, right],
+});
 
 /**
  * One channel: a `calc()`, `min()`, `max()` or `clamp()` of numbers and keywords, a keyword, a
  * number, a percentage of the channel's range, or an angle for a hue.
  */
 function relativeChannel(cursor: Cursor, keywords: readonly string[], full: number | null) {
-  const fn = match(cursor, FUNCTION)?.[1]?.toLowerCase();
-  if (fn) return channelMath(cursor, fn, keywords);
   const found = match(cursor, LITERAL);
-  if (!found) return channelOperand(cursor, keywords);
-  const value = Number(found[1]) * channelScale((found[2] ?? '').toLowerCase(), full);
-  return Number.isFinite(value) ? value : fail();
+  if (found) {
+    const value = Number(found[1]) * channelScale((found[2] ?? '').toLowerCase(), full);
+    return Number.isFinite(value) ? value : fail();
+  }
+  return cursor.text[cursor.at] === '(' ? fail() : readMath(cursor, channelArithmetic(keywords));
 }
 
 /** What one of a written channel's unit is: a share of its range, degrees of a hue, or itself. */
@@ -553,51 +501,6 @@ function channelScale(unit: string, full: number | null): number {
   if (unit === '%') return full === null ? NaN : full / 100;
   if (full !== null) return unit ? NaN : 1;
   return HUE_UNITS.has(unit) ? PER_UNIT[unit]! : NaN;
-}
-
-/** `a + b - c`, each side a product of numbers, keywords and bracketed sums. */
-function channelSum(cursor: Cursor, keywords: readonly string[]): Channel {
-  let value = channelProduct(cursor, keywords);
-  for (let op; (op = (['+', '-'] as const).find((char) => take(cursor, char)));) {
-    value = [op, value, channelProduct(cursor, keywords)];
-  }
-  return value;
-}
-
-function channelProduct(cursor: Cursor, keywords: readonly string[]): Channel {
-  let value = channelFactor(cursor, keywords);
-  for (let op; (op = (['*', '/'] as const).find((char) => take(cursor, char)));) {
-    value = [op, value, channelFactor(cursor, keywords)];
-  }
-  return value;
-}
-
-/** The rest of a `calc()`, `min()`, `max()` or `clamp()` of channels, once its name is read. */
-function channelMath(cursor: Cursor, fn: string, keywords: readonly string[]): Channel {
-  if (!CHANNEL_MATH.has(fn)) fail();
-  const sides = [channelSum(cursor, keywords)];
-  while (fn !== 'calc' && take(cursor, ',')) sides.push(channelSum(cursor, keywords));
-  expect(cursor, ')');
-  if (fn === 'clamp') {
-    if (sides.length !== 3) fail();
-    const [least, value, most] = sides;
-    return ['max', least!, ['min', value!, most!]];
-  }
-  return sides.reduce((a, b) => [fn as 'min' | 'max', a, b]);
-}
-
-function channelFactor(cursor: Cursor, keywords: readonly string[]): Channel {
-  if (take(cursor, '(')) {
-    const value = channelSum(cursor, keywords);
-    expect(cursor, ')');
-    return value;
-  }
-  const fn = match(cursor, FUNCTION)?.[1]?.toLowerCase();
-  if (fn) return channelMath(cursor, fn, keywords);
-  const found = match(cursor, LITERAL);
-  // A percentage or an angle stands alone: inside arithmetic the keywords are numbers.
-  if (found) return found[2] ? fail() : Number(found[1]);
-  return channelOperand(cursor, keywords);
 }
 
 function channelOperand(cursor: Cursor, keywords: readonly string[]): string {

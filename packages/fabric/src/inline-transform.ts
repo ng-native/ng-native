@@ -8,8 +8,30 @@
  *
  * Lengths in pixels become numbers, angles and percentages stay strings, as React Native keeps
  * them. A two-argument `translate`, `scale` or `skew` is split into its axes, and a 2D `matrix()`
- * is widened to the sixteen values native wants.
+ * is widened to the sixteen values native wants. A math function in an argument is worked out to
+ * what the function takes, and CSS refuses one of another type: `rotate(calc(1 + 1))`.
  */
+import {
+  MATH_FUNCTION,
+  SPACE,
+  match,
+  mathValue,
+  rounded,
+  type MathValue,
+  type RelativeUnit,
+} from './css-math.ts';
+
+/** A length measured where it is used, as a stylesheet's transform holds one. */
+type Measured = {
+  readonly __defer: {
+    readonly unit: RelativeUnit;
+    readonly factor: number;
+    readonly offset?: number;
+  };
+};
+
+type Argument = number | string | Measured;
+
 export type TransformEntry = Readonly<Record<string, number | string | readonly number[]>>;
 
 const AXES: Readonly<Record<string, readonly [string, string]>> = {
@@ -22,9 +44,13 @@ const PX = /^-?\d*\.?\d+(px)?$/;
 /** A transform function's argument: a number, a length, an angle or a percentage. */
 const ARGUMENT = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
 /** CSS whitespace: a space, a tab, a newline, a carriage return or a form feed, and no other. */
-const SPACE = /^[ \t\n\r\f]*$/;
+const SEPARATOR = /[ \t\n\r\f,]/;
 const PADDED = /^[ \t\n\r\f]+|[ \t\n\r\f]+$/g;
-const FUNCTIONS = /([a-zA-Z0-9]+)\(([^)]*)\)/g;
+const CALL = /([a-zA-Z0-9]+)\(/y;
+/** Whether a value could hold a length measured where it is used, without reading it. */
+const MEASURED = /\d(?:em|vw|vh|vmin|vmax)/i;
+/** A length in a unit measured where it is used. */
+const RELATIVE = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(em|vw|vh|vmin|vmax)$/i;
 /** The two axes a function is along, and whether it was given a value for each. */
 function axesOf(name: string, given: number) {
   return { axes: AXES[THREE_D[name] ?? name], both: given === 2 || name in THREE_D };
@@ -43,7 +69,37 @@ const NAMES = new Map(
   ].map((name) => [name.toLowerCase(), name]),
 );
 
-function argument(raw: string): number | string {
+/** The type of value a transform function's arguments are. */
+function slotOf(name: string): MathValue['type'] {
+  if (/^(?:rotate|skew)/i.test(name)) return 'angle';
+  return /^(?:scale|matrix)/i.test(name) ? 'number' : 'length';
+}
+
+const measured = (unit: RelativeUnit, factor: number, offset = 0): Measured => ({
+  __defer: { unit, factor: rounded(factor), ...(offset ? { offset: rounded(offset) } : {}) },
+});
+
+/** A math function as the slot takes it, or undefined for one of another type. */
+function mathArgument(slot: MathValue['type'], math: MathValue): Argument | undefined {
+  if (slot === 'number' && math.type === 'number') return rounded(math.value);
+  if (slot === 'angle' && math.type === 'angle') return `${rounded(math.value)}deg`;
+  if (slot !== 'length') return undefined;
+  if (math.type === 'percentage') return `${rounded(math.percent)}%`;
+  if (math.type !== 'length' || math.percent) return undefined;
+  const { relative, value } = math;
+  return relative ? measured(relative.unit, relative.factor, value) : rounded(value);
+}
+
+/** An argument as native takes it, or undefined for one CSS does not read in this function. */
+function argument(name: string, raw: string): Argument | undefined {
+  if (MATH_FUNCTION.test(raw)) {
+    const math = mathValue(raw);
+    return math && mathArgument(slotOf(name), math);
+  }
+  if (!ARGUMENT.test(raw)) return undefined;
+  const relative = RELATIVE.exec(raw);
+  if (relative && slotOf(name) !== 'length') return undefined;
+  if (relative) return measured(relative[2]!.toLowerCase() as RelativeUnit, Number(relative[1]));
   return PX.test(raw) ? parseFloat(raw) : raw;
 }
 
@@ -51,24 +107,62 @@ function argument(raw: string): number | string {
  * Whether a spelling with a third axis is one a view can have: all three values, as CSS takes no
  * fewer, and nothing along z for a move, in any unit, since a view has nowhere to go there.
  */
-function onAView(name: string, raw: readonly string[]): boolean {
-  if (raw.length !== 3) return false;
-  return name !== 'translate3d' || Number.parseFloat(raw[2]!) === 0;
+function onAView(name: string, args: readonly Argument[]): boolean {
+  if (args.length !== 3) return false;
+  if (name !== 'translate3d') return true;
+  const z = args[2]!;
+  return typeof z === 'object' ? z.__defer.factor === 0 : Number.parseFloat(String(z)) === 0;
+}
+
+/** The arguments in a function's body, split on whitespace and commas outside its brackets. */
+function argumentsIn(body: string): string[] {
+  const parts: string[] = [];
+  let part = '';
+  let depth = 0;
+  for (const char of body) {
+    if (depth === 0 && SEPARATOR.test(char)) {
+      if (part) parts.push(part);
+      part = '';
+      continue;
+    }
+    if (char === '(') depth++;
+    else if (char === ')') depth--;
+    part += char;
+  }
+  if (part) parts.push(part);
+  return parts;
+}
+
+/** Where the bracket closes that is open at `from`, or -1. */
+function closing(text: string, from: number): number {
+  let depth = 1;
+  for (let at = from; at < text.length; at++) {
+    if (text[at] === '(') depth++;
+    else if (text[at] === ')' && --depth === 0) return at;
+  }
+  return -1;
 }
 
 /** Each function and its arguments, or undefined where anything else is in the value. */
-function readCalls(value: string): { name: string; raw: string[] }[] | undefined {
-  const calls = [...value.matchAll(FUNCTIONS)].map(([, name, body]) => ({
-    name: NAMES.get(name!.toLowerCase())!,
-    raw: body!.split(/[ \t\n\r\f,]+/).filter(Boolean),
-  }));
-  // Functions native has, CSS whitespace between them and nothing else, and arguments CSS reads.
-  const readable =
-    calls.length &&
-    SPACE.test(value.replace(FUNCTIONS, '')) &&
-    calls.every(({ name, raw }) => name && raw.length && raw.every((arg) => ARGUMENT.test(arg)));
-  const flat = calls.every(({ name, raw }) => !(name in THREE_D) || onAView(name, raw));
-  return readable && flat ? calls : undefined;
+function readCalls(value: string): { name: string; args: Argument[] }[] | undefined {
+  const calls: { name: string; args: Argument[] }[] = [];
+  const cursor = { text: value, at: 0 };
+  for (;;) {
+    match(cursor, SPACE);
+    if (cursor.at === value.length) break;
+    const found = match(cursor, CALL);
+    const name = found && NAMES.get(found[1]!.toLowerCase());
+    if (!name) return undefined;
+    const end = closing(value, cursor.at);
+    if (end === -1) return undefined;
+    const raw = argumentsIn(value.slice(cursor.at, end));
+    const args = raw.map((part) => argument(name, part));
+    if (!raw.length || args.includes(undefined)) return undefined;
+    calls.push({ name, args: args as Argument[] });
+    cursor.at = end + 1;
+  }
+  const flat = calls.every(({ name, args }) => !(name in THREE_D) || onAView(name, args));
+  return calls.length && flat ? calls : undefined;
 }
 
 /**
@@ -76,12 +170,28 @@ function readCalls(value: string): { name: string; raw: string[] }[] | undefined
  * sets then applies instead.
  */
 export function transformList(value: string): TransformEntry[] | undefined {
-  const out: TransformEntry[] = [];
+  const list = listOf(value);
+  return list && !hasMeasured(list) ? (list as TransformEntry[]) : undefined;
+}
+
+const hasMeasured = (list: readonly object[]): boolean =>
+  list.some((entry) =>
+    Object.values(entry).some((value) => typeof value === 'object' && '__defer' in value),
+  );
+
+/** The list of a transform with a length to measure where it is used; undefined for any other. */
+export function measuredTransform(value: string): readonly object[] | undefined {
+  if (!MEASURED.test(value)) return undefined;
+  const list = listOf(value);
+  return list && hasMeasured(list) ? list : undefined;
+}
+
+function listOf(value: string): object[] | undefined {
+  const out: object[] = [];
   if (value.replace(PADDED, '').toLowerCase() === 'none') return out;
   const calls = readCalls(value);
   if (!calls) return undefined;
-  for (const { name, raw } of calls) {
-    const args = raw.map(argument);
+  for (const { name, args } of calls) {
     const { axes, both } = axesOf(name, args.length);
     if (axes && both) {
       out.push({ [axes[0]]: args[0]! }, { [axes[1]]: args[1]! });

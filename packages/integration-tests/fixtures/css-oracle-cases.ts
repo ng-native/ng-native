@@ -75,6 +75,15 @@ export const EXTRA_KEYS = {
   display: 'display',
   'font-family': 'fontFamily',
   'pointer-events': 'pointerEvents',
+  width: 'width',
+  'font-size': 'fontSize',
+  'font-weight': 'fontWeight',
+  'line-height': 'lineHeight',
+  'flex-grow': 'flexGrow',
+  'flex-shrink': 'flexShrink',
+  'aspect-ratio': 'aspectRatio',
+  transform: 'transform',
+  'z-index': 'zIndex',
 } as const;
 
 export type ExtraProperty = keyof typeof EXTRA_KEYS;
@@ -322,7 +331,82 @@ const INLINE_SHORTHAND_CASES: OracleCase[] = [
   ),
 ];
 
+/** A math function in the probe's inline style, over a box and a font size of a known size. */
+const INLINE_MATH_CASES = (
+  [
+    ['width', 'min(10px, 20px)', 'width'],
+    ['width', 'max(10px, 20px)', 'width'],
+    ['width', 'clamp(10px, 20px, 30px)', 'width'],
+    ['width', 'clamp(10px, 50px, 30px)', 'width'],
+    ['width', 'clamp(10px, 5px, 30px)', 'width'],
+    ['width', 'min(10px, 2rem, 5px)', 'width'],
+    ['width', 'calc(min(10px, 20px) + 1px)', 'width'],
+    ['width', 'calc(1em + 2px)', 'width'],
+    ['width', 'min(1em, 2em)', 'width'],
+    ['width', 'calc((1em + 1rem) * 2)', 'width'],
+    ['width', 'calc(1em + 1em)', 'width'],
+    ['font-size', 'calc(1em + 2px)', 'font-size'],
+    ['font-size', 'calc(150%)', 'font-size'],
+    ['padding-top', 'calc(1em + 2px)', 'padding-top'],
+    ['padding', 'calc(1em + 2px)', 'padding-top'],
+    ['opacity', 'calc(1 / 2)', 'opacity'],
+    ['opacity', 'calc(50%)', 'opacity'],
+    ['opacity', 'min(1, 0.5)', 'opacity'],
+    ['flex-grow', 'calc(1 + 1)', 'flex-grow'],
+    ['flex-shrink', 'calc(1 + 1)', 'flex-shrink'],
+    ['flex', 'calc(1 + 1)', 'flex-grow'],
+    ['flex', 'calc(1 + 1) 1 0px', 'flex-grow'],
+    ['flex', '1 calc(1 + 1) 10px', 'flex-shrink'],
+    ['aspect-ratio', 'calc(16 / 9)', 'aspect-ratio'],
+    ['line-height', 'calc(1 + 1)', 'line-height'],
+    ['line-height', 'calc(150%)', 'line-height'],
+    ['font-weight', 'calc(300 + 400)', 'font-weight'],
+    ['z-index', 'calc(3 / 2)', 'z-index'],
+    ['transform', 'translateX(calc(1px + 1px))', 'transform'],
+    ['transform', 'translate(calc(1px + 1px), calc(1rem * 2))', 'transform'],
+    ['transform', 'scale(calc(1 + 1))', 'transform'],
+    ['transform', 'rotate(calc(10deg + 20deg))', 'transform'],
+    ['transform', 'rotate(calc(1turn / 4))', 'transform'],
+    ['transform', 'translateX(calc(1em + 1px))', 'transform'],
+    ['transform', 'translateX(1em)', 'transform'],
+  ] as const
+).map(([property, value, measured]): OracleCase => ({
+  name: `an inline ${property}: ${value}`,
+  css: '#probe { display: block; font-size: 16px }',
+  tree: probe({ name: 'view' }),
+  inline: { [property]: value },
+  extra: [measured],
+}));
+
+/**
+ * A sign in a `calc()` of tokens wants whitespace either side, as in one of written values. Without
+ * it the value is invalid, and the declaration that reads it is unset. Bound only: in a stylesheet
+ * lightningcss reads the same text before the compiler does.
+ */
+const SIGN_SPACE_CASES = (
+  [
+    ['a plus with it', 'calc(var(--two) + 2px)'],
+    ['a minus with it', 'calc(var(--two) - 1px)'],
+    ['a bracket before a sign', 'calc((var(--two) * 2) + 1px)'],
+    ['a function before a sign', 'calc(min(var(--two), 9px) + 1px)'],
+    ['a product with none', 'calc(var(--two)*2)'],
+    ['a clamp()', 'calc(clamp(1px, var(--two), 3px) * 2)'],
+    ['a plus with none', 'calc(var(--two)+2px)'],
+    ['a plus with none after', 'calc(var(--two) +2px)'],
+    ['a plus with none before', 'calc(var(--two)+ 2px)'],
+    ['a minus with none after', 'calc(var(--two) -2px)'],
+  ] as const
+).map(([where, value]): OracleCase => ({
+  name: `${where} in a calc() of tokens, bound on the element`,
+  css: '#probe { --two: 2px; padding-top: 9px } #probe.c { padding-top: var(--t) }',
+  bound: { '--t': value },
+  tree: probe({ name: 'view', classes: ['c'] }),
+  extra: ['padding-top'],
+}));
+
 export const CASES: OracleCase[] = [
+  ...INLINE_MATH_CASES,
+  ...SIGN_SPACE_CASES,
   {
     name: 'specificity: a class beats a type',
     css: 'text { color: rgb(1, 0, 0) } .c { color: rgb(2, 0, 0) }',

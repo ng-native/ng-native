@@ -120,6 +120,31 @@ const NATIVE_INITIAL: Partial<Record<ExtraProperty, unknown>> = {
   'pointer-events': 'auto',
 };
 
+const UNITLESS: ReadonlySet<ExtraProperty> = new Set([
+  'opacity',
+  'flex-grow',
+  'flex-shrink',
+  'z-index',
+]);
+
+type TransformList = readonly Readonly<Record<string, number | string>>[];
+
+/** A list of one move, scale or turn at a time as Chrome reports it. */
+function matrixOf(list: TransformList): string {
+  let [a, b, c, d, e, f] = [1, 0, 0, 1, 0, 0];
+  for (const entry of list) {
+    const [[key, value]] = Object.entries(entry) as [[string, number | string]];
+    const radians = (parseFloat(String(value)) * Math.PI) / 180;
+    if (key === 'translateX') e += value as number;
+    else if (key === 'translateY') f += value as number;
+    else if (key === 'scale') [a, d] = [value as number, value as number];
+    else
+      [a, b, c, d] = [Math.cos(radians), Math.sin(radians), -Math.sin(radians), Math.cos(radians)];
+  }
+  const shown = [a, b, c, d, e, f].map((n) => Math.round(n * 1e6) / 1e6 + 0);
+  return `matrix(${shown.join(', ')})`;
+}
+
 /** One shadow in three props here: none is no blur, no offset and no colour to draw one in. */
 function assertNoTextShadow(style: Record<string, unknown>, browser: string): void {
   assert.equal(browser, 'none', 'only none is compared');
@@ -188,7 +213,7 @@ function assertExtra(property: ExtraProperty, style: Record<string, unknown>, br
   // initial value, as the browser reports its own.
   const read = readFrom(property, style).map((key) => style[key]);
   const ours = read.find((value) => value != null) ?? NATIVE_INITIAL[property];
-  const unit = property === 'opacity' ? '' : 'px';
+  const unit = UNITLESS.has(property) ? '' : 'px';
   const value = typeof ours === 'number' ? `${ours}${unit}` : ours;
   assert.equal(value, legacyColour(browser), property);
 }
@@ -282,7 +307,11 @@ describe('what a browser does with the same stylesheet', () => {
       for (const property of test.extra ?? []) {
         const browser = expected.expected[property]!;
         if (property === 'text-shadow') assertNoTextShadow(style, browser);
-        else assertExtra(property, style, browser);
+        else if (property === 'aspect-ratio') {
+          assert.equal(style['aspectRatio'], parseFloat(browser), property);
+        } else if (property === 'transform') {
+          assert.equal(matrixOf(style['transform'] as TransformList), browser, property);
+        } else assertExtra(property, style, browser);
       }
     });
   });

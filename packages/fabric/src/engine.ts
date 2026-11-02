@@ -66,7 +66,7 @@ import {
   type TransitionSpec,
 } from './transition.ts';
 import { isFormsInput } from './forms-inputs.ts';
-import { transformList } from './inline-transform.ts';
+import { measuredTransform, transformList } from './inline-transform.ts';
 import { tokenFromValue } from './inline-token.ts';
 import {
   NativeScrollDriver,
@@ -5974,9 +5974,10 @@ function boundRead(prop: string, text: string, on: string): DeferredDeclaration 
 }
 
 function boundFrom(prop: string, text: string, on: string): DeferredDeclaration | null {
-  return BOUND_TOKEN.test(text)
-    ? boundDeclaration(prop, tokenFromValue(text), on)
-    : boundRelativeLength(prop, text, on);
+  if (BOUND_TOKEN.test(text)) return boundDeclaration(prop, tokenFromValue(text), on);
+  if (prop !== 'transform') return boundRelativeLength(prop, text, on);
+  const within = measuredTransform(text);
+  return within ? { props: [prop], ...(on === undefined ? {} : { on }), within } : null;
 }
 
 /** Whether a value is one of the engine's own nodes. */

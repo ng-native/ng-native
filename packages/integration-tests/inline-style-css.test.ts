@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { describe, it, mock } from 'node:test';
 import type { Type } from '@angular/core';
+import { Engine } from '@ng-native/fabric';
 import { render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { compileSource } from './compile.ts';
 
@@ -634,5 +635,334 @@ export class CalcBound {
     instance.widthPoints.set('-5px');
     await settle();
     assert.deepEqual(styleOf(fabric, 'calc', keys), styleOf(fabric, 'points', keys));
+  });
+});
+
+describe('a math function in a style', () => {
+  const KEYS = ['width', 'height', 'minWidth', 'maxHeight', 'top', 'marginTop', 'marginRight'];
+  KEYS.push('fontSize', 'lineHeight', 'letterSpacing', 'borderTopLeftRadius', 'opacity');
+  KEYS.push('flexGrow', 'flexShrink', 'flexBasis', 'aspectRatio', 'fontWeight', 'transform');
+  const DECLARATIONS = [
+    // Lengths.
+    'width: min(10px, 20px)',
+    'width: max(10px, 20px)',
+    'width: clamp(10px, 20px, 30px)',
+    'width: clamp(10px, 50px, 30px)',
+    'width: clamp(10px, 5px, 30px)',
+    'width: min(10px, 2rem, 5px)',
+    'width: calc(min(10px, 20px) + 1px)',
+    'width: MIN(10PX, 20PX)',
+    'font-size: calc(1em + 2px)',
+    'font-size: calc(150%)',
+    'font-size: min(1em, 2em)',
+    'width: calc(1em + 2px)',
+    'width: calc((1vw + 1rem) * 2)',
+    'width: calc(100vw - 10px)',
+    'height: calc(100vh - 1px)',
+    'top: calc(100vmin / 2)',
+    'max-height: calc(100vmax - 1rem)',
+    'margin: calc(1em + 2px) 4px',
+    'letter-spacing: calc(1em / 10)',
+    'flex-basis: calc(1em + 2px)',
+    'flex: 1 1 calc(1em + 2px)',
+    'flex: 1 1 min(10px, 20px)',
+    'width: calc(50%)',
+    'width: calc(50% + 0px)',
+    'width: calc(50% * 2)',
+    'width: calc(100% / 3)',
+    'width: max(50%, 10%)',
+    'width: calc(100% - 2rem)',
+    'line-height: calc(1em + 2px)',
+    'line-height: calc(10px + 2px)',
+    'line-height: calc(150%)',
+    // Numbers.
+    'opacity: calc(1 / 2)',
+    'opacity: calc(50%)',
+    'opacity: calc(50% + 10%)',
+    'opacity: min(1, 0.5)',
+    'opacity: clamp(0, 2, 1)',
+    'flex-grow: calc(1 + 1)',
+    'flex-shrink: calc(1 + 1)',
+    'aspect-ratio: calc(16 / 9)',
+    'line-height: calc(1 + 1)',
+    'font-weight: calc(300 + 400)',
+    'flex: calc(1 + 1)',
+    'flex: calc(1 + 1) 1 0px',
+    'flex: calc(1 + 1) calc(2 + 1)',
+    'flex: 1 calc(1 + 1) 10px',
+    // Transforms.
+    'transform: translateX(calc(1px + 1px))',
+    'transform: scale(calc(1 + 1))',
+    'transform: rotate(calc(10deg + 20deg))',
+    'transform: translate(calc(1px + 1px), calc(1rem * 2))',
+    'transform: rotate(calc(1turn / 4))',
+    'transform: translateX(min(1px, 2px))',
+    'transform: scale(min(1, 2))',
+    'transform: rotate(max(1deg, 2deg))',
+    'transform: translateX(calc(50%))',
+    'transform: perspective(calc(10px * 2))',
+    'transform: scale(calc(1 + 1), 2) rotate(calc(1deg + 1deg))',
+    'transform: translateX(calc(1em + 1px))',
+    'transform: translateX(calc(1vw + 1px))',
+    'transform: translateX(1em) scale(calc(1 + 1))',
+  ];
+
+  let renderings = 0;
+
+  /** A style with `scale`, which a style commits for both axes, spelt as a stylesheet spells it. */
+  function bothAxes(style: Record<string, unknown>) {
+    const transform = style['transform'] as Record<string, unknown>[] | undefined;
+    return {
+      ...style,
+      transform: transform?.flatMap((entry) =>
+        'scale' in entry ? [{ scaleX: entry['scale'] }, { scaleY: entry['scale'] }] : [entry],
+      ),
+    };
+  }
+
+  /** The sheet, the static attribute and a [style] binding of each declaration, side by side. */
+  async function renderEach(declarations: readonly string[]) {
+    const views = declarations
+      .map(
+        (declaration, i) =>
+          `<view nativeID="sheet${i}" class="c${i}"></view><view nativeID="attribute${i}" style="${declaration}"></view><view nativeID="bound${i}" [style]="rows[${i}]"></view>`,
+      )
+      .join('');
+    const rules = declarations.map((declaration, i) => `.c${i} { ${declaration}; }`).join(' ');
+    const mod = await build(
+      `math-${renderings++}`,
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-math',
+  imports: [View],
+  template: '<view style="font-size: 16px">${views}</view>',
+  styles: '${rules}',
+})
+export class MathRows {
+  readonly rows = ${JSON.stringify(declarations)};
+}
+`,
+    );
+    return render(mod['MathRows'] as Type<unknown>, {
+      conditions: { width: 400, height: 800, colorScheme: 'light' },
+    });
+  }
+
+  it('is what a stylesheet makes of it, from an attribute and from a binding', async () => {
+    const { fabric } = await renderEach(DECLARATIONS);
+    DECLARATIONS.forEach((declaration, i) => {
+      const sheet = styleOf(fabric, `sheet${i}`, KEYS);
+      assert.ok(
+        Object.values(sheet).some((value) => value !== undefined),
+        `control: the stylesheet's ${declaration}`,
+      );
+      const inline = (id: string) => bothAxes(styleOf(fabric, id, KEYS));
+      assert.deepEqual(inline(`attribute${i}`), sheet, `attribute: ${declaration}`);
+      assert.deepEqual(inline(`bound${i}`), sheet, `binding: ${declaration}`);
+    });
+  });
+
+  it('settles a padding in em on every side, as one value', async () => {
+    const { fabric } = await renderEach(['padding: calc(1em + 2px)']);
+    assert.equal(styleOf(fabric, 'sheet0', ['paddingTop'])['paddingTop'], 18);
+    assert.equal(styleOf(fabric, 'attribute0', ['padding'])['padding'], 18);
+    assert.equal(styleOf(fabric, 'bound0', ['padding'])['padding'], 18);
+  });
+
+  it('leaves what CSS refuses, or the engine cannot work out, as written', async () => {
+    const REFUSED: [string, string][] = [
+      ['width', 'calc(3)'],
+      ['width', 'calc(1 + 1)'],
+      ['width', 'calc(1px + 2)'],
+      ['width', 'calc(50% + 2)'],
+      ['width', 'calc(1em + 1vw)'],
+      ['width', 'calc(50% + 1em)'],
+      ['width', 'calc(1em * 1em)'],
+      ['width', 'calc(1 / 1em)'],
+      ['width', 'calc(1px / 0)'],
+      ['width', 'min(1px, 2)'],
+      ['width', 'min(1em, 2px)'],
+      ['width', 'min(1em, 2vw)'],
+      ['width', 'min(50%, 1px)'],
+      ['width', 'min(1em + 1px, 2em)'],
+      ['width', 'clamp(1px, 2px)'],
+      ['width', 'clamp(1px, 2px, 3px, 4px)'],
+      ['width', 'min()'],
+      ['width', 'calc(1px, 2px)'],
+      ['width', 'calc(2, 1px)'],
+      ['width', 'min(1px + 50%, 2px)'],
+      ['width', 'calc(1deg + 1deg)'],
+      ['width', 'calc(1px + 1deg)'],
+      ['width', 'calc(1foo)'],
+      ['opacity', 'calc(1px)'],
+      ['opacity', 'calc(50% + 1)'],
+      ['color', 'calc(1px + 1px)'],
+      ['flexGrow', 'calc(50%)'],
+      ['aspectRatio', 'calc(1px)'],
+      ['fontWeight', 'calc(1px)'],
+      ['flexGrow', 'calc(1 / 0)'],
+    ];
+    const views = REFUSED.map(
+      ([key], i) => `<view nativeID="r${i}" [style.${key}]="rows[${i}]"></view>`,
+    ).join('');
+    const mod = await build(
+      'math-refused',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-math-refused',
+  imports: [View],
+  template: '${views}',
+})
+export class MathRefused {
+  readonly rows = ${JSON.stringify(REFUSED.map(([, value]) => value))};
+}
+`,
+    );
+    const { fabric } = await render(mod['MathRefused'] as Type<unknown>);
+    REFUSED.forEach(([key, value], i) => {
+      assert.equal(styleOf(fabric, `r${i}`, [key])[key], value, `${key}: ${value}`);
+    });
+  });
+
+  it('drops a transform CSS refuses', async () => {
+    const REFUSED = [
+      'scale(calc(1px + 1px))',
+      'scale(1em)',
+      'rotate(calc(1 + 1))',
+      'rotate(1em)',
+      'rotate(calc(1px + 1px))',
+      'translateX(calc(1 + 1))',
+      'translateX(calc(1deg + 1deg))',
+      // Chrome reads this one, and the stylesheet refuses it: no form holds it.
+      'translateX(calc(50% + 1px))',
+      'translateX(calc(1px)',
+      'translateX(1px ',
+    ];
+    const views = REFUSED.map(
+      (_, i) => `<view nativeID="r${i}" [style.transform]="rows[${i}]"></view>`,
+    ).join('');
+    const mod = await build(
+      'math-transform',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-math-transform',
+  imports: [View],
+  template: '${views}',
+})
+export class MathTransform {
+  readonly rows = ${JSON.stringify(REFUSED)};
+}
+`,
+    );
+    const { fabric } = await render(mod['MathTransform'] as Type<unknown>);
+    REFUSED.forEach((value, i) => {
+      assert.equal(styleOf(fabric, `r${i}`, ['transform'])['transform'], undefined, value);
+    });
+  });
+
+  it('follows a binding through each kind of value and takes the last one out', async () => {
+    const mod = await build(
+      'math-follows',
+      `
+import { Component, signal } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-math-follows',
+  imports: [View],
+  template: '<view nativeID="box" [style.width]="width()" [style.font-size]="size()" [style.opacity]="opacity()" [style.transform]="transform()"></view>',
+})
+export class MathFollows {
+  readonly width = signal<string | null>('calc(1em + 2px)');
+  readonly size = signal<string | null>('calc(8px * 2)');
+  readonly opacity = signal<string | null>('calc(1 / 2)');
+  readonly transform = signal<string | null>('translateX(calc(1em + 2px))');
+}
+`,
+    );
+    type Bound = { set(value: string | null): void };
+    const { fabric, instance } = await render(
+      mod['MathFollows'] as Type<Record<'width' | 'size' | 'opacity' | 'transform', Bound>>,
+    );
+    const keys = ['width', 'fontSize', 'opacity', 'transform'];
+    assert.deepEqual(styleOf(fabric, 'box', keys), {
+      width: 18,
+      fontSize: 16,
+      opacity: 0.5,
+      transform: [{ translateX: 18 }],
+    });
+
+    instance.size.set('calc(10px * 2)');
+    await settle();
+    assert.equal(styleOf(fabric, 'box', ['width'])['width'], 22, 'follows the font size');
+    assert.deepEqual(styleOf(fabric, 'box', ['transform'])['transform'], [{ translateX: 22 }]);
+
+    instance.width.set('calc(1px + 1px)');
+    instance.transform.set('translateX(calc(1px + 1px))');
+    await settle();
+    assert.equal(styleOf(fabric, 'box', ['width'])['width'], 2, 'an em length gives way');
+    assert.deepEqual(styleOf(fabric, 'box', ['transform'])['transform'], [{ translateX: 2 }]);
+
+    instance.width.set('calc(1em + 1px)');
+    instance.transform.set('translateX(calc(1em + 1px))');
+    await settle();
+    assert.equal(styleOf(fabric, 'box', ['width'])['width'], 21, 'and comes back');
+    assert.deepEqual(styleOf(fabric, 'box', ['transform'])['transform'], [{ translateX: 21 }]);
+
+    instance.width.set(null);
+    instance.opacity.set(null);
+    instance.transform.set(null);
+    await settle();
+    assert.deepEqual(styleOf(fabric, 'box', ['width', 'opacity', 'transform']), {
+      width: undefined,
+      opacity: undefined,
+      transform: undefined,
+    });
+  });
+
+  it('follows the viewport, in a length and in a transform', async () => {
+    const { fabric, componentRef } = await renderEach([
+      'width: calc(100vw - 10px)',
+      'transform: translateX(calc(1vw + 1px))',
+    ]);
+    assert.equal(styleOf(fabric, 'bound0', ['width'])['width'], 390);
+    componentRef.injector
+      .get(Engine)
+      .updateConditions({ width: 1000, height: 500, colorScheme: 'light' });
+    await settle();
+    assert.equal(styleOf(fabric, 'bound0', ['width'])['width'], 990);
+    assert.deepEqual(styleOf(fabric, 'bound1', ['transform'])['transform'], [{ translateX: 11 }]);
+    assert.deepEqual(
+      styleOf(fabric, 'attribute1', ['transform']),
+      styleOf(fabric, 'sheet1', ['transform']),
+    );
+  });
+
+  it('does not overflow the stack on brackets nested without end', async () => {
+    const deep = `${'calc('.repeat(20000)}1px${')'.repeat(20000)}`;
+    const mod = await build(
+      'math-deep',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-math-deep',
+  imports: [View],
+  template: '<view nativeID="box" [style.width]="width" [style.transform]="transform"></view>',
+})
+export class MathDeep {
+  readonly width = '${deep}';
+  readonly transform = 'translateX(${deep})';
+}
+`,
+    );
+    const { fabric } = await render(mod['MathDeep'] as Type<unknown>);
+    assert.equal(styleOf(fabric, 'box', ['width'])['width'], deep);
+    assert.equal(styleOf(fabric, 'box', ['transform'])['transform'], undefined);
   });
 });

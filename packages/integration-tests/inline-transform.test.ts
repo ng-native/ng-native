@@ -9,8 +9,22 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
-import { cleanup, render, screen } from '@ng-native/testing';
+import { Engine, type EngineNode } from '@ng-native/fabric';
+import { cleanup, createFakeFabric, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
+
+it('commits no length to measure from a style set as a whole', () => {
+  for (const transform of ['translateX(1em)', 'translateX(calc(1vw + 1px))']) {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const node: EngineNode = engine.createElement('view');
+    engine.setProp(node, 'style', { transform });
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    const style = fabric.committed[0]!.props['style'] as Record<string, unknown> | undefined;
+    assert.equal(style?.['transform'], undefined, transform);
+  }
+});
 
 describe('a transform bound on an element', () => {
   let transform: (id: string) => unknown;

@@ -18,6 +18,7 @@ import {
   type PlatformColour,
   type TokenValue,
 } from './css.ts';
+import { nestsTooDeep } from './css-math.ts';
 import { derivedToken } from './inline-derived-token.ts';
 import { HUE_DEGREES, isNamedColor } from './transition.ts';
 
@@ -243,22 +244,6 @@ function withUnit(text: string): TokenValue | undefined {
 function withTokens(text: string): TokenValue {
   if (nestsTooDeep(text)) return { keyword: text };
   return fromVar(text) ?? derivedToken(text) ?? { keyword: text };
-}
-
-/**
- * How deep a value's brackets may nest for its tokens to be read. Each level is a call deeper in
- * the reading, and in working the value out after, so a few thousand, in text from a server,
- * would overflow the stack in the middle of a binding. A stylesheet's deepest is a handful.
- */
-const MAX_NESTING = 32;
-
-function nestsTooDeep(text: string): boolean {
-  let depth = 0;
-  for (const char of text) {
-    if (char === '(' && ++depth > MAX_NESTING) return true;
-    if (char === ')') depth--;
-  }
-  return false;
 }
 
 const PLATFORM_COLOR = /^platform-color\(([\s\S]*)\)$/i;
