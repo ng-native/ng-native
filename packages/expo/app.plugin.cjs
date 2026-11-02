@@ -6,6 +6,7 @@
  */
 const PLIST_KEY = 'NgNativePointerEvents';
 const INDIRECT_INPUT_KEY = 'UIApplicationSupportsIndirectInputEvents';
+const ADDED_KEY = 'NgNativeAddedIndirectInputEvents';
 const MANIFEST_NAME = 'dev.ngnative.expo.POINTER_EVENTS';
 
 function pointerEvents(options) {
@@ -20,10 +21,13 @@ function infoPlist(plist, options) {
   if (pointerEvents(options)) {
     plist[PLIST_KEY] = true;
     // Absent, iOS 16 presents a trackpad or a mouse as a finger: no hover recognizer sees it.
-    // Left in place when the option goes, since nothing says this plugin wrote it.
+    // An app can set it for its own reasons, so a second key says when this plugin added it.
+    if (plist[INDIRECT_INPUT_KEY] !== true) plist[ADDED_KEY] = true;
     plist[INDIRECT_INPUT_KEY] = true;
   } else {
     delete plist[PLIST_KEY];
+    if (plist[ADDED_KEY]) delete plist[INDIRECT_INPUT_KEY];
+    delete plist[ADDED_KEY];
   }
   return plist;
 }

@@ -25,6 +25,8 @@ const plugin = require('@ng-native/expo/app.plugin.cjs') as ((
 const KEY = 'NgNativePointerEvents';
 // Absent, iOS 16 presents a trackpad or a mouse as a finger, which hover ignores.
 const INDIRECT = 'UIApplicationSupportsIndirectInputEvents';
+// Says the option added that key, so turning it off takes it back.
+const ADDED = 'NgNativeAddedIndirectInputEvents';
 const NAME = 'dev.ngnative.expo.POINTER_EVENTS';
 const emptyManifest = (): Manifest => ({ manifest: { application: [{}] } });
 const values = (manifest: Manifest) =>
@@ -44,6 +46,7 @@ describe('the pointerEvents option', () => {
     assert.deepEqual(plugin.infoPlist({}, { pointerEvents: true }), {
       [KEY]: true,
       [INDIRECT]: true,
+      [ADDED]: true,
     });
     assert.deepEqual(values(plugin.androidManifest(emptyManifest(), { pointerEvents: true })), [
       'true',
@@ -66,6 +69,16 @@ describe('the pointerEvents option', () => {
     assert.deepEqual(taken.manifest.application![0]!['meta-data'], [other]);
   });
 
+  it('takes the indirect input key back only where the option added it', () => {
+    const on = { pointerEvents: true };
+    assert.deepEqual(plugin.infoPlist(plugin.infoPlist({ Other: 1 }, on)), { Other: 1 });
+    const twice = plugin.infoPlist(plugin.infoPlist({}, on), on);
+    assert.deepEqual(plugin.infoPlist(twice), {});
+    const theApps = plugin.infoPlist({ [INDIRECT]: true }, on);
+    assert.deepEqual(theApps, { [KEY]: true, [INDIRECT]: true });
+    assert.deepEqual(plugin.infoPlist(theApps), { [INDIRECT]: true });
+  });
+
   it('refuses a value that is not a boolean, rather than leaving hover off', () => {
     for (const value of ['yes', null, 0]) {
       assert.throws(
@@ -84,7 +97,11 @@ describe('the pointerEvents option', () => {
     const { mods } = plugin(config, { pointerEvents: true });
     const run = async (mod: Mod, modResults: unknown) =>
       (await mod({ ...config, modResults, modRequest: {} })).modResults;
-    assert.deepEqual(await run(mods.ios['infoPlist']!, {}), { [KEY]: true, [INDIRECT]: true });
+    assert.deepEqual(await run(mods.ios['infoPlist']!, {}), {
+      [KEY]: true,
+      [INDIRECT]: true,
+      [ADDED]: true,
+    });
     assert.deepEqual(values((await run(mods.android['manifest']!, emptyManifest())) as Manifest), [
       'true',
     ]);
