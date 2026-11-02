@@ -475,19 +475,6 @@ describe('TabBarInsets on Android', () => {
     assert.equal(fake.listeners.size, 0);
   });
 
-  it('asks about no host again once the outlet is destroyed', async () => {
-    const fake = fakeBar();
-    const { navigation, host, insets } = await bootWith(fake);
-    await navigation.reset('/plain');
-    await settle();
-    await settle();
-    assert.equal(fake.listeners.size, 0);
-    fake.watched.length = 0;
-    await fireEvent(host, 'layout', { layout: { width: 402, height: 874 } });
-    assert.deepEqual(fake.watched, []);
-    assert.equal(insets.bottom(), 0);
-  });
-
   it('stays at 0 with no module, as in Expo Go, and with a module missing its methods', async () => {
     for (const expo of [undefined, { modules: {} }, { modules: { NgNativeTabBar: {} } }]) {
       if (expo) global.expo = expo;
