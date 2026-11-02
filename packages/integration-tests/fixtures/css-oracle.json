@@ -3894,6 +3894,46 @@
     }
   },
   {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, none) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, 10px) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, var(--y, none)) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, none) with --x of notacolour",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, rgb(1, 2, 3)) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
     "name": "background: var(--x) with --x of null",
     "expected": {
       "color": "rgb(0, 0, 0)",

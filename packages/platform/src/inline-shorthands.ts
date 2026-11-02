@@ -1,4 +1,5 @@
 import {
+  BACKGROUND_PLACING,
   backgroundLayers,
   boundDeclaration,
   firstFamily,
@@ -279,11 +280,7 @@ function readShadows(text: string, on: string): Reading {
 const IMAGE = 'experimental_backgroundImage';
 
 /** What `background` puts back of what it does not say, one of each for each of its layers. */
-const BACKGROUND_RESTS = [
-  ['experimental_backgroundPosition', { left: '0%', top: '0%' }],
-  ['experimental_backgroundSize', { x: 'auto', y: 'auto' }],
-  ['experimental_backgroundRepeat', { x: 'repeat', y: 'repeat' }],
-] as const;
+const BACKGROUND_RESTS = Object.entries(BACKGROUND_PLACING);
 
 const TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
@@ -317,9 +314,18 @@ function layersOverToken(layers: readonly string[], on: string): Reading {
   const images = backgroundLayers(layers.slice(0, -1).join(','));
   const token = backgroundToken(layers.at(-1)!, on);
   if (!images || images.color !== undefined || !token) return NO_BACKGROUND;
+  // Through any `var()` in its fallback, whose names the declaration already lists.
+  let fallbackLayer = tokenFromValue(layers.at(-1)!);
+  while (fallbackLayer?.alias) fallbackLayer = fallbackLayer.fallback;
   return {
     set: background(TRANSPARENT, images.images).slice(2),
-    deferred: { ...token, props: ['backgroundColor', IMAGE], layers: true, over: images.images },
+    deferred: {
+      ...token,
+      props: ['backgroundColor', IMAGE],
+      layers: true,
+      over: { [IMAGE]: images.images },
+      ...(fallbackLayer ? { fallbackLayer } : {}),
+    },
   };
 }
 

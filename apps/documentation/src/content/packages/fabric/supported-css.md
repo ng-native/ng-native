@@ -533,8 +533,11 @@ Layers written out over a token's colour,
 with the colour written, and the token as its `background-color`, as long as the token is all
 of the last layer and no other layer has one. A token that is unset, or a word that is no part of a
 background, makes the whole shorthand invalid, as in a browser, so the gradients go with the
-colour. A gradient set as the token on an element is drawn as one more layer under the written
-ones.
+colour. A token or a fallback that is a length or `none` is a valid last layer, so the gradients
+stay, with no colour. A gradient set as the token on an element is drawn as one more layer under
+the written ones, at the initial position, size and repeat.
+A bare `background: var(--surface)` that is unset, invalid, a length or `none` takes away an image
+a weaker rule declared. Only a token that is a colour leaves that image, where a browser clears it.
 `flex: var(--grow)` is `flex: <number>`: it grows by the token, shrinks by 1, and starts from a
 basis of 0, once the token is set. With no token it is `flex`'s initial value, `0 1 auto`, whatever
 a weaker rule set, as on the web, where a `var()` that cannot be substituted gives the property its

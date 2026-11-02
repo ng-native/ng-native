@@ -26,7 +26,8 @@ function tree(css: string, parent: string[] = []) {
   engine.commit();
   const background = () => fabric.committed[0]!.children[0]!.props['backgroundColor'];
   const image = () => fabric.committed[0]!.children[0]!.props['experimental_backgroundImage'];
-  return { engine, outer, node, background, image, warnings };
+  const position = () => fabric.committed[0]!.children[0]!.props['experimental_backgroundPosition'];
+  return { engine, outer, node, fabric, background, image, position, warnings };
 }
 
 describe('background: var()', () => {
@@ -396,6 +397,19 @@ describe('background: gradients over a var() colour', () => {
   });
 });
 
+const PLACED =
+  '.a { background: linear-gradient(red, blue) 20px 20px / 10px 10px no-repeat, var(--x) }';
+
+/** A background under `css`, with a colour for its token, and the placing it commits. */
+function placed(css: string) {
+  const { engine, node, fabric } = tree(css);
+  engine.setCustomProperty(node, '--x', 'rgb(1, 2, 3)');
+  engine.commit();
+  const committed = (part: string) =>
+    fabric.committed[0]!.children[0]!.props[`experimental_background${part}`] as unknown[];
+  return { engine, node, committed };
+}
+
 describe('a background token that is no colour, as Chrome reads it', () => {
   const LAYERED = '.a { background: linear-gradient(red, blue), var(--x) }';
   const held = (text: string) => {
@@ -484,6 +498,59 @@ describe('a background token that is no colour, as Chrome reads it', () => {
     engine.setCustomProperty(node, '--x', 'rgb(1, 2, 3)');
     engine.commit();
     assert.equal((image() as { direction: { value: number } }[])[0]!.direction.value, 180);
+  });
+
+  it('keeps the gradients over a fallback that is a valid last layer', () => {
+    for (const fallback of ['none', '10px', 'var(--y, none)']) {
+      const { engine, image, background } = tree(
+        `.a { background: linear-gradient(red, blue), var(--x, ${fallback}) }`,
+      );
+      engine.commit();
+      assert.equal(count(image()), 1, fallback);
+      assert.equal(background() ?? undefined, undefined, fallback);
+    }
+  });
+
+  it('reads the token before a fallback, and goes back to the fallback without it', () => {
+    const { engine, node, image } = tree(
+      '.a { background: linear-gradient(red, blue), var(--x, none) }',
+    );
+    engine.setCustomProperty(node, '--x', 'notacolour');
+    engine.commit();
+    assert.equal(count(image()), 0);
+    engine.setCustomProperty(node, '--x', null);
+    engine.commit();
+    assert.equal(count(image()), 1);
+  });
+
+  it('places a gradient the token holds at the initial position, size and repeat', () => {
+    const { engine, node, committed } = placed(PLACED);
+    assert.equal(committed('Position').length, 1);
+    engine.setCustomProperty(node, '--x', 'linear-gradient(to right, red, blue)');
+    engine.commit();
+    assert.deepEqual(committed('Position')[1], { left: '0%', top: '0%' });
+    assert.deepEqual(committed('Size')[1], { x: 'auto', y: 'auto' });
+    assert.deepEqual(committed('Repeat')[1], { x: 'repeat', y: 'repeat' });
+    assert.notDeepEqual(committed('Position')[0], committed('Position')[1]);
+    assert.notDeepEqual(committed('Repeat')[0], committed('Repeat')[1]);
+    engine.setCustomProperty(node, '--x', 'rgb(1, 2, 3)');
+    engine.commit();
+    assert.equal(committed('Position').length, 1, 'no image of the token, nothing to place');
+  });
+
+  it('leaves a background-size another rule declares, which repeats for every layer', () => {
+    const { engine, node, committed } = placed(`${PLACED} .a { background-size: 5px 5px }`);
+    engine.setCustomProperty(node, '--x', 'linear-gradient(to right, red, blue)');
+    engine.commit();
+    assert.equal(committed('Size').length, 1);
+    assert.equal(committed('Position').length, 2);
+  });
+
+  it('takes the placing away with the gradients where the shorthand is invalid', () => {
+    const { engine, image, position } = tree('.a { background-position: 1px 1px } ' + PLACED);
+    engine.commit();
+    assert.equal(count(image()), 0);
+    assert.equal(position() ?? undefined, undefined);
   });
 
   it('unsets a weaker image under background: var() of an unset token', () => {

@@ -13,7 +13,11 @@ import {
   mixChannels,
   mixColours,
 } from './color-mix.ts';
-import { type BackgroundLayers, backgroundLayers } from './background-layers.ts';
+import {
+  type BackgroundLayers,
+  BACKGROUND_PLACING,
+  backgroundLayers,
+} from './background-layers.ts';
 import { transformMathRefused } from './inline-transform.ts';
 import {
   MATH_FUNCTION,
@@ -369,10 +373,13 @@ export interface DeferredDeclaration {
    */
   readonly layers?: true;
   /**
-   * `background: linear-gradient(...), var(--x)`: the layers written over the token, which are
-   * drawn with it, or not at all where it makes the shorthand invalid.
+   * `background: linear-gradient(...), var(--x)`: the layers written over the token, by prop, the
+   * images and where a stylesheet places them, which are drawn with it, or not at all where it
+   * makes the shorthand invalid.
    */
-  readonly over?: readonly object[];
+  readonly over?: Readonly<Record<string, readonly unknown[]>>;
+  /** The fallback of such a token as a token, for what it makes of the last layer. */
+  readonly fallbackLayer?: TokenValue;
   /**
    * `inherit`, written for these props: each is the parent's value for it, or nothing where the
    * parent has none.
@@ -5536,7 +5543,7 @@ function writeSettled(
 ): void {
   const one = settled instanceof EachSide ? settled.at(declaration.props, prop) : settled;
   const value = clamped(prop, one) ?? declaration.unset;
-  if (declaration.layers) writeLayer(own, prop, value, layers, declaration.over);
+  if (declaration.layers) writeLayer(own, prop, value, layers, declaration.over?.[prop]);
   else write(own, prop, value, declaration.line !== undefined);
 }
 
@@ -5544,19 +5551,24 @@ function writeSettled(
  * One prop of a `background: var()`, whose token may hold the images as well as the colour. A
  * token that is a colour leaves an image another rule declared as it is, and one that fits no
  * part of a background makes the shorthand invalid, which unsets the image with the colour.
- * Layers written over the token are drawn above what it holds. Each prop is ranked in the cascade
- * by itself, so an image a later rule declares, or an important one, is not written over.
+ * Layers written over the token are drawn above what it holds, whose images take the initial
+ * place, as a native list shorter than the images starts again from its first. Each prop is ranked
+ * in the cascade by itself, so an image a later rule declares, or an important one, is not written
+ * over.
  */
 function writeLayer(
   own: Record<string, unknown>,
   prop: string,
   value: unknown,
   layers: BackgroundLayers | undefined,
-  over: readonly object[] | undefined,
+  over: readonly unknown[] | undefined,
 ): void {
-  if (prop !== BACKGROUND_IMAGE) write(own, prop, layers?.color ?? value, false);
-  else if (layers) own[prop] = [...(over ?? []), ...layers.images];
-  else if (value === undefined) delete own[prop];
+  if (prop === 'backgroundColor') write(own, prop, layers?.color ?? value, false);
+  else if (layers) {
+    const { images } = layers;
+    const held = prop === BACKGROUND_IMAGE ? images : images.map(() => BACKGROUND_PLACING[prop]);
+    own[prop] = [...(over ?? []), ...held];
+  } else if (value === undefined) delete own[prop];
   else if (over) own[prop] = over;
 }
 
@@ -5575,7 +5587,7 @@ function layersOf(
 ): BackgroundLayers | undefined {
   if (!declaration.layers) return undefined;
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
-  const token = firstSet(names, tokens);
+  const token = firstSet(names, tokens) ?? declaration.fallbackLayer;
   const text = token?.keyword;
   if (text && /gradient\(/i.test(text)) return backgroundLayers(text);
   // A length is the last layer's position, and `none` its image: valid, and no colour or image.

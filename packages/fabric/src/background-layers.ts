@@ -17,6 +17,13 @@ export interface BackgroundLayers {
   readonly color?: string;
 }
 
+/** Where a layer goes when nothing says: each prop of `background` other than the image. */
+export const BACKGROUND_PLACING: Readonly<Record<string, object>> = {
+  experimental_backgroundPosition: { left: '0%', top: '0%' },
+  experimental_backgroundSize: { x: 'auto', y: 'auto' },
+  experimental_backgroundRepeat: { x: 'repeat', y: 'repeat' },
+};
+
 const SIDES: Readonly<Record<string, number>> = {
   'to top': 0,
   'to right': 90,
