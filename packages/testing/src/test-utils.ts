@@ -61,6 +61,12 @@ export interface FakeFabric extends FabricUIManager {
   reset(): void;
 }
 
+/** The view Fabric finds for a pointer event on `target`, read as it reads it. */
+function shadowNodeOf(target: FakeFabricNode): unknown {
+  const handle = target.instanceHandle as { stateNode?: { node?: unknown } } | null;
+  return handle?.stateNode?.node;
+}
+
 /**
  * Keep the instance handle off the node's enumerable props. It is the engine's own node, which
  * reaches the whole application, and a node a query returns ends up printed in any failed
@@ -328,6 +334,9 @@ export function createFakeFabric(): FakeFabric {
         if (dismissed.has(target.reactTag)) return;
         if (closing(target)) dismissed.add(target.reactTag);
       }
+      // Fabric drops a pointer event whose instance handle names no view, with no error
+      // (`PointerEventsProcessor::getShadowNodeFromEventTarget`).
+      if (type.startsWith('topPointer') && !shadowNodeOf(target)) return;
       handler(unmounted.has(target.reactTag) ? null : target.instanceHandle, type, nativeEvent);
     },
     reset() {

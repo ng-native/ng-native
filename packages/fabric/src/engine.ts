@@ -913,6 +913,12 @@ export interface EngineNode extends HostNode {
   dormantHoists?: EngineNode[] | null;
 
   committed: Committed | null;
+  /**
+   * Where Fabric looks for the view a pointer event landed on: `getShadowNodeFromEventTarget`
+   * reads `instanceHandle.stateNode.node`, the shape of a React fiber, and drops the event when
+   * there is no view there. See `RetainedNode.stateNode`.
+   */
+  readonly stateNode: { readonly node: FabricNode | undefined };
   /** The node this one was committed as a child of, which native holds it to for its life. */
   committedUnder: EngineNode | LineBox | null;
   /** The hoisted views this node keeps committed for, by element name. See `HoistOptions`. */
@@ -6102,6 +6108,15 @@ class RetainedNode {
     return this.tag;
   }
 
+  /**
+   * Read from what is committed, so it is the newest clone, whose props say which events a view
+   * listens for, and nothing once the view is gone. It keeps no handle of its own, and asks
+   * nothing of a commit: only a pointer event reads it.
+   */
+  get stateNode(): { readonly node: FabricNode | undefined } {
+    return { node: this.committed?.handle };
+  }
+
   /** Angular's dev-mode assertion compares this against `Node.ELEMENT_NODE`. */
   get nodeType(): number {
     return 1;
@@ -6290,6 +6305,7 @@ const ENGINE_NODE_FIELDS = {
   defaultStyle: true,
   dormantHoists: true,
   committed: true,
+  stateNode: true,
   committedUnder: true,
   kept: true,
   onBaseline: true,
