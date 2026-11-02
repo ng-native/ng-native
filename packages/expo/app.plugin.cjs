@@ -5,10 +5,11 @@
  * and this package's native code reads it at launch, before the first surface exists.
  */
 const PLIST_KEY = 'NgNativePointerEvents';
+const INDIRECT_INPUT_KEY = 'UIApplicationSupportsIndirectInputEvents';
 const MANIFEST_NAME = 'dev.ngnative.expo.POINTER_EVENTS';
 
 function pointerEvents(options) {
-  const value = options?.pointerEvents ?? false;
+  const value = options?.pointerEvents === undefined ? false : options.pointerEvents;
   if (typeof value !== 'boolean') {
     throw new Error(`[angular-native] pointerEvents takes true or false, not ${String(value)}.`);
   }
@@ -16,8 +17,14 @@ function pointerEvents(options) {
 }
 
 function infoPlist(plist, options) {
-  if (pointerEvents(options)) plist[PLIST_KEY] = true;
-  else delete plist[PLIST_KEY];
+  if (pointerEvents(options)) {
+    plist[PLIST_KEY] = true;
+    // Absent, iOS 16 presents a trackpad or a mouse as a finger: no hover recognizer sees it.
+    // Left in place when the option goes, since nothing says this plugin wrote it.
+    plist[INDIRECT_INPUT_KEY] = true;
+  } else {
+    delete plist[PLIST_KEY];
+  }
   return plist;
 }
 

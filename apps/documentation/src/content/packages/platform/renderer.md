@@ -108,8 +108,10 @@ with the config plugin in `@ng-native/expo`:
 ```
 
 The option is read as the app launches, so it takes `npx expo prebuild` and a new development build,
-and has no effect in Expo Go. It turns on the whole of React Native's pointer handling for the app:
-every touch goes through it too. A finger's pointer events do not set `hovered` or fire `on hover`.
+and has no effect in Expo Go. It also sets `UIApplicationSupportsIndirectInputEvents` in Info.plist,
+without which iOS 16 presents a trackpad or a mouse as a finger. It turns on the whole of React
+Native's pointer handling for the app: every touch goes through it too. A finger's pointer events
+do not set `hovered` or fire `on hover`.
 
 ```html
 <pressable #more><text>Show reviews</text></pressable>

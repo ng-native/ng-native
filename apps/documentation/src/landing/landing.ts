@@ -496,7 +496,7 @@ export class Home {
     },
     {
       name: 'hover:  press:',
-      body: 'The press state on touch; real hover with a trackpad, once you turn it on.',
+      body: 'The press state on touch; real hover with a trackpad, mouse or pencil, once you turn on pointerEvents.',
       example: 'bg-red-600 hover:bg-red-700',
     },
     {

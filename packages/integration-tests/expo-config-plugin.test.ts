@@ -23,6 +23,8 @@ const plugin = require('@ng-native/expo/app.plugin.cjs') as ((
 };
 
 const KEY = 'NgNativePointerEvents';
+// Absent, iOS 16 presents a trackpad or a mouse as a finger, which hover ignores.
+const INDIRECT = 'UIApplicationSupportsIndirectInputEvents';
 const NAME = 'dev.ngnative.expo.POINTER_EVENTS';
 const emptyManifest = (): Manifest => ({ manifest: { application: [{}] } });
 const values = (manifest: Manifest) =>
@@ -39,7 +41,10 @@ describe('the pointerEvents option', () => {
   });
 
   it('writes what each platform reads at launch', () => {
-    assert.deepEqual(plugin.infoPlist({}, { pointerEvents: true }), { [KEY]: true });
+    assert.deepEqual(plugin.infoPlist({}, { pointerEvents: true }), {
+      [KEY]: true,
+      [INDIRECT]: true,
+    });
     assert.deepEqual(values(plugin.androidManifest(emptyManifest(), { pointerEvents: true })), [
       'true',
     ]);
@@ -52,6 +57,8 @@ describe('the pointerEvents option', () => {
 
   it('takes back what an earlier prebuild wrote, and only that', () => {
     assert.deepEqual(plugin.infoPlist({ [KEY]: true, Other: 1 }), { Other: 1 });
+    // Not the indirect input key, which an app can have set for its own reasons.
+    assert.deepEqual(plugin.infoPlist({ [INDIRECT]: true }), { [INDIRECT]: true });
     const other = { $: { 'android:name': 'other', 'android:value': 'kept' } };
     const manifest = plugin.androidManifest(emptyManifest(), { pointerEvents: true });
     manifest.manifest.application![0]!['meta-data']!.push(other);
@@ -60,10 +67,12 @@ describe('the pointerEvents option', () => {
   });
 
   it('refuses a value that is not a boolean, rather than leaving hover off', () => {
-    assert.throws(
-      () => plugin.infoPlist({}, { pointerEvents: 'yes' as unknown as boolean }),
-      /pointerEvents/,
-    );
+    for (const value of ['yes', null, 0]) {
+      assert.throws(
+        () => plugin.infoPlist({}, { pointerEvents: value as unknown as boolean }),
+        /pointerEvents/,
+      );
+    }
   });
 
   it('fails on a manifest with no application', () => {
@@ -75,7 +84,7 @@ describe('the pointerEvents option', () => {
     const { mods } = plugin(config, { pointerEvents: true });
     const run = async (mod: Mod, modResults: unknown) =>
       (await mod({ ...config, modResults, modRequest: {} })).modResults;
-    assert.deepEqual(await run(mods.ios['infoPlist']!, {}), { [KEY]: true });
+    assert.deepEqual(await run(mods.ios['infoPlist']!, {}), { [KEY]: true, [INDIRECT]: true });
     assert.deepEqual(values((await run(mods.android['manifest']!, emptyManifest())) as Manifest), [
       'true',
     ]);
