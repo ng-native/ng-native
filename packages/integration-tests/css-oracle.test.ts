@@ -207,6 +207,14 @@ function assertFamily(style: Record<string, unknown>, browser: string): void {
   assert.equal(style['fontFamily'], quoted ?? browser.split(',')[0], 'font-family');
 }
 
+/**
+ * A font size as a commit sends it, read as the browser has it: a size of 0 is sent as one too
+ * small to see, which native takes (`UNSEEN_FONT_SIZE` in the engine, and
+ * `css-font-size-zero.test.ts`). What the resolver settles is compared as it is.
+ */
+const sentFontSize = (size: unknown, browser: string): unknown =>
+  browser === '0px' && size === 0.001 ? 0 : size;
+
 /** One of a case's extra properties against what the browser computed for it. */
 function assertExtra(
   property: ExtraProperty,
@@ -232,11 +240,8 @@ function assertExtra(
   // A length is a number of points here, and `2px` in the browser. An unset one is native's
   // initial value, as the browser reports its own.
   const read = readFrom(property, style).map((key) => style[key]);
-  let ours = read.find((value) => value != null) ?? NATIVE_INITIAL[property];
-  // A commit sends a font size of 0 as one too small to see, which native takes: see
-  // `UNSEEN_FONT_SIZE` in the engine, and `css-font-size-zero.test.ts`. What the resolver
-  // settles is compared as it is.
-  if (committed && property === 'font-size' && browser === '0px' && ours === 0.001) ours = 0;
+  const found = read.find((value) => value != null) ?? NATIVE_INITIAL[property];
+  const ours = committed && property === 'font-size' ? sentFontSize(found, browser) : found;
   const unit = UNITLESS.has(property) ? '' : 'px';
   const value = typeof ours === 'number' ? `${ours}${unit}` : ours;
   assert.equal(value, legacyColour(browser), property);
