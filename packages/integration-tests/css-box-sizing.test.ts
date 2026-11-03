@@ -15,11 +15,11 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const SIZINGS = '.content-box { box-sizing: content-box } .border-box { box-sizing: border-box }';
 
-function scene(css: string) {
+function scene(css: string, direction?: 'rtl') {
   const fabric = createLaidOutFabric();
   const engine = new Engine(fabric, 1, {
     globalStyles: compileCss(`.col { width: 362px; height: 600px } ${css} ${SIZINGS}`, 'app.css'),
-    conditions: { width: 400, height: 800, colorScheme: 'light' },
+    conditions: { width: 400, height: 800, colorScheme: 'light', ...(direction && { direction }) },
   });
   const element = (id: string, parent: EngineNode) => {
     const node = engine.createElement('view');
@@ -41,7 +41,7 @@ function scene(css: string) {
     if (by === 'class') engine.setClasses(box, `box ${boxSizing}`);
     else engine.setProp(box, 'style', { boxSizing });
   };
-  return { engine, box, size, sized };
+  return { engine, col, box, size, sized, fabric };
 }
 
 const BY = ['element', 'class'] as const;
@@ -59,6 +59,25 @@ describe('a box whose box-sizing changes', () => {
       [100, 40],
     ],
     ['a border', 'width: 100px; height: 40px; border: 3px solid', [106, 46], [100, 40]],
+    // The ratio is of the content box, or of the border box.
+    [
+      'a ratio and a width',
+      'width: 100px; padding: 10px 20px 0; aspect-ratio: 2',
+      [140, 60],
+      [100, 50],
+    ],
+    [
+      'a ratio, a width and a border',
+      'width: 100px; padding: 0 20px 10px; border: 3px solid; aspect-ratio: 2',
+      [146, 66],
+      [100, 50],
+    ],
+    [
+      'a ratio and a height',
+      'height: 50px; padding: 10px 20px 0; aspect-ratio: 2; align-self: flex-start',
+      [140, 60],
+      [100, 50],
+    ],
     [
       'logical sides',
       'width: 100px; height: 40px; padding-inline: 5px 10px; padding-block: 2px 4px',
@@ -89,9 +108,50 @@ describe('a content box with a share of its size or of its padding', () => {
       ['width: 50%; height: 40px; padding: 10px', [201, 60]],
       // Chrome: 136.2 by 76.2.
       ['width: 100px; height: 40px; padding: 5%', [136, 76]],
+      // A ratio with no size, which is left to Yoga as a content box.
+      ['aspect-ratio: 2', [362, 181]],
     ] as const) {
       const s = scene(`.box { box-sizing: content-box; ${css} }`);
       assert.deepEqual(s.size(), size, css);
     }
+  });
+});
+
+describe('a content box with logical sides in a box read right to left', () => {
+  // Chrome: the start is the right, so 100 + 5 + 20 is 125. Read left to right, the start wins
+  // over the left: 120.
+  const box =
+    '.box { box-sizing: content-box; width: 100px; height: 10px; padding-left: 5px; padding-inline-start: 20px }';
+
+  it('takes the direction its parent has in a stylesheet or set on it', () => {
+    const sheet = scene(`.col { direction: rtl } ${box}`);
+    assert.deepEqual(sheet.size(), [125, 10]);
+    const set = scene(box);
+    assert.deepEqual(set.size(), [120, 10]);
+    set.engine.setProp(set.col, 'style', { direction: 'rtl' });
+    assert.deepEqual(set.size(), [125, 10]);
+    set.engine.setProp(set.col, 'style', {});
+    assert.deepEqual(set.size(), [120, 10]);
+  });
+
+  it('stays a content box where the side its direction reads first is a share', () => {
+    // Chrome: 100 + 10% of 362 + 20.
+    const s = scene(
+      '.col { direction: rtl } .box { box-sizing: content-box; width: 100px; height: 10px; padding-left: 10%; padding-inline-start: 20px }',
+    );
+    assert.deepEqual(s.size(), [156, 10]);
+  });
+
+  it("takes the app's direction, where nothing above it sets one", () => {
+    const s = scene(box, 'rtl');
+    s.engine.commit();
+    // Laid out here left to right, as the app is not: the width committed is the border box's.
+    const committed = s.fabric.committed[0]!.children[0]!.props;
+    assert.equal(committed['width'], 125);
+    // The left is read first in the app's direction, and a share: left a content box.
+    const share = scene(box.replace('padding-left: 5px', 'padding-left: 10%'), 'rtl');
+    share.engine.commit();
+    const left = share.fabric.committed[0]!.children[0]!.props;
+    assert.deepEqual([left['width'], left['boxSizing']], [100, 'content-box']);
   });
 });
