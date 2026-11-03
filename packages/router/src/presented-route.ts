@@ -297,6 +297,16 @@ export async function presentedCommands(router: Router, path: string): Promise<u
   return [{ outlets: { [PRESENTED]: parsed.flatMap(segmentCommands) } }];
 }
 
+/**
+ * Give the page `url` presents its copy, for a navigation straight to that url rather than through
+ * `present()`: the copy is made the first time a page is presented, so an app that reloads on such
+ * a url has none, and the router matches no route there.
+ */
+export async function copyPresentedOf(router: Router, url: string): Promise<void> {
+  const page = router.parseUrl(url).root.children[PRESENTED];
+  if (page) await presentedCommands(router, `/${page.toString()}`);
+}
+
 /** Where each copy's routes sit in the tab: see `orderIn`. */
 const precedence = new WeakMap<Route, readonly number[]>();
 

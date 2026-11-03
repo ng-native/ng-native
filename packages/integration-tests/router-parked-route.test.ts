@@ -3,10 +3,10 @@
  * server before the app goes, and the app that comes back collects it and goes through it again.
  */
 import assert from 'node:assert/strict';
-import { afterEach, before, beforeEach, it } from 'node:test';
-import type { Type } from '@angular/core';
+import { afterEach, before, beforeEach, describe, it } from 'node:test';
+import { ErrorHandler, type Type } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
-import { cleanup, render, screen, type FakeFabricNode } from '@ng-native/testing';
+import { cleanup, render, screen, settle, type FakeFabricNode } from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { ROUTE_PARKING, type ParkedPage, type RouteParking } from '../router/src/route-parking.ts';
 import { provideNativeRouter, withLinkParent } from '../router/src/provide-native-router.ts';
@@ -141,4 +141,68 @@ it('takes its hook away with the app, and installs none without somewhere to par
   (globalThis as { __DEV__?: boolean }).__DEV__ = false;
   await app({ park: async () => {}, collect: async () => null });
   assert.equal(park(), undefined);
+});
+
+describe('a page of another tab presented over the tab in front', () => {
+  let tabs: Record<string, unknown>;
+  before(async () => {
+    tabs = await compileFixture('fixtures/tab-stacks.ts');
+  });
+
+  async function tabApp(parking: RouteParking) {
+    const errors: unknown[] = [];
+    const rendered = await render(tabs['Shell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(tabs['routes'] as Routes),
+        { provide: ROUTE_PARKING, useValue: parking },
+        { provide: ErrorHandler, useValue: { handleError: (e: unknown) => errors.push(e) } },
+      ],
+    });
+    await (globalThis as { __angularNativeRestoring?: Promise<void> }).__angularNativeRestoring;
+    for (let turn = 0; turn < 5; turn++) await settle();
+    return { ...rendered, router: rendered.componentRef.injector.get(Router), errors };
+  }
+
+  it('leaves the url with the page in the presented outlet', async () => {
+    const parked: ParkedPage[][] = [];
+    const { componentRef } = await tabApp({
+      park: async (pages) => void parked.push(pages),
+      collect: async () => null,
+    });
+    await componentRef.injector.get(NativeNavigation).present('/library/7', { as: 'formSheet' });
+    await park()!();
+    assert.deepEqual(parked.at(-1)!.at(-1), {
+      url: '/home(presented:library/7)',
+      presentation: { stackPresentation: 'formSheet' },
+    });
+  });
+
+  for (const [id, written] of [
+    ['7', '7'],
+    ['Giant Steps', 'Giant%20Steps'],
+    ['AC/DC', 'AC%2FDC'],
+  ]) {
+    it(`comes back with ${id} presented over the tab it was over, with no error`, async () => {
+      const url = `/home(presented:library/${written})`;
+      const { router, errors, fabric } = await tabApp({
+        park: async () => {},
+        collect: async () => [
+          { url: '/home' },
+          { url, presentation: { stackPresentation: 'formSheet' } },
+        ],
+      });
+      assert.deepEqual(errors, []);
+      assert.equal(router.url, url);
+      const sheet = router.routerState.snapshot.root.children.find(
+        (route) => route.outlet === 'presented',
+      );
+      let page = sheet;
+      while (page?.firstChild) page = page.firstChild;
+      assert.equal(page?.paramMap.get('id'), id);
+      const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
+        nodes.flatMap((node) => [node, ...all(node.children)]);
+      const screens = all(fabric.committed).filter((node) => node.viewName === 'RNSScreen');
+      assert.equal(screens.at(-1)!.props['stackPresentation'], 'formSheet');
+    });
+  }
 });

@@ -56,6 +56,7 @@ import {
   intentOf,
 } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
+import { copyPresentedOf } from './presented-route.ts';
 import { refuseScreensUnderFullScreen } from './refuse-screens-under-full-screen.ts';
 import { SVG_ICON_RENDERER, type SvgIconRenderer } from './svg-icons.ts';
 import { NativeStackReuseStrategy } from './native-stack-reuse-strategy.ts';
@@ -307,6 +308,7 @@ function keepHistoryAcrossReloads(): void {
       for (const { url, presentation } of parked) {
         if (url === router.url) continue;
         const state = presentation && { [NATIVE_INTENT]: { stack: 'push', presentation } };
+        await copyPresentedOf(router, url);
         moved = (await router.navigateByUrl(url, { state })) || moved;
       }
       // The last page is still sliding in when its navigation ends.
