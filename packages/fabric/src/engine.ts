@@ -4768,6 +4768,8 @@ function borderBoxRatio(
   down: number,
 ): number | undefined {
   if (typeof ratio !== 'number' || ratio <= 0) return undefined;
+  // No padding or border: the two boxes are one, and a size of 0 would make the ratio 0 / 0.
+  if (across === 0 && down === 0) return ratio;
   const bounds = ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'];
   if (bounds.some((key) => isSet(props[key]) && props[key] !== 'auto')) return undefined;
   const [width, height] = [props['width'], props['height']];

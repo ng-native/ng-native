@@ -110,6 +110,11 @@ describe('a content box with a share of its size or of its padding', () => {
       ['width: 100px; height: 40px; padding: 5%', [136, 76]],
       // A ratio with no size, which is left to Yoga as a content box.
       ['aspect-ratio: 2', [362, 181]],
+      // A ratio from a size of 0, which leaves only the padding and border.
+      ['width: 0; padding: 0 20px; aspect-ratio: 2', [40, 0]],
+      ['width: 0; border: 3px solid; aspect-ratio: 2', [6, 6]],
+      ['height: 0; padding: 10px 0 0; aspect-ratio: 2; align-self: flex-start', [0, 10]],
+      ['height: 0; padding: 10px 20px 0; aspect-ratio: 2; align-self: flex-start', [40, 10]],
     ] as const) {
       const s = scene(`.box { box-sizing: content-box; ${css} }`);
       assert.deepEqual(s.size(), size, css);
@@ -153,5 +158,14 @@ describe('a content box with logical sides in a box read right to left', () => {
     share.engine.commit();
     const left = share.fabric.committed[0]!.children[0]!.props;
     assert.deepEqual([left['width'], left['boxSizing']], [100, 'content-box']);
+  });
+});
+
+describe('a content box with a ratio and a size of 0', () => {
+  it('keeps the ratio as written where a size of 0 has no padding or border', () => {
+    const s = scene('.box { box-sizing: content-box; width: 0; aspect-ratio: 2 }');
+    assert.deepEqual(s.size(), [0, 0]);
+    const committed = s.fabric.committed[0]!.children[0]!.props;
+    assert.deepEqual([committed['aspectRatio'], committed['boxSizing']], [2, 'border-box']);
   });
 });
