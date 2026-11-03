@@ -467,20 +467,24 @@ describe('a value a shorthand does not take', () => {
     });
   }
 
-  it('takes out the token of a line set before it', () => {
+  // Chrome's `setProperty` leaves the value before one it drops: the oracle's `then` rows.
+  it('keeps the token of a line set before a refused one', () => {
     const { renderer, node, props } = scene('.a { }');
     renderer.setStyle(node, '--c', 'red');
     renderer.setStyle(node, 'border', '1px solid var(--c)');
-    props();
-    renderer.setStyle(node, 'border', '1px solid notacolour');
-    assert.deepEqual(without(drawn(props())), {});
+    const before = without(drawn(props()));
+    assert.notDeepEqual(before, {});
+    renderer.setStyle(node, 'border', '3px solid notacolour');
+    assert.deepEqual(without(drawn(props())), before);
   });
 
-  it('takes out the value set before it', () => {
+  it('keeps the value set before a refused one', () => {
     const { renderer, node, props } = scene('.a { }');
     renderer.setStyle(node, 'border', '2px solid red');
-    renderer.setStyle(node, 'border', '2px solid notacolour');
-    assert.deepEqual(without(drawn(props())), {});
+    const before = without(drawn(props()));
+    renderer.setStyle(node, 'border', '3px solid notacolour');
+    assert.deepEqual(without(drawn(props())), before);
+    assert.equal(props()['borderTopWidth'], 2);
   });
 
   for (const value of ['1px 1px', '1px 1px currentColor']) {
