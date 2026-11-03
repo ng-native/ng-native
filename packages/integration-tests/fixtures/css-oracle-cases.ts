@@ -782,6 +782,11 @@ const SHEET_Z_INDEX_CASES = [
   'calc(round(down, 3, -2) + 1)',
 ].map((value) => inRule('z-index', value, 'z-index', false));
 
+/** A z-index of math with a string in it, which CSS has no number for: dropped, with a warning. */
+const SHEET_Z_INDEX_STRING_CASES = ['calc("2")', 'min("2", 3)'].map((value) =>
+  inRule('z-index', value, 'z-index', true),
+);
+
 /** A z-index of math past the range of an integer, in a style: Chrome clamps it to that range. */
 const STYLE_Z_INDEX_CASES = ['calc(1e20)', 'calc(-1e20)'].map((value) =>
   inStyle('z-index', value, 'z-index'),
@@ -952,6 +957,7 @@ export const CASES: OracleCase[] = [
   ...MATH_RANGE_CASES,
   ...SHEET_Z_INDEX_CASES,
   ...STYLE_Z_INDEX_CASES,
+  ...SHEET_Z_INDEX_STRING_CASES,
   ...TOKEN_NEGATIVE_CASES,
   ...WRITTEN_NEGATIVE_CASES,
   ...MATH_TYPE_CASES,

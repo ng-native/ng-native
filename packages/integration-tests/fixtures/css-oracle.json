@@ -760,6 +760,22 @@
     }
   },
   {
+    "name": "a rule's z-index: calc(\"2\"), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "7"
+    }
+  },
+  {
+    "name": "a rule's z-index: min(\"2\", 3), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "7"
+    }
+  },
+  {
     "name": "a negative in max-width, in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",

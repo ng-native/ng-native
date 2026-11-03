@@ -2808,9 +2808,22 @@ function positiveIntervals(term) {
   return { ...term, value: { ...term.value, arguments: args } };
 }
 
-/** Whether `parts` are one math function, of no percentage and no `round()` to the nearest. */
+/** Whether a term holds no string, which CSS has no number for, and which `termText` unquotes. */
+const noString = (term) =>
+  term?.type === 'function'
+    ? term.value.arguments.every(noString)
+    : !(term?.type === 'token' && term.value?.type === 'string');
+
+/**
+ * Whether `parts` are one math function, of no percentage, no string and no `round()` to the
+ * nearest.
+ */
 const oneMathOfNumbers = ([math, ...rest]) =>
-  !rest.length && math?.type === 'function' && noPercentage(math) && !roundsToNearest(math);
+  !rest.length &&
+  math?.type === 'function' &&
+  noPercentage(math) &&
+  noString(math) &&
+  !roundsToNearest(math);
 
 /** The range of a z-index, a 32-bit integer in Chrome and in React Native. */
 const Z_INDEX_MIN = -(2 ** 31);
