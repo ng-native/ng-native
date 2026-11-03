@@ -53,6 +53,13 @@ translucent, with a clear, unlined bar at the top of the content (`largeTitleBac
 `transparent` and `largeTitleHideShadow` is `true`), which is how UIKit draws one; binding any of
 those, or setting them in `withHeaderDefaults`, takes precedence.
 
+On iOS a stack whose root page has no header keeps its bar hidden, and react-native-screens turns
+large titles on only once a page with one is being pushed. Before that first push, the header has
+the native half of `@ng-native/expo` lay the hidden bar out with a large title, so the push starts
+at the height it ends at. That needs the package installed and a new development build. **In Expo
+Go the first such push starts from the compact bar**: the inline title fades out and the large
+title drops into place. Later pushes are right either way.
+
 A header an `@if` takes away leaves the screen with no navigation bar, the same as a screen that
 never had one, and a header that comes back brings its bar back. Native keeps the bar it was last
 told about until a header config says otherwise, so once a screen has had a header it keeps one

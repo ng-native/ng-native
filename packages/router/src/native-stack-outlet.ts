@@ -73,6 +73,7 @@ import { IN_TAB } from './in-tab.ts';
 import { ownHost } from './own-host.ts';
 import { leaveUnasked } from './leave-unasked.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
+import { PREPARE_LARGE_TITLE, nativeStackBar } from './large-title-bar.ts';
 import { HostEngine, nativePlatform, type Engine, type EngineNode } from '@ng-native/fabric';
 import type { ScreenPresentation } from './screen-presentation.ts';
 import { ActivityState } from './screens.ts';
@@ -1355,6 +1356,18 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   }
 
   /**
+   * Have this stack's bar laid out with a large title, where the bar is hidden and never has been:
+   * see `large-title-bar.ts`. Nothing before the stack's first commit, when it has no bar yet.
+   */
+  private prepareLargeTitle(): void {
+    const host = this.host.nativeElement as EngineNode;
+    const tag = ((host.engine ?? this.engine) as Partial<Engine> | null)?.tagOf?.(host);
+    if (tag == null) return;
+    const asked = nativeStackBar()?.prepareLargeTitle?.(tag);
+    void asked?.catch(() => {});
+  }
+
+  /**
    * What a page is created with: its route, its screen, the outlet contexts its own outlets
    * register in, and whether its screen is in front and has been shown - which is this screen's own
    * say and, for a stack inside a screen of another, that screen's too.
@@ -1383,6 +1396,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
         },
         { provide: ActivatedRoute, useValue: route },
         { provide: SCREEN_HEADER, useValue: header },
+        { provide: PREPARE_LARGE_TITLE, useValue: () => this.prepareLargeTitle() },
         {
           provide: ChildrenOutletContexts,
           useValue: this.parentContexts.getOrCreateContext(outlet).children,

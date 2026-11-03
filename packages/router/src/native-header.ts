@@ -43,6 +43,7 @@ import { HEADER_BAR_BUTTONS, HeaderBarButtons } from './header-bar-buttons.ts';
 import { HostEngine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
 import { ownHost } from './own-host.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
+import { PREPARE_LARGE_TITLE } from './large-title-bar.ts';
 import { nativePlatform } from '@ng-native/fabric';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 
@@ -157,6 +158,13 @@ export class NativeHeader {
     if (tab) {
       const inFront = inject(SCREEN_IN_FRONT);
       destroyRef.onDestroy(tab.hideBar(computed(() => inFront() && !!this.tabBarHidden())));
+    }
+    // Before the commit that pushes this page, while its bar may still be hidden.
+    const prepare = inject(PREPARE_LARGE_TITLE, { optional: true });
+    if (prepare) {
+      effect(() => {
+        if (this.iosLargeTitle() && !this.hidden()) prepare();
+      });
     }
     const above = this.above;
     if (!above) return;
