@@ -375,8 +375,9 @@ Where something between a fixed box and its page scrolls or clips, a scroll view
 `overflow: hidden` box, the fixed box is committed under the page instead, so it neither scrolls
 nor is clipped. So is a fixed box as wide as its content, with no width of its own and not stretched
 between a `left` and a `right`, so that its text wraps in the page and not in a narrower box it is
-written in. On iOS a fixed box goes back under its parent once it is not as wide as its content and
-nothing it is in scrolls or clips any more. On Android every fixed box is committed under its page.
+written in. On iOS a fixed box goes back under its parent once it has a width of its own or is
+stretched between a `left` and a `right`, and nothing it is in scrolls or clips any more. On
+Android every fixed box is committed under its page.
 
 A fixed box committed under its page keeps its static position on an axis it has no inset on, as in
 a browser: where it would be as the only child of the box it is written in, inside that box's

@@ -9776,6 +9776,8 @@ export class Engine implements HostEngine {
   private readonly fixedIn = new Map<EngineNode, Set<EngineNode>>();
   /** Boxes found to be fixed while they were being committed under their parent. */
   private readonly fixedLate = new Set<EngineNode>();
+  /** The boxes that clipped what is in them as they were last styled: see `pinBeneath`. */
+  private readonly clipping = new WeakSet<EngineNode>();
 
   /** What a finger is on, while one is down. */
   private fingerOn: EngineNode | null = null;
@@ -9960,14 +9962,57 @@ export class Engine implements HostEngine {
    * itself says. One let go is merged again, to be committed under its parent (`unpinFixed`).
    */
   private refixBeneath(node: EngineNode): void {
-    // Most pages have none, and a box only passed through on the way to another has not changed.
-    if (!this.fixedIn.size || !node.propsDirty) return;
+    // A box only passed through on the way to another has not changed.
+    if (!node.propsDirty) return;
+    this.pinBeneath(node);
+    // Most pages have none.
+    if (!this.fixedIn.size) return;
     for (const fixed of this.fixedIn.values()) {
       for (const box of fixed) {
         // Only those inside it, of which there are few: one anywhere else is styled as before.
         if (box === node || !isWithin(box, node)) continue;
         this.unpinFixed(box, readStyle(box, 'position'));
         if (box.fixedTo === undefined) this.touch([box]);
+      }
+    }
+  }
+
+  /**
+   * Ask of each fixed or absolute box inside `node` whether it is now to be committed under its
+   * page or the box it is placed against, as `node` starts to clip: nothing about those boxes
+   * says so, and a value set on `node` restyles only `node`. Asked only as it starts, and not of
+   * a box styled for the first time, whose boxes are all styled for the first time too.
+   */
+  private pinBeneath(node: EngineNode): void {
+    const clips = (readStyle(node, 'overflow') ?? 'visible') !== 'visible';
+    if (clips === this.clipping.has(node)) return;
+    if (!clips) return this.unpinBeneath(node);
+    this.clipping.add(node);
+    if (node.committed === null) return;
+    const visit = (box: EngineNode): void => {
+      for (const child of box.childList) {
+        if (child.nodeKind !== 'element') continue;
+        this.styles.resolve(child, this.styleEpoch);
+        const position = readStyle(child, 'position');
+        const out = position === 'fixed' || position === 'absolute';
+        if (out && child.fixedTo === undefined) this.refix(child, position);
+        visit(child);
+      }
+    };
+    visit(node);
+  }
+
+  /**
+   * Have each absolute box inside `node` that is committed under the box it is placed against
+   * asked again as it is committed whether it still is to be, as `node` stops clipping
+   * (`staysFixed`). A fixed one is asked as `node` is styled: see `refixBeneath`.
+   */
+  private unpinBeneath(node: EngineNode): void {
+    this.clipping.delete(node);
+    for (const held of this.fixedIn.values()) {
+      for (const box of held) {
+        const inside = box !== node && isWithin(box, node);
+        if (inside && readStyle(box, 'position') === 'absolute') this.touch([box]);
       }
     }
   }
@@ -11141,6 +11186,7 @@ export class Engine implements HostEngine {
       Object.assign(resolved, autoMargins(sized, axis, room, size, width));
     }
     if (node.fixedTo) Object.assign(resolved, this.staticPlace(node, style, against, box));
+    this.flowStyles.clear();
     const top = this.flowPlace(node, style, by[1]);
     if (top !== undefined) resolved['top'] = top;
     return Object.keys(resolved).length ? resolved : undefined;
@@ -11166,10 +11212,11 @@ export class Engine implements HostEngine {
     style: Record<string, unknown>,
     page: readonly number[],
     box: readonly number[],
-  ): Record<string, number> {
+  ): Record<string, number | null> {
     const parent = node.parent;
-    const out: Record<string, number> = {};
-    const free = [!insetOn(style, ...INLINE_INSETS), !insetOn(style, ...BLOCK_INSETS)];
+    const out: Record<string, number | null> = {};
+    const own = this.asCommitted(node, style);
+    const free = [!insetOn(own, ...INLINE_INSETS), !insetOn(own, ...BLOCK_INSETS)];
     if (!parent || parent.nodeKind !== 'element' || !free.some(Boolean)) return out;
     if (this.scrollsBetween(node, node.fixedTo!)) return out;
     const at = this.boxOf(parent);
@@ -11185,9 +11232,27 @@ export class Engine implements HostEngine {
         pointsOf(style, [`margin${axis.start}`, `margin${axis.across}`, 'margin']) +
         pointsOf(style, [`margin${axis.end}`, `margin${axis.across}`, 'margin']);
       const edges = contentEdges(outer, at, axis);
-      Object.assign(out, staticInset(alignments[axis.at]!, axis, edges, page, size));
+      const placed = staticInset(alignments[axis.at]!, axis, edges, page, size);
+      // Each `auto` inset on the axis is taken out, and the static one set over it: Yoga reads
+      // a logical one before a physical one, so a `start: auto` left in would hold it.
+      for (const key of axis.at === 0 ? INLINE_INSETS : BLOCK_INSETS) {
+        if (own[key] != null) out[key] = null;
+      }
+      Object.assign(out, placed);
     }
     return out;
+  }
+
+  /**
+   * A box's style as it is committed: an inset set on the element takes the other form of it in a
+   * sheet out (`overOtherForms`).
+   */
+  private asCommitted(node: EngineNode, style: Record<string, unknown>): Record<string, unknown> {
+    const inline = inlineOf(node);
+    if (inline === NO_STYLE) return style;
+    const own = { ...style };
+    this.styles.overOtherForms(inline, own);
+    return own;
   }
 
   /**

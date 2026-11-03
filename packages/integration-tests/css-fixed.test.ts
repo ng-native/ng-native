@@ -386,7 +386,7 @@ describe('a fixed box that stays in place', () => {
     assert.equal(under(), false, 'back under the box it is written in');
   });
 
-  it('goes back under its parent when only a box further up stops clipping', () => {
+  it('goes back under its parent when only a box further up stops clipping, and out as it clips again', () => {
     // Nothing about the bar changes: the box that clipped lets go of its `overflow`, by a class
     // going away, by one going away from the box around it, and by a value set on it changing to
     // `visible` and then going away.
@@ -441,6 +441,15 @@ describe('a fixed box that stays in place', () => {
           0,
         );
       assert.equal(count(s.fabric.committed), 1, way);
+      // And under its page again once the box clips again, after a commit with it clean, and
+      // back once more as it lets go.
+      clip(off, s.engine);
+      assert.deepEqual(s.box('bar'), [0, 10, 400, 40], way);
+      assert.equal(underMid(), false, `under its page as the box clips again, by ${way}`);
+      assert.equal(count(s.fabric.committed), 1, way);
+      unclip(off, s.engine);
+      assert.deepEqual(s.box('bar'), [0, 10, 400, 40], way);
+      assert.equal(underMid(), true, `back under its parent again, by ${way}`);
     }
   });
 
@@ -496,6 +505,54 @@ describe('an absolute box placed against a box further up than its parent', () =
     s.tree();
     s.engine.setClasses(s.nodes.get('ring')!, '');
     assert.deepEqual(s.tree(), [['chip', ['action', ['ring'], ['label']], ['trail']]]);
+  });
+
+  it('follows a value set on its parent starting to clip, stopping and starting again', () => {
+    // Nothing about the ring changes, and a value set on the action restyles only the action.
+    const s = chip('action');
+    s.tree();
+    const action = s.nodes.get('action')!;
+    s.engine.setProp(action, 'style', { overflow: 'hidden' });
+    assert.deepEqual(s.tree(), [['chip', ['action', ['label']], ['trail'], ['ring']]]);
+    s.engine.setProp(action, 'style', null);
+    assert.deepEqual(s.tree(), [['chip', ['action', ['ring'], ['label']], ['trail']]]);
+    s.engine.setProp(action, 'style', { overflow: 'hidden' });
+    assert.deepEqual(s.tree(), [['chip', ['action', ['label']], ['trail'], ['ring']]]);
+  });
+
+  it('keeps the static position its clipping parent gives it, on an axis it has no inset on', () => {
+    // Chrome's [x, y] from the chip: inside the chip's padding, the action's margin and the
+    // action's padding on the free axis, and at the chip's padding edge on the other.
+    const css =
+      '.chip { position: relative; flex-direction: row; padding: 7px 0 0 10px; margin-top: 20px }' +
+      ' .action { position: static; overflow: hidden; margin-left: 30px; padding: 3px 0 0 5px;' +
+      ' width: 100px; height: 50px } .ring { position: absolute; top: 0; width: 10px; height: 10px }' +
+      ' .down { position: absolute; left: 0; width: 10px; height: 10px }';
+    for (const [name, place] of [
+      ['ring', [45, 0]],
+      ['down', [0, 10]],
+    ] as const) {
+      const fabric = createLaidOutFabric();
+      const engine = new Engine(fabric, 1, {
+        globalStyles: compileCss(css, 'app.css') as never,
+        conditions: { width: 400, height: 800, colorScheme: 'light' },
+      });
+      const element = (classes: string, parent: EngineNode) => {
+        const node = engine.createElement('view');
+        engine.setClasses(node, classes);
+        engine.setProp(node, 'nativeID', classes);
+        engine.appendChild(parent, node);
+        return node;
+      };
+      element(name, element('action', element('chip', engine.root)));
+      engine.commit();
+      const [at, chipAt] = [fabric.box(name), fabric.box('chip')];
+      assert.deepEqual([at.left - chipAt.left, at.top - chipAt.top], place, name);
+      // Under the chip, which it is placed against, and not the action, which clips.
+      const chip = fabric.committed.find((node) => node.props['nativeID'] === 'chip')!;
+      const action = chip.children.find((node) => node.props['nativeID'] === 'action')!;
+      assert.equal(action.children.length, 0, name);
+    }
   });
 
   it('goes with its parent when the parent is taken away', () => {
@@ -776,6 +833,22 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
     assert.equal(s.underItsParent(), false);
   });
 
+  it('reads an inset set on the element over the other form of it in a sheet', () => {
+    // Chrome: an inline `inset-inline-start: auto` is the `left` a sheet sets, left to right, so
+    // the box is at its static position across; and the other way round. React Native's `start`
+    // is read before `left`, so a `start: auto` left committed would hold the box at the start.
+    for (const [sheet, inline, place] of [
+      ['left: 0', { start: 'auto' }, [20, 30]],
+      ['', { start: 'auto' }, [20, 30]],
+      ['inset-inline-start: 0', { left: 'auto' }, [20, 30]],
+      ['left: auto', { start: 0 }, [0, 30]],
+    ] as const) {
+      const s = laidOut(`.box { position: fixed; ${sheet} }`, 'abc');
+      s.engine.setProp(s.fixed, 'style', inline);
+      assert.deepEqual(s.at(), place, `${sheet} under ${JSON.stringify(inline)}`);
+    }
+  });
+
   it('keeps its static position as a width of its own comes and goes', () => {
     const css = '.box { position: fixed; left: 0 } .sized { width: 300px }';
     const s = laidOut(css, LONG);
@@ -868,5 +941,44 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
       assert.equal(s.engine.commit(), true, css);
       assert.equal(s.engine.commit(), false, css);
     }
+  });
+
+  it('leaves the row it is in to share its room out by the padding the row has now', () => {
+    // Chrome: in a 300 point row with 60 of padding, two items no narrower than 120 share a line
+    // and the third takes one of its own, whether the padding was there first or came later.
+    const css =
+      '.row { flex-direction: row; flex-wrap: wrap; width: 300px } .w { width: 120px; height: 10px }' +
+      ' .it { flex: 1 1 0%; min-width: auto; height: 20px } .f { position: fixed; height: 5px }';
+    const fabric = createLaidOutFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(css, 'app.css') as never,
+      conditions: { width: 400, height: 800, colorScheme: 'light' },
+    });
+    const element = (name: string, parent: EngineNode) => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, name);
+      engine.setProp(node, 'nativeID', name);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const row = element('row', engine.root);
+    for (const name of ['it a', 'it b', 'it c']) element('w', element(name, row));
+    const words = engine.createElement('text');
+    engine.appendChild(words, engine.createText('abc'));
+    engine.appendChild(element('f', row), words);
+    engine.commit();
+    engine.setProp(row, 'style', { paddingLeft: 60 });
+    engine.commit();
+    const at = (name: string) => {
+      const { left, top, width } = fabric.box(name);
+      return [left, top, width];
+    };
+    assert.deepEqual(['it a', 'it b', 'it c'].map(at), [
+      [60, 0, 120],
+      [180, 0, 120],
+      [60, 20, 240],
+    ]);
+    // And the fixed box at its static position, inside the padding.
+    assert.deepEqual(at('f'), [60, 0, 30]);
   });
 });
