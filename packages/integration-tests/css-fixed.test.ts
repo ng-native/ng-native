@@ -540,8 +540,36 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
       const narrow = fabric.committed.find((node) => node.props['nativeID'] === 'narrow');
       return narrow?.children.some((node) => node.props['nativeID'] === 'box') ?? false;
     };
-    return { engine, fixed, box, underItsParent };
+    /** Where the box is in the screen. */
+    const at = () => {
+      engine.commit();
+      const { left, top } = fabric.box('box');
+      return [left, top];
+    };
+    return { engine, fixed, box, at, underItsParent };
   }
+
+  it('keeps its static position on an axis it has no inset on, where Chrome has it', () => {
+    // Chrome's [x, y], the box written in a 100 point box at 20 across and 30 down. Committed
+    // under its page, it would be at the page's own start on that axis.
+    for (const [style, inset, place] of [
+      ['left: 0', { left: 0 }, [0, 30]],
+      ['left: 0; width: auto', { left: 0, width: 'auto' }, [0, 30]],
+      ['left: 0; top: auto', { left: 0, top: 'auto' }, [0, 30]],
+      ['top: 0', { top: 0 }, [20, 0]],
+      ['', {}, [20, 30]],
+    ] as const) {
+      const fromSheet = laidOut(`.box { position: fixed; ${style} }`, LONG);
+      const element = laidOut('', LONG);
+      element.engine.setProp(element.fixed, 'style', { position: 'fixed', ...inset });
+      for (const [way, s] of [
+        ['a sheet', fromSheet],
+        ['a value set on the element', element],
+      ] as const) {
+        assert.deepEqual(s.at(), place, `${style || 'no insets'}, by ${way}`);
+      }
+    }
+  });
 
   it('wraps in the screen, and not in the box it is written in', () => {
     const at = '.box { position: fixed; top: 0; left: 0 }';

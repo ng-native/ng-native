@@ -3900,10 +3900,22 @@ const clipsFixed = (position: unknown): boolean =>
  * Whether a fixed box is as wide as its content (`shrunkOutOfFlow`), a `width: auto` counting as
  * none. Yoga measures what is in an out-of-flow box within the box it is committed under, so in a
  * narrower box its text wraps there, where a browser wraps it in the screen.
+ *
+ * Only one placed by an inset on each axis: on an axis it has none on, it is at its static
+ * position, where it would be in the box it is written in, which Yoga puts it at only there.
  */
 const fixedToContent = (node: EngineNode, position: unknown): boolean =>
   position === 'fixed' &&
+  insetOn(node, 'left', 'right', 'start', 'end') &&
+  insetOn(node, 'top', 'bottom') &&
   (shrunkOutOfFlow(node) || (readStyle(node, 'width') === 'auto' && !betweenInsets(node)));
+
+/** Whether a box has an inset other than `auto` on any of `sides`. */
+const insetOn = (node: EngineNode, ...sides: string[]): boolean =>
+  sides.some((side) => {
+    const value = readStyle(node, side);
+    return value != null && value !== 'auto';
+  });
 
 /** What the view a page's fixed boxes are committed in is: see `fixedHandles`. */
 const FIXED_LAYER = {
