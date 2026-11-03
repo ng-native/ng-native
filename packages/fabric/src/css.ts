@@ -5704,10 +5704,7 @@ const NEGATIVE = new RegExp(String.raw`^\s*-(?:\d|\.\d)`);
  * drops, where a math function is clamped. `opacity` takes one, and clamps it. `-0px` is 0.
  */
 const isNegativeWritten = (prop: string, text: string): boolean =>
-  prop !== 'opacity' &&
-  NEVER_NEGATIVE.test(prop) &&
-  NEGATIVE.test(text) &&
-  parseFloat(text) < 0;
+  prop !== 'opacity' && NEVER_NEGATIVE.test(prop) && NEGATIVE.test(text) && parseFloat(text) < 0;
 
 /**
  * Why a browser drops `text` set on an element as `prop`, or undefined where it takes it: a
