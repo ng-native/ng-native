@@ -364,6 +364,60 @@ describe('a percentage basis in a box as wide as its content', () => {
     assert.equal(s.box('item')[1], 5);
   });
 
+  it('is measured at its own width in a row kept from stretching', () => {
+    const item = 'flex: 0 0 50%; width: 10px';
+    for (const conformance of CONFORMANCES) {
+      for (const [col, row] of [
+        ['', 'flex-direction: row; align-self: flex-start'],
+        ['align-items: flex-start', 'flex-direction: row'],
+      ] as const) {
+        const s = scene(css(col, row, item), SHORT, conformance);
+        assert.equal(s.box('row')[1], 10, `${col || row} (${conformance})`);
+        assert.equal(s.box('item')[1], 5, `${col || row} (${conformance})`);
+      }
+    }
+    // A basis in points is no share, and is the item's size there as anywhere.
+    for (const [item, width] of [
+      ['flex: 1 0 50%; width: 10px', 10],
+      ['flex: 1 0 50px; width: 10px', 50],
+    ] as const) {
+      const s = scene(css('', 'flex-direction: row; align-self: flex-start', item), SHORT);
+      assert.deepEqual([s.box('row')[1], s.box('item')[1]], [width, width], item);
+    }
+  });
+
+  it('is not measured again for a change that does not size it', () => {
+    const s = scene(
+      css('', 'flex-direction: row; align-self: flex-start', 'flex: 0 0 50%; width: 10px'),
+      SHORT,
+    );
+    assert.equal(s.box('row')[1], 10);
+    const before = s.fabric.calls.completeRoot;
+    s.engine.setProp(s.item, 'style', { backgroundColor: 'red' });
+    s.engine.commit();
+    assert.equal(s.fabric.calls.completeRoot, before + 1);
+    assert.equal(s.box('row')[1], 10);
+  });
+
+  it('is measured again when its width under the basis comes and goes', () => {
+    for (const row of ['align-self: flex-start', 'width: fit-content']) {
+      const s = scene(
+        `${css('', `flex-direction: row; ${row}`, 'flex: 0 0 50%')} .narrow { width: 10px }`,
+        SHORT,
+      );
+      const widths = () => [s.box('row')[1], s.box('item')[1]];
+      assert.deepEqual(widths(), [70, 35], row);
+      s.engine.setProp(s.item, 'style', { width: 10 });
+      assert.deepEqual(widths(), [10, 5], `${row}, set on the element`);
+      s.engine.setProp(s.item, 'style', null);
+      assert.deepEqual(widths(), [70, 35], `${row}, taken off the element`);
+      s.engine.setClasses(s.item, 'item narrow');
+      assert.deepEqual(widths(), [10, 5], `${row}, by a class`);
+      s.engine.setClasses(s.item, 'item');
+      assert.deepEqual(widths(), [70, 35], `${row}, the class taken away`);
+    }
+  });
+
   it('follows the row growing, and the basis going away', () => {
     const s = scene(css('', 'flex-direction: row; width: fit-content', 'flex: 0 0 50%'), SHORT);
     assert.equal(s.box('item')[1], 35);

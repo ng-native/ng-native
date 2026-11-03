@@ -803,6 +803,8 @@ export interface EngineNode extends HostNode {
   mayFit?: true;
   /** Set on a box inside one being fitted, while its percentage width and zero basis are off. */
   fitOff?: boolean;
+  /** The width of its own a share basis hides, or `NO_WIDTH`: see `Engine.noteUnderBasis`. */
+  underBasis?: unknown;
   /**
    * The declarations of this node that are a percentage with a length added, `calc(100% - 2rem)`,
    * what each came to against the box the percentage is of, and that box's size then. See
@@ -1792,6 +1794,10 @@ function basisAsSize(node: EngineNode, props: Record<string, unknown>): void {
   // Remembered on the container, so the box is merged again when the direction changes.
   parent.fitContainer = container;
   delete props['flexBasis'];
+  // A share of a row being measured to be fitted is of no width yet, and the item is as wide as
+  // it is without it: its own width where it has one, as a browser takes a basis it cannot
+  // resolve. See `setAsideToFit`.
+  if (node.fitOff && isPercent(basis) && container.startsWith('row')) return;
   if (container.startsWith('row')) props['width'] = basis;
   else {
     props['height'] = basis;
@@ -3538,6 +3544,9 @@ function contentSized(props: Record<string, unknown>): void {
 }
 
 const isNoBasis = (value: unknown): boolean => value === 0 || value === '0%';
+
+/** A basis that hides no width: see `Engine.noteUnderBasis`. */
+const NO_WIDTH = Symbol('no width');
 
 /** A picture with its share set aside is as wide as it is itself, as its content. */
 function pictureWide(node: EngineNode, props: Record<string, unknown>): void {
@@ -6298,6 +6307,7 @@ const ENGINE_NODE_FIELDS = {
   fitMin: true,
   mayFit: true,
   fitOff: true,
+  underBasis: true,
   mixed: true,
   mixedOff: true,
   line: true,
@@ -11936,7 +11946,9 @@ export class Engine implements HostEngine {
     if (field) centreSingleLine(viewName, merged, this.fontScale, isOnBaseline(node, viewName));
     if (field) echoedEventCount(viewName, merged, node.committed?.props);
     // After a transition, which eases the basis as the basis it was written as.
+    const own = merged['width'];
     basisAsSize(node, merged);
+    if (!node.fitOff) this.noteUnderBasis(node, merged['width'] === own ? NO_WIDTH : (own ?? null));
     // Each asked of the key it reads first, here and in `engineLayout`: it is asked of every node
     // merged. After the basis, which is a size given where it is committed as one.
     if (merged['aspectRatio'] != null) {
@@ -11971,6 +11983,19 @@ export class Engine implements HostEngine {
     }
     keptForPaint(node, merged);
     return merged;
+  }
+
+  /**
+   * Note the width a share basis hides, which the item is measured at while a row around it is
+   * fitted (`basisAsSize`). A change to it changes nothing committed, so it is noted as a box
+   * moved, for the fit to be read again (`standFitted`).
+   */
+  private noteUnderBasis(node: EngineNode, hidden: unknown): void {
+    const had = node.underBasis; // Written to a node only once it has a basis: most never have one (`engine-node-shape`).
+    if (had === hidden || (had === undefined && hidden === NO_WIDTH)) return;
+    node.underBasis = hidden;
+    // A box new to the commit is laid out for the first time whatever it hides.
+    if (had !== undefined) this.movedBoxes.add(node);
   }
 
   /** A run of text as it is committed: a word to a line while how narrow it goes is read. */
