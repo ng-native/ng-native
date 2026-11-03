@@ -895,8 +895,9 @@ export class MathRefused {
       'translateX(calc(1px + 2))',
       // Chrome reads this one, and the stylesheet refuses it: no form holds it.
       'translateX(calc(50% + 1px))',
-      'translateX(calc(1px)',
-      'translateX(1px ',
+      // A bracket left open is closed where the value ends, as Chrome closes it, so the one left
+      // open here is the math's.
+      'translateX(calc(1px + 2)',
     ];
     const views = REFUSED.map(
       (_, i) => `<view nativeID="r${i}" [style.transform]="rows[${i}]"></view>`,

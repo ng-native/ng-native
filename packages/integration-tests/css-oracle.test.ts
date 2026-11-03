@@ -248,6 +248,12 @@ const COMPARED: Partial<
   'font-family': assertFamily,
 };
 
+/** A ratio as the browser reports it, `16 / 9` or `1.5`, as the one number native takes. */
+function ratioOf(browser: string): number {
+  const [width, height = 1] = browser.split('/').map(Number);
+  return Math.round((width! / height) * 1e5) / 1e5;
+}
+
 /** One of a case's extra properties against what the browser computed for it. */
 function assertExtra(
   property: ExtraProperty,
@@ -371,7 +377,7 @@ describe('what a browser does with the same stylesheet', () => {
         const browser = expected.expected[property]!;
         if (property === 'text-shadow') assertNoTextShadow(style, browser);
         else if (property === 'aspect-ratio') {
-          assert.equal(style['aspectRatio'], parseFloat(browser), property);
+          assert.equal(style['aspectRatio'], ratioOf(browser), property);
         } else if (property === 'transform') {
           assert.equal(matrixOf(style['transform'] as TransformList), browser, property);
         } else assertExtra(property, style, browser, test.inline !== undefined);
