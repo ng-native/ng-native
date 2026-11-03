@@ -13,8 +13,9 @@ works where the [on-device language model](/packages/expo/language-model) is una
 
 ## Install
 
-Nothing to install beyond `@ng-native/expo`. Its native half is in a development build; Expo Go
-cannot load it.
+Recognition itself needs nothing beyond `@ng-native/expo`. Its native half is in a development
+build; Expo Go cannot load it. The example below picks its photo with the
+[image picker](/packages/expo/image-picker), which needs `npx expo install expo-image-picker`.
 
 ```ts
 import { TextRecognition } from '@ng-native/expo/text-recognition';

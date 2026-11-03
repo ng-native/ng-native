@@ -23,6 +23,10 @@ struct TextRecognitionOptions: Record {
  image from its bottom left corner, are converted.
  */
 public final class TextRecognitionModule: Module {
+  /// Expo runs an async function on one serial queue shared by every module unless told
+  /// otherwise, so decoding and reading an image here would hold up their calls.
+  private let queue = DispatchQueue(label: "ng-native.text-recognition", qos: .userInitiated)
+
   public func definition() -> ModuleDefinition {
     Name("NgNativeTextRecognition")
 
@@ -81,7 +85,7 @@ public final class TextRecognitionModule: Module {
         "width": size.width,
         "height": size.height,
       ])
-    }
+    }.runOnQueue(queue)
   }
 
   /// The code Vision lists for `code`: itself, or else the first with the same language, so

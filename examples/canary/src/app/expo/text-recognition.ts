@@ -50,9 +50,14 @@ export class TextRecognitionPage {
     if (!uri.startsWith('http')) return this.read(uri);
     const { Directory, File, Paths } =
       require('expo-file-system') as typeof import('expo-file-system');
-    const file = await File.downloadFileAsync(uri, new Directory(Paths.cache), {
-      idempotent: true,
-    });
+    this.error.set(null);
+    let file: InstanceType<typeof File>;
+    try {
+      file = await File.downloadFileAsync(uri, new Directory(Paths.cache), { idempotent: true });
+    } catch (failure) {
+      this.error.set(failure instanceof Error ? failure.message : String(failure));
+      return;
+    }
     await this.read(file.uri);
   }
 
