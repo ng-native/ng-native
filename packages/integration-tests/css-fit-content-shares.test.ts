@@ -434,6 +434,26 @@ describe('a box as wide as its content that holds more than the room', () => {
     }
   });
 
+  it('follows a box it holds changing its box-sizing', () => {
+    // Chrome: a cap of 500 on a box with 26 of padding and border is of its content for
+    // content-box, so the box is 526 and the row 556, and of the whole box for border-box.
+    for (const conformance of CONFORMANCES) {
+      const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1', conformance);
+      const framed = { paddingLeft: 10, paddingRight: 10, borderLeftWidth: 3, borderRightWidth: 3 };
+      const capped = { width: 'auto', maxWidth: 500, ...framed };
+      s.engine.setProp(s.item, 'style', capped);
+      inside(s, s.item, { width: 900, height: 10 });
+      for (const [boxSizing, width] of [
+        ['border-box', 530],
+        ['content-box', 556],
+        ['border-box', 530],
+      ] as const) {
+        s.engine.setProp(s.item, 'style', { ...capped, boxSizing });
+        assert.equal(s.box('row')[1], width, `${boxSizing} (${conformance})`);
+      }
+    }
+  });
+
   it('counts an item with a basis in points that does not grow at that basis', () => {
     // Chrome, for an item holding a 900 wide box: the basis, held to the item's minimum and
     // maximum, where the item does not grow; all it holds where it grows or the basis is a share.

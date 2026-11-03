@@ -5734,7 +5734,7 @@ const MOVES_BOXES = new Set([
   ...['flex', 'flexGrow', 'flexShrink', 'flexDirection', 'flexWrap', 'alignItems', 'alignSelf'],
   ...['alignContent', 'justifyContent', 'gap', 'rowGap', 'columnGap', 'display', 'position'],
   ...['aspectRatio', 'fontSize', 'lineHeight', 'fontFamily', 'fontWeight', 'letterSpacing'],
-  ...['numberOfLines', 'start', 'end'],
+  ...['numberOfLines', 'start', 'end', 'boxSizing'],
 ]);
 
 /** Whether native is moving a view to a prop's value, by a transition or an animation it laid out. */
