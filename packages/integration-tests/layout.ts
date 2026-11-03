@@ -299,6 +299,8 @@ function apply(node: Node, style: Readonly<Record<string, unknown>>): void {
     size(key, (v) => node.setPosition(edge, v as number));
   }
   const words = style as Record<string, string | number | undefined>;
+  if (words['direction'] === 'rtl') node.setDirection(Direction.RTL);
+  if (words['direction'] === 'ltr') node.setDirection(Direction.LTR);
   if (words['position'] === 'absolute') node.setPositionType(PositionType.Absolute);
   if (words['position'] === 'static') node.setPositionType(PositionType.Static);
   if (words['flexDirection'] !== undefined) {
