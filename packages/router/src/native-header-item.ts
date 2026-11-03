@@ -180,10 +180,7 @@ export class NativeHeaderItem implements AfterContentInit {
   /** What a tap on the bar button opens, instead of sending `(press)`. */
   readonly menu = input<HeaderMenu>();
   /** A gap of this many points in the bar, with no button. iOS only, as bar buttons are. */
-  readonly spacing = input(undefined, {
-    // `null` too, which `numberAttribute` makes NaN, as the usual way to bind no spacing.
-    transform: (value: unknown) => optionalNumber(value ?? undefined),
-  });
+  readonly spacing = input(undefined, { transform: optionalNumber });
 
   /** The bar button was tapped. Content written in the item handles its own presses. */
   readonly press = output<void>();

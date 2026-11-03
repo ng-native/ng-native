@@ -9,6 +9,7 @@ export function optionalBoolean(value: unknown): boolean | undefined {
   return value === undefined ? undefined : booleanAttribute(value);
 }
 
+/** `null` is unset too, as the usual way to bind no number, where `numberAttribute` makes it NaN. */
 export function optionalNumber(value: unknown): number | undefined {
-  return value === undefined ? undefined : numberAttribute(value);
+  return value == null ? undefined : numberAttribute(value);
 }
