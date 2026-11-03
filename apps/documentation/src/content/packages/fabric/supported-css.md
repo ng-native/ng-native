@@ -197,7 +197,9 @@ or linear gradients, with no position, size, repeat or `url()`, and no token in 
 `background-image` is linear gradients or `none`, with no token. `box-shadow` takes a token only
 as all of it, lengths in `px` or `rem` only, and a color written out, not a `color-mix()`. `font`
 has no `small-caps`, stretch, keyword size or system font.
-A value outside that is dropped, with a warning in development.
+A value outside that is dropped, with a warning in development, and what was set before it stays,
+as a browser leaves it. A negative written out where a property has nothing below zero,
+`width: -4px` say, is dropped the same way.
 
 `skewX()` and `skewY()` are drawn on iOS only. React Native on Android breaks a transform down into
 the rotation, scale and translation an Android view has, and a view has no skew, so `skewX()` is

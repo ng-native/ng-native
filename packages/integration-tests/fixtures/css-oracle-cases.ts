@@ -52,6 +52,11 @@ export interface OracleCase {
    * browser, and the renderer's `setStyle` here, merged over the cascade as a commit merges them.
    */
   inline?: Readonly<Record<string, string>>;
+  /**
+   * Declarations set on the probe after `inline` has been drawn, as a binding's next value is:
+   * `style.setProperty` again in the browser, and `setStyle` after a commit here.
+   */
+  then?: Readonly<Record<string, string>>;
   /** The compiler refuses part of `css` with a warning, for a value native has no form for. */
   warns?: boolean;
 }
@@ -451,6 +456,50 @@ const SHADOW_COLOUR_CASES: OracleCase[] = [
     extra: ['box-shadow'],
   },
   inlineValue({ 'box-shadow': '2px 3px 4px' }, '#probe { color: rgb(1, 2, 3) }', ['box-shadow']),
+];
+
+/** A value set on the probe, then one a browser drops: the first stays, as `setProperty` leaves it. */
+const refusedAfter = (
+  first: Readonly<Record<string, string>>,
+  then: Readonly<Record<string, string>>,
+  css: string,
+  extra: readonly ExtraProperty[],
+  name = 'view',
+): OracleCase => ({
+  name: `inline ${JSON.stringify(first)} then ${JSON.stringify(then)} over ${css}`,
+  css,
+  tree: probe({ name }),
+  inline: first,
+  then,
+  extra,
+});
+
+const REFUSED_AFTER_CASES: OracleCase[] = [
+  refusedAfter({ width: '40px' }, { width: 'calc(1px + 2)' }, '#probe { width: 10px }', ['width']),
+  refusedAfter({ width: '40px' }, { width: '-4px' }, '#probe { width: 10px }', ['width']),
+  refusedAfter({ width: 'var(--w)' }, { width: '-4px' }, '#probe { --w: 40px }', ['width']),
+  refusedAfter({ width: '40px' }, { width: '30px' }, '#probe { width: 10px }', ['width']),
+  refusedAfter({ padding: '4px' }, { padding: '1px -1px' }, '#probe { }', ['padding-top']),
+  refusedAfter({ padding: '4px' }, { padding: '1px 2px 3px 4px 5px' }, '#probe { }', [
+    'padding-top',
+  ]),
+  refusedAfter({ padding: '4px' }, { padding: '1px 2px' }, '#probe { }', [
+    'padding-top',
+    'padding-left',
+  ]),
+  refusedAfter(
+    { border: '2px solid rgb(255, 0, 0)' },
+    { border: '3px solid notacolour' },
+    '#probe { }',
+    ['border-top-width', 'border-top-color'],
+  ),
+  refusedAfter(
+    { 'line-height': '20px' },
+    { 'line-height': '-1.5' },
+    '#probe { font-size: 10px }',
+    ['line-height'],
+    'text',
+  ),
 ];
 
 /** The `font` shorthand puts back every part it leaves out, in a sheet as in a style. */
@@ -1715,6 +1764,7 @@ export const CASES: OracleCase[] = [
   ...BACKGROUND_TOKEN_MORE_CASES,
   ...SHADOW_COLOUR_CASES,
   ...SHEET_FONT_CASES,
+  ...REFUSED_AFTER_CASES,
   {
     name: 'background: var() of a colour token is the background colour',
     css: '#probe { --bg: rgb(1, 0, 0); background: var(--bg) }',

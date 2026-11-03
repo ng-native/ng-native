@@ -4772,6 +4772,80 @@
     }
   },
   {
+    "name": "inline {\"width\":\"40px\"} then {\"width\":\"calc(1px + 2)\"} over #probe { width: 10px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "40px"
+    }
+  },
+  {
+    "name": "inline {\"width\":\"40px\"} then {\"width\":\"-4px\"} over #probe { width: 10px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "40px"
+    }
+  },
+  {
+    "name": "inline {\"width\":\"var(--w)\"} then {\"width\":\"-4px\"} over #probe { --w: 40px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "40px"
+    }
+  },
+  {
+    "name": "inline {\"width\":\"40px\"} then {\"width\":\"30px\"} over #probe { width: 10px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "30px"
+    }
+  },
+  {
+    "name": "inline {\"padding\":\"4px\"} then {\"padding\":\"1px -1px\"} over #probe { }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "4px"
+    }
+  },
+  {
+    "name": "inline {\"padding\":\"4px\"} then {\"padding\":\"1px 2px 3px 4px 5px\"} over #probe { }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "4px"
+    }
+  },
+  {
+    "name": "inline {\"padding\":\"4px\"} then {\"padding\":\"1px 2px\"} over #probe { }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "1px",
+      "padding-left": "2px"
+    }
+  },
+  {
+    "name": "inline {\"border\":\"2px solid rgb(255, 0, 0)\"} then {\"border\":\"3px solid notacolour\"} over #probe { }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "2px",
+      "border-top-color": "rgb(255, 0, 0)"
+    }
+  },
+  {
+    "name": "inline {\"line-height\":\"20px\"} then {\"line-height\":\"-1.5\"} over #probe { font-size: 10px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "20px"
+    }
+  },
+  {
     "name": "background: var() of a colour token is the background colour",
     "expected": {
       "color": "rgb(0, 0, 0)",
