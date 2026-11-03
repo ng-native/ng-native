@@ -3896,6 +3896,14 @@ const sameStrut = (a: LineStrut | undefined, b: LineStrut): boolean =>
 const clipsFixed = (position: unknown): boolean =>
   position === 'fixed' && nativePlatform() === 'android';
 
+/**
+ * Whether a fixed box is as wide as its content (`shrunkOutOfFlow`). Yoga measures what is in an
+ * out-of-flow box within the box it is committed under, so in a narrower box its text wraps
+ * there, where a browser wraps it in the screen.
+ */
+const fixedToContent = (node: EngineNode, position: unknown): boolean =>
+  position === 'fixed' && shrunkOutOfFlow(node);
+
 /** What the view a page's fixed boxes are committed in is: see `fixedHandles`. */
 const FIXED_LAYER = {
   position: 'absolute',
@@ -9812,6 +9820,11 @@ export class Engine implements HostEngine {
     return page;
   }
 
+  /** Whether a box out of the flow is committed under its page however wide it is. */
+  private pinsToPage(node: EngineNode, page: EngineNode, position: unknown): boolean {
+    return clipsFixed(position) || this.scrollsOrClips(node, page);
+  }
+
   /** Whether anything between a box and its page scrolls or clips what is inside it. */
   private scrollsOrClips(node: EngineNode, page: EngineNode): boolean {
     for (let up = node.parent; up && up !== page; up = up.parent) {
@@ -9826,15 +9839,18 @@ export class Engine implements HostEngine {
    * Note a node that has become `position: fixed` inside something that scrolls or clips, which
    * a fixed box does neither with: it is committed under its page in place of its parent. It is
    * being reconciled under its parent as this is asked, so it is committed there once more and
-   * moved straight after: see `moveFixed`. Anywhere else a fixed box stays where it is, and is
-   * placed against its page by `settleAbsolute`.
+   * moved straight after: see `moveFixed`. So is a fixed box as wide as its content, which Yoga
+   * would measure in the box it is written in (`fixedToContent`). Anywhere else a fixed box
+   * stays where it is, and is placed against its page by `settleAbsolute`.
    */
   private refix(node: EngineNode, position: unknown): void {
     if (node.fixedTo !== undefined) return;
     // A view that is moved loses its touch: one a finger is on is moved when the finger lifts.
     if (isWithin(this.fingerOn, node)) return void this.fixedUnderFinger.add(node);
     const page = position === 'fixed' ? this.pageOf(node) : this.placedAbove(node);
-    if (!page || !(this.scrollsOrClips(node, page) || clipsFixed(position))) return;
+    if (!page || !(this.pinsToPage(node, page, position) || fixedToContent(node, position))) {
+      return;
+    }
     node.fixedTo = page;
     const held = this.fixedIn.get(page) ?? new Set();
     this.fixedIn.set(page, held.add(node));
@@ -9877,7 +9893,10 @@ export class Engine implements HostEngine {
     if (this.stillCommitted(child, context)) return true;
     this.styles.resolve(child, this.styleEpoch);
     const position = readStyle(child, 'position');
-    if (position === 'fixed') return true;
+    // A fixed box under its page for its width alone goes back once it has one: see `refix`.
+    if (position === 'fixed') {
+      return this.pinsToPage(child, child.fixedTo!, position) || fixedToContent(child, position);
+    }
     // An absolute one, for as long as it is placed against the same box and still clipped.
     const above = position === 'absolute' ? this.placedAbove(child) : null;
     if (above === child.fixedTo && above && this.scrollsOrClips(child, above)) return true;

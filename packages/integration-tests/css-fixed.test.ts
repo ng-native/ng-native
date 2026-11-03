@@ -5,9 +5,9 @@
  * It stays where it is in the tree, out of the flow, so it paints in the order it is written in
  * and takes its ancestors' opacity, as it does in a browser. The engine works out from sizes
  * read back from Fabric where the page is from there, and commits its insets against whatever
- * Yoga positions it by. Only when something between it and its page scrolls or clips is it
- * committed under the page instead, where neither reaches it; it is still styled, and its events
- * still bubble, as its parent's child.
+ * Yoga positions it by. Only when something between it and its page scrolls or clips, or it is as
+ * wide as its content, is it committed under the page instead, where neither reaches it and its
+ * text wraps in the page; it is still styled, and its events still bubble, as its parent's child.
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
@@ -390,6 +390,12 @@ describe('an absolute box placed against a box further up than its parent', () =
 
   it('stays under its parent where nothing between the two clips', () => {
     assert.deepEqual(chip('action').tree(), [['chip', ['action', ['ring'], ['label']], ['trail']]]);
+    // As wide as its content too, which a fixed box is not left as: see the end of this file.
+    const s = scene(`${CHIP} .loose { position: absolute; left: 0; top: 0 }`, [
+      'chip',
+      ['action', ['loose'], ['label']],
+    ]);
+    assert.deepEqual(s.tree(), [['chip', ['action', ['loose'], ['label']]]]);
   });
 
   it('stays under a parent that is positioned, which is what it is placed against', () => {
@@ -415,5 +421,85 @@ describe('an absolute box placed against a box further up than its parent', () =
     s.tree();
     s.engine.removeChild(s.nodes.get('chip')!, s.nodes.get('action')!);
     assert.deepEqual(s.tree(), [['chip', ['trail']]]);
+  });
+});
+
+describe('a fixed box as wide as its content, in a narrower box', () => {
+  // Chrome's values, with the layout reset, at ten points a character in a 400 point screen.
+  const SHORT = 'abcdefg abcdefg abcdefg';
+  const LONG = `${SHORT} ${SHORT}`;
+  const NARROW = '.narrow { width: 100px; height: 300px }';
+
+  function laidOut(css: string, text: string) {
+    const fabric = createLaidOutFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(`${NARROW} ${css}`, 'app.css') as never,
+      conditions: { width: 400, height: 800, colorScheme: 'light' },
+    });
+    const element = (name: string, parent: EngineNode) => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, name);
+      engine.setProp(node, 'nativeID', name);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const fixed = element('box', element('narrow', engine.root));
+    const words = engine.createElement('text');
+    engine.appendChild(words, engine.createText(text));
+    engine.appendChild(fixed, words);
+    const box = () => {
+      engine.commit();
+      const { left, width, height } = fabric.box('box');
+      return [left, width, height];
+    };
+    /** Whether the box is committed under the box it is written in. */
+    const underItsParent = () => {
+      engine.commit();
+      const narrow = fabric.committed.find((node) => node.props['nativeID'] === 'narrow');
+      return narrow?.children.some((node) => node.props['nativeID'] === 'box') ?? false;
+    };
+    return { engine, fixed, box, underItsParent };
+  }
+
+  it('wraps in the screen, and not in the box it is written in', () => {
+    const at = '.box { position: fixed; top: 0; left: 0 }';
+    assert.deepEqual(laidOut(at, SHORT).box(), [0, 230, 20]);
+    // Two lines, where the box it is written in would make six. Chrome has the box 400 wide,
+    // where a native paragraph is as wide as its longest line.
+    assert.deepEqual(laidOut(at, LONG).box(), [0, 390, 40]);
+    const fits = '.box { position: fixed; top: 0; width: fit-content; left: 10px; right: 20px }';
+    assert.deepEqual(laidOut(fits, SHORT).box(), [10, 230, 20]);
+  });
+
+  it('stays under its parent with a width of its own, or stretched between two insets', () => {
+    for (const [css, box] of [
+      ['.box { position: fixed; top: 0; left: 0; width: 300px }', [0, 300, 40]],
+      ['.box { position: fixed; top: 0; left: 0; right: 0 }', [0, 400, 40]],
+    ] as const) {
+      const s = laidOut(css, LONG);
+      assert.deepEqual(s.box(), box, css);
+      assert.equal(s.underItsParent(), true, css);
+    }
+  });
+
+  it('follows a width of its own coming and going', () => {
+    const css = '.box { position: fixed; top: 0; left: 0 } .sized { width: 300px }';
+    const s = laidOut(css, LONG);
+    assert.deepEqual([s.underItsParent(), s.box()], [false, [0, 390, 40]]);
+    s.engine.setClasses(s.fixed, 'box sized');
+    assert.deepEqual([s.underItsParent(), s.box()], [true, [0, 300, 40]]);
+    s.engine.setClasses(s.fixed, 'box');
+    assert.deepEqual([s.underItsParent(), s.box()], [false, [0, 390, 40]]);
+    // The same set on the element.
+    s.engine.setProp(s.fixed, 'style', { width: 300 });
+    assert.deepEqual([s.underItsParent(), s.box()], [true, [0, 300, 40]]);
+    s.engine.setProp(s.fixed, 'style', null);
+    assert.deepEqual([s.underItsParent(), s.box()], [false, [0, 390, 40]]);
+  });
+
+  it('settles in the commit it appears in, with no pass left over', () => {
+    const s = laidOut('.box { position: fixed; top: 0; left: 0 }', SHORT);
+    assert.equal(s.engine.commit(), true);
+    assert.equal(s.engine.commit(), false);
   });
 });

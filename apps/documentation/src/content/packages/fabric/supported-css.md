@@ -373,11 +373,14 @@ the page's place back from native to work its insets out, as it does a grid's si
 
 Where something between a fixed box and its page scrolls or clips, a scroll view or an
 `overflow: hidden` box, the fixed box is committed under the page instead, so it neither scrolls
-nor is clipped. There it draws over the page's other content, and an ancestor's `opacity` or
-`transform` no longer reaches it; it is still styled by rules that match through its parent, its
-events still bubble to its parent, and it is not shown while anything it is inside is
-`display: none`. A transformed ancestor does not become what a fixed box is fixed to, as one does
-in a browser.
+nor is clipped. So is a fixed box as wide as its content, with no width of its own and not
+stretched between a `left` and a `right`, so that its text wraps in the page and not in a narrower
+box it is written in; it goes back under its parent once it has a width. On Android every fixed
+box is committed under its page. There it draws over the page's other content, and an
+ancestor's `opacity` or `transform` no longer reaches it; it is still styled by rules that match
+through its parent, its events still bubble to its parent, and it is not shown while anything it
+is inside is `display: none`. A transformed ancestor does not become what a fixed box is fixed to,
+as one does in a browser.
 
 Two things Yoga leaves undone for a `position: absolute` or `fixed` box are put right from its
 laid-out size, read back from native as a grid's sizes are. `margin: auto` between two insets
