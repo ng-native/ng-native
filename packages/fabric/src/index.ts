@@ -40,7 +40,7 @@ export { EngineIntersectionObserver, installDeferTriggers } from './defer-trigge
 export { installNodeGlobal } from './node-global.ts';
 export { nextFrame } from './next-frame.ts';
 export { faceName, registeredFaces } from './font-faces.ts';
-export { boundMath } from './css.ts';
+export { boundMath, boundRefusal } from './css.ts';
 export { mathNumberText, MATH_FUNCTION, NEVER_NEGATIVE } from './css-math.ts';
 export { cssTrim, firstFamily, platformColourOf, tokenFromValue } from './inline-token.ts';
 export { layOutGrid, type Edges, type GridItem, type GridLayout, type Rect } from './grid.ts';

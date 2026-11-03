@@ -5696,12 +5696,29 @@ const RELATIVE_LENGTH = new RegExp(String.raw`^\s*(${CSS_NUMBER})(em|vw|vh|vmin|
 /** A number with no unit, as a `line-height` is written: a multiple of the font size. */
 const UNITLESS = new RegExp(String.raw`^\s*(${CSS_NUMBER})\s*$`, 'i');
 
-/** A negative `line-height`, of a number or a length, which CSS has no value for. */
+/** A negative written out, of a number or a length: `-1.5`, `-1em`, `-2px`, `-10%`. */
 const NEGATIVE = new RegExp(String.raw`^\s*-(?:\d|\.\d)`);
 
-/** Whether `text` is a `line-height` below zero, which a browser drops: `-1.5`, `-1em`, `-2px`. */
-export const isNegativeLineHeight = (prop: string, text: string): boolean =>
-  prop === 'lineHeight' && NEGATIVE.test(text);
+/**
+ * Whether `text` is a negative written out where `prop` takes nothing below zero, which a browser
+ * drops, where a math function is clamped. `opacity` takes one, and clamps it. `-0px` is 0.
+ */
+const isNegativeWritten = (prop: string, text: string): boolean =>
+  prop !== 'opacity' &&
+  NEVER_NEGATIVE.test(prop) &&
+  NEGATIVE.test(text) &&
+  parseFloat(text) < 0;
+
+/**
+ * Why a browser drops `text` set on an element as `prop`, or undefined where it takes it: a
+ * negative written out where the prop has nothing below zero, or a math function of no type the
+ * prop takes.
+ */
+export function boundRefusal(prop: string, text: string): string | undefined {
+  if (isNegativeWritten(prop, text)) return 'it is negative';
+  if (isRefusedMath(prop, text)) return 'its math comes to no type it takes';
+  return undefined;
+}
 
 type RelativeUnit = NonNullable<DeferredDeclaration['compute']>['unit'];
 
@@ -5811,7 +5828,7 @@ const TYPED_KINDS: ReadonlySet<TokenKind> = new Set([
  * Whether a math function in a bound declaration is one CSS refuses: it has no type, or one `prop`
  * does not take. Not one that cannot be worked out here, `min(50%, 100px)`, or holds a `var()`.
  */
-export function isRefusedMath(prop: string, text: string): boolean {
+function isRefusedMath(prop: string, text: string): boolean {
   if (!HOLDS_MATH.test(text) || /var\(/i.test(text)) return false;
   if (prop === 'transform') return transformMathRefused(text);
   if (!MATH_FUNCTION.test(text)) return false;

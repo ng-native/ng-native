@@ -944,6 +944,14 @@
     }
   },
   {
+    "name": "an inline width: -4px, read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
     "name": "a rule's width: -10%, read as width",
     "expected": {
       "color": "rgb(0, 0, 0)",
@@ -952,7 +960,127 @@
     }
   },
   {
+    "name": "an inline width: -10%, read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: -1em, read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: -1em, read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: -1rem, read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: -1rem, read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's width: -10vw, read as width",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "an inline width: -10vw, read as width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "7px"
+    }
+  },
+  {
+    "name": "a rule's padding: -1px, read as padding-top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "7px"
+    }
+  },
+  {
+    "name": "an inline padding: -1px, read as padding-top, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "7px"
+    }
+  },
+  {
+    "name": "a rule's padding: 1px -1px, read as padding-top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "7px"
+    }
+  },
+  {
+    "name": "an inline padding: 1px -1px, read as padding-top, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "7px"
+    }
+  },
+  {
+    "name": "a rule's gap: 1px -1px, read as row-gap",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "row-gap": "7px"
+    }
+  },
+  {
+    "name": "a rule's border-radius: 1px -1px, read as border-top-left-radius",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "7px"
+    }
+  },
+  {
+    "name": "an inline border-radius: 1px -1px, read as border-top-left-radius, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "7px"
+    }
+  },
+  {
     "name": "a rule's min-height: -4px, read as min-height",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "min-height": "7px"
+    }
+  },
+  {
+    "name": "an inline min-height: -4px, read as min-height, over a rule",
     "expected": {
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
@@ -968,7 +1096,23 @@
     }
   },
   {
+    "name": "an inline padding-left: -2px, read as padding-left, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "7px"
+    }
+  },
+  {
     "name": "a rule's padding: 1px -5px, read as padding-top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "7px"
+    }
+  },
+  {
+    "name": "an inline padding: 1px -5px, read as padding-top, over a rule",
     "expected": {
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
@@ -984,6 +1128,14 @@
     }
   },
   {
+    "name": "an inline font-size: -5px, read as font-size, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "7px"
+    }
+  },
+  {
     "name": "a rule's border-left-width: -1px, read as border-left-width",
     "expected": {
       "color": "rgb(0, 0, 0)",
@@ -992,7 +1144,23 @@
     }
   },
   {
+    "name": "an inline border-left-width: -1px, read as border-left-width, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-left-width": "7px"
+    }
+  },
+  {
     "name": "a rule's border-radius: -1px, read as border-top-left-radius",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "7px"
+    }
+  },
+  {
+    "name": "an inline border-radius: -1px, read as border-top-left-radius, over a rule",
     "expected": {
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
@@ -1032,7 +1200,23 @@
     }
   },
   {
+    "name": "an inline flex-grow: -1, read as flex-grow, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "7"
+    }
+  },
+  {
     "name": "a rule's flex-shrink: -1, read as flex-shrink",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-shrink": "7"
+    }
+  },
+  {
+    "name": "an inline flex-shrink: -1, read as flex-shrink, over a rule",
     "expected": {
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
@@ -1056,6 +1240,14 @@
     }
   },
   {
+    "name": "an inline line-height: -1, read as line-height, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "7px"
+    }
+  },
+  {
     "name": "a rule's line-height: -1px, read as line-height",
     "expected": {
       "color": "rgb(0, 0, 0)",
@@ -1064,7 +1256,23 @@
     }
   },
   {
+    "name": "an inline line-height: -1px, read as line-height, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "7px"
+    }
+  },
+  {
     "name": "a rule's aspect-ratio: -1, read as aspect-ratio",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "7 / 1"
+    }
+  },
+  {
+    "name": "an inline aspect-ratio: -1, read as aspect-ratio, over a rule",
     "expected": {
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
@@ -1277,6 +1485,22 @@
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
       "padding-left": "7px"
+    }
+  },
+  {
+    "name": "a rule's padding: 1px calc(1px + 2), read as padding-top",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "7px"
+    }
+  },
+  {
+    "name": "an inline padding: 1px calc(1px + 2), read as padding-top, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "7px"
     }
   },
   {

@@ -172,6 +172,39 @@ export class Many {}
     }
   });
 
+  it('drops one with a part a browser drops, whole, with a warning', async () => {
+    const mod = await build(
+      'refused-part',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-refused-part',
+  imports: [View],
+  template: \`
+    <view nativeID="sheet" class="p"></view>
+    <view nativeID="negative" class="p" style="padding: 1px -1px"></view>
+    <view nativeID="math" class="p" style="padding: 1px calc(1px + 2)"></view>
+  \`,
+  styles: '.p { padding: 3px; }',
+})
+export class RefusedPart {}
+`,
+    );
+    const warnings: string[] = [];
+    mock.method(console, 'warn', (message: string) => warnings.push(message));
+    try {
+      const { fabric } = await render(mod['RefusedPart'] as Type<unknown>, { dev: true });
+      assert.deepEqual(styleOf(fabric, 'negative', padding), styleOf(fabric, 'sheet', padding));
+      assert.deepEqual(styleOf(fabric, 'math', padding), styleOf(fabric, 'sheet', padding));
+      assert.equal(warnings.length, 2, warnings.join('\n'));
+      assert.match(warnings[0]!, /padding: 1px -1px.*negative, in paddingRight.*dropped/);
+      assert.match(warnings[1]!, /padding: 1px calc\(1px \+ 2\).*no type.*paddingRight.*dropped/);
+    } finally {
+      mock.restoreAll();
+    }
+  });
+
   it('follows a binding to one value, and to none', async () => {
     const mod = await build(
       'bound',

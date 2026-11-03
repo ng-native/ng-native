@@ -180,6 +180,35 @@ describe('the props with nothing below zero', () => {
     assert.equal(width(), 7);
   });
 
+  it('refuses a negative written out on the element, and keeps one where CSS takes it', () => {
+    const fabric = createFakeFabric();
+    const sheet = compileCss('.c { width: 7px; margin-top: 7px; opacity: 0.7; padding: 7px }');
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const renderer = new NativeRendererFactory(engine).createRenderer(null, null);
+    const node = renderer.createElement('view') as EngineNode;
+    renderer.setAttribute(node, 'class', 'c');
+    renderer.appendChild(engine.root, node);
+    const committed = (key: string) => {
+      engine.commit();
+      return (fabric.committed[0]!.props as Record<string, unknown>)[key];
+    };
+    renderer.setStyle(node, 'width', '-4px');
+    assert.equal(committed('width'), 7, 'refused, so the rule shows');
+    renderer.setStyle(node, 'width', '-0px');
+    assert.ok(committed('width') === 0, 'a zero with a sign is no negative');
+    // A margin takes a negative, and `opacity` clamps one, so neither is refused.
+    renderer.setStyle(node, 'margin-top', '-4px');
+    assert.equal(committed('marginTop'), -4);
+    renderer.setStyle(node, 'opacity', '-1');
+    assert.notEqual(committed('opacity'), 0.7);
+    // A shorthand refused whole takes out the sides it set before.
+    renderer.setStyle(node, 'padding', '1px 2px');
+    assert.equal(committed('paddingRight'), 2);
+    renderer.setStyle(node, 'padding', '1px -1px');
+    assert.equal(committed('paddingRight'), 7);
+    assert.equal(committed('paddingTop'), 7);
+  });
+
   it('leaves a negative written in a token unset, in a rule and on the element', () => {
     const fabric = createFakeFabric();
     const sheet = compileCss(

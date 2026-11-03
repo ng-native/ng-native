@@ -38,6 +38,7 @@ import { cssValues, MIXED_SHORTHANDS, type ReadShorthand } from './inline-shorth
 import { PLATFORM_NATIVE_ID } from './platform-id.ts';
 import {
   boundMath,
+  boundRefusal,
   Engine,
   cssTrim,
   firstFamily,
@@ -210,6 +211,28 @@ function longhands(key: string, value: unknown): [string, string][] | typeof REF
       ['columnGap', second],
     ];
   return [first, second, third, fourth].map((part, side) => [sideOf(key, side), part]);
+}
+
+/**
+ * Why a browser drops a shorthand set on an element: more values than it takes, or a part it drops,
+ * which drops the whole shorthand, `padding: 1px -1px`. Undefined for one it takes.
+ */
+function shorthandRefusal(
+  key: string,
+  sides: [string, string][] | typeof REFUSED,
+): string | undefined {
+  if (sides !== REFUSED) return refusedPart(sides);
+  if (key === 'flex') return 'flex takes a grow, a shrink and a basis';
+  return `${key} takes ${key === 'gap' ? 'two' : 'four'} values at most`;
+}
+
+/** Why a browser drops one of a shorthand's parts, as `boundRefusal` says, with the part's name. */
+function refusedPart(sides: readonly [string, string][]): string | undefined {
+  for (const [side, part] of sides) {
+    const why = boundRefusal(side, part);
+    if (why !== undefined) return `${why}, in ${side}`;
+  }
+  return undefined;
 }
 
 /** A number as `flex` takes a grow or a shrink: no sign, and no unit. */
@@ -488,16 +511,12 @@ class NativeRenderer implements Renderer2 {
     if (mixed) return this.setMixedShorthand(el, key, value, mixed);
     if (!SHORTHANDS.has(key)) return false;
     const sides = longhands(key, value);
-    this.dropLonghands(el, key, sides === REFUSED ? null : sides);
+    const refusal = sides ? shorthandRefusal(key, sides) : undefined;
+    this.dropLonghands(el, key, refusal || sides === REFUSED ? null : sides);
     if (!sides) return false;
     this.removeStyle(el, key);
-    if (sides === REFUSED) {
-      const most = key === 'gap' ? 'two' : 'four';
-      const why =
-        key === 'flex'
-          ? 'flex takes a grow, a shrink and a basis'
-          : `${key} takes ${most} values at most`;
-      this.engine.reportDroppedDeclaration(key, String(value), el.tag, why);
+    if (refusal || sides === REFUSED) {
+      this.engine.reportDroppedDeclaration(key, String(value), el.tag, refusal!);
       return true;
     }
     (writtenAs.get(el) ?? writtenAs.set(el, new Map()).get(el)!).set(

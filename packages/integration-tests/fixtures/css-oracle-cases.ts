@@ -608,11 +608,24 @@ const MATH_RANGE_CASES = (
   inStyle(property, value, measured),
 ]);
 
-/** A negative written out, which the same properties refuse, unlike a math function. */
+/**
+ * A negative written out, which the same properties refuse, unlike a math function, in a rule and
+ * in a style. One number alone in an inline `flex` stays React Native's own `flex`. A block box
+ * commits no gap and no basis, so a style's is told from the rule's only in a rule.
+ */
+const RULE_ONLY = new Set(['flex', 'gap', 'row-gap', 'flex-basis']);
+
 const WRITTEN_NEGATIVE_CASES = (
   [
     ['width', '-4px', 'width'],
     ['width', '-10%', 'width'],
+    ['width', '-1em', 'width'],
+    ['width', '-1rem', 'width'],
+    ['width', '-10vw', 'width'],
+    ['padding', '-1px', 'padding-top'],
+    ['padding', '1px -1px', 'padding-top'],
+    ['gap', '1px -1px', 'row-gap'],
+    ['border-radius', '1px -1px', 'border-top-left-radius'],
     ['min-height', '-4px', 'min-height'],
     ['padding-left', '-2px', 'padding-left'],
     ['padding', '1px -5px', 'padding-top'],
@@ -629,7 +642,10 @@ const WRITTEN_NEGATIVE_CASES = (
     ['line-height', '-1px', 'line-height'],
     ['aspect-ratio', '-1', 'aspect-ratio'],
   ] as const
-).map(([property, value, measured]) => inRule(property, value, measured, true));
+).flatMap(([property, value, measured]): OracleCase[] => [
+  inRule(property, value, measured, true),
+  ...(RULE_ONLY.has(property) ? [] : [inStyle(property, value, measured)]),
+]);
 
 /**
  * A math function that CSS types as nothing: a length and a number do not add, and do not compare.
@@ -652,6 +668,7 @@ const MATH_TYPE_CASES = [
       ['width', 'max(2, 1px)', 'width'],
       ['width', 'clamp(1px, 2, 3px)', 'width'],
       ['padding-left', 'calc(1px + 2)', 'padding-left'],
+      ['padding', '1px calc(1px + 2)', 'padding-top'],
       ['margin', 'calc(1px + 2)', 'margin-top'],
       ['font-size', 'calc(1px + 2)', 'font-size'],
       ['line-height', 'calc(1px + 2)', 'line-height'],
