@@ -9844,7 +9844,7 @@ export class Engine implements HostEngine {
    * stays where it is, and is placed against its page by `settleAbsolute`.
    */
   private refix(node: EngineNode, position: unknown): void {
-    if (node.fixedTo !== undefined) return;
+    if (node.fixedTo !== undefined) return this.unpinFixed(node, position);
     // A view that is moved loses its touch: one a finger is on is moved when the finger lifts.
     if (isWithin(this.fingerOn, node)) return void this.fixedUnderFinger.add(node);
     const page = position === 'fixed' ? this.pageOf(node) : this.placedAbove(node);
@@ -9855,6 +9855,22 @@ export class Engine implements HostEngine {
     const held = this.fixedIn.get(page) ?? new Set();
     this.fixedIn.set(page, held.add(node));
     this.fixedLate.add(node);
+  }
+
+  /**
+   * Let a fixed box committed under its page go back under its parent, once nothing has it there:
+   * it has a width of its own, and nothing between it and its page scrolls or clips. Asked as it
+   * is styled, before it is placed, so it is placed against its page from under its parent in
+   * the same commit (`settleAbsolute`).
+   */
+  private unpinFixed(node: EngineNode, position: unknown): void {
+    const page = node.fixedTo!;
+    if (position !== 'fixed' || this.pinsToPage(node, page, position)) return;
+    if (fixedToContent(node, position)) return;
+    // A view that is moved loses its touch: one a finger is on goes when the finger lifts.
+    if (isWithin(this.fingerOn, node)) return void this.fixedUnderFinger.add(node);
+    this.fixedIn.get(page)?.delete(node);
+    node.fixedTo = undefined;
   }
 
   /**
@@ -9893,10 +9909,8 @@ export class Engine implements HostEngine {
     if (this.stillCommitted(child, context)) return true;
     this.styles.resolve(child, this.styleEpoch);
     const position = readStyle(child, 'position');
-    // A fixed box under its page for its width alone goes back once it has one: see `refix`.
-    if (position === 'fixed') {
-      return this.pinsToPage(child, child.fixedTo!, position) || fixedToContent(child, position);
-    }
+    // One that is to go back under its parent is let go as it is styled: see `unpinFixed`.
+    if (position === 'fixed') return true;
     // An absolute one, for as long as it is placed against the same box and still clipped.
     const above = position === 'absolute' ? this.placedAbove(child) : null;
     if (above === child.fixedTo && above && this.scrollsOrClips(child, above)) return true;

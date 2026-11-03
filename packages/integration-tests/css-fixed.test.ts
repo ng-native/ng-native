@@ -310,7 +310,7 @@ describe('a fixed box that stays in place', () => {
       const { left, top, width, height } = fabric.box(name);
       return [left, top, width, height];
     };
-    return { engine, nodes, box };
+    return { engine, nodes, box, fabric };
   }
 
   it('is placed against the screen, not the box it is written in', () => {
@@ -360,6 +360,30 @@ describe('a fixed box that stays in place', () => {
     assert.deepEqual(s.box('bar'), [0, 10, 400, 40]);
     s.engine.setClasses(s.nodes.get('off')!, 'moved');
     assert.deepEqual(s.box('bar'), [0, 10, 400, 40]);
+  });
+
+  it('stays on the screen when it goes back under a box that no longer clips', () => {
+    // Under its page while the box it is written in clips, and back under that box once it no
+    // longer does and the bar is styled again: placed against the screen either way.
+    const css =
+      `${OFF} .clip { overflow: hidden } .bar { position: fixed; top: 10px; left: 0; right: 0;` +
+      ' height: 40px } .tall { height: 50px }';
+    const s = laidOut(css, ['off', ['bar']]);
+    s.engine.setClasses(s.nodes.get('off')!, 'off clip');
+    // Committed at the root, or in the view a page's fixed boxes are committed in, which has no name.
+    const atRoot = (all: readonly FakeFabricNode[]): boolean =>
+      all.some((node) =>
+        node.props['nativeID'] === undefined
+          ? atRoot(node.children)
+          : node.props['nativeID'] === 'bar',
+      );
+    const under = () => atRoot(s.fabric.committed);
+    assert.deepEqual(s.box('bar'), [0, 10, 400, 40]);
+    assert.equal(under(), true, 'under its page while the box clips');
+    s.engine.setClasses(s.nodes.get('off')!, 'off');
+    s.engine.setClasses(s.nodes.get('bar')!, 'bar tall');
+    assert.deepEqual(s.box('bar'), [0, 10, 400, 50]);
+    assert.equal(under(), false, 'back under the box it is written in');
   });
 
   it('settles in the commit it was changed in, with no pass left over', () => {
@@ -428,7 +452,7 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
   // Chrome's values, with the layout reset, at ten points a character in a 400 point screen.
   const SHORT = 'abcdefg abcdefg abcdefg';
   const LONG = `${SHORT} ${SHORT}`;
-  const NARROW = '.narrow { width: 100px; height: 300px }';
+  const NARROW = '.narrow { width: 100px; height: 300px; margin-top: 30px; margin-left: 20px }';
 
   function laidOut(css: string, text: string) {
     const fabric = createLaidOutFabric();
@@ -495,6 +519,18 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
     assert.deepEqual([s.underItsParent(), s.box()], [true, [0, 300, 40]]);
     s.engine.setProp(s.fixed, 'style', null);
     assert.deepEqual([s.underItsParent(), s.box()], [false, [0, 390, 40]]);
+  });
+
+  it('waits for a finger on it to lift before it goes back under its parent', () => {
+    const css = '.box { position: fixed; top: 0; left: 0 } .sized { width: 300px }';
+    const s = laidOut(css, LONG);
+    assert.equal(s.underItsParent(), false);
+    const point = { identifier: 0, pageX: 10, pageY: 10 };
+    s.engine.dispatchEvent(s.fixed, 'topTouchStart', { ...point, touches: [point] });
+    s.engine.setClasses(s.fixed, 'box sized');
+    assert.deepEqual([s.underItsParent(), s.box()], [false, [0, 300, 40]]);
+    s.engine.dispatchEvent(s.fixed, 'topTouchEnd', { ...point, touches: [] });
+    assert.deepEqual([s.underItsParent(), s.box()], [true, [0, 300, 40]]);
   });
 
   it('settles in the commit it appears in, with no pass left over', () => {
