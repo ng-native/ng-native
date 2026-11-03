@@ -21,6 +21,8 @@ export interface TextRecognitionOptions {
    * The languages to read, most likely first, as BCP 47 codes (`en-GB`, `fr-FR`). Left out,
    * Vision detects the language. A code Vision does not list reads as the first variant of the
    * same language it does (`en-GB` as `en-US`); a language it has no variant of rejects the call.
+   * Chinese and Cantonese go by script: `zh-TW`, `zh-HK` and `zh-MO` read Traditional, other
+   * regions Simplified, and a script in the code (`zh-Hant`) wins.
    */
   readonly languages?: readonly string[];
   /** `accurate` (the default) reads more, more slowly. `fast` suits a live preview. */
@@ -87,8 +89,31 @@ export class TextRecognition {
    * a downloaded asset gives. Rejects when the image cannot be read.
    */
   recognize(imageUri: string, options: TextRecognitionOptions = {}): Promise<RecognizedText> {
-    return this.native ? this.native.recognize(imageUri, options) : Promise.reject(missing());
+    if (!this.native) return Promise.reject(missing());
+    const languages = options.languages?.map(byScript);
+    return this.native.recognize(imageUri, languages ? { ...options, languages } : options);
   }
+}
+
+/** The languages Vision lists by script rather than by region: `zh-Hant`, `yue-Hans`. */
+const SCRIPTED = new Set(['zh', 'yue']);
+
+/** Where Chinese is written in Traditional characters. */
+const TRADITIONAL = new Set(['TW', 'HK', 'MO']);
+
+/**
+ * `code` as Vision names it. Chinese and Cantonese are named by script: one the code gives wins,
+ * and otherwise Taiwan, Hong Kong and Macau write Traditional and the rest Simplified. Vision
+ * would match `zh-TW` to the first Chinese it lists, which is Simplified.
+ */
+function byScript(code: string): string {
+  const [language = '', ...rest] = code.split('-');
+  const lower = language.toLowerCase();
+  if (!SCRIPTED.has(lower)) return code;
+  const script = rest.find((part) => /^[a-z]{4}$/i.test(part));
+  if (script) return `${lower}-${script[0]!.toUpperCase()}${script.slice(1).toLowerCase()}`;
+  const traditional = rest.some((part) => TRADITIONAL.has(part.toUpperCase()));
+  return `${lower}-${traditional ? 'Hant' : 'Hans'}`;
 }
 
 function missing(): MissingModuleError {

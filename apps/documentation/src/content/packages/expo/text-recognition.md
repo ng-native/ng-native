@@ -80,6 +80,11 @@ The options:
   code it does not list reads as the first variant of the same language it does: `en-GB` as
   `en-US`, `pt-PT` as `pt-BR`. A language it has no variant of at the chosen level rejects the
   call, and the error lists the ones it can. `fast` reads fewer languages than `accurate`.
+
+  Chinese and Cantonese go by script, as Vision lists them: `zh-TW`, `zh-HK` and `zh-MO` read
+  Traditional (`zh-Hant`), other regions Simplified (`zh-Hans`), and a script in the code, such as
+  `zh-Hant-CN`, wins. `yue` codes do the same.
+
 - `level`: `accurate`, the default, reads more and takes longer. `fast` suits a quick check.
 
 A file that is not an image, or a URI that is not a file, rejects with `ERR_IMAGE_LOAD`. A failure

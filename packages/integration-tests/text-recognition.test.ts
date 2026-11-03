@@ -62,6 +62,38 @@ describe('TextRecognition', () => {
     assert.deepEqual(fake.asked[0]!.options, {});
   });
 
+  it('asks for Chinese and Cantonese by script, which is how Vision lists them', async () => {
+    const fake = fakeNative();
+    const asked = {
+      'zh-TW': 'zh-Hant',
+      'zh-HK': 'zh-Hant',
+      'zh-MO': 'zh-Hant',
+      'zh-tw': 'zh-Hant',
+      'ZH-TW': 'zh-Hant',
+      'zh-HANT': 'zh-Hant',
+      'zh-cmn-TW': 'zh-Hant',
+      'zh-CN': 'zh-Hans',
+      'zh-SG': 'zh-Hans',
+      zh: 'zh-Hans',
+      'zh-Hant': 'zh-Hant',
+      'zh-hant': 'zh-Hant',
+      'zh-Hant-CN': 'zh-Hant',
+      'zh-Hans-TW': 'zh-Hans',
+      'yue-HK': 'yue-Hant',
+      yue: 'yue-Hans',
+      'en-GB': 'en-GB',
+      'sr-Latn': 'sr-Latn',
+    };
+    await withSource(fake.native).recognize('file:///photo.jpg', {
+      languages: Object.keys(asked),
+      level: 'fast',
+    });
+    assert.deepEqual(fake.asked[0]!.options, {
+      languages: Object.values(asked),
+      level: 'fast',
+    });
+  });
+
   it('is available with the module', () => {
     assert.equal(withSource(fakeNative().native).available(), true);
   });
