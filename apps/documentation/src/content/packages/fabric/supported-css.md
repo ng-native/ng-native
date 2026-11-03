@@ -404,7 +404,8 @@ between a `left` and a `right`, where Yoga would stretch it: the engine fits it 
 they leave, reading its width back, at the cost of two more commits when something in it changes.
 A `flex-basis` of a percentage in such a box, or in any box that is fitted, is a share of the
 width it comes to, as in a browser; `0%` stays at the item's content. While that width is worked
-out, the item counts for its own `width` where it has one, and for its content where it has none.
+out, the item counts for its own `width` where that is a length, and for its content where it
+has none or its `width` is a percentage, which is of the width being worked out.
 `min-content` is dropped with a warning, as is `fit-content` on `min-width`, `max-width`,
 `min-height` and `max-height`.
 
