@@ -5853,8 +5853,14 @@ function numberFrom(prop: string, kind: TokenKind, math: MathValue): number | st
   const value = inRange(prop, rounded(share ? math.percent / 100 : math.value));
   if (kind === 'weight') return String(value);
   if (kind !== 'number') return undefined;
-  return prop === 'zIndex' ? Math.round(value) : value;
+  return prop === 'zIndex'
+    ? Math.min(Math.max(Math.round(value), Z_INDEX_MIN), Z_INDEX_MAX)
+    : value;
 }
+
+/** The range of a z-index, a 32-bit integer in Chrome and in React Native. */
+const Z_INDEX_MIN = -(2 ** 31);
+const Z_INDEX_MAX = 2 ** 31 - 1;
 
 /** A bound colour made of tokens, worked out where it is used; null for any other value. */
 function derivedColour(

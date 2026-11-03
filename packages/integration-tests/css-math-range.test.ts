@@ -151,6 +151,8 @@ describe('a math function of a length and a number in a stylesheet', () => {
       // lightningcss rounds a tie to the nearest away from zero, -2, where Chrome gives -1.
       'round(-1.5, 1)',
       'calc(round(nearest, 2.5, 1) * 2)',
+      'ROUND(-1.5, 1)',
+      'calc(ROUND(NEAREST, -1.5, 1) + 1)',
     ]) {
       const { sheet, warnings } = compiled(`.a { z-index: ${value} }`);
       assert.equal(sheet.rules.length, 0, value);

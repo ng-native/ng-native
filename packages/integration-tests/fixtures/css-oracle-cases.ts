@@ -763,14 +763,29 @@ const MATH_RANGE_CASES = (
 
 /**
  * A z-index in a rule only, as the engine reads no `sqrt()` or `round()` in a style: one that comes
- * to NaN, which CSS reads as 0, and a `round()` lightningcss rounds as CSS does.
+ * to NaN, which CSS reads as 0, a `round()` lightningcss rounds as CSS does, with an interval of
+ * either sign, and one past the range of an integer, which Chrome clamps to that range.
  */
 const SHEET_Z_INDEX_CASES = [
   'sqrt(-1)',
   'calc(sqrt(-1) + 1)',
   'round(up, -1.5, 1)',
   'round(to-zero, -1.5, 1)',
+  'round(up, 3, -2)',
+  'round(down, 3, -2)',
+  'round(to-zero, -3, -2)',
+  'calc(infinity)',
+  'calc(-infinity)',
+  'calc(1e20)',
+  'round(UP, -1.5, 1)',
+  'ROUND(UP, 3, -2)',
+  'calc(round(down, 3, -2) + 1)',
 ].map((value) => inRule('z-index', value, 'z-index', false));
+
+/** A z-index of math past the range of an integer, in a style: Chrome clamps it to that range. */
+const STYLE_Z_INDEX_CASES = ['calc(1e20)', 'calc(-1e20)'].map((value) =>
+  inStyle('z-index', value, 'z-index'),
+);
 
 /**
  * A negative written out, which the same properties refuse, unlike a math function, in a rule and
@@ -936,6 +951,7 @@ const TOKEN_NEGATIVE_CASES = [
 export const CASES: OracleCase[] = [
   ...MATH_RANGE_CASES,
   ...SHEET_Z_INDEX_CASES,
+  ...STYLE_Z_INDEX_CASES,
   ...TOKEN_NEGATIVE_CASES,
   ...WRITTEN_NEGATIVE_CASES,
   ...MATH_TYPE_CASES,

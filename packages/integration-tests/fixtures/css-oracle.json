@@ -672,6 +672,94 @@
     }
   },
   {
+    "name": "a rule's z-index: round(up, 3, -2), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "4"
+    }
+  },
+  {
+    "name": "a rule's z-index: round(down, 3, -2), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "2"
+    }
+  },
+  {
+    "name": "a rule's z-index: round(to-zero, -3, -2), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-2"
+    }
+  },
+  {
+    "name": "a rule's z-index: calc(infinity), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "2147483647"
+    }
+  },
+  {
+    "name": "a rule's z-index: calc(-infinity), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-2147483648"
+    }
+  },
+  {
+    "name": "a rule's z-index: calc(1e20), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "2147483647"
+    }
+  },
+  {
+    "name": "a rule's z-index: round(UP, -1.5, 1), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-1"
+    }
+  },
+  {
+    "name": "a rule's z-index: ROUND(UP, 3, -2), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "4"
+    }
+  },
+  {
+    "name": "a rule's z-index: calc(round(down, 3, -2) + 1), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "3"
+    }
+  },
+  {
+    "name": "an inline z-index: calc(1e20), read as z-index, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "2147483647"
+    }
+  },
+  {
+    "name": "an inline z-index: calc(-1e20), read as z-index, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-2147483648"
+    }
+  },
+  {
     "name": "a negative in max-width, in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",
