@@ -208,7 +208,12 @@ function assertFamily(style: Record<string, unknown>, browser: string): void {
 }
 
 /** One of a case's extra properties against what the browser computed for it. */
-function assertExtra(property: ExtraProperty, style: Record<string, unknown>, browser: string) {
+function assertExtra(
+  property: ExtraProperty,
+  style: Record<string, unknown>,
+  browser: string,
+  committed: boolean,
+) {
   if (property === 'display') {
     // Every view is flex when display is unset. A block container and a grid are kept as the
     // browser has them, for the engine to lay out, and so are none and contents and the boxes
@@ -229,8 +234,9 @@ function assertExtra(property: ExtraProperty, style: Record<string, unknown>, br
   const read = readFrom(property, style).map((key) => style[key]);
   let ours = read.find((value) => value != null) ?? NATIVE_INITIAL[property];
   // A commit sends a font size of 0 as one too small to see, which native takes: see
-  // `UNSEEN_FONT_SIZE` in the engine, and `css-font-size-zero.test.ts`.
-  if (property === 'font-size' && ours === 0.001) ours = 0;
+  // `UNSEEN_FONT_SIZE` in the engine, and `css-font-size-zero.test.ts`. What the resolver
+  // settles is compared as it is.
+  if (committed && property === 'font-size' && browser === '0px' && ours === 0.001) ours = 0;
   const unit = UNITLESS.has(property) ? '' : 'px';
   const value = typeof ours === 'number' ? `${ours}${unit}` : ours;
   assert.equal(value, legacyColour(browser), property);
@@ -329,7 +335,7 @@ describe('what a browser does with the same stylesheet', () => {
           assert.equal(style['aspectRatio'], parseFloat(browser), property);
         } else if (property === 'transform') {
           assert.equal(matrixOf(style['transform'] as TransformList), browser, property);
-        } else assertExtra(property, style, browser);
+        } else assertExtra(property, style, browser, test.inline !== undefined);
       }
     });
   });
