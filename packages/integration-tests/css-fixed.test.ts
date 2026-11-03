@@ -549,26 +549,245 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
     return { engine, fixed, box, at, underItsParent };
   }
 
-  it('keeps its static position on an axis it has no inset on, where Chrome has it', () => {
-    // Chrome's [x, y], the box written in a 100 point box at 20 across and 30 down. Committed
-    // under its page, it would be at the page's own start on that axis.
-    for (const [style, inset, place] of [
-      ['left: 0', { left: 0 }, [0, 30]],
-      ['left: 0; width: auto', { left: 0, width: 'auto' }, [0, 30]],
-      ['left: 0; top: auto', { left: 0, top: 'auto' }, [0, 30]],
-      ['top: 0', { top: 0 }, [20, 0]],
-      ['', {}, [20, 30]],
-    ] as const) {
-      const fromSheet = laidOut(`.box { position: fixed; ${style} }`, LONG);
-      const element = laidOut('', LONG);
-      element.engine.setProp(element.fixed, 'style', { position: 'fixed', ...inset });
-      for (const [way, s] of [
-        ['a sheet', fromSheet],
-        ['a value set on the element', element],
-      ] as const) {
-        assert.deepEqual(s.at(), place, `${style || 'no insets'}, by ${way}`);
+  /** Run `check` on iOS and on Android, which commits every fixed box under its page. */
+  const onBoth = (check: () => void) => {
+    try {
+      for (const platform of ['ios', 'android']) {
+        registerPlatformComponents(platform);
+        check();
       }
+    } finally {
+      registerPlatformComponents('ios');
     }
+  };
+
+  it('keeps its static position on an axis it has no inset on, where Chrome has it', () =>
+    onBoth(() => {
+      // Chrome's [x, y], the box written in a 100 point box at 20 across and 30 down, and its
+      // height: wrapped in the room right of where it starts. Under its page all the same.
+      for (const [style, inset, place] of [
+        ['left: 0', { left: 0 }, [0, 30, 40]],
+        ['left: 0; width: auto', { left: 0, width: 'auto' }, [0, 30, 40]],
+        ['left: 0; top: auto', { left: 0, top: 'auto' }, [0, 30, 40]],
+        ['top: 0', { top: 0 }, [20, 0, 40]],
+        ['', {}, [20, 30, 40]],
+        ['left: auto; top: auto', { left: 'auto', top: 'auto' }, [20, 30, 40]],
+        // React Native's names for a logical inset, on the element.
+        ['inset-inline-start: 0', { insetInlineStart: 0 }, [0, 30, 40]],
+        ['inset-block-start: 0', { insetBlockStart: 0 }, [20, 0, 40]],
+      ] as const) {
+        const fromSheet = laidOut(`.box { position: fixed; ${style} }`, LONG);
+        const element = laidOut('', LONG);
+        element.engine.setProp(element.fixed, 'style', { position: 'fixed', ...inset });
+        for (const [way, s] of [
+          ['a sheet', fromSheet],
+          ['a value set on the element', element],
+        ] as const) {
+          const name = `${style || 'no insets'}, by ${way}`;
+          assert.deepEqual([...s.at(), s.box()[2]], place, name);
+          assert.equal(s.underItsParent(), false, name);
+        }
+      }
+    }));
+
+  it('keeps the static position its parent gives it: padding, alignment and direction', () =>
+    onBoth(() => {
+      // Chrome's [x, y] for a box three characters wide, in the same 100 by 300 point box.
+      const PAD = { paddingTop: 10, paddingBottom: 10, paddingLeft: 15, paddingRight: 15 };
+      const CENTRED = { alignItems: 'center', justifyContent: 'center' } as const;
+      const END = { alignItems: 'flex-end', justifyContent: 'flex-end' } as const;
+      const ROW = { flexDirection: 'row', ...CENTRED } as const;
+      const RTL = { direction: 'rtl' } as const;
+      for (const [parentCss, parentStyle, boxCss, place] of [
+        ['padding: 10px 15px', PAD, '', [35, 40]],
+        ['padding: 10px 15px', PAD, 'left: 0', [0, 40]],
+        ['padding: 10px 15px', PAD, 'top: 0', [35, 0]],
+        ['align-items: center; justify-content: center', CENTRED, '', [55, 170]],
+        ['align-items: center; justify-content: center', CENTRED, 'left: 0', [0, 170]],
+        ['align-items: center; justify-content: center', CENTRED, 'top: 0', [55, 0]],
+        ['align-items: flex-end; justify-content: flex-end', END, '', [90, 310]],
+        ['flex-direction: row; align-items: center; justify-content: center', ROW, '', [55, 170]],
+        ['direction: rtl', RTL, '', [90, 30]],
+        ['direction: rtl', RTL, 'top: 0', [90, 0]],
+        ['direction: rtl', RTL, 'left: 0', [0, 30]],
+        ['direction: rtl; padding: 10px 15px', { ...RTL, ...PAD }, '', [75, 40]],
+        [
+          'direction: rtl; padding: 10px 15px; border-width: 2px',
+          { ...RTL, ...PAD, borderWidth: 2 },
+          '',
+          [73, 42],
+        ],
+        ['direction: rtl; align-items: flex-end', { ...RTL, alignItems: 'flex-end' }, '', [20, 30]],
+        ['direction: rtl; flex-direction: row', { ...RTL, flexDirection: 'row' }, '', [90, 30]],
+        [
+          'direction: rtl; flex-direction: row-reverse',
+          { ...RTL, flexDirection: 'row-reverse' },
+          '',
+          [20, 30],
+        ],
+        ['flex-direction: row-reverse', { flexDirection: 'row-reverse' }, '', [90, 30]],
+        ['flex-direction: column-reverse', { flexDirection: 'column-reverse' }, '', [20, 310]],
+        [
+          'flex-direction: row; justify-content: flex-end',
+          { flexDirection: 'row', justifyContent: 'flex-end' },
+          '',
+          [90, 30],
+        ],
+        ['justify-content: space-between', { justifyContent: 'space-between' }, '', [20, 30]],
+        ['justify-content: space-around', { justifyContent: 'space-around' }, '', [20, 170]],
+        ['', {}, 'align-self: center', [55, 30]],
+        ['align-items: center', { alignItems: 'center' }, 'margin-left: 10px', [60, 30]],
+        ['padding: 10px 15px; border-width: 2px', { ...PAD, borderWidth: 2 }, '', [37, 42]],
+        // A block does not align its children by either.
+        [
+          'display: block; align-items: center; justify-content: center',
+          { display: 'block', ...CENTRED },
+          '',
+          [20, 30],
+        ],
+        ['display: block; direction: rtl', { display: 'block', ...RTL }, '', [90, 30]],
+      ] as const) {
+        const box = `.box { position: fixed; ${boxCss} }`;
+        const fromSheet = laidOut(`.narrow { ${parentCss} } ${box}`, 'abc');
+        const element = laidOut(box, 'abc');
+        element.engine.setProp(element.fixed.parent!, 'style', parentStyle);
+        for (const [way, s] of [
+          ['a sheet', fromSheet],
+          ['a value set on the parent', element],
+        ] as const) {
+          const name = `${parentCss}, ${boxCss || 'no insets'}, by ${way}`;
+          assert.deepEqual(s.at(), place, name);
+          assert.equal(s.underItsParent(), false, name);
+        }
+      }
+    }));
+
+  it('takes the direction its parent inherits, and the padding at that start', () =>
+    onBoth(() => {
+      // Chrome's: right to left from a box around the parent, with 15 points at its start.
+      for (const [way, sheet, set] of [
+        ['a sheet', '.around { direction: rtl } .narrow { padding-inline-start: 15px }', null],
+        ['a value set on each', '', { direction: 'rtl' }],
+      ] as const) {
+        const s = laidOut(`${sheet} .box { position: fixed }`, 'abc');
+        const narrow = s.fixed.parent!;
+        const around = s.engine.createElement('view');
+        s.engine.setClasses(around, 'around');
+        s.engine.removeChild(s.engine.root, narrow);
+        s.engine.appendChild(s.engine.root, around);
+        s.engine.appendChild(around, narrow);
+        if (set) {
+          s.engine.setProp(around, 'style', set);
+          s.engine.setProp(narrow, 'style', { paddingStart: 15 });
+        }
+        assert.deepEqual(s.at(), [75, 30], way);
+      }
+    }));
+
+  it('stays where it is as a scroll view it is in scrolls, which moves what native reads', () => {
+    // Native reads a box in a scroll view where it has scrolled to, and a browser keeps a fixed
+    // box where it was laid out: left at its page's start, it does not follow the scrolling.
+    const fabric = createLaidOutFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(
+        '.content { padding-top: 50px } .box { position: fixed; left: 0 }',
+        'app.css',
+      ) as never,
+      conditions: { width: 400, height: 800, colorScheme: 'light' },
+    });
+    const scroll = engine.createElement('scroll-view');
+    const content = engine.createElement('view');
+    engine.setClasses(content, 'content');
+    const box = engine.createElement('view');
+    engine.setClasses(box, 'box');
+    engine.setProp(box, 'nativeID', 'box');
+    engine.appendChild(engine.root, scroll);
+    engine.appendChild(scroll, content);
+    engine.appendChild(content, box);
+    const at = () => {
+      engine.commit();
+      return fabric.box('box').top;
+    };
+    const first = at();
+    const read = fabric.getBoundingClientRect!.bind(fabric);
+    // Scrolled down 100 points: every box read back is that much higher.
+    fabric.getBoundingClientRect = (handle, transform) => {
+      const rect = read(handle, transform);
+      return rect && [rect[0], rect[1] - 100, rect[2], rect[3]];
+    };
+    engine.setProp(box, 'style', { opacity: 0.5 });
+    assert.equal(at(), first);
+  });
+
+  it('is centred no wider than twice the room on the nearer side of its centre', () =>
+    onBoth(() => {
+      // Chrome's x for 23 characters centred in the 100 point box: 140 wide at 0, where Chrome
+      // wraps the text in those 140 and a native box is as wide as the text.
+      const centred = '.narrow { align-items: center; justify-content: center }';
+      const s = laidOut(`${centred} .box { position: fixed }`, SHORT);
+      assert.equal(s.at()[0], 0);
+    }));
+
+  it('follows its static position as its parent moves', () => {
+    const css = '.box { position: fixed; left: 0 } .lower { margin-top: 60px }';
+    const s = laidOut(css, 'abc');
+    assert.deepEqual([s.underItsParent(), s.at()], [false, [0, 30]]);
+    // Moved down by a box before it, which grows and goes.
+    const above = s.engine.createElement('view');
+    s.engine.setProp(above, 'style', { height: 25 });
+    s.engine.insertBefore(s.engine.root, above, s.fixed.parent!);
+    assert.deepEqual(s.at(), [0, 55]);
+    s.engine.setProp(above, 'style', { height: 45 });
+    assert.deepEqual(s.at(), [0, 75]);
+    s.engine.removeChild(s.engine.root, above);
+    assert.deepEqual(s.at(), [0, 30]);
+    s.engine.setClasses(s.fixed.parent!, 'narrow lower');
+    assert.deepEqual(s.at(), [0, 60]);
+    s.engine.setClasses(s.fixed.parent!, 'narrow');
+    assert.deepEqual(s.at(), [0, 30]);
+    // The same set on the parent, across and down, and re-centred in a parent that grows.
+    s.engine.setProp(s.fixed.parent!, 'style', { marginTop: 90, marginLeft: 50 });
+    assert.deepEqual(s.at(), [0, 90]);
+    s.engine.setProp(s.fixed, 'style', { left: 'auto' });
+    assert.deepEqual(s.at(), [50, 90]);
+    s.engine.setProp(s.fixed.parent!, 'style', { alignItems: 'center', width: 200 });
+    assert.deepEqual(s.at(), [105, 30]);
+    s.engine.setProp(s.fixed.parent!, 'style', null);
+    assert.deepEqual(s.at(), [20, 30]);
+  });
+
+  it('follows an inset coming and going on an axis', () => {
+    const css = '.box { position: fixed; left: 0 } .up { top: 5px }';
+    const s = laidOut(css, 'abc');
+    assert.deepEqual(s.at(), [0, 30]);
+    s.engine.setClasses(s.fixed, 'box up');
+    assert.deepEqual(s.at(), [0, 5]);
+    s.engine.setClasses(s.fixed, 'box');
+    assert.deepEqual(s.at(), [0, 30]);
+    // The same set on the element, on each axis.
+    s.engine.setProp(s.fixed, 'style', { top: 5 });
+    assert.deepEqual(s.at(), [0, 5]);
+    s.engine.setProp(s.fixed, 'style', { left: 'auto', top: 5 });
+    assert.deepEqual(s.at(), [20, 5]);
+    s.engine.setProp(s.fixed, 'style', { left: 'auto', right: 7, top: 5 });
+    assert.deepEqual(s.at(), [400 - 7 - 30, 5]);
+    s.engine.setProp(s.fixed, 'style', null);
+    assert.deepEqual(s.at(), [0, 30]);
+    assert.equal(s.underItsParent(), false);
+  });
+
+  it('keeps its static position as a width of its own comes and goes', () => {
+    const css = '.box { position: fixed; left: 0 } .sized { width: 300px }';
+    const s = laidOut(css, LONG);
+    assert.deepEqual([s.underItsParent(), s.at()], [false, [0, 30]]);
+    s.engine.setClasses(s.fixed, 'box sized');
+    assert.deepEqual([s.underItsParent(), s.at()], [true, [0, 30]]);
+    s.engine.setClasses(s.fixed, 'box');
+    assert.deepEqual([s.underItsParent(), s.at()], [false, [0, 30]]);
+    s.engine.setProp(s.fixed, 'style', { width: 300, left: 'auto' });
+    assert.deepEqual([s.underItsParent(), s.at()], [true, [20, 30]]);
+    s.engine.setProp(s.fixed, 'style', { left: 'auto' });
+    assert.deepEqual([s.underItsParent(), s.at()], [false, [20, 30]]);
   });
 
   it('wraps in the screen, and not in the box it is written in', () => {
@@ -635,8 +854,19 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
   });
 
   it('settles in the commit it appears in, with no pass left over', () => {
-    const s = laidOut('.box { position: fixed; top: 0; left: 0 }', SHORT);
-    assert.equal(s.engine.commit(), true);
-    assert.equal(s.engine.commit(), false);
+    // At its static position on an axis too, centred by its own size, and wider than the room
+    // its centre leaves it.
+    const centred = '.narrow { align-items: center; justify-content: center }';
+    for (const [css, text] of [
+      ['.box { position: fixed; top: 0; left: 0 }', SHORT],
+      ['.box { position: fixed; left: 0 }', SHORT],
+      ['.box { position: fixed }', LONG],
+      [`${centred} .box { position: fixed }`, 'abc'],
+      [`${centred} .box { position: fixed }`, LONG],
+    ] as const) {
+      const s = laidOut(css, text);
+      assert.equal(s.engine.commit(), true, css);
+      assert.equal(s.engine.commit(), false, css);
+    }
   });
 });
