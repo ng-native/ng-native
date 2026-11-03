@@ -54,6 +54,7 @@ import {
   onFontsSettled,
   platformColourOf,
   reportUnboundFormsInput,
+  splitOutside,
   styleSheetOf,
   type EngineNode,
   type EngineOptions,
@@ -117,19 +118,6 @@ function ratio(text: string): number | undefined {
   // Each side unrounded, so a small one still divides: only the ratio is rounded.
   const [width, height] = sides.map((side) => mathNumber(cssTrim(side)) ?? Number(cssTrim(side)));
   return width! > 0 && height! > 0 ? Math.round((width! / height!) * 1e5) / 1e5 : undefined;
-}
-
-/** `text` split on `separator` where it is outside brackets: `calc(16 / 9) / 1` in two. */
-function splitOutside(text: string, separator: string): string[] {
-  const parts = [''];
-  let depth = 0;
-  for (const char of text) {
-    if (char === '(') depth++;
-    else if (char === ')') depth--;
-    if (char === separator && depth === 0) parts.push('');
-    else parts[parts.length - 1] += char;
-  }
-  return parts;
 }
 
 /**

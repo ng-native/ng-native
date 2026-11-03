@@ -821,6 +821,8 @@ export class MathRows {
       ['color', 'calc(1px + 1px)'],
       ['flexGrow', 'calc(50%)'],
       ['aspectRatio', 'calc(1px)'],
+      ['aspectRatio', '1 / 0x10'],
+      ['aspectRatio', '1 / -2'],
       ['fontWeight', 'calc(1px)'],
     ];
     const LEFT: [string, string][] = [
@@ -838,6 +840,9 @@ export class MathRows {
       ['width', 'calc(2 + 1px + var(--x))'],
       ['scale', 'calc(1 + 1)'],
       ['flexGrow', 'calc(1 / 0)'],
+      ['aspectRatio', '16 / var(--x)'],
+      ['aspectRatio', 'auto 16 / 9'],
+      ['aspectRatio', 'inherit'],
       // A shape the reader gives up on, which is not a type it can name.
       ['width', 'clamp(1px, 2px)'],
       ['width', 'min()'],

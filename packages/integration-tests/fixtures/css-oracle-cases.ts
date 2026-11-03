@@ -952,10 +952,29 @@ const RATIO_PRECISION_CASES = (
     ['aspect-ratio', '0.000001 / calc(0.000002)', 'aspect-ratio'],
     ['aspect-ratio', '0.000001 / 0.000002', 'aspect-ratio'],
     ['aspect-ratio', '1 / 1000000', 'aspect-ratio'],
+    ['aspect-ratio', '1 / 1e2', 'aspect-ratio'],
   ] as const
 ).flatMap(([property, value, measured]): OracleCase[] => [
   inRule(property, value, measured, false),
   inStyle(property, value, measured),
+]);
+
+/**
+ * An aspect ratio with a side CSS reads no number from: hex and `Infinity`, which JavaScript reads
+ * as numbers, a negative, a length, or a third side. Chrome drops the declaration and keeps the
+ * weaker rule's ratio.
+ */
+const RATIO_SIDE_CASES = [
+  '1 / 0x10',
+  '1 / Infinity',
+  'Infinity / 1',
+  '0x10 / 1',
+  '-1 / 2',
+  '1 / 2 / 3',
+  'calc(1px) / 1',
+].flatMap((value): OracleCase[] => [
+  inRule('aspect-ratio', value, 'aspect-ratio', true),
+  inStyle('aspect-ratio', value, 'aspect-ratio'),
 ]);
 
 export const CASES: OracleCase[] = [
@@ -968,6 +987,7 @@ export const CASES: OracleCase[] = [
   ...INLINE_MATH_CASES,
   ...OPEN_TOKEN_CASES,
   ...RATIO_PRECISION_CASES,
+  ...RATIO_SIDE_CASES,
   ...SIGN_SPACE_CASES,
   {
     name: 'specificity: a class beats a type',

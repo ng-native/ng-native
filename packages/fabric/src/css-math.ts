@@ -300,6 +300,19 @@ export function mathNumber(text: string): number | undefined {
   return math?.type === 'number' ? Math.max(math.value, 0) : undefined;
 }
 
+/** `text` split on `separator` where it is outside brackets: `calc(16 / 9) / 1` in two. */
+export function splitOutside(text: string, separator: string): string[] {
+  const parts = [''];
+  let depth = 0;
+  for (const char of text) {
+    if (char === '(') depth++;
+    else if (char === ')') depth--;
+    if (char === separator && depth === 0) parts.push('');
+    else parts[parts.length - 1] += char;
+  }
+  return parts;
+}
+
 /** A math function that comes to a number, no less than 0, as `flex` takes one; any other text as it is. */
 export function mathNumberText(text: string): string {
   const number = mathNumber(text);

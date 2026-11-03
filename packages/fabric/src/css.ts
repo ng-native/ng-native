@@ -22,10 +22,12 @@ import {
 import { transformMathRefused } from './inline-transform.ts';
 import {
   MATH_FUNCTION,
+  mathNumber,
   mathRefused,
   mathValue,
   NEVER_NEGATIVE,
   rounded,
+  splitOutside,
   type MathValue,
 } from './css-math.ts';
 import { ELEMENT_STYLES } from './element-styles.ts';
@@ -5726,7 +5728,26 @@ const isNegativeWritten = (prop: string, text: string): boolean =>
 export function boundRefusal(prop: string, text: string): string | undefined {
   if (isNegativeWritten(prop, text)) return 'it is negative';
   if (isRefusedMath(prop, text)) return 'its math comes to no type it takes';
+  if (isRefusedRatio(prop, text)) return 'it is no ratio';
   return undefined;
+}
+
+/** A number CSS takes as a side of a ratio, the whole text: `16`, `1.5`, `1e2`. */
+const RATIO_SIDE = new RegExp(String.raw`^\s*\+?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?\s*$`, 'i');
+
+/**
+ * Whether `text` is an `aspect-ratio` of sides CSS reads no ratio from: more than two, or a side
+ * that is neither a number nor math of one. `0x10` and `Infinity` are numbers to JavaScript alone.
+ * Not one with a token, settled later, or with `auto`, which CSS takes beside a ratio.
+ */
+function isRefusedRatio(prop: string, text: string): boolean {
+  if (prop !== 'aspectRatio' || /var\(|auto/i.test(text)) return false;
+  const sides = splitOutside(text, '/');
+  if (sides.length === 1) return false;
+  return (
+    sides.length > 2 ||
+    sides.some((side) => !RATIO_SIDE.test(side) && mathNumber(side.trim()) === undefined)
+  );
 }
 
 type RelativeUnit = NonNullable<DeferredDeclaration['compute']>['unit'];
