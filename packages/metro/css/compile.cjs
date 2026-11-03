@@ -2936,6 +2936,7 @@ function holdsMarker(value) {
  * the same frames can be animating, and is refused.
  */
 function addFrameDeclaration(declaration, out, tokens, deferred, context) {
+  const before = { ...out };
   const waiting = [];
   addDeclaration(declaration, out, tokens, waiting, context);
   const [only] = waiting;
@@ -2944,7 +2945,13 @@ function addFrameDeclaration(declaration, out, tokens, deferred, context) {
     return;
   }
   if (waiting.some((one) => namesCurrentColour(one.within))) {
-    for (const one of waiting) for (const prop of one.props) delete out[prop];
+    // The value the frame gave before stays, as it does for any other value refused.
+    for (const one of waiting) {
+      for (const prop of one.props) {
+        if (Object.hasOwn(before, prop)) out[prop] = before[prop];
+        else delete out[prop];
+      }
+    }
     throw new CssUnsupported(
       `${context}: currentColor in a keyframe is the element's own colour, which the same ` +
         `frames can be animating, so only color can take it. Write the colour out.`,

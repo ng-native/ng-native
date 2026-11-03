@@ -454,6 +454,25 @@ describe('color: currentColor in a keyframe', () => {
       );
     }
   });
+
+  it('keeps the value a frame gave before one in currentColor it refuses', () => {
+    // As any other value a frame refuses: `width: 1px; width: foo()` keeps the 1px.
+    for (const [property, prop, value] of [
+      ['box-shadow', 'boxShadow', '0 0 4px'],
+      ['background-color', 'backgroundColor', ''],
+    ]) {
+      const warnings: string[] = [];
+      const sheet = compileCss(
+        `@keyframes k { from { ${property}: ${value} rgb(255, 0, 0); ${property}: ${value} currentColor } }`,
+        'frames',
+        { onUnsupported: (m: string) => warnings.push(m) },
+      ) as unknown as { keyframes: Record<string, { declarations: Record<string, unknown> }[]> };
+      const kept = sheet.keyframes['k']![0]!.declarations[prop];
+      const first = property === 'box-shadow' ? (kept as { color: unknown }[])[0]!.color : kept;
+      assert.equal(first, 'rgb(255, 0, 0)', property);
+      assert.equal(warnings.length, 1, property);
+    }
+  });
 });
 
 describe("a border whose width is a calc() of a token, as Bootstrap's .table-group-divider", () => {

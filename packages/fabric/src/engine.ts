@@ -15486,6 +15486,15 @@ export class Engine implements HostEngine {
     if (this.platformColours.has(report)) return;
     this.platformColours.add(report);
     const where = on === undefined ? props.join(', ') : `${props.join(', ')}, bound on <${on}>,`;
+    if (name === 'currentColor') {
+      console.warn(
+        `[angular-native] ${where} is drawn in currentColor, which is a platform colour here` +
+          ` (platform-color() or a system colour). The platform resolves that by name and it has` +
+          ` no channels to draw a shadow or a filter in, so the declaration is dropped. Give it a` +
+          ` colour written out.`,
+      );
+      return;
+    }
     console.warn(
       `[angular-native] ${where} works a colour out of var(${name}), which holds a platform` +
         ` colour (platform-color() or a system colour). The platform resolves that by name and` +
