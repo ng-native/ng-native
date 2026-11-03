@@ -96,6 +96,25 @@ describe('a box-shadow with no colour', () => {
   });
 });
 
+describe('a text-shadow with no colour', () => {
+  it('is drawn in the colour the element inherits, with no warning', () => {
+    const { props, warnings } = tree(`.p { color: ${RED} } .a { text-shadow: 2px 2px 4px }`, ['p']);
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['textShadowColor'], RED);
+  });
+
+  it('follows the colour when it changes', () => {
+    const { engine, outer, props } = tree(
+      `.p { color: ${RED} } .q { color: ${BLUE} } .a { text-shadow: 2px 2px currentColor }`,
+      ['p'],
+    );
+    engine.removeClass(outer, 'p');
+    engine.addClass(outer, 'q');
+    engine.commit();
+    assert.equal(props()['textShadowColor'], BLUE);
+  });
+});
+
 describe('a background in currentColor', () => {
   it('is the colour of the text, with no warning', () => {
     const { props, warnings } = tree(`.a { color: ${RED}; background-color: currentColor }`);

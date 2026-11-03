@@ -4750,6 +4750,38 @@
     }
   },
   {
+    "name": "text-shadow with no colour in a stylesheet is the colour of the text",
+    "expected": {
+      "color": "rgb(1, 2, 3)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "rgb(1, 2, 3) 2px 3px 4px"
+    }
+  },
+  {
+    "name": "text-shadow with no colour in a stylesheet is the colour the element inherits",
+    "expected": {
+      "color": "rgb(4, 5, 6)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "rgb(4, 5, 6) 2px 3px 0px"
+    }
+  },
+  {
+    "name": "text-shadow in currentColor in a stylesheet is the colour of the text",
+    "expected": {
+      "color": "rgb(7, 8, 9)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "rgb(7, 8, 9) 2px 3px 4px"
+    }
+  },
+  {
+    "name": "text-shadow with no colour on a parent is inherited in the colour of the parent",
+    "expected": {
+      "color": "rgb(1, 2, 3)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "rgb(1, 2, 3) 2px 3px 4px"
+    }
+  },
+  {
     "name": "font in a stylesheet over a weaker italic and bold",
     "expected": {
       "color": "rgb(0, 0, 0)",

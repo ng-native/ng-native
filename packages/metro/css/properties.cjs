@@ -2068,7 +2068,9 @@ const TRANSLATORS = new Map([
         height: length(shadow.yOffset, property),
       };
       out.textShadowRadius = length(shadow.blur, property);
-      out.textShadowColor = wholeColor(shadow.color, property);
+      // A shadow with no colour is in currentColor, the colour of the text, filled in on device.
+      out.textShadowColor =
+        shadow.color?.type === 'currentcolor' ? CURRENT_COLOUR : wholeColor(shadow.color, property);
     },
   ],
   [

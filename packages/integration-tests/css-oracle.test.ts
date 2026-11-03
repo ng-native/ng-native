@@ -152,12 +152,20 @@ function matrixOf(list: TransformList): string {
   return `matrix(${shown.join(', ')})`;
 }
 
-/** One shadow in three props here: none is no blur, no offset and no colour to draw one in. */
-function assertNoTextShadow(style: Record<string, unknown>, browser: string): void {
-  assert.equal(browser, 'none', 'only none is compared');
-  assert.equal(style['textShadowRadius'], 0);
-  assert.deepEqual(style['textShadowOffset'], { width: 0, height: 0 });
-  assert.equal(style['textShadowColor'], 'rgba(0, 0, 0, 0)');
+/**
+ * One shadow in three props here, written as Chrome computes it: colour, then the offset and the
+ * blur. None is no blur, no offset and no colour to draw one in.
+ */
+function assertTextShadow(style: Record<string, unknown>, browser: string): void {
+  const offset = style['textShadowOffset'] as { width: number; height: number } | undefined;
+  const radius = style['textShadowRadius'];
+  const colour = style['textShadowColor'];
+  const none = radius === 0 && offset?.width === 0 && offset.height === 0;
+  const written =
+    none && colour === 'rgba(0, 0, 0, 0)'
+      ? 'none'
+      : `${colour} ${offset?.width}px ${offset?.height}px ${radius}px`;
+  assert.equal(written, browser, 'text-shadow');
 }
 
 /**
@@ -369,7 +377,7 @@ describe('what a browser does with the same stylesheet', () => {
       }
       for (const property of test.extra ?? []) {
         const browser = expected.expected[property]!;
-        if (property === 'text-shadow') assertNoTextShadow(style, browser);
+        if (property === 'text-shadow') assertTextShadow(style, browser);
         else if (property === 'aspect-ratio') {
           assert.equal(style['aspectRatio'], parseFloat(browser), property);
         } else if (property === 'transform') {
