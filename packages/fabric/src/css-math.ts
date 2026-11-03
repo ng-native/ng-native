@@ -294,10 +294,16 @@ export function mathRefused(text: string): boolean {
   }
 }
 
+/** A math function that comes to a number, no less than 0 and unrounded; undefined for any other text. */
+export function mathNumber(text: string): number | undefined {
+  const math = mathValue(text);
+  return math?.type === 'number' ? Math.max(math.value, 0) : undefined;
+}
+
 /** A math function that comes to a number, no less than 0, as `flex` takes one; any other text as it is. */
 export function mathNumberText(text: string): string {
-  const math = mathValue(text);
-  return math?.type === 'number' ? String(Math.max(rounded(math.value), 0)) : text;
+  const number = mathNumber(text);
+  return number === undefined ? text : String(rounded(number));
 }
 
 /**

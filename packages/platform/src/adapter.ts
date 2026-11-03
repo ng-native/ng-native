@@ -47,6 +47,7 @@ import {
   installNodeGlobal,
   markComponentHost,
   MATH_FUNCTION,
+  mathNumber,
   mathNumberText,
   nativePlatform,
   onFontsRegistered,
@@ -113,7 +114,8 @@ const styleValue = (key: string, value: unknown): unknown =>
 function ratio(text: string): number | undefined {
   const sides = splitOutside(text, '/');
   if (sides.length !== 2) return boundMath('aspectRatio', text) as number | undefined;
-  const [width, height] = sides.map((side) => Number(mathNumberText(cssTrim(side))));
+  // Each side unrounded, so a small one still divides: only the ratio is rounded.
+  const [width, height] = sides.map((side) => mathNumber(cssTrim(side)) ?? Number(cssTrim(side)));
   return width! > 0 && height! > 0 ? Math.round((width! / height!) * 1e5) / 1e5 : undefined;
 }
 
@@ -510,7 +512,7 @@ class NativeRenderer implements Renderer2 {
 
   setStyle(el: EngineNode, style: string, value: unknown, _flags?: RendererStyleFlags2): void {
     if (style.startsWith('--')) {
-      this.engine.setCustomProperty(el, customPropertyName(style), value);
+      this.engine.setCustomProperty(el, customPropertyName(style), closedAtEnd(value));
       return;
     }
     if (extensions.length && this.restyled(el, style, value)) return;

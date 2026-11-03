@@ -2144,6 +2144,70 @@
     }
   },
   {
+    "name": "a token bound with a bracket left open, read by a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "3px"
+    }
+  },
+  {
+    "name": "a token bound with a bracket left open, read by a style",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "width": "6px"
+    }
+  },
+  {
+    "name": "a rule's aspect-ratio: 0.000001 / calc(0.000002), read as aspect-ratio",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "1e-06 / 2e-06"
+    }
+  },
+  {
+    "name": "an inline aspect-ratio: 0.000001 / calc(0.000002), read as aspect-ratio, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "1e-06 / 2e-06"
+    }
+  },
+  {
+    "name": "a rule's aspect-ratio: 0.000001 / 0.000002, read as aspect-ratio",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "1e-06 / 2e-06"
+    }
+  },
+  {
+    "name": "an inline aspect-ratio: 0.000001 / 0.000002, read as aspect-ratio, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "1e-06 / 2e-06"
+    }
+  },
+  {
+    "name": "a rule's aspect-ratio: 1 / 1000000, read as aspect-ratio",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "1 / 1e+06"
+    }
+  },
+  {
+    "name": "an inline aspect-ratio: 1 / 1000000, read as aspect-ratio, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "aspect-ratio": "1 / 1e+06"
+    }
+  },
+  {
     "name": "a plus with it in a calc() of tokens, bound on the element",
     "expected": {
       "color": "rgb(0, 0, 0)",

@@ -653,6 +653,27 @@ const INLINE_MATH_CASES = (
 }));
 
 /**
+ * A token bound on the element with a bracket left open, closed where its value ends as CSS
+ * closes it, read by a rule and by a style.
+ */
+const OPEN_TOKEN_CASES: OracleCase[] = [
+  {
+    name: 'a token bound with a bracket left open, read by a rule',
+    css: '#probe { display: block; width: var(--size) }',
+    tree: probe({ name: 'view' }),
+    inline: { '--size': 'calc(1px + 2px' },
+    extra: ['width'],
+  },
+  {
+    name: 'a token bound with a bracket left open, read by a style',
+    css: '#probe { display: block }',
+    tree: probe({ name: 'view' }),
+    inline: { '--size': 'min(10px, calc(5px + 1px', width: 'var(--size)' },
+    extra: ['width'],
+  },
+];
+
+/**
  * A sign in a `calc()` of tokens wants whitespace either side, as in one of written values. Without
  * it the value is invalid, and the declaration that reads it is unset. Bound only: in a stylesheet
  * lightningcss reads the same text before the compiler does.
@@ -925,6 +946,18 @@ const TOKEN_NEGATIVE_CASES = [
   inRule('max-width', 'var(--x, calc(20px - 2em))', 'max-width', false),
 ];
 
+/** An aspect ratio of two sides too small for five decimals, in a rule and in a style. */
+const RATIO_PRECISION_CASES = (
+  [
+    ['aspect-ratio', '0.000001 / calc(0.000002)', 'aspect-ratio'],
+    ['aspect-ratio', '0.000001 / 0.000002', 'aspect-ratio'],
+    ['aspect-ratio', '1 / 1000000', 'aspect-ratio'],
+  ] as const
+).flatMap(([property, value, measured]): OracleCase[] => [
+  inRule(property, value, measured, false),
+  inStyle(property, value, measured),
+]);
+
 export const CASES: OracleCase[] = [
   ...MATH_RANGE_CASES,
   ...TOKEN_NEGATIVE_CASES,
@@ -933,6 +966,8 @@ export const CASES: OracleCase[] = [
   ...TOKEN_RANGE_CASES,
   ...TOKEN_TYPE_CASES,
   ...INLINE_MATH_CASES,
+  ...OPEN_TOKEN_CASES,
+  ...RATIO_PRECISION_CASES,
   ...SIGN_SPACE_CASES,
   {
     name: 'specificity: a class beats a type',
