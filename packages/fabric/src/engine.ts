@@ -4517,6 +4517,18 @@ function alignMultiline(viewName: string, props: Record<string, unknown>): void 
   props['textAlignVertical'] ??= 'top';
 }
 
+/**
+ * The size a font of 0 is committed at: one too small to see, as Chrome draws none. React Native
+ * on Android throws on a size that is not above zero, and iOS draws 0 at its default size.
+ */
+const UNSEEN_FONT_SIZE = 0.001;
+
+/** A font size of 0 as one native draws nothing at: see `UNSEEN_FONT_SIZE`. */
+function unseenFont(props: Record<string, unknown>): void {
+  const size = props['fontSize'];
+  if (typeof size === 'number' && size <= 0) props['fontSize'] = UNSEEN_FONT_SIZE;
+}
+
 /** The props React Native builds a text field's text attributes from, as `BaseTextProps` reads them. */
 const TEXT_ATTRIBUTES = [
   'color',
@@ -11945,6 +11957,7 @@ export class Engine implements HostEngine {
     }
     if (merged['flexWrap'] !== undefined) wrappedLinesStretch(merged);
     noOutline(merged);
+    if (merged['fontSize'] !== undefined) unseenFont(merged);
     this.borderInText(node, merged);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
     hiddenOutOfFlow(merged);

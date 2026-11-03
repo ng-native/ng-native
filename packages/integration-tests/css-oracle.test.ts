@@ -227,7 +227,10 @@ function assertExtra(property: ExtraProperty, style: Record<string, unknown>, br
   // A length is a number of points here, and `2px` in the browser. An unset one is native's
   // initial value, as the browser reports its own.
   const read = readFrom(property, style).map((key) => style[key]);
-  const ours = read.find((value) => value != null) ?? NATIVE_INITIAL[property];
+  let ours = read.find((value) => value != null) ?? NATIVE_INITIAL[property];
+  // A commit sends a font size of 0 as one too small to see, which native takes: see
+  // `UNSEEN_FONT_SIZE` in the engine, and `css-font-size-zero.test.ts`.
+  if (property === 'font-size' && ours === 0.001) ours = 0;
   const unit = UNITLESS.has(property) ? '' : 'px';
   const value = typeof ours === 'number' ? `${ours}${unit}` : ours;
   assert.equal(value, legacyColour(browser), property);
