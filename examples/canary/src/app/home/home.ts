@@ -274,6 +274,11 @@ export class Home {
       blurb: 'a prompt, and the answer streamed from the model on the phone',
     },
     {
+      path: '/text-recognition',
+      title: 'Text recognition',
+      blurb: 'the lines of text in a photo, read on the phone',
+    },
+    {
       path: '/dom-components',
       title: 'DOM components',
       blurb: 'an Angular component for the browser, in a web view',

@@ -237,6 +237,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/screen-capture', title: 'Screen capture' },
         { path: 'packages/expo/browser', title: 'Browser' },
         { path: 'packages/expo/language-model', title: 'On-device AI', group: 'Intelligence' },
+        { path: 'packages/expo/text-recognition', title: 'Text recognition' },
         { path: 'packages/expo/fonts', title: 'Fonts', group: 'App lifecycle' },
         { path: 'packages/expo/splash-screen', title: 'Splash screen' },
         { path: 'packages/expo/updates', title: 'Updates' },

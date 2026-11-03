@@ -6,7 +6,8 @@
       "ExpoUIModifiersModule",
       "SearchFieldModule",
       "SymbolImageSizeModule",
-      "AddressSearchModule"
+      "AddressSearchModule",
+      "TextRecognitionModule"
     ],
     "appDelegateSubscribers": ["LiveActivityTapsObserver", "PointerEventsObserver"]
   },

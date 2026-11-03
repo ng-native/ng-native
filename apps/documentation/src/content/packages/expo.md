@@ -115,6 +115,8 @@ is organized into one entry point per module.
 
 - [On-device AI](/packages/expo/language-model) - Apple Foundation Models and Gemini Nano, streamed
   into a template, with nothing leaving the phone.
+- [Text recognition](/packages/expo/text-recognition) - the text in a photo, line by line, read on
+  the phone with no network. iOS only.
 
 ### App lifecycle
 

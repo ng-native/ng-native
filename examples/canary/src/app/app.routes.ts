@@ -339,6 +339,10 @@ export const routes: Routes = [
     loadComponent: () => import('./expo/language-model.ts').then((m) => m.LanguageModelPage),
   },
   {
+    path: 'text-recognition',
+    loadComponent: () => import('./expo/text-recognition.ts').then((m) => m.TextRecognitionPage),
+  },
+  {
     path: 'dom-components',
     loadComponent: () =>
       import('./dom-components/dom-components.ts').then((m) => m.DomComponentsPage),

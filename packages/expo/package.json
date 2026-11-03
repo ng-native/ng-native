@@ -65,6 +65,7 @@
     "./splash-screen": "./src/splash-screen.ts",
     "./store": "./src/store.ts",
     "./store-review": "./src/store-review.ts",
+    "./text-recognition": "./src/text-recognition.ts",
     "./tracking": "./src/tracking.ts",
     "./updates": "./src/updates.ts",
     "./video": "./src/video.ts",
@@ -261,6 +262,10 @@
       "./store-review": {
         "types": "./dist/store-review.d.ts",
         "default": "./dist/store-review.js"
+      },
+      "./text-recognition": {
+        "types": "./dist/text-recognition.d.ts",
+        "default": "./dist/text-recognition.js"
       },
       "./tracking": {
         "types": "./dist/tracking.d.ts",
