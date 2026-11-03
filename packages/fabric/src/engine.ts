@@ -2621,9 +2621,26 @@ function shrunkOutOfFlow(node: EngineNode): boolean {
 
 /** Whether a box has an inset on each side. */
 function betweenInsets(node: EngineNode): boolean {
-  const set = (...keys: string[]) => keys.some((key) => readStyle(node, key) != null);
-  return set('left', 'start') && set('right', 'end');
+  const set = (keys: readonly string[]) => keys.some((key) => readStyle(node, key) != null);
+  const [left, right] = insetSides(node);
+  return set(left) && set(right);
 }
+
+/**
+ * The insets on a box's left and on its right, as Yoga reads them: a logical side is the one the
+ * box's direction makes it, and is read before the physical one.
+ */
+function insetSides(node: EngineNode): readonly [readonly string[], readonly string[]] {
+  return readStyle(node, 'direction') === 'rtl' ? RTL_SIDES : LTR_SIDES;
+}
+const LTR_SIDES = [
+  ['start', 'left'],
+  ['end', 'right'],
+] as const;
+const RTL_SIDES = [
+  ['end', 'left'],
+  ['start', 'right'],
+] as const;
 
 /**
  * Whether a box out of the flow is written as wide as its content between two insets. Yoga
@@ -2859,10 +2876,8 @@ function setAsideToFit(node: EngineNode, props: Record<string, unknown>): void {
   pictureWide(node, props);
   // A field with its share set aside is as wide as its own size makes it, as its content.
   columnsWide(props, node.props[FIELD_SIZE]);
-  if (fitsBetweenInsets(node)) {
-    delete props['right'];
-    delete props['end'];
-  }
+  // Measured from its left, with nothing on its right to stretch it to.
+  if (fitsBetweenInsets(node)) for (const key of insetSides(node)[1]) delete props[key];
 }
 
 /** A box fitted to its content: the width that came to, and the least it may be. */
@@ -10569,11 +10584,12 @@ export class Engine implements HostEngine {
     const style = withOwnSizes(node, this.flowStyle(node));
     const whole = this.boxesFor(node, style['position'])?.against[2];
     if (whole === undefined) return Infinity;
-    const taken = (...keys: string[]) => resolveLength(firstOf(style, keys), whole) ?? 0;
+    const taken = (...keys: readonly string[]) => resolveLength(firstOf(style, keys), whole) ?? 0;
+    const [left, right] = insetSides(node);
     return (
       whole -
-      taken('left', 'start') -
-      taken('right', 'end') -
+      taken(...left) -
+      taken(...right) -
       taken('marginLeft', 'marginStart', 'marginHorizontal', 'margin') -
       taken('marginRight', 'marginEnd', 'marginHorizontal', 'margin')
     );
