@@ -721,7 +721,8 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
 
   it('takes the direction its parent inherits, and the padding at that start', () =>
     onBoth(() => {
-      // Chrome's: right to left from a box around the parent, with 15 points at its start.
+      // Chrome's: right to left from a box around the parent, which puts the parent at its right,
+      // with 15 points at the parent's start.
       for (const [way, sheet, set] of [
         ['a sheet', '.around { direction: rtl } .narrow { padding-inline-start: 15px }', null],
         ['a value set on each', '', { direction: 'rtl' }],
@@ -737,7 +738,7 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
           s.engine.setProp(around, 'style', set);
           s.engine.setProp(narrow, 'style', { paddingStart: 15 });
         }
-        assert.deepEqual(s.at(), [75, 30], way);
+        assert.deepEqual(s.at(), [355, 30], way);
       }
     }));
 
