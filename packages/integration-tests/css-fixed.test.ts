@@ -386,6 +386,64 @@ describe('a fixed box that stays in place', () => {
     assert.equal(under(), false, 'back under the box it is written in');
   });
 
+  it('goes back under its parent when only a box further up stops clipping', () => {
+    // Nothing about the bar changes: the box that clipped lets go of its `overflow`, by a class
+    // going away, by one going away from the box around it, and by a value set on it changing to
+    // `visible` and then going away.
+    const css =
+      `${OFF} .clip, .shut > .off { overflow: hidden } .bar { position: fixed; top: 10px;` +
+      ' left: 0; right: 0; height: 40px }';
+    const ways: [
+      string,
+      (off: EngineNode, engine: Engine) => void,
+      (off: EngineNode, engine: Engine) => void,
+    ][] = [
+      [
+        'a class going away',
+        (off, engine) => engine.setClasses(off, 'off clip'),
+        (off, engine) => engine.setClasses(off, 'off'),
+      ],
+      [
+        'a class going away from the box around it',
+        (off, engine) => engine.setClasses(off.parent!, 'wrap shut'),
+        (off, engine) => engine.setClasses(off.parent!, 'wrap'),
+      ],
+      [
+        'a value set on it changing',
+        (off, engine) => engine.setProp(off, 'style', { overflow: 'hidden' }),
+        (off, engine) => engine.setProp(off, 'style', { overflow: 'visible' }),
+      ],
+      [
+        'a value set on it going away',
+        (off, engine) => engine.setProp(off, 'style', { overflow: 'hidden' }),
+        (off, engine) => engine.setProp(off, 'style', null),
+      ],
+    ];
+    for (const [way, clip, unclip] of ways) {
+      const s = laidOut(css, ['wrap', ['off', ['mid', ['bar']]]]);
+      const off = s.nodes.get('off')!;
+      const find = (all: readonly FakeFabricNode[], name: string): FakeFabricNode | undefined =>
+        all
+          .map((node) => (node.props['nativeID'] === name ? node : find(node.children, name)))
+          .find(Boolean);
+      const underMid = () =>
+        find(s.fabric.committed, 'mid')?.children.some((node) => node.props['nativeID'] === 'bar');
+      clip(off, s.engine);
+      assert.deepEqual(s.box('bar'), [0, 10, 400, 40], way);
+      assert.equal(underMid(), false, `under its page while the box clips, by ${way}`);
+      unclip(off, s.engine);
+      assert.deepEqual(s.box('bar'), [0, 10, 400, 40], way);
+      assert.equal(underMid(), true, `back under its parent, by ${way}`);
+      // Only once: under its parent, and not in the page's layer as well.
+      const count = (all: readonly FakeFabricNode[]): number =>
+        all.reduce(
+          (sum, node) => sum + Number(node.props['nativeID'] === 'bar') + count(node.children),
+          0,
+        );
+      assert.equal(count(s.fabric.committed), 1, way);
+    }
+  });
+
   it('settles in the commit it was changed in, with no pass left over', () => {
     const css = `${OFF} .bar { position: fixed; top: 10px; left: 0; right: 0; height: 40px }`;
     const s = laidOut(css, ['off', ['bar']]);
@@ -493,6 +551,21 @@ describe('a fixed box as wide as its content, in a narrower box', () => {
     assert.deepEqual(laidOut(at, LONG).box(), [0, 390, 40]);
     const fits = '.box { position: fixed; top: 0; width: fit-content; left: 10px; right: 20px }';
     assert.deepEqual(laidOut(fits, SHORT).box(), [10, 230, 20]);
+  });
+
+  it('counts a width of auto as no width of its own', () => {
+    const s = laidOut('.box { position: fixed; top: 0; left: 0; width: auto }', LONG);
+    assert.deepEqual([s.underItsParent(), s.box()], [false, [0, 390, 40]]);
+    // The same set on the element, over a width in points.
+    const sized = laidOut('.box { position: fixed; top: 0; left: 0; width: 300px }', LONG);
+    sized.engine.setProp(sized.fixed, 'style', { width: 'auto' });
+    assert.deepEqual([sized.underItsParent(), sized.box()], [false, [0, 390, 40]]);
+    // Stretched between two insets, it is as wide as they make it, and stays.
+    const stretched = laidOut(
+      '.box { position: fixed; top: 0; left: 0; right: 0; width: auto }',
+      LONG,
+    );
+    assert.deepEqual([stretched.underItsParent(), stretched.box()], [true, [0, 400, 40]]);
   });
 
   it('stays under its parent with a width of its own, or stretched between two insets', () => {

@@ -375,8 +375,9 @@ Where something between a fixed box and its page scrolls or clips, a scroll view
 `overflow: hidden` box, the fixed box is committed under the page instead, so it neither scrolls
 nor is clipped. So is a fixed box as wide as its content, with no width of its own and not
 stretched between a `left` and a `right`, so that its text wraps in the page and not in a narrower
-box it is written in; it goes back under its parent once it has a width. On Android every fixed
-box is committed under its page. There it draws over the page's other content, and an
+box it is written in. On iOS a fixed box goes back under its parent once it is not as wide as
+its content and nothing it is in scrolls or clips any more. On Android every fixed box is
+committed under its page. There it draws over the page's other content, and an
 ancestor's `opacity` or `transform` no longer reaches it; it is still styled by rules that match
 through its parent, its events still bubble to its parent, and it is not shown while anything it
 is inside is `display: none`. A transformed ancestor does not become what a fixed box is fixed to,

@@ -3897,12 +3897,13 @@ const clipsFixed = (position: unknown): boolean =>
   position === 'fixed' && nativePlatform() === 'android';
 
 /**
- * Whether a fixed box is as wide as its content (`shrunkOutOfFlow`). Yoga measures what is in an
- * out-of-flow box within the box it is committed under, so in a narrower box its text wraps
- * there, where a browser wraps it in the screen.
+ * Whether a fixed box is as wide as its content (`shrunkOutOfFlow`), a `width: auto` counting as
+ * none. Yoga measures what is in an out-of-flow box within the box it is committed under, so in a
+ * narrower box its text wraps there, where a browser wraps it in the screen.
  */
 const fixedToContent = (node: EngineNode, position: unknown): boolean =>
-  position === 'fixed' && shrunkOutOfFlow(node);
+  position === 'fixed' &&
+  (shrunkOutOfFlow(node) || (readStyle(node, 'width') === 'auto' && !betweenInsets(node)));
 
 /** What the view a page's fixed boxes are committed in is: see `fixedHandles`. */
 const FIXED_LAYER = {
@@ -9858,6 +9859,24 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * Ask again of each fixed box under its page from inside `node` whether it is to stay there,
+   * as `node` is styled: it may have stopped scrolling or clipping, which nothing about the box
+   * itself says. One let go is merged again, to be committed under its parent (`unpinFixed`).
+   */
+  private refixBeneath(node: EngineNode): void {
+    // Most pages have none, and a box only passed through on the way to another has not changed.
+    if (!this.fixedIn.size || !node.propsDirty) return;
+    for (const fixed of this.fixedIn.values()) {
+      for (const box of fixed) {
+        // Only those inside it, of which there are few: one anywhere else is styled as before.
+        if (box === node || !isWithin(box, node)) continue;
+        this.unpinFixed(box, readStyle(box, 'position'));
+        if (box.fixedTo === undefined) this.touch([box]);
+      }
+    }
+  }
+
+  /**
    * Let a fixed box committed under its page go back under its parent, once nothing has it there:
    * it has a width of its own, and nothing between it and its page scrolls or clips. Asked as it
    * is styled, before it is placed, so it is placed against its page from under its parent in
@@ -10193,6 +10212,7 @@ export class Engine implements HostEngine {
     if (node.mixed && !this.settling) node.mixed.dirty = true;
     if (position === 'fixed' || position === 'absolute') this.refix(node, position);
     else if (position === 'sticky') this.stickies.add(node);
+    this.refixBeneath(node);
     if (position === 'absolute' || position === 'fixed') this.reabsolute(node, position);
     if (!this.settling) this.noteFits(node);
   }
