@@ -190,10 +190,11 @@ frame.
 
 A `style` attribute or a `[style]` binding has no compiler to read it, so it takes fewer forms of
 some shorthands than a stylesheet. `border`, its sides and logical sides, `outline`, `box-shadow`,
-`background`, `font` and `text-decoration` are read into the same props a stylesheet gives them.
-A line takes a token beside written parts, `border: 1px solid var(--c)`, and a `background` takes
-one as all of it or as its last layer. In these, `background` is a color or linear gradients, with
-no position, size, repeat or `url()`, and no token in a gradient. `box-shadow` takes a token only
+`background`, `background-image`, `font` and `text-decoration` are read into the same props a
+stylesheet gives them. A line takes a token beside written parts, `border: 1px solid var(--c)`,
+and a `background` takes one as all of it or as its last layer. In these, `background` is a color
+or linear gradients, with no position, size, repeat or `url()`, and no token in a gradient, and
+`background-image` is linear gradients or `none`, with no token. `box-shadow` takes a token only
 as all of it, lengths in `px` or `rem` only, and a color written out, not a `color-mix()`. `font`
 has no `small-caps`, stretch, keyword size or system font.
 A value outside that is dropped, with a warning in development.
@@ -525,21 +526,23 @@ length property is unset by such a token, `gap` and `padding-inline` among them.
 `background: var(--surface)` is read as
 `background-color`, the one part of that shorthand native has, and so are
 `rgba(var(--channels), <alpha>)`, `color-mix()`, `light-dark()` and a relative colour of a token
-written there. A token is read as one value, so one that is no colour unsets it: an unset token, a
-length, `none`, and also a gradient in a stylesheet's token, a `url()`, or a colour beside an image,
-`rgb(1 2 3) none`,
-where a browser reads the token as the whole shorthand and paints the colour and the image. With
+written there. The token is read as the whole shorthand, as a browser reads it: gradients over a
+colour, `linear-gradient(...), red`, or a layer with no image, `center / cover` or
+`rgb(1 2 3) none`, in a stylesheet's token or one set on an element. A gradient placed anywhere but
+the initial position, size and repeat, or a `url()`, is not read, and unsets the shorthand. With
 anything written beside the token, `background: var(--surface) none`, the shorthand is refused.
 Layers written out over a token's colour,
 `background: linear-gradient(#ffffff33, #ffffff00), var(--primary)`, are read as the shorthand
 with the colour written, and the token as its `background-color`, as long as the token is all
 of the last layer and no other layer has one. A token that is unset, or a word that is no part of a
 background, makes the whole shorthand invalid, as in a browser, so the gradients go with the
-colour. A token or a fallback that is a length or `none` is a valid last layer, so the gradients
-stay, with no colour. A gradient set as the token on an element is drawn as one more layer under
-the written ones, at the initial position, size and repeat.
-A bare `background: var(--surface)` that is unset, invalid, a length or `none` takes away an image
-a weaker rule declared. Only a token that is a colour leaves that image, where a browser clears it.
+colour. A token or a fallback that is a valid last layer with no image, a length, two lengths,
+`none`, or a position, size, repeat, attachment and box with a colour or without, keeps the
+gradients, under its colour if it has one. Each part comes at most once, so `none none` or
+`fixed scroll` is invalid. A gradient the token holds is drawn as one more layer under the written
+ones, at the initial position, size and repeat.
+A bare `background: var(--surface)` takes away an image a weaker rule declared, whatever its token
+holds, as in a browser.
 `flex: var(--grow)` is `flex: <number>`: it grows by the token, shrinks by 1, and starts from a
 basis of 0, once the token is set. With no token it is `flex`'s initial value, `0 1 auto`, whatever
 a weaker rule set, as on the web, where a `var()` that cannot be substituted gives the property its

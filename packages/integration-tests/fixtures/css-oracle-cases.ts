@@ -379,6 +379,114 @@ const BACKGROUND_TOKEN_CASES: OracleCase[] = [
   ),
 ];
 
+const TOKEN_GRADIENT = 'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))';
+
+/** `backgroundOver`, with `--x` written in the stylesheet beside the background. */
+const backgroundOverInSheet = (written: string, token: string, warns = false): OracleCase => ({
+  name: `background: ${written} with --x of ${token}, in the stylesheet`,
+  css: `#probe { background-color: rgb(0, 255, 0); --x: ${token}; background: ${written} }`,
+  tree: probe({ name: 'view' }),
+  ...(warns ? { warns } : {}),
+  extra: ['background-image'],
+});
+
+const REFUSED_LAYER_TOKENS = new Set([
+  'center / 10px auto 5px',
+  'left 10px right',
+  'center 10px center',
+  'top 10px',
+  '10px left',
+  'center / no-repeat',
+]);
+
+/** A last layer a token holds, valid or not, each bound on the probe and written in the sheet. */
+const LAST_LAYER_TOKEN_CASES: OracleCase[] = [
+  '10% 20%',
+  'center / cover',
+  'left 10px top 20px',
+  'center rgb(1, 2, 3)',
+  'none none',
+  'fixed scroll',
+  'center center center',
+  'text',
+  'border-box padding-box',
+  'border-box padding-box content-box',
+  'center / 10px auto',
+  'center / 10px auto 5px',
+  'repeat-x repeat',
+  'no-repeat repeat',
+  'top left',
+  'left top 10px',
+  'left 10px right',
+  'center 10px center',
+  'top 10px',
+  '10px left',
+  'center / no-repeat',
+].flatMap((token) => [
+  backgroundOver(`${GRADIENT}, var(--x)`, token),
+  // A list that is no background and no other form a token has is refused where it is written,
+  // with a warning, which leaves the shorthand invalid as Chrome has it.
+  backgroundOverInSheet(`${GRADIENT}, var(--x)`, token, REFUSED_LAYER_TOKENS.has(token)),
+]);
+
+const BACKGROUND_TOKEN_MORE_CASES: OracleCase[] = [
+  ...LAST_LAYER_TOKEN_CASES,
+  backgroundOver(`${GRADIENT}, var(--x, 10px 20px)`, null),
+  backgroundOver(`${GRADIENT}, none 20px 20px, var(--x)`, TOKEN_GRADIENT),
+  backgroundOverInSheet(`${GRADIENT}, none 20px 20px, var(--x)`, TOKEN_GRADIENT),
+  backgroundOver('var(--x)', TOKEN_GRADIENT),
+  backgroundOverInSheet('var(--x)', TOKEN_GRADIENT),
+  {
+    name: 'background: var() of a colour token over a weaker image, bound on the element',
+    css: `#probe { background-image: ${GRADIENT} } #probe.c { background: var(--x) }`,
+    tree: probe({ name: 'view', classes: ['c'] }),
+    bound: { '--x': 'rgb(1, 2, 3)' },
+    extra: ['background-image'],
+  },
+  {
+    name: 'background: var() of a colour token over a weaker image, in the stylesheet',
+    css: `#probe { background-image: ${GRADIENT} } #probe.c { --x: rgb(1, 2, 3); background: var(--x) }`,
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['background-image'],
+  },
+  inlineValue(
+    { background: `${GRADIENT}, var(--x, 10px 20px)` },
+    '#probe { background-color: rgb(0, 255, 0) }',
+    ['background-image'],
+  ),
+  inlineValue(
+    { background: `${GRADIENT}, var(--x)` },
+    '#probe { --x: center / cover; background-color: rgb(0, 255, 0) }',
+    ['background-image'],
+  ),
+  inlineValue(
+    { background: `${GRADIENT}, var(--x)` },
+    '#probe { --x: none none; background-color: rgb(0, 255, 0) }',
+    ['background-image'],
+  ),
+  inlineValue(
+    { background: 'var(--x)' },
+    `#probe { --x: rgb(1, 2, 3); background-image: ${GRADIENT} }`,
+    ['background-image'],
+  ),
+  inlineValue(
+    { background: 'var(--x)' },
+    `#probe { --x: ${TOKEN_GRADIENT}; background-color: rgb(0, 255, 0) }`,
+    ['background-image'],
+  ),
+  inlineValue({ 'background-image': GRADIENT }, '#probe { background-color: rgb(0, 255, 0) }', [
+    'background-image',
+  ]),
+  inlineValue(
+    { 'background-image': `${GRADIENT}, ${TOKEN_GRADIENT}` },
+    `#probe { background-image: ${TOKEN_GRADIENT} }`,
+    ['background-image'],
+  ),
+  inlineValue({ 'background-image': 'none' }, `#probe { background-image: ${GRADIENT} }`, [
+    'background-image',
+  ]),
+];
+
 const INLINE_SHORTHAND_CASES: OracleCase[] = [
   inlineOver(
     'an inline padding is over a padding-top in a rule',
@@ -1564,6 +1672,7 @@ export const CASES: OracleCase[] = [
   ...INLINE_SHORTHAND_CASES,
   ...INLINE_VALUE_SHORTHAND_CASES,
   ...BACKGROUND_TOKEN_CASES,
+  ...BACKGROUND_TOKEN_MORE_CASES,
   {
     name: 'background: var() of a colour token is the background colour',
     css: '#probe { --bg: rgb(1, 0, 0); background: var(--bg) }',

@@ -4262,6 +4262,462 @@
     }
   },
   {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of 10% 20%",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of 10% 20%, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center / cover",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center / cover, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of left 10px top 20px",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of left 10px top 20px, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center rgb(1, 2, 3)",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center rgb(1, 2, 3), in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of none none",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of none none, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of fixed scroll",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of fixed scroll, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center center center",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center center center, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of text",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of text, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of border-box padding-box",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of border-box padding-box, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of border-box padding-box content-box",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of border-box padding-box content-box, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center / 10px auto",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center / 10px auto, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center / 10px auto 5px",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center / 10px auto 5px, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of repeat-x repeat",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of repeat-x repeat, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of no-repeat repeat",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of no-repeat repeat, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of top left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of top left, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of left top 10px",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of left top 10px, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of left 10px right",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of left 10px right, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center 10px center",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center 10px center, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of top 10px",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of top 10px, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of 10px left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of 10px left, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center / no-repeat",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of center / no-repeat, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, 10px 20px) with --x of null",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none 20px 20px, var(--x) with --x of linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none, linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))"
+    }
+  },
+  {
+    "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none 20px 20px, var(--x) with --x of linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1)), in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none, linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))"
+    }
+  },
+  {
+    "name": "background: var(--x) with --x of linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))"
+    }
+  },
+  {
+    "name": "background: var(--x) with --x of linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1)), in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))"
+    }
+  },
+  {
+    "name": "background: var() of a colour token over a weaker image, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "background: var() of a colour token over a weaker image, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "inline background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x, 10px 20px) over #probe { background-color: rgb(0, 255, 0) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "inline background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) over #probe { --x: center / cover; background-color: rgb(0, 255, 0) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), none"
+    }
+  },
+  {
+    "name": "inline background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) over #probe { --x: none none; background-color: rgb(0, 255, 0) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "inline background: var(--x) over #probe { --x: rgb(1, 2, 3); background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "none"
+    }
+  },
+  {
+    "name": "inline background: var(--x) over #probe { --x: linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1)); background-color: rgb(0, 255, 0) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))"
+    }
+  },
+  {
+    "name": "inline background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) over #probe { background-color: rgb(0, 255, 0) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(0, 255, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))"
+    }
+  },
+  {
+    "name": "inline background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1)) over #probe { background-image: linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1)) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))"
+    }
+  },
+  {
+    "name": "inline background-image: none over #probe { background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "none"
+    }
+  },
+  {
     "name": "background: var() of a colour token is the background colour",
     "expected": {
       "color": "rgb(0, 0, 0)",

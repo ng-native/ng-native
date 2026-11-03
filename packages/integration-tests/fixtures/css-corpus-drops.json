@@ -1,7 +1,7 @@
 {
   "bootstrap": {
     "rules": 2592,
-    "dropped": 576,
+    "dropped": 575,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -131,7 +131,7 @@
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 57
       },
       "--*": {
-        "'--*' has a value native cannot express in any form": 15,
+        "'--*' has a value native cannot express in any form": 14,
         "filter: invert() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 4
       },
       "-moz-column-gap": {

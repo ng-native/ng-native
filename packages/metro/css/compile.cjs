@@ -772,7 +772,9 @@ function layersOverToken(value, out, deferred, context) {
 /** The token that is a background's last layer, read on device with the layers over it. */
 function tokenUnderLayers(last, over, context) {
   const token = deferVar({ propertyId: { property: 'background-color' }, value: last }, context);
-  const fallbackLayer = fallbackChain(last[0].value?.fallback, context).token;
+  const raw = last[0].value?.fallback;
+  const chained = fallbackChain(raw, context).token;
+  const fallbackLayer = chained && { ...chained, ...backgroundForm(innermostFallback(raw)) };
   return {
     ...token,
     layers: true,
@@ -780,6 +782,62 @@ function tokenUnderLayers(last, over, context) {
     over,
     ...(fallbackLayer ? { fallbackLayer } : {}),
   };
+}
+
+/** A fallback through the `var()`s it is made of: `var(--y, 10px 20px)` is `10px 20px`. */
+function innermostFallback(raw) {
+  const parts = meaningful(raw ?? []);
+  return parts.length === 1 && parts[0].type === 'var' && parts[0].value?.fallback
+    ? innermostFallback(parts[0].value.fallback)
+    : raw;
+}
+
+/** The props `background: <text>` compiles to, or null for text that is no background. */
+function backgroundWritten(text) {
+  const out = {};
+  try {
+    const typed = text === null ? null : reparsed('background', text, 'token');
+    if (typed?.property !== 'background') return null;
+    translate('background', typed.value, out, 'token');
+  } catch {
+    return null;
+  }
+  return out;
+}
+
+/** Where a background layer is drawn when it says nothing of it, as `translate` writes it. */
+const INITIAL_PLACING = {
+  experimental_backgroundPosition: JSON.stringify({ left: '0%', top: '0%' }),
+  experimental_backgroundSize: JSON.stringify({ x: 'auto', y: 'auto' }),
+  experimental_backgroundRepeat: JSON.stringify({ x: 'repeat', y: 'repeat' }),
+};
+
+/**
+ * What a token is as the layers of a `background`, read as the shorthand reads them written out:
+ * `{ background: { images, color } }`. A list of several words, or a gradient, the device has no
+ * parser for: `10% 20%`, `center / cover`, `center red` or `linear-gradient(...)`. Nothing for a
+ * value that is no background, one with a layer native cannot draw, such as a `url()`, or an image
+ * placed anywhere but the initial place, which a token's images are drawn at. A single word or
+ * colour is left to the forms the device reads it in already.
+ */
+function backgroundForm(parts) {
+  const terms = meaningful(parts ?? []);
+  const gradient = terms.some(
+    (part) => part.type === 'function' && GRADIENTS.has(part.value?.name),
+  );
+  if (terms.length < 2 && !gradient) return {};
+  // lightningcss reads a bare number as a length in `background`, where a browser takes only 0.
+  if (terms.some((part) => part.value?.type === 'number' && part.value.value !== 0)) return {};
+  const out = backgroundWritten(writtenText(parts));
+  if (!out) return {};
+  const images = out.experimental_backgroundImage ?? [];
+  const placed = Object.entries(INITIAL_PLACING).some(([prop, initial]) =>
+    images.some((_, at) => JSON.stringify(out[prop]?.[at]) !== initial),
+  );
+  if (placed) return {};
+  const color = out.backgroundColor;
+  if (typeof color !== 'string') return {};
+  return { background: { images, ...(color === 'rgba(0, 0, 0, 0)' ? {} : { color }) } };
 }
 
 /** The motion a token can be read into whole, and the key and token form each reads it as. */
@@ -2167,11 +2225,12 @@ function customToken(name, parts, context) {
   // Tailwind's own slots never hold an animation, and `--tw-inset-shadow: inset 200ms` parses as
   // one named inset: kept, a shadow that is not one would go unreported.
   if (value?.animation && name.startsWith('--tw-')) delete value.animation;
-  if (value === null || Object.keys(value).length === 0) {
+  const layers = backgroundForm(parts);
+  if ((value === null || Object.keys(value).length === 0) && !layers.background) {
     throw new CssUnsupported(`${context}: '${name}' has a value native cannot express in any form`);
   }
   const several = lengthsOf(parts, context);
-  return several ? { ...value, ...several } : value;
+  return { ...value, ...several, ...layers };
 }
 
 /**

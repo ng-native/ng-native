@@ -17,8 +17,8 @@ import {
  * compiler's comes with it, so the props are read here, by the same rules. Each value is left as
  * CSS for `setStyle` to read, as a longhand set on its own is.
  *
- * ponytail: `border` and its sides, `outline`, `box-shadow`, `background`, `font` and
- * `text-decoration`. A token is read where a stylesheet reads one that native can tell the part of:
+ * ponytail: `border` and its sides, `outline`, `box-shadow`, `background`, `background-image`,
+ * `font` and `text-decoration`. A token is read where a stylesheet reads one that native can tell the part of:
  * in a line of written parts, as the colour under a `background`, or as all of it. A `background`
  * has no position, size, repeat, `url()` or token in a gradient, and its gradients are those
  * `backgroundLayers` reads. A `box-shadow` has no relative length, no colour worked out on the node, and a token only as all
@@ -340,6 +340,16 @@ function readBackground(text: string, on: string): Reading {
   return read ? { set: background(read.color ?? TRANSPARENT, read.images) } : NO_BACKGROUND;
 }
 
+/** `background-image`, which native names `experimental_backgroundImage`: gradients or `none`. */
+function readBackgroundImage(text: string): Reading {
+  if (/^none$/i.test(text)) return { set: [[IMAGE, []]] };
+  const read = hasToken(text) ? undefined : backgroundLayers(`${text}, transparent`);
+  // The colour is the one written here: a colour of the text's is read as a gradient, and refused.
+  return read
+    ? { set: [[IMAGE, read.images]] }
+    : 'a background-image is linear gradients or none, with no token';
+}
+
 const FONT_STYLE = /^(?:normal|italic|oblique)$/i;
 const FONT_WEIGHT = /^(?:normal|bold|\d+(?:\.\d+)?)$/i;
 const FONT_SIZE = /^(?:(?:\d*\.)?\d+(?:px|rem|em|vw|vh|vmin|vmax)|0)$/i;
@@ -433,6 +443,7 @@ export const MIXED_SHORTHANDS: ReadonlyMap<string, (text: string, on: string) =>
   ),
   ['boxShadow', readShadows],
   ['background', readBackground],
+  ['backgroundImage', readBackgroundImage],
   ['font', readFont],
   ['textDecoration', readDecoration],
 ]);

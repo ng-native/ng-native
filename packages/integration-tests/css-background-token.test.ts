@@ -208,11 +208,26 @@ describe('background: var()', () => {
     }
   });
 
-  it('leaves the colour unset for a token holding a gradient, which is refused where it is set', () => {
-    const { background, warnings } = tree(
+  it('draws a gradient a stylesheet token holds, with no colour under it', () => {
+    const { background, image, warnings } = tree(
       '.a { background-color: #f00 } .a { --bg: linear-gradient(red, blue); background: var(--bg) }',
     );
-    assert.equal(background(), undefined, 'no colour to read, so the declaration is unset');
+    assert.deepEqual(warnings, []);
+    assert.equal(background(), undefined, 'the shorthand unsets the weaker colour');
+    assert.deepEqual(
+      image(),
+      committedProps('.a { background: linear-gradient(red, blue) }')[
+        'experimental_backgroundImage'
+      ],
+    );
+  });
+
+  it('refuses a stylesheet token holding a gradient placed anywhere but the initial place', () => {
+    // A token's images are drawn at the initial place, so one placed elsewhere is not read.
+    const { image, warnings } = tree(
+      '.a { --bg: linear-gradient(red, blue) center / 10px 10px no-repeat; background: var(--bg) }',
+    );
+    assert.equal(image() ?? null, null);
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /'--bg' has a value native cannot express/);
   });
@@ -254,15 +269,17 @@ describe('background: var()', () => {
     );
   });
 
-  it('unsets the colour for a token holding a colour and an image, which a browser paints', () => {
+  it('paints the colour of a token holding a colour and no image, as a browser does', () => {
     // Chrome 154 paints rgb(1, 2, 3) for `--bg: rgb(1, 2, 3) none`: the token is the whole
-    // shorthand there. Here a token is one value, so it is no colour; supported-css says so.
-    const { engine, node, background } = tree(
-      '.a { background-color: rgb(9, 9, 9) } .a { background: var(--bg) }',
+    // shorthand there.
+    const { engine, node, background, image } = tree(
+      '.a { background-color: rgb(9, 9, 9); background-image: linear-gradient(red, blue) } ' +
+        '.a { background: var(--bg) }',
     );
     engine.setCustomProperty(node, '--bg', 'rgb(1, 2, 3) none');
     engine.commit();
-    assert.equal(background(), undefined);
+    assert.equal(background(), 'rgb(1, 2, 3)');
+    assert.equal(image() ?? null, null, 'the weaker image is cleared');
   });
 });
 
@@ -542,6 +559,8 @@ describe('a background token that is no colour, as Chrome reads it', () => {
     assert.equal(count(held('center notacolour').image()), 0);
     assert.equal(count(held('notacolour center').image()), 0);
     assert.equal(count(held('centerleft').image()), 0);
+    // A no-break space is no CSS whitespace: it is part of the word, as in Chrome.
+    assert.equal(count(held('center\u00a0no-repeat').image()), 0);
   });
 
   it('works out a fallback made of a token, which is a valid last layer or invalid', () => {

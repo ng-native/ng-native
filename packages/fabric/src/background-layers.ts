@@ -92,3 +92,136 @@ export function backgroundLayers(text: string): BackgroundLayers | undefined {
   if (!images.length || images.some((each) => each === undefined)) return undefined;
   return { images: images as object[], color };
 }
+
+const POSITION_WORD = /^(?:left|right|top|bottom|center)$/i;
+/** A length or a percentage, as a position or a size takes one. A bare number only as 0. */
+const LENGTH_PERCENTAGE =
+  /^(?:[+-]?(?:\d+\.?\d*|\.\d+)(?:%|px|r?em|vw|vh|vmin|vmax|ch|ex|cm|mm|in|pt|pc|q)|[+-]?0|calc\(.*\))$/i;
+const REPEAT_ONE = /^repeat-[xy]$/i;
+const REPEAT_EACH = /^(?:repeat|space|round|no-repeat)$/i;
+const ATTACHMENT = /^(?:scroll|fixed|local)$/i;
+/** A box, the clip's and the origin's: `text` is a clip only, which the shorthand takes too. */
+const BOX = /^(?:border-box|padding-box|content-box|text)$/i;
+const SIZE_WORD = /^(?:cover|contain)$/i;
+
+/** A layer's terms: split at the spaces outside brackets, with `/` a term of its own. */
+function layerTerms(text: string): string[] {
+  const terms: string[] = [];
+  let depth = 0;
+  let term = '';
+  const end = () => {
+    if (term) terms.push(term);
+    term = '';
+  };
+  for (const char of text) {
+    if (char === '(') depth++;
+    else if (char === ')') depth--;
+    if (depth === 0 && /[ \t\n\r\f]/.test(char)) end();
+    else if (depth === 0 && char === '/') {
+      end();
+      terms.push('/');
+    } else term += char;
+  }
+  end();
+  return terms;
+}
+
+const axis = (word: string): string => {
+  const lower = word.toLowerCase();
+  if (lower === 'left' || lower === 'right') return 'x';
+  return lower === 'center' ? 'center' : 'y';
+};
+
+const isWord = (term: string): boolean => POSITION_WORD.test(term);
+
+/**
+ * Two values: across then down, each a word of its axis or a length, or two words the other way
+ * round, `top left`.
+ */
+function isPair(first: string, second: string): boolean {
+  const across = !isWord(first) || axis(first) !== 'y';
+  const down = !isWord(second) || axis(second) !== 'x';
+  if (across && down) return true;
+  return isWord(first) && isWord(second) && axis(first) !== 'x' && axis(second) !== 'y';
+}
+
+/** Three or four values: two words, each but `center` with a length after it or not, one an axis. */
+function isGrouped(terms: readonly string[]): boolean {
+  const groups: string[] = [];
+  for (let at = 0; at < terms.length; at++) {
+    const term = terms[at]!;
+    if (!isWord(term)) return false;
+    groups.push(axis(term));
+    if (axis(term) !== 'center' && !isWord(terms[at + 1] ?? 'left')) at++;
+  }
+  return groups.length === 2 && (groups[0] !== groups[1] || groups[0] === 'center');
+}
+
+/** Whether terms are one `<bg-position>`. */
+function isPosition(terms: readonly string[]): boolean {
+  if (terms.length === 1) return true;
+  return terms.length === 2 ? isPair(terms[0]!, terms[1]!) : isGrouped(terms);
+}
+
+/** Where the position starting at `from` ends, the longest run that is one; `from` for none. */
+function positionEnd(terms: readonly string[], from: number): number {
+  let run = from;
+  const isTerm = (term: string) => POSITION_WORD.test(term) || LENGTH_PERCENTAGE.test(term);
+  while (run < terms.length && run - from < 4 && isTerm(terms[run]!)) run++;
+  for (; run > from; run--) if (isPosition(terms.slice(from, run))) return run;
+  return from;
+}
+
+/** Where the size starting at `from` ends: `cover`, `contain`, or one or two lengths or `auto`. */
+function sizeEnd(terms: readonly string[], from: number): number {
+  if (SIZE_WORD.test(terms[from] ?? '')) return from + 1;
+  let at = from;
+  const isTerm = (term: string) => /^auto$/i.test(term) || LENGTH_PERCENTAGE.test(term);
+  while (at < terms.length && at - from < 2 && isTerm(terms[at]!)) at++;
+  return at;
+}
+
+/** Where a position and the size after it end, `at` for no position, or nothing for no size. */
+function positionPart(terms: readonly string[], at: number): number | undefined {
+  const placed = positionEnd(terms, at);
+  if (placed === at || terms[placed] !== '/') return placed;
+  const sized = sizeEnd(terms, placed + 1);
+  return sized > placed + 1 ? sized : undefined;
+}
+
+/** The part of a layer the term at `at` starts, and where it ends; nothing for none. */
+function layerPart(terms: readonly string[], at: number): readonly [string, number] | undefined {
+  const term = terms[at]!;
+  if (/^none$/i.test(term)) return ['image', at + 1];
+  const placed = positionPart(terms, at);
+  if (placed !== at) return placed === undefined ? undefined : ['position', placed];
+  if (REPEAT_ONE.test(term)) return ['repeat', at + 1];
+  if (REPEAT_EACH.test(term))
+    return ['repeat', REPEAT_EACH.test(terms[at + 1] ?? '') ? at + 2 : at + 1];
+  if (ATTACHMENT.test(term)) return ['attachment', at + 1];
+  if (BOX.test(term)) return ['box', at + 1];
+  return parseColor(term) ? ['color', at + 1] : undefined;
+}
+
+/**
+ * A last layer with no image native draws, as a token holds it set on an element: `10% 20%`,
+ * `center / cover`, `none no-repeat` or `left 10px top 20px red`, each part at most once, a box
+ * twice, and the colour, if any, the colour under the layers. Nothing for text that is no such
+ * layer, `none none` or `fixed scroll` say, which makes the whole background invalid.
+ */
+export function imagelessLayer(text: string): BackgroundLayers | undefined {
+  const terms = layerTerms(text);
+  const seen = new Map<string, number>();
+  let color: string | undefined;
+  for (let at = 0; at < terms.length;) {
+    const found = layerPart(terms, at);
+    if (!found) return undefined;
+    const [part, next] = found;
+    const times = (seen.get(part) ?? 0) + 1;
+    if (times > (part === 'box' ? 2 : 1)) return undefined;
+    seen.set(part, times);
+    if (part === 'color') color = terms[at];
+    at = next;
+  }
+  return terms.length ? { images: [], ...(color === undefined ? {} : { color }) } : undefined;
+}

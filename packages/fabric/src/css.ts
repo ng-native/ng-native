@@ -17,6 +17,7 @@ import {
   type BackgroundLayers,
   BACKGROUND_PLACING,
   backgroundLayers,
+  imagelessLayer,
 } from './background-layers.ts';
 import { transformMathRefused } from './inline-transform.ts';
 import {
@@ -269,6 +270,11 @@ export interface TokenValue {
    * `0 var(--modal-padding) var(--modal-padding)`. Worked out into `lengths` where it is defined.
    */
   readonly deferredLengths?: readonly (number | string | TokenValue)[];
+  /**
+   * What a stylesheet's token is as the layers of a `background`, where it is several words or a
+   * gradient the device has no parser for: `center / cover`, `linear-gradient(...)`.
+   */
+  readonly background?: BackgroundLayers;
   /** A whole shadow list, in the processed shape `boxShadow` takes. */
   readonly shadow?: readonly unknown[];
   /** One filter function, as the one-entry list `filter` takes: a slot of Tailwind's filters. */
@@ -5549,8 +5555,9 @@ function writeSettled(
 
 /**
  * One prop of a `background: var()`, whose token may hold the images as well as the colour. A
- * token that is a colour leaves an image another rule declared as it is, and one that fits no
- * part of a background makes the shorthand invalid, which unsets the image with the colour.
+ * token that is a colour is a layer with no image, which clears an image another rule declared,
+ * and one that fits no part of a background makes the shorthand invalid, which unsets the image
+ * with the colour.
  * Layers written over the token are drawn above what it holds, whose images take the initial
  * place, as a native list shorter than the images starts again from its first, and a written layer
  * that paints nothing leaves no place ahead of them. Each prop is ranked in the cascade by itself,
@@ -5563,18 +5570,24 @@ function writeLayer(
   layers: BackgroundLayers | undefined,
   over: DeferredDeclaration['over'],
 ): void {
-  if (prop === 'backgroundColor') write(own, prop, layers?.color ?? value, false);
-  else if (layers) own[prop] = layerList(prop, layers.images, over);
-  else if (value === undefined) delete own[prop];
-  else if (over?.[prop]) own[prop] = over[prop];
+  if (prop === 'backgroundColor') return write(own, prop, layers?.color ?? value, false);
+  const images = layers?.images ?? (value === undefined ? undefined : []);
+  const list = images && layerList(prop, images, over);
+  if (list) own[prop] = list;
+  else delete own[prop];
 }
 
-/** One prop's list for a token's images: what is written over them, then what each takes. */
+/**
+ * One prop's list for a token's images: what is written over them, then what each takes. With no
+ * image of the token's, what is written, as the shorthand written out commits it, and with nothing
+ * written either, nothing: the prop is unset, as a weaker rule's image is cleared.
+ */
 function layerList(
   prop: string,
   images: readonly object[],
   over: DeferredDeclaration['over'],
-): unknown[] {
+): readonly unknown[] | undefined {
+  if (!images.length) return over?.[prop];
   const held = prop === BACKGROUND_IMAGE ? images : images.map(() => BACKGROUND_PLACING[prop]);
   const written = over?.[BACKGROUND_IMAGE]?.length ? over[prop] : undefined;
   return [...(written ?? []), ...held];
@@ -5582,16 +5595,11 @@ function layerList(
 
 const BACKGROUND_IMAGE = 'experimental_backgroundImage';
 
-/** The words a last layer can be with no colour: its image of `none`, position, repeat and boxes. */
-const LAST_LAYER_WORDS =
-  /^(?:(?:none|center|left|right|top|bottom|repeat|no-repeat|repeat-x|repeat-y|space|round|scroll|fixed|local|border-box|padding-box|content-box|text)(?:\s+|$))+$/i;
-
 /**
- * The gradients a `background: var()` reads where its token is no colour: see `backgroundLayers`.
- * Only the shorthand, which the compiler marks: `background-color: var()` is a colour or nothing.
- * And only where the token is set as text on an element, which is where a library sets one as the
- * app runs; a stylesheet's is refused where it is written. The token is the one the declaration
- * settles on, the first that is set.
+ * The layers a `background: var()` reads from its token: see `backgroundLayers`. Only the
+ * shorthand, which the compiler marks: `background-color: var()` is a colour or nothing. A
+ * stylesheet's token holds them read at build (`background`); one set on an element as text is
+ * read here. The token is the one the declaration settles on, the first that is set.
  */
 function layersOf(
   declaration: DeferredDeclaration,
@@ -5601,15 +5609,17 @@ function layersOf(
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
   const fallback = declaration.fallbackLayer;
   const token = firstSet(names, tokens) ?? (fallback && substitutedIn(fallback, tokens));
-  const text = token?.keyword;
+  if (!token) return undefined;
+  if (token.background) return token.background;
+  const text = token.keyword;
   if (text && /gradient\(/i.test(text)) return backgroundLayers(text);
-  return token && isEmptyLastLayer(token) ? { images: [] } : undefined;
+  return imagelessTokenLayer(token);
 }
 
-/** Whether a token is valid as a last layer with no colour or image: a position or such words. */
-function isEmptyLastLayer(token: TokenValue): boolean {
-  if (token.length !== undefined || token.lengths?.length === 2) return true;
-  return LAST_LAYER_WORDS.test(token.keyword ?? token.family ?? '');
+/** A token set on an element as a layer with no image: a length, two lengths, or such words. */
+function imagelessTokenLayer(token: TokenValue): BackgroundLayers | undefined {
+  if (token.length !== undefined || token.lengths?.length === 2) return { images: [] };
+  return token.keyword === undefined ? undefined : imagelessLayer(token.keyword);
 }
 
 const BOUND_NUMBERS = new Set([
