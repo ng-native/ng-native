@@ -10581,17 +10581,19 @@ export class Engine implements HostEngine {
   /** The most a fitted box can be: what it is in, or what its insets and margins leave of it. */
   private fitRoom(node: EngineNode): number {
     if (!fitsBetweenInsets(node)) return this.roomIn(node.parent);
-    const style = withOwnSizes(node, this.flowStyle(node));
+    // A side the element sets itself over the other form of it in a sheet, as it is committed.
+    const style = { ...withOwnSizes(node, this.flowStyle(node)) };
+    this.styles.overOtherForms(inlineOf(node), style);
     const whole = this.boxesFor(node, style['position'])?.against[2];
     if (whole === undefined) return Infinity;
-    const taken = (...keys: readonly string[]) => resolveLength(firstOf(style, keys), whole) ?? 0;
+    const taken = (keys: readonly string[]) => resolveLength(firstOf(style, keys), whole) ?? 0;
     const [left, right] = insetSides(node);
     return (
       whole -
-      taken(...left) -
-      taken(...right) -
-      taken('marginLeft', 'marginStart', 'marginHorizontal', 'margin') -
-      taken('marginRight', 'marginEnd', 'marginHorizontal', 'margin')
+      taken(left) -
+      taken(right) -
+      taken(['marginLeft', 'marginStart', 'marginHorizontal', 'margin']) -
+      taken(['marginRight', 'marginEnd', 'marginHorizontal', 'margin'])
     );
   }
 

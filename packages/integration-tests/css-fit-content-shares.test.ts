@@ -261,6 +261,18 @@ describe('a box as wide as its content between two insets', () => {
     // And the room is what the two of them leave.
     const room = 'width: fit-content; left: 100px; inset-inline-start: 5px';
     assert.deepEqual(rtl(room, 'flex: 1 1 0px', WORDS).box('row'), [100, 257]);
+    // An inset set on the element over the other form of it in a sheet: only the one it set.
+    for (const [dir, other] of [
+      ['direction: rtl', 'inset-inline-start'],
+      ['', 'inset-inline-end'],
+    ] as const) {
+      const s = scene(
+        css(dir, `${ROW}; width: fit-content; left: 100px; ${other}: 50px`, 'flex: 1 1 0px'),
+        WORDS,
+      );
+      s.engine.setProp(s.row, 'style', { right: 5 });
+      assert.deepEqual(s.box('row'), [100, 257], `${other} under right`);
+    }
     const centred = 'width: fit-content; left: 0; right: 0; margin: 0 auto';
     assert.deepEqual(rtl(centred).box('row'), [146, 70]);
     assert.deepEqual(rtl('width: fit-content; left: 0; right: auto').box('row'), [0, 70]);
