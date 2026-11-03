@@ -678,6 +678,7 @@ const heldBy = (property: string): string =>
     'aspect-ratio': '7',
     opacity: '0.7',
     transform: 'translateX(7px)',
+    'z-index': '7',
   })[property] ?? '7px';
 
 /** What a border or an outline needs to have a width at all. */
@@ -750,6 +751,9 @@ const MATH_RANGE_CASES = (
     ['margin-left', 'calc(1px - 5px)', 'margin-left'],
     ['margin-top', 'calc(1em - 20px)', 'margin-top'],
     ['top', 'calc(1px - 5px)', 'top'],
+    ['z-index', 'calc(3 / 2)', 'z-index'],
+    ['z-index', 'calc(1 - 2.6)', 'z-index'],
+    ['z-index', 'min(-2.5, 4)', 'z-index'],
   ] as const
 ).flatMap(([property, value, measured]): OracleCase[] => [
   inRule(property, value, measured, false),
@@ -820,6 +824,7 @@ const MATH_TYPE_CASES = [
       ['margin', 'calc(1px + 2)', 'margin-top'],
       ['font-size', 'calc(1px + 2)', 'font-size'],
       ['line-height', 'calc(1px + 2)', 'line-height'],
+      ['z-index', 'calc(1px + 1px)', 'z-index'],
       ['transform', 'translateX(calc(1px + 2))', 'transform'],
     ] as const
   ).flatMap(([property, value, measured]): OracleCase[] => [

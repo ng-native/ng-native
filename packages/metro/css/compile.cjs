@@ -2471,6 +2471,8 @@ function unparsedValue(value, out, deferred, context) {
         `implement. Write the value it stands for.`,
     );
   }
+  const order = property === 'z-index' ? integerOfMath(parts, context) : undefined;
+  if (order !== undefined) return void (out.zIndex = order);
   // A bare number `markUnitless` tagged, which lightningcss hands over as an unknown dimension.
   const bare = parts.find((part) => /^__(?:unitless|negative)$/.test(part.value?.unit));
   if (bare) length({ type: 'dimension', value: bare.value }, context);
@@ -2763,6 +2765,34 @@ function reparsed(property, text, context) {
     throw new CssUnsupported(`${context}: could not read '${property}: ${text}'`);
   }
   return found;
+}
+
+/**
+ * Whether a term holds no percentage, which a `scale()` takes and a `z-index` does not. A length
+ * is left for the `scale()` to refuse.
+ */
+const noPercentage = (term) =>
+  term?.type === 'function'
+    ? term.value.arguments.every(noPercentage)
+    : term?.value?.type !== 'percentage';
+
+/**
+ * A math function of numbers, `calc(3 / 2)`, as the integer CSS rounds it to, half up: lightningcss
+ * reads none in a `z-index`. Undefined for anything else: a number written out, which is no
+ * integer, a length or a percentage. It is worked out as a `scale()`, which takes any number.
+ */
+function integerOfMath(parts, context) {
+  if (parts.length !== 1 || parts[0].type !== 'function' || !noPercentage(parts[0])) {
+    return undefined;
+  }
+  let typed;
+  try {
+    typed = reparsed('transform', `scale(${cssText(parts, context)})`, context);
+  } catch {
+    return undefined;
+  }
+  const value = typed?.property === 'transform' ? typed.value[0]?.value?.[0]?.value : undefined;
+  return typeof value === 'number' ? Math.round(value) : undefined;
 }
 
 /** Unparsed terms as the CSS they were: words, numbers, lengths and functions of them. */

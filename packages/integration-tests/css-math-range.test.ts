@@ -127,6 +127,24 @@ describe('a math function of a length and a number in a stylesheet', () => {
     const { warnings } = compiled('.a { flex-grow: -1 }');
     assert.match(warnings[0]!, /nothing below zero/);
   });
+
+  it('takes one math function of a number in a z-index, and nothing more', () => {
+    assert.equal(compiled('.a { z-index: calc(3 / 2) }').sheet.rules[0].declarations.zIndex, 2);
+    for (const value of [
+      'calc(1), 2',
+      'calc(1) calc(2)',
+      'calc(1px)',
+      'calc(37% * -1)',
+      '0.35',
+      // Chrome clamps this one to the largest integer. Nothing here folds it, and it is refused
+      // rather than sent as no number at all.
+      'calc(1 / 0)',
+    ]) {
+      const { sheet, warnings } = compiled(`.a { z-index: ${value} }`);
+      assert.equal(sheet.rules.length, 0, value);
+      assert.match(warnings[0]!, /z-index/, value);
+    }
+  });
 });
 
 describe('the props with nothing below zero', () => {

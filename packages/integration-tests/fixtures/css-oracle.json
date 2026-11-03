@@ -576,6 +576,54 @@
     }
   },
   {
+    "name": "a rule's z-index: calc(3 / 2), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "2"
+    }
+  },
+  {
+    "name": "an inline z-index: calc(3 / 2), read as z-index, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "2"
+    }
+  },
+  {
+    "name": "a rule's z-index: calc(1 - 2.6), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-2"
+    }
+  },
+  {
+    "name": "an inline z-index: calc(1 - 2.6), read as z-index, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-2"
+    }
+  },
+  {
+    "name": "a rule's z-index: min(-2.5, 4), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-2"
+    }
+  },
+  {
+    "name": "an inline z-index: min(-2.5, 4), read as z-index, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-2"
+    }
+  },
+  {
     "name": "a negative in max-width, in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",
@@ -1549,6 +1597,22 @@
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
       "line-height": "7px"
+    }
+  },
+  {
+    "name": "a rule's z-index: calc(1px + 1px), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "7"
+    }
+  },
+  {
+    "name": "an inline z-index: calc(1px + 1px), read as z-index, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "7"
     }
   },
   {
