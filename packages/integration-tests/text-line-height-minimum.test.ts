@@ -79,7 +79,8 @@ describe('the least height of text', () => {
     s.say('pad', 'pad');
     s.say('content', 'pad content');
     assert.equal(s.least('pad'), 41);
-    assert.equal(s.least('content'), 24);
+    // A content box's least is its line alone, committed as its border box's.
+    assert.equal(s.least('content'), 41);
   });
 
   it('is the tallest line of the text in it, a run with a line height of its own among them', () => {

@@ -5,6 +5,7 @@
  * text at ten points a character, wrapping at spaces and breaking at line breaks, twenty points a
  * line.
  */
+import { isDeepStrictEqual } from 'node:util';
 import type { FabricNode, FabricUIManager } from '@ng-native/fabric';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { layOutRects, type Box } from './layout.ts';
@@ -72,6 +73,19 @@ export function layOutFabric(
   let laidFrom: readonly FakeFabricNode[] | undefined;
   let laidIn = '';
   let laid: ReturnType<typeof layOutRects<FakeFabricNode>> | undefined;
+  /** The props each view was last laid out with, by tag: see `asLaidOut`. */
+  const laidWith = new Map<number, Readonly<Record<string, unknown>>>();
+  // React Native's Yoga leaves `boxSizing` out of the style it compares (`Style::operator==`), so
+  // a view whose props change in nothing else is not laid out again and keeps the box-sizing it
+  // had. Each tree laid out is laid out that way.
+  const asLaidOut = (node: FakeFabricNode): Readonly<Record<string, unknown>> => {
+    const before = laidWith.get(node.reactTag);
+    const { boxSizing: _now, ...rest } = node.props;
+    const { boxSizing: _then, ...had } = before ?? {};
+    const props = before && isDeepStrictEqual(rest, had) ? before : node.props;
+    laidWith.set(node.reactTag, props);
+    return props;
+  };
   /** How far each scroll view has been told to scroll, by tag. */
   const scrolled = new Map<number, { x: number; y: number }>();
   // A commit hands over a new tree, so the one laid out is kept only as long as it is committed,
@@ -81,7 +95,7 @@ export function layOutFabric(
     if (laidFrom !== fabric.committed || laidIn !== size || !laid) {
       laidFrom = fabric.committed;
       laidIn = size;
-      laid = layOutRects(fabric.committed, screen, paragraph, conformance);
+      laid = layOutRects(fabric.committed, screen, paragraph, conformance, asLaidOut);
       if (scrolled.size) for (const node of fabric.committed) shift(laid, node, 0, 0);
     }
     return laid;

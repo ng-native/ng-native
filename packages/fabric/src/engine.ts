@@ -4710,6 +4710,41 @@ function leastWins(props: Record<string, unknown>, size: 'Height' | 'Width'): vo
   if (most < least) props[MOST[size]] = least;
 }
 
+/** The sizes across a box's width and down its height, as committed. */
+const SIZES = {
+  Width: ['width', 'minWidth', 'maxWidth'],
+  Height: ['height', 'minHeight', 'maxHeight'],
+} as const;
+
+/**
+ * A content box's sizes in points as its border box's, with its padding and border added, and
+ * its `box-sizing` committed as `border-box`: the same box. React Native's Yoga leaves
+ * `boxSizing` out of the style it compares (`Style::operator==`, read by `updateYogaProps`), so a
+ * view whose box-sizing alone changes is not laid out again and keeps its old size, where a
+ * changed size is compared and laid out.
+ *
+ * ponytail: a box with a size or a side of padding or border that is not in points is left a
+ * content box, and keeps its old size natively when its box-sizing alone changes. Give it a size
+ * Yoga compares that changes with it if one is seen. A basis is committed as written: by here
+ * only a box out of the flow, which Yoga reads none of, or a grid item being measured has one.
+ */
+function contentAsBorderBox(props: Record<string, unknown>): void {
+  const inPoints = (value: unknown) => value == null || typeof value === 'number';
+  const noShare = (value: unknown) => value === 'auto' || inPoints(value);
+  for (const size of ['Width', 'Height'] as const) {
+    if (!SIZES[size].every((key) => noShare(props[key]))) return;
+    const found = sides(props, size).map((keys) => keys.map((key) => props[key]).find(isSet));
+    if (!found.every(inPoints)) return;
+  }
+  for (const size of ['Width', 'Height'] as const) {
+    const frame = around(props, size);
+    for (const key of SIZES[size]) {
+      if (typeof props[key] === 'number') props[key] = (props[key] as number) + frame;
+    }
+  }
+  props['boxSizing'] = 'border-box';
+}
+
 /**
  * Where a line may break: at a space, after a hyphen, and anywhere in a script written without
  * spaces. A soft hyphen and a zero-width space are places to break that draw nothing.
@@ -12007,6 +12042,8 @@ export class Engine implements HostEngine {
       if (merged['maxHeight'] !== undefined) leastWins(merged, 'Height');
       if (merged['maxWidth'] !== undefined) leastWins(merged, 'Width');
     }
+    // Last of the sizes, once each is written: a content box is committed as its border box.
+    if (merged['boxSizing'] === 'content-box') contentAsBorderBox(merged);
     keptForPaint(node, merged);
     return merged;
   }

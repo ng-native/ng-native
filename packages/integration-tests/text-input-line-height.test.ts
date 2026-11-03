@@ -178,13 +178,14 @@ describe('a single-line text input with a line height', () => {
   });
 
   it('keeps the line alone as the minHeight of a content-box field', () => {
-    // Yoga adds a content-box field's padding and border to its minHeight itself.
+    // The line alone, committed as the border box's: the same 41 as a border-box field's.
     const { props } = commitInput((engine, input) => {
       engine.addClass(input, 'field');
       engine.setProp(input, 'style', { boxSizing: 'content-box' });
     });
     assert.equal(props()['lineHeight'], undefined);
-    assert.equal(props()['minHeight'], 24);
+    assert.equal(props()['minHeight'], 41);
+    assert.equal(props()['boxSizing'], 'border-box');
   });
 
   it('keeps the line box within a maxHeight', () => {
@@ -342,8 +343,9 @@ describe('a single-line iOS text input in a row aligned by baseline', () => {
   });
 
   it('is as tall as its line where its height is its content', () => {
+    // Its line less what is now padding, committed as the border box's: as tall as it was.
     const { props } = inRow({ alignItems: 'baseline' }, { boxSizing: 'content-box' });
-    near(props()['minHeight'], 24 - 2 * HALF);
+    near(props()['minHeight'], 41);
     near(props()['paddingTop'], 8 + HALF);
   });
 
@@ -361,11 +363,12 @@ describe('a single-line iOS text input in a row aligned by baseline', () => {
     near(props()['paddingTop'], 8 + half);
     near(props()['paddingBottom'], 6 + half);
     assert.equal(props()['height'], 44);
-    // Its content alone is the height of a content-box field, less what is now padding.
+    // Its content alone is the height of a content-box field, less what is now padding, and
+    // committed as the border box's: 44 and the 17 of padding and border around it.
     const content = inRow({ alignItems: 'baseline' }, { height: 44, boxSizing: 'content-box' });
     const inner = (44 - 16 * 1.19) / 2;
     near(content.props()['paddingTop'], 8 + inner);
-    near(content.props()['height'], 44 - 2 * inner);
+    near(content.props()['height'], 61);
     assert.equal(inRow({ alignItems: 'center' }, { height: 44 }).props()['paddingTop'], 8);
   });
 

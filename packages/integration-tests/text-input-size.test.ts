@@ -35,9 +35,10 @@ describe('size on a text input', () => {
     const padded = `${FONT} text-input { padding: 8px 12px; border-width: 1px }`;
     // As written in a template, the attribute is text.
     assert.equal(field(padded, { size: '20' }).width(), 201);
-    // A content box's width is its characters alone: Yoga adds the padding and border itself.
+    // A content box's width is its characters alone, committed as its border box's: see
+    // `contentAsBorderBox`.
     const content = `${padded} text-input { box-sizing: content-box }`;
-    assert.equal(field(content, { size: 20 }).width(), 175);
+    assert.equal(field(content, { size: 20 }).width(), 201);
     assert.equal(field('text-input { font-size: 32px }', { size: 10 }).width(), 175);
   });
 

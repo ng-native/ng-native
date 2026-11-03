@@ -35,9 +35,10 @@ describe('rows on a multiline text input', () => {
     const padded = `${LINES} text-input { padding: 4px 0; border-width: 1px }`;
     // As written in a template, the attribute is text.
     assert.equal(field(padded, { multiline: true, rows: '3' }).height(), 70);
-    // A content box's height is its lines alone: Yoga adds the padding and border itself.
+    // A content box's height is its lines alone, committed as its border box's: see
+    // `contentAsBorderBox`.
     const content = `${padded} text-input { box-sizing: content-box }`;
-    assert.equal(field(content, { multiline: true, rows: 3 }).height(), 60);
+    assert.equal(field(content, { multiline: true, rows: 3 }).height(), 70);
   });
 
   it('gives way to a height of its own, and is no height where `auto` is written', () => {

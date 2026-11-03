@@ -97,7 +97,8 @@ async function asked() {
 describe('a library element in an app that asked for web-compat', () => {
   it('is sized content-box, as getComputedStyle says', async () => {
     const { element, committed } = await asked();
-    assert.equal(committed('div')['boxSizing'], 'content-box');
+    // Committed as the border box it makes, which Yoga compares: see `contentAsBorderBox`.
+    assert.equal(committed('div')['boxSizing'], 'border-box');
     assert.equal(computed(element('div')).boxSizing, 'content-box');
   });
 
@@ -146,7 +147,8 @@ describe('a library element in an app that asked for web-compat', () => {
       assert.equal(committed(id)['boxSizing'], 'border-box', id);
       assert.equal(computed(element(id)).boxSizing, 'border-box', id);
     }
-    assert.equal(committed('input')['boxSizing'], 'content-box');
+    assert.equal(computed(element('input')).boxSizing, 'content-box');
+    assert.equal(committed('input')['boxSizing'], 'border-box', 'committed as its border box');
     assert.equal(committed('input')['underlineColorAndroid'], 'transparent', "a field's own");
   });
 

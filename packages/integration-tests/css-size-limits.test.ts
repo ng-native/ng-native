@@ -130,8 +130,10 @@ describe('a least size over a most', () => {
   });
 
   it('leaves a content box its most, which its padding is outside', () => {
+    // Committed as its border box's: the most and the padding and border outside it.
     const s = scene(CSS, ['a', ['content']]);
-    assert.equal(s.committed('content', 'maxHeight'), 10);
+    assert.equal(s.committed('content', 'maxHeight'), 60);
+    assert.equal(s.committed('content', 'boxSizing'), 'border-box');
   });
 
   it('gives the most back when the least goes under it', () => {

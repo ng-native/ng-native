@@ -161,7 +161,8 @@ export function layOutTree<T extends TreeNode>(
 /**
  * Lay out a committed tree in a screen-sized root view, and answer each node's box against the
  * screen. `measured` gives a node a size from its content, as a paragraph has, in place of
- * children: the width it takes with nothing limiting it, and its height at a width.
+ * children: the width it takes with nothing limiting it, and its height at a width. `propsOf` gives
+ * the props a node is laid out with, its committed ones unless said otherwise.
  */
 export function layOutRects<T extends TreeNode>(
   nodes: readonly T[],
@@ -170,6 +171,7 @@ export function layOutRects<T extends TreeNode>(
     node: T,
   ) => ((width: number | undefined) => { width: number; height: number }) | undefined,
   conformance: 'classic' | 'strict' = 'classic',
+  propsOf: (node: T) => Readonly<Record<string, unknown>> = (node) => node.props,
 ): Map<T, Box> {
   const yoga = new Map<T, Node>();
   const build = (node: T): Node => {
@@ -177,7 +179,7 @@ export function layOutRects<T extends TreeNode>(
     // A prop taken away is committed as null, which native reads as unset.
     apply(
       created,
-      Object.fromEntries(Object.entries(node.props).filter(([, value]) => value !== null)),
+      Object.fromEntries(Object.entries(propsOf(node)).filter(([, value]) => value !== null)),
     );
     const measure = measured(node);
     if (measure) {
