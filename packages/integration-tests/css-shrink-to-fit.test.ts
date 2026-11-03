@@ -227,6 +227,23 @@ describe('an inline-level box holding a percentage width', () => {
     assert.equal(s.box('cell c')[2], 32);
   });
 
+  it('counts a box with a width of its own at that width, not what overflows it', () => {
+    // Chrome: 120, a box 500 wide inside the one of 120 notwithstanding.
+    const s = scene(`${BASE} .over { width: 500px; height: 10px }`, [
+      'p',
+      ['i', ['full'], ['w', ['over']]],
+    ]);
+    assert.equal(s.box('i')[2], 120);
+    assert.equal(s.box('full')[2], 120);
+  });
+
+  it('counts a box where it is before a relative offset moves it', () => {
+    // Chrome: 500, where the box is drawn 200 to the right of that.
+    const s = scene(`${BASE} .w { width: 500px; left: 200px }`, ['p', ['i', ['full'], ['w']]]);
+    assert.equal(s.box('i')[2], 500);
+    assert.equal(s.box('full')[2], 500);
+  });
+
   it('follows its content growing', () => {
     const s = scene(`${BASE} .wide { width: 200px; height: 20px }`, ['p', ['i', ['full'], ['w']]]);
     assert.equal(s.box('full')[2], 120);

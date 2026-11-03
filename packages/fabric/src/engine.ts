@@ -10561,16 +10561,22 @@ export class Engine implements HostEngine {
   /**
    * How far right the boxes in a node reach, in the window: past its own edge where they
    * overflow. `inFlow` leaves out a box out of the flow, and all in it, as a browser's content
-   * size does.
+   * size does. A box counts where it is before a relative offset moves it, `moved` being what
+   * the boxes around it are moved by, and one with a width of its own counts at that width,
+   * not for what overflows it.
    */
-  private reachOf(node: EngineNode, least: number, inFlow: boolean): number {
+  private reachOf(node: EngineNode, least: number, inFlow: boolean, moved = 0): number {
     let reach = least;
     for (const child of node.childList) {
       if (child.nodeKind !== 'element' || !child.committed) continue;
-      if (inFlow && OUT_OF_FLOW.has(readStyle(child, 'position') as string)) continue;
+      const props = child.committed.props;
+      const out = OUT_OF_FLOW.has(props['position'] as string);
+      if (inFlow && out) continue;
+      const shift = moved + (out ? 0 : relativeShift(props).x);
       const box = this.boxOf(child);
-      if (box) reach = Math.max(reach, box[0] + box[2]);
-      reach = Math.max(reach, this.reachOf(child, reach, inFlow));
+      if (box) reach = Math.max(reach, box[0] + box[2] - shift);
+      if (typeof readStyle(child, 'width') === 'number') continue;
+      reach = Math.max(reach, this.reachOf(child, reach, inFlow, shift));
     }
     return reach;
   }

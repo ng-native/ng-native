@@ -365,6 +365,46 @@ describe('a box as wide as its content that holds more than the room', () => {
     assert.equal(s.box('row')[1], 30);
   });
 
+  /** A box in `parent`, styled `style`. */
+  function inside(s: ReturnType<typeof overflowing>, parent: EngineNode, style: object) {
+    const node = s.engine.createElement('view');
+    s.engine.setProp(node, 'style', style);
+    s.engine.appendChild(parent, node);
+    return node;
+  }
+
+  it('counts a box in it where it is before a relative offset moves it', () => {
+    // Chrome: 530 for each, as the offset moves the box and not what it contributes.
+    for (const conformance of CONFORMANCES) {
+      const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1', conformance);
+      s.engine.setProp(s.item, 'style', { left: 600 });
+      assert.equal(s.box('row')[1], 530, `an item moved (${conformance})`);
+      s.engine.setProp(s.item, 'style', { width: 'auto', left: 600 });
+      inside(s, s.item, { width: 500, height: 10 });
+      assert.equal(s.box('row')[1], 530, `a box in an item moved (${conformance})`);
+      s.engine.setProp(s.item, 'style', { width: 'auto' });
+      inside(s, s.item, { width: 400, height: 10, left: 300 });
+      assert.equal(s.box('row')[1], 530, `a box moved in an item (${conformance})`);
+    }
+  });
+
+  it('counts a box in it with a width of its own at that width, not what overflows it', () => {
+    // Chrome: 530 in a row, 500 in a column, and 530 under an item as wide as its content.
+    for (const conformance of CONFORMANCES) {
+      const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1', conformance);
+      inside(s, s.item, { width: 900, height: 10 });
+      assert.equal(s.box('row')[1], 530, `in a row (${conformance})`);
+      s.engine.setProp(s.item, 'style', { width: 'auto' });
+      const own = s.item.childList[0]!;
+      s.engine.setProp(own, 'style', { width: 500, height: 10 });
+      inside(s, own, { width: 900, height: 10 });
+      assert.equal(s.box('row')[1], 530, `further down (${conformance})`);
+      const column = overflowing('width: fit-content', 'width: 50%', conformance);
+      inside(column, column.item, { width: 900, height: 10 });
+      assert.equal(column.box('row')[1], 500, `in a column (${conformance})`);
+    }
+  });
+
   it('follows what it holds growing past the room and back', () => {
     const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1');
     assert.equal(s.box('row')[1], 530);
