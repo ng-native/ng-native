@@ -405,6 +405,35 @@ describe('a box as wide as its content that holds more than the room', () => {
     }
   });
 
+  it('counts a box in it capped at a width no wider than that cap', () => {
+    // Chrome: a box capped at 500 holding 900 counts 500, under a minimum of 600 counts that,
+    // under a cap of 50% counts all of it, and holding 400 counts the 400.
+    for (const conformance of CONFORMANCES) {
+      const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1', conformance);
+      const named = (what: string) => `${what} (${conformance})`;
+      s.engine.setProp(s.item, 'style', { width: 'auto', maxWidth: 500 });
+      const held = inside(s, s.item, { width: 900, height: 10 });
+      assert.equal(s.box('row')[1], 530, named('an item capped'));
+      s.engine.setProp(s.item, 'style', { width: 'auto', maxWidth: 500, left: 100 });
+      assert.equal(s.box('row')[1], 530, named('an item capped and moved'));
+      s.engine.setProp(s.item, 'style', { width: 'auto', maxWidth: 500, minWidth: 600 });
+      assert.equal(s.box('row')[1], 630, named('an item capped under a minimum'));
+      s.engine.setProp(s.item, 'style', { width: 'auto', maxWidth: '50%' });
+      assert.equal(s.box('row')[1], 930, named('an item capped at a share'));
+      s.engine.setProp(s.item, 'style', { width: 'auto', maxWidth: 500 });
+      s.engine.setProp(held, 'style', { width: 400, height: 10 });
+      assert.equal(s.box('row')[1], 430, named('an item capped wider than it holds'));
+      s.engine.setProp(s.item, 'style', { width: 'auto' });
+      s.engine.setProp(held, 'style', { maxWidth: 500 });
+      inside(s, held, { width: 900, height: 10 });
+      assert.equal(s.box('row')[1], 530, named('a box capped further down'));
+      const column = overflowing('width: fit-content', 'width: 50%', conformance);
+      column.engine.setProp(column.item, 'style', { width: 'auto', maxWidth: 500 });
+      inside(column, column.item, { width: 900, height: 10 });
+      assert.equal(column.box('row')[1], 500, named('in a column'));
+    }
+  });
+
   it('follows what it holds growing past the room and back', () => {
     const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1');
     assert.equal(s.box('row')[1], 530);

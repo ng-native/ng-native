@@ -10576,7 +10576,13 @@ export class Engine implements HostEngine {
       const box = this.boxOf(child);
       if (box) reach = Math.max(reach, box[0] + box[2] - shift);
       if (typeof readStyle(child, 'width') === 'number') continue;
-      reach = Math.max(reach, this.reachOf(child, reach, inFlow, shift));
+      const held = this.reachOf(child, reach, inFlow, shift);
+      // One capped at a width counts no further than the cap: a browser clamps what it holds.
+      const cap = readStyle(child, 'maxWidth');
+      reach = Math.max(
+        reach,
+        box && typeof cap === 'number' ? Math.min(held, box[0] - shift + cap) : held,
+      );
     }
     return reach;
   }
