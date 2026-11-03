@@ -235,15 +235,14 @@ describe('a sheet on the same stack a guard decides for', () => {
     });
   }
 
-  async function open(url: string, config: Routes, presenting = true) {
+  async function open(url: string, config: Routes) {
     const app = await render(sheetMod['GuardShell'] as Type<unknown>, {
       providers: [provideNativeRouter(config)],
     });
     await settle();
     const router = app.componentRef.injector.get(Router);
     const navigation = app.componentRef.injector.get(NativeNavigation);
-    if (presenting) await navigation.present(url, { as: 'formSheet' });
-    else await router.navigateByUrl(url);
+    await navigation.present(url, { as: 'formSheet' });
     await settled();
     const screens = () =>
       flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen');
@@ -298,15 +297,6 @@ describe('a sheet on the same stack a guard decides for', () => {
     await settled();
     assert.equal(router.url, '/compose');
     assert.ok(sheet());
-  });
-
-  it('leaves a pushed screen to native', async () => {
-    const { screens } = await open(
-      '/editor',
-      guardedAt('editor', () => false),
-      false,
-    );
-    assert.notEqual(screens().at(-1)!.props['preventNativeDismiss'], true);
   });
 
   it('leaves a refusal the page binds to the page, and asks once it lets go', async () => {

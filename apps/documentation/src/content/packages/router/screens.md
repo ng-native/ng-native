@@ -188,16 +188,25 @@ A page that should not be shown at all, a record that no longer exists, can call
 appears, from an `effect()` in its constructor: a back asked for while the navigation is still
 putting the page up waits for it, then goes.
 
-A presented screen refuses a native dismissal the same way when leaving it would run a
-`canDeactivate` guard, and the guard answers: a swipe it allows dismisses the screen, and one it
-refuses leaves the screen up. That is a guard on the screen's route or on a route showing inside
-it, and for a [page of another tab](/packages/router/tabs), a guard on a route above it too. A page
+The screen in front refuses a native dismissal the same way when leaving it would run a
+`canDeactivate` guard, and the guard answers: a swipe, a back or a pick from the iOS back button's
+menu that it allows goes back, and one it refuses leaves the screen up. That is a guard on the
+screen's route or on a route showing inside it, and for a [page of another
+tab](/packages/router/tabs), a guard on a route above it too. A screen on a stack lets go once
+leaving it would run no guard, as when the route showing inside it changes to one without. A page
 that also binds `preventNativeDismiss` hears `(nativeDismissCancelled)` for those attempts, even
 while its binding is false, and while the binding is true the guard is not asked.
 
-On Android this covers the Back button and the header's back arrow but not dragging a `formSheet`
-down, which dismisses the sheet whatever a guard says. Pushed screens are not held: on iOS, a swipe
-back from one is not stopped by its guard.
+On iOS a pushed screen held this way cannot be swiped back interactively: the swipe does not follow
+the finger, it only asks, and a back the guard allows is the usual animated pop. React Navigation's
+native stack does the same for `usePreventRemove`. A pick from the back button's menu that goes back
+past covered screens asks only the guards of the screen in front, as `back()` does from code: the
+router asked the covered screens' guards as it covered them.
+
+On Android the Back button and the header's back arrow go to the guards the same way, but dragging a
+`formSheet` down, or tapping outside it, dismisses the sheet whatever a guard says. A screen native
+has dismissed this way is gone and does not come back, so the router follows it without asking its
+guards, or those of the routes showing inside it.
 
 ## Presented screens have no header
 

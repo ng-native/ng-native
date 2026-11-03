@@ -71,6 +71,7 @@ import { poppingTo } from './popping-to.ts';
 import { markScreenRoute } from './tab-routes.ts';
 import { IN_TAB } from './in-tab.ts';
 import { ownHost } from './own-host.ts';
+import { leaveUnasked } from './leave-unasked.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
 import { HostEngine, nativePlatform, type Engine, type EngineNode } from '@ng-native/fabric';
 import type { ScreenPresentation } from './screen-presentation.ts';
@@ -389,7 +390,10 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     const presentation = this.claimPresentation(this.currentIntent()) ?? {
       stackPresentation: 'modal',
     };
-    const screen = this.createScreen(presentation, () => this.dismissPresentedPage());
+    const screen = this.createScreen(presentation, () => {
+      leaveUnasked(route.snapshot.pathFromRoot.find((above) => above.outlet === PRESENTED)!);
+      this.dismissPresentedPage();
+    });
     const inFront = signal(true);
     const { ref, unbind } = this.createPage(
       component,
@@ -428,10 +432,11 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   }
 
   /**
-   * A presented screen a `canDeactivate` guard decides for: native never dismisses it, and an
-   * attempt goes to the router, where the guards answer. A screen native has dismissed does not
-   * come back, and a guard that refused would hold the router on a page nobody can see. So the
-   * screen refuses, and leaves as any page does when the router takes it off the stack.
+   * A screen a `canDeactivate` guard decides for: native never dismisses it, and an attempt goes
+   * to the router, where the guards answer. A screen native has dismissed does not come back, and
+   * a guard that refused would hold the router on a page nobody can see. So the screen refuses,
+   * and leaves as any page does when the router takes it off the stack. It lets go once leaving it
+   * would run no guard.
    *
    * A refusal bound on the page is the page's: it hears the attempt, and the guards are not asked.
    * A value the outlet writes is taken out of the screen's `writes`, which tells the two apart.
@@ -439,22 +444,31 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private askGuardsFirst(
     { screen, ref }: StackEntry,
     guarded: () => boolean,
-    dismiss: () => unknown,
+    dismiss: (count: number) => unknown,
   ): void {
     const writes = (screen as Partial<EngineNode>).writes;
+    let held = false;
     // After every render, as a binding can let go of the value and a child route can arrive, for
     // as long as the page lasts.
     afterEveryRender(
       () => {
-        if (refuses(screen) || !guarded()) return;
-        this.renderer.setProperty(screen, 'preventNativeDismiss', true);
+        if (refuses(screen) && writes?.has('preventNativeDismiss')) return void (held = false);
+        if (guarded() === held) return;
+        held = !held;
+        this.renderer.setProperty(screen, 'preventNativeDismiss', held);
         writes?.delete('preventNativeDismiss');
       },
       { injector: ref.injector },
     );
-    this.renderer.listen(screen, 'nativeDismissCancelled', () => {
-      if (refuses(screen) && !writes?.has('preventNativeDismiss')) dismiss();
-    });
+    this.renderer.listen(
+      screen,
+      'nativeDismissCancelled',
+      (event: { nativeEvent?: { dismissCount?: number } }) => {
+        if (refuses(screen) && !writes?.has('preventNativeDismiss')) {
+          dismiss(event?.nativeEvent?.dismissCount ?? 1);
+        }
+      },
+    );
   }
 
   /** The router left the presented page: take it off the stack. */
@@ -586,14 +600,20 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     ref.onDestroy(this.tab.coverBar(inFront));
   }
 
-  /** `askGuardsFirst` for a screen presented on this stack. A pushed screen is left to native. */
+  /**
+   * `askGuardsFirst` for a screen pushed or presented on this stack, while it is the one in front:
+   * a pop past a screen under it does not leave that screen's routes, which the router left as it
+   * covered it. A pick from the iOS back button's menu goes back as far as it asked.
+   *
+   * On iOS a held push cannot be swiped back interactively: `RNSScreenStack` cancels the pop at
+   * once, as it does for React Navigation's `usePreventRemove`, and the guards decide the attempt.
+   */
   private askGuardsOfPresented(entry: StackEntry): void {
     if (this.entries.length < 2) return;
-    if ((entry.presentation?.stackPresentation ?? 'push') === 'push') return;
     this.askGuardsFirst(
       entry,
-      () => guardsBelow(entry.route.snapshot),
-      () => this.onNativeDismiss(1),
+      () => entry === this.top && guardsBelow(entry.route.snapshot),
+      (count) => this.onNativeDismiss(count),
     );
   }
 
@@ -1036,7 +1056,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
 
   private createScreen(
     presentation?: ScreenPresentation,
-    dismissed = (count: number) => this.onNativeDismiss(count),
+    dismissed = (count: number) => this.followNativeDismiss(count),
   ): unknown {
     const screen = ownHost(this.renderer.createElement('screen'));
     // From before the presentation is set, so a value it or the page's host bindings write counts
@@ -1115,6 +1135,16 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   }
 
   /**
+   * `onNativeDismiss` for screens native has taken off already, past their guards. Only the top
+   * screen's routes are the router's now: it asked the guards of the screens under it as it
+   * covered them.
+   */
+  private followNativeDismiss(count: number): void {
+    if (this.top) leaveUnasked(this.top.route.snapshot);
+    this.onNativeDismiss(count);
+  }
+
+  /**
    * A back, from the button or `NativeNavigation`: pop the top screen, as long as there is one
    * below it and this stack is the one the user is looking at. A stack in a tab behind, or under
    * a screen pushed over the tab bar, is still subscribed, and the newest one would otherwise
@@ -1186,8 +1216,11 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   }
 
   private holdRefusal(holder: HoldingScreen): void {
-    // A stack in a tab behind is inside the same screen, and has no say in it.
-    if (!refuses(this.top?.screen) || !this.isShowing()) return this.release(holder);
+    // A stack in a tab behind is inside the same screen, and has no say in it. A refusal the outlet
+    // holds for a guard is not passed on: the screen holding the stack asks the same guards.
+    const top = this.top?.screen as Partial<EngineNode> | undefined;
+    const pages = refuses(top) && !!top?.writes?.has('preventNativeDismiss');
+    if (!pages || !this.isShowing()) return this.release(holder);
     const node = holder.screen as EngineNode;
     // A refusal held only so the guards are asked gives way: this one is the page's.
     if (refuses(holder.screen) && node.writes?.has('preventNativeDismiss')) return;
