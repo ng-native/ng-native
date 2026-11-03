@@ -51,6 +51,13 @@ describe('a custom property nothing defines', () => {
     assert.ok(!said().some((line) => /--unset-tint|--tone|--edge/.test(line)), said().join('\n'));
   });
 
+  it("says nothing of a background's last layer that falls back to a layer with no colour", async () => {
+    const { fabric } = await render(Host, { dev: true });
+    const g = flatten(fabric.committed).find((n) => n.props['nativeID'] === 'g')!;
+    assert.equal((g.props['experimental_backgroundImage'] as unknown[]).length, 1);
+    assert.ok(!said().some((line) => line.includes('--layer')), said().join('\n'));
+  });
+
   it('says nothing in a release build', async () => {
     await render(Host, { dev: false });
     assert.deepEqual(said(), []);

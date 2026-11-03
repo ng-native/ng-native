@@ -4728,6 +4728,8 @@ export class StyleResolver {
     const name = declaration.reference;
     if (name === undefined || name in tokens) return;
     if (declaration.fallback !== undefined || declaration.fallbackToken) return;
+    // A background's last layer falls back to a layer with no colour, `var(--x, center)`.
+    if (declaration.fallbackLayer) return;
     if (declaration.alternatives?.some((alternative) => alternative in tokens)) return;
     this.onUndefinedToken!(name, declaration.props, declaration.on);
   }

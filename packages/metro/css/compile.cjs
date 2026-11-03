@@ -774,7 +774,8 @@ function tokenUnderLayers(last, over, context) {
   const token = deferVar({ propertyId: { property: 'background-color' }, value: last }, context);
   const raw = last[0].value?.fallback;
   const chained = fallbackChain(raw, context).token;
-  const fallbackLayer = chained && { ...chained, ...backgroundForm(innermostFallback(raw)) };
+  const layer = backgroundForm(innermostFallback(raw));
+  const fallbackLayer = chained || layer.background ? { ...chained, ...layer } : null;
   return {
     ...token,
     layers: true,

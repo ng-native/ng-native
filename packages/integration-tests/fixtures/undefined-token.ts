@@ -11,6 +11,7 @@ import { View } from '../../components/src/view.ts';
     <view class="fallback" nativeID="c"></view>
     <view class="defined" nativeID="d"></view>
     <view class="scoped" nativeID="e"><view class="inner" nativeID="f"></view></view>
+    <view class="layered" nativeID="g"></view>
   `,
   styles: `
     .pinned {
@@ -28,6 +29,9 @@ import { View } from '../../components/src/view.ts';
     }
     .inner {
       padding: var(--edge);
+    }
+    .layered {
+      background: linear-gradient(red, blue), var(--layer, center / cover);
     }
   `,
 })
