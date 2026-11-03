@@ -4723,7 +4723,7 @@ export class StyleResolver {
     this.reportPlatformColour(declaration, tokens);
     // A shadow in currentColor, where the colour in scope is a platform one: `color: CanvasText`.
     const current = own['color'] ?? parentInherited['color'];
-    if (isPlatformColour(current) && holdsCurrentColour(declaration.within)) {
+    if (isPlatformColour(current) && holdsCurrentColour(declaration.within, tokens)) {
       this.onPlatformColour('currentColor', declaration.props, declaration.on);
     }
   }
@@ -6590,12 +6590,15 @@ function platformColourRead(
   return undefined;
 }
 
-/** Whether a deferred value holds `currentColor` written out, which the colour in scope settles. */
-function holdsCurrentColour(value: unknown): boolean {
+/**
+ * Whether a deferred value holds a colour that comes to `currentColor` with these tokens, which the
+ * colour in scope settles: written out, or a shadow's inset token left unset.
+ */
+function holdsCurrentColour(value: unknown, tokens: Readonly<Record<string, TokenValue>>): boolean {
   if (value === null || typeof value !== 'object') return false;
-  if ((colourMarker(value) as { color?: unknown } | undefined)?.color === 'currentcolor')
-    return true;
-  return Object.values(value).some(holdsCurrentColour);
+  const colour = colourMarker(value);
+  if (colour) return resolveColour(colour, tokens) === 'currentcolor';
+  return Object.values(value).some((part) => holdsCurrentColour(part, tokens));
 }
 
 /** `platformColourRead` of the token `name`, which is the one when it holds a platform colour. */

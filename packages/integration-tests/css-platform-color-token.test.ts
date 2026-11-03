@@ -475,6 +475,14 @@ describe('a token holding platform-color() where a colour has to be worked out',
     assert.match(said[0]!, /boxShadow is drawn in currentColor/);
   });
 
+  it('says it of a shadow whose unset inset token leaves it in currentColor', () => {
+    const s = app('.a { color: CanvasText; box-shadow: var(--tw-ring-inset,) 0 0 2px; }');
+    const a = s.element('a');
+    s.engine.commit();
+    assert.equal(s.committed(a)['boxShadow'], undefined);
+    assert.equal(warnings.filter((line) => line.includes('currentColor')).length, 1);
+  });
+
   it('says it of a shadow in currentColor where the colour inherited is a platform one', () => {
     const s = app('.p { color: CanvasText; } .a { box-shadow: 0 0 2px; }');
     const a = s.element('a', 'view', s.element('p'));
