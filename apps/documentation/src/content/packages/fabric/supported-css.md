@@ -398,7 +398,10 @@ container's main axis a box is that size already. Across it, where a box stretch
 stretching and sits at the start, as in a browser, unless the container's `align-items` or its own
 `align-self` already places it. `max-content` is read as `fit-content` on a width or a height,
 and on `max-width` or `max-height` caps a box that would fill its container at its content. Under
-a percentage the box is the smaller of the two.
+a percentage the box is the smaller of the two. A box in the flow that is `width: fit-content` and
+holds a percentage width or an item that grows is no narrower than what in it cannot get
+narrower, a box of a set width say, and overflows its container as in a browser. One between two
+insets, or one holding neither, is held to the room it has.
 A box out of the flow that is as wide as its content by `width: fit-content` or a cap stays so
 between a `left` and a `right`, where Yoga would stretch it: the engine fits it within the room
 they leave, reading its width back, at the cost of two more commits when something in it changes.

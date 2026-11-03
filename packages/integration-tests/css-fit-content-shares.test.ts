@@ -316,6 +316,65 @@ describe('a box as wide as its content between two insets', () => {
   });
 });
 
+describe('a box as wide as its content that holds more than the room', () => {
+  /** `item` holds nothing and is 500 wide; `share`, after it, holds three letters. */
+  function overflowing(row: string, share: string, conformance: Conformance = 'classic') {
+    const s = scene(
+      `${css('', row, 'width: 500px')} .share { ${share} } .free { flex: 1 }`,
+      '',
+      conformance,
+    );
+    s.engine.removeChild(s.item, s.item.childList[0]!);
+    const node = s.engine.createElement('view');
+    s.engine.setClasses(node, 'share');
+    s.engine.setProp(node, 'nativeID', 'share');
+    const words = s.engine.createElement('text');
+    s.engine.appendChild(words, s.engine.createText('abc'));
+    s.engine.appendChild(node, words);
+    s.engine.appendChild(s.row, node);
+    return { ...s, share: node };
+  }
+  const BETWEEN = 'position: absolute; left: 0; right: 0';
+
+  it('reaches past the room, as wide as what it holds', () => {
+    for (const conformance of CONFORMANCES) {
+      for (const [row, share, width, shared] of [
+        ['flex-direction: row; width: fit-content', 'flex: 1', 530, 30],
+        ['flex-direction: row; width: fit-content', 'width: 50%', 530, 265],
+        ['width: fit-content', 'width: 50%', 500, 250],
+        ['flex-direction: row; width: fit-content; padding: 0 6px', 'flex: 1', 542, 30],
+      ] as const) {
+        const s = overflowing(row, share, conformance);
+        const named = `${row}, ${share} (${conformance})`;
+        assert.equal(s.box('row')[1], width, named);
+        assert.equal(s.box('share')[1], shared, named);
+      }
+    }
+  });
+
+  it('is held to the room where it is capped at its content, which is no wider', () => {
+    for (const row of ['max-width: max-content', `max-width: max-content; ${BETWEEN}`]) {
+      const s = overflowing(`flex-direction: row; ${row}`, 'flex: 1');
+      assert.equal(s.box('row')[1], 362, row);
+    }
+  });
+
+  it('counts nothing in it that is out of the flow', () => {
+    const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1');
+    s.engine.setProp(s.item, 'style', { position: 'absolute', left: 600, width: 50 });
+    assert.equal(s.box('row')[1], 30);
+  });
+
+  it('follows what it holds growing past the room and back', () => {
+    const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1');
+    assert.equal(s.box('row')[1], 530);
+    s.engine.setProp(s.item, 'style', { width: 100 });
+    assert.equal(s.box('row')[1], 130);
+    s.engine.setProp(s.item, 'style', null);
+    assert.equal(s.box('row')[1], 530);
+  });
+});
+
 describe('a percentage basis in a box as wide as its content', () => {
   const ROOMS = [
     ['a column', ''],

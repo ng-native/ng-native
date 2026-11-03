@@ -2856,6 +2856,8 @@ const wrapsDown = (props: Record<string, unknown>): boolean =>
 /** A box with its share of a row set aside, while the box it is in is measured. */
 function setAsideToFit(node: EngineNode, props: Record<string, unknown>): void {
   contentSized(props);
+  // At its content, which a browser sums as it is: it does not shrink because the rest overflow.
+  props['flexShrink'] = 0;
   pictureWide(node, props);
   // A field with its share set aside is as wide as its own size makes it, as its content.
   columnsWide(props, node.props[FIELD_SIZE]);
@@ -10470,15 +10472,28 @@ export class Engine implements HostEngine {
     this.flowStyles.clear();
     const box = this.boxOf(node);
     const within = Math.min(box?.[2] ?? 0, this.fitRoom(node));
+    // One in the flow written `width: fit-content` is no narrower than what in it is in the flow,
+    // and overflows its room as a browser's does; nothing it is in grows with it.
+    //
+    // ponytail: not one between two insets, which is measured in the box Yoga places it by, so
+    // its text wraps wider than its room and reaches past it as a fixed size does. Measure it
+    // within its room if content wider than the room is seen there.
+    if (box && readStyle(node, 'width') === 'fit-content' && !fitsBetweenInsets(node)) {
+      return { width: Math.max(within, this.contentReach(node, box[0], true)), grown: [] };
+    }
     // An item of a row is as wide as it was laid out with its shares set aside, and no wider
     // than the row: what reaches past it, a drawer waiting off to one side, is no part of it.
     if (!this.sitsInLine(node)) return { width: within, grown: [] };
-    // Its content's reach, and its own padding and border after that.
-    const edge = insets(this.flowStyle(node)).Right;
-    const width = box ? Math.max(within, this.reachOf(node, box[0]) - box[0] + edge) : within;
+    const width = box ? Math.max(within, this.contentReach(node, box[0], false)) : within;
     const grown = width > within ? this.growAround(node, width) : [];
     this.flowStyles.clear();
     return { width, grown };
+  }
+
+  /** How wide a box's content reaches from its left edge, with its own padding and border after it. */
+  private contentReach(node: EngineNode, left: number, inFlow: boolean): number {
+    const edge = insets(this.flowStyle(node)).Right;
+    return this.reachOf(node, left, inFlow) - left + edge;
   }
 
   /**
@@ -10543,14 +10558,19 @@ export class Engine implements HostEngine {
     return fit.width === undefined || this.roomOf(node) === fit.room;
   }
 
-  /** How far right the boxes in a node reach, in the window: past its own edge where they overflow. */
-  private reachOf(node: EngineNode, least: number): number {
+  /**
+   * How far right the boxes in a node reach, in the window: past its own edge where they
+   * overflow. `inFlow` leaves out a box out of the flow, and all in it, as a browser's content
+   * size does.
+   */
+  private reachOf(node: EngineNode, least: number, inFlow: boolean): number {
     let reach = least;
     for (const child of node.childList) {
       if (child.nodeKind !== 'element' || !child.committed) continue;
+      if (inFlow && OUT_OF_FLOW.has(readStyle(child, 'position') as string)) continue;
       const box = this.boxOf(child);
       if (box) reach = Math.max(reach, box[0] + box[2]);
-      reach = Math.max(reach, this.reachOf(child, reach));
+      reach = Math.max(reach, this.reachOf(child, reach, inFlow));
     }
     return reach;
   }
