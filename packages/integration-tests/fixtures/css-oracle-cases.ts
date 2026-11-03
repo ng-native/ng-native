@@ -754,11 +754,23 @@ const MATH_RANGE_CASES = (
     ['z-index', 'calc(3 / 2)', 'z-index'],
     ['z-index', 'calc(1 - 2.6)', 'z-index'],
     ['z-index', 'min(-2.5, 4)', 'z-index'],
+    ['z-index', 'calc((1 + 2) * 3)', 'z-index'],
   ] as const
 ).flatMap(([property, value, measured]): OracleCase[] => [
   inRule(property, value, measured, false),
   inStyle(property, value, measured),
 ]);
+
+/**
+ * A z-index in a rule only, as the engine reads no `sqrt()` or `round()` in a style: one that comes
+ * to NaN, which CSS reads as 0, and a `round()` lightningcss rounds as CSS does.
+ */
+const SHEET_Z_INDEX_CASES = [
+  'sqrt(-1)',
+  'calc(sqrt(-1) + 1)',
+  'round(up, -1.5, 1)',
+  'round(to-zero, -1.5, 1)',
+].map((value) => inRule('z-index', value, 'z-index', false));
 
 /**
  * A negative written out, which the same properties refuse, unlike a math function, in a rule and
@@ -923,6 +935,7 @@ const TOKEN_NEGATIVE_CASES = [
 
 export const CASES: OracleCase[] = [
   ...MATH_RANGE_CASES,
+  ...SHEET_Z_INDEX_CASES,
   ...TOKEN_NEGATIVE_CASES,
   ...WRITTEN_NEGATIVE_CASES,
   ...MATH_TYPE_CASES,

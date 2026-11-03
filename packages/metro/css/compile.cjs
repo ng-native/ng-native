@@ -2776,15 +2776,35 @@ const noPercentage = (term) =>
     ? term.value.arguments.every(noPercentage)
     : term?.value?.type !== 'percentage';
 
+/** The strategies of a `round()` that lightningcss rounds as CSS does. */
+const ROUND_STRATEGIES = new Set(['up', 'down', 'to-zero']);
+
+/**
+ * Whether a term holds a `round()` to the nearest, which lightningcss rounds half away from zero
+ * where CSS rounds half up: `round(-1.5, 1)` is -2 for it and -1 for Chrome.
+ */
+const roundsToNearest = (term) => {
+  if (term?.type !== 'function') return false;
+  const args = term.value.arguments;
+  if (term.value.name === 'round') {
+    const first = args.find((arg) => arg.value?.type !== 'white-space');
+    if (!ROUND_STRATEGIES.has(first?.value?.value)) return true;
+  }
+  return args.some(roundsToNearest);
+};
+
+/** Whether `parts` are one math function, of no percentage and no `round()` to the nearest. */
+const oneMathOfNumbers = ([math, ...rest]) =>
+  !rest.length && math?.type === 'function' && noPercentage(math) && !roundsToNearest(math);
+
 /**
  * A math function of numbers, `calc(3 / 2)`, as the integer CSS rounds it to, half up: lightningcss
  * reads none in a `z-index`. Undefined for anything else: a number written out, which is no
- * integer, a length or a percentage. It is worked out as a `scale()`, which takes any number.
+ * integer, a length or a percentage, and a `round()` to the nearest. It is worked out as a
+ * `scale()`, which takes any number.
  */
 function integerOfMath(parts, context) {
-  if (parts.length !== 1 || parts[0].type !== 'function' || !noPercentage(parts[0])) {
-    return undefined;
-  }
+  if (!oneMathOfNumbers(parts)) return undefined;
   let typed;
   try {
     typed = reparsed('transform', `scale(${cssText(parts, context)})`, context);
@@ -2792,13 +2812,24 @@ function integerOfMath(parts, context) {
     return undefined;
   }
   const value = typed?.property === 'transform' ? typed.value[0]?.value?.[0]?.value : undefined;
-  return typeof value === 'number' ? Math.round(value) : undefined;
+  if (typeof value !== 'number') return undefined;
+  // CSS reads a NaN, `sqrt(-1)`, as 0. lightningcss hands no infinity: it leaves `calc(1 / 0)`
+  // unread, and clamps `calc(infinity)` to the largest float.
+  return Number.isNaN(value) ? 0 : Math.round(value);
 }
 
 /** Unparsed terms as the CSS they were: words, numbers, lengths and functions of them. */
 function cssText(parts, context) {
   return parts.map((part) => termText(part, context)).join('');
 }
+
+/** The tokens with no value of their own, as the text they stand for. */
+const TOKEN_TEXT = {
+  'white-space': ' ',
+  comma: ',',
+  'parenthesis-block': '(',
+  'close-parenthesis': ')',
+};
 
 function termText(part, context) {
   if (part.type === 'function') {
@@ -2809,8 +2840,7 @@ function termText(part, context) {
   if (part.type === 'angle') return `${value.value}${value.type}`;
   if (part.type === 'length') return `${value.value}${value.unit}`;
   if (part.type !== 'token') throw new CssUnsupported(`${context}: '${part.type}' in a shorthand`);
-  if (value.type === 'white-space') return ' ';
-  if (value.type === 'comma') return ',';
+  if (Object.hasOwn(TOKEN_TEXT, value.type)) return TOKEN_TEXT[value.type];
   if (value.type === 'dimension') return `${value.value}${value.unit}`;
   if (value.type === 'percentage') return `${value.value * 100}%`;
   return String(value.value);

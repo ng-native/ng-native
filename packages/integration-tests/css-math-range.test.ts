@@ -130,6 +130,15 @@ describe('a math function of a length and a number in a stylesheet', () => {
 
   it('takes one math function of a number in a z-index, and nothing more', () => {
     assert.equal(compiled('.a { z-index: calc(3 / 2) }').sheet.rules[0].declarations.zIndex, 2);
+    // The rounding lightningcss does as CSS does: Chrome's values.
+    assert.equal(
+      compiled('.a { z-index: round(up, -1.5, 1) }').sheet.rules[0].declarations.zIndex,
+      -1,
+    );
+    assert.equal(
+      compiled('.a { z-index: round(to-zero, -1.5, 1) }').sheet.rules[0].declarations.zIndex,
+      -1,
+    );
     for (const value of [
       'calc(1), 2',
       'calc(1) calc(2)',
@@ -139,6 +148,9 @@ describe('a math function of a length and a number in a stylesheet', () => {
       // Chrome clamps this one to the largest integer. Nothing here folds it, and it is refused
       // rather than sent as no number at all.
       'calc(1 / 0)',
+      // lightningcss rounds a tie to the nearest away from zero, -2, where Chrome gives -1.
+      'round(-1.5, 1)',
+      'calc(round(nearest, 2.5, 1) * 2)',
     ]) {
       const { sheet, warnings } = compiled(`.a { z-index: ${value} }`);
       assert.equal(sheet.rules.length, 0, value);

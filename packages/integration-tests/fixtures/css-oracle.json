@@ -624,6 +624,54 @@
     }
   },
   {
+    "name": "a rule's z-index: calc((1 + 2) * 3), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "9"
+    }
+  },
+  {
+    "name": "an inline z-index: calc((1 + 2) * 3), read as z-index, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "9"
+    }
+  },
+  {
+    "name": "a rule's z-index: sqrt(-1), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "0"
+    }
+  },
+  {
+    "name": "a rule's z-index: calc(sqrt(-1) + 1), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "0"
+    }
+  },
+  {
+    "name": "a rule's z-index: round(up, -1.5, 1), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-1"
+    }
+  },
+  {
+    "name": "a rule's z-index: round(to-zero, -1.5, 1), read as z-index",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "z-index": "-1"
+    }
+  },
+  {
     "name": "a negative in max-width, in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",
