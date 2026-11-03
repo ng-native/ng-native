@@ -2853,9 +2853,23 @@ const wrapsDown = (props: Record<string, unknown>): boolean =>
   (props['flexWrap'] === 'wrap' || props['flexWrap'] === 'wrap-reverse') &&
   !String(props['flexDirection'] ?? 'column').startsWith('row');
 
+/**
+ * Whether a box counts at its own box in what holds it, not for what overflows it: one with a
+ * width in points, or an item of a row with a basis in points that does not grow.
+ */
+function countsAtItsBox(node: EngineNode, parent: EngineNode, out: boolean): boolean {
+  if (typeof readStyle(node, 'width') === 'number') return true;
+  const based = !out && typeof readStyle(node, 'flexBasis') === 'number' && isRow(parent);
+  return based && !growsInRow(node);
+}
+
 /** A box with its share of a row set aside, while the box it is in is measured. */
 function setAsideToFit(node: EngineNode, props: Record<string, unknown>): void {
   contentSized(props);
+  // An item of a row with a basis of 0 that does not grow is that wide, as in a browser.
+  const row = node.parent;
+  const itemOfRow = row?.nodeKind === 'element' && isRow(row);
+  if (readStyle(node, 'flexBasis') === 0 && itemOfRow && !growsInRow(node)) props['flexBasis'] = 0;
   // At its content, which a browser sums as it is: it does not shrink because the rest overflow.
   props['flexShrink'] = 0;
   pictureWide(node, props);
@@ -10563,7 +10577,7 @@ export class Engine implements HostEngine {
    * overflow. `inFlow` leaves out a box out of the flow, and all in it, as a browser's content
    * size does. A box counts where it is before a relative offset moves it, `moved` being what
    * the boxes around it are moved by, and one with a width of its own counts at that width,
-   * not for what overflows it.
+   * not for what overflows it, as does an item of a row with a basis in points that does not grow.
    */
   private reachOf(node: EngineNode, least: number, inFlow: boolean, moved = 0): number {
     let reach = least;
@@ -10575,14 +10589,12 @@ export class Engine implements HostEngine {
       const shift = moved + (out ? 0 : relativeShift(props).x);
       const box = this.boxOf(child);
       if (box) reach = Math.max(reach, box[0] + box[2] - shift);
-      if (typeof readStyle(child, 'width') === 'number') continue;
+      if (countsAtItsBox(child, node, out)) continue;
       const held = this.reachOf(child, reach, inFlow, shift);
       // One capped at a width counts no further than the cap: a browser clamps what it holds.
       const cap = readStyle(child, 'maxWidth');
-      reach = Math.max(
-        reach,
-        box && typeof cap === 'number' ? Math.min(held, box[0] - shift + cap) : held,
-      );
+      const capped = box && typeof cap === 'number' ? box[0] - shift + cap : held;
+      reach = Math.max(reach, Math.min(held, capped));
     }
     return reach;
   }

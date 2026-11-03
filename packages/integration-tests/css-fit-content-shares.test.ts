@@ -434,6 +434,36 @@ describe('a box as wide as its content that holds more than the room', () => {
     }
   });
 
+  it('counts an item with a basis in points that does not grow at that basis', () => {
+    // Chrome, for an item holding a 900 wide box: the basis, held to the item's minimum and
+    // maximum, where the item does not grow; all it holds where it grows or the basis is a share.
+    for (const conformance of CONFORMANCES) {
+      for (const [style, width] of [
+        [{ flexBasis: 0, flexShrink: 1, maxWidth: 500 }, 30],
+        [{ flexBasis: 0, flexShrink: 1 }, 30],
+        [{ flexBasis: 0 }, 30],
+        [{ flexBasis: 100 }, 130],
+        [{ flexBasis: 600 }, 630],
+        [{ flexBasis: 0, minWidth: 200 }, 230],
+        [{ flexBasis: 0, flexGrow: 1 }, 930],
+        [{ flexBasis: 0, flexGrow: 1, maxWidth: 500 }, 530],
+        [{ flexBasis: '50%' }, 930],
+      ] as const) {
+        const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1', conformance);
+        s.engine.setProp(s.item, 'style', { width: 'auto', ...style });
+        inside(s, s.item, { width: 900, height: 10 });
+        assert.equal(s.box('row')[1], width, `${JSON.stringify(style)} (${conformance})`);
+      }
+      // In a column the basis is a height, and all it holds counts.
+      for (const flexBasis of [0, 100]) {
+        const column = overflowing('width: fit-content', 'width: 50%', conformance);
+        column.engine.setProp(column.item, 'style', { width: 'auto', flexBasis });
+        inside(column, column.item, { width: 900, height: 10 });
+        assert.equal(column.box('row')[1], 900, `a column, basis ${flexBasis} (${conformance})`);
+      }
+    }
+  });
+
   it('follows what it holds growing past the room and back', () => {
     const s = overflowing('flex-direction: row; width: fit-content', 'flex: 1');
     assert.equal(s.box('row')[1], 530);
