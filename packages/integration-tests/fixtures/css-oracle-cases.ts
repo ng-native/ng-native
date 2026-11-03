@@ -95,6 +95,7 @@ export const EXTRA_KEYS = {
   'aspect-ratio': 'aspectRatio',
   transform: 'transform',
   'z-index': 'zIndex',
+  'box-shadow': 'boxShadow',
 } as const;
 
 export type ExtraProperty = keyof typeof EXTRA_KEYS;
@@ -428,6 +429,45 @@ const LAST_LAYER_TOKEN_CASES: OracleCase[] = [
   // with a warning, which leaves the shorthand invalid as Chrome has it.
   backgroundOverInSheet(`${GRADIENT}, var(--x)`, token, REFUSED_LAYER_TOKENS.has(token)),
 ]);
+
+/** A shadow with no colour of its own, which is `currentColor`, in a sheet and in a style. */
+const SHADOW_COLOUR_CASES: OracleCase[] = [
+  {
+    name: 'box-shadow with no colour in a stylesheet is the colour of the text',
+    css: '#probe { color: rgb(1, 2, 3); box-shadow: 2px 3px 4px }',
+    tree: probe({ name: 'view' }),
+    extra: ['box-shadow'],
+  },
+  {
+    name: 'box-shadow with no colour in a stylesheet is the colour the element inherits',
+    css: '.outer { color: rgb(4, 5, 6) } #probe { box-shadow: 2px 3px 4px 1px, inset 0 0 2px }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['box-shadow'],
+  },
+  {
+    name: 'box-shadow in currentColor in a stylesheet is the colour of the text',
+    css: '#probe { color: rgb(7, 8, 9); box-shadow: 2px 3px 4px currentColor }',
+    tree: probe({ name: 'view' }),
+    extra: ['box-shadow'],
+  },
+  inlineValue({ 'box-shadow': '2px 3px 4px' }, '#probe { color: rgb(1, 2, 3) }', ['box-shadow']),
+];
+
+/** The `font` shorthand puts back every part it leaves out, in a sheet as in a style. */
+const SHEET_FONT_CASES: OracleCase[] = [
+  {
+    name: 'font in a stylesheet over a weaker italic and bold',
+    css: 'text { font-style: italic; font-weight: 700 } #probe { font: 12px Arial }',
+    tree: probe(),
+    extra: TYPE,
+  },
+  {
+    name: 'font in a stylesheet over an italic in the same rule',
+    css: '#probe { font-style: italic; font: 12px Arial }',
+    tree: probe(),
+    extra: TYPE,
+  },
+];
 
 const BACKGROUND_TOKEN_MORE_CASES: OracleCase[] = [
   ...LAST_LAYER_TOKEN_CASES,
@@ -1673,6 +1713,8 @@ export const CASES: OracleCase[] = [
   ...INLINE_VALUE_SHORTHAND_CASES,
   ...BACKGROUND_TOKEN_CASES,
   ...BACKGROUND_TOKEN_MORE_CASES,
+  ...SHADOW_COLOUR_CASES,
+  ...SHEET_FONT_CASES,
   {
     name: 'background: var() of a colour token is the background colour',
     css: '#probe { --bg: rgb(1, 0, 0); background: var(--bg) }',

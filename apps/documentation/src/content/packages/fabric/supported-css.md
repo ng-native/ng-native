@@ -485,7 +485,7 @@ computes it, until a rule styles that side again. A border with no color is draw
 text color, its own or inherited, as on the web: `border: 2px solid`, a `border-width` with no
 `border-color`, and a side with a width that no rule gave a color. So is a border color of
 `currentColor`, which is what Tailwind's `border-current` writes. Where no text color is set
-either, the border is black. An outline with no
+either, the border is black. An outline or a `box-shadow` with no
 color, an `outline-color`, a `background-color` and a `text-decoration-color` of `currentColor`, a
 `var()` that falls back to `currentColor` and a custom property that holds it take the text color
 the same way, where they are used. `color: currentColor` and `color: inherit` are the color the

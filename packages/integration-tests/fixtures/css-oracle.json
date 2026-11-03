@@ -4718,6 +4718,60 @@
     }
   },
   {
+    "name": "box-shadow with no colour in a stylesheet is the colour of the text",
+    "expected": {
+      "color": "rgb(1, 2, 3)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "box-shadow": "rgb(1, 2, 3) 2px 3px 4px 0px"
+    }
+  },
+  {
+    "name": "box-shadow with no colour in a stylesheet is the colour the element inherits",
+    "expected": {
+      "color": "rgb(4, 5, 6)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "box-shadow": "rgb(4, 5, 6) 2px 3px 4px 1px, rgb(4, 5, 6) 0px 0px 2px 0px inset"
+    }
+  },
+  {
+    "name": "box-shadow in currentColor in a stylesheet is the colour of the text",
+    "expected": {
+      "color": "rgb(7, 8, 9)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "box-shadow": "rgb(7, 8, 9) 2px 3px 4px 0px"
+    }
+  },
+  {
+    "name": "inline box-shadow: 2px 3px 4px over #probe { color: rgb(1, 2, 3) }",
+    "expected": {
+      "color": "rgb(1, 2, 3)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "box-shadow": "rgb(1, 2, 3) 2px 3px 4px 0px"
+    }
+  },
+  {
+    "name": "font in a stylesheet over a weaker italic and bold",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "12px",
+      "font-family": "Arial",
+      "font-weight": "400",
+      "font-style": "normal"
+    }
+  },
+  {
+    "name": "font in a stylesheet over an italic in the same rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-size": "12px",
+      "font-family": "Arial",
+      "font-weight": "400",
+      "font-style": "normal"
+    }
+  },
+  {
     "name": "background: var() of a colour token is the background colour",
     "expected": {
       "color": "rgb(0, 0, 0)",

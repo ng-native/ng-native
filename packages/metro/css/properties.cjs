@@ -773,7 +773,8 @@ function shadowList(value, context) {
       offsetY: length(shadow.yOffset, context),
       blurRadius: length(shadow.blur, context),
       spreadDistance: length(shadow.spread, context),
-      color: color(shadow.color, context),
+      // A shadow with no colour is in currentColor, the colour of the text, filled in on device.
+      color: shadow.color?.type === 'currentcolor' ? CURRENT_COLOUR : color(shadow.color, context),
       inset: shadow.inset ?? false,
     }))
     .filter((shadow) => !fullyTransparent(shadow.color));
@@ -1902,10 +1903,7 @@ const TRANSLATORS = new Map([
     (property, value, out) => {
       if (value.size !== undefined) out.fontSize = length(value.size, property);
       if (value.family?.length) out.fontFamily = value.family[0];
-      if (value.style !== undefined) {
-        const style = fontStyle(value.style);
-        if (style !== 'normal') out.fontStyle = style;
-      }
+      if (value.style !== undefined) out.fontStyle = fontStyle(value.style);
       if (value.weight !== undefined) translate('font-weight', value.weight, out);
       if (value.lineHeight !== undefined) fontLineHeight(value.lineHeight, out);
     },

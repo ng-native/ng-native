@@ -79,7 +79,9 @@ describe('shorthands that every stylesheet uses', () => {
   });
 
   it('font, with a unitless line-height left to be worked out against the font size', () => {
+    // The style left out is put back, as Chrome puts it back: `normal`.
     assert.deepEqual(declarationsOf('font: bold 12px/1.5 system-ui'), {
+      fontStyle: 'normal',
       fontWeight: '700',
       fontSize: 12,
       fontFamily: 'system-ui',

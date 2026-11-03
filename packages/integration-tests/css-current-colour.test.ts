@@ -74,6 +74,28 @@ describe('an outline in currentColor', () => {
   });
 });
 
+describe('a box-shadow with no colour', () => {
+  const shadowColour = (props: Record<string, unknown>) =>
+    (props['boxShadow'] as { color: unknown }[] | undefined)?.map((shadow) => shadow.color);
+
+  it('is drawn in the colour the element inherits, with no warning', () => {
+    const { props, warnings } = tree(`.p { color: ${RED} } .a { box-shadow: 2px 2px 4px }`, ['p']);
+    assert.deepEqual(warnings, []);
+    assert.deepEqual(shadowColour(props()), [RED]);
+  });
+
+  it('follows the colour when it changes', () => {
+    const { engine, outer, props } = tree(
+      `.p { color: ${RED} } .q { color: ${BLUE} } .a { box-shadow: 2px 2px 4px, 0 0 1px ${GREY} }`,
+      ['p'],
+    );
+    engine.removeClass(outer, 'p');
+    engine.addClass(outer, 'q');
+    engine.commit();
+    assert.deepEqual(shadowColour(props()), [BLUE, GREY]);
+  });
+});
+
 describe('a background in currentColor', () => {
   it('is the colour of the text, with no warning', () => {
     const { props, warnings } = tree(`.a { color: ${RED}; background-color: currentColor }`);

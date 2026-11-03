@@ -194,6 +194,26 @@ function readFrom(property: ExtraProperty, style: Record<string, unknown>): stri
   return keys[property] ?? [EXTRA_KEYS[property]];
 }
 
+interface Shadow {
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly blurRadius: number;
+  readonly spreadDistance: number;
+  readonly color: string;
+  readonly inset: boolean;
+}
+
+/** A shadow list here, written as Chrome computes one: colour, the four lengths, then `inset`. */
+function assertShadows(style: Record<string, unknown>, browser: string): void {
+  const shadows = (style['boxShadow'] as readonly Shadow[] | undefined) ?? [];
+  const written = shadows.map(
+    (shadow) =>
+      `${shadow.color} ${shadow.offsetX}px ${shadow.offsetY}px ${shadow.blurRadius}px ` +
+      `${shadow.spreadDistance}px${shadow.inset ? ' inset' : ''}`,
+  );
+  assert.equal(written.join(', ') || 'none', browser, 'box-shadow');
+}
+
 /** A list of gradients here, and their text in the browser: each has its one layer. */
 function assertGradients(style: Record<string, unknown>, browser: string): void {
   const drawn = (style['experimental_backgroundImage'] as unknown[] | undefined)?.length ?? 0;
@@ -215,6 +235,19 @@ function assertFamily(style: Record<string, unknown>, browser: string): void {
 const sentFontSize = (size: unknown, browser: string): unknown =>
   browser === '0px' && size === 0.001 ? 0 : size;
 
+/** What native draws for a value, as the browser writes it: the weight `normal` is 400. */
+const drawnAs = (property: ExtraProperty, value: unknown): unknown =>
+  property === 'font-weight' && value === 'normal' ? '400' : value;
+
+/** The properties compared in a form of their own: a list, or a family read from a stack. */
+const COMPARED: Partial<
+  Record<ExtraProperty, (style: Record<string, unknown>, browser: string) => void>
+> = {
+  'background-image': assertGradients,
+  'box-shadow': assertShadows,
+  'font-family': assertFamily,
+};
+
 /** One of a case's extra properties against what the browser computed for it. */
 function assertExtra(
   property: ExtraProperty,
@@ -235,13 +268,14 @@ function assertExtra(
     assert.equal(style['display'] ?? 'flex', kept, property);
     return;
   }
-  if (property === 'background-image') return assertGradients(style, browser);
-  if (property === 'font-family') return assertFamily(style, browser);
+  const compare = COMPARED[property];
+  if (compare) return compare(style, browser);
   // A length is a number of points here, and `2px` in the browser. An unset one is native's
   // initial value, as the browser reports its own.
   const read = readFrom(property, style).map((key) => style[key]);
   const found = read.find((value) => value != null) ?? NATIVE_INITIAL[property];
-  const ours = committed && property === 'font-size' ? sentFontSize(found, browser) : found;
+  const sent = committed && property === 'font-size' ? sentFontSize(found, browser) : found;
+  const ours = drawnAs(property, sent);
   const unit = UNITLESS.has(property) ? '' : 'px';
   const value = typeof ours === 'number' ? `${ours}${unit}` : ours;
   assert.equal(value, legacyColour(browser), property);
