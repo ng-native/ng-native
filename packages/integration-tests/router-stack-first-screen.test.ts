@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { Type } from '@angular/core';
+import type { Type, WritableSignal } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric, settle, type FakeFabricNode } from '@ng-native/testing';
@@ -20,10 +20,17 @@ const mod = await compileFixture('fixtures/stack-first-screen.ts');
 const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) => [node, ...flatten(node.children)]);
 
-/** Each commit's stack: its tag and how many screens it holds, or null with no stack. */
-async function stacksCommitted(routes: string, then?: (router: Router) => Promise<void>) {
+/** A commit's stack: its tag and how many screens it holds, or null with no stack. */
+type Committed = { tag: number; screens: number } | null;
+
+/** Each commit's stack. */
+async function stacksCommitted(
+  routes: string,
+  then?: (router: Router, seen: Committed[]) => Promise<void>,
+  shell = 'Shell',
+) {
   const fabric = createFakeFabric();
-  const seen: ({ tag: number; screens: number } | null)[] = [];
+  const seen: Committed[] = [];
   const commit = fabric.completeRoot.bind(fabric);
   fabric.completeRoot = (rootTag, set) => {
     commit(rootTag, set);
@@ -37,12 +44,12 @@ async function stacksCommitted(routes: string, then?: (router: Router) => Promis
         : null,
     );
   };
-  const app = mount(1, mod['Shell'] as Type<unknown>, fabric, {
+  const app = mount(1, mod[shell] as Type<unknown>, fabric, {
     providers: [provideNativeRouter(mod[routes] as Routes)],
   });
   try {
     await settle();
-    await then?.(app.componentRef.injector.get(Router));
+    await then?.(app.componentRef.injector.get(Router), seen);
     return seen;
   } finally {
     app.applicationRef.destroy();
@@ -62,6 +69,34 @@ describe('a stack and its first screen', () => {
       );
     });
   }
+
+  it('leave a stack the app hides hidden, and show it with its screen once shown', async () => {
+    const hidden = mod['stackHidden'] as WritableSignal<boolean>;
+    hidden.set(true);
+    try {
+      const seen = await stacksCommitted(
+        'routes',
+        async (_router, committed) => {
+          assert.ok(
+            committed.every((stack) => stack === null),
+            'not committed while the app hides it',
+          );
+          hidden.set(false);
+          await settle();
+        },
+        'HiddenShell',
+      );
+      const stacks = seen.filter((stack) => stack !== null);
+      assert.ok(stacks.length > 0, 'committed once the app shows it');
+      assert.deepEqual(
+        stacks.filter((stack) => stack.screens === 0),
+        [],
+        'with its screen',
+      );
+    } finally {
+      hidden.set(true);
+    }
+  });
 
   it('keep the stack committed, as the same view, through a push and a pop', async () => {
     const seen = await stacksCommitted('routes', async (router) => {

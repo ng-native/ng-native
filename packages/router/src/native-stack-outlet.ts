@@ -191,6 +191,8 @@ type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown
   selector: 'native-stack-outlet',
   template: '',
   host: { '[style]': 'fill' },
+  // See `empty`. A class of its own, so a `display` the app sets on the outlet takes precedence.
+  styles: ':host(.ngn-empty-stack) { display: none; }',
 })
 export class NativeStackOutlet implements RouterOutletContract, OnInit {
   /**
@@ -265,7 +267,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
 
   constructor() {
     ownHost(this.host.nativeElement);
-    this.renderer.setStyle(this.host.nativeElement, 'display', 'none');
+    this.renderer.addClass(this.host.nativeElement, 'ngn-empty-stack');
     // Ours, not a prop of the native stack.
     delete (this.host.nativeElement as { props: Record<string, unknown> }).props['name'];
     this.parentContexts.onChildOutletCreated(this.name, this);
@@ -1109,8 +1111,9 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
 
   private appendScreen(screen: unknown): void {
     this.renderer.appendChild(this.host.nativeElement, screen);
-    if (this.empty) this.renderer.removeStyle(this.host.nativeElement, 'display');
+    if (!this.empty) return;
     this.empty = false;
+    this.renderer.removeClass(this.host.nativeElement, 'ngn-empty-stack');
   }
 
   /**

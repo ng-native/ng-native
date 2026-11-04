@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { ScrollView } from '../../components/src/scroll-view.ts';
 import { Text } from '../../components/src/text.ts';
@@ -11,6 +11,19 @@ import { NativeStackOutlet } from '../../router/src/native-stack-outlet.ts';
   template: `<native-stack-outlet />`,
 })
 export class Shell {}
+
+/** Whether `HiddenShell` hides its stack. */
+export const stackHidden = signal(true);
+
+/** A stack the app hides with a binding of its own. */
+@Component({
+  selector: 'x-hidden-shell',
+  imports: [NativeStackOutlet],
+  template: `<native-stack-outlet [style.display]="hidden() ? 'none' : null" />`,
+})
+export class HiddenShell {
+  protected readonly hidden = stackHidden;
+}
 
 /** A root page with a large title over a scroll view, as the canary's home is. */
 @Component({
