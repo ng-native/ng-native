@@ -70,6 +70,19 @@ describe('a stack and its first screen', () => {
     });
   }
 
+  it('are committed together when the app sets a display of its own on the outlet', async () => {
+    for (const routes of ['routes', 'lazyRoutes']) {
+      const seen = await stacksCommitted(routes, undefined, 'FlexShell');
+      const stacks = seen.filter((stack) => stack !== null);
+      assert.ok(stacks.length > 0, `the stack is committed, for ${routes}`);
+      assert.deepEqual(
+        stacks.filter((stack) => stack.screens === 0),
+        [],
+        `no commit has the stack without a screen, for ${routes}`,
+      );
+    }
+  });
+
   it('leave a stack the app hides hidden, and show it with its screen once shown', async () => {
     const hidden = mod['stackHidden'] as WritableSignal<boolean>;
     hidden.set(true);

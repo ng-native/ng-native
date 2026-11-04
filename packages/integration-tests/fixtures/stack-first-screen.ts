@@ -25,6 +25,14 @@ export class HiddenShell {
   protected readonly hidden = stackHidden;
 }
 
+/** A stack the app sets `display: flex` on. */
+@Component({
+  selector: 'x-flex-shell',
+  imports: [NativeStackOutlet],
+  template: `<native-stack-outlet style="display: flex" />`,
+})
+export class FlexShell {}
+
 /** A root page with a large title over a scroll view, as the canary's home is. */
 @Component({
   selector: 'x-home',

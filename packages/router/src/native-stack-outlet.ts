@@ -191,8 +191,9 @@ type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown
   selector: 'native-stack-outlet',
   template: '',
   host: { '[style]': 'fill' },
-  // See `empty`. A class of its own, so a `display` the app sets on the outlet takes precedence.
-  styles: ':host(.ngn-empty-stack) { display: none; }',
+  // See `empty`. A class of its own, so the app's own `display` is left alone and applies once the
+  // class goes, and `!important`, so that until then it is hidden over a `display` set inline.
+  styles: ':host(.ngn-empty-stack) { display: none !important; }',
 })
 export class NativeStackOutlet implements RouterOutletContract, OnInit {
   /**
