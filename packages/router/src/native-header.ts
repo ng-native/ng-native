@@ -40,6 +40,7 @@ import { IN_TAB } from './in-tab.ts';
 import { NATIVE_HEADER_DEFAULTS } from './native-bar-defaults.ts';
 import { NATIVE_HEADER_PALETTE } from './native-header-palette.ts';
 import { HEADER_BAR_BUTTONS, HeaderBarButtons } from './header-bar-buttons.ts';
+import { HEADER_SEARCH } from './header-search.ts';
 import { HostEngine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
 import { ownHost } from './own-host.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
@@ -83,7 +84,7 @@ export type HeaderInterfaceStyle = 'unspecified' | 'light' | 'dark';
 @Component({
   selector: 'native-header',
   template: '<ng-content />',
-  providers: [HEADER_BAR_BUTTONS],
+  providers: [HEADER_BAR_BUTTONS, HEADER_SEARCH],
   host: {
     '[headerLeftBarButtonItems]': 'barButtons.left()',
     '[headerRightBarButtonItems]': 'barButtons.right()',

@@ -36,6 +36,7 @@ import {
   untracked,
 } from '@angular/core';
 import { type EngineNode, HostEngine, type NativeSyntheticEvent } from '@ng-native/fabric';
+import { HeaderSearch } from './header-search.ts';
 import { ownHost } from './own-host.ts';
 import { optionalBoolean } from './transforms.ts';
 
@@ -111,6 +112,15 @@ export class NativeSearchBar {
       listen('topSearchFocus', () => this.searchFocus.emit()),
       listen('topSearchBlur', () => this.searchBlur.emit()),
     ];
+    const header = inject(HeaderSearch, { optional: true });
+    if (header) {
+      stops.push(
+        listen('topOpen', () => header.open.set(true)),
+        listen('topClose', () => header.open.set(false)),
+        // A field that goes while open gives the bar back, as native does.
+        () => header.open.set(false),
+      );
+    }
     inject(DestroyRef).onDestroy(() => stops.forEach((stop) => stop()));
     // A query that is not what the field holds was set from code: put it in the field. After the
     // render, so a query the page starts with reaches a field that has been committed.

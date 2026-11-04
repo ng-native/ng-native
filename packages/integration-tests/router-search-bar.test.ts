@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import type { Type } from '@angular/core';
+import type { Type, WritableSignal } from '@angular/core';
 import { cleanup, fireEvent, render, screen, userEvent } from '@ng-native/testing';
 import { registerScreenComponents } from '../router/src/screens.ts';
 import { compileFixture } from './compile.ts';
@@ -126,5 +126,55 @@ describe('native search bar', () => {
     bar.clear();
     bar.cancelSearch();
     assert.deepEqual(commands(fabric), [['focus'], ['blur'], ['clearText'], ['cancelSearch']]);
+  });
+});
+
+// On Android the open field covers the bar and react-native-screens hides the header's other
+// items, which keep their bounds. React Native finds a touch's target by bounds alone, so a tap on
+// the field pressed the item hidden under it (#1404).
+describe('native search bar open in a header', () => {
+  let Header: Type<unknown>;
+
+  before(async () => {
+    registerScreenComponents();
+    const mod = await compileFixture('fixtures/search-bar.ts');
+    Header = mod['SearchInHeader'] as Type<unknown>;
+  });
+
+  afterEach(() => cleanup());
+
+  const touchable = (testID: string) =>
+    screen.getByTestId(testID).props['pointerEvents'] !== 'none';
+
+  it("keeps touches off the header's other items while the field is open", async () => {
+    const { fabric } = await render(Header);
+    const bar = fabric.find('RNSSearchBar')!;
+    assert.equal(touchable('item'), true, 'control: the item takes touches before the field opens');
+
+    await fireEvent(bar, 'open', {});
+    assert.equal(touchable('item'), false);
+    const field = fabric.find('RNSSearchBar')!;
+    assert.notEqual(field.props['pointerEvents'], 'none', 'the field itself still takes touches');
+
+    await fireEvent(bar, 'close', {});
+    assert.equal(touchable('item'), true);
+  });
+
+  it('keeps touches off an item added while the field is open', async () => {
+    const { fabric, instance, detectChanges } = await render(Header);
+    await fireEvent(fabric.find('RNSSearchBar')!, 'open', {});
+
+    (instance as { more: WritableSignal<boolean> }).more.set(true);
+    await detectChanges();
+    assert.equal(touchable('more'), false);
+  });
+
+  it('gives the items their touches back when the open field goes', async () => {
+    const { fabric, instance, detectChanges } = await render(Header);
+    await fireEvent(fabric.find('RNSSearchBar')!, 'open', {});
+
+    (instance as { searchable: WritableSignal<boolean> }).searchable.set(false);
+    await detectChanges();
+    assert.equal(touchable('item'), true);
   });
 });

@@ -43,6 +43,7 @@ import {
 } from '@angular/core';
 import { type Engine, type EngineNode, HostEngine, nativePlatform } from '@ng-native/fabric';
 import { HeaderBarButtons, type BarButtonConfig } from './header-bar-buttons.ts';
+import { HeaderSearch } from './header-search.ts';
 import { ownHost } from './own-host.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 
@@ -108,6 +109,8 @@ let warnedAndroid = false;
     '[hidesSharedBackground]': 'hidesSharedBackground()',
     // A bar button is the header's data, not a view: committed, it would be an empty custom view.
     '[style.display]': 'isBarButton() || hidden() ? "none" : undefined',
+    // Inherited by the content: Android hides the item under an open search field, keeping its bounds.
+    '[style.pointerEvents]': 'coveredBySearch() ? "none" : undefined',
     // An input, so it reaches an item's view only through this. A bar button commits no view.
     '[accessibilityLabel]': 'accessibilityLabel()',
   },
@@ -186,6 +189,13 @@ export class NativeHeaderItem implements AfterContentInit {
   readonly press = output<void>();
   /** An action of the `menu` was tapped: its `id`. */
   readonly menuSelect = output<string>();
+
+  private readonly search = inject(HeaderSearch, { optional: true });
+
+  /** Whether an open search field covers the item, which is every item but the field's own. */
+  protected readonly coveredBySearch = computed(
+    () => this.search?.open() === true && this.slot() !== 'searchBar',
+  );
 
   /** Whether anything is written in the element, which keeps it a view. */
   private readonly hasContent = signal(false);

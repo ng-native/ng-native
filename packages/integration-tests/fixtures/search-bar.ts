@@ -1,4 +1,8 @@
 import { Component, signal, viewChild } from '@angular/core';
+import { Pressable } from '../../components/src/pressable.ts';
+import { Text } from '../../components/src/text.ts';
+import { NativeHeader } from '../../router/src/native-header.ts';
+import { NativeHeaderItem } from '../../router/src/native-header-item.ts';
 import { NativeSearchBar } from '../../router/src/native-search-bar.ts';
 
 @Component({
@@ -67,4 +71,34 @@ export class SearchClear {
     if (query.length > 2) this.bar().clear();
     this.query.set(query.length > 2 ? '' : query);
   }
+}
+
+/** A header with a button beside its search field, and one more the page can add (#1404). */
+@Component({
+  selector: 'x-search-in-header',
+  imports: [NativeHeader, NativeHeaderItem, NativeSearchBar, Pressable, Text],
+  template: `
+    <native-header title="Repro">
+      <native-header-item type="right">
+        <pressable testID="item" accessibilityRole="button" (press)="presses = presses + 1">
+          <text>Item</text>
+        </pressable>
+      </native-header-item>
+      @if (more()) {
+        <native-header-item type="left">
+          <pressable testID="more"><text>More</text></pressable>
+        </native-header-item>
+      }
+      @if (searchable()) {
+        <native-header-item type="searchBar">
+          <native-search-bar placeholder="Search" />
+        </native-header-item>
+      }
+    </native-header>
+  `,
+})
+export class SearchInHeader {
+  readonly more = signal(false);
+  readonly searchable = signal(true);
+  presses = 0;
 }
