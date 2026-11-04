@@ -60,6 +60,13 @@ at the height it ends at. That needs the package installed and a new development
 Go the first such push starts from the compact bar**: the inline title fades out and the large
 title drops into place. Later pushes are right either way.
 
+The same package keeps a header item from laying the bar out while a push or pop runs, which
+react-native-screens does each time an item's size changes. A `<ui-host [matchContents]="true">` in
+an item has its size only once SwiftUI lays it out, during the push. In Expo Go, which cannot load
+the package, a large title pushed with such an item onto a stack whose root page has no header
+starts above its place on every push and drops into it: give the host a fixed size there, or use
+`systemImageName` for an SF Symbol button.
+
 A header an `@if` takes away leaves the screen with no navigation bar, the same as a screen that
 never had one, and a header that comes back brings its bar back. Native keeps the bar it was last
 told about until a header config says otherwise, so once a screen has had a header it keeps one

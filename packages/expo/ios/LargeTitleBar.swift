@@ -11,10 +11,17 @@ import UIKit
  in from its compact layout: the inline title fades out and the large title drops into place.
  Laid out once with a large title beforehand, out of sight, the push starts from the
  height it ends at.
+
+ It also keeps a header item from laying the bar out while a push or pop runs: see
+ `deferredHeaderLayout`.
  */
 public final class LargeTitleBarModule: Module {
   public func definition() -> ModuleDefinition {
     Name("NgNativeStackBar")
+
+    OnCreate {
+      _ = Self.deferredHeaderLayout
+    }
 
     // Before the commit's mount, which is queued on the main thread after this.
     AsyncFunction("prepareLargeTitle") { (stack: Int) in
@@ -23,6 +30,48 @@ public final class LargeTitleBarModule: Module {
       else { return }
       Self.prepare(navigation)
     }.runOnQueue(.main)
+  }
+
+  /**
+   react-native-screens lays the stack's bar out at once, with `layoutIfNeeded`, whenever a header
+   item's layout changes (`-[RNSScreenStackHeaderSubview layoutNavigationBar]`). A `matchContents`
+   `ui-host` in an item has a size only once SwiftUI has laid it out in the window, which is during
+   the push, and the bar laid out then starts a large title above its place, to drop into it. While
+   a transition runs, the layout waits for it to end, once per item, and runs then. Replaced once
+   per process; a react-native-screens without the method is left as it is.
+   */
+  private static let deferredHeaderLayout: Void = {
+    let selector = NSSelectorFromString("layoutNavigationBar")
+    guard let itemClass = NSClassFromString("RNSScreenStackHeaderSubview"),
+      let method = class_getInstanceMethod(itemClass, selector)
+    else { return }
+    typealias Layout = @convention(c) (UIView, Selector) -> Void
+    let layout = unsafeBitCast(method_getImplementation(method), to: Layout.self)
+    let waiting = NSHashTable<UIView>.weakObjects()
+    let deferred: @convention(block) (UIView) -> Void = { item in
+      guard let coordinator = navigationController(containing: item)?.transitionCoordinator else {
+        layout(item, selector)
+        return
+      }
+      if waiting.contains(item) { return }
+      waiting.add(item)
+      let queued = coordinator.animate(alongsideTransition: nil) { [weak item] _ in
+        guard let item else { return }
+        waiting.remove(item)
+        layout(item, selector)
+      }
+      if !queued {
+        waiting.remove(item)
+        layout(item, selector)
+      }
+    }
+    method_setImplementation(method, imp_implementationWithBlock(deferred))
+  }()
+
+  /// A header item is in its stack's bar, whose superview is the navigation controller's view.
+  private static func navigationController(containing item: UIView) -> UINavigationController? {
+    sequence(first: item as UIResponder) { $0.next }.lazy
+      .compactMap { $0 as? UINavigationController }.first
   }
 
   /// `RNSScreenStack` holds its navigation controller's view as a subview.
