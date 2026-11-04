@@ -91,10 +91,18 @@ export class ScreenPositioned {
 @Component({
   selector: 'x-stack-host',
   imports: [NativeStackOutlet],
-  template: `<native-stack-outlet />`,
+  template: `
+    <native-stack-outlet />
+    @if (twinShown()) {
+      <native-stack-outlet name="twin" #twin />
+    }
+  `,
 })
 export class StackHost {
   readonly outlet = viewChild.required(NativeStackOutlet);
+  /** A second stack, for a screen another outlet made. */
+  readonly twinShown = signal(false);
+  readonly twin = viewChild('twin', { read: NativeStackOutlet });
 }
 
 /** A second, named stack, beside the first. */

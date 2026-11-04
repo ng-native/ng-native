@@ -6,7 +6,13 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { EnvironmentInjector, inject, type ComponentRef, type Type } from '@angular/core';
+import {
+  EnvironmentInjector,
+  inject,
+  type ComponentRef,
+  type Type,
+  type WritableSignal,
+} from '@angular/core';
 import { PlatformLocation } from '@angular/common';
 import {
   ChildrenOutletContexts,
@@ -244,9 +250,31 @@ describe('native stack outlet', () => {
     assert.deepEqual(labels(fabric), ['lisbon']);
   });
 
-  it('commits the outlet host as a native screen stack', () => {
-    const stack = flatten(fabric.committed).find((n) => n.viewName === 'RNSScreenStack');
-    assert.ok(stack, 'the outlet host is the RNSScreenStack itself, not a wrapper');
+  it('commits the outlet host as a native screen stack, with its first screen', async () => {
+    const stack = () => flatten(fabric.committed).find((n) => n.viewName === 'RNSScreenStack');
+    assert.equal(stack(), undefined, 'not committed while it has no screen');
+    outlet.activateWith(routeFor(ScreenA, '/a'), env);
+    await settle();
+    assert.ok(stack(), 'the outlet host is the RNSScreenStack itself, not a wrapper');
+    assert.equal(stack()!.children[0]?.viewName, 'RNSScreen');
+  });
+
+  it('commits a stack whose first screen another outlet made', async () => {
+    const routeA = routeFor(ScreenA, '/a');
+    outlet.activateWith(routeA, env);
+    await settle();
+    const ref = outlet.detach();
+    const host = app.componentRef.instance as {
+      twinShown: WritableSignal<boolean>;
+      twin(): Outlet;
+    };
+    host.twinShown.set(true);
+    await settle();
+    host.twin().attach(ref, routeA);
+    await settle();
+    const stacks = flatten(fabric.committed).filter((n) => n.viewName === 'RNSScreenStack');
+    assert.equal(stacks.length, 2, 'the second stack is committed');
+    assert.equal(stacks[1]!.children[0]?.viewName, 'RNSScreen', 'with the screen it was given');
   });
 
   it('pushes a screen per activation and keeps the ones below mounted', async () => {
@@ -742,7 +770,8 @@ describe('a named native stack outlet', () => {
     const contexts = app.componentRef.injector.get(ChildrenOutletContexts);
     assert.equal(contexts.getContext('list')?.outlet, outlet);
     assert.equal(contexts.getContext('primary')?.outlet ?? null, null, 'not the primary outlet');
-    const stack = app.fabric.find('RNSScreenStack');
-    assert.equal('name' in stack!.props, false, 'and the name stays off the native view');
+    // Not committed while it has no screen, so read from the element the stack is committed from.
+    const stack = app.componentRef.location.nativeElement.childList[0] as { props: object };
+    assert.equal('name' in stack.props, false, 'and the name stays off the native view');
   });
 });

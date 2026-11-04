@@ -254,9 +254,18 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   } | null = null;
 
   protected readonly fill = { flex: 1 };
+  /**
+   * Whether no screen has joined the stack yet. Until one does, the stack is `display: none`, so
+   * it is not committed: native creates it with a placeholder view controller so that a large
+   * title on its first screen opens expanded, and react-native-screens' own JavaScript mounts the
+   * two together. Mounted empty, it is laid out on iOS with the placeholder's compact bar, and a
+   * large title on the root page shows collapsed. Never true again, so the stack is not made again.
+   */
+  private empty = true;
 
   constructor() {
     ownHost(this.host.nativeElement);
+    this.renderer.setStyle(this.host.nativeElement, 'display', 'none');
     // Ours, not a prop of the native stack.
     delete (this.host.nativeElement as { props: Record<string, unknown> }).props['name'];
     this.parentContexts.onChildOutletCreated(this.name, this);
@@ -721,7 +730,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       // host element is already a screen, complete with the `dismissed` listener that outlet
       // registered, so it is re-parented rather than rebuilt.
       const screen = ref.location.nativeElement;
-      this.renderer.appendChild(this.host.nativeElement, screen);
+      this.appendScreen(screen);
       this.entries.push({
         route,
         ref,
@@ -1094,8 +1103,14 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       ...presentation?.gestureResponseDistance,
     });
 
-    this.renderer.appendChild(this.host.nativeElement, screen);
+    this.appendScreen(screen);
     return screen;
+  }
+
+  private appendScreen(screen: unknown): void {
+    this.renderer.appendChild(this.host.nativeElement, screen);
+    if (this.empty) this.renderer.removeStyle(this.host.nativeElement, 'display');
+    this.empty = false;
   }
 
   /**
