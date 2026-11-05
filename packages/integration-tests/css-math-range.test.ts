@@ -190,7 +190,7 @@ describe('the props with nothing below zero', () => {
     assert.equal(width(), 0);
   });
 
-  it('gives way to the rule when refused, and follows the binding out of it', () => {
+  it('keeps the value bound before a refused one, and follows the binding out of it', () => {
     const fabric = createFakeFabric();
     const sheet = compileCss('.c { width: 7px }') as StyleSheet;
     const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
@@ -204,8 +204,9 @@ describe('the props with nothing below zero', () => {
     };
     renderer.setStyle(node, 'width', 'calc(1px + 1px)');
     assert.equal(width(), 2);
+    // Chrome's `setProperty` leaves the value before a refused one (the oracle's `then` rows).
     renderer.setStyle(node, 'width', 'calc(1px + 2)');
-    assert.equal(width(), 7, 'refused over a value bound before it');
+    assert.equal(width(), 2, 'refused over a value bound before it, which stays');
     renderer.setStyle(node, 'width', 'calc(1px - 5px)');
     assert.equal(width(), 0);
     renderer.removeStyle(node, 'width', 0 as never);
@@ -233,12 +234,54 @@ describe('the props with nothing below zero', () => {
     assert.equal(committed('marginTop'), -4);
     renderer.setStyle(node, 'opacity', '-1');
     assert.notEqual(committed('opacity'), 0.7);
-    // A shorthand refused whole takes out the sides it set before.
+    // A shorthand refused whole leaves the sides it set before, as Chrome leaves them.
     renderer.setStyle(node, 'padding', '1px 2px');
     assert.equal(committed('paddingRight'), 2);
     renderer.setStyle(node, 'padding', '1px -1px');
-    assert.equal(committed('paddingRight'), 7);
-    assert.equal(committed('paddingTop'), 7);
+    assert.equal(committed('paddingRight'), 2);
+    assert.equal(committed('paddingTop'), 1);
+    renderer.removeStyle(node, 'padding', 0 as never);
+    assert.equal(committed('paddingRight'), 7, 'and goes with them when removed');
+  });
+
+  it('keeps a border before a refused one, and takes it away when the binding goes', () => {
+    const fabric = createFakeFabric();
+    const sheet = compileCss('.c { border-top-width: 7px }');
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const renderer = new NativeRendererFactory(engine).createRenderer(null, null);
+    const node = renderer.createElement('view') as EngineNode;
+    renderer.setAttribute(node, 'class', 'c');
+    renderer.appendChild(engine.root, node);
+    const committed = (key: string) => {
+      engine.commit();
+      return (fabric.committed[0]!.props as Record<string, unknown>)[key];
+    };
+    renderer.setStyle(node, 'border', '2px solid rgb(255, 0, 0)');
+    assert.equal(committed('borderTopWidth'), 2);
+    renderer.setStyle(node, 'border', '3px solid notacolour');
+    assert.equal(committed('borderTopWidth'), 2, 'refused, so the border before it stays');
+    assert.equal(committed('borderTopColor'), 'rgb(255, 0, 0)');
+    renderer.setStyle(node, 'border', '4px solid rgb(0, 0, 255)');
+    assert.equal(committed('borderTopWidth'), 4);
+    renderer.removeStyle(node, 'border', 0 as never);
+    assert.equal(committed('borderTopWidth'), 7, 'the rule, once the binding goes');
+  });
+
+  it('keeps a background of a token before a refused one', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const renderer = new NativeRendererFactory(engine).createRenderer(null, null);
+    const node = renderer.createElement('view') as EngineNode;
+    renderer.setStyle(node, '--c', 'rgb(1, 2, 3)');
+    renderer.appendChild(engine.root, node);
+    const background = () => {
+      engine.commit();
+      return (fabric.committed[0]!.props as Record<string, unknown>)['backgroundColor'];
+    };
+    renderer.setStyle(node, 'background', 'var(--c)');
+    assert.equal(background(), 'rgb(1, 2, 3)');
+    renderer.setStyle(node, 'background', 'notabackground');
+    assert.equal(background(), 'rgb(1, 2, 3)', 'refused, so the token before it stays');
   });
 
   it('leaves a negative written in a token unset, in a rule and on the element', () => {

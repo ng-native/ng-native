@@ -512,7 +512,8 @@ class NativeRenderer implements Renderer2 {
     if (this.setShorthand(el, key, value)) return;
     // `setDeclaration`, written out: Angular calls this for every declaration of every bound
     // style, where the call more measured slower in `pnpm bench`. The two change together.
-    if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
+    const bound = this.engine.setBoundStyle(el, key, value);
+    if (bound) return this.boundOrRefused(el, key, bound);
     const next = declaredValue(key, value);
     const current = el.props['style'] as Record<string, unknown> | undefined;
     if (current && current === el.ownStyle) {
@@ -532,7 +533,8 @@ class NativeRenderer implements Renderer2 {
    */
   private setDeclaration(el: EngineNode, key: string, value: unknown): void {
     // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
-    if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
+    const bound = this.engine.setBoundStyle(el, key, value);
+    if (bound) return this.boundOrRefused(el, key, bound);
     const next = declaredValue(key, value);
     const current = el.props['style'] as Record<string, unknown> | undefined;
     if (current && current === el.ownStyle) {
@@ -547,8 +549,17 @@ class NativeRenderer implements Renderer2 {
   }
 
   /**
+   * A declaration the cascade settles takes the place of the value in the style. One a browser
+   * drops leaves the value set before it, as `setProperty` does.
+   */
+  private boundOrRefused(el: EngineNode, key: string, bound: true | 'refused'): void {
+    if (bound !== 'refused') this.dropStyle(el, key);
+  }
+
+  /**
    * A shorthand with a value for each side, set as its sides, or dropped for more values than it
-   * takes. False for any other declaration, which is set as it is.
+   * takes, or a side a browser drops, which leaves what was set before. False for any other
+   * declaration, which is set as it is.
    */
   private setShorthand(el: EngineNode, key: string, value: unknown): boolean {
     const mixed = MIXED_SHORTHANDS.get(key);
@@ -556,13 +567,13 @@ class NativeRenderer implements Renderer2 {
     if (!SHORTHANDS.has(key)) return false;
     const sides = longhands(key, value);
     const refusal = sides ? shorthandRefusal(key, sides) : undefined;
-    this.dropLonghands(el, key, refusal || sides === REFUSED ? null : sides);
-    if (!sides) return false;
-    this.removeStyle(el, key);
     if (refusal || sides === REFUSED) {
       this.engine.reportDroppedDeclaration(key, String(value), el.tag, refusal!);
       return true;
     }
+    this.dropLonghands(el, key, sides);
+    if (!sides) return false;
+    this.removeStyle(el, key);
     (writtenAs.get(el) ?? writtenAs.set(el, new Map()).get(el)!).set(
       key,
       sides.map(([side]) => side),
@@ -585,13 +596,14 @@ class NativeRenderer implements Renderer2 {
     if (typeof value !== 'string' && typeof value !== 'number') return false;
     const text = cssTrim(String(value).replace(IMPORTANT, ''));
     const reading = read(text, el.tag);
-    const longhands = typeof reading === 'string' ? null : reading.set;
-    this.dropLonghands(el, key, longhands);
-    this.dropDeclaration(el, key);
     if (typeof reading === 'string') {
+      // Dropped as a browser drops it, leaving what was set before.
       this.engine.reportDroppedDeclaration(key, text, el.tag, reading);
       return true;
     }
+    const longhands = reading.set;
+    this.dropLonghands(el, key, longhands);
+    this.dropDeclaration(el, key);
     (writtenAs.get(el) ?? writtenAs.set(el, new Map()).get(el)!).set(
       key,
       longhands!.map(([side]) => side),

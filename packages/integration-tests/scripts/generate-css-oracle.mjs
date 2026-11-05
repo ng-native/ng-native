@@ -78,6 +78,8 @@ ${render(test.tree, test.global !== undefined || test.none !== undefined)}
 <script>
   const el = document.getElementById('probe');
   for (const [name, value] of Object.entries(${JSON.stringify({ ...test.bound, ...test.inline })})) el.style.setProperty(name, value);
+  getComputedStyle(el).color;
+  for (const [name, value] of Object.entries(${JSON.stringify(test.then ?? {})})) el.style.setProperty(name, value);
   const style = getComputedStyle(el);
   const values = {};
   for (const property of ${JSON.stringify([...PROPERTIES, ...(test.extra ?? [])])}) values[property] = style.getPropertyValue(property);

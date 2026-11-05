@@ -8923,19 +8923,20 @@ export class Engine implements HostEngine {
    * A bound declaration, `[style.color]`, whose value may be a `var()`, or a length in `em` or a
    * viewport unit. One that is, is kept as a declaration the cascade settles with the node's
    * tokens, font size and viewport, as a rule's is, and true is answered: the text is no value to
-   * put in the node's style. A negative `line-height` is dropped, with a warning, and true is
-   * answered too. Any other value forgets what was kept.
+   * put in the node's style. A value CSS has none of, a negative `line-height` say, is dropped
+   * with a warning, and `'refused'` is answered: what was set before stays, as a browser's
+   * `setProperty` leaves it. Any other value forgets what was kept.
    */
-  setBoundStyle(node: EngineNode, prop: string, value: unknown): boolean {
+  setBoundStyle(node: EngineNode, prop: string, value: unknown): boolean | 'refused' {
     const text = typeof value === 'string' ? value : undefined;
     const had = node.boundByProp?.get(prop);
     // Bound again as it is: a chart writes each of its points' paints again as a finger moves.
     // Asked here, without a call, as this runs for every declaration of every inline style.
     if (had !== undefined && text !== undefined && BOUND_TEXT.get(had) === text) return true;
-    const refused = text !== undefined && this.refusedBound(node, prop, text);
-    const bound = text === undefined || refused ? null : boundRead(prop, text, node.tag);
+    if (text !== undefined && this.refusedBound(node, prop, text)) return 'refused';
+    const bound = text === undefined ? null : boundRead(prop, text, node.tag);
     if (bound || had) this.keepBound(node, prop, bound);
-    return bound !== null || refused;
+    return bound !== null;
   }
 
   /**
@@ -15974,6 +15975,15 @@ export class Engine implements HostEngine {
     if (this.platformColours.has(report)) return;
     this.platformColours.add(report);
     const where = on === undefined ? props.join(', ') : `${props.join(', ')}, bound on <${on}>,`;
+    if (name === 'currentColor') {
+      console.warn(
+        `[angular-native] ${where} is drawn in currentColor, which is a platform colour here` +
+          ` (platform-color() or a system colour). The platform resolves that by name and it has` +
+          ` no channels to draw a shadow or a filter in, so the declaration is dropped. Give it a` +
+          ` colour written out.`,
+      );
+      return;
+    }
     console.warn(
       `[angular-native] ${where} works a colour out of var(${name}), which holds a platform` +
         ` colour (platform-color() or a system colour). The platform resolves that by name and` +

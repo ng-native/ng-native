@@ -445,6 +445,65 @@ describe('a token holding platform-color() where a colour has to be worked out',
     assert.equal(s.committed(a)['borderTopColor'], undefined);
   });
 
+  for (const [label, colour] of [
+    ['platform-color()', LINK],
+    ['a system colour', 'CanvasText'],
+  ] as const) {
+    it(`drops a shadow in currentColor where the colour is ${label}, and says so once`, () => {
+      const s = app(`.a { color: ${colour}; box-shadow: 0 0 2px; }`);
+      const a = s.element('a');
+      s.element('a');
+      s.engine.commit();
+      assert.equal(s.committed(a)['boxShadow'], undefined);
+      const said = warnings.filter((line) => line.includes('platform'));
+      assert.equal(said.length, 1, warnings.join('\n'));
+      assert.match(said[0]!, /boxShadow is drawn in currentColor, which is a platform colour/);
+    });
+  }
+
+  it('says so of a shadow in currentColor where the colour set on the element is a platform one', () => {
+    const s = app('.a { box-shadow: 0 0 2px; }');
+    const a = s.element('a');
+    s.engine.commit();
+    assert.equal((s.committed(a)['boxShadow'] as unknown[]).length, 1);
+    new NativeRendererFactory(s.engine).createRenderer(null, null).setStyle(a, 'color', LINK);
+    s.engine.commit();
+    // Null takes the shadow committed before away.
+    assert.equal(s.committed(a)['boxShadow'], null);
+    const said = warnings.filter((line) => line.includes('platform'));
+    assert.equal(said.length, 1, warnings.join('\n'));
+    assert.match(said[0]!, /boxShadow is drawn in currentColor/);
+  });
+
+  it('says it of a shadow whose unset inset token leaves it in currentColor', () => {
+    const s = app('.a { color: CanvasText; box-shadow: var(--tw-ring-inset,) 0 0 2px; }');
+    const a = s.element('a');
+    s.engine.commit();
+    assert.equal(s.committed(a)['boxShadow'], undefined);
+    assert.equal(warnings.filter((line) => line.includes('currentColor')).length, 1);
+  });
+
+  it('says it of a shadow in currentColor where the colour inherited is a platform one', () => {
+    const s = app('.p { color: CanvasText; } .a { box-shadow: 0 0 2px; }');
+    const a = s.element('a', 'view', s.element('p'));
+    s.engine.commit();
+    assert.equal(s.committed(a)['boxShadow'], undefined);
+    assert.equal(warnings.filter((line) => line.includes('currentColor')).length, 1);
+  });
+
+  it('says nothing of currentColor where the colour is written out, nor of another cause', () => {
+    const s = app(
+      '.a { color: red; box-shadow: 0 0 2px; } .b { color: red; box-shadow: var(--nope) 0 2px; }',
+    );
+    s.element('a');
+    s.element('b');
+    s.engine.commit();
+    assert.deepEqual(
+      warnings.filter((line) => line.includes('platform')),
+      [],
+    );
+  });
+
   /** What the build says of a sheet with `css` after a token holding a platform colour. */
   const buildSays = (css: string): string[] => {
     const dropped: string[] = [];

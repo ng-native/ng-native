@@ -313,6 +313,7 @@ function committed(test: OracleCase, sheet: StyleSheet): Record<string, unknown>
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
   const renderer = new NativeRendererFactory(engine).createRenderer(null, null);
+  let probe: EngineNode | undefined;
   const add = (spec: CaseNode, parent: EngineNode): void => {
     const node = renderer.createElement(spec.name) as EngineNode;
     if (spec.classes) renderer.setAttribute(node, 'class', spec.classes.join(' '));
@@ -321,6 +322,7 @@ function committed(test: OracleCase, sheet: StyleSheet): Record<string, unknown>
       renderer.setAttribute(node, name, value);
     }
     if (spec.id === 'probe') {
+      probe = node;
       for (const [name, value] of Object.entries(test.inline!)) {
         renderer.setStyle(node, name, value);
       }
@@ -329,6 +331,10 @@ function committed(test: OracleCase, sheet: StyleSheet): Record<string, unknown>
     for (const child of spec.children ?? []) add(child, node);
   };
   add(test.tree, engine.root);
+  engine.commit();
+  // A binding's next value, set once the first has been drawn.
+  for (const [name, value] of Object.entries(test.then ?? {}))
+    renderer.setStyle(probe!, name, value);
   engine.commit();
   return flatten(fabric.committed).find((node) => node.props['nativeID'] === 'probe')!.props;
 }

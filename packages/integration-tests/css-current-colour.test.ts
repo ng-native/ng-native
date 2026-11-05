@@ -454,6 +454,70 @@ describe('color: currentColor in a keyframe', () => {
       );
     }
   });
+
+  it('keeps the value a frame gave before one in currentColor it refuses', () => {
+    // As any other value a frame refuses: `width: 1px; width: foo()` keeps the 1px.
+    for (const [property, prop, value] of [
+      ['box-shadow', 'boxShadow', '0 0 4px'],
+      ['background-color', 'backgroundColor', ''],
+    ]) {
+      const warnings: string[] = [];
+      const sheet = compileCss(
+        `@keyframes k { from { ${property}: ${value} rgb(255, 0, 0); ${property}: ${value} currentColor } }`,
+        'frames',
+        { onUnsupported: (m: string) => warnings.push(m) },
+      ) as unknown as { keyframes: Record<string, { declarations: Record<string, unknown> }[]> };
+      const kept = sheet.keyframes['k']![0]!.declarations[prop];
+      const first = property === 'box-shadow' ? (kept as { color: unknown }[])[0]!.color : kept;
+      assert.equal(first, 'rgb(255, 0, 0)', property);
+      assert.equal(warnings.length, 1, property);
+    }
+  });
+
+  /** The first frame of `frame`, compiled, and what the build said of it. */
+  const firstFrame = (frame: string) => {
+    const warnings: string[] = [];
+    const sheet = compileCss(`@keyframes k { from { ${frame} } }`, 'frames', {
+      onUnsupported: (m: string) => warnings.push(m),
+    }) as unknown as {
+      keyframes: Record<string, { declarations: Record<string, unknown>; deferred?: unknown[] }[]>;
+    };
+    return { ...sheet.keyframes['k']![0]!, warnings };
+  };
+
+  it('keeps all of a shorthand it refuses as the frame had it', () => {
+    const { declarations } = firstFrame(
+      'outline: 2px solid rgb(255, 0, 0); outline: 8px solid currentColor',
+    );
+    assert.equal(declarations['outlineWidth'], 2);
+    assert.equal(declarations['outlineColor'], 'rgb(255, 0, 0)');
+  });
+
+  it('keeps color: currentColor apart from the declarations after it', () => {
+    for (const between of ['', 'background-color: currentColor;']) {
+      const frame = firstFrame(`color: currentColor; ${between} width: 1em`);
+      assert.ok(frame.declarations['color'], between);
+      assert.deepEqual(frame.deferred, [{ props: ['width'], compute: { unit: 'em', factor: 1 } }]);
+      assert.equal(frame.warnings.length, between ? 1 : 0, frame.warnings.join('\n'));
+    }
+    // A colour of its own after it stands, written out or from a token.
+    const { declarations } = firstFrame('color: currentColor; color: rgb(1, 2, 3)');
+    assert.equal(declarations['color'], 'rgb(1, 2, 3)');
+    assert.equal(
+      firstFrame('color: currentColor; color: var(--x)').declarations['color'],
+      undefined,
+    );
+    // One refused leaves it as it was.
+    const refused = firstFrame(
+      'color: currentColor; color: color-mix(in srgb, currentColor 50%, red)',
+    );
+    assert.ok(refused.declarations['color']);
+    assert.equal(refused.warnings.length, 1);
+  });
+
+  it('leaves out all of a shorthand it refuses where the frame had none', () => {
+    assert.deepEqual(firstFrame('outline: 8px solid currentColor').declarations, {});
+  });
 });
 
 describe("a border whose width is a calc() of a token, as Bootstrap's .table-group-divider", () => {

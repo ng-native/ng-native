@@ -3033,21 +3033,34 @@ function holdsMarker(value) {
  * the same frames can be animating, and is refused.
  */
 function addFrameDeclaration(declaration, out, tokens, deferred, context) {
+  // The frame's own `color: currentColor`, held aside: `addDeclaration` lifts every marker in
+  // `out`, and would take it for this declaration's.
+  const held = out.color === CURRENT_COLOUR;
+  if (held) delete out.color;
+  const before = { ...out };
   const waiting = [];
-  addDeclaration(declaration, out, tokens, waiting, context);
-  const [only] = waiting;
-  if (waiting.length === 1 && only.props.join() === 'color' && only.within === CURRENT_COLOUR) {
-    out.color = CURRENT_COLOUR;
-    return;
+  try {
+    addDeclaration(declaration, out, tokens, waiting, context);
+    const [only] = waiting;
+    if (waiting.length === 1 && only.props.join() === 'color' && only.within === CURRENT_COLOUR) {
+      out.color = CURRENT_COLOUR;
+      return;
+    }
+    if (waiting.some((one) => namesCurrentColour(one.within))) {
+      // All of it, as the frame had it before, as for any other value refused.
+      for (const key of Object.keys(out)) delete out[key];
+      Object.assign(out, before);
+      waiting.length = 0;
+      throw new CssUnsupported(
+        `${context}: currentColor in a keyframe is the element's own colour, which the same ` +
+          `frames can be animating, so only color can take it. Write the colour out.`,
+      );
+    }
+    deferred.push(...waiting);
+  } finally {
+    const coloured = 'color' in out || waiting.some((one) => one.props.includes('color'));
+    if (held && !coloured) out.color = CURRENT_COLOUR;
   }
-  if (waiting.some((one) => namesCurrentColour(one.within))) {
-    for (const one of waiting) for (const prop of one.props) delete out[prop];
-    throw new CssUnsupported(
-      `${context}: currentColor in a keyframe is the element's own colour, which the same ` +
-        `frames can be animating, so only color can take it. Write the colour out.`,
-    );
-  }
-  deferred.push(...waiting);
 }
 
 /** Whether a deferred value is, or is worked out from, the colour in scope. */

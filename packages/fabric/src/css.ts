@@ -4604,7 +4604,7 @@ export class StyleResolver {
         continue;
       }
       const settled = this.settled(declaration, own, parentInherited, tokens);
-      if (settled === undefined) this.reportUnsettled(declaration, tokens);
+      if (settled === undefined) this.reportUnsettled(declaration, tokens, own, parentInherited);
       const outranked = (prop: string) =>
         !declaration.important && important !== null && prop in important;
       // Said only of a display that is written: an important one wins over the token's.
@@ -4717,9 +4717,17 @@ export class StyleResolver {
   private reportUnsettled(
     declaration: DeferredDeclaration,
     tokens: Readonly<Record<string, TokenValue>>,
+    own: Record<string, unknown>,
+    parentInherited: Record<string, unknown>,
   ): void {
     if (this.onUndefinedToken) this.reportUndefined(declaration, tokens);
-    if (this.onPlatformColour) this.reportPlatformColour(declaration, tokens);
+    if (!this.onPlatformColour) return;
+    this.reportPlatformColour(declaration, tokens);
+    // A shadow in currentColor, where the colour in scope is a platform one: `color: CanvasText`.
+    const current = own['color'] ?? parentInherited['color'];
+    if (isPlatformColour(current) && holdsCurrentColour(declaration.within, tokens)) {
+      this.onPlatformColour('currentColor', declaration.props, declaration.on);
+    }
   }
 
   /** A reference with nothing defined for it and nothing to fall back to. */
@@ -6607,6 +6615,17 @@ function platformColourRead(
     if (found) return found;
   }
   return undefined;
+}
+
+/**
+ * Whether a deferred value holds a colour that comes to `currentColor` with these tokens, which the
+ * colour in scope settles: written out, or a shadow's inset token left unset.
+ */
+function holdsCurrentColour(value: unknown, tokens: Readonly<Record<string, TokenValue>>): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  const colour = colourMarker(value);
+  if (colour) return resolveColour(colour, tokens) === 'currentcolor';
+  return Object.values(value).some((part) => holdsCurrentColour(part, tokens));
 }
 
 /** `platformColourRead` of the token `name`, which is the one when it holds a platform colour. */
