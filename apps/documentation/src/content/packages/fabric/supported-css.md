@@ -219,7 +219,8 @@ the exception, since a token is read in one form: write its lengths out, or put 
 the token. A shadow token can have a token in its color too, `--ring: 0 0 0 2px var(--ring-color,
 currentcolor)`, filled in where it is used. `currentcolor` as the fallback of a shadow's color is
 the element's `color`, or the one it inherits, or black. A `text-shadow` takes tokens the same way,
-in its color and its lengths.
+in its color and its lengths. One with no color is inherited as `currentColor`, so a text inside it
+with a color of its own draws the shadow in that color.
 
 Truncation is a paragraph's props on native, not a style, and CSS's three ways of asking for it
 compile to them: `white-space: nowrap` to `numberOfLines: 1`, `line-clamp` or `-webkit-line-clamp`

@@ -3468,6 +3468,64 @@ function ownPaint(
 }
 
 /**
+ * The inherited maps whose `textShadowColor` is `currentColor`. CSS inherits the keyword, not the
+ * colour it came to, so a text with a colour of its own under a shadow of no colour draws the
+ * shadow in its own colour. A map is shared as long as nothing inheritable changes under it, and a
+ * node that sets one is handed a copy, which `shadowInTextColour` marks again.
+ */
+const shadowsInTextColour = new WeakSet<Record<string, unknown>>();
+
+/** Whether a deferred declaration writes `currentColor` to the text shadow's colour. */
+const shadowFromCurrentColour = (deferred: readonly DeferredDeclaration[] | null): boolean =>
+  deferred?.some(
+    (declaration) =>
+      declaration.props.includes('textShadowColor') &&
+      (declaration.within as { __colour?: { color?: unknown } } | undefined)?.__colour?.color ===
+        'currentcolor',
+  ) ?? false;
+
+/**
+ * Draw a text shadow in `currentColor` in the node's own text colour, where the node set it so or
+ * inherits it so, and hand the keyword on: see `shadowsInTextColour`. `style` gets the colour;
+ * what the node's children inherit is returned.
+ */
+function shadowInTextColour(
+  style: Record<string, unknown>,
+  inherited: Record<string, unknown>,
+  parentInherited: Record<string, unknown>,
+  own: Readonly<Record<string, unknown>>,
+  setsCurrent: boolean,
+): Record<string, unknown> {
+  const follows =
+    setsCurrent || (shadowsInTextColour.has(parentInherited) && !('textShadowColor' in own));
+  if (!follows) return inherited;
+  const colour = style['color'] ?? 'black';
+  style['textShadowColor'] = colour;
+  let handed = inherited;
+  if (handed['textShadowColor'] !== colour) {
+    if (handed === parentInherited) handed = { ...parentInherited };
+    handed['textShadowColor'] = colour;
+  }
+  shadowsInTextColour.add(handed);
+  return handed;
+}
+
+/**
+ * `shadowInTextColour` for a node no rule can match, whose inherited colour its inline style
+ * overrides. Its style can be the very map its parent hands down, so it gets a copy of its own.
+ */
+function inlineOverShadow(
+  cache: StyleCache,
+  inline: Readonly<Record<string, unknown>> | null,
+  parentInherited: Record<string, unknown>,
+): void {
+  if (inline?.['color'] === undefined || 'textShadowColor' in inline) return;
+  if (!shadowsInTextColour.has(parentInherited)) return;
+  cache.style = { ...cache.style, color: inline['color'] };
+  cache.inherited = shadowInTextColour(cache.style, cache.inherited, {}, inline, true);
+}
+
+/**
  * A text decoration's colour, which travels with its line rather than inheriting on its own. A
  * decoration is drawn under the text inside the element that declares it, in that element's
  * decoration colour or its text colour, and a text's own decoration colour only colours a line it
@@ -4155,6 +4213,7 @@ export class StyleResolver {
       inherited: handedOn(node, parentInherited, inline, drawing),
       tokens,
     };
+    inlineOverShadow(passthrough, inline, parentInherited);
     node.styleCache = passthrough;
     node.styleDirty = false;
     node.ownDirty = false;
@@ -4413,7 +4472,13 @@ export class StyleResolver {
     const style = { ...parentInherited, ...own };
     if (!takesPaint(node)) unpainted(style, own);
     settleLineHeight(style);
-    const inherited = decorate(style, inheritFrom(parentInherited, own, node), own);
+    const inherited = shadowInTextColour(
+      style,
+      decorate(style, inheritFrom(parentInherited, own, node), own),
+      parentInherited,
+      own,
+      own['textShadowColor'] !== undefined && shadowFromCurrentColour(result.deferred),
+    );
     const rtl = (style['direction'] ?? this.conditions.direction) === 'rtl';
     const important = importantNames(result, () => TWIN[rtl ? 'rtl' : 'ltr']);
     return important ? { style, inherited, tokens, important } : { style, inherited, tokens };

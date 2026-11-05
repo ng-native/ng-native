@@ -470,6 +470,28 @@ const SHADOW_COLOUR_CASES: OracleCase[] = [
     extra: ['text-shadow'],
   },
   {
+    name: 'text-shadow with no colour on a parent is drawn in the colour of a text that sets its own',
+    css: '.outer { color: rgb(1, 2, 3); text-shadow: 2px 3px 4px } #probe { color: rgb(4, 5, 6) }',
+    tree: { name: 'text', classes: ['outer'], children: [probe()] },
+    extra: ['text-shadow'],
+  },
+  {
+    name: 'text-shadow with no colour is drawn in the colour of a text two levels down',
+    css: '.outer { color: rgb(1, 2, 3); text-shadow: 2px 3px 4px } .mid { color: rgb(4, 5, 6) } #probe { color: rgb(7, 8, 9) }',
+    tree: {
+      name: 'text',
+      classes: ['outer'],
+      children: [{ name: 'text', classes: ['mid'], children: [probe()] }],
+    },
+    extra: ['text-shadow'],
+  },
+  {
+    name: 'text-shadow with a colour of its own on a parent keeps it in a text with another colour',
+    css: '.outer { color: rgb(1, 2, 3); text-shadow: 2px 3px 4px rgb(9, 9, 9) } #probe { color: rgb(4, 5, 6) }',
+    tree: { name: 'text', classes: ['outer'], children: [probe()] },
+    extra: ['text-shadow'],
+  },
+  {
     name: 'text-shadow with no colour on a parent is inherited in the colour of the parent',
     css: '.outer { color: rgb(1, 2, 3); text-shadow: 2px 3px 4px } #probe { color: rgb(1, 2, 3) }',
     tree: { name: 'text', classes: ['outer'], children: [probe()] },
