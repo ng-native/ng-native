@@ -3475,14 +3475,21 @@ function ownPaint(
  */
 const shadowsInTextColour = new WeakSet<Record<string, unknown>>();
 
-/** Whether a deferred declaration writes `currentColor` to the text shadow's colour. */
-const shadowFromCurrentColour = (deferred: readonly DeferredDeclaration[] | null): boolean =>
-  deferred?.some(
-    (declaration) =>
-      declaration.props.includes('textShadowColor') &&
-      (declaration.within as { __colour?: { color?: unknown } } | undefined)?.__colour?.color ===
-        'currentcolor',
-  ) ?? false;
+/**
+ * Whether a deferred declaration writes `currentColor` to the text shadow's colour: written out,
+ * or by the token or the fallback a `var()` comes to on this node.
+ */
+const shadowFromCurrentColour = (
+  deferred: readonly DeferredDeclaration[] | null,
+  tokens: Readonly<Record<string, TokenValue>>,
+): boolean =>
+  deferred?.some((declaration) => {
+    if (!declaration.props.includes('textShadowColor')) return false;
+    const colour = colourMarker(declaration.within);
+    return (
+      colour !== undefined && colourWithin(colour, tokens, () => 'currentcolor') === 'currentcolor'
+    );
+  }) ?? false;
 
 /**
  * Draw a text shadow in `currentColor` in the node's own text colour, where the node set it so or
@@ -4477,7 +4484,7 @@ export class StyleResolver {
       decorate(style, inheritFrom(parentInherited, own, node), own),
       parentInherited,
       own,
-      own['textShadowColor'] !== undefined && shadowFromCurrentColour(result.deferred),
+      own['textShadowColor'] !== undefined && shadowFromCurrentColour(result.deferred, tokens),
     );
     const rtl = (style['direction'] ?? this.conditions.direction) === 'rtl';
     const important = importantNames(result, () => TWIN[rtl ? 'rtl' : 'ltr']);
@@ -6548,7 +6555,9 @@ function settledMarker(
   current?: CurrentColour,
 ): unknown {
   const colour = colourMarker(value);
-  if (colour) return resolveColour(colour, tokens, current);
+  // A token that holds `currentColor` is the node's colour too, where the node's is known.
+  if (colour)
+    return current ? colourWithin(colour, tokens, current) : resolveColour(colour, tokens);
   // Whether a shadow is inset, from a token that is the word or nothing: `ring-inset`.
   const inset = (value as { __inset?: { reference: string } }).__inset;
   if (inset) return formOf(tokens[inset.reference], 'keyword') === 'inset';

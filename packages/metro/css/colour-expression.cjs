@@ -113,6 +113,8 @@ function literal(part, context, named = false) {
 /** `literal` where a colour by name is kept: `platform-color()` and a system colour. */
 function namedLiteral(part, context) {
   const word = part.type === 'token' && part.value?.type === 'ident';
+  // The colour of the text, which the node fills in, as in any other shadow.
+  if (word && part.value.value.toLowerCase() === 'currentcolor') return 'currentcolor';
   const platform = part.type === 'function' && part.value?.name === 'platform-color';
   return word || platform ? tokenColour(part, context) : literal(part, context);
 }

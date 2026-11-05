@@ -4790,6 +4790,30 @@
     }
   },
   {
+    "name": "text-shadow in a token holding currentColor is drawn in the colour of a text that sets its own",
+    "expected": {
+      "color": "rgb(4, 5, 6)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "rgb(4, 5, 6) 2px 3px 4px"
+    }
+  },
+  {
+    "name": "text-shadow falling back to currentColor is drawn in the colour of a text that sets its own",
+    "expected": {
+      "color": "rgb(4, 5, 6)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "rgb(4, 5, 6) 2px 3px 4px"
+    }
+  },
+  {
+    "name": "text-shadow in a set token keeps its colour over a fallback of currentColor",
+    "expected": {
+      "color": "rgb(4, 5, 6)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "rgb(9, 9, 9) 2px 3px 4px"
+    }
+  },
+  {
     "name": "text-shadow with a colour of its own on a parent keeps it in a text with another colour",
     "expected": {
       "color": "rgb(4, 5, 6)",

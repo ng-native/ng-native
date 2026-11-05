@@ -486,6 +486,24 @@ const SHADOW_COLOUR_CASES: OracleCase[] = [
     extra: ['text-shadow'],
   },
   {
+    name: 'text-shadow in a token holding currentColor is drawn in the colour of a text that sets its own',
+    css: '.outer { --shade: currentColor; color: rgb(1, 2, 3); text-shadow: 2px 3px 4px var(--shade) } #probe { color: rgb(4, 5, 6) }',
+    tree: { name: 'text', classes: ['outer'], children: [probe()] },
+    extra: ['text-shadow'],
+  },
+  {
+    name: 'text-shadow falling back to currentColor is drawn in the colour of a text that sets its own',
+    css: '.outer { color: rgb(1, 2, 3); text-shadow: 2px 3px 4px var(--unset, currentColor) } #probe { color: rgb(4, 5, 6) }',
+    tree: { name: 'text', classes: ['outer'], children: [probe()] },
+    extra: ['text-shadow'],
+  },
+  {
+    name: 'text-shadow in a set token keeps its colour over a fallback of currentColor',
+    css: '.outer { --shade: rgb(9, 9, 9); color: rgb(1, 2, 3); text-shadow: 2px 3px 4px var(--shade, currentColor) } #probe { color: rgb(4, 5, 6) }',
+    tree: { name: 'text', classes: ['outer'], children: [probe()] },
+    extra: ['text-shadow'],
+  },
+  {
     name: 'text-shadow with a colour of its own on a parent keeps it in a text with another colour',
     css: '.outer { color: rgb(1, 2, 3); text-shadow: 2px 3px 4px rgb(9, 9, 9) } #probe { color: rgb(4, 5, 6) }',
     tree: { name: 'text', classes: ['outer'], children: [probe()] },
