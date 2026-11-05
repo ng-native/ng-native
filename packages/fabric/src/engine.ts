@@ -43,6 +43,7 @@ import {
   isGenerated,
   noteGeneratedBoxes,
   settleUnsidedBorder,
+  isInherited,
 } from './css.ts';
 import { applyAria } from './aria-props.ts';
 import { STYLED_ELEMENTS } from './element-styles.ts';
@@ -7413,6 +7414,7 @@ export class Engine implements HostEngine {
     const conditions = options.conditions ?? { width: 0, height: 0, colorScheme: 'light' };
     this.lastConditions = options.conditions;
     this.styles = new StyleResolver(options.globalStyles ?? null, conditions);
+    this.styles.animatedInheritables = (node) => this.inheritablesAnimated(node as EngineNode);
     this.viewportSize = { width: conditions.width, height: conditions.height };
     this.fontScale = conditions.fontScale;
     if (options.tokens) this.styles.setRootTokens(options.tokens);
@@ -8590,6 +8592,48 @@ export class Engine implements HostEngine {
     return this.animated(node, this.transitioned(node, style));
   }
 
+  /**
+   * What a node's running transitions and animation give the properties its children inherit
+   * this frame: the resolver hands them down in place of the values the node rests at.
+   */
+  private inheritablesAnimated(node: EngineNode): Record<string, unknown> | null {
+    if (!node.transitions && !node.playing) return null;
+    let values: Record<string, unknown> | null = null;
+    for (const [key, transition] of node.transitions ?? []) {
+      if (!transition.done && isInherited(key)) (values ??= {})[key] = transition.current;
+    }
+    const played = playedOver(node);
+    for (const key in played) if (isInherited(key)) (values ??= {})[key] = played[key];
+    return values;
+  }
+
+  /**
+   * Nodes whose transition or animation of an inherited property started or stopped as they were
+   * merged, after their children were committed: committed again once, for the children.
+   */
+  private readonly handOnAgain = new Set<EngineNode>();
+
+  /** Whether a node animates, or handed its children what an animation gave it: see `handOnAgain`. */
+  private mayHandOn(node: EngineNode): boolean {
+    return node.transitions !== undefined || node.playing !== undefined || this.styles.handsOn;
+  }
+
+  /** Tell the resolver whether anything runs this commit: see `StyleResolver.anyAnimating`. */
+  private noteAnimating(): void {
+    this.styles.anyAnimating = this.running.size > 0 || this.playing.size > 0;
+    if (this.styles.handsOn) {
+      this.styles.releaseHanded((node) => this.topOf(node as EngineNode) === this.root);
+    }
+  }
+
+  /** Commit again for each node in `handOnAgain`: see there. */
+  private commitHandedOn(): void {
+    if (this.handOnAgain.size === 0) return;
+    for (const node of this.handOnAgain) this.markPath(node);
+    this.handOnAgain.clear();
+    this.commit();
+  }
+
   /** Note a sheet any of whose rules transitions or animates: see `eases`. */
   private noteSheetEasing(sheet: StyleSheet): void {
     for (const rule of this.eases ? [] : sheet.rules) {
@@ -9377,6 +9421,7 @@ export class Engine implements HostEngine {
     this.holders = undefined;
     const sent = this.rootsSent;
     this.paintedInstead = false;
+    this.noteAnimating();
     this.commitAsAsked();
     if (this.paintedOnly(sent)) return false;
     // Each a layout of the engine's, which an app of plain flex has asked for none of.
@@ -9395,6 +9440,7 @@ export class Engine implements HostEngine {
     const facesAdded = this.facesAdded;
     if (this.awaitingKeyframes.size) this.settleKeyframes();
     if (facesAdded) this.rematchFonts();
+    this.commitHandedOn();
     this.blurHidden();
     return true;
   }
@@ -12336,6 +12382,9 @@ export class Engine implements HostEngine {
     const field = TEXT_INPUTS.has(viewName);
     if (field) fieldStyled(viewName, style, this.fontScale);
     const merged = composeTransform(node, this.eased(node, style));
+    if (this.eases && this.mayHandOn(node) && this.styles.handsOnStale(node)) {
+      this.handOnAgain.add(node);
+    }
     // From the sides as committed: the element's own, and each frame of a transition.
     settleUnsidedBorder(merged);
     // On iOS: Android's field says the baseline of the line it is sized and centred by.
@@ -14782,6 +14831,8 @@ export class Engine implements HostEngine {
     // very same cache object when nothing has changed, so one reference comparison settles it,
     // and a subtree whose inherited context is unmoved is skipped exactly as before.
     const style = node.nodeKind === 'element' ? this.styles.resolve(node, this.styleEpoch) : null;
+    // What it hands down this frame, where it animates a property its children inherit.
+    if (style && this.eases) this.styles.handOver(node, this.styleEpoch);
     const styleChanged = node.styleCommitted !== style;
     if (this.isClean(node) && !styleChanged) return node.committed!.handle;
     // What a commit changed is noted, and a box planned again, for a layout of the engine's.

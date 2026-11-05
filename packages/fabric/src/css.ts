@@ -714,6 +714,25 @@ export interface StyleCache {
   important?: ReadonlySet<string>;
 }
 
+/** Whether two sets of animated values are the same, key for key. */
+function sameValues(
+  a: Readonly<Record<string, unknown>>,
+  b: Readonly<Record<string, unknown>>,
+): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => key in b && a[key] === b[key]);
+}
+
+/** What a node animating an inherited property hands its children, as of one commit. */
+interface HandedOver {
+  epoch: number;
+  /** The node's own inherited map the values were laid over. */
+  from: Record<string, unknown>;
+  values: Readonly<Record<string, unknown>>;
+  map: Record<string, unknown>;
+}
+
 /**
  * Whether a child is one `:empty` sees. An anchor is a comment on the web, which it does not;
  * nor text of no length, which a binding to nothing leaves behind; nor a box a rule generated,
@@ -879,6 +898,9 @@ const SHAPE_PAINT_INHERITED: ReadonlySet<string> = new Set(['fill', 'stroke', 's
  */
 const takesPaint = (node: StyleTarget): boolean =>
   node.namespace !== undefined || node.parent?.namespace !== undefined;
+
+/** Whether CSS hands a property down to an element's children: see `INHERITED`. */
+export const isInherited = (key: string): boolean => INHERITED.has(key);
 
 /** Whether a node is handed a shape's paint: see `SHAPE_PAINT_INHERITED`. */
 const handedPaint = (inherited: Record<string, unknown>): boolean =>
@@ -3647,6 +3669,28 @@ export class StyleResolver {
    */
   onPlatformColour: ((name: string, props: readonly string[], on?: string) => void) | null = null;
 
+  /**
+   * What a node's transitions and animation give, this frame, the properties its children
+   * inherit, or null for none. Set by the engine, which runs them. In a browser a child inherits
+   * the value an ancestor is animated to, not the one it rests at, so `color` easing on a card
+   * eases the text inside it as well.
+   */
+  animatedInheritables: ((node: StyleTarget) => Readonly<Record<string, unknown>> | null) | null =
+    null;
+
+  /** What each node animating an inherited property hands its children: see `animatedOver`. */
+  private readonly handedOver = new Map<StyleTarget, HandedOver>();
+  /**
+   * Whether any node has a transition running or an animation playing, set by the engine for each
+   * commit: while none has and no node hands anything down, a commit asks nothing about either.
+   */
+  anyAnimating = false;
+
+  /** Whether any node hands its children what its animation gives them. */
+  get handsOn(): boolean {
+    return this.handedOver.size > 0;
+  }
+
   constructor(globalSheet: StyleSheet | null, conditions: Conditions) {
     this.globalSheet = globalSheet;
     this.conditions = conditions;
@@ -3875,6 +3919,9 @@ export class StyleResolver {
     if (resolvedIn(epoch, cached, node)) return cached!;
 
     const parent = node.parent ? this.resolve(node.parent, epoch) : null;
+    if (parent && (this.anyAnimating || this.handedOver.size > 0) && this.animatedInheritables) {
+      this.animatedOver(node.parent!, parent, epoch);
+    }
     const parentContext = parent ? parent.context : ROOT_CONTEXT;
 
     // Across commits: nothing about this node changed and nothing above it moved, so the last
@@ -3903,7 +3950,7 @@ export class StyleResolver {
   ): StyleCache {
     const cached = node.styleCache;
     const parentContext = parent ? parent.context : ROOT_CONTEXT;
-    const parentInherited = parent ? parent.inherited : EMPTY;
+    const parentInherited = parent ? this.inheritedOf(node.parent!, parent) : EMPTY;
     const parentScope = parent ? parent.scope : ROOT_SCOPE;
     const stands = this.matchesStand(cached, node, parentScope);
     // The scope it keeps, or none: it then has a new one, which its new `context` serves as.
@@ -4569,6 +4616,80 @@ export class StyleResolver {
   }
 
   /**
+   * Bring what `node` hands its children up to date with its animation, for the commit `epoch`.
+   * A change mints the node a new `context`, so each child is styled again from the new values:
+   * nothing else about the node moved, and without it every child would keep its last answer.
+   */
+  private animatedOver(node: StyleTarget, cache: StyleCache, epoch: number): void {
+    const last = this.handedOver.get(node);
+    if (last?.epoch === epoch && last.from === cache.inherited) return;
+    const values = this.animatedInheritables!(node);
+    if (!values) {
+      if (!last) return;
+      this.handedOver.delete(node);
+      cache.context = {};
+      return;
+    }
+    if (last && last.from === cache.inherited && sameValues(last.values, values)) {
+      last.epoch = epoch;
+      return;
+    }
+    const map = { ...cache.inherited, ...values };
+    this.handedOver.set(node, { epoch, from: cache.inherited, values, map });
+    cache.context = {};
+  }
+
+  /**
+   * Forget what a node no longer in the tree hands down: nothing resolves it again to say its
+   * animation ended, and one left behind would keep every commit asking. A new `context` has what
+   * is under it styled again, should it come back.
+   */
+  releaseHanded(inTree: (node: StyleTarget) => boolean): void {
+    for (const node of this.handedOver.keys()) {
+      if (inTree(node)) continue;
+      this.handedOver.delete(node);
+      if (node.styleCache) node.styleCache.context = {};
+    }
+  }
+
+  /**
+   * Bring what a node the engine is committing hands its children up to date, before they are
+   * stepped over for a `context` that has not moved: see `animatedOver`.
+   */
+  handOver(node: StyleTarget, epoch: number): void {
+    if (!this.anyAnimating && this.handedOver.size === 0) return;
+    if (this.animatedInheritables && node.styleCache) {
+      this.animatedOver(node, node.styleCache, epoch);
+    }
+  }
+
+  /** What `node`, resolved to `cache`, hands its children: see `animatedOver`. */
+  private inheritedOf(node: StyleTarget, cache: StyleCache): Record<string, unknown> {
+    if (this.handedOver.size === 0) return cache.inherited;
+    const handed = this.handedOver.get(node);
+    return handed && handed.from === cache.inherited ? handed.map : cache.inherited;
+  }
+
+  /**
+   * Whether what `node` hands its children is behind its animation: one that started or stopped
+   * while the node was merged, after its children were styled this commit. Brought up to date,
+   * so the engine commits again once and the children take it.
+   */
+  handsOnStale(node: StyleTarget): boolean {
+    const cache = node.styleCache;
+    if (!this.animatedInheritables || !cache) return false;
+    const last = this.handedOver.get(node);
+    const values = this.animatedInheritables(node);
+    if (!values && !last) return false;
+    if (values && last && last.from === cache.inherited && sameValues(last.values, values)) {
+      return false;
+    }
+    // Under no commit's epoch, so the next commit takes the values as they are now.
+    this.animatedOver(node, cache, -1);
+    return true;
+  }
+
+  /**
    * Write the declarations that could not be settled at build time: a `var()` reference, or a
    * length relative to the viewport or to the font size in scope.
    *
@@ -4585,7 +4706,9 @@ export class StyleResolver {
     epoch: number,
   ): Record<string, unknown> {
     const { tokens } = this.resolve(node, epoch);
-    const above = node.parent ? this.resolve(node.parent, epoch).inherited : EMPTY;
+    const above = node.parent
+      ? this.inheritedOf(node.parent, this.resolve(node.parent, epoch))
+      : EMPTY;
     const own: Record<string, unknown> = {};
     this.applyDeferred(deferred, own, tokens, above, null);
     return own;

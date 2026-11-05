@@ -74,6 +74,11 @@ with `transition-duration: var(--duration-fast)`. The `transition` shorthand doe
 `transition: opacity var(--duration-fast) ease-out` is dropped whole, with a build warning, and the
 element has no transition.
 
+A property children inherit, such as `color`, `font-size` or `letter-spacing`, eases in them as
+well: they take the value the element has this frame, not the one it ends at, as in a browser. A
+child that sets the property itself keeps its own. The same holds for a `@keyframes` animation that
+plays over time. An animation a scroll drives still hands children the value the element rests at.
+
 ## `animate.enter` and `animate.leave`
 
 They add and remove a class, and wait for what the class starts, using `getAnimations()` on the
