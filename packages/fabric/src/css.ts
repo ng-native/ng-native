@@ -3476,20 +3476,25 @@ function ownPaint(
 const shadowsInTextColour = new WeakSet<Record<string, unknown>>();
 
 /**
- * Whether a deferred declaration writes `currentColor` to the text shadow's colour: written out,
- * or by the token or the fallback a `var()` comes to on this node.
+ * Whether the deferred declaration that wins the text shadow's colour writes `currentColor`:
+ * written out, or by the token or the fallback a `var()` comes to on this node. The last to settle
+ * wins, as in `applyDeferred`, unless a plain one is under an important declaration.
  */
-const shadowFromCurrentColour = (
+function shadowFromCurrentColour(
   deferred: readonly DeferredDeclaration[] | null,
   tokens: Readonly<Record<string, TokenValue>>,
-): boolean =>
-  deferred?.some((declaration) => {
-    if (!declaration.props.includes('textShadowColor')) return false;
-    const colour = colourMarker(declaration.within);
-    return (
-      colour !== undefined && colourWithin(colour, tokens, () => 'currentcolor') === 'currentcolor'
-    );
-  }) ?? false;
+  important: Readonly<Record<string, unknown>> | null,
+): boolean {
+  let winner: DeferredDeclaration | undefined;
+  for (const declaration of settlingOrder(deferred ?? [])) {
+    const outranked = !declaration.important && important && 'textShadowColor' in important;
+    if (declaration.props.includes('textShadowColor') && !outranked) winner = declaration;
+  }
+  const colour = winner && colourMarker(winner.within);
+  return (
+    colour !== undefined && colourWithin(colour, tokens, () => 'currentcolor') === 'currentcolor'
+  );
+}
 
 /**
  * Draw a text shadow in `currentColor` in the node's own text colour, where the node set it so or
@@ -4484,7 +4489,8 @@ export class StyleResolver {
       decorate(style, inheritFrom(parentInherited, own, node), own),
       parentInherited,
       own,
-      own['textShadowColor'] !== undefined && shadowFromCurrentColour(result.deferred, tokens),
+      own['textShadowColor'] !== undefined &&
+        shadowFromCurrentColour(result.deferred, tokens, result.important),
     );
     const rtl = (style['direction'] ?? this.conditions.direction) === 'rtl';
     const important = importantNames(result, () => TWIN[rtl ? 'rtl' : 'ltr']);
