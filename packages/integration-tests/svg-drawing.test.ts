@@ -858,3 +858,70 @@ describe("a library drawing's stroke-dasharray: none", () => {
     });
   });
 });
+
+describe("a shape's paint written as a token on the shape itself", () => {
+  for (const drawing of [true, false]) {
+    it(`is the token's colour where it is in scope, ${drawing ? 'in a drawing' : 'in an icon'}`, () => {
+      withViews(SHAPES, () => {
+        const { fabric, engine, add } = scene('.icon { --ink: #112233 }', drawing);
+        const root = add('x-svg', engine.root, 'icon');
+        const path = add('x-path', root);
+        engine.setProp(path, 'fill', 'var(--ink)');
+        engine.setProp(path, 'stroke', 'var(--missing, #00ff00)');
+        engine.commit();
+        const props = () => fabric.committed[0]!.children[0]!.props;
+        assert.deepEqual(props()['fill'], { type: 0, payload: 'rgb(17, 34, 51)' });
+        assert.deepEqual(props()['stroke'], { type: 0, payload: '#00ff00' });
+        // And follows it: the token changing, then the paint written as a plain colour again.
+        engine.setClasses(root, '');
+        engine.commit();
+        assert.equal(props()['fill'] ?? null, null, 'nothing defines it now');
+        engine.setProp(path, 'fill', 'red');
+        engine.commit();
+        assert.deepEqual(props()['fill'], { type: 0, payload: 'red' });
+        // And taken away, leaving none of the token behind.
+        engine.setClasses(root, 'icon');
+        engine.setProp(path, 'fill', undefined);
+        engine.commit();
+        assert.equal(props()['fill'] ?? null, null);
+      });
+    });
+  }
+
+  it('leaves a paint bound in its style alone', () => {
+    withViews(SHAPES, () => {
+      const { fabric, engine, add } = scene('.icon { --ink: #112233 }');
+      const root = add('x-svg', engine.root, 'icon');
+      const path = add('x-path', root);
+      // `[style.fill]`, and the attribute written with a plain colour and then taken away.
+      engine.setBoundStyle(path, 'fill', 'var(--ink)');
+      engine.setProp(path, 'fill', 'red');
+      engine.setProp(path, 'fill', undefined);
+      engine.commit();
+      const fill = fabric.committed[0]!.children[0]!.props['fill'];
+      assert.deepEqual(fill, { type: 0, payload: 'rgb(17, 34, 51)' });
+    });
+  });
+
+  it('keeps the attribute and an inline style apart, the style over the attribute', () => {
+    withViews(SHAPES, () => {
+      const { fabric, engine, add } = scene('.icon { --a: #110000; --b: #002200 }');
+      const root = add('x-svg', engine.root, 'icon');
+      const path = add('x-path', root);
+      const fill = () => {
+        engine.commit();
+        return (fabric.committed[0]!.children[0]!.props['fill'] as { payload?: unknown })?.payload;
+      };
+      // `style="fill: var(--a)"`, and `fill` written as a token and then as none.
+      engine.setBoundStyle(path, 'fill', 'var(--a)');
+      engine.setProp(path, 'fill', 'var(--b)');
+      assert.equal(fill(), 'rgb(17, 0, 0)', 'the style wins');
+      engine.setProp(path, 'fill', undefined);
+      assert.equal(fill(), 'rgb(17, 0, 0)', 'the style stays');
+      // And the other way: the style taken away leaves the attribute's.
+      engine.setProp(path, 'fill', 'var(--b)');
+      engine.setBoundStyle(path, 'fill', null);
+      assert.equal(fill(), 'rgb(0, 34, 0)');
+    });
+  });
+});

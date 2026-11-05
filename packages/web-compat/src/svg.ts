@@ -1,4 +1,10 @@
-import { nativePlatform, registerViewName, type Engine, type EngineNode } from '@ng-native/fabric';
+import {
+  isTokenPaint,
+  nativePlatform,
+  registerViewName,
+  type Engine,
+  type EngineNode,
+} from '@ng-native/fabric';
 import { nativeProps, viewBoxProps } from '@ng-native/icons';
 import { DEFINED, MARKED, definitionProps } from './svg-definitions.ts';
 import { isUnseen } from './svg-unseen.ts';
@@ -474,13 +480,8 @@ export const baselineOf = (attrs: Readonly<Record<string, string>>): string | un
 
 const PAINTS = ['fill', 'stroke'];
 
-/**
- * Whether a paint is written as a token, `fill="var(--ink)"`, or as a colour that may be made of
- * one: a mix, `color-mix(in srgb, var(--ink), white 20%)`, or a relative colour, `color(from
- * var(--ink) srgb r g b)`. The cascade settles each.
- */
-export const isToken = (written: unknown): boolean =>
-  typeof written === 'string' && /^\s*(var|color-mix)\(|^\s*[a-z]+\(\s*from\s/i.test(written);
+/** Whether a paint is written as a token, which the cascade settles: see `isTokenPaint`. */
+export const isToken = isTokenPaint;
 
 /** Take a paint off a shape's own props: it is its style's to give, where a token is set. */
 function notOwn(props: Record<string, unknown>, paint: string): void {

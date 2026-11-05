@@ -1,4 +1,4 @@
-import type { Engine, EngineNode, TokenValue } from '@ng-native/fabric';
+import { tokenText, type Engine, type EngineNode } from '@ng-native/fabric';
 import { applyChanged } from './runtime-style.ts';
 import { computedTransform } from './computed-transform.ts';
 import { isShape } from './svg.ts';
@@ -326,31 +326,6 @@ function shorthand(parts: string[]): string {
   if (left !== right) return parts.join(' ');
   if (bottom !== top) return `${top} ${right} ${bottom}`;
   return right === top ? top! : `${top} ${right}`;
-}
-
-/** A token's colour as text: a platform colour as the `platform-color()` that names it. */
-function tokenColourText(colour: NonNullable<TokenValue['color']>): string {
-  if (typeof colour === 'string') return colour;
-  const names = colour.platformColor.map((name) =>
-    /^[a-z_][\w-]*$/i.test(name) ? name : serializeString(name),
-  );
-  return `platform-color(${names.join(', ')})`;
-}
-
-/** A custom property as text, from the forms the engine keeps of it. */
-function tokenText(token: TokenValue | undefined): string {
-  if (!token) return '';
-  if (token.keyword !== undefined) return token.keyword;
-  if (token.number !== undefined) return String(token.number);
-  if (token.length !== undefined) {
-    return typeof token.length === 'number' ? `${token.length}px` : token.length;
-  }
-  if (token.color !== undefined) return tokenColourText(token.color);
-  if (token.angle !== undefined) return `${token.angle}deg`;
-  if (token.time !== undefined) return `${token.time}ms`;
-  if (token.lengths)
-    return token.lengths.map((each) => (typeof each === 'number' ? `${each}px` : each)).join(' ');
-  return token.weight ?? token.family ?? '';
 }
 
 /** The pseudo-elements a browser resolves a style for, by the names it takes them by. */

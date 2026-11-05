@@ -182,6 +182,50 @@ theme defines it, as on the web: setting `--color-blue-500` on an element does n
 Resolving tokens on device costs little. Nodes that match the same rules under the same parent share
 one resolved style, so a list of identical rows resolves its tokens once.
 
+## Reading a token from TypeScript
+
+Some places take a colour as a value rather than as a style: a prop on a native view, a colour
+passed to a library, a drawing that paints each series its own colour. `injectToken` from
+`@ng-native/device` reads a custom property's value for them, so the stylesheet stays the one
+place the palette is defined.
+
+```ts
+import { Component, signal } from '@angular/core';
+import { Switch } from '@ng-native/components';
+import { injectToken } from '@ng-native/device';
+
+@Component({
+  selector: 'app-setting',
+  imports: [Switch],
+  template: `<switch [(checked)]="on" [trackColor]="{ true: accent() }" />`,
+})
+export class Setting {
+  protected readonly on = signal(false);
+  protected readonly accent = injectToken('--accent');
+}
+```
+
+It returns a signal of the value as text, `rgb(255, 0, 0)` or `12px`, with aliases, `color-mix()`
+and fallbacks worked out as the stylesheet works them out. On iOS and Android it updates when the
+colour scheme, another media condition or a stylesheet changes the token. A token holding
+`platform-color()` reads as that text. The signal is `undefined` where nothing defines the token,
+and where the token holds a value with no text form here: a shadow, a gradient or other background
+layers, a filter, a transform, or bare colour channels such as `13, 110, 253`.
+
+Without options it reads the token at the root, the scope of `:root` rules, and has a value from
+the start. To read it where a class lower in the tree sets it again, pass a node:
+`injectToken('--accent', { at: inject(ElementRef).nativeElement })`. On iOS and Android that value
+arrives once the node has been committed, so the signal is `undefined` until then.
+
+On the web it reads the browser's computed value, at the mount point or at the node, which keeps a
+`color-mix()` as written. It updates when a class or inline style changes under the mount point or
+a node is put in or taken out. The `dark` class `mount` keeps in step with the system is one such
+class, so a `prefers-color-scheme` query is followed while `mount` keeps it. Other media queries,
+and stylesheets added later, are not followed on the web.
+
+A shape's `fill` or `stroke` written as a token, `<svg-path fill="var(--series-1)">`, is resolved
+against the tokens in scope at the shape, as the same declaration in a stylesheet is.
+
 ## Unsupported values and font fallbacks
 
 A unitless `line-height` value such as `calc(1.75 / 1.125)` inside a custom property leaves

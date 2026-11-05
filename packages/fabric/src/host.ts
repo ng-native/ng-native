@@ -113,6 +113,27 @@ export abstract class HostEngine {
   abstract color(value: unknown): unknown;
 
   /**
+   * A custom property's value as text, at `node` or at the root: what a prop, a drawing or an API
+   * that takes a colour rather than a style is given. Undefined where nothing defines it, where
+   * it holds a value with no text form here, and from a host that keeps no tokens.
+   */
+  token(_name: string, _node?: HostNode): string | undefined {
+    return undefined;
+  }
+
+  /**
+   * Call `listener` with a custom property's value, as `token` reads it, each time it changes.
+   * The function returned stops it. A host that keeps no tokens never calls it.
+   */
+  watchToken(
+    _name: string,
+    _listener: (value: string | undefined) => void,
+    _node?: HostNode,
+  ): () => void {
+    return () => {};
+  }
+
+  /**
    * Call `target.settleProps()` before the next commit, once the element's static inputs are set.
    *
    * A host primitive writes its props from `ngOnChanges` and `ngOnInit`, which run in its parent

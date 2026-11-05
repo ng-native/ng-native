@@ -68,6 +68,7 @@ import {
 import { isFormsInput } from './forms-inputs.ts';
 import { measuredTransform, transformList } from './inline-transform.ts';
 import { tokenFromValue } from './inline-token.ts';
+import { tokenText } from './token-text.ts';
 import {
   NativeScrollDriver,
   pinnedRange,
@@ -194,6 +195,14 @@ const SPEC_FIELDS = [
   'direction',
   'timeline',
 ] as const satisfies readonly (keyof AnimationSpec)[];
+
+/** A custom property `watchToken` reports on, and what it last reported. */
+interface TokenWatch {
+  readonly name: string;
+  readonly node: EngineNode | undefined;
+  readonly listener: (value: string | undefined) => void;
+  heard: string | undefined;
+}
 
 /**
  * A view whose paint native sets with no commit: see `Engine.paintNatively`. The shadow node
@@ -6773,6 +6782,25 @@ const COLOR_LIST_PROPS = new Set(['colors']);
 
 /** The props of an SVG shape that take a brush, not a colour. */
 const BRUSH_PROPS = new Set(['fill', 'stroke']);
+/**
+ * Whether a paint is written as a token, `fill="var(--ink)"`, or as a colour that may be made of
+ * one: a mix, `color-mix(in srgb, var(--ink), white 20%)`, or a relative colour, `color(from
+ * var(--ink) srgb r g b)`. The cascade settles each, as it does the same value bound in a style.
+ */
+export const isTokenPaint = (written: unknown): boolean =>
+  typeof written === 'string' && BOUND_TOKEN.test(written);
+/** Where a paint attribute's declaration is kept, apart from an inline style's: no prop has a space. */
+const paintAttributeSlot = (paint: string): string => `${paint} attribute`;
+/**
+ * The bound declarations in the order the cascade applies them: an attribute's first, for the
+ * inline style to win over it, as a style beats a presentation attribute in a browser.
+ */
+function attributesFirst(byProp: ReadonlyMap<string, DeferredDeclaration>): DeferredDeclaration[] {
+  const first: DeferredDeclaration[] = [];
+  const rest: DeferredDeclaration[] = [];
+  for (const [slot, bound] of byProp) (slot.endsWith(' attribute') ? first : rest).push(bound);
+  return first.length ? [...first, ...rest] : rest;
+}
 /** The brush that paints a shape in the colour of the view it is in: `currentColor`. */
 const CURRENT_BRUSH = { type: 2 };
 
@@ -8618,6 +8646,8 @@ export class Engine implements HostEngine {
    */
   // eslint-disable-next-line complexity
   setProp(node: EngineNode, key: string, value: unknown): void {
+    // Two compares, not a lookup: this runs for every prop Angular writes.
+    if ((key === 'fill' || key === 'stroke') && this.paintedByToken(node, key, value)) return;
     if (!this.eases) this.noteEasingProp(key, value);
     noteWrite(node, key, value);
     // A prop written again is a binding's, and is committed as any other is.
@@ -8699,6 +8729,57 @@ export class Engine implements HostEngine {
     };
   }
 
+  /**
+   * A custom property's value as text, `rgb(255, 0, 0)` or `12px`, with its aliases, mixes and
+   * fallbacks worked out as the cascade works them out: undefined where nothing defines it, or
+   * where it holds what `tokenText` has no text for, such as a shadow or a gradient. At the
+   * root without a node, settled now, under the conditions now in effect, so a component built
+   * before the first commit reads it. At a node, what its last commit settled, which is nothing
+   * before its first: `watchToken` hears it once there is one.
+   */
+  token(name: string, node?: EngineNode): string | undefined {
+    // The root alone is settled here: settling a node marks it clean, which only the commit may
+    // do of one it has still to send. The root is never sent. In an epoch of its own, as the last
+    // commit's would answer what that commit settled, whatever changed since; a root that has not
+    // changed is still its own, and costs a look.
+    const tokens = node
+      ? node.styleCache?.tokens
+      : this.styles.resolve(this.root, ++this.styleEpoch).tokens;
+    const text = tokenText(tokens?.[name]);
+    return text === '' ? undefined : text;
+  }
+
+  /**
+   * Call `listener` with a custom property's value at `node`, or at the root, as `token` reads it,
+   * after each commit that changes it, the first that gives it one included. The function
+   * returned stops it.
+   */
+  watchToken(
+    name: string,
+    listener: (value: string | undefined) => void,
+    node?: EngineNode,
+  ): () => void {
+    const watch: TokenWatch = { name, node, listener, heard: this.token(name, node) };
+    this.tokenWatches.add(watch);
+    return () => this.tokenWatches.delete(watch);
+  }
+
+  private readonly tokenWatches = new Set<TokenWatch>();
+
+  private reportTokens(): void {
+    // One listener that throws stops neither the rest nor what the commit does after them.
+    for (const watch of this.tokenWatches) {
+      const value = this.token(watch.name, watch.node);
+      if (value === watch.heard) continue;
+      watch.heard = value;
+      try {
+        watch.listener(value);
+      } catch (error) {
+        this.reportEventError(error, 'token');
+      }
+    }
+  }
+
   /** Nodes whose background colour is to be handed over once the commit running ends. */
   private readonly paintReports = new Set<EngineNode>();
 
@@ -8714,6 +8795,35 @@ export class Engine implements HostEngine {
       }
     }
   }
+
+  /**
+   * A shape's paint written as a token on the shape, `fill="var(--ink)"`: a declaration for the
+   * cascade to settle with the tokens in scope, as a stylesheet's is, in place of a prop native
+   * would read no colour in. True when it was one. Any other value takes back the one this made,
+   * and is a prop again.
+   */
+  private paintedByToken(node: EngineNode, key: string, value: unknown): boolean {
+    const keys = this.tokenPaints.get(node);
+    // Kept apart from an inline style's declaration of the same paint, and under it.
+    const slot = paintAttributeSlot(key);
+    if (!isTokenPaint(value)) {
+      if (keys?.delete(key)) this.keepBound(node, slot, null);
+      return false;
+    }
+    if (!keys?.has(key)) {
+      this.setProp(node, key, undefined);
+      this.tokenPaints.set(node, (keys ?? new Set()).add(key));
+    }
+    // Bound again as it is, as a chart writes each point's paints again as a finger moves.
+    const had = node.boundByProp?.get(slot);
+    if (had === undefined || BOUND_TEXT.get(had) !== value) {
+      this.keepBound(node, slot, boundRead(key, value as string, node.tag));
+    }
+    return true;
+  }
+
+  /** The paints `paintedByToken` made declarations of, by node. */
+  private readonly tokenPaints = new WeakMap<EngineNode, Set<string>>();
 
   /**
    * Keep a prop the node already has as an attribute: on the node for a selector such as
@@ -8843,7 +8953,7 @@ export class Engine implements HostEngine {
     const byProp = (node.boundByProp ??= new Map());
     if (bound) byProp.set(prop, bound);
     else byProp.delete(prop);
-    node.boundStyle = byProp.size ? [...byProp.values()] : null;
+    node.boundStyle = byProp.size ? attributesFirst(byProp) : null;
     // Settled by the cascade as the node is styled, and asked about by no selector: nothing after
     // the node matches otherwise for it.
     this.markProps(node, true, false);
@@ -9378,7 +9488,10 @@ export class Engine implements HostEngine {
     const sent = this.rootsSent;
     this.paintedInstead = false;
     this.commitAsAsked();
-    if (this.paintedOnly(sent)) return false;
+    if (this.paintedOnly(sent)) {
+      this.reportTokens();
+      return false;
+    }
     // Each a layout of the engine's, which an app of plain flex has asked for none of.
     if (!this.paintOnly && this.asked & LAYOUTS) this.settleLayout();
     this.paintOnly = false;
@@ -9389,6 +9502,7 @@ export class Engine implements HostEngine {
 
     this.flushTransitionEvents();
     this.reportPaint();
+    this.reportTokens();
     this.playSized();
     this.scrollDriver?.afterCommit();
     // Read first: the commit that settles keyframes starts by clearing it.

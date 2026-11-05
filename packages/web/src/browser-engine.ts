@@ -18,6 +18,8 @@ import {
   DIRECT_EVENTS,
   HostEngine,
   SyntheticEvent,
+  cssTrim,
+  type HostNode,
   type ResponderEvent,
   type ResponderHandlers,
   type WindowFrame,
@@ -159,6 +161,8 @@ export class BrowserEngine extends HostEngine {
    * page, so a text field's `(blur)` ran once per island.
    */
   private readonly owned = new WeakSet<BrowserNode>();
+  /** The mount point `wrapRoot` wrapped last: where `token` reads a custom property by default. */
+  private rootElement: Element | null = null;
   /** Removes the document listeners, once the app they served is gone; see `dispose`. */
   private readonly listening: AbortController;
 
@@ -203,6 +207,7 @@ export class BrowserEngine extends HostEngine {
    * which a node is not.
    */
   wrapRoot(el: Element): BrowserNode {
+    this.rootElement = el;
     const node = makeElementNode(el.tagName.toLowerCase(), el);
     el.setAttribute('data-rn', 'root');
     el.setAttribute('ngSkipHydration', '');
@@ -220,6 +225,65 @@ export class BrowserEngine extends HostEngine {
   }
 
   // --- HostEngine -----------------------------------------------------------------------------
+
+  /** The browser's own computed value, which is the value as written once its `var()`s are in. */
+  override token(name: string, node?: HostNode): string | undefined {
+    const el = (node as BrowserNode | undefined)?.el ?? this.rootElement;
+    if (el?.nodeType !== 1) return undefined;
+    const text = this.document.defaultView?.getComputedStyle(el as Element).getPropertyValue(name);
+    return text === undefined ? undefined : cssTrim(text) || undefined;
+  }
+
+  /**
+   * Read again when a class or an inline style changes under the mount point, the `dark` class
+   * `mount` keeps there in step with the system's colour scheme among them, or a node is put in or
+   * taken out, as a node read at is when its view is inserted. One observer for every watch, which
+   * reads them all in one pass: the first read styles the page, and the rest read what it styled.
+   *
+   * The colour scheme's media query is followed through that class, where `mount` keeps it.
+   * ponytail: a sheet added later, or any other media query, is not watched. Listen to
+   * `matchMedia` too if a page needs a token one of those changes.
+   */
+  override watchToken(
+    name: string,
+    listener: (value: string | undefined) => void,
+    node?: HostNode,
+  ): () => void {
+    const view = this.document.defaultView;
+    if (!view || !this.rootElement) return () => {};
+    const watch = { name, node, listener, heard: this.token(name, node) };
+    if (!this.tokenWatches.size) {
+      this.tokenObserver ??= new view.MutationObserver(() => this.reportTokens());
+      this.tokenObserver.observe(this.rootElement, {
+        attributes: true,
+        attributeFilter: ['class', 'style'],
+        childList: true,
+        subtree: true,
+      });
+    }
+    this.tokenWatches.add(watch);
+    return () => {
+      this.tokenWatches.delete(watch);
+      if (!this.tokenWatches.size) this.tokenObserver?.disconnect();
+    };
+  }
+
+  private readonly tokenWatches = new Set<{
+    readonly name: string;
+    readonly node: HostNode | undefined;
+    readonly listener: (value: string | undefined) => void;
+    heard: string | undefined;
+  }>();
+  private tokenObserver: MutationObserver | null = null;
+
+  private reportTokens(): void {
+    for (const watch of this.tokenWatches) {
+      const value = this.token(watch.name, watch.node);
+      if (value === watch.heard) continue;
+      watch.heard = value;
+      watch.listener(value);
+    }
+  }
 
   setProp(node: BrowserNode, key: string, value: unknown): void {
     const clear = value === undefined || value === null;

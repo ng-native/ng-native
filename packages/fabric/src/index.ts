@@ -49,12 +49,14 @@ export {
   splitOutside,
 } from './css-math.ts';
 export { cssTrim, firstFamily, platformColourOf, tokenFromValue } from './inline-token.ts';
+export { serializeString, tokenText } from './token-text.ts';
 export { layOutGrid, type Edges, type GridItem, type GridLayout, type Rect } from './grid.ts';
 export { isBlockContainer, planFlow, type FlowKey, type FlowPlan, type FlowTree } from './flow.ts';
 export {
   DIRECT_EVENTS,
   Engine,
   SyntheticEvent,
+  isTokenPaint,
   claimHost,
   extendNodes,
   keepNativeView,

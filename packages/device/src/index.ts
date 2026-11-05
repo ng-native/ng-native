@@ -79,3 +79,4 @@ export { SCREEN_SHOWN } from './screen-shown.ts';
 export { NATIVE_HISTORY } from './native-history.ts';
 export { OS } from './os.ts';
 export { OS_VERSION } from './os-version.ts';
+export { injectToken, type InjectTokenOptions } from './inject-token.ts';

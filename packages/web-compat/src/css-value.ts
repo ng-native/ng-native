@@ -1,4 +1,7 @@
+import { serializeString } from '@ng-native/fabric';
 import { tokenize, type Token } from './css-tokens.ts';
+
+export { serializeString };
 
 /**
  * A declared value as the CSSOM writes it back (https://drafts.csswg.org/cssom/#serializing-css-values):
@@ -36,18 +39,6 @@ export function serializeIdentifier(text: string): string {
   let out = '';
   for (let at = 0; at < text.length; at++) out += escaped(text, at);
   return out;
-}
-
-/** A string as the CSSOM serialises one: in double quotes, with what would end it escaped. */
-export function serializeString(text: string): string {
-  let out = '';
-  for (const char of text) {
-    const code = char.codePointAt(0)!;
-    if (code === 0) out += '\uFFFD';
-    else if ((code >= 0x1 && code <= 0x1f) || code === 0x7f) out += byNumber(code);
-    else out += char === '"' || char === '\\' ? `\\${char}` : char;
-  }
-  return `"${out}"`;
 }
 
 /** A number as the CSSOM writes it: six significant digits at most, and no negative zero. */

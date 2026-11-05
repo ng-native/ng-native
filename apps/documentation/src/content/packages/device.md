@@ -121,6 +121,8 @@ providers: [
 **Appearance**
 
 - [Color scheme](/packages/device/color-scheme) - light or dark, as the user set it.
+- [Reading a token](/guide/theming#reading-a-token-from-typescript) - `injectToken`, a custom
+  property's value as a signal, for a prop or an API that takes a colour.
 - [Accessibility](/packages/device/accessibility) - screen reader, reduced motion, bold text and
   font scale.
 - [Direction](/packages/device/direction) - left-to-right or right-to-left.
