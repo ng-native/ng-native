@@ -183,6 +183,24 @@ describe('a text-shadow with no colour, over an element no sheet reaches', () =>
     assert.equal(bareProps.children[0]!.props['textShadowColor'], BLUE);
   });
 
+  it('hands the keyword on through one whose inline style sets no colour', () => {
+    const sheet = compileCss(`.p { color: ${RED}; text-shadow: 2px 2px }`, 'current');
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const outer = engine.createElement('view', sheet);
+    engine.addClass(outer, 'p');
+    const sized = engine.createElement('view');
+    engine.setProp(sized, 'style', { fontSize: 20 });
+    const coloured = engine.createElement('view');
+    engine.setProp(coloured, 'style', { color: BLUE });
+    engine.appendChild(sized, coloured);
+    engine.appendChild(outer, sized);
+    engine.appendChild(engine.root, outer);
+    engine.commit();
+    const under = fabric.committed[0]!.children[0]!.children[0]!;
+    assert.equal(under.props['textShadowColor'], BLUE);
+  });
+
   it('leaves a shadow colour its inline style sets as it is', () => {
     const sheet = compileCss(`.p { color: ${RED}; text-shadow: 2px 2px }`, 'current');
     const fabric = createFakeFabric();

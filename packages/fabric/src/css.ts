@@ -3525,14 +3525,18 @@ function shadowInTextColour(
 /**
  * `shadowInTextColour` for a node no rule can match, whose inherited colour its inline style
  * overrides. Its style can be the very map its parent hands down, so it gets a copy of its own.
+ * One with no inline colour hands the keyword on, in a copy where its inline style made one.
  */
 function inlineOverShadow(
   cache: StyleCache,
   inline: Readonly<Record<string, unknown>> | null,
   parentInherited: Record<string, unknown>,
 ): void {
-  if (inline?.['color'] === undefined || 'textShadowColor' in inline) return;
-  if (!shadowsInTextColour.has(parentInherited)) return;
+  if (!inline || 'textShadowColor' in inline || !shadowsInTextColour.has(parentInherited)) return;
+  if (inline['color'] === undefined) {
+    shadowsInTextColour.add(cache.inherited);
+    return;
+  }
   cache.style = { ...cache.style, color: inline['color'] };
   cache.inherited = shadowInTextColour(cache.style, cache.inherited, {}, inline, true);
 }
