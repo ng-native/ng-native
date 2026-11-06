@@ -143,6 +143,7 @@ export class ScreenCapture {
     await this.native?.enableAppSwitcherProtectionAsync(blurIntensity);
   }
 
+  /** Shows the app's content in the app switcher again. */
   async unprotectAppSwitcher(): Promise<void> {
     const recents = nativeRecents();
     if (recents?.setScreenshotEnabled) return recents.setScreenshotEnabled(true);

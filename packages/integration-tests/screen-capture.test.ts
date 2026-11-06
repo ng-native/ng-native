@@ -179,7 +179,7 @@ describe('screen capture in the Android app switcher', () => {
     });
   });
 
-  it('works without expo-screen-capture installed', async () => {
+  it('reaches the native half when no expo-screen-capture source is given', async () => {
     const sent: boolean[] = [];
     const recents = { setScreenshotEnabled: async (enabled: boolean) => void sent.push(enabled) };
     await withRecents(recents, async () => {
