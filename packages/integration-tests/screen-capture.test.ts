@@ -188,6 +188,32 @@ describe('screen capture in the Android app switcher', () => {
     });
   });
 
+  it('does nothing on Android without the native half, as in Expo Go, where the module rejects', async () => {
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      if (id === 'react-native') return { Platform: { OS: 'android' } };
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    try {
+      for (const recents of [undefined, {}]) {
+        await withRecents(recents, async () => {
+          const unavailable = async () => {
+            throw new Error('UnavailabilityError');
+          };
+          const native = Object.assign(platform(), {
+            enableAppSwitcherProtectionAsync: unavailable,
+            disableAppSwitcherProtectionAsync: unavailable,
+          });
+          const capture = serviceOn(native);
+          await capture.protectAppSwitcher();
+          await capture.unprotectAppSwitcher();
+        });
+      }
+    } finally {
+      delete host['require'];
+    }
+  });
+
   it('falls back to the module where the native half has no such method', async () => {
     await withRecents({}, async () => {
       const native = platform();

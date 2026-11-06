@@ -20,7 +20,7 @@
  */
 import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
 import { onWindowFront, sharedBySource } from '@ng-native/device';
-import { expoModule, present } from './native.ts';
+import { currentPlatform, expoModule, present } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-screen-capture');
@@ -134,17 +134,19 @@ export class ScreenCapture {
    * app while it is not in focus - in the app switcher, in the background, and during
    * interruptions - by `blurIntensity` from 0 to 1, half by default. Android 13 and later: leaves
    * the app's snapshot out of recent apps, with this package's native half; `blurIntensity` is
-   * not used, and earlier Android does nothing.
+   * not used. Earlier Android, and a build without the native half such as Expo Go, do nothing.
    */
   async protectAppSwitcher(blurIntensity?: number): Promise<void> {
     const recents = nativeRecents();
     if (recents?.setScreenshotEnabled) return recents.setScreenshotEnabled(false);
+    if (currentPlatform() === 'android') return;
     await this.native?.enableAppSwitcherProtectionAsync(blurIntensity);
   }
 
   async unprotectAppSwitcher(): Promise<void> {
     const recents = nativeRecents();
     if (recents?.setScreenshotEnabled) return recents.setScreenshotEnabled(true);
+    if (currentPlatform() === 'android') return;
     await this.native?.disableAppSwitcherProtectionAsync();
   }
 }

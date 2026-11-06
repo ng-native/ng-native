@@ -66,8 +66,8 @@ export class CardDetails {
   focus - in the app switcher, in the background, during interruptions - by an intensity from 0 to
   1, half by default. Android 13 and later: leaves the app's snapshot out of recent apps, including
   after the activity is recreated, through this package's native half, so it needs a development
-  build rather than Expo Go and works without `expo-screen-capture`; the intensity is not used.
-  Earlier Android does nothing: `prevent()` hides the app in recent apps there, and blocks
+  build and works without `expo-screen-capture`; the intensity is not used. Earlier Android, and
+  Expo Go on Android, do nothing: `prevent()` hides the app in recent apps there, and blocks
   screenshots too.
 - **`permission`** - a [`Permission`](/packages/expo/permissions) for screenshot detection. Android
   13 and earlier need it, since detection reads the photo library; later Android needs none, and
