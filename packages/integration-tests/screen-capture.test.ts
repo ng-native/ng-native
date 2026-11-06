@@ -152,4 +152,54 @@ describe('screen capture two apps hold', () => {
   });
 });
 
+describe('screen capture in the Android app switcher', () => {
+  // This package's native half, which is on Android only and absent in Expo Go.
+  const withRecents = async (recents: unknown, run: () => Promise<void>) => {
+    const scope = globalThis as { expo?: unknown };
+    const before = scope.expo;
+    scope.expo = { modules: { NgNativeRecents: recents } };
+    try {
+      await run();
+    } finally {
+      if (before === undefined) delete scope.expo;
+      else scope.expo = before;
+    }
+  };
+
+  it('hides the snapshot without blocking screenshots, through this package s native half', async () => {
+    const sent: boolean[] = [];
+    const recents = { setScreenshotEnabled: async (enabled: boolean) => void sent.push(enabled) };
+    await withRecents(recents, async () => {
+      const native = platform();
+      const capture = serviceOn(native);
+      await capture.protectAppSwitcher(0.8);
+      await capture.unprotectAppSwitcher();
+      assert.deepEqual(sent, [false, true]);
+      assert.deepEqual(native.calls, [], 'neither FLAG_SECURE nor the iOS blur');
+    });
+  });
+
+  it('works without expo-screen-capture installed', async () => {
+    const sent: boolean[] = [];
+    const recents = { setScreenshotEnabled: async (enabled: boolean) => void sent.push(enabled) };
+    await withRecents(recents, async () => {
+      await serviceOn(null).protectAppSwitcher();
+      assert.deepEqual(sent, [false]);
+    });
+  });
+
+  it('falls back to the module where the native half has no such method', async () => {
+    await withRecents({}, async () => {
+      const native = platform();
+      const capture = serviceOn(native);
+      await capture.protectAppSwitcher();
+      await capture.unprotectAppSwitcher();
+      assert.deepEqual(native.calls, [
+        ['enableAppSwitcherProtectionAsync', undefined],
+        ['disableAppSwitcherProtectionAsync'],
+      ]);
+    });
+  });
+});
+
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));

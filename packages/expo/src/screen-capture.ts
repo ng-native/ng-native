@@ -130,17 +130,29 @@ export class ScreenCapture {
   }
 
   /**
-   * iOS: blurs the app while it is not in focus - in the app switcher, in the background, and
-   * during interruptions - by `blurIntensity` from 0 to 1, half by default. Android already hides
-   * it in the app switcher while capture is prevented.
+   * Hides the app's content in the app switcher, and leaves screenshots allowed. iOS: blurs the
+   * app while it is not in focus - in the app switcher, in the background, and during
+   * interruptions - by `blurIntensity` from 0 to 1, half by default. Android 13 and later: leaves
+   * the app's snapshot out of recent apps, with this package's native half; `blurIntensity` is
+   * not used, and earlier Android does nothing.
    */
   async protectAppSwitcher(blurIntensity?: number): Promise<void> {
+    const recents = nativeRecents();
+    if (recents?.setScreenshotEnabled) return recents.setScreenshotEnabled(false);
     await this.native?.enableAppSwitcherProtectionAsync(blurIntensity);
   }
 
   async unprotectAppSwitcher(): Promise<void> {
+    const recents = nativeRecents();
+    if (recents?.setScreenshotEnabled) return recents.setScreenshotEnabled(true);
     await this.native?.disableAppSwitcherProtectionAsync();
   }
+}
+
+/** `RecentsModule`, this package's Android half. Absent on iOS and in Expo Go. */
+function nativeRecents(): { setScreenshotEnabled?(enabled: boolean): Promise<void> } | undefined {
+  const modules = (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo?.modules;
+  return modules?.['NgNativeRecents'] as ReturnType<typeof nativeRecents>;
 }
 
 /** Screen capture, as every app on one module holds it. */

@@ -61,10 +61,14 @@ export class CardDetails {
   key is held is kept out of capture again.
 - **`allow(key?)`** - releases the key. Capture is allowed again once no key is held.
 - **`available()`** - whether the platform can prevent capture.
-- **`protectAppSwitcher(blurIntensity?)`** and **`unprotectAppSwitcher()`** - iOS: blurs the app
-  while it is not in focus - in the app switcher, in the background, during interruptions - by an
-  intensity from 0 to 1, half by default. Android already hides it in the app switcher while
-  capture is prevented.
+- **`protectAppSwitcher(blurIntensity?)`** and **`unprotectAppSwitcher()`** - hide the app's
+  content in the app switcher and leave screenshots allowed. iOS: blurs the app while it is not in
+  focus - in the app switcher, in the background, during interruptions - by an intensity from 0 to
+  1, half by default. Android 13 and later: leaves the app's snapshot out of recent apps, including
+  after the activity is recreated, through this package's native half, so it needs a development
+  build rather than Expo Go and works without `expo-screen-capture`; the intensity is not used.
+  Earlier Android does nothing: `prevent()` hides the app in recent apps there, and blocks
+  screenshots too.
 - **`permission`** - a [`Permission`](/packages/expo/permissions) for screenshot detection. Android
   13 and earlier need it, since detection reads the photo library; later Android needs none, and
   iOS always answers granted.
