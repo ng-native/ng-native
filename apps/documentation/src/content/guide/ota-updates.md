@@ -1,6 +1,6 @@
 ---
 title: OTA updates
-summary: Ship JavaScript and asset changes to installed apps without a store release, with expo-updates or HotCodePush.
+summary: Ship JavaScript and assets without a store release, with expo-updates or HotCodePush.
 ---
 
 # OTA updates
@@ -10,8 +10,9 @@ without a new store build. Native code stays as it was built, so an update can c
 Metro bundle holds: Angular code, templates, styles and images. A change to a native module, a
 config plugin or `app.json` still needs a store release.
 
-Two services do this in an NG Native app. Both run on `expo prebuild` and a build of your own, a
-development build or a release build, since Expo Go carries neither native module. Pick one: the
+Two services do this in an NG Native app. Both need `expo prebuild` and a build of your own. Expo Go
+cannot run either: it has no HotCodePush module, and it keeps `expo-updates` for loading projects,
+with its update API disabled. A development build can preview an EAS update. Pick one service: the
 HotCodePush prebuild refuses an app with `expo-updates` enabled, because each decides which bundle
 the app runs.
 
@@ -56,9 +57,18 @@ Add a `hotcodepush.json` next to `app.json`, with the app id from the
 }
 ```
 
-`npx hotcodepush init` does the same in one step: it installs the package, writes the file, adds the
-plugin entry and signs you in. Then build in release, since a debug build takes its JavaScript from
-Metro and no update:
+Then sign in with `npx hotcodepush login`, or set `HOTCODEPUSH_TOKEN` in CI. A release build runs
+the CLI, which registers the build and uploads the bundle it embeds, so later updates download only
+the files that changed. Signed out, a local build only warns and registers nothing, while a CI
+build fails.
+
+Generate a signing key with `npx hotcodepush signing-key create`. It adds the public key to
+`hotcodepush.json`, the build embeds it, and from then on the app runs only bundles signed with the
+private key. Without a key the app trusts whatever the HotCodePush servers deliver.
+
+`npx hotcodepush init` does all of this in one step: it installs the package, writes the file, adds
+the plugin entry, signs you in and offers to generate the key. Then build in release, since a debug
+build takes its JavaScript from Metro and no update:
 
 ```sh
 npx expo prebuild
@@ -70,37 +80,50 @@ npx expo run:android --variant release
 
 The SDK exports `HotCodePush`, an object of promise-returning functions with no React in its API.
 Load it the way [a module with no service](/packages/expo/using-a-module#a-module-with-no-service)
-is loaded, through a token whose factory calls `require()`, so a test in Node can provide a
-stand-in:
+is loaded, through a token whose factory calls `expoModule()`, so the service is inert in a test
+in Node and a test can provide a stand-in:
 
 ```ts
 import { InjectionToken, Service, inject, signal } from '@angular/core';
-import type { HotCodePush, SyncResult } from '@hotcodepush/expo-ota-updates';
+import { expoModule } from '@ng-native/expo';
 
-export const HOT_CODE_PUSH = new InjectionToken<HotCodePush>('app.hotCodePush', {
-  factory: () => {
-    const sdk = require('@hotcodepush/expo-ota-updates') as { HotCodePush: HotCodePush };
-    return sdk.HotCodePush;
-  },
+interface NativeHotCodePush {
+  sync(): Promise<{ status: string }>;
+}
+
+export const HOT_CODE_PUSH = new InjectionToken<NativeHotCodePush | null>('app.hotCodePush', {
+  factory: () =>
+    expoModule(
+      '@hotcodepush/expo-ota-updates',
+      () =>
+        (require('@hotcodepush/expo-ota-updates') as { HotCodePush: NativeHotCodePush })
+          .HotCodePush,
+    ),
 });
 
 @Service()
-export class Updates {
-  private readonly api = inject(HOT_CODE_PUSH);
+export class OtaSync {
+  private readonly native = inject(HOT_CODE_PUSH);
 
-  readonly lastSync = signal<SyncResult | null>(null);
+  readonly lastStatus = signal<string | null>(null);
 
   async sync(): Promise<void> {
-    this.lastSync.set(await this.api.sync());
+    const result = await this.native?.sync();
+    this.lastStatus.set(result?.status ?? null);
   }
 }
 ```
 
+The package's own `SyncResult` type describes the full result, if you import it.
+
 `sync()` runs one cycle, check, download and apply, and resolves a typed result. With the defaults
 the SDK runs the same cycle on its own at every start, downloads in the background and applies the
-update at the next start, so the app never restarts under the user's hands. A rollback guard watches
-the first start of every update: an update whose bundle does not render in time is rolled back to
-the one before it.
+update at the start after that, so the app never restarts under the user's hands. A release marked
+mandatory is the exception: by default it applies as soon as it downloads, which restarts the app
+and discards unsaved state such as a half-filled form. Set `mandatoryApplyStrategy` to `manual` in
+`hotcodepush.json` to apply it yourself at a safe moment. A rollback guard watches the first start
+of every update: an update whose bundle does not render in time is rolled back to the one before
+it.
 
 ### Release
 
@@ -112,7 +135,7 @@ build:
 npx hotcodepush release create
 ```
 
-The installed app applies the release at its next start. The
-[Expo SDK docs](https://hotcodepush.com/docs/expo) cover the configuration, the API and the events.
-The [demo app](https://github.com/hotcodepush-team/ng-native-ota-updates-demo) is the template app
-with the SDK wired in, built on both platforms in CI.
+The installed app downloads the release at its next start and runs it from the start after that.
+The [Expo SDK docs](https://hotcodepush.com/docs/sdks/expo) cover the configuration, the API and
+the events. The [demo app](https://github.com/hotcodepush-team/ng-native-ota-updates-demo) is the
+template app with the SDK wired in, built on both platforms in CI.
