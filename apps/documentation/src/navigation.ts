@@ -99,6 +99,7 @@ export const GUIDE: NavSection = {
       ],
     },
     { path: 'guide/deployment', title: 'Deployment' },
+    { path: 'guide/ota-updates', title: 'OTA updates' },
     { path: 'guide/updating', title: 'Updating an app' },
   ],
 };
