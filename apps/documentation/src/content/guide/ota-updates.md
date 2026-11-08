@@ -33,9 +33,13 @@ JavaScript API is plain functions, and the plugin edits the files `expo prebuild
 ### Install
 
 ```sh
-npm install @hotcodepush/expo-ota-updates
+npm install @hotcodepush/expo-ota-updates @ng-native/expo
 npm install --save-dev hotcodepush
 ```
+
+`@ng-native/expo` loads the SDK in a service below. It carries native modules, so install it before
+the build: a native module changes the build's fingerprint, and an update only reaches the builds
+whose fingerprint it was made for.
 
 Add the plugin after `@ng-native/metro`:
 
@@ -84,8 +88,7 @@ npx expo run:android --variant release
 The SDK exports `HotCodePush`, an object of promise-returning functions with no React in its API.
 Load it the way [a module with no service](/packages/expo/using-a-module#a-module-with-no-service)
 is loaded, through a token whose factory calls `expoModule()`, so the service is inert in a test
-in Node and a test can provide a stand-in. The factory comes from `@ng-native/expo`, which the
-template does not install: `npm install @ng-native/expo`.
+in Node and a test can provide a stand-in:
 
 ```ts
 import { InjectionToken, Service, inject, signal } from '@angular/core';
@@ -140,8 +143,9 @@ npx hotcodepush release create --platform ios --private-key-path hotcodepush-pri
 npx hotcodepush release create --platform android --private-key-path hotcodepush-private-key.pem
 ```
 
-In CI, put the key's text in `HOTCODEPUSH_SIGNING_KEY` and drop the flag. An app without a
-registered key releases without either.
+In CI, put the key's text in `HOTCODEPUSH_SIGNING_KEY`, drop the flag and add `--yes`, since
+nothing can answer the confirmation there. An app without a registered key releases without the
+key.
 
 The installed app downloads the release at its next start and runs it from the start after that.
 The [Expo SDK docs](https://hotcodepush.com/docs/sdks/expo) cover the configuration, the API and
