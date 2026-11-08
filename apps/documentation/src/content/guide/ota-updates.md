@@ -27,8 +27,8 @@ state.
 
 HotCodePush, the over-the-air (OTA) update service for React Native, Expo, Capacitor and Cordova,
 ships its Expo SDK as a config plugin. The plugin wires the native projects at prebuild and the CLI
-bundles and uploads each platform. An NG Native app needs no change to the SDK: its JavaScript API
-is plain functions, and the plugin edits the files `expo prebuild` writes.
+bundles and uploads the platform you name. An NG Native app needs no change to the SDK: its
+JavaScript API is plain functions, and the plugin edits the files `expo prebuild` writes.
 
 ### Install
 
@@ -64,7 +64,10 @@ build fails.
 
 Generate a signing key with `npx hotcodepush signing-key create`. It adds the public key to
 `hotcodepush.json`, the build embeds it, and from then on the app runs only bundles signed with the
-private key. Without a key the app trusts whatever the HotCodePush servers deliver.
+private key. Without a key the app trusts whatever the HotCodePush servers deliver. The private key
+lands in `hotcodepush-private-key.pem` in the working directory. Add that file to `.gitignore`
+before the next commit and keep it where your CI secrets live, since whoever holds it can sign the
+app's updates.
 
 `npx hotcodepush init` does all of this in one step: it installs the package, writes the file, adds
 the plugin entry, signs you in and offers to generate the key. Then build in release, since a debug
@@ -81,7 +84,8 @@ npx expo run:android --variant release
 The SDK exports `HotCodePush`, an object of promise-returning functions with no React in its API.
 Load it the way [a module with no service](/packages/expo/using-a-module#a-module-with-no-service)
 is loaded, through a token whose factory calls `expoModule()`, so the service is inert in a test
-in Node and a test can provide a stand-in:
+in Node and a test can provide a stand-in. The factory comes from `@ng-native/expo`, which the
+template does not install: `npm install @ng-native/expo`.
 
 ```ts
 import { InjectionToken, Service, inject, signal } from '@angular/core';
@@ -127,13 +131,17 @@ it.
 
 ### Release
 
-Change something, then release it to the channel. The CLI bundles each platform with
-`expo export:embed`, through the app's own Metro config, so the Angular compilation runs as in a
-build:
+Change something, then release it to the channel, once per platform. The CLI bundles the platform
+you name with `expo export:embed`, through the app's own Metro config, so the Angular compilation
+runs as in a build, and signs the bundle with the private key:
 
 ```sh
-npx hotcodepush release create
+npx hotcodepush release create --platform ios --private-key-path hotcodepush-private-key.pem
+npx hotcodepush release create --platform android --private-key-path hotcodepush-private-key.pem
 ```
+
+In CI, put the key's text in `HOTCODEPUSH_SIGNING_KEY` and drop the flag. An app without a
+registered key releases without either.
 
 The installed app downloads the release at its next start and runs it from the start after that.
 The [Expo SDK docs](https://hotcodepush.com/docs/sdks/expo) cover the configuration, the API and
