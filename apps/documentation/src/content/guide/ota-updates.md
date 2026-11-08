@@ -37,9 +37,9 @@ npm install @hotcodepush/expo-ota-updates @ng-native/expo
 npm install --save-dev hotcodepush
 ```
 
-`@ng-native/expo` loads the SDK in a service below. It carries native modules, so install it before
-the build: a native module changes the build's fingerprint, and an update only reaches the builds
-whose fingerprint it was made for.
+`@ng-native/expo` loads the SDK in a service below. Install it at the version of your other
+`@ng-native` packages, and before the build: it carries native modules, a native module changes
+the build's fingerprint, and an update only reaches the builds whose fingerprint it was made for.
 
 Add the plugin after `@ng-native/metro`:
 
