@@ -684,11 +684,15 @@ describe('scheduled notifications', () => {
 
   it('says when a calendar trigger with a whole date fires, as iOS reports a date', async () => {
     const parts = { year: 2027, month: 3, day: 9, hour: 8, minute: 30, timeZone: null };
-    const [at, withSeconds] = await scheduledWith(
+    const [at, withSeconds, gregorian, iso] = await scheduledWith(
       { type: 'calendar', repeats: false, dateComponents: parts },
       { type: 'calendar', repeats: false, dateComponents: { ...parts, second: 15 } },
+      { type: 'calendar', repeats: false, dateComponents: { ...parts, calendar: 'gregorian' } },
+      { type: 'calendar', repeats: false, dateComponents: { ...parts, calendar: 'iso8601' } },
     );
     assert.equal(at?.getTime(), new Date(2027, 2, 9, 8, 30, 0).getTime());
+    assert.equal(gregorian?.getTime(), at?.getTime());
+    assert.equal(iso?.getTime(), at?.getTime());
     assert.equal(withSeconds?.getTime(), new Date(2027, 2, 9, 8, 30, 15).getTime());
   });
 
@@ -703,7 +707,12 @@ describe('scheduled notifications', () => {
       { type: 'calendar', repeats: false, dateComponents: { year: 2027, timeZone: 'UTC' } },
       { type: 'date', repeats: false },
       { type: 'push' },
+      ...['buddhist', 'japanese', 'islamic', 'hebrew'].map((calendar) => ({
+        type: 'calendar',
+        repeats: false,
+        dateComponents: { year: 2570, month: 3, day: 9, hour: 8, minute: 30, calendar },
+      })),
     );
-    assert.deepEqual(answers, Array(9).fill(null));
+    assert.deepEqual(answers, Array(13).fill(null));
   });
 });
