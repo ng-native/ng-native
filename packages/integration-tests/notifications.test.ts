@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import {
   Notifications,
+  ImportanceLevel,
   TriggerType,
   type NativeNotifications,
 } from '@ng-native/expo/notifications';
@@ -66,7 +67,9 @@ function platform(
     scheduleNotificationAsync: record('scheduleNotificationAsync', 'scheduled-1'),
     cancelScheduledNotificationAsync: record('cancelScheduledNotificationAsync'),
     cancelAllScheduledNotificationsAsync: record('cancelAllScheduledNotificationsAsync'),
-    getAllScheduledNotificationsAsync: record('getAllScheduledNotificationsAsync', ['s']),
+    getAllScheduledNotificationsAsync: record('getAllScheduledNotificationsAsync', [
+      { identifier: 's', content: {}, trigger: null },
+    ]),
     getNextTriggerDateAsync: record('getNextTriggerDateAsync', 1_000),
     getPresentedNotificationsAsync: record('getPresentedNotificationsAsync', [presentedOne]),
     dismissNotificationAsync: record('dismissNotificationAsync'),
@@ -259,7 +262,7 @@ describe('the rest of the module', () => {
 
     assert.deepEqual(results, {
       schedule: 'scheduled-1',
-      scheduled: ['s'],
+      scheduled: [{ identifier: 's', content: {}, trigger: null, at: null }],
       next: 1_000,
       presented: [presentedOne],
       badge: 4,
@@ -642,5 +645,65 @@ describe('where expo-notifications will not load: Expo Go on Android', () => {
       assert.equal(native, module, `${platform}, Expo Go ${expoGo}`);
       assert.deepEqual(warnings, []);
     }
+  });
+});
+
+describe('importance levels', () => {
+  it('are the module s own enum, so a channel can be written without loading the module', () => {
+    const require = createRequire(import.meta.url);
+    const types = readFileSync(
+      require.resolve('expo-notifications/build/NotificationChannelManager.types.js'),
+      'utf8',
+    );
+    const expo = Object.fromEntries(
+      [...types.matchAll(/AndroidImportance\["(\w+)"\] = (\d+)\]/g)].map(([, key, value]) => [
+        key,
+        Number(value),
+      ]),
+    );
+    assert.ok(Object.keys(expo).length > 0, 'found the enum');
+    assert.deepEqual({ ...ImportanceLevel }, expo);
+  });
+});
+
+describe('scheduled notifications', () => {
+  const request = (trigger: unknown) => ({ identifier: 'id', content: {}, trigger });
+  const scheduledWith = async (...triggers: unknown[]) => {
+    const native = {
+      ...platform(),
+      getAllScheduledNotificationsAsync: async () => triggers.map(request),
+    };
+    const n = serviceOn(native as never);
+    return (await n.scheduled()).map((item) => item.at);
+  };
+
+  it('says when a date trigger fires: Android answers it in milliseconds as value', async () => {
+    const [at] = await scheduledWith({ type: 'date', repeats: false, value: 1_800_000_000_000 });
+    assert.equal(at?.getTime(), 1_800_000_000_000);
+  });
+
+  it('says when a calendar trigger with a whole date fires, as iOS reports a date', async () => {
+    const parts = { year: 2027, month: 3, day: 9, hour: 8, minute: 30, timeZone: null };
+    const [at, withSeconds] = await scheduledWith(
+      { type: 'calendar', repeats: false, dateComponents: parts },
+      { type: 'calendar', repeats: false, dateComponents: { ...parts, second: 15 } },
+    );
+    assert.equal(at?.getTime(), new Date(2027, 2, 9, 8, 30, 0).getTime());
+    assert.equal(withSeconds?.getTime(), new Date(2027, 2, 9, 8, 30, 15).getTime());
+  });
+
+  it('answers null where the request does not name a moment', async () => {
+    const answers = await scheduledWith(
+      null,
+      { type: 'timeInterval', repeats: false, seconds: 60 },
+      { type: 'date', repeats: true, value: 1_800_000_000_000 },
+      { type: 'daily', hour: 9, minute: 0 },
+      { type: 'calendar', repeats: true, dateComponents: { year: 2027, month: 1, day: 1 } },
+      { type: 'calendar', repeats: false, dateComponents: { hour: 9, minute: 0 } },
+      { type: 'calendar', repeats: false, dateComponents: { year: 2027, timeZone: 'UTC' } },
+      { type: 'date', repeats: false },
+      { type: 'push' },
+    );
+    assert.deepEqual(answers, Array(9).fill(null));
   });
 });

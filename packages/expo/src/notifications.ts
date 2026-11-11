@@ -36,8 +36,10 @@
  */
 import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
 import type {
+  AndroidImportance,
   DevicePushToken,
   Notification,
+  NotificationRequest,
   NotificationResponse,
   SchedulableTriggerInputTypes,
 } from 'expo-notifications';
@@ -108,6 +110,30 @@ export const TriggerType = {
   DATE: 'date',
   TIME_INTERVAL: 'timeInterval',
 } as unknown as typeof SchedulableTriggerInputTypes;
+
+/**
+ * An Android channel's importance, as `expo-notifications`' own `AndroidImportance` enum.
+ * Importing the enum from the module loads the module, which a test in Node cannot; these are the
+ * same numbers, typed as the enum, so `{ importance: ImportanceLevel.HIGH }` is accepted either
+ * way. `DEFAULT` is 5 and `HIGH` is 6: the numbers are Expo's, not Android's.
+ */
+export const ImportanceLevel = {
+  UNKNOWN: 0,
+  UNSPECIFIED: 1,
+  NONE: 2,
+  MIN: 3,
+  LOW: 4,
+  DEFAULT: 5,
+  HIGH: 6,
+  MAX: 7,
+} as unknown as typeof AndroidImportance;
+
+/**
+ * A local notification still waiting for its trigger: Expo's request, and `at`, when it will
+ * fire. `at` is null when the request does not say: an interval (it counts from a moment the
+ * request does not keep), a repeating trigger, or one the platform did not describe.
+ */
+export type ScheduledNotification = NotificationRequest & { at: Date | null };
 
 @Service()
 export class Notifications {
@@ -232,9 +258,10 @@ export class Notifications {
     await this.native?.cancelAllScheduledNotificationsAsync();
   }
 
-  /** Every local notification still waiting for its trigger. */
-  async scheduled(): Promise<Awaited<ReturnType<Expo['getAllScheduledNotificationsAsync']>>> {
-    return (await this.native?.getAllScheduledNotificationsAsync()) ?? [];
+  /** Every local notification still waiting for its trigger, each with when it fires as `at`. */
+  async scheduled(): Promise<ScheduledNotification[]> {
+    const requests = (await this.native?.getAllScheduledNotificationsAsync()) ?? [];
+    return requests.map((request) => ({ ...request, at: firesAt(request.trigger) }));
   }
 
   /** When a trigger would next fire, in milliseconds since the epoch; null if it never will. */
@@ -480,3 +507,48 @@ const REFUSED_BY_EXPO_GO =
   '[angular-native] Notifications does nothing here: expo-notifications cannot be loaded in Expo ' +
   'Go on Android, which has had no push since SDK 53, so nothing is scheduled or received and ' +
   'the permission is never granted. Use a development build.';
+
+/**
+ * When a scheduled request fires, if it fires once at a moment its trigger names. Android reports
+ * a date trigger as `{ type: 'date', value }`, `value` in milliseconds. iOS reports it as a
+ * calendar trigger of date components, which names a moment only with a whole date and time, and
+ * no time zone of its own, read in the device's.
+ */
+function firesAt(trigger: unknown): Date | null {
+  const t = trigger as ReportedTrigger | null;
+  if (!t || t.repeats === true) return null;
+  if (t.type === 'date') return typeof t.value === 'number' ? new Date(t.value) : null;
+  if (t.type === 'calendar') return calendarDate(t.dateComponents);
+  return null;
+}
+
+function calendarDate(parts: ReportedTrigger['dateComponents']): Date | null {
+  if (!parts || parts.timeZone != null) return null;
+  const { year, month, day, hour, minute, second = 0 } = parts;
+  const whole = [year, month, day, hour, minute, second].every((n) => typeof n === 'number');
+  if (!whole) return null;
+  return new Date(
+    year as number,
+    (month as number) - 1,
+    day as number,
+    hour as number,
+    minute as number,
+    second as number,
+  );
+}
+
+/** The parts of a scheduled request's trigger that say when it fires, as the platforms report them. */
+interface ReportedTrigger {
+  type?: string;
+  repeats?: boolean;
+  value?: unknown;
+  dateComponents?: {
+    year?: unknown;
+    month?: unknown;
+    day?: unknown;
+    hour?: unknown;
+    minute?: unknown;
+    second?: unknown;
+    timeZone?: unknown;
+  };
+}
