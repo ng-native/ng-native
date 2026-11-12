@@ -358,7 +358,8 @@ await notifications.setChannel('reminders', {
 
 `scheduled()` answers Expo's requests, each with `at`, a `Date` for when it fires. Only a request
 that fires once at a moment its trigger names has one: a date trigger on Android, or, on iOS, a
-calendar trigger with a whole date and time and no time zone of its own, read in the device's. iOS
+calendar trigger in the Gregorian calendar with a whole date and time and no time zone of its
+own, read in the device's. iOS
 schedules a date trigger as an interval and reports it as one, so there `at` is `null` for it. `at`
 is `null` for an interval, which counts from a moment the request does not keep, for a repeating
 trigger, and for one the platform did not describe. Ask `nextTriggerDate(trigger)` when a trigger
