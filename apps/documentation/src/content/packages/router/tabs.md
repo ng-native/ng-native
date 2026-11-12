@@ -318,7 +318,10 @@ though with no component to pass them, and their `runGuardsAndResolvers` decides
 and resolvers run again. A `canDeactivate` guard that fails when the page is dismissed, as one
 that reads its component does, is reported to the app's `ErrorHandler` and lets the page go.
 While it is up the url names it beside where the app is, `/home(presented:invoices/7)`, and a
-back, or the swipe that dismisses a sheet, returns to `/home`.
+back, or the swipe that dismisses a sheet, returns to `/home`. The url shows the page without
+`present()` too: a link into the app written with it, such as `myapp:///home(presented:invoices/7)`,
+or `router.navigateByUrl()` with it. The url says nothing of how to present the page, so it is shown
+as a modal.
 
 Three things follow from the page being over the tabs rather than in one:
 

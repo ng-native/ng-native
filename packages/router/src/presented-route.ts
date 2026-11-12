@@ -8,15 +8,22 @@
  * and `present()` navigates to the copy: `/home(presented:invoices/7)`. The router still runs the
  * navigation, so the page's guards, resolvers, lazy component and params are what they are in its
  * tab, and a back goes through history as any other does.
+ *
+ * A url can name the copy before the page was ever presented: a launch link written with the
+ * outlet, a reload going back to it, or the app's own `navigateByUrl`. `copyPresentedPages` gives
+ * the page its copy as the router matches such a url, so each of them works as `present()` does.
  */
-import { ErrorHandler, inject, type ProviderToken } from '@angular/core';
+import { DestroyRef, ErrorHandler, inject, type ProviderToken } from '@angular/core';
 import {
+  NavigationStart,
   PRIMARY_OUTLET,
+  RedirectCommand,
+  Router,
   type CanDeactivate,
   type CanDeactivateFn,
+  type CanMatchFn,
   type NavigationExtras,
   type Route,
-  type Router,
   type Routes,
   type UrlTree,
 } from '@angular/router';
@@ -285,26 +292,69 @@ export async function presentedCommands(router: Router, path: string): Promise<u
   if (!copied) {
     // The router matches the copies in their order, so they keep the one their routes have in the
     // tab, not the one their pages were presented in: `library/:id` presented before `library/new`
-    // would take `/library/new` too.
+    // would take `/library/new` too. All of them come before the route that makes a missing one.
     precedence.set(copy, order);
     const after = router.config.findIndex((route) => {
       const other = precedence.get(route);
       return route.outlet === PRESENTED && other !== undefined && comesBefore(order, other);
     });
-    if (after === -1) router.config.push(copy);
-    else router.config.splice(after, 0, copy);
+    const at = after === -1 ? router.config.findIndex(makesCopies) : after;
+    if (at === -1) router.config.push(copy);
+    else router.config.splice(at, 0, copy);
   }
   return [{ outlets: { [PRESENTED]: parsed.flatMap(segmentCommands) } }];
 }
 
+/** The id of the navigation each router starts again from `copyThenMatch`: see there. */
+const retried = new WeakMap<Router, number>();
+
 /**
- * Give the page `url` presents its copy, for a navigation straight to that url rather than through
- * `present()`: the copy is made the first time a page is presented, so an app that reloads on such
- * a url has none, and the router matches no route there.
+ * The router reaches this route only when no copy took the url's presented outlet. The page is
+ * given its copy, and the navigation starts again, to the same url with the same state, with the
+ * copy there. Again even when the copy was there by then, made for a navigation this one
+ * superseded after the router had read the routes. Once only: a url whose page has no route this
+ * follows, or that its copy does not take, fails as it would without this route, with `NG04002`.
  */
-export async function copyPresentedOf(router: Router, url: string): Promise<void> {
-  const page = router.parseUrl(url).root.children[PRESENTED];
-  if (page) await presentedCommands(router, `/${page.toString()}`);
+const copyThenMatch: CanMatchFn = async (_route, segments) => {
+  const router = inject(Router);
+  const navigation = router.currentNavigation();
+  if (!navigation || retried.get(router) === navigation.id) return false;
+  // Written with its escapes, so a segment such as `AC%2FDC` stays one segment.
+  const path = `/${segments.map((segment) => segment.toString()).join('/')}`;
+  if (!(await presentedCommands(router, path))) return false;
+  // Superseded meanwhile: the next id is the navigation that superseded this one, not a retry.
+  if (router.currentNavigation()?.id !== navigation.id) return false;
+  // The router starts the navigation a redirect asks for next, under the next id.
+  retried.set(router, navigation.id + 1);
+  return new RedirectCommand(navigation.extractedUrl, { state: navigation.extras.state });
+};
+
+/** Whether `route` is the one `copyPresentedPages` keeps last in the presented outlet. */
+function makesCopies(route: Route): boolean {
+  return route.outlet === PRESENTED && route.canMatch?.[0] === copyThenMatch;
+}
+
+/**
+ * Give a page its copy when a url names it in the presented outlet before `present()` has: a
+ * launch link written with the outlet, a link while the app runs, a reload going back to it, or
+ * the app's own `navigateByUrl` or `navigate`. The router matches every one of them, so a route
+ * kept last in the outlet makes the copy, and only when no copy took the url.
+ *
+ * Put back as each navigation starts, since `resetConfig` gives the router routes without it.
+ */
+export function copyPresentedPages(): void {
+  const router = inject(Router);
+  const keep = () => {
+    if (router.config.some(makesCopies)) return;
+    // Children, so routes read back from the router pass `resetConfig`'s checks. It has no page.
+    router.config.push({ path: '**', outlet: PRESENTED, canMatch: [copyThenMatch], children: [] });
+  };
+  keep();
+  // The router matches the routes it has as a navigation starts, after this event.
+  const events = router.events.subscribe((event) => {
+    if (event instanceof NavigationStart) keep();
+  });
+  inject(DestroyRef).onDestroy(() => events.unsubscribe());
 }
 
 /** Where each copy's routes sit in the tab: see `orderIn`. */
