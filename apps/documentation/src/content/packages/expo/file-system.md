@@ -88,7 +88,8 @@ if (folder) this.files.write(folder.createFile('export.csv', 'text/csv'), csv);
 
 `createFile(name, mimeType)` makes the file inside the folder, empty, so `write()` finds it there
 and only writes. Use `mimeType` for the type of the content (Android uses it, `null` means text).
-The result is Expo's `Directory`; moving, listing and deleting inside it are on that object.
+Its type has only `uri` and `createFile()`. To list, move or delete, make Expo's own `Directory`
+from the uri, `new Directory(folder.uri)`, imported from `expo-file-system`.
 
 ## Without the module
 
