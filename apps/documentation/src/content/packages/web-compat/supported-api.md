@@ -14,7 +14,8 @@ listed is not there.
 - Node names and kinds, namespaces and prefixes, attributes (as `Attr` nodes and in a namespace)
   and classes, `classList`, `dataset`, `textContent` and `innerText`.
 - Listeners: `addEventListener`, `removeEventListener` and `dispatchEvent`, on nodes and on the
-  `window`.
+  `window`. The window's stay once the last app has gone, with none of the app's listeners on it,
+  so a root service destroyed after the provider can take its listener off.
 - The tree: live `childNodes` and `children`, the nodes around one, `appendChild`,
   `insertBefore`, `removeChild`, `replaceChild`, `append`, `prepend`, `replaceChildren`, `before`,
   `after`, `replaceWith`, `insertAdjacentElement`, `moveBefore`, `cloneNode`, `getRootNode`,
@@ -78,7 +79,8 @@ a browser where the state is not the case. A button or a link a pointer is over 
   asked for, and `@supports`.
 - `element.style` as a `CSSStyleDeclaration`: `cssText`, `setProperty`, `getPropertyValue`,
   `removeProperty` and each property by name, shorthands as their longhands, and the `style`
-  attribute as its text. A style a library binds is set as what a native view reads.
+  attribute as its text, which a stylesheet's selector of it, `[style*=top]`, matches as a script
+  changes it. A style a library binds is set as what a native view reads.
 - `getComputedStyle`, a `hidden` element drawn as `display: none`, and `CSS.escape` and
   `CSS.supports`.
 
@@ -103,6 +105,9 @@ Gaps:
   `background-position` and `all`; `transition` and the rest are declared as themselves.
 - `getComputedStyle` answers a percentage as written, reads no vertical writing mode, and answers
   a transform other than a move or a scale as written.
+- A style a template sets, in a `style` attribute or with a binding, is not in the `style`
+  attribute's text: `getAttribute('style')` does not answer it, and a selector of the text,
+  `[style*=top]`, does not match it.
 
 ## Geometry and observers
 

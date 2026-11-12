@@ -260,7 +260,7 @@ export interface WebCompatOptions {
  * - An `<iframe>` is a native web view, or a document of its own: see `WebCompatOptions.frames`.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
- * that asked for it is destroyed.
+ * that asked for it is destroyed, but for the window's listening: see `installWindow`.
  */
 export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentProviders {
   // Now, not when the app starts: a library reads `window` as it is imported.

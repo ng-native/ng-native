@@ -19,8 +19,11 @@ A library uses its own part of the DOM, so whether one works is a question of wh
 calls.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken
-away again when the last app that asked for it is destroyed. Components written for native, the
-`@ng-native/components` elements and the app's own, stay the native views they are.
+away again when the last app that asked for it is destroyed, but for the window's
+`addEventListener`, `removeEventListener` and `dispatchEvent`. The window's listeners go with the
+app, and those three stay, so a service destroyed after the provider's own teardown can still take
+its listener off the window, and one added after is kept for the next app. Components written for
+native, the `@ng-native/components` elements and the app's own, stay the native views they are.
 
 ## Installing
 

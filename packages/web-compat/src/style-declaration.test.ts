@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, inject } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
-import { cleanup, render, settle } from '@ng-native/testing';
+import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 import { engineOf } from './window.ts';
 
@@ -47,7 +47,7 @@ describe('element.style', () => {
     div.setAttribute('style', 'opacity: 1');
     assert.equal(div.props.style.width, undefined, 'what the attribute no longer says is gone');
     div.removeAttribute('style');
-    assert.equal(div.props.style.opacity, undefined);
+    assert.equal(div.props.style, undefined, "and the view's style with it");
     assert.equal(div.style.opacity, '');
     assert.equal(div.getAttribute('style'), null);
   });
@@ -64,10 +64,10 @@ describe('element.style', () => {
       { offsetX: 0, offsetY: 1, blurRadius: 2, color: 'blue' },
     ]);
     div.style.boxShadow = 'none';
-    assert.equal(div.props.style.boxShadow ?? null, null);
+    assert.equal(div.props.style?.boxShadow ?? null, null);
     div.style.boxShadow = '1px 1px red';
     div.style.removeProperty('box-shadow');
-    assert.equal(div.props.style.boxShadow, undefined, 'what the style no longer says is gone');
+    assert.equal(div.props.style?.boxShadow, undefined, 'what the style no longer says is gone');
   });
 
   it('takes a filter a script wrote as functions, and sets it as the list a view reads', async () => {
@@ -94,17 +94,17 @@ describe('element.style', () => {
     // A browser draws no filter where one part is one native has no form of.
     div.style.filter = 'url(#shadow) grayscale(50%)';
     assert.equal(div.style.filter, 'url("#shadow") grayscale(50%)');
-    assert.equal(div.props.style.filter ?? null, null);
+    assert.equal(div.props.style?.filter ?? null, null);
     div.style.filter = 'blur(2px)';
     div.style.filter = 'none';
     assert.equal(div.style.filter, 'none');
-    assert.equal(div.props.style.filter ?? null, null);
+    assert.equal(div.props.style?.filter ?? null, null);
     // A word that is no function is no filter, and leaves the one before.
     div.style.filter = 'brightness';
     assert.equal(div.style.filter, 'none');
     div.style.filter = 'blur(2px)';
     div.style.filter = '';
-    assert.equal(div.props.style.filter, undefined, 'what the style no longer says is gone');
+    assert.equal(div.props.style?.filter, undefined, 'what the style no longer says is gone');
   });
 
   it('writes a value as the CSSOM serialises it', async () => {
@@ -204,6 +204,117 @@ describe('element.style', () => {
     div.style.setProperty('z-index', '1');
     assert.equal(observer.takeRecords().length, 2);
     observer.disconnect();
+  });
+});
+
+@Component({
+  selector: 'x-boxes',
+  template: `
+    <div testID="row" class="row">
+      <div id="box" testID="box" class="box"></div>
+      <div testID="next" class="next"></div>
+    </div>
+  `,
+})
+class Boxes {
+  readonly document: Dom = inject(DOCUMENT);
+}
+
+/**
+ * A stylesheet's selector of the `style` attribute, against what a script writes of it. Each
+ * expectation is what Chrome computes for the same steps.
+ */
+describe('a selector of the style attribute', () => {
+  const page = async () => {
+    const app = await render(Boxes, { providers: [provideWebCompat()] });
+    await settle();
+    const { document } = app.fixture.componentInstance;
+    const sheet = document.createElement('style');
+    sheet.textContent =
+      '.box:not([style*=top]) { opacity: 0 } .box[style] { z-index: 5 } ' +
+      '.box[style] + .next { opacity: 0.25 } .row:has(> [style*=left]) { opacity: 0.5 }';
+    document.head.appendChild(sheet);
+    await settle();
+    const box = document.getElementById('box');
+    /** What is committed: the box's opacity and z-index, the next one's and the row's opacity. */
+    const seen = async () => {
+      await settle();
+      const prop = (id: string, name: string) => screen.getByTestId(id).props[name] ?? null;
+      return [
+        prop('box', 'opacity'),
+        prop('box', 'zIndex'),
+        prop('next', 'opacity'),
+        prop('row', 'opacity'),
+      ];
+    };
+    return { document, box, seen };
+  };
+  const hidden = [0, null, null, null];
+  const shown = [null, 5, 0.25, null];
+  const emptied = [0, 5, 0.25, null];
+
+  it('follows a property a script sets and takes away', async () => {
+    const { box, seen } = await page();
+    assert.deepEqual(await seen(), hidden);
+    box.style.top = '4px';
+    assert.deepEqual(await seen(), shown);
+    box.style.removeProperty('top');
+    assert.equal(box.getAttribute('style'), '');
+    assert.deepEqual(await seen(), emptied, 'an empty attribute is still one');
+    box.style.setProperty('top', '5px');
+    assert.deepEqual(await seen(), shown);
+    box.style.top = '';
+    assert.deepEqual(await seen(), emptied);
+  });
+
+  it('follows cssText, an empty one being an attribute still', async () => {
+    const { box, seen } = await page();
+    box.style.cssText = 'top: 1px; left: 2px';
+    assert.deepEqual(await seen(), [null, 5, 0.25, 0.5]);
+    box.style.cssText = '';
+    assert.deepEqual(await seen(), emptied);
+    box.removeAttribute('style');
+    box.style.cssText = 'bogus: 1';
+    assert.equal(box.getAttribute('style'), '');
+    assert.deepEqual(await seen(), emptied);
+  });
+
+  it('follows the attribute set, toggled and taken away', async () => {
+    const { box, seen } = await page();
+    box.style.top = '4px';
+    box.removeAttribute('style');
+    assert.deepEqual(await seen(), hidden, 'what a script declared goes with the attribute');
+    // The text as written: `*=` is told apart by case.
+    box.setAttribute('style', 'TOP:3px');
+    assert.deepEqual(await seen(), emptied);
+    box.setAttribute('style', 'top:3px');
+    assert.deepEqual(await seen(), shown);
+    box.toggleAttribute('style');
+    assert.deepEqual(await seen(), hidden);
+    box.toggleAttribute('style');
+    assert.equal(box.getAttribute('style'), '');
+    assert.deepEqual(await seen(), emptied);
+  });
+
+  it('adds no attribute for a write that changes nothing', async () => {
+    const { box, seen } = await page();
+    box.style.top = '';
+    box.style.removeProperty('top');
+    box.style.setProperty('top', 'bogus');
+    assert.equal(box.hasAttribute('style'), false);
+    assert.deepEqual(await seen(), hidden);
+  });
+
+  it('matches a copy by the attribute it was copied with', async () => {
+    const { box } = await page();
+    box.style.top = '4px';
+    const copy = box.cloneNode();
+    copy.removeAttribute('id');
+    engineOf(copy).setProp(copy, 'testID', 'copy');
+    box.parentNode.appendChild(copy);
+    await settle();
+    const { props } = screen.getByTestId('copy');
+    assert.deepEqual([props['opacity'] ?? null, props['zIndex']], [null, 5]);
   });
 });
 
