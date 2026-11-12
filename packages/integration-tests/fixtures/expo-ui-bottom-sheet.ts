@@ -47,7 +47,7 @@ export class SheetRow {
 export class ExpoUiBottomSheetFixture {
   readonly open = signal(false);
   readonly fit = signal(false);
-  readonly grabber = signal(true);
+  readonly grabber = signal<boolean | null | undefined>(true);
   readonly detents = signal<readonly UiPresentationDetent[] | undefined>(undefined);
   readonly second = signal('Two');
   readonly background = signal<string | undefined>(undefined);

@@ -1,19 +1,11 @@
-import {
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  signal,
-  booleanAttribute,
-} from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { Keyboard, LayoutAnimation, type LayoutEasing } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Rect } from './events.ts';
 import { ContentContainer } from './content-container.ts';
 import { View } from './view.ts';
 import { ViewBase } from './view-base.ts';
-import { numberOr } from './transforms.ts';
+import { booleanOr, numberOr } from './transforms.ts';
 
 export type KeyboardAvoidingBehavior = 'padding' | 'height' | 'position';
 
@@ -97,7 +89,7 @@ export class KeyboardAvoidingView extends ViewBase {
    */
   readonly contentContainerClass = input<string>();
   /** Set to false to stop avoiding without removing the view. */
-  readonly enabled = input(true, { transform: booleanAttribute });
+  readonly enabled = input(true, { transform: booleanOr(true) });
   /**
    * Extra room to leave above the keyboard, in points. RN's name, and in RN the place to put a
    * header's height; here the view is measured in the window, so a navigation bar needs none.

@@ -27,13 +27,13 @@ import {
   DestroyRef,
   ElementRef,
   Renderer2,
-  booleanAttribute,
   inject,
   input,
 } from '@angular/core';
 import { SafeArea, type Frame, type Insets } from '@ng-native/device';
 import { Engine, claimHost, type HostNode } from '@ng-native/fabric';
 import { registerSafeAreaComponents } from './safe-area.ts';
+import { booleanOr } from './transforms.ts';
 
 /** The insets, in the form the cascade carries: one custom property per edge, in points. */
 function insetTokens(insets: Insets): Record<string, { length: number }> {
@@ -59,7 +59,7 @@ export class SafeAreaProvider {
    * Whether what this measures becomes `SafeArea.insets`. The app has one safe area; a second
    * provider inside a modal is there so native descendants can find one, not to redefine it.
    */
-  readonly reportInsets = input(true, { transform: booleanAttribute });
+  readonly reportInsets = input(true, { transform: booleanOr(true) });
 
   constructor() {
     registerSafeAreaComponents();

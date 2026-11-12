@@ -5,19 +5,10 @@
  * press rectangle, delays and a long-press timer around them. This is that machine, on the same
  * responder negotiation, so a button and an enclosing scroll view agree on who owns a drag.
  */
-import {
-  Directive,
-  computed,
-  forwardRef,
-  input,
-  output,
-  signal,
-  type Signal,
-  booleanAttribute,
-} from '@angular/core';
+import { Directive, computed, forwardRef, input, output, signal, type Signal } from '@angular/core';
 import { isTouchPointer, nativePlatform, type NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Insets, TouchEvent } from './events.ts';
-import { numberOr, optionalBoolean } from './transforms.ts';
+import { booleanOr, numberOr, optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
 
 /** What a press handler receives: RN's `{nativeEvent}` shape, passed straight through. */
@@ -118,7 +109,7 @@ export abstract class TouchableBase extends ViewBase {
     transform: numberOr(DEFAULT_MIN_PRESS_DURATION),
   });
   /** Whether a scrolling ancestor may take the gesture away mid-press. */
-  readonly cancelable = input(true, { transform: booleanAttribute });
+  readonly cancelable = input(true, { transform: booleanOr(true) });
   /** Android: a native ripple on press. */
   readonly androidRipple = input<AndroidRipple>(undefined, { alias: 'android_ripple' });
 
