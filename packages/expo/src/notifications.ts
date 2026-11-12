@@ -510,9 +510,10 @@ const REFUSED_BY_EXPO_GO =
 
 /**
  * When a scheduled request fires, if it fires once at a moment its trigger names. Android reports
- * a date trigger as `{ type: 'date', value }`, `value` in milliseconds. iOS reports it as a
- * calendar trigger of date components, which names a moment only with a whole date and time, in a
- * Gregorian calendar, and no time zone of its own, read in the device's.
+ * a date trigger as `{ type: 'date', value }`, `value` in milliseconds. iOS schedules a date
+ * trigger as a time interval and reports it as one, which names no moment. An iOS calendar trigger
+ * names one only with a whole date and time, in a Gregorian calendar, and no time zone of its own,
+ * read in the device's.
  */
 function firesAt(trigger: unknown): Date | null {
   const t = trigger as ReportedTrigger | null;
