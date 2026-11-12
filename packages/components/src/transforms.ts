@@ -27,3 +27,11 @@ export function optionalNumber(value: unknown): number | undefined {
 export function numberOr(fallback: number): (value: unknown) => number {
   return (value) => numberAttribute(value, fallback);
 }
+
+/**
+ * The transform for a boolean input with a default: `[enabled]="undefined"` or `null` is the
+ * default, as a prop left out is, where `booleanAttribute` alone makes both `false`.
+ */
+export function booleanOr(fallback: boolean): (value: unknown) => boolean {
+  return (value) => (value == null ? fallback : booleanAttribute(value));
+}
