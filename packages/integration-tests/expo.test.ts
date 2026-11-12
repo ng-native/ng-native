@@ -22,7 +22,12 @@ import {
 } from '@ng-native/expo';
 import { EXPO_UI_VIEWS } from '../expo/src/expo-ui.ts';
 import { Clipboard } from '@ng-native/expo/clipboard';
-import { FileSystem, type NativeDirectory, type NativeFile } from '@ng-native/expo/file-system';
+import {
+  FileSystem,
+  type NativeDirectory,
+  type NativeFile,
+  type PickedDirectory,
+} from '@ng-native/expo/file-system';
 import { Haptics } from '@ng-native/expo/haptics';
 import { serviceWith } from './injected.ts';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -249,8 +254,8 @@ describe('the file system', () => {
 
   const directory = (
     name: string,
-    make?: NativeDirectory['createFile'],
-  ): NativeDirectory & { name: string } => ({
+    make?: PickedDirectory['createFile'],
+  ): PickedDirectory & { name: string } => ({
     name,
     uri: `file:///${name}/`,
     createFile: make ?? (() => fakeFile(false).file),

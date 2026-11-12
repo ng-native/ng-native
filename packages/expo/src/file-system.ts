@@ -13,7 +13,7 @@
  * if (folder) this.files.write(folder.createFile('export.csv', 'text/csv'), csv);
  * ```
  *
- * Sharing, moving and listing stay on Expo's `File` and `Directory`.
+ * Moving and listing stay on Expo's `File` and `Directory`.
  */
 import { InjectionToken, Service, inject } from '@angular/core';
 import { expoModule, unavailable } from './native.ts';
@@ -37,11 +37,14 @@ export interface NativeFile {
   delete(): void;
 }
 
+/** A directory, as far as this needs to know: something a file can be named inside. */
+export type NativeDirectory = object;
+
 /**
- * A directory, as far as this needs to know: something a file can be named inside, or created in.
+ * A folder the user picked, as far as this needs to know: something a file can be created in.
  * Structural like `NativeFile`: Expo's `Directory` satisfies it, and so does a test fake.
  */
-export interface NativeDirectory {
+export interface PickedDirectory {
   readonly uri: string;
   /** Creates the file, empty, and answers it. `mimeType` is used on Android, `null` for text. */
   createFile(name: string, mimeType: string | null): NativeFile;
@@ -57,7 +60,7 @@ export interface NativeFiles {
   /** The file at a uri, such as one a picker answers with. */
   fileAt?(uri: string): NativeFile;
   /** The system folder picker. Rejects with a coded error when the user dismisses it. */
-  pickDirectoryAsync?(): Promise<NativeDirectory>;
+  pickDirectoryAsync?(): Promise<PickedDirectory>;
 }
 
 /**
@@ -129,7 +132,7 @@ export class FileSystem {
    * dismissed it. Create a file in it with `createFile(name, mimeType)`, which makes it, then
    * `write()` it. Any other failure is rethrown. Needs no permission.
    */
-  async pickDirectory(): Promise<NativeDirectory | null> {
+  async pickDirectory(): Promise<PickedDirectory | null> {
     const native = this.installed();
     if (!native.pickDirectoryAsync) {
       throw new Error(

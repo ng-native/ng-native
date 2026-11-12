@@ -7,8 +7,7 @@ summary: The cache and document directories, a folder the user picks, and writin
 
 `FileSystem` locates files by what they are for, cache or document, rather than by path, and
 hands back Expo's own `File`. It is a locator, not a file API: everything else - moving, listing,
-downloading, streaming, sharing - is on the object it returns, documented by `expo-file-system`
-itself.
+downloading, streaming - is on the object it returns, documented by `expo-file-system` itself.
 
 ## Install
 
@@ -90,9 +89,6 @@ if (folder) this.files.write(folder.createFile('export.csv', 'text/csv'), csv);
 `createFile(name, mimeType)` makes the file inside the folder, empty, so `write()` finds it there
 and only writes. Use `mimeType` for the type of the content (Android uses it, `null` means text).
 The result is Expo's `Directory`; moving, listing and deleting inside it are on that object.
-Sharing a file with another app is not covered here either: a share sheet cannot say whether the
-user shared or dismissed it, which is why saving into a picked folder is the way to know a file
-was written.
 
 ## Without the module
 
