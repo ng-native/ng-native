@@ -1,6 +1,6 @@
 ---
 title: File system
-summary: The cache and document directories, and the create-then-write dance a first write needs.
+summary: The cache and document directories, a folder the user picks, and writing a file.
 ---
 
 # File system
@@ -73,6 +73,23 @@ exist, then writes - text or bytes - replacing whatever was there.
 ```ts
 this.files.write(this.files.cache('thumb.jpg'), imageBytes);
 ```
+
+## `pickDirectory()`
+
+Opens the system folder picker and answers the folder the user chose, so a file can be saved
+somewhere they can find it, such as an export in Files on iOS or a Drive folder on Android. It
+answers `null` when the user dismisses the picker, like `DocumentPicker.pick()` answering no
+files, and rethrows any other failure. No permission is asked for.
+
+```ts
+const folder = await this.files.pickDirectory();
+if (folder) this.files.write(folder.createFile('export.csv', 'text/csv'), csv);
+```
+
+`createFile(name, mimeType)` makes the file inside the folder, empty, so `write()` finds it there
+and only writes. Use `mimeType` for the type of the content (Android uses it, `null` means text).
+Its type has only `uri` and `createFile()`. To list, move or delete, make Expo's own `Directory`
+from the uri, `new Directory(folder.uri)`, imported from `expo-file-system`.
 
 ## Without the module
 

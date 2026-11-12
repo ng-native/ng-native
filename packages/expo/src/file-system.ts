@@ -4,6 +4,16 @@
  * Files located by what they are for rather than by path. `File` and `Paths` are Expo's own
  * classes over a native one, so they are used as published; this only decides which directory a
  * name lands in and hands the file back.
+ *
+ * `pickDirectory()` opens the system folder picker and answers the folder the user chose (or null
+ * if they dismissed it), so a file can be saved somewhere the user can find it:
+ *
+ * ```ts
+ * const folder = await this.files.pickDirectory();
+ * if (folder) this.files.write(folder.createFile('export.csv', 'text/csv'), csv);
+ * ```
+ *
+ * Moving and listing stay on Expo's `File` and `Directory`.
  */
 import { InjectionToken, Service, inject } from '@angular/core';
 import { expoModule, unavailable } from './native.ts';
@@ -30,6 +40,16 @@ export interface NativeFile {
 /** A directory, as far as this needs to know: something a file can be named inside. */
 export type NativeDirectory = object;
 
+/**
+ * A folder the user picked, as far as this needs to know: something a file can be created in.
+ * Structural like `NativeFile`: Expo's `Directory` satisfies it, and so does a test fake.
+ */
+export interface PickedDirectory {
+  readonly uri: string;
+  /** Creates the file, empty, and answers it. `mimeType` is used on Android, `null` for text. */
+  createFile(name: string, mimeType: string | null): NativeFile;
+}
+
 /** The slice of `expo-file-system` this needs. */
 export interface NativeFiles {
   /** Cleared by the system under storage pressure. */
@@ -39,6 +59,8 @@ export interface NativeFiles {
   file(directory: NativeDirectory, name: string): NativeFile;
   /** The file at a uri, such as one a picker answers with. */
   fileAt?(uri: string): NativeFile;
+  /** The system folder picker. Rejects with a coded error when the user dismisses it. */
+  pickDirectoryAsync?(): Promise<PickedDirectory>;
 }
 
 /**
@@ -71,6 +93,7 @@ export class FileSystem {
           file: (directory, name) =>
             new expo.File(directory as InstanceType<typeof expo.Directory>, name),
           fileAt: (uri) => new expo.File(uri),
+          pickDirectoryAsync: () => expo.Directory.pickDirectoryAsync(),
         };
       },
     },
@@ -105,6 +128,26 @@ export class FileSystem {
   }
 
   /**
+   * Opens the system folder picker and answers the folder the user chose, or null if they
+   * dismissed it. Create a file in it with `createFile(name, mimeType)`, which makes it, then
+   * `write()` it. Any other failure is rethrown. Needs no permission.
+   */
+  async pickDirectory(): Promise<PickedDirectory | null> {
+    const native = this.installed();
+    if (!native.pickDirectoryAsync) {
+      throw new Error(
+        '[angular-native] this FileSystem.SOURCE has no pickDirectoryAsync(), which pickDirectory() opens the picker with.',
+      );
+    }
+    try {
+      return await native.pickDirectoryAsync();
+    } catch (error) {
+      if (isCancelled(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
    * Write text, or bytes for anything that is not text, whether or not the file is there already.
    * `write` alone throws on a file that has never been created, which is the first thing everyone
    * hits. It replaces what was there, and has written by the time it returns: from SDK 58 through
@@ -122,4 +165,12 @@ export class FileSystem {
     }
     return this.native;
   }
+}
+
+/** Android codes a dismissed picker ERR_PICKER_CANCELLED, iOS ERR_FILE_PICKING_CANCELLED. */
+const CANCELLED = ['ERR_PICKER_CANCELLED', 'ERR_FILE_PICKING_CANCELLED'];
+
+function isCancelled(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && CANCELLED.includes(code);
 }

@@ -22,7 +22,12 @@ import {
 } from '@ng-native/expo';
 import { EXPO_UI_VIEWS } from '../expo/src/expo-ui.ts';
 import { Clipboard } from '@ng-native/expo/clipboard';
-import { FileSystem, type NativeFile } from '@ng-native/expo/file-system';
+import {
+  FileSystem,
+  type NativeDirectory,
+  type NativeFile,
+  type PickedDirectory,
+} from '@ng-native/expo/file-system';
 import { Haptics } from '@ng-native/expo/haptics';
 import { serviceWith } from './injected.ts';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -247,11 +252,20 @@ describe('the file system', () => {
     return { file, written, creations: () => created };
   }
 
+  const directory = (
+    name: string,
+    make?: PickedDirectory['createFile'],
+  ): PickedDirectory & { name: string } => ({
+    name,
+    uri: `file:///${name}/`,
+    createFile: make ?? (() => fakeFile(false).file),
+  });
+
   const files = (file: NativeFile) => ({
-    cacheDirectory: { name: 'cache' },
-    documentDirectory: { name: 'documents' },
-    file: (directory: object, name: string) => {
-      asked.push(`${(directory as { name: string }).name}/${name}`);
+    cacheDirectory: directory('cache'),
+    documentDirectory: directory('documents'),
+    file: (dir: NativeDirectory, name: string) => {
+      asked.push(`${(dir as NativeDirectory & { name: string }).name}/${name}`);
       return file;
     },
   });
@@ -326,11 +340,67 @@ describe('the file system', () => {
     assert.equal(present.creations(), 0, 'create() throws on a file that is already there');
   });
 
+  it('answers the folder the user picked, and creates then writes a file in it', () => {
+    // Expo's Directory.createFile makes the file, so it exists by the time write sees it.
+    const made = fakeFile(false);
+    const created: [string, string | null][] = [];
+    const picked = directory('picked', (name, mimeType) => {
+      created.push([name, mimeType]);
+      const file = { ...made.file, exists: true };
+      return file;
+    });
+    const source = { ...files(made.file), pickDirectoryAsync: () => Promise.resolve(picked) };
+    const system = serviceWith(FileSystem.SOURCE, source, () => new FileSystem());
+    return system.pickDirectory().then((folder) => {
+      assert.equal(folder, picked);
+      const file = folder!.createFile('export.csv', 'text/csv');
+      system.write(file, 'a,b');
+      assert.deepEqual(created, [['export.csv', 'text/csv']]);
+      assert.deepEqual(made.written, ['a,b']);
+      assert.equal(made.creations(), 0, 'createFile already made it, so write does not create');
+    });
+  });
+
+  it('answers null when the user dismisses the folder picker, on Android and iOS', async () => {
+    for (const code of ['ERR_PICKER_CANCELLED', 'ERR_FILE_PICKING_CANCELLED']) {
+      const source = {
+        ...files(fakeFile(true).file),
+        pickDirectoryAsync: () => Promise.reject(Object.assign(new Error('cancelled'), { code })),
+      };
+      const system = serviceWith(FileSystem.SOURCE, source, () => new FileSystem());
+      assert.equal(await system.pickDirectory(), null, code);
+    }
+  });
+
+  it('rethrows any other folder picker failure', async () => {
+    const failure = Object.assign(new Error('denied'), { code: 'ERR_UNABLE_TO_CREATE' });
+    const source = {
+      ...files(fakeFile(true).file),
+      pickDirectoryAsync: () => Promise.reject(failure),
+    };
+    const system = serviceWith(FileSystem.SOURCE, source, () => new FileSystem());
+    await assert.rejects(system.pickDirectory(), (error) => error === failure);
+    const plain = { ...files(fakeFile(true).file), pickDirectoryAsync: () => Promise.reject('x') };
+    await assert.rejects(
+      serviceWith(FileSystem.SOURCE, plain, () => new FileSystem()).pickDirectory(),
+    );
+  });
+
+  it('says so when a stand-in cannot pick a folder', async () => {
+    const system = serviceWith(
+      FileSystem.SOURCE,
+      files(fakeFile(true).file),
+      () => new FileSystem(),
+    );
+    await assert.rejects(system.pickDirectory(), /no pickDirectoryAsync\(\)/);
+  });
+
   it('says there is no module to load rather than failing on a directory it does not have', () => {
     const system = serviceWith(FileSystem.SOURCE, null, () => new FileSystem());
     const notInstalled = { message: /expo-file-system has no native module to load in Node/ };
     assert.throws(() => system.cache('canary.txt'), notInstalled);
     assert.throws(() => system.document('canary.txt'), notInstalled);
+    return assert.rejects(system.pickDirectory(), notInstalled);
   });
 });
 

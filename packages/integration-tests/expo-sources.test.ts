@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Battery } from '@ng-native/expo/battery';
 import { Clipboard } from '@ng-native/expo/clipboard';
-import { FileSystem } from '@ng-native/expo/file-system';
+import { FileSystem, type NativeFile } from '@ng-native/expo/file-system';
 import { Foldable } from '@ng-native/expo/foldable';
 import { LanguageModel } from '@ng-native/expo/language-model';
 import { Network } from '@ng-native/expo/network';
@@ -679,8 +679,13 @@ describe('the file system source', () => {
         created.push({ directory, name });
       }
     }
-    const cache = { kind: 'cache' };
-    const document = { kind: 'documents' };
+    const directory = (kind: string) => ({
+      kind,
+      uri: `file:///${kind}/`,
+      createFile: () => ({}) as NativeFile,
+    });
+    const cache = directory('cache');
+    const document = directory('documents');
     const expoFileSystem = {
       Paths: {
         get cache() {
@@ -691,6 +696,7 @@ describe('the file system source', () => {
         },
       },
       File: FakeFile,
+      Directory: { pickDirectoryAsync: () => Promise.resolve(document) },
     };
 
     const files = withModules({ 'expo-file-system': expoFileSystem }, () =>
@@ -703,6 +709,7 @@ describe('the file system source', () => {
     const file = files.file(cache, 'a.txt');
     assert.deepEqual(created, [{ directory: cache, name: 'a.txt' }]);
     assert.ok(file instanceof FakeFile);
+    return files.pickDirectoryAsync!().then((picked) => assert.equal(picked, document));
   });
 
   it('is inert with no expo-file-system installed', () => {
