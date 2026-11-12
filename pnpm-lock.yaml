@@ -2243,6 +2243,9 @@ importers:
       '@angular/core':
         specifier: 22.2.0
         version: 22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)
+      '@angular/platform-browser':
+        specifier: 22.2.0
+        version: 22.2.0(@angular/common@22.2.0(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))
       '@babel/core':
         specifier: ^7.29.7
         version: 7.29.7
@@ -2261,6 +2264,9 @@ importers:
       '@ng-native/testing':
         specifier: workspace:*
         version: link:../testing
+      rxjs:
+        specifier: ^7.8.2
+        version: 7.8.2
 
   template:
     dependencies:
