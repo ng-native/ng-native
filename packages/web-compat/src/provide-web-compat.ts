@@ -13,6 +13,7 @@ import {
 import { Engine, extendNodes } from '@ng-native/fabric';
 import { DeepLinks, Keyboard, NATIVE_HISTORY } from '@ng-native/device';
 import { extendRenderer } from '@ng-native/platform';
+import { installDomAdapter } from './dom-adapter.ts';
 import { documentFor } from './document.ts';
 import { loadFramesWith, type FrameLoader } from './frame.ts';
 import { registerFrameViews, showFramesAs, type FrameMode } from './frame-view.ts';
@@ -258,9 +259,14 @@ export interface WebCompatOptions {
  * - Angular's `Location` has a platform to stand on in an app with no router. In one with the
  *   native router, it is the router's.
  * - An `<iframe>` is a native web view, or a document of its own: see `WebCompatOptions.frames`.
+ * - Angular's DOM adapter, which `Meta` makes and takes away its tags with, is this package's
+ *   where the app has none: see `dom-adapter.ts`. `Meta` takes the adapter when it is made, and
+ *   this sets it in its environment initializer, so list it before any provider whose initializer
+ *   uses `Meta`: one listed first makes a `Meta` with no adapter, whose `addTag()` throws.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
- * that asked for it is destroyed.
+ * that asked for it is destroyed, but for the window's listening, see `installWindow`, and
+ * Angular's DOM adapter, which Angular never gives back.
  */
 export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentProviders {
   // Now, not when the app starts: a library reads `window` as it is imported.
@@ -285,6 +291,8 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       const document = documentFor(engine);
       documents.push(document);
       setGlobalDocument(document);
+      // Once the global document is there, which `Meta` makes its tags with: see `dom-adapter.ts`.
+      installDomAdapter();
       // What a library listened for on the document as its module loaded: see `before-modules.js`.
       const unhand = handEarlyListeners(document);
       const forgetRenderer = setAttributesWith(

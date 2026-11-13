@@ -18,6 +18,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./ng-icons": "./src/ng-icons.ts",
+    "./event-plugins": "./src/event-plugins-provider.ts",
     "./metro": {
       "types": "./build.d.cts",
       "default": "./build.cjs"
@@ -41,6 +42,10 @@
         "types": "./dist/ng-icons.d.ts",
         "default": "./dist/ng-icons.js"
       },
+      "./event-plugins": {
+        "types": "./dist/event-plugins-provider.d.ts",
+        "default": "./dist/event-plugins-provider.js"
+      },
       "./metro": {
         "types": "./build.d.cts",
         "default": "./build.cjs"
@@ -61,12 +66,16 @@
   "peerDependencies": {
     "@angular/common": "^22.0.0",
     "@angular/core": "^22.0.0",
+    "@angular/platform-browser": "^22.0.0",
     "@ng-icons/core": ">=30",
     "@ng-native/icons": "workspace:*",
     "expo-document-picker": "^57.0.0 || ^58.0.0",
     "react-native-webview": ">=13.16.1"
   },
   "peerDependenciesMeta": {
+    "@angular/platform-browser": {
+      "optional": true
+    },
     "@ng-icons/core": {
       "optional": true
     },
@@ -80,12 +89,14 @@
   "devDependencies": {
     "@angular/common": "22.2.0",
     "@angular/core": "22.2.0",
+    "@angular/platform-browser": "22.2.0",
     "@babel/core": "^7.29.7",
     "@emotion/css": "^11.13.5",
     "@ng-native/components": "workspace:*",
     "@ng-native/testing": "workspace:*",
     "@ng-native/icons": "workspace:*",
-    "@ng-icons/core": "^36.0.0"
+    "@ng-icons/core": "^36.0.0",
+    "rxjs": "^7.8.2"
   },
   "nx": {
     "tags": [

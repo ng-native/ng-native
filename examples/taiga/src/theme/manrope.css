@@ -1,0 +1,22 @@
+/*
+ * Manrope, the face Taiga's typography tokens name. A browser would fetch it from Google Fonts,
+ * as the theme's LESS imports it; on a phone it is bundled, from Expo's own package of it, and
+ * registered by `loadFonts()` before the app mounts. Taiga sets text in these three weights.
+ */
+@font-face {
+  font-family: 'Manrope';
+  font-weight: 400;
+  src: url('@expo-google-fonts/manrope/400Regular/Manrope_400Regular.ttf');
+}
+
+@font-face {
+  font-family: 'Manrope';
+  font-weight: 500;
+  src: url('@expo-google-fonts/manrope/500Medium/Manrope_500Medium.ttf');
+}
+
+@font-face {
+  font-family: 'Manrope';
+  font-weight: 700;
+  src: url('@expo-google-fonts/manrope/700Bold/Manrope_700Bold.ttf');
+}

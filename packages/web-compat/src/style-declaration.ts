@@ -16,7 +16,7 @@ import { engineOf } from './window.ts';
  * `element.style`: the element's inline declarations, which a `style` attribute or a script
  * declared. Each is kept as the CSSOM writes it back, and is set on the view as what it reads (see
  * `inline-style.ts`), so a write is CSS, as a bound style is. The `style` attribute is the
- * block's text once a script has changed it.
+ * block's text once a script has changed it, which a stylesheet's `[style*=top]` reads too.
  *
  * A template's style binding sets the view's style past this block: where the view's prop is no
  * longer what a declaration set it to, the view's is what is read.
@@ -45,7 +45,8 @@ function apply(node: EngineNode, property: string, written: unknown): void {
     if (set == null) delete next[name];
     else next[name] = plain(set);
   }
-  engine.setProp(node, 'style', next);
+  // None left is none: a selector reads a style prop as a `style` attribute where none is kept.
+  engine.setProp(node, 'style', Object.keys(next).length ? next : null);
 }
 
 /**

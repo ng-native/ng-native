@@ -19,7 +19,13 @@ A library uses its own part of the DOM, so whether one works is a question of wh
 calls.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken
-away again when the last app that asked for it is destroyed. Components written for native, the
+away again when the last app that asked for it is destroyed, but for the window's
+`addEventListener`, `removeEventListener` and `dispatchEvent`, and Angular's DOM adapter. The
+window's listeners go with the app, and those three stay, so a service destroyed after the
+provider's own teardown can still take its listener off the window, and one added after is kept
+for the next app. Angular takes a DOM adapter once and never gives it back, so the one the
+package gives Angular as the first app starts, where the app set none of its own, stays: it holds
+nothing of an app, and speaks for the newest one up. Components written for native, the
 `@ng-native/components` elements and the app's own, stay the native views they are.
 
 ## Installing
@@ -48,6 +54,10 @@ npx expo install react-native-webview
 `provideWebCompat()` goes in the providers `mount` is given. It gives Angular's `Location` a
 platform to stand on in an app with no router. In an app with the native router, `Location` is the
 router's, in whichever order the two are listed.
+
+List it before any provider whose initializer uses Angular's `Meta`. `Meta` takes Angular's DOM
+adapter when it is made, and `provideWebCompat()` sets that adapter as its own initializer runs, so
+a `Meta` made in an initializer listed before it has none, and its `addTag()` throws.
 
 ```ts
 import { AppRegistry } from 'react-native';
@@ -116,6 +126,26 @@ export default defineConfig({
   plugins: [ngNative(), webCompat({ libraries: ['@angular/cdk', '@angular/material'] })],
 });
 ```
+
+## A library's event-manager plugins
+
+Some libraries listen by names that Angular's event-manager plugins read: Taiga UI's tabs listen for
+`tui-tab-activate.stop`, which a plugin from `@taiga-ui/event-plugins` attaches as a
+`tui-tab-activate` listener that stops the event going further. `provideEventPlugins()`, from
+`@ng-native/web-compat/event-plugins`, runs the plugins the app provides as
+`EVENT_MANAGER_PLUGINS`, so a listener whose name one of them claims is attached by it. It needs
+`@angular/platform-browser`, which such a library depends on already.
+
+```ts
+import { provideEventPlugins } from '@ng-native/web-compat/event-plugins';
+
+export const appConfig = {
+  providers: [provideWebCompat(), provideEventPlugins(), provideTaiga()],
+};
+```
+
+A plugin that claims every name, as Angular's own DOM plugin does, is left out, and the renderer
+attaches those listeners itself.
 
 ## A library that asks whether it is in a browser
 
