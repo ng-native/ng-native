@@ -11,6 +11,7 @@ import { createDocumentType } from './document-type.ts';
 import { required } from './dom-error.ts';
 import { implementationFor } from './dom-implementation.ts';
 import { byClassName, byName, byTagName, byTagNameNS } from './elements-by.ts';
+import { childText } from './element-text.ts';
 import type { HTMLCollection } from './live-list.ts';
 import {
   createEvent,
@@ -24,7 +25,6 @@ import { asMouse } from './mouse-after-touch.ts';
 import { madeByScript } from './html-tree.ts';
 import { elementsUnder } from './element-tree.ts';
 import { elementFromPoint, elementsFromPoint } from './hit-test.ts';
-import { descendants } from './in-document.ts';
 import { baseUrl, locationOf, pageUrl } from './page-address.ts';
 import { delivering, touchFields } from './listen.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
@@ -422,15 +422,13 @@ export function documentFor(engine: Engine): CompatDocument {
   // Somewhere for a library's style elements to go: never in the tree, so never drawn.
   const head = ownView(engine);
   const body = createBody(engine);
-  // The head and then the page, as a document has them: a library looks for a stylesheet it
-  // added before it adds one.
   // A head a script put in the page is found with it, once.
   const apart = () => topOf(head) !== engine.root;
-  function* everything(): Generator<EngineNode> {
-    if (apart()) yield* descendants(head);
-    yield* descendants(engine.root);
-  }
-  /** The elements a query of the document looks at: `<html>`, then the head, then the page. */
+  /**
+   * The elements a query or a lookup of the document looks at, in the order a document has them:
+   * `<html>`, then the head and what it holds, then the page. A library looks for a stylesheet it
+   * added before it adds one, and for the head by its name, as `getElementsByTagName('head')[0]`.
+   */
   function* elements(): Generator<EngineNode> {
     yield engine.root;
     if (apart()) {
@@ -442,6 +440,16 @@ export function documentFor(engine: Engine): CompatDocument {
   const first = (...args: unknown[]): EngineNode | null => {
     required(args, 1, 'querySelector');
     return query(elements(), String(args[0]), engine.root, true)[0] ?? null;
+  };
+  type TextHolder = { textContent: string };
+  type Parent = { appendChild(node: unknown): unknown };
+  /** The document's title element: the first HTML `<title>` in it, read each time it is asked. */
+  const titleElement = (): EngineNode | null => {
+    for (const node of elements()) {
+      const named = node as unknown as { localName?: string; namespaceURI?: string };
+      if (named.localName === 'title' && named.namespaceURI === XHTML) return node;
+    }
+    return null;
   };
   // A listener on the body hears the whole page, as one on the document does.
   const bodyListeners = anywhere(engine, body);
@@ -483,6 +491,22 @@ export function documentFor(engine: Engine): CompatDocument {
     },
     set dir(value: unknown) {
       (engine.root as unknown as { dir: unknown }).dir = value;
+    },
+    // The text of the first HTML `<title>`, in the head or anywhere in the page, as Angular's
+    // `Title` reads it. Set, it is that title's text, or a new one's in the head.
+    get title() {
+      // Only the text directly in it, as HTML's "child text content" is: an element in it is not.
+      const element = titleElement();
+      const text = element ? childText(element) : '';
+      // ASCII white space, which `trim()` is more than: a no-break space stays.
+      return text.replace(/[\t\n\f\r ]+/g, ' ').replace(/^ | $/g, '');
+    },
+    set title(value: unknown) {
+      const made = () =>
+        (head as unknown as Parent).appendChild(
+          elementNamed(engine, { namespace: XHTML, prefix: null, localName: 'title' }),
+        );
+      ((titleElement() ?? made()) as TextHolder).textContent = String(value);
     },
     readyState: 'complete',
     visibilityState: 'visible',
@@ -552,15 +576,15 @@ export function documentFor(engine: Engine): CompatDocument {
     elementsFromPoint: (...point: unknown[]) => elementsFromPoint(engine, body, point),
     getElementById(id: unknown) {
       const wanted = String(id);
-      for (const node of everything()) if (node.props['nativeID'] === wanted) return node;
+      for (const node of elements()) if (node.props['nativeID'] === wanted) return node;
       return null;
     },
     // Live lists, which a library keeps and reads again: see `live-list.ts`.
-    getElementsByTagName: (name: unknown) => byTagName(engine, everything, name),
-    getElementsByClassName: (names: unknown) => byClassName(engine, everything, names),
-    getElementsByName: (name: unknown) => byName(engine, everything, name),
+    getElementsByTagName: (name: unknown) => byTagName(engine, elements, name),
+    getElementsByClassName: (names: unknown) => byClassName(engine, elements, names),
+    getElementsByName: (name: unknown) => byName(engine, elements, name),
     getElementsByTagNameNS: (namespace: unknown, local: unknown) =>
-      byTagNameNS(engine, everything, namespace, local),
+      byTagNameNS(engine, elements, namespace, local),
     // By a selector: see `selector.ts`.
     querySelector: first,
     querySelectorAll: (...args: unknown[]) => {
@@ -569,7 +593,7 @@ export function documentFor(engine: Engine): CompatDocument {
     },
     // Every form in the page, as a library finds one by its name: `document.forms.login`.
     get forms() {
-      return (forms ??= byTagName(engine, everything, 'form'));
+      return (forms ??= byTagName(engine, elements, 'form'));
     },
     // Documents a script makes for itself, which are never drawn: see `dom-implementation.ts`.
     get implementation() {
