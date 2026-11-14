@@ -93,6 +93,7 @@ add_library(ngn_core STATIC
     core/src/tabs-host.cpp
     core/src/updates.cpp
     core/src/view-tree.cpp
+    core/src/modules/accessibility-manager.cpp
     core/src/modules/alert-manager.cpp
     core/src/modules/app-modules.cpp
     core/src/modules/async-storage.cpp

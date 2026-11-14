@@ -8,10 +8,10 @@ Alpha, and early: the host draws views, text, text fields, images, scroll views,
 sheet, an in-window cover, or an NSPopover when the modal has an `anchor`), takes clicks, hover
 and the scroll wheel, loads the app from the dev server with reload and Fast Refresh, runs React
 Native's layout animations, and has the default menu bar. React Native's iOS modules answer from
-the core: Linking, Appearance, AppState, DeviceInfo, PlatformConstants, I18nManager, Alert
-(NSAlert), Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob,
-FileReader, ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no
-React Native DevTools yet.
+the core: Linking, Appearance, AccessibilityInfo, AppState, DeviceInfo, PlatformConstants,
+I18nManager, Alert (NSAlert), Clipboard, Networking (streaming, progress, cookies, redirects),
+WebSocket, Blob, FileReader, ImageLoader and `@react-native-async-storage` (2.x and 3.x,
+file-backed). It has no React Native DevTools yet.
 
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its
 window, stacked on a sheet already there. It takes its content root's CSS width and height, or
@@ -68,7 +68,10 @@ key-view loop: positive `tabIndex` first, then focusable views, text inputs and 
 order, inside the container the focus is in. With the Mac's default keyboard navigation Tab
 reaches text inputs only, and Option-Tab reaches everything. A view's accessibility props give it
 its NSAccessibility role, subrole, label, hint, value and state (`accessibility.h`); a role AppKit
-lacks, such as a heading, is a group with that role's name spoken.
+lacks, such as a heading, is a group with that role's name spoken. `AccessibilityInfo` reads
+VoiceOver's state, reduce motion, reduce transparency, invert colours and increase contrast from
+NSWorkspace, and sends their change events from its notifications; macOS has no bold-text or
+grayscale setting, so those answer false.
 
 When the app has them installed, the host compiles in the Fabric components of
 `react-native-screens`, `react-native-safe-area-context` and `react-native-svg`:

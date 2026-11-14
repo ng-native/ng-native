@@ -18,6 +18,7 @@ void addCoreModules(ModuleRegistry &registry, const CoreModuleServices &given) {
       {"DeviceInfo", makeDeviceInfo},
       {"AppState", makeAppState},
       {"Appearance", makeAppearance},
+      {"AccessibilityManager", makeAccessibilityManager},
       {"LinkingManager", makeLinking},
       {"I18nManager", makeI18n},
       {"AlertManager", makeAlertManager},

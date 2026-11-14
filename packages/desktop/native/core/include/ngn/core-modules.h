@@ -41,6 +41,8 @@ std::shared_ptr<NativeModule> makePlatformConstants(const CoreModuleServices &se
 std::shared_ptr<NativeModule> makeDeviceInfo(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeAppState(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeAppearance(const CoreModuleServices &services);
+// AccessibilityInfo's iOS module: the settings in the host state and their change events.
+std::shared_ptr<NativeModule> makeAccessibilityManager(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeLinking(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeI18n(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeAlertManager(const CoreModuleServices &services);

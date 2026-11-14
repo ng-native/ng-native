@@ -126,6 +126,21 @@ struct Dimensions {
   bool operator==(const Dimensions &) const = default;
 };
 
+// The system's accessibility settings that apps adapt to, as React Native's AccessibilityInfo
+// names them. A desktop without one of them reports it off.
+struct AccessibilitySettings {
+  // A screen reader is running (VoiceOver on macOS).
+  bool screenReader{false};
+  bool reduceMotion{false};
+  bool reduceTransparency{false};
+  bool invertColors{false};
+  bool boldText{false};
+  // Increase contrast, which iOS calls darker system colours.
+  bool increaseContrast{false};
+  bool grayscale{false};
+  bool operator==(const AccessibilitySettings &) const = default;
+};
+
 struct WindowMetrics {
   Dimensions window;
   Dimensions screen;
@@ -138,6 +153,8 @@ class HostState {
   Watched<WindowMetrics> metrics;
   // "light" or "dark".
   Watched<std::string> colorScheme{"light"};
+  // Set by the backend from the system's notifications, never by polling.
+  Watched<AccessibilitySettings> accessibility;
   // The clipboard's change count (System::clipboardChangeCount), as the backend last checked it.
   // There is no change notification: the backend checks when the app becomes active and after
   // each key press, click and menu command, so an idle app never wakes to poll.

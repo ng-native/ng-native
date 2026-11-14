@@ -265,6 +265,15 @@ std::shared_ptr<System> makeSystem(std::string appId) {
                                           return event;
                                         }];
   [NSApp addObserver:self forKeyPath:@"effectiveAppearance" options:NSKeyValueObservingOptionNew context:nil];
+  // The display options post a notification as any of them changes, and VoiceOver's state is
+  // key-value observable, so nothing polls.
+  NSWorkspace *workspace = NSWorkspace.sharedWorkspace;
+  [workspace.notificationCenter addObserver:self
+                                   selector:@selector(accessibilityChanged)
+                                       name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+                                     object:nil];
+  [workspace addObserver:self forKeyPath:@"voiceOverEnabled" options:NSKeyValueObservingOptionNew context:nil];
+  [self accessibilityChanged];
   [NSAppleEventManager.sharedAppleEventManager setEventHandler:self
                                                    andSelector:@selector(handleURL:withReply:)
                                                  forEventClass:kInternetEventClass
@@ -290,10 +299,29 @@ std::shared_ptr<System> makeSystem(std::string appId) {
   self.state->activity.set(activity);
 }
 
+// macOS has no bold-text or grayscale setting an app can read, so those stay off.
+- (void)accessibilityChanged {
+  NSWorkspace *workspace = NSWorkspace.sharedWorkspace;
+  self.state->accessibility.set({
+      .screenReader = (bool)workspace.voiceOverEnabled,
+      .reduceMotion = (bool)workspace.accessibilityDisplayShouldReduceMotion,
+      .reduceTransparency = (bool)workspace.accessibilityDisplayShouldReduceTransparency,
+      .invertColors = (bool)workspace.accessibilityDisplayShouldInvertColors,
+      .increaseContrast = (bool)workspace.accessibilityDisplayShouldIncreaseContrast,
+  });
+}
+
 - (void)observeValueForKeyPath:(NSString *)keyPath
                       ofObject:(id)object
                         change:(NSDictionary *)change
                        context:(void *)context {
+  if ([keyPath isEqualToString:@"voiceOverEnabled"]) {
+    // KVO may call on another thread; the host state is set from the main thread.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self accessibilityChanged];
+    });
+    return;
+  }
   // With no override of the app's own, what the app draws in is the system's scheme.
   if (NSApp.appearance == nil) {
     self.system->systemSchemeChanged(schemeOf(NSApp.effectiveAppearance));
