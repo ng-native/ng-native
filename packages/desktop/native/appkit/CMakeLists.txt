@@ -10,6 +10,7 @@ add_executable(ngn-macos
     menu-bar.mm
     modal-host-view.mm
     native-controls.mm
+    presented-screen.mm
     network.mm
     scroll-view.mm
     split-view.mm

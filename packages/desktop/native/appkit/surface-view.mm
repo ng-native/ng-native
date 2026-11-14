@@ -205,7 +205,8 @@ NSCursor *nsCursor(Cursor cursor) {
 }
 
 - (ngn::PointerInput)inputFor:(NSEvent *)event {
-  NSPoint inView = [self convertPoint:event.locationInWindow fromView:nil];
+  NSView *root = self.rootView != nil && [self.rootView isDescendantOf:self] ? self.rootView : self;
+  NSPoint inView = [root convertPoint:event.locationInWindow fromView:nil];
   NSPoint onScreen = [self.window convertPointToScreen:event.locationInWindow];
   // AppKit's screen coordinates start at the bottom left of the primary display.
   CGFloat top = NSMaxY(NSScreen.screens.firstObject.frame);

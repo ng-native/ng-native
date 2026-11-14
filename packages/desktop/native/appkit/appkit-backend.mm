@@ -3,6 +3,7 @@
 #import "header-toolbar.h"
 #import "host-view.h"
 #import "modal-host-view.h"
+#import "presented-screen.h"
 #import "split-view.h"
 #import "surface-view.h"
 
@@ -72,7 +73,7 @@ void AppKitBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
     return;
   }
   // The index counts Fabric children only: a TextInput holds an NSTextField of its own.
-  if ([childView isKindOfClass:NGNModalHostView.class]) {
+  if ([childView isKindOfClass:NGNModalHostView.class] && ![childView isKindOfClass:NGNPresentedScreenView.class]) {
     [(NGNModalHostView *)childView presentOver:parentView];
     return;
   }
@@ -97,6 +98,11 @@ void AppKitBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
 
 void AppKitBackend::removeChild(SurfaceId, Tag parent, Tag child, int) {
   NGNView *view = views_[@(child)];
+  if ([view isKindOfClass:NGNPresentedScreenView.class]) {
+    [(NGNPresentedScreenView *)view dismiss];
+    [view removeFromSuperview];
+    return;
+  }
   if ([view isKindOfClass:NGNModalHostView.class]) {
     [(NGNModalHostView *)view dismiss];
     return;
@@ -164,6 +170,12 @@ void AppKitBackend::touched(NSView *view) {
   }
 }
 
+void AppKitBackend::setPresented(SurfaceId, Tag screen, bool presented) {
+  if (auto *view = (NGNPresentedScreenView *)views_[@(screen)]; [view isKindOfClass:NGNPresentedScreenView.class]) {
+    [view setPresented:presented];
+  }
+}
+
 void AppKitBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
   NGNSplitView *view = (NGNSplitView *)views_[@(split)];
   if (![view isKindOfClass:NGNSplitView.class]) {
@@ -202,6 +214,7 @@ void AppKitBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<Sour
 }
 
 void AppKitBackend::didMount(SurfaceId surfaceId) {
+  [NGNPresentedScreenView refreshChrome];
   [NGNModalHostView fitPopovers];
   for (NGNSourceLists *lists in sourceLists_.allValues) {
     [lists layOut];

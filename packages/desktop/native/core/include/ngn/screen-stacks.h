@@ -24,6 +24,8 @@ class ScreenStacks {
   // A view's children changed. Settled with the transaction, so a push that inserts and removes
   // in one commit is one change.
   void childrenChanged(const ViewTree &tree, Tag parent);
+  // A screen's props changed: its presentation may have (screen-presentation.h).
+  void propsChanged(const ViewTree &tree, Tag tag);
   void deleted(Tag tag);
 
   struct Covered {
@@ -33,13 +35,20 @@ class ScreenStacks {
   // Settles every stack whose screens changed since the last call: marks the screens covered or
   // not in `tree`, sends the events, and returns the screens whose covered state changed, for the
   // backend to hide or show.
+  //
+  // A presented screen (screen-presentation.h) does not cover the screens under it: those below
+  // the last pushed screen are covered, and the presented ones over it are each presented.
   std::vector<Covered> settle(ViewTree &tree);
+
+  // The screens that came to be presented (covered = true) or stopped being presented since the
+  // last call, as settle found them.
+  std::vector<Covered> takePresented();
 
   // The top screen of a stack, or -1.
   Tag top(Tag stack) const;
 
-  // The header a container shows: the RNSScreenStackHeaderConfig of the top screen of the
-  // innermost stack in the container that has one (a window has one toolbar, and the screen in
+  // The header a container shows: the RNSScreenStackHeaderConfig of the last pushed screen of the
+  // innermost stack (a presented screen draws its own) in the container that has one (a window has one toolbar, and the screen in
   // front fills it). Stacks under a covered screen or in a container of their own do not count,
   // but for the content pane of a split view or a tabs host, which is the window's content.
   struct FrontHeader {
@@ -58,6 +67,8 @@ class ScreenStacks {
  private:
   std::unordered_set<Tag> dirty_;
   std::unordered_map<Tag, Tag> tops_;
+  std::unordered_set<Tag> presented_;
+  std::vector<Covered> presentedChanges_;
 };
 
 } // namespace ngn

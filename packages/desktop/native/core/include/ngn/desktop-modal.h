@@ -56,8 +56,11 @@ struct SheetNode {
   std::vector<SheetNode> children;
 };
 
-// A laid out shadow node and those under it, leaving out a modal inside, which is presented on
-// its own.
+// Whether a child takes room in its sheet's content: not a modal inside, presented on its own, nor
+// a presented screen's header config, which the sheet draws around its content.
+bool takesRoomInSheet(std::string_view componentName);
+
+// A laid out shadow node and those under it, leaving out what takes no room in it.
 SheetNode sheetNode(const facebook::react::ShadowNode &node);
 
 // The size a sheet takes for `modal`, laid out at the size it has now, on a window whose content

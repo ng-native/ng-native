@@ -71,6 +71,13 @@ TEST_CASE("the definite size is read from the shadow node's Yoga style") {
   CHECK(ngn::sheetNode(*withInner).children.size() == 1);
 }
 
+TEST_CASE("a modal inside and a presented screen's header config take no room in a sheet") {
+  CHECK_FALSE(ngn::takesRoomInSheet("ModalHostView"));
+  CHECK_FALSE(ngn::takesRoomInSheet("RNSScreenStackHeaderConfig"));
+  CHECK(ngn::takesRoomInSheet("View"));
+  CHECK(ngn::takesRoomInSheet("RNSScreenStack"));
+}
+
 TEST_CASE("a content-sized root gives the default width and the height its content laid out to") {
   // A column stretched across the container, as tall as its two rows and its padding.
   auto column = node({{0, 0}, {1000, 260}}, {}, {}, {node({{20, 20}, {960, 100}}), node({{20, 120}, {960, 120}})});

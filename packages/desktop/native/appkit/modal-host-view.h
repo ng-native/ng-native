@@ -18,6 +18,7 @@
 
 #import "host-view.h"
 
+#include "ngn/desktop-props.h"
 #include "ngn/input.h"
 
 #include <functional>
@@ -39,4 +40,19 @@
 // Called by the backend in place of inserting the view into its parent.
 - (void)presentOver:(NSView *)parent;
 - (void)dismiss;
+
+// For a subclass that presents other content the same way (a presented screen).
+// The sheet, cover or popover's container while presented, or nil.
+@property (nonatomic, readonly) NSView *presentationView;
+@property (nonatomic, readonly) ngn::ModalPresentation presentedAs;
+// Escape, Cmd-W or a click outside a popover: asks the app to close it.
+- (void)requestClose;
+// Sets the size the content was given in layout: a modal's state by default.
+- (void)applyPresentedSize:(NSSize)size;
+// Where the content sits in its container, which the subclass may draw around: all of it by default.
+- (NSRect)contentFrameIn:(NSRect)bounds;
+// What a sheet adds to its content's size for what the subclass draws around it.
+- (NSSize)chromeSize;
+// Called once presented, before the app hears it.
+- (void)didPresent;
 @end

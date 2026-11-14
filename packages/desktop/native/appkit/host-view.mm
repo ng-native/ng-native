@@ -4,6 +4,7 @@
 #import "image-view.h"
 #import "modal-host-view.h"
 #import "native-controls.h"
+#import "presented-screen.h"
 #import "scroll-view.h"
 #import "split-view.h"
 
@@ -661,6 +662,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == "ModalHostView") {
     return [[NGNModalHostView alloc] initWithShadowView:view];
+  }
+  if (name == "RNSScreen") {
+    return [[NGNPresentedScreenView alloc] initWithShadowView:view];
   }
   if (name == "RNSScreenStackHeaderConfig") {
     return [[NGNHeaderConfigView alloc] initWithShadowView:view];

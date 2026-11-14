@@ -88,6 +88,10 @@ void FakeBackend::setFrontHeader(SurfaceId, const std::optional<ScreenStacks::Fr
              : "no header");
 }
 
+void FakeBackend::setPresented(SurfaceId, Tag screen, bool presented) {
+  calls.push_back((presented ? "present " : "unpresent ") + std::to_string(screen));
+}
+
 void FakeBackend::setSplitView(SurfaceId, Tag split, bool window) {
   calls.push_back("split view " + std::to_string(split) + (window ? " of the window" : " in the content"));
 }

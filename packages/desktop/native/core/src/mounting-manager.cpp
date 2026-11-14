@@ -133,6 +133,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
           reportDesktopProps(view, &old);
           sidebars_.propsChanged(tree_, view.tag);
           tabs_->propsChanged(tree_, view.tag);
+          screens_->propsChanged(tree_, view.tag);
         }
         if (old.state != view.state) {
           backend_->updateState(view);
@@ -148,6 +149,9 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   }
   for (const auto &change : screens_->settle(tree_)) {
     backend_->setCovered(surfaceId, change.tag, change.covered);
+  }
+  for (const auto &change : screens_->takePresented()) {
+    backend_->setPresented(surfaceId, change.tag, change.covered);
   }
   applyTabs(surfaceId);
   safeAreas_->settle(tree_);

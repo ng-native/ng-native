@@ -1,6 +1,7 @@
 // The core's reading of react-native-screens' props and state, compiled into the host only with
 // the library (cmake/libraries.cmake).
 #include "ngn/library-glue.h"
+#include "ngn/screen-presentation.h"
 #include "ngn/split-view.h"
 
 #include <react/renderer/components/rnscreens/EventEmitters.h>
@@ -12,6 +13,11 @@
 
 using namespace facebook::react;
 
+namespace facebook::react {
+// The library's own (RNSScreenShadowNode.cpp), whose shadow node the desktop replaces.
+extern const char RNSScreenComponentName[];
+} // namespace facebook::react
+
 namespace ngn {
 
 namespace {
@@ -19,6 +25,10 @@ namespace {
 // A tab's screen fills the content pane its tabs host is drawn in: the pane's size is its state.
 using TabsScreenShadowNode =
     ConcreteViewShadowNode<RNSTabsScreenIOSComponentName, RNSTabsScreenIOSProps, RNSTabsScreenIOSEventEmitter, SplitPaneState>;
+
+// A screen with the props the desktop reads, `anchor` among them, which the library's drop
+// (screen-presentation.h); presented, it takes the size it is presented at.
+using ScreenShadowNode = ConcreteViewShadowNode<RNSScreenComponentName, ScreenProps, RNSScreenEventEmitter, SplitPaneState>;
 
 } // namespace
 
@@ -73,6 +83,7 @@ void installGlue_rnscreens() {
     };
   };
   glue.components.push_back(concreteComponentDescriptorProvider<ToolkitSizedComponentDescriptor<TabsScreenShadowNode>>());
+  glue.components.push_back(concreteComponentDescriptorProvider<ToolkitSizedComponentDescriptor<ScreenShadowNode>>());
   glue.safeAreaStates.emplace_back([](const State &state, EdgeInsets insets) {
     const auto *concrete = dynamic_cast<const ConcreteState<RNSSafeAreaViewState> *>(&state);
     if (concrete == nullptr) {

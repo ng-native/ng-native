@@ -79,6 +79,7 @@ add_library(ngn_core STATIC
     core/src/text-layout-manager.cpp
     core/src/tray-and-dock.cpp
     core/src/safe-areas.cpp
+    core/src/screen-presentation.cpp
     core/src/screen-stacks.cpp
     core/src/split-view.cpp
     core/src/tabs-host.cpp

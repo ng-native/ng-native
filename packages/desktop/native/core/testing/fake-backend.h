@@ -27,6 +27,7 @@ class FakeBackend final : public MountingBackend, public DesktopPropsSink {
   void dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) override;
   void setCovered(SurfaceId surfaceId, Tag tag, bool covered) override;
   void setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) override;
+  void setPresented(SurfaceId surfaceId, Tag screen, bool presented) override;
   void setSplitView(SurfaceId surfaceId, Tag split, bool window) override;
   void setSourceLists(SurfaceId surfaceId, Tag parent, const std::vector<SourceList> &lists) override;
   void didMount(SurfaceId surfaceId) override;

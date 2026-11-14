@@ -38,6 +38,10 @@ std::optional<Float> definite(const ViewProps &props, facebook::yoga::Dimension 
 
 } // namespace
 
+bool takesRoomInSheet(std::string_view componentName) {
+  return componentName != std::string_view(ModalHostViewComponentName) && componentName != "RNSScreenStackHeaderConfig";
+}
+
 SheetNode sheetNode(const ShadowNode &node) {
   SheetNode out;
   if (const auto *layoutable = dynamic_cast<const LayoutableShadowNode *>(&node)) {
@@ -48,8 +52,7 @@ SheetNode sheetNode(const ShadowNode &node) {
     out.height = definite(*props, facebook::yoga::Dimension::Height);
   }
   for (const auto &child : node.getChildren()) {
-    // A modal inside is presented on its own: it takes no room in this one.
-    if (child->getComponentName() != std::string_view(ModalHostViewComponentName)) {
+    if (takesRoomInSheet(child->getComponentName())) {
       out.children.push_back(sheetNode(*child));
     }
   }

@@ -48,6 +48,10 @@ class MountingBackend {
   // shown again as it returns to the top.
   virtual void setCovered(SurfaceId /*surfaceId*/, Tag /*tag*/, bool /*covered*/) {}
 
+  // A screen came to be presented over its stack (screen-presentation.h) or went back to being
+  // pushed. It is a sheet, cover or popover as its desktop props say, presented like a modal.
+  virtual void setPresented(SurfaceId /*surfaceId*/, Tag /*screen*/, bool /*presented*/) {}
+
   // The header the surface's main container shows changed: another screen came to the front, or
   // its stack gained or lost the screen below it. Nothing when no screen in front has a header.
   virtual void setFrontHeader(SurfaceId /*surfaceId*/, const std::optional<ScreenStacks::FrontHeader> & /*header*/) {}
