@@ -15,6 +15,9 @@
  * - On Android it is an Expo module: the constants are properties, it sends the same events through
  *   its own `addListener('ngNativeMenus', ...)`, and it has `setContextMenu(nativeID, entries)`,
  *   since React Native's Android view drops a `contextMenu` prop it does not know.
+ * - On iOS it is a TurboModule with `setContextMenu(nativeID, entries)` too, for the same reason.
+ *   React Native's iOS view sends no event it does not know either, so the module sends the item
+ *   chosen as `{ type: 'contextMenuSelect', nativeID, id }`.
  */
 import {
   InjectionToken,
@@ -114,6 +117,8 @@ export interface NativeShortcut {
 export type NativeMenuEvent =
   | { readonly type: 'menuSelect'; readonly id: string }
   | { readonly type: 'shortcut'; readonly id: string; readonly textInputFocused?: boolean }
+  /** An item chosen in the context menu of the view with `nativeID` (iOS). */
+  | { readonly type: 'contextMenuSelect'; readonly nativeID: string; readonly id: string }
   /**
    * Back or forward, from whichever input the OS has for it: View > Back and Forward and their
    * keys, a two-finger swipe, mouse buttons 4 and 5, the toolbar's chevrons and their history
@@ -144,8 +149,8 @@ export interface NativeMenus {
   /** The history of the window on `surface`, for its back and forward chevrons. Desktop only. */
   setHistory?(surface: number, history: NativeWindowHistory): void;
   /**
-   * The context menu of the view with `nativeID`, or null to take it away. Android, whose view
-   * reads no `contextMenu` prop: the host finds the view by its `nativeID` as it is pressed.
+   * The context menu of the view with `nativeID`, or null to take it away. Android and iOS, whose
+   * views read no `contextMenu` prop: the host finds the view by its `nativeID`.
    */
   setContextMenu?(nativeID: string, entries: readonly NativeMenuEntry[] | null): void;
   subscribe(listener: (event: NativeMenuEvent) => void): () => void;
@@ -235,13 +240,25 @@ export class Menus {
 
   /**
    * Whether the host takes a `[contextMenu]` by the view's `nativeID` through `setContextMenu`
-   * (Android) rather than as the view's `contextMenu` prop. Where it does, it draws the menu on a
-   * long press.
+   * (Android and iOS) rather than as the view's `contextMenu` prop. Where it does, it draws the
+   * menu on a long press.
    */
   readonly contextMenuByNativeId: boolean = this.native?.setContextMenu !== undefined;
 
-  /** Send the context menu of the view with `nativeID`, or null to take it away. */
-  setContextMenu(nativeID: string, entries: readonly NativeMenuEntry[] | null): void {
+  /** What choosing an item does, by the `nativeID` of the view whose menu it is in. */
+  private readonly contextMenuChoices = new Map<string, (id: string) => void>();
+
+  /**
+   * Send the context menu of the view with `nativeID`, or null to take it away. `choose` runs with
+   * the item's `id` where the host sends the choice itself (iOS) rather than through the view.
+   */
+  setContextMenu(
+    nativeID: string,
+    entries: readonly NativeMenuEntry[] | null,
+    choose?: (id: string) => void,
+  ): void {
+    if (entries && choose) this.contextMenuChoices.set(nativeID, choose);
+    else this.contextMenuChoices.delete(nativeID);
     this.native?.setContextMenu?.(nativeID, entries);
   }
 
@@ -379,6 +396,10 @@ export class Menus {
     }
     if (event.type === 'menuSelect') {
       this.sentBar().actions.get(event.id)?.();
+      return;
+    }
+    if (event.type === 'contextMenuSelect') {
+      this.contextMenuChoices.get(event.nativeID)?.(event.id);
       return;
     }
     const { presses, editing } = this.sentShortcuts();

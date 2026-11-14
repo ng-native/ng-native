@@ -3,7 +3,7 @@
  *
  * The host contract, on the `NgNativeUndo` module:
  * - `register(id, label)` registers an action the app has done with the app's undo manager
- *   (NSUndoManager on macOS, UIUndoManager on iOS), named `label`, so Edit > Undo reads
+ *   (an NSUndoManager, on macOS and iOS), named `label`, so Edit > Undo reads
  *   "Undo <label>". One manager serves every window. A focused text input keeps its own undo
  *   history, so Edit > Undo and mod+z reach the app's actions only when no text input has focus.
  * - Undoing an action sends `{ type: 'undo', id }` on `ngNativeUndo` and registers its redo under

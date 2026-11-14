@@ -3,8 +3,9 @@ require 'json'
 package = JSON.parse(File.read(File.join(__dir__, '..', 'package.json')))
 
 # The iOS side of the elements whose native view or module the host draws: `<native-button>` as a
-# UIButton, the `contextMenu`, `fileDrop` and `dragItem` view props, and the `NgNativeMenus` and
-# `NgNativeUndo` modules. Fabric components, so React Native's own C++ is a dependency.
+# UIButton, and the `NgNativeMenus`, `NgNativeUndo` and `NgNativeDragAndDrop` modules, which add
+# context menus, drops and drags to React Native's own views by `nativeID`. Fabric components, so
+# React Native's own C++ is a dependency.
 Pod::Spec.new do |s|
   s.name           = 'NgNativeComponents'
   s.version        = package['version']

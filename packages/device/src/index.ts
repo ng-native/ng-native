@@ -158,6 +158,13 @@ export {
   type SerializedMenu,
 } from './menus.ts';
 export { Dock, type NativeDock } from './dock.ts';
+export {
+  DragAndDrop,
+  dragAndDropSource,
+  type NativeDragAndDrop,
+  type NativeDragItem,
+  type NativeDropEvent,
+} from './drag-and-drop.ts';
 export { UndoStack, type NativeUndo, type NativeUndoEvent, type UndoAction } from './undo-stack.ts';
 export {
   OS_SUPPORT,

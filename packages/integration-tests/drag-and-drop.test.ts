@@ -23,11 +23,18 @@
  *   for, so the directive's output fires once and not twice.
  * - Neither prop is committed on Android or in the web host, where both are absent; iPhone's host
  *   ignores them.
+ * - React Native's iOS view reads neither prop and sends no event it does not know, so on iOS,
+ *   where the host has the `NgNativeDragAndDrop` module (`NativeDragAndDrop` in
+ *   `@ng-native/device`), the view is named by a `nativeID` as `[contextMenu]` names it, and the
+ *   module takes `setFileDrop(nativeID, takes)` and `setDragItem(nativeID, item)` in the props'
+ *   form. It sends `{ type, nativeID, files, text, urls }` on `ngNativeDragAndDrop`, `type` being
+ *   `dropEnter`, `dropLeave` or `dropPerform`, which run the bindings as the view's events would.
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
-import type { Type, WritableSignal } from '@angular/core';
-import { OS } from '@ng-native/device';
+import { describe } from 'node:test';
+import { signal, type Type, type WritableSignal } from '@angular/core';
+import { DragAndDrop, OS, type NativeDragAndDrop, type NativeDropEvent } from '@ng-native/device';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -123,4 +130,111 @@ it('commits neither prop on Android, where drag and drop is absent', async () =>
   await settle();
   assert.equal(screen.getByTestId('target').props['fileDrop'], undefined);
   assert.equal(screen.getByTestId('source').props['dragItem'], undefined);
+});
+
+describe("on iOS, through the host's module", () => {
+  function fakeModule() {
+    const calls: string[] = [];
+    const listeners = new Set<(event: NativeDropEvent) => void>();
+    const native: NativeDragAndDrop = {
+      setFileDrop: (id, takes) => void calls.push(`drop ${id} ${takes}`),
+      setDragItem: (id, item) => void calls.push(`drag ${id} ${JSON.stringify(item)}`),
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => void listeners.delete(listener);
+      },
+    };
+    const send = async (event: NativeDropEvent) => {
+      listeners.forEach((listener) => listener(event));
+      await settle();
+    };
+    return { native, calls, send };
+  }
+
+  async function open(os: 'ios' | 'macos') {
+    const host = fakeModule();
+    const { componentRef } = await render(Fixture, {
+      providers: [
+        { provide: OS, useValue: os },
+        { provide: DragAndDrop.SOURCE, useValue: host.native },
+      ],
+    });
+    await settle();
+    const id = (testID: string) => screen.getByTestId(testID).props['nativeID'] as string;
+    return { host, fixture: componentRef.instance, id };
+  }
+
+  it('names each view and tells the module which take drops and what each offers', async () => {
+    const { host, fixture, id } = await open('ios');
+    assert.equal(screen.getByTestId('plain').props['nativeID'], undefined);
+    assert.ok(host.calls.includes(`drop ${id('target')} true`));
+    assert.ok(host.calls.includes(`drop ${id('enter-only')} true`));
+    assert.ok(host.calls.includes(`drag ${id('source')} null`));
+    host.calls.length = 0;
+    fixture.item.set({ files: ['/tmp/a b.md'], url: 'https://example.com/' });
+    await settle();
+    const offered = JSON.stringify({
+      files: ['file:///tmp/a%20b.md'],
+      text: null,
+      url: 'https://example.com/',
+    });
+    assert.deepEqual(host.calls.sort(), [
+      `drag ${id('both')} ${offered}`,
+      `drag ${id('source')} ${offered}`,
+    ]);
+  });
+
+  it('gives a view with both a drop and a drag one name', async () => {
+    const { host, id } = await open('ios');
+    const both = id('both');
+    assert.ok(host.calls.includes(`drop ${both} true`));
+    assert.ok(host.calls.includes(`drag ${both} null`));
+    assert.equal(new Set(['target', 'enter-only', 'source', 'both'].map(id)).size, 4);
+  });
+
+  it("runs each binding once from the module's events for its view, and none for another", async () => {
+    const { host, fixture, id } = await open('ios');
+    const target = id('target');
+    await host.send({ type: 'dropEnter', nativeID: target, ...NOTES });
+    await host.send({ type: 'dropLeave', nativeID: target });
+    await host.send({ type: 'dropPerform', nativeID: target, text: 'Hello' });
+    await host.send({ type: 'dropPerform', nativeID: 'elsewhere', text: 'Nope' });
+    assert.deepEqual(fixture.heard(), [
+      'enter notes.md file:///Users/me/notes.md',
+      'leave',
+      'drop Hello',
+    ]);
+  });
+
+  it('takes the drop and the drag away as the element goes', async () => {
+    const host = fakeModule();
+    const shown = signal(true);
+    const { FileDrop, DragItem, View } = await import('@ng-native/components');
+    const app = await render(
+      `@if (shown()) {
+        <view nativeID="tray" (fileDrop)="dropped()" [dragItem]="{ text: 'Hi' }"></view>
+      }`,
+      {
+        imports: [View, FileDrop, DragItem],
+        providers: [
+          { provide: OS, useValue: 'ios' },
+          { provide: DragAndDrop.SOURCE, useValue: host.native },
+        ],
+        componentProperties: { shown, dropped: () => host.calls.push('dropped') },
+      },
+    );
+    await settle();
+    host.calls.length = 0;
+    shown.set(false);
+    await app.detectChanges();
+    await host.send({ type: 'dropPerform', nativeID: 'tray', text: 'Late' });
+    assert.deepEqual(host.calls.sort(), ['drag tray null', 'drop tray false']);
+  });
+
+  it('leaves macOS to the props, naming nothing and calling no module', async () => {
+    const { host } = await open('macos');
+    assert.deepEqual(host.calls, []);
+    assert.equal(screen.getByTestId('target').props['nativeID'], undefined);
+    assert.equal(screen.getByTestId('target').props['fileDrop'], true);
+  });
 });

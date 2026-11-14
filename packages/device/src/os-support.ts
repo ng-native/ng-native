@@ -93,7 +93,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`[contextMenu]`',
     ['ContextMenu'],
-    ['yes', 'inert', 'inert', 'long press or right-click', 'inert'],
+    ['yes', 'long press or secondary click', 'long press', 'long press or right-click', 'inert'],
   ),
   row('`<tray-icon>`, `Dock`', ['TrayIcon', 'Tray', 'Dock'], MAC_ONLY, {
     Tray: 'NgNativeTray',

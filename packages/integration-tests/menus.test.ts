@@ -15,9 +15,11 @@
  *   `{ type: 'shortcut', id, textInputFocused }`.
  * - A view with `[contextMenu]` takes a `contextMenu` prop in the same entry form (null without
  *   one) and sends `topContextMenuSelect` with `{ id }`.
- * - Android reads no prop React Native's view does not know, so its host has
+ * - Android and iOS read no prop React Native's view does not know, so their host has
  *   `setContextMenu(nativeID, entries)` (null to take it away): the view is found by its
- *   `nativeID`, which the element is given where the app gave it none.
+ *   `nativeID`, which the element is given where the app gave it none. Android's view sends
+ *   `topContextMenuSelect` itself; iOS's host sends `{ type: 'contextMenuSelect', nativeID, id }`
+ *   on `ngNativeMenus` instead, which reaches the element as `topContextMenuSelect`.
  * - Android's module is an Expo module: its constants are properties, and it sends the same events
  *   through its own `addListener('ngNativeMenus', ...)`.
  */
@@ -268,15 +270,16 @@ describe('a context menu', () => {
     assert.deepEqual(said, ['delete']);
   });
 
-  // Android's host draws the menu on a long press where it has `setContextMenu`, and the long
-  // press is then the menu's. iOS draws none yet, and macOS opens it with a right-click.
+  // Android's and iOS's hosts draw the menu on a long press where they have `setContextMenu`, and
+  // the long press is then the menu's. macOS opens it with a right-click.
   for (const [os, hostDraws, fires] of [
     ['android', true, false],
     ['android', false, true],
+    ['ios', true, false],
     ['ios', false, true],
     ['macos', false, true],
   ] as const) {
-    const where = os === 'android' && !hostDraws ? ' with no host to draw it' : '';
+    const where = os !== 'macos' && !hostDraws ? ' with no host to draw it' : '';
     it(`${fires ? 'still fires' : 'takes'} the long press on ${os}${where}`, async () => {
       const { said } = await open(os, os === 'macos', hostDraws);
       const row = screen.getByTestId('row');
@@ -289,49 +292,63 @@ describe('a context menu', () => {
   }
 });
 
-describe('a context menu on Android', () => {
+for (const os of ['android', 'ios'] as const) {
+  describe(`a context menu on ${os}`, () => {
+    after(() => registerPlatformComponents('ios'));
+
+    it('names the view and sends its menu to the host by that name', async () => {
+      const { host } = await open(os, false, true);
+      const row = screen.getByTestId('row');
+      const id = row.props['nativeID'];
+      assert.equal(typeof id, 'string');
+      assert.deepEqual(host.contextMenus.get(id as string), [
+        { id: '0', label: 'Rename', icon: 'ic_edit', sfSymbol: 'pencil' },
+        { id: '1', label: 'Delete', destructive: true },
+      ]);
+    });
+
+    it('sends nothing by name to a host without setContextMenu, and names nothing', async () => {
+      await open(os, false, false);
+      assert.equal(screen.getByTestId('row').props['nativeID'], undefined);
+    });
+
+    it('keeps a nativeID the app gave, and takes the menu away as the element goes', async () => {
+      registerPlatformComponents(os);
+      const host = fakeHost(false, true);
+      const { ContextMenu, MenuItem, View } = await import('@ng-native/components');
+      const app = await render(
+        `@if (shown()) {
+          <view testID="target" nativeID="note-7" [contextMenu]="menu"></view>
+        }
+        <ng-template #menu><menu-item label="Pin" /></ng-template>`,
+        {
+          imports: [View, ContextMenu, MenuItem],
+          providers: [
+            { provide: Menus.SOURCE, useValue: host.native },
+            { provide: OS, useValue: os },
+          ],
+          componentProperties: { shown: signal(true) },
+        },
+      );
+      await settle();
+      assert.equal(screen.getByTestId('target').props['nativeID'], 'note-7');
+      assert.deepEqual(host.contextMenus.get('note-7'), [{ id: '0', label: 'Pin' }]);
+      (app.instance as unknown as { shown: WritableSignal<boolean> }).shown.set(false);
+      await app.detectChanges();
+      assert.equal(host.contextMenus.get('note-7'), null);
+    });
+  });
+}
+
+describe('a context menu chosen on iOS', () => {
   after(() => registerPlatformComponents('ios'));
 
-  it('names the view and sends its menu to the host by that name', async () => {
-    const { host } = await open('android', false, true);
-    const row = screen.getByTestId('row');
-    const id = row.props['nativeID'];
-    assert.equal(typeof id, 'string');
-    assert.deepEqual(host.contextMenus.get(id as string), [
-      { id: '0', label: 'Rename', icon: 'ic_edit', sfSymbol: 'pencil' },
-      { id: '1', label: 'Delete', destructive: true },
-    ]);
-  });
-
-  it('sends nothing by name to a host without setContextMenu, and names nothing', async () => {
-    await open('android', false, false);
-    assert.equal(screen.getByTestId('row').props['nativeID'], undefined);
-  });
-
-  it('keeps a nativeID the app gave, and takes the menu away as the element goes', async () => {
-    registerPlatformComponents('android');
-    const host = fakeHost(false, true);
-    const { ContextMenu, MenuItem, View } = await import('@ng-native/components');
-    const app = await render(
-      `@if (shown()) {
-        <view testID="target" nativeID="note-7" [contextMenu]="menu"></view>
-      }
-      <ng-template #menu><menu-item label="Pin" /></ng-template>`,
-      {
-        imports: [View, ContextMenu, MenuItem],
-        providers: [
-          { provide: Menus.SOURCE, useValue: host.native },
-          { provide: OS, useValue: 'android' },
-        ],
-        componentProperties: { shown: signal(true) },
-      },
-    );
-    await settle();
-    assert.equal(screen.getByTestId('target').props['nativeID'], 'note-7');
-    assert.deepEqual(host.contextMenus.get('note-7'), [{ id: '0', label: 'Pin' }]);
-    (app.instance as unknown as { shown: WritableSignal<boolean> }).shown.set(false);
-    await app.detectChanges();
-    assert.equal(host.contextMenus.get('note-7'), null);
+  it("runs the item the host's module says was chosen in the view by that name", async () => {
+    const { host, said } = await open('ios', false, true);
+    const id = screen.getByTestId('row').props['nativeID'] as string;
+    await host.send({ type: 'contextMenuSelect', nativeID: id, id: '0' });
+    await host.send({ type: 'contextMenuSelect', nativeID: 'someone-else', id: '1' });
+    assert.deepEqual(said, ['rename']);
   });
 });
 
