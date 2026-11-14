@@ -111,6 +111,14 @@ export {
   type NativeShortcut,
   type SerializedMenu,
 } from './menus.ts';
+export { Dock, type NativeDock } from './dock.ts';
+export {
+  Tray,
+  type NativeTray,
+  type NativeTrayEvent,
+  type NativeTrayIcon,
+  type TrayIconModel,
+} from './tray.ts';
 export { SIDEBAR_SELECTION } from './sidebar-selection.ts';
 export { WINDOW_NAVIGATOR, type WindowNavigator } from './window-navigator.ts';
 export {
