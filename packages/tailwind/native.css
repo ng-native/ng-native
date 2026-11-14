@@ -35,7 +35,8 @@
  *
  * A Mac has clicking, so a ring is for focus the keyboard moved there, which the host reports. A
  * focused text field matches as well, as it does in a browser: it takes the keyboard however it
- * was focused. On a phone there is no keyboard focus to report, so a ring shows on a focused field.
+ * was focused. A phone focuses anything else only from a keyboard, a remote or an assistive
+ * technology, the cases a ring is for, so there every focus matches, as `focus:` does.
  *
  * `data-focus` is there because focus lands on the control and the ring belongs on the box around
  * it. A text field is the native view that takes focus; the border, the radius and the padding are

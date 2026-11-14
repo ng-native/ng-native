@@ -88,8 +88,9 @@ one half each, for a component that wants to be precise rather than portable.
 
 `focus-visible:` is `:focus-visible`, as on the web: focus the keyboard moved, which the macOS host
 reports, so a click draws no ring and Tab does, and a focused text field however it was focused, as
-a browser does. iOS and Android report no keyboard focus, so there it matches a focused text field
-and `focus:` matches any focused element. Both match `[data-focus]` as well, because focus lands on
+a browser does. On iOS and Android a tap focuses only a text field, and anything else is focused
+from a keyboard, a remote or an assistive technology, so there it matches every focused element, as
+`focus:` does. Both match `[data-focus]` as well, because focus lands on
 the control itself while the border and padding that form the ring usually sit on a wrapper around
 it, which can only know it is focused because the behavior composed onto the control told it.
 

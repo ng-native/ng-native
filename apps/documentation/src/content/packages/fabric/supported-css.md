@@ -67,8 +67,8 @@ with no such rule pays nothing for it. On iOS and Android it takes the pointer e
 [turns on](/packages/platform/renderer#pointer-events); on macOS they are always on.
 `:focus-within` matches the focused element and every element it is in. `:focus-visible` matches
 focus the keyboard moved, which the macOS host reports, and a focused text field however it was
-focused, as a browser does. iOS and Android report no keyboard focus, so there it matches a
-focused text field only.
+focused, as a browser does. On iOS and Android a tap focuses only a text field, so there it
+matches every focused element.
 
 `@media (hover: hover)`, `(any-hover)`, `(pointer: fine)` and `(any-pointer)` are answered from the
 OS: `hover` and `fine` on macOS, `none` and `coarse` on iOS and Android, an iPad with a trackpad

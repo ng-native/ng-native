@@ -12,7 +12,12 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
+import {
+  Engine,
+  registerPlatformComponents,
+  type EngineNode,
+  type StyleSheet,
+} from '@ng-native/fabric';
 import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 const sheet = (css: string) => compileCss(css, 'app.css') as StyleSheet;
@@ -286,22 +291,45 @@ describe(':focus-within', () => {
 });
 
 describe(':focus-visible', () => {
-  it('matches focus the host says came from the keyboard, and not a click', () => {
-    const s = scene('.field:focus-visible { opacity: 0.5 } .field:focus { border-width: 1px }');
-    s.make('view', 'field');
-    s.make('view', 'other');
-    s.engine.commit();
-    s.fabric.emit(s.id('field'), 'topFocus', {});
-    s.engine.commit();
-    assert.equal(s.id('field').props['opacity'], undefined, 'a click draws no ring');
-    s.fabric.emit(s.id('other'), 'topFocus', {});
-    s.fabric.emit(s.id('field'), 'topFocus', { focusVisible: true });
-    s.engine.commit();
-    assert.equal(s.id('field').props['opacity'], 0.5, 'Tab does');
-    s.fabric.emit(s.id('field'), 'topBlur', {});
-    s.engine.commit();
-    assert.equal(s.id('field').props['opacity'], null);
+  it('matches focus the macOS host says came from the keyboard, and not a click', () => {
+    registerPlatformComponents('macos');
+    try {
+      const s = scene('.field:focus-visible { opacity: 0.5 } .field:focus { border-width: 1px }');
+      s.make('view', 'field');
+      s.make('view', 'other');
+      s.engine.commit();
+      s.fabric.emit(s.id('field'), 'topFocus', {});
+      s.engine.commit();
+      assert.equal(s.id('field').props['opacity'], undefined, 'a click draws no ring');
+      s.fabric.emit(s.id('other'), 'topFocus', {});
+      s.fabric.emit(s.id('field'), 'topFocus', { focusVisible: true });
+      s.engine.commit();
+      assert.equal(s.id('field').props['opacity'], 0.5, 'Tab does');
+      s.fabric.emit(s.id('field'), 'topBlur', {});
+      s.engine.commit();
+      assert.equal(s.id('field').props['opacity'], null);
+    } finally {
+      registerPlatformComponents('ios');
+    }
   });
+
+  for (const os of ['ios', 'android']) {
+    it(`matches every focus on ${os}, where a tap focuses no view but a text field`, () => {
+      // A phone focuses a button only from a hardware keyboard, a remote or an assistive
+      // technology, which are the cases a ring is for, and its host reports no keyboard flag.
+      registerPlatformComponents(os);
+      try {
+        const s = scene('.field:focus-visible { opacity: 0.5 }');
+        s.make('view', 'field');
+        s.engine.commit();
+        s.fabric.emit(s.id('field'), 'topFocus', {});
+        s.engine.commit();
+        assert.equal(s.id('field').props['opacity'], 0.5);
+      } finally {
+        registerPlatformComponents('ios');
+      }
+    });
+  }
 
   it('matches a focused text field however it was focused, as a browser does', () => {
     // It takes the keyboard whichever way focus arrived, so Chrome draws its ring on a click too.
