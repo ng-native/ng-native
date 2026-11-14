@@ -379,8 +379,9 @@ release publishes with its `hermesc` and Sparkle, and unpack it into the per-use
 hash. The archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does
 not match it is deleted and stops the command. The host is built from source instead when the app
 links a library's or its own native desktop code, when a host library it has installed
-(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`) is another version than the prebuilt one
-or denied, when the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
+(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`) is another version
+than the prebuilt one or denied, when the download fails (with a warning), and when
+`NGN_DESKTOP_FROM_SOURCE=1` is set.
 
 `native/scripts/make-prebuilt.mjs <app> <out>` builds and packs one, signed with
 `NGN_SIGN_IDENTITY` or ad hoc, and writes its `prebuilt.json` entry; the release workflow runs it
