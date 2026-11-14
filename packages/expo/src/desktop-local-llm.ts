@@ -5,7 +5,7 @@
  * shape of an `LLMSession`: its tokens and tool calls arrive as `ngNativeLocalLlm` events with the
  * session they are for, and a failure as `CODE: message`, which becomes an error with that `code`.
  */
-import { desktopHost, type DesktopHost } from './desktop-host.ts';
+import { coded, desktopHost, type DesktopHost } from './desktop-host.ts';
 
 type ExpoLocalLlm = typeof import('expo-local-llm');
 
@@ -26,18 +26,6 @@ interface LocalLlmEvent {
   readonly session: string;
   readonly requestId: string | null;
   readonly [key: string]: unknown;
-}
-
-/** The host's rejection, `CODE: message`, as an error with expo-local-llm's `code`. */
-async function coded<T>(answer: Promise<T>): Promise<T> {
-  try {
-    return await answer;
-  } catch (failure) {
-    const text = failure instanceof Error ? failure.message : String(failure);
-    const match = /^(ERR_[A-Z_]+): ([\s\S]*)$/.exec(text);
-    if (!match) throw failure;
-    throw Object.assign(new Error(match[2]), { code: match[1] });
-  }
 }
 
 function session(host: DesktopHost<LocalLlmHost>, config: unknown) {

@@ -903,3 +903,94 @@ describe('Camera on macOS', () => {
     ]);
   });
 });
+
+describe('MapView on macOS', () => {
+  it("calls the map's functions on the desktop host's NgNativeMaps with the view's tag", async () => {
+    const calls: unknown[][] = [];
+    mac({
+      NgNativeMaps: {
+        setCameraPosition: async (...args: unknown[]) => void calls.push(['camera', ...args]),
+        selectMarker: async (...args: unknown[]) => void calls.push(['select', ...args]),
+      },
+    });
+    const { MapView } = await import('@ng-native/expo/map-view');
+    const functions = injectService(MapView.SOURCE);
+    assert.ok(functions);
+    const london = { coordinates: { latitude: 51.5, longitude: -0.1 }, zoom: 12 };
+    await functions.setCameraPosition.call({ nativeTag: 9 }, london);
+    await functions.setCameraPosition.call({ nativeTag: 9 });
+    await functions.selectMarker.call({ nativeTag: 9 }, 'kx', { zoom: 15 });
+    await functions.selectMarker.call({ nativeTag: 9 });
+    // A TurboModule drops an undefined argument, so a missing one crosses as null.
+    assert.deepEqual(calls, [
+      ['camera', 9, london],
+      ['camera', 9, null],
+      ['select', 9, 'kx', { zoom: 15 }],
+      ['select', 9, null, null],
+    ]);
+  });
+});
+
+describe('AppleSignIn on macOS', () => {
+  function host(options: { entitled?: boolean; request?: (options: unknown) => Promise<unknown> }) {
+    const calls: unknown[][] = [];
+    const events = mac({
+      NgNativeAppleAuthentication: {
+        isAvailableAsync: async () => options.entitled ?? true,
+        requestAsync: async (request: unknown) => (
+          calls.push(['request', request]),
+          (options.request ?? (async () => credential))(request)
+        ),
+        getCredentialStateAsync: async (user: string) => (calls.push(['state', user]), 1),
+        formatFullName: (...args: unknown[]) => (calls.push(['format', ...args]), 'Ada Lovelace'),
+      },
+    });
+    return { calls, events };
+  }
+  const credential = { user: 'u1', identityToken: 'jwt', authorizationCode: 'code', email: null };
+
+  it("asks the desktop host's NgNativeAppleAuthentication with expo's operations", async () => {
+    const { calls } = host({});
+    const { AppleSignIn } = await import('@ng-native/expo/apple-sign-in');
+    const apple = injectService(AppleSignIn);
+    assert.deepEqual(await apple.signIn({ requestedScopes: [1] }), credential);
+    await apple.refresh({ user: 'u1' });
+    await apple.signOut({ user: 'u1' });
+    assert.equal(await apple.credentialState('u1'), 1);
+    assert.equal(apple.formatName({ givenName: 'Ada' } as never, 'short'), 'Ada Lovelace');
+    assert.deepEqual(calls, [
+      ['request', { requestedScopes: [1], requestedOperation: 1 }],
+      ['request', { user: 'u1', requestedOperation: 2 }],
+      ['request', { user: 'u1', requestedOperation: 3 }],
+      ['state', 'u1'],
+      ['format', { givenName: 'Ada' }, 'short'],
+    ]);
+  });
+
+  it("answers a cancelled sheet as null and refuses an app without the entitlement with the host's code", async () => {
+    const { AppleSignIn } = await import('@ng-native/expo/apple-sign-in');
+    host({ request: () => Promise.reject(new Error('ERR_REQUEST_CANCELED: The user canceled')) });
+    assert.equal(await injectService(AppleSignIn).signIn(), null);
+
+    host({
+      entitled: false,
+      request: () => Promise.reject(new Error('ERR_REQUEST_NOT_HANDLED: needs the entitlement')),
+    });
+    const absent = injectService(AppleSignIn);
+    await assert.rejects(absent.signIn(), { code: 'ERR_REQUEST_NOT_HANDLED' });
+  });
+
+  it('refuses a sign-in credential without its token, as expo-apple-authentication does', async () => {
+    host({ request: async () => ({ user: 'u1' }) });
+    const { AppleSignIn } = await import('@ng-native/expo/apple-sign-in');
+    await assert.rejects(injectService(AppleSignIn).signIn(), { code: 'ERR_REQUEST_FAILED' });
+  });
+
+  it("counts the host's revocations", async () => {
+    const { events } = host({});
+    const { AppleSignIn } = await import('@ng-native/expo/apple-sign-in');
+    const apple = injectService(AppleSignIn);
+    events.send('ngNativeAppleAuthentication', { type: 'revoked' });
+    assert.equal(apple.revoked(), 1);
+  });
+});

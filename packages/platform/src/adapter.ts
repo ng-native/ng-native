@@ -1446,7 +1446,22 @@ function windowMounter(
         if (!own) return app;
         return { ...(app ?? { colorScheme: 'light' as const }), ...own };
       };
-      const engine = engineOn(fabric, surface, { ...engineOptions, conditions: conditions() });
+      // The tokens the app has now, its hairline among them, not only the ones it started with.
+      const engine = engineOn(fabric, surface, {
+        ...engineOptions,
+        conditions: conditions(),
+        tokens: appEngine.tokens,
+      });
+      // The global sheets the app engine has, and each one it adds, replaces or removes from here
+      // on, and the tokens it updates: an app that adds its Tailwind sheet to `app.engine` would
+      // otherwise reach the hidden surface only. A window's own (its components' unscoped CSS,
+      // its safe area) stay its own.
+      for (const sheet of appEngine.globalSheetsAdded) engine.addGlobalSheet(sheet);
+      const stopSharing = appEngine.watchShared((change) => {
+        if (change.kind === 'tokens') engine.updateTokens(change.tokens);
+        else if (change.sheet) engine.addGlobalSheet(change.sheet, change.replacing);
+        else if (change.replacing) engine.removeGlobalSheet(change.replacing);
+      });
       const factory = new NativeRendererFactory(engine);
       engine.setOnDirty(factory.commitSoon);
       if (!engineOptions.onError) {
@@ -1503,6 +1518,7 @@ function windowMounter(
       }
       componentRef.onDestroy(() => {
         stopFollowing();
+        stopSharing();
         (elementInjector as Partial<{ destroy(): void }>).destroy?.();
         engine.leaveEvents();
         const at = applicationRef.components.indexOf(componentRef);

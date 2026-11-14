@@ -8,7 +8,8 @@ summary: Apple's sign-in sheet and its approved button, with a canceled sheet an
 `AppleSignIn` wraps `expo-apple-authentication`: whether Sign in with Apple can be offered, the
 sheet that signs the user in, and the checks an app makes afterwards. `<apple-sign-in-button>` is
 Apple's own button for it. The App Store requires Sign in with Apple of an app that offers another
-social sign-in. It is iOS only; elsewhere `available()` answers false.
+social sign-in. It works on iOS, and on macOS in an app signed with the Sign in with Apple
+entitlement; elsewhere `available()` answers false.
 
 ## Install
 

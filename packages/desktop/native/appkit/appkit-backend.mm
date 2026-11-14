@@ -1,6 +1,7 @@
 #import "appkit-backend.h"
 #import "system.h"
 
+#import "expo-ui-view.h"
 #import "header-toolbar.h"
 #import "host-view.h"
 #import "modal-host-view.h"
@@ -192,6 +193,12 @@ void AppKitBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
 void AppKitBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {
   if (auto *view = (NGNSvgView *)views_[@(svg)]; [view isKindOfClass:NGNSvgView.class]) {
     [view setDocument:std::move(document)];
+  }
+}
+
+void AppKitBackend::setExpoUITree(SurfaceId, Tag host, std::shared_ptr<const ExpoUINode> root) {
+  if (auto *view = (NGNExpoUIHostView *)views_[@(host)]; [view isKindOfClass:NGNExpoUIHostView.class]) {
+    [view setTree:std::move(root)];
   }
 }
 

@@ -104,6 +104,7 @@ add_library(ngn_core STATIC
     core/src/view-box.cpp
     core/src/view-transform.cpp
     core/src/expo-image.cpp
+    core/src/expo-ui.cpp
     core/src/view-tree.cpp
     core/src/web-view.cpp
     core/src/worklet-host.cpp
@@ -112,6 +113,7 @@ add_library(ngn_core STATIC
     core/src/modules/alert-manager.cpp
     core/src/modules/app-info.cpp
     core/src/modules/app-modules.cpp
+    core/src/modules/apple-authentication.cpp
     core/src/modules/asset.cpp
     core/src/modules/async-storage.cpp
     core/src/modules/audio.cpp
@@ -128,6 +130,7 @@ add_library(ngn_core STATIC
     core/src/modules/language-model.cpp
     core/src/modules/local-authentication.cpp
     core/src/modules/location.cpp
+    core/src/modules/maps.cpp
     core/src/modules/network-state.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
@@ -179,10 +182,13 @@ if(NGN_TESTS)
         appkit/printing.mm appkit/tests/printing.test.mm
         appkit/web-view.mm appkit/tests/web-view.test.mm
         appkit/expo-image-drawing.mm appkit/tests/expo-image.test.mm
+        appkit/expo-ui-renderer.mm appkit/tests/expo-ui.test.mm
         appkit/camera.mm appkit/tests/camera.test.mm
+        appkit/maps.mm appkit/tests/maps.test.mm
+        appkit/apple-authentication.mm appkit/tests/apple-authentication.test.mm
         appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AuthenticationServices")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

@@ -592,6 +592,37 @@ the name the component's template uses for it, since `ui-bottom-sheet` there wou
 component again. A template that does not import `UiBottomSheet` still gets the native view from
 `<ui-bottom-sheet>`, with each platform's own props.
 
+## On macOS
+
+The desktop host draws `@expo/ui` itself, in SwiftUI inside an NSHostingView, under the same names
+and props as iOS: `registerExpoUiViews(Platform.OS)` registers the iOS names on macOS, and a
+template written for iOS draws there. `<ui-host>` sizes itself by its content's fitting size on
+the axes `matchContents` names, and each control sends iOS's events with iOS's payloads.
+
+Every view whose SwiftUI type exists on macOS is drawn. `EXPO_UI_MACOS` in `@ng-native/expo` lists
+each iOS view with the SwiftUI view it is on macOS, or the reason it is absent. Three are absent,
+and stay plain views:
+
+| View                             | Why                                                                                                                        |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `ui-accessory-widget-background` | WidgetKit's `AccessoryWidgetBackground` is for the iOS Lock Screen and watchOS only.                                       |
+| `ui-sync-toggle`                 | It reads and writes its state through `react-native-worklets`, which has no native part on macOS. Use `ui-toggle`.         |
+| `ui-toolbar`                     | A SwiftUI toolbar on macOS belongs to the window's toolbar, which the desktop host builds from the screen's native header. |
+
+Where macOS differs:
+
+- **Styles.** A modifier with no macOS meaning is skipped: the `wheel` picker and date picker
+  styles, and presentation detents. `pickerStyle('palette')` is a segmented control, and
+  `toggleStyle('checkbox')` and `pickerStyle('radioGroup')` are macOS's own.
+- **Text fields.** `nativeState()` returns null on macOS, so a `ui-text-field` keeps its own text
+  and reports each change through `textChange`. A `text` given as a plain string is shown instead.
+- **A bottom sheet** is a sheet on the window, without detents.
+- **`ui-view-host`** puts the app's own views in the SwiftUI content at their laid-out size. A
+  pointer event on one of them is not delivered yet.
+- **Modifiers** take the common set: layout (`padding`, `frame`, `fixedSize`), colour and type
+  (`foregroundStyle`, `background`, `tint`, `font`), shape and effect (`clipShape`, `opacity`,
+  `shadow`), the control styles, and accessibility. Any other is skipped.
+
 ## Without the module
 
 An element registered for `@expo/ui` when it is not installed commits as nothing
