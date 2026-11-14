@@ -551,3 +551,39 @@ describe('LanguageModel on macOS', () => {
     await assert.rejects(model.generate('Hi'), LanguageModelUnavailableError);
   });
 });
+
+describe('ScreenCapture on macOS', () => {
+  it('prevents and allows capture by key through NgNativeScreenCapture, and counts no screenshot', async () => {
+    const calls: unknown[][] = [];
+    const record =
+      (name: string, answer?: unknown) =>
+      async (...args: unknown[]) => (calls.push([name, ...args]), answer);
+    mac({
+      NgNativeScreenCapture: {
+        isAvailableAsync: async () => true,
+        preventScreenCaptureAsync: record('prevent'),
+        allowScreenCaptureAsync: record('allow'),
+        enableAppSwitcherProtectionAsync: record('enableAppSwitcher'),
+        disableAppSwitcherProtectionAsync: record('disableAppSwitcher'),
+        getPermissionsAsync: async () => ({ status: 'granted', granted: true }),
+        requestPermissionsAsync: async () => ({ status: 'granted', granted: true }),
+      },
+    });
+    const { ScreenCapture } = await import('@ng-native/expo/screen-capture');
+    const capture = injectService(ScreenCapture);
+    assert.equal(capture.available(), false);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(capture.available(), true);
+    await capture.prevent('card');
+    await capture.prevent();
+    await capture.allow('card');
+    await capture.protectAppSwitcher();
+    assert.deepEqual(calls, [
+      ['prevent', 'card'],
+      ['prevent', null],
+      ['allow', 'card'],
+      ['enableAppSwitcher'],
+    ]);
+    assert.equal(capture.screenshots(), 0);
+  });
+});

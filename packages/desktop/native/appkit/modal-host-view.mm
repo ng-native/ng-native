@@ -1,5 +1,6 @@
 #import "modal-host-view.h"
 #import "undo.h"
+#import "screen-capture.h"
 
 #import "surface-view.h"
 
@@ -232,6 +233,7 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
                                          backing:NSBackingStoreBuffered
                                            defer:NO];
   _sheet.releasedWhenClosed = NO;
+  ngn::appkit::shieldNewWindow(_sheet);
   _sheet.delegate = [NGNUndoWindowDelegate shared];
   _sheet.contentView = _cover;
   self.frame = [self contentFrameIn:_cover.bounds];

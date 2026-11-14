@@ -11,6 +11,7 @@ add_executable(ngn-macos
     calendar.mm
     audio.mm
     language-model.mm
+    screen-capture.mm
     battery.mm
     header-toolbar.mm
     host-view.mm

@@ -115,6 +115,7 @@ add_library(ngn_core STATIC
     core/src/modules/network-state.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
+    core/src/modules/screen-capture.cpp
     core/src/modules/sharing.cpp
     core/src/modules/sqlite.cpp
     core/src/modules/store-review.cpp
@@ -146,7 +147,8 @@ if(NGN_TESTS)
         appkit/text-recognition.mm appkit/tests/text-recognition.test.mm
         appkit/calendar.mm appkit/tests/calendar.test.mm
         appkit/audio.mm appkit/tests/audio.test.mm
-        appkit/language-model.mm appkit/tests/language-model.test.mm)
+        appkit/language-model.mm appkit/tests/language-model.test.mm
+        appkit/screen-capture.mm appkit/tests/screen-capture.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia")
   endif()

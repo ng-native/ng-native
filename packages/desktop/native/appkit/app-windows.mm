@@ -1,5 +1,6 @@
 #import "app-windows.h"
 #import "undo.h"
+#import "screen-capture.h"
 
 #import "surface-view.h"
 
@@ -135,6 +136,7 @@ void AppKitWindows::openWindow(
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
     window.releasedWhenClosed = NO;
+    shieldNewWindow(window);
     window.title = string(request.title);
     window.tabbingMode = NSWindowTabbingModeDisallowed;
     if (request.titleBar != TitleBar::Default) {
