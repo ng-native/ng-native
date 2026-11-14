@@ -65,13 +65,26 @@ export function startDeviceTests(options: DeviceTestsOptions = {}): void {
     const recorder = record(getFabricUIManager());
     const app = mount(Number(rootTag), DeviceTestHost, recorder.fabric, options.mount ?? {});
     options.onMount?.(app);
-    const host = app.componentRef.instance as DeviceTestHost;
-    setHarness({ app, recorder, slot: () => host.slot() });
-    void serve(url, (status) => {
-      host.status.set(status);
-      app.applicationRef.tick();
+    void rootComponent(app).then((host) => {
+      setHarness({ app, recorder, slot: () => host.slot() });
+      void serve(url, (status) => {
+        host.status.set(status);
+        app.applicationRef.tick();
+      });
     });
   });
+}
+
+/**
+ * The host component once it is made: at once on a phone, and on an OS with windows (macOS) as the
+ * main window opens, a round trip to the host after `mount`.
+ */
+async function rootComponent(app: MountResult): Promise<DeviceTestHost> {
+  for (;;) {
+    const root = app.applicationRef.components[0];
+    if (root) return root.instance as DeviceTestHost;
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
 }
 
 /** A message from the pool: Vitest's own worker request, with what the app needs added. */

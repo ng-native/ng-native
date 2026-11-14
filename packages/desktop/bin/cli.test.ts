@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -132,6 +134,9 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     links: () => ({ libraries: [], appModules: [], withoutDesktop: [], problems: [] }),
     writeFile: (file, text) => void (written[file] = text),
     warn: (line) => void warnings.push(line),
+    host(command, args) {
+      return Promise.resolve(this.run(command, args).status);
+    },
     run(command, args, options) {
       calls.push({ command, args, ...(options?.env && { env: options.env }) });
       return command.endsWith('build.sh')
@@ -327,6 +332,21 @@ describe('run', () => {
     assert.equal(devServerBundleUrl(8081), calls[1].args[0].replace('8082', '8081'));
   });
 
+  it('opens the app on a link given with --url, as its initial URL', async () => {
+    assert.deepEqual(parseCommand(['run', '--url', 'demo://settings']), {
+      command: 'run',
+      bundle: undefined,
+      module: 'main',
+      port: 8081,
+      universal: false,
+      url: 'demo://settings',
+    });
+    assert.equal('url' in parseCommand(['run']), false);
+    const { sys, calls } = fakeSystem();
+    await run({ module: 'main', universal: false, url: 'demo://settings' }, sys);
+    assert.deepEqual(calls[1].args.slice(-2), ['--url', 'demo://settings']);
+  });
+
   it('passes a bundle URL to the host as it is, so it stays connected to the dev server', async () => {
     const { sys, calls } = fakeSystem();
     const url = 'http://localhost:8081/index.bundle?platform=macos&dev=true';
@@ -473,5 +493,43 @@ describe('main', () => {
       run: (command) => ({ status: command.endsWith('ngn-macos') ? 3 : 0, stdout: '/b\n' }),
     });
     assert.equal(await main(['run', 'a.js'], exiting.sys), 3);
+  });
+});
+
+describe('system.host', () => {
+  it('passes the environment on, and a SIGTERM to the host, and exits with the host’s status', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-host-signal-'));
+    try {
+      const log = path.join(dir, 'log');
+      const host = path.join(dir, 'host.cjs');
+      writeFileSync(
+        host,
+        `const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(log)}, 'env ' + process.env.NGN_RUN_ID + '\\n');
+process.on('SIGTERM', () => { fs.appendFileSync(${JSON.stringify(log)}, 'TERM\\n'); process.exit(7); });
+setInterval(() => {}, 1000);`,
+      );
+      const cli = path.join(dir, 'cli.mjs');
+      writeFileSync(
+        cli,
+        `import { system } from ${JSON.stringify(path.join(packageDir, 'bin', 'host.mjs'))};
+process.exitCode = await system.host(process.execPath, [${JSON.stringify(host)}]);`,
+      );
+      const child = spawn(process.execPath, [cli], {
+        env: { ...process.env, NGN_RUN_ID: 'run-1' },
+        stdio: 'ignore',
+      });
+      const exited = new Promise<number | null>((resolve) =>
+        child.once('exit', (code) => resolve(code)),
+      );
+      for (let i = 0; i < 100 && !existsSync(log); i++) await new Promise((r) => setTimeout(r, 50));
+      const sent = Date.now();
+      child.kill('SIGTERM');
+      assert.equal(await exited, 7);
+      assert.ok(Date.now() - sent < 3000);
+      assert.equal(readFileSync(log, 'utf8'), 'env run-1\nTERM\n');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

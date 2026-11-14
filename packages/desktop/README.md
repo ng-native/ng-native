@@ -214,6 +214,20 @@ settings such as the updates URL from `NGN_*` environment variables. A packaged 
 the `NGN_*` variables, so nothing that launches the app can make it run another bundle, as another
 app, or take updates from another server.
 
+A dev run with `NGN_TESTS=1` is a test launch, which `vitest --project macos` (`@ng-native/testing`)
+starts with `NGN_STATE_DIR`, `NGN_RUN_ID` and `NGN_TESTS_FAKE_SYSTEM_UI=1`. Its windows show on
+screen without activating the app or taking focus, and it has no Dock icon until a test focuses a
+window through `AppWindows`. Its Application Support, Caches and temporary folders are under
+`NGN_STATE_DIR`, its preferences are in a defaults suite named by the run id, and its Keychain
+services are prefixed `ngn-test-<run id>.`; it removes the suite and its Keychain items as it quits
+or gets SIGTERM, and those a crashed run left when the next test launch starts. With
+`NGN_TESTS_FAKE_SYSTEM_UI=1` (or `NGN_NO_PROMPTS=1`) no system UI is shown: open and save panels
+answer as cancelled, permission prompts as denied, Touch ID and sign-in as cancelled, and an alert
+with its cancel button, or not at all when it has none. A packaged app is never a test launch.
+
+SIGTERM ends any run as a clean quit does, without asking the app, within three seconds, and
+`ng-native-desktop run` passes SIGTERM, SIGINT and SIGHUP to the host and exits with its status.
+
 ## Expo modules
 
 Some of `@ng-native/expo`'s services answer from modules of the host's own, named `NgNative` and
@@ -335,6 +349,7 @@ libraries above recompiles only that library.
 | ----------------- | --------------------------------------------------------- |
 | `--module <name>` | The registered app to start. Default `main`.              |
 | `--port <port>`   | The dev server's port. Default `8081`.                    |
+| `--url <link>`    | A link to open the app on, as `Linking`'s initial URL.    |
 | `--universal`     | Build for arm64 and x86_64. Default: this Mac's own arch. |
 
 ## Config

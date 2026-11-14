@@ -1,4 +1,5 @@
 #import "split-view.h"
+#import "test-launch.h"
 
 #import "surface-view.h"
 
@@ -15,6 +16,16 @@ std::function<bool(NSInteger, NSPoint)> gRowContentTakesClick;
 NSString *nsString(const std::string &s) {
   NSString *result = [NSString stringWithUTF8String:s.c_str()];
   return result != nil ? result : @"";
+}
+
+// The name NSSplitView autosaves under, in the standard defaults: in a test launch prefixed with
+// the run's, so a run never restores another's divider and removes its own as it ends.
+NSString *autosaveKey(const std::string &name) {
+  if (name.empty()) {
+    return nil;
+  }
+  auto &test = ngn::appkit::testLaunch();
+  return nsString(test ? test->keychainPrefix() + name : name);
 }
 
 void send(NGNView *view, const std::string &name, folly::dynamic payload) {
@@ -273,7 +284,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 - (BOOL)hasAutosavedFrames {
   return !_autosave.empty() &&
       [NSUserDefaults.standardUserDefaults
-          objectForKey:[@"NSSplitView Subview Frames " stringByAppendingString:nsString(_autosave)]] != nil;
+          objectForKey:[@"NSSplitView Subview Frames " stringByAppendingString:autosaveKey(_autosave)]] != nil;
 }
 
 - (void)installInWindow {
@@ -310,7 +321,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   const auto *p = [_sidebar paneProps];
   _autosave = p ? p->autosaveName : std::string{};
   if (!_autosave.empty()) {
-    _controller.splitView.autosaveName = nsString(_autosave);
+    _controller.splitView.autosaveName = autosaveKey(_autosave);
   }
   BOOL restoring = [self hasAutosavedFrames];
   [_controller addSplitViewItem:_sidebarItem];
@@ -339,7 +350,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   const auto *p = [_sidebar paneProps];
   _autosave = p ? p->autosaveName : std::string{};
   if (!_autosave.empty()) {
-    _plain.autosaveName = nsString(_autosave);
+    _plain.autosaveName = autosaveKey(_autosave);
   }
   BOOL restoring = [self hasAutosavedFrames];
   [_plain addArrangedSubview:_sidebarContainer];
@@ -393,7 +404,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   if (p->autosaveName != _autosave) {
     _autosave = p->autosaveName;
     NSSplitView *view = _controller != nil ? _controller.splitView : _plain;
-    view.autosaveName = _autosave.empty() ? nil : nsString(_autosave);
+    view.autosaveName = autosaveKey(_autosave);
   }
   if (auto collapsed = _collapse.propChanged(p->collapsed)) {
     [self setToolkitCollapsed:*collapsed];

@@ -38,6 +38,7 @@ function fakeMac(
     cwd: () => '/apps/notes',
     resolveReactNative: () => '/apps/notes/node_modules/react-native',
     resolvePackage: () => null,
+    host: () => Promise.reject(new Error('package never runs the host')),
     expoConfig: () => ({
       name: 'Notes',
       slug: 'notes',

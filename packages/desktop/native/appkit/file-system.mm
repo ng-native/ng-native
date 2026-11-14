@@ -1,6 +1,7 @@
 // The OS half of NgNativeFileSystem: FSEvents streams with file-level events, one per watch, each
 // on its own serial queue, and the folders NSFileManager names.
 #import "file-system.h"
+#import "test-launch.h"
 
 #import <CoreServices/CoreServices.h>
 #import <Foundation/Foundation.h>
@@ -120,7 +121,7 @@ FileAccess::Folders fileFolders(const std::string &appData, const std::string &c
       .cache = plain([NSString stringWithUTF8String:cache.c_str()]),
       .document = plain(documents),
       .appData = plain([NSString stringWithUTF8String:appData.c_str()]),
-      .temp = plain(NSTemporaryDirectory()),
+      .temp = testLaunch() ? plain([NSString stringWithUTF8String:testLaunch()->temp().c_str()]) : plain(NSTemporaryDirectory()),
       .home = plain(NSHomeDirectory()),
       .desktop = user(NSDesktopDirectory),
       .downloads = user(NSDownloadsDirectory),

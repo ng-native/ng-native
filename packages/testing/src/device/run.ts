@@ -3,6 +3,8 @@
  * file loaded from what the pool sent and its calls to Vitest made over HTTP. What the test runner
  * brings with it comes along: snapshots, `expect.assertions`, fixtures, `onTestFailed`.
  */
+// First: Vitest reads its worker state as it loads.
+import './worker-state.ts';
 import * as vitest from 'vitest';
 import type * as browserRunner from 'vitest/internal/browser';
 import { cleanup } from './index.ts';
