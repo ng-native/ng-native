@@ -50,6 +50,7 @@ globalThis.__probe = {
   clone: () => structuredClone({ a: [1] }).a[0],
   fetch: () => void fetch('https://example.com/a'),
   image: () => resolveAssetSource(require('./logo.png')).uri,
+  env: process.env.EXPO_PUBLIC_MACOS_PROBE,
 };
 `;
 
@@ -99,6 +100,7 @@ interface Probe {
   clone(): number;
   fetch(): void;
   image(): string;
+  env: unknown;
 }
 
 // Real, because Metro watches the project under the path it is given and macOS links the temp
@@ -128,7 +130,11 @@ function exportMacos(mode: 'dev' | 'release'): string {
       '--no-bytecode',
       ...(mode === 'dev' ? ['--dev'] : []),
     ],
-    { cwd: root, stdio: 'pipe', env: { ...process.env, CI: '1', EXPO_NO_TELEMETRY: '1' } },
+    {
+      cwd: root,
+      stdio: 'pipe',
+      env: { ...process.env, CI: '1', EXPO_NO_TELEMETRY: '1', EXPO_PUBLIC_MACOS_PROBE: 'set' },
+    },
   );
   const dir = path.join(out, '_expo/static/js/macos');
   const [bundle] = readdirSync(dir).filter((name) => name.endsWith('.js'));
@@ -228,6 +234,10 @@ for (const mode of ['release', 'dev'] as const) {
       assert.equal(app.probe.emptied, 0);
       assert.equal(app.probe.url(), 'c');
       assert.equal(app.probe.clone(), 1);
+    });
+
+    it('reads an EXPO_PUBLIC_ variable, which dev reads through expo/virtual/env', () => {
+      assert.equal(app.probe.env, 'set');
     });
 
     it("gives fetch the streaming one, over React Native's Networking module", () => {

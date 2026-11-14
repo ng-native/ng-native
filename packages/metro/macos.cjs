@@ -9,6 +9,8 @@
  *   empty module, and `expo` itself to `macos/expo-runtime.js`, which brings what `import 'expo'`
  *   brought that the app relies on. Expo's own files keep their imports of each other: they are in
  *   the bundle only where Expo's config put them there, as the module a lazy `import()` loads.
+ *   `expo/virtual/env`, which babel-preset-expo imports in dev for `process.env.EXPO_PUBLIC_*`,
+ *   resolves too.
  * - A file whose iOS behaviour is wrong for a Mac gets a hand-written override, listed in
  *   `OVERRIDES`: `Platform`, which reports `'macos'`, and `resolveAssetSource`, which finds an
  *   Expo update's assets by file hash, as `expo-asset` does where Expo runs.
@@ -45,6 +47,13 @@ const OWN_OVERRIDES = new Set(OVERRIDES.values());
 
 const EXPO_REQUEST = /^(expo(\/|$)|expo-)/;
 
+/**
+ * Expo's JavaScript-only modules that babel-preset-expo writes imports of into the app's own files,
+ * which resolve as they do anywhere else. In dev it reads `process.env.EXPO_PUBLIC_*` through
+ * `expo/virtual/env`, which an empty module would leave `undefined`.
+ */
+const PRESET_IMPORTS = new Set(['expo/virtual/env']);
+
 /** A file inside Expo's own packages, whose imports of each other are kept. */
 const EXPO_FILE = /[\\/]node_modules[\\/](expo|expo-[^\\/]+|@expo[\\/][^\\/]+)[\\/]/;
 
@@ -60,7 +69,7 @@ const EXPO_FILE = /[\\/]node_modules[\\/](expo|expo-[^\\/]+|@expo[\\/][^\\/]+)[\
 function macosRequest(context, name, platform, kept) {
   if (platform !== PLATFORM || !EXPO_REQUEST.test(name)) return undefined;
   const from = context.originModulePath ?? '';
-  if (from === RUNTIME || kept.has(name)) return undefined;
+  if (from === RUNTIME || kept.has(name) || PRESET_IMPORTS.has(name)) return undefined;
   if (name === 'expo') return { type: 'sourceFile', filePath: RUNTIME };
   if (EXPO_FILE.test(from)) return undefined;
   return { type: 'empty' };
