@@ -217,3 +217,28 @@ describe('Fonts on macOS', () => {
     assert.equal(fonts.has('Broken'), false);
   });
 });
+
+describe('TextRecognition on macOS', () => {
+  it("reads through the desktop host's NgNativeTextRecognition", async () => {
+    const asked: unknown[] = [];
+    const read = { text: 'Hi', lines: [], width: 2, height: 1 };
+    mac({
+      NgNativeTextRecognition: {
+        recognize: async (...args: unknown[]) => (asked.push(args), read),
+      },
+    });
+    const { TextRecognition } = await import('@ng-native/expo/text-recognition');
+    const recognition = injectService(TextRecognition);
+    assert.equal(recognition.available(), true);
+    assert.deepEqual(await recognition.recognize('file:///a.png', { languages: ['zh-TW'] }), read);
+    assert.deepEqual(asked, [['file:///a.png', { languages: ['zh-Hant'] }]]);
+  });
+
+  it('says to rebuild the desktop host when it has no such module', async () => {
+    mac({});
+    const { TextRecognition } = await import('@ng-native/expo/text-recognition');
+    const recognition = injectService(TextRecognition);
+    assert.equal(recognition.available(), false);
+    await assert.rejects(recognition.recognize('file:///a.png'), /npm run macos/);
+  });
+});

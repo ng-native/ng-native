@@ -109,6 +109,7 @@ add_library(ngn_core STATIC
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
     core/src/modules/sqlite.cpp
+    core/src/modules/text-recognition.cpp
     core/src/modules/undo.cpp
     core/src/modules/web-browser.cpp
     core/src/modules/web-socket.cpp)
@@ -131,9 +132,10 @@ if(NGN_TESTS)
         appkit/app-info.mm appkit/tests/app-info.test.mm
         appkit/network-state.mm appkit/tests/network-state.test.mm
         appkit/battery.mm appkit/tests/battery.test.mm
-        appkit/fonts.mm appkit/text-layout.mm appkit/tests/fonts.test.mm)
+        appkit/fonts.mm appkit/text-layout.mm appkit/tests/fonts.test.mm
+        appkit/text-recognition.mm appkit/tests/text-recognition.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)
