@@ -36,6 +36,9 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0)
 # resolve archives in any order; GNU ld does not, so Linux links with lld.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_link_options(-fuse-ld=lld)
+  # A std::atomic of a type wider than the hardware's lock-free size calls libatomic on Linux;
+  # Apple's runtime has those calls built in.
+  link_libraries(atomic)
 endif()
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
