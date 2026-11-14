@@ -35,9 +35,14 @@ import { Engine, claimHost, type HostNode } from '@ng-native/fabric';
 import { registerSafeAreaComponents } from './safe-area.ts';
 import { booleanOr } from './transforms.ts';
 
-/** The insets, in the form the cascade carries: one custom property per edge, in points. */
-function insetTokens(insets: Insets): Record<string, { length: number }> {
+/**
+ * The insets, in the form the cascade carries: one custom property per edge, in points, and the
+ * width of a desktop window's title bar controls where content runs beside them (zero with a
+ * sidebar under them, and on every OS that has none).
+ */
+function insetTokens(insets: Insets, titlebarLeading = 0): Record<string, { length: number }> {
   return {
+    '--safe-area-inset-titlebar-leading': { length: titlebarLeading },
     '--safe-area-inset-top': { length: insets.top },
     '--safe-area-inset-right': { length: insets.right },
     '--safe-area-inset-bottom': { length: insets.bottom },
@@ -48,6 +53,8 @@ function insetTokens(insets: Insets): Record<string, { length: number }> {
 interface InsetsChange {
   readonly insets: Insets;
   readonly frame: Frame;
+  /** The desktop host's window controls' width, from each pane's insets. Absent elsewhere. */
+  readonly titlebarLeading?: number;
 }
 
 @Component({
@@ -78,7 +85,7 @@ export class SafeAreaProvider {
         area.report(change.insets, change.frame, this);
         // Also published to the stylesheet, where a padding that clears the home indicator
         // belongs. `env()` on the web; a seeded custom property here.
-        engine?.updateTokens(insetTokens(change.insets));
+        engine?.updateTokens(insetTokens(change.insets, change.titlebarLeading));
       },
     );
     inject(DestroyRef).onDestroy(() => {

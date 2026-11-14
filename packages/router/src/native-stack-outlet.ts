@@ -236,8 +236,12 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private held: { own: unknown; written: boolean } | null = null;
   private readonly statusBar = inject(StatusBar);
   private readonly navigationBar = inject(NavigationBar);
-  /** iOS 26 and later, where a screen runs under its navigation bar: see `insetContent`. */
-  private readonly underBar = nativePlatform() === 'ios' && (inject(OS_VERSION) ?? 0) >= 26;
+  /**
+   * Where a screen runs under its bar, see `insetContent`: iOS 26 and later, under the navigation
+   * bar, and every macOS, where a window's content runs under its title bar and toolbar.
+   */
+  private readonly underBar =
+    nativePlatform() === 'macos' || (nativePlatform() === 'ios' && (inject(OS_VERSION) ?? 0) >= 26);
   /** Both bars' claims, as the screens carry them. */
   private readonly systemBars = computed<SystemBarClaim>(() => ({
     ...this.statusBar.forScreens(),

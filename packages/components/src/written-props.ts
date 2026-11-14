@@ -35,6 +35,7 @@ export const WRITTEN_PROPS: readonly string[] = [
   'alwaysBounceVertical',
   'android_hyphenationFrequency',
   'animating',
+  'anchor',
   'animationType',
   'autoCapitalize',
   'autoComplete',
