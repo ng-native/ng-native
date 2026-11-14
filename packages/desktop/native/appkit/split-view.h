@@ -25,7 +25,7 @@
 - (void)unmountChild:(NGNView *)child;
 @end
 
-// NgNativeSplitView.
+// NgNativeSplitView, and the split view a tabs host draws as.
 @interface NGNSplitView : NGNView <NGNMountsChildren>
 // Set once by the host: where the panes' and rows' containers report input, which views root a
 // container of their own, and whether a click in a custom row is the content's.
@@ -50,6 +50,18 @@
 
 // NgNativeSidebarItem: a model object, or a custom row's views.
 @interface NGNSidebarItemView : NGNView
+@end
+
+// RNSTabsHostIOS (the core's tabs-host.h): a split view whose sidebar lists the tabs and whose
+// content pane shows the selected one's screen.
+@interface NGNTabsHostView : NGNSplitView
+// Set once by the host: the user chose a tab (surface, host, screen).
+@property (class, nonatomic) std::function<void(NSInteger, NSInteger, NSInteger)> tabChosen;
+- (void)setTabs:(const ngn::SourceList &)tabs;
+@end
+
+// RNSTabsScreenIOS: as big as its tabs host's content pane.
+@interface NGNTabScreenView : NGNView
 @end
 
 // The source lists among one parent's children.

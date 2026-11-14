@@ -387,6 +387,9 @@ int main(int argc, const char *argv[]) {
       auto chain = tree.hitTest(static_cast<Tag>(row), {static_cast<Float>(point.x), static_cast<Float>(point.y)});
       return ngn::rowContentTakesClick(tree, chain);
     };
+    NGNTabsHostView.tabChosen = [](NSInteger surface, NSInteger host, NSInteger screen) {
+      gHost.mounting->chooseTab(static_cast<SurfaceId>(surface), static_cast<Tag>(host), static_cast<Tag>(screen));
+    };
     NGNModalHostView.sheetSizer = [](NSInteger surface, NSInteger tag, NSSize window) {
       ngn::SheetNode empty;
       auto node = gHost.runtime ? gHost.runtime->sheetNode(static_cast<SurfaceId>(surface), static_cast<Tag>(tag))

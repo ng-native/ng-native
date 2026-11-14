@@ -81,6 +81,7 @@ add_library(ngn_core STATIC
     core/src/safe-areas.cpp
     core/src/screen-stacks.cpp
     core/src/split-view.cpp
+    core/src/tabs-host.cpp
     core/src/view-tree.cpp
     core/src/modules/alert-manager.cpp
     core/src/modules/app-modules.cpp

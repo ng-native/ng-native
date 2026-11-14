@@ -15,6 +15,17 @@ bool isScreen(const ViewTree::Node *node) {
   return node != nullptr && std::string_view(node->view.componentName) == "RNSScreen";
 }
 
+// A container that is part of the window's content, whose screen in front fills the window's
+// toolbar: a split view's content pane, or the content pane a tabs host draws its tab in. A
+// sheet's, a popover's or a toolbar item's is not.
+bool partOfWindow(const ViewTree::Node *node) {
+  if (node == nullptr) {
+    return false;
+  }
+  std::string_view name = node->view.componentName;
+  return name == "NgNativeSplitContent" || name == "RNSTabsHostIOS";
+}
+
 } // namespace
 
 void ScreenStacks::childrenChanged(const ViewTree &tree, Tag parent) {
@@ -102,7 +113,7 @@ std::optional<ScreenStacks::FrontHeader> ScreenStacks::frontHeader(const ViewTre
     int depth = 0;
     Tag at = stack;
     for (; at != root && at != -1; depth++) {
-      if (tree.covered(at) || tree.isContainerRoot(at)) {
+      if (tree.covered(at) || (tree.isContainerRoot(at) && !partOfWindow(tree.find(at)))) {
         at = -1;
         break;
       }

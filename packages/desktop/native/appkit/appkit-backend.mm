@@ -176,6 +176,10 @@ void AppKitBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
 }
 
 void AppKitBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<SourceList> &lists) {
+  if (auto *tabs = (NGNTabsHostView *)views_[@(parent)]; [tabs isKindOfClass:NGNTabsHostView.class]) {
+    [tabs setTabs:lists.empty() ? SourceList{} : lists[0]];
+    return;
+  }
   NGNSourceLists *known = sourceLists_[@(parent)];
   if (lists.empty()) {
     [known remove];

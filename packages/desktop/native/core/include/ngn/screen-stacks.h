@@ -40,7 +40,8 @@ class ScreenStacks {
 
   // The header a container shows: the RNSScreenStackHeaderConfig of the top screen of the
   // innermost stack in the container that has one (a window has one toolbar, and the screen in
-  // front fills it). Stacks under a covered screen or in a container of their own do not count.
+  // front fills it). Stacks under a covered screen or in a container of their own do not count,
+  // but for the content pane of a split view or a tabs host, which is the window's content.
   struct FrontHeader {
     Tag config{-1};
     Tag screen{-1};

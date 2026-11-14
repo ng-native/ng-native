@@ -92,6 +92,17 @@ struct Fixture {
   }
 };
 
+// Only what the split views became.
+Lines splits(const Lines &lines) {
+  Lines out;
+  for (const auto &line : lines) {
+    if (line.starts_with("split")) {
+      out.push_back(line);
+    }
+  }
+  return out;
+}
+
 ShadowView section(Tag tag, dynamic raw) {
   return shadowView(tag, ngn::SidebarSectionComponentName, {}, props<ngn::SidebarSectionComponentDescriptor>(raw));
 }
@@ -271,7 +282,7 @@ TEST_CASE("a section mounted before its parent is in place still makes its list"
   CHECK(lines == Lines{"lists of 2: [4 Mail: 5 Inbox]"});
 }
 
-TEST_CASE("the first split view in a window is the window's, and one inside another, a modal or tabs is plain") {
+TEST_CASE("the first split view or tabs host in a window is the window's, and one inside another, a modal or tabs is plain") {
   Fixture f;
   auto outer = shadowView(2, ngn::SplitViewComponentName, {});
   auto sidebar = shadowView(3, ngn::SidebarComponentName, {});
@@ -312,16 +323,17 @@ TEST_CASE("the first split view in a window is the window's, and one inside anot
   Fixture tabs;
   auto host = shadowView(2, "RNSTabsHostIOS", {});
   lines = tabs.mount(add(1, {host}) + add(2, {shadowView(3, ngn::SplitViewComponentName, {})}));
-  CHECK(lines == Lines{"split view 3 in the content"});
+  // The tabs host draws as the window's split view, its tabs the sidebar.
+  CHECK(splits(lines) == Lines{"split view 2 of the window", "split view 3 in the content"});
   // Mounted into the tabs before the tabs are in the window, it waits to know where it is.
   Fixture later;
   auto laterHost = shadowView(2, "RNSTabsHostIOS", {});
   auto laterSplit = shadowView(3, ngn::SplitViewComponentName, {});
   lines = later.mount({ShadowViewMutation::CreateMutation(laterHost), ShadowViewMutation::CreateMutation(laterSplit),
                        ShadowViewMutation::InsertMutation(2, laterSplit, 0)});
-  CHECK(lines.empty());
+  CHECK(splits(lines).empty());
   lines = later.mount({ShadowViewMutation::InsertMutation(1, laterHost, 0)});
-  CHECK(lines == Lines{"split view 3 in the content"});
+  CHECK(splits(lines) == Lines{"split view 2 of the window", "split view 3 in the content"});
 }
 
 TEST_CASE("a click in a custom row is the content's when it lands on something that takes it") {

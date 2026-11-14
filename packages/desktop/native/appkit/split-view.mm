@@ -86,6 +86,8 @@ void updatePaneState(NGNView *view, facebook::react::Size size) {
 
 @interface NGNSplitView ()
 - (void)paneChanged:(NGNSplitPaneView *)pane;
+// What a subclass shows in place of the panes.
+- (void)setSidebarView:(NSView *)sidebar contentView:(NSView *)content;
 @end
 
 @implementation NGNPaneContainer
@@ -142,8 +144,9 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 @implementation NGNSplitView {
   NGNSplitPaneView *_sidebar;
   NGNSplitPaneView *_content;
-  NGNPaneContainer *_sidebarContainer;
-  NGNPaneContainer *_contentContainer;
+  // What the split view shows: the panes' containers, or a tabs host's list and content.
+  NSView *_sidebarContainer;
+  NSView *_contentContainer;
   BOOL _decided;
   BOOL _windows;
   // The window's: the controller, its sidebar item, and the surface view it took the place of.
@@ -194,6 +197,11 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     gContainerRootChanged(pane.reactTag, YES);
   }
   return container;
+}
+
+- (void)setSidebarView:(NSView *)sidebar contentView:(NSView *)content {
+  _sidebarContainer = sidebar;
+  _contentContainer = content;
 }
 
 - (void)mountChild:(NGNView *)child index:(NSInteger)index {
@@ -605,6 +613,10 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 // One run of sections as one source list.
 @interface NGNSourceListView : NSOutlineView <NSOutlineViewDataSource, NSOutlineViewDelegate>
 @property (nonatomic, copy) NGNView * (^views)(NSInteger tag);
+// A tabs host's: it fills its scroll view, in the source-list style, and a choice goes to `chose`
+// rather than to the row's item.
+@property (nonatomic) BOOL fills;
+@property (nonatomic, copy) void (^chose)(NSInteger rowTag);
 - (void)setList:(const ngn::SourceList &)list;
 - (void)layOutInParent;
 @end
@@ -756,7 +768,23 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 }
 
 // Over the union of its sections' frames, in their parent.
+- (void)setFills:(BOOL)fills {
+  _fills = fills;
+  self.style = fills ? NSTableViewStyleSourceList : NSTableViewStylePlain;
+}
+
+// Filling its scroll view, its one column is as wide as the view.
+- (void)setFrameSize:(NSSize)size {
+  [super setFrameSize:size];
+  if (self.fills) {
+    [self sizeLastColumnToFit];
+  }
+}
+
 - (void)layOutInParent {
+  if (self.fills) {
+    return;
+  }
   NSRect frame = NSZeroRect;
   BOOL first = YES;
   for (const auto &g : _list.groups) {
@@ -809,7 +837,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 }
 
 - (NSTableRowView *)outlineView:(NSOutlineView *)outlineView rowViewForItem:(id)item {
-  return [NGNSourceRowView new];
+  return self.fills ? nil : [NGNSourceRowView new];
 }
 
 - (CGFloat)outlineView:(NSOutlineView *)outlineView heightOfRowByItem:(id)item {
@@ -905,10 +933,16 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     return;
   }
   id item = [self itemAtRow:self.selectedRow];
-  if ([item isKindOfClass:NGNSourceRow.class]) {
-    NGNView *view = self.views ? self.views(((NGNSourceRow *)item).tag) : nil;
-    send(view, "sidebarSelect", folly::dynamic::object());
+  if (![item isKindOfClass:NGNSourceRow.class]) {
+    return;
   }
+  NSInteger tag = ((NGNSourceRow *)item).tag;
+  if (self.chose) {
+    self.chose(tag);
+    return;
+  }
+  NGNView *view = self.views ? self.views(tag) : nil;
+  send(view, "sidebarSelect", folly::dynamic::object());
 }
 
 - (void)outlineViewItemDidCollapse:(NSNotification *)notification {
@@ -984,4 +1018,133 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   [_lists removeAllObjects];
 }
 
+@end
+
+#pragma mark - Tabs
+
+namespace {
+std::function<void(NSInteger, NSInteger, NSInteger)> gTabChosen;
+} // namespace
+
+@interface NGNTabScreenView () <NGNSizedByToolkit>
+@end
+
+@implementation NGNTabScreenView
+- (void)applyToolkitSize:(facebook::react::Size)size {
+  updatePaneState(self, size);
+}
+@end
+
+// The flipped view a tabs host's screens mount in.
+@interface NGNTabsScreens : NSView
+@end
+@implementation NGNTabsScreens
+- (BOOL)isFlipped {
+  return YES;
+}
+@end
+
+// The content pane of a tabs host: part of the surface, hit-tested from the host, and the size
+// every tab's screen takes.
+@interface NGNTabsContent : NGNSurfaceView
+@property (nonatomic, weak) NSView *screens;
+@end
+
+@implementation NGNTabsContent
+- (void)setFrameSize:(NSSize)size {
+  [super setFrameSize:size];
+  if (size.width > 0 && size.height > 0) {
+    for (NSView *screen in self.screens.subviews) {
+      if ([screen isKindOfClass:NGNTabScreenView.class]) {
+        reportSize((NGNTabScreenView *)screen, size);
+      }
+    }
+  }
+}
+@end
+
+@implementation NGNTabsHostView {
+  NGNTabsScreens *_screens;
+  NGNTabsContent *_content;
+  NSScrollView *_scroll;
+  NGNSourceListView *_list;
+}
+
++ (std::function<void(NSInteger, NSInteger, NSInteger)>)tabChosen {
+  return gTabChosen;
+}
++ (void)setTabChosen:(std::function<void(NSInteger, NSInteger, NSInteger)>)fn {
+  gTabChosen = std::move(fn);
+}
+
+- (instancetype)initWithShadowView:(const ShadowView &)view {
+  if ((self = [super initWithShadowView:view])) {
+    _screens = [[NGNTabsScreens alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
+    _screens.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    if (gInput != nullptr) {
+      _content = [[NGNTabsContent alloc] initWithFrame:_screens.frame
+                                             surfaceId:view.surfaceId
+                                             container:static_cast<ngn::ContainerId>(view.tag)
+                                               rootTag:view.tag
+                                                 input:gInput];
+      _content.wantsLayer = YES;
+      _content.screens = _screens;
+      [_content addSubview:_screens];
+      if (gContainerRootChanged) {
+        gContainerRootChanged(view.tag, YES);
+      }
+    }
+    _list = [[NGNSourceListView alloc] initWithFrame:NSMakeRect(0, 0, 240, 400)];
+    _list.fills = YES;
+    NSInteger surface = view.surfaceId;
+    NSInteger host = view.tag;
+    _list.chose = ^(NSInteger screen) {
+      if (gTabChosen) {
+        gTabChosen(surface, host, screen);
+      }
+    };
+    _scroll = [[NSScrollView alloc] initWithFrame:_list.frame];
+    _scroll.drawsBackground = NO;
+    _scroll.hasVerticalScroller = YES;
+    _scroll.autohidesScrollers = YES;
+    _scroll.documentView = _list;
+    [self setSidebarView:_scroll contentView:_content];
+  }
+  return self;
+}
+
+- (NSView *)contentContainer {
+  return _screens;
+}
+
+- (void)mountChild:(NGNView *)child index:(NSInteger)index {
+  NSMutableArray<NSView *> *siblings = [NSMutableArray array];
+  for (NSView *v in _screens.subviews) {
+    if ([v isKindOfClass:NGNView.class]) {
+      [siblings addObject:v];
+    }
+  }
+  if (index >= (NSInteger)siblings.count) {
+    [_screens addSubview:child];
+  } else {
+    [_screens addSubview:child positioned:NSWindowBelow relativeTo:siblings[(NSUInteger)index]];
+  }
+  if ([child isKindOfClass:NGNTabScreenView.class] && NSWidth(_content.bounds) > 0) {
+    reportSize((NGNTabScreenView *)child, _content.bounds.size);
+  }
+}
+
+- (void)unmountChild:(NGNView *)child {
+  [child removeFromSuperview];
+}
+
+- (void)setTabs:(const ngn::SourceList &)tabs {
+  [_list setList:tabs];
+}
+
+- (void)dealloc {
+  if (gContainerRootChanged) {
+    gContainerRootChanged(self.reactTag, NO);
+  }
+}
 @end

@@ -65,17 +65,16 @@ template <const char *Name>
 using SplitPaneShadowNode = facebook::react::
     ConcreteViewShadowNode<Name, SplitPaneProps, facebook::react::ViewEventEmitter, SplitPaneState>;
 
-// A pane takes the size its state says, positioned absolutely: its container places it.
-template <const char *Name>
-class SplitPaneComponentDescriptor final
-    : public facebook::react::ConcreteComponentDescriptor<SplitPaneShadowNode<Name>> {
-  using Base = facebook::react::ConcreteComponentDescriptor<SplitPaneShadowNode<Name>>;
+// A view sized by its toolkit (a pane, a tab's screen): it takes the size its state says,
+// positioned absolutely, since its container places it.
+template <class ShadowNodeT>
+class ToolkitSizedComponentDescriptor final : public facebook::react::ConcreteComponentDescriptor<ShadowNodeT> {
+  using Base = facebook::react::ConcreteComponentDescriptor<ShadowNodeT>;
 
  public:
   using Base::Base;
   void adopt(facebook::react::ShadowNode &shadowNode) const override {
-    const auto &state =
-        static_cast<const typename SplitPaneShadowNode<Name>::ConcreteState &>(*shadowNode.getState()).getData();
+    const auto &state = static_cast<const typename ShadowNodeT::ConcreteState &>(*shadowNode.getState()).getData();
     if (state.size.width > 0 && state.size.height > 0) {
       auto &layoutable = static_cast<facebook::react::YogaLayoutableShadowNode &>(shadowNode);
       layoutable.setPositionType(YGPositionTypeAbsolute);
@@ -84,6 +83,9 @@ class SplitPaneComponentDescriptor final
     Base::adopt(shadowNode);
   }
 };
+
+template <const char *Name>
+using SplitPaneComponentDescriptor = ToolkitSizedComponentDescriptor<SplitPaneShadowNode<Name>>;
 
 using SidebarComponentDescriptor = SplitPaneComponentDescriptor<SidebarComponentName>;
 using SplitContentComponentDescriptor = SplitPaneComponentDescriptor<SplitContentComponentName>;
@@ -204,6 +206,7 @@ class Sidebars {
   void propsChanged(const ViewTree &tree, Tag tag);
   void deleted(Tag tag);
 
+  // A split view, or a tabs host (tabs-host.h), which draws as one with its tabs as the sidebar.
   struct SplitView {
     Tag tag{-1};
     // The window's own split view, or a plain one in the content.

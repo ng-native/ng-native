@@ -677,6 +677,12 @@ NGNView *NGNMakeView(const ShadowView &view) {
   if (name == ngn::SidebarComponentName || name == ngn::SplitContentComponentName) {
     return [[NGNSplitPaneView alloc] initWithShadowView:view];
   }
+  if (name == "RNSTabsHostIOS") {
+    return [[NGNTabsHostView alloc] initWithShadowView:view];
+  }
+  if (name == "RNSTabsScreenIOS") {
+    return [[NGNTabScreenView alloc] initWithShadowView:view];
+  }
   if (name == ngn::SidebarSectionComponentName) {
     return [[NGNSidebarSectionView alloc] initWithShadowView:view];
   }

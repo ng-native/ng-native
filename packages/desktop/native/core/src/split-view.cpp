@@ -179,9 +179,11 @@ bool rowContentTakesClick(const ViewTree &tree, const std::vector<Tag> &chain) {
 void Sidebars::childrenChanged(const ViewTree &tree, Tag parent) {
   // Resolved in settle, once the transaction has put every node in its place.
   dirtyParents_.insert(parent);
-  if (const auto *node = tree.find(parent)) {
-    for (Tag child : node->children) {
-      if (named(tree.find(child), SplitViewComponentName) && !placed_.contains(child) &&
+  if (const auto *parentNode = tree.find(parent)) {
+    for (Tag child : parentNode->children) {
+      const auto *node = tree.find(child);
+      bool splits = named(node, SplitViewComponentName) || named(node, "RNSTabsHostIOS");
+      if (splits && !placed_.contains(child) &&
           std::find(newSplits_.begin(), newSplits_.end(), child) == newSplits_.end()) {
         newSplits_.push_back(child);
       }
