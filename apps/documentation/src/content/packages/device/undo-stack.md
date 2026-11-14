@@ -11,6 +11,8 @@ mod+shift+z, and shake to undo on an iPhone then take the app's actions back and
 A focused text input keeps its own undo history, so these reach the app's actions only while no
 text input has focus.
 
+<!-- platforms: UndoStack -->
+
 On Android and in the web host there is no undo manager: `available()` is `false` and every call
 does nothing.
 

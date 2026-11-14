@@ -10,6 +10,8 @@ bar along the bottom of an Android screen: the colour of its buttons, and whethe
 all. A video player that hides the bar while it is open gives the screen behind it the bar back when
 it closes, without either knowing about the other.
 
+<!-- platforms: NavigationBar -->
+
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
 import { View } from '@ng-native/components';

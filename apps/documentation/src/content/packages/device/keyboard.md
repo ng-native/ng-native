@@ -10,6 +10,8 @@ animation takes - useful for a view that has to move with it - and it stays subs
 of the app, so a component that mounts mid-gesture gets the height that is already true rather than
 waiting for the next change. The subscription is removed when the app is destroyed.
 
+<!-- platforms: Keyboard -->
+
 ```ts
 import { Component, computed, inject } from '@angular/core';
 import { View } from '@ng-native/components';

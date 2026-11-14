@@ -33,7 +33,6 @@ import {
   LayoutAnimation,
   NavigationBar,
   OS,
-  OS_SUPPORT,
   Processes,
   SafeArea,
   Screen,
@@ -43,6 +42,7 @@ import {
   Tray,
   UndoStack,
   Vibration,
+  supportRowOf,
 } from '@ng-native/device';
 import { AddressSearch } from '@ng-native/expo/address-search';
 import { AppInfo } from '@ng-native/expo/app-info';
@@ -127,7 +127,7 @@ const expo = (
  * source for the table on the documentation site and for what this test checks.
  */
 function absentInTable(name: string): Os[] {
-  const row = OS_SUPPORT.find((one) => one.services?.[name]);
+  const row = supportRowOf(name);
   assert.ok(row, `${name} has a row in OS_SUPPORT`);
   const os = { macos: 'macos', iphone: 'ios', android: 'android', web: 'web' } as const;
   return (Object.keys(os) as (keyof typeof os)[])
@@ -135,7 +135,7 @@ function absentInTable(name: string): Os[] {
     .map((column) => os[column]);
 }
 
-/** A desktop service, absent where the support table says. */
+/** A service absent where the support table says. */
 const desktop = (token: ProviderToken<unknown>, file: string) => {
   const name = (token as { name: string }).name;
   return device(token, file, absentInTable(name));
@@ -152,8 +152,8 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   DevMenu: device(DevMenu, 'dev-menu'),
   Dialogs: device(Dialogs, 'dialogs'),
   Direction: device(Direction, 'direction'),
-  HardwareBack: device(HardwareBack, 'hardware-back', ['ios', 'macos', 'web']),
-  Keyboard: device(Keyboard, 'keyboard', ['macos', 'web']),
+  HardwareBack: desktop(HardwareBack, 'hardware-back'),
+  Keyboard: desktop(Keyboard, 'keyboard'),
   LayoutAnimation: device(LayoutAnimation, 'layout-animation'),
   AppWindows: desktop(AppWindows, 'app-windows'),
   Dock: desktop(Dock, 'dock'),
@@ -161,19 +161,21 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   Shell: desktop(Shell, 'shell'),
   Tray: desktop(Tray, 'tray'),
   UndoStack: desktop(UndoStack, 'undo-stack'),
-  NavigationBar: device(NavigationBar, 'navigation-bar', ['ios', 'macos', 'web']),
+  NavigationBar: desktop(NavigationBar, 'navigation-bar'),
   SafeArea: device(SafeArea, 'safe-area'),
   Screen: device(Screen, 'screen'),
   Sharing: device(Sharing, 'sharing'),
-  StatusBar: device(StatusBar, 'status-bar', ['macos', 'web']),
-  Vibration: device(Vibration, 'vibration', ['macos']),
+  StatusBar: desktop(StatusBar, 'status-bar'),
+  Vibration: desktop(Vibration, 'vibration'),
   AddressSearch: expo(AddressSearch, 'address-search'),
   AppInfo: expo(AppInfo, 'app-info'),
   AppleSignIn: expo(AppleSignIn, 'apple-sign-in', { absentOn: ['android', 'web'] }),
-  BackgroundTask: expo(BackgroundTask, 'background-task', MOBILE_ONLY),
+  BackgroundTask: expo(BackgroundTask, 'background-task', {
+    absentOn: absentInTable('BackgroundTask'),
+  }),
   Battery: expo(Battery, 'battery'),
   Biometrics: expo(Biometrics, 'biometrics'),
-  Brightness: expo(Brightness, 'brightness', MOBILE_ONLY),
+  Brightness: expo(Brightness, 'brightness', { absentOn: absentInTable('Brightness') }),
   Browser: expo(Browser, 'browser'),
   Calendar: expo(Calendar, 'calendar'),
   Clipboard: expo(Clipboard, 'clipboard'),
@@ -192,7 +194,9 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   MediaLibrary: expo(MediaLibrary, 'media-library'),
   Network: expo(Network, 'network'),
   Notifications: expo(Notifications, 'notifications'),
-  DeviceOrientation: expo(DeviceOrientation, 'orientation', MOBILE_ONLY),
+  DeviceOrientation: expo(DeviceOrientation, 'orientation', {
+    absentOn: absentInTable('DeviceOrientation'),
+  }),
   Printing: expo(Printing, 'printing'),
   ScreenCapture: expo(ScreenCapture, 'screen-capture'),
   Storage: expo(Storage, 'store', { cls: 'Store', absentOn: ['web'] }),

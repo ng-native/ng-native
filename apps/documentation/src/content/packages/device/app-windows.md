@@ -9,6 +9,8 @@ On macOS, and on iPadOS with the scene plugin, an app can have several windows. 
 root services, the Router and change detection are shared, so a change in one window shows in every
 other. On iPhone and Android `AppWindows.available()` is `false` and `open` resolves to `null`.
 
+<!-- platforms: AppWindows -->
+
 ## The main window
 
 The root component `mount` is given renders in the main window, which opens at launch, as the app's

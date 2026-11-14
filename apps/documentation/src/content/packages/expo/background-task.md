@@ -8,6 +8,8 @@ summary: Register work for the platform to run while the app is in the backgroun
 `BackgroundTask` registers work for the platform to run while the app is in the background, bound
 to `expo-background-task`: WorkManager on Android and BGTaskScheduler on iOS.
 
+<!-- platforms: BackgroundTask -->
+
 The platform decides when a registered task runs. The interval is a minimum rather than a
 schedule, and iOS in particular runs tasks in windows of its own, such as overnight. A task is for
 work that can wait: syncing, pruning a cache, refreshing content before the user next opens the
