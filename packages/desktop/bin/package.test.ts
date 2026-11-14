@@ -59,6 +59,8 @@ function fakeMac(
     writeFile: (file, text) => void (written[file] = text),
     readFile: () => '',
     warn: () => {},
+    sha256: () => '',
+    rename: () => {},
     run(command, args) {
       calls.push({ command, args });
       const key = `${command} ${args[0]}`;
@@ -661,7 +663,10 @@ describe('packageApp', () => {
       readFile: (file: string) => (read.push(file), '-----BEGIN CERTIFICATE-----\nX\n'),
     });
     await quiet(() => packageApp(parsePackage([]), sys));
-    assert.deepEqual(read, ['/apps/notes/certs/certificate.pem']);
+    assert.deepEqual(
+      read.filter((file) => file.startsWith('/apps/notes/certs')),
+      ['/apps/notes/certs/certificate.pem'],
+    );
     const info = written['/apps/notes/dist/macos/Notes.app/Contents/Info.plist']!;
     assert.match(info, /<key>NGNUpdatesCodeSigningKeyId<\/key>\n\t*<string>release<\/string>/);
     assert.match(info, /<key>NGNUpdatesCodeSigningCertificate<\/key>\n\t*<string>-----BEGIN/);

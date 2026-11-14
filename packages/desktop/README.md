@@ -345,6 +345,21 @@ the component's name as it loads:
 Events go out through the codegen's `EventEmitter`, cast from `self.eventEmitter`. A component
 with no view registered mounts as a plain view, and the host's own components keep theirs.
 
+## Prebuilt hosts
+
+An app with no native desktop code of its own compiles nothing: `run` and `package` download the
+prebuilt host its React Native version has in `prebuilt.json`, the universal Release build each
+release publishes with its `hermesc` and Sparkle, and unpack it into the per-user cache under its
+hash. The archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does
+not match it is deleted and stops the command. The host is built from source instead when the app
+links a library's or its own native desktop code, when a host library it has installed
+(`react-native-screens`, `react-native-safe-area-context`) is another version than the prebuilt one
+or denied, when the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
+
+`native/scripts/make-prebuilt.mjs <app> <out>` builds and packs one, signed with
+`NGN_SIGN_IDENTITY` or ad hoc, and writes its `prebuilt.json` entry; the release workflow runs it
+and uploads the archive with the GitHub release.
+
 ## Package the app
 
 `ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]

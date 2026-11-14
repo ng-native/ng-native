@@ -124,6 +124,8 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     env: {},
     readFile: () => '',
     expo: () => ({ status: 0 }),
+    sha256: () => '',
+    rename: () => {},
     exists: () => false,
     remove: () => {},
     copy: () => {},
@@ -175,6 +177,45 @@ describe('run', () => {
         ],
       },
     ]);
+  });
+
+  it('runs on the prebuilt host for its React Native version, compiling nothing', async () => {
+    const sha = 'c'.repeat(64);
+    const manifest = JSON.stringify({
+      version: 1,
+      hosts: [{ reactNative: '0.88.0', url: 'https://e.com/h.tar.gz', sha256: sha, libraries: {} }],
+    });
+    const cache = { NGN_DESKTOP_CACHE: '/cache' };
+    const host = '/cache/rn-0.88.0/prebuilt/cccccccccccccccc/appkit/ngn-macos';
+    const files: Record<string, string> = {
+      [path.join(packageDir, 'prebuilt.json')]: manifest,
+      '/apps/demo/node_modules/react-native/package.json': '{"version":"0.88.0"}',
+    };
+    const prebuilt = fakeSystem({
+      env: cache,
+      readFile: (file) => files[file] ?? '',
+      exists: (file) => file === host,
+    });
+    await run({ bundle: 'dist/main.hbc', module: 'main', universal: false }, prebuilt.sys);
+    assert.deepEqual(
+      prebuilt.calls.map((call) => call.command),
+      [host],
+    );
+
+    // With native code of its own linked, the app builds its host.
+    const linked = fakeSystem({
+      env: cache,
+      readFile: (file) => files[file] ?? '',
+      exists: (file) => file === host,
+      links: () => ({
+        libraries: [],
+        appModules: [{ name: 'Mine', dir: '/apps/demo/desktop' }] as never,
+        withoutDesktop: [],
+        problems: [],
+      }),
+    });
+    await run({ bundle: 'dist/main.hbc', module: 'main', universal: false }, linked.sys);
+    assert.ok(linked.calls[0]!.command.endsWith('build.sh'));
   });
 
   it('compiles in the host libraries the app has installed, and only those', async () => {

@@ -55,6 +55,7 @@
   },
   "files": [
     "app.plugin.cjs",
+    "prebuilt.json",
     "bin/*.mjs",
     "native/CMakeLists.txt",
     "native/cmake",
