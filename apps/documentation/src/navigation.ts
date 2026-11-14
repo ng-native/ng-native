@@ -225,6 +225,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/assets', title: 'Assets' },
         { path: 'packages/expo/image-picker', title: 'Image picker', group: 'Media and camera' },
         { path: 'packages/expo/document-picker', title: 'Document picker' },
+        { path: 'packages/expo/printing', title: 'Printing' },
         { path: 'packages/expo/image-editor', title: 'Image editor' },
         { path: 'packages/expo/media-library', title: 'Media library' },
         { path: 'packages/expo/camera', title: 'Camera' },

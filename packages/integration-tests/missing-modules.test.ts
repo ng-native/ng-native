@@ -50,6 +50,7 @@ import { MediaLibrary } from '@ng-native/expo/media-library';
 import { Network } from '@ng-native/expo/network';
 import { Notifications } from '@ng-native/expo/notifications';
 import { DeviceOrientation } from '@ng-native/expo/orientation';
+import { Printing } from '@ng-native/expo/printing';
 import { audioPlayer } from '@ng-native/expo/audio';
 import { videoPlayer } from '@ng-native/expo/video';
 import { ScreenCapture } from '@ng-native/expo/screen-capture';
@@ -141,6 +142,7 @@ const SERVICES: readonly [string, () => unknown, string, (readonly Platform[])?]
   ['Network', factoryOf(Network.SOURCE), 'expo-network'],
   ['Notifications', factoryOf(Notifications.SOURCE), 'expo-notifications'],
   ['DeviceOrientation', factoryOf(DeviceOrientation.SOURCE), 'expo-screen-orientation'],
+  ['Printing', factoryOf(Printing.SOURCE), 'expo-print'],
   [
     'videoPlayer',
     () => videoPlayer('https://example.com/a.mp4'),

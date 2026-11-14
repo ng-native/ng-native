@@ -87,11 +87,11 @@ A database has no token: `openDatabasesWith()` points `database()` at a stand-in
 
 ## A module with no service
 
-An Expo module this package has no service for, `expo-print` or `expo-contacts`, has no React in
-it and works as it is. What does not work is its documented import in a file a test loads:
-`import * as Print from 'expo-print'` evaluates the package, the package imports `react-native`,
-and a test in Node fails while the module graph loads, with `Flow is not supported`, whether or
-not the test prints anything.
+An Expo module this package has no service for, `expo-contacts` or `expo-mail-composer`, has no
+React in it and works as it is. What does not work is its documented import in a file a test loads:
+`import * as Contacts from 'expo-contacts'` evaluates the package, the package imports
+`react-native`, and a test in Node fails while the module graph loads, with `Flow is not
+supported`, whether or not the test reads a contact.
 
 Load it where it is used instead, as this package's own services do: a token whose factory calls
 `expoModule()`, and a service that injects it.
@@ -100,20 +100,20 @@ Load it where it is used instead, as this package's own services do: a token who
 import { InjectionToken, Service, inject } from '@angular/core';
 import { expoModule } from '@ng-native/expo';
 
-interface NativePrint {
-  printToFileAsync(options: { html: string }): Promise<{ uri: string }>;
+interface NativeContacts {
+  getContactsAsync(): Promise<{ data: { name: string }[] }>;
 }
 
-export const PRINT = new InjectionToken<NativePrint | null>('app.print', {
-  factory: () => expoModule('expo-print', () => require('expo-print') as NativePrint),
+export const CONTACTS = new InjectionToken<NativeContacts | null>('app.contacts', {
+  factory: () => expoModule('expo-contacts', () => require('expo-contacts') as NativeContacts),
 });
 
 @Service()
-export class Printer {
-  private readonly native = inject(PRINT);
+export class People {
+  private readonly native = inject(CONTACTS);
 
-  async toFile(html: string): Promise<string | null> {
-    return (await this.native?.printToFileAsync({ html }))?.uri ?? null;
+  async names(): Promise<string[]> {
+    return (await this.native?.getContactsAsync())?.data.map((contact) => contact.name) ?? [];
   }
 }
 ```
@@ -124,7 +124,7 @@ one under the token.
 
 ```ts
 providers: [
-  { provide: PRINT, useValue: { printToFileAsync: async () => ({ uri: 'file:///out.pdf' }) } },
+  { provide: CONTACTS, useValue: { getContactsAsync: async () => ({ data: [{ name: 'Ada' }] }) } },
 ];
 ```
 

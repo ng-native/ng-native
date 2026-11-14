@@ -65,6 +65,7 @@ import { MediaLibrary } from '@ng-native/expo/media-library';
 import { Network } from '@ng-native/expo/network';
 import { Notifications } from '@ng-native/expo/notifications';
 import { DeviceOrientation } from '@ng-native/expo/orientation';
+import { Printing } from '@ng-native/expo/printing';
 import { ScreenCapture } from '@ng-native/expo/screen-capture';
 import { SecureStorage } from '@ng-native/expo/secure-store';
 import { Accelerometer } from '@ng-native/expo/sensors';
@@ -159,6 +160,7 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   Network: expo(Network, 'network'),
   Notifications: expo(Notifications, 'notifications'),
   DeviceOrientation: expo(DeviceOrientation, 'orientation'),
+  Printing: expo(Printing, 'printing'),
   ScreenCapture: expo(ScreenCapture, 'screen-capture'),
   Storage: expo(Storage, 'store', { cls: 'Store', absentOn: ['web'] }),
   SecureStorage: expo(SecureStorage, 'store', { cls: 'Store' }),

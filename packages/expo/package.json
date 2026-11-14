@@ -58,6 +58,7 @@
     "./ongoing-notification": "./src/ongoing-notification.ts",
     "./orientation": "./src/orientation.ts",
     "./player": "./src/player.ts",
+    "./printing": "./src/printing.ts",
     "./screen-capture": "./src/screen-capture.ts",
     "./search-field": "./src/search-field.ts",
     "./secure-store": "./src/secure-store.ts",
@@ -235,6 +236,10 @@
         "types": "./dist/player.d.ts",
         "default": "./dist/player.js"
       },
+      "./printing": {
+        "types": "./dist/printing.d.ts",
+        "default": "./dist/printing.js"
+      },
       "./screen-capture": {
         "types": "./dist/screen-capture.d.ts",
         "default": "./dist/screen-capture.js"
@@ -345,6 +350,7 @@
     "expo-modules-core": "^57.0.0 || ^58.0.0",
     "expo-network": "^57.0.0 || ^58.0.0",
     "expo-notifications": "^57.0.0 || ^58.0.0",
+    "expo-print": "^57.0.0 || ^58.0.0",
     "expo-screen-capture": "^57.0.0 || ^58.0.0",
     "expo-screen-orientation": "^57.0.0 || ^58.0.0",
     "expo-secure-store": "^57.0.0 || ^58.0.0",
@@ -497,6 +503,9 @@
       "optional": true
     },
     "expo-notifications": {
+      "optional": true
+    },
+    "expo-print": {
       "optional": true
     },
     "expo-screen-capture": {

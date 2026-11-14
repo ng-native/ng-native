@@ -147,6 +147,7 @@ const NATIVE_MODULES: Readonly<Record<string, string>> = {
   'expo-media-library': 'ExpoMediaLibrary',
   'expo-network': 'ExpoNetwork',
   'expo-notifications': 'ExpoNotificationPresenter',
+  'expo-print': 'ExpoPrint',
   'expo-screen-capture': 'ExpoScreenCapture',
   'expo-screen-orientation': 'ExpoScreenOrientation',
   'expo-secure-store': 'ExpoSecureStore',
