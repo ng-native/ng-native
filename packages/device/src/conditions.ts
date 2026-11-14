@@ -9,10 +9,11 @@
  * re-render. The engine re-resolves and commits on its own when the conditions change.
  */
 import type { Conditions, TokenValue } from '@ng-native/fabric';
-import { accessibilitySource } from './accessibility.ts';
+import { accessibilitySource, systemFontScale } from './accessibility.ts';
 import { colorSchemeSource } from './color-scheme.ts';
 import { directionSource } from './direction.ts';
 import { recordKeyboard } from './keyboard.ts';
+import { isPhoneOs, platformOs } from './os.ts';
 import { screenSource } from './screen.ts';
 import { reactNative } from './react-native.ts';
 
@@ -26,9 +27,15 @@ interface Resolves<Node = unknown> {
   remeasureText?(): void;
 }
 
-/** The system text size, as a multiplier. One off a device. */
-function fontScale(): number {
-  return reactNative()?.PixelRatio.getFontScale() ?? 1;
+/**
+ * The pointer media features: a desktop hovers with a fine pointer, and a phone or tablet has a
+ * finger, coarse and unable to hover. An iPad with a trackpad still answers as a phone.
+ */
+function pointerConditions(): Pick<Conditions, 'hover' | 'anyHover' | 'pointer' | 'anyPointer'> {
+  const desktop = !isPhoneOs(platformOs());
+  const hover = desktop ? 'hover' : 'none';
+  const pointer = desktop ? 'fine' : 'coarse';
+  return { hover, anyHover: hover, pointer, anyPointer: pointer };
 }
 
 /** The screen's pixels in a point. One off a device. */
@@ -55,11 +62,12 @@ export function currentConditions(): Conditions {
     // corrects it. Reduced motion is a preference about what happens next, not about the frame
     // already on screen, so nothing is lost by learning it a tick late.
     reducedMotion: false,
-    fontScale: fontScale(),
+    fontScale: systemFontScale(),
     // Read again when the window is resized, which it is when it moves to a screen of another density.
     pixelRatio: pixelRatio(),
     // Settled while the native side starts up, and fixed until the app restarts.
     direction: directionSource().current(),
+    ...pointerConditions(),
   };
 }
 
@@ -121,7 +129,10 @@ export function watchConditions<Node>(
   };
 
   const sizes = screen.subscribe(({ window }) =>
-    resize({ width: window.width, height: window.height, pixelRatio: pixelRatio() }, fontScale()),
+    resize(
+      { width: window.width, height: window.height, pixelRatio: pixelRatio() },
+      systemFontScale(),
+    ),
   );
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
   let heardReduceMotion = false;

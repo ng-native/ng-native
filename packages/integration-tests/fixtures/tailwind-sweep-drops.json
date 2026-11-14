@@ -10481,12 +10481,6 @@
     "enabled:opacity-50",
     "enabled:p-4"
   ],
-  "dropped a rule: ':focus-within' is not supported. Native has no hover or focus cascade: use '…' or '…', which the engine tracks, or a bound attribute such as [attr.data-hover].": [
-    "focus-within:bg-[rgb(1,2,3)]",
-    "focus-within:bg-red-500",
-    "focus-within:opacity-50",
-    "focus-within:p-4"
-  ],
   "dropped a rule: ':in-range' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": [
     "in-range:bg-[rgb(1,2,3)]",
     "in-range:bg-red-500",
@@ -10631,21 +10625,7 @@
     "marker:opacity-50",
     "marker:p-4"
   ],
-  "dropped a rule: tailwind: 'any-pointer' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": [
-    "any-pointer-coarse:bg-[rgb(1,2,3)]",
-    "any-pointer-coarse:bg-red-500",
-    "any-pointer-coarse:opacity-50",
-    "any-pointer-coarse:p-4",
-    "any-pointer-fine:bg-[rgb(1,2,3)]",
-    "any-pointer-fine:bg-red-500",
-    "any-pointer-fine:opacity-50",
-    "any-pointer-fine:p-4",
-    "any-pointer-none:bg-[rgb(1,2,3)]",
-    "any-pointer-none:bg-red-500",
-    "any-pointer-none:opacity-50",
-    "any-pointer-none:p-4"
-  ],
-  "dropped a rule: tailwind: 'forced-colors' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": [
+  "dropped a rule: tailwind: 'forced-colors' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme, prefers-reduced-motion, hover, any-hover, pointer and any-pointer are)": [
     "forced-colors:bg-[rgb(1,2,3)]",
     "forced-colors:bg-red-500",
     "forced-colors:opacity-50",
@@ -10653,27 +10633,13 @@
     "outline-hidden",
     "outline-hidden!"
   ],
-  "dropped a rule: tailwind: 'inverted-colors' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": [
+  "dropped a rule: tailwind: 'inverted-colors' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme, prefers-reduced-motion, hover, any-hover, pointer and any-pointer are)": [
     "inverted-colors:bg-[rgb(1,2,3)]",
     "inverted-colors:bg-red-500",
     "inverted-colors:opacity-50",
     "inverted-colors:p-4"
   ],
-  "dropped a rule: tailwind: 'pointer' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": [
-    "pointer-coarse:bg-[rgb(1,2,3)]",
-    "pointer-coarse:bg-red-500",
-    "pointer-coarse:opacity-50",
-    "pointer-coarse:p-4",
-    "pointer-fine:bg-[rgb(1,2,3)]",
-    "pointer-fine:bg-red-500",
-    "pointer-fine:opacity-50",
-    "pointer-fine:p-4",
-    "pointer-none:bg-[rgb(1,2,3)]",
-    "pointer-none:bg-red-500",
-    "pointer-none:opacity-50",
-    "pointer-none:p-4"
-  ],
-  "dropped a rule: tailwind: 'prefers-contrast' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": [
+  "dropped a rule: tailwind: 'prefers-contrast' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme, prefers-reduced-motion, hover, any-hover, pointer and any-pointer are)": [
     "contrast-less:bg-[rgb(1,2,3)]",
     "contrast-less:bg-red-500",
     "contrast-less:opacity-50",
@@ -10683,7 +10649,7 @@
     "contrast-more:opacity-50",
     "contrast-more:p-4"
   ],
-  "dropped a rule: tailwind: 'scripting' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": [
+  "dropped a rule: tailwind: 'scripting' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme, prefers-reduced-motion, hover, any-hover, pointer and any-pointer are)": [
     "noscript:bg-[rgb(1,2,3)]",
     "noscript:bg-red-500",
     "noscript:opacity-50",

@@ -80,8 +80,8 @@ export interface Compound {
    * variant compiles to.
    */
   readonly parents?: readonly Compound[];
-  /** Interaction state the engine tracks: `:focus` and `:active`. */
-  readonly pseudo?: readonly ('focus' | 'active')[];
+  /** Interaction state the engine tracks: see `InteractionState`. */
+  readonly pseudo?: readonly InteractionState[];
   /**
    * `:first-child` and its family, reduced to the counting tests CSS defines them as. More than
    * one because `:only-child` is two: first from the start and first from the end.
@@ -97,6 +97,13 @@ export interface Compound {
   /** `:has()`: every one of these must find a match beneath the node. */
   readonly has?: readonly HasTest[];
 }
+
+/**
+ * The pseudo-classes the engine answers from what it is told of the node: `:focus` and
+ * `:focus-visible` from the native focus events, `:focus-within` from those of what is inside,
+ * `:active` from the responder, and `:hover` from the pointer events of a view that opts in.
+ */
+export type InteractionState = 'focus' | 'active' | 'hover' | 'focus-visible' | 'focus-within';
 
 /** One `:has()`: some element beneath the node, or some child of it, matches one of `any`. */
 export interface HasTest {
@@ -174,6 +181,30 @@ export interface StyleRule {
   active?: boolean;
 }
 
+/** A feature whose value is a keyword the device answers, rather than a measurement. */
+export type KeywordFeature =
+  | 'orientation'
+  | 'prefers-color-scheme'
+  | 'prefers-reduced-motion'
+  | 'direction'
+  | 'hover'
+  | 'any-hover'
+  | 'pointer'
+  | 'any-pointer';
+
+/** The pointer features, by the condition each reads, and what a phone answers without one. */
+const POINTER_FEATURES: Readonly<Record<string, readonly [keyof Conditions, string]>> = {
+  hover: ['hover', 'none'],
+  'any-hover': ['anyHover', 'none'],
+  pointer: ['pointer', 'coarse'],
+  'any-pointer': ['anyPointer', 'coarse'],
+};
+
+function pointerFeature(conditions: Conditions, feature: string): unknown {
+  const [key, phone] = POINTER_FEATURES[feature]!;
+  return conditions[key] ?? phone;
+}
+
 export type MediaCondition =
   | { readonly all: readonly MediaCondition[] }
   | { readonly any: readonly MediaCondition[] }
@@ -184,8 +215,7 @@ export type MediaCondition =
     }
   | {
       /** `direction` is not a media feature: it is what `:dir()` asks, of the app as a whole. */
-      readonly feature:
-        'orientation' | 'prefers-color-scheme' | 'prefers-reduced-motion' | 'direction';
+      readonly feature: KeywordFeature;
       readonly value: string;
     };
 
@@ -218,6 +248,15 @@ export interface Conditions {
    * corner or edge a logical one is, where an element has both and no `direction` of its own.
    */
   readonly direction?: 'ltr' | 'rtl';
+  /**
+   * Whether the primary pointer can hover, and how fine it is: `(hover)` and `(pointer)`. A
+   * desktop answers `hover` and `fine`. Optional, and a phone's `none` and `coarse` when absent.
+   */
+  readonly hover?: 'hover' | 'none';
+  readonly pointer?: 'fine' | 'coarse' | 'none';
+  /** The same of any pointer the device has: `(any-hover)` and `(any-pointer)`. */
+  readonly anyHover?: 'hover' | 'none';
+  readonly anyPointer?: 'fine' | 'coarse' | 'none';
 }
 
 /** A run of CSS whitespace: spaces, tabs, newlines, carriage returns and form feeds, and no other. */
@@ -837,6 +876,12 @@ export interface StyleTarget {
    * activates the whole chain on the web too, not only the deepest element under the finger.
    */
   active?: boolean;
+  /** `:hover`. Set by the engine from a mouse, trackpad or pencil entering the node, never a finger. */
+  hovered?: boolean;
+  /** `:focus-within`. Set by the engine on the focused node and every one of its ancestors. */
+  focusWithin?: boolean;
+  /** `:focus-visible`. Set by the engine on a focused node the host says the keyboard focused. */
+  focusVisible?: boolean;
 }
 
 /**
@@ -1029,75 +1074,100 @@ function agreedSides(own: Record<string, unknown>, part: 'Width' | 'Color'): unk
  * reads, so it does not distort what it measures.
  */
 /**
- * What a sheet asks about a pressed element. `own` is whether a rule styles one, `.button:active`,
- * which matching the pressed elements again answers. `elsewhere` is each compound that asks about
- * a pressed element from another one: `.card:active .title`, `.a:active + .b`, or `:active`
- * inside `:not()`, `:is()` or `:has()`. An element such a compound could be is restyled with
- * everything under it when it is pressed, as what it changes is not itself alone.
+ * What a sheet asks about an element in one interaction state, pressed or hovered or with the
+ * focus inside it. `own` is whether a rule styles one, `.button:active`, which matching the
+ * elements in that state again answers. `elsewhere` is each compound that asks about such an
+ * element from another one: `.card:active .title`, `.a:active + .b`, or `:active` inside `:not()`,
+ * `:is()` or `:has()`. An element such a compound could be is restyled with everything under it
+ * when its state changes, as what it changes is not itself alone. `asked` is every compound that
+ * asks about the state, wherever it is written: the elements it could be are the ones whose state
+ * is worth keeping, which is how `:hover` opts only those into pointer events.
  */
-export function usesActive(sheet: StyleSheet): ActiveUse {
-  const known = ACTIVE_USE.get(sheet);
-  if (known) return known;
+export function usesState(sheet: StyleSheet, state: InteractionState): StateUse {
+  let known = STATE_USE.get(sheet);
+  if (!known) STATE_USE.set(sheet, (known = new Map()));
+  const cached = known.get(state);
+  if (cached) return cached;
   let own = false;
   const elsewhere: Compound[] = [];
+  const asked: Compound[] = [];
+  const isIn = (compound: Compound): boolean => {
+    const yes = compound.pseudo?.includes(state) === true;
+    if (yes) asked.push(compound);
+    return yes;
+  };
   for (const rule of sheet.rules) {
     rule.compounds.forEach((compound, at) => {
       const subject = at === rule.compounds.length - 1;
       // Asked of the element itself, on the compound or in its `:is()` and `:not()`: the
       // subject's is its own, and any other compound's is of the element that compound is.
-      if (activeItself(compound, elsewhere)) {
+      if (stateItself(compound, elsewhere, isIn)) {
         if (subject) own = true;
         else elsewhere.push(compound);
       }
-      activeAround(compound, elsewhere);
+      stateAround(compound, elsewhere, isIn);
     });
   }
-  const use = { own, elsewhere };
-  ACTIVE_USE.set(sheet, use);
+  const use = { own, elsewhere, asked };
+  known.set(state, use);
   return use;
 }
 
-const isActive = (compound: Compound): boolean => compound.pseudo?.includes('active') === true;
+/** `usesState` for `:active`. */
+export function usesActive(sheet: StyleSheet): StateUse {
+  return usesState(sheet, 'active');
+}
 
 /**
- * Whether a compound asks about the pressed state of the element it matches: on itself, in a
- * `:not()`, or as the last compound of an `:is()` argument. The compounds before the last in
- * such an argument are other elements, and are collected as they are.
+ * Whether a compound asks about the state of the element it matches: on itself, in a `:not()`,
+ * or as the last compound of an `:is()` argument. The compounds before the last in such an
+ * argument are other elements, and are collected as they are.
  */
-function activeItself(compound: Compound, elsewhere: Compound[]): boolean {
-  let itself = isActive(compound);
+function stateItself(
+  compound: Compound,
+  elsewhere: Compound[],
+  isIn: (compound: Compound) => boolean,
+): boolean {
+  let itself = isIn(compound);
   for (const inner of compound.not ?? []) {
-    if (activeItself(inner, elsewhere)) itself = true;
-    activeAround(inner, elsewhere);
+    if (stateItself(inner, elsewhere, isIn)) itself = true;
+    stateAround(inner, elsewhere, isIn);
   }
   for (const chain of compound.is ?? []) {
     chain.forEach((inner, at) => {
-      const asked = activeItself(inner, elsewhere);
+      const asked = stateItself(inner, elsewhere, isIn);
       if (asked && at === chain.length - 1) itself = true;
       else if (asked) elsewhere.push(inner);
-      activeAround(inner, elsewhere);
+      stateAround(inner, elsewhere, isIn);
     });
   }
   return itself;
 }
 
-/** Each compound that asks about a pressed element around the one a compound matches. */
-function activeAround(compound: Compound, elsewhere: Compound[]): void {
+/** Each compound that asks about the state of an element around the one a compound matches. */
+function stateAround(
+  compound: Compound,
+  elsewhere: Compound[],
+  isIn: (compound: Compound) => boolean,
+): void {
   const collect = (value: unknown): void => {
     if (!value || typeof value !== 'object') return;
     if (Array.isArray(value)) return value.forEach(collect);
-    if (isActive(value as Compound)) elsewhere.push(value as Compound);
+    if (isIn(value as Compound)) elsewhere.push(value as Compound);
     for (const inside of Object.values(value)) collect(inside);
   };
   for (const [key, inside] of Object.entries(compound)) {
     if (key !== 'is' && key !== 'not' && key !== 'pseudo') collect(inside);
   }
 }
-export interface ActiveUse {
+export interface StateUse {
   readonly own: boolean;
   readonly elsewhere: readonly Compound[];
+  readonly asked: readonly Compound[];
 }
-const ACTIVE_USE = new WeakMap<StyleSheet, ActiveUse>();
+/** The name it had when `:active` was the one state asked about. */
+export type ActiveUse = StateUse;
+const STATE_USE = new WeakMap<StyleSheet, Map<InteractionState, StateUse>>();
 
 export const styleStats = {
   /** Calls to `matchesCompound`, the innermost unit of matching work. */
@@ -1215,15 +1285,28 @@ export function noteGeneratedBoxes(): void {
   boxesDrawn = true;
 }
 
+function inState(node: StyleTarget, state: InteractionState): boolean | undefined {
+  switch (state) {
+    case 'focus':
+      return node.focused;
+    case 'active':
+      return node.active;
+    case 'hover':
+      return node.hovered;
+    case 'focus-within':
+      return node.focusWithin;
+    case 'focus-visible':
+      return node.focusVisible;
+  }
+}
+
 // eslint-disable-next-line complexity
 function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
   styleStats.compoundTests++;
   if (compound.host !== undefined && node.hostSheet !== sheet) return false;
   if (compound.root !== undefined && node.parent !== null) return false;
   if (compound.pseudo !== undefined) {
-    for (const state of compound.pseudo) {
-      if (state === 'focus' ? !node.focused : !node.active) return false;
-    }
+    for (const state of compound.pseudo) if (!inState(node, state)) return false;
   }
   if (compound.type !== undefined) {
     // `typeOf`, asked here without the call: this is asked of every compound tested.
@@ -4677,11 +4760,10 @@ export class StyleResolver {
   }
 
   /** What the device answers for a feature that is a keyword rather than a measurement. */
-  private preference(
-    feature: 'orientation' | 'prefers-color-scheme' | 'prefers-reduced-motion' | 'direction',
-  ) {
+  private preference(feature: KeywordFeature) {
     const { width, height, colorScheme, reducedMotion, direction } = this.conditions;
     if (feature === 'direction') return direction ?? 'ltr';
+    if (feature in POINTER_FEATURES) return pointerFeature(this.conditions, feature);
     if (feature === 'orientation') return width > height ? 'landscape' : 'portrait';
     if (feature === 'prefers-color-scheme') return colorScheme;
     return reducedMotion ? 'reduce' : 'no-preference';

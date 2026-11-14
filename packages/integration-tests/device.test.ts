@@ -751,6 +751,10 @@ describe('the engine conditions', () => {
       fontScale: 1,
       pixelRatio: 1,
       direction: 'ltr',
+      hover: 'none',
+      anyHover: 'none',
+      pointer: 'coarse',
+      anyPointer: 'coarse',
     });
 
     const stop = watchConditions(engine);

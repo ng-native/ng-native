@@ -986,10 +986,41 @@ function mediaLength(value, context) {
 const PLAIN_FEATURES = new Set(['orientation', 'prefers-color-scheme', 'prefers-reduced-motion']);
 
 /**
+ * Features about the pointer, each with the values it can have. The engine answers them from the
+ * OS: a desktop hovers with a fine pointer, a phone has a coarse one that cannot hover.
+ */
+const POINTER_FEATURES = {
+  hover: ['hover', 'none'],
+  'any-hover': ['hover', 'none'],
+  pointer: ['fine', 'coarse', 'none'],
+  'any-pointer': ['fine', 'coarse', 'none'],
+};
+
+/** A pointer feature as a condition, or null for any other feature. */
+function pointerCondition(feature, context) {
+  const values = POINTER_FEATURES[feature.name];
+  if (!values) return null;
+  // With no value a feature is true for any value but its "none".
+  if (feature.type === 'boolean') {
+    const some = values.filter((value) => value !== 'none');
+    return some.length === 1
+      ? { feature: feature.name, value: some[0] }
+      : { any: some.map((value) => ({ feature: feature.name, value })) };
+  }
+  const value = feature.type === 'plain' && keyword(feature.value, `${context} (${feature.name})`);
+  if (!values.includes(value)) {
+    throw new CssUnsupported(
+      `${context}: '${feature.name}' is one of ${values.join(', ')}, not '${value || feature.type}'`,
+    );
+  }
+  return { feature: feature.name, value };
+}
+
+/**
  * A media query condition, compiled to a tree the runtime can walk without parsing anything.
  *
- * Only features a device can actually answer are accepted. `hover`, `pointer` and the print media
- * type have no meaning here, and a query that silently never matches is worse than a build warning.
+ * Only features a device can actually answer are accepted. The print media type has no meaning
+ * here, and a query that silently never matches is worse than a build warning.
  */
 // Navigating lightningcss's untyped AST. Every `?.` and `??` counts as a branch, so the
 // complexity score here measures defensiveness rather than logic: one line of
@@ -1009,6 +1040,8 @@ function mediaCondition(condition, context) {
 
   if (condition.type === 'feature') {
     const feature = condition.value;
+    const pointer = pointerCondition(feature, context);
+    if (pointer) return pointer;
     const measured = feature.name === 'width' || feature.name === 'height';
     if (measured && feature.type === 'plain') {
       return { feature: feature.name, op: 'eq', value: mediaLength(feature.value, context) };
@@ -1040,7 +1073,7 @@ function mediaCondition(condition, context) {
       if (!op || !measured) {
         throw new CssUnsupported(
           `${context}: '${feature.name}' is not a media feature a device can answer ` +
-            `(width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)`,
+            `(width, height, orientation, prefers-color-scheme, prefers-reduced-motion, hover, any-hover, pointer and any-pointer are)`,
         );
       }
       return { feature: feature.name, op, value: mediaLength(feature.value, context) };
@@ -1053,7 +1086,7 @@ function mediaCondition(condition, context) {
     }
     throw new CssUnsupported(
       `${context}: '${feature.name ?? feature.type}' is not a media feature a device can answer ` +
-        `(width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)`,
+        `(width, height, orientation, prefers-color-scheme, prefers-reduced-motion, hover, any-hover, pointer and any-pointer are)`,
     );
   }
 
@@ -1162,7 +1195,7 @@ function compound(parts, context) {
           classes++;
           break;
         }
-        if (part.kind === 'focus' || part.kind === 'active') {
+        if (TRACKED_STATE.has(part.kind)) {
           (out.pseudo ??= []).push(part.kind);
           classes++;
           break;
@@ -1270,7 +1303,6 @@ function compound(parts, context) {
   return { compound: out, ids, classes, types };
 }
 
-/** Pseudo-classes about a pointer or about where focus came from, neither of which native has. */
 /** Whether a value is one relative colour, `oklch(from var(--brand) l c h)`. */
 function isRelativeColour(parts) {
   const written = meaningful(parts);
@@ -1614,7 +1646,12 @@ function darkSide(rule) {
   };
 }
 
-const HOVER_OR_FOCUS = new Set(['hover', 'focus-visible', 'focus-within']);
+/**
+ * Interaction state the engine tracks on each node: focus from the native focus and blur events
+ * (and whether the host said it came from the keyboard), a press from the responder, and a
+ * pointer from the pointer events of a view a `:hover` rule could match.
+ */
+const TRACKED_STATE = new Set(['focus', 'active', 'hover', 'focus-visible', 'focus-within']);
 
 /** Form-control state the web keeps on the element and native keeps in a component's inputs. */
 const CONTROL_STATE = new Set(['checked', 'indeterminate', 'default']);
@@ -1633,13 +1670,6 @@ function refusedPseudoClass(part, name, context) {
       `${context}: ':${name}' has no state on native to read: whether a control is checked is ` +
         `an input of its component, not a prop a selector can see. Bind an attribute from the ` +
         `same signal, such as [attr.data-checked], and select on that.`,
-    );
-  }
-  if (HOVER_OR_FOCUS.has(part.kind)) {
-    return new CssUnsupported(
-      `${context}: ':${name}' is not supported. Native has no hover or focus cascade: use ` +
-        `':active' or ':focus', which the engine tracks, or a bound attribute such as ` +
-        `[attr.data-hover].`,
     );
   }
   return new CssUnsupported(

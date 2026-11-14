@@ -753,7 +753,7 @@ describe('what it refuses, and how it says so', () => {
     // `group-hover:` beside `data-[state=on]:` of the same colour arrives as one rule, and
     // refusing the whole list silently took the variant that was fine with it.
     const dropped: string[] = [];
-    const sheet = compileCss('.a:hover, .b, .c:checked { color: red }', 'list.css', {
+    const sheet = compileCss('.a:target, .b, .c:checked { color: red }', 'list.css', {
       onUnsupported: (message: string) => dropped.push(message),
     });
     assert.deepEqual(
@@ -764,7 +764,7 @@ describe('what it refuses, and how it says so', () => {
     );
     assert.equal((sheet.rules[0] as { order: number }).order, 1, 'ordered as it was in the list');
     assert.equal(dropped.length, 2);
-    assert.match(dropped[0]!, /^list\.css:1: dropped a selector: ':hover'/);
+    assert.match(dropped[0]!, /^list\.css:1: dropped a selector: ':target'/);
     assert.match(dropped[1]!, /^list\.css:1: dropped a selector: ':checked'/);
   });
 

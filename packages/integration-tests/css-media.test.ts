@@ -296,8 +296,8 @@ describe('a media feature written with no value', () => {
     }
     // One a device cannot answer is still said to be that.
     assert.match(
-      sheet('(hover)').refused[0]!,
-      /'hover' is not a media feature a device can answer/,
+      sheet('(color-gamut)').refused[0]!,
+      /'color-gamut' is not a media feature a device can answer/,
     );
   });
 });

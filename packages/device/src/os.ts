@@ -16,8 +16,8 @@ export const OS = new InjectionToken<'ios' | 'android' | 'macos' | 'web'>('angul
 });
 
 /** The OS as React Native, or off a device the engine, reports it: what `OS` answers unprovided. */
-function platformOs(): 'ios' | 'android' | 'macos' | 'web' {
-  const os = reactNative()?.Platform.OS ?? nativePlatform();
+export function platformOs(): 'ios' | 'android' | 'macos' | 'web' {
+  const os = reactNative()?.Platform?.OS ?? nativePlatform();
   return os === 'android' || os === 'macos' || os === 'web' ? os : 'ios';
 }
 

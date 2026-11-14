@@ -45,14 +45,14 @@ describe('CSS compilation', () => {
     assert.throws(() => compileCss('.a { float: left }'), /float.*no React Native equivalent/s);
     assert.throws(() => compileCss('.a { display: table }'), /display: table does not exist/);
     assert.throws(() => compileCss('.a { width: 3ex }'), /unit 'ex'/);
-    assert.throws(() => compileCss('.a:hover { color: red }'), /':hover' is not supported/);
+    assert.throws(() => compileCss('.a:target { color: red }'), /':target' is not supported/);
     assert.throws(() => compileCss('@supports (a: b) { .a { color: red } }'), /@supports/);
     assert.throws(
       () => compileCss('@media print { .a { color: red } }'),
       /media type has no meaning/,
     );
     assert.throws(
-      () => compileCss('@media (hover: hover) { .a { color: red } }'),
+      () => compileCss('@media (color-gamut: p3) { .a { color: red } }'),
       /not a media feature/,
     );
   });

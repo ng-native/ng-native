@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2593,
-    "dropped": 571,
+    "rules": 2643,
+    "dropped": 513,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -113,21 +113,16 @@
         "':-moz-focusring' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':autofill' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 6,
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 25,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 1,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 60,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 62,
         "the 'print' media type has no meaning on a device": 1
       },
       "(selector)": {
         "':autofill' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 6,
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
-        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 8,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 22,
-        "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
+        "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 17,
         "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 4,
-        "':valid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
+        "':valid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 17,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 57
       },
       "--*": {
@@ -285,7 +280,7 @@
         "'text-size-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "text-underline-offset": {
-        "'text-underline-offset' has no React Native equivalent: no style prop of a native view does what it does.": 4
+        "'text-underline-offset' has no React Native equivalent: no style prop of a native view does what it does.": 7
       },
       "transition": {
         "var() cannot be used in the 'transition' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 9
@@ -312,8 +307,8 @@
     }
   },
   "bulma": {
-    "rules": 3329,
-    "dropped": 1786,
+    "rules": 3436,
+    "dropped": 1568,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -394,6 +389,8 @@
       "numberOfLines",
       "opacity",
       "order",
+      "outlineOffset",
+      "outlineStyle",
       "outlineWidth",
       "overflow",
       "paddingBottom",
@@ -423,20 +420,16 @@
     ],
     "drops": {
       "(rule)": {
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 11,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 4,
         "'@container' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 10,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 32
       },
       "(selector)": {
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 92,
-        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 18,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 122,
         "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 24,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 16
       },
       "--*": {
-        "'--*' has a value native cannot express in any form": 22
+        "'--*' has a value native cannot express in any form": 23
       },
       "-moz-osx-font-smoothing": {
         "'-moz-osx-font-smoothing' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 2
@@ -454,7 +447,7 @@
         "'appearance' has no React Native equivalent: no style prop of a native view does what it does.": 8
       },
       "background-color": {
-        "'background-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 626
+        "'background-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 638
       },
       "background-image": {
         "hsl() with a var() in it is only understood as a whole colour token, inside color-mix(), as rgba(var(--channels), <alpha>) or as an hsl() of tokens. Put the whole colour in the variable instead.": 22
@@ -514,7 +507,7 @@
         "'clip' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "color": {
-        "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 637
+        "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 648
       },
       "container-name": {
         "'container-name' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -571,6 +564,9 @@
       "min-height": {
         "arithmetic with tokens in it cannot take 'vh' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
       },
+      "outline-color": {
+        "'outline-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
+      },
       "overflow-x": {
         "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 11
       },
@@ -622,8 +618,8 @@
     }
   },
   "pico": {
-    "rules": 477,
-    "dropped": 285,
+    "rules": 488,
+    "dropped": 273,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -696,7 +692,9 @@
       "minWidth",
       "numberOfLines",
       "opacity",
+      "outlineColor",
       "outlineOffset",
+      "outlineStyle",
       "outlineWidth",
       "overflow",
       "paddingBottom",
@@ -725,28 +723,19 @@
       "zIndex"
     ],
     "drops": {
-      "(alternative)": {
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 24
-      },
       "(rule)": {
         "':-moz-focusring' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':-moz-ui-invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 3,
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 2,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 5,
         "'@moz-document' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 1,
         "'@supports' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 1,
-        "'hover' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 48
       },
       "(selector)": {
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 39,
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
-        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
         "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 45
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 71
       },
       "--*": {
         "'--*' has a value native cannot express in any form": 15,
@@ -876,9 +865,10 @@
     }
   },
   "open-props": {
-    "rules": 87,
-    "dropped": 175,
+    "rules": 95,
+    "dropped": 167,
     "emitted": [
+      "$transitionDuration",
       "alignItems",
       "aspectRatio",
       "backgroundColor",
@@ -931,6 +921,8 @@
       "minHeight",
       "minWidth",
       "numberOfLines",
+      "outlineColor",
+      "outlineOffset",
       "paddingBottom",
       "paddingEnd",
       "paddingLeft",
@@ -948,17 +940,13 @@
     ],
     "drops": {
       "(rule)": {
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
         "':visited' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,
         "'@supports' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 2,
-        "'dynamic-range' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
+        "'dynamic-range' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme, prefers-reduced-motion, hover, any-hover, pointer and any-pointer are)": 1,
         "a @keyframes inside @media is not supported. Keyframes are global here, so there is nothing for the condition to attach to; write it at the top level.": 2,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 1
       },
       "(selector)": {
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 2,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 2
       },
       "--*": {
@@ -1010,11 +998,17 @@
       "scrollbar-color": {
         "'scrollbar-color' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
+      "text-decoration": {
+        "'text-decoration: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
+      },
       "text-size-adjust": {
         "'text-size-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "text-underline-offset": {
         "'text-underline-offset' has no React Native equivalent: no style prop of a native view does what it does.": 1
+      },
+      "transition": {
+        "'transition' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
       "white-space": {
         "white-space: pre is not supported: native text has no switch for how spaces and line breaks are kept. nowrap, read as one line, and normal are.": 1

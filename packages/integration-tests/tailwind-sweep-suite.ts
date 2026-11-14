@@ -487,7 +487,15 @@ function resolverFor(
   viewport: Recorded['viewport'],
   withChild = world.name === 'base',
 ) {
-  const resolver = new StyleResolver(sheet, { ...viewport, colorScheme: 'light' });
+  // Chrome measured on a desktop, with a mouse: a fine pointer that hovers.
+  const resolver = new StyleResolver(sheet, {
+    ...viewport,
+    colorScheme: 'light',
+    hover: 'hover',
+    anyHover: 'hover',
+    pointer: 'fine',
+    anyPointer: 'fine',
+  });
   const states = world.states ? { ...STATE_ATTRIBUTES } : {};
   const target = (
     tag: string,
