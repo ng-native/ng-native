@@ -247,6 +247,25 @@ describe('watchConditions and the text size', () => {
     stop();
   });
 
+  it('hands the engine a --hairline for the new pixel ratio, and only when it changes', () => {
+    // React Native's `StyleSheet.hairlineWidth` is worked out once, so a window moved from a 2x
+    // screen to a 1x one would keep a half-point line, which a 1x screen cannot draw.
+    const tokens: Record<string, unknown>[] = [];
+    const stop = watchConditions({
+      ...engine(),
+      updateTokens: (next: Record<string, unknown>) => void tokens.push(next),
+    });
+    resize(1);
+    assert.deepEqual(tokens, [], 'the same screen keeps the hairline it started with');
+    pixelRatio = 1;
+    resize(1);
+    pixelRatio = 2;
+    resize(1);
+    resize(1);
+    assert.deepEqual(tokens, [{ '--hairline': { length: 1 } }, { '--hairline': { length: 0.5 } }]);
+    stop();
+  });
+
   describe('on a Mac', () => {
     beforeEach(() => (os = 'macos'));
     afterEach(() => (os = 'ios'));

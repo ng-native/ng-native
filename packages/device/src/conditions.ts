@@ -25,6 +25,8 @@ interface Resolves<Node = unknown> {
   removeClass(node: Node, name: string): void;
   /** Measure every text again, after the system text size changed. */
   remeasureText?(): void;
+  /** Merge custom properties into the root's, as `--hairline` after the pixel ratio changed. */
+  updateTokens?(tokens: Readonly<Record<string, TokenValue>>): void;
 }
 
 /**
@@ -36,6 +38,15 @@ function pointerConditions(): Pick<Conditions, 'hover' | 'anyHover' | 'pointer' 
   const hover = desktop ? 'hover' : 'none';
   const pointer = desktop ? 'fine' : 'coarse';
   return { hover, anyHover: hover, pointer, anyPointer: pointer };
+}
+
+/**
+ * The thinnest line a screen of `ratio` pixels to the point draws, worked out as React Native
+ * works out `StyleSheet.hairlineWidth`: 0.4 points rounded to a whole pixel, or one pixel where
+ * that rounds to none.
+ */
+function hairlineAt(ratio: number): number {
+  return Math.round(0.4 * ratio) / ratio || 1 / ratio;
 }
 
 /** The screen's pixels in a point. One off a device. */
@@ -80,9 +91,10 @@ export function currentConditions(): Conditions {
  * out from the pixel ratio; off a device there is no answer, and inventing one would be a line of
  * the wrong weight in every test that draws one.
  *
- * Not watched, unlike the conditions: React Native works the hairline out once and keeps it, so
- * a window moved to a screen of another density keeps the first screen's, as a React Native app's
- * `StyleSheet.hairlineWidth` does. The safe-area insets arrive through `updateTokens`.
+ * React Native works `StyleSheet.hairlineWidth` out once and keeps it. `watchConditions` hands
+ * the engine a new `--hairline` when a window resize reports another pixel ratio, as when a
+ * window moves to a screen of another density. The safe-area insets arrive through
+ * `updateTokens` too.
  */
 export function deviceTokens(): Record<string, TokenValue> {
   const native = reactNative();
@@ -128,12 +140,15 @@ export function watchConditions<Node>(
     if (rescaled) engine.remeasureText?.();
   };
 
-  const sizes = screen.subscribe(({ window }) =>
-    resize(
-      { width: window.width, height: window.height, pixelRatio: pixelRatio() },
-      systemFontScale(),
-    ),
-  );
+  // The hairline for the pixel ratio now in effect, handed over only when that changes.
+  let ratio = conditions.pixelRatio ?? 1;
+  const sizes = screen.subscribe(({ window }) => {
+    const next = pixelRatio();
+    resize({ width: window.width, height: window.height, pixelRatio: next }, systemFontScale());
+    if (next === ratio) return;
+    ratio = next;
+    engine.updateTokens?.({ '--hairline': { length: hairlineAt(next) } });
+  });
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
   let heardReduceMotion = false;
   let stopped = false;
