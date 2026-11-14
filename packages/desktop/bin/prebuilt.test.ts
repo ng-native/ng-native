@@ -73,7 +73,13 @@ describe('choosePrebuilt', () => {
 });
 
 /** A system for fetchPrebuilt: `curl` and `tar` answer as told, and files exist once made. */
-function fakeFetch({ curl = 0, tar = 0, sha = SHA, cached = false } = {}) {
+function fakeFetch({
+  curl = 0,
+  tar = 0,
+  sha = SHA,
+  cached = false,
+  finishedMeanwhile = false,
+} = {}) {
   const calls: string[][] = [];
   const files = new Set<string>(cached ? ['/c/prebuilt/aaaaaaaaaaaaaaaa/appkit/ngn-macos'] : []);
   const warnings: string[] = [];
@@ -88,7 +94,11 @@ function fakeFetch({ curl = 0, tar = 0, sha = SHA, cached = false } = {}) {
     rename: (from: string, to: string) => void renamed.push([from, to]),
     run(command: string, args: string[]) {
       calls.push([command, ...args]);
-      if (command === 'curl') return { status: curl, stdout: '' };
+      if (command === 'curl') {
+        // Another run unpacks the same host while this one downloads.
+        if (finishedMeanwhile) files.add('/c/prebuilt/aaaaaaaaaaaaaaaa/appkit/ngn-macos');
+        return { status: curl, stdout: '' };
+      }
       if (command === 'tar' && tar === 0) {
         files.add(`${args[3]}/appkit/ngn-macos`);
       }
@@ -109,8 +119,39 @@ describe('fetchPrebuilt', () => {
       ['curl', 'tar'],
     );
     assert.equal(calls[0]!.at(-1), HOST.url);
-    assert.deepEqual(calls[1], ['tar', '-xzf', `${dir}.tar.gz`, '-C', `${dir}.partial`]);
-    assert.deepEqual(renamed, [[`${dir}.partial`, dir]]);
+    const archive = calls[0]![calls[0]!.indexOf('-o') + 1]!;
+    const unpacked = calls[1]![4]!;
+    assert.match(archive, new RegExp(`^${dir}\\.${process.pid}-[0-9a-f]+\\.tar\\.gz$`));
+    assert.match(unpacked, new RegExp(`^${dir}\\.${process.pid}-[0-9a-f]+\\.partial$`));
+    assert.deepEqual(calls[1], ['tar', '-xzf', archive, '-C', unpacked]);
+    assert.deepEqual(renamed, [[unpacked, dir]]);
+  });
+
+  it("gives each run temp files of its own, so a second run never deletes the first's download", () => {
+    const first = fakeFetch();
+    const second = fakeFetch();
+    fetchPrebuilt(first.sys, HOST, '/c');
+    fetchPrebuilt(second.sys, HOST, '/c');
+    const archiveOf = (calls: string[][]) => calls[0]![calls[0]!.indexOf('-o') + 1]!;
+    assert.notEqual(archiveOf(first.calls), archiveOf(second.calls));
+    assert.notEqual(first.calls[1]![4], second.calls[1]![4]);
+    // Nothing but its own files is removed (and the host's folder, only while it holds no host):
+    // no fixed name another run could be writing.
+    for (const { calls, removed } of [first, second]) {
+      const own = [archiveOf(calls), calls[1]![4]!, dir];
+      assert.deepEqual(
+        removed.filter((file) => !own.includes(file)),
+        [],
+      );
+    }
+  });
+
+  it('uses the host another run unpacked meanwhile, and drops its own copy', () => {
+    const { sys, calls, removed, renamed } = fakeFetch({ finishedMeanwhile: true });
+    assert.equal(fetchPrebuilt(sys, HOST, '/c'), dir);
+    assert.deepEqual(renamed, []);
+    assert.ok(removed.includes(calls[1]![4]!));
+    assert.ok(!removed.includes(dir), "the other run's host is kept");
   });
 
   it('uses a host already in the cache without downloading it', () => {
@@ -122,7 +163,7 @@ describe('fetchPrebuilt', () => {
   it('refuses and deletes a download whose SHA-256 is not the manifest', () => {
     const { sys, calls, removed, renamed } = fakeFetch({ sha: 'f'.repeat(64) });
     assert.throws(() => fetchPrebuilt(sys, HOST, '/c'), /has SHA-256 f+, not the a+/);
-    assert.ok(removed.includes(`${dir}.tar.gz`));
+    assert.ok(removed.includes(calls[0]![calls[0]!.indexOf('-o') + 1]!));
     assert.ok(!calls.some((call) => call[0] === 'tar'), 'never unpacked');
     assert.deepEqual(renamed, []);
   });

@@ -10,6 +10,7 @@
  *
  * `native/scripts/make-prebuilt.mjs` builds and packs one.
  */
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
 /** The manifest's format, which `prebuilt.json` names. */
@@ -91,7 +92,9 @@ export function choosePrebuilt(manifest, { reactNative, linked, libraries, deny,
 /**
  * The prebuilt host's build folder in the cache, downloading, checking and unpacking it first when
  * it is not there. Null, with a warning, when it cannot be downloaded, so the host is built from
- * source instead; a download whose SHA-256 is not the manifest's throws, and is deleted.
+ * source instead; a download whose SHA-256 is not the manifest's throws, and is deleted. Each run
+ * downloads and unpacks into names of its own, so two first runs at once never touch each other's
+ * files, and a run that finds the host unpacked by another when it is done uses that one.
  *
  * @param {System} sys
  * @param {PrebuiltHost} host
@@ -104,10 +107,9 @@ export function fetchPrebuilt(sys, host, cache) {
   }
   const dir = path.join(cache, 'prebuilt', host.sha256.slice(0, 16));
   if (sys.exists(path.join(dir, 'appkit', 'ngn-macos'))) return dir;
-  const archive = `${dir}.tar.gz`;
-  const unpacked = `${dir}.partial`;
-  sys.remove(archive);
-  sys.remove(unpacked);
+  const own = `${dir}.${process.pid}-${randomBytes(4).toString('hex')}`;
+  const archive = `${own}.tar.gz`;
+  const unpacked = `${own}.partial`;
   const got = sys.run(
     'curl',
     [
@@ -149,7 +151,16 @@ export function fetchPrebuilt(sys, host, cache) {
       `The prebuilt desktop host from ${host.url} did not unpack to appkit/ngn-macos.`,
     );
   }
-  sys.remove(dir);
-  sys.rename(unpacked, dir);
+  const binary = path.join(dir, 'appkit', 'ngn-macos');
+  if (!sys.exists(binary)) {
+    sys.remove(dir);
+    try {
+      sys.rename(unpacked, dir);
+    } catch (error) {
+      // Another run moved its copy in first.
+      if (!sys.exists(binary)) throw error;
+    }
+  }
+  sys.remove(unpacked);
   return dir;
 }
