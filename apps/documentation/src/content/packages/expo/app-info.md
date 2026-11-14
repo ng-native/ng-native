@@ -8,6 +8,8 @@ summary: The app's version, build and identifier, and the device it is running o
 `AppInfo` reports the app's own version and build, and the device it is running on, bound to
 `expo-application` and `expo-device`.
 
+<!-- platforms: AppInfo -->
+
 These are constants, read once, rather than signals: none of them changes while the app runs.
 Anything the platform does not say is null, and so is everything from a module that is not
 installed.

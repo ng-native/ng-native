@@ -8,6 +8,8 @@ summary: An in-app browser, and a sign-in session through expo-web-browser.
 `Browser` wraps `expo-web-browser`: a page shown in an in-app browser, and a sign-in flow through
 the system's own authentication session.
 
+<!-- platforms: Browser -->
+
 ## Install
 
 ```sh

@@ -19,10 +19,7 @@ const SHARED = [
   'CLAUDE.md',
   'LICENSE',
   'gitignore',
-  'metro.config.js',
   'tsconfig.json',
-  'vitest.config.mts',
-  'src/main.ts',
   'assets/icon.png',
 ];
 
@@ -67,7 +64,35 @@ describe('the desktop template', () => {
     ]);
     assert.equal(scripts.macos, 'ng-native-desktop run');
     assert.equal(scripts.package, 'ng-native-desktop package');
-    for (const name of ['start', 'test', 'typecheck']) assert.equal(scripts[name], theirs[name]);
+    for (const name of ['start', 'typecheck']) assert.equal(scripts[name], theirs[name]);
+    // Its Vitest config has a project that opens the app, so `npm test` names the Node one.
+    assert.equal(scripts.test, 'vitest run --project node-macos');
+  });
+
+  it('tests in Node as macOS, and inside the app with `vitest --project macos`', () => {
+    const config = read(desktop, 'vitest.config.mts').toString('utf8');
+    assert.match(config, /ngNative\(\{ os: 'macos' \}\)\], test: \{ name: 'node-macos' \}/);
+    assert.match(config, /deviceTests\(\{ platform: 'macos' \}\)/);
+    const readme = read(desktop, 'README.md').toString('utf8');
+    assert.match(readme, /vitest --project macos/);
+    assert.match(readme, /`node-macos`/);
+    assert.match(readme, /EXPO_PUBLIC_DEVICE_TESTS=1/);
+  });
+
+  it("wraps Metro's config for the in-app tests, and starts the test host for them in main.ts", () => {
+    assert.match(
+      read(desktop, 'metro.config.js').toString('utf8'),
+      /withDeviceTests\(withAngularNative\(/,
+    );
+    const main = read(desktop, 'src/main.ts').toString('utf8');
+    assert.match(main, /if \(process\.env\.EXPO_PUBLIC_DEVICE_TESTS\) \{/);
+    assert.match(main, /startDeviceTests\(\{ mount: mountOptions\(\) \}\)/);
+    // The mobile template's app mounts the same options, so the two stay alike where they can.
+    assert.match(main, /AppRegistry\.registerRunnable\('main'/);
+  });
+
+  it('has an in-app test beside the Node one', () => {
+    assert.match(read(desktop, 'src/app/app.device.ts').toString('utf8'), /Platform\.OS/);
   });
 
   it("takes the mobile template's version of every dependency they share", () => {

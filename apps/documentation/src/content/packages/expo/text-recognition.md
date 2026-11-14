@@ -9,7 +9,9 @@ summary: The text in a photo, line by line, read on the phone with no network.
 or picked from their library. It answers the whole text and each line with its confidence and its
 box in the image. It runs on the device, offline, and does not need Apple Intelligence, so it also
 works where the [on-device language model](/packages/expo/language-model) is unavailable. It is
-`@ng-native/expo`'s own native code, on iOS only for now.
+`@ng-native/expo`'s own native code, on iOS and macOS, and with no Vision on Android or the web.
+
+<!-- platforms: TextRecognition -->
 
 ## Install
 

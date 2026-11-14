@@ -10,6 +10,8 @@ summary: Save photos and videos to the user's library, and query what is in it.
 [image picker](/packages/expo/image-picker) needs no permission at all and is usually the better
 fit.
 
+<!-- platforms: MediaLibrary -->
+
 The module's API is its classes. An `Asset` and an `Album` are handles, whose details are read
 with their own async getters (`getFilename()`, `getWidth()`, `getUri()` and the rest), and a
 `Query` is built by chaining. The service is where they are reached from, and where the two

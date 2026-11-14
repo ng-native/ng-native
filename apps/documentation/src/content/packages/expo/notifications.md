@@ -11,6 +11,8 @@ taps and the response that launched the app as signals, and the permission, sche
 Android's channels, action buttons, the foreground handler, push tokens and background tasks as
 methods that take and return the module's own types.
 
+<!-- platforms: Notifications -->
+
 The signals are the part that was only reachable through a hook - the difference between a
 notification _arriving_ while the app is in front, and a user _tapping_ one, which is a navigation
 instruction and must not be missed, including the one that launched the app, which arrived before

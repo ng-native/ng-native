@@ -7,6 +7,8 @@ summary: Print HTML or a file with the system's print dialog, and render HTML to
 
 `Printing` is the system's print dialog and an HTML-to-PDF renderer, bound to `expo-print`.
 
+<!-- platforms: Printing -->
+
 ## Install
 
 ```sh

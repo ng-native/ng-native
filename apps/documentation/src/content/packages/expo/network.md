@@ -13,6 +13,8 @@ anything else. Treat `reachable` as a signal worth branching an offline banner o
 confirmation that a request will succeed - a `try`/`catch` around the request itself is what
 actually knows that.
 
+<!-- platforms: Network -->
+
 ## Install
 
 ```sh
