@@ -102,7 +102,7 @@ export async function run(options, sys = system) {
   const appId = config.bundleIdentifier ?? expo.slug ?? config.name;
   // What Processes may run and read, as a packaged app's Info.plist gives it.
   const capabilities = hostCapabilities(config.options);
-  return sys.run(path.join(buildDir, 'appkit', 'ngn-macos'), [
+  return sys.host(path.join(buildDir, 'appkit', 'ngn-macos'), [
     bundleArgument(options, cwd),
     '--module',
     options.module,
@@ -111,7 +111,7 @@ export async function run(options, sys = system) {
     '--app-id',
     appId,
     ...(capabilities ? ['--capabilities', JSON.stringify(capabilities)] : []),
-  ]).status;
+  ]);
 }
 
 /**
