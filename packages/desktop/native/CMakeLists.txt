@@ -122,6 +122,11 @@ endif()
 # --- libraries' components (react-native-screens, react-native-safe-area-context) ---------------
 include(cmake/libraries.cmake)
 
+# --- autolinked libraries and app modules ------------------------------------------------------
+if(NGN_WITH_RUNTIME)
+  include(cmake/linked-modules.cmake)
+endif()
+
 # --- backends -------------------------------------------------------------------------------------
 if(NGN_BACKEND STREQUAL "appkit")
   add_subdirectory(appkit)
