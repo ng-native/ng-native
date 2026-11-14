@@ -5,7 +5,9 @@
  *
  * - `=== 'ios'` is false on a Mac, though iOS and macOS share most of what such a branch is for;
  * - `!== 'android'` is true on a Mac, which then takes a branch written for iOS;
- * - `OS_VERSION >= 26` matches macOS 26 too, where it was meant for iOS 26.
+ * - `OS_VERSION >= 26` matches macOS 26 too, where it was meant for iOS 26;
+ * - `Platform.select({ ios: ... })` with no `macos` entry no longer takes its `ios` entry on a Mac, but
+ *   `native` or `default`, or nothing without them.
  *
  * Which of these an app wants is its own to say, so nothing is rewritten: each comparison in the
  * app's TypeScript, JavaScript and templates is noted with its file and line.
@@ -19,7 +21,10 @@ const ORDER = new Set(['<', '<=', '>', '>=', '===', '==', '!==', '!=']);
 
 /** Whether a file can hold a comparison worth a note at all, before it is parsed. */
 const mentions = (text) =>
-  text !== null && (/['"](ios|android)['"]/.test(text) || text.includes('OS_VERSION'));
+  text !== null &&
+  (/['"](ios|android)['"]/.test(text) ||
+    text.includes('OS_VERSION') ||
+    /Platform\.select/.test(text));
 
 /**
  * Why a comparison answers differently on a Mac, or null when it does not.
@@ -47,6 +52,26 @@ function why(operator, literal, version) {
   return null;
 }
 
+/**
+ * Why a `Platform.select({...})` answers differently on a Mac, or null when it does not: it has an
+ * `ios` entry and no `macos` one, which a Mac used to take as iOS.
+ */
+function platformSelect(ts, node) {
+  const callee = ts.isCallExpression(node) && node.expression;
+  if (!callee || !ts.isPropertyAccessExpression(callee) || callee.name.text !== 'select') {
+    return null;
+  }
+  if (!ts.isIdentifier(callee.expression) || callee.expression.text !== 'Platform') return null;
+  const [options] = node.arguments;
+  if (!options || !ts.isObjectLiteralExpression(options)) return null;
+  const keys = options.properties.map((property) => property.name?.text);
+  if (!keys.includes('ios') || keys.includes('macos')) return null;
+  return (
+    `${node.getText().split('\n')[0]} has an ios entry and no macos one, so a Mac now takes ` +
+    'native or default, or nothing without them, where it took ios. Add a macos entry if it should keep the ios value.'
+  );
+}
+
 /** Notes for the comparisons in a TypeScript or JavaScript file. */
 function scriptNotes(ts, file, text) {
   const source = ts.createSourceFile(
@@ -58,6 +83,11 @@ function scriptNotes(ts, file, text) {
   );
   const notes = [];
   const visit = (node) => {
+    const select = platformSelect(ts, node);
+    if (select) {
+      const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+      notes.push(`${file}:${line}: ${select}`);
+    }
     if (ts.isBinaryExpression(node)) {
       const operator = ts.tokenToString(node.operatorToken.kind) ?? '';
       const literal = [node.left, node.right].find((side) => ts.isStringLiteralLike(side));
@@ -76,11 +106,11 @@ function scriptNotes(ts, file, text) {
 
 /** Notes for the comparisons in a template's bindings, `@if` and `[class]` alike. */
 function templateNotes(file, text) {
-  const COMPARISON = /([\w.$?!]+(?:\(\))?)\s*(===|!==|==|!=)\s*'(ios|android)'/g;
+  const COMPARISON = /([\w.$?!]+(?:\(\))?)\s*(===|!==|==|!=)\s*(['"])(ios|android)\3/g;
   const notes = [];
   text.split('\n').forEach((line, index) => {
     for (const match of line.matchAll(COMPARISON)) {
-      const reason = why(match[2], match[3], false);
+      const reason = why(match[2], match[4], false);
       if (reason) notes.push(`${file}:${index + 1}: ${match[0]} ${reason}`);
     }
   });

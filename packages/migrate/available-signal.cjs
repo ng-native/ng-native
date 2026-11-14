@@ -143,6 +143,37 @@ function isHolder(ts, receiver, types, instances) {
   return (self.static ? names.static : names.instance).has(receiver.name.text);
 }
 
+/** Whether `node` reads a member named `available`, as `x.available` or `x['available']`. */
+const readsAvailable = (ts, node) =>
+  (ts.isPropertyAccessExpression(node) && node.name.text === 'available') ||
+  (ts.isElementAccessExpression(node) &&
+    ts.isStringLiteralLike(node.argumentExpression) &&
+    node.argumentExpression.text === 'available');
+
+/** The expression a member is read from, for either way of reading it. */
+const receiverOf = (node) => node.expression;
+
+/** Whether `call` is used as a promise still: chained with then, catch or finally, or in Promise.all. */
+function usedAsPromise(ts, call) {
+  const around = outside(ts, call);
+  const parent = around.parent;
+  if (
+    ts.isPropertyAccessExpression(parent) &&
+    parent.expression === around &&
+    ['then', 'catch', 'finally'].includes(parent.name.text)
+  ) {
+    return true;
+  }
+  const list = ts.isArrayLiteralExpression(parent) ? parent.parent : parent;
+  return (
+    ts.isCallExpression(list) &&
+    ts.isPropertyAccessExpression(list.expression) &&
+    ts.isIdentifier(list.expression.expression) &&
+    list.expression.expression.text === 'Promise' &&
+    ['all', 'allSettled', 'race', 'any'].includes(list.expression.name.text)
+  );
+}
+
 /** Skips the parentheses around an expression, outwards. */
 function outside(ts, node) {
   let at = node;
@@ -162,33 +193,35 @@ function codeEdits(ts, source, file, { types, instances }) {
   const notes = [];
   const line = (node) => source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
   const visit = (node) => {
-    if (ts.isPropertyAccessExpression(node) && node.name.text === 'available') {
+    if (readsAvailable(ts, node)) {
       const call = ts.isCallExpression(node.parent) && node.parent.expression === node;
-      if (!call && isHolder(ts, node.expression, types.property, instances)) {
+      if (!call && isHolder(ts, receiverOf(node), types.property, instances)) {
         edits.push({ start: node.getEnd(), end: node.getEnd(), text: '()' });
       }
       if (call && node.parent.arguments.length === 0) {
-        promised(node.parent);
-        nullable(node.parent);
+        promised(node.parent, receiverOf(node));
+        nullable(node.parent, receiverOf(node));
       }
     }
     ts.forEachChild(node, visit);
   };
-  const promised = (call) => {
-    if (!isHolder(ts, call.expression.expression, types.promise, instances)) return;
+  const promised = (call, receiver) => {
+    if (!isHolder(ts, receiver, types.promise, instances)) return;
     const around = outside(ts, call);
     if (ts.isAwaitExpression(around.parent)) {
       const awaited = around.parent;
       edits.push({ start: awaited.getStart(), end: awaited.expression.getStart(), text: '' });
       return;
     }
+    // Only a call still used as a promise: one that is read as a signal is already migrated.
+    if (!usedAsPromise(ts, call)) return;
     notes.push(
       `${file}:${line(call)}: available() is a signal now, not a promise. ` +
         'Read it as available(), without awaiting it or calling then().',
     );
   };
-  const nullable = (call) => {
-    if (!isHolder(ts, call.expression.expression, types.nullable, instances)) return;
+  const nullable = (call, receiver) => {
+    if (!isHolder(ts, receiver, types.nullable, instances)) return;
     const around = outside(ts, call);
     const parent = around.parent;
     if (!ts.isBinaryExpression(parent)) return;
@@ -215,7 +248,8 @@ const declaration = (name) =>
   );
 
 /** A property read of `name.available`, not already called. */
-const propertyRead = (name) => new RegExp(`\\b${name}\\.available\\b(?!\\s*\\()`, 'g');
+const propertyRead = (name) =>
+  new RegExp(`\\b${name}(?:\\.available\\b|\\[\\s*['"]available['"]\\s*\\])(?!\\s*\\()`, 'g');
 
 /** A template with each holder's `.available` called, and the names it left as declared there. */
 function inTemplate(text, names) {
@@ -226,7 +260,7 @@ function inTemplate(text, names) {
       if (propertyRead(name).test(text)) left.push(name);
       continue;
     }
-    next = next.replace(propertyRead(name), `${name}.available()`);
+    next = next.replace(propertyRead(name), (read) => `${read}()`);
   }
   return { text: next, left };
 }

@@ -1107,6 +1107,40 @@ describe('os-comparisons-on-macos, through nx migrate, ng update and ng-native-m
   });
 });
 
+describe('os-comparisons-on-macos: Platform.select and double-quoted templates', () => {
+  const files = {
+    'src/app/select.ts': [
+      "import { Platform } from 'react-native';",
+      '',
+      'export const a = Platform.select({ ios: 1, android: 2 });',
+      'export const b = Platform.select({ ios: 1, default: 3 });',
+      'export const c = Platform.select({ ios: 1, macos: 4, default: 3 });',
+      'export const d = Platform.select({ android: 2, default: 3 });',
+      'export const e = Platform.select({ ios: 1, native: 5 });',
+      '',
+    ].join('\n'),
+    'src/app/screen.html': ['@if (os === "ios") {', '  <text>iPhone</text>', '}', ''].join('\n'),
+  };
+
+  it('notes a select with an ios entry and no macos one, and a double-quoted comparison', async () => {
+    const { nx } = await acrossAdapters(files, 'os-comparisons-on-macos', '0.22.2');
+    assert.deepEqual(nx.files, files);
+    assert.deepEqual(
+      nx.notes.map((note) => note.split(' ')[0]),
+      [
+        'src/app/screen.html:1:',
+        'src/app/select.ts:3:',
+        'src/app/select.ts:4:',
+        'src/app/select.ts:7:',
+      ],
+    );
+    assert.match(
+      nx.notes.find((note) => note.includes('select.ts:4'))!,
+      /Platform\.select/,
+    );
+  });
+});
+
 describe('available-signal, through nx migrate, ng update and ng-native-migrate', () => {
   const files = {
     'src/app/privacy.ts': [
@@ -1194,5 +1228,70 @@ describe('available-signal, through nx migrate, ng update and ng-native-migrate'
     ]);
     assert.deepEqual(angular, nx);
     assert.deepEqual(cli, nx);
+  });
+});
+
+describe('available-signal on code that is already migrated, and on bracket reads', () => {
+  const files = {
+    'src/app/ready.ts': [
+      "import { inject } from '@angular/core';",
+      "import { Biometrics } from '@ng-native/expo/biometrics';",
+      "import { Haptics } from '@ng-native/expo/haptics';",
+      '',
+      'const biometrics = inject(Biometrics);',
+      'const haptics = inject(Haptics);',
+      'export const ready = biometrics.available() && haptics.available();',
+      'export const pick = () => (biometrics.available() ? 1 : 2);',
+      'export const stale = () => biometrics.available().then((yes) => yes);',
+      'export const all = () => Promise.all([biometrics.available(), biometrics.available()]);',
+      '',
+    ].join('\n'),
+    'src/app/bracket.ts': [
+      "import { inject } from '@angular/core';",
+      "import { Haptics } from '@ng-native/expo/haptics';",
+      "import { Biometrics } from '@ng-native/expo/biometrics';",
+      '',
+      'const haptics = inject(Haptics);',
+      'const biometrics = inject(Biometrics);',
+      "export const read = haptics['available'];",
+      "export const wait = async () => await biometrics['available']();",
+      "export const chained = () => biometrics['available']().then((yes) => yes);",
+      '',
+    ].join('\n'),
+    'src/app/panel.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Haptics } from '@ng-native/expo/haptics';",
+      '',
+      '@Component({',
+      "  selector: 'app-panel',",
+      '  template: `@if (haptics["available"]) { <text>Buzz</text> }`,',
+      '})',
+      'export class Panel {',
+      '  protected readonly haptics = inject(Haptics);',
+      '}',
+      '',
+    ].join('\n'),
+  };
+
+  it('does not note a signal that is only read, and notes a promise that is still used as one', async () => {
+    const { nx } = await acrossAdapters(files, 'available-signal', '0.22.2');
+    assert.equal(nx.files['src/app/ready.ts'], files['src/app/ready.ts']);
+    const ready = nx.notes.filter((note) => note.startsWith('src/app/ready.ts'));
+    assert.deepEqual(
+      ready.map((note) => note.split(': ')[0]),
+      ['src/app/ready.ts:9', 'src/app/ready.ts:10', 'src/app/ready.ts:10'],
+    );
+  });
+
+  it("follows x['available'] as it follows x.available", async () => {
+    const { nx } = await acrossAdapters(files, 'available-signal', '0.22.2');
+    const bracket = nx.files['src/app/bracket.ts']!;
+    assert.match(bracket, /read = haptics\['available'\]\(\);/);
+    assert.match(bracket, /wait = async \(\) => biometrics\['available'\]\(\);/);
+    assert.match(nx.files['src/app/panel.ts']!, /@if \(haptics\["available"\]\(\)\)/);
+    assert.deepEqual(
+      nx.notes.filter((note) => note.startsWith('src/app/bracket.ts')).map((n) => n.split(': ')[0]),
+      ['src/app/bracket.ts:9'],
+    );
   });
 });
