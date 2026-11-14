@@ -59,3 +59,11 @@ TEST_CASE("a measurement is cached for the same text and constraints") {
   f.measure("hello", {500, 1000});
   CHECK(f.measurer->calls == 2);
 }
+
+TEST_CASE("an empty string measures one line high and no width, as React Native iOS measures it") {
+  // An empty text input with no placeholder: its box is a line of its font, not nothing.
+  Fixture f;
+  auto size = f.measure("", {1000, 1000});
+  CHECK(size.width == doctest::Approx(0));
+  CHECK(size.height == doctest::Approx(17.5));
+}

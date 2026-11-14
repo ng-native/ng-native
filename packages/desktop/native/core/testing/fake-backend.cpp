@@ -158,7 +158,8 @@ facebook::react::Size FakeTextMeasurer::measure(
     facebook::react::Float maxWidth) const {
   calls++;
   auto width = charWidth * static_cast<facebook::react::Float>(text.getString().size());
-  return {std::min(width, maxWidth), lineHeight};
+  // As Core Text lays it out: an empty string has no line, so no height.
+  return {std::min(width, maxWidth), text.getString().empty() ? 0 : lineHeight};
 }
 
 } // namespace ngn::testing
