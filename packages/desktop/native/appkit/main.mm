@@ -23,6 +23,7 @@
 #import "menu-bar.h"
 #import "modal-host-view.h"
 #import "network.h"
+#import "red-box.h"
 #import "scroll-view.h"
 #import "split-view.h"
 #import "system.h"
@@ -115,6 +116,8 @@ struct Host {
   bool appWindowShown = false;
   // The Expo Updates client, for a bundle on disk (updates.h).
   std::shared_ptr<ngn::UpdatesClient> updates;
+  // A dev run's red box (red-box.h).
+  std::shared_ptr<ngn::RedBox> redBox;
 };
 
 Host gHost;
@@ -264,6 +267,8 @@ struct AppKitMenus final : ngn::MenuBackend {
               fprintf(stderr, "ngn-macos: the reload could not load the bundle\n");
             }
           });
+        } else if (item.command == ngn::MenuCommand::OpenDevTools && gHost.runtime) {
+          gHost.runtime->openDebugger();
         } else if (gHost.menus) {
           gHost.menus->choose(item, surfaceOf(NSApp.keyWindow));
         }
@@ -946,9 +951,44 @@ int main(int argc, const char *argv[]) {
         gHost.mounting,
         std::make_shared<ngn::CoreTextMeasurer>(),
         std::make_shared<ngn::appkit::AppKitControlMeasurer>(),
-        modules, network, bundle);
+        modules, network, bundle,
+        ngn::DebuggerIdentity{
+            .appId = appId,
+            .deviceName = NSHost.currentHost.localizedName ? NSHost.currentHost.localizedName.UTF8String : "Mac"});
 
     bool developer = gHost.runtime->devServer().has_value();
+    if (developer) {
+      const auto &server = *gHost.runtime->devServer();
+      gHost.redBox = std::make_shared<ngn::RedBox>(
+          ngn::appkit::makeRedBoxWindow({
+              .dismiss = [] { gHost.redBox->dismiss(); },
+              .reload =
+                  [] {
+                    gHost.redBox->reloaded();
+                    gHost.runtime->reload();
+                  },
+              .step = [](int delta) { gHost.redBox->step(delta); },
+          }),
+          network.http,
+          server.scheme + "://" + server.host + ":" + std::to_string(server.port));
+      std::weak_ptr<ngn::RedBox> redBox = gHost.redBox;
+      gHost.runtime->onJsError = [redBox](const folly::dynamic &data) {
+        auto box = redBox.lock();
+        auto error = data.getDefault("source") == "console" ? ngn::jsErrorFromConsole(data) : ngn::jsErrorFrom(data);
+        if (box && error) {
+          box->report(std::move(*error));
+        }
+      };
+      gHost.runtime->onDebuggerPaused = [](std::function<void()> resume) {
+        ngn::appkit::showDebuggerPaused(std::move(resume));
+      };
+      gHost.runtime->onDebuggerResumed = [] { ngn::appkit::hideDebuggerPaused(); };
+      gHost.runtime->onInstanceStart = [redBox] {
+        if (auto box = redBox.lock()) {
+          box->reloaded();
+        }
+      };
+    }
     NGNSurfaceView.contextMenuShower = [](NGNSurfaceView *view, NSEvent *event, const ngn::PointerInput &input) {
       auto target = gHost.input->contextMenuAt(input);
       if (!target) {

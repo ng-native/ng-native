@@ -94,4 +94,11 @@ TEST_CASE("a bundle from a dev server adds the Developer menu with Reload on Com
   REQUIRE(reload);
   CHECK(reload->key == "r");
   CHECK(reload->modifiers == ngn::Command);
+  // React Native DevTools, on Safari's and Chrome's Web Inspector shortcut.
+  auto devTools = ngn::findMenuItem(bar, MenuCommand::OpenDevTools);
+  REQUIRE(devTools);
+  CHECK(devTools->title == "Open DevTools");
+  CHECK(devTools->key == "i");
+  CHECK(devTools->modifiers == (ngn::Command | ngn::Option));
+  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes"}), MenuCommand::OpenDevTools));
 }

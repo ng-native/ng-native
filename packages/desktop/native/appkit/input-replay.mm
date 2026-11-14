@@ -78,8 +78,41 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
   }
 }
 
+// A key press and its release, to the key window (a red box or a sheet, not only the app's).
+void sendKey(const InputStep &step) {
+  NSWindow *window = NSApp.keyWindow;
+  if (window == nil) {
+    return;
+  }
+  NSString *characters = step.key == "escape" ? @"\x1b"
+      : step.key == "return"                  ? @"\r"
+                                              : [NSString stringWithUTF8String:step.key.c_str()];
+  unsigned short code = step.key == "escape" ? 53 : step.key == "return" ? 36 : 0;
+  NSEventModifierFlags flags = 0;
+  if (step.modifiers & InputStep::Command) flags |= NSEventModifierFlagCommand;
+  if (step.modifiers & InputStep::Shift) flags |= NSEventModifierFlagShift;
+  if (step.modifiers & InputStep::Option) flags |= NSEventModifierFlagOption;
+  if (step.modifiers & InputStep::Control) flags |= NSEventModifierFlagControl;
+  for (NSEventType type : {NSEventTypeKeyDown, NSEventTypeKeyUp}) {
+    NSEvent *event = [NSEvent keyEventWithType:type
+                                      location:NSZeroPoint
+                                 modifierFlags:flags
+                                     timestamp:NSProcessInfo.processInfo.systemUptime
+                                  windowNumber:window.windowNumber
+                                       context:nil
+                                    characters:characters
+                   charactersIgnoringModifiers:characters
+                                     isARepeat:NO
+                                       keyCode:code];
+    [NSApp sendEvent:event];
+  }
+}
+
 void play(NSWindow *window, const InputStep &step) {
   switch (step.kind) {
+    case InputStep::Kind::Key:
+      sendKey(step);
+      break;
     case InputStep::Kind::Wait:
       break;
     case InputStep::Kind::Move:

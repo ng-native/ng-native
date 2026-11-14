@@ -1,6 +1,7 @@
 #include "ngn/runtime.h"
 
 #include "ngn/worklet-host.h"
+#include "red-box-errors.h"
 
 #include <react/featureflags/ReactNativeFeatureFlags.h>
 #include <react/featureflags/ReactNativeFeatureFlagsDefaults.h>
@@ -9,15 +10,18 @@
 #include <react/logging/DefaultOnJsErrorHandler.h>
 #include <react/renderer/scheduler/Scheduler.h>
 #include <react/renderer/uimanager/UIManager.h>
+#include <react/devsupport/IDevUIDelegate.h>
 #include <react/runtime/ReactHost.h>
 #include <react/utils/RunLoopObserverManager.h>
 
 #include <glog/logging.h>
+#include <jsi/JSIDynamic.h>
 
 #include <set>
 #include <thread>
 
 using namespace facebook::react;
+namespace jsi = facebook::jsi;
 
 namespace ngn {
 
@@ -30,6 +34,32 @@ class FeatureFlags final : public ReactNativeFeatureFlagsDefaults {
   bool enableBridgelessArchitecture() override {
     return true;
   }
+};
+
+// React Native's dev UI as the host has it: the debugger's pause, handed to the runtime's owner.
+// The bundle's download progress and loading view are left to the app (DevLoadingView).
+class DevUI final : public IDevUIDelegate {
+ public:
+  explicit DevUI(std::function<void(std::function<void()>)> &paused, std::function<void()> &resumed)
+      : paused_(paused), resumed_(resumed) {}
+  void showDownloadBundleProgress() override {}
+  void hideDownloadBundleProgress() override {}
+  void showLoadingView(const std::string &, SharedColor, SharedColor) override {}
+  void hideLoadingView() override {}
+  void showDebuggerOverlay(std::function<void()> &&resume) override {
+    if (paused_) {
+      paused_(std::move(resume));
+    }
+  }
+  void hideDebuggerOverlay() override {
+    if (resumed_) {
+      resumed_();
+    }
+  }
+
+ private:
+  std::function<void(std::function<void()>)> &paused_;
+  std::function<void()> &resumed_;
 };
 
 LayoutConstraints constraints(const SurfaceMetrics &metrics) {
@@ -51,13 +81,15 @@ Runtime::Runtime(
     std::shared_ptr<const ControlMeasurer> controlMeasurer,
     std::shared_ptr<ModuleRegistry> modules,
     NetworkClients clients,
-    std::string bundle)
+    std::string bundle,
+    DebuggerIdentity identity)
     : mounting_(std::move(mounting)),
       textMeasurer_(std::move(textMeasurer)),
       controlMeasurer_(std::move(controlMeasurer)),
       modules_(std::move(modules)),
       clients_(std::move(clients)),
       bundle_(std::move(bundle)),
+      identity_(std::move(identity)),
       devServer_(DevServer::fromBundleUrl(bundle_)),
       runLoop_(std::make_shared<RunLoopObserverManager>()) {
   // As React Native iOS's surface presenter does after each mount: the UIManager's mount hooks
@@ -92,12 +124,18 @@ void Runtime::createHost() {
   contextContainer->insert("RCTImageLoader", std::shared_ptr<void>{});
 
   ReactInstanceConfig config;
-  config.appId = "ngn-desktop";
-  config.deviceName = "desktop";
+  config.appId = identity_.appId;
+  config.deviceName = identity_.deviceName;
   // Dev mode is what makes ReactHost load from the dev server, connect to /message for reload and
   // set up the HMR client; a bundle on disk runs without it.
   config.enableDevMode = devServer_.has_value();
+  // The inspector registers the app with the dev server's inspector proxy (its /json/list), which
+  // React Native DevTools connects to. Only with a dev server; Release builds have no debugger.
+#ifdef NGN_INSPECTOR
+  config.enableInspector = devServer_.has_value();
+#else
   config.enableInspector = false;
+#endif
   if (devServer_) {
     config.devServerHost = devServer_->host;
     config.devServerPort = devServer_->port;
@@ -110,8 +148,12 @@ void Runtime::createHost() {
       contextContainer,
       getDefaultOnJsErrorFunc(),
       [](const std::string &message, unsigned int level) { LOG(INFO) << "[js:" << level << "] " << message; },
+      std::make_shared<DevUI>(onDebuggerPaused, onDebuggerResumed),
+      modules_->providers(),
       nullptr,
-      modules_->providers());
+      nullptr,
+      devServer_ ? ReactInstance::BindingsInstallFunc([this](jsi::Runtime &runtime) { installErrorListener(runtime); })
+                 : nullptr);
   // Reanimated reaches the UIManager through here as it installs (worklet-host.h).
   auto *host = host_.get();
   workletHost().runOnScheduler = [host](std::function<void(Scheduler &)> task) { host->runOnScheduler(std::move(task)); };
@@ -119,6 +161,70 @@ void Runtime::createHost() {
 
 Runtime::~Runtime() {
   shutdown();
+}
+
+// Before the bundle runs, so the listener is the pipeline's first: LogBox, which an Angular app
+// never draws, prevents the default handling of the errors it takes, but every listener still
+// hears them.
+void Runtime::installErrorListener(jsi::Runtime &runtime) {
+  if (onInstanceStart) {
+    onInstanceStart();
+  }
+  auto report = [this](jsi::Runtime &rt, const jsi::Value &error, bool console) {
+    if (!error.isObject() || !onJsError) {
+      return;
+    }
+    try {
+      auto data = jsi::dynamicFromValue(rt, error);
+      if (console) {
+        data["source"] = "console";
+      }
+      onJsError(data);
+    } catch (const std::exception &e) {
+      LOG(WARNING) << "ngn: an error could not be read for the red box: " << e.what();
+    }
+  };
+  // Errors the pipeline does not see once the runtime is ready: console.error's and ErrorUtils'.
+  try {
+    auto install = runtime.evaluateJavaScript(std::make_shared<jsi::StringBuffer>(kRedBoxErrors), "ngn-red-box-errors.js");
+    install.asObject(runtime).asFunction(runtime).call(
+        runtime,
+        jsi::Function::createFromHostFunction(
+            runtime,
+            jsi::PropNameID::forAscii(runtime, "ngnReportError"),
+            1,
+            [report](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args, size_t count) {
+              if (count > 0) {
+                report(rt, args[0], true);
+              }
+              return jsi::Value::undefined();
+            }));
+  } catch (const std::exception &e) {
+    LOG(WARNING) << "ngn: the red box's error hook did not install: " << e.what();
+  }
+  auto global = runtime.global();
+  auto registerListener = global.getProperty(runtime, "RN$registerExceptionListener");
+  if (!registerListener.isObject() || !registerListener.asObject(runtime).isFunction(runtime)) {
+    return;
+  }
+  auto listener = jsi::Function::createFromHostFunction(
+      runtime,
+      jsi::PropNameID::forAscii(runtime, "ngnRedBox"),
+      1,
+      [report](jsi::Runtime &rt, const jsi::Value &, const jsi::Value *args, size_t count) {
+        if (count > 0) {
+          report(rt, args[0], false);
+        }
+        return jsi::Value::undefined();
+      });
+  registerListener.asObject(runtime).asFunction(runtime).call(runtime, std::move(listener));
+}
+
+void Runtime::openDebugger() {
+  std::lock_guard lock(mutex_);
+  if (host_ && devServer_) {
+    host_->openDebugger();
+  }
 }
 
 bool Runtime::loadBundle() {

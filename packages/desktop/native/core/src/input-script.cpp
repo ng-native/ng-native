@@ -69,6 +69,28 @@ InputScript parseInputScript(const std::string &text) {
       if (!(words >> step.x >> step.y >> step.amount >> phase) || phase.empty()) {
         return fail(verb + " needs x, y, an amount and a phase");
       }
+    } else if (verb == "key") {
+      step.kind = InputStep::Kind::Key;
+      if (!(words >> step.key)) {
+        return fail("key needs a key");
+      }
+      if (step.key.size() != 1 && step.key != "escape" && step.key != "return") {
+        return fail("unknown key " + step.key);
+      }
+      std::string modifier;
+      while (words >> modifier) {
+        if (modifier == "cmd") {
+          step.modifiers |= InputStep::Command;
+        } else if (modifier == "shift") {
+          step.modifiers |= InputStep::Shift;
+        } else if (modifier == "option") {
+          step.modifiers |= InputStep::Option;
+        } else if (modifier == "ctrl") {
+          step.modifiers |= InputStep::Control;
+        } else {
+          return fail("unknown modifier " + modifier);
+        }
+      }
     } else {
       return fail("unknown step " + verb);
     }
