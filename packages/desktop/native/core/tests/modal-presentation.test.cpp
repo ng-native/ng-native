@@ -22,6 +22,13 @@ SheetNode node(Rect frame, std::optional<Float> width = {}, std::optional<Float>
   return SheetNode{.frame = frame, .width = width, .height = height, .children = std::move(children)};
 }
 
+// A content-sized view with 20 points of padding all round.
+SheetNode padded(Rect frame, std::vector<SheetNode> children) {
+  auto out = node(frame, {}, {}, std::move(children));
+  out.insets = {.left = 20, .top = 20, .right = 20, .bottom = 20};
+  return out;
+}
+
 // A <modal> as it lays out at `laidOut`: the ModalHostView, its full-bleed container and the app's
 // content under that.
 SheetNode modal(std::vector<SheetNode> content, Size laidOut = {1000, 700}) {
@@ -99,4 +106,35 @@ TEST_CASE("a sheet stays between 320x200 and the window") {
   CHECK(ngn::sheetSize(small, {300, 150}) == Size{320, 200});
   // An empty modal, before its content commits.
   CHECK(ngn::sheetSize(modal({}), {900, 600}) == Size{ngn::kDefaultSheetWidth, 200});
+}
+
+TEST_CASE("a content-sized root keeps its padding once the sheet is its size") {
+  // Once the sheet takes the column's height, the column fills the container and is passed
+  // through: its bottom padding still counts, or the sheet would shrink and grow every commit.
+  auto column = padded({{0, 0}, {480, 260}}, {node({{20, 20}, {440, 100}}), node({{20, 120}, {440, 120}})});
+  CHECK(ngn::sheetSize(modal({column}, {480, 260}), {1200, 800}) == Size{ngn::kDefaultSheetWidth, 260});
+}
+
+TEST_CASE("a popover takes its root's definite size, or its content's extent with its padding") {
+  // A presented screen as it first lays out, at the most a popover measures against, holding a
+  // root 200 by 90 with padding.
+  auto root = padded({{0, 0}, {200, 90}}, {node({{20, 20}, {40, 17}}), node({{20, 43}, {40, 17}})});
+  root.width = 200;
+  root.height = 90;
+  auto screen = [](SheetNode content, Size laidOut) { return node({{0, 0}, laidOut}, {}, {}, {std::move(content)}); };
+  CHECK(ngn::popoverSize(screen(root, {640, 640}), {900, 600}) == Size{200, 90});
+  // Laid out at that size, the root fills the screen; it is still what the popover is sized by.
+  CHECK(ngn::popoverSize(screen(root, {200, 90}), {900, 600}) == Size{200, 90});
+
+  // A content-sized root: its children's extent and its padding, the same at either size.
+  auto loose = padded({{0, 0}, {100, 77}}, {node({{20, 20}, {60, 17}}), node({{20, 40}, {40, 17}})});
+  CHECK(ngn::popoverSize(screen(loose, {640, 640}), {900, 600}) == Size{100, 77});
+  loose.frame.size = {100, 77};
+  CHECK(ngn::popoverSize(screen(loose, {100, 77}), {900, 600}) == Size{100, 77});
+
+  // Never past the window, nor the most a popover measures against.
+  auto huge = node({{0, 0}, {2000, 1500}}, 2000, 1500);
+  CHECK(ngn::popoverSize(screen(huge, {640, 640}), {900, 600}) == Size{640, 600});
+  // Nothing laid out yet: no size.
+  CHECK(ngn::popoverSize(node({{0, 0}, {640, 640}}), {900, 600}) == Size{0, 0});
 }

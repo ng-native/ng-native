@@ -15,9 +15,9 @@ ngn::InputSink *gInput = nullptr;
 std::function<void(NSInteger, BOOL)> gPresentationChanged;
 std::function<NSView *(NSInteger)> gViewForTag;
 std::function<NSSize(NSInteger, NSInteger, NSSize)> gSheetSizer;
+std::function<NSSize(NSInteger, NSInteger, NSSize)> gPopoverSizer;
 NSHashTable *gPopovers = [NSHashTable weakObjectsHashTable];
-// The most a popover measures its content against, before it fits.
-constexpr CGFloat kPopoverMax = 640;
+constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
 } // namespace
 
 @class NGNModalHostView;
@@ -56,6 +56,8 @@ constexpr CGFloat kPopoverMax = 640;
   NSPopover *_popover;
   NSWindow *_sheet;
   BOOL _dismissing;
+  // The window a popover measures against: its anchor's.
+  NSSize _anchorWindowSize;
   State::Shared _modalState;
   NSSize _reportedSize;
 }
@@ -67,21 +69,18 @@ constexpr CGFloat kPopoverMax = 640;
   gSheetSizer = std::move(fn);
 }
 
++ (std::function<NSSize(NSInteger, NSInteger, NSSize)>)popoverSizer {
+  return gPopoverSizer;
+}
++ (void)setPopoverSizer:(std::function<NSSize(NSInteger, NSInteger, NSSize)>)fn {
+  gPopoverSizer = std::move(fn);
+}
+
 + (std::function<NSView *(NSInteger)>)viewForTag {
   return gViewForTag;
 }
 + (void)setViewForTag:(std::function<NSView *(NSInteger)>)fn {
   gViewForTag = std::move(fn);
-}
-
-- (NSArray<NSView *> *)fabricChildrenOf:(NSView *)view {
-  NSMutableArray *children = [NSMutableArray array];
-  for (NSView *v in view.subviews) {
-    if ([v isKindOfClass:NGNView.class] && !v.hidden) {
-      [children addObject:v];
-    }
-  }
-  return children;
 }
 
 + (void)fitPopovers {
@@ -110,26 +109,16 @@ constexpr CGFloat kPopoverMax = 640;
   [_sheet setContentSize:size];
 }
 
-// The popover takes its content's size, once it has one: past the views that fill their parent
-// (<modal>'s own container), the extent of what is in them.
+// The popover takes its content's size, once it has one, as the core works it out from the
+// shadow tree: the mounted views lose a root's padding once the popover is the root's size.
 - (void)fitPopover {
-  if (_popover == nil) {
+  if (_popover == nil || !gPopoverSizer) {
     return;
   }
-  NSView *root = self;
-  for (;;) {
-    NSArray<NSView *> *children = [self fabricChildrenOf:root];
-    if (children.count == 1 && NSEqualSizes(children[0].frame.size, root.bounds.size)) {
-      root = children[0];
-    } else {
-      break;
-    }
-  }
-  NSSize size = NSZeroSize;
-  for (NSView *child in [self fabricChildrenOf:root]) {
-    size.width = std::max(size.width, NSMaxX(child.frame));
-    size.height = std::max(size.height, NSMaxY(child.frame));
-  }
+  NSSize window = _anchorWindowSize;
+  NSSize size = gPopoverSizer(self.surfaceId, self.reactTag, window);
+  NSSize chrome = [self chromeSize];
+  size.height += chrome.height;
   if (size.width < 1 || size.height < 1 || NSEqualSizes(size, _popover.contentSize)) {
     return;
   }
@@ -260,6 +249,7 @@ constexpr CGFloat kPopoverMax = 640;
     return;
   }
   NSSize window = anchor.window.contentView.bounds.size;
+  _anchorWindowSize = window;
   NSRect frame = NSMakeRect(0, 0, std::min(window.width, kPopoverMax), std::min(window.height, kPopoverMax));
   _cover = [[NGNModalCover alloc] initWithFrame:frame
                                       surfaceId:static_cast<SurfaceId>(self.surfaceId)

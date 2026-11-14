@@ -418,6 +418,13 @@ int main(int argc, const char *argv[]) {
           node ? *node : empty, {static_cast<Float>(window.width), static_cast<Float>(window.height)});
       return NSMakeSize(size.width, size.height);
     };
+    NGNModalHostView.popoverSizer = [](NSInteger surface, NSInteger tag, NSSize window) {
+      auto node = gHost.runtime ? gHost.runtime->sheetNode(static_cast<SurfaceId>(surface), static_cast<Tag>(tag))
+                                : std::nullopt;
+      auto size = node ? ngn::popoverSize(*node, {static_cast<Float>(window.width), static_cast<Float>(window.height)})
+                       : facebook::react::Size{0, 0};
+      return NSMakeSize(size.width, size.height);
+    };
     NGNModalHostView.viewForTag = [](NSInteger tag) -> NSView * {
       return gHost.backend->view(static_cast<Tag>(tag));
     };
