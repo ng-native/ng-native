@@ -1,5 +1,6 @@
 #include "ngn/launch-settings.h"
 
+#include <cctype>
 #include <filesystem>
 
 namespace ngn {
@@ -7,9 +8,42 @@ namespace ngn {
 namespace {
 
 const char *kUsage =
-    "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>]";
+    "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>] [--url <link>]";
+
+bool is(const LaunchSources &sources, const char *name, const char *value) {
+  auto found = sources.env ? sources.env(name) : std::nullopt;
+  return found && *found == value;
+}
+
+// A test launch from the environment, nothing when NGN_TESTS is not 1, or why it is unusable.
+std::variant<std::optional<TestLaunch>, std::string> testLaunch(const LaunchSources &sources) {
+  if (!is(sources, "NGN_TESTS", "1")) {
+    return std::optional<TestLaunch>();
+  }
+  auto dir = sources.env("NGN_STATE_DIR").value_or("");
+  auto runId = sources.env("NGN_RUN_ID").value_or("");
+  if (dir.empty() || dir.front() != '/') {
+    return std::string("NGN_TESTS=1 needs NGN_STATE_DIR, an absolute path: \"") + dir + "\"";
+  }
+  bool plain = !runId.empty() && runId.size() <= 64;
+  for (char c : runId) {
+    plain = plain && (std::isalnum(static_cast<unsigned char>(c)) || c == '-');
+  }
+  if (!plain) {
+    return std::string("NGN_TESTS=1 needs NGN_RUN_ID, letters, digits and dashes: \"") + runId + "\"";
+  }
+  while (dir.size() > 1 && dir.back() == '/') {
+    dir.pop_back();
+  }
+  return std::optional<TestLaunch>(
+      TestLaunch{.stateDir = dir, .runId = runId, .fakeSystemUI = is(sources, "NGN_TESTS_FAKE_SYSTEM_UI", "1")});
+}
 
 } // namespace
+
+bool isStaleTestService(const std::string &service, const TestLaunch &own) {
+  return service.starts_with("ngn-test-") && !service.starts_with(own.keychainPrefix());
+}
 
 std::string LaunchSettings::setting(const std::string &plistKey, const std::string &envName) const {
   if (auto value = plist ? plist(plistKey) : std::nullopt) {
@@ -28,6 +62,8 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources) 
   settings.env = sources.env;
   settings.plist = sources.plist;
   auto plist = [&](const char *key) { return sources.plist ? sources.plist(key) : std::nullopt; };
+  // Only ever takes a prompt away, so a packaged app reads it too.
+  settings.noPrompts = is(sources, "NGN_NO_PROMPTS", "1");
 
   if (auto file = plist("NGNBundleFile")) {
     // Packaged: argv and the environment are never read.
@@ -47,6 +83,12 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources) 
     return settings;
   }
 
+  auto test = testLaunch(sources);
+  if (auto *problem = std::get_if<std::string>(&test)) {
+    return *problem;
+  }
+  settings.test = std::get<std::optional<TestLaunch>>(test);
+  settings.noPrompts = settings.noPrompts || (settings.test && settings.test->fakeSystemUI);
   if (auto capabilities = sources.env ? sources.env("NGN_DESKTOP_CAPABILITIES") : std::nullopt) {
     settings.capabilitiesJson = *capabilities;
   }
@@ -60,6 +102,8 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources) 
       settings.appId = args[++i];
     } else if (arg == "--capabilities" && hasValue) {
       settings.capabilitiesJson = args[++i];
+    } else if (arg == "--url" && hasValue) {
+      settings.initialUrl = args[++i];
     } else if (arg == "--title" && hasValue) {
       settings.title = args[++i];
     } else if (settings.bundle.empty() && !arg.starts_with("--")) {

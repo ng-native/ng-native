@@ -1,4 +1,5 @@
 #import "system.h"
+#import "test-launch.h"
 
 #import <AppKit/AppKit.h>
 #import <ImageIO/ImageIO.h>
@@ -178,7 +179,7 @@ class AppKitSystem final : public System {
   }
 
   std::optional<folly::dynamic> preference(const std::string &key) override {
-    NSString *json = [NSUserDefaults.standardUserDefaults stringForKey:ns(prefixed(key))];
+    NSString *json = [appDefaults() stringForKey:ns(prefixed(key))];
     if (json == nil) {
       return std::nullopt;
     }
@@ -190,7 +191,7 @@ class AppKitSystem final : public System {
   }
 
   void setPreference(const std::string &key, std::optional<folly::dynamic> value) override {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSUserDefaults *defaults = appDefaults();
     if (value) {
       [defaults setObject:ns(folly::toJson(*value)) forKey:ns(prefixed(key))];
     } else {
@@ -222,9 +223,10 @@ class AppKitSystem final : public System {
   }
 
   std::string appDataDirectory() override {
-    NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
-                                                          inDomains:NSUserDomainMask]
-                         .firstObject;
+    NSURL *support = testLaunch() ? [NSURL fileURLWithPath:ns(testLaunch()->applicationSupport()) isDirectory:YES]
+                                  : [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
+                                                                         inDomains:NSUserDomainMask]
+                                        .firstObject;
     NSString *bundleId = NSBundle.mainBundle.bundleIdentifier;
     NSURL *dir = [support URLByAppendingPathComponent:bundleId != nil ? bundleId : ns(appId_) isDirectory:YES];
     [NSFileManager.defaultManager createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];

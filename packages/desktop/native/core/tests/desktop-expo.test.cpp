@@ -404,3 +404,39 @@ TEST_CASE("the Data Protection keychain is used when the app's signature has a T
   CHECK_FALSE(ngn::usesDataProtectionKeychain("ABCDE12345", {"com.apple.security.device.camera"}));
   CHECK_FALSE(ngn::usesDataProtectionKeychain("", {"com.apple.application-identifier"}));
 }
+
+TEST_CASE("A test launch's SecureStore keeps its items under its own prefix and clears what it wrote") {
+  auto secrets = std::make_shared<MemorySecrets>();
+  secrets->items[{"com.example.app", "token"}] = "the app's own";
+  auto prefixed = std::make_shared<ngn::PrefixedSecretStore>(secrets, "ngn-test-run-1.");
+  auto module = ngn::makeSecureStoreModule(prefixed, "com.example.app");
+
+  // The app's own item is not the run's.
+  CHECK(ask(*module, "getItemAsync", dynamic::array("token")).value == dynamic(nullptr));
+  ask(*module, "setItemAsync", dynamic::array("token", "run"));
+  ask(*module, "setItemAsync", dynamic::array("token", "shared", dynamic::object("keychainService", "shared")));
+  ask(*module, "setItemAsync", dynamic::array("gone", "x"));
+  ask(*module, "deleteItemAsync", dynamic::array("gone"));
+  CHECK(secrets->items.at({"ngn-test-run-1.com.example.app", "token"}) == "run");
+  CHECK(secrets->items.at({"ngn-test-run-1.shared", "token"}) == "shared");
+  CHECK(ask(*module, "getItemAsync", dynamic::array("token")).value == dynamic("run"));
+
+  prefixed->clear();
+  CHECK(secrets->items.size() == 1);
+  CHECK(secrets->items.at({"com.example.app", "token"}) == "the app's own");
+
+  // A store that fails to remove leaves the item for the next launch, and does not throw.
+  ask(*module, "setItemAsync", dynamic::array("token", "run"));
+  secrets->failing = true;
+  CHECK_NOTHROW(prefixed->clear());
+}
+
+TEST_CASE("Dismissed panels answer at once as a person cancelling would") {
+  TempDir cache;
+  auto module = ngn::makeDocumentPickerModule(ngn::makeDismissedFileDialogs(), cache.path.string());
+  auto picked = ask(*module, "getDocumentAsync", dynamic::array(dynamic::object()));
+  REQUIRE(picked.value);
+  CHECK((*picked.value)["canceled"] == true);
+  CHECK(ask(*module, "saveDocumentAsync", dynamic::array(dynamic::object("suggestedName", "a.txt")("contents", "x"))).value == dynamic(nullptr));
+  CHECK(ask(*module, "pickDirectoryAsync", dynamic::array()).value == dynamic(nullptr));
+}

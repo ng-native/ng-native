@@ -4,7 +4,7 @@
  * `native/scripts/fetch.sh` fetches, against the app's own `react-native`. The side effects go
  * through `system`, which the tests replace.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   cpSync,
@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
+import { constants, homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -102,6 +102,34 @@ export const system = {
     });
     if (result.error) throw result.error;
     return { status: result.status ?? 1, stdout: result.stdout ?? '' };
+  },
+  /**
+   * Runs the host with this process's environment and terminal, passing on the signals that end a
+   * process (a test pool's SIGTERM, Ctrl-C), and resolves with its status: its exit code, or 128
+   * and the signal's number when a signal ended it.
+   *
+   * @param {string} command
+   * @param {string[]} args
+   * @returns {Promise<number>}
+   */
+  host(command, args) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(command, args, { stdio: 'inherit' });
+      const signals = /** @type {const} */ (['SIGTERM', 'SIGINT', 'SIGHUP']);
+      const forward = (/** @type {NodeJS.Signals} */ signal) => child.kill(signal);
+      for (const signal of signals) process.on(signal, forward);
+      const done = () => {
+        for (const signal of signals) process.off(signal, forward);
+      };
+      child.once('error', (error) => {
+        done();
+        reject(error);
+      });
+      child.once('exit', (code, signal) => {
+        done();
+        resolve(code ?? 128 + (signal ? osSignal(signal) : 0));
+      });
+    });
   },
   /**
    * The project's public Expo config, as the Expo CLI resolves it (app.json or app.config.js).
@@ -355,4 +383,9 @@ function buildHost(sys, reactNative, libraries, { universal, release }, link) {
     throw new Error('The desktop host did not build; the output above says why.');
   }
   return buildDir;
+}
+
+/** @param {NodeJS.Signals} signal */
+function osSignal(signal) {
+  return constants.signals[signal] ?? 0;
 }

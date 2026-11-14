@@ -34,6 +34,9 @@ struct CoreModuleServices {
   // Moves the screen reader to the view with this tag (AccessibilityInfo.setAccessibilityFocus).
   // Any thread; nothing when absent.
   std::function<void(int tag)> focusAccessibility;
+  // A test launch's fake system UI: an alert is never shown and answers at once with its cancel
+  // button, or not at all when it has none, as a person must pick one of its buttons.
+  bool fakeSystemUI{false};
 };
 
 // Registers every core module.

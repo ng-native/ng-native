@@ -280,6 +280,23 @@ TEST_CASE("a prompt has a text field and sends what was typed with the key") {
   CHECK(answer == dynamic::array("1", "Grace"));
 }
 
+TEST_CASE("with fake system UI an alert is never shown and answers with its cancel button at once") {
+  Fixture f;
+  f.services.fakeSystemUI = true;
+  auto module = ngn::makeAlertManager(f.services);
+  std::vector<dynamic> answers;
+  auto alert = [&](dynamic options) {
+    module->callWithCallbacks("alertWithArgs", dynamic::array(options, nullptr), {[&](dynamic a) { answers.push_back(a); }});
+  };
+  alert(dynamic::object("title", "Delete?")("buttons", dynamic::array(dynamic::object("0", "Cancel"), dynamic::object("1", "Delete")))(
+      "cancelButtonKey", "0"));
+  alert(dynamic::object("title", "Saved"));
+  // No cancel button: a person must choose, so nothing answers.
+  alert(dynamic::object("title", "Pick")("buttons", dynamic::array(dynamic::object("0", "A"), dynamic::object("1", "B"))));
+  CHECK(f.system->alerts.empty());
+  CHECK(answers == std::vector<dynamic>{dynamic::array("0", ""), dynamic::array("0", "")});
+}
+
 TEST_CASE("every core module is registered under its iOS name") {
   Fixture f;
   f.services.storage = std::make_shared<ngn::KeyValueStore>("/nonexistent");

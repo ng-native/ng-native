@@ -104,10 +104,18 @@ std::shared_ptr<NativeModule> makeAlertManager(const CoreModuleServices &s) {
   struct AlertManager : NativeModule {
     explicit AlertManager(const CoreModuleServices &s) : NativeModule("AlertManager") {
       auto system = s.system;
-      async("alertWithArgs", [system](const folly::dynamic &args, std::vector<JsCallback> callbacks) {
+      bool fake = s.fakeSystemUI;
+      async("alertWithArgs", [system, fake](const folly::dynamic &args, std::vector<JsCallback> callbacks) {
         auto prepared = prepareAlert(args.size() > 0 && args[0].isObject() ? args[0] : folly::dynamic::object());
         JsCallback callback = callbacks.empty() ? nullptr : callbacks[0];
         auto keys = prepared.keys;
+        if (fake) {
+          int cancel = prepared.request.cancelIndex;
+          if (callback && cancel >= 0 && static_cast<size_t>(cancel) < keys.size()) {
+            callback(folly::dynamic::array(keys[cancel], prepared.request.defaultValue));
+          }
+          return;
+        }
         system->showAlert(prepared.request, [callback, keys](int button, std::string text) {
           if (callback && button >= 0 && static_cast<size_t>(button) < keys.size()) {
             callback(folly::dynamic::array(keys[button], text));

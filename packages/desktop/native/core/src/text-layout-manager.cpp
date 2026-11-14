@@ -2,6 +2,8 @@
 // The header is React Native's (platform/cxx); its stub .cpp leaves the build (react-native.cmake).
 #include <react/renderer/textlayoutmanager/TextLayoutManager.h>
 
+#include <react/renderer/attributedstring/PlaceholderAttributedString.h>
+
 #include "ngn/text-measurer.h"
 
 #include <cmath>
@@ -16,7 +18,10 @@ TextMeasurement TextLayoutManager::measure(
     const ParagraphAttributes &paragraphAttributes,
     const TextLayoutContext &layoutContext,
     const LayoutConstraints &layoutConstraints) const {
-  const auto &attributedString = attributedStringBox.getValue();
+  // An empty string is measured as "I" with its attributes, and kept no wider than nothing, as
+  // React Native iOS does, so an empty text input is a line of its font high.
+  const auto &original = attributedStringBox.getValue();
+  auto attributedString = ensurePlaceholderIfEmpty_DO_NOT_USE(original);
   auto compute = [&]() {
     TextMeasurement::Attachments attachments;
     for (const auto &fragment : attributedString.getFragments()) {
@@ -30,6 +35,9 @@ TextMeasurement TextLayoutManager::measure(
         : std::nullopt;
     if (measurer && *measurer) {
       size = (*measurer)->measure(attributedString, paragraphAttributes, layoutConstraints.maximumSize.width);
+      if (original.isEmpty()) {
+        size.width = 0;
+      }
       // Round up to the device pixel, as React Native iOS does, so the box never clips a glyph.
       Float scale = layoutContext.pointScaleFactor > 0 ? layoutContext.pointScaleFactor : 1;
       size = {std::ceil(size.width * scale) / scale, std::ceil(size.height * scale) / scale};
