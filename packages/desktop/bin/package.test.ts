@@ -401,6 +401,37 @@ describe('packageApp', () => {
     });
   });
 
+  it('copies a document type icon into the bundle and names it by its file in the plist', async () => {
+    const { sys, copied, written } = fakeMac({
+      expoConfig: () => ({
+        name: 'Notes',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        ios: { bundleIdentifier: 'com.example.notes' },
+        plugins: [
+          [
+            '@ng-native/desktop',
+            { documentTypes: [{ name: 'Note', extensions: ['note'], icon: './assets/note.icns' }] },
+          ],
+        ],
+      }),
+    });
+    await quiet(() => packageApp(parsePackage([]), sys));
+    assert.deepEqual(
+      copied.filter(([from]) => from.endsWith('note.icns')),
+      [
+        [
+          '/apps/notes/assets/note.icns',
+          '/apps/notes/dist/macos/Notes.app/Contents/Resources/note.icns',
+        ],
+      ],
+    );
+    assert.match(
+      written['/apps/notes/dist/macos/Notes.app/Contents/Info.plist']!,
+      /<key>CFBundleTypeIconFile<\/key>\n\t\t\t<string>note.icns<\/string>/,
+    );
+  });
+
   it('refuses an app name that would leave the output folder, before anything builds', async () => {
     for (const name of ['../evil', 'a/b', '..', 'a\\b']) {
       const { sys, calls, removed } = fakeMac({

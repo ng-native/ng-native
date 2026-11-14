@@ -253,7 +253,7 @@ export function infoPlist(
       CFBundleTypeRole: type.role === 'viewer' ? 'Viewer' : 'Editor',
       CFBundleTypeExtensions: [...type.extensions],
       LSItemContentTypes: type.utis ? [...type.utis] : undefined,
-      CFBundleTypeIconFile: type.icon,
+      CFBundleTypeIconFile: type.icon ? path.basename(type.icon) : undefined,
     })),
     LSMinimumSystemVersion: MINIMUM_MACOS,
     NSHighResolutionCapable: true,
@@ -442,6 +442,23 @@ function certificateOf(sys, cwd, config) {
 }
 
 /**
+ * Copies each document type's icon into `resources`. The plist names it by its file, which has to
+ * be in the bundle for Finder to find it.
+ *
+ * @param {System} sys
+ * @param {string} cwd
+ * @param {DesktopAppConfig} config
+ * @param {string} resources
+ */
+function copyDocumentIcons(sys, cwd, config, resources) {
+  for (const type of config.options.documentTypes ?? []) {
+    if (type.icon) {
+      sys.copy(path.resolve(cwd, type.icon), path.join(resources, path.basename(type.icon)));
+    }
+  }
+}
+
+/**
  * Builds the app and makes the package `options.format` asks for. Returns the exit status.
  *
  * @param {PackageCommand} options
@@ -484,6 +501,7 @@ export async function packageApp(options, sys) {
   const iconName = config.icon
     ? compileIcon(sys, path.resolve(cwd, config.icon), resources, staging)
     : null;
+  copyDocumentIcons(sys, cwd, config, resources);
   if (options.feedUrl) embedSparkle(sys, buildDir, contents);
   sys.writeFile(
     path.join(contents, 'Info.plist'),
