@@ -127,3 +127,52 @@ describe('Network on macOS', () => {
     assert.deepEqual(network.status(), { connected: false, type: 'none', reachable: false });
   });
 });
+
+describe('Battery on macOS', () => {
+  it('reads NgNativeBattery and follows each kind of ngNativeBattery event', async () => {
+    const host = mac({
+      NgNativeBattery: {
+        getBatteryLevelAsync: async () => 0.5,
+        getBatteryStateAsync: async () => 1,
+        isLowPowerModeEnabledAsync: async () => false,
+        isAvailableAsync: async () => true,
+      },
+    });
+    const { Battery } = await import('@ng-native/expo/battery');
+    const battery = injectService(Battery);
+    assert.equal(battery.available(), true);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(battery.level(), 0.5);
+    assert.equal(battery.state(), 'unplugged');
+    assert.equal(battery.saving(), false);
+    assert.equal(host.listening('ngNativeBattery'), 3);
+    host.send('ngNativeBattery', { type: 'level', batteryLevel: 0.1 });
+    assert.equal(battery.level(), 0.1);
+    assert.equal(battery.low(), true);
+    host.send('ngNativeBattery', { type: 'state', batteryState: 2 });
+    assert.equal(battery.state(), 'charging');
+    host.send('ngNativeBattery', { type: 'lowPowerMode', lowPowerMode: true });
+    assert.equal(battery.saving(), true);
+    assert.equal(battery.level(), 0.1);
+    // Held below full on the adapter reads as full, as expo-battery's NOT_CHARGING does.
+    host.send('ngNativeBattery', { type: 'state', batteryState: 4 });
+    assert.equal(battery.state(), 'full');
+  });
+
+  it('reads a Mac with no battery as a level not known, and never low', async () => {
+    mac({
+      NgNativeBattery: {
+        getBatteryLevelAsync: async () => -1,
+        getBatteryStateAsync: async () => 0,
+        isLowPowerModeEnabledAsync: async () => false,
+      },
+    });
+    const { Battery } = await import('@ng-native/expo/battery');
+    const battery = injectService(Battery);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(battery.known(), false);
+    assert.equal(battery.level(), 1);
+    assert.equal(battery.state(), 'unknown');
+    assert.equal(battery.low(), false);
+  });
+});

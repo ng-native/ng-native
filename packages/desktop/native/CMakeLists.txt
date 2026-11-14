@@ -96,6 +96,7 @@ add_library(ngn_core STATIC
     core/src/modules/app-info.cpp
     core/src/modules/app-modules.cpp
     core/src/modules/async-storage.cpp
+    core/src/modules/battery.cpp
     core/src/modules/core-modules.cpp
     core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
@@ -126,7 +127,8 @@ if(NGN_TESTS)
         appkit/updates.mm appkit/tests/update-crypto.test.mm
         appkit/crypto.mm appkit/tests/crypto.test.mm
         appkit/app-info.mm appkit/tests/app-info.test.mm
-        appkit/network-state.mm appkit/tests/network-state.test.mm)
+        appkit/network-state.mm appkit/tests/network-state.test.mm
+        appkit/battery.mm appkit/tests/battery.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network")
   endif()

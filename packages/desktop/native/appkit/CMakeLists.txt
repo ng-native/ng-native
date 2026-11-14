@@ -7,6 +7,7 @@ add_executable(ngn-macos
     desktop-expo.mm
     file-system.mm
     appkit-backend.mm
+    battery.mm
     header-toolbar.mm
     host-view.mm
     image-view.mm
