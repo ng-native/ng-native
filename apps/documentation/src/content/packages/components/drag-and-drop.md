@@ -1,6 +1,6 @@
 ---
 title: Drag and drop
-summary: Files, text and urls dragged onto a view, and a view dragged out to Finder or another app, on macOS and iPadOS.
+summary: Files, text and urls dragged onto a view, and a view dragged out, on macOS and iPadOS.
 ---
 
 # Drag and drop

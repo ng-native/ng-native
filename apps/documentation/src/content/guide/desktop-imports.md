@@ -29,5 +29,6 @@ summary: The package each macOS API is imported from, in one table.
 | The `ng-native-desktop` command and the config plugin                           | `@ng-native/desktop`, never imported |
 
 An element is used by its selector once its class is in the component's `imports`: `MenuBar` is
-`<menu-bar>`, `ContextMenu` is `[contextMenu]`, `Shortcut` is `[shortcut]`, `FileDrop` is `(fileDrop)`, `DragItem` is `[dragItem]`, `SplitView` is
-`<split-view>`, and `SidebarItemPath` is `<sidebar-item path="...">`.
+`<menu-bar>`, `ContextMenu` is `[contextMenu]`, `Shortcut` is `[shortcut]`, `FileDrop` is
+`(fileDrop)`, `DragItem` is `[dragItem]`, `SplitView` is `<split-view>`, and `SidebarItemPath` is
+`<sidebar-item path="...">`.
