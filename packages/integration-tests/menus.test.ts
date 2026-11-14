@@ -123,6 +123,31 @@ describe('the menu bar on macOS', () => {
     assert.equal(item(bar[0], 'Settings...')?.handled, true);
   });
 
+  it('gives Back and Forward the OS keys for them, not a mod chord', async () => {
+    const { host } = await open('macos', true);
+    const view = host.bar().find((group) => group.label === 'View');
+    assert.deepEqual(item(view, 'Back')?.shortcut, {
+      key: '[',
+      meta: true,
+      ctrl: false,
+      alt: false,
+      shift: false,
+    });
+    assert.equal(item(view, 'Forward')?.shortcut?.key, ']');
+  });
+
+  it('hands the OS back and forward commands to whoever listens, with their window', async () => {
+    const { host, app } = await open('macos', true);
+    const heard: unknown[] = [];
+    const stop = app.componentRef.injector
+      .get(Menus)
+      .onNavigate((direction, surface) => heard.push([direction, surface]));
+    await host.send({ type: 'navigate', direction: 'back', surface: 11 });
+    stop();
+    await host.send({ type: 'navigate', direction: 'forward' });
+    assert.deepEqual(heard, [['back', 11]]);
+  });
+
   it('runs what the item chosen does, and toggles a checked one', async () => {
     const { host, app, said } = await open('macos', true);
     await host.send({ type: 'menuSelect', id: item(host.bar()[1], 'New')!.id });

@@ -167,6 +167,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/router/screens', title: 'Screens and navigation' },
         { path: 'packages/router/header', title: 'The native header' },
         { path: 'packages/router/tabs', title: 'Tabs' },
+        { path: 'packages/router/history', title: 'Back and forward' },
         { path: 'packages/router/file-routes', title: 'File routes' },
       ],
     },

@@ -11,8 +11,10 @@ import {
   ApplicationInitStatus,
   ApplicationRef,
   DOCUMENT,
+  EnvironmentInjector,
   ErrorHandler,
   Injector,
+  inject,
   LOCALE_ID,
   Renderer2,
   RendererFactory2,
@@ -21,7 +23,6 @@ import {
   PLATFORM_ID,
   type Binding,
   type ComponentRef,
-  type EnvironmentInjector,
   type EnvironmentProviders,
   type ListenerOptions,
   type Provider,
@@ -1560,7 +1561,9 @@ export function mount(
       // Each window's root, on an OS with several: see `windowMounter`.
       {
         provide: WINDOW_MOUNTER,
-        useFactory: () => windowMounter(fabric, engine, engineOptions, injector),
+        // Its own injector by `inject`: an environment initializer can ask for it while the
+        // injector is still being made.
+        useFactory: () => windowMounter(fabric, engine, engineOptions, inject(EnvironmentInjector)),
       },
       ...extraProviders,
     ],

@@ -95,6 +95,7 @@ export {
 export {
   isEditingShortcut,
   matchesShortcut,
+  navigationShortcut,
   parseShortcut,
   shortcutFires,
   type KeyChord,

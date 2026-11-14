@@ -132,8 +132,9 @@ export function defaultMenuBar(appName: string): MenuGroupModel[] {
       label: 'View',
       menuRole: 'view',
       items: [
-        item('Back', 'back', 'mod+['),
-        item('Forward', 'forward', 'mod+]'),
+        // Their keys are each OS's own, which `navigationShortcut` gives: not a `mod` chord.
+        item('Back', 'back'),
+        item('Forward', 'forward'),
         SEPARATOR,
         item('Show Sidebar', 'toggleSidebar', 'ctrl+mod+s'),
         item('Enter Full Screen', 'toggleFullScreen', 'ctrl+mod+f'),

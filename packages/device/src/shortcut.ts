@@ -109,3 +109,22 @@ export function shortcutFires(
   if (!matchesShortcut(shortcut, chord, os)) return false;
   return !(textInputFocused && isEditingShortcut(shortcut, os));
 }
+
+/**
+ * The back and forward keys on `os`: a shortcut role rather than a `mod` chord, since each OS has
+ * its own. Cmd-[ and Cmd-] on macOS and iPadOS keyboards (Cmd-Left stays with text editing), and
+ * Alt-Left and Alt-Right elsewhere, as Windows, Linux and Android browsers have them.
+ */
+export function navigationShortcut(direction: 'back' | 'forward', os: ShortcutOs): ParsedShortcut {
+  if (apple(os)) {
+    return {
+      key: direction === 'back' ? '[' : ']',
+      meta: true,
+      ctrl: false,
+      alt: false,
+      shift: false,
+    };
+  }
+  const key = direction === 'back' ? 'ArrowLeft' : 'ArrowRight';
+  return { key, meta: false, ctrl: false, alt: true, shift: false };
+}

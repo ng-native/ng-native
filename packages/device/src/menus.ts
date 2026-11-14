@@ -33,6 +33,7 @@ import { injectOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 import {
   isEditingShortcut,
+  navigationShortcut,
   parseShortcut,
   type ParsedShortcut,
   type ShortcutOs,
@@ -86,7 +87,11 @@ export function serializeMenu(
         ...rest,
         // A role item the app handles: the host sends its select rather than doing the role.
         ...(select && entry.menuRole && { handled: true }),
-        ...(shortcut && { shortcut: parseShortcut(shortcut, os) }),
+        ...(shortcut
+          ? { shortcut: parseShortcut(shortcut, os) }
+          : (entry.menuRole === 'back' || entry.menuRole === 'forward') && {
+              shortcut: navigationShortcut(entry.menuRole, os),
+            }),
         ...(items && { items: walk(items, `${id}.`) }),
       };
     });
@@ -105,7 +110,16 @@ export interface NativeShortcut {
 
 export type NativeMenuEvent =
   | { readonly type: 'menuSelect'; readonly id: string }
-  | { readonly type: 'shortcut'; readonly id: string; readonly textInputFocused?: boolean };
+  | { readonly type: 'shortcut'; readonly id: string; readonly textInputFocused?: boolean }
+  /**
+   * Back or forward, from whichever input the OS has for it: View > Back and Forward and their
+   * keys, a two-finger swipe, mouse buttons 4 and 5. `surface` is the window it was in.
+   */
+  | {
+      readonly type: 'navigate';
+      readonly direction: 'back' | 'forward';
+      readonly surface?: number;
+    };
 
 /** The host's menu module. */
 export interface NativeMenus {
@@ -277,7 +291,24 @@ export class Menus {
     return () => this.shortcuts.update((all) => all.filter((one) => one !== registered));
   }
 
+  private readonly navigators = new Set<
+    (direction: 'back' | 'forward', surface?: number) => void
+  >();
+
+  /**
+   * Hear the OS's back and forward commands. `@ng-native/router` listens, and moves through the
+   * history of the window each was in. Answers the function that stops listening.
+   */
+  onNavigate(listener: (direction: 'back' | 'forward', surface?: number) => void): () => void {
+    this.navigators.add(listener);
+    return () => void this.navigators.delete(listener);
+  }
+
   private hostSaid(event: NativeMenuEvent): void {
+    if (event.type === 'navigate') {
+      this.navigators.forEach((listener) => listener(event.direction, event.surface));
+      return;
+    }
     if (event.type === 'menuSelect') {
       this.sentBar().actions.get(event.id)?.();
       return;
