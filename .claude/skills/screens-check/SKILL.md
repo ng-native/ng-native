@@ -1,6 +1,6 @@
 ---
 name: screens-check
-description: Compare how a change draws the canary's screens on iOS against main - the screens whose native output changed, each opened by deep link on one simulator in main's bundle and in the change's, tapped through with idb where a screen needs it, screenshotted with simctl and compared pair by pair. Use for a change that draws (the CSS engine, components, layout, text), when asked to check a pull request's screens, or when the PR gate's native output lists changed screens.
+description: Compare how a change draws the canary's screens on iOS, or on macOS, against main - the screens whose native output changed, each opened by deep link on one simulator (or as a packaged Mac app) in main's bundle and in the change's, tapped through with idb on iOS where a screen needs it, screenshotted with simctl (or screencapture -l on the host window) and compared pair by pair. Use for a change that draws (the CSS engine, components, layout, text), when asked to check a pull request's screens, or when the PR gate's native output lists changed screens.
 ---
 
 # Check a change's screens
@@ -180,6 +180,57 @@ side. Say what changed, where on the screen, and whether it is what the change m
 difference in a spinner or a caret alone is noise: say so. The clock is frozen at 9:41 in step 3,
 so a clock that differs means the override was skipped. Check that a screenshot is
 of the screen named, not the home screen, a dialog or a red error screen.
+
+## macOS mode
+
+For a change that draws on the desktop host, compare the same screens as a packaged Mac app,
+main beside the change. Steps 1 and 5 are unchanged (`native-output.mjs` is the same on every OS,
+and the comparison reads any PNG). Steps 2 to 4 and 6 become:
+
+**2m. One packaged app per side.** Only a packaged `.app` has its URL scheme registered with
+LaunchServices, so a dev host cannot be opened on a route. Package the canary in each checkout,
+one native build at a time, the host built for this Mac only:
+
+```sh
+(cd "$out/base/examples/canary" && pnpm exec ng-native-desktop package --format app --output "$out/base-app")
+(cd examples/canary && pnpm exec ng-native-desktop package --format app --output "$out/change-app")
+```
+
+The scheme is the app's `scheme` in `app.json`. Both builds share a host unless the change touches
+`packages/desktop/native`: a native change needs the base's host built from the base checkout, as
+step 2 needs a build of its own for iOS.
+
+**3m. This Mac, held still.** There is no simulator to make, so the Mac is what makes the
+comparison fair: one sitting, one display and one scale. Close other windows over the area the
+app opens in, set Appearance to what the screens expect (light, unless a screen is about dark),
+and leave the Mac alone while it runs: the host window must be on screen and not covered. The
+terminal needs the Screen Recording permission (System Settings, Privacy and Security) or
+`screencapture` writes an empty or wallpaper-only image. Do not run this beside another desktop
+check that also opens windows.
+
+**4m. Each screen, on each side.** One launch per route: the script opens a new instance of the
+app on the link (`open -n -a`), waits for the host window to stop changing (two captures a second
+apart that are the same, at most twenty seconds), captures that window alone with
+`screencapture -l`, and quits the instance.
+
+```sh
+for side in base change; do
+  node .claude/skills/screens-check/macos.mjs --app "$out/$side-app/Canary.app" --scheme canary \
+    --out "$out/shots/$side" $(echo $ROUTES)
+done
+```
+
+The files are named as step 4 names them, so step 5 compares them as it is. The window's own
+shadow is left out of the capture, and the PNG is Display P3 at the display's scale, so only a
+base and a change from this Mac in this sitting compare. A native menu bar and a Dock are not in
+a window capture: a change to the menus is checked by hand.
+
+The script does not tap. A route that needs a tap to show what changed gets a link of its own, or
+is looked at by hand and said so in the report. A route that opens a second window captures the
+largest; say so when the change is about the other.
+
+Step 6 on a Mac: `rm -rf "$out"` after `git worktree remove` is all there is, and make sure no
+`Canary` is left running (`pgrep -fl Canary.app`).
 
 ## 6. Clean up
 
