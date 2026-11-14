@@ -51,6 +51,29 @@ describe('Shell', () => {
     assert.deepEqual(calls, []);
   });
 
+  it("reads the scheme itself, as React Native's URL reads it off the raw string", async () => {
+    // React Native's URL keeps a leading space or control character, where a browser's trims it,
+    // so the scheme it reports is empty; and it throws on a mailto: with a #.
+    const { shell, calls } = fake();
+    const browsers = globalThis.URL;
+    globalThis.URL = class {
+      readonly protocol: string;
+      constructor(url: string) {
+        if (url.includes('#') && !url.includes('://')) throw new TypeError('no host');
+        this.protocol = /^([a-zA-Z][a-zA-Z\d+\-.]*):/.exec(url)?.[1]?.concat(':') ?? '';
+      }
+    } as unknown as typeof URL;
+    try {
+      for (const url of [' javascript:alert(1)', '\tfile:///Applications/Calculator.app']) {
+        assert.equal(await shell.openExternal(url), false, JSON.stringify(url));
+      }
+      assert.equal(await shell.openExternal('mailto:me@example.com#top'), true);
+    } finally {
+      globalThis.URL = browsers;
+    }
+    assert.deepEqual(calls, ['external mailto:me@example.com#top']);
+  });
+
   it('refuses a path that is relative or walks out of where it says', async () => {
     const { shell, calls } = fake();
     for (const path of ['notes.md', '/Users/me/../../etc/passwd', '/a/./b', '/a//b', '/a\0b']) {
