@@ -82,12 +82,17 @@ await updates.checkForAppUpdate();
 ```
 
 - **`checkForAppUpdate()`** - shows Sparkle's check, as Check for Updates... does in other Mac apps,
-  and resolves `true`. Where there is no whole-app updater it shows nothing and resolves `false`.
+  and resolves `true`. On iOS and Android it opens the app's store page and resolves `true`, or
+  resolves `false` when the app config names none. Where there is no whole-app updater it shows
+  nothing and resolves `false`.
 - **`appUpdateAvailable`** - `true` once Sparkle has found a newer version, from its own scheduled
-  checks or from `checkForAppUpdate()`.
+  checks or from `checkForAppUpdate()`. It stays `false` on iOS and Android, where the store gives
+  the app no way to ask.
 
-A `dmg` build is the only one with Sparkle. In development, in `app` and `mas` builds, and on iOS,
-Android and the web, both are inert: `appUpdateAvailable()` stays `false`.
+On iOS and Android the page is the `ios.appStoreUrl` or `android.playStoreUrl` in the app config,
+the same one `StoreReview.storeUrl()` reads, and `expo-store-review` must be installed. A `dmg`
+build is the only one with Sparkle. In development, in `app` and `mas` builds, and on the web, both
+are inert: `appUpdateAvailable()` stays `false`.
 
 ## Without the module
 

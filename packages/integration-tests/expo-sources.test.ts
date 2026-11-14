@@ -914,6 +914,57 @@ describe('the updates source', () => {
     assert.deepEqual(reloads, [1]);
   });
 
+  describe('the store page, as the whole-app updater on iOS and Android', () => {
+    function onPhone(os: string, storeUrl: string | null, withStoreReview = true) {
+      const opened: string[] = [];
+      const modules: Record<string, unknown> = {
+        'react-native': {
+          Platform: { OS: os },
+          Linking: { openURL: async (url: string) => void opened.push(url) },
+        },
+        'expo-updates': {
+          isEnabled: true,
+          checkForUpdateAsync: async () => ({ isAvailable: false }),
+          fetchUpdateAsync: async () => ({ isNew: false }),
+          reloadAsync: async () => {},
+        },
+      };
+      if (withStoreReview) modules['expo-store-review'] = { storeUrl: () => storeUrl };
+      // Left installed for the check, which runs after the source is made; afterEach removes it.
+      (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+        if (id in modules) return modules[id];
+        throw new Error(`Cannot find module '${id}'`);
+      };
+      const native = defaultSource(Updates.SOURCE)!;
+      return { native, opened };
+    }
+
+    for (const os of ['ios', 'android']) {
+      it(`opens the app's store page on ${os} and resolves true`, async () => {
+        const { native, opened } = onPhone(os, 'https://store.example/app');
+        assert.equal(await native.appUpdater?.check(), true);
+        assert.deepEqual(opened, ['https://store.example/app']);
+      });
+    }
+
+    it('resolves false and opens nothing with no store URL in the app config', async () => {
+      const { native, opened } = onPhone('ios', null);
+      assert.equal(await native.appUpdater?.check(), false);
+      assert.deepEqual(opened, []);
+    });
+
+    it('resolves false with no expo-store-review installed', async () => {
+      const { native, opened } = onPhone('android', null, false);
+      assert.equal(await native.appUpdater?.check(), false);
+      assert.deepEqual(opened, []);
+    });
+
+    it('never claims a newer version it cannot know of', () => {
+      const { native } = onPhone('ios', 'https://store.example/app');
+      assert.equal(native.appUpdater?.available(), false);
+    });
+  });
+
   it('is inert with no expo-updates installed', () => {
     assert.equal(
       withModules({}, () => defaultSource(Updates.SOURCE)),

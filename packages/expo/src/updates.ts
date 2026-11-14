@@ -16,11 +16,13 @@
  *
  * Beside the bundle updates, a whole-app updater: Sparkle in a macOS `dmg` build, where
  * `checkForAppUpdate()` shows Sparkle's check and `appUpdateAvailable` follows what it has found.
- * Elsewhere both are inert: in development, in `app` and `mas` builds, and on iOS, Android and the
- * web for now.
+ * On iOS and Android `checkForAppUpdate()` opens the app's store page, the `ios.appStoreUrl` or
+ * `android.playStoreUrl` of the app config, and `appUpdateAvailable` stays false, as the stores
+ * offer no way to ask. Elsewhere both are inert: in development, in `app` and `mas` builds, and on
+ * the web.
  */
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { expoModule, presence, present } from './native.ts';
+import { currentPlatform, expoModule, presence, present } from './native.ts';
 
 export interface NativeUpdates {
   readonly enabled: boolean;
@@ -71,6 +73,31 @@ function appUpdaterOf(module: DesktopAppUpdater): NativeAppUpdater | null {
   };
 }
 
+/**
+ * The store page as the whole-app updater on iOS and Android: `check()` opens the app's store page
+ * from `expo-store-review`, and there is no telling whether a newer version is in it. Null on any
+ * other platform, and a `check()` that resolves false where the app config names no page.
+ */
+function storePageUpdaterOf(): NativeAppUpdater | null {
+  const platform = currentPlatform();
+  if (platform !== 'ios' && platform !== 'android') return null;
+  return {
+    available: () => false,
+    check: async () => {
+      const review = expoModule(
+        'expo-store-review',
+        () => require('expo-store-review') as typeof import('expo-store-review'),
+      );
+      const url = present(review)?.storeUrl() ?? null;
+      if (!url) return false;
+      const { Linking } = require('react-native') as typeof import('react-native');
+      await Linking.openURL(url);
+      return true;
+    },
+    subscribe: () => () => {},
+  };
+}
+
 export type UpdateState = 'idle' | 'checking' | 'downloading' | 'ready' | 'error';
 
 @Service()
@@ -94,7 +121,7 @@ export class Updates {
           check: async () => ({ isAvailable: (await expo.checkForUpdateAsync()).isAvailable }),
           fetch: async () => ({ isNew: (await expo.fetchUpdateAsync()).isNew }),
           reload: () => expo.reloadAsync(),
-          appUpdater: appUpdaterOf(expo as DesktopAppUpdater),
+          appUpdater: appUpdaterOf(expo as DesktopAppUpdater) ?? storePageUpdaterOf(),
         };
       },
     },
@@ -125,7 +152,7 @@ export class Updates {
 
   /**
    * Whether the whole-app updater has found a newer version of the app: Sparkle in a macOS `dmg`
-   * build. False wherever there is none.
+   * build. False wherever there is none, and on iOS and Android, where the store page cannot say.
    */
   readonly appUpdateAvailable: Signal<boolean> = this.appUpdate.asReadonly();
 
@@ -175,8 +202,9 @@ export class Updates {
 
   /**
    * Check for a newer version of the whole app, showing the updater's own window as Check for
-   * Updates... does: Sparkle in a macOS `dmg` build. Resolves whether there was an updater to ask;
-   * false, and nothing shown, wherever there is none.
+   * Updates... does: Sparkle in a macOS `dmg` build. On iOS and Android it opens the app's store
+   * page and resolves true, or false when the app config names none. Resolves whether there was
+   * an updater to ask; false, and nothing shown, wherever there is none.
    */
   async checkForAppUpdate(): Promise<boolean> {
     return (await this.appUpdater?.check()) ?? false;
