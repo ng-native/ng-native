@@ -345,6 +345,21 @@ TEST_CASE("presentations and disclosures send their state as the user changes it
   CHECK(h.events.size() == before);
 }
 
+extern "C" double ngn_ui_sheet_height(const char *detents, double windowHeight);
+
+TEST_CASE("a sheet's detents give it a height in its window, where macOS sheets have no detents") {
+  // Its smallest detent's height, as iOS opens a sheet at its smallest.
+  CHECK(ngn_ui_sheet_height(R"(["medium","large"])", 800) == 400);
+  CHECK(ngn_ui_sheet_height(R"(["large"])", 800) == 720);
+  CHECK(ngn_ui_sheet_height(R"([{"fraction":0.3},"large"])", 800) == 240);
+  CHECK(ngn_ui_sheet_height(R"([{"height":200}])", 800) == 200);
+  // Never taller than the window.
+  CHECK(ngn_ui_sheet_height(R"([{"height":2000}])", 800) == 800);
+  // No detent it knows: no height, so the sheet takes its content's.
+  CHECK(ngn_ui_sheet_height(R"([])", 800) < 0);
+  CHECK(ngn_ui_sheet_height(R"(["tall"])", 800) < 0);
+}
+
 TEST_CASE("an RNHostView holds the app's own view in the SwiftUI content") {
   [NSApplication sharedApplication];
   Harness h;

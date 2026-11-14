@@ -53,6 +53,7 @@ import {
   type HostNode,
   type NativeSyntheticEvent,
   keepNativeView,
+  isApplePlatform,
   nativePlatform,
 } from '@ng-native/fabric';
 import { optional } from './native.ts';
@@ -1837,8 +1838,11 @@ export class UiBottomSheet {
     { $type: 'ngNativeInlineNavigationTitle' },
   ];
 
-  /** SwiftUI's sheet stays in the tree; anywhere else it is there while it shows. */
-  protected readonly swiftUI = nativePlatform() === 'ios';
+  /**
+   * SwiftUI's sheet (iOS's, and the macOS host's, which draws expo/ui's iOS views) stays in the
+   * tree; Compose's is there while it shows.
+   */
+  protected readonly swiftUI = isApplePlatform();
   protected readonly width = windowWidth();
 
   /**

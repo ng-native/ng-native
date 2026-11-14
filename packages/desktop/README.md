@@ -259,7 +259,10 @@ views draw nothing of their own. A control keeps what the user set until its pro
 sends expo/ui's iOS event with its payload (`selectionChange`, `dateChange`, `isOnChange`,
 `valueChanged` and the rest). A HostView with `matchContents` takes its content's fitting size
 on the axes it matches, reported as its state, as `setViewSize` does on iOS. An `RNHostView`
-holds the app's own views in the SwiftUI content at their Yoga size.
+holds the app's own views in the SwiftUI content at their Yoga size (`layoutRoot`, which takes
+SwiftUI's size into Yoga on iOS, is not taken yet). A sheet opens at its smallest
+`presentationDetents` height in the window (`medium` half of it, `large` nine tenths), as a macOS
+sheet has no detents.
 
 Every view whose SwiftUI type exists on macOS is drawn; `EXPO_UI_MACOS` in `@ng-native/expo`
 names each iOS view's SwiftUI view or the reason it is absent (`AccessoryWidgetBackgroundView`,
