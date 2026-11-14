@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ngn/header-bar.h"
+#include "ngn/module-registry.h"
 #include "ngn/svg.h"
 #include "ngn/tabs-host.h"
 #include "ngn/web-view.h"
@@ -15,6 +16,7 @@
 #include <react/renderer/graphics/RectangleEdges.h>
 
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -39,6 +41,10 @@ struct LibraryGlue {
   // Components the desktop draws its own way, registered before the library's own and in place of
   // any of theirs with the same name.
   std::vector<facebook::react::ComponentDescriptorProvider> components;
+  // TurboModules the library's glue implements in place of its iOS module (react-native-worklets'
+  // WorkletsModule, Reanimated's ReanimatedModule), by name. The registry asks these after the
+  // core's own modules.
+  std::map<std::string, ModuleRegistry::Factory> modules;
 };
 
 LibraryGlue &libraryGlue();

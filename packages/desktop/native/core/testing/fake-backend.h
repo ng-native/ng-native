@@ -8,6 +8,7 @@
 
 #include <deque>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,8 @@ class FakeBackend final : public MountingBackend, public DesktopPropsSink {
   }
 
   std::vector<std::string> calls;
+  // The props each view was last given, by create or update.
+  std::map<Tag, facebook::react::Props::Shared> props;
 
  private:
   std::deque<std::function<void()>> tasks_;

@@ -11,6 +11,7 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
+#import "animation-frames.h"
 #import "notifications.h"
 #import "undo.h"
 #import "app-windows.h"
@@ -563,6 +564,7 @@ int main(int argc, const char *argv[]) {
     gHost.backend = std::make_shared<ngn::appkit::AppKitBackend>();
     gHost.mounting = std::make_shared<ngn::MountingManager>(gHost.backend, gHost.backend);
     gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
+    ngn::appkit::installWorkletHost(gHost.mounting);
     // Each commit's time, for the performance budget (pnpm bench:macos), when asked for: every
     // frame of an animation commits, which would flood a dev run's terminal.
     if (const char *log = getenv("NGN_LOG_COMMITS"); log != nullptr && std::string(log) == "1") {

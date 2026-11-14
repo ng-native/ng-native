@@ -1,4 +1,5 @@
 #include "ngn/module-registry.h"
+#include "ngn/library-glue.h"
 
 #include <ReactCommon/CxxTurboModuleUtils.h>
 
@@ -79,4 +80,23 @@ TEST_CASE("a module a library registers in React Native's C++ module map comes a
   CHECK(nameOf(registry.module("LinkedMath", nullptr)) == "linked LinkedMath");
   CHECK(nameOf(registry.module("Appearance", nullptr)) == "core Appearance");
   CHECK(nameOf(registry.providers()[0]("LinkedMath", nullptr)) == "linked LinkedMath");
+}
+
+TEST_CASE("a library's glue module is found after the core's, while the host has the library") {
+  ngn::ModuleRegistry registry;
+  registry.add("Linking", [](const auto &invoker) { return named("core Linking", invoker); });
+  auto &glue = ngn::libraryGlue().modules;
+  auto saved = glue;
+  try {
+    glue["WorkletsModule"] = [](const auto &invoker) { return named("glue WorkletsModule", invoker); };
+    glue["Linking"] = [](const auto &invoker) { return named("glue Linking", invoker); };
+    CHECK(nameOf(registry.module("WorkletsModule", nullptr)) == "glue WorkletsModule");
+    CHECK(nameOf(registry.module("Linking", nullptr)) == "core Linking");
+    glue.erase("WorkletsModule");
+    CHECK(nameOf(registry.module("WorkletsModule", nullptr)) == "none");
+  } catch (...) {
+    glue = saved;
+    throw;
+  }
+  glue = saved;
 }

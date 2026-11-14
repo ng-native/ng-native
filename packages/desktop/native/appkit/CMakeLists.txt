@@ -1,6 +1,7 @@
 # The AppKit backend and the ngn-macos binary. Everything links statically: the binary loads
 # nothing from outside itself but the system's frameworks.
 add_executable(ngn-macos
+    animation-frames.mm
     app-info.mm
     app-windows.mm
     crypto.mm

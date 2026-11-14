@@ -38,6 +38,9 @@ class MountingManager final : public facebook::react::IMountingManager,
   void executeMount(SurfaceId surfaceId, facebook::react::MountingTransaction &&transaction) override;
   void dispatchCommand(const ShadowView &view, const std::string &name, const folly::dynamic &args) override;
   void setAfterMountCallback(std::function<void(SurfaceId)> &&onAfterMount) override;
+  // UI thread. The props in `changed` merged into the mounted view's and given to the backend at
+  // once, with no commit, as RCTMountingManager does: Animated and Reanimated move views this way.
+  void synchronouslyUpdateViewOnUIThread(Tag tag, const folly::dynamic &changed) override;
 
   facebook::react::ComponentRegistryFactory getComponentRegistryFactory() override;
   bool hasComponent(const std::string &name) override;
@@ -75,6 +78,9 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::shared_ptr<MountingBackend> backend_;
   std::shared_ptr<DesktopPropsSink> desktopProps_;
   std::vector<facebook::react::ComponentDescriptorProvider> components_;
+  // The descriptors a synchronous update clones props with, made the first time a name needs one.
+  std::shared_ptr<const facebook::react::ContextContainer> propsContext_;
+  std::unordered_map<std::string, std::shared_ptr<const facebook::react::ComponentDescriptor>> descriptors_;
   std::unordered_set<std::string> componentNames_;
   std::function<void(SurfaceId)> afterMount_;
   ViewTree tree_;

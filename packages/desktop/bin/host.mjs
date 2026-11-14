@@ -52,7 +52,9 @@ export class UsageError extends Error {}
 /**
  * The libraries whose Fabric components the host compiles in when the app has them installed:
  * the stack, its header and the safe area that `@ng-native/router` and `<safe-area-view>` commit,
- * the svg views `@ng-native/icons` commits, and the web view `<web-view>` and an `<iframe>` commit.
+ * the svg views `@ng-native/icons` commits, the web view `<web-view>` and an `<iframe>` commit, and
+ * the worklets and Reanimated, whose shared C++ the host builds by its own recipes
+ * (`native/cmake/libraries/`).
  * They ship no desktop code of their own, so autolinking (`autolink.mjs`) does not find them.
  */
 export const HOST_LIBRARIES = [
@@ -60,6 +62,8 @@ export const HOST_LIBRARIES = [
   'react-native-safe-area-context',
   'react-native-svg',
   'react-native-webview',
+  'react-native-worklets',
+  'react-native-reanimated',
 ];
 
 /**

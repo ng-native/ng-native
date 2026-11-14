@@ -64,6 +64,7 @@ endif()
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
     core/src/accessibility.cpp
+    core/src/animation-frames.cpp
     core/src/app-menus.cpp
     core/src/app-windows.cpp
     core/src/bytes.cpp
@@ -102,6 +103,7 @@ add_library(ngn_core STATIC
     core/src/expo-image.cpp
     core/src/view-tree.cpp
     core/src/web-view.cpp
+    core/src/worklet-host.cpp
     core/src/modules/accessibility-manager.cpp
     core/src/modules/address-search.cpp
     core/src/modules/alert-manager.cpp

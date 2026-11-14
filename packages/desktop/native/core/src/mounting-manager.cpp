@@ -88,6 +88,34 @@ void MountingManager::executeMount(SurfaceId surfaceId, MountingTransaction &&tr
   });
 }
 
+void MountingManager::synchronouslyUpdateViewOnUIThread(Tag tag, const folly::dynamic &changed) {
+  const auto *node = tree_.find(tag);
+  if (!node || !node->view.props) {
+    return;
+  }
+  ShadowView view = node->view;
+  auto &descriptor = descriptors_[view.componentName];
+  if (!descriptor) {
+    for (const auto &provider : components_) {
+      if (std::string_view(view.componentName) == provider.name) {
+        if (!propsContext_) {
+          propsContext_ = std::make_shared<const ContextContainer>();
+        }
+        descriptor = provider.constructor({{}, propsContext_, provider.flavor});
+        break;
+      }
+    }
+    if (!descriptor) {
+      descriptors_.erase(view.componentName);
+      return;
+    }
+  }
+  PropsParserContext context{view.surfaceId, *propsContext_};
+  view.props = descriptor->cloneProps(context, view.props, RawProps(changed));
+  tree_.update(view);
+  backend_->updateProps(view);
+}
+
 void MountingManager::ensureRoot(SurfaceId surfaceId, Tag tag) {
   if (tag != surfaceId || tree_.contains(tag)) {
     return;

@@ -1,5 +1,7 @@
 #include "ngn/module-registry.h"
 
+#include "ngn/library-glue.h"
+
 #include <ReactCommon/CxxTurboModuleUtils.h>
 
 using namespace facebook::react;
@@ -23,6 +25,10 @@ std::shared_ptr<TurboModule> ModuleRegistry::module(
     }
   }
   if (auto it = factories_.find(name); it != factories_.end()) {
+    return it->second(jsInvoker);
+  }
+  const auto &glue = libraryGlue().modules;
+  if (auto it = glue.find(name); it != glue.end()) {
     return it->second(jsInvoker);
   }
   // Autolinked libraries' and the app's own modules, which register themselves as they load, the

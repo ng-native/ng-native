@@ -295,3 +295,24 @@ TEST_CASE("a live region's new text is announced after the transaction that chan
   f.mount({ShadowViewMutation::RemoveMutation(1, busy, 0), ShadowViewMutation::DeleteMutation(busy)});
   CHECK(f.backend->calls == std::vector<std::string>{"remove 2 from 1 at 0", "delete 2", "mounted 1"});
 }
+
+TEST_CASE("a synchronous update on the UI thread merges the changed props into the mounted view's") {
+  Fixture f;
+  auto box = shadowView(2, "View", {{0, 0}, {100, 50}}, desktop(folly::dynamic::object("opacity", 1.0)("nativeID", "box")));
+  f.mount({ShadowViewMutation::CreateMutation(box), ShadowViewMutation::InsertMutation(1, box, 0)});
+  f.backend->calls.clear();
+
+  f.mounting->synchronouslyUpdateViewOnUIThread(2, folly::dynamic::object("opacity", 0.25));
+  // At once, with no transaction: Reanimated and Animated move a view this way every frame.
+  CHECK(f.backend->calls == std::vector<std::string>{"props 2"});
+  CHECK(f.backend->pending() == 0);
+  auto props = std::static_pointer_cast<const ViewProps>(f.mounting->tree().find(2)->view.props);
+  CHECK(props->opacity == doctest::Approx(0.25));
+  CHECK(props->nativeId == "box");
+  CHECK(f.backend->props.at(2) == f.mounting->tree().find(2)->view.props);
+
+  // A view that is not mounted, or has gone, takes nothing.
+  f.backend->calls.clear();
+  f.mounting->synchronouslyUpdateViewOnUIThread(99, folly::dynamic::object("opacity", 0.5));
+  CHECK(f.backend->calls.empty());
+}

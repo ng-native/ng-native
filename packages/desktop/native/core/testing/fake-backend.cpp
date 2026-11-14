@@ -58,6 +58,7 @@ void FakeBackend::removeChild(SurfaceId, Tag parent, Tag child, int index) {
 }
 
 void FakeBackend::updateProps(const ShadowView &view) {
+  props[view.tag] = view.props;
   calls.push_back("props " + std::to_string(view.tag));
 }
 

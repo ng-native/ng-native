@@ -325,6 +325,10 @@ describe('run', () => {
       '/apps/demo/node_modules/react-native-svg',
       '--library',
       '/apps/demo/node_modules/react-native-webview',
+      '--library',
+      '/apps/demo/node_modules/react-native-worklets',
+      '--library',
+      '/apps/demo/node_modules/react-native-reanimated',
     ]);
   });
 
