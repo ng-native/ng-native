@@ -1,0 +1,21 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.ngnative.components'
+version = '1.0.0'
+
+android {
+  namespace "dev.ngnative.components"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // TouchTargetHelper, which finds the view a press lands on as React Native's touches do, and the
+  // event dispatcher that sends a menu's choice to the view.
+  implementation 'com.facebook.react:react-android'
+}

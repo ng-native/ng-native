@@ -52,6 +52,10 @@ A `<menu-item>` takes `label`, `menuRole`, `shortcut`, `[disabled]`, `[(checked)
 `mod` is Cmd on Apple's OSes and Ctrl on Android. The editing keys (mod+z, x, c, v and a) go to a
 focused text input first, so a shortcut on one of them fires only while no text input has focus.
 
+On Android a shortcut works from a hardware keyboard once it has a modifier (Ctrl, Alt, Shift or
+Meta), and Meta-/ lists it in the Keyboard Shortcuts helper by its `shortcutLabel`, under the app's
+name.
+
 ## Context menus
 
 ```angular-html
@@ -64,8 +68,13 @@ focused text input first, so a shortcut on one of them fires only while no text 
 </ng-template>
 ```
 
-A right-click opens it on macOS. iOS, Android and the web host do not draw it yet, so there it does
-nothing, and a `(longPress)` on the same element fires as it would without one.
+A right-click opens it on macOS. On Android a long press or a right-click opens it as a menu at the
+press point, and there the long press is the menu's, so the element's `(longPress)` does not also
+fire. A destructive item's label is red, `icon` names a drawable resource shown beside the label
+(Android 10 and later), and `subtitle` is the item's tooltip. Android finds the view by its
+`nativeID`, so an element without one is given one. Menus inside a `<modal>` do not open on
+Android yet. iOS and the web host do not draw it yet, so there it does nothing, and a
+`(longPress)` on the same element fires as it would without one.
 
 ## Reference
 

@@ -15,13 +15,19 @@
  *   `{ type: 'shortcut', id, textInputFocused }`.
  * - A view with `[contextMenu]` takes a `contextMenu` prop in the same entry form (null without
  *   one) and sends `topContextMenuSelect` with `{ id }`.
+ * - Android reads no prop React Native's view does not know, so its host has
+ *   `setContextMenu(nativeID, entries)` (null to take it away): the view is found by its
+ *   `nativeID`, which the element is given where the app gave it none.
+ * - Android's module is an Expo module: its constants are properties, and it sends the same events
+ *   through its own `addListener('ngNativeMenus', ...)`.
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import type { Type, WritableSignal } from '@angular/core';
+import { signal, type Type, type WritableSignal } from '@angular/core';
 import {
   Menus,
   OS,
+  menusSource,
   type NativeMenuEntry,
   type NativeMenuEvent,
   type NativeMenus,
@@ -49,8 +55,9 @@ afterEach(cleanup);
 
 type Group = { label: string; menuRole?: string; items: NativeMenuEntry[] };
 
-function fakeHost(menuBar: boolean) {
+function fakeHost(menuBar: boolean, drawsContextMenus = false) {
   const bars: Group[][] = [];
+  const contextMenus = new Map<string, NativeMenuEntry[] | null>();
   const shortcuts: NativeShortcut[][] = [];
   const listeners = new Set<(event: NativeMenuEvent) => void>();
   const native: NativeMenus = {
@@ -62,9 +69,14 @@ function fakeHost(menuBar: boolean) {
       listeners.add(listener);
       return () => void listeners.delete(listener);
     },
+    ...(drawsContextMenus && {
+      setContextMenu: (nativeId: string, entries: readonly NativeMenuEntry[] | null) =>
+        void contextMenus.set(nativeId, entries && [...entries]),
+    }),
   };
   return {
     native,
+    contextMenus,
     bar: () => bars.at(-1)!,
     bars,
     shortcuts: () => shortcuts.at(-1)!,
@@ -75,9 +87,9 @@ function fakeHost(menuBar: boolean) {
   };
 }
 
-async function open(os: 'macos' | 'android' | 'ios', menuBar: boolean) {
+async function open(os: 'macos' | 'android' | 'ios', menuBar: boolean, drawsContextMenus = false) {
   registerPlatformComponents(os);
-  const host = fakeHost(menuBar);
+  const host = fakeHost(menuBar, drawsContextMenus);
   const app = await render(Fixture, {
     providers: [
       { provide: Menus.SOURCE, useValue: host.native },
@@ -256,14 +268,17 @@ describe('a context menu', () => {
     assert.deepEqual(said, ['delete']);
   });
 
-  // No phone host draws the menu yet, so a long press there is still the element's own.
-  for (const [os, fires] of [
-    ['android', true],
-    ['ios', true],
-    ['macos', true],
+  // Android's host draws the menu on a long press where it has `setContextMenu`, and the long
+  // press is then the menu's. iOS draws none yet, and macOS opens it with a right-click.
+  for (const [os, hostDraws, fires] of [
+    ['android', true, false],
+    ['android', false, true],
+    ['ios', false, true],
+    ['macos', false, true],
   ] as const) {
-    it(`${fires ? 'still fires' : 'takes'} the long press on ${os}`, async () => {
-      const { said } = await open(os, os === 'macos');
+    const where = os === 'android' && !hostDraws ? ' with no host to draw it' : '';
+    it(`${fires ? 'still fires' : 'takes'} the long press on ${os}${where}`, async () => {
+      const { said } = await open(os, os === 'macos', hostDraws);
       const row = screen.getByTestId('row');
       const { fireEvent } = await import('@ng-native/testing');
       await fireEvent(row, 'touchStart', { touches: [{}], changedTouches: [{}] });
@@ -272,6 +287,52 @@ describe('a context menu', () => {
       assert.deepEqual(said, fires ? ['long'] : []);
     });
   }
+});
+
+describe('a context menu on Android', () => {
+  after(() => registerPlatformComponents('ios'));
+
+  it('names the view and sends its menu to the host by that name', async () => {
+    const { host } = await open('android', false, true);
+    const row = screen.getByTestId('row');
+    const id = row.props['nativeID'];
+    assert.equal(typeof id, 'string');
+    assert.deepEqual(host.contextMenus.get(id as string), [
+      { id: '0', label: 'Rename', icon: 'ic_edit', sfSymbol: 'pencil' },
+      { id: '1', label: 'Delete', destructive: true },
+    ]);
+  });
+
+  it('sends nothing by name to a host without setContextMenu, and names nothing', async () => {
+    await open('android', false, false);
+    assert.equal(screen.getByTestId('row').props['nativeID'], undefined);
+  });
+
+  it('keeps a nativeID the app gave, and takes the menu away as the element goes', async () => {
+    registerPlatformComponents('android');
+    const host = fakeHost(false, true);
+    const { ContextMenu, MenuItem, View } = await import('@ng-native/components');
+    const app = await render(
+      `@if (shown()) {
+        <view testID="target" nativeID="note-7" [contextMenu]="menu"></view>
+      }
+      <ng-template #menu><menu-item label="Pin" /></ng-template>`,
+      {
+        imports: [View, ContextMenu, MenuItem],
+        providers: [
+          { provide: Menus.SOURCE, useValue: host.native },
+          { provide: OS, useValue: 'android' },
+        ],
+        componentProperties: { shown: signal(true) },
+      },
+    );
+    await settle();
+    assert.equal(screen.getByTestId('target').props['nativeID'], 'note-7');
+    assert.deepEqual(host.contextMenus.get('note-7'), [{ id: '0', label: 'Pin' }]);
+    (app.instance as unknown as { shown: WritableSignal<boolean> }).shown.set(false);
+    await app.detectChanges();
+    assert.equal(host.contextMenus.get('note-7'), null);
+  });
 });
 
 describe('a context menu written with control flow', () => {
@@ -293,5 +354,71 @@ describe('a context menu written with control flow', () => {
       entries.map((entry) => entry.label),
       ['A', 'B', 'C'],
     );
+  });
+});
+
+describe("the menus' platform source", () => {
+  /** A device for one call: React Native with `turbo` as its modules, and Expo's `modules`. */
+  function onDevice<T>(
+    turbo: Record<string, unknown>,
+    modules: Record<string, unknown> | undefined,
+    run: () => T,
+  ): T {
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) =>
+      id === 'react-native'
+        ? { TurboModuleRegistry: { get: (name: string) => turbo[name] } }
+        : undefined;
+    host['nativeFabricUIManager'] = {};
+    host['expo'] = modules && { modules };
+    try {
+      return run();
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+      delete host['expo'];
+    }
+  }
+
+  it("reaches Android's Expo module: constants as properties, events from its emitter", () => {
+    const calls: unknown[] = [];
+    const listeners: ((event: unknown) => void)[] = [];
+    const expoModule = {
+      menuBar: false,
+      appName: 'Notes',
+      setShortcuts: (list: unknown) => void calls.push(['shortcuts', list]),
+      setContextMenu: (id: string, entries: unknown) => void calls.push(['menu', id, entries]),
+      addListener: (name: string, listener: (event: unknown) => void) => {
+        assert.equal(name, 'ngNativeMenus');
+        listeners.push(listener);
+        return { remove: () => void listeners.splice(listeners.indexOf(listener), 1) };
+      },
+    };
+    const source = onDevice({}, { NgNativeMenus: expoModule }, menusSource)!;
+    assert.equal(source.menuBar, false);
+    assert.equal(source.appName, 'Notes');
+    source.setShortcuts([]);
+    source.setContextMenu?.('row', null);
+    assert.deepEqual(calls, [
+      ['shortcuts', []],
+      ['menu', 'row', null],
+    ]);
+    const heard: unknown[] = [];
+    const stop = source.subscribe((event) => heard.push(event));
+    listeners.forEach((listener) => listener({ type: 'shortcut', id: 's0' }));
+    stop();
+    assert.deepEqual(heard, [{ type: 'shortcut', id: 's0' }]);
+    assert.equal(listeners.length, 0, 'stopped listening');
+  });
+
+  it('prefers a TurboModule, which has no setContextMenu unless it says so', () => {
+    const turbo = { getConstants: () => ({ menuBar: true, appName: 'Mac' }) };
+    const source = onDevice({ NgNativeMenus: turbo }, { NgNativeMenus: {} }, menusSource)!;
+    assert.equal(source.menuBar, true);
+    assert.equal(source.setContextMenu, undefined);
+  });
+
+  it('is absent with neither module', () => {
+    assert.equal(onDevice({}, undefined, menusSource), null);
   });
 });

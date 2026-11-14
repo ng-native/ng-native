@@ -75,7 +75,11 @@ import { LibraryWindow } from './library-window.ts';
         <menu-item label="Add a Star" (select)="addStar()" />
         <menu-item label="Clear Stars" destructive (select)="clearStars()" />
       </ng-template>
-      <view shortcut="mod+k" (shortcutPress)="chosen.set('mod+k pressed')"></view>
+      <view
+        shortcut="mod+k"
+        shortcutLabel="Say mod+k"
+        (shortcutPress)="chosen.set('mod+k pressed')"
+      ></view>
 
       <text class="heading">Windows</text>
       <native-button testID="library" (press)="openLibrary()">Open Library</native-button>

@@ -12,6 +12,9 @@
  * - It sends `ngNativeMenus` events on `DeviceEventEmitter`: `{ type: 'menuSelect', id }` for a menu
  *   bar item, and `{ type: 'shortcut', id, textInputFocused }` for a chord pressed.
  * - Its constants say whether it draws a menu bar (`menuBar`) and the app's name (`appName`).
+ * - On Android it is an Expo module: the constants are properties, it sends the same events through
+ *   its own `addListener('ngNativeMenus', ...)`, and it has `setContextMenu(nativeID, entries)`,
+ *   since React Native's Android view drops a `contextMenu` prop it does not know.
  */
 import {
   InjectionToken,
@@ -140,32 +143,60 @@ export interface NativeMenus {
   setShortcuts(shortcuts: readonly NativeShortcut[]): void;
   /** The history of the window on `surface`, for its back and forward chevrons. Desktop only. */
   setHistory?(surface: number, history: NativeWindowHistory): void;
+  /**
+   * The context menu of the view with `nativeID`, or null to take it away. Android, whose view
+   * reads no `contextMenu` prop: the host finds the view by its `nativeID` as it is pressed.
+   */
+  setContextMenu?(nativeID: string, entries: readonly NativeMenuEntry[] | null): void;
   subscribe(listener: (event: NativeMenuEvent) => void): () => void;
 }
 
-interface MenusTurboModule {
+interface MenusModule {
   getConstants?(): { menuBar?: boolean; appName?: string };
+  /** An Expo module's constants, which are its properties. */
+  readonly menuBar?: boolean;
+  readonly appName?: string;
   setMenuBar?(groups: unknown): void;
   setShortcuts?(shortcuts: unknown): void;
   setHistory?(surface: number, history: unknown): void;
+  setContextMenu?(nativeID: string, entries: unknown): void;
+  /** An Expo module's own events. */
+  addListener?(event: string, listener: (event: unknown) => void): { remove(): void };
 }
 
-function menusSource(): NativeMenus | null {
+/** Android's `NgNativeMenus`, an Expo module, where React Native has no TurboModule of the name. */
+function expoMenusModule(): MenusModule | undefined {
+  const modules = (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo?.modules;
+  return modules?.['NgNativeMenus'] as MenusModule | undefined;
+}
+
+/**
+ * The host's menu module: a TurboModule (the desktop host, iOS), or else Android's Expo module.
+ * Null where there is neither, as in Expo Go.
+ */
+export function menusSource(): NativeMenus | null {
   const native = reactNative();
-  const module = native?.TurboModuleRegistry?.get?.('NgNativeMenus') as
-    MenusTurboModule | null | undefined;
+  const turbo = native?.TurboModuleRegistry?.get?.('NgNativeMenus') as
+    MenusModule | null | undefined;
+  const expo = turbo ? undefined : expoMenusModule();
+  const module = turbo ?? expo;
   if (!module) return null;
-  const constants = module.getConstants?.() ?? {};
+  const constants = module.getConstants?.() ?? module;
+  const setContextMenu = module.setContextMenu?.bind(module);
+  // An Expo module sends its events itself; a TurboModule's come through DeviceEventEmitter.
+  const listen = (hear: (event: unknown) => void) =>
+    expo
+      ? expo.addListener?.('ngNativeMenus', hear)
+      : native?.DeviceEventEmitter?.addListener('ngNativeMenus', hear);
   return {
     menuBar: constants.menuBar === true,
     appName: constants.appName ?? '',
     setMenuBar: (groups) => module.setMenuBar?.(groups),
     setShortcuts: (shortcuts) => module.setShortcuts?.(shortcuts),
     setHistory: (surface, history) => module.setHistory?.(surface, history),
+    ...(setContextMenu && { setContextMenu }),
     subscribe: (listener) => {
-      const subscription = native?.DeviceEventEmitter?.addListener('ngNativeMenus', (event) =>
-        listener(event as NativeMenuEvent),
-      );
+      const subscription = listen((event) => listener(event as NativeMenuEvent));
       return () => subscription?.remove();
     },
   };
@@ -201,6 +232,18 @@ export class Menus {
 
   /** Whether the menu bar is drawn: macOS and iPadOS. Elsewhere its shortcuts still work. */
   readonly menuBarShown: Signal<boolean> = signal(this.native?.menuBar === true).asReadonly();
+
+  /**
+   * Whether the host takes a `[contextMenu]` by the view's `nativeID` through `setContextMenu`
+   * (Android) rather than as the view's `contextMenu` prop. Where it does, it draws the menu on a
+   * long press.
+   */
+  readonly contextMenuByNativeId: boolean = this.native?.setContextMenu !== undefined;
+
+  /** Send the context menu of the view with `nativeID`, or null to take it away. */
+  setContextMenu(nativeID: string, entries: readonly NativeMenuEntry[] | null): void {
+    this.native?.setContextMenu?.(nativeID, entries);
+  }
 
   private readonly bars = signal<readonly Signal<readonly MenuEntry[]>[]>([]);
   private readonly shortcuts = signal<readonly Registered[]>([]);

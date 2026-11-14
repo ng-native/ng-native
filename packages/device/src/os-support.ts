@@ -88,9 +88,13 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`[shortcut]`, menu item shortcuts',
     ['Shortcut'],
-    ['yes', 'yes', 'hardware keyboard', 'hardware keyboard', 'yes'],
+    ['yes', 'yes', 'hardware keyboard', 'hardware keyboard, Keyboard Shortcuts helper', 'yes'],
   ),
-  row('`[contextMenu]`', ['ContextMenu'], ['yes', 'inert', 'inert', 'inert', 'inert']),
+  row(
+    '`[contextMenu]`',
+    ['ContextMenu'],
+    ['yes', 'inert', 'inert', 'long press or right-click', 'inert'],
+  ),
   row('`<tray-icon>`, `Dock`', ['TrayIcon', 'Tray', 'Dock'], MAC_ONLY, {
     Tray: 'NgNativeTray',
     Dock: 'NgNativeDock',

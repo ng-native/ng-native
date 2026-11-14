@@ -5,8 +5,18 @@
  * press rectangle, delays and a long-press timer around them. This is that machine, on the same
  * responder negotiation, so a button and an enclosing scroll view agree on who owns a drag.
  */
-import { Directive, computed, forwardRef, input, output, signal, type Signal } from '@angular/core';
+import {
+  Directive,
+  computed,
+  forwardRef,
+  inject,
+  input,
+  output,
+  signal,
+  type Signal,
+} from '@angular/core';
 import { isTouchPointer, nativePlatform, type NativeSyntheticEvent } from '@ng-native/fabric';
+import { CONTEXT_MENU } from './context-menu.ts';
 import type { Insets, TouchEvent } from './events.ts';
 import { booleanOr, numberOr, optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
@@ -188,6 +198,8 @@ export abstract class TouchableBase extends ViewBase {
   private longPressed = false;
   /** How many `(longPress)` listeners there are; the long-press clock only runs with one. */
   private longPressListeners = 0;
+  /** A `[contextMenu]` on the same element, whose menu a long press may open instead. */
+  private readonly contextMenu = inject(CONTEXT_MENU, { self: true, optional: true });
   private pressedAt = 0;
   private pressInTimer: ReturnType<typeof setTimeout> | null = null;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -420,7 +432,7 @@ export abstract class TouchableBase extends ViewBase {
     this.pressed.set(true);
     this.pressedChanged(true);
     this.pressIn.emit(event);
-    if (!this.longPressListeners) return;
+    if (!this.longPressListeners || this.contextMenu?.takesLongPress()) return;
     this.longPressTimer = setTimeout(() => {
       this.longPressTimer = null;
       this.longPressed = true;
