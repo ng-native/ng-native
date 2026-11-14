@@ -15,6 +15,31 @@ export interface NativeClipboard {
   addClipboardListener(listener: () => void): { remove(): void };
 }
 
+/** The desktop host's slice of the clipboard: everything but the change listener. */
+type DesktopClipboard = Omit<NativeClipboard, 'addClipboardListener'>;
+
+/**
+ * The desktop host's `NgNativeClipboard`, with the change listener on its `ngNativeClipboard`
+ * event: a TurboModule cannot hand back the subscription `addClipboardListener` answers. Null
+ * where the host has no such module.
+ */
+function desktopClipboard(): NativeClipboard | null {
+  const native = require('react-native') as {
+    TurboModuleRegistry: { get(name: string): unknown };
+    DeviceEventEmitter: {
+      addListener(event: string, listener: () => void): { remove(): void };
+    };
+  };
+  const module = native.TurboModuleRegistry.get('NgNativeClipboard') as DesktopClipboard | null;
+  if (!module) return null;
+  return {
+    getStringAsync: () => module.getStringAsync(),
+    setStringAsync: (text) => module.setStringAsync(text),
+    addClipboardListener: (listener) =>
+      native.DeviceEventEmitter.addListener('ngNativeClipboard', () => listener()),
+  };
+}
+
 /**
  * `changes` counts pasteboard changes rather than holding the contents, and that is deliberate:
  * on iOS 16 and later, *reading* the clipboard prompts the user for permission. A signal that
@@ -36,6 +61,7 @@ export class Clipboard {
         const expo = expoModule(
           'expo-clipboard',
           () => require('expo-clipboard') as typeof import('expo-clipboard'),
+          { desktop: desktopClipboard },
         );
         if (!expo) return null;
         // Missing from the build: the stand-in, to say so when it is used.

@@ -212,3 +212,49 @@ describe('a package the desktop host serves as it is', () => {
     assert.deepEqual([asked, theme()], [['theme'], 'dark']);
   });
 });
+
+/**
+ * The host contract for `NgNativeClipboard`: `getStringAsync`, `setStringAsync` and
+ * `hasStringAsync`, and an `ngNativeClipboard` event on `DeviceEventEmitter` each time the
+ * pasteboard's change count moves, from this app or another, with no payload: the contents are
+ * read only when asked for. A TurboModule cannot hand back `addClipboardListener`'s subscription,
+ * so the change listener is the emitter's.
+ */
+describe('the clipboard on macOS', () => {
+  it('counts the changes the desktop host sends on its emitter', async () => {
+    const listeners = new Set<(event: unknown) => void>();
+    const emitted: string[] = [];
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) =>
+            name === 'NgNativeClipboard'
+              ? {
+                  getStringAsync: async () => 'copied',
+                  setStringAsync: async () => true,
+                  hasStringAsync: async () => true,
+                }
+              : null,
+        },
+        DeviceEventEmitter: {
+          addListener: (event: string, listener: (event: unknown) => void) => {
+            emitted.push(event);
+            listeners.add(listener);
+            return { remove: () => void listeners.delete(listener) };
+          },
+        },
+      };
+    };
+    const { Clipboard } = await import('@ng-native/expo/clipboard');
+    const { injectService } = await import('@ng-native/testing');
+    const clipboard = injectService(Clipboard);
+    assert.equal(clipboard.available(), true);
+    assert.deepEqual(emitted, ['ngNativeClipboard']);
+    for (const listener of listeners) listener({});
+    for (const listener of listeners) listener({});
+    assert.equal(clipboard.changes(), 2);
+    assert.equal(await clipboard.read(), 'copied');
+  });
+});
