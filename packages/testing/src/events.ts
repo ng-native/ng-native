@@ -60,7 +60,7 @@ function touch(node: FakeFabricNode, phase: 'start' | 'end'): Record<string, unk
  * SwiftUI's sheet, for the toolbar items it presents with that content.
  */
 function touchable(node: FakeFabricNode): boolean {
-  withParents(ownerOf(node).fabric.committed);
+  withParents(ownerOf(node).roots());
   let blocking = 'box-none';
   for (let at: FakeFabricNode | null = currentOf(node) ?? node; at; at = at.parent ?? null) {
     if (at.props['layoutRoot'] === true || /ExpoUI_BottomSheetView$/.test(at.viewName)) return true;

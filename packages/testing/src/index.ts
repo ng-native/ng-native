@@ -17,8 +17,10 @@ export {
   type RenderOptions,
   type RenderResult,
   type TestOs,
+  type TestWindow,
 } from './render.ts';
 export {
+  fakeDeepLinks,
   fakeDock,
   fakeMenus,
   fakeProcesses,
@@ -26,8 +28,10 @@ export {
   fakeWindows,
   provideDesktopFakes,
   type DesktopFakes,
+  type FakeDeepLinks,
   type FakeDock,
   type FakeMenus,
+  type MenuItemQuery,
   type FakeProcesses,
   type FakeProcessesOptions,
   type FakeProgram,

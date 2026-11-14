@@ -3,17 +3,21 @@
  * sends the host (windows, the menu bar, shortcuts, the Dock menu, tray icons, spawned programs)
  * is recorded for the test to read, and the test plays what the host would send back.
  *
- * `render(X, { os: 'macos' })` provides them, all but the windows'; `provideDesktopFakes()` provides them to a render
- * or an `injectService` on any OS, and a test that wants its own fake of one provides that instead.
+ * `render(X, { os: 'macos' })` provides every one, the windows' included, so the component renders
+ * in the main window as in an app. `provideDesktopFakes()` provides them to a render or an
+ * `injectService` on any OS, and a test that wants its own fake of one provides that instead.
  */
 import type { Provider } from '@angular/core';
 import {
   AppWindows,
+  DeepLinks,
   Dock,
   Menus,
   Processes,
   Tray,
+  type DeepLinkSource,
   type KeyChord,
+  type MenuRole,
   type ParsedShortcut,
   type NativeDock,
   type NativeMenuEntry,
@@ -53,6 +57,41 @@ function keyEquivalent(entries: readonly NativeMenuEntry[], chord: KeyChord): st
   }
   return null;
 }
+
+/** What a menu item is found by: its role, its label, or both. */
+export interface MenuItemQuery {
+  readonly menuRole?: MenuRole;
+  readonly label?: string | RegExp;
+}
+
+/** The first item, at any depth, that `query` matches. */
+function findItem(
+  entries: readonly NativeMenuEntry[],
+  query: MenuItemQuery,
+): Exclude<NativeMenuEntry, { separator: true }> | null {
+  for (const entry of entries) {
+    if ('separator' in entry) continue;
+    const label = query.label;
+    const labelled =
+      label === undefined ||
+      (typeof label === 'string' ? entry.label === label : label.test(entry.label));
+    if (labelled && (query.menuRole === undefined || entry.menuRole === query.menuRole)) {
+      return entry;
+    }
+    const inner = findItem(entry.items ?? [], query);
+    if (inner) return inner;
+  }
+  return null;
+}
+
+/** What a query names, for an error that says what was not found. */
+const describeQuery = (query: MenuItemQuery): string =>
+  [
+    query.menuRole && `menuRole '${query.menuRole}'`,
+    query.label !== undefined && `label ${String(query.label)}`,
+  ]
+    .filter(Boolean)
+    .join(' and ');
 
 /** A set of listeners a fake host sends its events to. */
 function channel<E>() {
@@ -128,6 +167,13 @@ export interface FakeMenus extends NativeMenus {
    * `textInputFocused` is whether a text input has the focus, for the editing-key rule.
    */
   press(chord: KeyChord, textInputFocused?: boolean): boolean;
+  /**
+   * The item of the menu bar `query` finds, at any depth, as it was last sent: the app's merged
+   * with the defaults, so `{ menuRole: 'quit' }` finds Quit. Null where none matches.
+   */
+  item(query: MenuItemQuery): Exclude<NativeMenuEntry, { separator: true }> | null;
+  /** Choose the item `query` finds, as a click on it does. Throws where none matches. */
+  choose(query: MenuItemQuery): void;
   emit(event: NativeMenuEvent): void;
 }
 
@@ -151,6 +197,20 @@ export function fakeMenus(options: { menuBar?: boolean; appName?: string } = {})
     subscribe: events.subscribe,
     emit: events.emit,
     select: (id) => events.emit({ type: 'menuSelect', id }),
+    item: (query) =>
+      findItem(
+        state.menuBarGroups.flatMap((group) => group.items),
+        query,
+      ),
+    choose(query) {
+      const found = findItem(
+        state.menuBarGroups.flatMap((group) => group.items),
+        query,
+      );
+      if (!found) throw new Error(`No menu item with ${describeQuery(query)} in the menu bar.`);
+      if (found.disabled) throw new Error(`The menu item '${found.label}' is disabled.`);
+      events.emit({ type: 'menuSelect', id: found.id });
+    },
     press(chord, textInputFocused = false) {
       const found = state.shortcuts.find((shortcut) => presses(shortcut.chord, chord));
       if (found) {
@@ -317,9 +377,31 @@ export function fakeProcesses(options: FakeProcessesOptions = {}): FakeProcesses
   };
 }
 
+/** The OS's links to the app, recorded: urls it was opened with, and urls it opened. */
+export interface FakeDeepLinks extends DeepLinkSource {
+  /** The urls the app asked the OS to open. */
+  readonly opened: string[];
+  /** Open the app with `url`, as Open With, a Dock drop or a link in another app does. */
+  emit(url: string): void;
+}
+
+export function fakeDeepLinks(launchUrl: string | null = null): FakeDeepLinks {
+  const events = channel<string>();
+  const opened: string[] = [];
+  return {
+    opened,
+    emit: events.emit,
+    launchUrl: () => Promise.resolve(launchUrl),
+    subscribe: events.subscribe,
+    open: (url) => void opened.push(url),
+    openSettings: () => {},
+  };
+}
+
 /** The fakes a render on a desktop OS gets, each one replaceable. */
 export interface DesktopFakes {
   readonly windows?: FakeWindows;
+  readonly deepLinks?: FakeDeepLinks;
   readonly menus?: FakeMenus;
   readonly dock?: FakeDock;
   readonly tray?: FakeTray;
@@ -327,10 +409,11 @@ export interface DesktopFakes {
 }
 
 /**
- * Providers that put the recording fakes in place of the desktop host's menus, Dock, tray and
- * processes. A fake given here is used as it is; the rest are made new. The windows' fake goes in
- * only when one is given: with it, the root component waits for `AppWindows` to open the main
- * window, where a render without it mounts on the render's own surface.
+ * Providers that put the recording fakes in place of the desktop host's menus, Dock, tray,
+ * processes and deep links. A fake given here is used as it is; the rest are made new. The
+ * windows' fake goes in only when one is given, as `render`'s `os: 'macos'` gives one: with it,
+ * the root component waits for `AppWindows` to open the main window, where a render without it
+ * mounts on the render's own surface.
  */
 export function provideDesktopFakes(fakes: DesktopFakes = {}): Provider[] {
   return [
@@ -339,5 +422,6 @@ export function provideDesktopFakes(fakes: DesktopFakes = {}): Provider[] {
     { provide: Dock.SOURCE, useValue: fakes.dock ?? fakeDock() },
     { provide: Tray.SOURCE, useValue: fakes.tray ?? fakeTray() },
     { provide: Processes.SOURCE, useValue: fakes.processes ?? fakeProcesses() },
+    { provide: DeepLinks.SOURCE, useValue: fakes.deepLinks ?? fakeDeepLinks() },
   ];
 }

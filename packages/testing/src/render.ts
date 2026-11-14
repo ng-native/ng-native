@@ -19,7 +19,7 @@ import {
   type Provider,
   type Type,
 } from '@angular/core';
-import { OS, OS_VERSION } from '@ng-native/device';
+import { AppWindows, OS, OS_VERSION, type AppWindow } from '@ng-native/device';
 import {
   nativePlatform,
   registerPlatformComponents,
@@ -28,7 +28,7 @@ import {
   type EngineOptions,
 } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
-import { provideDesktopFakes } from './desktop-fakes.ts';
+import { fakeWindows, provideDesktopFakes, type FakeWindows } from './desktop-fakes.ts';
 import { destroyServiceApps } from './inject-service.ts';
 import { bindQueries, describeTree, flatten, type BoundQueries } from './queries.ts';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from './test-utils.ts';
@@ -55,9 +55,9 @@ export interface RenderOptions<T> extends EngineOptions {
    * The OS to render as, for this render alone: the `OS`, `OS_VERSION`, `DESKTOP` and `APPLE`
    * tokens, the view names and the `platform-<os>` class, the `macos:` and `desktop:` variants,
    * and the hover and pointer media features (a Mac's `hover` and `fine`). On a desktop OS the
-   * desktop host's menus, Dock, tray and processes are recording fakes (`provideDesktopFakes`),
-   * which a provider of the test's own replaces; the component renders on the render's own
-   * surface, as the main window. It does not change which
+   * desktop host's windows, menus, Dock, tray, processes and deep links are recording fakes
+   * (`provideDesktopFakes`), which a provider of the test's own replaces, and the component
+   * renders in the main window `AppWindows` opens, as in an app. It does not change which
    * file a `.macos.ts` or `.ios.ts` import resolved to: that is the Vitest preset's `os`.
    */
   os?: TestOs;
@@ -103,7 +103,7 @@ function osOptions(
   conditions: Conditions | undefined,
 ): { providers: Provider[]; conditions: Conditions | undefined } {
   const providers: Provider[] = [];
-  if (os === 'macos') providers.push(...provideDesktopFakes());
+  if (os === 'macos') providers.push(...provideDesktopFakes({ windows: fakeWindows() }));
   if (os) providers.push({ provide: OS, useValue: os });
   if (os || osVersion !== undefined) {
     providers.push({ provide: OS_VERSION, useValue: osVersion ?? null });
@@ -146,7 +146,12 @@ interface Mounted {
   fabric: FakeFabric;
   engine: Engine;
   applicationRef: ApplicationRef;
-  componentRef: ComponentRef<unknown>;
+  /** The root component: on a desktop OS the main window's, which throws while none is open. */
+  readonly componentRef: ComponentRef<unknown>;
+  /** The host's windows where the render has the windows' fake, which its views are in. */
+  windows: FakeWindows | null;
+  /** The views the queries search: every open window's, or the render's own surface's. */
+  roots(): FakeFabricNode[];
   /** The platform to go back to as this render goes, where it rendered as another OS. */
   platform: string | null;
 }
@@ -214,7 +219,7 @@ export function ownerOf(node: FakeFabricNode): Mounted {
 
 /** The node as it is in the most recent commit, found by its tag, or null once it is gone. */
 export function currentOf(node: FakeFabricNode): FakeFabricNode | null {
-  const hit = flatten(ownerOf(node).fabric.committed).find((n) => n.reactTag === node.reactTag);
+  const hit = flatten(ownerOf(node).roots()).find((n) => n.reactTag === node.reactTag);
   if (hit) owners.set(hit, ownerOf(node));
   return hit ?? null;
 }
@@ -351,31 +356,27 @@ export async function render<T>(
     if (platform !== null) registerPlatformComponents(platform);
     throw error;
   }
-  const self: Mounted = {
-    fabric,
-    engine: app.engine,
-    applicationRef: app.applicationRef,
-    componentRef: app.componentRef,
-    platform,
-  };
+  const self = mountedFor(fabric, app, platform);
   mounted.push(self);
+  await mainWindowOpened(self);
 
-  const componentRef = app.componentRef as ComponentRef<T>;
-  const instance = componentRef.instance as T & Record<string, unknown>;
+  const componentRef = (): ComponentRef<T> => app.componentRef as ComponentRef<T>;
+  const main = (): (T & Record<string, unknown>) | undefined =>
+    app.applicationRef.components[0]?.instance as (T & Record<string, unknown>) | undefined;
 
   const detectChanges = async (): Promise<void> => {
     // The component's own view, not the host's: `componentRef.changeDetectorRef` marks the host
     // and upwards, which leaves an OnPush component with a changed field exactly as it was.
-    componentRef.injector.get(ChangeDetectorRef).markForCheck();
+    app.applicationRef.components[0]?.injector.get(ChangeDetectorRef).markForCheck();
     app.applicationRef.tick();
     await settle();
   };
   const rerender: RenderResult<T>['rerender'] = async (changes = {}) => {
     refuseUnknownInputs(type, changes.inputs);
     for (const [name, value] of Object.entries(changes.inputs ?? {})) {
-      componentRef.setInput(name, value);
+      componentRef().setInput(name, value);
     }
-    Object.assign(instance, changes.componentProperties);
+    Object.assign(componentRef().instance as object, changes.componentProperties);
     await detectChanges();
   };
 
@@ -383,19 +384,67 @@ export async function render<T>(
   else await settle();
 
   return {
-    ...queriesFor(
-      () => fabric.committed,
-      () => self,
-    ),
+    ...queriesFor(self.roots, () => self),
     fabric,
-    componentRef,
-    instance,
-    fixture: { componentRef, componentInstance: instance, detectChanges },
+    get componentRef() {
+      return componentRef();
+    },
+    get instance() {
+      return componentRef().instance;
+    },
+    fixture: {
+      get componentRef() {
+        return componentRef();
+      },
+      get componentInstance() {
+        return main() ?? componentRef().instance;
+      },
+      detectChanges,
+    },
     rerender,
     detectChanges,
-    debug: (node) => console.log(tree(node ? [currentOf(node) ?? node] : fabric.committed)),
+    debug: (node) => console.log(tree(node ? [currentOf(node) ?? node] : self.roots())),
     unmount: () => unmount(self),
   };
+}
+
+/** On a desktop OS the root component is made as the main window opens, a round trip away. */
+async function mainWindowOpened(self: Mounted): Promise<void> {
+  if (self.windows) await settle();
+}
+
+/** What is kept of a render, for its queries and events and to unmount it. */
+function mountedFor(
+  fabric: FakeFabric,
+  app: ReturnType<typeof mount>,
+  platform: string | null,
+): Mounted {
+  const hostWindows = windowsFake(app.applicationRef);
+  return {
+    fabric,
+    engine: app.engine,
+    applicationRef: app.applicationRef,
+    get componentRef() {
+      return app.componentRef;
+    },
+    windows: hostWindows,
+    roots: () =>
+      hostWindows
+        ? hostWindows.windows
+            .filter((window) => window.open)
+            .flatMap((window) => fabric.committedOn(window.surface))
+        : fabric.committed,
+    platform,
+  };
+}
+
+/** The windows' fake a render's app has, where it has one. */
+function windowsFake(applicationRef: ApplicationRef): FakeWindows | null {
+  const source = applicationRef.injector.get(
+    AppWindows.SOURCE,
+    null,
+  ) as Partial<FakeWindows> | null;
+  return source && Array.isArray(source.windows) ? (source as FakeWindows) : null;
 }
 
 function unmount(target: Mounted): void {
@@ -420,10 +469,58 @@ export function cleanup(): void {
 }
 
 /** Queries over whatever was rendered most recently, as Testing Library's `screen` is. */
-export const screen: BoundQueries & { debug(node?: FakeFabricNode): void } = {
-  ...queriesFor(() => latest().fabric.committed, latest),
-  debug: (node) => console.log(tree(node ? [currentOf(node) ?? node] : latest().fabric.committed)),
+export const screen: BoundQueries & {
+  debug(node?: FakeFabricNode): void;
+  /**
+   * The open windows of the most recent render, in the order they opened, each with the queries
+   * bound to its own views. A render with no windows' fake has its own surface as its one window.
+   */
+  windows(): TestWindow[];
+} = {
+  ...queriesFor(() => latest().roots(), latest),
+  debug: (node) => console.log(tree(node ? [currentOf(node) ?? node] : latest().roots())),
+  windows: () => windowsOf(latest()),
 };
+
+/** One open window of a render, and the queries bound to its views. */
+export interface TestWindow extends BoundQueries {
+  readonly surface: number;
+  /** `main`, a route window's outlet, a `restoreKey`, or null. */
+  readonly key: string | null;
+  readonly title: string;
+  /** The app's handle for it, where `AppWindows` opened it. */
+  readonly window: AppWindow | null;
+}
+
+function windowsOf(owner: Mounted): TestWindow[] {
+  if (!owner.windows) {
+    return [
+      {
+        ...queriesFor(
+          () => owner.fabric.committed,
+          () => owner,
+        ),
+        surface: 1,
+        key: 'main',
+        title: '',
+        window: null,
+      },
+    ];
+  }
+  const handles = owner.applicationRef.injector.get(AppWindows).windows();
+  return owner.windows.windows
+    .filter((window) => window.open)
+    .map((window) => ({
+      ...queriesFor(
+        () => owner.fabric.committedOn(window.surface),
+        () => owner,
+      ),
+      surface: window.surface,
+      key: window.request.key,
+      title: window.title,
+      window: handles.find((handle) => handle.surface === window.surface) ?? null,
+    }));
+}
 
 /** Queries scoped to one node and what is under it, in whichever commit is current. */
 export function within(node: FakeFabricNode): BoundQueries {
@@ -461,7 +558,7 @@ export async function waitForElementToBeRemoved(
   }
   await waitFor(() => {
     if (present())
-      throw new Error(`Still rendered after the timeout.\n\n${tree(latest().fabric.committed)}`);
+      throw new Error(`Still rendered after the timeout.\n\n${tree(latest().roots())}`);
   }, options);
 }
 
