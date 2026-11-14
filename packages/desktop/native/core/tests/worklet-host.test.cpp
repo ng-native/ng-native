@@ -13,7 +13,8 @@ TEST_CASE("A worklet host callback set, read and cleared from three threads at o
   auto &host = ngn::workletHost();
   std::atomic<bool> stop{false};
   std::atomic<long> calls{0};
-  std::atomic<long> events{0};
+  // Calls that saw a callback other than the one set, or its arguments mangled.
+  std::atomic<long> wrong{0};
   std::thread reader([&] {
     while (!stop) {
       host.wakeUiFrames.call();
@@ -29,11 +30,14 @@ TEST_CASE("A worklet host callback set, read and cleared from three threads at o
     // A closure owning state, as the glue's do: a torn read or a freed closure would touch freed
     // memory, or count into the wrong place.
     auto counter = std::make_shared<std::vector<int>>(64, 1);
-    host.wakeUiFrames.set([counter, &calls] { calls += (*counter)[63]; });
-    host.reanimatedEvent.set([counter, &events](const std::string &name, facebook::react::Tag tag, const folly::dynamic &payload) {
-      events += (*counter)[0] * (name.size() == 21 && tag == 7 && payload["state"] == 4 ? 1 : 1000);
+    host.wakeUiFrames.set([counter, &calls, &wrong] {
+      calls++;
+      wrong += (*counter)[63] != 1;
     });
-    host.runOnScheduler.set([counter](std::function<void(facebook::react::Scheduler &)>) { CHECK((*counter)[1] == 1); });
+    host.reanimatedEvent.set([counter, &wrong](const std::string &name, facebook::react::Tag tag, const folly::dynamic &payload) {
+      wrong += (*counter)[0] != 1 || name != "onGestureHandlerEvent" || tag != 7 || payload["state"] != 4;
+    });
+    host.runOnScheduler.set([counter, &wrong](std::function<void(facebook::react::Scheduler &)>) { wrong += (*counter)[1] != 1; });
     host.wakeUiFrames.set(nullptr);
     host.reanimatedEvent.set(nullptr);
     host.runOnScheduler.set(nullptr);
@@ -41,7 +45,7 @@ TEST_CASE("A worklet host callback set, read and cleared from three threads at o
   stop = true;
   reader.join();
   runner.join();
-  CHECK(events.load() < 1000 * 1000);
+  CHECK(wrong.load() == 0);
   // Cleared, nothing is called and the caller is told so.
   CHECK_FALSE(host.wakeUiFrames.call());
   CHECK_FALSE(host.wakeUiFrames);
