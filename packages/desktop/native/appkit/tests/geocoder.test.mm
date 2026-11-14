@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdlib>
 #import <Foundation/Foundation.h>
 
 namespace {
@@ -31,6 +32,13 @@ bool offline(const ngn::Geocoder::Answer &answer) {
 } // namespace
 
 TEST_CASE("CoreLocationGeocoder reverse geocodes a point into expo's address fields, with no permission") {
+  // Live: the answer depends on Apple's servers and where the machine is, so it is run on a Mac
+  // here and skipped in CI, where a runner's network and location make it flaky.
+  if (std::getenv("CI") != nullptr) {
+    MESSAGE("skipped in CI: a live MapKit request");
+    return;
+  }
+
   auto geocoder = ngn::appkit::makeGeocoder();
   auto answer = wait([&](auto done) { geocoder->reverseGeocode(51.50083, -0.12457, done); });
   if (offline(answer)) {
@@ -45,6 +53,13 @@ TEST_CASE("CoreLocationGeocoder reverse geocodes a point into expo's address fie
 }
 
 TEST_CASE("CoreLocationGeocoder geocodes an address to its point") {
+  // Live: the answer depends on Apple's servers and where the machine is, so it is run on a Mac
+  // here and skipped in CI, where a runner's network and location make it flaky.
+  if (std::getenv("CI") != nullptr) {
+    MESSAGE("skipped in CI: a live MapKit request");
+    return;
+  }
+
   auto geocoder = ngn::appkit::makeGeocoder();
   auto answer = wait([&](auto done) { geocoder->geocode("Westminster Bridge, London", done); });
   if (offline(answer)) {

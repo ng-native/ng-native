@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdlib>
 #import <Foundation/Foundation.h>
 
 namespace {
@@ -49,6 +50,13 @@ TEST_CASE("postalAddressOf puts the street number and street on the first line, 
 }
 
 TEST_CASE("MapKitLookup completes a query in a country and looks the first completion up, live") {
+  // Live: the answer depends on Apple's servers and where the machine is, so it is run on a Mac
+  // here and skipped in CI, where a runner's network and location make it flaky.
+  if (std::getenv("CI") != nullptr) {
+    MESSAGE("skipped in CI: a live MapKit request");
+    return;
+  }
+
   auto lookup = ngn::appkit::makeAddressLookup();
   std::optional<std::vector<ngn::AddressCompletion>> found;
   std::optional<std::string> failure;
