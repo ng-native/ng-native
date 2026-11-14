@@ -66,6 +66,8 @@ struct Host {
   // Ticks the layout animations while they run, at the display's rate.
   NSTimer *animationTimer;
   bool firstFrameLogged = false;
+  // The app window is ordered front once, when its safe areas settle (showAppWindowWhenSettled).
+  bool appWindowShown = false;
 };
 
 Host gHost;
@@ -245,6 +247,8 @@ void navigate(ngn::NavigationDirection direction, NSWindow *window) {
 
 // An app that renders on its own surface rather than opening windows (one that is not an
 // ng-native app with AppWindows) gets that surface in a window once it has something on it.
+void showAppWindow();
+
 void showAppSurfaceIfUsed() {
   const auto *root = gHost.mounting->tree().find(kAppSurface);
   if (gHost.appWindow != nil || root == nullptr || root->children.empty()) {
@@ -262,7 +266,22 @@ void showAppSurfaceIfUsed() {
   gHost.appWindow.delegate = (id<NSWindowDelegate>)NSApp.delegate;
   gHost.appWindow.contentView = gHost.appSurface;
   [gHost.appWindow setFrameTopLeftPoint:NSMakePoint(NSMinX(visible) + 40, NSMaxY(visible) - 40)];
+  // Shown once the content has the insets of the title bar and toolbar it runs under, a commit or
+  // two later, or after kSettleWait at the latest: shown at once, its first frames would draw under
+  // the toolbar and then jump down.
+  constexpr int64_t kSettleWait = 300 * NSEC_PER_MSEC;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kSettleWait), dispatch_get_main_queue(), ^{
+    showAppWindow();
+  });
+}
+
+void showAppWindow() {
+  if (gHost.appWindowShown || gHost.appWindow == nil) {
+    return;
+  }
+  gHost.appWindowShown = true;
   [gHost.appWindow makeKeyAndOrderFront:nil];
+  logFirstFrame(gHost.appWindow);
 }
 
 } // namespace
@@ -370,7 +389,9 @@ int main(int argc, const char *argv[]) {
       gHost.input->didMount(surfaceId);
       if (surfaceId == kAppSurface) {
         showAppSurfaceIfUsed();
-        logFirstFrame(gHost.appWindow);
+        if (gHost.mounting->safeAreasSettled()) {
+          showAppWindow();
+        }
       } else {
         gHost.windows->didMount(surfaceId);
         logFirstFrame(gHost.windows->window(surfaceId));

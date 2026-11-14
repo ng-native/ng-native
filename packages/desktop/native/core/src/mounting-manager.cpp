@@ -154,7 +154,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
     backend_->setPresented(surfaceId, change.tag, change.covered);
   }
   applyTabs(surfaceId);
-  safeAreas_->settle(tree_);
+  safeAreasSettled_ = !safeAreas_->settle(tree_);
   auto sidebars = sidebars_.settle(tree_, surfaceId);
   for (const auto &split : sidebars.splitViews) {
     backend_->setSplitView(surfaceId, split.tag, split.window);
@@ -191,7 +191,9 @@ void MountingManager::chooseTab(SurfaceId surfaceId, Tag host, Tag screen) {
 
 void MountingManager::setContainerInsets(Tag root, const ContainerInsets &insets) {
   safeAreas_->setContainer(root, insets);
-  safeAreas_->settle(tree_);
+  if (safeAreas_->settle(tree_)) {
+    safeAreasSettled_ = false;
+  }
 }
 
 void MountingManager::removeContainerInsets(Tag root) {
