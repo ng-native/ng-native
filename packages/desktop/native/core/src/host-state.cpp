@@ -12,6 +12,17 @@ std::optional<std::string> HostState::initialUrl() const {
   return initialUrl_;
 }
 
+void HostState::receiveUrl(std::string url, bool launched) {
+  if (!launched) {
+    std::lock_guard lock(mutex_);
+    if (!initialUrl_) {
+      initialUrl_ = std::move(url);
+      return;
+    }
+  }
+  openUrl(url);
+}
+
 void HostState::openUrl(const std::string &url) {
   std::map<int, std::function<void(const std::string &)>> listeners;
   {

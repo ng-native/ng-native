@@ -1,5 +1,8 @@
 #include "fake-system.h"
 #include "ngn/desktop-expo.h"
+#include "ngn/host-state.h"
+
+#include <folly/json.h>
 
 #include <doctest/doctest.h>
 
@@ -80,11 +83,40 @@ TEST_CASE("SecureStore refuses a key expo-secure-store refuses, a value that is 
 
 TEST_CASE("Clipboard reads and writes the pasteboard") {
   auto system = std::make_shared<ngn::testing::FakeSystem>();
-  auto module = ngn::makeDesktopClipboardModule(system);
+  auto module = ngn::makeDesktopClipboardModule(system, std::make_shared<ngn::HostState>());
   CHECK(ask(*module, "hasStringAsync", dynamic::array()).value == dynamic(false));
   CHECK(ask(*module, "setStringAsync", dynamic::array("copied")).value == dynamic(true));
   CHECK(ask(*module, "getStringAsync", dynamic::array()).value == dynamic("copied"));
   CHECK(ask(*module, "hasStringAsync", dynamic::array()).value == dynamic(true));
+}
+
+TEST_CASE("Clipboard sends ngNativeClipboard each time the pasteboard's change count moves") {
+  auto system = std::make_shared<ngn::testing::FakeSystem>();
+  auto state = std::make_shared<ngn::HostState>();
+  state->clipboardChangeCount.set(system->clipboardChangeCount());
+  auto module = ngn::makeDesktopClipboardModule(system, state);
+  Lines events;
+  module->setEmitter([&](const std::string &event, dynamic body) { events.push_back(event + " " + folly::toJson(body)); });
+
+  // Another app copied: the backend saw the count move.
+  ++system->clipboardChanges;
+  state->clipboardChangeCount.set(system->clipboardChangeCount());
+  // Checked again with nothing new: no event.
+  state->clipboardChangeCount.set(system->clipboardChangeCount());
+  CHECK(events == Lines{"ngNativeClipboard {}"});
+  // The app's own write counts too, once.
+  ask(*module, "setStringAsync", dynamic::array("mine"));
+  CHECK(events == Lines{"ngNativeClipboard {}", "ngNativeClipboard {}"});
+
+  // A reload's new module hears changes; the old one hears nothing more.
+  module.reset();
+  auto again = ngn::makeDesktopClipboardModule(system, state);
+  Lines heard;
+  again->setEmitter([&](const std::string &event, dynamic) { heard.push_back(event); });
+  ++system->clipboardChanges;
+  state->clipboardChangeCount.set(system->clipboardChangeCount());
+  CHECK(heard == Lines{"ngNativeClipboard"});
+  CHECK(events.size() == 2);
 }
 
 TEST_CASE("the display stays awake while any tag holds it") {

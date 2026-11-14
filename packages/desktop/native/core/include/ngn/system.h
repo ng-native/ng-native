@@ -64,6 +64,8 @@ class System {
 
   virtual std::optional<std::string> clipboardText() = 0;
   virtual void setClipboardText(const std::string &text) = 0;
+  // A number that moves each time anything (this app or another) changes the clipboard.
+  virtual int64_t clipboardChangeCount() = 0;
 
   // Small values that persist across launches (NSUserDefaults on macOS).
   virtual std::optional<folly::dynamic> preference(const std::string &key) = 0;

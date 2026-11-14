@@ -159,6 +159,10 @@ class AppKitSystem final : public System {
     [board setString:ns(text) forType:NSPasteboardTypeString];
   }
 
+  int64_t clipboardChangeCount() override {
+    return NSPasteboard.generalPasteboard.changeCount;
+  }
+
   std::optional<folly::dynamic> preference(const std::string &key) override {
     NSString *json = [NSUserDefaults.standardUserDefaults stringForKey:ns(prefixed(key))];
     if (json == nil) {
@@ -247,6 +251,19 @@ std::shared_ptr<System> makeSystem(std::string appId) {
     [center addObserver:self selector:@selector(activityChanged) name:name object:nil];
   }
   [center addObserver:self selector:@selector(didLaunch) name:NSApplicationDidFinishLaunchingNotification object:nil];
+  // The pasteboard posts no change notification, and polling it would wake an idle app. It is
+  // checked where a change can come from: another app while this one was away (on becoming
+  // active), and this app's own key presses, clicks and menu commands, after each is handled.
+  self.state->clipboardChangeCount.set(NSPasteboard.generalPasteboard.changeCount);
+  [center addObserver:self selector:@selector(checkClipboard) name:NSMenuDidSendActionNotification object:nil];
+  __weak NGNAppObserver *weakSelf = self;
+  [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown | NSEventMaskLeftMouseUp | NSEventMaskRightMouseUp
+                                        handler:^NSEvent *(NSEvent *event) {
+                                          dispatch_async(dispatch_get_main_queue(), ^{
+                                            [weakSelf checkClipboard];
+                                          });
+                                          return event;
+                                        }];
   [NSApp addObserver:self forKeyPath:@"effectiveAppearance" options:NSKeyValueObservingOptionNew context:nil];
   [NSAppleEventManager.sharedAppleEventManager setEventHandler:self
                                                    andSelector:@selector(handleURL:withReply:)
@@ -259,7 +276,14 @@ std::shared_ptr<System> makeSystem(std::string appId) {
   self.launched = YES;
 }
 
+- (void)checkClipboard {
+  self.state->clipboardChangeCount.set(NSPasteboard.generalPasteboard.changeCount);
+}
+
 - (void)activityChanged {
+  if (NSApp.isActive) {
+    [self checkClipboard];
+  }
   ngn::Activity activity = NSApp.isHidden ? ngn::Activity::Background
       : NSApp.isActive                    ? ngn::Activity::Active
                                           : ngn::Activity::Inactive;
@@ -283,11 +307,7 @@ std::shared_ptr<System> makeSystem(std::string appId) {
     return;
   }
   // A URL that launched the app is its initial URL; later ones are events.
-  if (self.launched) {
-    self.state->openUrl(str(url));
-  } else {
-    self.state->setInitialUrl(str(url));
-  }
+  self.state->receiveUrl(str(url), self.launched);
 }
 
 @end

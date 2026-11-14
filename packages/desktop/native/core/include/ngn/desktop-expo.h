@@ -6,7 +6,8 @@
 // - NgNativeSecureStore: getItemAsync, setItemAsync, deleteItemAsync, getItem, setItem and
 //   canUseBiometricAuthentication, over a SecretStore. Keys follow expo-secure-store's rule
 //   (letters, digits, `.`, `-` and `_`), and the `keychainService` option picks the service.
-// - NgNativeClipboard: getStringAsync, setStringAsync and hasStringAsync, over System's pasteboard.
+// - NgNativeClipboard: getStringAsync, setStringAsync and hasStringAsync, over System's pasteboard,
+//   and `ngNativeClipboard` on DeviceEventEmitter each time HostState's clipboard change count moves.
 // - NgNativeKeepAwake: activateKeepAwakeAsync and deactivateKeepAwake by tag; the display stays
 //   awake while any tag holds it.
 // - NgNativeHaptics: impactAsync, notificationAsync and selectionAsync, as the trackpad's feedback.
@@ -18,6 +19,7 @@
 //   LocaleSource (the user's preferred languages and the region's formats).
 #pragma once
 
+#include "ngn/host-state.h"
 #include "ngn/native-module.h"
 #include "ngn/system.h"
 
@@ -43,7 +45,7 @@ class SecretStore {
 std::shared_ptr<NativeModule> makeSecureStoreModule(std::shared_ptr<SecretStore> store, std::string defaultService);
 bool secureStoreKeyValid(const std::string &key);
 
-std::shared_ptr<NativeModule> makeDesktopClipboardModule(std::shared_ptr<System> system);
+std::shared_ptr<NativeModule> makeDesktopClipboardModule(std::shared_ptr<System> system, std::shared_ptr<HostState> state);
 
 class SleepPreventer {
  public:

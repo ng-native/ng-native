@@ -306,7 +306,23 @@ void showAppWindow() {
 @interface NGNAppDelegate : NSObject <NSApplicationDelegate, NSWindowDelegate>
 @end
 
-@implementation NGNAppDelegate
+@implementation NGNAppDelegate {
+  BOOL _launched;
+}
+- (void)applicationDidFinishLaunching:(NSNotification *)note {
+  _launched = YES;
+}
+// Open With, a drop on the Dock icon and a double click on one of the app's document types in
+// Finder: each file reaches Linking (DeepLinks) as its file:// url. Links to the app's scheme come
+// through the AppleEvent handler (system.mm) instead.
+- (void)application:(NSApplication *)app openURLs:(NSArray<NSURL *> *)urls {
+  for (NSURL *url in urls) {
+    NSURL *plain = url.isFileReferenceURL ? url.filePathURL : url;
+    if (plain.absoluteString != nil && gHost.state) {
+      gHost.state->receiveUrl(plain.absoluteString.UTF8String, _launched);
+    }
+  }
+}
 // The app decides (AppWindows and provideAppLifecycle): closing the last window never quits.
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app {
   return gHost.appWindow != nil;
@@ -549,7 +565,7 @@ int main(int argc, const char *argv[]) {
       static auto awake = std::make_shared<ngn::KeepAwakeTags>(ngn::appkit::makeSleepPreventer());
       static auto haptics = ngn::appkit::makeHapticPlayer();
       ngn::addModule(*modules, "NgNativeSecureStore", [] { return ngn::makeSecureStoreModule(keychain, keychainService); });
-      ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem); });
+      ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem, gHost.state); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
       static auto dialogs = ngn::appkit::makeFileDialogs();
