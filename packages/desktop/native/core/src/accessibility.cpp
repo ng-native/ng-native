@@ -71,6 +71,11 @@ const std::unordered_map<std::string, Mapping> &roles() {
       {"directory", {AxRole::List, AxSubrole::None, "directory"}},
       {"feed", {AxRole::List, AxSubrole::None, "feed"}},
       {"option", {AxRole::Row, AxSubrole::None, "option"}},
+      // ARIA roles React Native's Role lacks, read as written (DesktopProps::role).
+      {"listbox", {AxRole::List}},
+      {"gridcell", {AxRole::Cell}},
+      {"menuitemcheckbox", {AxRole::MenuItem}},
+      {"menuitemradio", {AxRole::MenuItem}},
       {"columnheader", {AxRole::Cell, AxSubrole::None, "column header"}},
       {"rowheader", {AxRole::Cell, AxSubrole::None, "row header"}},
       {"term", {AxRole::StaticText, AxSubrole::None, "term"}},
@@ -112,7 +117,7 @@ const std::unordered_map<std::string, Mapping> &roles() {
 // The roles a press means something on: AppKit's controls, which VoiceOver presses.
 bool pressableRole(const std::string &name) {
   static const std::unordered_set<std::string> names{"button", "togglebutton", "link", "imagebutton", "checkbox",
-      "switch", "radio", "tab", "menuitem", "combobox", "searchbox", "search"};
+      "switch", "radio", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "combobox", "searchbox", "search"};
   return names.contains(name);
 }
 
@@ -157,6 +162,10 @@ bool declares(const ViewProps &props, const std::string &action) {
 std::string roleName(const ViewProps &props) {
   if (props.role != Role::None) {
     return toString(props.role);
+  }
+  // An ARIA role React Native's Role lacks, as written.
+  if (const auto *desktop = dynamic_cast<const HasDesktopProps *>(&props); desktop && !desktop->desktop.role.empty()) {
+    return desktop->desktop.role;
   }
   return props.accessibilityRole;
 }

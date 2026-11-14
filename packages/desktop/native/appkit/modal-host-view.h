@@ -7,7 +7,10 @@
 // does on iOS.
 //
 // A sheet is an NSWindow sheet on the window (on its top sheet, so sheets stack), and takes the key
-// focus while it is up; the window gets it back when it goes. A cover sits below the title bar
+// focus while it is up; the window gets it back when it goes. Whatever the presentation, the focus
+// moves into it when it opens (to the first view in its Tab order, `initialFocus`, else its
+// container), Tab stays inside it, and the focus goes back to the view that held it when it closes
+// (modal-focus.h). Its container is labelled with the modal's accessibility label. A cover sits below the title bar
 // and the toolbar, and a transparent one leaves the screen under it showing.
 //
 // A modal with an `anchor` (desktop-modal.h) is a popover instead: an NSPopover at the anchor's
@@ -35,6 +38,15 @@
 @property (class, nonatomic) std::function<NSSize(NSInteger surface, NSInteger tag, NSSize window)> sheetSizer;
 // The size a popover takes for its content, which the core works out (ngn::popoverSize).
 @property (class, nonatomic) std::function<NSSize(NSInteger surface, NSInteger tag, NSSize window)> popoverSizer;
+
+// What takes the focus when the modal rooted at `tag` opens: the first view in its Tab order, or
+// nil for the container itself.
+@property (class, nonatomic) std::function<NSResponder *(NSInteger tag)> initialFocus;
+
+// The front in-window cover in `window`, or nil.
++ (NSView *)frontCoverIn:(NSWindow *)window;
+// Whether `view` is a sheet's, a cover's or a popover's container.
++ (BOOL)isPresentationContainer:(NSView *)view;
 
 // Fits each open popover and sheet to its content, after a transaction is mounted.
 + (void)fitPopovers;

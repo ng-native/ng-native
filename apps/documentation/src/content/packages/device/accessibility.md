@@ -70,6 +70,16 @@ Tab and Shift-Tab move the keyboard focus in the order views appear in the tree,
 Option-Tab reaches every focusable view, as in other Mac apps. A focus moved by a key draws
 AppKit's focus ring, unless the view styles `outline`.
 
+A sheet, an in-window cover or a popover keeps Tab inside it. The focus moves into it as it opens
+and goes back to the view that had it when it closes.
+
+A view with the `tablist`, `radiogroup`, `menu`, `menubar`, `listbox` or `grid` role is one Tab
+stop, as WAI-ARIA describes. Inside it the arrow keys, Home and End move the focus between its
+`tab`, `radio`, `menuitem`, `option` or cell views. A tablist, radio group, menu or menu bar wraps
+round; a listbox and a grid stop at their ends. In a grid, Control-Home and Control-End go to the
+first and last cell. A `tabIndex` of -1 keeps an item out of Tab order while the arrows still reach
+it. The host only moves the focus: select a tab or check a radio from its `(focus)` handler.
+
 The desktop host has no accessibility settings module, so on macOS every value here stays at its
 neutral setting and `announce()` does nothing. `fontScale` is one, since nothing resizes a Mac app.
 

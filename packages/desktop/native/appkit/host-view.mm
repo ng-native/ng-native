@@ -271,8 +271,10 @@ static ngn::InputDispatcher *gViewInput;
   return [super hitTest:NSMakePoint(origin.x + local->x, origin.y + local->y)];
 }
 
+// Any tabIndex takes the focus, -1 too, as on the web: out of Tab order, but where a click or the
+// arrow keys in a composite widget move it (focus-order.h).
 - (BOOL)acceptsFirstResponder {
-  return _desktop.focusable.value_or(false) || _desktop.tabIndex.value_or(-1) >= 0;
+  return _desktop.focusable.value_or(false) || _desktop.tabIndex.has_value();
 }
 
 

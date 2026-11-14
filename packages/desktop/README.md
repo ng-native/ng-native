@@ -153,9 +153,31 @@ keyboard, by a click, Tab or `focus()`.
 Tab and Shift-Tab move the focus in the order the core walks (`focus-order.h`), not AppKit's
 key-view loop: positive `tabIndex` first, then focusable views, text inputs and controls in tree
 order, inside the container the focus is in. With the Mac's default keyboard navigation Tab
-reaches text inputs only, and Option-Tab reaches everything. A view's accessibility props give it
-its NSAccessibility role, subrole, label, hint, value and state, selected, disabled, checked and
-expanded included (`accessibility.h`). Every role the components take is mapped; one AppKit lacks,
+reaches text inputs only, and Option-Tab reaches everything. A sheet, an in-window cover or a
+popover keeps Tab inside it; the focus moves into it as it opens, to the first view in its Tab order
+(else the container, labelled with the modal's accessibility label), and goes back to the view that
+held it when it closes. A composite widget is one Tab stop, as WAI-ARIA has it: a view with the
+`tablist`, `radiogroup`, `menu`, `menubar`, `listbox` or `grid` role is entered at its focused, else
+its selected or checked, else its first item, and the arrow keys, Home and End move between its
+items:
+
+| Role                    | Keys                   | At the ends |
+| ----------------------- | ---------------------- | ----------- |
+| `tablist`, `radiogroup` | every arrow, Home, End | wraps       |
+| `menu`                  | Up, Down, Home, End    | wraps       |
+| `menubar`               | Left, Right, Home, End | wraps       |
+| `listbox`               | Up, Down, Home, End    | stops       |
+| `grid`                  | every arrow, Home, End | stops       |
+
+A grid's rows are its `row` views: Home and End go to the ends of the row, and Control-Home and
+Control-End to the grid's first and last cell. Left and Right swap in a right-to-left composite. An
+item that takes no focus itself gives it to the first view inside it that does, a disabled radio is
+skipped, and any `tabIndex`, -1 included, lets a view take the focus there (or from a click). The
+host moves the focus only: an app that selects the tab or checks the radio on focus does so from
+`(focus)`.
+
+A view's accessibility props give it its NSAccessibility role, subrole, label, hint, value and
+state, selected, disabled, checked and expanded included (`accessibility.h`). Every role the components take is mapped; one AppKit lacks,
 such as `navigation`, is a group with the role's name spoken, and a heading is AppKit's heading role
 with its `accessibilityLevel` from macOS 26 (a group spoken as a heading before). A text is static
 text whose value is its string. A control, a heading or an `accessible` view is read as one element,
