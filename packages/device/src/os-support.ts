@@ -23,6 +23,11 @@ export interface OsSupportRow {
    * true where the row is not `absent` and the module is there, false where it is `absent`.
    */
   readonly services?: Readonly<Record<string, string>>;
+  /**
+   * Services with no host module of their own, whose `available()` follows the row: absent where the
+   * row says `absent`, which `every-service.test.ts` checks call by call.
+   */
+  readonly inert?: readonly string[];
   readonly on: Readonly<Record<SupportOs, string>>;
 }
 
@@ -39,11 +44,13 @@ const row = (
   covers: readonly string[],
   [macos, ipados, iphone, android, web]: readonly [string, string, string, string, string],
   services?: Readonly<Record<string, string>>,
+  inert?: readonly string[],
 ): OsSupportRow => ({
   feature,
   covers,
   on: { macos, ipados, iphone, android, web },
   ...(services && { services }),
+  ...(inert && { inert }),
 });
 
 const MAC_ONLY = ['yes', 'absent', 'absent', 'absent', 'absent'] as const;
@@ -128,4 +135,54 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     ['accessibilityLevel'],
     ['macOS 26 and later', 'ignored', 'ignored', 'ignored', 'yes'],
   ),
+  row(
+    '`HardwareBack`, `NavigationBar`',
+    ['HardwareBack', 'NavigationBar'],
+    ['absent', 'absent', 'absent', 'yes', 'absent'],
+    undefined,
+    ['HardwareBack', 'NavigationBar'],
+  ),
+  row(
+    '`StatusBar`, `Keyboard`',
+    ['StatusBar', 'Keyboard'],
+    ['absent', 'yes', 'yes', 'yes', 'absent'],
+    undefined,
+    ['StatusBar', 'Keyboard'],
+  ),
+  row('`Vibration`', ['Vibration'], ['absent', 'yes', 'yes', 'yes', 'yes'], undefined, [
+    'Vibration',
+  ]),
+  row(
+    '`BackgroundTask`, `Brightness`, `DeviceOrientation`',
+    [],
+    ['absent', 'yes', 'yes', 'yes', 'absent'],
+    undefined,
+    ['BackgroundTask', 'Brightness', 'DeviceOrientation'],
+  ),
 ];
+
+/** The row a service's `available()` follows, or undefined where the table has none for it. */
+export function supportRowOf(service: string): OsSupportRow | undefined {
+  return OS_SUPPORT.find((one) => one.services?.[service] || one.inert?.includes(service));
+}
+
+/**
+ * One line for a service's documentation page, drawn from its row: where it is available, with
+ * the row's words where it is not a plain `yes`, and where it is absent. The documentation site
+ * writes it under `<!-- platforms: Service -->`, so the page cannot disagree with the table.
+ */
+export function platformsLine(service: string): string | undefined {
+  const row = supportRowOf(service);
+  if (!row) return undefined;
+  const oses = Object.keys(SUPPORT_OSES) as SupportOs[];
+  const present = oses
+    .filter((os) => row.on[os] !== 'absent')
+    .map((os) => (row.on[os] === 'yes' ? SUPPORT_OSES[os] : `${SUPPORT_OSES[os]} (${row.on[os]})`));
+  const absent = oses.filter((os) => row.on[os] === 'absent').map((os) => SUPPORT_OSES[os]);
+  const list = (names: readonly string[]) =>
+    names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+  const parts = [];
+  if (present.length) parts.push(`Available on ${list(present)}.`);
+  if (absent.length) parts.push(`Absent on ${list(absent)}, where \`available()\` is false.`);
+  return `**Platforms.** ${parts.join(' ')}`;
+}

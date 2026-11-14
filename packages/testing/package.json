@@ -25,6 +25,21 @@
     },
     "./register": "./runner/register.mjs",
     "./loader": "./runner/loader.mjs",
+    "./device": "./src/device/index.ts",
+    "./device/host": "./src/device/host.ts",
+    "./device/pool": "./src/device/pool.ts",
+    "./device/vitest": "./src/device/vitest.ts",
+    "./device/mocks": "./src/device/mocks.ts",
+    "./device/loader": "./src/device/loader.ts",
+    "./device/mock-registry": "./src/device/mock-registry.ts",
+    "./device/bundle-modules": "./src/device/bundle-modules.ts",
+    "./device/metro": {
+      "types": "./device/metro.d.cts",
+      "default": "./device/metro.cjs"
+    },
+    "./device/transformer": "./device/transformer.cjs",
+    "./device/launcher": "./src/device/launcher.ts",
+    "./device/macos-launcher": "./src/device/macos-launcher.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -42,13 +57,59 @@
       },
       "./register": "./runner/register.mjs",
       "./loader": "./runner/loader.mjs",
+      "./device": {
+        "types": "./dist/device/index.d.ts",
+        "default": "./dist/device/index.js"
+      },
+      "./device/host": {
+        "types": "./dist/device/host.d.ts",
+        "default": "./dist/device/host.js"
+      },
+      "./device/pool": {
+        "types": "./dist/device/pool.d.ts",
+        "default": "./dist/device/pool.js"
+      },
+      "./device/vitest": {
+        "types": "./dist/device/vitest.d.ts",
+        "default": "./dist/device/vitest.js"
+      },
+      "./device/mocks": {
+        "types": "./dist/device/mocks.d.ts",
+        "default": "./dist/device/mocks.js"
+      },
+      "./device/loader": {
+        "types": "./dist/device/loader.d.ts",
+        "default": "./dist/device/loader.js"
+      },
+      "./device/mock-registry": {
+        "types": "./dist/device/mock-registry.d.ts",
+        "default": "./dist/device/mock-registry.js"
+      },
+      "./device/bundle-modules": {
+        "types": "./dist/device/bundle-modules.d.ts",
+        "default": "./dist/device/bundle-modules.js"
+      },
+      "./device/metro": {
+        "types": "./device/metro.d.cts",
+        "default": "./device/metro.cjs"
+      },
+      "./device/transformer": "./device/transformer.cjs",
+      "./device/launcher": {
+        "types": "./dist/device/launcher.d.ts",
+        "default": "./dist/device/launcher.js"
+      },
+      "./device/macos-launcher": {
+        "types": "./dist/device/macos-launcher.d.ts",
+        "default": "./dist/device/macos-launcher.js"
+      },
       "./package.json": "./package.json"
     }
   },
   "dependencies": {
     "@ng-native/fabric": "workspace:*",
     "@ng-native/metro": "workspace:*",
-    "@ng-native/platform": "workspace:*"
+    "@ng-native/platform": "workspace:*",
+    "esbuild": "^0.28.2"
   },
   "peerDependencies": {
     "@angular/compiler": "^22.0.0",
@@ -104,6 +165,7 @@
   },
   "files": [
     "dist",
-    "runner"
+    "runner",
+    "device"
   ]
 }

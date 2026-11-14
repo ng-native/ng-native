@@ -43,3 +43,20 @@ describe('the OS support table', () => {
     expect(html).toContain('After.');
   });
 });
+
+describe('the platforms line', () => {
+  test('is drawn from the service row where a page has the marker', async () => {
+    const html = await render('# Dock\n\n<!-- platforms: Dock -->\n\nAfter.\n');
+    expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
+    expect(html).toContain('Absent on iPadOS, iPhone, Android and Web host');
+    expect(html).not.toContain('platforms:');
+    expect(html).toContain('After.');
+  });
+
+  test('says where a service is on more than one OS, and fails for a service with no row', async () => {
+    expect(await render('# Keyboard\n\n<!-- platforms: Keyboard -->\n')).toContain(
+      'Available on iPadOS, iPhone and Android.',
+    );
+    await expect(render('# X\n\n<!-- platforms: Nothing -->\n')).rejects.toThrow(/Nothing/);
+  });
+});

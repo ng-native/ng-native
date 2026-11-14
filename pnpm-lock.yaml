@@ -2122,6 +2122,9 @@ importers:
       '@ng-native/platform':
         specifier: workspace:*
         version: link:../platform
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
     devDependencies:
       '@angular/common':
         specifier: 22.2.0

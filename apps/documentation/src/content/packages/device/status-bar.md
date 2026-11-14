@@ -9,6 +9,8 @@ summary: A stack of claims on the status bar's style, visibility and color, not 
 have an opinion about the bar at once: a modal that wants light text has to give the screen behind
 it back its own claim when it closes, and nothing else remembers what that was.
 
+<!-- platforms: StatusBar -->
+
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
 import { View } from '@ng-native/components';

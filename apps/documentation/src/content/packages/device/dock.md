@@ -9,6 +9,8 @@ On macOS an app has a Dock icon, and can put icons in the status area at the rig
 On iOS and Android neither exists: `Dock.available()` and `Tray.available()` are `false`, and every
 call does nothing.
 
+<!-- platforms: Dock, Tray -->
+
 ## The Dock
 
 ```ts

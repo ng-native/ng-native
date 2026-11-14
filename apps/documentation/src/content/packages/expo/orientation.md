@@ -8,6 +8,8 @@ summary: The screen orientation, and locking it, through expo-screen-orientation
 `DeviceOrientation` reports the screen orientation and lets you lock it through
 `expo-screen-orientation`.
 
+<!-- platforms: DeviceOrientation -->
+
 `DeviceOrientation` wraps `expo-screen-orientation`'s own `getOrientationAsync()`, which reports how
 the screen is currently laid out - the same value the platform uses to decide whether to rotate -
 not the physical attitude of the device measured against gravity. A layout that only wants to know

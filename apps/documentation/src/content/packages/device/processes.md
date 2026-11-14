@@ -9,6 +9,8 @@ summary: A desktop app's environment, and the programs it declares, run with spa
 was started with, in `env`, and `spawn`, which runs a program the app declares. On iOS, Android
 and the web it is absent: `available()` is `false`, `env` is empty and `spawn` resolves `null`.
 
+<!-- platforms: Processes, Shell -->
+
 ```ts
 import { Component, inject } from '@angular/core';
 import { Processes } from '@ng-native/device';

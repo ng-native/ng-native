@@ -156,7 +156,14 @@ export {
 } from './menus.ts';
 export { Dock, type NativeDock } from './dock.ts';
 export { UndoStack, type NativeUndo, type NativeUndoEvent, type UndoAction } from './undo-stack.ts';
-export { OS_SUPPORT, SUPPORT_OSES, type OsSupportRow, type SupportOs } from './os-support.ts';
+export {
+  OS_SUPPORT,
+  SUPPORT_OSES,
+  platformsLine,
+  supportRowOf,
+  type OsSupportRow,
+  type SupportOs,
+} from './os-support.ts';
 export { Shell, type NativeShell } from './shell.ts';
 export {
   Tray,
