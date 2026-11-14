@@ -14,7 +14,9 @@ import {
 } from './package.mjs';
 import { plist } from './plist.mjs';
 
-const BUILD = '/cache/rn-0.88.0/host/appkit-arm64-x86_64-RelWithDebInfo';
+const BUILD = '/cache/rn-0.88.0/host/appkit-arm64-x86_64-Release';
+/** The hermesc the host build puts beside its binary. */
+const HERMESC = `${BUILD}/appkit/hermesc`;
 
 type Call = { command: string; args: string[] };
 
@@ -51,7 +53,7 @@ function fakeMac(
       return { status: 0 };
     },
     links: () => ({ libraries: [], appModules: [], withoutDesktop: [], problems: [] }),
-    exists: () => false,
+    exists: (file) => file === HERMESC,
     remove: (file) => void removed.push(file),
     copy: (from, to) => void copied.push([from, to]),
     writeFile: (file, text) => void (written[file] = text),
@@ -110,6 +112,7 @@ describe('parsePackage', () => {
       output: 'dist/macos',
       feedUrl: undefined,
       sparkleKey: undefined,
+      skipNotarize: false,
     });
     assert.deepEqual(
       parsePackage(['--format', 'dmg', '--feed-url', 'https://example.com/appcast.xml']),
@@ -119,8 +122,10 @@ describe('parsePackage', () => {
         output: 'dist/macos',
         feedUrl: 'https://example.com/appcast.xml',
         sparkleKey: undefined,
+        skipNotarize: false,
       },
     );
+    assert.equal(parsePackage(['--format', 'dmg', '--skip-notarize']).skipNotarize, true);
     assert.equal(
       parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml', '--sparkle-key', 'K='])
         .sparkleKey,
@@ -146,6 +151,12 @@ describe('parsePackage', () => {
       () => parsePackage(['--format', 'dmg', '--sparkle-key', 'K=']),
       /--sparkle-key goes with --feed-url/,
     );
+    for (const format of ['app', 'mas']) {
+      assert.throws(
+        () => parsePackage(['--format', format, '--skip-notarize']),
+        /--skip-notarize is for --format dmg only/,
+      );
+    }
   });
 });
 
@@ -338,12 +349,14 @@ describe('sandboxProblems', () => {
 });
 
 describe('packageApp', () => {
-  it('bundles with expo export:embed, builds the universal host and ad-hoc signs an app', async () => {
+  it('bundles with expo export:embed, builds the universal release host and ad-hoc signs an app', async () => {
     const { sys, calls, written, copied } = fakeMac();
     assert.equal(await quiet(() => packageApp(parsePackage([]), sys)), 0);
     const build = calls.find((call) => call.command.endsWith('build.sh'))!;
     assert.ok(build.args.includes('--universal'), 'a release build is universal');
+    assert.ok(build.args.includes('--release'), 'and built as Release');
     const app = '/apps/notes/dist/macos/Notes.app';
+    const staging = '/apps/notes/.expo/ng-native-desktop/package';
     assert.deepEqual(calls.find((call) => call.command === 'expo')!.args, [
       '/apps/notes',
       'export:embed',
@@ -352,14 +365,52 @@ describe('packageApp', () => {
       '--dev',
       'false',
       '--bundle-output',
-      `${app}/Contents/Resources/main.jsbundle`,
+      `${staging}/main.js`,
       '--assets-dest',
       `${app}/Contents/Resources`,
     ]);
     assert.deepEqual(copied, [[`${BUILD}/appkit/ngn-macos`, `${app}/Contents/MacOS/Notes`]]);
+    assert.deepEqual(
+      calls.find((call) => call.command === 'strip'),
+      { command: 'strip', args: ['-x', `${app}/Contents/MacOS/Notes`] },
+      'local symbols stripped',
+    );
     assert.match(written[`${app}/Contents/Info.plist`]!, /<string>com\.example\.notes<\/string>/);
     assert.equal(written[`${app}/Contents/PkgInfo`], 'APPL????');
     assert.deepEqual(calls.at(-1), { command: 'codesign', args: ['--force', '--sign', '-', app] });
+  });
+
+  it('compiles the bundle to Hermes bytecode with the hermesc the host was built against', async () => {
+    const { sys, calls } = fakeMac();
+    await quiet(() => packageApp(parsePackage([]), sys));
+    const app = '/apps/notes/dist/macos/Notes.app';
+    const hermesc = calls.find((call) => call.command === HERMESC);
+    assert.deepEqual(hermesc?.args, [
+      '-emit-binary',
+      '-O',
+      '-w',
+      '-max-diagnostic-width=80',
+      '-out',
+      `${app}/Contents/Resources/main.jsbundle`,
+      '/apps/notes/.expo/ng-native-desktop/package/main.js',
+    ]);
+    const order = calls.map((call) => call.command);
+    assert.ok(order.indexOf('expo') < order.indexOf(HERMESC));
+  });
+
+  it('stops when hermesc fails or the host build has none', async () => {
+    const failing = fakeMac({}, { [`${HERMESC} -emit-binary`]: { status: 1 } });
+    await assert.rejects(
+      quiet(() => packageApp(parsePackage([]), failing.sys)),
+      /hermesc could not compile the bundle/,
+    );
+    assert.ok(!failing.calls.some((call) => call.command === 'codesign'), 'nothing signed');
+    const without = fakeMac({ exists: () => false });
+    await assert.rejects(
+      quiet(() => packageApp(parsePackage([]), without.sys)),
+      /has no hermesc beside it/,
+    );
+    assert.ok(!without.calls.some((call) => call.command === 'expo'), 'checked before bundling');
   });
 
   it('checks for Xcode before it builds anything', async () => {
@@ -399,6 +450,23 @@ describe('packageApp', () => {
       idiom: 'mac',
       filename: 'icon_16x16@2x.png',
     });
+  });
+
+  it("makes the icon set's folder before sips writes into it, which sips does not make", async () => {
+    const set =
+      '/apps/notes/.expo/ng-native-desktop/package/Assets.xcassets/AppIcon.appiconset/Contents.json';
+    let made = 0;
+    let before = 0;
+    const fake = fakeMac({
+      writeFile: (file) => void (file === set && made++),
+    });
+    const run = fake.sys.run;
+    fake.sys.run = (command, args, options) => {
+      if (command === 'sips' && made > 0) before++;
+      return run(command, args, options);
+    };
+    await quiet(() => packageApp(parsePackage([]), fake.sys));
+    assert.equal(before, 10, 'every sips ran after the folder was made');
   });
 
   it('copies a document type icon into the bundle and names it by its file in the plist', async () => {
@@ -609,8 +677,16 @@ describe('packageApp', () => {
 
   it('needs its credentials before it builds: a dmg its identity and notary, a mas its four', async () => {
     for (const [args, env, message] of [
-      [['--format', 'dmg'], {}, /--format dmg needs NGN_SIGN_IDENTITY/],
-      [['--format', 'dmg'], { NGN_SIGN_IDENTITY: 'x' }, /found no credentials/],
+      [
+        ['--format', 'dmg'],
+        {},
+        /--format dmg needs NGN_SIGN_IDENTITY set in the environment[\s\S]*--skip-notarize/,
+      ],
+      [
+        ['--format', 'dmg'],
+        { NGN_SIGN_IDENTITY: 'x' },
+        /found no credentials[\s\S]*--skip-notarize/,
+      ],
       [
         ['--format', 'mas'],
         { NGN_SIGN_IDENTITY: 'x' },
@@ -621,6 +697,54 @@ describe('packageApp', () => {
       await assert.rejects(packageApp(parsePackage([...args]), sys), message);
       assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
     }
+  });
+
+  it('makes a dmg with --skip-notarize and no credentials, ad-hoc signed, and says it is for this Mac', async () => {
+    const warnings: string[] = [];
+    const { sys, calls } = fakeMac({ warn: (line) => void warnings.push(line) });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys));
+    assert.deepEqual(tools(calls).slice(tools(calls).indexOf('codesign --force')), [
+      'codesign --force',
+      'hdiutil create',
+      'codesign --force',
+    ]);
+    const [signApp, signDmg] = calls.filter((call) => call.command === 'codesign');
+    assert.deepEqual(signApp!.args.slice(0, 4), [
+      '--force',
+      '--options',
+      'runtime',
+      '--timestamp=none',
+    ]);
+    assert.deepEqual(signApp!.args.slice(-2), ['-', '/apps/notes/dist/macos/Notes.app']);
+    assert.deepEqual(signDmg!.args, [
+      '--force',
+      '--timestamp=none',
+      '--sign',
+      '-',
+      '/apps/notes/dist/macos/Notes.dmg',
+    ]);
+    assert.ok(warnings.some((line) => /not notarised.*for testing on this Mac only/.test(line)));
+  });
+
+  it('signs with the identity it is given under --skip-notarize, and still notarises nothing', async () => {
+    const { sys, calls } = fakeMac({ env: { NGN_SIGN_IDENTITY: DMG_ENV.NGN_SIGN_IDENTITY } });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys));
+    assert.ok(!calls.some((call) => call.args[0] === 'notarytool' || call.args[0] === 'stapler'));
+    const signApp = calls.find((call) => call.command === 'codesign')!;
+    assert.deepEqual(signApp.args.slice(0, 4), ['--force', '--options', 'runtime', '--timestamp']);
+    assert.ok(signApp.args.includes(DMG_ENV.NGN_SIGN_IDENTITY));
+  });
+
+  it('refuses Sparkle under an ad-hoc --skip-notarize signature, which cannot load it', async () => {
+    const { sys, calls } = fakeMac({ env: { NGN_SPARKLE_PUBLIC_KEY: 'K=' } });
+    await assert.rejects(
+      packageApp(
+        parsePackage(['--format', 'dmg', '--skip-notarize', '--feed-url', 'https://e.com/a.xml']),
+        sys,
+      ),
+      /--feed-url needs NGN_SIGN_IDENTITY/,
+    );
+    assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
   });
 
   it('needs the bundle identifier for dmg and mas, and makes one up for an app', async () => {

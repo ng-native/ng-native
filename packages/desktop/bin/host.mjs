@@ -225,7 +225,8 @@ export function linkFile(appDir) {
  * host built (a no-op when nothing changed).
  *
  * @param {typeof system} sys
- * @param {{ universal: boolean }} options
+ * @param {{ universal: boolean, release?: boolean }} options `release` builds the host as a
+ *   packaged app ships it, without the core tests
  */
 export function prepareHost(sys, options) {
   if (sys.platform !== 'darwin') {
@@ -251,7 +252,7 @@ export function prepareHost(sys, options) {
   const hostLibraries = HOST_LIBRARIES.filter((name) => !deny.includes(name))
     .map((name) => sys.resolvePackage(cwd, name))
     .filter((dir) => dir !== null);
-  const buildDir = buildHost(sys, reactNative, hostLibraries, options.universal, file);
+  const buildDir = buildHost(sys, reactNative, hostLibraries, options, file);
   return { cwd, expo, config, buildDir, reactNative };
 }
 
@@ -261,12 +262,13 @@ export function prepareHost(sys, options) {
  * @param {typeof system} sys
  * @param {string} reactNative
  * @param {string[]} libraries
- * @param {boolean} universal
+ * @param {{ universal: boolean, release?: boolean }} options
  * @param {string} link the file `linkFile` names
  */
-function buildHost(sys, reactNative, libraries, universal, link) {
+function buildHost(sys, reactNative, libraries, { universal, release }, link) {
   const buildArgs = [reactNative, ...libraries.flatMap((dir) => ['--library', dir])];
   if (universal) buildArgs.push('--universal');
+  if (release) buildArgs.push('--release');
   const build = sys.run(path.join(packageDir, 'native', 'scripts', 'build.sh'), buildArgs, {
     capture: true,
     env: { NGN_DESKTOP_LINK: link },

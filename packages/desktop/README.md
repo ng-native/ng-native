@@ -348,14 +348,23 @@ with no view registered mounts as a plain view, and the host's own components ke
 ## Package the app
 
 `ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
-[--sparkle-key <key>]` builds a
-universal release host, bundles with `expo export:embed --platform macos` (the assets laid out as
-React Native's resolver reads them beside an embedded bundle), and assembles
-`<output>/<name>.app`: the host binary as `Contents/MacOS/<name>`, the bundle and assets in
-`Resources`, the icon compiled by `actool`, and an `Info.plist` from the Expo keys. Then `app` is
+[--sparkle-key <key>] [--skip-notarize]` builds a
+universal Release host (arm64 and x86_64, without the core tests, dead code stripped), bundles
+with `expo export:embed --platform macos` (the assets laid out as React Native's resolver reads
+them beside an embedded bundle), compiles the bundle to Hermes bytecode with the `hermesc` the
+host build puts beside its binary, built from the same Hermes, and assembles
+`<output>/<name>.app`: the host binary as `Contents/MacOS/<name>` with its local symbols stripped,
+the bytecode bundle and assets in `Resources`, the icon compiled by `actool`, and an `Info.plist`
+from the Expo keys. Then `app` is
 signed ad hoc, `dmg` is signed with the hardened runtime, notarised and stapled (app and disk
 image), and `mas` is signed in the App Sandbox and wrapped by `productbuild`. `codesign`,
 `notarytool`, `stapler`, `hdiutil`, `ditto`, `sips`, `actool` and `productbuild` are Xcode's.
+
+A `dmg` stops before anything builds when its signing identity or notary credentials are missing,
+naming them. `--skip-notarize`, for testing a `dmg` on this Mac only, makes it without them: signed
+with `NGN_SIGN_IDENTITY` when that is set and ad hoc when not, with the hardened runtime, and never
+sent to Apple. Gatekeeper refuses such a disk image on any other Mac. Sparkle (`--feed-url`) still
+needs `NGN_SIGN_IDENTITY` there, since it loads only into an app signed with a Team ID.
 
 `NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
 ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.

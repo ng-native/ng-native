@@ -4,13 +4,15 @@
  * - `--format app` (the default): an ad-hoc signed `.app`, for this Mac and for testing.
  * - `--format dmg`: Developer ID signed with the hardened runtime, notarised and stapled, in a
  *   `.dmg`. With `--feed-url`, Sparkle is embedded with that appcast and the `.zip` it updates from
- *   is made beside the `.dmg`.
+ *   is made beside the `.dmg`. `--skip-notarize` makes the same `.dmg` without Apple, signed with
+ *   `NGN_SIGN_IDENTITY` or ad hoc, for testing the package on this Mac only.
  * - `--format mas`: sandboxed, signed for the Mac App Store, in a `.pkg`. Capabilities the App
  *   Sandbox forbids are named before it is built.
  *
  * Release builds are universal (arm64 and x86_64) with a minimum of macOS 14. The bundle comes from
  * `expo export:embed`, which lays the assets out the way React Native's asset resolver reads them
- * beside an embedded bundle. Credentials come from the environment (see `notaryArguments`), never
+ * beside an embedded bundle, compiled to Hermes bytecode by the `hermesc` built with the host's
+ * Hermes, so the bytecode is the version the host runs. Credentials come from the environment (see `notaryArguments`), never
  * from app.json. Packaging needs full Xcode, for `actool` to compile the icon.
  */
 import path from 'node:path';
@@ -28,7 +30,7 @@ export const DEFAULT_OUTPUT = 'dist/macos';
 
 const FORMATS = ['app', 'dmg', 'mas'];
 
-export const PACKAGE_USAGE = `Usage: ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url> [--sparkle-key <key>]]
+export const PACKAGE_USAGE = `Usage: ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url> [--sparkle-key <key>]] [--skip-notarize]
 
 Builds the app for release, universal for arm64 and x86_64, into dist/macos. Needs full Xcode.
 
@@ -39,6 +41,8 @@ Builds the app for release, universal for arm64 and x86_64, into dist/macos. Nee
   --feed-url <url>  dmg only: the Sparkle appcast the app updates from, embedding Sparkle
   --sparkle-key <key>  with --feed-url: Sparkle's public EdDSA key, which updates are checked
                     against (or NGN_SPARKLE_PUBLIC_KEY)
+  --skip-notarize   dmg only, for testing on this Mac: no notarisation, and signed ad hoc
+                    unless NGN_SIGN_IDENTITY is set. Gatekeeper refuses it on any other Mac.
 
 Signing and notarising read the environment:
   NGN_SIGN_IDENTITY             the codesign identity (dmg: Developer ID Application, mas: Apple Distribution)
@@ -47,7 +51,7 @@ Signing and notarising read the environment:
   mas: NGN_INSTALLER_IDENTITY, NGN_PROVISIONING_PROFILE and APPLE_TEAM_ID`;
 
 /**
- * @typedef {{ command: 'package', format: 'app' | 'dmg' | 'mas', output: string, feedUrl: string | undefined, sparkleKey: string | undefined }} PackageCommand
+ * @typedef {{ command: 'package', format: 'app' | 'dmg' | 'mas', output: string, feedUrl: string | undefined, sparkleKey: string | undefined, skipNotarize: boolean }} PackageCommand
  * @typedef {import('./host.mjs').system} System
  * @typedef {import('./app-config.mjs').DesktopAppConfig} DesktopAppConfig
  */
@@ -64,6 +68,7 @@ export function parsePackage(args) {
       output: { type: 'string', default: DEFAULT_OUTPUT },
       'feed-url': { type: 'string' },
       'sparkle-key': { type: 'string' },
+      'skip-notarize': { type: 'boolean', default: false },
     },
   });
   const format = values.format;
@@ -89,12 +94,19 @@ export function parsePackage(args) {
       '--sparkle-key goes with --feed-url, the appcast whose updates it checks.',
     );
   }
+  const skipNotarize = values['skip-notarize'];
+  if (skipNotarize && format !== 'dmg') {
+    throw new UsageError(
+      `--skip-notarize is for --format dmg only: ${format === 'mas' ? 'the Mac App Store notarises a mas build itself' : 'an app build is never notarised'}.`,
+    );
+  }
   return {
     command: 'package',
     format: /** @type {'app' | 'dmg' | 'mas'} */ (format),
     output: values.output,
     feedUrl,
     sparkleKey,
+    skipNotarize,
   };
 }
 
@@ -158,14 +170,44 @@ export function notaryArguments(env) {
   );
 }
 
+/** What each refusal of a dmg's credentials adds, for someone only trying the package out. */
+const SKIP_NOTARIZE_HINT =
+  ' To try the package on this Mac without them, add --skip-notarize, which makes a dmg no other Mac opens.';
+
 /**
- * The environment variables a format needs, by name, each checked before anything is built.
+ * A `--skip-notarize` dmg's signing: `NGN_SIGN_IDENTITY` when set, else ad hoc, and no notary.
  *
- * @param {'app' | 'dmg' | 'mas'} format
+ * @param {string | undefined} feedUrl
  * @param {Record<string, string | undefined>} env
  */
-function credentials(format, env) {
+function localSigning(feedUrl, env) {
+  const identity = env['NGN_SIGN_IDENTITY'];
+  if (!identity && feedUrl) {
+    throw new UsageError(
+      '--feed-url needs NGN_SIGN_IDENTITY even with --skip-notarize: Sparkle loads only into an ' +
+        'app signed with a Team ID, and an ad hoc signature has none.',
+    );
+  }
+  return {
+    identity: identity || '-',
+    installer: undefined,
+    profile: undefined,
+    team: undefined,
+    notary: null,
+  };
+}
+
+/**
+ * The environment variables a format needs, by name, each checked before anything is built. A
+ * `dmg` with `--skip-notarize` needs none: it signs with `NGN_SIGN_IDENTITY` when that is set and
+ * ad hoc (`-`) when not, and never asks Apple.
+ *
+ * @param {PackageCommand} options
+ * @param {Record<string, string | undefined>} env
+ */
+function credentials({ format, skipNotarize, feedUrl }, env) {
   if (format === 'app') return null;
+  if (format === 'dmg' && skipNotarize) return localSigning(feedUrl, env);
   const required =
     format === 'dmg'
       ? ['NGN_SIGN_IDENTITY']
@@ -177,14 +219,26 @@ function credentials(format, env) {
         ];
   const missing = required.filter((name) => !env[name]);
   if (missing.length > 0) {
-    throw new UsageError(`--format ${format} needs ${missing.join(', ')} set in the environment.`);
+    const hint = format === 'dmg' ? SKIP_NOTARIZE_HINT : '';
+    throw new UsageError(
+      `--format ${format} needs ${missing.join(', ')} set in the environment.${hint}`,
+    );
+  }
+  let notary = null;
+  if (format === 'dmg') {
+    try {
+      notary = notaryArguments(env);
+    } catch (error) {
+      if (error instanceof UsageError) throw new UsageError(error.message + SKIP_NOTARIZE_HINT);
+      throw error;
+    }
   }
   return {
     identity: String(env['NGN_SIGN_IDENTITY']),
     installer: env['NGN_INSTALLER_IDENTITY'],
     profile: env['NGN_PROVISIONING_PROFILE'],
     team: env['APPLE_TEAM_ID'],
-    notary: format === 'dmg' ? notaryArguments(env) : [],
+    notary,
   };
 }
 
@@ -329,6 +383,12 @@ export function compileIcon(sys, icon, resources, staging) {
       })),
     );
     sys.writeFile(path.join(catalog, 'Contents.json'), JSON.stringify({ info: { version: 1 } }));
+    // Written first: it makes the set's folder, and sips writes into a folder only when it is there.
+    const contents = images.map(({ pixels: _, ...entry }) => entry);
+    sys.writeFile(
+      path.join(set, 'Contents.json'),
+      JSON.stringify({ images: contents, info: { version: 1 } }, null, 2),
+    );
     for (const image of images) {
       const out = path.join(set, image.filename);
       const px = String(image.pixels);
@@ -339,11 +399,6 @@ export function compileIcon(sys, icon, resources, staging) {
         `sips could not scale ${icon} to ${px} pixels.`,
       );
     }
-    const contents = images.map(({ pixels: _, ...entry }) => entry);
-    sys.writeFile(
-      path.join(set, 'Contents.json'),
-      JSON.stringify({ images: contents, info: { version: 1 } }, null, 2),
-    );
     input = catalog;
   }
   expectSuccess(
@@ -442,6 +497,41 @@ function certificateOf(sys, cwd, config) {
 }
 
 /**
+ * The `hermesc` the host build in `buildDir` puts beside its binary, built with the Hermes the
+ * binary links. Expo's own compiler can be another Hermes version, whose bytecode the host would
+ * refuse.
+ *
+ * @param {System} sys
+ * @param {string} buildDir
+ */
+export function hermesCompiler(sys, buildDir) {
+  const hermesc = path.join(buildDir, 'appkit', 'hermesc');
+  if (!sys.exists(hermesc)) {
+    throw new Error(
+      `The desktop host in ${buildDir} has no hermesc beside it, so the bundle cannot be compiled ` +
+        'to Hermes bytecode. Delete that folder and package again to rebuild it.',
+    );
+  }
+  return hermesc;
+}
+
+/**
+ * Compiles the JavaScript bundle at `source` to Hermes bytecode at `out`, optimised as React
+ * Native's iOS release build does.
+ *
+ * @param {System} sys
+ * @param {string} hermesc
+ * @param {string} source
+ * @param {string} out
+ */
+function compileBytecode(sys, hermesc, source, out) {
+  expectSuccess(
+    sys.run(hermesc, ['-emit-binary', '-O', '-w', '-max-diagnostic-width=80', '-out', out, source]),
+    'hermesc could not compile the bundle to Hermes bytecode; the output above says why.',
+  );
+}
+
+/**
  * Copies each document type's icon into `resources`. The plist names it by its file, which has to
  * be in the bundle for Finder to find it.
  *
@@ -469,9 +559,10 @@ export async function packageApp(options, sys) {
     throw new UsageError('Packaging for macOS runs on macOS only.');
   }
   checkXcode(sys);
-  const keys = credentials(options.format, sys.env);
+  const keys = credentials(options, sys.env);
   const sparkleKey = sparkleKeyFor(options, sys.env);
-  const { cwd, expo, config, buildDir } = prepareHost(sys, { universal: true });
+  const { cwd, expo, config, buildDir } = prepareHost(sys, { universal: true, release: true });
+  const hermesc = hermesCompiler(sys, buildDir);
   if (options.format === 'mas') for (const line of sandboxProblems(config)) sys.warn(line);
   const bundleIdentifier = config.bundleIdentifier ?? fallbackIdentifier(options.format, expo);
 
@@ -483,6 +574,7 @@ export async function packageApp(options, sys) {
   sys.remove(app);
   sys.remove(staging);
 
+  const javascript = path.join(staging, 'main.js');
   expectSuccess(
     sys.expo(cwd, [
       'export:embed',
@@ -491,13 +583,17 @@ export async function packageApp(options, sys) {
       '--dev',
       'false',
       '--bundle-output',
-      path.join(resources, 'main.jsbundle'),
+      javascript,
       '--assets-dest',
       resources,
     ]),
     'expo export:embed did not bundle the app for macos; the output above says why.',
   );
-  sys.copy(path.join(buildDir, 'appkit', 'ngn-macos'), path.join(contents, 'MacOS', config.name));
+  compileBytecode(sys, hermesc, javascript, path.join(resources, 'main.jsbundle'));
+  const executable = path.join(contents, 'MacOS', config.name);
+  sys.copy(path.join(buildDir, 'appkit', 'ngn-macos'), executable);
+  // Local symbols only, which nothing resolves at run time; the exported ones stay.
+  expectSuccess(sys.run('strip', ['-x', executable]), `strip could not strip ${executable}.`);
   const iconName = config.icon
     ? compileIcon(sys, path.resolve(cwd, config.icon), resources, staging)
     : null;
@@ -567,7 +663,9 @@ function embedSparkle(sys, buildDir, contents) {
 
 /**
  * Signs with the hardened runtime, notarises and staples the app, zips it for Sparkle when there
- * is a feed, then makes, signs, notarises and staples the `.dmg`.
+ * is a feed, then makes, signs, notarises and staples the `.dmg`. With no notary credentials
+ * (`--skip-notarize`) nothing goes to Apple, and an ad hoc signature takes no timestamp, which
+ * only a real identity can get.
  *
  * @param {System} sys
  * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: PackageCommand }} build
@@ -576,6 +674,7 @@ function embedSparkle(sys, buildDir, contents) {
 function shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, options }) {
   const file = path.join(staging, 'entitlements.plist');
   sys.writeFile(file, /** @type {string} */ (entitlements(config, 'dmg', { bundleIdentifier })));
+  const timestamp = keys.identity === '-' ? '--timestamp=none' : '--timestamp';
   /** @param {string} target @param {boolean} withEntitlements */
   const sign = (target, withEntitlements) =>
     expectSuccess(
@@ -583,7 +682,7 @@ function shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, op
         '--force',
         '--options',
         'runtime',
-        '--timestamp',
+        timestamp,
         ...(withEntitlements ? ['--entitlements', file] : []),
         '--sign',
         keys.identity,
@@ -594,9 +693,11 @@ function shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, op
   if (options.feedUrl) sign(path.join(app, 'Contents', 'Frameworks', 'Sparkle.framework'), false);
   sign(app, true);
 
-  const submission = path.join(staging, `${config.name}.zip`);
-  zip(sys, app, submission);
-  notarise(sys, submission, keys.notary, app);
+  if (keys.notary) {
+    const submission = path.join(staging, `${config.name}.zip`);
+    zip(sys, app, submission);
+    notarise(sys, submission, keys.notary, app);
+  }
 
   const made = [];
   if (options.feedUrl) {
@@ -620,10 +721,17 @@ function shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, op
     'hdiutil could not make the disk image.',
   );
   expectSuccess(
-    sys.run('codesign', ['--force', '--timestamp', '--sign', keys.identity, dmg]),
+    sys.run('codesign', ['--force', timestamp, '--sign', keys.identity, dmg]),
     'codesign could not sign the disk image.',
   );
-  notarise(sys, dmg, keys.notary);
+  if (keys.notary) {
+    notarise(sys, dmg, keys.notary);
+  } else {
+    sys.warn(
+      `${path.basename(dmg)} is not notarised (--skip-notarize): it is for testing on this Mac ` +
+        'only, and Gatekeeper refuses it on any other.',
+    );
+  }
   made.push(dmg);
   return made;
 }
