@@ -192,6 +192,10 @@ class ReanimatedModule final : public TurboModule {
       }
       auto &uiRuntime = worklets::getJSIRuntimeFromWorkletRuntime(uiWorkletRuntime);
       proxy->handleEvent(name, tag, jsi::valueFromDynamic(uiRuntime, payload), workletHost().now());
+      // The handler may have moved a shared value, whose mappers run on the next frame.
+      if (auto wake = workletHost().wakeUiFrames) {
+        wake();
+      }
       if (auto frames = loop.lock()) {
         frames->perform();
       }

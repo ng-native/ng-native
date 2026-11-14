@@ -16,6 +16,8 @@
 
 #include <glog/logging.h>
 
+#include "worklets-idle-frames.h"
+
 #include <cstdio>
 #include <stdexcept>
 #include <thread>
@@ -55,6 +57,7 @@ class DesktopUIScheduler final : public worklets::UIScheduler,
   void scheduleOnUI(std::function<void()> job) override {
     if (isOnUIThread()) {
       job();
+      wake();
       return;
     }
     UIScheduler::scheduleOnUI(std::move(job));
@@ -67,7 +70,18 @@ class DesktopUIScheduler final : public worklets::UIScheduler,
     }
   }
 
+ void triggerUI() override {
+    UIScheduler::triggerUI();
+    wake();
+  }
+
  protected:
+  static void wake() {
+    if (auto wake = workletHost().wakeUiFrames) {
+      wake();
+    }
+  }
+
   bool queryIsOnUIThread() const override {
     return workletHost().isUiThread();
   }
@@ -91,6 +105,7 @@ class WorkletsModule final : public TurboModule {
   }
 
   ~WorkletsModule() override {
+    workletHost().wakeUiFrames = nullptr;
     status_->setDead();
     if (initializer_) {
       initializer_->invalidate();
@@ -141,6 +156,24 @@ class WorkletsModule final : public TurboModule {
       throw jsi::JSError(rt, "[Worklets] start before installTurboModule");
     }
     self.proxy_->start();
+    // The UI runtime's frame loop asks for a frame at the end of every frame; parked while it has
+    // no work, a still app takes none (worklets-idle-frames.js).
+    self.proxy_->getUIWorkletRuntime()->schedule([](jsi::Runtime &ui) {
+      ui.evaluateJavaScript(std::make_shared<jsi::StringBuffer>(kWorkletsIdleFrames), "ngn-worklets-idle-frames.js");
+    });
+    std::weak_ptr<worklets::WorkletRuntime> ui = self.proxy_->getUIWorkletRuntime();
+    workletHost().wakeUiFrames = [ui] {
+      auto runtime = ui.lock();
+      if (!runtime) {
+        return;
+      }
+      runtime->runSync([](jsi::Runtime &rt) {
+        auto wake = rt.global().getProperty(rt, "__ngnWakeFrames");
+        if (wake.isObject() && wake.asObject(rt).isFunction(rt)) {
+          wake.asObject(rt).asFunction(rt).call(rt);
+        }
+      });
+    };
     return jsi::Value(true);
   }
 

@@ -37,6 +37,11 @@ struct WorkletHost {
   // The props a view is mounted with now, or null. UI thread.
   std::function<facebook::react::Props::Shared(facebook::react::Tag tag)> readMountedProps;
 
+  // Set by the worklets' glue while its module lives: the UI runtime's frame loop, parked while it
+  // has nothing to do (worklets-idle-frames.js), runs a frame again. Called after work that ran on
+  // the UI runtime outside a frame and may have changed a shared value. UI thread.
+  std::function<void()> wakeUiFrames;
+
   // Set by Reanimated's glue while its module lives: an event for the worklets registered on a
   // view, as React Native iOS's RCTEventDispatcher hands RNGestureHandler's events to Reanimated.
   // UI thread.
