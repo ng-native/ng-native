@@ -52,6 +52,12 @@ lists them). A service whose module the host has not got throws `MissingModuleEr
 and a mobile-only one, such as sensors or the screen orientation, is absent: its `available()` is
 false.
 
+`import 'expo'` still installs a runtime: `URL`, `URLSearchParams`, `TextDecoderStream`,
+`structuredClone`, and a `fetch` whose `Response` streams its `body`, over React Native's
+Networking module. That `fetch` reads every body as text, so a binary response read through
+`body`, `arrayBuffer()` or `blob()` is not byte-exact, and a debug build warns when one arrives.
+`XMLHttpRequest`, and `HttpClient` with `provideNativeHttpClient()`, read a binary body whole.
+
 ## Events
 
 `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)` and `(mouseout)` are React Native's

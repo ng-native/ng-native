@@ -46,6 +46,7 @@ globalThis.__probe = {
   alert: (title, message) => Alert.alert(title, message),
   url: () => new URL('https://example.com/a?b=c').searchParams.get('b'),
   clone: () => structuredClone({ a: [1] }).a[0],
+  fetch: () => void fetch('https://example.com/a'),
 };
 `;
 
@@ -84,6 +85,7 @@ interface Probe {
   alert(title: string, message: string): void;
   url(): string;
   clone(): number;
+  fetch(): void;
 }
 
 // Real, because Metro watches the project under the path it is given and macOS links the temp
@@ -145,6 +147,8 @@ function run(bundle: string): { probe: Probe; calls: string[] } {
     btoa,
     TextEncoder,
     TextDecoder,
+    Headers,
+    ReadableStream,
     __fbBatchedBridgeConfig: { remoteModuleConfig: [] },
     __turboModuleProxy: (name: string) =>
       new Proxy(
@@ -193,6 +197,11 @@ for (const mode of ['release', 'dev'] as const) {
       assert.equal(app.probe.emptied, 0);
       assert.equal(app.probe.url(), 'c');
       assert.equal(app.probe.clone(), 1);
+    });
+
+    it("gives fetch the streaming one, over React Native's Networking module", () => {
+      app.probe.fetch();
+      assert.ok(app.calls.includes('Networking.sendRequest'), app.calls.join(', '));
     });
   });
 }

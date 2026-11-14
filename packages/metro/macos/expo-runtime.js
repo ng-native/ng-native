@@ -3,13 +3,13 @@
  *
  * On iOS and Android `import 'expo'` installs Expo's runtime: a `fetch` whose response streams its
  * body, `URL` and `URLSearchParams` that follow the standard, `TextDecoderStream` and
- * `structuredClone`. These are its JavaScript-only parts, from the same files, installed the same
- * lazy way. The app keeps one entry file for every OS.
+ * `structuredClone`. All but `fetch` are its JavaScript-only parts, from the same files, installed
+ * the same lazy way. The app keeps one entry file for every OS.
  *
- * TODO(desktop): a `fetch` whose `Response` has a streaming `body`, built on the Networking
- * module's incremental-data events (`didReceiveNetworkIncrementalData`), once the desktop host's
- * Networking sends them. Until then a Mac has React Native's own `fetch`, which reads the whole
- * body before it answers and has no `body` stream. `provideNativeHttpClient()` is unaffected.
+ * `fetch` is `./fetch.js`, over React Native's Networking module rather than Expo's native fetch
+ * module, which a desktop host does not have. It is required by its package path because this
+ * file's imports resolve from the app. As with Expo's runtime, `EXPO_PUBLIC_USE_RN_FETCH` set to
+ * `1` or `true` leaves React Native's own `fetch` in place.
  */
 import { installGlobal } from 'expo/internal/install-global';
 
@@ -25,3 +25,16 @@ installGlobal('URL', () => require('expo/build/winter/url.js').URL);
 installGlobal('URLSearchParams', () => require('expo/build/winter/url.js').URLSearchParams);
 installGlobal('DOMException', () => require('expo/build/winter/DOMException.js').DOMException);
 installGlobal('structuredClone', () => require('@ungap/structured-clone').default);
+
+const useRnFetch =
+  process.env.EXPO_PUBLIC_USE_RN_FETCH === '1' || process.env.EXPO_PUBLIC_USE_RN_FETCH === 'true';
+if (!useRnFetch) {
+  // Reading `Headers` runs React Native's fetch polyfill first. It installs `Headers`, `Request`
+  // and `Response` only while there is no global `fetch`, so after this one they stay missing.
+  void globalThis.Headers;
+  installGlobal('fetch', () =>
+    require('@ng-native/metro/macos/fetch.js').createFetch(
+      require('react-native/Libraries/Network/RCTNetworking').default,
+    ),
+  );
+}
