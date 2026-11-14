@@ -41,6 +41,7 @@
 #import "tracking.h"
 #import "image-manipulator.h"
 #import "printing.h"
+#import "expo-image-view.h"
 #include "ngn/web-view.h"
 #import "geocoder.h"
 #import "address-search.h"
@@ -832,6 +833,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeImageManipulator", [] {
         return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator");
       });
+      // <expo-image>'s bytes: 64 MB of them in memory, the rest on disk in the caches.
+      [NGNExpoImageView useHttp:imageHttp cache:std::make_shared<ngn::ImageCache>(caches + "/ExpoImage", 64 << 20)];
       static auto printSystem = ngn::appkit::makePrintSystem();
       ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", noPrompts); });
       // react-native-webview's navigation answers; harmless in a host built without the library.

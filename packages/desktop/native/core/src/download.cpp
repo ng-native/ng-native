@@ -6,6 +6,10 @@
 namespace ngn {
 
 void fetchBytes(const std::shared_ptr<Http> &http, const std::string &url, std::function<void(std::string body, const std::string &error)> done) {
+  fetchBytes(http, HttpRequest{.url = url}, std::move(done));
+}
+
+void fetchBytes(const std::shared_ptr<Http> &http, HttpRequest request, std::function<void(std::string body, const std::string &error)> done) {
   // The body, and the task kept alive until it completes.
   struct Fetch {
     std::string body;
@@ -14,7 +18,7 @@ void fetchBytes(const std::shared_ptr<Http> &http, const std::string &url, std::
   };
   auto fetch = std::make_shared<Fetch>();
   fetch->task = http->send(
-      {.url = url},
+      std::move(request),
       {.onResponse = [fetch](const HttpResponse &response) { fetch->status = response.status; },
        .onData = [fetch](std::string chunk, int64_t) { fetch->body += chunk; },
        .onComplete =

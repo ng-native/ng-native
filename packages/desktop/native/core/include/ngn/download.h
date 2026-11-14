@@ -13,6 +13,8 @@ namespace ngn {
 // Reads the whole body of `url` (a `file:`, `data:` or `http(s):` url). Answers once, on any thread:
 // the body and an empty error, or no body and why: "HTTP <status>" or the client's error.
 void fetchBytes(const std::shared_ptr<Http> &http, const std::string &url, std::function<void(std::string body, const std::string &error)> done);
+// The same for a request of its own, with its method and headers.
+void fetchBytes(const std::shared_ptr<Http> &http, HttpRequest request, std::function<void(std::string body, const std::string &error)> done);
 
 // Downloads `url` into the file `target`, making its folder first. Answers once, on any thread:
 // an empty error once the file is written, else why not: "HTTP <status>", the client's error, or

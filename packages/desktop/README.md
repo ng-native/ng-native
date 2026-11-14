@@ -276,6 +276,16 @@ the package's name after `expo-`, each with the methods the service calls on the
 | `NgNativeSymbol`                        | `<expo-symbol>`'s size: the symbol image's at a point size, weight and scale, as the iOS module answers it. The host draws the view itself (`ViewManagerAdapter_SymbolModule`) with AppKit's symbol configuration: the type, tint, palette, weight and scale, built at the system font size and placed by `resizeMode`, as `expo-symbols` does on macOS. `animationSpec` plays nothing.                                                                                                                                                                                                                        |
 | `NgNativeApplication`, `NgNativeDevice` | `AppInfo`: the bundle's version, build, id and name (a dev run, with no bundle, gives the app's id and name and no versions), and the Mac's model, macOS version and `desktop` device type.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
+`<expo-image>` (`ViewManagerAdapter_ExpoImage`) is drawn by the host, with no module of its own:
+the source nearest the view's size in pixels, placed by `contentFit` and `contentPosition`, with
+its `tintColor` and `blurRadius`, faded in over `transition`'s duration (every effect is a
+cross-dissolve). The placeholder shows until the image arrives, a `blurhash:` or `thumbhash:` one
+decoded in the core. Remote images are kept by `cachePolicy` in memory (64 MB) and on disk in the
+app's caches, by their `cacheKey` or url; `file:` and `data:` sources are read each time. It sends
+`loadStart`, `load` (with `cacheType` and the source's size and media type), `error` and
+`display`. Animated images show their first frame, and `expo-image`'s module (prefetch, clearing
+the caches) is not there.
+
 `@ng-native/device`'s `Sharing` uses `NgNativeSharing` on macOS, where React Native's `Share` has
 no implementation. It shows AppKit's share picker below the top of the key window's content, with
 the message as text and the url as a link, or as the file itself for a `file:` uri or a path, and
