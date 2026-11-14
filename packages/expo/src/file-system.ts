@@ -11,7 +11,8 @@
  * Moving and listing stay on Expo's `File` and `Directory`.
  */
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
-import { expoModule, presence, present } from './native.ts';
+import { desktopFiles } from './desktop-file-system.ts';
+import { currentPlatform, expoModule, presence, present } from './native.ts';
 
 /**
  * A file. Structural on purpose: this is Expo's `File`, described in terms a test can satisfy, so
@@ -30,6 +31,11 @@ export interface NativeFile {
   /** The contents as bytes: a PDF, an image, anything that is not text. */
   bytes(): Promise<Uint8Array>;
   delete(): void;
+  /**
+   * Only on macOS, where the host's calls are asynchronous and each change to the file is queued:
+   * answers when the queue is empty, and rejects with the first failure since last asked.
+   */
+  settled?(): Promise<void>;
 }
 
 /** A directory, as far as this needs to know: something a file can be named inside. */
@@ -117,10 +123,13 @@ export class FileSystem {
         const expo = expoModule(
           'expo-file-system',
           () => require('expo-file-system') as typeof import('expo-file-system'),
+          { desktop: desktopFiles },
         );
         if (!expo) return null;
         // Missing from the build: the stand-in, to say so when it is used.
         if (!present(expo)) return expo as never;
+        // On macOS the loader has already built the slice, paths and all.
+        if (currentPlatform() === 'macos') return expo as unknown as NativeFiles;
         return {
           // Both are getters on Expo's side, handing back a fresh Directory each time.
           get cacheDirectory() {
@@ -229,11 +238,15 @@ export class FileSystem {
    * `write` alone throws on a file that has never been created, which is the first thing everyone
    * hits. It replaces what was there, and has written by the time it returns: from SDK 58 through
    * `writeSync`, since `write` there answers a promise.
+   *
+   * On macOS the host writes asynchronously, so this answers a promise that settles when the file
+   * has been written, and rejects if it could not be. Elsewhere it answers nothing.
    */
-  write(file: NativeFile, content: string | Uint8Array): void {
+  write(file: NativeFile, content: string | Uint8Array): void | Promise<void> {
     if (!file.exists) file.create({ intermediates: true });
     if (file.writeSync) file.writeSync(content);
     else file.write(content);
+    return file.settled?.();
   }
 }
 
