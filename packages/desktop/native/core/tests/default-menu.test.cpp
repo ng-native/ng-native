@@ -66,6 +66,17 @@ TEST_CASE("the window commands close, minimise and zoom") {
   CHECK(ngn::findMenuItem(bar[4].items, MenuCommand::BringAllToFront));
 }
 
+TEST_CASE("View has Back and Forward on Command-[ and Command-] before the app sets its own bar") {
+  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto back = ngn::findMenuItem(bar[3].items, MenuCommand::Back);
+  auto forward = ngn::findMenuItem(bar[3].items, MenuCommand::Forward);
+  REQUIRE(back);
+  REQUIRE(forward);
+  CHECK(back->key == "[");
+  CHECK(forward->key == "]");
+  CHECK(back->modifiers == ngn::Command);
+}
+
 TEST_CASE("a bundle from a dev server adds the Developer menu with Reload on Command-R") {
   CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes"}), MenuCommand::Reload));
   auto bar = ngn::defaultMenuBar({.appName = "Notes", .developer = true});

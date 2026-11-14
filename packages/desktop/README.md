@@ -23,6 +23,15 @@ and comes back there, within its size limits, when a window with that key opens 
 closes the windows with no key and keeps the rest for five seconds for the reloaded app to open
 again. An app that renders on its own surface instead gets that surface in a window.
 
+The menu bar is the app's (`<menu-bar>`, through `NgNativeMenus`), drawn as NSApp's main menu
+once the app sets it, with the host's Developer menu kept before Help; until then the host's own
+default bar shows. An item with a `menuRole` is AppKit's own command (Copy reaches the focused
+field) unless the app handles it. An app's `[shortcut]` takes its key press before the menus do,
+except that Cmd-Z, X, C, V and A still reach a focused text input. A view's `[contextMenu]` shows
+as an NSMenu on a secondary click, and its choice comes back to the view. View > Back and Forward
+(Cmd-[ and Cmd-]), mouse buttons 4 and 5, a three-finger swipe and, with "Swipe between pages",
+a two-finger sideways swipe that nothing scrolls send `navigate` with the window's surface.
+
 The mouse reaches an app as on the web: every move goes to React Native's pointer events, which
 send `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)` and `(mouseout)` to the views
 that listen, and `(dblclick)`, `(contextmenu)` (a secondary click or Control-click) and `(wheel)`
@@ -88,7 +97,8 @@ libraries above recompiles only that library.
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and
-  hover, Tab order, the app's windows and their autosaved frames (`app-windows.h`), the accessibility mapping, the native controls' props and measuring, text
+  hover, Tab order, the app's windows and their autosaved frames (`app-windows.h`), menus, shortcuts and the back and
+  forward inputs (`app-menus.h`), the accessibility mapping, the native controls' props and measuring, text
   measurement, the module registry and desktop view props, the dev server connection,
   the default menu bar and React Native's iOS-shaped modules in `src/modules`), with tests on an
   in-memory backend that run on Linux and macOS. A backend answers the OS calls through narrow

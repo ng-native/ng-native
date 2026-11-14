@@ -16,6 +16,7 @@
 // text input, and the default otherwise.
 #pragma once
 
+#include "ngn/default-menu.h"
 #include "ngn/desktop-view-props.h"
 #include "ngn/input.h"
 #include "ngn/view-tree.h"
@@ -56,6 +57,16 @@ class InputDispatcher : public InputSink {
   bool contextMenu(const PointerInput &input) override;
   bool wheel(const PointerInput &input, const WheelDelta &delta) override;
 
+  // The context menu a secondary click at `input` shows: the nearest view under it with a
+  // `contextMenu` prop, and its entries. Nothing when no view there has one.
+  struct ContextMenuTarget {
+    Tag tag;
+    std::vector<MenuItem> items;
+  };
+  std::optional<ContextMenuTarget> contextMenuAt(const PointerInput &input) const;
+  // An item of the context menu of `tag` was chosen: `topContextMenuSelect` with its id.
+  void contextMenuSelect(Tag tag, const std::string &id);
+
   // After a transaction: the views under a still pointer may have changed what cursor they ask
   // for.
   void didMount(SurfaceId surfaceId);
@@ -71,7 +82,8 @@ class InputDispatcher : public InputSink {
   // record them instead.
   virtual void emitTouch(TouchPhase phase, const ViewTree::Node &target, const facebook::react::TouchEvent &event);
   virtual void emitPointer(PointerKind kind, const ViewTree::Node &node, const facebook::react::PointerEvent &event);
-  // `name` without React Native's `top` prefix: `doubleClick`, `contextMenu` or `wheel`.
+  // `name` without React Native's `top` prefix: `doubleClick`, `contextMenu`, `contextMenuSelect`
+  // or `wheel`.
   virtual void emitElementEvent(const ViewTree::Node &node, const std::string &name, folly::dynamic payload);
 
  private:

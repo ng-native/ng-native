@@ -7,6 +7,7 @@ using facebook::react::Cursor;
 namespace {
 std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> gInsetsChanged;
 NSCursor *gCursor = nil;
+std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)> gContextMenuShower;
 
 // A cursor of nothing, for `cursor: none`.
 NSCursor *noCursor() {
@@ -93,6 +94,13 @@ NSCursor *nsCursor(Cursor cursor) {
 + (void)showCursor:(Cursor)cursor {
   gCursor = nsCursor(cursor);
   [gCursor set];
+}
+
++ (std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)>)contextMenuShower {
+  return gContextMenuShower;
+}
++ (void)setContextMenuShower:(std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)>)fn {
+  gContextMenuShower = std::move(fn);
 }
 
 + (std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)>)insetsChanged {
@@ -227,9 +235,18 @@ NSCursor *nsCursor(Cursor cursor) {
   return input;
 }
 
+// A secondary click: the `(contextmenu)` event, then the menu of the view's `contextMenu` prop. True
+// when either was there.
+- (BOOL)secondaryClick:(NSEvent *)event {
+  auto input = [self inputFor:event];
+  bool heard = _input->contextMenu(input);
+  bool shown = gContextMenuShower && gContextMenuShower(self, event, input);
+  return heard || shown;
+}
+
 - (void)mouseDown:(NSEvent *)event {
   // Control-click is the Mac's secondary click.
-  if ((event.modifierFlags & NSEventModifierFlagControl) != 0 && _input->contextMenu([self inputFor:event])) {
+  if ((event.modifierFlags & NSEventModifierFlagControl) != 0 && [self secondaryClick:event]) {
     return;
   }
   // A click focuses the focusable view it lands in, as on the web, without a focus ring.
@@ -248,7 +265,7 @@ NSCursor *nsCursor(Cursor cursor) {
 }
 
 - (void)rightMouseDown:(NSEvent *)event {
-  if (!_input->contextMenu([self inputFor:event])) {
+  if (![self secondaryClick:event]) {
     [super rightMouseDown:event];
   }
 }

@@ -21,6 +21,7 @@
 #import "surface-view.h"
 #include "text-layout.h"
 
+#include "ngn/app-menus.h"
 #include "ngn/core-modules.h"
 #include "ngn/default-menu.h"
 #include "ngn/input-dispatcher.h"
@@ -48,6 +49,7 @@ struct Host {
   std::unique_ptr<ngn::Runtime> runtime;
   std::shared_ptr<ngn::appkit::AppKitWindows> windows;
   std::shared_ptr<ngn::WindowHost> windowHost;
+  std::shared_ptr<ngn::MenuHost> menus;
   NGNSurfaceView *appSurface;
   // The app's own surface in a window, for an app that renders there instead of opening windows.
   NSWindow *appWindow;
@@ -152,6 +154,84 @@ bool moveFocus(NSEvent *event) {
     from = next;
   }
   return false;
+}
+
+// The surface of the window `window` is, or belongs to (a sheet's or a popover's parent), if any.
+std::optional<SurfaceId> surfaceOf(NSWindow *window) {
+  for (NSWindow *w = window; w != nil; w = w.sheetParent != nil ? w.sheetParent : w.parentWindow) {
+    if (auto surface = gHost.windows->surfaceOf(w)) {
+      return surface;
+    }
+  }
+  return std::nullopt;
+}
+
+// The menu bar the core asks for, drawn on the main thread.
+struct AppKitMenus final : ngn::MenuBackend {
+  void setMenuBar(std::vector<ngn::MenuItem> bar) override {
+    auto shared = std::make_shared<std::vector<ngn::MenuItem>>(std::move(bar));
+    dispatch_async(dispatch_get_main_queue(), ^{
+      ngn::appkit::installMenuBar(*shared, [](const ngn::MenuItem &item) {
+        if (item.command == ngn::MenuCommand::Reload && gHost.runtime) {
+          gHost.runtime->reload([](bool loaded) {
+            if (!loaded) {
+              fprintf(stderr, "ngn-macos: the reload could not load the bundle\n");
+            }
+          });
+        } else if (gHost.menus) {
+          gHost.menus->choose(item, surfaceOf(NSApp.keyWindow));
+        }
+      });
+    });
+  }
+};
+
+// A key press as the web names it, with the modifiers held.
+ngn::KeyChord chordOf(NSEvent *event) {
+  static NSDictionary<NSNumber *, NSString *> *named = @{
+    @123 : @"ArrowLeft", @124 : @"ArrowRight", @125 : @"ArrowDown", @126 : @"ArrowUp",
+    @36 : @"Enter", @76 : @"Enter", @53 : @"Escape", @51 : @"Backspace", @117 : @"Delete",
+    @48 : @"Tab", @115 : @"Home", @119 : @"End", @116 : @"PageUp", @121 : @"PageDown",
+    @122 : @"F1", @120 : @"F2", @99 : @"F3", @118 : @"F4", @96 : @"F5", @97 : @"F6",
+    @98 : @"F7", @100 : @"F8", @101 : @"F9", @109 : @"F10", @103 : @"F11", @111 : @"F12",
+  };
+  NSString *key = named[@(event.keyCode)];
+  if (key == nil) {
+    // Shift still applies, as the web's `key` has it: shift+/ is "?".
+    key = event.charactersIgnoringModifiers != nil ? event.charactersIgnoringModifiers : @"";
+  }
+  unsigned modifiers = 0;
+  NSEventModifierFlags flags = event.modifierFlags;
+  if (flags & NSEventModifierFlagCommand) modifiers |= ngn::Command;
+  if (flags & NSEventModifierFlagShift) modifiers |= ngn::Shift;
+  if (flags & NSEventModifierFlagOption) modifiers |= ngn::Option;
+  if (flags & NSEventModifierFlagControl) modifiers |= ngn::Control;
+  return {.key = std::string(key.UTF8String), .modifiers = modifiers};
+}
+
+bool textInputFocused(NSWindow *window) {
+  return [window.firstResponder isKindOfClass:NSText.class];
+}
+
+// Whether a horizontal scroll at the event belongs to a scroll view that scrolls sideways.
+bool scrollsSideways(NSEvent *event) {
+  NSView *hit = [event.window.contentView hitTest:[event.window.contentView.superview convertPoint:event.locationInWindow
+                                                                                            fromView:nil]];
+  for (NSView *v = hit; v != nil; v = v.superview) {
+    if ([v isKindOfClass:NSScrollView.class]) {
+      NSScrollView *scroll = (NSScrollView *)v;
+      if (NSWidth(scroll.documentView.frame) > NSWidth(scroll.contentView.bounds) + 1) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void navigate(ngn::NavigationDirection direction, NSWindow *window) {
+  if (gHost.menus) {
+    gHost.menus->navigate(direction, surfaceOf(window));
+  }
 }
 
 // An app that renders on its own surface rather than opening windows (one that is not an
@@ -347,6 +427,12 @@ int main(int argc, const char *argv[]) {
     gHost.windows->setHost(gHost.windowHost);
     ngn::addModule(*modules, "NgNativeWindows", [] { return ngn::makeWindowsModule(gHost.windowHost); });
 
+    gHost.menus = std::make_shared<ngn::MenuHost>(
+        std::make_shared<AppKitMenus>(),
+        ngn::DefaultMenuOptions{
+            .appName = std::string(title.UTF8String), .developer = ngn::DevServer::fromBundleUrl(bundle).has_value()});
+    ngn::addModule(*modules, "NgNativeMenus", [] { return ngn::makeMenusModule(gHost.menus); });
+
     gHost.runtime = std::make_unique<ngn::Runtime>(
         gHost.mounting,
         std::make_shared<ngn::CoreTextMeasurer>(),
@@ -354,17 +440,25 @@ int main(int argc, const char *argv[]) {
         modules, network, bundle);
 
     bool developer = gHost.runtime->devServer().has_value();
-    ngn::appkit::installMenuBar(
-        ngn::defaultMenuBar({.appName = std::string(title.UTF8String), .developer = developer}),
-        [](ngn::MenuCommand command) {
-          if (command == ngn::MenuCommand::Reload && gHost.runtime) {
-            gHost.runtime->reload([](bool loaded) {
-              if (!loaded) {
-                fprintf(stderr, "ngn-macos: the reload could not load the bundle\n");
-              }
-            });
-          }
-        });
+    NGNSurfaceView.contextMenuShower = [](NGNSurfaceView *view, NSEvent *event, const ngn::PointerInput &input) {
+      auto target = gHost.input->contextMenuAt(input);
+      if (!target) {
+        return false;
+      }
+      Tag tag = target->tag;
+      NSWindow *window = view.window;
+      NSMenu *menu = ngn::appkit::buildMenu("", target->items, [tag, window](const ngn::MenuItem &item) {
+        if (item.command == ngn::MenuCommand::Back || item.command == ngn::MenuCommand::Forward) {
+          navigate(item.command == ngn::MenuCommand::Back ? ngn::NavigationDirection::Back
+                                                          : ngn::NavigationDirection::Forward,
+                   window);
+        } else {
+          gHost.input->contextMenuSelect(tag, item.id);
+        }
+      });
+      [NSMenu popUpContextMenu:menu withEvent:event forView:view];
+      return true;
+    };
 
     ngn::onLayoutAnimationsRunning([](bool running) {
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -409,12 +503,61 @@ int main(int argc, const char *argv[]) {
 
     [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
                                           handler:^NSEvent *(NSEvent *event) {
+                                            // The app's shortcuts come before the menus' keys.
+                                            if (gHost.menus->keyDown(chordOf(event), textInputFocused(event.window))) {
+                                              return nil;
+                                            }
                                             constexpr unsigned short kTab = 48;
                                             auto mods = event.modifierFlags &
                                                 (NSEventModifierFlagCommand | NSEventModifierFlagControl);
                                             if (event.keyCode == kTab && mods == 0 && moveFocus(event)) {
                                               return nil;
                                             }
+                                            return event;
+                                          }];
+    // Back and forward from the mouse's side buttons and the trackpad.
+    [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskOtherMouseDown
+                                          handler:^NSEvent *(NSEvent *event) {
+                                            auto input = event.buttonNumber == 3 ? ngn::NavigationInput::MouseButton4
+                                                : event.buttonNumber == 4        ? ngn::NavigationInput::MouseButton5
+                                                                                 : std::optional<ngn::NavigationInput>{};
+                                            if (!input) {
+                                              return event;
+                                            }
+                                            navigate(*ngn::navigationFor(*input), event.window);
+                                            return nil;
+                                          }];
+    [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskSwipe
+                                          handler:^NSEvent *(NSEvent *event) {
+                                            if (event.deltaX == 0) {
+                                              return event;
+                                            }
+                                            auto input = event.deltaX > 0 ? ngn::NavigationInput::SwipeRight
+                                                                          : ngn::NavigationInput::SwipeLeft;
+                                            navigate(*ngn::navigationFor(input), event.window);
+                                            return nil;
+                                          }];
+    // "Swipe between pages" with two fingers: a sideways scroll that nothing scrolls sideways.
+    [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
+                                          handler:^NSEvent *(NSEvent *event) {
+                                            if (!NSEvent.isSwipeTrackingFromScrollEventsEnabled ||
+                                                event.phase != NSEventPhaseBegan ||
+                                                fabs(event.scrollingDeltaX) <= fabs(event.scrollingDeltaY) ||
+                                                surfaceOf(event.window) == std::nullopt || scrollsSideways(event)) {
+                                              return event;
+                                            }
+                                            NSWindow *window = event.window;
+                                            [event trackSwipeEventWithOptions:NSEventSwipeTrackingLockDirection
+                                                     dampenAmountThresholdMin:-1
+                                                                          max:1
+                                                                 usingHandler:^(CGFloat amount, NSEventPhase phase, BOOL complete, BOOL *stop) {
+                                                                   if (phase == NSEventPhaseEnded && amount != 0) {
+                                                                     navigate(*ngn::navigationFor(
+                                                                                  amount > 0 ? ngn::NavigationInput::SwipeRight
+                                                                                             : ngn::NavigationInput::SwipeLeft),
+                                                                              window);
+                                                                   }
+                                                                 }];
                                             return event;
                                           }];
     [app activateIgnoringOtherApps:YES];
