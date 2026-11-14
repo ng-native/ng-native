@@ -235,7 +235,9 @@ function warnIfIconOnOnePlatform(tab: NativeTab): void {
       ? [tab.drawable(), tab.sfSymbol(), 'drawable', 'Android']
       : nativePlatform() === 'ios'
         ? [tab.sfSymbol(), tab.drawable(), 'sfSymbol', 'iOS']
-        : [];
+        : nativePlatform() === 'macos'
+          ? [tab.sfSymbol(), tab.drawable(), 'sfSymbol', 'macOS']
+          : [];
   if (own || !other) return;
   const path = tab.path();
   if (warnedTabs.has(path)) return;
@@ -333,7 +335,10 @@ export class NativeTab implements OnInit {
   /** The label under the icon. Absent gives an icon-only item. */
   readonly title = input<string>();
 
-  /** iOS: an SF Symbol name, e.g. `books.vertical.fill`. Shorthand for `[icon]`. */
+  /**
+   * iOS and macOS: an SF Symbol name, e.g. `books.vertical.fill`. Shorthand for `[icon]`. On macOS
+   * it is the tab's icon in the sidebar the tabs render as.
+   */
   readonly sfSymbol = input<string>();
 
   /** Android: a drawable resource name. Shorthand for `[icon]`. */
