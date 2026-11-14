@@ -130,7 +130,11 @@ export type NativeWindowEvent =
     }
   | { readonly type: 'closeRequest'; readonly surface: number }
   | { readonly type: 'closed'; readonly surface: number }
-  | { readonly type: 'quitRequest' }
+  /**
+   * Cmd-Q, a logout or an update's relaunch. `terminate` is a SIGTERM: run only the `willQuit`
+   * handlers, ask no `canClose` guard, and answer true. The host ends after two seconds anyway.
+   */
+  | { readonly type: 'quitRequest'; readonly terminate?: boolean }
   /** A Dock click, or the app opened again, with no window visible. */
   | { readonly type: 'reopen' };
 
@@ -557,7 +561,7 @@ export class AppWindows {
         this.closeNow(event.surface, false);
         return;
       case 'quitRequest':
-        void this.quitAsked();
+        void this.quitAsked(event.terminate === true);
         return;
       case 'reopen':
         if (!this.open$().length) void this.openMain();
@@ -611,9 +615,11 @@ export class AppWindows {
   /**
    * The host asks to quit: every window's guards, in the order the windows opened, then the
    * `willQuit` handlers, then the answer. One guard that says no keeps the app, and every window.
+   * A SIGTERM (`terminate`) skips the guards.
    */
-  private async quitAsked(): Promise<void> {
-    for (const open of this.open$()) {
+  private async quitAsked(terminate = false): Promise<void> {
+    // A SIGTERM is no one's choice to veto: no guard is asked, so a dialog cannot hold it.
+    for (const open of terminate ? [] : this.open$()) {
       if (!(await this.guardsAgree(open))) {
         this.native?.answerQuit(false);
         return;

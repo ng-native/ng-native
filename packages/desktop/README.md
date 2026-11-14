@@ -419,7 +419,9 @@ or gets SIGTERM, and those a crashed run left when the next test launch starts. 
 answer as cancelled, permission prompts as denied, Touch ID and sign-in as cancelled, and an alert
 with its cancel button, or not at all when it has none. A packaged app is never a test launch.
 
-SIGTERM ends any run as a clean quit does, without asking the app, within three seconds, and
+SIGTERM ends any run as a clean quit does, within three seconds: the app is asked to run its
+`willQuit` handlers, though not its `canClose` guards, and the host ends once it has answered or
+after two seconds, whichever is first. With no app listening it ends at once.
 `ng-native-desktop run` passes SIGTERM, SIGINT and SIGHUP to the host and exits with its status.
 
 ## Expo modules

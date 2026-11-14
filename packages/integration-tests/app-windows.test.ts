@@ -11,8 +11,11 @@
  * - `close(surface)` closes it and stops its surface; `focus`, `setTitle` do what they say.
  * - The host sends `ngNativeWindows` events on `DeviceEventEmitter`: `focus`, `resize`,
  *   `closeRequest` (the close button, Cmd-W), `closed` (the OS closed it), `quitRequest`
- *   (Cmd-Q, logout) and `reopen` (a Dock click with no window). It never closes a window or quits
+ *   (Cmd-Q, logout, or with `terminate: true` a SIGTERM) and `reopen` (a Dock click with no window). It never closes a window or quits
  *   on its own: it waits for `close(surface)` or `answerQuit(proceed)`.
+ * - A `quitRequest` with `terminate: true` is SIGTERM: the app runs only its `willQuit` handlers,
+ *   asks no `canClose` guard, and answers `answerQuit(true)`; the host ends within two seconds
+ *   with or without the answer.
  * - `quit()` starts quitting as Cmd-Q does, so it comes back as a `quitRequest`.
  */
 import assert from 'node:assert/strict';
@@ -518,6 +521,27 @@ describe('the app lifecycle', () => {
     windows.quit();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(host.answers, [false, true]);
+  });
+
+  it('runs willQuit but no canClose guard when the host is terminated by SIGTERM', async () => {
+    const host = fakeHost();
+    const { windows, app } = start('MainWindowApp', host);
+    await windows.open(fixtures['NoteWindow']!);
+    await settle();
+    findNote(windows).unsaved.set(true);
+    let guards = 0;
+    windows.windows()[0]!.canClose(() => {
+      guards++;
+      return false;
+    });
+    const lifecycle = app.applicationRef.injector.get(AppLifecycle);
+    let saved = 0;
+    lifecycle.willQuit(() => void saved++);
+    host.send({ type: 'quitRequest', terminate: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(saved, 1, 'willQuit ran');
+    assert.equal(guards, 0, 'no guard was asked');
+    assert.deepEqual(host.answers, [true], 'the unsaved note does not keep a terminated app');
   });
 
   it('runs willQuit after the guards and waits for it, up to its deadline', async () => {

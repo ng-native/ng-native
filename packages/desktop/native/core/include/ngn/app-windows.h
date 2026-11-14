@@ -118,6 +118,12 @@ class WindowHost {
   bool closeRequested(SurfaceId surface);
   // The OS's quit command or a logout.
   QuitReply quitRequested();
+  // SIGTERM. The app is asked to run only its `willQuit` hooks, with no `canClose` guard, and
+  // `done` runs on its `answerQuit` (either answer) or after kTerminateSeconds, whichever is first;
+  // it ends the process. With no app listening, `done` runs at once. A second SIGTERM while waiting
+  // asks nothing more. `done` runs once, on the thread that answered, the backend's timer or the caller.
+  void terminateRequested(std::function<void()> done);
+  static constexpr double kTerminateSeconds = 2;
   // The key window, or none when the app has none.
   void focused(std::optional<SurfaceId> surface);
   void resized(SurfaceId surface, const WindowFrame &frame, double scale);
@@ -142,6 +148,8 @@ class WindowHost {
     bool kept{false};
   };
   void send(const folly::dynamic &event);
+  bool isTerminating() const;
+  void finishTerminate();
   void autosave(SurfaceId surface, const WindowFrame &frame);
   void reloading();
   void dropUnclaimed();
@@ -155,6 +163,7 @@ class WindowHost {
   std::optional<SurfaceId> focused_;
   bool quitAsked_{false};
   bool quitAgreed_{false};
+  std::optional<std::function<void()>> terminating_;
   std::map<int, Listener> listeners_;
   int nextListener_{0};
   bool attached_{false};

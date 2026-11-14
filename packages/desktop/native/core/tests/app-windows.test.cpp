@@ -203,6 +203,48 @@ TEST_CASE("quit() starts quitting as Cmd-Q does, and comes back as a request") {
   CHECK(g.windows->quits == std::vector<std::string>{"begin", "now"});
 }
 
+TEST_CASE("SIGTERM asks the app to run its willQuit hooks only, and ends on its answer") {
+  Fixture f;
+  f.open(request("main"));
+  int ended = 0;
+  f.host->terminateRequested([&] { ended++; });
+  CHECK(f.events == std::vector<std::string>{"ngNativeWindows {\"terminate\":true,\"type\":\"quitRequest\"}"});
+  CHECK(ended == 0);
+  // A second signal while waiting asks nothing more and ends nothing.
+  f.host->terminateRequested([&] { ended += 10; });
+  CHECK(f.events.size() == 1);
+  CHECK(ended == 0);
+
+  f.app().call("answerQuit", dynamic::array(true));
+  CHECK(ended == 1);
+  // The answer is no quit to reply to, and the timer that is left does nothing.
+  CHECK(f.windows->quits.empty());
+  REQUIRE(f.windows->timers.size() == 1);
+  CHECK(f.windows->timers[0].first == WindowHost::kTerminateSeconds);
+  f.windows->timers[0].second();
+  CHECK(ended == 1);
+}
+
+TEST_CASE("SIGTERM ends after the wait when the app never answers, and with no app at once") {
+  Fixture f;
+  f.open(request("main"));
+  int ended = 0;
+  f.host->terminateRequested([&] { ended++; });
+  REQUIRE(f.windows->timers.size() == 1);
+  CHECK(WindowHost::kTerminateSeconds == 2);
+  f.windows->timers[0].second();
+  CHECK(ended == 1);
+  // A late answer changes nothing.
+  f.app().call("answerQuit", dynamic::array(true));
+  CHECK(ended == 1);
+
+  Fixture none;
+  int noneEnded = 0;
+  none.host->terminateRequested([&] { noneEnded++; });
+  CHECK(noneEnded == 1);
+  CHECK(none.windows->timers.empty());
+}
+
 TEST_CASE("focus, resize and a Dock click with no window reach the app") {
   Fixture f;
   auto surface = f.open(request("main"));

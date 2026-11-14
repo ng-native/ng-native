@@ -164,6 +164,11 @@ void WindowHost::quit() {
 }
 
 void WindowHost::answerQuit(bool proceed) {
+  // The app answered the SIGTERM's request: its hooks have run, and the process ends.
+  if (isTerminating()) {
+    finishTerminate();
+    return;
+  }
   bool asked;
   {
     std::lock_guard lock(mutex_);
@@ -178,6 +183,43 @@ void WindowHost::answerQuit(bool proceed) {
   } else if (proceed) {
     backend_->beginQuit();
   }
+}
+
+bool WindowHost::isTerminating() const {
+  std::lock_guard lock(mutex_);
+  return terminating_.has_value();
+}
+
+void WindowHost::finishTerminate() {
+  std::function<void()> done;
+  {
+    std::lock_guard lock(mutex_);
+    if (!terminating_) {
+      return;
+    }
+    done = std::move(*terminating_);
+    terminating_.reset();
+  }
+  done();
+}
+
+void WindowHost::terminateRequested(std::function<void()> done) {
+  {
+    std::lock_guard lock(mutex_);
+    if (terminating_) {
+      return;
+    }
+    if (!listeners_.empty()) {
+      terminating_ = std::move(done);
+      done = nullptr;
+    }
+  }
+  if (done) {
+    done();
+    return;
+  }
+  send(folly::dynamic::object("type", "quitRequest")("terminate", true));
+  backend_->after(kTerminateSeconds, [this] { finishTerminate(); });
 }
 
 bool WindowHost::closeRequested(SurfaceId surface) {

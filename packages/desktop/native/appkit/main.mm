@@ -607,9 +607,10 @@ void showAppSurfaceIfUsed() {
   });
 }
 
-// SIGTERM (a test pool ending its run, or `kill`) ends the host as a clean quit does, without asking
-// the app: the programs it started go with it and a test launch removes what it leaves behind.
-// A main thread that does not get to it within kTermWait is not waited for.
+// SIGTERM (a test pool ending its run, or `kill`) ends the host as a clean quit does, after asking
+// the app to run its `willQuit` hooks, though not its `canClose` guards, for at most
+// WindowHost::kTerminateSeconds: the programs it started go with it and a test launch removes what
+// it leaves behind. A main thread that does not get to it within kTermWait is not waited for.
 void endOnTerminateSignal() {
   constexpr int64_t kTermWait = 2500 * NSEC_PER_MSEC;
   signal(SIGTERM, SIG_IGN);
@@ -620,9 +621,17 @@ void endOnTerminateSignal() {
       _exit(0);
     });
     dispatch_async(dispatch_get_main_queue(), ^{
-      [NSApp.delegate applicationWillTerminate:[NSNotification notificationWithName:NSApplicationWillTerminateNotification
-                                                                             object:NSApp]];
-      exit(0);
+      auto end = [] {
+        [NSApp.delegate applicationWillTerminate:[NSNotification notificationWithName:NSApplicationWillTerminateNotification
+                                                                               object:NSApp]];
+        exit(0);
+      };
+      if (gHost.windowHost) {
+        // The app's answer arrives on the JavaScript thread; the host ends on the main one.
+        gHost.windowHost->terminateRequested([end] { dispatch_async(dispatch_get_main_queue(), end); });
+      } else {
+        end();
+      }
     });
   });
   dispatch_resume(source);

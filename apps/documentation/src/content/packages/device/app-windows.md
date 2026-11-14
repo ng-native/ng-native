@@ -83,6 +83,10 @@ export class Editor {
 Quitting (Cmd-Q, a logout, an update's relaunch) asks every window's guards, then runs the
 `AppLifecycle.willQuit` handlers and waits for them, for at most five seconds in all.
 
+On macOS a SIGTERM to the host (`kill`, or a test pool ending its run) runs the `willQuit`
+handlers but asks no `canClose` guard, so an unsaved-changes dialog cannot hold it. The host ends
+once the handlers have finished or two seconds after the signal, whichever is first.
+
 ## Reference
 
 <!-- api: AppWindows -->
