@@ -65,8 +65,11 @@ A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` na
 AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
 goes to the key window, and a character is typed into a focused text field. A scroll or gesture
 goes to the view under its point, wherever the real pointer is, so a web view scrolls and a map
-pans and zooms. A `choose` step names the item the next menu to open picks a second after it
-opens (a picker's, a pop-up button's or a context menu), since a menu follows the real pointer.
+pans and zooms. A `secondary` step is a secondary click. The steps after a `down` go on from a run
+loop timer, so a view that tracks the press in a loop of its own (a source list row) gets its `up`
+from the event queue: put a `wait` between them. A `choose` step names the item the next menu to
+open picks a second after it opens (a picker's, a pop-up button's or a context menu), since a menu
+follows the real pointer.
 
 A view's box is painted as React Native iOS paints it (`view-box.h`): one corner radius and one
 solid border are the layer's own, drawn over the children only when the view clips or the border
@@ -104,7 +107,12 @@ field) unless the app handles it. An app's `[shortcut]` takes its key press befo
 except that Cmd-Z, X, C, V and A still reach a focused text input. A view's `[contextMenu]` shows
 as an NSMenu on a secondary click, and its choice comes back to the view. View > Back and Forward
 (Cmd-[ and Cmd-]), mouse buttons 4 and 5, a three-finger swipe and, with "Swipe between pages",
-a two-finger sideways swipe that nothing scrolls send `navigate` with the window's surface.
+a two-finger sideways swipe that nothing scrolls send `navigate` with the window's surface. A back
+swipe over a native stack with a screen below its front one is interactive (`back-swipe.h`): the
+front screen follows the fingers with the one below showing, goes back when released past a third
+of the width or flicked, and slides home when released early. It is not offered on a screen with
+`gestureEnabled: false` or `stackAnimation: 'none'`, and a `fade` screen fades instead. A forward
+swipe, or a back one with no screen below (into another sidebar item), goes when it ends.
 
 Each `<tray-icon>` is an NSStatusItem (`NgNativeTray`): an SF Symbol as a template image or a named
 image, a title and a tooltip, with its menu on a click or a press when it has none. The `Dock`
@@ -194,9 +202,13 @@ When the app has them installed, the host compiles in the Fabric components of
 - A native stack keeps every screen mounted, shows the top one and hides those below it, and sends
   `willAppear` and `appear` (which the router waits for) as a screen comes to the top. Push and pop
   swap at once.
-- The header of the screen in front is the window's toolbar: its title is the window title, a back
-  chevron leads when there is a screen below, bar buttons and their menus sit at their side, and a
-  header item's own content moves into a toolbar item.
+- The header of the screen in front is the window's toolbar: its title is the window title, the
+  back and forward chevrons lead, bar buttons and their menus sit at their side, and a header
+  item's own content moves into a toolbar item. The chevrons follow the window's history, which
+  `@ng-native/router` reports (`setHistory` on `NgNativeMenus`), and show beside a sidebar with no
+  header too; a press and hold or a secondary click on one lists that way's entries by title, and
+  a pick goes that many steps. An app with no router history gets a back chevron while the stack
+  has a screen below. `hideBackButton` hides the pair, and the header's own left items replace it.
 - The window's content runs under the title bar and toolbar, and each safe-area view gets the part
   of the window's safe area it overlaps: `RNCSafeAreaProvider`'s `insetsChange` (with the window
   controls' width as `titlebarLeading`), `RNCSafeAreaView` and `RNSSafeAreaView`.

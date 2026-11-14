@@ -151,6 +151,7 @@ export {
   type NativeMenuEntry,
   type NativeMenuEvent,
   type NativeMenus,
+  type NativeWindowHistory,
   type NativeShortcut,
   type SerializedMenu,
 } from './menus.ts';

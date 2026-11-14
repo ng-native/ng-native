@@ -7,6 +7,7 @@
 //   down <x> <y>          the primary button
 //   drag <x> <y>
 //   up <x> <y>
+//   secondary <x> <y>     a secondary click (the right button down and up): a context menu
 //   scroll <x> <y> <dx> <dy> [began|changed|ended]   a trackpad scroll by the fingers' movement
 //   magnify <x> <y> <amount> began|changed|ended
 //   rotate <x> <y> <degrees> began|changed|ended     anticlockwise
@@ -27,7 +28,7 @@
 namespace ngn {
 
 struct InputStep {
-  enum class Kind { Wait, Move, Down, Drag, Up, Scroll, Magnify, Rotate, Key, Choose } kind;
+  enum class Kind { Wait, Move, Down, Drag, Up, Secondary, Scroll, Magnify, Rotate, Key, Choose } kind;
   enum Modifier : unsigned { Command = 1 << 0, Shift = 1 << 1, Option = 1 << 2, Control = 1 << 3 };
   double x{0};
   double y{0};

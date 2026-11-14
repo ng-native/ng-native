@@ -214,6 +214,7 @@ static ngn::InputDispatcher *gViewInput;
 - (instancetype)initWithShadowView:(const ShadowView &)view {
   if ((self = [super initWithFrame:NSZeroRect])) {
     _transform = CATransform3DIdentity;
+    _swipeOpacity = 1;
     _reactTag = view.tag;
     _surfaceId = view.surfaceId;
     _componentName = [NSString stringWithUTF8String:view.componentName];
@@ -584,15 +585,34 @@ static BOOL focusFromKeyboard() {
 - (void)updateLayout:(const LayoutMetrics &)metrics {
   _layout = metrics;
   const auto &f = metrics.frame;
-  self.frame = NSMakeRect(f.origin.x, f.origin.y, f.size.width, f.size.height);
-  self.hidden = metrics.displayType == DisplayType::None || _covered;
+  self.frame = NSMakeRect(f.origin.x + _swipeOffset, f.origin.y, f.size.width, f.size.height);
+  [self updateHidden];
   [self applyVisuals];
   [self setNeedsDisplay:YES];
 }
 
+- (void)updateHidden {
+  self.hidden = _layout.displayType == DisplayType::None || (_covered && !_swipeShown);
+}
+
 - (void)setCovered:(BOOL)covered {
   _covered = covered;
-  self.hidden = _layout.displayType == DisplayType::None || covered;
+  [self updateHidden];
+}
+
+- (void)setSwipeShown:(BOOL)swipeShown {
+  _swipeShown = swipeShown;
+  [self updateHidden];
+}
+
+- (void)setSwipeOffset:(CGFloat)swipeOffset {
+  _swipeOffset = swipeOffset;
+  [self setFrameOrigin:NSMakePoint(_layout.frame.origin.x + swipeOffset, _layout.frame.origin.y)];
+}
+
+- (void)setSwipeOpacity:(CGFloat)swipeOpacity {
+  _swipeOpacity = swipeOpacity;
+  [self applyVisuals];
 }
 
 - (void)updateState:(const State::Shared &)state {
@@ -618,7 +638,7 @@ static BOOL focusFromKeyboard() {
     return;
   }
   CALayer *layer = self.layer;
-  self.alphaValue = viewProps->opacity;
+  self.alphaValue = viewProps->opacity * _swipeOpacity;
   auto box = ngn::viewBox(*viewProps, _layout);
   layer.backgroundColor = box.background ? cgColor(*box.background) : nil;
   layer.cornerRadius = box.cornerRadius;

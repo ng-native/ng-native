@@ -113,13 +113,21 @@ export type NativeMenuEvent =
   | { readonly type: 'shortcut'; readonly id: string; readonly textInputFocused?: boolean }
   /**
    * Back or forward, from whichever input the OS has for it: View > Back and Forward and their
-   * keys, a two-finger swipe, mouse buttons 4 and 5. `surface` is the window it was in.
+   * keys, a two-finger swipe, mouse buttons 4 and 5, the toolbar's chevrons and their history
+   * menus. `surface` is the window it was in, and `steps` how many entries (one where absent).
    */
   | {
       readonly type: 'navigate';
       readonly direction: 'back' | 'forward';
       readonly surface?: number;
+      readonly steps?: number;
     };
+
+/** A window's history as the host draws it: the titles behind and ahead, nearest first. */
+export interface NativeWindowHistory {
+  readonly back: readonly string[];
+  readonly forward: readonly string[];
+}
 
 /** The host's menu module. */
 export interface NativeMenus {
@@ -130,6 +138,8 @@ export interface NativeMenus {
     groups: readonly { label: string; menuRole?: string; items: NativeMenuEntry[] }[],
   ): void;
   setShortcuts(shortcuts: readonly NativeShortcut[]): void;
+  /** The history of the window on `surface`, for its back and forward chevrons. Desktop only. */
+  setHistory?(surface: number, history: NativeWindowHistory): void;
   subscribe(listener: (event: NativeMenuEvent) => void): () => void;
 }
 
@@ -137,6 +147,7 @@ interface MenusTurboModule {
   getConstants?(): { menuBar?: boolean; appName?: string };
   setMenuBar?(groups: unknown): void;
   setShortcuts?(shortcuts: unknown): void;
+  setHistory?(surface: number, history: unknown): void;
 }
 
 function menusSource(): NativeMenus | null {
@@ -150,6 +161,7 @@ function menusSource(): NativeMenus | null {
     appName: constants.appName ?? '',
     setMenuBar: (groups) => module.setMenuBar?.(groups),
     setShortcuts: (shortcuts) => module.setShortcuts?.(shortcuts),
+    setHistory: (surface, history) => module.setHistory?.(surface, history),
     subscribe: (listener) => {
       const subscription = native?.DeviceEventEmitter?.addListener('ngNativeMenus', (event) =>
         listener(event as NativeMenuEvent),
@@ -292,21 +304,34 @@ export class Menus {
   }
 
   private readonly navigators = new Set<
-    (direction: 'back' | 'forward', surface?: number) => void
+    (direction: 'back' | 'forward', surface?: number, steps?: number) => void
   >();
 
   /**
    * Hear the OS's back and forward commands. `@ng-native/router` listens, and moves through the
-   * history of the window each was in. Answers the function that stops listening.
+   * history of the window each was in, `steps` entries (one, but for a pick from a chevron's
+   * history menu). Answers the function that stops listening.
    */
-  onNavigate(listener: (direction: 'back' | 'forward', surface?: number) => void): () => void {
+  onNavigate(
+    listener: (direction: 'back' | 'forward', surface?: number, steps?: number) => void,
+  ): () => void {
     this.navigators.add(listener);
     return () => void this.navigators.delete(listener);
   }
 
+  /**
+   * Tell the host the history of the window on `surface`, which its toolbar's back and forward
+   * chevrons and their menus show. `@ng-native/router` calls it. Does nothing where the host has
+   * no chevrons.
+   */
+  setHistory(surface: number, history: NativeWindowHistory): void {
+    this.native?.setHistory?.(surface, history);
+  }
+
   private hostSaid(event: NativeMenuEvent): void {
     if (event.type === 'navigate') {
-      this.navigators.forEach((listener) => listener(event.direction, event.surface));
+      const steps = event.steps ?? 1;
+      this.navigators.forEach((listener) => listener(event.direction, event.surface, steps));
       return;
     }
     if (event.type === 'menuSelect') {

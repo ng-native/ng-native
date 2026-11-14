@@ -74,6 +74,7 @@ add_library(ngn_core STATIC
     core/src/animation-frames.cpp
     core/src/app-menus.cpp
     core/src/app-windows.cpp
+    core/src/back-swipe.cpp
     core/src/bytes.cpp
     core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp

@@ -63,6 +63,15 @@ class MountingManager final : public facebook::react::IMountingManager,
     return safeAreasSettled_;
   }
 
+  // UI thread only. What a back swipe in the window of `surfaceId` moves (back-swipe.h), and the top
+  // screen of a stack now.
+  std::optional<BackSwipeTarget> backSwipeTarget(SurfaceId surfaceId) const {
+    return screens_->backSwipeTarget(tree_, surfaceId);
+  }
+  Tag stackTop(Tag stack) const {
+    return screens_->top(stack);
+  }
+
   // UI thread only.
   const ViewTree &tree() const {
     return tree_;

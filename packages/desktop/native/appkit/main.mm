@@ -70,6 +70,7 @@
 #include "text-layout.h"
 
 #include "ngn/app-menus.h"
+#include "ngn/back-swipe.h"
 #include "ngn/core-modules.h"
 #include "ngn/default-menu.h"
 #include "ngn/desktop-modal.h"
@@ -313,9 +314,10 @@ bool textInputFocused(NSWindow *window) {
 }
 
 // Whether a horizontal scroll at the event belongs to a scroll view that scrolls sideways.
-bool scrollsSideways(NSEvent *event) {
-  NSView *hit = [event.window.contentView hitTest:[event.window.contentView.superview convertPoint:event.locationInWindow
-                                                                                            fromView:nil]];
+bool scrollsSideways(NSEvent *event, NSWindow *window) {
+  // A replayed scroll the window takes itself has no window, and its location is on the screen.
+  NSPoint point = event.window == window ? event.locationInWindow : [window convertPointFromScreen:event.locationInWindow];
+  NSView *hit = [window.contentView hitTest:[window.contentView.superview convertPoint:point fromView:nil]];
   for (NSView *v = hit; v != nil; v = v.superview) {
     if ([v isKindOfClass:NSScrollView.class]) {
       NSScrollView *scroll = (NSScrollView *)v;
@@ -331,6 +333,168 @@ void navigate(ngn::NavigationDirection direction, NSWindow *window) {
   if (gHost.menus) {
     gHost.menus->navigate(direction, surfaceOf(window));
   }
+}
+
+// The interactive back swipe (back-swipe.h) in flight, and the screens it moves.
+struct Swipe {
+  ngn::BackSwipe swipe;
+  NGNView *top;
+  NGNView *below;
+  NSWindow *window;
+  // The momentum scrolls after a swipe's fingers lift are the swipe's, not the content's.
+  bool swallowMomentum = false;
+  // Bumped as a swipe starts or ends, so a late animation step or timeout of an old one stops.
+  int generation = 0;
+  NSTimer *animation;
+};
+Swipe gSwipe;
+
+void drawSwipe(const ngn::BackSwipeFrame &frame) {
+  gSwipe.top.swipeOffset = frame.offset;
+  gSwipe.top.swipeOpacity = frame.opacity;
+  gSwipe.below.swipeShown = frame.belowShown;
+}
+
+// The swipe is over: every screen as layout and the stack put it.
+void endSwipe() {
+  [gSwipe.animation invalidate];
+  gSwipe.animation = nil;
+  drawSwipe(ngn::BackSwipe::rest());
+  gSwipe.top = nil;
+  gSwipe.below = nil;
+  gSwipe.window = nil;
+  gSwipe.generation++;
+}
+
+// Eases the moving screen from where it is to `to` over a fifth of a second, then calls `done`.
+void animateSwipe(ngn::BackSwipeFrame to, void (^done)(void)) {
+  [gSwipe.animation invalidate];
+  ngn::BackSwipeFrame from{
+      .offset = gSwipe.top.swipeOffset, .opacity = gSwipe.top.swipeOpacity, .belowShown = gSwipe.below.swipeShown};
+  CFTimeInterval start = CACurrentMediaTime();
+  constexpr CFTimeInterval kDuration = 0.2;
+  gSwipe.animation = [NSTimer scheduledTimerWithTimeInterval:1.0 / 120 repeats:YES block:^(NSTimer *timer) {
+    double t = std::min(1.0, (CACurrentMediaTime() - start) / kDuration);
+    double eased = 1 - (1 - t) * (1 - t) * (1 - t);
+    drawSwipe({.offset = from.offset + (to.offset - from.offset) * eased,
+               .opacity = from.opacity + (to.opacity - from.opacity) * eased,
+               .belowShown = to.belowShown || from.belowShown});
+    if (t >= 1) {
+      [timer invalidate];
+      gSwipe.animation = nil;
+      if (done != nil) {
+        done();
+      }
+    }
+  }];
+}
+
+// How far the fingers moved right: AppKit's delta moves the content, which follows the fingers
+// only with natural scrolling.
+double fingersMovedRight(NSEvent *event) {
+  return event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX;
+}
+
+// The fingers lifted from a tracking swipe: it goes back, or slides home.
+void liftSwipe(NSEvent *event) {
+  bool back = gSwipe.swipe.lifted(event.phase == NSEventPhaseCancelled);
+  if (!back) {
+    animateSwipe(gSwipe.swipe.settled(), ^{
+      gSwipe.swipe.returned();
+      endSwipe();
+    });
+    return;
+  }
+  animateSwipe(gSwipe.swipe.settled(), nil);
+  auto surface = surfaceOf(gSwipe.window);
+  if (surface && gHost.menus->history(*surface)) {
+    gHost.menus->navigate(ngn::NavigationDirection::Back, surface);
+  } else if (auto emitter = gSwipe.top.eventEmitter) {
+    // An app that reports no history: the stack's own back, as the back chevron sends it.
+    emitter->dispatchEvent("headerBackButtonClicked");
+  }
+  // A back the app refused (a guard) never pops: the screen comes home.
+  int generation = gSwipe.generation;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    if (gSwipe.generation == generation && gSwipe.swipe.phase() == ngn::BackSwipe::Phase::Leaving) {
+      gSwipe.swipe.abandon();
+      animateSwipe(ngn::BackSwipe::rest(), ^{
+        endSwipe();
+      });
+    }
+  });
+}
+
+// A leaving swipe ends once its stack's top screen has changed.
+void swipeMounted() {
+  const auto &target = gSwipe.swipe.target();
+  if (target && gSwipe.swipe.mounted(gHost.mounting->stackTop(target->stack))) {
+    endSwipe();
+  }
+}
+
+// "Swipe between pages" with two fingers: a sideways scroll that nothing scrolls sideways. A back
+// swipe over a stack with a screen below drags the screen in front; any other goes when it ends.
+// Answers the event to send on, or nil where the swipe took it.
+NSEvent *swipeScroll(NSEvent *event, NSWindow *window) {
+  if (gSwipe.swipe.phase() == ngn::BackSwipe::Phase::Tracking) {
+    if (window != gSwipe.window) {
+      return event;
+    }
+    double dx = fingersMovedRight(event);
+    if (dx != 0) {
+      drawSwipe(gSwipe.swipe.moved(dx));
+    }
+    if (event.phase == NSEventPhaseEnded || event.phase == NSEventPhaseCancelled) {
+      liftSwipe(event);
+    }
+    return nil;
+  }
+  if (event.momentumPhase != NSEventPhaseNone && gSwipe.swallowMomentum) {
+    return nil;
+  }
+  if (!NSEvent.isSwipeTrackingFromScrollEventsEnabled || event.phase != NSEventPhaseBegan) {
+    return event;
+  }
+  gSwipe.swallowMomentum = false;
+  auto surface = surfaceOf(window);
+  if (fabs(event.scrollingDeltaX) <= fabs(event.scrollingDeltaY) || !surface || scrollsSideways(event, window)) {
+    return event;
+  }
+  // Without a history from the app, the stack in front decides.
+  auto history = gHost.menus->history(*surface);
+  bool canGoBack = !history || !history->back.empty();
+  bool canGoForward = !history || !history->forward.empty();
+  double dx = fingersMovedRight(event);
+  if (dx > 0 && canGoBack && gSwipe.swipe.phase() == ngn::BackSwipe::Phase::Idle) {
+    auto target = gHost.mounting->backSwipeTarget(*surface);
+    NGNView *top = target ? gHost.backend->view(target->top) : nil;
+    NGNView *below = target ? gHost.backend->view(target->below) : nil;
+    if (top != nil && below != nil && gSwipe.swipe.begin(target, NSWidth(top.bounds))) {
+      endSwipe();
+      gSwipe.top = top;
+      gSwipe.below = below;
+      gSwipe.window = window;
+      gSwipe.swallowMomentum = true;
+      drawSwipe(gSwipe.swipe.moved(dx));
+      return nil;
+    }
+  }
+  auto bounds = ngn::swipeBounds(canGoBack, canGoForward);
+  if (bounds == ngn::SwipeBounds{}) {
+    return event;
+  }
+  [event trackSwipeEventWithOptions:NSEventSwipeTrackingLockDirection
+           dampenAmountThresholdMin:bounds.min
+                                max:bounds.max
+                       usingHandler:^(CGFloat amount, NSEventPhase phase, BOOL complete, BOOL *stop) {
+                         if (phase == NSEventPhaseEnded && amount != 0) {
+                           navigate(*ngn::navigationFor(
+                                        amount > 0 ? ngn::NavigationInput::SwipeRight : ngn::NavigationInput::SwipeLeft),
+                                    window);
+                         }
+                       }];
+  return event;
 }
 
 // An app that renders on its own surface rather than opening windows (one that is not an
@@ -641,6 +805,7 @@ int main(int argc, const char *argv[]) {
     }
     gHost.backend->onMount = [](SurfaceId surfaceId) {
       gHost.input->didMount(surfaceId);
+      swipeMounted();
       if (surfaceId == kAppSurface) {
         showAppSurfaceIfUsed();
         if (gHost.mounting->safeAreasSettled()) {
@@ -820,6 +985,7 @@ int main(int argc, const char *argv[]) {
           gHost.runtime->updateSurface(surface, metricsFor(window));
         },
         .stopSurface = [](SurfaceId surface) {
+          gHost.menus->forgetHistory(surface);
           gHost.runtime->stopSurface(surface);
           gHost.backend->removeSurface(surface);
         },
@@ -835,6 +1001,16 @@ int main(int argc, const char *argv[]) {
         ngn::DefaultMenuOptions{
             .appName = std::string(title.UTF8String), .developer = ngn::DevServer::fromBundleUrl(bundle).has_value()});
     ngn::addModule(*modules, "NgNativeMenus", [] { return ngn::makeMenusModule(gHost.menus); });
+    // Each window's history, as the app's router reports it, for its toolbar's chevrons.
+    gHost.menus->historyChanged = [](SurfaceId surface) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        gHost.backend->setHistory(surface, gHost.menus->history(surface));
+      });
+    };
+    gHost.backend->historyOf = [](SurfaceId surface) { return gHost.menus->history(surface); };
+    NGNHeaderToolbar.navigate = [](NSWindow *window, ngn::NavigationDirection direction, int steps) {
+      gHost.menus->navigate(direction, surfaceOf(window), steps);
+    };
     gHost.tray = std::make_shared<ngn::TrayHost>(std::make_shared<ngn::appkit::AppKitTray>(
         [](const std::string &icon) { gHost.tray->press(icon); },
         [](const std::string &icon, const std::string &id) { gHost.tray->menuSelect(icon, id); }));
@@ -1128,6 +1304,11 @@ int main(int argc, const char *argv[]) {
                                             }
                                             return event;
                                           }];
+    // A chevron's history list on a secondary click (a long press is the control's own).
+    [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskRightMouseDown
+                                          handler:^NSEvent *(NSEvent *event) {
+                                            return [NGNHeaderToolbar showHistoryMenuForEvent:event] ? nil : event;
+                                          }];
     // Back and forward from the mouse's side buttons and the trackpad.
     [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskOtherMouseDown
                                           handler:^NSEvent *(NSEvent *event) {
@@ -1150,29 +1331,12 @@ int main(int argc, const char *argv[]) {
                                             navigate(*ngn::navigationFor(input), event.window);
                                             return nil;
                                           }];
-    // "Swipe between pages" with two fingers: a sideways scroll that nothing scrolls sideways.
+    // "Swipe between pages" with two fingers (swipeScroll), for real scrolls and replayed ones.
     [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
                                           handler:^NSEvent *(NSEvent *event) {
-                                            if (!NSEvent.isSwipeTrackingFromScrollEventsEnabled ||
-                                                event.phase != NSEventPhaseBegan ||
-                                                fabs(event.scrollingDeltaX) <= fabs(event.scrollingDeltaY) ||
-                                                surfaceOf(event.window) == std::nullopt || scrollsSideways(event)) {
-                                              return event;
-                                            }
-                                            NSWindow *window = event.window;
-                                            [event trackSwipeEventWithOptions:NSEventSwipeTrackingLockDirection
-                                                     dampenAmountThresholdMin:-1
-                                                                          max:1
-                                                                 usingHandler:^(CGFloat amount, NSEventPhase phase, BOOL complete, BOOL *stop) {
-                                                                   if (phase == NSEventPhaseEnded && amount != 0) {
-                                                                     navigate(*ngn::navigationFor(
-                                                                                  amount > 0 ? ngn::NavigationInput::SwipeRight
-                                                                                             : ngn::NavigationInput::SwipeLeft),
-                                                                              window);
-                                                                   }
-                                                                 }];
-                                            return event;
+                                            return swipeScroll(event, event.window);
                                           }];
+    ngn::appkit::setReplayScrollMonitor([](NSEvent *event, NSWindow *window) { return swipeScroll(event, window); });
     if (!settings.test) {
       [app activateIgnoringOtherApps:YES];
     }

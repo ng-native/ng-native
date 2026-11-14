@@ -50,11 +50,12 @@ InputScript parseInputScript(const std::string &text) {
       if (!(words >> step.amount) || step.amount < 0) {
         return fail("wait needs a number of milliseconds");
       }
-    } else if (verb == "move" || verb == "down" || verb == "drag" || verb == "up") {
+    } else if (verb == "move" || verb == "down" || verb == "drag" || verb == "up" || verb == "secondary") {
       step.kind = verb == "move" ? InputStep::Kind::Move
           : verb == "down"       ? InputStep::Kind::Down
           : verb == "drag"       ? InputStep::Kind::Drag
-                                 : InputStep::Kind::Up;
+          : verb == "up"         ? InputStep::Kind::Up
+                                 : InputStep::Kind::Secondary;
       if (!(words >> step.x >> step.y)) {
         return fail(verb + " needs x and y");
       }

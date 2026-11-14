@@ -8,7 +8,14 @@ import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { Router } from '@angular/router';
-import { AppWindows, Menus, type NativeMenuEvent, type NativeMenus } from '@ng-native/device';
+import {
+  AppWindows,
+  Menus,
+  type NativeMenuEvent,
+  type NativeMenus,
+  type NativeWindowHistory,
+  type NativeWindows,
+} from '@ng-native/device';
 import { mount, type MountResult } from '@ng-native/platform';
 import { NativeNavigation, NavigationHistory, provideNativeRouter } from '@ng-native/router';
 import { createFakeFabric, settle } from '@ng-native/testing';
@@ -33,17 +40,37 @@ const idle = async () => {
 
 function menusHost() {
   const listeners = new Set<(event: NativeMenuEvent) => void>();
+  const histories: [number, NativeWindowHistory][] = [];
   const native: NativeMenus = {
     menuBar: true,
     appName: 'Notes',
     setMenuBar: () => {},
     setShortcuts: () => {},
+    setHistory: (surface, history) => void histories.push([surface, history]),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => void listeners.delete(listener);
     },
   };
-  return { native, send: (event: NativeMenuEvent) => listeners.forEach((one) => one(event)) };
+  return {
+    native,
+    histories,
+    send: (event: NativeMenuEvent) => listeners.forEach((one) => one(event)),
+  };
+}
+
+/** A host that opens a surface a window, 11 first. */
+function windowsHost(): NativeWindows {
+  let next = 11;
+  return {
+    open: async () => (next += 10) - 10,
+    close: () => {},
+    focus: () => {},
+    setTitle: () => {},
+    quit: () => {},
+    answerQuit: () => {},
+    subscribe: () => () => {},
+  };
 }
 
 async function start(windows: unknown = null) {
@@ -55,9 +82,14 @@ async function start(windows: unknown = null) {
         { path: '', component: page },
         { path: 'notes', component: page },
         { path: 'notes/:id', component: page },
-        { path: 'settings', component: page },
+        { path: 'settings', component: page, title: 'Settings' },
         { path: 'general', outlet: 'preferences', component: fixtures['GeneralPage']! },
-        { path: 'privacy', outlet: 'preferences', component: fixtures['GeneralPage']! },
+        {
+          path: 'privacy',
+          outlet: 'preferences',
+          component: fixtures['GeneralPage']!,
+          title: 'Privacy',
+        },
       ]),
       { provide: Menus.SOURCE, useValue: menus.native },
       { provide: AppWindows.SOURCE, useValue: windows },
@@ -71,6 +103,7 @@ async function start(windows: unknown = null) {
     router: injector.get(Router),
     navigation: injector.get(NativeNavigation),
     history: injector.get(NavigationHistory),
+    windows: injector.get(AppWindows),
   };
 }
 
@@ -105,6 +138,45 @@ describe('a window history', () => {
       main.backMenu().map((item) => item.label),
       ['/notes', '/'],
     );
+    // An entry is listed by its route's title where it has one.
+    await main.back();
+    await idle();
+    assert.deepEqual(
+      main.forwardMenu().map((item) => item.label),
+      ['Settings'],
+    );
+  });
+
+  it('goes as many entries as a pick from a chevron menu says, and no further than the ends', async () => {
+    const { router, navigation, history, menus } = await start();
+    await navigation.push('/notes');
+    await navigation.push('/notes/1');
+    await navigation.push('/settings');
+    await idle();
+    menus.send({ type: 'navigate', direction: 'back', steps: 2 });
+    await idle();
+    assert.equal(router.url, '/notes');
+    assert.equal(history.for().index(), 1);
+    menus.send({ type: 'navigate', direction: 'forward', steps: 5 });
+    await idle();
+    assert.equal(router.url, '/settings', 'past the end stops at the last entry');
+    menus.send({ type: 'navigate', direction: 'back', steps: 9 });
+    await idle();
+    assert.equal(router.url, '/');
+  });
+
+  it("tells the host each window's history by title, nearest first, as it changes", async () => {
+    const { router, menus, windows } = await start(windowsHost());
+    const window = await windows.open({ outlet: 'preferences', path: 'general' });
+    const surface = window!.surface;
+    await idle();
+    await router.navigate([{ outlets: { preferences: ['privacy'] } }]);
+    await idle();
+    const last = () => menus.histories.filter(([one]) => one === surface).at(-1)?.[1];
+    assert.deepEqual(last(), { back: ['/general'], forward: [] });
+    menus.send({ type: 'navigate', direction: 'back', surface });
+    await idle();
+    assert.deepEqual(last(), { back: [], forward: ['Privacy'] });
   });
 
   it('keeps the last 100 entries of a window, dropping the oldest, so a long session does not grow it', async () => {
