@@ -98,7 +98,10 @@ last window leaves the app running. A Dock click with no window open sends `reop
 frame autosaves under its key (`main`, a route outlet or a `restoreKey`) in the app's preferences
 and comes back there, within its size limits, when a window with that key opens again. A reload
 closes the windows with no key and keeps the rest for five seconds for the reloaded app to open
-again. An app that renders on its own surface instead gets that surface in a window.
+again. An app that renders on its own surface instead gets that surface in a window. Each window
+tells the app its size and its backing scale as it shows and whenever either changes, as when it
+moves to a display of another density, so its engine keeps its own media query size, pixel ratio
+and `--hairline`.
 
 The menu bar is the app's (`<menu-bar>`, through `NgNativeMenus`), drawn as NSApp's main menu
 once the app sets it, with the host's Developer menu kept before Help; until then the host's own

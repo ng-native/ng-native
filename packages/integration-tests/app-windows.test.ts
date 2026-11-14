@@ -414,6 +414,40 @@ describe('the app engine state each window shares', () => {
     assert.equal(brand(window), undefined);
   });
 
+  it("draws each window's hairline for the screen it is on, not the app's", async () => {
+    const host = fakeHost();
+    const { windows, app } = start('MainWindowApp', host);
+    const retina = (await windows.open(fixtures['ScreenWindow']!))!;
+    const plain = (await windows.open(fixtures['ScreenWindow']!))!;
+    await windows.open(fixtures['ScreenWindow']!);
+    await settle();
+    const [first, second, third] = made()
+      .slice(-3)
+      .map((window) => window.engine as Engine);
+    host.send({ type: 'resize', surface: retina.surface, width: 400, height: 600, scale: 2 });
+    host.send({ type: 'resize', surface: plain.surface, width: 400, height: 600, scale: 1 });
+    await settle();
+    assert.equal(first!.token('--hairline'), '0.5px');
+    assert.equal(second!.token('--hairline'), '1px');
+    // The app's hairline changing, as the key window moves to a 3x screen, leaves a window with a
+    // scale of its own alone, and reaches one the host has not sized yet.
+    app.engine.updateTokens({ '--hairline': { length: 1 / 3 }, '--extra': { length: 2 } });
+    assert.equal(first!.token('--hairline'), '0.5px');
+    assert.equal(second!.token('--hairline'), '1px');
+    assert.equal(first!.token('--extra'), '2px');
+    assert.equal(third!.token('--hairline'), app.engine.token('--hairline'));
+    // A window moved to a screen of another density takes that screen's; a resize that says no
+    // scale keeps the one it has.
+    host.send({ type: 'resize', surface: plain.surface, width: 400, height: 600, scale: 2 });
+    host.send({ type: 'resize', surface: retina.surface, width: 500, height: 600 });
+    await settle();
+    assert.equal(second!.token('--hairline'), '0.5px');
+    assert.equal(first!.token('--hairline'), '0.5px');
+    host.send({ type: 'resize', surface: retina.surface, width: 500, height: 600, scale: 3 });
+    await settle();
+    assert.equal(first!.token('--hairline'), `${1 / 3}px`);
+  });
+
   it('gives each window the tokens the app has, opened before or after', async () => {
     const host = fakeHost();
     const { windows, app } = start('MainWindowApp', host);

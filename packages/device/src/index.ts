@@ -15,6 +15,7 @@ export { ColorScheme, type ColorSchemeSource, type Scheme } from './color-scheme
 export {
   currentConditions,
   deviceTokens,
+  hairlineTokens,
   watchConditions,
   type WatchOptions,
 } from './conditions.ts';

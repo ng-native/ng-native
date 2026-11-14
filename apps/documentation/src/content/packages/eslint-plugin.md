@@ -220,7 +220,8 @@ not followed, and a template is left to Angular's own checks.
 Warns on `StyleSheet.hairlineWidth`. React Native works it out once, at startup, so a window that
 moves to a screen of another density, such as a Mac window dragged to a second display, keeps the
 first screen's value. The `--hairline` token is the same width, and `watchConditions()` updates it
-when the pixel ratio changes: write `var(--hairline)` in a stylesheet, or `border-hairline` with
+when the pixel ratio changes. On macOS each window's `--hairline` is the one for the display that
+window is on. Write `var(--hairline)` in a stylesheet, or `border-hairline` with
 [Tailwind](/packages/tailwind/utilities#hairline-utilities).
 
 It reads `StyleSheet.hairlineWidth` by name, in TypeScript. A `StyleSheet` renamed on import is not

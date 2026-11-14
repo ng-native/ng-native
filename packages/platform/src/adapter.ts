@@ -36,6 +36,7 @@ import {
 } from '@angular/core';
 import {
   AppWindows,
+  hairlineTokens,
   SafeArea,
   Screen,
   WINDOW_MOUNTER,
@@ -75,6 +76,7 @@ import {
   type FabricUIManager,
   type NativeAnimated,
   type StyleSheet,
+  type TokenValue,
 } from '@ng-native/fabric';
 import { calmLoadingBanner, type LoadingBanner } from './dev-loading-view.ts';
 import { installHotEpoch } from './hot-epoch.ts';
@@ -1441,6 +1443,12 @@ function windowMounter(
     mount(surface, component, { inputs = {}, providers, main }) {
       // The window's own size, once the host has told it; the app's until then.
       let own: Pick<Conditions, 'width' | 'height' | 'pixelRatio'> | null = null;
+      const withoutOwnHairline = (tokens: Readonly<Record<string, TokenValue>>) => {
+        if (!own?.pixelRatio || !('--hairline' in tokens)) return tokens;
+        const rest = { ...tokens };
+        delete rest['--hairline'];
+        return rest;
+      };
       const conditions = (): Conditions | undefined => {
         const app = appEngine.conditions ?? engineOptions.conditions;
         if (!own) return app;
@@ -1457,8 +1465,10 @@ function windowMounter(
       // otherwise reach the hidden surface only. A window's own (its components' unscoped CSS,
       // its safe area) stay its own.
       for (const sheet of appEngine.globalSheetsAdded) engine.addGlobalSheet(sheet);
+      // The app's hairline is for the app's screen. A window the host has given a scale of its own
+      // keeps the hairline of the screen it is on.
       const stopSharing = appEngine.watchShared((change) => {
-        if (change.kind === 'tokens') engine.updateTokens(change.tokens);
+        if (change.kind === 'tokens') engine.updateTokens(withoutOwnHairline(change.tokens));
         else if (change.sheet) engine.addGlobalSheet(change.sheet, change.replacing);
         else if (change.replacing) engine.removeGlobalSheet(change.replacing);
       });
@@ -1535,7 +1545,9 @@ function windowMounter(
       return {
         resize({ width, height, scale }) {
           const pixelRatio = scale ?? own?.pixelRatio;
+          const rescaled = pixelRatio !== undefined && pixelRatio !== own?.pixelRatio;
           own = { width, height, ...(pixelRatio && { pixelRatio }) };
+          if (rescaled) engine.updateTokens(hairlineTokens(pixelRatio));
           engine.updateConditions(conditions()!);
         },
         destroy: () => componentRef.destroy(),

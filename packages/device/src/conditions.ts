@@ -102,6 +102,14 @@ export function deviceTokens(): Record<string, TokenValue> {
 }
 
 /**
+ * The `--hairline` for a screen of `pixelRatio` pixels to the point: what a window on that screen
+ * draws its thinnest line with, as `watchConditions` gives the app's engine for the app's ratio.
+ */
+export function hairlineTokens(pixelRatio: number): Record<string, TokenValue> {
+  return { '--hairline': { length: hairlineAt(pixelRatio) } };
+}
+
+/**
  * Keep the engine's conditions current. Returns an unsubscribe, though an app that calls this at
  * bootstrap will never use it.
  */
@@ -147,7 +155,7 @@ export function watchConditions<Node>(
     resize({ width: window.width, height: window.height, pixelRatio: next }, systemFontScale());
     if (next === ratio) return;
     ratio = next;
-    engine.updateTokens?.({ '--hairline': { length: hairlineAt(next) } });
+    engine.updateTokens?.(hairlineTokens(next));
   });
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
   let heardReduceMotion = false;
