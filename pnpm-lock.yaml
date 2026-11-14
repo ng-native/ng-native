@@ -1436,6 +1436,19 @@ importers:
         specifier: ^18.0.14
         version: 18.0.14
 
+  packages/desktop:
+    dependencies:
+      react-native:
+        specifier: 0.88.0
+        version: 0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0)
+    devDependencies:
+      '@babel/core':
+        specifier: ^7.29.7
+        version: 7.29.7
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
   packages/device:
     dependencies:
       '@ng-native/fabric':

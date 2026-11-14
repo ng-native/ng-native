@@ -1,0 +1,13 @@
+// A window's content view, and the main container of one surface: it reports the mouse to the
+// core's InputSink, which hit tests and sends touches and hover to Fabric.
+#pragma once
+
+#import <AppKit/AppKit.h>
+
+#include "ngn/input.h"
+
+@interface NGNSurfaceView : NSView
+@property (nonatomic, readonly) facebook::react::SurfaceId surfaceId;
+// The sink must outlive the view.
+- (instancetype)initWithFrame:(NSRect)frame surfaceId:(facebook::react::SurfaceId)surfaceId input:(ngn::InputSink *)input;
+@end
