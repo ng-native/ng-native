@@ -780,8 +780,12 @@ describe('fonts in a window', () => {
     ]);
     await settle();
     await windows.windows()[0]!.close();
-    await settle();
-    const commits = fabric.calls.completeRoot;
+    // Under load the close's own last commit can land after one settle; wait until none arrive.
+    let commits = -1;
+    while (commits !== fabric.calls.completeRoot) {
+      commits = fabric.calls.completeRoot;
+      await settle();
+    }
 
     const registered = new Set<string>();
     await new FontRegistry({
