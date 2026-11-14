@@ -521,9 +521,9 @@ void InputDispatcher::rotate(const PointerInput &input, double degrees, GestureP
 
 folly::dynamic InputDispatcher::locationPayload(const Container &container, Tag target, Point point) const {
   auto page = pageOrigin(container);
-  auto origin = tree_.originIn(target, container.root).value_or(Point{0, 0});
-  return folly::dynamic::object("pageX", point.x + page.x)("pageY", point.y + page.y)("locationX", point.x - origin.x)(
-      "locationY", point.y - origin.y);
+  auto local = localPoint(target, container.root, point);
+  return folly::dynamic::object("pageX", point.x + page.x)("pageY", point.y + page.y)("locationX", local.x)(
+      "locationY", local.y);
 }
 
 void InputDispatcher::setCursor(Cursor cursor) {
@@ -545,8 +545,7 @@ void InputDispatcher::updateHover(const Container &container, std::vector<Tag> c
   // surface. Sending enter or leave here as well would deliver each twice.
   if (!chain.empty()) {
     if (const auto *node = tree_.find(chain.back())) {
-      auto origin = tree_.originIn(chain.back(), container.root).value_or(Point{0, 0});
-      event.offsetPoint = {input.point.x - origin.x, input.point.y - origin.y};
+      event.offsetPoint = localPoint(chain.back(), container.root, input.point);
       emitPointer(PointerKind::Move, *node, event);
     }
     pointerSurface_ = container.surfaceId;
@@ -573,10 +572,9 @@ void InputDispatcher::sendTouch(TouchPhase phase, const PointerInput &input) {
   // Touches are reported in the surface's coordinates (page) and the target's (offset), whichever
   // container the press is in.
   auto rootOrigin = pageOrigin(container->second);
-  auto targetOrigin = tree_.originIn(press_->target, root).value_or(Point{0, 0});
   Touch touch;
   touch.pagePoint = {input.point.x + rootOrigin.x, input.point.y + rootOrigin.y};
-  touch.offsetPoint = {input.point.x - targetOrigin.x, input.point.y - targetOrigin.y};
+  touch.offsetPoint = localPoint(press_->target, root, input.point);
   touch.screenPoint = input.screenPoint;
   touch.identifier = 0;
   touch.target = press_->target;
@@ -590,6 +588,14 @@ void InputDispatcher::sendTouch(TouchPhase phase, const PointerInput &input) {
     event.targetTouches.insert(touch);
   }
   emitTouch(phase, *target, event);
+}
+
+Point InputDispatcher::localPoint(Tag tag, Tag root, Point point) const {
+  if (auto local = tree_.pointIn(tag, root, point)) {
+    return *local;
+  }
+  auto origin = tree_.originIn(tag, root).value_or(Point{0, 0});
+  return {point.x - origin.x, point.y - origin.y};
 }
 
 Point InputDispatcher::pageOrigin(const Container &container) const {

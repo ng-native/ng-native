@@ -159,8 +159,8 @@ class GestureHandler {
   void untrack(int pointerId);
   Point average() const;
   Point velocity() const;
-  // The view's origin in the surface, and its size.
-  Point viewOrigin() const;
+  // A point in the surface in the handler's view, through its transforms, as UIKit's locationInView:.
+  Point local(Point page) const;
   // Runs `fn` after `ms` unless the handler resets first.
   void after(double ms, std::function<void()> fn);
   void clearTimer();

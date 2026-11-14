@@ -12,7 +12,9 @@ the core: Linking, Appearance, AccessibilityInfo, AppState, DeviceInfo, Platform
 I18nManager, Alert (NSAlert), Clipboard, Networking (streaming, progress, cookies, redirects),
 WebSocket, Blob, FileReader, ImageLoader and `@react-native-async-storage` (2.x and 3.x,
 file-backed). It has no React Native DevTools yet. A view's `transform` is drawn on its layer, about
-its `transform-origin`, as React Native iOS draws it.
+its `transform-origin`, as React Native iOS draws it, and the view is hit where it is drawn: a
+click, a pointer event or a gesture lands on a moved, scaled or rotated view by its drawn shape, and
+its `locationX`, `offsetX` and gesture `x` are in the view's own coordinates.
 
 ## Gestures, worklets and Reanimated
 

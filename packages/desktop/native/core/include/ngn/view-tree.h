@@ -46,7 +46,8 @@ class ViewTree {
   // The views under `point` (in `root`'s coordinates), from `root` down to the deepest, as React
   // Native iOS's hitTest:withEvent: finds them: later siblings are on top, `pointerEvents` is
   // honoured, hidden views are skipped, and a view clips the hit test to its bounds when it
-  // clips its content or nothing of it overflows. Empty when nothing is hit.
+  // clips its content or nothing of it overflows. A view with a `transform` is hit where its
+  // layer draws it, moved, scaled or rotated. Empty when nothing is hit.
   std::vector<Tag> hitTest(Tag root, Point point) const;
 
   // A screen below the top of its stack: kept mounted, but neither drawn nor hit.
@@ -61,10 +62,18 @@ class ViewTree {
   std::vector<Tag> chain(Tag tag, Tag root) const;
 
   // Where `tag`'s origin is in `root`'s coordinates, or nothing when `tag` is not under `root`.
+  // Transforms are not applied: this is the layout's origin.
   std::optional<Point> originIn(Tag tag, Tag root) const;
+
+  // `point`, in `root`'s coordinates, in `tag`'s own, through every transform between them, as
+  // UIKit's convertPoint:fromView: does. Nothing when `tag` is not under `root` or a transform
+  // flattens it to a line.
+  std::optional<Point> pointIn(Tag tag, Tag root, Point point) const;
 
  private:
   bool hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) const;
+  // `point` in the parent's coordinates (its scroll already taken off) in `child`'s own.
+  static std::optional<Point> toChild(const Node &child, Point point);
   Point scrollOffset(Tag tag) const;
 
   std::unordered_map<Tag, Node> nodes_;

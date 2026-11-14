@@ -167,6 +167,33 @@ NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
 
 static ngn::InputDispatcher *gViewInput;
 
+// A view's backing layer, holding the transform from its props. AppKit puts a layer-backed view's
+// own geometry back on its layer as it lays out and displays the window, which sets the transform
+// back to the identity (the view has no rotation of its own); this layer keeps the view's.
+@interface NGNViewLayer : CALayer
+@property (nonatomic) CATransform3D viewTransform;
+@end
+
+@implementation NGNViewLayer
+
+- (instancetype)init {
+  if ((self = [super init])) {
+    _viewTransform = CATransform3DIdentity;
+  }
+  return self;
+}
+
+- (void)setTransform:(CATransform3D)transform {
+  [super setTransform:_viewTransform];
+}
+
+- (void)setViewTransform:(CATransform3D)transform {
+  _viewTransform = transform;
+  [super setTransform:transform];
+}
+
+@end
+
 @implementation NGNView {
   Props::Shared _props;
   LayoutMetrics _layout;
@@ -177,10 +204,13 @@ static ngn::InputDispatcher *gViewInput;
   // drawRect draws the box (ngn/view-box.h), which the layer does not.
   BOOL _boxDrawn;
   NSMutableArray<CALayer *> *_shadowLayers;
+  // The transform from the props, as NGNViewLayer holds it.
+  CATransform3D _transform;
 }
 
 - (instancetype)initWithShadowView:(const ShadowView &)view {
   if ((self = [super initWithFrame:NSZeroRect])) {
+    _transform = CATransform3DIdentity;
     _reactTag = view.tag;
     _surfaceId = view.surfaceId;
     _componentName = [NSString stringWithUTF8String:view.componentName];
@@ -199,6 +229,43 @@ static ngn::InputDispatcher *gViewInput;
 
 - (BOOL)isFlipped {
   return YES;
+}
+
+- (CALayer *)makeBackingLayer {
+  NGNViewLayer *layer = [NGNViewLayer layer];
+  layer.contentsScale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
+  return layer;
+}
+
+// A layer of the view's own making draws its contents at the scale it is given, not the screen's.
+- (void)viewDidChangeBackingProperties {
+  [super viewDidChangeBackingProperties];
+  if (self.window) {
+    self.layer.contentsScale = self.window.backingScaleFactor;
+  }
+}
+
+// AppKit's hit test goes by the frame and ignores the layer's transform. A transformed view is
+// hit where its layer draws it, as the core's hit test finds it (ViewTree::pointIn): `point` (in
+// the superview's coordinates) goes back through the transform, about the frame's corner, before
+// AppKit tests the frame and the subviews.
+- (NSView *)hitTest:(NSPoint)point {
+  CATransform3D t = _transform;
+  if (CATransform3DIsIdentity(t)) {
+    return [super hitTest:point];
+  }
+  const CGFloat columns[16] = {
+      t.m11, t.m12, t.m13, t.m14, t.m21, t.m22, t.m23, t.m24, t.m31, t.m32, t.m33, t.m34, t.m41, t.m42, t.m43, t.m44};
+  Transform matrix;
+  for (size_t i = 0; i < 16; ++i) {
+    matrix.matrix[i] = static_cast<Float>(columns[i]);
+  }
+  NSPoint origin = self.frame.origin;
+  auto local = ngn::layerPointAt(matrix, {static_cast<Float>(point.x - origin.x), static_cast<Float>(point.y - origin.y)});
+  if (!local) {
+    return nil;
+  }
+  return [super hitTest:NSMakePoint(origin.x + local->x, origin.y + local->y)];
 }
 
 - (BOOL)acceptsFirstResponder {
@@ -563,8 +630,13 @@ static BOOL focusFromKeyboard() {
     const auto &m = matrix->matrix;
     transform = CATransform3D{m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15]};
   }
-  if (!CATransform3DEqualToTransform(layer.transform, transform)) {
-    layer.transform = transform;
+  if (!CATransform3DEqualToTransform(_transform, transform)) {
+    _transform = transform;
+    if ([layer isKindOfClass:NGNViewLayer.class]) {
+      ((NGNViewLayer *)layer).viewTransform = transform;
+    } else {
+      layer.transform = transform;
+    }
   }
   if (box.drawn || _boxDrawn) {
     [self setNeedsDisplay:YES];

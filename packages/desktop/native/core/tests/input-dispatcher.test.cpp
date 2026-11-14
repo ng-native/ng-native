@@ -574,3 +574,27 @@ TEST_CASE("a gesture handler sees the press, its moves and the pointer's hover, 
   f.input.pointerLeave(1, Fixture::at({390, 290}));
   CHECK(sent.back() == "2 5");
 }
+
+TEST_CASE("a transformed view is pressed where it is drawn, and reports its own coordinates") {
+  Fixture f;
+  // 4 (50,50 100x100) drawn at half size about its centre: 75,75 to 125,125.
+  auto props = std::make_shared<ViewProps>();
+  props->transform = Transform::Scale(0.5, 0.5, 1);
+  auto view = f.tree.find(4)->view;
+  view.props = props;
+  f.tree.update(view);
+
+  f.input.pointerDown(Fixture::at({60, 60}));
+  f.input.pointerUp(Fixture::at({60, 60}));
+  // Inside the layout's frame but outside what is drawn: 2 is what is there.
+  CHECK(only(f.input.events, "touch").front() == "touch start 2 page 60,60 offset 50,50 touches 1");
+
+  f.input.events.clear();
+  f.input.pointerDown(Fixture::at({100, 100}));
+  CHECK(only(f.input.events, "touch").front() == "touch start 4 page 100,100 offset 50,50 touches 1");
+  f.input.pointerMove(Fixture::at({110, 100}));
+  // A move of 10 on screen is 20 of the view's own.
+  CHECK(only(f.input.events, "touch").back() == "touch move 4 page 110,100 offset 70,50 touches 1");
+  REQUIRE_FALSE(f.input.pointerEvents.empty());
+  CHECK(f.input.pointerEvents.back().offsetPoint.x == doctest::Approx(70));
+}
