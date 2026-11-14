@@ -1,5 +1,8 @@
 #import "host-view.h"
 
+#import <QuartzCore/QuartzCore.h>
+
+#import "cg-canvas.h"
 #import "header-toolbar.h"
 #import "image-view.h"
 #import "modal-host-view.h"
@@ -14,6 +17,7 @@
 
 #include "ngn/accessibility.h"
 #include "ngn/symbol.h"
+#include "ngn/view-box.h"
 
 #include <react/renderer/components/iostextinput/TextInputProps.h>
 #include <react/renderer/components/text/ParagraphState.h>
@@ -32,6 +36,25 @@ NSColor *nsColor(const SharedColor &color) {
   }
   auto c = colorComponentsFromColor(color);
   return [NSColor colorWithSRGBRed:c.red green:c.green blue:c.blue alpha:c.alpha];
+}
+
+CGColorRef cgColor(uint32_t argb) {
+  return [NSColor colorWithSRGBRed:((argb >> 16) & 0xff) / 255.0
+                             green:((argb >> 8) & 0xff) / 255.0
+                              blue:(argb & 0xff) / 255.0
+                             alpha:(argb >> 24) / 255.0]
+      .CGColor;
+}
+
+// A mask layer over `bounds` showing `path`.
+CAShapeLayer *shapeLayer(const ngn::SvgPath &path, BOOL evenOdd, NSRect bounds) {
+  CAShapeLayer *mask = [CAShapeLayer layer];
+  mask.frame = bounds;
+  CGPathRef p = NGNCreatePath(path);
+  mask.path = p;
+  CGPathRelease(p);
+  mask.fillRule = evenOdd ? kCAFillRuleEvenOdd : kCAFillRuleNonZero;
+  return mask;
 }
 
 NSString *nsString(const std::string &s) {
@@ -144,6 +167,9 @@ static ngn::InputDispatcher *gViewInput;
   EventEmitter::Shared _emitter;
   ngn::DesktopProps _desktop;
   BOOL _focusVisible;
+  // drawRect draws the box (ngn/view-box.h), which the layer does not.
+  BOOL _boxDrawn;
+  NSMutableArray<CALayer *> *_shadowLayers;
 }
 
 - (instancetype)initWithShadowView:(const ShadowView &)view {
@@ -515,18 +541,60 @@ static BOOL focusFromKeyboard() {
     return;
   }
   CALayer *layer = self.layer;
-  layer.backgroundColor = nsColor(viewProps->backgroundColor).CGColor;
   self.alphaValue = viewProps->opacity;
-  // One radius, width and colour for now; per-corner and per-side drawing comes with the
-  // CSS-engine parity work.
-  auto border = viewProps->resolveBorderMetrics(_layout);
-  layer.cornerRadius = border.borderRadii.topLeft.horizontal;
-  layer.borderWidth = border.borderWidths.left;
-  layer.borderColor = nsColor(border.borderColors.left).CGColor;
+  auto box = ngn::viewBox(*viewProps, _layout);
+  layer.backgroundColor = box.background ? cgColor(*box.background) : nil;
+  layer.cornerRadius = box.cornerRadius;
+  layer.borderWidth = box.borderWidth;
+  layer.borderColor = box.borderColor ? cgColor(*box.borderColor) : nil;
   layer.masksToBounds = viewProps->yogaStyle.overflow() != facebook::yoga::Overflow::Visible;
+  layer.mask = box.clip ? shapeLayer(*box.clip, NO, self.bounds) : nil;
+  [self applyShadows:box.shadows];
+  if (box.drawn || _boxDrawn) {
+    [self setNeedsDisplay:YES];
+  }
+  _boxDrawn = box.drawn;
+}
+
+// Each box shadow as a layer under the children, as RCTViewComponentView adds them.
+- (void)applyShadows:(const std::vector<ngn::BoxShadowLayer> &)shadows {
+  for (CALayer *old in _shadowLayers) {
+    [old removeFromSuperlayer];
+  }
+  [_shadowLayers removeAllObjects];
+  if (shadows.empty()) {
+    return;
+  }
+  if (_shadowLayers == nil) {
+    _shadowLayers = [NSMutableArray array];
+  }
+  for (const auto &shadow : shadows) {
+    CALayer *layer = [CALayer layer];
+    layer.frame = self.bounds;
+    layer.zPosition = -1000;
+    layer.shadowColor = cgColor(shadow.argb);
+    layer.shadowOpacity = 1;
+    layer.shadowOffset = CGSizeZero;
+    layer.shadowRadius = shadow.radius;
+    CGPathRef path = NGNCreatePath(shadow.shadowPath);
+    layer.shadowPath = path;
+    CGPathRelease(path);
+    layer.mask = shapeLayer(shadow.mask, shadow.maskEvenOdd, self.bounds);
+    [self.layer addSublayer:layer];
+    [_shadowLayers addObject:layer];
+  }
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
+  auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
+  if (_boxDrawn && viewProps) {
+    CGContextRef context = NSGraphicsContext.currentContext.CGContext;
+    CGFloat scale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
+    auto canvas = NGNMakeCGCanvas(context, self.bounds.size, scale, nil);
+    CGContextSaveGState(context);
+    ngn::drawViewBox(*viewProps, _layout, *canvas);
+    CGContextRestoreGState(context);
+  }
   if (![_componentName isEqualToString:@"Paragraph"] || !_state) {
     return;
   }

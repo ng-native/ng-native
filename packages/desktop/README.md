@@ -13,6 +13,15 @@ I18nManager, Alert (NSAlert), Clipboard, Networking (streaming, progress, cookie
 WebSocket, Blob, FileReader, ImageLoader and `@react-native-async-storage` (2.x and 3.x,
 file-backed). It has no React Native DevTools yet.
 
+A view's box is painted as React Native iOS paints it (`view-box.h`): one corner radius and one
+solid border are the layer's own, drawn over the children only when the view clips or the border
+is hidden, and any other box is drawn under the children, with each corner's radius and each
+side's width and colour (the start and end sides by the layout direction), a dashed or dotted
+border in one colour, and the background colour in the border box's shape. Linear and radial
+gradients (`background-image`) are drawn with their size, position and repeat, and each box shadow,
+outer or inset, is a blurred layer under the children. A view that clips its overflow also clips
+its outer shadows.
+
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its
 window, stacked on a sheet already there. It takes its content root's CSS width and height, or
 480 points wide and as tall as its content lays out, measured from the shadow tree in a second

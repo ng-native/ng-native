@@ -98,6 +98,7 @@ add_library(ngn_core STATIC
     core/src/tabs-host.cpp
     core/src/download.cpp
     core/src/updates.cpp
+    core/src/view-box.cpp
     core/src/view-tree.cpp
     core/src/modules/accessibility-manager.cpp
     core/src/modules/address-search.cpp

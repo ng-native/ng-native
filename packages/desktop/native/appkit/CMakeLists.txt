@@ -38,6 +38,7 @@ add_executable(ngn-macos
     split-view.mm
     surface-view.mm
     svg-view.mm
+    cg-canvas.mm
     tray-and-dock.mm
     store-review.mm
     system.mm
