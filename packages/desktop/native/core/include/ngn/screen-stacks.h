@@ -8,6 +8,7 @@
 // hears nothing, as on iOS when JavaScript pops.
 #pragma once
 
+#include "ngn/back-swipe.h"
 #include "ngn/view-tree.h"
 
 #include <optional>
@@ -59,6 +60,11 @@ class ScreenStacks {
     bool operator==(const FrontHeader &) const = default;
   };
   std::optional<FrontHeader> frontHeader(const ViewTree &tree, Tag root) const;
+
+  // What a back swipe in `root`'s window moves: the innermost stack in the window's content with a
+  // screen below its last pushed one, and nothing presented over it. Nothing when that screen has
+  // `gestureEnabled: false` or `stackAnimation: none`, as on iOS.
+  std::optional<BackSwipeTarget> backSwipeTarget(const ViewTree &tree, Tag root) const;
 
  protected:
   // Where events leave the core: through the view's event emitter by default, recorded in tests.

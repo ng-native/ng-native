@@ -1,6 +1,8 @@
 // A native stack's header as the window's NSToolbar: the screen in front's
-// RNSScreenStackHeaderConfig fills it. Its title is the window title; a back chevron leads when the
-// screen has one below it; left bar buttons and left header items follow it, and right ones
+// RNSScreenStackHeaderConfig fills it. Its title is the window title; the back and forward chevrons
+// lead when the window has history (or back alone when the app reports none and the screen has
+// one below it), each listing its way's entries on a long press or a secondary click; left bar
+// buttons and left header items follow it, and right ones
 // trail. A header item's Angular content (an RNSScreenStackHeaderSubview) moves into its toolbar
 // item as a container of its own, hit-tested from the item's root.
 //
@@ -9,6 +11,7 @@
 
 #import "host-view.h"
 
+#include "ngn/app-menus.h"
 #include "ngn/input.h"
 
 #include <functional>
@@ -26,6 +29,10 @@
 // which views root a container of their own.
 @property (class, nonatomic) ngn::InputSink *input;
 @property (class, nonatomic) std::function<void(NSInteger tag, BOOL isRoot)> containerRootChanged;
+// Set once by the host: where a chevron's click, or a pick from its menu, goes when the window
+// reports its history.
+@property (class, nonatomic)
+    std::function<void(NSWindow *window, ngn::NavigationDirection direction, int steps)> navigate;
 
 - (instancetype)initWithWindow:(NSWindow *)window;
 // The window's content is a split view controller: the sidebar button and the tracking separator
@@ -33,6 +40,11 @@
 @property (nonatomic) BOOL sidebar;
 // The header in front, or nil for none. `screen` hears the back button.
 - (void)showConfig:(NGNHeaderConfigView *)config screen:(NGNView *)screen canGoBack:(BOOL)canGoBack;
+// A secondary click on a chevron shows its way's entries, in place of the toolbar's own menu that
+// the toolbar would show. True when it did.
++ (BOOL)showHistoryMenuForEvent:(NSEvent *)event;
+// The window's history as the app reports it, or nothing for an app that reports none.
+- (void)showHistory:(const std::optional<ngn::WindowHistory> &)history;
 // Rebuilds the bar when the config in front (or a view under it) changed.
 - (void)refreshIfShowing:(NGNView *)view;
 @end

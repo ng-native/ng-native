@@ -67,3 +67,13 @@ TEST_CASE("a choose step names the item, spaces and all, that the next menu to o
   CHECK(ngn::parseInputScript("choose").error == "line 1: choose needs an item's title");
   CHECK(ngn::parseInputScript("choose   ").error == "line 1: choose needs an item's title");
 }
+
+TEST_CASE("a secondary step is a secondary click at its point") {
+  auto script = ngn::parseInputScript("secondary 150 26");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 1);
+  CHECK(script.steps[0].kind == Kind::Secondary);
+  CHECK(script.steps[0].x == 150);
+  CHECK(script.steps[0].y == 26);
+  CHECK(ngn::parseInputScript("secondary 1").error == "line 1: secondary needs x and y");
+}

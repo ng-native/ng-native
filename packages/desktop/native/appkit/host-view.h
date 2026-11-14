@@ -19,6 +19,12 @@
 @property (nonatomic, readonly, copy) NSString *componentName;
 // A screen below the top of its stack: hidden, and kept mounted.
 @property (nonatomic) BOOL covered;
+// A back swipe's frame (back-swipe.h): the screen in front moved right by `swipeOffset` points
+// and faded to `swipeOpacity`, and the covered screen below it drawn while `swipeShown`. Layout
+// keeps them until the swipe sets them back.
+@property (nonatomic) CGFloat swipeOffset;
+@property (nonatomic) CGFloat swipeOpacity;
+@property (nonatomic) BOOL swipeShown;
 - (instancetype)initWithShadowView:(const facebook::react::ShadowView &)view;
 - (void)updateProps:(const facebook::react::Props::Shared &)props;
 - (void)updateLayout:(const facebook::react::LayoutMetrics &)metrics;

@@ -13,6 +13,7 @@
 
 #include <react/renderer/core/ReactPrimitives.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -47,6 +48,39 @@ enum class NavigationInput { MouseButton4, MouseButton5, SwipeLeft, SwipeRight }
 std::optional<NavigationDirection> navigationFor(NavigationInput input);
 std::optional<NavigationDirection> navigationFor(const KeyChord &chord);
 
+// A window's back and forward history, as the app's router reports it (`setHistory`): the titles
+// of the entries behind and ahead, nearest first.
+struct WindowHistory {
+  std::vector<std::string> back;
+  std::vector<std::string> forward;
+  bool operator==(const WindowHistory &) const = default;
+};
+
+// The back and forward chevrons leading a window's toolbar.
+struct HistoryButtons {
+  bool shown{false};
+  bool backEnabled{false};
+  bool forwardEnabled{false};
+  // Whether a click goes through the window's history (`navigate`), rather than popping the stack
+  // in front (an app that reports no history).
+  bool fromHistory{false};
+  bool operator==(const HistoryButtons &) const = default;
+};
+
+// The pair shows when the window has history, or, for an app that reports none, when the stack in
+// front has a screen below (back only). The header's `hideBackButton` hides it, and its own left
+// items replace it.
+HistoryButtons historyButtons(const std::optional<WindowHistory> &history, bool stackCanGoBack, bool hidden);
+
+// The list a long press or a secondary click on a chevron shows: the entries that way, nearest
+// first, each with how many steps it is.
+struct HistoryMenuItem {
+  std::string title;
+  int steps{1};
+  bool operator==(const HistoryMenuItem &) const = default;
+};
+std::vector<HistoryMenuItem> historyMenu(const WindowHistory &history, NavigationDirection direction);
+
 class MenuBackend {
  public:
   virtual ~MenuBackend() = default;
@@ -75,7 +109,17 @@ class MenuHost {
   // A key press, before the menus and the focused view see it. True when the app's shortcut takes
   // it, and the press goes no further.
   bool keyDown(const KeyChord &chord, bool textInputFocused);
-  void navigate(NavigationDirection direction, std::optional<SurfaceId> surface);
+  // Back or forward `steps` entries (one, but for a pick from the history menu).
+  void navigate(NavigationDirection direction, std::optional<SurfaceId> surface, int steps = 1);
+
+  // --- the windows' history, as the app reports it ---
+  void setHistory(SurfaceId surface, WindowHistory history);
+  // Nothing for a window the app reported none for.
+  std::optional<WindowHistory> history(SurfaceId surface) const;
+  // A window closed: its history goes with it.
+  void forgetHistory(SurfaceId surface);
+  // Told, on the thread `setHistory` came on, of a window whose history changed. Set once.
+  std::function<void(SurfaceId)> historyChanged;
 
   std::shared_ptr<void> listen(Listener listener);
 
@@ -87,6 +131,7 @@ class MenuHost {
   mutable std::mutex mutex_;
   std::vector<std::pair<std::string, KeyChord>> shortcuts_;
   std::map<int, Listener> listeners_;
+  std::map<SurfaceId, WindowHistory> histories_;
   int next_{0};
 };
 

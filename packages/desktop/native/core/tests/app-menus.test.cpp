@@ -248,3 +248,61 @@ TEST_CASE("a context menu reads the entries a view's contextMenu prop gives") {
   CHECK(entries[3].items[0].id == "3.0");
   CHECK(ngn::parseMenu(nullptr).empty());
 }
+
+TEST_CASE("the app reports each window's history, and the host hears when it changes") {
+  Fixture f;
+  std::vector<ngn::SurfaceId> changed;
+  f.host->historyChanged = [&](ngn::SurfaceId surface) { changed.push_back(surface); };
+  CHECK_FALSE(f.host->history(11));
+
+  f.module->call(
+      "setHistory",
+      dynamic::array(11, dynamic::object("back", dynamic::array("Notes", "Home"))("forward", dynamic::array("Note 4"))));
+  CHECK(f.host->history(11) == ngn::WindowHistory{.back = {"Notes", "Home"}, .forward = {"Note 4"}});
+  // The same history again is no change; another window's is its own.
+  f.module->call(
+      "setHistory",
+      dynamic::array(11, dynamic::object("back", dynamic::array("Notes", "Home"))("forward", dynamic::array("Note 4"))));
+  f.module->call("setHistory", dynamic::array(21, dynamic::object("back", dynamic::array())));
+  CHECK(changed == std::vector<ngn::SurfaceId>{11, 21});
+  CHECK(f.host->history(21) == ngn::WindowHistory{});
+  // Without a window, nothing is kept.
+  f.module->call("setHistory", dynamic::array(nullptr, dynamic::object("back", dynamic::array("Home"))));
+  CHECK(changed.size() == 2);
+
+  f.host->forgetHistory(11);
+  CHECK_FALSE(f.host->history(11));
+}
+
+TEST_CASE("the chevrons show the window's history, or the stack's back for an app that reports none") {
+  using ngn::HistoryButtons;
+  using ngn::WindowHistory;
+  // No history reported: back only, while the stack has a screen below.
+  CHECK(ngn::historyButtons(std::nullopt, true, false) == HistoryButtons{.shown = true, .backEnabled = true});
+  CHECK(ngn::historyButtons(std::nullopt, false, false) == HistoryButtons{});
+  // Reported: the pair while there is anywhere to go, each enabled by its side, whatever the stack.
+  CHECK(ngn::historyButtons(WindowHistory{.back = {"Home"}}, false, false) ==
+        HistoryButtons{.shown = true, .backEnabled = true, .fromHistory = true});
+  CHECK(ngn::historyButtons(WindowHistory{.forward = {"Note"}}, true, false) ==
+        HistoryButtons{.shown = true, .forwardEnabled = true, .fromHistory = true});
+  CHECK(ngn::historyButtons(WindowHistory{}, true, false) == HistoryButtons{.fromHistory = true});
+  // hideBackButton, or the header's own left items, hide the pair.
+  CHECK(ngn::historyButtons(WindowHistory{.back = {"Home"}}, true, true) == HistoryButtons{});
+}
+
+TEST_CASE("a chevron's menu lists that way's entries nearest first, and a pick navigates that many steps") {
+  Fixture f;
+  ngn::WindowHistory history{.back = {"Notes", "Home"}, .forward = {"Note 4", "Note 5", "Note 6"}};
+  using ngn::HistoryMenuItem;
+  using ngn::NavigationDirection;
+  CHECK(ngn::historyMenu(history, NavigationDirection::Back) ==
+        std::vector<HistoryMenuItem>{{.title = "Notes", .steps = 1}, {.title = "Home", .steps = 2}});
+  CHECK(ngn::historyMenu(history, NavigationDirection::Forward).back() == HistoryMenuItem{.title = "Note 6", .steps = 3});
+
+  f.host->navigate(NavigationDirection::Back, 11, 2);
+  f.host->navigate(NavigationDirection::Forward, 11, 1);
+  CHECK(f.events == std::vector<std::string>{
+                        "ngNativeMenus {\"direction\":\"back\",\"steps\":2,\"surface\":11,\"type\":\"navigate\"}",
+                        "ngNativeMenus {\"direction\":\"forward\",\"surface\":11,\"type\":\"navigate\"}",
+                    });
+}

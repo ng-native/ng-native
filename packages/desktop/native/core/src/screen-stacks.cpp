@@ -42,6 +42,31 @@ size_t baseOf(const ViewTree &tree, const std::vector<Tag> &screens) {
   return 0;
 }
 
+// How deep `stack` is in `root`'s window content, or -1 where it is not in it: under a covered
+// screen, or in a container of its own that is not part of the window.
+int depthIn(const ViewTree &tree, Tag stack, Tag root) {
+  int depth = 0;
+  Tag at = stack;
+  for (; at != root && at != -1; depth++) {
+    if (tree.covered(at) || (tree.isContainerRoot(at) && !partOfWindow(tree.find(at)))) {
+      return -1;
+    }
+    const auto *node = tree.find(at);
+    at = node == nullptr ? -1 : node->parent;
+  }
+  return at == root ? depth : -1;
+}
+
+std::vector<Tag> screensOf(const ViewTree &tree, const ViewTree::Node &stack) {
+  std::vector<Tag> screens;
+  for (Tag child : stack.children) {
+    if (isScreen(tree.find(child))) {
+      screens.push_back(child);
+    }
+  }
+  return screens;
+}
+
 } // namespace
 
 void ScreenStacks::propsChanged(const ViewTree &tree, Tag tag) {
@@ -170,18 +195,8 @@ std::optional<ScreenStacks::FrontHeader> ScreenStacks::frontHeader(const ViewTre
         break;
       }
     }
-    // How deep the stack is in `root`'s container, or not in it at all.
-    int depth = 0;
-    Tag at = stack;
-    for (; at != root && at != -1; depth++) {
-      if (tree.covered(at) || (tree.isContainerRoot(at) && !partOfWindow(tree.find(at)))) {
-        at = -1;
-        break;
-      }
-      const auto *node = tree.find(at);
-      at = node == nullptr ? -1 : node->parent;
-    }
-    if (at != root || depth <= frontDepth) {
+    int depth = depthIn(tree, stack, root);
+    if (depth <= frontDepth) {
       continue;
     }
     for (Tag child : screen->children) {
@@ -192,6 +207,40 @@ std::optional<ScreenStacks::FrontHeader> ScreenStacks::frontHeader(const ViewTre
         break;
       }
     }
+  }
+  return front;
+}
+
+std::optional<BackSwipeTarget> ScreenStacks::backSwipeTarget(const ViewTree &tree, Tag root) const {
+  std::optional<BackSwipeTarget> front;
+  int frontDepth = -1;
+  for (const auto &[stack, _] : tops_) {
+    const auto *stackNode = tree.find(stack);
+    if (stackNode == nullptr) {
+      continue;
+    }
+    auto screens = screensOf(tree, *stackNode);
+    size_t base = screens.empty() ? 0 : baseOf(tree, screens);
+    // Nothing to go back to, or a presented screen over the pushed one, which a swipe leaves be.
+    if (base == 0 || base + 1 != screens.size() || presented(tree.find(screens[base]))) {
+      continue;
+    }
+    int depth = depthIn(tree, stack, root);
+    if (depth <= frontDepth) {
+      continue;
+    }
+    frontDepth = depth;
+    front = BackSwipeTarget{.stack = stack, .top = screens[base], .below = screens[base - 1]};
+  }
+  if (!front) {
+    return std::nullopt;
+  }
+  const auto *top = tree.find(front->top);
+  if (const auto *props = top && top->view.props ? dynamic_cast<const ScreenProps *>(top->view.props.get()) : nullptr) {
+    if (!props->gestureEnabled || props->stackAnimation == "none") {
+      return std::nullopt;
+    }
+    front->style = props->stackAnimation == "fade" ? SwipeStyle::Fade : SwipeStyle::Slide;
   }
   return front;
 }

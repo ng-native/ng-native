@@ -10,7 +10,10 @@ ScreenProps::ScreenProps(const PropsParserContext &context, const ScreenProps &s
     : ViewProps(context, sourceProps, rawProps),
       stackPresentation(
           convertRawProp(context, rawProps, "stackPresentation", sourceProps.stackPresentation, std::string{"push"})),
-      anchor(convertRawProp(context, rawProps, "anchor", sourceProps.anchor, 0)) {}
+      anchor(convertRawProp(context, rawProps, "anchor", sourceProps.anchor, 0)),
+      gestureEnabled(convertRawProp(context, rawProps, "gestureEnabled", sourceProps.gestureEnabled, true)),
+      stackAnimation(
+          convertRawProp(context, rawProps, "stackAnimation", sourceProps.stackAnimation, std::string{"default"})) {}
 
 std::optional<ModalPresentation> screenPresentation(const Props &props) {
   const auto *screen = dynamic_cast<const ScreenProps *>(&props);

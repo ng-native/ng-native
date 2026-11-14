@@ -9,8 +9,9 @@
  * window its named one), so a window's history is its outlet's. The OS's back and forward inputs
  * arrive through `Menus.onNavigate` from `@ng-native/device`, with the window they were in.
  */
-import { DestroyRef, Service, computed, inject, signal, type Signal } from '@angular/core';
+import { DestroyRef, Service, computed, effect, inject, signal, type Signal } from '@angular/core';
 import {
+  ActivatedRouteSnapshot,
   ChildrenOutletContexts,
   NavigationEnd,
   PRIMARY_OUTLET,
@@ -24,12 +25,14 @@ import { AppWindows, Menus, type MenuItemModel } from '@ng-native/device';
 /** One window's history: the outlet's paths, oldest first, and which one is showing. */
 export interface OutletHistory {
   readonly entries: Signal<readonly string[]>;
+  /** Each entry's title: its route's `title` where it has one, else its path. */
+  readonly titles: Signal<readonly string[]>;
   readonly index: Signal<number>;
   readonly canGoBack: Signal<boolean>;
   readonly canGoForward: Signal<boolean>;
   /**
-   * The entries behind and ahead as menu items, nearest first, for the list a long press on the
-   * back or forward chevron shows.
+   * The entries behind and ahead as menu items by title, nearest first, for the list a long press
+   * on the back or forward chevron shows.
    */
   readonly backMenu: Signal<readonly MenuItemModel[]>;
   readonly forwardMenu: Signal<readonly MenuItemModel[]>;
@@ -51,11 +54,26 @@ function outletPath(tree: UrlTree, outlet: string, serializer: UrlSerializer): s
   );
 }
 
+/**
+ * The title the route `outlet` shows in `root` has: the deepest `title` along its routes, or
+ * undefined where none has one.
+ */
+function outletTitle(root: ActivatedRouteSnapshot, outlet: string): string | undefined {
+  let route = root.children.find((child) => child.outlet === outlet) ?? null;
+  let title: string | undefined;
+  while (route) {
+    title = route.title ?? title;
+    route = route.children.find((child) => child.outlet === PRIMARY_OUTLET) ?? null;
+  }
+  return title;
+}
+
 /** The entries a window keeps, as a browser's back list does: the oldest are dropped past it. */
 const MAX_ENTRIES = 100;
 
 class History implements OutletHistory {
   readonly entries = signal<readonly string[]>([]);
+  readonly titles = signal<readonly string[]>([]);
   readonly index = signal(-1);
   readonly canGoBack = computed(() => this.index() > 0);
   readonly canGoForward = computed(() => this.index() < this.entries().length - 1);
@@ -94,8 +112,8 @@ class History implements OutletHistory {
     return done;
   }
 
-  /** What a finished navigation leaves the outlet showing: `path`. */
-  record(path: string): void {
+  /** What a finished navigation leaves the outlet showing: `path`, titled `title` where it is. */
+  record(path: string, title: string | undefined): void {
     const pending = this.pending;
     this.pending = null;
     if (pending?.path === path) {
@@ -103,16 +121,29 @@ class History implements OutletHistory {
       return;
     }
     if (this.entries()[this.index()] === path) return;
-    const kept = [...this.entries().slice(0, this.index() + 1), path].slice(-MAX_ENTRIES);
+    const keep = (list: readonly string[], added: string) =>
+      [...list.slice(0, this.index() + 1), added].slice(-MAX_ENTRIES);
+    const kept = keep(this.entries(), path);
+    this.titles.set(keep(this.titles(), title ?? path));
     this.entries.set(kept);
     this.index.set(kept.length - 1);
   }
 
+  /** The titles behind and ahead, nearest first, as the host's chevrons show them. */
+  around(): { back: string[]; forward: string[] } {
+    const titles = this.titles();
+    const index = this.index();
+    return {
+      back: titles.slice(0, Math.max(index, 0)).reverse(),
+      forward: titles.slice(index + 1),
+    };
+  }
+
   private menu(step: -1 | 1): MenuItemModel[] {
     const items: MenuItemModel[] = [];
-    const entries = this.entries();
-    for (let at = this.index() + step; at >= 0 && at < entries.length; at += step) {
-      items.push({ label: entries[at]!, select: () => void this.go(at) });
+    const titles = this.titles();
+    for (let at = this.index() + step; at >= 0 && at < titles.length; at += step) {
+      items.push({ label: titles[at]!, select: () => void this.go(at) });
     }
     return items;
   }
@@ -124,6 +155,8 @@ export class NavigationHistory {
   private readonly windows = inject(AppWindows);
   private readonly serializer = inject(UrlSerializer);
   private readonly histories = new Map<string, History>();
+  /** Bumped after each navigation, which may have started or ended a window's history. */
+  private readonly opened = signal(0);
 
   constructor() {
     const events = this.router.events.subscribe((event) => {
@@ -131,14 +164,26 @@ export class NavigationHistory {
         this.recordAll(this.router.parseUrl(event.urlAfterRedirects));
     });
     const contexts = inject(ChildrenOutletContexts);
-    const stop = inject(Menus).onNavigate((direction, surface) => {
+    const menus = inject(Menus);
+    // Each window's history, for the host's back and forward chevrons and their menus.
+    effect(() => {
+      this.opened();
+      for (const window of this.windows.windows()) {
+        const outlet = window.key === 'main' ? PRIMARY_OUTLET : window.key;
+        const history = outlet === null ? undefined : this.histories.get(outlet);
+        if (history) menus.setHistory(window.surface, history.around());
+      }
+    });
+    const stop = menus.onNavigate((direction, surface, steps = 1) => {
       const outlet = this.outletOf(surface);
       if (outlet === null) return;
       // A screen with `gestureEnabled: false` is left only by its own way out.
       const showing = contexts.getContext(outlet)?.outlet as { refusesGesture?(): boolean } | null;
       if (showing?.refusesGesture?.()) return;
       const history = this.for(outlet);
-      void (direction === 'back' ? history.back() : history.forward());
+      const last = history.entries().length - 1;
+      const to = history.index() + (direction === 'back' ? -steps : steps);
+      void history.go(Math.min(Math.max(to, 0), last));
     });
     inject(DestroyRef).onDestroy(() => {
       events.unsubscribe();
@@ -177,7 +222,9 @@ export class NavigationHistory {
         if (outlet !== PRIMARY_OUTLET) this.histories.delete(outlet);
         continue;
       }
-      (this.for(outlet) as History).record(path);
+      const title = outletTitle(this.router.routerState.snapshot.root, outlet);
+      (this.for(outlet) as History).record(path, title);
     }
+    this.opened.update((count) => count + 1);
   }
 }

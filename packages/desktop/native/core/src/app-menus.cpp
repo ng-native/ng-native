@@ -245,12 +245,61 @@ bool MenuHost::keyDown(const KeyChord &pressed, bool textInputFocused) {
   return !(textInputFocused && editingChord(chord));
 }
 
-void MenuHost::navigate(NavigationDirection direction, std::optional<SurfaceId> surface) {
+void MenuHost::navigate(NavigationDirection direction, std::optional<SurfaceId> surface, int steps) {
   folly::dynamic event = folly::dynamic::object("type", "navigate")("direction", directionName(direction));
   if (surface) {
     event["surface"] = *surface;
   }
+  if (steps > 1) {
+    event["steps"] = steps;
+  }
   send(event);
+}
+
+void MenuHost::setHistory(SurfaceId surface, WindowHistory history) {
+  {
+    std::lock_guard lock(mutex_);
+    auto it = histories_.find(surface);
+    if (it != histories_.end() && it->second == history) {
+      return;
+    }
+    histories_[surface] = std::move(history);
+  }
+  if (historyChanged) {
+    historyChanged(surface);
+  }
+}
+
+std::optional<WindowHistory> MenuHost::history(SurfaceId surface) const {
+  std::lock_guard lock(mutex_);
+  auto it = histories_.find(surface);
+  return it == histories_.end() ? std::nullopt : std::optional(it->second);
+}
+
+void MenuHost::forgetHistory(SurfaceId surface) {
+  std::lock_guard lock(mutex_);
+  histories_.erase(surface);
+}
+
+HistoryButtons historyButtons(const std::optional<WindowHistory> &history, bool stackCanGoBack, bool hidden) {
+  if (hidden) {
+    return {};
+  }
+  if (!history) {
+    return {.shown = stackCanGoBack, .backEnabled = stackCanGoBack};
+  }
+  bool back = !history->back.empty();
+  bool forward = !history->forward.empty();
+  return {.shown = back || forward, .backEnabled = back, .forwardEnabled = forward, .fromHistory = true};
+}
+
+std::vector<HistoryMenuItem> historyMenu(const WindowHistory &history, NavigationDirection direction) {
+  const auto &entries = direction == NavigationDirection::Back ? history.back : history.forward;
+  std::vector<HistoryMenuItem> items;
+  for (size_t i = 0; i < entries.size(); i++) {
+    items.push_back({.title = entries[i], .steps = static_cast<int>(i) + 1});
+  }
+  return items;
 }
 
 std::shared_ptr<void> MenuHost::listen(Listener listener) {
@@ -285,6 +334,24 @@ std::shared_ptr<NativeModule> makeMenusModule(std::shared_ptr<MenuHost> host) {
       });
       async("setShortcuts", [host](const folly::dynamic &args, std::vector<JsCallback>) {
         host->setShortcuts(args.size() > 0 ? args[0] : nullptr);
+      });
+      // setHistory(surface, { back: [titles], forward: [titles] }), nearest first.
+      async("setHistory", [host](const folly::dynamic &args, std::vector<JsCallback>) {
+        if (args.size() < 2 || !args[0].isNumber() || !args[1].isObject()) {
+          return;
+        }
+        auto titles = [](const folly::dynamic &list) {
+          std::vector<std::string> out;
+          if (list.isArray()) {
+            for (const auto &title : list) {
+              out.push_back(title.isString() ? title.getString() : std::string{});
+            }
+          }
+          return out;
+        };
+        host->setHistory(
+            static_cast<SurfaceId>(args[0].asInt()),
+            WindowHistory{.back = titles(args[1].getDefault("back")), .forward = titles(args[1].getDefault("forward"))});
       });
       listeners();
       subscription = host->listen([this](const folly::dynamic &event) { emit(kEvent, event); });

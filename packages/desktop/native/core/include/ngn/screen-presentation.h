@@ -36,6 +36,10 @@ class ScreenProps final : public facebook::react::ViewProps {
   std::string stackPresentation{"push"};
   // 0 for none.
   int anchor{0};
+  // Whether the OS's back gesture may leave the screen (a back swipe, back-swipe.h).
+  bool gestureEnabled{true};
+  // How the screen arrives and leaves: `none` and `fade` change how a back swipe moves it.
+  std::string stackAnimation{"default"};
 };
 
 // How a screen with these props is presented, or nothing for one pushed onto its stack (or props

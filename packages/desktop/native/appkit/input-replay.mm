@@ -6,6 +6,8 @@ namespace ngn::appkit {
 
 namespace {
 
+std::function<NSEvent *(NSEvent *, NSWindow *)> gScrollMonitor;
+
 // IOKit's gesture phases, which a gesture CGEvent carries (field 132).
 int64_t hidPhase(std::optional<GesturePhase> phase) {
   if (!phase) {
@@ -51,7 +53,12 @@ void sendCGEvent(NSWindow *window, CGEventRef cg, double x, double y) {
   // under its point, as it does a real one.
   if (event.window == window) {
     [NSApp sendEvent:event];
-  } else {
+    return;
+  }
+  if (event.type == NSEventTypeScrollWheel && gScrollMonitor) {
+    event = gScrollMonitor(event, window);
+  }
+  if (event != nil) {
     [window sendEvent:event];
   }
 }
@@ -63,6 +70,10 @@ NSView *__weak gPressedView;
 // Whether the press has dragged: its release then goes to the pressed view too.
 bool gDragged = false;
 
+// Whether a replayed press is still being handled: a view tracking it in a loop of its own reads
+// the release from the event queue, where it is posted.
+bool gInPress = false;
+
 void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
   NSEvent *event = [NSEvent mouseEventWithType:type
                                       location:inWindow(window, x, y)
@@ -72,7 +83,7 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
                                        context:nil
                                    eventNumber:0
                                     clickCount:1
-                                      pressure:type == NSEventTypeLeftMouseUp || type == NSEventTypeMouseMoved ? 0 : 1];
+                                      pressure:type == NSEventTypeLeftMouseUp || type == NSEventTypeRightMouseUp || type == NSEventTypeMouseMoved ? 0 : 1];
   if (type == NSEventTypeLeftMouseDown) {
     gDragged = false;
     NSView *content = window.contentView;
@@ -91,8 +102,17 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
     // press through the window (SwiftUI's controls, AppKit's own) sees it end.
     if (type == NSEventTypeLeftMouseUp) {
       gPressedView = nil;
+      if (gInPress) {
+        [NSApp postEvent:event atStart:NO];
+        return;
+      }
     }
+    bool press = type == NSEventTypeLeftMouseDown;
+    gInPress = gInPress || press;
     [NSApp sendEvent:event];
+    if (press) {
+      gInPress = false;
+    }
   }
 }
 
@@ -207,6 +227,10 @@ void play(NSWindow *window, const InputStep &step) {
     case InputStep::Kind::Up:
       sendMouse(window, NSEventTypeLeftMouseUp, step.x, step.y);
       break;
+    case InputStep::Kind::Secondary:
+      sendMouse(window, NSEventTypeRightMouseDown, step.x, step.y);
+      sendMouse(window, NSEventTypeRightMouseUp, step.x, step.y);
+      break;
     case InputStep::Kind::Scroll: {
       // AppKit's deltas move the content: the fingers' movement, as with natural scrolling off.
       CGEventRef cg = CGEventCreateScrollWheelEvent2(
@@ -236,14 +260,32 @@ void play(NSWindow *window, const InputStep &step) {
   }
 }
 
+void playFrom(NSWindow *window, std::shared_ptr<InputScript> script, size_t at);
+
+// Plays the steps from `at` after `ms`, from a run loop timer in the common modes rather than a
+// main-queue block: a press a view tracks in a loop of its own (a table's row, a text field)
+// holds up the main queue's blocks until it returns, while its loop still fires these timers.
+void playLater(NSWindow *window, std::shared_ptr<InputScript> script, size_t at, double ms) {
+  NSTimer *timer = [NSTimer timerWithTimeInterval:ms / 1000
+                                          repeats:NO
+                                            block:^(NSTimer *) {
+                                              playFrom(window, script, at);
+                                            }];
+  [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
+}
+
 void playFrom(NSWindow *window, std::shared_ptr<InputScript> script, size_t at) {
   while (at < script->steps.size()) {
     const auto &step = script->steps[at++];
     if (step.kind == InputStep::Kind::Wait) {
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(step.amount * NSEC_PER_MSEC)),
-                     dispatch_get_main_queue(), ^{
-                       playFrom(window, script, at);
-                     });
+      playLater(window, script, at, step.amount);
+      return;
+    }
+    if (step.kind == InputStep::Kind::Down) {
+      // The steps after a press go on from a timer, which fires inside the press's tracking loop
+      // where a view runs one: its release is then posted for the loop to read (sendMouse).
+      playLater(window, script, at, 0);
+      play(window, step);
       return;
     }
     play(window, step);
@@ -257,6 +299,10 @@ void playInputStep(NSWindow *window, const InputStep &step) {
   if (step.kind != InputStep::Kind::Wait) {
     play(window, step);
   }
+}
+
+void setReplayScrollMonitor(std::function<NSEvent *(NSEvent *, NSWindow *)> monitor) {
+  gScrollMonitor = std::move(monitor);
 }
 
 void replayInputScript(NSWindow *window, InputScript script) {

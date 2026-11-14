@@ -23,8 +23,11 @@ restored on relaunch, and a route window's history goes when the window closes.
 
 The OS's own inputs move through the history of the window they are in: View > Back and Forward
 with Cmd-[ and Cmd-] on macOS (Alt-Left and Alt-Right on other OSes), a two-finger swipe, and mouse
-buttons 4 and 5. `backMenu()` and `forwardMenu()` list the entries behind and ahead, nearest first,
-as menu items, which is what a long press on the back and forward chevrons shows.
+buttons 4 and 5. On macOS a back swipe drags the screen in front aside while there is a screen
+below it in the stack. `backMenu()` and `forwardMenu()` list the entries behind and ahead, nearest
+first, as menu items by the route's `title` (its path where it has none), which is what a long press
+or a secondary click on the back and forward chevrons shows on macOS. A pick there goes that many
+entries at once.
 
 On iPhone, iPadOS and Android each tab keeps its own stack, and the native back button and gesture
 pop it; this history is not used there.

@@ -155,8 +155,15 @@ NGNHeaderToolbar *AppKitBackend::toolbarFor(SurfaceId surfaceId) {
   if (toolbar == nil && window != nil) {
     toolbar = [[NGNHeaderToolbar alloc] initWithWindow:window];
     toolbars_[@(surfaceId)] = toolbar;
+    if (historyOf) {
+      [toolbar showHistory:historyOf(surfaceId)];
+    }
   }
   return toolbar;
+}
+
+void AppKitBackend::setHistory(SurfaceId surfaceId, const std::optional<WindowHistory> &history) {
+  [toolbarFor(surfaceId) showHistory:history];
 }
 
 void AppKitBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) {

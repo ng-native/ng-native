@@ -4,6 +4,7 @@
 
 #import <AppKit/AppKit.h>
 
+#include "ngn/app-menus.h"
 #include "ngn/desktop-view-props.h"
 #include "ngn/mounting-backend.h"
 
@@ -24,6 +25,11 @@ class AppKitBackend final : public MountingBackend, public DesktopPropsSink {
   NGNSurfaceView *surface(SurfaceId surfaceId) const;
   // The view mounted for `tag`, or nil. Main thread.
   NGNView *view(Tag tag) const;
+  // The history the app reports for the window of `surfaceId`, for its toolbar's chevrons. Main
+  // thread.
+  void setHistory(SurfaceId surfaceId, const std::optional<WindowHistory> &history);
+  // The history a window's toolbar starts with, when it is made after the app reported it.
+  std::function<std::optional<WindowHistory>(SurfaceId)> historyOf;
   // Called on the main thread after each mounted transaction.
   std::function<void(SurfaceId)> onMount;
 

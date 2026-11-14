@@ -8,11 +8,18 @@
 
 #import <AppKit/AppKit.h>
 
+#include <functional>
+
 namespace ngn::appkit {
 
 void replayInputScript(NSWindow *window, InputScript script);
 
 // Plays one step into the window now; a wait does nothing.
 void playInputStep(NSWindow *window, const InputStep &step);
+
+// The host's local monitor of scrolls (its back swipe), which a replayed scroll the window takes
+// itself (the real pointer being elsewhere) passes first, as NSApp's monitors see a real one. It
+// answers the event to send on, or nil to stop it, and is given the window the event is for.
+void setReplayScrollMonitor(std::function<NSEvent *(NSEvent *, NSWindow *)> monitor);
 
 } // namespace ngn::appkit
