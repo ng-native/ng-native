@@ -6,7 +6,7 @@
 # set adds Hermes, the JSI executor and ReactCxxPlatform's ReactHost, for a host that runs a bundle.
 #
 # The directory list (the transitive closure of what ReactHost needs), the iOS TextInput variant,
-# dropping the stub TextLayoutManager.cpp and compiling JSIDynamic.cpp ourselves follow Basalt
+# and dropping the stub TextLayoutManager.cpp follow Basalt
 # 0.2.9's ReactNativeCore.cmake (MIT, Copyright (c) 2026 Vince Vella), which mirrors Fantom.
 
 set(REACT_COMMON_DIR ${RN_DIR}/ReactCommon)
@@ -25,7 +25,7 @@ include_directories(SYSTEM
     ${REACT_CXX_PLATFORM_DIR})
 
 set(RN_RENDERER_DIRS
-    callinvoker cxxreact devtoolsruntimesettings jserrorhandler jsi jsiexecutor
+    callinvoker cxxreact devtoolsruntimesettings jserrorhandler jsiexecutor
     jsinspector-modern jsinspector-modern/cdp jsinspector-modern/network
     jsinspector-modern/tracing jsitooling logger oscompat react/bridging react/cxxstableapi
     react/debug react/featureflags react/nativemodule/core react/nativemodule/defaults
@@ -89,9 +89,12 @@ target_link_libraries(rn_textinput glog folly_runtime jsi react_debug react_rend
     react_renderer_uimanager react_utils rrc_image rrc_text rrc_view yoga)
 target_compile_options(rn_textinput PRIVATE -fexceptions -frtti -Wno-unknown-pragmas)
 
-# Declared by ReactCommon, compiled by nobody.
-add_library(rn_jsidynamic OBJECT ${REACT_COMMON_DIR}/jsi/jsi/JSIDynamic.cpp)
-target_link_libraries(rn_jsidynamic jsi folly_runtime glog)
+# jsi, which React Native's own CMakeLists makes a shared library (Android's layout). Here it is
+# an object library like the rest, so it links in statically.
+file(GLOB jsi_SRC CONFIGURE_DEPENDS ${REACT_COMMON_DIR}/jsi/jsi/*.cpp)
+add_library(jsi OBJECT ${jsi_SRC})
+target_include_directories(jsi PUBLIC ${REACT_COMMON_DIR}/jsi)
+target_link_libraries(jsi folly_runtime glog)
 
 if(NGN_WITH_RUNTIME)
   foreach(dir coremodules devsupport http io logging nativemodule profiling renderer/scheduler
