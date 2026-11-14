@@ -1,6 +1,7 @@
 #include "ngn/updates.h"
 
 #include "ngn/bytes.h"
+#include "ngn/file-system.h"
 #include "ngn/native-module.h"
 
 #include <folly/json.h>
@@ -527,6 +528,32 @@ std::optional<LaunchState::Update> UpdatesClient::running() const {
   return running_;
 }
 
+std::map<std::string, std::string> UpdatesClient::localAssets() const {
+  std::lock_guard lock(mutex_);
+  std::map<std::string, std::string> out;
+  if (!running_) {
+    return out;
+  }
+  auto folder = config_.directory / running_->id;
+  try {
+    auto paths = folly::parseJson(readFile(folder / "assets.json"));
+    for (const auto &[key, value] : paths.items()) {
+      if (!key.isString() || !value.isString()) {
+        continue;
+      }
+      fs::path relative(value.asString());
+      bool inside = !relative.empty() && relative.is_relative() &&
+          std::none_of(relative.begin(), relative.end(), [](const fs::path &part) { return part == ".."; });
+      if (inside && fs::is_regular_file(folder / relative)) {
+        out[key.asString()] = (folder / relative).string();
+      }
+    }
+  } catch (const std::exception &) {
+    // An update with no readable assets.json has none to give; launch() would not have run one.
+  }
+  return out;
+}
+
 LaunchState UpdatesClient::state() const {
   std::lock_guard lock(mutex_);
   return load();
@@ -862,6 +889,16 @@ std::shared_ptr<NativeModule> makeUpdatesModule(
         return running ? folly::dynamic(running->id) : folly::dynamic(nullptr);
       });
       property("isEmbeddedLaunch", [client] { return folly::dynamic(!client->running()); });
+      // The running update's assets by file hash (the manifest's key), as `file:` URLs, which a
+      // macOS bundle's asset resolver looks in first: a Hermes bytecode bundle's own registrations
+      // cannot be read here, so its assets are kept by key rather than where it would look.
+      property("localAssets", [client] {
+        folly::dynamic assets = folly::dynamic::object();
+        for (const auto &[key, file] : client->localAssets()) {
+          assets[key] = fileUri(file);
+        }
+        return assets;
+      });
       auto refuse = [on, development](JsPromise &p) {
         if (on) {
           return false;

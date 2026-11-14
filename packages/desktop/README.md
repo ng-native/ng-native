@@ -383,7 +383,11 @@ With `NGNUpdatesURL` set, the host takes Expo Updates (protocol 1) from that ser
 asset and each of the update's other assets, every one checked against the manifest's hash. React
 Native's resolver finds a bundle's images beside it, through `SourceCode`'s `scriptURL`, so the host
 lays an update's assets out as its bundle registers them, from the `registerAsset` calls Metro
-writes into a JavaScript bundle. An asset the bundle does not register is kept but never found.
+writes into a JavaScript bundle. A Hermes bytecode bundle's registrations cannot be read, so its
+assets are kept by their key, the file hash, and `NgNativeUpdates.localAssets` maps each key to its
+`file:` URL. In a `macos` bundle, `@ng-native/metro` gives React Native's `resolveAssetSource` a
+transformer that looks there first, by the file hash of the scale it picks, as `expo-asset` does
+with `expo-updates` on iOS and Android.
 
 ## Layout
 

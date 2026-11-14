@@ -16,7 +16,9 @@
 //   asset a kept update already has with the same hash is taken from disk. Each asset goes where
 //   React Native's resolver looks for it beside the bundle (SourceCode's scriptURL), found from the
 //   bundle's own registration of it (assetPathsInBundle); `assets.json` in the update's folder
-//   records where. The update becomes the one the next launch runs.
+//   records where. A bundle whose registrations cannot be read (Hermes bytecode) gets each by its
+//   key, and NgNativeUpdates' `localAssets` answers where each is by that key, which a macOS
+//   bundle's asset resolver asks first. The update becomes the one the next launch runs.
 // - launch: what the host loads at startup, the newest kept update or the embedded bundle. A launch
 //   of a downloaded update is marked before it starts and cleared once it has run for a while
 //   (markLaunchSucceeded); a marker still set at the next startup means that launch crashed, so the
@@ -88,7 +90,8 @@ struct UpdateAsset {
 // Where a bundle's assets go beside it, by file hash, read from Metro's `registerAsset` calls in
 // it: `<httpServerLocation>/<name>[@<scale>x].<type>`, as React Native's resolver asks for them
 // next to a bundle on disk, with `../` as `_`. A path that would lead out of the folder, or onto a
-// file the client keeps there, is left out. Plain JavaScript only: Hermes bytecode gives nothing.
+// file the client keeps there, is left out. Plain JavaScript only: Hermes bytecode gives nothing,
+// so its assets are kept by key and found through NgNativeUpdates' `localAssets`.
 std::map<std::string, std::string> assetPathsInBundle(const std::string &bundle);
 
 struct UpdateManifest {
@@ -163,6 +166,9 @@ class UpdatesClient {
   uint64_t launchGeneration() const;
   // The update this launch runs, or nothing for the embedded bundle.
   std::optional<LaunchState::Update> running() const;
+  // That update's assets on disk, absolute paths by the manifest's key (the file hash a bundle
+  // registers each with). Empty for the embedded bundle.
+  std::map<std::string, std::string> localAssets() const;
 
   struct CheckResult {
     bool isAvailable{false};
