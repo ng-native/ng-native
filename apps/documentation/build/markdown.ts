@@ -27,6 +27,7 @@ import { marked } from 'marked';
 import { gfmHeadingId, getHeadingList } from 'marked-gfm-heading-id';
 import { bundledThemes, createHighlighter, type Highlighter } from 'shiki';
 import type { Plugin } from 'vite';
+import { OS_SUPPORT, SUPPORT_OSES } from '@ng-native/device/os-support';
 import { pageLinks, pageUrl } from './page-links.ts';
 
 /** One piece of a page: prose already rendered, a named example, or a generated API table. */
@@ -150,6 +151,23 @@ function segments(body: string): DocBlock[] {
   return blocks;
 }
 
+/** `<!-- os-support -->` on a line of its own: where a page shows the per-OS support table. */
+const OS_SUPPORT_MARKER = /^[ \t]*<!--\s*os-support\s*-->[ \t]*$/m;
+
+/**
+ * The per-OS support table as Markdown, drawn from `OS_SUPPORT` in `@ng-native/device`, the data
+ * `os-support.test.ts` holds the code to.
+ */
+function osSupportTable(): string {
+  const oses = Object.keys(SUPPORT_OSES) as (keyof typeof SUPPORT_OSES)[];
+  const line = (cells: readonly string[]) => `| ${cells.join(' | ')} |`;
+  return [
+    line(['API or input', ...oses.map((os) => SUPPORT_OSES[os])]),
+    line(['---', ...oses.map(() => '---')]),
+    ...OS_SUPPORT.map((row) => line([row.feature, ...oses.map((os) => row.on[os])])),
+  ].join('\n');
+}
+
 async function render(source: string, headings: DocHeading[]): Promise<string> {
   const instance = marked.use(gfmHeadingId(), {
     async: true,
@@ -236,7 +254,7 @@ export function markdown(): Plugin {
       const url = pageUrl(id);
       const headings: DocHeading[] = [];
       const blocks: DocBlock[] = [];
-      for (const block of segments(body)) {
+      for (const block of segments(body.replace(OS_SUPPORT_MARKER, osSupportTable))) {
         blocks.push(
           block.kind === 'html'
             ? { kind: 'html', html: pageLinks(await render(block.html, headings), url) }

@@ -58,6 +58,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./desktop-options": "./src/desktop-options.ts",
+    "./os-support": "./src/os-support.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -72,6 +73,10 @@
       "./desktop-options": {
         "types": "./dist/desktop-options.d.ts",
         "default": "./dist/desktop-options.js"
+      },
+      "./os-support": {
+        "types": "./dist/os-support.d.ts",
+        "default": "./dist/os-support.js"
       },
       "./package.json": "./package.json"
     }

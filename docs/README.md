@@ -79,7 +79,8 @@ reference, with a package's overview at `packages/<name>.md` and its detail page
   plain text.
 - **Live blocks.** A line holding only `<!-- example: name -->` renders a running example, and
   `<!-- api: ClassName -->` renders an API table (`@ng-native/components#Switch` when two packages
-  share a class name). Each marker sits alone on its line. See `apps/documentation/build/markdown.ts`.
+  share a class name), and `<!-- os-support -->` the per-OS support table drawn from `OS_SUPPORT`
+  in `@ng-native/device`. Each marker sits alone on its line. See `apps/documentation/build/markdown.ts`.
 
 Build the site with `pnpm nx build documentation`, or serve it with
 `pnpm --filter documentation dev`, to see a new page before opening a pull request.

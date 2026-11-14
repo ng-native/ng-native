@@ -49,7 +49,8 @@ app, and the desktop host runs it. To add macOS to an app you have, see
 
 The pages under this one cover [what differs](/guide/desktop-differences) from iOS and Android,
 [how big things are](/guide/desktop-sizing) on a Mac, [where each desktop API is imported
-from](/guide/desktop-imports), and how [Electron's APIs](/guide/desktop-electron) map to these.
+from](/guide/desktop-imports), [what each OS has](/guide/desktop-support), and how
+[Electron's APIs](/guide/desktop-electron) map to these.
 
 ## Test it
 
