@@ -1102,8 +1102,8 @@ describe('with --desktopOnly', () => {
     assert.match(tree.read('apps/desktop/src/app/app.ts', 'utf-8')!, /<split-view>/);
     assert.equal(
       tree.read('apps/desktop/src/main.ts', 'utf-8'),
-      native.sourceFile('src/main.ts'),
-      'main.ts is the one both templates share',
+      native.sourceFile('src/main.ts', true),
+      "main.ts is the desktop template's, which starts the in-app tests",
     );
   });
 

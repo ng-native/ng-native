@@ -241,7 +241,7 @@ async function writeFiles(tree, resolved) {
   if (linksLibraries(tree, workspaces)) {
     file('tsconfig.typecheck.json', JSON.stringify(native.typecheckTsconfig(), null, 2) + '\n');
   }
-  file('vitest.config.mts', native.vitestConfig(Boolean(base)));
+  file('vitest.config.mts', native.vitestConfig(Boolean(base), desktopOnly));
 
   const manifest = { name: projectName, version: '0.0.1', private: true, main: 'src/main.ts' };
   const root = readJson(tree, 'package.json');

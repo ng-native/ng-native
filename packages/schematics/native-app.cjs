@@ -31,7 +31,13 @@ const SOURCE_FILES = [
  * The desktop template's files that differ from the template's, which a desktop-only app takes in
  * their place, from `files/desktop/`: its starter screen, the screen's test and its `AGENTS.md`.
  */
-const DESKTOP_SOURCE_FILES = ['src/app/app.ts', 'src/app/app.test.ts'];
+const DESKTOP_SOURCE_FILES = [
+  'src/app/app.ts',
+  'src/app/app.test.ts',
+  'src/main.ts',
+  'vitest.config.mts',
+  'metro.config.js',
+];
 
 /**
  * @param {string} name

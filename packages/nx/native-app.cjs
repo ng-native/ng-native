@@ -55,7 +55,12 @@ const SOURCE_FILES = ['src/app/app.ts', 'src/main.ts', 'src/app/app.test.ts'];
  * The desktop template's files that differ from the template's, which a desktop-only app takes in
  * their place, from `files/desktop/`: its starter screen, the screen's test and its `AGENTS.md`.
  */
-const DESKTOP_SOURCE_FILES = ['src/app/app.ts', 'src/app/app.test.ts'];
+const DESKTOP_SOURCE_FILES = [
+  'src/app/app.ts',
+  'src/app/app.test.ts',
+  'src/main.ts',
+  'vitest.config.mts',
+];
 
 /**
  * @param {string} name
@@ -167,9 +172,15 @@ function typecheckTsconfig() {
   return { extends: './tsconfig.json', compilerOptions: { paths } };
 }
 
-/** @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases */
-function vitestConfig(withPaths) {
-  const template = readFileSync(path.join(__dirname, 'files', 'vitest.config.mts'), 'utf8');
+/**
+ * @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases
+ * @param {boolean} [desktopOnly] the desktop template's config, with its Node and in-app projects
+ */
+function vitestConfig(withPaths, desktopOnly = false) {
+  const template = readFileSync(
+    path.join(__dirname, 'files', ...(desktopOnly ? ['desktop'] : []), 'vitest.config.mts'),
+    'utf8',
+  );
   if (!withPaths) return template;
   return template
     .replace(
@@ -177,7 +188,11 @@ function vitestConfig(withPaths) {
       "import tsconfigPaths from 'vite-tsconfig-paths';\n" +
         "import { defineConfig } from 'vitest/config';",
     )
-    .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],');
+    .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],')
+    .replace(
+      "plugins: [ngNative({ os: 'macos' })]",
+      "plugins: [tsconfigPaths(), ngNative({ os: 'macos' })]",
+    );
 }
 
 /**
