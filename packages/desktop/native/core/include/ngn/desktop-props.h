@@ -9,6 +9,7 @@
 #include <react/renderer/core/ReactPrimitives.h>
 
 #include <optional>
+#include <string>
 
 namespace ngn {
 
@@ -47,6 +48,9 @@ struct DesktopProps {
   // The `contextMenu` prop: the entries of the menu a secondary click shows, as the app sends them
   // (app-menus.h), or null for none.
   folly::dynamic contextMenu{nullptr};
+  // `role` as written. React Native's Role has no `listbox`, `gridcell`, `menuitemcheckbox` or
+  // `menuitemradio` and drops them; the core reads them from here (accessibility.h roleName).
+  std::string role;
   // `accessibilityLevel` (`aria-level`): a heading's level, from 1.
   std::optional<int> accessibilityLevel;
   // ModalHostView only.
@@ -64,7 +68,7 @@ struct HasDesktopProps {
 // hit test, the cursor and Tab order all read it, and a flattened view is not mounted.
 inline bool formsStackingContext(const DesktopProps &props) {
   return props.focusable.value_or(false) || props.tabIndex.has_value() || props.cursor.has_value() ||
-      props.onDoubleClick || props.onContextMenu || props.onWheel || props.fileDrop || !props.dragItem.isNull() ||
+      !props.role.empty() || props.onDoubleClick || props.onContextMenu || props.onWheel || props.fileDrop || !props.dragItem.isNull() ||
       !props.contextMenu.isNull();
 }
 

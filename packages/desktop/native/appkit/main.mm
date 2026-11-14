@@ -86,6 +86,7 @@
 #include <unistd.h>
 
 #include <mutex>
+#include <unordered_map>
 #include <string>
 
 using namespace facebook::react;
@@ -206,44 +207,63 @@ void logFirstFrame(NSWindow *window) {
   }
 }
 
-// Tab and Shift-Tab, walked in the core (focus-order.h) over the container the focus is in, in
-// place of AppKit's key-view loop. True when the focus moved.
-bool moveFocus(NSEvent *event) {
-  NSWindow *window = event.window;
-  NSResponder *first = window.firstResponder;
+// The container the focus is in, and the view holding it, in `window`. An in-window cover (a modal)
+// is the container while it is up, wherever the first responder is: Tab stays inside it.
+struct FocusContext {
   NGNSurfaceView *container = nil;
   NGNView *focused = nil;
+};
+
+FocusContext focusContext(NSWindow *window) {
+  FocusContext context;
+  NSResponder *first = window.firstResponder;
   // A field editor stands in for its text field, inside the field's view.
   for (NSView *v = [first isKindOfClass:NSView.class] ? (NSView *)first : nil; v != nil; v = v.superview) {
-    if (focused == nil && [v isKindOfClass:NGNView.class]) {
-      focused = (NGNView *)v;
+    if (context.focused == nil && [v isKindOfClass:NGNView.class]) {
+      context.focused = (NGNView *)v;
     }
     if ([v isKindOfClass:NGNSurfaceView.class]) {
-      container = (NGNSurfaceView *)v;
+      context.container = (NGNSurfaceView *)v;
       break;
     }
   }
-  if (container == nil) {
-    container = [window.contentView isKindOfClass:NGNSurfaceView.class] ? (NGNSurfaceView *)window.contentView : nil;
+  if (context.container == nil) {
+    context.container =
+        [window.contentView isKindOfClass:NGNSurfaceView.class] ? (NGNSurfaceView *)window.contentView : nil;
   }
+  NSView *cover = [NGNModalHostView frontCoverIn:window];
+  if (cover != nil && ![context.container isDescendantOf:cover]) {
+    context.container = (NGNSurfaceView *)cover;
+    context.focused = nil;
+  }
+  return context;
+}
+
+// Tab and Shift-Tab, walked in the core (focus-order.h) over the container the focus is in, in
+// place of AppKit's key-view loop. True when the key is used: the focus moved, or it is inside a
+// sheet, cover or popover, which Tab never leaves.
+bool moveFocus(NSEvent *event) {
+  NSWindow *window = event.window;
+  auto [container, focused] = focusContext(window);
   if (container == nil) {
     return false;
   }
+  bool contained = [NGNModalHostView isPresentationContainer:container];
   // Option-Tab reaches every focusable view, whatever the keyboard navigation setting.
   bool everything = NSApp.isFullKeyboardAccessEnabled || (event.modifierFlags & NSEventModifierFlagOption) != 0;
   auto reach = everything ? ngn::TabReach::All : ngn::TabReach::TextInputs;
   bool backwards = (event.modifierFlags & NSEventModifierFlagShift) != 0;
   const auto &tree = gHost.mounting->tree();
-  auto count = ngn::tabOrder(tree, container.rootTag, reach).size();
   std::optional<Tag> from;
   if (focused != nil) {
     from = static_cast<Tag>(focused.reactTag);
   }
+  auto count = ngn::tabOrder(tree, container.rootTag, reach, from).size();
   // A control AppKit will not focus (a button, with keyboard navigation off) passes Tab on.
   for (size_t tries = 0; tries < count; tries++) {
     auto next = ngn::nextInTabOrder(tree, container.rootTag, from, backwards, reach);
     if (!next) {
-      return false;
+      return contained;
     }
     NGNView *view = gHost.backend->view(*next);
     if (view != nil && [window makeFirstResponder:view.keyboardResponder]) {
@@ -251,7 +271,36 @@ bool moveFocus(NSEvent *event) {
     }
     from = next;
   }
-  return false;
+  return contained;
+}
+
+// Arrow keys, Home and End inside a composite widget (a tablist, radiogroup, menu, menubar, listbox
+// or grid), walked in the core (focus-order.h compositeMove). True when the key is used.
+bool moveInComposite(NSEvent *event) {
+  static const std::unordered_map<unsigned short, ngn::CompositeKey> keys{
+      {123, ngn::CompositeKey::Left}, {124, ngn::CompositeKey::Right}, {125, ngn::CompositeKey::Down},
+      {126, ngn::CompositeKey::Up},   {115, ngn::CompositeKey::Home},  {119, ngn::CompositeKey::End},
+  };
+  auto key = keys.find(event.keyCode);
+  auto mods = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagShift);
+  if (key == keys.end() || mods != 0) {
+    return false;
+  }
+  NSWindow *window = event.window;
+  auto [container, focused] = focusContext(window);
+  if (container == nil || focused == nil || window.firstResponder != focused) {
+    return false;
+  }
+  bool control = (event.modifierFlags & NSEventModifierFlagControl) != 0;
+  auto next = ngn::compositeMove(
+      gHost.mounting->tree(), container.rootTag, static_cast<Tag>(focused.reactTag), key->second, control);
+  if (!next) {
+    return false;
+  }
+  if (NGNView *view = gHost.backend->view(*next); view != nil && view != focused) {
+    [window makeFirstResponder:view.keyboardResponder];
+  }
+  return true;
 }
 
 // The surface of the window `window` is, or belongs to (a sheet's or a popover's parent), if any.
@@ -828,6 +877,13 @@ int main(int argc, const char *argv[]) {
     };
     NGNModalHostView.input = gHost.input.get();
     NGNView.activator = gHost.input.get();
+    // The focus into a modal as it opens: the first view in its Tab order.
+    NGNModalHostView.initialFocus = [](NSInteger tag) -> NSResponder * {
+      auto reach = NSApp.isFullKeyboardAccessEnabled ? ngn::TabReach::All : ngn::TabReach::TextInputs;
+      auto first = ngn::nextInTabOrder(gHost.mounting->tree(), static_cast<Tag>(tag), std::nullopt, false, reach);
+      NGNView *view = first ? gHost.backend->view(*first) : nil;
+      return view.keyboardResponder;
+    };
     NGNModalHostView.presentationChanged = [](NSInteger tag, BOOL presented) {
       if (presented) {
         gHost.mounting->tree().addContainerRoot(static_cast<Tag>(tag));
@@ -1011,6 +1067,15 @@ int main(int argc, const char *argv[]) {
     NGNHeaderToolbar.navigate = [](NSWindow *window, ngn::NavigationDirection direction, int steps) {
       gHost.menus->navigate(direction, surfaceOf(window), steps);
     };
+    // File > Print with no print item of the app's: what the window shows (printing.h).
+    gHost.menus->printWindow = [](std::optional<SurfaceId> surface) {
+      NSWindow *window = surface ? (*surface == kAppSurface ? gHost.appWindow : gHost.windows->window(*surface)) : nil;
+      ngn::appkit::printWindow(window != nil ? window : NSApp.keyWindow, false, [](const std::string &error) {
+        if (!error.empty()) {
+          fprintf(stderr, "[ngn] print: %s\n", error.c_str());
+        }
+      });
+    };
     gHost.tray = std::make_shared<ngn::TrayHost>(std::make_shared<ngn::appkit::AppKitTray>(
         [](const std::string &icon) { gHost.tray->press(icon); },
         [](const std::string &icon, const std::string &id) { gHost.tray->menuSelect(icon, id); }));
@@ -1128,7 +1193,9 @@ int main(int argc, const char *argv[]) {
       // Sign in with Apple: available only to an app signed with its entitlement.
       static auto appleId = ngn::appkit::makeAppleIdProvider();
       ngn::addModule(*modules, "NgNativeAppleAuthentication", [] { return ngn::makeAppleAuthenticationModule(appleId, noPrompts); });
-      static auto printSystem = ngn::appkit::makePrintSystem();
+      static auto printSystem = ngn::appkit::makePrintSystem([](SurfaceId surface) -> NSWindow * {
+        return surface == kAppSurface ? gHost.appWindow : gHost.windows->window(surface);
+      });
       ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", fileAccess, noPrompts); });
       // react-native-webview's navigation answers; harmless in a host built without the library.
       ngn::addModule(*modules, "RNCWebViewModule", [] { return ngn::makeWebViewModule(ngn::sharedNavigationLocks()); });
@@ -1300,6 +1367,9 @@ int main(int argc, const char *argv[]) {
                                             auto mods = event.modifierFlags &
                                                 (NSEventModifierFlagCommand | NSEventModifierFlagControl);
                                             if (event.keyCode == kTab && mods == 0 && moveFocus(event)) {
+                                              return nil;
+                                            }
+                                            if (moveInComposite(event)) {
                                               return nil;
                                             }
                                             return event;

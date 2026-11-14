@@ -178,6 +178,37 @@ TEST_CASE("choosing an app item or a handled role item tells the app its id; bac
                     });
 }
 
+TEST_CASE("File > Print with no handler prints the window it was chosen in; the app's own print item is the app's") {
+  Fixture f;
+  std::vector<std::optional<ngn::SurfaceId>> printed;
+  f.host->printWindow = [&](std::optional<ngn::SurfaceId> surface) { printed.push_back(surface); };
+  // The default bar's, before the app sets one.
+  auto defaults = ngn::defaultMenuBar({.appName = "Notes"});
+  auto print = ngn::findMenuItem(defaults, MenuCommand::Print);
+  REQUIRE(print);
+  f.host->choose(*print, 11);
+  f.host->choose(*print, std::nullopt);
+  CHECK(printed == std::vector<std::optional<ngn::SurfaceId>>{11, std::nullopt});
+  CHECK(f.events.empty());
+
+  // The role from the app's bar is the host's; with a handler it is the app's item.
+  f.module->call(
+      "setMenuBar",
+      dynamic::array(dynamic::array(dynamic::object("label", "File")("menuRole", "file")(
+          "items",
+          dynamic::array(
+              dynamic::object("id", "1.0")("label", "Print...")("menuRole", "print")("shortcut", chord("p")),
+              dynamic::object("id", "1.1")("label", "Print Note...")("menuRole", "print")("handled", true)(
+                  "shortcut", chord("p", true, true)))))));
+  const auto &file = f.backend->bars.back()[0].items;
+  CHECK(file[0].command == MenuCommand::Print);
+  f.host->choose(file[0], 4);
+  f.host->choose(file[1], 4);
+  CHECK(printed.size() == 3);
+  CHECK(printed.back() == 4);
+  CHECK(f.events == std::vector<std::string>{"ngNativeMenus {\"id\":\"1.1\",\"type\":\"menuSelect\"}"});
+}
+
 TEST_CASE("a shortcut the app listens for is its, and says whether a text input had focus") {
   Fixture f;
   f.module->call(

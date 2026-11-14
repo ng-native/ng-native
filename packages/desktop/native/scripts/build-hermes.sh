@@ -15,6 +15,7 @@ RN_VERSION="$(node -p "require('$RN_PKG/package.json').version")"
 CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 JOBS="${NGN_JOBS:-8}"
 OUT="$CACHE/hermes-${ARCHS//;/-}"
+TARGET="$("$here/macos-target.sh")"
 
 [ -d "$CACHE/src/hermes" ] || { echo "build-hermes.sh: run fetch.sh first" >&2; exit 1; }
 
@@ -24,7 +25,7 @@ cmake --log-level=ERROR -G Ninja -S "$CACHE/src/hermes" -B "$OUT" \
   -DJSI_DIR="$RN_PKG/ReactCommon/jsi" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_ARCHITECTURES="$ARCHS" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET="$TARGET" \
   -DHERMES_ENABLE_DEBUGGER=ON \
   -DHERMES_ENABLE_INTL="$intl" \
   -DHERMESVM_HEAP_HV_MODE=HEAP_HV_PREFER32 \
@@ -33,4 +34,6 @@ cmake --log-level=ERROR -G Ninja -S "$CACHE/src/hermes" -B "$OUT" \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 # hermesc too, which compiles a packaged app's bundle to this Hermes's bytecode.
 nice -n 10 cmake --build "$OUT" --target hermesvm_a hermesc -j "$JOBS"
+# What hermes-built.sh checks: the macOS this build is for.
+echo "$TARGET" > "$OUT/macos-target"
 echo "$OUT"

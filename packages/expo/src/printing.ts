@@ -4,6 +4,7 @@
  * ```ts
  * private readonly printing = inject(Printing);
  * await this.printing.print({ html: '<h1>Invoice</h1>' });
+ * await this.printing.print({ window: inject(CURRENT_WINDOW) }); // macOS: what the window shows
  * const pdf = await this.printing.printToPdf(invoiceHtml);
  * ```
  *
@@ -12,7 +13,8 @@
  * does nothing, and `printToPdf()` and `selectPrinter()` answer null.
  */
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
-import { expoModule, presence } from './native.ts';
+import { OS } from '@ng-native/device';
+import { currentPlatform, expoModule, presence } from './native.ts';
 
 /** A printer, as iOS's picker answers it. */
 export interface Printer {
@@ -25,6 +27,8 @@ export interface NativePrinting {
   printAsync(options: {
     html?: string;
     uri?: string;
+    /** macOS: the surface of the window whose content prints. */
+    window?: number;
     printerUrl?: string;
     orientation?: 'portrait' | 'landscape';
   }): Promise<void>;
@@ -37,9 +41,27 @@ export interface NativePrinting {
   selectPrinterAsync?(): Promise<Printer>;
 }
 
-/** What `print()` prints: HTML, or a file such as a PDF, and on iOS the printer to use. */
+/** A window, as `AppWindows` and `CURRENT_WINDOW` answer it: only its surface is read. */
+export interface PrintableWindow {
+  readonly surface: number;
+}
+
+/**
+ * What `print()` prints: HTML, a file such as a PDF, or on macOS what a window shows; and on iOS
+ * the printer to use.
+ */
 export type PrintOptions = (
-  { readonly html: string; readonly uri?: never } | { readonly uri: string; readonly html?: never }
+  | { readonly html: string; readonly uri?: never; readonly window?: never }
+  | { readonly uri: string; readonly html?: never; readonly window?: never }
+  | {
+      /**
+       * macOS: what this window shows, laid out on the paper the print panel has. Absent on every
+       * other OS, where the call does nothing.
+       */
+      readonly window: PrintableWindow;
+      readonly html?: never;
+      readonly uri?: never;
+    }
 ) & {
   /** iOS: print to this printer, from `selectPrinter()`, without showing the dialog. */
   readonly printer?: Printer;
@@ -55,14 +77,23 @@ export class Printing {
   );
 
   private readonly native = inject(Printing.SOURCE);
+  private readonly os = inject(OS, { optional: true }) ?? currentPlatform();
 
   /** Whether the module is here. False where the service is absent, and every call is inert. */
   readonly available: Signal<boolean> = presence(this.native);
 
-  /** Shows the print dialog for HTML or a file. Resolves once it closes, printed or not. */
+  /**
+   * Shows the print dialog for HTML, a file, or on macOS a window's content. Resolves once it
+   * closes, printed or not. A window prints nothing off macOS.
+   */
   async print(options: PrintOptions): Promise<void> {
     if (!this.native) return;
-    const { printer, ...rest } = options;
+    const { printer, window, ...rest } = options;
+    if (window) {
+      if (this.os !== 'macos') return;
+      await this.native.printAsync({ ...rest, window: window.surface });
+      return;
+    }
     await this.native.printAsync(printer ? { ...rest, printerUrl: printer.url } : rest);
   }
 

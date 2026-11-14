@@ -3,7 +3,9 @@
  * typed so a template is checked against the props. Registered with
  * `registerExpoViews('expo-glass', 'expo-glass-container')`. Where Liquid Glass is unavailable -
  * before iOS 26, and on Android - the view renders as a plain view, so a fallback background is the
- * app's to set; `liquidGlassAvailable()` says which it will be.
+ * app's to set; `liquidGlassAvailable()` says which it will be. On macOS the desktop host draws
+ * NSGlassEffectView from macOS 26, and a frosted NSVisualEffectView before it; a container is a
+ * plain view there, each glass view drawing its own.
  *
  * ```html
  * <expo-glass-container spacing="10">

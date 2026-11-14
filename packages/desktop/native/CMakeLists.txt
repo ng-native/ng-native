@@ -30,7 +30,8 @@ endforeach()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0)
+# The oldest macOS the host runs on (scripts/macos-target.sh reads it from here).
+set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0)
 # React Native's libraries reference each other in both directions. Apple's linker and lld
 # resolve archives in any order; GNU ld does not, so Linux links with lld.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -70,6 +71,7 @@ endif()
 
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
+    core/src/absent-views.cpp
     core/src/accessibility.cpp
     core/src/animation-frames.cpp
     core/src/app-menus.cpp
@@ -82,6 +84,7 @@ add_library(ngn_core STATIC
     core/src/dev-server.cpp
     core/src/focus-order.cpp
     core/src/gestures.cpp
+    core/src/glass.cpp
     core/src/header-bar.cpp
     core/src/host-state.cpp
     core/src/input-dispatcher.cpp
@@ -207,6 +210,8 @@ if(NGN_TESTS)
         appkit/push.mm appkit/tests/push.test.mm
         appkit/undo.mm appkit/tests/undo.test.mm
         appkit/input-replay.mm appkit/tests/input-replay.test.mm
+        appkit/modal-focus.mm appkit/tests/modal-focus.test.mm
+        appkit/glass-effect.mm appkit/tests/glass.test.mm
         appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AuthenticationServices" "-framework AVKit")

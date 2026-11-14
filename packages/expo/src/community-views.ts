@@ -21,11 +21,17 @@ import { registerViewName } from '@ng-native/fabric';
 export const NATIVE_VIEWS: Readonly<Record<string, [string, Record<string, unknown>?]>> = {
   /** `react-native-webview`. */
   'web-view': ['RNCWebView', { javaScriptEnabled: true, domStorageEnabled: true }],
-  /** `@react-native-community/slider`. */
+  /**
+   * `@react-native-community/slider`. Absent on macOS, where the library has no view: use
+   * `ui-slider` from `@expo/ui`, a SwiftUI slider there.
+   */
   slider: ['RNCSlider', { maximumValue: 1, minimumValue: 0, step: 0 }],
   /** `@react-native-community/datetimepicker`. iOS only: on Android the library has no view. */
   'date-time-picker': ['RNDateTimePicker'],
-  /** `@react-native-picker/picker`, whose items are `<picker-item>` children. */
+  /**
+   * `@react-native-picker/picker`, whose items are `<picker-item>` children. Absent on macOS, where
+   * the library has no view: use `ui-picker` from `@expo/ui`, a SwiftUI picker there.
+   */
   picker: ['RNCPicker'],
   'picker-item': ['RNCPickerItem'],
   /**
@@ -36,7 +42,10 @@ export const NATIVE_VIEWS: Readonly<Record<string, [string, Record<string, unkno
    * the control changes on screen and nothing hears about it.
    */
   'segmented-control': ['RNCSegmentedControl', { onChange: true }],
-  /** `@react-native-masked-view/masked-view`: its `maskElement` is a prop, not a child. */
+  /**
+   * `@react-native-masked-view/masked-view`: its `maskElement` is a prop, not a child. Absent on
+   * macOS, where the library has no view: the content shows unmasked.
+   */
   'masked-view': ['RNCMaskedView'],
   /** `react-native-pager-view`, the swipeable pager a tab layout is built on. */
   'pager-view': ['RNCViewPager', { initialPage: 0 }],

@@ -1,6 +1,8 @@
 // NgNativePrint: what @ng-native/expo's Printing calls on expo-print, over a PrintSystem, which the
 // AppKit backend implements with NSPrintOperation and WebKit.
 //
+// - printAsync({window, orientation}): shows the print panel for what the window on surface
+//   `window` shows (Printing's `print({ window })`), as a sheet on it.
 // - printAsync({html | uri, orientation}): shows the print panel for the HTML, or for the PDF or
 //   image the uri names (a `file:` uri, a path, a `data:` uri or an `http(s):` url, read through
 //   the backend's HTTP client; a file only where `files` lets it, FileAccess::readFor). Resolves once the panel closes, printed or cancelled, as the
@@ -15,6 +17,8 @@
 
 #include "ngn/native-module.h"
 #include "ngn/network.h"
+
+#include <react/renderer/core/ReactPrimitives.h>
 
 #include <functional>
 #include <memory>
@@ -50,6 +54,9 @@ class PrintSystem {
   // Shows the print panel for `document`. Answers once, on any thread: empty when the panel has
   // closed, printed or cancelled, else why it could not show.
   virtual void print(Document document, bool landscape, std::function<void(const std::string &error)> done) = 0;
+  // Shows the print panel for what the window on `surface` shows, as a sheet on it. Answers once,
+  // as print does; why not when no window shows that surface.
+  virtual void printWindow(facebook::react::SurfaceId surface, bool landscape, std::function<void(const std::string &error)> done) = 0;
   // Lays `html` out on pages of `page` and writes the PDF to `path`. Answers once, on any thread,
   // with the number of pages, or why it could not.
   virtual void renderPdf(std::string html, PageSetup page, std::string path, std::function<void(int pages, const std::string &error)> done) = 0;

@@ -119,16 +119,12 @@ class EventKitStore final : public CalendarStore {
       (*answer)(access(entity));
     };
     EKEventStore *events = store();
-    if (@available(macOS 14.0, *)) {
-      if (entity == Entity::Reminder) {
-        [events requestFullAccessToRemindersWithCompletion:finish];
-      } else if (writeOnly) {
-        [events requestWriteOnlyAccessToEventsWithCompletion:finish];
-      } else {
-        [events requestFullAccessToEventsWithCompletion:finish];
-      }
+    if (entity == Entity::Reminder) {
+      [events requestFullAccessToRemindersWithCompletion:finish];
+    } else if (writeOnly) {
+      [events requestWriteOnlyAccessToEventsWithCompletion:finish];
     } else {
-      [events requestAccessToEntityType:entityTypeOf(entity) completion:finish];
+      [events requestFullAccessToEventsWithCompletion:finish];
     }
   }
 

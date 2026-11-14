@@ -38,6 +38,11 @@ class FakeBackend final : public MountingBackend, public DesktopPropsSink {
   std::map<Tag, std::shared_ptr<const ExpoUINode>> expoUITrees;
   void announce(SurfaceId surfaceId, const Announcement &announcement) override;
   void didMount(SurfaceId surfaceId) override;
+  // The components the backend adds, as a library compiled in would.
+  std::vector<facebook::react::ComponentDescriptorProvider> providers;
+  std::vector<facebook::react::ComponentDescriptorProvider> componentProviders() const override {
+    return providers;
+  }
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
 
   // Runs every queued UI thread task, including any a task queues. Returns how many ran.

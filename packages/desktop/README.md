@@ -164,17 +164,39 @@ keyboard, by a click, Tab or `focus()`.
 Tab and Shift-Tab move the focus in the order the core walks (`focus-order.h`), not AppKit's
 key-view loop: positive `tabIndex` first, then focusable views, text inputs and controls in tree
 order, inside the container the focus is in. With the Mac's default keyboard navigation Tab
-reaches text inputs only, and Option-Tab reaches everything. A view's accessibility props give it
-its NSAccessibility role, subrole, label, hint, value and state, selected, disabled, checked and
-expanded included (`accessibility.h`). Every role the components take is mapped; one AppKit lacks,
-such as `navigation`, is a group with the role's name spoken, and a heading is AppKit's heading role
-with its `accessibilityLevel` from macOS 26 (a group spoken as a heading before). A text is static
-text whose value is its string. A control, a heading or an `accessible` view is read as one element,
-named by the text inside it when it has no label, and a view with a role or a label keeps its
-children under it so that text is there to read. `AccessibilityInfo` reads
-VoiceOver's state, reduce motion, reduce transparency, invert colours and increase contrast from
-NSWorkspace, and sends their change events from its notifications; macOS has no bold-text or
-grayscale setting, so those answer false.
+reaches text inputs only, and Option-Tab reaches everything. A sheet, an in-window cover or a
+popover keeps Tab inside it; the focus moves into it as it opens, to the first view in its Tab order
+(else the container, labelled with the modal's accessibility label), and goes back to the view that
+held it when it closes. A composite widget is one Tab stop, as WAI-ARIA has it: a view with the
+`tablist`, `radiogroup`, `menu`, `menubar`, `listbox` or `grid` role is entered at its focused, else
+its selected or checked, else its first item, and the arrow keys, Home and End move between its
+items:
+
+| Role                    | Keys                   | At the ends |
+| ----------------------- | ---------------------- | ----------- |
+| `tablist`, `radiogroup` | every arrow, Home, End | wraps       |
+| `menu`                  | Up, Down, Home, End    | wraps       |
+| `menubar`               | Left, Right, Home, End | wraps       |
+| `listbox`               | Up, Down, Home, End    | stops       |
+| `grid`                  | every arrow, Home, End | stops       |
+
+A grid's rows are its `row` views: Home and End go to the ends of the row, and Control-Home and
+Control-End to the grid's first and last cell. Left and Right swap in a right-to-left composite. An
+item that takes no focus itself gives it to the first view inside it that does, a disabled radio is
+skipped, and any `tabIndex`, -1 included, lets a view take the focus there (or from a click). The
+host moves the focus only: an app that selects the tab or checks the radio on focus does so from
+`(focus)`.
+
+A view's accessibility props give it its NSAccessibility role, subrole, label, hint, value and
+state, selected, disabled, checked and expanded included (`accessibility.h`). Every role the
+components take is mapped; one AppKit lacks, such as `navigation`, is a group with the role's name
+spoken, and a heading is AppKit's heading role with its `accessibilityLevel` from macOS 26 (a group
+spoken as a heading before). A text is static text whose value is its string. A control, a heading
+or an `accessible` view is read as one element, named by the text inside it when it has no label,
+and a view with a role or a label keeps its children under it so that text is there to read.
+`AccessibilityInfo` reads VoiceOver's state, reduce motion, reduce transparency, invert colours and
+increase contrast from NSWorkspace, and sends their change events from its notifications; macOS has
+no bold-text or grayscale setting, so those answer false.
 
 VoiceOver's actions come from `accessibilityActions`: `activate` is its press, `increment` and
 `decrement` step an adjustable view, `escape` is its cancel, and any other is a custom action by its
@@ -406,7 +428,7 @@ the package's name after `expo-`, each with the methods the service calls on the
 | `NgNativeImagePicker`                   | `ImagePicker`'s library half: `pick()` shows the system's photo picker as a sheet on the key window, which needs no permission, and copies what is picked into the app's caches. `libraryPermission` is the photo library's. macOS has no system camera to open, so `capture()` answers nothing and the camera permission is denied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `NgNativeTrackingTransparency`          | `Tracking` over App Tracking Transparency: the permission, asked only when the app's `Info.plist` has `NSUserTrackingUsageDescription` and never with `NGN_NO_PROMPTS=1`, and the advertising identifier once tracking is allowed (null where macOS answers zeros).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `NgNativeImageManipulator`              | `ImageEditor` over ImageIO and Core Graphics, as `expo-image-manipulator` on iOS: resize (to a width or a height keeping the ratio), rotate, flip and crop, applied in order to the image the right way up, after scaling it into `maxWidth` and `maxHeight`, and saved as JPEG at the `compress` quality or as PNG into the app's caches, with its base64 when asked. The source is a `file:` uri, a path, a `data:` uri or an asset from the dev server. macOS cannot write WebP, so saving as WebP rejects.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `NgNativePrint`                         | `Printing` over NSPrintOperation: `print()` shows the print panel as a sheet on the key window (app-modally with none) for HTML, laid out by WebKit, or for the PDF or image a `file:`, `data:` or `http(s):` uri names, and resolves once it closes, printed or cancelled. `printToPdf()` lays the HTML out on pages of its size (US Letter by default) into a PDF in the app's caches, breaking pages where the CSS asks. macOS has no printer picker: `selectPrinter()` answers null and a printer passed to `print()` is ignored. With `NGN_NO_PROMPTS=1` `print()` shows nothing.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `NgNativePrint`                         | `Printing` over NSPrintOperation: `print()` shows the print panel as a sheet on the key window (app-modally with none) for HTML, laid out by WebKit, or for the PDF or image a `file:`, `data:` or `http(s):` uri names, and resolves once it closes, printed or cancelled. `printToPdf()` lays the HTML out on pages of its size (US Letter by default) into a PDF in the app's caches, breaking pages where the CSS asks. `print({ window })` prints what the window on that surface shows, drawn as on screen and scaled to the paper, with the panel as a sheet on it; File > Print... (Command-P) in the default menu bar does the same for the key window unless the app gives a `print` item a handler. macOS has no printer picker: `selectPrinter()` answers null and a printer passed to `print()` is ignored. With `NGN_NO_PROMPTS=1` `print()` shows nothing.                                                                                                                                  |
 | `NgNativeCamera`                        | `<expo-camera>` and `Camera`: the host draws the view (`ViewManagerAdapter_ExpoCamera`) as an AVCaptureSession's preview from the built-in camera (or the first there is, `facing` either way), started while `active` once the camera is allowed and present, with `cameraReady`, or `mountError` with expo-camera's message when the permission is not granted or the Mac has no camera. The view asks for the permission as it mounts only when the app's `Info.plist` has `NSCameraUsageDescription`, never with `NGN_NO_PROMPTS=1`. `takePicture()` writes a JPEG at its `quality` into the app's caches; `record()` rejects, as macOS records no video yet.                                                                                                                                                                                                                                                                                                                                          |
 | `NgNativeMaps`                          | `<expo-map>` (`registerExpoMap('macos')`): the host draws expo-maps' Apple view (`ViewManagerAdapter_ExpoAppleMaps`) with an MKMapView, taking the iOS props: markers (title, tint, SF Symbol or monogram), polylines (geodesic too), polygons and circles, `cameraPosition`, the map type, elevation, emphasis, traffic and points of interest, the compass, scale and pitch controls, and the colour scheme. It sends `cameraMove` once as it appears and as the region changes, `markerClick` when a marker is selected, `polygonClick`, `circleClick` or `polylineClick` for a click on a shape (polylines within `polylineTapThreshold` metres), and `mapClick` otherwise. `setCameraPosition()` and `selectMarker()` reach the view by its tag. The user's location shows only once location is allowed: the map never asks. macOS has no location button, and `selectionEnabled` does nothing.                                                                                                      |
 | `NgNativeAddressSearch`                 | `AddressSearch`, the module the iOS app has, over MapKit: a completer for each search, suggesting as the query changes (later answers for the same query arrive as `ngNativeAddressSearch` events), and `MKLocalSearch` for the address of a picked suggestion of the latest answer. The `region` option looks only in that country from macOS 15, and there first before. It needs no permission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -414,6 +436,20 @@ the package's name after `expo-`, each with the methods the service calls on the
 | `NgNativeAsset`                         | `assets()`: each module resolves as an image's does, and its `localUri` is its file on the Mac. An asset the dev server serves is downloaded into the app's caches as `ExponentAsset-<hash>.<type>` first, once per hash; a packaged app's is the file in the app.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `NgNativeSymbol`                        | `<expo-symbol>`'s size: the symbol image's at a point size, weight and scale, as the iOS module answers it. The host draws the view itself (`ViewManagerAdapter_SymbolModule`) with AppKit's symbol configuration: the type, tint, palette, weight and scale, built at the system font size and placed by `resizeMode`, as `expo-symbols` does on macOS. `animationSpec` plays nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `NgNativeApplication`, `NgNativeDevice` | `AppInfo`: the bundle's version, build, id and name (a dev run, with no bundle, gives the app's id and name and no versions), and the Mac's model, macOS version and `desktop` device type.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+
+`<expo-glass>` (`ViewManagerAdapter_ExpoGlassEffect_GlassView`) is drawn by the host: Liquid Glass,
+NSGlassEffectView, from macOS 26 (found by name, so any SDK builds it), and an NSVisualEffectView
+before it, behind the view's children in its own corners, with `glassEffectStyle` (`regular`,
+`clear`, `none`), `tintColor` and `colorScheme`. `<expo-glass-container>` is a plain view.
+
+Views with no macOS counterpart are absent from the host's view registry (`absent-views.h`), which
+JavaScript reads as `__nativeComponentRegistry__hasComponent`, each with its reason: one committed
+anyway is a plain view whose children still show. They are `<refresh-control>`'s
+`PullToRefreshView` and `AndroidSwipeRefreshLayout` (a Mac has no pull to refresh),
+`<input-accessory-view>` and react-native-keyboard-controller's views, though the library is
+compiled in (a Mac has no software keyboard), and the community `slider`, `picker` and
+`masked-view`, whose libraries have no macOS view (`@expo/ui`'s `ui-slider` and `ui-picker` are
+SwiftUI's on macOS).
 
 `<expo-image>` (`ViewManagerAdapter_ExpoImage`) is drawn by the host, with no module of its own:
 the source nearest the view's size in pixels, placed by `contentFit` and `contentPosition`, with
@@ -528,9 +564,23 @@ reload reloads, and so does Developer > Reload (Command-R). A bundle path (from
 `npx expo export -p macos`) or another URL can be given instead.
 
 The host is built against the app's own `react-native` (0.88), the first time into
-`~/Library/Caches/ng-native/desktop/rn-<version>`, which takes a few minutes and needs Xcode's
-command line tools, CMake and Ninja. Later runs reuse it, and adding or removing one of the
-libraries above recompiles only that library.
+`~/Library/Caches/ng-native/desktop/rn-<version>`, which takes about 4 minutes on an Apple silicon
+Mac (about 6 for a universal release build), and the command says so before it starts. Later runs
+reuse it, and adding or removing one of the libraries above recompiles only that library. The host
+is built for macOS 14 and later (`native/CMakeLists.txt`, which `scripts/macos-target.sh` reads for
+Hermes too; a cached Hermes built for another macOS is built again).
+
+Before a from-source build the command checks the toolchain (`bin/toolchain.mjs`) and stops with a
+fix-it line for each problem:
+
+| Tool                            | Minimum                | Fix-it when missing or older                 |
+| ------------------------------- | ---------------------- | -------------------------------------------- |
+| Xcode or the Command Line Tools | installed and selected | `xcode-select --install`                     |
+| `swiftc`                        | Swift 6.0 (Xcode 16)   | Software Update, or `xcode-select --install` |
+| CMake                           | 3.25                   | `brew install cmake` / `brew upgrade cmake`  |
+| Ninja                           | 1.10                   | `brew install ninja` / `brew upgrade ninja`  |
+
+A prebuilt host needs none of them.
 
 | Option            | What it does                                              |
 | ----------------- | --------------------------------------------------------- |

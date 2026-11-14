@@ -22,6 +22,14 @@ const HERMESC = `${BUILD}/appkit/hermesc`;
 
 type Call = { command: string; args: string[] };
 
+/** What the toolchain check (toolchain.mjs) asks, answered by a Mac that has every tool. */
+const TOOLCHAIN: Record<string, string> = {
+  'xcode-select --print-path': '/Applications/Xcode.app/Contents/Developer\n',
+  'xcrun swiftc --version': 'Apple Swift version 6.2 (swiftlang-6.2.0.19.9 clang-1700.3.19.1)\n',
+  'cmake --version': 'cmake version 3.31.6\n',
+  'ninja --version': '1.12.1\n',
+};
+
 /**
  * A Mac with full Xcode whose tools succeed, recording each one run and each file written. A tool
  * answers from `answers` by its name and first argument (`xcrun notarytool`), where it is given.
@@ -65,6 +73,8 @@ function fakeMac(
     sha256: () => '',
     rename: () => {},
     run(command, args) {
+      const probe = TOOLCHAIN[[command, ...args].join(' ')];
+      if (probe !== undefined) return { status: 0, stdout: probe };
       calls.push({ command, args });
       const key = `${command} ${args[0]}`;
       if (answers[key]) return { stdout: '', ...answers[key] };

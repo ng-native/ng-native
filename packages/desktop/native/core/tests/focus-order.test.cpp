@@ -152,3 +152,206 @@ TEST_CASE("a rotor lists its views in tree order, skipping what is not drawn and
   CHECK(ngn::rotorItems(t.tree, 12, AxRotor::Headings) == Tags{13});
   CHECK(ngn::rotorItems(t.tree, 99, AxRotor::Headings).empty());
 }
+
+namespace {
+
+folly::dynamic withRole(const char *role) {
+  return folly::dynamic::object("role", role);
+}
+
+// An item with a roving tabIndex: 0 for the one in Tab order, -1 for the rest.
+Props::Shared item(const char *role, int tabIndex, folly::dynamic state = folly::dynamic::object()) {
+  return view(folly::dynamic::object("role", role)("tabIndex", tabIndex)("accessibilityState", std::move(state)));
+}
+
+std::optional<Tag> move(const Tree &t, Tag focused, ngn::CompositeKey key, bool control = false) {
+  return ngn::compositeMove(t.tree, 1, focused, key, control);
+}
+
+using Key = ngn::CompositeKey;
+
+} // namespace
+
+TEST_CASE("arrows move round a tablist and a radiogroup, wrapping, and Home and End go to the ends") {
+  Tree t;
+  t.add(2, 1, "View", view(withRole("tablist")));
+  t.add(3, 2, "View", item("tab", 0));
+  t.add(4, 2, "View", item("tab", -1));
+  t.add(5, 2, "View", item("tab", -1));
+  CHECK(move(t, 3, Key::Right) == 4);
+  CHECK(move(t, 4, Key::Down) == 5);
+  CHECK(move(t, 5, Key::Right) == 3);
+  CHECK(move(t, 3, Key::Left) == 5);
+  CHECK(move(t, 4, Key::Up) == 3);
+  CHECK(move(t, 4, Key::Home) == 3);
+  CHECK(move(t, 3, Key::End) == 5);
+
+  t.add(6, 1, "View", view(withRole("radiogroup")));
+  t.add(7, 6, "View", item("radio", 0));
+  t.add(8, 6, "View", item("radio", -1, folly::dynamic::object("disabled", true)));
+  t.add(9, 6, "View", item("radio", -1));
+  // A disabled radio is skipped.
+  CHECK(move(t, 7, Key::Down) == 9);
+  CHECK(move(t, 9, Key::Right) == 7);
+  CHECK(move(t, 7, Key::Up) == 9);
+}
+
+TEST_CASE("a menu takes Up and Down and wraps, a menubar Left and Right, a listbox stops at its ends") {
+  Tree t;
+  t.add(2, 1, "View", view(withRole("menu")));
+  t.add(3, 2, "View", item("menuitem", -1));
+  t.add(4, 2, "View", item("menuitemcheckbox", -1));
+  t.add(5, 2, "View", item("menuitemradio", -1));
+  CHECK(move(t, 3, Key::Down) == 4);
+  CHECK(move(t, 5, Key::Down) == 3);
+  CHECK(move(t, 3, Key::Up) == 5);
+  CHECK_FALSE(move(t, 3, Key::Right).has_value());
+
+  t.add(6, 1, "View", view(withRole("menubar")));
+  t.add(7, 6, "View", item("menuitem", 0));
+  t.add(8, 6, "View", item("menuitem", -1));
+  CHECK(move(t, 7, Key::Right) == 8);
+  CHECK(move(t, 8, Key::Right) == 7);
+  CHECK_FALSE(move(t, 7, Key::Down).has_value());
+
+  t.add(10, 1, "View", view(withRole("listbox")));
+  t.add(11, 10, "View", item("option", 0));
+  t.add(12, 10, "View", item("option", -1));
+  t.add(13, 10, "View", item("option", -1));
+  CHECK(move(t, 11, Key::Down) == 12);
+  CHECK(move(t, 12, Key::Up) == 11);
+  // At either end the key is used and the focus stays.
+  CHECK(move(t, 13, Key::Down) == 13);
+  CHECK(move(t, 11, Key::Up) == 11);
+  CHECK(move(t, 12, Key::End) == 13);
+  CHECK(move(t, 12, Key::Home) == 11);
+  CHECK_FALSE(move(t, 11, Key::Left).has_value());
+}
+
+TEST_CASE("a grid moves by row and column, stops at its edges, and Control-Home and -End go to its corners") {
+  Tree t;
+  t.add(2, 1, "View", view(withRole("grid")));
+  // Three rows: the middle one shorter, its row inside a rowgroup.
+  t.add(3, 2, "View", view(withRole("row")));
+  t.add(4, 3, "View", item("columnheader", -1));
+  t.add(5, 3, "View", item("columnheader", -1));
+  t.add(6, 3, "View", item("columnheader", -1));
+  t.add(7, 2, "View", view(withRole("rowgroup")));
+  t.add(8, 7, "View", view(withRole("row")));
+  t.add(9, 8, "View", item("rowheader", 0));
+  t.add(10, 8, "View", item("gridcell", -1));
+  t.add(11, 7, "View", view(withRole("row")));
+  t.add(12, 11, "View", item("gridcell", -1));
+  t.add(13, 11, "View", item("cell", -1));
+  t.add(14, 11, "View", item("gridcell", -1));
+  CHECK(move(t, 9, Key::Right) == 10);
+  CHECK(move(t, 10, Key::Right) == 10);
+  CHECK(move(t, 9, Key::Left) == 9);
+  CHECK(move(t, 9, Key::Up) == 4);
+  CHECK(move(t, 4, Key::Up) == 4);
+  CHECK(move(t, 10, Key::Down) == 13);
+  // Down from a column the next row lacks: that row's last cell.
+  CHECK(move(t, 6, Key::Down) == 10);
+  CHECK(move(t, 14, Key::Down) == 14);
+  CHECK(move(t, 13, Key::Home) == 12);
+  CHECK(move(t, 12, Key::End) == 14);
+  CHECK(move(t, 13, Key::Home, true) == 4);
+  CHECK(move(t, 9, Key::End, true) == 14);
+}
+
+TEST_CASE("an item that takes no focus gives it to the first view inside it, and the focus may be inside an item") {
+  Tree t;
+  t.add(2, 1, "View", view(withRole("grid")));
+  t.add(3, 2, "View", view(withRole("row")));
+  t.add(4, 3, "View", view(withRole("gridcell")));
+  t.add(5, 4, "NgNativeButton", button(folly::dynamic::object("title", "Edit")));
+  t.add(6, 3, "View", view(withRole("gridcell")));
+  t.add(7, 6, "View", view(folly::dynamic::object("focusable", true)));
+  // A cell with nothing to focus is passed over.
+  t.add(8, 3, "View", view(withRole("gridcell")));
+  t.add(9, 3, "View", item("gridcell", -1));
+  CHECK(move(t, 7, Key::Left) == 5);
+  CHECK(move(t, 7, Key::Right) == 9);
+  CHECK(move(t, 9, Key::Left) == 7);
+  // A native control uses its own keys: nothing moves from one.
+  CHECK_FALSE(move(t, 5, Key::Right).has_value());
+}
+
+TEST_CASE("right to left, Left and Right swap in a tablist and a grid") {
+  Tree t;
+  t.add(2, 1, "View", view(withRole("tablist")));
+  t.add(3, 2, "View", item("tab", 0));
+  t.add(4, 2, "View", item("tab", -1));
+  auto rtl = t.tree.find(2)->view;
+  rtl.layoutMetrics.layoutDirection = LayoutDirection::RightToLeft;
+  t.tree.update(rtl);
+  CHECK(move(t, 3, Key::Left) == 4);
+  CHECK(move(t, 4, Key::Right) == 3);
+  // Up and Down are not sides.
+  CHECK(move(t, 3, Key::Down) == 4);
+
+  t.add(5, 1, "View", view(withRole("grid")));
+  t.add(6, 5, "View", view(withRole("row")));
+  t.add(7, 6, "View", item("gridcell", 0));
+  t.add(8, 6, "View", item("gridcell", -1));
+  auto grid = t.tree.find(5)->view;
+  grid.layoutMetrics.layoutDirection = LayoutDirection::RightToLeft;
+  t.tree.update(grid);
+  CHECK(move(t, 7, Key::Left) == 8);
+  CHECK(move(t, 8, Key::Left) == 8);
+  CHECK(move(t, 8, Key::Right) == 7);
+}
+
+TEST_CASE("arrows do nothing outside a composite, in a text input, across a nested composite or into another container") {
+  Tree t;
+  t.add(2, 1, "View", view(folly::dynamic::object("focusable", true)));
+  CHECK_FALSE(move(t, 2, Key::Down).has_value());
+
+  t.add(3, 1, "View", view(withRole("listbox")));
+  t.add(4, 3, "View", item("option", 0));
+  t.add(5, 3, "TextInput", std::make_shared<const ViewProps>());
+  // A nested composite's items are its own.
+  t.add(6, 3, "View", view(withRole("menu")));
+  t.add(7, 6, "View", item("option", -1));
+  t.add(8, 6, "View", item("menuitem", -1));
+  // Hidden, and another container's root.
+  t.add(9, 3, "View", item("option", -1));
+  t.add(10, 3, "View", item("option", -1));
+  t.add(11, 3, "View", item("option", -1));
+  auto hidden = t.tree.find(9)->view;
+  hidden.layoutMetrics.displayType = DisplayType::None;
+  t.tree.update(hidden);
+  t.tree.addContainerRoot(10);
+  CHECK_FALSE(move(t, 5, Key::Down).has_value());
+  CHECK(move(t, 4, Key::Down) == 11);
+  CHECK(move(t, 8, Key::Down) == 8);
+  CHECK(move(t, 11, Key::Home) == 4);
+}
+
+TEST_CASE("a composite is one Tab stop: the focused item, else the selected or checked one, else the first") {
+  Tree t;
+  t.add(2, 1, "TextInput", std::make_shared<const ViewProps>());
+  t.add(3, 1, "View", view(withRole("tablist")));
+  // Every tab in Tab order, the second selected.
+  t.add(4, 3, "View", item("tab", 0));
+  t.add(5, 3, "View", item("tab", 0, folly::dynamic::object("selected", true)));
+  t.add(6, 3, "View", item("tab", 0));
+  t.add(7, 1, "View", view(withRole("radiogroup")));
+  t.add(8, 7, "View", item("radio", 0));
+  t.add(9, 7, "View", item("radio", 0, folly::dynamic::object("checked", true)));
+  t.add(10, 1, "View", view(withRole("listbox")));
+  t.add(11, 10, "View", item("option", 0));
+  t.add(12, 10, "View", item("option", 0));
+  // A text input inside a composite keeps its own stop.
+  t.add(13, 10, "TextInput", std::make_shared<const ViewProps>());
+  t.add(14, 1, "View", view(folly::dynamic::object("focusable", true)));
+  CHECK(t.order() == Tags{2, 5, 9, 11, 13, 14});
+  // With the focus on an item, that item is the stop, though its tabIndex is -1.
+  t.add(15, 10, "View", item("option", -1));
+  CHECK(ngn::tabOrder(t.tree, 1, TabReach::All, 15) == Tags{2, 5, 9, 15, 13, 14});
+  CHECK(ngn::nextInTabOrder(t.tree, 1, 15, false, TabReach::All) == 13);
+  CHECK(ngn::nextInTabOrder(t.tree, 1, 15, true, TabReach::All) == 9);
+  CHECK(ngn::nextInTabOrder(t.tree, 1, 6, false, TabReach::All) == 9);
+  // Only text inputs: the composites are passed over.
+  CHECK(t.order(TabReach::TextInputs) == Tags{2, 13});
+}

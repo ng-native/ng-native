@@ -1,4 +1,5 @@
 #import "modal-host-view.h"
+#import "modal-focus.h"
 #import "undo.h"
 #import "screen-capture.h"
 
@@ -18,6 +19,7 @@ std::function<void(NSInteger, BOOL)> gPresentationChanged;
 std::function<NSView *(NSInteger)> gViewForTag;
 std::function<NSSize(NSInteger, NSInteger, NSSize)> gSheetSizer;
 std::function<NSSize(NSInteger, NSInteger, NSSize)> gPopoverSizer;
+std::function<NSResponder *(NSInteger)> gInitialFocus;
 NSHashTable *gPopovers = [NSHashTable weakObjectsHashTable];
 constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
 } // namespace
@@ -62,6 +64,53 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
   NSSize _anchorWindowSize;
   State::Shared _modalState;
   NSSize _reportedSize;
+  // Who had the focus when the modal opened, given it back on close.
+  __weak NSView *_opener;
+  __weak NSWindow *_openerWindow;
+}
+
++ (std::function<NSResponder *(NSInteger)>)initialFocus {
+  return gInitialFocus;
+}
++ (void)setInitialFocus:(std::function<NSResponder *(NSInteger)>)fn {
+  gInitialFocus = std::move(fn);
+}
+
++ (NSView *)frontCoverIn:(NSWindow *)window {
+  for (NSView *view in window.contentView.subviews.reverseObjectEnumerator) {
+    if ([view isKindOfClass:NGNModalCover.class]) {
+      return view;
+    }
+  }
+  return nil;
+}
+
++ (BOOL)isPresentationContainer:(NSView *)view {
+  return [view isKindOfClass:NGNModalCover.class];
+}
+
+// Remembers who has the focus in `window`, before the modal takes it.
+- (void)noteOpenerIn:(NSWindow *)window {
+  _openerWindow = window;
+  _opener = ngn::appkit::focusHolder(window);
+}
+
+// The focus into the modal: its container now, and its first view in Tab order once its content
+// is mounted (after this transaction), unless something in it took the focus first (autoFocus).
+- (void)takeFocus {
+  NSWindow *window = _cover.window;
+  [window makeFirstResponder:_cover];
+  _cover.accessibilityLabel = self.axInfo.label.empty() ? nil : @(self.axInfo.label.c_str());
+  __weak NGNModalHostView *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NGNModalHostView *modal = weakSelf;
+    if (modal == nil || modal->_cover == nil || !gInitialFocus || modal->_cover.window.firstResponder != modal->_cover) {
+      return;
+    }
+    if (NSResponder *first = gInitialFocus(modal.reactTag)) {
+      [modal->_cover.window makeFirstResponder:first];
+    }
+  });
 }
 
 + (std::function<NSSize(NSInteger, NSInteger, NSSize)>)sheetSizer {
@@ -190,10 +239,11 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
   if (gPresentationChanged) {
     gPresentationChanged(self.reactTag, YES);
   }
+  [self noteOpenerIn:parent.window];
   [content addSubview:_cover];
   self.frame = [self contentFrameIn:_cover.bounds];
   [_cover addSubview:self];
-  [_cover.window makeFirstResponder:_cover];
+  [self takeFocus];
   [self coverResized];
   [self didPresent];
   if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(self.eventEmitter)) {
@@ -240,8 +290,9 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
   [_cover addSubview:self];
   [gPopovers addObject:self];
   [self coverResized];
+  [self noteOpenerIn:window];
   [window beginSheet:_sheet completionHandler:nil];
-  [_sheet makeFirstResponder:_cover];
+  [self takeFocus];
   [self didPresent];
   if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(self.eventEmitter)) {
     emitter->onShow({});
@@ -278,8 +329,9 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
   _popover.delegate = self;
   [gPopovers addObject:self];
   [self coverResized];
+  [self noteOpenerIn:anchor.window];
   [_popover showRelativeToRect:anchor.bounds ofView:anchor preferredEdge:NSRectEdgeMaxY];
-  [_cover.window makeFirstResponder:_cover];
+  [self takeFocus];
   [self didPresent];
   if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(self.eventEmitter)) {
     emitter->onShow({});
@@ -321,6 +373,9 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
   if (gPresentationChanged) {
     gPresentationChanged(self.reactTag, NO);
   }
+  ngn::appkit::returnFocus(_openerWindow, _opener);
+  _opener = nil;
+  _openerWindow = nil;
 }
 
 - (void)coverResized {

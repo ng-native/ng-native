@@ -88,9 +88,10 @@ const SEPARATOR: MenuSeparator = { separator: true };
 export const isSeparator = (entry: MenuEntry): entry is MenuSeparator => 'separator' in entry;
 
 /**
- * The menu bar every desktop app gets: App, Edit, View, Window and Help, each item with its role
- * and standard shortcut. `Settings...` is in it until the merge, which keeps it only when the app
- * gives it a handler.
+ * The menu bar every desktop app gets: App, File, Edit, View, Window and Help, each item with its
+ * role and standard shortcut. `Settings...` is in it until the merge, which keeps it only when the
+ * app gives it a handler. File holds Print... (`mod+p`), which prints the key window unless the app
+ * gives a `print` item a handler.
  */
 export function defaultMenuBar(appName: string): MenuGroupModel[] {
   const item = (label: string, menuRole: MenuRole, shortcut?: string): MenuItemModel =>
@@ -113,6 +114,7 @@ export function defaultMenuBar(appName: string): MenuGroupModel[] {
         item(`Quit ${appName}`, 'quit', 'mod+q'),
       ],
     },
+    { label: 'File', menuRole: 'file', items: [item('Print...', 'print', 'mod+p')] },
     {
       label: 'Edit',
       menuRole: 'edit',
@@ -185,17 +187,76 @@ function tidy(entries: readonly MenuEntry[], drop: (item: MenuItemModel) => bool
   return kept;
 }
 
+type MergedGroup = { label: string; menuRole?: MenuGroupRole; items: MenuEntry[] };
+
+/**
+ * The app's groups, each added to the default menu it names or set aside to go after App (a
+ * `file` group with no default File menu) or after View. The items for the default File menu are
+ * kept apart, to go before its own.
+ */
+function placeAppGroups(
+  merged: MergedGroup[],
+  app: readonly MenuGroupModel[],
+  defaultFile: MergedGroup | undefined,
+  moved: (item: MenuItemModel) => boolean,
+): { afterApp: MergedGroup[]; afterView: MergedGroup[]; fileItems: MenuEntry[] } {
+  const afterApp: MergedGroup[] = [];
+  const afterView: MergedGroup[] = [];
+  let fileItems: MenuEntry[] = [];
+  for (const group of app) {
+    const items = tidy(group.items, moved);
+    const standard = merged.find((one) => group.menuRole && one.menuRole === group.menuRole);
+    if (standard && standard === defaultFile) fileItems = joined(fileItems, items);
+    else if (standard) standard.items = joined(standard.items, items);
+    // A group whose items all replaced defaults: an empty menu is not worth a place in the bar.
+    else if (items.length)
+      (group.menuRole === 'file' ? afterApp : afterView).push({ ...group, items });
+  }
+  return { afterApp, afterView, fileItems };
+}
+
+/** `items` after `entries`, with a separator between when both have any. */
+function joined(entries: readonly MenuEntry[], items: readonly MenuEntry[]): MenuEntry[] {
+  return entries.length && items.length
+    ? [...entries, SEPARATOR, ...items]
+    : [...entries, ...items];
+}
+
+/**
+ * The File menu: the app's items, then Close Window when it moved there, then the defaults
+ * (Print...), each part apart.
+ */
+function fileMenu(
+  own: readonly MenuEntry[],
+  close: MenuItemModel | undefined,
+  defaults: readonly MenuEntry[],
+): MenuEntry[] {
+  return tidy([...own, SEPARATOR, ...(close ? [close, SEPARATOR] : []), ...defaults], () => false);
+}
+
+/** The Window menu's Close Window (or the app's `close` item), taken out of it. */
+function takeClose(
+  groups: { menuRole?: MenuGroupRole; items: MenuEntry[] }[],
+): MenuItemModel | undefined {
+  const window = groups.find((group) => group.menuRole === 'window');
+  const close = window?.items.find((entry) => !isSeparator(entry) && entry.menuRole === 'close');
+  if (!window || !close || isSeparator(close)) return undefined;
+  window.items = tidy(window.items, (item) => item === close);
+  return close;
+}
+
 /**
  * The menu bar an app ends up with, from the defaults and its `<menu-bar>`:
  *
  * - An app item with a `menuRole` replaces the default item with that role, where the default is,
  *   and leaves the group it was written in.
  * - `Settings...` shows only when the app gives a `settings` item a handler.
- * - A group whose `menuRole` names a default menu adds its items to the end of that menu.
- * - A `file` group goes after the App menu, as on a Mac, and any other group after View, in the
- *   order the app wrote them. A group left with no items is left out.
+ * - A group whose `menuRole` names a default menu adds its items to the end of that menu; a `file`
+ *   group's go before Print..., which stays last, as on a Mac.
+ * - A `file` group with no default File menu goes after the App menu, and any other group after
+ *   View, in the order the app wrote them. A group left with no items is left out.
  * - With a `file` group, the Window menu's Close Window (or the app's own `close` item) moves to
- *   the end of it.
+ *   the File menu, after the app's items and before the defaults.
  */
 export function mergeMenuBar(
   defaults: readonly MenuGroupModel[],
@@ -211,36 +272,17 @@ export function mergeMenuBar(
       if (own) return own;
       return entry.items ? { ...entry, items: replace(entry.items) } : entry;
     });
-  const merged: { label: string; menuRole?: MenuGroupRole; items: MenuEntry[] }[] = defaults.map(
-    (group) => ({
-      ...group,
-      items: tidy(
-        replace(group.items),
-        (item) => item.menuRole === 'settings' && !settings?.select,
-      ),
-    }),
-  );
+  const merged: MergedGroup[] = defaults.map((group) => ({
+    ...group,
+    items: tidy(replace(group.items), (item) => item.menuRole === 'settings' && !settings?.select),
+  }));
   const moved = (item: MenuItemModel) => Boolean(item.menuRole && defaultRoles.has(item.menuRole));
-  const afterApp: typeof merged = [];
-  const afterView: typeof merged = [];
-  for (const group of app) {
-    const items = tidy(group.items, moved);
-    const standard = merged.find((one) => group.menuRole && one.menuRole === group.menuRole);
-    if (standard) {
-      const joined = standard.items.length && items.length ? [SEPARATOR, ...items] : items;
-      standard.items = [...standard.items, ...joined];
-    } else if (!items.length) {
-      // Every item it had replaced a default: an empty menu is not worth a place in the bar.
-      continue;
-    } else if (group.menuRole === 'file') afterApp.push({ ...group, items });
-    else afterView.push({ ...group, items });
-  }
-  const file = afterApp[0];
-  const window = merged.find((group) => group.menuRole === 'window');
-  const close = window?.items.find((entry) => !isSeparator(entry) && entry.menuRole === 'close');
-  if (file && window && close) {
-    window.items = tidy(window.items, (item) => item === close);
-    file.items = [...file.items, SEPARATOR, close];
+  const defaultFile = merged.find((group) => group.menuRole === 'file');
+  const { afterApp, afterView, fileItems } = placeAppGroups(merged, app, defaultFile, moved);
+  const file = defaultFile ?? afterApp[0];
+  if (file) {
+    const close = app.some((group) => group.menuRole === 'file') ? takeClose(merged) : undefined;
+    file.items = fileMenu(defaultFile ? fileItems : file.items, close, defaultFile?.items ?? []);
   }
   const at = (role: MenuGroupRole) => merged.findIndex((group) => group.menuRole === role) + 1;
   merged.splice(at('view'), 0, ...afterView);

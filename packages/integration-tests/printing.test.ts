@@ -4,8 +4,9 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { OS } from '@ng-native/device';
 import { Printing, type NativePrinting } from '@ng-native/expo/printing';
-import { serviceWith } from './injected.ts';
+import { serviceWith, servicesWith } from './injected.ts';
 
 function platform(overrides: Partial<NativePrinting> = {}) {
   const calls: unknown[][] = [];
@@ -41,6 +42,28 @@ describe('Printing', () => {
       ['printAsync', { html: '<h1>Invoice</h1>' }],
       ['printAsync', { uri: 'file:///cache/out.pdf', printerUrl: 'ipp://office' }],
     ]);
+  });
+
+  it('prints a window on macOS by its surface, and nothing for a window on any other OS', async () => {
+    const on = (os: 'macos' | 'ios' | 'android' | 'web') => {
+      const fake = platform();
+      const printing = servicesWith(
+        [
+          [Printing.SOURCE, fake.native],
+          [OS, os],
+        ],
+        () => new Printing(),
+      );
+      return { printing, calls: fake.calls };
+    };
+    const mac = on('macos');
+    await mac.printing.print({ window: { surface: 3 }, orientation: 'landscape' });
+    assert.deepEqual(mac.calls, [['printAsync', { orientation: 'landscape', window: 3 }]]);
+    for (const os of ['ios', 'android', 'web'] as const) {
+      const other = on(os);
+      await other.printing.print({ window: { surface: 1 } });
+      assert.deepEqual(other.calls, [], `nothing on ${os}`);
+    }
   });
 
   it('renders HTML to a PDF file and answers its uri', async () => {

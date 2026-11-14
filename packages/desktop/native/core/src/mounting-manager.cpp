@@ -1,5 +1,6 @@
 #include "ngn/mounting-manager.h"
 
+#include "ngn/absent-views.h"
 #include "ngn/accessibility.h"
 
 #include <chrono>
@@ -9,6 +10,7 @@
 #include "ngn/split-view.h"
 #include "ngn/apple-authentication.h"
 #include "ngn/camera.h"
+#include "ngn/glass.h"
 #include "ngn/maps.h"
 #include "ngn/video.h"
 #include "ngn/expo-image.h"
@@ -66,13 +68,18 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<MapComponentDescriptor>(),
       concreteComponentDescriptorProvider<VideoViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<AppleButtonComponentDescriptor>(),
+      concreteComponentDescriptorProvider<GlassViewComponentDescriptor>(),
+      concreteComponentDescriptorProvider<GlassContainerComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : expoUIComponentProviders()) {
     components_.push_back(std::move(provider));
   }
   for (auto &provider : backend_->componentProviders()) {
-    components_.push_back(std::move(provider));
+    // A library's view this host has no counterpart for stays out (absent-views.h).
+    if (!absentReason(provider.name)) {
+      components_.push_back(std::move(provider));
+    }
   }
   for (const auto &provider : components_) {
     componentNames_.insert(provider.name);

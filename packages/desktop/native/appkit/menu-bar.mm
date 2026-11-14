@@ -28,7 +28,6 @@ SEL selectorFor(MenuCommand command) {
     case C::BringAllToFront: return @selector(arrangeInFront:);
     case C::Find: return @selector(performFindPanelAction:);
     case C::ToggleSidebar: return @selector(toggleSidebar:);
-    case C::Print: return @selector(print:);
     default: return nil;
   }
 }

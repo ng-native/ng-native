@@ -107,3 +107,43 @@ TEST_CASE("printOperation shows the panel, in the orientation asked, without run
   CHECK(portrait.printInfo.orientation == NSPaperOrientationPortrait);
   CHECK(ngn::appkit::printOperation(image, true).printInfo.orientation == NSPaperOrientationLandscape);
 }
+
+TEST_CASE("a window prints as what its content view draws, on one page of its size") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NSView *content = window.contentView;
+  content.wantsLayer = YES;
+  // A layer's colour, which only a render of the layers draws.
+  NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 150, 200)];
+  box.wantsLayer = YES;
+  box.layer.backgroundColor = NSColor.redColor.CGColor;
+  [content addSubview:box];
+
+  PDFDocument *pdf = ngn::appkit::windowDocument(content);
+  REQUIRE((pdf != nil));
+  CHECK(pdf.pageCount == 1);
+  NSRect page = [[pdf pageAtIndex:0] boundsForBox:kPDFDisplayBoxMediaBox];
+  CHECK(NSWidth(page) == doctest::Approx(300));
+  CHECK(NSHeight(page) == doctest::Approx(200));
+  // The page carries the window's pixels: the layer's red on the left half, and on the right the
+  // window's own content view, which draws nothing.
+  NSImage *drawn = [[NSImage alloc] initWithData:[[pdf pageAtIndex:0] dataRepresentation]];
+  REQUIRE((drawn != nil));
+  NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:[drawn CGImageForProposedRect:nil context:nil hints:nil]];
+  NSColor *left = [[rep colorAtX:rep.pixelsWide / 4 y:rep.pixelsHigh / 2] colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+  NSColor *right = [[rep colorAtX:rep.pixelsWide * 3 / 4 y:rep.pixelsHigh / 2] colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+  CHECK(left.redComponent > 0.9);
+  CHECK(left.greenComponent < 0.4);
+  CHECK(right.redComponent < 0.5);
+
+  CHECK((ngn::appkit::windowDocument(nil) == nil));
+  // The operation the panel would run: shown, scaled to the paper, and never run here.
+  NSPrintOperation *operation = ngn::appkit::printOperation(pdf, true);
+  CHECK(operation.showsPrintPanel);
+  CHECK(operation.printInfo.orientation == NSPaperOrientationLandscape);
+  [window close];
+}

@@ -41,6 +41,13 @@ npm start        # the Expo CLI's dev server, in one terminal
 npm run macos    # builds the host the first time, then opens the app from the dev server
 ```
 
+The first `npm run macos` for a React Native version builds the host from source, React Native and
+Hermes included: about 4 minutes on an Apple silicon Mac, and about 6 for a universal release build.
+Later runs reuse it. Building needs Xcode 16 or its Command Line Tools (Swift 6.0 or later), CMake
+3.25 or later and Ninja 1.10 or later; the command checks for them first and prints the line that
+installs whatever is missing or too old, such as `xcode-select --install` or `brew install ninja`.
+The host runs on macOS 14 and later.
+
 The Expo CLI has no `run:macos`: its `run` commands are a fixed list, so `npm run macos` is
 `ng-native-desktop run`. It takes a bundle path or URL in place of the dev server, `--module`,
 `--port` and `--universal`.

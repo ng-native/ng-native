@@ -106,7 +106,9 @@ describe('the menu bar on macOS', () => {
       ['Notes', 'File', 'Edit', 'View', 'Format', 'Window', 'Help'],
     );
     const file = bar[1];
-    assert.deepEqual(labels(file), ['New', '-', 'Save', '-', 'Close Window']);
+    assert.deepEqual(labels(file), ['New', '-', 'Save', '-', 'Close Window', '-', 'Print...']);
+    assert.deepEqual(item(file, 'Print...')?.menuRole, 'print');
+    assert.equal(item(file, 'Print...')?.shortcut?.key, 'p');
     assert.deepEqual(item(file, 'New')?.shortcut, {
       key: 'n',
       meta: true,
@@ -163,7 +165,16 @@ describe('the menu bar on macOS', () => {
     app.instance.showOpen.set(true);
     app.instance.dirty.set(true);
     await app.detectChanges();
-    assert.deepEqual(labels(host.bar()[1]), ['New', 'Open', '-', 'Save', '-', 'Close Window']);
+    assert.deepEqual(labels(host.bar()[1]), [
+      'New',
+      'Open',
+      '-',
+      'Save',
+      '-',
+      'Close Window',
+      '-',
+      'Print...',
+    ]);
     assert.equal(item(host.bar()[1], 'Save')?.disabled, undefined);
   });
 
@@ -173,7 +184,7 @@ describe('the menu bar on macOS', () => {
     await app.detectChanges();
     assert.deepEqual(
       host.bar().map((group) => group.label),
-      ['Notes', 'Edit', 'View', 'Window', 'Help'],
+      ['Notes', 'File', 'Edit', 'View', 'Window', 'Help'],
     );
     assert.ok(!labels(host.bar()[0])?.includes('Settings...'), 'no handler, no Settings...');
   });

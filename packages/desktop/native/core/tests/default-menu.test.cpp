@@ -102,3 +102,15 @@ TEST_CASE("a bundle from a dev server adds the Developer menu with Reload on Com
   CHECK(devTools->modifiers == (ngn::Command | ngn::Option));
   CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes"}), MenuCommand::OpenDevTools));
 }
+
+TEST_CASE("File has Print... on Command-P, after Close Window") {
+  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  const auto &file = bar[1].items;
+  REQUIRE(file.size() == 3);
+  CHECK(file[0].command == MenuCommand::CloseWindow);
+  CHECK(file[1].separator);
+  CHECK(file[2].title == "Print...");
+  CHECK(file[2].command == MenuCommand::Print);
+  CHECK(file[2].key == "p");
+  CHECK(file[2].modifiers == ngn::Command);
+}

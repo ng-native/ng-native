@@ -140,8 +140,33 @@ void onMain(std::function<void()> work) {
   }
 }
 
+// Runs `operation` as a sheet on `window` when it shows, else app-modally.
+void runPanel(NSPrintOperation *operation, NSWindow *window, const std::function<void(const std::string &)> &done) {
+  if (window == nil || !window.visible) {
+    // No window to hang a sheet on: the panel runs app-modally, and has closed when this returns.
+    [operation runOperation];
+    done("");
+    return;
+  }
+  NGNPrintPanelEnd *end = [[NGNPrintPanelEnd alloc] initWithDone:[done] { done(""); }];
+  [operation runOperationModalForWindow:window delegate:end didRunSelector:@selector(printOperationDidRun:success:contextInfo:) contextInfo:nil];
+}
+
 class AppKitPrintSystem final : public PrintSystem {
  public:
+  explicit AppKitPrintSystem(std::function<NSWindow *(facebook::react::SurfaceId)> windowOf) : windowOf_(std::move(windowOf)) {}
+
+  void printWindow(facebook::react::SurfaceId surface, bool landscape, std::function<void(const std::string &)> done) override {
+    onMain([this, surface, landscape, done = std::move(done)] {
+      NSWindow *window = windowOf_ ? windowOf_(surface) : nil;
+      if (window == nil) {
+        done("no window shows surface " + std::to_string(surface));
+        return;
+      }
+      ngn::appkit::printWindow(window, landscape, done);
+    });
+  }
+
   void print(Document document, bool landscape, std::function<void(const std::string &)> done) override {
     onMain([document = std::move(document), landscape, done = std::move(done)] {
       if (document.kind != Document::Kind::Html) {
@@ -186,16 +211,10 @@ class AppKitPrintSystem final : public PrintSystem {
       done("the document cannot be printed");
       return;
     }
-    NSWindow *window = NSApp.keyWindow;
-    if (window == nil || !window.visible) {
-      // No window to hang a sheet on: the panel runs app-modally, and has closed when this returns.
-      [operation runOperation];
-      done("");
-      return;
-    }
-    NGNPrintPanelEnd *end = [[NGNPrintPanelEnd alloc] initWithDone:[done] { done(""); }];
-    [operation runOperationModalForWindow:window delegate:end didRunSelector:@selector(printOperationDidRun:success:contextInfo:) contextInfo:nil];
+    runPanel(operation, NSApp.keyWindow, done);
   }
+
+  std::function<NSWindow *(facebook::react::SurfaceId)> windowOf_;
 };
 
 } // namespace
@@ -248,8 +267,40 @@ NSPrintOperation *printOperation(PDFDocument *document, bool landscape) {
   return operation;
 }
 
-std::shared_ptr<PrintSystem> makePrintSystem() {
-  return std::make_shared<AppKitPrintSystem>();
+PDFDocument *windowDocument(NSView *content) {
+  NSRect bounds = content.bounds;
+  if (content == nil || NSWidth(bounds) < 1 || NSHeight(bounds) < 1) {
+    return nil;
+  }
+  // Drawn as the screen draws it, layers and all, at the window's scale.
+  NSBitmapImageRep *rep = [content bitmapImageRepForCachingDisplayInRect:bounds];
+  if (rep == nil) {
+    return nil;
+  }
+  [content cacheDisplayInRect:bounds toBitmapImageRep:rep];
+  NSImage *image = [[NSImage alloc] initWithSize:bounds.size];
+  [image addRepresentation:rep];
+  PDFPage *page = [[PDFPage alloc] initWithImage:image];
+  if (page == nil) {
+    return nil;
+  }
+  PDFDocument *pdf = [PDFDocument new];
+  [pdf insertPage:page atIndex:0];
+  return pdf;
+}
+
+void printWindow(NSWindow *window, bool landscape, std::function<void(const std::string &)> done) {
+  PDFDocument *pdf = windowDocument(window.contentView);
+  NSPrintOperation *operation = pdf != nil ? printOperation(pdf, landscape) : nil;
+  if (operation == nil) {
+    done("the window has nothing to print");
+    return;
+  }
+  runPanel(operation, window, done);
+}
+
+std::shared_ptr<PrintSystem> makePrintSystem(std::function<NSWindow *(facebook::react::SurfaceId)> windowOf) {
+  return std::make_shared<AppKitPrintSystem>(std::move(windowOf));
 }
 
 } // namespace ngn::appkit

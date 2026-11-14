@@ -1,3 +1,4 @@
+#include "ngn/accessibility.h"
 #include "ngn/desktop-modal.h"
 #include "ngn/desktop-view-props.h"
 
@@ -150,6 +151,8 @@ TEST_CASE("a view with desktop props is mounted with its children under it, not 
   // An accessibility element keeps the text VoiceOver reads as part of it.
   CHECK(traitsOf(folly::dynamic::object("accessibilityRole", "button")).check(ShadowNodeTraits::Trait::FormsStackingContext));
   CHECK(traitsOf(folly::dynamic::object("role", "heading")).check(ShadowNodeTraits::Trait::FormsStackingContext));
+  // A role React Native's Role lacks too: a listbox keeps its options under it.
+  CHECK(traitsOf(folly::dynamic::object("role", "listbox")).check(ShadowNodeTraits::Trait::FormsStackingContext));
   CHECK(traitsOf(folly::dynamic::object("accessibilityLabel", "Logo")).check(ShadowNodeTraits::Trait::FormsStackingContext));
   // A live region keeps the text it announces under it (live-regions.h).
   CHECK(traitsOf(folly::dynamic::object("accessibilityLiveRegion", "polite")).check(ShadowNodeTraits::Trait::FormsStackingContext));
@@ -157,4 +160,25 @@ TEST_CASE("a view with desktop props is mounted with its children under it, not 
   CHECK_FALSE(traitsOf(folly::dynamic::object("accessibilityLiveRegion", "none")).check(ShadowNodeTraits::Trait::FormsStackingContext));
   CHECK(traitsOf(folly::dynamic::object("focusable", true)).check(ShadowNodeTraits::Trait::KeyboardFocusable));
   CHECK_FALSE(traitsOf(folly::dynamic::object("tabIndex", -1)).check(ShadowNodeTraits::Trait::KeyboardFocusable));
+}
+
+TEST_CASE("a role React Native's Role lacks is kept as written, and is the view's role name") {
+  Parser p;
+  for (const char *role : {"listbox", "gridcell", "menuitemcheckbox", "menuitemradio"}) {
+    auto props = p.clone(nullptr, folly::dynamic::object("role", role));
+    CHECK(ngn::desktopProps(*props).role == role);
+    CHECK(ngn::roleName(static_cast<const ViewProps &>(*props)) == role);
+  }
+  auto listbox = p.clone(nullptr, folly::dynamic::object("role", "listbox"));
+  CHECK(ngn::accessibilityInfo(static_cast<const ViewProps &>(*listbox)).role == ngn::AxRole::List);
+  auto cell = p.clone(nullptr, folly::dynamic::object("role", "gridcell"));
+  CHECK(ngn::accessibilityInfo(static_cast<const ViewProps &>(*cell)).role == ngn::AxRole::Cell);
+  auto check = p.clone(nullptr, folly::dynamic::object("role", "menuitemcheckbox"));
+  CHECK(ngn::accessibilityInfo(static_cast<const ViewProps &>(*check)).role == ngn::AxRole::MenuItem);
+  // React Native's own roles still come from its Role, and an update to null clears the role.
+  auto tab = p.clone(nullptr, folly::dynamic::object("role", "tab"));
+  CHECK(ngn::roleName(static_cast<const ViewProps &>(*tab)) == "tab");
+  auto cleared = p.clone(listbox, folly::dynamic::object("role", nullptr));
+  CHECK(ngn::desktopProps(*cleared).role.empty());
+  CHECK(ngn::roleName(static_cast<const ViewProps &>(*cleared)).empty());
 }

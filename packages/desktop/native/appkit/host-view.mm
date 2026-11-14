@@ -14,6 +14,9 @@
 #import "split-view.h"
 #import "svg-view.h"
 #import "symbol-view.h"
+#import "glass-view.h"
+
+#include "ngn/glass.h"
 #import "web-view-component.h"
 #import "expo-image-view.h"
 #import "expo-ui-view.h"
@@ -272,8 +275,10 @@ static ngn::InputDispatcher *gViewInput;
   return [super hitTest:NSMakePoint(origin.x + local->x, origin.y + local->y)];
 }
 
+// Any tabIndex takes the focus, -1 too, as on the web: out of Tab order, but where a click or the
+// arrow keys in a composite widget move it (focus-order.h).
 - (BOOL)acceptsFirstResponder {
-  return _desktop.focusable.value_or(false) || _desktop.tabIndex.value_or(-1) >= 0;
+  return _desktop.focusable.value_or(false) || _desktop.tabIndex.has_value();
 }
 
 
@@ -1153,6 +1158,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == ngn::SymbolComponentName) {
     return [[NGNSymbolView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::GlassViewComponentName) {
+    return [[NGNGlassView alloc] initWithShadowView:view];
   }
   // react-native-svg's: the svg draws its elements, whose own views are hidden.
   if (name == "RNSVGSvgView") {
