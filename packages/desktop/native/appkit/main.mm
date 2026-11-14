@@ -303,6 +303,53 @@ void showAppWindow() {
 
 } // namespace
 
+// The source of a `[dragItem]` view's drag out: a file url per file, and the text and url on one
+// more item. Finder takes the files, a text field the text, a browser the url.
+@interface NGNDragOutSource : NSObject <NSDraggingSource>
++ (void)begin:(const ngn::DragOutItem &)item from:(NSView *)view event:(NSEvent *)event;
+@end
+
+@implementation NGNDragOutSource
++ (void)begin:(const ngn::DragOutItem &)item from:(NSView *)view event:(NSEvent *)event {
+  static NGNDragOutSource *source = [NGNDragOutSource new];
+  // The view as it is drawn, under the pointer where the press started.
+  NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect:view.bounds];
+  NSImage *image = nil;
+  if (rep != nil) {
+    [view cacheDisplayInRect:view.bounds toBitmapImageRep:rep];
+    image = [[NSImage alloc] initWithSize:view.bounds.size];
+    [image addRepresentation:rep];
+  }
+  NSMutableArray<NSDraggingItem *> *items = [NSMutableArray array];
+  auto add = [&](id<NSPasteboardWriting> writer) {
+    NSDraggingItem *dragging = [[NSDraggingItem alloc] initWithPasteboardWriter:writer];
+    [dragging setDraggingFrame:view.bounds contents:image];
+    [items addObject:dragging];
+  };
+  for (const auto &file : item.files) {
+    if (NSURL *url = [NSURL URLWithString:[NSString stringWithUTF8String:file.c_str()]]) {
+      add(url);
+    }
+  }
+  if (item.text || item.url) {
+    NSPasteboardItem *extra = [NSPasteboardItem new];
+    if (item.url) {
+      [extra setString:[NSString stringWithUTF8String:item.url->c_str()] forType:NSPasteboardTypeURL];
+    }
+    const std::string &text = item.text ? *item.text : *item.url;
+    [extra setString:[NSString stringWithUTF8String:text.c_str()] forType:NSPasteboardTypeString];
+    add(extra);
+  }
+  if (items.count > 0) {
+    [view beginDraggingSessionWithItems:items event:event source:source];
+  }
+}
+- (NSDragOperation)draggingSession:(NSDraggingSession *)session
+    sourceOperationMaskForDraggingContext:(NSDraggingContext)context {
+  return NSDragOperationCopy | NSDragOperationGeneric;
+}
+@end
+
 @interface NGNAppDelegate : NSObject <NSApplicationDelegate, NSWindowDelegate>
 @end
 
@@ -431,6 +478,15 @@ int main(int argc, const char *argv[]) {
       }
     };
     gHost.input->onCursor = [](ngn::Cursor cursor) { [NGNSurfaceView showCursor:cursor]; };
+    // A press that became a drag out of a `[dragItem]` view: the mouse event that crossed the
+    // threshold starts the session, which has the mouse from there.
+    gHost.input->onDragOut = [](Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) {
+      NSView *view = gHost.backend->view(tag);
+      NSEvent *event = NSApp.currentEvent;
+      if (view != nil && event != nil && event.type == NSEventTypeLeftMouseDragged) {
+        [NGNDragOutSource begin:item from:view event:event];
+      }
+    };
     NGNModalHostView.input = gHost.input.get();
     NGNModalHostView.presentationChanged = [](NSInteger tag, BOOL presented) {
       if (presented) {

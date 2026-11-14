@@ -21,7 +21,7 @@ class RecordingDispatcher final : public ngn::InputDispatcher {
 
  protected:
   void emitTouch(ngn::TouchPhase phase, const ngn::ViewTree::Node &target, const TouchEvent &event) override {
-    const char *names[] = {"start", "move", "end"};
+    const char *names[] = {"start", "move", "end", "cancel"};
     const auto &touch = *event.changedTouches.begin();
     events.push_back(
         std::string("touch ") + names[static_cast<int>(phase)] + " " + std::to_string(target.view.tag) + " page " +
@@ -352,6 +352,11 @@ TEST_CASE("a drag's urls split into files, named by their last part, and other u
   CHECK(items.urls == std::vector<std::string>{"https://example.com/a?b=1"});
   CHECK(items.text == "hello");
 
+  // A url is offered as text too, and a file as its path: that is not dragged text.
+  CHECK_FALSE(ngn::dragItems({"https://example.com/"}, std::string("https://example.com/")).text);
+  CHECK_FALSE(ngn::dragItems({"file:///Users/me/My%20Notes.md"}, std::string("/Users/me/My Notes.md")).text);
+  CHECK(ngn::dragItems({"https://example.com/"}, std::string("Example")).text == "Example");
+
   folly::json::serialization_opts opts;
   opts.sort_keys = true;
   CHECK(
@@ -441,4 +446,51 @@ TEST_CASE("a drag hit-tests as a click does, so a view that lets points through 
   setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)("pointerEvents", "none")));
   CHECK_FALSE(f.input.dragOver(Fixture::at({35, 35}), notes()));
   CHECK(f.input.events.empty());
+}
+
+TEST_CASE("a drag item is parsed from its prop, and one with nothing in it is none") {
+  auto item = ngn::dragItemOf(folly::dynamic::object(
+      "files", folly::dynamic::array("file:///Users/me/a%20b.md"))("text", "Hello")("url", "https://example.com/"));
+  REQUIRE(item);
+  CHECK(item->files == std::vector<std::string>{"file:///Users/me/a%20b.md"});
+  CHECK(item->text == "Hello");
+  CHECK(item->url == "https://example.com/");
+  CHECK_FALSE(ngn::dragItemOf(nullptr));
+  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array())("text", nullptr)("url", nullptr)));
+  // Files that are not file urls are left out.
+  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array("/no/scheme", 3))));
+}
+
+TEST_CASE("a press that moves on a view with a drag item drags it out, and cancels the press") {
+  Fixture f;
+  setProps(
+      f.tree, 2,
+      desktopView(folly::dynamic::object(
+          "dragItem", folly::dynamic::object("files", folly::dynamic::array("file:///tmp/a.md"))("text", nullptr)("url", nullptr))));
+  std::vector<std::pair<Tag, ngn::DragOutItem>> started;
+  f.input.onDragOut = [&](Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) { started.emplace_back(tag, item); };
+
+  f.input.pointerDown(Fixture::at({35, 35}));
+  // A wobble under the threshold is still a press.
+  f.input.pointerMove(Fixture::at({37, 36}));
+  CHECK(started.empty());
+  f.input.pointerMove(Fixture::at({45, 35}));
+  REQUIRE(started.size() == 1);
+  CHECK(started[0].first == 2);
+  CHECK(started[0].second.files == std::vector<std::string>{"file:///tmp/a.md"});
+  // The press is cancelled, so a pressable under it never sees a release as a press.
+  CHECK(only(f.input.events, "touch").back().rfind("touch cancel 3", 0) == 0);
+
+  // The drag owns the mouse now: the rest of the gesture sends no touches.
+  f.input.events.clear();
+  f.input.pointerMove(Fixture::at({80, 80}));
+  f.input.pointerUp(Fixture::at({80, 80}));
+  CHECK(only(f.input.events, "touch").empty());
+  CHECK(started.size() == 1);
+
+  // A press on a view with no drag item above it moves as a press.
+  f.input.pointerDown(Fixture::at({120, 120}));
+  f.input.pointerMove(Fixture::at({140, 140}));
+  CHECK(started.size() == 1);
+  CHECK(only(f.input.events, "touch move").size() == 1);
 }

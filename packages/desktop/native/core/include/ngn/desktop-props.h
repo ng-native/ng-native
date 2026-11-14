@@ -42,6 +42,8 @@ struct DesktopProps {
   bool onWheel{false};
   // Whether the view takes files, text and urls dragged onto it (input-dispatcher.h).
   bool fileDrop{false};
+  // The `dragItem` prop: `{ files, text, url }` the view offers when dragged out, or null for none.
+  folly::dynamic dragItem{nullptr};
   // The `contextMenu` prop: the entries of the menu a secondary click shows, as the app sends them
   // (app-menus.h), or null for none.
   folly::dynamic contextMenu{nullptr};
@@ -60,7 +62,8 @@ struct HasDesktopProps {
 // hit test, the cursor and Tab order all read it, and a flattened view is not mounted.
 inline bool formsStackingContext(const DesktopProps &props) {
   return props.focusable.value_or(false) || props.tabIndex.has_value() || props.cursor.has_value() ||
-      props.onDoubleClick || props.onContextMenu || props.onWheel || props.fileDrop || !props.contextMenu.isNull();
+      props.onDoubleClick || props.onContextMenu || props.onWheel || props.fileDrop || !props.dragItem.isNull() ||
+      !props.contextMenu.isNull();
 }
 
 } // namespace ngn

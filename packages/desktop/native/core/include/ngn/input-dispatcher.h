@@ -16,6 +16,9 @@
 //   as `dropEnter` when it comes over that view, `dropLeave` when it goes off it without dropping
 //   and `dropPerform` on a drop, which ends the drag without a leave. Enter and perform carry
 //   `{ files: [{ uri, name }], text, urls }` (packages/integration-tests/drag-and-drop.test.ts).
+// - A press that moves past the drag threshold on a view whose nearest ancestor-or-self with a
+//   `dragItem` prop offers something is cancelled (touch cancel), and `onDragOut` starts the drag
+//   session; the rest of the gesture belongs to it.
 //
 // It also decides the cursor: the nearest view under the pointer that names one, `text` over a
 // text input, and the default otherwise.
@@ -40,7 +43,7 @@
 
 namespace ngn {
 
-enum class TouchPhase { Start, Move, End };
+enum class TouchPhase { Start, Move, End, Cancel };
 enum class PointerKind { Enter, Leave, Move, Over, Out };
 
 using facebook::react::Cursor;
@@ -48,6 +51,20 @@ using facebook::react::Cursor;
 // The cursor the views under the pointer ask for, `chain` running from the container's root to
 // the deepest. `Cursor::Auto` when none does: the toolkit's default.
 Cursor cursorFor(const ViewTree &tree, const std::vector<Tag> &chain);
+
+// What a `[dragItem]` view offers when dragged out: `file://` urls, text and a url.
+struct DragOutItem {
+  std::vector<std::string> files;
+  std::optional<std::string> text;
+  std::optional<std::string> url;
+  bool operator==(const DragOutItem &) const = default;
+};
+
+// The item of a `dragItem` prop, or nothing when it is null or offers nothing.
+std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop);
+
+// How far a press moves before it becomes a drag, in points (AppKit's own threshold).
+constexpr float kDragThreshold = 4;
 
 class InputDispatcher : public InputSink {
  public:
@@ -84,6 +101,9 @@ class InputDispatcher : public InputSink {
 
   // Told each time the cursor should change.
   std::function<void(Cursor)> onCursor;
+  // Told when a press becomes a drag out of `tag`, at `input` (the move that crossed the
+  // threshold): the backend starts the drag session with the item.
+  std::function<void(Tag tag, const PointerInput &input, const DragOutItem &item)> onDragOut;
 
  protected:
   // Where events leave the core. The defaults send them through the view's event emitter; tests
@@ -103,7 +123,10 @@ class InputDispatcher : public InputSink {
     ContainerId container;
     Tag target;
     int clickCount;
+    Point start;
   };
+  // Whether a drag out starts from this move of the press; true when it did.
+  bool startDragOut(const PointerInput &input);
 
   void updateHover(const Container &container, std::vector<Tag> chain, const PointerInput &input);
   void sendTouch(TouchPhase phase, const PointerInput &input);
@@ -127,6 +150,8 @@ class InputDispatcher : public InputSink {
   std::map<ContainerId, Container> containers_;
   std::map<SurfaceId, std::vector<Tag>> hovered_;
   std::optional<Press> press_;
+  // A drag out has the rest of the gesture, up to the release.
+  bool draggingOut_{false};
   // The surface the pointer is over, if any, and the cursor last asked for.
   std::optional<SurfaceId> pointerSurface_;
   std::optional<Cursor> cursor_;

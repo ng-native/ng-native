@@ -55,7 +55,7 @@ struct DragItems {
 };
 
 // The items of a drag's urls (`file://` ones are files, named by their last part decoded) and
-// its plain text.
+// its plain text, which is left out when it only repeats a url or a file's path.
 DragItems dragItems(const std::vector<std::string> &urls, std::optional<std::string> text);
 
 class InputSink {

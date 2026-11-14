@@ -141,6 +141,7 @@ TEST_CASE("a view with desktop props is mounted with its children under it, not 
       folly::dynamic::object("onContextMenu", true),
       folly::dynamic::object("onWheel", true),
       folly::dynamic::object("fileDrop", true),
+      folly::dynamic::object("dragItem", folly::dynamic::object("text", "Hello")),
       folly::dynamic::object("tabIndex", 0),
   };
   for (const auto &raw : asking) {

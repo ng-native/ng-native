@@ -66,7 +66,8 @@ void InputDispatcher::pointerDown(const PointerInput &input) {
   if (chain.empty()) {
     return;
   }
-  press_ = Press{input.container, chain.back(), input.clickCount};
+  draggingOut_ = false;
+  press_ = Press{input.container, chain.back(), input.clickCount, input.point};
   sendTouch(TouchPhase::Start, input);
 }
 
@@ -75,13 +76,51 @@ void InputDispatcher::pointerMove(const PointerInput &input) {
   if (container == containers_.end()) {
     return;
   }
+  if (draggingOut_) {
+    return;
+  }
   updateHover(container->second, tree_.hitTest(container->second.root, input.point), input);
-  if (press_) {
+  if (press_ && !startDragOut(input)) {
     sendTouch(TouchPhase::Move, input);
   }
 }
 
+bool InputDispatcher::startDragOut(const PointerInput &input) {
+  if (input.container != press_->container) {
+    return false;
+  }
+  float dx = input.point.x - press_->start.x;
+  float dy = input.point.y - press_->start.y;
+  if (dx * dx + dy * dy < kDragThreshold * kDragThreshold) {
+    return false;
+  }
+  auto container = containers_.find(press_->container);
+  if (container == containers_.end()) {
+    return false;
+  }
+  auto chain = tree_.chain(press_->target, container->second.root);
+  for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+    const auto *node = tree_.find(*it);
+    if (node == nullptr || !node->view.props) {
+      continue;
+    }
+    auto item = dragItemOf(desktopProps(*node->view.props).dragItem);
+    if (!item) {
+      continue;
+    }
+    sendTouch(TouchPhase::Cancel, input);
+    press_.reset();
+    draggingOut_ = true;
+    if (onDragOut) {
+      onDragOut(*it, input, *item);
+    }
+    return true;
+  }
+  return false;
+}
+
 void InputDispatcher::pointerUp(const PointerInput &input) {
+  draggingOut_ = false;
   if (!press_) {
     return;
   }
@@ -198,6 +237,30 @@ std::string percentDecoded(std::string_view text) {
 
 } // namespace
 
+std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop) {
+  if (!prop.isObject()) {
+    return std::nullopt;
+  }
+  DragOutItem item;
+  if (auto files = prop.get_ptr("files"); files != nullptr && files->isArray()) {
+    for (const auto &file : *files) {
+      if (file.isString() && file.asString().rfind("file:", 0) == 0) {
+        item.files.push_back(file.asString());
+      }
+    }
+  }
+  if (auto text = prop.get_ptr("text"); text != nullptr && text->isString()) {
+    item.text = text->asString();
+  }
+  if (auto url = prop.get_ptr("url"); url != nullptr && url->isString() && !url->asString().empty()) {
+    item.url = url->asString();
+  }
+  if (item.files.empty() && !item.text && !item.url) {
+    return std::nullopt;
+  }
+  return item;
+}
+
 DragItems dragItems(const std::vector<std::string> &urls, std::optional<std::string> text) {
   DragItems items;
   items.text = std::move(text);
@@ -213,6 +276,16 @@ DragItems dragItems(const std::vector<std::string> &urls, std::optional<std::str
     auto slash = path.rfind('/');
     auto last = slash == std::string_view::npos ? path : path.substr(slash + 1);
     items.files.push_back({.uri = url, .name = percentDecoded(last)});
+  }
+  // The toolkit offers a dragged url as text too, and a file as its path.
+  if (items.text) {
+    for (const auto &url : urls) {
+      bool path = url.rfind("file://", 0) == 0 && percentDecoded(std::string_view(url).substr(7)) == *items.text;
+      if (url == *items.text || path) {
+        items.text.reset();
+        break;
+      }
+    }
   }
   return items;
 }
@@ -386,7 +459,7 @@ void InputDispatcher::sendTouch(TouchPhase phase, const PointerInput &input) {
   touch.timeStamp = HighResTimeStamp::now();
   TouchEvent event;
   event.changedTouches.insert(touch);
-  if (phase != TouchPhase::End) {
+  if (phase != TouchPhase::End && phase != TouchPhase::Cancel) {
     event.touches.insert(touch);
     event.targetTouches.insert(touch);
   }
@@ -429,6 +502,9 @@ void InputDispatcher::emitTouch(TouchPhase phase, const ViewTree::Node &target, 
       break;
     case TouchPhase::End:
       emitter->onTouchEnd(event);
+      break;
+    case TouchPhase::Cancel:
+      emitter->onTouchCancel(event);
       break;
   }
 }

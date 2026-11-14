@@ -357,7 +357,7 @@ NSCursor *nsCursor(Cursor cursor) {
 
 #pragma mark - Drops
 
-// What the drag carries: its urls (files among them) and, when it has no url, its plain text.
+// What the drag carries: its urls (files among them) and its plain text.
 - (ngn::DragItems)dragItemsOf:(id<NSDraggingInfo>)info {
   NSPasteboard *pasteboard = info.draggingPasteboard;
   std::vector<std::string> urls;
@@ -369,8 +369,7 @@ NSCursor *nsCursor(Cursor cursor) {
     }
   }
   std::optional<std::string> text;
-  // A dragged url is offered as text too: the text is only what is dragged without one.
-  if (NSString *string = [pasteboard stringForType:NSPasteboardTypeString]; string != nil && urls.empty()) {
+  if (NSString *string = [pasteboard stringForType:NSPasteboardTypeString]; string != nil) {
     text = string.UTF8String;
   }
   return ngn::dragItems(urls, std::move(text));
