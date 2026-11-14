@@ -57,6 +57,9 @@ if(NGN_WITH_RUNTIME)
   include(cmake/runtime-dependencies.cmake)
 endif()
 include(cmake/react-native.cmake)
+if(APPLE)
+  include(cmake/swift.cmake)
+endif()
 
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
@@ -106,6 +109,7 @@ add_library(ngn_core STATIC
     core/src/modules/file-system.cpp
     core/src/modules/fonts.cpp
     core/src/modules/image-loader.cpp
+    core/src/modules/language-model.cpp
     core/src/modules/local-authentication.cpp
     core/src/modules/location.cpp
     core/src/modules/network-state.cpp
@@ -131,6 +135,7 @@ if(NGN_TESTS)
   target_link_libraries(ngn_core_tests PRIVATE ngn_core doctest)
   # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks.
   if(APPLE)
+    ngn_link_swift(ngn_core_tests)
     target_sources(ngn_core_tests PRIVATE
         appkit/updates.mm appkit/tests/update-crypto.test.mm
         appkit/crypto.mm appkit/tests/crypto.test.mm
@@ -140,7 +145,8 @@ if(NGN_TESTS)
         appkit/fonts.mm appkit/text-layout.mm appkit/tests/fonts.test.mm
         appkit/text-recognition.mm appkit/tests/text-recognition.test.mm
         appkit/calendar.mm appkit/tests/calendar.test.mm
-        appkit/audio.mm appkit/tests/audio.test.mm)
+        appkit/audio.mm appkit/tests/audio.test.mm
+        appkit/language-model.mm appkit/tests/language-model.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia")
   endif()

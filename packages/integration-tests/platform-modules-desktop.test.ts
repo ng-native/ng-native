@@ -440,3 +440,114 @@ describe('Audio on macOS', () => {
     );
   });
 });
+
+describe('LanguageModel on macOS', () => {
+  function llmHost(availability = 'available') {
+    const calls: unknown[][] = [];
+    const host = mac({
+      NgNativeLocalLlm: {
+        getAvailability: () => availability,
+        downloadModel: async () => {},
+        createSession: (config: unknown) => (calls.push(['createSession', config]), '3'),
+        respond: async (...args: unknown[]) => (calls.push(['respond', ...args]), 'Blue'),
+        streamResponse: async (id: string, prompt: string, requestId: string) => {
+          calls.push(['streamResponse', id, prompt]);
+          host.send('ngNativeLocalLlm', {
+            type: 'token',
+            session: '9',
+            requestId,
+            accumulated: 'Not this',
+          });
+          host.send('ngNativeLocalLlm', {
+            type: 'token',
+            session: id,
+            requestId,
+            accumulated: 'Once',
+          });
+          if (prompt === 'Too long') {
+            throw new Error('ERR_CONTEXT_WINDOW_EXCEEDED: Exceeded the context window');
+          }
+          host.send('ngNativeLocalLlm', {
+            type: 'toolCall',
+            session: id,
+            requestId,
+            callId: 'c1',
+            toolName: 'weather',
+            arguments: { city: 'Leeds' },
+          });
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return 'Once upon a time';
+        },
+        cancelStream: async () => {},
+        release: (id: string) => void calls.push(['release', id]),
+        resolveToolCall: (...args: unknown[]) => void calls.push(['resolveToolCall', ...args]),
+        rejectToolCall: (...args: unknown[]) => void calls.push(['rejectToolCall', ...args]),
+      },
+    });
+    return { host, calls };
+  }
+
+  it("generates through NgNativeLocalLlm with expo-local-llm's config, and releases the session", async () => {
+    const { calls } = llmHost();
+    const { LanguageModel } = await import('@ng-native/expo/language-model');
+    const model = injectService(LanguageModel);
+    assert.equal(model.availability(), 'available');
+    assert.equal(
+      await model.generate('Sky?', { instructions: 'Be brief', temperature: 0.2 }),
+      'Blue',
+    );
+    assert.deepEqual(calls, [
+      ['createSession', { instructions: 'Be brief', options: { temperature: 0.2 } }],
+      ['respond', '3', 'Sky?', null],
+      ['release', '3'],
+    ]);
+  });
+
+  it("streams only its own session's tokens, and answers the model's tool calls", async () => {
+    const { calls } = llmHost();
+    const { LanguageModel, defineTool } = await import('@ng-native/expo/language-model');
+    const model = injectService(LanguageModel);
+    const weather = defineTool({
+      name: 'weather',
+      description: 'The weather in a city',
+      parameters: { city: { type: 'string', description: 'The city' } },
+      handler: ({ city }) => `Rain in ${city}`,
+    });
+    const injector = Injector.create({ providers: [] });
+    try {
+      const session = model.session({ tools: [weather], injector });
+      const reply = session.stream('Tell me');
+      assert.equal(await reply.result, 'Once upon a time');
+      assert.equal(reply.text(), 'Once upon a time');
+      assert.deepEqual(
+        calls.find(([name]) => name === 'resolveToolCall'),
+        ['resolveToolCall', '3', 'c1', 'Rain in Leeds'],
+      );
+    } finally {
+      injector.destroy();
+    }
+  });
+
+  it("turns the host's coded failure into expo-local-llm's, and reads the model's absence", async () => {
+    llmHost();
+    const { LanguageModel, LanguageModelContextExceededError } =
+      await import('@ng-native/expo/language-model');
+    const model = injectService(LanguageModel);
+    const injector = Injector.create({ providers: [] });
+    try {
+      const session = model.session({ injector });
+      await assert.rejects(session.respond('Too long'), LanguageModelContextExceededError);
+    } finally {
+      injector.destroy();
+    }
+  });
+
+  it('answers notEligible where the Mac has no on-device model', async () => {
+    llmHost('notEligible');
+    const { LanguageModel, LanguageModelUnavailableError } =
+      await import('@ng-native/expo/language-model');
+    const model = injectService(LanguageModel);
+    assert.equal(model.availability(), 'notEligible');
+    await assert.rejects(model.generate('Hi'), LanguageModelUnavailableError);
+  });
+});

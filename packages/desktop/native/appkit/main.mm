@@ -35,6 +35,7 @@
 #import "text-recognition.h"
 #import "calendar.h"
 #import "audio.h"
+#import "language-model.h"
 #import "store-review.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
@@ -716,6 +717,8 @@ int main(int argc, const char *argv[]) {
       static auto audioOutput = ngn::appkit::makeAudioOutput();
       static auto audioInput = ngn::appkit::makeAudioInput();
       ngn::addModule(*modules, "NgNativeAudio", [] { return ngn::makeAudioModule(audioOutput, audioInput, caches + "/Audio", noPrompts); });
+      static auto languageModel = ngn::appkit::makeLanguageModelEngine();
+      ngn::addModule(*modules, "NgNativeLocalLlm", [] { return ngn::makeLocalLlmModule(languageModel); });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
       static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });
