@@ -46,6 +46,9 @@
 #include <sys/sysctl.h>
 #include <unistd.h>
 
+#include <mutex>
+#include <string>
+
 using namespace facebook::react;
 
 namespace {
@@ -81,6 +84,16 @@ struct Host {
 };
 
 Host gHost;
+
+// The bundle the runtime runs now, for SourceCode's scriptURL: set at launch and before a reload
+// into an update, read on the JavaScript thread.
+std::mutex gBundleMutex;
+std::string gBundle;
+
+void setRunningBundle(const std::string &bundle) {
+  std::lock_guard lock(gBundleMutex);
+  gBundle = bundle;
+}
 
 ngn::WindowMetrics windowMetrics(NSWindow *window) {
   NSSize size = window.contentView.bounds.size;
@@ -582,7 +595,11 @@ int main(int argc, const char *argv[]) {
          .state = gHost.state,
          .http = network.http,
          .webSockets = network.webSockets,
-         .reactNativeVersion = NGN_REACT_NATIVE_VERSION});
+         .reactNativeVersion = NGN_REACT_NATIVE_VERSION,
+         .bundle = [] {
+           std::lock_guard lock(gBundleMutex);
+           return gBundle;
+         }});
 
     gHost.windows = std::make_shared<ngn::appkit::AppKitWindows>(ngn::appkit::AppKitWindows::Hooks{
         .makeSurface = [](SurfaceId surface, NSRect bounds) -> NGNSurfaceView * {
@@ -680,6 +697,7 @@ int main(int argc, const char *argv[]) {
       static auto appUpdater = ngn::appkit::makeSparkleUpdater();
       ngn::addModule(*modules, "NgNativeUpdates", [fromDevServer] {
         return ngn::makeUpdatesModule(gHost.updates, fromDevServer, [](const std::string &next, std::function<void(bool)> done) {
+          setRunningBundle(next);
           gHost.runtime->reload(next, [next, done](bool loaded) {
             if (!loaded) {
               fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
@@ -696,6 +714,7 @@ int main(int argc, const char *argv[]) {
       });
     }
 
+    setRunningBundle(bundle);
     gHost.runtime = std::make_unique<ngn::Runtime>(
         gHost.mounting,
         std::make_shared<ngn::CoreTextMeasurer>(),

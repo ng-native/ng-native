@@ -11,6 +11,7 @@
 #include "ngn/network.h"
 #include "ngn/system.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -27,6 +28,9 @@ struct CoreModuleServices {
   std::shared_ptr<KeyValueStore> storage;
   // "0.88.0", the React Native the host was built from, which its JavaScript checks.
   std::string reactNativeVersion;
+  // The bundle the runtime runs now: a path, or a dev server's URL. SourceCode is registered only
+  // with it.
+  std::function<std::string()> bundle;
 };
 
 // Registers every core module.
@@ -54,6 +58,9 @@ std::shared_ptr<NativeModule> makeFileReader(const CoreModuleServices &services)
 // @react-native-async-storage: RNCAsyncStorage for 2.x, RNAsyncStorage for 3.x, over one store.
 std::shared_ptr<NativeModule> makeLegacyAsyncStorage(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeAsyncStorage(const CoreModuleServices &services);
+// SourceCode's scriptURL, which React Native's asset resolver finds a bundle's assets beside, as
+// iOS's RCTSourceCode gives it. React Native's own answers nothing for a bundle on disk.
+std::shared_ptr<NativeModule> makeSourceCode(const CoreModuleServices &services);
 
 // The body of a request JavaScript sent (Networking.sendRequest's `data`), and the content type
 // it implies when the request has none.

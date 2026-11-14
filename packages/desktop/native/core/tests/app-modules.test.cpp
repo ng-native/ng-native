@@ -292,3 +292,31 @@ TEST_CASE("every core module is registered under its iOS name") {
     CHECK(registry.module(name, nullptr));
   }
 }
+
+TEST_CASE("SourceCode gives the bundle running now as scriptURL, which React Native finds the assets beside") {
+  Fixture f;
+  std::string bundle = "/Applications/Notes.app/Contents/Resources/main.jsbundle";
+  f.services.bundle = [&bundle] { return bundle; };
+  auto module = ngn::makeSourceCode(f.services);
+  CHECK(module->name() == "SourceCode");
+  CHECK(module->call("getConstants") ==
+        dynamic::object("scriptURL", "file:///Applications/Notes.app/Contents/Resources/main.jsbundle"));
+  // An update's bundle after a reload, and a path with a space, percent-encoded.
+  bundle = "/Users/a/Library/Application Support/notes/updates/2a1b/launch-asset";
+  CHECK(module->call("getConstants")["scriptURL"] ==
+        "file:///Users/a/Library/Application%20Support/notes/updates/2a1b/launch-asset");
+  // A dev server's URL as it is.
+  bundle = "http://localhost:8081/index.bundle?platform=macos";
+  CHECK(module->call("getConstants")["scriptURL"] == "http://localhost:8081/index.bundle?platform=macos");
+}
+
+TEST_CASE("addCoreModules registers SourceCode only when it is told the bundle") {
+  Fixture f;
+  ngn::ModuleRegistry without;
+  ngn::addCoreModules(without, f.services);
+  CHECK_FALSE(without.module("SourceCode", nullptr));
+  f.services.bundle = [] { return std::string("/b.js"); };
+  ngn::ModuleRegistry with;
+  ngn::addCoreModules(with, f.services);
+  CHECK(with.module("SourceCode", nullptr));
+}

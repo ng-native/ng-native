@@ -1,5 +1,7 @@
 #include "ngn/core-modules.h"
 
+#include "ngn/file-system.h"
+
 namespace ngn {
 
 void addCoreModules(ModuleRegistry &registry, const CoreModuleServices &given) {
@@ -36,6 +38,23 @@ void addCoreModules(ModuleRegistry &registry, const CoreModuleServices &given) {
   for (const auto &[name, make] : modules) {
     addModule(registry, name, [services, make] { return make(services); });
   }
+  if (services.bundle) {
+    addModule(registry, "SourceCode", [services] { return makeSourceCode(services); });
+  }
+}
+
+std::shared_ptr<NativeModule> makeSourceCode(const CoreModuleServices &services) {
+  struct SourceCode : NativeModule {
+    explicit SourceCode(std::function<std::string()> bundle) : NativeModule("SourceCode") {
+      // Asked as each runtime starts, so a reload into an update's bundle reads that one.
+      constants([bundle = std::move(bundle)] {
+        auto at = bundle ? bundle() : std::string();
+        bool url = at.starts_with("http://") || at.starts_with("https://") || at.starts_with("file://");
+        return folly::dynamic::object("scriptURL", url || at.empty() ? at : fileUri(at));
+      });
+    }
+  };
+  return std::make_shared<SourceCode>(services.bundle);
 }
 
 } // namespace ngn
