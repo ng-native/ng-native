@@ -31,8 +31,11 @@
 @custom-variant ios (.platform-ios &);
 @custom-variant android (.platform-android &);
 @custom-variant web (.platform-web &);
-/** Either of the two native platforms, for a rule that is about not being a browser. */
-@custom-variant native (.platform-ios &, .platform-android &);
+@custom-variant macos (.platform-macos &);
+/** A desktop OS: macOS today. */
+@custom-variant desktop (.platform-macos &);
+/** Any native OS, for a rule that is about not being a browser: a desktop counts. */
+@custom-variant native (.platform-ios &, .platform-android &, .platform-macos &);
 
 /*
  * `disabled:` follows the state attribute, not the pseudo-class.

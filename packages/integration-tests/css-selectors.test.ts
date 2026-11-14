@@ -329,11 +329,6 @@ describe('what a refused selector says', () => {
     assert.doesNotMatch(message, /hover/);
   });
 
-  it('keeps the hover and focus explanation for :hover and :focus-visible', () => {
-    assert.match(refusal('view:hover'), /no hover or focus cascade/);
-    assert.match(refusal('view:focus-visible'), /no hover or focus cascade/);
-  });
-
   it('gives any other pseudo-class a message about state, not hover', () => {
     const message = refusal('view:target');
     assert.match(message, /':target' is not supported/);

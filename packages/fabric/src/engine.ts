@@ -21,7 +21,8 @@ import {
   handsDownPaint,
   StyleResolver,
   underOwnShorthands,
-  usesActive,
+  usesState,
+  type StateUse,
   elementsAtEnd,
   hasAbove,
   couldAsk,
@@ -478,6 +479,10 @@ export const DIRECT_EVENTS: ReadonlySet<string> = new Set([
   'topTabSelected',
   // Safe-area insets, reported by the provider that measured them.
   'topInsetsChange',
+  // Native sends an enter and a leave to each view the pointer crosses into or out of, as the
+  // W3C's do not bubble: one bubbling up as well ran a parent's handler twice for one entry.
+  'topPointerEnter',
+  'topPointerLeave',
 ]);
 
 /**
@@ -591,6 +596,13 @@ const EVENT_OPT_IN_PROPS: Record<string, string> = {
    */
   topPointerEnter: 'onPointerEnter',
   topPointerLeave: 'onPointerLeave',
+  topPointerMove: 'onPointerMove',
+  topPointerOver: 'onPointerOver',
+  topPointerOut: 'onPointerOut',
+  // A desktop host's, for `(dblclick)`, `(contextmenu)` and `(wheel)`: see `DOM_EVENT_TYPES`.
+  topDoubleClick: 'onDoubleClick',
+  topContextMenu: 'onContextMenu',
+  topWheel: 'onWheel',
 };
 
 /**
@@ -731,6 +743,12 @@ export interface EngineNode extends HostNode {
   focused?: boolean;
   /** `:active`, set on the responder and every ancestor of it. */
   active?: boolean;
+  /** `:hover`, from the pointer events of a view a `:hover` rule could match. */
+  hovered?: boolean;
+  /** `:focus-within`, set on the focused node and every ancestor of it. */
+  focusWithin?: boolean;
+  /** `:focus-visible`, set on a focused node the host says the keyboard focused. */
+  focusVisible?: boolean;
   /**
    * The style object the platform adapter made for this node, and may therefore write into.
    *
@@ -5224,8 +5242,14 @@ function describeViews(
   elementName: string,
   { viewName, defaultProps, options }: ViewNameRegistration,
 ): void {
-  for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
-    describeView(name, defaultProps, options);
+  const names =
+    typeof viewName === 'string'
+      ? [viewName]
+      : [viewName.ios, viewName.android, ...(viewName.macos ? [viewName.macos] : [])];
+  for (const name of names) {
+    // React Native's plain view, which an element is on an OS that has no view of its own for it,
+    // is every element's: what this registration says of its own view is not said of that one.
+    if (name !== 'View' || typeof viewName === 'string') describeView(name, defaultProps, options);
   }
   // The element's, not the view's: another element may name the same view without it.
   if (options?.spacedText) SPACED_TEXT.add(elementName);
@@ -6588,6 +6612,9 @@ const ENGINE_NODE_FIELDS = {
   styled: true,
   focused: true,
   active: true,
+  hovered: true,
+  focusWithin: true,
+  focusVisible: true,
   ownStyle: true,
   styleCommitted: true,
   fitContainer: true,
@@ -7351,6 +7378,29 @@ function couldBe(compound: Compound, node: EngineNode): boolean {
   );
 }
 
+/** What a sheet asks about each state the engine tracks across nodes: see `usesState`. */
+interface SheetStates {
+  readonly active: StateUse;
+  readonly hover: StateUse;
+  readonly focusWithin: StateUse;
+}
+
+const NO_USE: StateUse = { own: false, elsewhere: [], asked: [] };
+
+/** Whether a sheet, or the sheets in play, ask about a state at all. */
+const inPlay = (use: StateUse): boolean => use.own || use.elsewhere.length > 0;
+
+/**
+ * Whether the host says a focus came from the keyboard, which is what `:focus-visible` matches.
+ *
+ * The contract for a host: a `topFocus` event whose payload has `focusVisible: true` was moved
+ * there by Tab, Shift-Tab or another key, and draws a focus ring; one without it (a click, a tap,
+ * a call to `focus()`) does not. iOS and Android send no such flag, so there it never matches.
+ */
+function focusVisible(nativeEvent: unknown): boolean {
+  return (nativeEvent as { focusVisible?: unknown } | null)?.focusVisible === true;
+}
+
 /** Dev-time commit accounting, so a slow frame can be attributed rather than guessed at. */
 export interface EngineStats {
   commits: number;
@@ -7584,19 +7634,46 @@ export class Engine implements HostEngine {
    * Precise rather than by generation: unlike a rotation, the engine knows exactly which nodes
    * changed, and a keystroke's worth of focus movement should not invalidate the tree.
    */
-  private setFocused(node: EngineNode | null): void {
+  private setFocused(node: EngineNode | null, visible = false): void {
     if (this.focusedNode === node) return;
     if (this.focusedNode) {
       this.focusedNode.focused = false;
+      this.focusedNode.focusVisible = undefined;
       this.markProps(this.focusedNode);
     }
     this.focusedNode = node;
     if (node) {
       node.focused = true;
+      // A text field takes the keyboard however focus arrived, so a browser rings it on a click too.
+      if (visible || TEXT_INPUTS.has(viewNameOf(node))) node.focusVisible = true;
       this.markProps(node);
     }
+    this.setFocusWithin(node);
     this.commit();
   }
+
+  /**
+   * Move `:focus-within` to `node` and its ancestors. Kept whether or not a rule asks, as it is a
+   * walk up from one node, so a sheet that arrives later reads it right; only marked where one asks.
+   */
+  private setFocusWithin(node: EngineNode | null): void {
+    const chain = new Set<EngineNode>();
+    for (let at = node; at; at = at.parent) chain.add(at);
+    for (const was of this.focusWithinNodes) {
+      if (chain.has(was)) continue;
+      was.focusWithin = undefined;
+      this.markState(was, this.focusWithinUse);
+    }
+    for (const now of chain) {
+      if (now.focusWithin) continue;
+      now.focusWithin = true;
+      this.markState(now, this.focusWithinUse);
+    }
+    this.focusWithinNodes = chain;
+  }
+
+  /** The nodes `:focus-within` is set on, to clear whatever happened to the tree meanwhile. */
+  private focusWithinNodes = new Set<EngineNode>();
 
   /**
    * Set or clear `:active` along a responder chain, marking each node so its style re-resolves.
@@ -7629,25 +7706,32 @@ export class Engine implements HostEngine {
   private readonly activeNodes = new Set<EngineNode>();
 
   /** Whether any sheet styles a pressed element, and each compound that asks about one from another. */
-  private activeUse: { own: boolean; elsewhere: readonly Compound[] } = {
-    own: false,
-    elsewhere: [],
-  };
+  private activeUse: StateUse = NO_USE;
+  /** The same for a hovered element. */
+  private hoverUse: StateUse = NO_USE;
+  /** The same for an element with the focus in it. */
+  private focusWithinUse: StateUse = NO_USE;
 
-  /** What each sheet in play asks about a pressed element: `activeUse` is all of them together. */
-  private readonly activeBySheet = new Map<StyleSheet, ReturnType<typeof usesActive>>();
+  /** What each sheet in play asks about each state: the uses above are all of them together. */
+  private readonly usesBySheet = new Map<StyleSheet, SheetStates>();
 
-  /** Note what a sheet in play asks about a pressed element. See `markActive`. */
+  /** Note what a sheet in play asks about a pressed, hovered or focused-within element. */
   private watchActive(sheet: StyleSheet | null | undefined): void {
     // Asked for every element a component's sheet is given to: noted once a sheet.
-    if (!sheet || this.activeBySheet.has(sheet)) return;
-    const use = usesActive(sheet);
-    this.activeBySheet.set(sheet, use);
-    if (!use.own && !use.elsewhere.length) return;
+    if (!sheet || this.usesBySheet.has(sheet)) return;
+    const uses: SheetStates = {
+      active: usesState(sheet, 'active'),
+      hover: usesState(sheet, 'hover'),
+      focusWithin: usesState(sheet, 'focus-within'),
+    };
+    this.usesBySheet.set(sheet, uses);
+    if (!inPlay(uses.active) && !inPlay(uses.hover) && !inPlay(uses.focusWithin)) return;
     this.countActive();
+    if (uses.hover.asked.length) this.markHoverable();
     if (this.styles.tracksHas) return;
-    // What a pressed element is compared with is the rules it matched, which no cache kept until
-    // a sheet asked. Nothing is resolved yet when the sheet is the one the engine was made with.
+    // What an element in a state is compared with is the rules it matched, which no cache kept
+    // until a sheet asked. Nothing is resolved yet when the sheet is the one the engine was made
+    // with.
     this.styles.tracksHas = true;
     if (!this.root) return;
     this.root.styleDirty = true;
@@ -7656,17 +7740,24 @@ export class Engine implements HostEngine {
 
   /** A sheet has left play, by a hot swap or by being removed: what it asked goes with it. */
   private unwatchActive(sheet: StyleSheet): void {
-    if (!this.activeBySheet.delete(sheet)) return;
+    const uses = this.usesBySheet.get(sheet);
+    if (!uses) return;
+    this.usesBySheet.delete(sheet);
     this.countActive();
     this.trackMatched();
+    if (uses.hover.asked.length) this.markHoverable();
   }
 
   private countActive(): void {
-    const all = [...this.activeBySheet.values()];
-    this.activeUse = {
-      own: all.some((use) => use.own),
-      elsewhere: all.flatMap((use) => use.elsewhere),
-    };
+    const all = [...this.usesBySheet.values()];
+    const merge = (state: keyof SheetStates): StateUse => ({
+      own: all.some((uses) => uses[state].own),
+      elsewhere: all.flatMap((uses) => uses[state].elsewhere),
+      asked: all.flatMap((uses) => uses[state].asked),
+    });
+    this.activeUse = merge('active');
+    this.hoverUse = merge('hover');
+    this.focusWithinUse = merge('focusWithin');
   }
 
   /**
@@ -7679,11 +7770,86 @@ export class Engine implements HostEngine {
    * is nothing to match.
    */
   private markActive(node: EngineNode): void {
-    const { own, elsewhere } = this.activeUse;
+    this.markState(node, this.activeUse);
+  }
+
+  /** `markActive` for any state, by what the sheets in play ask about it. */
+  private markState(node: EngineNode, use: StateUse): void {
+    const { own, elsewhere } = use;
     if (!own && !elsewhere.length) return;
     if (elsewhere.some((compound) => couldBe(compound, node))) return this.markProps(node);
     node.stateDirty = true;
     this.markPath(node.parent ?? node);
+  }
+
+  /** The nodes the pointer is over, to clear whatever happens to the tree meanwhile. */
+  private readonly hoveredNodes = new Set<EngineNode>();
+
+  /** Whether a `:hover` rule could match `node`, so that native is to tell it of the pointer. */
+  private hoverable(node: EngineNode): boolean {
+    return this.hoverUse.asked.some((compound) => couldBe(compound, node));
+  }
+
+  /**
+   * `:hover` from the pointer events of a view that opted in. A finger is no hover: with pointer
+   * events on, a touch enters what it lands on and leaves as it lifts, so neither is heard. Only
+   * on a view a rule could match, so the state is never left on one native stopped telling of.
+   */
+  private trackHover(target: EngineNode | null, topLevelType: string, nativeEvent: unknown): void {
+    if (!target || !this.hoverUse.asked.length) return;
+    const entered = topLevelType === 'topPointerEnter';
+    if (!entered && topLevelType !== 'topPointerLeave') return;
+    if (isTouchPointer({ nativeEvent }) || !this.hoverable(target)) return;
+    if (this.setHovered(target, entered)) this.commit();
+  }
+
+  private setHovered(node: EngineNode, hovered: boolean): boolean {
+    if ((node.hovered === true) === hovered) return false;
+    node.hovered = hovered || undefined;
+    if (hovered) this.hoveredNodes.add(node);
+    else this.hoveredNodes.delete(node);
+    this.markState(node, this.hoverUse);
+    return true;
+  }
+
+  /**
+   * The `:hover` rules in play changed: commit the pointer opt-in again on each view whose answer
+   * moved, and forget the hover of one no rule can match now, as native stops telling it of the
+   * pointer.
+   */
+  private markHoverable(): void {
+    if (!this.root) return;
+    const walk = (node: EngineNode): void => {
+      if (node.nodeKind === 'element') {
+        const could = this.hoverable(node);
+        const committed = node.committed?.props['onPointerEnter'] === true;
+        if (node.committed && committed !== (could || node.props['onPointerEnter'] === true)) {
+          this.markProps(node, false);
+        }
+        if (!could && node.hovered) this.setHovered(node, false);
+      }
+      for (const child of node.childList) walk(child);
+    };
+    walk(this.root);
+  }
+
+  /** Commit the pointer opt-in on a view a `:hover` rule could match. See `trackHover`. */
+  private optInHover(node: EngineNode, props: Record<string, unknown>): void {
+    if (this.hoverable(node)) {
+      props['onPointerEnter'] = true;
+      props['onPointerLeave'] = true;
+    } else if (node.hovered) {
+      // Its classes moved off every rule: native will not say when the pointer leaves.
+      node.hovered = undefined;
+      this.hoveredNodes.delete(node);
+    }
+  }
+
+  /** Hovered nodes out of the tree: native has no view to say the pointer left. */
+  private dropDetachedHover(): void {
+    for (const node of this.hoveredNodes) {
+      if (this.topOf(node) !== this.root) this.setHovered(node, false);
+    }
   }
 
   /**
@@ -8595,6 +8761,7 @@ export class Engine implements HostEngine {
     }
     if (this.focusedNode && this.topOf(this.focusedNode) !== this.root) this.dropFocus();
     this.dropDetachedPress();
+    if (this.hoveredNodes.size) this.dropDetachedHover();
   }
 
   /** A pressed node out of the tree gets no release: native has no view to end the touch on. */
@@ -8612,8 +8779,10 @@ export class Engine implements HostEngine {
   private dropFocus(): void {
     const node = this.focusedNode!;
     node.focused = false;
+    node.focusVisible = undefined;
     this.markProps(node);
     this.focusedNode = null;
+    this.setFocusWithin(null);
   }
 
   /** Forget the committed views of each node removed since the last commit that is still out. */
@@ -9217,8 +9386,12 @@ export class Engine implements HostEngine {
    * stop once none does. A sheet that asks about a place in a child list is never unset.
    */
   private trackMatched(): void {
-    const { own, elsewhere } = this.activeUse;
-    this.styles.tracksHas = this.hasSheets || this.structuralSheets || own || elsewhere.length > 0;
+    this.styles.tracksHas =
+      this.hasSheets ||
+      this.structuralSheets ||
+      inPlay(this.activeUse) ||
+      inPlay(this.hoverUse) ||
+      inPlay(this.focusWithinUse);
   }
 
   /**
@@ -12650,6 +12823,7 @@ export class Engine implements HostEngine {
     hiddenOutOfFlow(merged);
     delete merged['touchAction'];
     if (this.responders.has(node)) stillTouched(merged);
+    if (this.hoverUse.asked.length) this.optInHover(node, merged);
     // Each read here, so asked for as a layout of CSS's is: see `LAID_OUT_HERE`.
     if (this.asked & CSS_LAYOUT) seenByCss(merged);
     this.heldFor(node, merged);
@@ -16674,7 +16848,8 @@ export class Engine implements HostEngine {
       }
       this.holdSwipe(target, topLevelType, nativeEvent);
       this.trackFinger(target, topLevelType, nativeEvent);
-      this.trackFocus(target, topLevelType);
+      this.trackFocus(target, topLevelType, nativeEvent);
+      this.trackHover(target, topLevelType, nativeEvent);
       if (target) this.cancelPressForScroll(target, topLevelType, event as ResponderEvent);
       if (target) this.runResponder(target, topLevelType, event as ResponderEvent);
     } catch (error) {
@@ -16921,8 +17096,8 @@ export class Engine implements HostEngine {
    * `:focus` follows the native events rather than being inferred from a tap, so it is right for a
    * field focused programmatically or by the keyboard's next-field button.
    */
-  private trackFocus(target: EngineNode | null, topLevelType: string): void {
-    if (topLevelType === 'topFocus') this.setFocused(target);
+  private trackFocus(target: EngineNode | null, topLevelType: string, nativeEvent: unknown): void {
+    if (topLevelType === 'topFocus') this.setFocused(target, focusVisible(nativeEvent));
     else if (topLevelType === 'topBlur' && this.focusedNode === target) this.setFocused(null);
   }
 

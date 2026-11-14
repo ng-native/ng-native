@@ -146,7 +146,7 @@ test('routerLink, written or bound, is reported, and nativeRouterLink is not', a
 test('an HTML control in a template is reported, with what to use', async () => {
   assert.deepEqual(await lint('<view><button>Save</button><img src="a.png" /></view>', 'a.html'), [
     '1:7 @ng-native/no-html-controls: <button> draws as a plain view on a device, with no ' +
-      'behaviour. Use <pressable>.',
+      'behaviour. Use <native-button>, or <pressable> for a look of your own.',
     '1:28 @ng-native/no-html-controls: <img> draws as a plain view on a device, with no ' +
       'behaviour. Use <image>.',
   ]);
@@ -368,4 +368,44 @@ test('available read uncalled is fixed to a call', async () => {
     await fix('if (haptics.available && !x.available) go();\n', 'a.ts'),
     'if (haptics.available() && !x.available()) go();\n',
   );
+});
+
+test('a mouse event is an error in a project that builds for no desktop OS', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ng-native-eslint-'));
+  try {
+    writeFileSync(
+      join(dir, 'app.json'),
+      JSON.stringify({ expo: { platforms: ['ios', 'android'] } }),
+    );
+    assert.deepEqual(await lint('<view (mouseenter)="go()"></view>', join(dir, 'a.html'), dir), [
+      '1:7 @ng-native/no-dom-events: (mouseenter) fires only on macOS, and expo.platforms in ' +
+        'app.json lists no desktop OS, so it never fires here. Use a [gesture] from ' +
+        '@ng-native/components.',
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a desktop event is a warning that it fires only there, in a project that builds for macOS', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ng-native-eslint-'));
+  try {
+    writeFileSync(
+      join(dir, 'app.json'),
+      JSON.stringify({ expo: { platforms: ['ios', 'android', 'macos'] } }),
+    );
+    const template =
+      '<view (mouseenter)="go()" (dblclick)="go()" (wheel)="go()" (contextmenu)="go()"></view>' +
+      '<view (click)="go()"></view>';
+    const messages = await lint(template, join(dir, 'src', 'a.html'), dir);
+    assert.deepEqual(
+      messages.map((m) => m.split(':').slice(0, 3).join(':').replace(/ .*$/, '')),
+      ['1:7', '1:27', '1:45', '1:60', '1:94'],
+    );
+    assert.equal(messages.filter((m) => m.includes('desktop-only-events')).length, 4);
+    assert.match(messages[0]!, /\(mouseenter\) fires only on macOS: iOS and Android never send it/);
+    assert.match(messages[4]!, /no-dom-events: \(click\) is a DOM event/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

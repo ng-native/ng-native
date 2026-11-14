@@ -34,6 +34,7 @@ import {
   output,
   signal,
 } from '@angular/core';
+import type { ControlSize } from '@ng-native/device';
 import {
   Engine,
   type EngineNode,
@@ -84,6 +85,7 @@ function fieldFontName(props: Record<string, unknown>, postScriptName: PostScrip
   styles: ':host { height: 56px; }',
   host: {
     '[text]': 'value()',
+    '[controlSize]': 'controlSize()',
     '[enabled]': '!disabled()',
     '[mostRecentEventCount]': 'eventCount()',
     '[placeholder]': 'placeholder()',
@@ -118,6 +120,8 @@ export class SearchField {
    * `model()`, which is all `FormValueControl<string>` asks, so `[formField]` binds it.
    */
   readonly value = model('');
+  /** AppKit's control size on macOS, and UIKit's on iOS 26 and later. Ignored elsewhere. */
+  readonly controlSize = input<ControlSize>();
   /** Refuse input and show the field dimmed. Signal Forms' `disabled()` rule sets it. */
   readonly disabled = input(false, { transform: booleanAttribute });
   readonly placeholder = input<string>();

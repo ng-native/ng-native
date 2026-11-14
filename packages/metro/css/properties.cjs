@@ -209,10 +209,6 @@ const KEYWORD_VALUES = {
     ]),
     hint: 'Native draws the separable and non-separable blend modes and plus-lighter.',
   },
-  cursor: {
-    allowed: new Set(['auto', 'pointer']),
-    hint: 'Native has two cursors, auto and pointer, for an iPad with a pointer attached.',
-  },
   overflow: {
     allowed: new Set(['visible', 'hidden', 'scroll']),
     hint: 'Native has visible, hidden and scroll.',
@@ -2073,14 +2069,100 @@ const TRANSLATORS = new Map([
         shadow.color?.type === 'currentcolor' ? CURRENT_COLOUR : wholeColor(shadow.color, property);
     },
   ],
-  [
-    'cursor',
-    (property, value, out) => {
-      out.cursor = honoured(property, value.keyword ?? keyword(value, property));
-    },
-  ],
+  ['cursor', cursor],
+  ['scrollbar-width', scrollbarWidth],
+  ['scrollbar-gutter', scrollbarGutter],
   ['font-weight', fontWeight],
 ]);
+
+/**
+ * The CSS cursors a desktop host draws, beside `auto` and `pointer`, which React Native's own
+ * `cursor` takes and iOS draws for an iPad's pointer.
+ */
+const DESKTOP_CURSORS = new Set([
+  'none',
+  'context-menu',
+  'help',
+  'progress',
+  'wait',
+  'cell',
+  'crosshair',
+  'text',
+  'vertical-text',
+  'alias',
+  'copy',
+  'move',
+  'no-drop',
+  'not-allowed',
+  'grab',
+  'grabbing',
+  'all-scroll',
+  'col-resize',
+  'row-resize',
+  'n-resize',
+  'e-resize',
+  's-resize',
+  'w-resize',
+  'ne-resize',
+  'nw-resize',
+  'se-resize',
+  'sw-resize',
+  'ew-resize',
+  'ns-resize',
+  'nesw-resize',
+  'nwse-resize',
+  'zoom-in',
+  'zoom-out',
+]);
+
+/**
+ * `cursor`: `auto` and `pointer` as React Native's `cursor`, and any other CSS cursor as
+ * `desktopCursor` beside `cursor: auto`, which a desktop host draws and iOS and Android leave.
+ */
+function cursor(property, value, out) {
+  if (value.images?.length) {
+    throw new CssUnsupported(
+      `${property}: an image cursor is not drawn. Native takes a keyword: auto, pointer, or one ` +
+        `of the CSS cursors a desktop draws, such as text, grab or not-allowed.`,
+    );
+  }
+  const word = value.keyword ?? keyword(value, property);
+  const found = SAME_AS.cursor[word] ?? word;
+  if (found === 'auto' || found === 'pointer') {
+    out.cursor = found;
+    return;
+  }
+  if (!DESKTOP_CURSORS.has(found)) {
+    throw new CssUnsupported(`${property}: ${found} is not a cursor native draws.`);
+  }
+  out.cursor = 'auto';
+  out.desktopCursor = found;
+}
+
+/**
+ * `scrollbar-width`: for a desktop host as written, and `none` as React Native's scroll indicators
+ * hidden, which iOS and Android draw too.
+ */
+function scrollbarWidth(property, value, out) {
+  const word = typeof value === 'string' ? value : keyword(value, property);
+  if (!['auto', 'thin', 'none'].includes(word)) {
+    throw new CssUnsupported(
+      `${property}: ${word} is not supported. Native has auto, thin and none.`,
+    );
+  }
+  out.scrollbarWidth = word;
+  out.showsVerticalScrollIndicator = word !== 'none';
+  out.showsHorizontalScrollIndicator = word !== 'none';
+}
+
+/** `scrollbar-gutter`, for a desktop host, which keeps the room for a scroll bar with `stable`. */
+function scrollbarGutter(property, value, out) {
+  const word = typeof value === 'string' ? value : keyword(value, property);
+  if (word !== 'auto' && word !== 'stable') {
+    throw new CssUnsupported(`${property}: ${word} is not supported. Native has auto and stable.`);
+  }
+  out.scrollbarGutter = word;
+}
 
 /**
  * `text-shadow: none`: no shadow at all, said in full, so it clears one a weaker rule or a parent

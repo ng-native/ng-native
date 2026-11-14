@@ -13,9 +13,10 @@ and `web.css` in a browser build.
 ## Platform, disabled and dark variants
 
 Tailwind cannot infer what platform it is running on, so the variants match a class on the root:
-`platform-ios`, `platform-android` or `platform-web`. `mount` puts it there itself - on a phone
-from `nativePlatform()`, and `platform-web` from `@ng-native/web`'s `mount` - so `ios:`,
-`android:`, `web:` and `native:` (either native platform) work with nothing to set up. A variant
+`platform-ios`, `platform-android`, `platform-macos` or `platform-web`. `mount` puts it there
+itself - on a device from `nativePlatform()`, and `platform-web` from `@ng-native/web`'s `mount` -
+so `ios:`, `android:`, `macos:`, `desktop:` (macOS today), `web:` and `native:` (any OS but the
+web, macOS included) work with nothing to set up. A variant
 whose class is never present simply never matches rather than erroring - `ios:pt-2` in a shared
 class string is not a mistake on a web page, it is just not an iPhone.
 
@@ -72,35 +73,25 @@ per node. Define your tokens that way and the switch reaches them.
 
 ## `hover:` and `press:`
 
-On native, `hover:` means the pressed state: `:hover` is dropped with a build warning there and
-always will be - there is no pointer cascade to answer it - but a hover style and a press style ask
-the same design question. The native preset points the variant at `:active` (set by the engine while
-a touch is down) and also `data-hover`, for a real pointer - a trackpad, a mouse or a pencil, which
-React Native's pointer events report once an app
-[turns them on](/packages/platform/renderer#pointer-events). `press:` and `hovered:` name one half
-each, for a component that wants to be precise rather than portable.
-
-On the web, `hover:` keeps the real `:hover` as well as `:active` and `data-hover`, so a class
-string written once behaves the same on a desktop browser, a touchscreen laptop, and a phone browser
-without the component knowing which it is on.
+`hover:` is the same in `native.css` and `web.css`: a real `:hover`, the pressed state, and
+`data-hover`. On a Mac it is a real hover. On a phone, which has no pointer, it is the pressed state
+(`:active`, set by the engine while a touch is down), since a hover style and a press style ask the
+same design question. On an iPad, a trackpad, a mouse or a pencil hovers once an app
+[turns pointer events on](/packages/platform/renderer#pointer-events). `press:` and `hovered:` name
+one half each, for a component that wants to be precise rather than portable.
 
 ```css
-/* native.css */
-@custom-variant hover (&:active, &[data-hover]:where(:not([data-hover="false"])));
-
-/* web.css */
 @custom-variant hover (&:hover, &:active, &[data-hover]:where(:not([data-hover="false"])));
 ```
 
 ## `focus-visible:` and `focus:`
 
-On native, `focus-visible:` is aliased straight to `focus:`, because the distinction it exists for
-on the web - keeping a ring off a control someone clicked - has no case on a phone: focus only ever
-arrives from a keyboard, a remote or an assistive technology, exactly the situations a ring is for.
-`:focus-visible` is dropped with a build warning on native for the same reason `:hover` is. Both
-platforms also match `[data-focus]`, because focus lands on the control itself while the border and
-padding that form the ring usually sit on a wrapper around it, which can only know it is focused
-because the behavior composed onto the control told it.
+`focus-visible:` is `:focus-visible`, as on the web: focus the keyboard moved, which the macOS host
+reports, so a click draws no ring and Tab does, and a focused text field however it was focused, as
+a browser does. iOS and Android report no keyboard focus, so there it matches a focused text field
+and `focus:` matches any focused element. Both match `[data-focus]` as well, because focus lands on
+the control itself while the border and padding that form the ring usually sit on a wrapper around
+it, which can only know it is focused because the behavior composed onto the control told it.
 
 ## `*:` and `**:`
 
@@ -113,9 +104,9 @@ because the behavior composed onto the control told it.
 `group-*` variants match an ancestor with the `group` class, and `peer-*` variants match an earlier
 sibling with the `peer` class, exactly as on the web. The state a variant reads has to be one the
 engine can see on the peer: `peer-focus:` (focus, or `data-focus`), `peer-active:` and `peer-hover:`
-(a press), `peer-disabled:` (a `disabled` prop, or the `data-disabled` a control publishes),
-`peer-aria-disabled:` and the other aria states above, `peer-data-[...]:`, `peer-aria-[...]:` on an
-attribute the peer really carries, and the arbitrary
+(a press, or a pointer over it), `peer-disabled:` (a `disabled` prop, or the `data-disabled` a
+control publishes), `peer-aria-disabled:` and the other aria states above, `peer-data-[...]:`,
+`peer-aria-[...]:` on an attribute the peer really carries, and the arbitrary
 `peer-[.is-on]:`. A class or a state arriving on the peer restyles the siblings after it.
 
 ```html

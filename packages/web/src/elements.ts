@@ -62,6 +62,7 @@ export const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const SPECS: Record<string, ElementSpec> = {
   'text-input': { tag: 'input', attrs: { type: 'text' } },
   switch: { tag: 'input', attrs: { type: 'checkbox' } },
+  'native-button': { tag: 'button', attrs: { type: 'button' } },
   'activity-indicator': { tag: 'activity-indicator', attrs: { role: 'progressbar' } },
   // The shapes `@ng-native/icons`' `svg-elements.ts` registers. Real SVG tag names, not the prefixed
   // template names - `svg-path` would otherwise ask the DOM for an element literally called

@@ -8,7 +8,7 @@
  * `active:` needs nothing added: it lands on the `:active` the engine already tracks. Everything
  * that is not about the input device lives in `shared.css`, which this imports - the safe-area
  * and hairline utilities, and the platform, disabled and dark variants. What is left here is the
- * four variants where having a pointer, or not, changes the answer.
+ * four variants about the pointer and focus, and the monospace font.
  *
  * `web.css` is the counterpart, and the two files are worth reading side by side: the difference
  * between them is the whole of what this platform is missing and what it has instead.
@@ -16,37 +16,33 @@
 @import './shared.css';
 
 /*
- * `hover:` is the pressed state, or a real hover where there is a pointer.
+ * `hover:` is a real hover where there is a pointer, and the pressed state as well.
  *
- * `:hover` is dropped with a build warning here and always will be: it is a pseudo-class the
- * matcher has no way to answer. But a hover style and a press style answer the same design question - what does this
- * look like while the user is engaging with it - and class strings written for the web ask it with
- * `hover:`. Pointing the variant at `:active`, which the engine sets on the touched view and its
- * ancestors, is what lets those strings port unedited.
+ * The same form as `web.css`. The engine answers `:hover` from the pointer events of a view a
+ * `:hover` rule could match: a Mac's mouse, or an iPad's trackpad or pencil, never a finger. A phone
+ * has no pointer, so there `:active`, which the engine sets on the touched view and its ancestors,
+ * is what lets class strings written for the web port unedited.
  *
- * `data-hover` is for the one device with a pointer: an iPad with a trackpad or a mouse, which
- * sends React Native's pointer events. Nothing sets it for you; a component that listens for
- * those events can. `press:` and `hovered:` say one half each, for code that would rather be
- * precise than portable.
+ * `data-hover` is for a component that tracks a pointer itself and says so. `press:` and `hovered:`
+ * say one half each, for code that would rather be precise than portable.
  */
-@custom-variant hover (&:active, &[data-hover]:where(:not([data-hover="false"])));
+@custom-variant hover (&:hover, &:active, &[data-hover]:where(:not([data-hover="false"])));
 @custom-variant press (&:active);
-@custom-variant hovered (&[data-hover]:where(:not([data-hover="false"])));
+@custom-variant hovered (&:hover, &[data-hover]:where(:not([data-hover="false"])));
 
 /*
- * `focus-visible:` is `focus:`, and both match the state attribute as well as the pseudo-class.
+ * `focus-visible:` is the focus a ring is for, as on the web.
  *
- * The web distinction exists to keep a focus ring off a control someone clicked, and there is no
- * clicking here: focus arrives from a keyboard, a remote or an assistive technology, all of which
- * are exactly the cases the ring is for. `:focus-visible` is also dropped with a build warning,
- * and shadcn puts one on every interactive control, so without this nothing ports.
+ * A Mac has clicking, so a ring is for focus the keyboard moved there, which the host reports. A
+ * focused text field matches as well, as it does in a browser: it takes the keyboard however it
+ * was focused. On a phone there is no keyboard focus to report, so a ring shows on a focused field.
  *
  * `data-focus` is there because focus lands on the control and the ring belongs on the box around
  * it. A text field is the native view that takes focus; the border, the radius and the padding are
  * on a view wrapping it, and that view can only know it is focused because the primitive told it.
  * The same idea as `hovered:` matching `data-hover`.
  */
-@custom-variant focus-visible (&:focus, &[data-focus]:where(:not([data-focus="false"])));
+@custom-variant focus-visible (&:focus-visible, &[data-focus]:where(:not([data-focus="false"])));
 @custom-variant focus (&:focus, &[data-focus]:where(:not([data-focus="false"])));
 
 /*
@@ -66,7 +62,7 @@
  * silent failure in a new shape.
  *
  * The two platform rules then upgrade it to the font each platform actually uses for code -
- * Menlo on iOS, and Android's own `monospace` alias, which maps to Roboto Mono. They set a custom
+ * Menlo on iOS and macOS, and Android's own `monospace` alias, which maps to Roboto Mono. They set a custom
  * property on the root rather than `font-family` on `.font-mono`, so an app's own
  * `@theme { --font-mono: ... }` replaces the whole chain and keeps its font on every platform, and
  * a `prefix()` on Tailwind's imports leaves them working.
@@ -86,4 +82,7 @@
 }
 .platform-android {
   --platform-font-mono: monospace;
+}
+.platform-macos {
+  --platform-font-mono: Menlo;
 }

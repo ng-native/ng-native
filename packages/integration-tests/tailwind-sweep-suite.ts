@@ -388,6 +388,9 @@ const CSS_OF: Record<string, string | readonly string[]> = {
   experimental_backgroundSize: 'background-size',
   experimental_backgroundRepeat: 'background-repeat',
   experimental_backgroundPosition: 'background-position',
+  desktopCursor: 'cursor',
+  showsVerticalScrollIndicator: 'scrollbar-width',
+  showsHorizontalScrollIndicator: 'scrollbar-width',
 };
 const cssOf = (key: string): readonly string[] => {
   const known = CSS_OF[key];
@@ -487,7 +490,15 @@ function resolverFor(
   viewport: Recorded['viewport'],
   withChild = world.name === 'base',
 ) {
-  const resolver = new StyleResolver(sheet, { ...viewport, colorScheme: 'light' });
+  // Chrome measured on a desktop, with a mouse: a fine pointer that hovers.
+  const resolver = new StyleResolver(sheet, {
+    ...viewport,
+    colorScheme: 'light',
+    hover: 'hover',
+    anyHover: 'hover',
+    pointer: 'fine',
+    anyPointer: 'fine',
+  });
   const states = world.states ? { ...STATE_ATTRIBUTES } : {};
   const target = (
     tag: string,
@@ -737,8 +748,23 @@ function commitAll(sheet: StyleSheet, cases: readonly SweepCase[]): Map<string, 
 const TEXT_PROPS =
   /^(color|font|letterSpacing|lineHeight|textAlign|textDecoration|textTransform|textShadow|writingDirection|numberOfLines|ellipsizeMode|lineBreakStrategyIOS|textBreakStrategy|selectable)/;
 
-/** Props the engine writes that are a component's rather than a style's. */
-const COMPONENT_PROPS = new Set(['nativeID', 'accessible', 'pointerEvents', 'collapsable']);
+/**
+ * Props the engine writes that are a component's rather than a style's, the pointer events a
+ * `:hover` rule opts a view into, a scroll view's indicators, and what a desktop host reads.
+ */
+const COMPONENT_PROPS = new Set([
+  'nativeID',
+  'accessible',
+  'pointerEvents',
+  'collapsable',
+  'onPointerEnter',
+  'onPointerLeave',
+  'showsVerticalScrollIndicator',
+  'showsHorizontalScrollIndicator',
+  'desktopCursor',
+  'scrollbarWidth',
+  'scrollbarGutter',
+]);
 
 /**
  * A `fit-content` size as the engine commits it in the layout scene, whose container is a column

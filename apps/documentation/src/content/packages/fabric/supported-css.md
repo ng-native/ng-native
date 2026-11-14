@@ -60,12 +60,19 @@ to work out: `opacity: 0` hides either and any other value leaves it alone. A pl
 a colour and an opacity, so anything else in the rule is dropped with a warning, and the rule
 matches those three elements only, as a browser's matches an input.
 
-`:hover` and `:focus-visible` are also unsupported, because there is no hover or focus cascade to
-answer them from: a phone has no pointer to hover with, and focus arriving from a keyboard or an
-assistive technology looks identical to focus arriving any other way. Use `:active` and `:focus`,
-which the engine does track, or drive the state with a bound attribute such as `[attr.data-hover]`.
-The `hover:` and `focus-visible:` variants in [`@ng-native/tailwind`](/packages/tailwind/variants)
-already point at them for you.
+`:hover`, `:focus-within` and `:focus-visible` are supported, beside `:active` and `:focus`.
+`:hover` matches while a mouse, a trackpad or a pencil is over the element or something inside
+it, never a finger. Only an element a `:hover` rule could match is told of the pointer, so an app
+with no such rule pays nothing for it. On iOS and Android it takes the pointer events an app
+[turns on](/packages/platform/renderer#pointer-events); on macOS they are always on.
+`:focus-within` matches the focused element and every element it is in. `:focus-visible` matches
+focus the keyboard moved, which the macOS host reports, and a focused text field however it was
+focused, as a browser does. iOS and Android report no keyboard focus, so there it matches a
+focused text field only.
+
+`@media (hover: hover)`, `(any-hover)`, `(pointer: fine)` and `(any-pointer)` are answered from the
+OS: `hover` and `fine` on macOS, `none` and `coarse` on iOS and Android, an iPad with a trackpad
+included.
 
 `:checked`, `:indeterminate`, `:valid`, `:invalid`, `:placeholder-shown` and the other form-state
 pseudo-classes are unsupported too: a native control keeps that state in its component's inputs,
@@ -458,11 +465,18 @@ so is `overflow-x` or `overflow-y` on its own, outside a
 [sheet read as a browser reads it](#a-sheet-read-as-a-browser-reads-it).
 `overflow: auto` is read as `scroll`, which is how Yoga lays out a scroll container, and `clip` as
 `hidden`. `cursor` takes `auto` and `pointer`, the two a pointer on an iPad draws, with `default`
-read as `auto`; any other cursor is dropped with a warning. So is a `mix-blend-mode` native does not
+read as `auto`, and on macOS every other CSS keyword cursor too, such as `text`, `grab`,
+`not-allowed`, the resize cursors and `zoom-in`: iOS draws `auto` for those. A cursor applies to
+everything inside the element, as on the web, and a text field shows `text` unless it has one. An
+image cursor is dropped with a warning. So is a `mix-blend-mode` native does not
 draw, `plus-darker`, and a `text-decoration-line` of `overline`, which native has no line for. A
 text decoration is drawn under the text inside the element that declares it, in that element's
 `text-decoration-color` or its text colour, as on the web. Android draws every line in the colour
 of the text it underlines, because its text has no decoration colour.
+
+Scroll bars are the system's. `scrollbar-width: none` hides a scroll view's indicators on every
+OS, and on macOS `thin` draws the small scroll bar and `scrollbar-gutter: stable` keeps room for
+one when nothing overflows. `::-webkit-scrollbar` is dropped with a warning.
 
 `pointer-events` is inherited, as on the web, and `none` is about the element alone: it and whatever
 inherits the value take no touches, and a descendant that sets `pointer-events: auto` takes them

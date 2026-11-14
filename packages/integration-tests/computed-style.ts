@@ -133,6 +133,9 @@ export function ours(style: Style, property: string): unknown {
       return style['fontVariant'];
     case 'touch-action':
       return style['touchAction'];
+    // The cursor a desktop draws, where React Native's own takes only auto and pointer.
+    case 'cursor':
+      return style['desktopCursor'] ?? style['cursor'];
     case 'vertical-align':
       return style['baselineShift'] ?? style['textAlignVertical'];
     case 'text-decoration-line':

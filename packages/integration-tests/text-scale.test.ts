@@ -116,6 +116,7 @@ describe('watchConditions and the text size', () => {
   let dimensions: Listener[];
   let appState: ((state: string) => void)[];
   let rightToLeft = false;
+  let os = 'ios';
   let fontScale: number;
   let pixelRatio: number;
   let remeasured: number;
@@ -129,6 +130,11 @@ describe('watchConditions and the text size', () => {
     remeasured = 0;
     const subscription = { remove: () => {} };
     const native = {
+      Platform: {
+        get OS() {
+          return os;
+        },
+      },
       Dimensions: {
         get: () => ({ width: 390, height: 844, fontScale }),
         addEventListener: (_: string, listener: Listener) => (
@@ -239,6 +245,36 @@ describe('watchConditions and the text size', () => {
     resize(1);
     assert.equal(conditions.pixelRatio, 2);
     stop();
+  });
+
+  describe('on a Mac', () => {
+    beforeEach(() => (os = 'macos'));
+    afterEach(() => (os = 'ios'));
+
+    // Nothing resizes an app on macOS: an app reaches Mac sizes with macos: variants.
+    it('keeps the text size at 1 whatever the system says', () => {
+      fontScale = 1.5;
+      assert.equal(currentConditions().fontScale, 1);
+      let conditions: { fontScale?: number } = {};
+      const stop = watchConditions({
+        ...engine(),
+        updateConditions: (next: { fontScale?: number }) => void (conditions = next),
+      });
+      resize(2);
+      assert.equal(conditions.fontScale, 1);
+      assert.equal(remeasured, 0);
+      stop();
+    });
+
+    it('hovers with a fine pointer', () => {
+      const { hover, anyHover, pointer, anyPointer } = currentConditions();
+      assert.deepEqual([hover, anyHover, pointer, anyPointer], ['hover', 'hover', 'fine', 'fine']);
+    });
+  });
+
+  it('has a coarse pointer that cannot hover on a phone', () => {
+    const { hover, anyHover, pointer, anyPointer } = currentConditions();
+    assert.deepEqual([hover, anyHover, pointer, anyPointer], ['none', 'none', 'coarse', 'coarse']);
   });
 
   it("starts with the app's layout direction in the conditions", () => {

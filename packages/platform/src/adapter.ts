@@ -41,11 +41,14 @@ import {
   boundRefusal,
   Engine,
   cssTrim,
+  DOM_EVENT_TYPES,
   firstFamily,
   HostEngine,
   installDeferTriggers,
   installNodeGlobal,
+  isTouchPointer,
   markComponentHost,
+  MOUSE_EVENTS,
   MATH_FUNCTION,
   mathNumber,
   mathNumberText,
@@ -75,7 +78,9 @@ import { onSurfaceStop } from './surface-stop.ts';
  * that output rather than reaching the renderer at all.
  */
 function topLevelType(eventName: string): string {
-  return 'top' + eventName.charAt(0).toUpperCase() + eventName.slice(1);
+  return (
+    DOM_EVENT_TYPES[eventName] ?? 'top' + eventName.charAt(0).toUpperCase() + eventName.slice(1)
+  );
 }
 
 /**
@@ -692,12 +697,16 @@ class NativeRenderer implements Renderer2 {
     if (typeof target === 'string') return () => {};
     // `once` taken off before the first call: the engine keeps a listener until it is told.
     let unlisten = () => {};
-    const listener = options?.once
+    const once = options?.once
       ? (event: unknown) => {
           unlisten();
           return callback(event);
         }
       : callback;
+    // A mouse event is a pointer event that is not a finger's.
+    const listener = MOUSE_EVENTS.has(eventName)
+      ? (event: unknown) => (isTouchPointer(event) ? undefined : once(event))
+      : once;
     unlisten = this.engine.setEventListener(target, topLevelType(eventName), listener);
     return unlisten;
   }
