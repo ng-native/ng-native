@@ -20,43 +20,14 @@ import {
 import {
   MENU_MODEL,
   Menus,
-  createMenuModel,
+  menuModelInTreeOrder,
   type MenuEntry,
   type MenuGroupRole,
-  type MenuModel,
   type MenuRole,
 } from '@ng-native/device';
 import type { EngineNode } from '@ng-native/fabric';
 
-/** Where a node is in its tree: each ancestor's index in its parent, from the root down. */
-function placeOf(node: EngineNode): { root: EngineNode; path: number[] } {
-  const path: number[] = [];
-  let at = node;
-  while (at.parent) {
-    path.unshift(at.parent.childList.indexOf(at));
-    at = at.parent;
-  }
-  return { root: at, path };
-}
-
-/**
- * Which of two elements comes first in the tree: negative for `a`. Elements in different trees, or
- * not in one yet, compare equal, and keep the order they registered in.
- */
-export function treeOrder(a: unknown, b: unknown): number {
-  if (!a || !b) return 0;
-  const first = placeOf(a as EngineNode);
-  const second = placeOf(b as EngineNode);
-  if (first.root !== second.root) return 0;
-  for (let i = 0; i < Math.min(first.path.length, second.path.length); i++) {
-    const step = first.path[i]! - second.path[i]!;
-    if (step) return step;
-  }
-  return first.path.length - second.path.length;
-}
-
-/** A menu model whose entries keep their places in the template. */
-export const menuModelInTreeOrder = (): MenuModel => createMenuModel(treeOrder);
+export { menuModelInTreeOrder, treeOrder } from '@ng-native/device';
 
 /** Register `entry` with the menu the element is written in, and take it out as it goes. */
 function registerIn(entry: Signal<MenuEntry>, element: string): void {

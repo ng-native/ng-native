@@ -84,6 +84,8 @@ export {
   defaultMenuBar,
   isSeparator,
   mergeMenuBar,
+  menuModelInTreeOrder,
+  treeOrder,
   type MenuEntry,
   type MenuGroupModel,
   type MenuGroupRole,
@@ -200,3 +202,4 @@ export {
   type RestoredWindow,
   type WindowRestoreStore,
 } from './window-restore.ts';
+export { buildMenuTemplate, type MenuTemplate } from './menu-template.ts';

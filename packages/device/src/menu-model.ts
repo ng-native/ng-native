@@ -283,6 +283,42 @@ export function createMenuModel(order?: (a: unknown, b: unknown) => number): Men
   };
 }
 
+/** Just enough of a node to find its place: its parent, and the parent's children in order. */
+interface TreeNode {
+  readonly parent: TreeNode | null;
+  readonly childList: readonly TreeNode[];
+}
+
+/** Where a node is in its tree: each ancestor's index in its parent, from the root down. */
+function placeOf(node: TreeNode): { root: TreeNode; path: number[] } {
+  const path: number[] = [];
+  let at = node;
+  while (at.parent) {
+    path.unshift(at.parent.childList.indexOf(at));
+    at = at.parent;
+  }
+  return { root: at, path };
+}
+
+/**
+ * Which of two elements comes first in the tree: negative for `a`. Elements in different trees, or
+ * not in one yet, compare equal, and keep the order they registered in.
+ */
+export function treeOrder(a: unknown, b: unknown): number {
+  if (!a || !b) return 0;
+  const first = placeOf(a as TreeNode);
+  const second = placeOf(b as TreeNode);
+  if (first.root !== second.root) return 0;
+  for (let i = 0; i < Math.min(first.path.length, second.path.length); i++) {
+    const step = first.path[i]! - second.path[i]!;
+    if (step) return step;
+  }
+  return first.path.length - second.path.length;
+}
+
+/** A menu model whose entries keep their places in the template. */
+export const menuModelInTreeOrder = (): MenuModel => createMenuModel(treeOrder);
+
 /**
  * Where a `<menu-item>` registers itself: the menu it is written in, which a `<menu-group>`, a
  * submenu or a `<native-header-item [menu]>` template provides. There is none at the root, so an

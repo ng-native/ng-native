@@ -261,3 +261,25 @@ describe('a context menu', () => {
     });
   }
 });
+
+describe('a context menu written with control flow', () => {
+  it('keeps an item an @if shows in its place in the template', async () => {
+    const { ContextMenu, MenuItem, View } = await import('@ng-native/components');
+    await render(
+      `<view testID="target" [contextMenu]="menu"></view>
+      <ng-template #menu>
+        <menu-item label="A" />
+        @if (true) {
+          <menu-item label="B" />
+        }
+        <menu-item label="C" />
+      </ng-template>`,
+      { imports: [View, ContextMenu, MenuItem] },
+    );
+    const entries = screen.getByTestId('target').props['contextMenu'] as { label: string }[];
+    assert.deepEqual(
+      entries.map((entry) => entry.label),
+      ['A', 'B', 'C'],
+    );
+  });
+});

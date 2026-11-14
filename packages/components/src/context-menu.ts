@@ -1,5 +1,4 @@
 import {
-  ApplicationRef,
   DestroyRef,
   Directive,
   ElementRef,
@@ -11,12 +10,11 @@ import {
   inject,
   input,
   signal,
-  type EmbeddedViewRef,
+  untracked,
   type TemplateRef,
 } from '@angular/core';
-import { MENU_MODEL, OS, serializeMenu, type MenuModel } from '@ng-native/device';
+import { OS, buildMenuTemplate, serializeMenu, type MenuTemplate } from '@ng-native/device';
 import { HostEngine, type HostNode } from '@ng-native/fabric';
-import { menuModelInTreeOrder } from './menu.ts';
 
 /**
  * Whether an element has a context menu, for `<pressable>`: on iOS and Android a long press opens
@@ -42,11 +40,11 @@ export class ContextMenu {
   private readonly node = inject(ElementRef).nativeElement as HostNode;
   private readonly engine = inject(HostEngine);
   private readonly injector = inject(Injector);
-  private readonly app = inject(ApplicationRef);
   private readonly os = inject(OS);
-  private view: EmbeddedViewRef<unknown> | null = null;
-  private readonly model = signal<MenuModel | null>(null);
-  private readonly menu = computed(() => serializeMenu(this.model()?.entries() ?? [], this.os));
+  private readonly built = signal<MenuTemplate | null>(null);
+  private readonly menu = computed(() =>
+    serializeMenu(this.built()?.model.entries() ?? [], this.os),
+  );
 
   constructor() {
     effect(() => this.build(this.contextMenu() ?? null));
@@ -69,26 +67,12 @@ export class ContextMenu {
     return this.menu().entries.length > 0;
   }
 
-  /**
-   * Make the template's items, outside the tree: they draw nothing, and only register with the
-   * menu model this provides them. Attached to the app so their bindings stay live.
-   */
+  /** Make the template's items, which register with the menu this element sends. */
   private build(template: TemplateRef<unknown> | null): void {
-    if (this.view) {
-      this.app.detachView(this.view);
-      this.view.destroy();
-      this.view = null;
-      this.model.set(null);
-    }
-    if (!template) return;
-    const model = menuModelInTreeOrder();
-    const injector = Injector.create({
-      providers: [{ provide: MENU_MODEL, useValue: model }],
-      parent: this.injector,
+    // Read and written outside the effect that calls this, which would otherwise run again.
+    untracked(() => {
+      this.built()?.destroy();
+      this.built.set(template ? buildMenuTemplate(template, this.injector) : null);
     });
-    this.model.set(model);
-    this.view = template.createEmbeddedView({}, injector);
-    this.app.attachView(this.view);
-    this.view.detectChanges();
   }
 }
