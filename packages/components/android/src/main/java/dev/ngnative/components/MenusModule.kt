@@ -15,7 +15,8 @@ import expo.modules.kotlin.modules.ModuleDefinition
  *
  * `setContextMenu` keeps each `[contextMenu]` by its view's `nativeID`, since React Native's view
  * drops a `contextMenu` prop it does not know. A long press or a right-click on the view opens it
- * as a PopupMenu at the press point.
+ * as a PopupMenu at the press point. `setTakesLongPress` names views inside one that take a long
+ * press themselves, where a long press opens no menu.
  */
 class MenusModule : Module() {
   private val main = Handler(Looper.getMainLooper())
@@ -43,6 +44,16 @@ class MenusModule : Module() {
       }
     }
 
+    Function("setTakesLongPress") { nativeId: String, takes: Boolean ->
+      main.post {
+        if (takes) {
+          MenuHost.longPressTakers.add(nativeId)
+        } else {
+          MenuHost.longPressTakers.remove(nativeId)
+        }
+      }
+    }
+
     OnCreate {
       MenuHost.send = { body -> sendEvent("ngNativeMenus", body) }
       watchActivity()
@@ -57,6 +68,7 @@ class MenusModule : Module() {
         MenuHost.send = null
         MenuHost.shortcuts = emptyList()
         MenuHost.contextMenus.clear()
+        MenuHost.longPressTakers.clear()
       }
     }
   }

@@ -57,9 +57,10 @@ afterEach(cleanup);
 
 type Group = { label: string; menuRole?: string; items: NativeMenuEntry[] };
 
-function fakeHost(menuBar: boolean, drawsContextMenus = false) {
+function fakeHost(menuBar: boolean, drawsContextMenus = false, leavesLongPresses = false) {
   const bars: Group[][] = [];
   const contextMenus = new Map<string, NativeMenuEntry[] | null>();
+  const longPressTakers = new Set<string>();
   const shortcuts: NativeShortcut[][] = [];
   const listeners = new Set<(event: NativeMenuEvent) => void>();
   const native: NativeMenus = {
@@ -75,10 +76,15 @@ function fakeHost(menuBar: boolean, drawsContextMenus = false) {
       setContextMenu: (nativeId: string, entries: readonly NativeMenuEntry[] | null) =>
         void contextMenus.set(nativeId, entries && [...entries]),
     }),
+    ...(leavesLongPresses && {
+      setTakesLongPress: (nativeId: string, takes: boolean) =>
+        void (takes ? longPressTakers.add(nativeId) : longPressTakers.delete(nativeId)),
+    }),
   };
   return {
     native,
     contextMenus,
+    longPressTakers,
     bar: () => bars.at(-1)!,
     bars,
     shortcuts: () => shortcuts.at(-1)!,
@@ -382,6 +388,73 @@ for (const os of ['android', 'ios'] as const) {
   });
 }
 
+for (const os of ['android', 'ios'] as const) {
+  describe(`a long press inside a context menu's element on ${os}`, () => {
+    after(() => registerPlatformComponents('ios'));
+
+    async function openRow(host: ReturnType<typeof fakeHost>) {
+      registerPlatformComponents(os);
+      const shown = signal(true);
+      const said: string[] = [];
+      const { ContextMenu, MenuItem, Pressable, View } = await import('@ng-native/components');
+      const app = await render(
+        `@if (shown()) {
+          <view testID="row" [contextMenu]="menu">
+            <pressable testID="handle" (longPress)="said.push('reorder')"></pressable>
+            <pressable testID="plain" (press)="said.push('open')"></pressable>
+          </view>
+        }
+        <ng-template #menu><menu-item label="Pin" /></ng-template>`,
+        {
+          imports: [View, ContextMenu, MenuItem, Pressable],
+          providers: [
+            { provide: Menus.SOURCE, useValue: host.native },
+            { provide: OS, useValue: os },
+          ],
+          componentProperties: { shown, said },
+        },
+      );
+      await settle();
+      return { app, shown, said };
+    }
+
+    it('tells the host that a pressable with its own (longPress) takes the long press', async () => {
+      const host = fakeHost(false, true, true);
+      const { app, shown, said } = await openRow(host);
+      const handle = screen.getByTestId('handle').props['nativeID'];
+      assert.equal(typeof handle, 'string');
+      assert.deepEqual([...host.longPressTakers], [handle]);
+      assert.equal(screen.getByTestId('plain').props['nativeID'], undefined);
+      const { fireEvent } = await import('@ng-native/testing');
+      const target = screen.getByTestId('handle');
+      await fireEvent(target, 'touchStart', { touches: [{}], changedTouches: [{}] });
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await fireEvent(target, 'touchEnd', { touches: [], changedTouches: [{}] });
+      assert.deepEqual(said, ['reorder'], 'the menu is not on the pressable, so it fires');
+      shown.set(false);
+      await app.detectChanges();
+      assert.deepEqual([...host.longPressTakers], [], 'and takes it back as the pressable goes');
+    });
+
+    it('names nothing for a host that cannot be told, nor where there is no host', async () => {
+      await openRow(fakeHost(false, true, false));
+      assert.equal(screen.getByTestId('handle').props['nativeID'], undefined);
+      cleanup();
+      registerPlatformComponents(os);
+      const { Pressable } = await import('@ng-native/components');
+      await render(`<pressable testID="handle" (longPress)="0"></pressable>`, {
+        imports: [Pressable],
+        providers: [
+          { provide: Menus.SOURCE, useValue: null },
+          { provide: OS, useValue: os },
+        ],
+      });
+      await settle();
+      assert.equal(screen.getByTestId('handle').props['nativeID'], undefined);
+    });
+  });
+}
+
 describe('a context menu chosen on iOS', () => {
   after(() => registerPlatformComponents('ios'));
 
@@ -447,6 +520,7 @@ describe("the menus' platform source", () => {
       appName: 'Notes',
       setShortcuts: (list: unknown) => void calls.push(['shortcuts', list]),
       setContextMenu: (id: string, entries: unknown) => void calls.push(['menu', id, entries]),
+      setTakesLongPress: (id: string, takes: boolean) => void calls.push(['takes', id, takes]),
       addListener: (name: string, listener: (event: unknown) => void) => {
         assert.equal(name, 'ngNativeMenus');
         listeners.push(listener);
@@ -458,9 +532,11 @@ describe("the menus' platform source", () => {
     assert.equal(source.appName, 'Notes');
     source.setShortcuts([]);
     source.setContextMenu?.('row', null);
+    source.setTakesLongPress?.('handle', true);
     assert.deepEqual(calls, [
       ['shortcuts', []],
       ['menu', 'row', null],
+      ['takes', 'handle', true],
     ]);
     const heard: unknown[] = [];
     const stop = source.subscribe((event) => heard.push(event));
@@ -475,6 +551,7 @@ describe("the menus' platform source", () => {
     const source = onDevice({ NgNativeMenus: turbo }, { NgNativeMenus: {} }, menusSource)!;
     assert.equal(source.menuBar, true);
     assert.equal(source.setContextMenu, undefined);
+    assert.equal(source.setTakesLongPress, undefined);
   });
 
   it('is absent with neither module', () => {

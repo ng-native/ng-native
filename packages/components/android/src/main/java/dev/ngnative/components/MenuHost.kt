@@ -11,6 +11,12 @@ internal object MenuHost {
   /** Each `[contextMenu]`'s entries, as `serializeMenu` makes them, by its view's `nativeID`. */
   val contextMenus: MutableMap<String, List<Map<String, Any?>>> = HashMap()
 
+  /**
+   * The `nativeID`s of views that take a long press themselves (a `(longPress)`): one there opens
+   * no context menu around them, as the innermost handler wins.
+   */
+  val longPressTakers: MutableSet<String> = HashSet()
+
   /** Sends an `ngNativeMenus` event to JavaScript, while a module is there to send it. */
   var send: ((Map<String, Any?>) -> Unit)? = null
 }
