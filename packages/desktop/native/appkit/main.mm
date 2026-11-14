@@ -11,6 +11,7 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
+#import "notifications.h"
 #import "undo.h"
 #import "app-windows.h"
 #import "appkit-backend.h"
@@ -631,6 +632,11 @@ int main(int argc, const char *argv[]) {
       static auto haptics = ngn::appkit::makeHapticPlayer();
       ngn::addModule(*modules, "NgNativeSecureStore", [] { return ngn::makeSecureStoreModule(keychain, keychainService); });
       ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem, gHost.state); });
+      static auto notificationEvents = std::make_shared<ngn::NotificationEvents>();
+      static auto notifications = ngn::appkit::makeNotificationCenter(notificationEvents);
+      ngn::addModule(*modules, "NgNativeNotifications", [] {
+        return ngn::makeNotificationsModule(notifications, notificationEvents);
+      });
       static auto undo = ngn::appkit::makeUndoManager();
       ngn::addModule(*modules, "NgNativeUndo", [] { return ngn::makeUndoModule(undo); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
