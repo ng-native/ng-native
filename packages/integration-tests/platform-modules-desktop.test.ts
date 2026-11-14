@@ -301,10 +301,11 @@ describe('Calendar on macOS', () => {
     assert.deepEqual(events, [{ id: 'e1' }]);
     assert.deepEqual(calls.slice(-1), [['listEventsAsync', ['c1', 'c2'], 1_000, 2_000]]);
     assert.deepEqual(calls[0], ['getCalendarPermissionsAsync', true]);
-    await assert.rejects(calendar.createCalendar({ title: 'x' }), /not available on macOS/);
     // A host built before the writes rejects them, and reads no reminders.
+    await assert.rejects(calendar.createCalendar({ title: 'x' }), /Build it again/);
     const [home] = await calendar.calendars();
     await assert.rejects(home!.createEvent({ title: 'x' }), /Build it again/);
+    await assert.rejects(home!.delete(), /Build it again/);
     assert.deepEqual(await home!.listReminders(), []);
   });
 
@@ -346,6 +347,11 @@ describe('Calendar on macOS', () => {
           ...(details as object),
         })),
         deleteReminderAsync: answer('deleteReminderAsync', () => null),
+        createCalendarAsync: answer('createCalendarAsync', (details) => ({
+          id: 'c9',
+          ...(details as object),
+        })),
+        deleteCalendarAsync: answer('deleteCalendarAsync', () => null),
         getDefaultCalendarSync: () => ({ id: 'c1' }),
         getSourcesSync: () => [],
       },
@@ -401,6 +407,35 @@ describe('Calendar on macOS', () => {
     await found!.update({ notes: 'x' });
     assert.deepEqual(calls.at(-1), ['updateEventAsync', 'e1', { notes: 'x' }, []]);
     await assert.rejects(home!.update({ title: 'x' }), /not available on macOS/);
+  });
+
+  it('creates a calendar and deletes it, and its events go into it', async () => {
+    const calls = writingHost();
+    const { Calendar, EntityTypes } = await import('@ng-native/expo/calendar');
+    const service = injectService(Calendar);
+    const created = await service.createCalendar({
+      title: 'Trips',
+      color: '#FF6600',
+      entityType: EntityTypes.EVENT,
+      sourceId: 's1',
+      name: undefined,
+    } as never);
+    assert.deepEqual(calls.at(-1), [
+      'createCalendarAsync',
+      { title: 'Trips', color: '#FF6600', entityType: 'event', sourceId: 's1' },
+    ]);
+    assert.equal(created!.id, 'c9');
+    await created!.createEvent({ title: 'Flight', startDate: new Date(1), endDate: new Date(2) });
+    assert.deepEqual(calls.at(-1), [
+      'createEventAsync',
+      'c9',
+      { title: 'Flight', startDate: 1, endDate: 2 },
+    ]);
+    await created!.delete();
+    assert.deepEqual(calls.at(-1), ['deleteCalendarAsync', 'c9']);
+    const read = await service.calendar('c1');
+    await read!.delete();
+    assert.deepEqual(calls.at(-1), ['deleteCalendarAsync', 'c1']);
   });
 
   it('lists, reads, creates, completes and deletes reminders', async () => {

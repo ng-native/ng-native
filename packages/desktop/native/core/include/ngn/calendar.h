@@ -15,6 +15,9 @@
 //   deleteEventAsync(id): expo-calendar's ExpoCalendar.createEvent and an event's update() and
 //   delete(), dates as milliseconds. Creating needs write-only or full access, changing and
 //   deleting full access; without it they reject, saying which permission to ask for.
+// - createCalendarAsync(details), deleteCalendarAsync(id): expo-calendar's createCalendar (title,
+//   color, entityType "event" or "reminder", sourceId) and a calendar's delete(), with full access
+//   to the calendars or the reminders; without it they reject, naming the permission.
 // - listRemindersAsync(calendarIds, start, end, status), getReminderAsync(id),
 //   createReminderAsync(calendarId, details), updateReminderAsync(id, details, nullableFields),
 //   deleteReminderAsync(id): the reminders, with full reminders access. Without it the reads
@@ -151,6 +154,17 @@ class CalendarStore {
   virtual Reminder createReminder(const std::string &calendarId, const Details &details) = 0;
   virtual Reminder updateReminder(const std::string &id, const Details &details) = 0;
   virtual void deleteReminder(const std::string &id) = 0;
+
+  // A calendar to make: its title, "#RRGGBB" colour (empty for the OS's), and the source to keep
+  // it in (empty for the source the default calendar of its kind is in).
+  struct NewCalendar {
+    std::string title;
+    std::string color;
+    std::string sourceId;
+  };
+  // With full access to its kind; throws Failure when the OS refuses.
+  virtual Calendar createCalendar(Entity entity, const NewCalendar &calendar) = 0;
+  virtual void deleteCalendar(const std::string &id) = 0;
 };
 
 // The details of an expo-calendar create or update, dates as milliseconds, with the fields in
