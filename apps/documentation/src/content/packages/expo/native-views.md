@@ -76,7 +76,7 @@ have to look each one up:
 | `apple-sign-in-button`                 | `ExpoAppleAuthentication`               | See [Sign in with Apple](/packages/expo/apple-sign-in). iOS only.      |
 | `expo-symbol`                          | `SymbolModule`                          | SF Symbols, iOS and macOS.                                             |
 | `expo-gl`                              | `ExpoGL`                                | Its context is reached through an event rather than a prop.            |
-| `expo-glass`                           | `ExpoGlassEffect` (`GlassView`)         | The iOS 26 material. Renders as a plain view where unavailable.        |
+| `expo-glass`                           | `ExpoGlassEffect` (`GlassView`)         | The iOS 26 material, and macOS's. See below.                           |
 | `expo-glass-container`                 | `ExpoGlassEffect` (`GlassContainer`)    | Glass views inside merge when they come within `spacing` points.       |
 | `expo-mesh-gradient`                   | `ExpoMeshGradient` (`MeshGradientView`) | The one gradient with no CSS spelling.                                 |
 | `expo-live-photo`                      | `ExpoLivePhoto` (`LivePhotoView`)       | iOS only.                                                              |
@@ -125,6 +125,11 @@ registerExpoViews('expo-glass', 'expo-symbol'); // once, before the app mounts
 export class Like {}
 ```
 
+Where Liquid Glass is unavailable, before iOS 26 and on Android, `<expo-glass>` renders as a plain
+view, so its fallback background is the app's to set. On macOS the desktop host draws
+NSGlassEffectView from macOS 26, and a frosted material before it, in the element's own corners;
+`<expo-glass-container>` is a plain view there, each glass view inside drawing its own.
+
 A symbol's color is its `tintColor`, and `tint-color` in a stylesheet is the declaration that sets
 it, so that is how a symbol takes its color from a token and follows a theme:
 `.like { tint-color: var(--color-accent); }` on `<expo-symbol class="like">`. `color` does not tint
@@ -170,6 +175,11 @@ only installs its `onChange` native block when the prop is set - as React's hand
 there. Bind `(change)` or nothing fires. `SegmentedControl` (`segmented-control.ts`) is a thin
 typed component over this element for strict templates: import it and keep registering the name -
 the component supplies the types, the registration is what makes the element commit.
+
+On macOS `slider`, `picker` and `masked-view` are absent: their libraries have no macOS view, so
+the element is a plain view and the desktop host's view registry reports it missing. Use
+`ui-slider` and `ui-picker` from `@expo/ui`, which are SwiftUI's slider and picker there; a masked
+view's content shows unmasked.
 
 `date-time-picker` is the library's native view, not its React component, so it takes what the
 view does and not what the library's README lists: the date is `date`, in milliseconds, where the

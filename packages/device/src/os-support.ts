@@ -136,6 +136,27 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     ['accessibilityLevel'],
     ['macOS 26 and later', 'ignored', 'ignored', 'ignored', 'yes'],
   ),
+  row('`<refresh-control>`', ['RefreshControl'], ['inert', 'yes', 'yes', 'yes', 'inert']),
+  row(
+    '`<keyboard-dock>`, `<keyboard-avoiding-view>`',
+    ['KeyboardDock', 'KeyboardAvoidingView'],
+    ['plain view', 'yes', 'yes', 'yes', 'plain view'],
+  ),
+  row(
+    '`<input-accessory-view>`',
+    ['InputAccessoryView'],
+    ['plain view', 'yes', 'yes', 'plain view', 'docked at the bottom'],
+  ),
+  row(
+    '`<expo-glass>`, `<expo-glass-container>`',
+    [],
+    ['yes', 'iOS 26 and later', 'iOS 26 and later', 'plain view', 'plain view'],
+  ),
+  row(
+    'Community `slider`, `picker`, `masked-view`',
+    [],
+    ['absent: `ui-slider`, `ui-picker`', 'yes', 'yes', 'yes', 'plain view'],
+  ),
   row(
     '`HardwareBack`, `NavigationBar`',
     ['HardwareBack', 'NavigationBar'],

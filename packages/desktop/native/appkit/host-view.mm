@@ -14,6 +14,9 @@
 #import "split-view.h"
 #import "svg-view.h"
 #import "symbol-view.h"
+#import "glass-view.h"
+
+#include "ngn/glass.h"
 #import "web-view-component.h"
 #import "expo-image-view.h"
 #import "expo-ui-view.h"
@@ -1135,6 +1138,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == ngn::SymbolComponentName) {
     return [[NGNSymbolView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::GlassViewComponentName) {
+    return [[NGNGlassView alloc] initWithShadowView:view];
   }
   // react-native-svg's: the svg draws its elements, whose own views are hidden.
   if (name == "RNSVGSvgView") {

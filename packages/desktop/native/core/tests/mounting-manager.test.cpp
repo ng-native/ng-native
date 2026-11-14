@@ -1,9 +1,12 @@
+#include "ngn/absent-views.h"
 #include "fake-backend.h"
 #include "helpers.h"
 #include "ngn/library-glue.h"
 #include "ngn/mounting-manager.h"
 
 #include <doctest/doctest.h>
+#include <react/renderer/components/view/ConcreteViewShadowNode.h>
+#include <react/renderer/core/ConcreteComponentDescriptor.h>
 #include <react/renderer/mounting/MountingTransaction.h>
 
 using namespace facebook::react;
@@ -204,6 +207,37 @@ TEST_CASE("the core registers its components and the backend's") {
     CHECK_MESSAGE(f.mounting->hasComponent(name), name);
   }
   CHECK_FALSE(f.mounting->hasComponent("RNSScreen"));
+}
+
+namespace {
+const char KeyboardControllerViewName[] = "KeyboardControllerView";
+const char LibraryViewName[] = "SomeLibraryView";
+using KeyboardControllerDescriptor =
+    ConcreteComponentDescriptor<ConcreteViewShadowNode<KeyboardControllerViewName, ViewProps>>;
+using LibraryDescriptor = ConcreteComponentDescriptor<ConcreteViewShadowNode<LibraryViewName, ViewProps>>;
+} // namespace
+
+TEST_CASE("the registry reports refresh controls, keyboard views and the community views it has none for absent, though a library compiled in has one") {
+  auto backend = std::make_shared<FakeBackend>();
+  backend->providers = {
+      concreteComponentDescriptorProvider<KeyboardControllerDescriptor>(),
+      concreteComponentDescriptorProvider<LibraryDescriptor>(),
+  };
+  auto mounting = std::make_shared<ngn::MountingManager>(backend, backend);
+  CHECK(mounting->hasComponent("SomeLibraryView"));
+  for (const char *name : {"KeyboardControllerView", "PullToRefreshView", "AndroidSwipeRefreshLayout", "KeyboardGestureArea", "InputAccessoryView"}) {
+    CHECK_FALSE_MESSAGE(mounting->hasComponent(name), name);
+    REQUIRE_MESSAGE(ngn::absentReason(name), name);
+  }
+  CHECK(*ngn::absentReason("PullToRefreshView") == "a Mac has no pull to refresh: a scroll view stops at its top");
+  CHECK(ngn::absentReason("KeyboardControllerView")->find("no software keyboard") != std::string_view::npos);
+  CHECK(ngn::absentReason("RNCSlider")->find("ui-slider") != std::string_view::npos);
+  CHECK(ngn::absentReason("RNCMaskedView")->find("unmasked") != std::string_view::npos);
+  CHECK_FALSE(ngn::absentReason("View"));
+  // Every absent view is out of the registry, whoever offers it.
+  for (const auto &view : ngn::absentViews()) {
+    CHECK_FALSE(mounting->hasComponent(std::string(view.name)));
+  }
 }
 
 namespace {

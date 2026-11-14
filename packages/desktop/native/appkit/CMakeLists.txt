@@ -48,6 +48,8 @@ add_executable(ngn-macos
     share-picker.mm
     main.mm
     menu-bar.mm
+    glass-effect.mm
+    glass-view.mm
     modal-focus.mm
     modal-host-view.mm
     native-controls.mm

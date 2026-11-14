@@ -422,6 +422,20 @@ the package's name after `expo-`, each with the methods the service calls on the
 | `NgNativeSymbol`                        | `<expo-symbol>`'s size: the symbol image's at a point size, weight and scale, as the iOS module answers it. The host draws the view itself (`ViewManagerAdapter_SymbolModule`) with AppKit's symbol configuration: the type, tint, palette, weight and scale, built at the system font size and placed by `resizeMode`, as `expo-symbols` does on macOS. `animationSpec` plays nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `NgNativeApplication`, `NgNativeDevice` | `AppInfo`: the bundle's version, build, id and name (a dev run, with no bundle, gives the app's id and name and no versions), and the Mac's model, macOS version and `desktop` device type.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
+`<expo-glass>` (`ViewManagerAdapter_ExpoGlassEffect_GlassView`) is drawn by the host: Liquid Glass,
+NSGlassEffectView, from macOS 26 (found by name, so any SDK builds it), and an NSVisualEffectView
+before it, behind the view's children in its own corners, with `glassEffectStyle` (`regular`,
+`clear`, `none`), `tintColor` and `colorScheme`. `<expo-glass-container>` is a plain view.
+
+Views with no macOS counterpart are absent from the host's view registry (`absent-views.h`), which
+JavaScript reads as `__nativeComponentRegistry__hasComponent`, each with its reason: one committed
+anyway is a plain view whose children still show. They are `<refresh-control>`'s
+`PullToRefreshView` and `AndroidSwipeRefreshLayout` (a Mac has no pull to refresh),
+`<input-accessory-view>` and react-native-keyboard-controller's views, though the library is
+compiled in (a Mac has no software keyboard), and the community `slider`, `picker` and
+`masked-view`, whose libraries have no macOS view (`@expo/ui`'s `ui-slider` and `ui-picker` are
+SwiftUI's on macOS).
+
 `<expo-image>` (`ViewManagerAdapter_ExpoImage`) is drawn by the host, with no module of its own:
 the source nearest the view's size in pixels, placed by `contentFit` and `contentPosition`, with
 its `tintColor` and `blurRadius`, faded in over `transition`'s duration (every effect is a
