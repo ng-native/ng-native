@@ -99,9 +99,9 @@ export class Dialogs {
   /**
    * Ask for a line of text. Resolves to null if they cancelled.
    *
-   * iOS only: `Alert.prompt` has no Android equivalent, and inventing one out of a modal and a
-   * text input would be a dialog that looks nothing like the platform's. On Android this resolves
-   * to null so a caller can fall back to a screen of its own.
+   * iOS and macOS only: `Alert.prompt` has no Android equivalent, and inventing one out of a modal
+   * and a text input would be a dialog that looks nothing like the platform's. On Android this
+   * resolves to null so a caller can fall back to a screen of its own.
    */
   ask(title: string, options: { message?: string; value?: string } = {}): Promise<string | null> {
     return new Promise((resolve) => {
@@ -193,9 +193,9 @@ export class Dialogs {
 /**
  * The platform's dialogs, from React Native's own modules.
  *
- * `Alert.prompt` and `ActionSheetIOS` are iOS-only and `ToastAndroid` is Android-only; each is
- * left absent rather than shimmed, which is what lets `ask`, `choose` and `notify` above decide
- * what to do about it.
+ * `Alert.prompt` is iOS and macOS only, `ActionSheetIOS` iOS only and `ToastAndroid` Android
+ * only; each is left absent rather than shimmed, which is what lets `ask`, `choose` and `notify`
+ * above decide what to do about it.
  *
  * Which platform it is has to be asked outright, because React Native's own modules do not answer
  * it. `react-native` exports `ActionSheetIOS` on Android too - the object is there and so is
