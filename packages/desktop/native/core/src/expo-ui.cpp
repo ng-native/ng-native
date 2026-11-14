@@ -76,6 +76,7 @@ ExpoUIProps::ExpoUIProps(const PropsParserContext &context, const ExpoUIProps &s
   }
   matchContentsHorizontal = truthy(values, "matchContentsHorizontal");
   matchContentsVertical = truthy(values, "matchContentsVertical");
+  sizeFromChildren = truthy(values, "expoInternalSizeFromChildren");
 }
 
 void ExpoUIShadowNode::applyContentSize() {
@@ -83,11 +84,14 @@ void ExpoUIShadowNode::applyContentSize() {
   const auto &size = getStateData().contentSize;
   bool width = props.matchContentsHorizontal && size.width > 0;
   bool height = props.matchContentsVertical && size.height > 0;
-  if (!width && !height) {
+  if (!width && !height && !props.sizeFromChildren) {
     return;
   }
   ensureUnsealed();
   auto style = yogaNode_.style();
+  if (props.sizeFromChildren) {
+    style.setAlignSelf(facebook::yoga::Align::FlexStart);
+  }
   if (width) {
     style.setDimension(facebook::yoga::Dimension::Width, facebook::yoga::StyleSizeLength::points(size.width));
   }
