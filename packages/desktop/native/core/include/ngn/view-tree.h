@@ -48,14 +48,20 @@ class ViewTree {
   // clips its content or nothing of it overflows. Empty when nothing is hit.
   std::vector<Tag> hitTest(Tag root, Point point) const;
 
+  // How far a scrolling view has scrolled its content: the content's origin is drawn at minus
+  // this. The backend reports it as the user scrolls; the view's state lags behind.
+  void setScrollOffset(Tag tag, Point offset);
+
   // Where `tag`'s origin is in `root`'s coordinates, or nothing when `tag` is not under `root`.
   std::optional<Point> originIn(Tag tag, Tag root) const;
 
  private:
   bool hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) const;
+  Point scrollOffset(Tag tag) const;
 
   std::unordered_map<Tag, Node> nodes_;
   std::unordered_set<Tag> containerRoots_;
+  std::unordered_map<Tag, Point> scrollOffsets_;
 };
 
 } // namespace ngn

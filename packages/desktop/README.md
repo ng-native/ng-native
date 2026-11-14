@@ -4,30 +4,48 @@ The macOS desktop host for Angular Native: React Native's C++ core and Hermes, m
 views into AppKit, and the `ng-native-desktop` command that builds and launches it. You install the
 package and never import it.
 
-Alpha, and early: the host draws views, text and text fields and takes clicks and hover. It has no
-dev server, menu bar, scrolling or networking yet.
+Alpha, and early: the host draws views, text, text fields, images, scroll views and modals (as an
+in-window cover), takes clicks, hover and the scroll wheel, loads the app from the dev server with
+reload and Fast Refresh, and has the default menu bar. React Native's iOS modules answer from the
+core: Linking, Appearance, AppState, DeviceInfo, PlatformConstants, I18nManager, Alert (NSAlert),
+Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob, FileReader,
+ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no safe-area
+insets, sheets, popovers, second windows or React Native DevTools yet.
 
-## Run a bundle
+## Run the app
 
 ```sh
-npx ng-native-desktop run dist/main.hbc
+npm start            # the Expo CLI's dev server, in one terminal
+npx ng-native-desktop run
 ```
 
-Run it from the app's directory: the host is built against the app's own `react-native`
-(0.88), the first time into `~/Library/Caches/ng-native/desktop/rn-<version>`, which takes a few
-minutes and needs Xcode's command line tools, CMake and Ninja. Later runs reuse it. A bundle URL is
-downloaded and opened from disk.
+Run it from the app's directory. The app's Expo config must list `macos` in `expo.platforms` with
+`expo.experiments.outOfTreePlatforms` set to `true`; the command says so when it does not.
+
+With no bundle, the host loads
+`http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=macos&dev=true` straight from the
+dev server and stays connected to it: an edit Fast Refreshes and keeps state, the dev server's
+reload reloads, and so does Developer > Reload (Command-R). A bundle path (from
+`npx expo export -p macos`) or another URL can be given instead.
+
+The host is built against the app's own `react-native` (0.88), the first time into
+`~/Library/Caches/ng-native/desktop/rn-<version>`, which takes a few minutes and needs Xcode's
+command line tools, CMake and Ninja. Later runs reuse it.
 
 | Option            | What it does                                              |
 | ----------------- | --------------------------------------------------------- |
 | `--module <name>` | The registered app to start. Default `main`.              |
+| `--port <port>`   | The dev server's port. Default `8081`.                    |
 | `--universal`     | Build for arm64 and x86_64. Default: this Mac's own arch. |
 
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and
-  hover, text measurement, the module registry and desktop view props), with tests on an in-memory
-  backend that run on Linux and macOS.
+  hover, text measurement, the module registry and desktop view props, the dev server connection,
+  the default menu bar and React Native's iOS-shaped modules in `src/modules`), with tests on an
+  in-memory backend that run on Linux and macOS. A backend answers the OS calls through narrow
+  interfaces: `network.h` (HTTP and WebSocket) and `system.h` (URLs, alerts, appearance,
+  clipboard, preferences, image sizes and the app's data directory).
 - `native/appkit`: the AppKit backend and the `ngn-macos` binary.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles.

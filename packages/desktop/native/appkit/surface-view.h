@@ -10,4 +10,10 @@
 @property (nonatomic, readonly) facebook::react::SurfaceId surfaceId;
 // The sink must outlive the view.
 - (instancetype)initWithFrame:(NSRect)frame surfaceId:(facebook::react::SurfaceId)surfaceId input:(ngn::InputSink *)input;
+// A container for part of a surface (a modal's in-window cover), hit-testing from `rootTag`.
+- (instancetype)initWithFrame:(NSRect)frame
+                    surfaceId:(facebook::react::SurfaceId)surfaceId
+                    container:(ngn::ContainerId)container
+                      rootTag:(facebook::react::Tag)rootTag
+                        input:(ngn::InputSink *)input;
 @end

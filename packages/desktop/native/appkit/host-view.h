@@ -10,6 +10,7 @@
 
 @interface NGNView : NSView
 @property (nonatomic, readonly) NSInteger reactTag;
+@property (nonatomic, readonly) NSInteger surfaceId;
 @property (nonatomic, readonly, copy) NSString *componentName;
 - (instancetype)initWithShadowView:(const facebook::react::ShadowView &)view;
 - (void)updateProps:(const facebook::react::Props::Shared &)props;
@@ -19,6 +20,9 @@
 - (void)updateDesktopProps:(const ngn::DesktopProps &)props;
 - (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args;
 - (facebook::react::EventEmitter::Shared)eventEmitter;
+- (facebook::react::Props::Shared)props;
+// Where Fabric children mount: the view itself, or a scroll view's document view.
+- (NSView *)contentContainer;
 @end
 
 // Hosts a real NSTextField, so the field editor, NSTextInputClient and IME are AppKit's own.

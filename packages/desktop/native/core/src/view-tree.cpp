@@ -20,6 +20,7 @@ void ViewTree::destroy(Tag tag) {
   if (it->second.parent != -1) {
     remove(it->second.parent, tag);
   }
+  scrollOffsets_.erase(tag);
   // Fabric deletes children before their parent, so any left here were already removed.
   for (auto child : it->second.children) {
     if (auto c = nodes_.find(child); c != nodes_.end()) {
@@ -75,6 +76,19 @@ void ViewTree::removeContainerRoot(Tag root) {
   containerRoots_.erase(root);
 }
 
+void ViewTree::setScrollOffset(Tag tag, Point offset) {
+  if (offset == Point{0, 0}) {
+    scrollOffsets_.erase(tag);
+  } else {
+    scrollOffsets_[tag] = offset;
+  }
+}
+
+Point ViewTree::scrollOffset(Tag tag) const {
+  auto it = scrollOffsets_.find(tag);
+  return it == scrollOffsets_.end() ? Point{0, 0} : it->second;
+}
+
 std::vector<Tag> ViewTree::hitTest(Tag root, Point point) const {
   std::vector<Tag> chain;
   hitTest(root, root, point, chain);
@@ -107,13 +121,14 @@ bool ViewTree::hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) 
     return false;
   }
   if (pointerEvents != PointerEventsMode::BoxOnly) {
+    Point scrolled = scrollOffset(tag);
     for (auto it = node->children.rbegin(); it != node->children.rend(); ++it) {
       const Node *child = find(*it);
       if (child == nullptr) {
         continue;
       }
       const auto &origin = child->view.layoutMetrics.frame.origin;
-      if (hitTest(*it, root, {point.x - origin.x, point.y - origin.y}, chain)) {
+      if (hitTest(*it, root, {point.x + scrolled.x - origin.x, point.y + scrolled.y - origin.y}, chain)) {
         chain.push_back(tag);
         return true;
       }
@@ -133,8 +148,9 @@ std::optional<Point> ViewTree::originIn(Tag tag, Tag root) const {
     if (node == nullptr || node->parent == -1) {
       return std::nullopt;
     }
-    origin.x += node->view.layoutMetrics.frame.origin.x;
-    origin.y += node->view.layoutMetrics.frame.origin.y;
+    Point scrolled = scrollOffset(node->parent);
+    origin.x += node->view.layoutMetrics.frame.origin.x - scrolled.x;
+    origin.y += node->view.layoutMetrics.frame.origin.y - scrolled.y;
     current = node->parent;
   }
   if (!contains(root)) {

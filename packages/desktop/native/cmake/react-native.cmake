@@ -101,6 +101,11 @@ if(NGN_WITH_RUNTIME)
               renderer/uimanager runtime threading utils)
     add_subdirectory(${REACT_CXX_PLATFORM_DIR}/react/${dir} ReactCxxPlatform/${dir})
   endforeach()
+  # The core's src/dev-server-helper.cpp replaces upstream's, which hard-codes `android` as the
+  # bundle's and the HMR client's platform. Its header stays.
+  get_target_property(_dsh react_cxx_platform_react_devsupport SOURCES)
+  list(FILTER _dsh EXCLUDE REGEX "/devsupport/DevServerHelper.cpp$")
+  set_target_properties(react_cxx_platform_react_devsupport PROPERTIES SOURCES "${_dsh}")
 endif()
 
 # Every React Native object library, as one static archive: a binary takes only the objects it
@@ -130,3 +135,6 @@ add_library(react_native STATIC)
 # definitions and link dependencies carry on to whatever links the archive.
 target_link_libraries(react_native PUBLIC ${RN_OBJECT_LIBRARIES})
 target_link_libraries(react_native PUBLIC yogacore folly_runtime glog fmt double-conversion boost fast_float)
+# The modal component is a static library upstream, not an object library.
+target_link_libraries(react_native PUBLIC rrc_modal)
+target_compile_options(rrc_modal PRIVATE -include cstdint -w)

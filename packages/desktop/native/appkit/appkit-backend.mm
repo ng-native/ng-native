@@ -1,6 +1,7 @@
 #import "appkit-backend.h"
 
 #import "host-view.h"
+#import "modal-host-view.h"
 #import "surface-view.h"
 
 namespace ngn::appkit {
@@ -48,21 +49,31 @@ void AppKitBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
     return;
   }
   // The index counts Fabric children only: a TextInput holds an NSTextField of its own.
+  if ([childView isKindOfClass:NGNModalHostView.class]) {
+    [(NGNModalHostView *)childView presentOver:parentView];
+    return;
+  }
+  NSView *container = parentView.contentContainer;
   NSMutableArray<NSView *> *siblings = [NSMutableArray array];
-  for (NSView *v in parentView.subviews) {
+  for (NSView *v in container.subviews) {
     if ([v isKindOfClass:NGNView.class]) {
       [siblings addObject:v];
     }
   }
   if (index >= (int)siblings.count) {
-    [parentView addSubview:childView];
+    [container addSubview:childView];
   } else {
-    [parentView addSubview:childView positioned:NSWindowBelow relativeTo:siblings[index]];
+    [container addSubview:childView positioned:NSWindowBelow relativeTo:siblings[index]];
   }
 }
 
 void AppKitBackend::removeChild(SurfaceId, Tag, Tag child, int) {
-  [views_[@(child)] removeFromSuperview];
+  NGNView *view = views_[@(child)];
+  if ([view isKindOfClass:NGNModalHostView.class]) {
+    [(NGNModalHostView *)view dismiss];
+    return;
+  }
+  [view removeFromSuperview];
 }
 
 void AppKitBackend::updateProps(const ShadowView &view) {

@@ -2,7 +2,9 @@
 
 #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
+#include <react/renderer/components/image/ImageComponentDescriptor.h>
 #include <react/renderer/components/iostextinput/TextInputComponentDescriptor.h>
+#include <react/renderer/components/modal/ModalHostViewComponentDescriptor.h>
 #include <react/renderer/components/scrollview/ScrollViewComponentDescriptor.h>
 #include <react/renderer/components/text/ParagraphComponentDescriptor.h>
 #include <react/renderer/components/text/RawTextComponentDescriptor.h>
@@ -24,6 +26,8 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<RawTextComponentDescriptor>(),
       concreteComponentDescriptorProvider<ScrollViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<TextInputComponentDescriptor>(),
+      concreteComponentDescriptorProvider<ImageComponentDescriptor>(),
+      concreteComponentDescriptorProvider<ModalHostViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : backend_->componentProviders()) {

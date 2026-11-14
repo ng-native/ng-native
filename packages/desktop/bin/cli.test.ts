@@ -4,7 +4,16 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { cacheDir, main, parseCommand, run, system, UsageError } from './cli.mjs';
+import {
+  cacheDir,
+  checkExpoConfig,
+  devServerBundleUrl,
+  main,
+  parseCommand,
+  run,
+  system,
+  UsageError,
+} from './cli.mjs';
 
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -56,6 +65,7 @@ describe('parseCommand', () => {
       command: 'run',
       bundle: 'dist/main.hbc',
       module: 'main',
+      port: 8081,
       universal: false,
     });
     assert.deepEqual(
@@ -70,6 +80,7 @@ describe('parseCommand', () => {
         command: 'run',
         bundle: 'http://localhost:8081/index.bundle',
         module: 'other',
+        port: 8081,
         universal: true,
       },
     );
@@ -80,10 +91,21 @@ describe('parseCommand', () => {
     assert.deepEqual(parseCommand(['--help']), { command: 'help' });
   });
 
-  it('refuses an unknown command and a run without exactly one bundle', () => {
+  it('reads run with no bundle, which loads from the dev server, and its port', () => {
+    assert.deepEqual(parseCommand(['run', '--port', '8082']), {
+      command: 'run',
+      bundle: undefined,
+      module: 'main',
+      port: 8082,
+      universal: false,
+    });
+  });
+
+  it('refuses an unknown command, a run with two bundles and a port that is not one', () => {
     assert.throws(() => parseCommand(['package']), UsageError);
-    assert.throws(() => parseCommand(['run']), UsageError);
     assert.throws(() => parseCommand(['run', 'a.js', 'b.js']), UsageError);
+    assert.throws(() => parseCommand(['run', '--port', 'eighty']), /--port takes a port number/);
+    assert.throws(() => parseCommand(['run', '--port', '70000']), UsageError);
   });
 });
 
@@ -103,7 +125,13 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
           }
         : { status: 0, stdout: '' };
     },
-    download: async () => '/tmp/downloaded/bundle.js',
+    expoConfig: () => ({
+      name: 'Demo',
+      slug: 'demo',
+      platforms: ['ios', 'android', 'macos'],
+      experiments: { outOfTreePlatforms: true },
+      ios: { bundleIdentifier: 'com.example.demo' },
+    }),
     ...overrides,
   };
   return { sys, calls };
@@ -121,22 +149,61 @@ describe('run', () => {
       },
       {
         command: '/cache/rn-0.88.0/host/appkit-arm64-RelWithDebInfo/appkit/ngn-macos',
-        args: ['/apps/demo/dist/main.hbc', '--module', 'main'],
+        args: [
+          '/apps/demo/dist/main.hbc',
+          '--module',
+          'main',
+          '--title',
+          'Demo',
+          '--app-id',
+          'com.example.demo',
+        ],
       },
     ]);
   });
 
-  it('downloads a bundle URL before launching', async () => {
+  it('loads from the dev server by URL when no bundle is given', async () => {
     const { sys, calls } = fakeSystem();
-    await run(
-      {
-        bundle: 'http://localhost:8081/index.bundle?platform=macos',
-        module: 'main',
-        universal: false,
-      },
-      sys,
+    await run({ module: 'main', port: 8082, universal: false }, sys);
+    assert.equal(
+      calls[1].args[0],
+      'http://localhost:8082/.expo/.virtual-metro-entry.bundle?platform=macos&dev=true',
     );
-    assert.deepEqual(calls[1].args, ['/tmp/downloaded/bundle.js', '--module', 'main']);
+    assert.equal(devServerBundleUrl(8081), calls[1].args[0].replace('8082', '8081'));
+  });
+
+  it('passes a bundle URL to the host as it is, so it stays connected to the dev server', async () => {
+    const { sys, calls } = fakeSystem();
+    const url = 'http://localhost:8081/index.bundle?platform=macos&dev=true';
+    await run({ bundle: url, module: 'main', universal: false }, sys);
+    assert.equal(calls[1].args[0], url);
+  });
+
+  it('names the app from its slug when it has no bundle identifier', async () => {
+    const { sys, calls } = fakeSystem({
+      expoConfig: () => ({
+        slug: 'demo',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+      }),
+    });
+    await run({ module: 'main', universal: false }, sys);
+    assert.deepEqual(calls[1].args.slice(3), ['--title', 'demo', '--app-id', 'demo']);
+  });
+
+  it('stops with a fix-it line, before building, when the Expo config does not list macos', async () => {
+    const { sys, calls } = fakeSystem({
+      expoConfig: () => ({ platforms: ['ios', 'android'] }),
+    });
+    await assert.rejects(
+      run({ module: 'main', universal: false }, sys),
+      (error: Error) =>
+        error instanceof UsageError &&
+        /Add "macos" to expo.platforms in app.json and set expo.experiments.outOfTreePlatforms to true/.test(
+          error.message,
+        ),
+    );
+    assert.equal(calls.length, 0);
   });
 
   it('stops when the build fails, without launching', async () => {
@@ -166,6 +233,19 @@ describe('run', () => {
     await assert.rejects(
       run({ bundle: 'a.js', module: 'main', universal: false }, noReactNative),
       /react-native is not installed/,
+    );
+  });
+});
+
+describe('checkExpoConfig', () => {
+  it('needs macos listed and the out-of-tree platforms experiment on', () => {
+    assert.doesNotThrow(() =>
+      checkExpoConfig({ platforms: ['macos'], experiments: { outOfTreePlatforms: true } }),
+    );
+    assert.throws(() => checkExpoConfig({}), /does not list macos/);
+    assert.throws(
+      () => checkExpoConfig({ platforms: ['macos'] }),
+      /without expo.experiments.outOfTreePlatforms/,
     );
   });
 });

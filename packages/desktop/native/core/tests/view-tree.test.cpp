@@ -160,3 +160,30 @@ TEST_CASE("removing and destroying views keeps the tree consistent") {
   t.tree.insert(1, 8, 0);
   CHECK(t.tree.find(1)->children == Chain{8, 2, 5});
 }
+
+TEST_CASE("a scrolled view's content is hit where it is drawn, not where its layout put it") {
+  // 7 is a scroll view at 0,150 400x100 (it clips), its content 8 400x1000 holding rows 9 (y 0)
+  // and 10 (y 300), each 400x50.
+  Tree t;
+  auto clipping = std::make_shared<ViewProps>();
+  clipping->yogaStyle.setOverflow(facebook::yoga::Overflow::Scroll);
+  t.add(7, 1, {{0, 150}, {400, 100}}, clipping);
+  t.add(8, 7, {{0, 0}, {400, 1000}});
+  t.add(9, 8, {{0, 0}, {400, 50}});
+  t.add(10, 8, {{0, 300}, {400, 50}});
+  CHECK(t.tree.hitTest(1, {200, 160}) == Chain{1, 7, 8, 9});
+
+  t.tree.setScrollOffset(7, {0, 290});
+  CHECK(t.tree.hitTest(1, {200, 160}) == Chain{1, 7, 8, 10});
+  CHECK(t.tree.originIn(10, 1) == Point{0, 160});
+  // What scrolled out of the viewport cannot be hit, even where it would be without the offset.
+  CHECK(t.tree.hitTest(1, {200, 130}) == Chain{1});
+
+  // The offset goes with the view.
+  t.tree.remove(1, 7);
+  t.tree.destroy(7);
+  t.add(7, 1, {{0, 150}, {400, 100}}, clipping);
+  t.add(8, 7, {{0, 0}, {400, 1000}});
+  t.add(9, 8, {{0, 0}, {400, 50}});
+  CHECK(t.tree.hitTest(1, {200, 160}) == Chain{1, 7, 8, 9});
+}
