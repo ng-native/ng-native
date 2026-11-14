@@ -206,6 +206,10 @@ the package's name after `expo-`, each with the methods the service calls on the
 | `NgNativeStoreReview`                   | `StoreReview`: in a Mac App Store (`mas`) build, `request()` asks SKStoreReviewController for the system's rating prompt (not with `NGN_NO_PROMPTS=1`); in any other build it is inert and `available()` is false. `storeUrl()` is null.                                                                                                                                                                                         |
 | `NgNativeApplication`, `NgNativeDevice` | `AppInfo`: the bundle's version, build, id and name (a dev run, with no bundle, gives the app's id and name and no versions), and the Mac's model, macOS version and `desktop` device type.                                                                                                                                                                                                                                      |
 
+`@ng-native/device`'s `Sharing` uses `NgNativeSharing` on macOS, where React Native's `Share` has
+no implementation. Only its contract is in the core (`sharing.h`): the AppKit share picker is not
+built, so the host does not register the module and `Sharing` is absent on macOS.
+
 The clipboard has no change notification, so the host checks the count when the app becomes active
 and after each key press, click and menu command, and never polls.
 
