@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base.json",
+  "compilerOptions": {
+    "strict": true,
+    "allowImportingTsExtensions": true
+  },
+  "angularCompilerOptions": {
+    "strictTemplates": true,
+    "typeCheckHostBindings": false,
+    "strictDomEventTypes": false
+  }
+}

@@ -185,6 +185,7 @@ jobs:
               - '!packages/integration-tests/**'
               - '!packages/**/*.md'
               - 'template/**'
+              - 'template-desktop/**'
               - 'scripts/verify-publish.mjs'
               - 'verdaccio.yaml'
               - 'package.json'

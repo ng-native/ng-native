@@ -35,6 +35,7 @@ export default tseslint.config(
       // by being used: `scripts/verify-publish.mjs` publishes to a local registry, generates an
       // app from each and bundles it, which is a stronger check than linting them in place.
       'template/**',
+      'template-desktop/**',
       // The generators' copies of the template's files, for the same reason. They are an app's
       // source, and a test in each package fails if they stop matching the template's.
       'packages/schematics/files/**',
