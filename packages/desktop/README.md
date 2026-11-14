@@ -11,8 +11,28 @@ Native's layout animations, and has the default menu bar. React Native's iOS mod
 the core: Linking, Appearance, AccessibilityInfo, AppState, DeviceInfo, PlatformConstants,
 I18nManager, Alert (NSAlert), Clipboard, Networking (streaming, progress, cookies, redirects),
 WebSocket, Blob, FileReader, ImageLoader and `@react-native-async-storage` (2.x and 3.x,
-file-backed). It has no React Native DevTools yet. A view's `transform` is drawn on its layer, about
-its `transform-origin`, as React Native iOS draws it.
+file-backed). A view's `transform` is drawn on its layer, about
+its `transform-origin`, as React Native iOS draws it, and the view is hit where it is drawn: a
+click, a pointer event or a gesture lands on a moved, scaled or rotated view by its drawn shape, and
+its `locationX`, `offsetX` and gesture `x` are in the view's own coordinates.
+
+## Developer tools
+
+A dev run (a bundle from the dev server) registers with the dev server's inspector proxy, so the
+app is a Hermes target in its `/json/list` under its app id and the Mac's name, and React Native
+DevTools opens on it from `j` in the Expo CLI or Developer > Open DevTools (Command-Option-I): its
+console, sources with source maps, breakpoints and stepping. While the debugger holds the
+JavaScript, "Paused in debugger" shows over the top of the app's window with a Resume button. A
+packaged app (a Release build) has no debugger.
+
+JavaScript's errors show in a red box, a window over the app's: fatal ones, the errors
+`ErrorUtils` and React Native's error pipeline hand on, and soft ones logged with `console.error`
+(Angular's `ErrorHandler` logs every error it catches there). Its stack is symbolicated by the dev
+server to the app's sources. Escape or Dismiss closes it, Command-R or Reload reloads the app, Copy
+copies the error, and with several errors kept the arrows step between them. A reload clears it.
+LogBox draws nothing in an Angular app, so the red box stands in for it. The Developer menu has
+Reload and Open DevTools; React Native's element inspector and performance monitor are React
+features with no React tree to read here, so the menu leaves them out.
 
 ## Gestures, worklets and Reanimated
 
@@ -40,8 +60,9 @@ detector), the UI runtime's `_setGestureStateSync` (a worklet's state manager go
 Reanimated's `setGestureState`), and force touch.
 
 A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
-(`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies and rotations, as AppKit
-events sent through NSApp, which drives these screens without an accessibility grant.
+(`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
+AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
+goes to the key window, and a character is typed into a focused text field.
 
 A view's box is painted as React Native iOS paints it (`view-box.h`): one corner radius and one
 solid border are the layer's own, drawn over the children only when the view clips or the border

@@ -30,6 +30,8 @@ enum class MenuCommand {
   Zoom,
   BringAllToFront,
   Reload,
+  // React Native DevTools, through the dev server's inspector proxy (Developer menu).
+  OpenDevTools,
   Find,
   ToggleSidebar,
   Print,

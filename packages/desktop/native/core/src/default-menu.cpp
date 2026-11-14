@@ -70,7 +70,12 @@ std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options) {
           MenuRole::Window),
   };
   if (options.developer) {
-    bar.push_back(menu("Developer", {item("Reload", MenuCommand::Reload, "r")}));
+    bar.push_back(menu(
+        "Developer",
+        {
+            item("Reload", MenuCommand::Reload, "r"),
+            item("Open DevTools", MenuCommand::OpenDevTools, "i", Command | Option),
+        }));
   }
   bar.push_back(menu("Help", {}, MenuRole::Help));
   return bar;

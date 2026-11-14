@@ -1,5 +1,7 @@
 #include "ngn/view-tree.h"
 
+#include "ngn/view-transform.h"
+
 #include <react/renderer/components/view/ViewProps.h>
 
 #include <algorithm>
@@ -144,8 +146,8 @@ bool ViewTree::hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) 
       if (child == nullptr) {
         continue;
       }
-      const auto &origin = child->view.layoutMetrics.frame.origin;
-      if (hitTest(*it, root, {point.x + scrolled.x - origin.x, point.y + scrolled.y - origin.y}, chain)) {
+      auto local = toChild(*child, {point.x + scrolled.x, point.y + scrolled.y});
+      if (local && hitTest(*it, root, *local, chain)) {
         chain.push_back(tag);
         return true;
       }
@@ -156,6 +158,33 @@ bool ViewTree::hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) 
     return true;
   }
   return false;
+}
+
+std::optional<Point> ViewTree::toChild(const Node &child, Point point) {
+  const auto &layout = child.view.layoutMetrics;
+  Point local{point.x - layout.frame.origin.x, point.y - layout.frame.origin.y};
+  auto props = std::dynamic_pointer_cast<const ViewProps>(child.view.props);
+  auto transform = props ? layerTransform(*props, layout) : std::nullopt;
+  if (!transform) {
+    return local;
+  }
+  return layerPointAt(*transform, local);
+}
+
+std::optional<Point> ViewTree::pointIn(Tag tag, Tag root, Point point) const {
+  auto path = chain(tag, root);
+  if (path.empty()) {
+    return std::nullopt;
+  }
+  for (size_t index = 1; index < path.size(); ++index) {
+    Point scrolled = scrollOffset(path[index - 1]);
+    auto local = toChild(*find(path[index]), {point.x + scrolled.x, point.y + scrolled.y});
+    if (!local) {
+      return std::nullopt;
+    }
+    point = *local;
+  }
+  return point;
 }
 
 std::optional<Point> ViewTree::originIn(Tag tag, Tag root) const {

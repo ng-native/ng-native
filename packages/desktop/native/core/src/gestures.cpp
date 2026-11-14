@@ -821,8 +821,8 @@ class PinchHandler final : public GestureHandler {
 
  protected:
   folly::dynamic extraData() const override {
-    auto origin = viewOrigin();
-    return folly::dynamic::object("scale", scale_)("focalX", lastAverage_.x - origin.x)("focalY", lastAverage_.y - origin.y)(
+    auto focal = local(lastAverage_);
+    return folly::dynamic::object("scale", scale_)("focalX", focal.x)("focalY", focal.y)(
         "velocity", velocity_)("numberOfPointers", 2)("pointerType", kMouse);
   }
 
@@ -880,9 +880,8 @@ class RotationHandler final : public GestureHandler {
 
  protected:
   folly::dynamic extraData() const override {
-    auto origin = viewOrigin();
-    return folly::dynamic::object("rotation", rotation_)("anchorX", lastAverage_.x - origin.x)(
-        "anchorY", lastAverage_.y - origin.y)("velocity", velocity_)("numberOfPointers", 2)("pointerType", kMouse);
+    auto anchor = local(lastAverage_);
+    return folly::dynamic::object("rotation", rotation_)("anchorX", anchor.x)("anchorY", anchor.y)("velocity", velocity_)("numberOfPointers", 2)("pointerType", kMouse);
   }
 
  private:
@@ -1155,8 +1154,12 @@ Point GestureHandler::velocity() const {
   return counted ? Point{sum.x / counted, sum.y / counted} : Point{0, 0};
 }
 
-Point GestureHandler::viewOrigin() const {
-  return owner_.tree().originIn(view_, owner_.surface()).value_or(Point{0, 0});
+Point GestureHandler::local(Point page) const {
+  if (auto at = owner_.tree().pointIn(view_, owner_.surface(), page)) {
+    return *at;
+  }
+  auto origin = owner_.tree().originIn(view_, owner_.surface()).value_or(Point{0, 0});
+  return {page.x - origin.x, page.y - origin.y};
 }
 
 void GestureHandler::after(double ms, std::function<void()> fn) {
@@ -1229,8 +1232,8 @@ void GestureHandler::reset() {
 }
 
 folly::dynamic GestureHandler::extraData() const {
-  auto origin = viewOrigin();
-  return folly::dynamic::object("x", lastAverage_.x - origin.x)("y", lastAverage_.y - origin.y)("absoluteX", lastAverage_.x)(
+  auto at = local(lastAverage_);
+  return folly::dynamic::object("x", at.x)("y", at.y)("absoluteX", lastAverage_.x)(
       "absoluteY", lastAverage_.y)("numberOfPointers", static_cast<int>(pointers_.size()))("pointerType", kMouse);
 }
 
@@ -1243,9 +1246,9 @@ folly::dynamic GestureHandler::eventData() const {
 }
 
 void GestureHandler::sendTouches(int eventType, const GesturePointer &changed) {
-  auto origin = viewOrigin();
   auto touch = [&](int id, Point page) {
-    return folly::dynamic::object("id", id)("x", page.x - origin.x)("y", page.y - origin.y)("absoluteX", page.x)("absoluteY", page.y);
+    auto at = local(page);
+    return folly::dynamic::object("id", id)("x", at.x)("y", at.y)("absoluteX", page.x)("absoluteY", page.y);
   };
   folly::dynamic all = folly::dynamic::array();
   for (const auto &[id, tracked] : pointers_) {
@@ -1368,12 +1371,12 @@ bool Gestures::handles(const std::vector<Tag> &chain) const {
 
 bool Gestures::inBounds(const GestureHandler &handler, Point page) const {
   const auto *node = tree_.find(handler.view());
-  auto origin = tree_.originIn(handler.view(), surface_);
-  if (!node || !origin) {
+  auto at = tree_.pointIn(handler.view(), surface_, page);
+  if (!node || !at) {
     return false;
   }
   const auto &size = node->view.layoutMetrics.frame.size;
-  return page.x >= origin->x && page.y >= origin->y && page.x <= origin->x + size.width && page.y <= origin->y + size.height;
+  return at->x >= 0 && at->y >= 0 && at->x <= size.width && at->y <= size.height;
 }
 
 void Gestures::pointerDown(SurfaceId surface, const std::vector<Tag> &chain, const GesturePointer &pointer) {

@@ -468,3 +468,22 @@ TEST_CASE("a tap that ended while it waited for a pan is cancelled when the pan 
   CHECK(f.has("state 1 2->3"));
   CHECK_FALSE(f.has("state 1 4->5"));
 }
+
+TEST_CASE("a handler on a transformed view reports its own coordinates and its drawn bounds") {
+  Fixture f;
+  // Card 2 (10,20 200x100) moved 50 right, as a dragged card is: drawn 60,20 to 260,120.
+  auto props = std::make_shared<ViewProps>();
+  props->transform = Transform::Translate(50, 0, 0);
+  auto view = f.tree.find(2)->view;
+  view.props = props;
+  f.tree.update(view);
+  f.add("NativeViewGestureHandler", 1, 2, dynamic::object("shouldCancelWhenOutside", true));
+
+  f.down(62, 30);
+  REQUIRE_FALSE(f.bodies.empty());
+  CHECK(f.bodies.back()["x"].asDouble() == doctest::Approx(2));
+  CHECK(f.bodies.back()["absoluteX"].asDouble() == doctest::Approx(62));
+  // Inside the layout's frame but outside where it is drawn: the handler leaves its bounds.
+  f.move(58, 30);
+  CHECK(f.events.back() == "state 1 2->1");
+}

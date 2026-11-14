@@ -96,3 +96,16 @@ export class ScreenWindow {
 
   static readonly made: ScreenWindow[] = [];
 }
+
+/** A window whose text names a face the app loads after the window has drawn. */
+@Component({
+  selector: 'x-font-window',
+  imports: [Text],
+  template: `<text testID="late-face" class="late">A face loaded late</text>`,
+  styles: `
+    .late {
+      font-family: LateFace;
+    }
+  `,
+})
+export class FontWindowApp {}

@@ -155,6 +155,9 @@ class InputDispatcher : public InputSink {
       folly::dynamic payload);
   folly::dynamic locationPayload(const Container &container, Tag target, Point point) const;
   // Where a container's root sits in its surface: page coordinates are the surface's.
+  // `point` (in `root`'s coordinates) in `tag`'s own, through any transforms between them; by its
+  // layout origin when a transform flattens it.
+  Point localPoint(Tag tag, Tag root, Point point) const;
   Point pageOrigin(const Container &container) const;
   facebook::react::PointerEvent pointerEvent(const PointerInput &input, Point pageOrigin) const;
   void setCursor(Cursor cursor);

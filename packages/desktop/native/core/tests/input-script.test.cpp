@@ -42,3 +42,18 @@ TEST_CASE("an input script with a bad line plays nothing and names the line") {
   CHECK(ngn::parseInputScript("up 1 2 3").error == "line 1: unexpected 3");
   CHECK(ngn::parseInputScript("wait -1").steps.empty());
 }
+
+TEST_CASE("a key step names a key and its modifiers, for the key window") {
+  auto script = ngn::parseInputScript("key escape\nkey r cmd\nkey i cmd option\nkey return");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 4);
+  CHECK(script.steps[0].kind == Kind::Key);
+  CHECK(script.steps[0].key == "escape");
+  CHECK(script.steps[0].modifiers == 0);
+  CHECK(script.steps[1].key == "r");
+  CHECK(script.steps[1].modifiers == ngn::InputStep::Command);
+  CHECK(script.steps[2].modifiers == (ngn::InputStep::Command | ngn::InputStep::Option));
+  CHECK(ngn::parseInputScript("key").error == "line 1: key needs a key");
+  CHECK(ngn::parseInputScript("key r hyper").error == "line 1: unknown modifier hyper");
+  CHECK(ngn::parseInputScript("key tab").error == "line 1: unknown key tab");
+}

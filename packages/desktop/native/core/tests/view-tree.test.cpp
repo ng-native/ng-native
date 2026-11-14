@@ -187,3 +187,74 @@ TEST_CASE("a scrolled view's content is hit where it is drawn, not where its lay
   t.add(9, 8, {{0, 0}, {400, 50}});
   CHECK(t.tree.hitTest(1, {200, 160}) == Chain{1, 7, 8, 9});
 }
+
+namespace {
+
+std::shared_ptr<ViewProps> transformed(Transform transform) {
+  auto props = std::make_shared<ViewProps>();
+  props->transform = std::move(transform);
+  return props;
+}
+
+} // namespace
+
+TEST_CASE("a transformed view is hit where its layer draws it") {
+  Tree t;
+  SUBCASE("moved: where it went, and not where its layout put it") {
+    // 4 drawn 200 to the right: 250,50 to 350,150, under 5 above y 100.
+    t.setProps(4, transformed(Transform::Translate(200, 0, 0)));
+    CHECK(t.tree.hitTest(1, {120, 120}) == Chain{1});
+    CHECK(t.tree.hitTest(1, {260, 120}) == Chain{1, 4});
+    CHECK(t.tree.pointIn(4, 1, {260, 120}) == Point{10, 70});
+  }
+  SUBCASE("scaled about its centre") {
+    // 2 is 10,10 to 110,110; at half size about its centre (60,60) it is drawn 35,35 to 85,85,
+    // and 3 inside it 45,45 to 60,60.
+    t.tree.remove(1, 4);
+    t.setProps(2, transformed(Transform::Scale(0.5, 0.5, 1)));
+    CHECK(t.tree.hitTest(1, {20, 20}) == Chain{1});
+    CHECK(t.tree.hitTest(1, {40, 40}) == Chain{1, 2});
+    CHECK(t.tree.hitTest(1, {50, 50}) == Chain{1, 2, 3});
+    auto local = t.tree.pointIn(3, 1, {50, 50});
+    REQUIRE(local);
+    CHECK(local->x == doctest::Approx(10));
+    CHECK(local->y == doctest::Approx(10));
+  }
+  SUBCASE("rotated about its centre") {
+    // 4 is 50,50 to 150,150 about 100,100. Turned 45 degrees, its corners are on the axes
+    // through the centre, so a point just inside its layout corner is outside the drawn diamond,
+    // and one just past its layout's right edge on the centre line is inside it.
+    t.tree.remove(1, 2);
+    t.setProps(4, transformed(Transform::RotateZ(M_PI / 4)));
+    CHECK(t.tree.hitTest(1, {55, 55}) == Chain{1});
+    CHECK(t.tree.hitTest(1, {165, 100}) == Chain{1, 4});
+    // Clockwise on screen (y down): the view's own top-centre point is drawn up and to the right
+    // of its centre.
+    auto half = static_cast<Float>(50 / std::sqrt(2.0));
+    auto local = t.tree.pointIn(4, 1, {100 + half, 100 - half});
+    REQUIRE(local);
+    CHECK(local->x == doctest::Approx(50));
+    CHECK(std::abs(local->y) < 1e-3);
+  }
+  SUBCASE("a scale of zero is never hit") {
+    t.setProps(4, transformed(Transform::Scale(0, 0, 1)));
+    CHECK(t.tree.hitTest(1, {100, 100}) == Chain{1, 2});
+    CHECK_FALSE(t.tree.pointIn(4, 1, {100, 100}));
+  }
+  SUBCASE("the transform going away puts the view back") {
+    t.setProps(4, transformed(Transform::Translate(200, 0, 0)));
+    t.setProps(4, viewProps());
+    CHECK(t.tree.hitTest(1, {120, 120}) == Chain{1, 4});
+  }
+}
+
+TEST_CASE("a point in a nested transformed view goes through every transform above it") {
+  Tree t;
+  // 2 moved 100 down, and 3 inside it moved 10 right: 3 is drawn 40,130 to 70,160.
+  t.setProps(2, transformed(Transform::Translate(0, 100, 0)));
+  t.setProps(3, transformed(Transform::Translate(10, 0, 0)));
+  t.tree.remove(1, 4);
+  CHECK(t.tree.hitTest(1, {45, 135}) == Chain{1, 2, 3});
+  CHECK(t.tree.pointIn(3, 1, {45, 135}) == Point{5, 5});
+  CHECK_FALSE(t.tree.pointIn(3, 5, {45, 135}));
+}

@@ -52,6 +52,8 @@ void sendCGEvent(NSWindow *window, CGEventRef cg, double x, double y) {
 // drops a made-up drag when no button is down in hardware (NSEvent.pressedMouseButtons), so the
 // replay hands the drag and the release to that view itself, as the window would.
 NSView *__weak gPressedView;
+// Whether the press has dragged: its release then goes to the pressed view too.
+bool gDragged = false;
 
 void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
   NSEvent *event = [NSEvent mouseEventWithType:type
@@ -64,22 +66,72 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
                                     clickCount:1
                                       pressure:type == NSEventTypeLeftMouseUp || type == NSEventTypeMouseMoved ? 0 : 1];
   if (type == NSEventTypeLeftMouseDown) {
+    gDragged = false;
     NSView *content = window.contentView;
     gPressedView = [content hitTest:[content.superview convertPoint:event.locationInWindow fromView:nil]];
   }
   NSView *pressed = gPressedView;
   if (type == NSEventTypeLeftMouseDragged && pressed != nil) {
+    gDragged = true;
     [pressed mouseDragged:event];
-  } else if (type == NSEventTypeLeftMouseUp && pressed != nil) {
+  } else if (type == NSEventTypeLeftMouseUp && pressed != nil && gDragged) {
     gPressedView = nil;
+    gDragged = false;
     [pressed mouseUp:event];
   } else {
+    // A click's release goes through the window as a real one does, so a view that tracks the
+    // press through the window (SwiftUI's controls, AppKit's own) sees it end.
+    if (type == NSEventTypeLeftMouseUp) {
+      gPressedView = nil;
+    }
+    [NSApp sendEvent:event];
+  }
+}
+
+// A key press and its release, to the key window (a red box or a sheet, not only the app's).
+void sendKey(const InputStep &step) {
+  NSWindow *window = NSApp.keyWindow;
+  if (window == nil) {
+    return;
+  }
+  NSString *characters = step.key == "escape" ? @"\x1b"
+      : step.key == "return"                  ? @"\r"
+                                              : [NSString stringWithUTF8String:step.key.c_str()];
+  unsigned short code = step.key == "escape" ? 53 : step.key == "return" ? 36 : 0;
+  // A character typed into text goes in as the input method puts it, through NSTextInputClient: a
+  // made-up key event reaches the field editor's keyDown, but the text system inserts nothing for
+  // one no keyboard sent.
+  bool typed = step.key.size() == 1 && (step.modifiers & (InputStep::Command | InputStep::Control)) == 0;
+  id responder = window.firstResponder;
+  if (typed && [responder conformsToProtocol:@protocol(NSTextInputClient)]) {
+    [(id<NSTextInputClient>)responder insertText:characters replacementRange:NSMakeRange(NSNotFound, 0)];
+    return;
+  }
+  NSEventModifierFlags flags = 0;
+  if (step.modifiers & InputStep::Command) flags |= NSEventModifierFlagCommand;
+  if (step.modifiers & InputStep::Shift) flags |= NSEventModifierFlagShift;
+  if (step.modifiers & InputStep::Option) flags |= NSEventModifierFlagOption;
+  if (step.modifiers & InputStep::Control) flags |= NSEventModifierFlagControl;
+  for (NSEventType type : {NSEventTypeKeyDown, NSEventTypeKeyUp}) {
+    NSEvent *event = [NSEvent keyEventWithType:type
+                                      location:NSZeroPoint
+                                 modifierFlags:flags
+                                     timestamp:NSProcessInfo.processInfo.systemUptime
+                                  windowNumber:window.windowNumber
+                                       context:nil
+                                    characters:characters
+                   charactersIgnoringModifiers:characters
+                                     isARepeat:NO
+                                       keyCode:code];
     [NSApp sendEvent:event];
   }
 }
 
 void play(NSWindow *window, const InputStep &step) {
   switch (step.kind) {
+    case InputStep::Kind::Key:
+      sendKey(step);
+      break;
     case InputStep::Kind::Wait:
       break;
     case InputStep::Kind::Move:
