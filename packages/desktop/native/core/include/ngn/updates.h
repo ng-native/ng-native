@@ -166,6 +166,8 @@ class UpdatesClient {
   void save(const LaunchState &state) const;
   std::string pathOf(const LaunchState::Update &update) const;
   bool usable(const LaunchState::Update &update, const LaunchState &state) const;
+  // Why a manifest's signature header does not verify its bytes, when the app requires signing.
+  std::optional<std::string> signatureProblem(const std::string &body, const std::string &header) const;
 
   UpdatesConfig config_;
   std::shared_ptr<Http> http_;
@@ -174,6 +176,8 @@ class UpdatesClient {
   std::optional<LaunchState::Update> running_;
   // What the last check found.
   std::optional<UpdateManifest> found_;
+  std::string foundBody_;
+  std::string foundSignature_;
   bool foundRollBack_{false};
   std::shared_ptr<HttpTask> task_;
 };

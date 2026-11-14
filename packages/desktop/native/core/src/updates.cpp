@@ -61,6 +61,20 @@ std::string mediaType(const std::string &contentType) {
   return lower(trim(contentType.substr(0, contentType.find(';'))));
 }
 
+// 8-4-4-4-12 hex digits: what the protocol's ids are, and all a folder name may be.
+bool isUuid(const std::string &id) {
+  if (id.size() != 36) {
+    return false;
+  }
+  for (size_t i = 0; i < id.size(); i++) {
+    bool dash = i == 8 || i == 13 || i == 18 || i == 23;
+    if (dash ? id[i] != '-' : !std::isxdigit(static_cast<unsigned char>(id[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 UpdateManifest readManifest(const std::string &body) {
   folly::dynamic json;
   try {
@@ -78,6 +92,9 @@ UpdateManifest readManifest(const std::string &body) {
   const auto *launch = json.isObject() ? json.get_ptr("launchAsset") : nullptr;
   if (launch == nullptr || !launch->isObject()) {
     throw std::runtime_error("the manifest has no launchAsset");
+  }
+  if (!isUuid(text(json, "id"))) {
+    throw std::runtime_error("the manifest's id is not a UUID");
   }
   return UpdateManifest{
       .id = text(json, "id"),
@@ -298,10 +315,42 @@ std::string UpdatesClient::pathOf(const LaunchState::Update &update) const {
   return (config_.directory / update.file).string();
 }
 
+std::optional<std::string> UpdatesClient::signatureProblem(const std::string &body, const std::string &header) const {
+  if (config_.certificatePem.empty()) {
+    return std::nullopt;
+  }
+  auto signature = parseSignatureHeader(header);
+  if (header.empty() || !signature || !signature->contains("sig")) {
+    return "the manifest has no expo-signature, and the app requires one";
+  }
+  auto keyId = signature->contains("keyid") ? signature->at("keyid") : std::string("main");
+  auto alg = signature->contains("alg") ? signature->at("alg") : config_.algorithm;
+  auto bytes = base64Decode(signature->at("sig"));
+  if (keyId != config_.keyId || alg != config_.algorithm || !bytes ||
+      !crypto_->verifyRsaSha256(config_.certificatePem, body, *bytes)) {
+    return "the manifest's signature does not verify against the app's certificate";
+  }
+  return std::nullopt;
+}
+
 bool UpdatesClient::usable(const LaunchState::Update &update, const LaunchState &state) const {
-  return update.runtimeVersion == config_.runtimeVersion &&
-      std::find(state.failed.begin(), state.failed.end(), update.id) == state.failed.end() &&
-      fs::exists(pathOf(update));
+  // Only `<uuid>/launch-asset`, whatever the state file says.
+  if (!isUuid(update.id) || update.file != update.id + "/launch-asset" || update.runtimeVersion != config_.runtimeVersion ||
+      std::find(state.failed.begin(), state.failed.end(), update.id) != state.failed.end() || !fs::exists(pathOf(update))) {
+    return false;
+  }
+  // The files may have changed since they were checked: the kept manifest must still be signed,
+  // name this update, and hash to the asset.
+  try {
+    auto folder = config_.directory / update.id;
+    auto body = readFile(folder / "manifest.json");
+    auto manifest = readManifest(body);
+    std::string signature = fs::exists(folder / "signature") ? readFile(folder / "signature") : "";
+    return manifest.id == update.id && !signatureProblem(body, signature) &&
+        base64Url(crypto_->sha256(readFile(pathOf(update)))) == manifest.launchHash;
+  } catch (const std::exception &) {
+    return false;
+  }
 }
 
 std::string UpdatesClient::launch() {
@@ -432,23 +481,15 @@ void UpdatesClient::check(std::function<void(CheckResult)> done) {
                     result.isRollBackToEmbedded = foundRollBack_;
                   } else if (response.manifest) {
                     const auto &manifest = *response.manifest;
-                    if (!config_.certificatePem.empty()) {
-                      auto signature = parseSignatureHeader(response.signature);
-                      if (response.signature.empty() || !signature || !signature->contains("sig")) {
-                        throw std::runtime_error("the manifest has no expo-signature, and the app requires one");
-                      }
-                      auto keyId = signature->contains("keyid") ? signature->at("keyid") : std::string("main");
-                      auto alg = signature->contains("alg") ? signature->at("alg") : config_.algorithm;
-                      auto bytes = base64Decode(signature->at("sig"));
-                      if (keyId != config_.keyId || alg != config_.algorithm || !bytes ||
-                          !crypto_->verifyRsaSha256(config_.certificatePem, response.manifestBody, *bytes)) {
-                        throw std::runtime_error("the manifest's signature does not verify against the app's certificate");
-                      }
+                    if (auto problem = signatureProblem(response.manifestBody, response.signature)) {
+                      throw std::runtime_error(*problem);
                     }
                     bool failed = std::find(state.failed.begin(), state.failed.end(), manifest.id) != state.failed.end();
                     bool known = (running_ && running_->id == manifest.id) || (state.current && state.current->id == manifest.id);
                     if (manifest.runtimeVersion == config_.runtimeVersion && !failed && !known) {
                       found_ = manifest;
+                      foundBody_ = response.manifestBody;
+                      foundSignature_ = response.signature;
                       result.isAvailable = true;
                       result.manifest = manifest.raw;
                     }
@@ -465,10 +506,14 @@ void UpdatesClient::check(std::function<void(CheckResult)> done) {
 
 void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
   std::optional<UpdateManifest> found;
+  std::string foundBody;
+  std::string foundSignature;
   bool rollBack = false;
   {
     std::lock_guard lock(mutex_);
     found = found_;
+    foundBody = foundBody_;
+    foundSignature = foundSignature_;
     rollBack = foundRollBack_;
   }
   if (rollBack) {
@@ -494,7 +539,7 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
           .onResponse = [download](const HttpResponse &response) { download->status = response.status; },
           .onData = [download](std::string chunk, int64_t) { download->body += chunk; },
           .onComplete =
-              [this, download, found, done](const std::string &error, bool) {
+              [this, download, found, foundBody, foundSignature, done](const std::string &error, bool) {
                 FetchResult result;
                 if (!error.empty() || download->status != 200) {
                   result.error = error.empty() ? "the launch asset's server answered " + std::to_string(download->status)
@@ -516,6 +561,9 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
                       .file = found->id + "/launch-asset",
                   };
                   writeFile(config_.directory / update.file, download->body);
+                  // What the next launch checks the asset against, signature and all.
+                  writeFile(config_.directory / update.id / "manifest.json", foundBody);
+                  writeFile(config_.directory / update.id / "signature", foundSignature);
                   auto state = load();
                   if (state.current && state.current->id != update.id) {
                     state.previous = state.current;
