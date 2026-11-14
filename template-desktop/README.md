@@ -14,6 +14,16 @@ npm run typecheck
 npm run package    # dist/macos/my-app.app; --format dmg or --format mas to ship it
 ```
 
+To run tests inside the app, on real AppKit views, start Metro for them and run the `macos` Vitest
+project, which opens the app itself (`src/app/app.device.ts` is the example):
+
+```sh
+EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start
+npx vitest --project macos
+```
+
+`npm test` runs the Node project, `node-macos`, alone.
+
 The first `npm run macos` builds the desktop host from source, which takes a few minutes and needs
 Xcode's command line tools, CMake and Ninja. Later runs reuse it. `npm run package` needs full Xcode
 for the app icon.

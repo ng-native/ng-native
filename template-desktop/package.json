@@ -9,7 +9,7 @@
     "macos": "ng-native-desktop run",
     "package": "ng-native-desktop package",
     "typecheck": "node metro.config.js && ngc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --project node-macos"
   },
   "dependencies": {
     "@ng-native/components": "workspace:*",
