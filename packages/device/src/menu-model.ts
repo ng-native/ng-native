@@ -53,6 +53,15 @@ export interface MenuItemModel {
   readonly checked?: boolean;
   readonly destructive?: boolean;
   readonly subtitle?: string;
+  /** An SF Symbol, shown on Apple's OSes. */
+  readonly sfSymbol?: string;
+  /** A drawable resource's name, shown on Android. */
+  readonly icon?: string;
+  /**
+   * The standard menu a top-level `<menu-group menuRole>` adds its items to, for a group written
+   * in a `<menu-bar>`: what becomes `MenuGroupModel.menuRole`.
+   */
+  readonly group?: MenuGroupRole;
   /** A submenu, or with `inline` a section of the menu the item is in. */
   readonly items?: readonly MenuEntry[];
   readonly inline?: boolean;
@@ -234,17 +243,30 @@ export function mergeMenuBar(
  */
 export interface MenuModel {
   readonly entries: Signal<readonly MenuEntry[]>;
-  register(entry: Signal<MenuEntry>): () => void;
+  /**
+   * Add `entry`, at `place` where the container can order places: an item an `@if` shows later
+   * takes its place in the template, not the end.
+   */
+  register(entry: Signal<MenuEntry>, place?: unknown): () => void;
 }
 
-/** A menu model for a container to provide as `MENU_MODEL`. */
-export function createMenuModel(): MenuModel {
-  const registered = signal<readonly Signal<MenuEntry>[]>([]);
+/**
+ * A menu model for a container to provide as `MENU_MODEL`. `order` compares two places, negative
+ * for the first one earlier; places it cannot compare keep the order they registered in.
+ */
+export function createMenuModel(order?: (a: unknown, b: unknown) => number): MenuModel {
+  type Registered = { entry: Signal<MenuEntry>; place: unknown };
+  const registered = signal<readonly Registered[]>([]);
   return {
-    entries: computed(() => registered().map((entry) => entry())),
-    register(entry) {
-      registered.update((all) => [...all, entry]);
-      return () => registered.update((all) => all.filter((one) => one !== entry));
+    entries: computed(() => {
+      const all = registered();
+      const sorted = order ? [...all].sort((a, b) => order(a.place, b.place)) : all;
+      return sorted.map((one) => one.entry());
+    }),
+    register(entry, place) {
+      const one: Registered = { entry, place };
+      registered.update((all) => [...all, one]);
+      return () => registered.update((all) => all.filter((each) => each !== one));
     },
   };
 }

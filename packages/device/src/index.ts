@@ -102,6 +102,15 @@ export {
   type ShortcutOs,
 } from './shortcut.ts';
 export { Processes, type NativeProcesses } from './processes.ts';
+export {
+  Menus,
+  serializeMenu,
+  type NativeMenuEntry,
+  type NativeMenuEvent,
+  type NativeMenus,
+  type NativeShortcut,
+  type SerializedMenu,
+} from './menus.ts';
 export { SIDEBAR_SELECTION } from './sidebar-selection.ts';
 export { WINDOW_NAVIGATOR, type WindowNavigator } from './window-navigator.ts';
 export {
