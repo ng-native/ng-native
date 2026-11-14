@@ -19,9 +19,7 @@ const ORDER = new Set(['<', '<=', '>', '>=', '===', '==', '!==', '!=']);
 
 /** Whether a file can hold a comparison worth a note at all, before it is parsed. */
 const mentions = (text) =>
-  text !== null &&
-  (/['"](ios|android)['"]/.test(text) ||
-    text.includes('OS_VERSION'));
+  text !== null && (/['"](ios|android)['"]/.test(text) || text.includes('OS_VERSION'));
 
 /**
  * Why a comparison answers differently on a Mac, or null when it does not.
