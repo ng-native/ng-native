@@ -1086,3 +1086,61 @@ describe('generators.json', () => {
     }
   });
 });
+
+describe('with --desktopOnly', () => {
+  it("writes the desktop template's app: macOS alone, with its starter screen", async () => {
+    const tree = pnpmWorkspace();
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    const { expo } = JSON.parse(tree.read('apps/desktop/app.json', 'utf-8')!);
+    assert.deepEqual(expo.platforms, ['macos']);
+    assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
+    assert.ok(expo.plugins.includes('@ng-native/desktop'));
+    assert.equal(expo.android, undefined);
+    for (const file of native.DESKTOP_SOURCE_FILES) {
+      assert.equal(tree.read(`apps/desktop/${file}`, 'utf-8'), native.sourceFile(file, true), file);
+    }
+    assert.match(tree.read('apps/desktop/src/app/app.ts', 'utf-8')!, /<split-view>/);
+    assert.equal(
+      tree.read('apps/desktop/src/main.ts', 'utf-8'),
+      native.sourceFile('src/main.ts'),
+      'main.ts is the one both templates share',
+    );
+  });
+
+  it('lists the desktop template’s dependencies, the host among them and no phone UI', async () => {
+    const tree = pnpmWorkspace();
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    const { dependencies } = readJson(tree, 'apps/desktop/package.json');
+    assert.ok(dependencies['@ng-native/desktop']);
+    assert.ok(dependencies['@ng-native/expo']);
+    assert.equal(dependencies['expo-status-bar'], undefined);
+
+    const integratedTree = integrated();
+    await generate(integratedTree, { directory: 'apps/desktop', desktopOnly: true });
+    const pins = readJson(integratedTree, 'apps/desktop/package.json').dependencies;
+    assert.ok(pins['@ng-native/desktop'], 'Expo autolinks what the app names');
+    assert.ok(readJson(integratedTree, 'package.json').dependencies['@ng-native/desktop']);
+  });
+
+  it('runs on macOS with macos and package targets, and names them in AGENTS.md', async () => {
+    const tree = pnpmWorkspace();
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    const { targets } = readProjectConfiguration(tree, '@proj/desktop');
+    assert.equal(targets!['macos'].options.command, 'ng-native-desktop run');
+    assert.equal(targets!['package'].options.command, 'ng-native-desktop package');
+    assert.equal(targets!['run-ios'], undefined);
+    const agents = tree.read('apps/desktop/AGENTS.md', 'utf-8')!;
+    assert.match(agents, /^nx run @proj\/desktop:macos +# /m);
+    assert.doesNotMatch(agents, /run-ios|Expo Go/);
+    assert.match(tree.read('apps/desktop/.gitignore', 'utf-8')!, /^\/dist\/macos$/m);
+  });
+
+  it('is the default for every app once init sets it', async () => {
+    const tree = pnpmWorkspace();
+    const { init } = require('../init/index.cjs');
+    await init(tree, { desktopOnly: true, skipInstall: true, skipFormat: true });
+    assert.deepEqual(readNxJson(tree)!.generators!['@ng-native/nx:application'], {
+      desktopOnly: true,
+    });
+  });
+});

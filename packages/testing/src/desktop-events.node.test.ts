@@ -5,7 +5,16 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { Component, inject, signal } from '@angular/core';
-import { Pressable, Shortcut, Text, TextInput, View } from '@ng-native/components';
+import {
+  MenuBar,
+  MenuGroup,
+  MenuItem,
+  Pressable,
+  Shortcut,
+  Text,
+  TextInput,
+  View,
+} from '@ng-native/components';
 import { Menus, Processes } from '@ng-native/device';
 import { cleanup, fakeMenus, fakeProcesses, render, screen, userEvent } from '@ng-native/testing';
 
@@ -99,6 +108,41 @@ test('presses a shortcut, with mod as Cmd on macOS and Ctrl on Android', async (
   });
   assert.equal(await userEvent.keyboard('ctrl+k'), true);
   assert.deepEqual(second.instance.heard(), ['find']);
+});
+
+@Component({
+  selector: 'app-menu-keys',
+  imports: [MenuBar, MenuGroup, MenuItem],
+  template: `
+    <menu-bar>
+      <menu-group label="File">
+        <menu-item label="New" shortcut="mod+n" (select)="log('new')" />
+        <menu-item label="Close" shortcut="mod+w" disabled (select)="log('close')" />
+        <menu-group label="Open Recent">
+          <menu-item label="Notes" shortcut="mod+shift+1" (select)="log('notes')" />
+        </menu-group>
+      </menu-group>
+    </menu-bar>
+  `,
+})
+class MenuKeys {
+  readonly heard = signal<string[]>([]);
+  log(line: string): void {
+    this.heard.update((lines) => [...lines, line]);
+  }
+}
+
+test("presses a menu item's key equivalent where the menu bar is drawn, as AppKit does", async () => {
+  const menus = fakeMenus();
+  const { instance } = await render(MenuKeys, {
+    os: 'macos',
+    providers: [{ provide: Menus.SOURCE, useValue: menus }],
+  });
+  assert.equal(await userEvent.keyboard('mod+n'), true);
+  assert.equal(await userEvent.keyboard('mod+shift+1'), true, 'in a submenu too');
+  assert.equal(await userEvent.keyboard('mod+w'), false, 'not a disabled item');
+  assert.equal(await userEvent.keyboard('mod+j'), false);
+  assert.deepEqual(instance.heard(), ['new', 'notes']);
 });
 
 test('walks focus with Tab, as focus from the keyboard, and leaves the editing keys to a field', async () => {

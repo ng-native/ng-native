@@ -6,22 +6,24 @@
   "properties": {
     "command": {
       "type": "string",
-      "description": "The Expo CLI command: start, export, run:ios, run:android, prebuild."
+      "description": "The Expo CLI command: start, export, run:ios, run:android, prebuild. Or macos, which builds the desktop host and opens the app in it, and package, which packages the macOS app: both run ng-native-desktop from @ng-native/desktop."
     },
     "args": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Arguments passed to the command as they are.",
       "default": []
     },
     "platform": {
       "type": "string",
-      "enum": ["ios", "android", "web", "all"],
+      "enum": ["ios", "android", "macos", "web", "all"],
       "description": "Passed as --platform, for export."
     },
     "port": {
       "type": "number",
-      "description": "Passed as --port: the port Metro listens on."
+      "description": "Passed as --port: the port Metro listens on, or for macos the one the host loads the app from."
     },
     "clear": {
       "type": "boolean",

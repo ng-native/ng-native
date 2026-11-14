@@ -290,6 +290,11 @@ export const PACKAGES: NavSection = {
       ],
     },
     {
+      path: 'packages/desktop',
+      title: 'Desktop',
+      summary: 'The macOS host, and the command that builds, runs and packages the app',
+    },
+    {
       path: 'packages/eslint-plugin',
       title: 'ESLint',
       summary: 'What compiles and does nothing on a device',

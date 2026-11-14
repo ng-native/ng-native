@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "my-app",
+    "slug": "my-app",
+    "version": "1.0.0",
+    "platforms": ["macos"],
+    "experiments": {
+      "outOfTreePlatforms": true
+    },
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "helloworld",
+    "extra": {
+      "router": {
+        "root": "src/app"
+      }
+    },
+    "plugins": ["@ng-native/metro", "@ng-native/desktop"]
+  }
+}

@@ -9,6 +9,7 @@ import {
   checkExpoConfig,
   devServerBundleUrl,
   HOST_LIBRARIES,
+  linkFile,
   main,
   parseCommand,
   run,
@@ -103,7 +104,7 @@ describe('parseCommand', () => {
   });
 
   it('refuses an unknown command, a run with two bundles and a port that is not one', () => {
-    assert.throws(() => parseCommand(['package']), UsageError);
+    assert.throws(() => parseCommand(['bundle']), UsageError);
     assert.throws(() => parseCommand(['run', 'a.js', 'b.js']), UsageError);
     assert.throws(() => parseCommand(['run', '--port', 'eighty']), /--port takes a port number/);
     assert.throws(() => parseCommand(['run', '--port', '70000']), UsageError);
@@ -112,14 +113,24 @@ describe('parseCommand', () => {
 
 /** A system that records what run() asks of it. */
 function fakeSystem(overrides: Partial<typeof system> = {}) {
-  const calls: { command: string; args: string[] }[] = [];
+  const calls: { command: string; args: string[]; env?: Record<string, string> }[] = [];
+  const written: Record<string, string> = {};
+  const warnings: string[] = [];
   const sys: typeof system = {
     platform: 'darwin',
     cwd: () => '/apps/demo',
     resolveReactNative: () => '/apps/demo/node_modules/react-native',
     resolvePackage: () => null,
-    run(command, args) {
-      calls.push({ command, args });
+    env: {},
+    expo: () => ({ status: 0 }),
+    exists: () => false,
+    remove: () => {},
+    copy: () => {},
+    links: () => ({ libraries: [], appModules: [], withoutDesktop: [], problems: [] }),
+    writeFile: (file, text) => void (written[file] = text),
+    warn: (line) => void warnings.push(line),
+    run(command, args, options) {
+      calls.push({ command, args, ...(options?.env && { env: options.env }) });
       return command.endsWith('build.sh')
         ? {
             status: 0,
@@ -136,7 +147,7 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     }),
     ...overrides,
   };
-  return { sys, calls };
+  return { sys, calls, written, warnings };
 }
 
 describe('run', () => {
@@ -148,6 +159,7 @@ describe('run', () => {
       {
         command: path.join(packageDir, 'native', 'scripts', 'build.sh'),
         args: ['/apps/demo/node_modules/react-native', '--universal'],
+        env: { NGN_DESKTOP_LINK: '/apps/demo/.expo/ng-native-desktop/link.json' },
       },
       {
         command: '/cache/rn-0.88.0/host/appkit-arm64-RelWithDebInfo/appkit/ngn-macos',
@@ -179,6 +191,80 @@ describe('run', () => {
       '/apps/demo/node_modules/react-native',
       '--library',
       '/apps/demo/node_modules/react-native-screens',
+    ]);
+  });
+
+  it('writes the native code autolinking found for the build, and names the file to it', async () => {
+    const library = {
+      name: 'rn-haptics',
+      dir: '/apps/demo/node_modules/rn-haptics',
+      cmakeTarget: 'haptics_desktop',
+      cmakeDir: '/apps/demo/node_modules/rn-haptics/desktop',
+    };
+    const appModule = { name: 'clock', dir: '/apps/demo/modules/clock/macos', cmakeTarget: null };
+    const asked: unknown[] = [];
+    const { sys, calls, written } = fakeSystem({
+      links: (appDir, options) => (
+        asked.push({ appDir, options }),
+        { libraries: [library], appModules: [appModule], withoutDesktop: [], problems: [] }
+      ),
+    });
+    await run({ module: 'main', universal: false }, sys);
+    assert.deepEqual(asked, [
+      { appDir: '/apps/demo', options: { deny: [], builtIn: HOST_LIBRARIES } },
+    ]);
+    assert.equal(linkFile('/apps/demo'), '/apps/demo/.expo/ng-native-desktop/link.json');
+    assert.deepEqual(JSON.parse(written[linkFile('/apps/demo')]!), {
+      version: 1,
+      libraries: [library],
+      appModules: [appModule],
+    });
+    assert.equal(calls[0]!.env!['NGN_DESKTOP_LINK'], linkFile('/apps/demo'));
+  });
+
+  it('writes the file with nothing in it when nothing links, so a removed library is gone', async () => {
+    const { sys, written } = fakeSystem();
+    await run({ module: 'main', universal: false }, sys);
+    assert.deepEqual(JSON.parse(written[linkFile('/apps/demo')]!), {
+      version: 1,
+      libraries: [],
+      appModules: [],
+    });
+  });
+
+  it('warns about dependencies whose native code the build leaves out', async () => {
+    const { sys, warnings } = fakeSystem({
+      links: () => ({
+        libraries: [],
+        appModules: [],
+        withoutDesktop: ['react-native-mmkv'],
+        problems: [],
+      }),
+    });
+    await run({ module: 'main', universal: false }, sys);
+    assert.match(warnings.join('\n'), /No desktop code in react-native-mmkv/);
+  });
+
+  it('keeps a denied host library out of the build, and passes the deny-list to autolinking', async () => {
+    let deny: readonly string[] | undefined;
+    const { sys, calls } = fakeSystem({
+      resolvePackage: (_, name) => `/apps/demo/node_modules/${name}`,
+      links: (_, options) => (
+        (deny = options?.deny),
+        { libraries: [], appModules: [], withoutDesktop: [], problems: [] }
+      ),
+      expoConfig: () => ({
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        plugins: [['@ng-native/desktop', { deny: ['react-native-screens', 'rn-other'] }]],
+      }),
+    });
+    await run({ module: 'main', universal: false }, sys);
+    assert.deepEqual(deny, ['react-native-screens', 'rn-other']);
+    assert.deepEqual(calls[0]!.args, [
+      '/apps/demo/node_modules/react-native',
+      '--library',
+      '/apps/demo/node_modules/react-native-safe-area-context',
     ]);
   });
 
@@ -222,6 +308,21 @@ describe('run', () => {
         /Add "macos" to expo.platforms in app.json and set expo.experiments.outOfTreePlatforms to true/.test(
           error.message,
         ),
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it('stops before building when the desktop plugin options are not valid', async () => {
+    const { sys, calls } = fakeSystem({
+      expoConfig: () => ({
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        plugins: [['@ng-native/desktop', { capabilities: { env: ['NOT-A-NAME'] } }]],
+      }),
+    });
+    await assert.rejects(
+      run({ module: 'main', universal: false }, sys),
+      /capabilities\.env\[0\]: "NOT-A-NAME" is not an environment variable name/,
     );
     assert.equal(calls.length, 0);
   });

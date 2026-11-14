@@ -1,0 +1,42 @@
+{
+  "name": "@ng-native/template-desktop",
+  "version": "0.22.2",
+  "description": "A macOS app in Angular, rendering real AppKit views. Use with create-expo-app --template.",
+  "license": "MIT",
+  "main": "src/main.ts",
+  "scripts": {
+    "start": "expo start",
+    "macos": "ng-native-desktop run",
+    "package": "ng-native-desktop package",
+    "typecheck": "node metro.config.js && ngc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ng-native/components": "workspace:*",
+    "@ng-native/desktop": "workspace:*",
+    "@ng-native/device": "workspace:*",
+    "@ng-native/expo": "workspace:*",
+    "@ng-native/fabric": "workspace:*",
+    "@ng-native/metro": "workspace:*",
+    "@ng-native/platform": "workspace:*",
+    "@angular/common": "^22.0.0",
+    "@angular/core": "^22.0.0",
+    "expo": "~58.0.16",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1"
+  },
+  "devDependencies": {
+    "@angular/compiler-cli": "^22.0.0",
+    "@babel/core": "^7.29.7",
+    "@ng-native/testing": "workspace:*",
+    "@types/react": "~19.3.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ng-native/ng-native.git",
+    "directory": "template-desktop"
+  }
+}

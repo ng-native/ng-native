@@ -174,6 +174,85 @@ describe('the generated app', () => {
     assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
     assert.equal(JSON.parse(native.appJson('mobile')).expo.experiments, undefined);
   });
+
+  it('lists the desktop config plugin beside macos, and only there', () => {
+    const { expo } = JSON.parse(native.appJson('mobile', undefined, ['ios', 'android', 'macos']));
+    assert.deepEqual(expo.plugins, ['@ng-native/metro', '@ng-native/desktop']);
+    assert.deepEqual(JSON.parse(native.appJson('mobile')).expo.plugins, ['@ng-native/metro']);
+  });
+
+  it('writes a desktop-only app.json with no phone settings, keeping the bundle identifier', () => {
+    const { expo } = JSON.parse(native.appJson('@org/notes', 'com.org.notes', ['macos']));
+    assert.deepEqual(expo.platforms, ['macos']);
+    assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
+    assert.deepEqual(expo.ios, { bundleIdentifier: 'com.org.notes' });
+    for (const key of ['android', 'orientation']) assert.equal(expo[key], undefined, key);
+    assert.deepEqual(expo.plugins, ['@ng-native/metro', '@ng-native/desktop']);
+  });
+});
+
+describe('the generated desktop-only app', () => {
+  const desktop = path.resolve(import.meta.dirname, '../../template-desktop');
+  const desktopFile = (file: string) => readFileSync(path.join(desktop, file), 'utf8');
+
+  for (const file of [...native.DESKTOP_SOURCE_FILES, 'AGENTS.md']) {
+    it(`copies the desktop template's ${file} as it is`, () => {
+      assert.equal(native.sourceFile(file, true), desktopFile(file));
+    });
+  }
+
+  it("installs the desktop template's dependencies, at its versions", () => {
+    const theirs = JSON.parse(desktopFile('package.json')).dependencies;
+    assert.deepEqual(
+      Object.keys(native.desktopOnlyDependencies).sort(),
+      Object.keys(theirs).sort(),
+    );
+    for (const [name, range] of Object.entries(theirs)) {
+      if (range !== 'workspace:*') assert.equal(native.desktopOnlyDependencies[name], range, name);
+    }
+  });
+
+  it("writes the desktop template's app.json, with the app's name and bundle identifier", () => {
+    const { expo } = JSON.parse(native.appJson('notes', 'com.acme.notes', ['macos']));
+    const theirs = JSON.parse(desktopFile('app.json')).expo;
+    for (const key of ['version', 'platforms', 'experiments', 'userInterfaceStyle', 'extra']) {
+      assert.deepEqual(expo[key], theirs[key], key);
+    }
+    assert.deepEqual(expo.plugins, theirs.plugins);
+  });
+});
+
+describe('withDesktop', () => {
+  it('adds macos, the out-of-tree platforms flag and the plugin, keeping what is there', () => {
+    const expo = native.withDesktop({
+      platforms: ['ios', 'android'],
+      experiments: { typedRoutes: true },
+      plugins: ['@ng-native/metro', ['expo-camera', {}]],
+    });
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos']);
+    assert.deepEqual(expo.experiments, { typedRoutes: true, outOfTreePlatforms: true });
+    assert.deepEqual(expo.plugins, ['@ng-native/metro', ['expo-camera', {}], '@ng-native/desktop']);
+  });
+
+  it("keeps Expo's default iOS and Android where the config names no platforms", () => {
+    assert.deepEqual(native.withDesktop({}).platforms, ['ios', 'android', 'macos']);
+  });
+
+  it('changes nothing the second time, and keeps the options of a plugin entry', () => {
+    const entry = ['@ng-native/desktop', { deny: ['x'] }];
+    const once = native.withDesktop({ platforms: ['macos'], plugins: [entry] });
+    assert.deepEqual(native.withDesktop(once), once);
+    assert.deepEqual(once.plugins, [entry]);
+  });
+
+  it('adds the desktop package at the version the framework is released at', () => {
+    const { version } = require('./package.json');
+    assert.deepEqual(native.desktopDependencies, { '@ng-native/desktop': version });
+    assert.deepEqual(native.DESKTOP_SCRIPTS, {
+      macos: 'ng-native-desktop run',
+      package: 'ng-native-desktop package',
+    });
+  });
 });
 
 describe('conflicts', () => {

@@ -14,6 +14,7 @@ const path = require('node:path').posix;
 const { SchematicsException } = require('@angular-devkit/schematics');
 const { NodePackageInstallTask } = require('@angular-devkit/schematics/tasks');
 const native = require('../native-app.cjs');
+const { desktopTargets } = require('../desktop/index.cjs');
 
 function readJson(tree, file) {
   return JSON.parse(tree.readText(file));
@@ -27,7 +28,7 @@ function writeJson(tree, file, value) {
  * The project's targets. Each is an Expo command run in the project's directory, which is where
  * Expo reads `app.json` and `metro.config.js` from.
  */
-function targets(root, name, lint = false) {
+function targets(root, name, lint = false, desktopOnly = false) {
   const expo = (command, args) => ({
     builder: '@ng-native/schematics:expo',
     options: args ? { command, args } : { command },
@@ -37,8 +38,10 @@ function targets(root, name, lint = false) {
   return {
     serve: expo('start'),
     build: expo('export', ['--output-dir', outputDir]),
-    'run-ios': expo('run:ios'),
-    'run-android': expo('run:android'),
+    // A desktop-only app runs with `ng-native-desktop`: the Expo CLI has no `run:macos`.
+    ...(desktopOnly
+      ? desktopTargets()
+      : { 'run-ios': expo('run:ios'), 'run-android': expo('run:android') }),
     test: { builder: '@ng-native/schematics:vitest', options: {} },
     typecheck: { builder: '@ng-native/schematics:typecheck', options: {} },
     // With `--linter=eslint`, angular-eslint's builder, which `ng lint` runs, with the project's
@@ -71,7 +74,7 @@ const WEB_SPECS = [
   'service',
 ];
 
-function project(root, name, prefix, lint) {
+function project(root, name, prefix, lint, desktopOnly) {
   return {
     projectType: 'application',
     root,
@@ -85,20 +88,34 @@ function project(root, name, prefix, lint) {
     schematics: Object.fromEntries(
       WEB_SPECS.map((schematic) => [`@schematics/angular:${schematic}`, { skipTests: true }]),
     ),
-    architect: targets(root, name, lint),
+    architect: targets(root, name, lint, desktopOnly),
   };
 }
 
 /** The Commands section of the app's `AGENTS.md`, as this workspace runs them. */
-function commands(name, lint) {
+function commands(name, lint, desktopOnly) {
+  const runs = desktopOnly
+    ? [
+        [`ng serve ${name}`, 'Metro, the dev server the app loads from'],
+        [`ng run ${name}:macos`, 'builds the desktop host and opens the app from Metro'],
+      ]
+    : [
+        [
+          `ng serve ${name}`,
+          'Metro; press i or a for a simulator, or scan the QR code with Expo Go',
+        ],
+        [`ng run ${name}:run-ios`, 'the iOS simulator'],
+        [`ng run ${name}:run-android`, 'the Android emulator'],
+      ];
   const rows = [
-    [`ng serve ${name}`, 'Metro; press i or a for a simulator, or scan the QR code with Expo Go'],
-    [`ng run ${name}:run-ios`, 'the iOS simulator'],
-    [`ng run ${name}:run-android`, 'the Android emulator'],
+    ...runs,
     [`ng test ${name}`, 'Vitest, in Node against a fake native layer: no simulator needed'],
     [`ng run ${name}:typecheck`, 'ngc, which checks the templates as well as the code'],
     ...(lint ? [[`ng lint ${name}`, 'ESLint: what compiles but does nothing on a device']] : []),
     [`ng build ${name}`, 'an exported bundle'],
+    ...(desktopOnly
+      ? [[`ng run ${name}:package`, 'the .app; --format dmg or mas to ship it']]
+      : []),
   ];
   const width = Math.max(...rows.map(([command]) => command.length)) + 2;
   return [
@@ -113,26 +130,33 @@ function commands(name, lint) {
   ].join('\n');
 }
 
-function writeFiles(tree, root, name, bundleIdentifier, lint) {
+function writeFiles(tree, root, name, bundleIdentifier, lint, desktopOnly) {
   for (const file of native.SOURCE_FILES) {
-    tree.create(path.join(root, file), native.sourceFile(file));
+    tree.create(path.join(root, file), native.sourceFile(file, desktopOnly));
   }
-  tree.create(path.join(root, 'app.json'), native.appJson(name, bundleIdentifier));
-  tree.create(path.join(root, 'AGENTS.md'), native.agentsFile(commands(name, lint)));
+  const platforms = desktopOnly ? ['macos'] : undefined;
+  tree.create(path.join(root, 'app.json'), native.appJson(name, bundleIdentifier, platforms));
+  tree.create(
+    path.join(root, 'AGENTS.md'),
+    native.agentsFile(commands(name, lint, desktopOnly), desktopOnly),
+  );
   if (lint) tree.create(path.join(root, 'eslint.config.mjs'), native.ESLINT_CONFIG);
   tree.create(path.join(root, 'CLAUDE.md'), '@AGENTS.md\n');
-  tree.create(path.join(root, '.gitignore'), native.GITIGNORE);
-  const manifest = native.projectManifest(name, readJson(tree, 'package.json'));
+  tree.create(
+    path.join(root, '.gitignore'),
+    desktopOnly ? `${native.GITIGNORE}\n${native.DESKTOP_GITIGNORE}` : native.GITIGNORE,
+  );
+  const manifest = native.projectManifest(name, readJson(tree, 'package.json'), desktopOnly);
   tree.create(path.join(root, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
 }
 
 /** Adds what is missing and leaves every version the workspace already chose alone. */
-function addDependencies(tree, context, lint) {
+function addDependencies(tree, context, lint, desktopOnly) {
   const manifest = readJson(tree, 'package.json');
   const linter = lint ? 'eslint' : 'none';
   for (const problem of native.conflicts(manifest, { linter })) context.logger.warn(problem);
   const wanted = {
-    dependencies: native.dependencies,
+    dependencies: desktopOnly ? native.desktopOnlyDependencies : native.dependencies,
     devDependencies: lint
       ? { ...native.devDependencies, ...native.lintDevDependencies }
       : native.devDependencies,
@@ -156,7 +180,7 @@ function ignoreExpo(tree) {
 }
 
 /**
- * @param {{ name: string, directory?: string, prefix?: string, bundleIdentifier?: string, linter?: 'eslint' | 'none', skipInstall?: boolean }} options
+ * @param {{ name: string, directory?: string, prefix?: string, bundleIdentifier?: string, linter?: 'eslint' | 'none', desktopOnly?: boolean, skipInstall?: boolean }} options
  */
 function application(options) {
   return (tree, context) => {
@@ -178,21 +202,28 @@ function application(options) {
     if (problem) throw new SchematicsException(problem);
 
     const lint = options.linter === 'eslint';
-    addDependencies(tree, context, lint);
-    writeFiles(tree, root, name, bundleIdentifier, lint);
-    const added = project(root, name, options.prefix, lint);
+    const desktopOnly = options.desktopOnly === true;
+    addDependencies(tree, context, lint, desktopOnly);
+    writeFiles(tree, root, name, bundleIdentifier, lint, desktopOnly);
+    const added = project(root, name, options.prefix, lint, desktopOnly);
     workspace.projects = { ...workspace.projects, [name]: added };
     writeJson(tree, 'angular.json', workspace);
     ignoreExpo(tree);
 
     if (!options.skipInstall) context.addTask(new NodePackageInstallTask());
-    context.logger.info(
-      `Created ${root}. Run it with: ng serve ${name} (Metro), ng run ${name}:run-ios, ` +
-        `ng test ${name}, ng run ${name}:typecheck, ` +
-        (lint ? `ng lint ${name}, ` : '') +
-        `ng build ${name}.`,
-    );
+    context.logger.info(created(root, name, lint, desktopOnly));
   };
+}
+
+/** What the schematic says once the app is written: the commands that run it. */
+function created(root, name, lint, desktopOnly) {
+  return (
+    `Created ${root}. Run it with: ng serve ${name} (Metro), ` +
+    `ng run ${name}:${desktopOnly ? 'macos' : 'run-ios'}, ` +
+    `ng test ${name}, ng run ${name}:typecheck, ` +
+    (lint ? `ng lint ${name}, ` : '') +
+    `ng build ${name}.`
+  );
 }
 
 module.exports = { application, targets };

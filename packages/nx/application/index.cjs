@@ -33,6 +33,7 @@ const { init } = require('../init/index.cjs');
 const { usesWorkspaces, includeInWorkspaces } = require('./workspaces.cjs');
 const { asSaved } = require('../save-exact.cjs');
 const { registerSyncGenerator } = require('../sync/index.cjs');
+const { desktopTargets } = require('../desktop/index.cjs');
 
 function names(tree, options) {
   const directory = path.normalize(options.directory).replace(/\/$/, '');
@@ -43,8 +44,13 @@ function names(tree, options) {
   const projectName = workspaces && scope ? `${scope}/${name}` : name;
   const bundleIdentifier = options.bundleIdentifier ?? native.bundleIdentifier(name, scope);
   const lint = options.linter === 'eslint';
-  return { directory, name, projectName, workspaces, bundleIdentifier, lint };
+  const desktopOnly = options.desktopOnly === true;
+  return { directory, name, projectName, workspaces, bundleIdentifier, lint, desktopOnly };
 }
+
+/** The app's dependencies: a desktop-only app's are the desktop template's. */
+const dependenciesFor = (desktopOnly) =>
+  desktopOnly ? native.desktopOnlyDependencies : native.dependencies;
 
 /** The app's dev dependencies: with `--linter=eslint`, ESLint and the plugin as well. */
 const devDependencies = (lint) =>
@@ -130,15 +136,18 @@ function metroPort(tree) {
   return port;
 }
 
-function targets(directory, port, oneCopy, lint) {
+function targets(directory, port, oneCopy, lint, desktopOnly) {
   const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: directory, command } });
   const own = port === DEFAULT_PORT ? '' : ` --port ${port}`;
   // `expo run:ios` and `expo run:android` build the port into the app, so a later app's has to be
-  // its own too. The first app's are @nx/expo's inferred ones, on Expo's default.
-  const runs = own && {
-    'run-ios': { ...run(`expo run:ios${own}`), continuous: true },
-    'run-android': { ...run(`expo run:android${own}`), continuous: true },
-  };
+  // its own too. The first app's are @nx/expo's inferred ones, on Expo's default. A desktop-only
+  // app runs with `ng-native-desktop` instead.
+  const runs = desktopOnly
+    ? desktopTargets(directory, port)
+    : own && {
+        'run-ios': { ...run(`expo run:ios${own}`), continuous: true },
+        'run-android': { ...run(`expo run:android${own}`), continuous: true },
+      };
   return {
     typecheck: {
       ...run(oneCopy ? native.TYPECHECK_ONE_COPY : native.TYPECHECK),
@@ -156,14 +165,28 @@ function targets(directory, port, oneCopy, lint) {
 }
 
 /** The Commands section of the app's `AGENTS.md`, as this workspace runs them. */
-function commands(name, lint) {
+function commands(name, lint, desktopOnly) {
+  const runs = desktopOnly
+    ? [
+        [`nx start ${name}`, 'Metro, the dev server the app loads from'],
+        [`nx run ${name}:macos`, 'builds the desktop host and opens the app from Metro'],
+      ]
+    : [
+        [
+          `nx start ${name}`,
+          'Metro; press i or a for a simulator, or scan the QR code with Expo Go',
+        ],
+        [`nx run ${name}:run-ios`, 'the iOS simulator'],
+        [`nx run ${name}:run-android`, 'the Android emulator'],
+      ];
   const rows = [
-    [`nx start ${name}`, 'Metro; press i or a for a simulator, or scan the QR code with Expo Go'],
-    [`nx run ${name}:run-ios`, 'the iOS simulator'],
-    [`nx run ${name}:run-android`, 'the Android emulator'],
+    ...runs,
     [`nx test ${name}`, 'Vitest, in Node against a fake native layer: no simulator needed'],
     [`nx typecheck ${name}`, 'TypeScript, without emitting'],
     ...(lint ? [[`nx lint ${name}`, 'ESLint: what compiles but does nothing on a device']] : []),
+    ...(desktopOnly
+      ? [[`nx run ${name}:package`, 'the .app; --format dmg or mas to ship it']]
+      : []),
   ];
   const width = Math.max(...rows.map(([command]) => command.length)) + 2;
   return [
@@ -196,14 +219,19 @@ function listed(manifest) {
   return Object.keys({ ...manifest.dependencies, ...manifest.devDependencies });
 }
 
-async function writeFiles(tree, { directory, projectName, workspaces, bundleIdentifier, lint }) {
+async function writeFiles(tree, resolved) {
+  const { directory, projectName, workspaces, bundleIdentifier, lint, desktopOnly } = resolved;
   const file = (name, content) => tree.write(joinPathFragments(directory, name), content);
-  for (const name of native.SOURCE_FILES) file(name, native.sourceFile(name));
-  file('app.json', native.appJson(projectName, bundleIdentifier));
-  file('AGENTS.md', native.agentsFile(commands(projectName, lint)));
+  for (const name of native.SOURCE_FILES) file(name, native.sourceFile(name, desktopOnly));
+  const platforms = desktopOnly ? ['macos'] : undefined;
+  file('app.json', native.appJson(projectName, bundleIdentifier, platforms));
+  file('AGENTS.md', native.agentsFile(commands(projectName, lint, desktopOnly), desktopOnly));
   file('CLAUDE.md', '@AGENTS.md\n');
   file('metro.config.js', native.METRO_CONFIG);
-  file('.gitignore', native.GITIGNORE);
+  file(
+    '.gitignore',
+    desktopOnly ? `${native.GITIGNORE}\n${native.DESKTOP_GITIGNORE}` : native.GITIGNORE,
+  );
   if (lint) file('eslint.config.mjs', native.ESLINT_CONFIG);
 
   const base = hasPathAliases(tree, workspaces);
@@ -220,11 +248,11 @@ async function writeFiles(tree, { directory, projectName, workspaces, bundleIden
   if (workspaces) {
     const root = readJson(tree, 'package.json');
     Object.assign(manifest, {
-      dependencies: await appDependencies(tree, root, native.dependencies),
+      dependencies: await appDependencies(tree, root, dependenciesFor(desktopOnly)),
       devDependencies: await appDependencies(tree, root, devDependencies(lint)),
     });
   } else {
-    manifest.dependencies = native.prebuildPins(root);
+    manifest.dependencies = native.prebuildPins(root, dependenciesFor(desktopOnly));
   }
   file('package.json', JSON.stringify(manifest, null, 2) + '\n');
 }
@@ -239,11 +267,11 @@ function ignoreExpo(tree) {
 
 /**
  * @param {import('@nx/devkit').Tree} tree
- * @param {{ directory: string, name?: string, bundleIdentifier?: string, tags?: string, linter?: 'eslint' | 'none', skipInstall?: boolean, skipFormat?: boolean }} options
+ * @param {{ directory: string, name?: string, bundleIdentifier?: string, tags?: string, linter?: 'eslint' | 'none', desktopOnly?: boolean, skipInstall?: boolean, skipFormat?: boolean }} options
  */
 async function application(tree, options) {
   const resolved = names(tree, options);
-  const { directory, projectName, workspaces, lint } = resolved;
+  const { directory, projectName, workspaces, lint, desktopOnly } = resolved;
   const problem = native.bundleIdentifierProblem(resolved.bundleIdentifier);
   if (problem) throw new Error(problem);
   if (tree.exists(joinPathFragments(directory, 'package.json'))) {
@@ -262,7 +290,7 @@ async function application(tree, options) {
     const existing = listed(readJson(tree, 'package.json'));
     addDependenciesToPackageJson(
       tree,
-      await asSaved(tree, native.dependencies, existing),
+      await asSaved(tree, dependenciesFor(desktopOnly), existing),
       await asSaved(tree, devDependencies(lint), existing),
       'package.json',
       true,
@@ -283,7 +311,7 @@ async function application(tree, options) {
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean),
-    targets: targets(directory, port, linksLibraries(tree, workspaces), lint),
+    targets: targets(directory, port, linksLibraries(tree, workspaces), lint, desktopOnly),
   });
 
   ignoreExpo(tree);
@@ -291,7 +319,8 @@ async function application(tree, options) {
 
   if (!options.skipFormat) await formatFiles(tree);
   logger.info(
-    `Created ${directory}. nx start ${projectName} runs Metro; nx run ${projectName}:run-ios, ` +
+    `Created ${directory}. nx start ${projectName} runs Metro; ` +
+      `nx run ${projectName}:${desktopOnly ? 'macos' : 'run-ios'}, ` +
       `nx test ${projectName}, nx typecheck ${projectName}, ` +
       (lint ? `nx lint ${projectName}, ` : '') +
       `nx export ${projectName}.`,
