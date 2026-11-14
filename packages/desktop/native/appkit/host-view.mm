@@ -14,6 +14,7 @@
 #import "symbol-view.h"
 #import "web-view-component.h"
 #import "expo-image-view.h"
+#import "expo-ui-view.h"
 #import "camera-view.h"
 
 #include "text-layout.h"
@@ -997,6 +998,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == ngn::CameraComponentName) {
     return [[NGNCameraView alloc] initWithShadowView:view];
+  }
+  if (NGNView *expoUI = NGNMakeExpoUIView(view)) {
+    return expoUI;
   }
   if (name == ngn::ExpoImageComponentName) {
     return [[NGNExpoImageView alloc] initWithShadowView:view];

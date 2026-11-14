@@ -175,6 +175,7 @@ if(NGN_TESTS)
         appkit/printing.mm appkit/tests/printing.test.mm
         appkit/web-view.mm appkit/tests/web-view.test.mm
         appkit/expo-image-drawing.mm appkit/tests/expo-image.test.mm
+        appkit/expo-ui-renderer.mm appkit/tests/expo-ui.test.mm
         appkit/camera.mm appkit/tests/camera.test.mm
         appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
