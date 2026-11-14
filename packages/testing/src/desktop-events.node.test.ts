@@ -117,7 +117,7 @@ test('presses a shortcut, with mod as Cmd on macOS and Ctrl on Android', async (
     <menu-bar>
       <menu-group label="File">
         <menu-item label="New" shortcut="mod+n" (select)="log('new')" />
-        <menu-item label="Close" shortcut="mod+w" disabled (select)="log('close')" />
+        <menu-item label="Archive" shortcut="mod+e" disabled (select)="log('archive')" />
         <menu-group label="Open Recent">
           <menu-item label="Notes" shortcut="mod+shift+1" (select)="log('notes')" />
         </menu-group>
@@ -140,7 +140,7 @@ test("presses a menu item's key equivalent where the menu bar is drawn, as AppKi
   });
   assert.equal(await userEvent.keyboard('mod+n'), true);
   assert.equal(await userEvent.keyboard('mod+shift+1'), true, 'in a submenu too');
-  assert.equal(await userEvent.keyboard('mod+w'), false, 'not a disabled item');
+  assert.equal(await userEvent.keyboard('mod+e'), false, 'not a disabled item');
   assert.equal(await userEvent.keyboard('mod+j'), false);
   assert.deepEqual(instance.heard(), ['new', 'notes']);
 });
