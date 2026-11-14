@@ -38,3 +38,13 @@ if (!useRnFetch) {
     ),
   );
 }
+
+// What Expo's libraries import from `expo` as they load, inert here: see `./expo-modules.js`.
+export {
+  requireNativeModule,
+  requireOptionalNativeModule,
+  requireNativeView,
+  useReleasingSharedObject,
+  useReleasingSharedObjectWithLifecycle,
+  installOnUIRuntime,
+} from '@ng-native/metro/macos/expo-modules.js';
