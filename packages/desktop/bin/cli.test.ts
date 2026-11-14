@@ -226,6 +226,21 @@ describe('run', () => {
     assert.equal(calls.length, 0);
   });
 
+  it('stops before building when the desktop plugin options are not valid', async () => {
+    const { sys, calls } = fakeSystem({
+      expoConfig: () => ({
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        plugins: [['@ng-native/desktop', { capabilities: { env: ['NOT-A-NAME'] } }]],
+      }),
+    });
+    await assert.rejects(
+      run({ module: 'main', universal: false }, sys),
+      /capabilities\.env\[0\]: "NOT-A-NAME" is not an environment variable name/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
   it('stops when the build fails, without launching', async () => {
     const { sys, calls } = fakeSystem({
       run: (command, args) => (calls.push({ command, args }), { status: 1, stdout: '' }),

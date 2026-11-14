@@ -75,6 +75,38 @@ libraries above recompiles only that library.
 | `--port <port>`   | The dev server's port. Default `8081`.                    |
 | `--universal`     | Build for arm64 and x86_64. Default: this Mac's own arch. |
 
+## Config
+
+The macOS build reads what Expo already has a key for from that key, the one the iOS build reads:
+`ios.bundleIdentifier`, `scheme` (and `ios.scheme`), `ios.icon` or `icon`, `version`,
+`ios.buildNumber`, `updates.url`, the usage strings in `ios.infoPlist` and each `expo-*` plugin's
+permission option. The plugin options hold only what has no Expo key:
+
+```json
+{
+  "expo": {
+    "plugins": [
+      [
+        "@ng-native/desktop",
+        {
+          "documentTypes": [{ "name": "Markdown", "extensions": ["md"] }],
+          "capabilities": {
+            "spawn": [{ "program": "git", "args": ["status", "--porcelain"] }],
+            "env": ["HOME"],
+            "paths": [{ "path": "~/Projects", "access": "readwrite" }]
+          },
+          "deny": ["react-native-some-library"]
+        }
+      ]
+    ]
+  }
+}
+```
+
+Expo runs the plugin whenever it reads the config, so an option that is not valid stops
+`expo start`, `expo export` and `ng-native-desktop` with every problem listed. The plugin changes
+nothing in the config.
+
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and

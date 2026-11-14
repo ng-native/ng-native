@@ -15,6 +15,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
+import { desktopAppConfig } from './app-config.mjs';
+
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 export const USAGE = `Usage: ng-native-desktop run [bundle path or URL] [--module <name>] [--port <port>] [--universal]
@@ -166,15 +168,7 @@ export const system = {
   },
 };
 
-/**
- * @typedef {{
- *   name?: string,
- *   slug?: string,
- *   platforms?: string[],
- *   experiments?: { outOfTreePlatforms?: boolean },
- *   ios?: { bundleIdentifier?: string },
- * }} ExpoConfig
- */
+/** @typedef {import('./app-config.mjs').ExpoConfig} ExpoConfig */
 
 /**
  * Throws a usage error naming the fix when the app's Expo config cannot run on macOS: without
@@ -209,13 +203,14 @@ export async function run(options, sys = system) {
   }
   const cwd = sys.cwd();
   const reactNative = resolveReactNative(sys, cwd);
-  const config = readExpoConfig(sys, cwd);
+  const expo = readExpoConfig(sys, cwd);
+  const config = desktopAppConfig(expo);
   const libraries = HOST_LIBRARIES.map((name) => sys.resolvePackage(cwd, name)).filter(
     (dir) => dir !== null,
   );
   const buildDir = buildHost(sys, reactNative, libraries, options.universal);
-  const title = config.name ?? config.slug ?? 'ng-native';
-  const appId = config.ios?.bundleIdentifier ?? config.slug ?? title;
+  const title = config.name;
+  const appId = config.bundleIdentifier ?? expo.slug ?? title;
   return sys.run(path.join(buildDir, 'appkit', 'ngn-macos'), [
     bundleArgument(options, cwd),
     '--module',

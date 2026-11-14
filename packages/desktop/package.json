@@ -16,6 +16,9 @@
   "bin": {
     "ng-native-desktop": "./bin/ng-native-desktop.mjs"
   },
+  "dependencies": {
+    "@ng-native/device": "workspace:*"
+  },
   "peerDependencies": {
     "react-native": "~0.88.0"
   },
@@ -52,6 +55,7 @@
     "directory": "packages/desktop"
   },
   "files": [
+    "app.plugin.cjs",
     "bin/*.mjs",
     "native/CMakeLists.txt",
     "native/cmake",

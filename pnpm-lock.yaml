@@ -1438,6 +1438,9 @@ importers:
 
   packages/desktop:
     dependencies:
+      '@ng-native/device':
+        specifier: workspace:*
+        version: link:../device
       react-native:
         specifier: 0.88.0
         version: 0.88.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0)
