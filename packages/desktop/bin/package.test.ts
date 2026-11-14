@@ -171,7 +171,20 @@ describe('checkXcode', () => {
 });
 
 describe('notaryArguments', () => {
-  it('takes a keychain profile, an API key or an Apple ID, in that order', () => {
+  it('never puts an app-specific password in the arguments, which any process can read', () => {
+    const env = {
+      APPLE_ID: 'me@example.com',
+      APPLE_APP_SPECIFIC_PASSWORD: 'pw',
+      APPLE_TEAM_ID: 'T',
+    };
+    assert.throws(
+      () => notaryArguments(env),
+      /store-credentials[\s\S]*NGN_NOTARY_PROFILE|NGN_NOTARY_PROFILE[\s\S]*store-credentials/,
+    );
+    assert.ok(!notaryArguments({ ...env, NGN_NOTARY_PROFILE: 'p' }).includes('pw'));
+  });
+
+  it('takes a keychain profile or an API key, in that order', () => {
     assert.deepEqual(notaryArguments({ NGN_NOTARY_PROFILE: 'p', APPLE_ID: 'x' }), [
       '--keychain-profile',
       'p',
@@ -180,24 +193,12 @@ describe('notaryArguments', () => {
       notaryArguments({ APPLE_API_KEY: '/k.p8', APPLE_API_KEY_ID: 'K', APPLE_API_ISSUER: 'I' }),
       ['--key', '/k.p8', '--key-id', 'K', '--issuer', 'I'],
     );
-    assert.deepEqual(
-      notaryArguments({
-        APPLE_ID: 'me@example.com',
-        APPLE_APP_SPECIFIC_PASSWORD: 'pw',
-        APPLE_TEAM_ID: 'T',
-      }),
-      ['--apple-id', 'me@example.com', '--password', 'pw', '--team-id', 'T'],
-    );
   });
 
   it('names what a half-set group is missing, and says how to set any when there are none', () => {
     assert.throws(
       () => notaryArguments({ APPLE_API_KEY: '/k.p8' }),
       /APPLE_API_KEY needs APPLE_API_KEY_ID and APPLE_API_ISSUER too/,
-    );
-    assert.throws(
-      () => notaryArguments({ APPLE_ID: 'me@example.com', APPLE_TEAM_ID: 'T' }),
-      /needs APPLE_APP_SPECIFIC_PASSWORD too/,
     );
     assert.throws(() => notaryArguments({}), /found no credentials. Set NGN_NOTARY_PROFILE/);
     assert.throws(() => notaryArguments({ APPLE_TEAM_ID: 'T' }), /found no credentials/);

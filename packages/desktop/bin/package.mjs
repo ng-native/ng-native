@@ -42,9 +42,8 @@ Builds the app for release, universal for arm64 and x86_64, into dist/macos. Nee
 
 Signing and notarising read the environment:
   NGN_SIGN_IDENTITY             the codesign identity (dmg: Developer ID Application, mas: Apple Distribution)
-  NGN_NOTARY_PROFILE            a notarytool keychain profile, or
-  APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER        an App Store Connect API key, or
-  APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID     an Apple ID
+  NGN_NOTARY_PROFILE            a notarytool keychain profile (xcrun notarytool store-credentials), or
+  APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER        an App Store Connect API key
   mas: NGN_INSTALLER_IDENTITY, NGN_PROVISIONING_PROFILE and APPLE_TEAM_ID`;
 
 /**
@@ -117,8 +116,9 @@ export function checkXcode(sys) {
 }
 
 /**
- * The credentials `notarytool` takes, from the environment: a keychain profile, an App Store
- * Connect API key (the one to use in CI), or an Apple ID with an app-specific password. Throws
+ * The credentials `notarytool` takes, from the environment: a keychain profile or an App Store
+ * Connect API key (the one to use in CI). An app-specific password is refused, because notarytool
+ * takes it only as an argument, which any process can read. Throws
  * naming what is missing, so a half-set group never reads as no notarisation.
  *
  * @param {Record<string, string | undefined>} env
@@ -131,10 +131,6 @@ export function notaryArguments(env) {
       names: ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER'],
       flags: ['--key', '--key-id', '--issuer'],
     },
-    {
-      names: ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'],
-      flags: ['--apple-id', '--password', '--team-id'],
-    },
   ];
   for (const { names, flags } of groups) {
     const set = names.filter((name) => env[name]);
@@ -144,16 +140,21 @@ export function notaryArguments(env) {
         String(env[name]),
       ]);
     }
-    // The Apple ID group shares APPLE_TEAM_ID with mas, so the team alone does not start it.
-    if (set.length > 0 && !(set.length === 1 && set[0] === 'APPLE_TEAM_ID')) {
+    if (set.length > 0) {
       const missing = names.filter((name) => !env[name]);
       throw new UsageError(`Notarising with ${set.join(', ')} needs ${missing.join(' and ')} too.`);
     }
   }
+  // notarytool takes an app-specific password only as a --password argument, which every process
+  // on the Mac can read, so it is read from the keychain instead.
+  const password = env['APPLE_APP_SPECIFIC_PASSWORD']
+    ? 'APPLE_APP_SPECIFIC_PASSWORD is not read, because notarytool would take it as an argument ' +
+      'any process can see. Store it in the keychain once with xcrun notarytool store-credentials ' +
+      '<profile>, which prompts for it, and set NGN_NOTARY_PROFILE to the profile. '
+    : '';
   throw new UsageError(
-    '--format dmg notarises the app, and found no credentials. Set NGN_NOTARY_PROFILE to a ' +
-      'notarytool keychain profile, or APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER, or ' +
-      'APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID.',
+    `${password}--format dmg notarises the app, and found no credentials. Set NGN_NOTARY_PROFILE ` +
+      'to a notarytool keychain profile, or APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER.',
   );
 }
 

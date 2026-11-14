@@ -74,14 +74,13 @@ puts the packages somewhere other than `dist/macos`.
 A `dmg` or `mas` needs `ios.bundleIdentifier`. Credentials come from the environment, never from
 `app.json`:
 
-| Variable                                                              | For                                                            |
-| --------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `NGN_SIGN_IDENTITY`                                                   | The signing identity, for `dmg` and `mas`                      |
-| `NGN_NOTARY_PROFILE`                                                  | A `notarytool` keychain profile                                |
-| `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`               | Or an App Store Connect API key, for CI                        |
-| `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`            | Or an Apple ID                                                 |
-| `NGN_INSTALLER_IDENTITY`, `NGN_PROVISIONING_PROFILE`, `APPLE_TEAM_ID` | `mas`: the installer identity, the profile's path and the team |
-| `NGN_SPARKLE_PUBLIC_KEY`                                              | `dmg` with `--feed-url`: Sparkle's public EdDSA key            |
+| Variable                                                              | For                                                                    |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `NGN_SIGN_IDENTITY`                                                   | The signing identity, for `dmg` and `mas`                              |
+| `NGN_NOTARY_PROFILE`                                                  | A `notarytool` keychain profile (`xcrun notarytool store-credentials`) |
+| `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`               | Or an App Store Connect API key, for CI                                |
+| `NGN_INSTALLER_IDENTITY`, `NGN_PROVISIONING_PROFILE`, `APPLE_TEAM_ID` | `mas`: the installer identity, the profile's path and the team         |
+| `NGN_SPARKLE_PUBLIC_KEY`                                              | `dmg` with `--feed-url`: Sparkle's public EdDSA key                    |
 
 A rejected notarisation stops the command with the submission's id, for
 `xcrun notarytool log <id>`.
