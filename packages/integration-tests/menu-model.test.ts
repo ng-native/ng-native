@@ -29,7 +29,7 @@ function outline(groups: readonly MenuGroupModel[]): Record<string, string[]> {
 const DEFAULTS = defaultMenuBar('Notes');
 
 describe('the default menu bar', () => {
-  it('has App, Edit, View, Window and Help, with their standard items and shortcuts', () => {
+  it('has App, File, Edit, View, Window and Help, with their standard items and shortcuts', () => {
     assert.deepEqual(outline(DEFAULTS), {
       Notes: [
         'About Notes',
@@ -44,6 +44,7 @@ describe('the default menu bar', () => {
         '-',
         'Quit Notes',
       ],
+      File: ['Print...'],
       Edit: ['Undo', 'Redo', '-', 'Cut', 'Copy', 'Paste', 'Select All', '-', 'Find'],
       View: ['Back', 'Forward', '-', 'Show Sidebar', 'Enter Full Screen'],
       Window: ['Close Window', 'Minimize', 'Zoom', '-', 'Bring All to Front'],
@@ -53,6 +54,24 @@ describe('the default menu bar', () => {
     assert.deepEqual(quit, { label: 'Quit Notes', menuRole: 'quit', shortcut: 'mod+q' });
     const close = DEFAULTS.find((group) => group.menuRole === 'window')!.items[0];
     assert.deepEqual(close, { label: 'Close Window', menuRole: 'close', shortcut: 'mod+w' });
+    const print = DEFAULTS.find((group) => group.menuRole === 'file')!.items[0];
+    assert.deepEqual(print, { label: 'Print...', menuRole: 'print', shortcut: 'mod+p' });
+    assert.deepEqual(
+      DEFAULTS.map((group) => group.label),
+      ['Notes', 'File', 'Edit', 'View', 'Window', 'Help'],
+    );
+  });
+
+  it('keeps Print... as the role the app handles: its own print item replaces it, with its handler', () => {
+    const print = () => {};
+    const merged = mergeMenuBar(DEFAULTS, [
+      { label: 'Document', items: [{ label: 'Print Note...', menuRole: 'print', select: print }] },
+    ]);
+    const file = merged.find((group) => group.menuRole === 'file')!;
+    assert.deepEqual(outline(merged)['File'], ['Print Note...']);
+    assert.equal((file.items[0] as { select?: () => void }).select, print);
+    assert.ok(!outline(merged)['Document'], 'no longer in its own group');
+    assert.deepEqual(outline(mergeMenuBar(DEFAULTS, []))['File'], ['Print...']);
   });
 });
 
@@ -110,17 +129,17 @@ describe('merging an app menu bar', () => {
       ['Notes', 'File', 'Edit', 'View', 'Format', 'Note', 'Window', 'Help'],
     );
     assert.deepEqual(outline(merged)['Edit']!.slice(-3), ['Find', '-', 'Transform']);
-    assert.deepEqual(outline(merged)['File'], ['Print...', '-', 'Close Window']);
+    assert.deepEqual(outline(merged)['File'], ['Close Window', '-', 'Print...']);
     assert.deepEqual(outline(merged)['Window'], ['Minimize', 'Zoom', '-', 'Bring All to Front']);
   });
 
-  it('moves Close Window to the end of an app File menu, unless the app gave its own', () => {
+  it('moves Close Window into File after the app’s items and before Print..., unless the app gave its own', () => {
     const close = () => {};
     const merged = mergeMenuBar(DEFAULTS, [
       { label: 'File', menuRole: 'file', items: [{ label: 'New', shortcut: 'mod+n' }] },
       { label: 'Note', items: [{ label: 'Close Note', menuRole: 'close', select: close }] },
     ]);
-    assert.deepEqual(outline(merged)['File'], ['New', '-', 'Close Note']);
+    assert.deepEqual(outline(merged)['File'], ['New', '-', 'Close Note', '-', 'Print...']);
     assert.ok(!outline(merged)['Window']!.includes('Close Window'));
     const kept = mergeMenuBar(DEFAULTS, [{ label: 'Note', items: [{ label: 'Pin' }] }]);
     assert.equal(outline(kept)['Window']![0], 'Close Window', 'in Window with no File menu');
@@ -135,7 +154,7 @@ describe('merging an app menu bar', () => {
     ]);
     assert.deepEqual(
       merged.map((group) => group.label),
-      ['Notes', 'Edit', 'View', 'Window', 'Help'],
+      ['Notes', 'File', 'Edit', 'View', 'Window', 'Help'],
       'and no empty Tools menu',
     );
   });

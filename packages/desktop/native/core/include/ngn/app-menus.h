@@ -70,8 +70,12 @@ class MenuHost {
   void setShortcuts(const folly::dynamic &shortcuts);
 
   // --- what the OS reports ---
-  // A menu bar item was chosen in the window on `surface` (the key window's, or nothing).
+  // A menu bar item was chosen in the window on `surface` (the key window's, or nothing). Print
+  // with no handler of the app's prints that window (`printWindow`).
   void choose(const MenuItem &item, std::optional<SurfaceId> surface);
+  // What File > Print does when the app has no print item of its own: prints the window on the
+  // surface, or the key window when it has none. Set once by the host.
+  std::function<void(std::optional<SurfaceId> surface)> printWindow;
   // A key press, before the menus and the focused view see it. True when the app's shortcut takes
   // it, and the press goes no further.
   bool keyDown(const KeyChord &chord, bool textInputFocused);

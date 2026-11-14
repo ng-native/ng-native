@@ -99,6 +99,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   row('`UndoStack`', ['UndoStack'], ['yes', 'yes', 'yes', 'absent', 'absent'], {
     UndoStack: 'NgNativeUndo',
   }),
+  row('`Printing.print({ window })`, File > Print...', [], MAC_ONLY),
   row(
     '`Updates.checkForAppUpdate()`, `appUpdateAvailable`',
     ['appUpdateAvailable'],

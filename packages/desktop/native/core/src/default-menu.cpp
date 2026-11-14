@@ -36,7 +36,7 @@ std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options) {
               item("Quit " + app, MenuCommand::Quit, "q"),
           },
           MenuRole::App),
-      menu("File", {item("Close Window", MenuCommand::CloseWindow, "w")}),
+      menu("File", {item("Close Window", MenuCommand::CloseWindow, "w"), separator(), item("Print...", MenuCommand::Print, "p")}),
       menu(
           "Edit",
           {

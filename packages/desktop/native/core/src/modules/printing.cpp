@@ -93,6 +93,27 @@ std::shared_ptr<NativeModule> makePrintModule(
         const folly::dynamic options = args.empty() ? folly::dynamic(nullptr) : args[0];
         auto html = text(options, "html");
         auto uri = text(options, "uri");
+        const auto *window = options.isObject() ? options.get_ptr("window") : nullptr;
+        if (html.empty() && uri.empty() && window != nullptr && window->isNumber()) {
+          if (noPrompts) {
+            promise.resolve(nullptr);
+            return;
+          }
+          if (printing->exchange(true)) {
+            promise.reject("Print: the print panel is already showing");
+            return;
+          }
+          auto surface = static_cast<facebook::react::SurfaceId>(window->asInt());
+          system->printWindow(surface, landscape(options), [printing, promise](const std::string &error) {
+            printing->store(false);
+            if (error.empty()) {
+              promise.resolve(nullptr);
+            } else {
+              promise.reject("Print: " + error);
+            }
+          });
+          return;
+        }
         if (html.empty() && uri.empty()) {
           promise.reject("Print: No data to print. You must specify `uri` or `html` option");
           return;

@@ -891,6 +891,15 @@ int main(int argc, const char *argv[]) {
         ngn::DefaultMenuOptions{
             .appName = std::string(title.UTF8String), .developer = ngn::DevServer::fromBundleUrl(bundle).has_value()});
     ngn::addModule(*modules, "NgNativeMenus", [] { return ngn::makeMenusModule(gHost.menus); });
+    // File > Print with no print item of the app's: what the window shows (printing.h).
+    gHost.menus->printWindow = [](std::optional<SurfaceId> surface) {
+      NSWindow *window = surface ? (*surface == kAppSurface ? gHost.appWindow : gHost.windows->window(*surface)) : nil;
+      ngn::appkit::printWindow(window != nil ? window : NSApp.keyWindow, false, [](const std::string &error) {
+        if (!error.empty()) {
+          fprintf(stderr, "[ngn] print: %s\n", error.c_str());
+        }
+      });
+    };
     gHost.tray = std::make_shared<ngn::TrayHost>(std::make_shared<ngn::appkit::AppKitTray>(
         [](const std::string &icon) { gHost.tray->press(icon); },
         [](const std::string &icon, const std::string &id) { gHost.tray->menuSelect(icon, id); }));
@@ -1008,7 +1017,9 @@ int main(int argc, const char *argv[]) {
       // Sign in with Apple: available only to an app signed with its entitlement.
       static auto appleId = ngn::appkit::makeAppleIdProvider();
       ngn::addModule(*modules, "NgNativeAppleAuthentication", [] { return ngn::makeAppleAuthenticationModule(appleId, noPrompts); });
-      static auto printSystem = ngn::appkit::makePrintSystem();
+      static auto printSystem = ngn::appkit::makePrintSystem([](SurfaceId surface) -> NSWindow * {
+        return surface == kAppSurface ? gHost.appWindow : gHost.windows->window(surface);
+      });
       ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", fileAccess, noPrompts); });
       // react-native-webview's navigation answers; harmless in a host built without the library.
       ngn::addModule(*modules, "RNCWebViewModule", [] { return ngn::makeWebViewModule(ngn::sharedNavigationLocks()); });

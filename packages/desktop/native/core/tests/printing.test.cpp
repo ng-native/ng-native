@@ -22,7 +22,12 @@ struct FakePrintSystem final : ngn::PrintSystem {
   std::vector<Shown> shown;
   std::function<void(const std::string &)> pendingPrint;
   std::vector<ngn::PageSetup> pages;
+  std::vector<std::pair<facebook::react::SurfaceId, bool>> windows;
   std::string error;
+  void printWindow(facebook::react::SurfaceId surface, bool landscape, std::function<void(const std::string &)> done) override {
+    windows.emplace_back(surface, landscape);
+    pendingPrint = std::move(done);
+  }
   void print(Document document, bool landscape, std::function<void(const std::string &)> done) override {
     shown.push_back({std::move(document), landscape});
     pendingPrint = std::move(done);
@@ -199,4 +204,33 @@ TEST_CASE("NgNativePrint prints only files FileSystem could read, with or withou
   auto module = ngn::makePrintModule(system, http, folders.cache + "/Print", access);
   call(*module, "printAsync", dynamic::object("uri", folders.cache + "/Print/a.pdf"));
   CHECK(http->sent.size() == 1);
+}
+
+TEST_CASE("NgNativePrint prints the window on a surface, one panel at a time, and nothing with no prompts") {
+  auto system = std::make_shared<FakePrintSystem>();
+  auto module = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), "/tmp/unused", ngn::testing::readsEverywhere());
+  Answer answer;
+  call(*module, "printAsync", dynamic::object("window", 3)("orientation", "landscape"), &answer);
+  REQUIRE(system->windows.size() == 1);
+  CHECK(system->windows[0] == std::pair<facebook::react::SurfaceId, bool>{3, true});
+  CHECK(system->shown.empty());
+  CHECK(call(*module, "printAsync", dynamic::object("window", 3)).error == "Print: the print panel is already showing");
+  CHECK_FALSE(answer.resolved);
+  system->pendingPrint("");
+  CHECK(answer.resolved);
+
+  Answer gone;
+  call(*module, "printAsync", dynamic::object("window", 9), &gone);
+  CHECK_FALSE(system->windows[1].second);
+  system->pendingPrint("no window shows surface 9");
+  CHECK(gone.error == "Print: no window shows surface 9");
+  // HTML given beside a window is what prints.
+  call(*module, "printAsync", dynamic::object("html", "<p>Hi</p>")("window", 3));
+  CHECK(system->windows.size() == 2);
+  CHECK(system->shown.size() == 1);
+  system->pendingPrint("");
+
+  auto quiet = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), "/tmp/unused", ngn::testing::readsEverywhere(), true);
+  CHECK(call(*quiet, "printAsync", dynamic::object("window", 3)).resolved);
+  CHECK(system->windows.size() == 2);
 }

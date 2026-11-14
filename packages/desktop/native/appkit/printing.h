@@ -26,6 +26,15 @@ PDFDocument *printableDocument(const PrintSystem::Document &document);
 // scaled down to fit the paper and turned to it, in `landscape` or portrait.
 NSPrintOperation *printOperation(PDFDocument *document, bool landscape);
 
-std::shared_ptr<PrintSystem> makePrintSystem();
+// What a window's content view shows, as it is drawn, on one page of its size: what
+// `print({ window })` and File > Print print. Nil for a view with nothing to draw.
+PDFDocument *windowDocument(NSView *content);
+
+// Shows the print panel for what `window` shows, as a sheet on it, scaled down to the paper. Main
+// thread; answers once the panel closes, or why it could not show.
+void printWindow(NSWindow *window, bool landscape, std::function<void(const std::string &error)> done);
+
+// `windowOf` finds the window that shows a surface, for printWindow.
+std::shared_ptr<PrintSystem> makePrintSystem(std::function<NSWindow *(facebook::react::SurfaceId)> windowOf = nullptr);
 
 } // namespace ngn::appkit

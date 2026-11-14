@@ -223,6 +223,8 @@ void MenuHost::choose(const MenuItem &item, std::optional<SurfaceId> surface) {
     navigate(NavigationDirection::Back, surface);
   } else if (item.command == MenuCommand::Forward) {
     navigate(NavigationDirection::Forward, surface);
+  } else if (item.command == MenuCommand::Print && printWindow) {
+    printWindow(surface);
   }
 }
 
