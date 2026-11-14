@@ -307,6 +307,34 @@ write what they found to `.expo/ng-native-desktop/link.json` in the app, which t
 from `NGN_DESKTOP_LINK`, and warn about dependencies with native code for iOS or Android and none
 for the desktop. `deny` in the plugin options keeps a package out.
 
+A library with a `codegenConfig` gets its specs' codegen, as on Android: the `<Name>JSI.h` its C++
+TurboModule implements, and for its Fabric components their props, events and shadow nodes, which
+the host compiles in and registers, so the component lays out and its events reach JavaScript. The
+library draws it with a subclass of `NGNView` from the host's `component-view.h`, registered for
+the component's name as it loads:
+
+```objc
+#import "component-view.h"
+#include <react/renderer/components/MyLibSpec/Props.h>
+
+@interface MyBadgeView : NGNView
+@end
+
+@implementation MyBadgeView
++ (void)load {
+  NGNRegisterComponentView(@"MyBadge", self);
+}
+- (void)updateProps:(const facebook::react::Props::Shared &)props {
+  [super updateProps:props]; // background, border, opacity and accessibility
+  auto badge = std::dynamic_pointer_cast<const facebook::react::MyBadgeProps>(props);
+  // ...
+}
+@end
+```
+
+Events go out through the codegen's `EventEmitter`, cast from `self.eventEmitter`. A component
+with no view registered mounts as a plain view, and the host's own components keep theirs.
+
 ## Package the app
 
 `ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]

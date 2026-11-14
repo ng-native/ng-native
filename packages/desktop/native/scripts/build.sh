@@ -76,6 +76,8 @@ if [ -n "${NGN_DESKTOP_LINK:-}" ] && [ "$backend" != "none" ]; then
     while IFS=$'\t' read -r name dir; do
       out="$("$here/codegen-library.sh" "$RN_PKG" "$dir" --modules)"
       [ -n "$out" ] && codegen="$codegen${codegen:+;}$name|$out"
+      # Its Fabric components, when it has any: compiled in and registered like a --library's.
+      [ -n "$out" ] && [ -f "$out/library.cmake" ] && library_dirs="$library_dirs${library_dirs:+;}$out"
     done < <(tail -n +2 <<< "$linked")
     # The app is link.json's .expo/ng-native-desktop/..
     app="$(cd "$(dirname "$link")/../.." && pwd -P)"

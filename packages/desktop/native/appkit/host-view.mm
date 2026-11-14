@@ -645,6 +645,21 @@ static BOOL focusFromKeyboard() {
 
 @end
 
+// The libraries' views (component-view.h), by component name. Filled as the binary loads, before
+// anything mounts, and read on the UI thread after.
+static NSMutableDictionary<NSString *, Class> *libraryViews() {
+  static NSMutableDictionary<NSString *, Class> *views = [NSMutableDictionary dictionary];
+  return views;
+}
+
+void NGNRegisterComponentView(NSString *componentName, Class viewClass) {
+  if (![viewClass isSubclassOfClass:NGNView.class]) {
+    NSLog(@"[ngn] %@ is not an NGNView, so %@ mounts as a plain view", viewClass, componentName);
+    return;
+  }
+  libraryViews()[componentName] = viewClass;
+}
+
 NGNView *NGNMakeView(const ShadowView &view) {
   if (NGNView *control = NGNMakeControlView(view)) {
     return control;
@@ -692,6 +707,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == ngn::SidebarItemComponentName) {
     return [[NGNSidebarItemView alloc] initWithShadowView:view];
+  }
+  if (Class library = libraryViews()[@(view.componentName)]) {
+    return [[library alloc] initWithShadowView:view];
   }
   return [[NGNView alloc] initWithShadowView:view];
 }

@@ -3,8 +3,10 @@
 #
 # - A library's CMake fragment (its `macos.cmakeDir`, `desktop` by default) declares the target its
 #   `macos.cmakeTarget` names. The build gives that target React Native's headers, JSI and folly,
-#   and the codegen of the library's TurboModule spec when its package.json has a codegenConfig
-#   (the `<Name>JSI.h` its C++ module implements, as on Android).
+#   the host's appkit/component-view.h, and the codegen of the library's specs when its
+#   package.json has a codegenConfig: the `<Name>JSI.h` its C++ module implements, and its Fabric
+#   components' props, events and shadow nodes, which scripts/build.sh also compiles in and
+#   registers through cmake/libraries.cmake, as on Android.
 # - An app module's `modules/<name>/macos/` folder either has a CMakeLists.txt declaring the target
 #   its expo-module.config.json names, or is compiled whole: every .cpp, .mm, .m and .c in it.
 #
@@ -21,6 +23,10 @@ set(NGN_LINK_CODEGEN "" CACHE STRING "<package>|<dir> for each linked library's 
 
 add_library(ngn_module_api INTERFACE)
 target_link_libraries(ngn_module_api INTERFACE react_native)
+# A library's views include appkit/component-view.h, and through it the core's headers.
+if(NGN_BACKEND STREQUAL "appkit")
+  target_include_directories(ngn_module_api INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/appkit ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
+endif()
 
 set(NGN_LINKED "")
 

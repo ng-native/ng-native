@@ -4,9 +4,11 @@
 #
 #   codegen-library.sh <node_modules/react-native> <node_modules/library> [--modules]
 #
-# --modules is for an autolinked library (cmake/linked-modules.cmake): its TurboModule spec's
-# codegen only, the <Name>JSI.h its C++ module implements, in <cache>/linked/<name>. A library
-# with no codegen config prints nothing, since its module needs none.
+# --modules is for an autolinked library (cmake/linked-modules.cmake), in <cache>/linked/<name>:
+# its TurboModule spec's codegen, the <Name>JSI.h its C++ module implements, and when it declares
+# Fabric components, their codegen and a library.cmake as below, which build.sh adds to the
+# libraries it compiles in. A library with no codegen config prints nothing, since its module
+# needs none.
 #
 # The directory, <cache>/libraries/<name>, holds:
 #   codegen/react/renderer/components/<name>/   the codegen output (props, events, shadow nodes)
@@ -52,7 +54,8 @@ DESCRIPTORS="$(sed -n 3p <<< "$info")"
 
 OUT="$CACHE/libraries/$NAME"
 [ "$modules" = 1 ] && OUT="$CACHE/linked/$NAME"
-STAMP="$VERSION $LIB"
+# The layout's own version last, so a cache written by an older script is made again.
+STAMP="$VERSION $LIB 2"
 if [ -f "$OUT/stamp" ] && [ "$(cat "$OUT/stamp")" = "$STAMP" ]; then
   echo "$OUT"
   exit 0
@@ -63,7 +66,7 @@ tmp="$(mktemp -d)"
 # The codegen also generates the library's own dependencies' specs; only its own are kept.
 (cd "$RN_PKG" && node scripts/generate-codegen-artifacts.js -p "$LIB" -t android -o "$tmp" -s library) > "$tmp.log" 2>&1 || true
 GEN="$tmp/android/app/build/generated/source/codegen/jni/react/renderer/components/$NAME"
-if [ "$modules" = 1 ]; then
+if [ "$modules" = 1 ] && [ ! -f "$GEN/ComponentDescriptors.h" ]; then
   if [ ! -f "$GEN/${NAME}JSI.h" ]; then
     cat "$tmp.log" >&2
     echo "codegen-library.sh: the codegen wrote no module spec for $VERSION" >&2
