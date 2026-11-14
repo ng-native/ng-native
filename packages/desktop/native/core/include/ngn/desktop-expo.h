@@ -42,6 +42,28 @@ class SecretStore {
   virtual void remove(const std::string &service, const std::string &key) = 0;
 };
 
+// Items in `now`, with what `old` still has moved over as it is read: the Data Protection keychain
+// over the file keychain an app used before it was signed with a Team ID. A write or a removal
+// takes the old copy away too, so it never comes back.
+class MovingSecretStore final : public SecretStore {
+ public:
+  MovingSecretStore(std::shared_ptr<SecretStore> now, std::shared_ptr<SecretStore> old)
+      : now_(std::move(now)), old_(std::move(old)) {}
+  std::optional<std::string> get(const std::string &service, const std::string &key) override;
+  void set(const std::string &service, const std::string &key, const std::string &value) override;
+  void remove(const std::string &service, const std::string &key) override;
+
+ private:
+  void removeOld(const std::string &service, const std::string &key);
+  std::shared_ptr<SecretStore> now_;
+  std::shared_ptr<SecretStore> old_;
+};
+
+// Whether the app can use the Data Protection keychain: its signature has a Team ID, and an
+// entitlement that gives it a keychain access group (an application identifier, as a Mac App Store
+// build has, or keychain-access-groups). Without one the keychain refuses it (errSecMissingEntitlement).
+bool usesDataProtectionKeychain(const std::string &teamId, const std::set<std::string> &entitlements);
+
 // The service items go under when the call names none: the app's own.
 std::shared_ptr<NativeModule> makeSecureStoreModule(std::shared_ptr<SecretStore> store, std::string defaultService);
 bool secureStoreKeyValid(const std::string &key);

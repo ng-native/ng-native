@@ -43,6 +43,9 @@ struct MemorySecrets final : ngn::SecretStore {
     items[{s, k}] = v;
   }
   void remove(const std::string &s, const std::string &k) override {
+    if (failing) {
+      throw std::runtime_error("the keychain is locked");
+    }
     items.erase({s, k});
   }
 };
@@ -357,4 +360,47 @@ TEST_CASE("DocumentPicker lets FileSystem reach what the user picked, and gives 
   dialogs->savedAt = saved;
   CHECK(ask(*module, "saveDocumentAsync", dynamic::array(dynamic::object("contents", "x"))).value == dynamic(ngn::fileUri(saved)));
   CHECK(access->accessTo(saved) == ngn::FileAccess::Access::ReadWrite);
+}
+
+TEST_CASE("a moving store reads through to the old one and moves what it finds there") {
+  auto now = std::make_shared<MemorySecrets>();
+  auto old = std::make_shared<MemorySecrets>();
+  old->items[{"app", "token"}] = "from before";
+  old->items[{"app", "other"}] = "left";
+  ngn::MovingSecretStore store(now, old);
+
+  CHECK(store.get("app", "token") == "from before");
+  CHECK(now->items.at({"app", "token"}) == "from before");
+  CHECK_FALSE(old->items.contains({"app", "token"}));
+  CHECK_FALSE(store.get("app", "missing"));
+
+  // A write goes to the new store, and takes the old copy away, so a stale one never comes back.
+  store.set("app", "other", "new");
+  CHECK(now->items.at({"app", "other"}) == "new");
+  CHECK_FALSE(old->items.contains({"app", "other"}));
+  CHECK(store.get("app", "other") == "new");
+
+  old->items[{"app", "gone"}] = "x";
+  now->items[{"app", "gone"}] = "y";
+  store.remove("app", "gone");
+  CHECK_FALSE(store.get("app", "gone"));
+  CHECK(old->items.empty());
+
+  // The old store failing (a locked file keychain) does not hide what the new one has, or stop a
+  // write or a removal.
+  old->failing = true;
+  CHECK(store.get("app", "token") == "from before");
+  CHECK_FALSE(store.get("app", "missing"));
+  store.set("app", "locked", "v");
+  CHECK(now->items.at({"app", "locked"}) == "v");
+  store.remove("app", "locked");
+  CHECK_FALSE(now->items.contains({"app", "locked"}));
+}
+
+TEST_CASE("the Data Protection keychain is used when the app's signature has a Team ID and an app identity") {
+  CHECK(ngn::usesDataProtectionKeychain("ABCDE12345", {"com.apple.application-identifier"}));
+  CHECK(ngn::usesDataProtectionKeychain("ABCDE12345", {"keychain-access-groups"}));
+  // Developer ID with no identity entitlement, ad hoc, and unsigned: the file keychain.
+  CHECK_FALSE(ngn::usesDataProtectionKeychain("ABCDE12345", {"com.apple.security.device.camera"}));
+  CHECK_FALSE(ngn::usesDataProtectionKeychain("", {"com.apple.application-identifier"}));
 }

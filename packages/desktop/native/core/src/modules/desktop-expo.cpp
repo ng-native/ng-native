@@ -37,6 +37,47 @@ bool secureStoreKeyValid(const std::string &key) {
   });
 }
 
+std::optional<std::string> MovingSecretStore::get(const std::string &service, const std::string &key) {
+  if (auto value = now_->get(service, key)) {
+    return value;
+  }
+  std::optional<std::string> value;
+  try {
+    value = old_->get(service, key);
+  } catch (const std::exception &) {
+    // An old store that cannot be read has nothing to move.
+    return std::nullopt;
+  }
+  if (value) {
+    now_->set(service, key, *value);
+    removeOld(service, key);
+  }
+  return value;
+}
+
+void MovingSecretStore::set(const std::string &service, const std::string &key, const std::string &value) {
+  now_->set(service, key, value);
+  removeOld(service, key);
+}
+
+void MovingSecretStore::remove(const std::string &service, const std::string &key) {
+  now_->remove(service, key);
+  removeOld(service, key);
+}
+
+void MovingSecretStore::removeOld(const std::string &service, const std::string &key) {
+  try {
+    old_->remove(service, key);
+  } catch (const std::exception &) {
+    // The new store has the answer; an old copy left behind is never read while it does.
+  }
+}
+
+bool usesDataProtectionKeychain(const std::string &teamId, const std::set<std::string> &entitlements) {
+  return !teamId.empty() &&
+      (entitlements.contains("com.apple.application-identifier") || entitlements.contains("keychain-access-groups"));
+}
+
 std::shared_ptr<NativeModule> makeSecureStoreModule(std::shared_ptr<SecretStore> store, std::string defaultService) {
   struct SecureStore : NativeModule {
     SecureStore(std::shared_ptr<SecretStore> store, std::string service) : NativeModule("NgNativeSecureStore") {

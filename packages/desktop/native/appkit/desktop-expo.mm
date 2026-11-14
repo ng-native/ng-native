@@ -7,7 +7,9 @@
 #import <Security/Security.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
+#include <set>
 #include <stdexcept>
+#include <utility>
 
 namespace ngn::appkit {
 
@@ -18,12 +20,41 @@ NSString *ns(const std::string &s) {
   return out != nil ? out : @"";
 }
 
-NSMutableDictionary *itemQuery(const std::string &service, const std::string &key) {
-  return [@{
+NSMutableDictionary *itemQuery(const std::string &service, const std::string &key, bool dataProtection) {
+  NSMutableDictionary *query = [@{
     (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
     (__bridge id)kSecAttrService : ns(service),
     (__bridge id)kSecAttrAccount : ns(key),
   } mutableCopy];
+  if (dataProtection) {
+    query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  }
+  return query;
+}
+
+// The Team ID and the entitlements the running binary is signed with: none for an unsigned or ad
+// hoc build.
+std::pair<std::string, std::set<std::string>> ownSigning() {
+  SecCodeRef code = nullptr;
+  SecStaticCodeRef staticCode = nullptr;
+  CFDictionaryRef info = nullptr;
+  std::pair<std::string, std::set<std::string>> out;
+  if (SecCodeCopySelf(kSecCSDefaultFlags, &code) == errSecSuccess &&
+      SecCodeCopyStaticCode(code, kSecCSDefaultFlags, &staticCode) == errSecSuccess &&
+      SecCodeCopySigningInformation(staticCode, kSecCSSigningInformation | kSecCSRequirementInformation, &info) == errSecSuccess) {
+    NSDictionary *signing = (__bridge NSDictionary *)info;
+    if (NSString *team = signing[(__bridge id)kSecCodeInfoTeamIdentifier]) {
+      out.first = team.UTF8String;
+    }
+    NSDictionary *entitlements = signing[(__bridge id)kSecCodeInfoEntitlementsDict];
+    for (NSString *name in entitlements) {
+      out.second.insert(name.UTF8String);
+    }
+  }
+  if (info) CFRelease(info);
+  if (staticCode) CFRelease(staticCode);
+  if (code) CFRelease(code);
+  return out;
 }
 
 std::runtime_error keychainError(OSStatus status) {
@@ -33,8 +64,10 @@ std::runtime_error keychainError(OSStatus status) {
 
 class Keychain final : public SecretStore {
  public:
+  explicit Keychain(bool dataProtection) : dataProtection_(dataProtection) {}
+
   std::optional<std::string> get(const std::string &service, const std::string &key) override {
-    NSMutableDictionary *query = itemQuery(service, key);
+    NSMutableDictionary *query = itemQuery(service, key, dataProtection_);
     query[(__bridge id)kSecReturnData] = @YES;
     query[(__bridge id)kSecMatchLimit] = (__bridge id)kSecMatchLimitOne;
     CFTypeRef result = nullptr;
@@ -51,7 +84,7 @@ class Keychain final : public SecretStore {
 
   void set(const std::string &service, const std::string &key, const std::string &value) override {
     NSData *data = [NSData dataWithBytes:value.data() length:value.size()];
-    NSMutableDictionary *query = itemQuery(service, key);
+    NSMutableDictionary *query = itemQuery(service, key, dataProtection_);
     OSStatus status = SecItemUpdate(
         (__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef) @{(__bridge id)kSecValueData : data});
     if (status == errSecItemNotFound) {
@@ -66,11 +99,14 @@ class Keychain final : public SecretStore {
   }
 
   void remove(const std::string &service, const std::string &key) override {
-    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)itemQuery(service, key));
+    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)itemQuery(service, key, dataProtection_));
     if (status != errSecSuccess && status != errSecItemNotFound) {
       throw keychainError(status);
     }
   }
+
+ private:
+  bool dataProtection_;
 };
 
 class PowerAssertion final : public SleepPreventer {
@@ -108,7 +144,12 @@ class Trackpad final : public HapticPlayer {
 } // namespace
 
 std::shared_ptr<SecretStore> makeKeychain() {
-  return std::make_shared<Keychain>();
+  auto [team, entitlements] = ownSigning();
+  if (!usesDataProtectionKeychain(team, entitlements)) {
+    return std::make_shared<Keychain>(false);
+  }
+  // Items an earlier build kept in the file keychain move over as they are read.
+  return std::make_shared<MovingSecretStore>(std::make_shared<Keychain>(true), std::make_shared<Keychain>(false));
 }
 std::shared_ptr<SleepPreventer> makeSleepPreventer() {
   return std::make_shared<PowerAssertion>();
