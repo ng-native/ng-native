@@ -370,7 +370,7 @@ void endSwipe() {
 void animateSwipe(ngn::BackSwipeFrame to, void (^done)(void)) {
   [gSwipe.animation invalidate];
   ngn::BackSwipeFrame from{
-      .offset = gSwipe.top.swipeOffset, .opacity = gSwipe.top.swipeOpacity, .belowShown = gSwipe.below.swipeShown};
+      .offset = gSwipe.top.swipeOffset, .opacity = gSwipe.top.swipeOpacity, .belowShown = gSwipe.below.swipeShown == YES};
   CFTimeInterval start = CACurrentMediaTime();
   constexpr CFTimeInterval kDuration = 0.2;
   gSwipe.animation = [NSTimer scheduledTimerWithTimeInterval:1.0 / 120 repeats:YES block:^(NSTimer *timer) {
