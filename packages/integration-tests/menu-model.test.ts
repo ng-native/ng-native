@@ -46,11 +46,13 @@ describe('the default menu bar', () => {
       ],
       Edit: ['Undo', 'Redo', '-', 'Cut', 'Copy', 'Paste', 'Select All', '-', 'Find'],
       View: ['Back', 'Forward', '-', 'Show Sidebar', 'Enter Full Screen'],
-      Window: ['Minimize', 'Zoom', '-', 'Bring All to Front'],
+      Window: ['Close Window', 'Minimize', 'Zoom', '-', 'Bring All to Front'],
       Help: [],
     });
     const quit = DEFAULTS[0]!.items.at(-1);
     assert.deepEqual(quit, { label: 'Quit Notes', menuRole: 'quit', shortcut: 'mod+q' });
+    const close = DEFAULTS.find((group) => group.menuRole === 'window')!.items[0];
+    assert.deepEqual(close, { label: 'Close Window', menuRole: 'close', shortcut: 'mod+w' });
   });
 });
 
@@ -108,7 +110,20 @@ describe('merging an app menu bar', () => {
       ['Notes', 'File', 'Edit', 'View', 'Format', 'Note', 'Window', 'Help'],
     );
     assert.deepEqual(outline(merged)['Edit']!.slice(-3), ['Find', '-', 'Transform']);
-    assert.deepEqual(outline(merged)['File'], ['Print...'], 'print has no default to replace');
+    assert.deepEqual(outline(merged)['File'], ['Print...', '-', 'Close Window']);
+    assert.deepEqual(outline(merged)['Window'], ['Minimize', 'Zoom', '-', 'Bring All to Front']);
+  });
+
+  it('moves Close Window to the end of an app File menu, unless the app gave its own', () => {
+    const close = () => {};
+    const merged = mergeMenuBar(DEFAULTS, [
+      { label: 'File', menuRole: 'file', items: [{ label: 'New', shortcut: 'mod+n' }] },
+      { label: 'Note', items: [{ label: 'Close Note', menuRole: 'close', select: close }] },
+    ]);
+    assert.deepEqual(outline(merged)['File'], ['New', '-', 'Close Note']);
+    assert.ok(!outline(merged)['Window']!.includes('Close Window'));
+    const kept = mergeMenuBar(DEFAULTS, [{ label: 'Note', items: [{ label: 'Pin' }] }]);
+    assert.equal(outline(kept)['Window']![0], 'Close Window', 'in Window with no File menu');
   });
 
   it('leaves out a group whose items all replaced defaults, separators and all', () => {

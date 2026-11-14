@@ -106,7 +106,7 @@ describe('the menu bar on macOS', () => {
       ['Notes', 'File', 'Edit', 'View', 'Format', 'Window', 'Help'],
     );
     const file = bar[1];
-    assert.deepEqual(labels(file), ['New', '-', 'Save']);
+    assert.deepEqual(labels(file), ['New', '-', 'Save', '-', 'Close Window']);
     assert.deepEqual(item(file, 'New')?.shortcut, {
       key: 'n',
       meta: true,
@@ -163,7 +163,7 @@ describe('the menu bar on macOS', () => {
     app.instance.showOpen.set(true);
     app.instance.dirty.set(true);
     await app.detectChanges();
-    assert.deepEqual(labels(host.bar()[1]), ['New', 'Open', '-', 'Save']);
+    assert.deepEqual(labels(host.bar()[1]), ['New', 'Open', '-', 'Save', '-', 'Close Window']);
     assert.equal(item(host.bar()[1], 'Save')?.disabled, undefined);
   });
 

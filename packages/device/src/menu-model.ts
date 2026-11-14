@@ -144,6 +144,8 @@ export function defaultMenuBar(appName: string): MenuGroupModel[] {
       label: 'Window',
       menuRole: 'window',
       items: [
+        // An app with a File menu has it at the end of that menu instead, as a Mac app does.
+        item('Close Window', 'close', 'mod+w'),
         item('Minimize', 'minimize', 'mod+m'),
         item('Zoom', 'zoom'),
         SEPARATOR,
@@ -192,6 +194,8 @@ function tidy(entries: readonly MenuEntry[], drop: (item: MenuItemModel) => bool
  * - A group whose `menuRole` names a default menu adds its items to the end of that menu.
  * - A `file` group goes after the App menu, as on a Mac, and any other group after View, in the
  *   order the app wrote them. A group left with no items is left out.
+ * - With a `file` group, the Window menu's Close Window (or the app's own `close` item) moves to
+ *   the end of it.
  */
 export function mergeMenuBar(
   defaults: readonly MenuGroupModel[],
@@ -230,6 +234,13 @@ export function mergeMenuBar(
       continue;
     } else if (group.menuRole === 'file') afterApp.push({ ...group, items });
     else afterView.push({ ...group, items });
+  }
+  const file = afterApp[0];
+  const window = merged.find((group) => group.menuRole === 'window');
+  const close = window?.items.find((entry) => !isSeparator(entry) && entry.menuRole === 'close');
+  if (file && window && close) {
+    window.items = tidy(window.items, (item) => item === close);
+    file.items = [...file.items, SEPARATOR, close];
   }
   const at = (role: MenuGroupRole) => merged.findIndex((group) => group.menuRole === role) + 1;
   merged.splice(at('view'), 0, ...afterView);
