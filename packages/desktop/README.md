@@ -164,25 +164,74 @@ clicks select the row.
 capabilities, from `NGNCapabilities` in a packaged app's `Info.plist` or the `--capabilities` that
 `ng-native-desktop run` passes: a program and its arguments must match a `spawn` rule, the program
 gets only the `env` variables declared, and its output and exit arrive as `ngNativeProcesses`
-events. A Mac App Store (`mas`) build spawns nothing.
+events. A Mac App Store (`mas`) build spawns nothing. A spawned program gets SIGTERM when the app
+reloads, and every program still running gets SIGKILL when the app quits.
 
 `NgNativeShell` hands a URL, a path or a Finder selection to the OS through NSWorkspace. It refuses
-`file:`, script and `data:` URLs, and paths that are not absolute and normalised.
+`file:`, script and `data:` URLs, and paths that are not absolute and normalised. `Linking`
+refuses the same URLs. `openPath` opens a document in its app and refuses a path that is not
+there, a program, an app, a script and a location file, since those would run or follow a link past
+the `spawn` rules.
+
+## Launch settings
+
+A dev run takes its bundle, module, title, app id and capabilities from the command line, and
+settings such as the updates URL from `NGN_*` environment variables. A packaged app, whose
+`Info.plist` names `NGNBundleFile`, takes all of them from its `Info.plist` and ignores argv and
+the `NGN_*` variables, so nothing that launches the app can make it run another bundle, as another
+app, or take updates from another server.
 
 ## Expo modules
 
 Some of `@ng-native/expo`'s services answer from modules of the host's own, named `NgNative` and
 the package's name after `expo-`, each with the methods the service calls on the Expo package:
 
-| Module                | What it does                                                                                                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NgNativeSecureStore` | Items in the Keychain, under the app's id or the `keychainService` a call names, refusing the keys `expo-secure-store` refuses.                                                 |
-| `NgNativeClipboard`   | Reads and writes the pasteboard's text. `Clipboard.changes()` counts its `ngNativeClipboard` events on `DeviceEventEmitter`, sent when the pasteboard's change count has moved. |
-| `NgNativeKeepAwake`   | Keeps the display awake with an IOKit power assertion while any tag holds it.                                                                                                   |
-| `NgNativeHaptics`     | Plays the trackpad's feedback for an impact, a selection and a notification.                                                                                                    |
+| Module                        | What it does                                                                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NgNativeSecureStore`         | Items in the Keychain, under the app's id or the `keychainService` a call names, refusing the keys `expo-secure-store` refuses.                                                 |
+| `NgNativeClipboard`           | Reads and writes the pasteboard's text. `Clipboard.changes()` counts its `ngNativeClipboard` events on `DeviceEventEmitter`, sent when the pasteboard's change count has moved. |
+| `NgNativeKeepAwake`           | Keeps the display awake with an IOKit power assertion while any tag holds it.                                                                                                   |
+| `NgNativeHaptics`             | Plays the trackpad's feedback for an impact, a selection and a notification.                                                                                                    |
+| `NgNativeSqlite`              | `expo-sqlite`'s databases over the system's sqlite3. See Sqlite.                                                                                                                |
+| `NgNativeLocalAuthentication` | `Biometrics` over LAContext. See Local authentication.                                                                                                                          |
+| `NgNativeFileSystem`          | `FileSystem`'s files over uris. See File system.                                                                                                                                |
 
 The clipboard has no change notification, so the host checks the count when the app becomes active
 and after each key press, click and menu command, and never polls.
+
+### Sqlite
+
+`database()` opens its database through `NgNativeSqlite`. A TurboModule cannot return an object
+with methods, so the host answers a handle, `{id, databasePath, databaseName}`, and each call takes
+the id first; the desktop loader builds `expo-sqlite`'s database on it, with each call also in its
+`Sync` form. A file database lives in `<appData>/SQLite`, uses the WAL journal, and cannot be named
+with a path that leaves that folder; `:memory:` is in memory. `withTransactionAsync` runs `BEGIN`,
+the task, then `COMMIT`, or `ROLLBACK` when the task throws. Blobs cross as `{base64}` and come
+back as bytes. A reload closes every open database. Calls run on the JavaScript thread, in order.
+
+The host answers a row without a column list, so a row's keys are not in the order of the `SELECT`.
+`prepareAsync` and `serializeAsync` throw, and `getEachAsync` reads every row before it yields the
+first.
+
+### Local authentication
+
+`NgNativeLocalAuthentication` answers `Biometrics` over LAContext: Touch ID, the login password and
+an Apple Watch. The password stands in for Touch ID unless `disableDeviceFallback` is set, and with
+it set a call that Touch ID cannot answer (no sensor, nothing enrolled, locked out, the lid closed)
+fails at once with no prompt. With `NGN_NO_PROMPTS=1` in the environment no prompt is ever shown,
+and every evaluation fails as `not_interactive`, so an automated run never waits on a dialog.
+
+### File system
+
+`NgNativeFileSystem` answers flat calls over `file:` uris, and the desktop loader builds the
+service's files on them: `paths` names `cache`, `document`, `appData`, `temp`, `home`, `desktop`
+and `downloads`, each left out where the app cannot reach it. `document` is `<appData>/Documents`,
+not `~/Documents`. A call reaches the app's own folders, the files and folders the user picked in
+a panel (until the app quits), and the paths the plugin options' `capabilities.paths` declare,
+read-only or read-write, after symbolic links are followed. `watch` reports changes from FSEvents.
+
+The host's calls are asynchronous, so `write()` answers a promise, `textSync()` throws, and a
+file's `exists` and `size` are the last answer until `settled()` resolves.
 
 The other services with a desktop source in `DESKTOP_MODULES` throw `MissingModuleError` on first
 use until the host has their module.
