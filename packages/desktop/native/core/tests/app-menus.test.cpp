@@ -129,6 +129,10 @@ TEST_CASE("the app's bar is drawn as it sent it, with the Developer menu kept be
   CHECK(bar[3].items[1].modifiers == (ngn::Command | ngn::Control));
 
   const auto &file = bar[1].items;
+  // Cmd-W stays: Close Window ends the app's File menu when its bar has no close item.
+  CHECK(titles(file) == std::vector<std::string>{"New", "Save", "Export", "-", "Close Window"});
+  CHECK(file.back().command == MenuCommand::CloseWindow);
+  CHECK(file.back().key == "w");
   CHECK(file[0].command == MenuCommand::AppItem);
   CHECK(file[0].key == "n");
   CHECK(file[1].disabled);
@@ -138,6 +142,24 @@ TEST_CASE("the app's bar is drawn as it sent it, with the Developer menu kept be
   CHECK(exportMenu.items[0].checked);
   CHECK(exportMenu.items[1].destructive);
   CHECK(exportMenu.items[1].subtitle == "Cannot be undone");
+}
+
+TEST_CASE("a bar with no File menu gets one for Close Window, after the app menu; one with a close item keeps its own") {
+  Fixture f;
+  f.module->call(
+      "setMenuBar",
+      dynamic::array(dynamic::array(
+          dynamic::object("label", "Notes")("menuRole", "app")("items", dynamic::array()),
+          dynamic::object("label", "Help")("menuRole", "help")("items", dynamic::array()))));
+  CHECK(titles(f.backend->bars.back()) == std::vector<std::string>{"Notes", "File", "Developer", "Help"});
+  CHECK(titles(f.backend->bars.back()[1].items) == std::vector<std::string>{"Close Window"});
+
+  f.module->call(
+      "setMenuBar",
+      dynamic::array(dynamic::array(dynamic::object("label", "Window")("menuRole", "window")(
+          "items", dynamic::array(dynamic::object("id", "0.0")("label", "Close Tab")("menuRole", "close")(
+                       "shortcut", chord("w")))))));
+  CHECK(titles(f.backend->bars.back()) == std::vector<std::string>{"Window", "Developer"});
 }
 
 TEST_CASE("choosing an app item or a handled role item tells the app its id; back and forward navigate") {

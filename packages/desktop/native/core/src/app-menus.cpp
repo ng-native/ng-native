@@ -145,6 +145,19 @@ std::vector<MenuItem> parseMenuBar(const folly::dynamic &groups, const DefaultMe
       });
     }
   }
+  // Cmd-W closes the window (or the sheet in front) whatever the app's bar has: the File menu's
+  // Close Window, as the default bar has it, when the app's bar has no close item.
+  if (findMenuItem(bar, MenuCommand::CloseWindow) == nullptr) {
+    auto close = *findMenuItem(defaultMenuBar(options), MenuCommand::CloseWindow);
+    auto file = std::find_if(bar.begin(), bar.end(), [](const MenuItem &m) { return m.title == "File"; });
+    if (file == bar.end()) {
+      auto after = std::find_if(bar.begin(), bar.end(), [](const MenuItem &m) { return m.role == MenuRole::App; });
+      file = bar.insert(after == bar.end() ? bar.begin() : after + 1, MenuItem{.title = "File"});
+    } else if (!file->items.empty()) {
+      file->items.push_back(MenuItem{.separator = true});
+    }
+    file->items.push_back(close);
+  }
   if (options.developer) {
     auto defaults = defaultMenuBar(options);
     auto developer = std::find_if(defaults.begin(), defaults.end(), [](const MenuItem &m) {

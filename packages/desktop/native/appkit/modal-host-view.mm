@@ -2,6 +2,8 @@
 
 #import "surface-view.h"
 
+#include "ngn/desktop-modal.h"
+
 #include <react/renderer/components/FBReactNativeSpec/EventEmitters.h>
 #include <react/renderer/components/modal/ModalHostViewState.h>
 #include <react/renderer/core/ConcreteState.h>
@@ -12,6 +14,7 @@ namespace {
 ngn::InputSink *gInput = nullptr;
 std::function<void(NSInteger, BOOL)> gPresentationChanged;
 std::function<NSView *(NSInteger)> gViewForTag;
+std::function<NSSize(NSInteger, NSInteger, NSSize)> gSheetSizer;
 NSHashTable *gPopovers = [NSHashTable weakObjectsHashTable];
 // The most a popover measures its content against, before it fits.
 constexpr CGFloat kPopoverMax = 640;
@@ -36,6 +39,10 @@ constexpr CGFloat kPopoverMax = 640;
 - (void)cancelOperation:(id)sender {
   [self.modal requestClose];
 }
+// Cmd-W closes the sheet or cover in front before its window.
+- (void)performClose:(id)sender {
+  [self.modal requestClose];
+}
 - (void)setFrameSize:(NSSize)size {
   [super setFrameSize:size];
   [self.modal coverResized];
@@ -48,9 +55,17 @@ constexpr CGFloat kPopoverMax = 640;
 @implementation NGNModalHostView {
   NGNModalCover *_cover;
   NSPopover *_popover;
+  NSWindow *_sheet;
   BOOL _dismissing;
   State::Shared _modalState;
   NSSize _reportedSize;
+}
+
++ (std::function<NSSize(NSInteger, NSInteger, NSSize)>)sheetSizer {
+  return gSheetSizer;
+}
++ (void)setSheetSizer:(std::function<NSSize(NSInteger, NSInteger, NSSize)>)fn {
+  gSheetSizer = std::move(fn);
 }
 
 + (std::function<NSView *(NSInteger)>)viewForTag {
@@ -73,7 +88,24 @@ constexpr CGFloat kPopoverMax = 640;
 + (void)fitPopovers {
   for (NGNModalHostView *modal in gPopovers.allObjects) {
     [modal fitPopover];
+    [modal fitSheet];
   }
+}
+
+// The sheet takes the size the core works out from what its content laid out to: a second commit
+// on open for content that sizes itself.
+- (void)fitSheet {
+  if (_sheet == nil || !gSheetSizer) {
+    return;
+  }
+  NSWindow *parent = _sheet.sheetParent;
+  NSSize window = parent != nil ? parent.contentView.bounds.size : _sheet.contentView.bounds.size;
+  NSSize size = gSheetSizer(self.surfaceId, self.reactTag, window);
+  NSSize current = _sheet.contentView.bounds.size;
+  if (fabs(size.width - current.width) < 0.5 && fabs(size.height - current.height) < 0.5) {
+    return;
+  }
+  [_sheet setContentSize:size];
 }
 
 // The popover takes its content's size, once it has one: past the views that fill their parent
@@ -136,6 +168,10 @@ constexpr CGFloat kPopoverMax = 640;
     [self presentPopoverAt:anchor];
     return;
   }
+  if (self.desktopProps.presentation == ngn::ModalPresentation::Sheet && parent.window != nil) {
+    [self presentSheetOn:parent.window];
+    return;
+  }
   NSView *content = parent.window.contentView;
   if (content == nil || _cover != nil || gInput == nullptr) {
     return;
@@ -148,6 +184,11 @@ constexpr CGFloat kPopoverMax = 640;
                                           input:gInput];
   _cover.modal = self;
   _cover.wantsLayer = YES;
+  // Below the title bar and the toolbar, which stay the window's.
+  NSRect below = [content convertRect:parent.window.contentLayoutRect fromView:nil];
+  if (NSWidth(below) > 0 && NSHeight(below) > 0) {
+    _cover.frame = below;
+  }
   _cover.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   if (gPresentationChanged) {
     gPresentationChanged(self.reactTag, YES);
@@ -157,6 +198,49 @@ constexpr CGFloat kPopoverMax = 640;
   [_cover addSubview:self];
   [_cover.window makeFirstResponder:_cover];
   [self coverResized];
+  if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(self.eventEmitter)) {
+    emitter->onShow({});
+  }
+}
+
+- (void)presentSheetOn:(NSWindow *)window {
+  if (_cover != nil || gInput == nullptr) {
+    return;
+  }
+  // On the sheet in front, if there is one: sheets stack.
+  while (window.attachedSheet != nil) {
+    window = window.attachedSheet;
+  }
+  NSSize available = window.contentView.bounds.size;
+  // Measured first at the default width and the window's height, then fitted (fitSheet).
+  NSSize first = NSMakeSize(std::min<CGFloat>(ngn::kDefaultSheetWidth, available.width), available.height);
+  if (gSheetSizer) {
+    first.width = gSheetSizer(self.surfaceId, self.reactTag, available).width;
+  }
+  NSRect frame = NSMakeRect(0, 0, first.width, first.height);
+  _cover = [[NGNModalCover alloc] initWithFrame:frame
+                                      surfaceId:static_cast<SurfaceId>(self.surfaceId)
+                                      container:static_cast<ngn::ContainerId>(self.reactTag)
+                                        rootTag:static_cast<Tag>(self.reactTag)
+                                          input:gInput];
+  _cover.modal = self;
+  _cover.wantsLayer = YES;
+  _cover.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  if (gPresentationChanged) {
+    gPresentationChanged(self.reactTag, YES);
+  }
+  _sheet = [[NSWindow alloc] initWithContentRect:frame
+                                       styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView
+                                         backing:NSBackingStoreBuffered
+                                           defer:NO];
+  _sheet.releasedWhenClosed = NO;
+  _sheet.contentView = _cover;
+  self.frame = _cover.bounds;
+  [_cover addSubview:self];
+  [gPopovers addObject:self];
+  [self coverResized];
+  [window beginSheet:_sheet completionHandler:nil];
+  [_sheet makeFirstResponder:_cover];
   if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(self.eventEmitter)) {
     emitter->onShow({});
   }
@@ -207,6 +291,16 @@ constexpr CGFloat kPopoverMax = 640;
 - (void)dismiss {
   if (_cover == nil) {
     return;
+  }
+  if (_sheet != nil) {
+    [gPopovers removeObject:self];
+    NSWindow *parent = _sheet.sheetParent;
+    if (parent != nil) {
+      [parent endSheet:_sheet];
+    }
+    [_sheet orderOut:nil];
+    _sheet.contentView = nil;
+    _sheet = nil;
   }
   if (_popover != nil) {
     _dismissing = YES;

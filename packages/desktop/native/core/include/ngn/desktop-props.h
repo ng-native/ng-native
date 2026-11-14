@@ -19,6 +19,10 @@ using facebook::react::Tag;
 enum class ScrollbarWidth { Auto, Thin, None };
 enum class ScrollbarGutter { Auto, Stable };
 
+// How a ModalHostView shows (desktop-modal.h): a sheet on its window, a cover in the window, or a
+// popover at its anchor.
+enum class ModalPresentation { Sheet, Cover, Popover };
+
 struct DesktopProps {
   // Unset means the toolkit's default for the component.
   std::optional<bool> focusable;
@@ -39,6 +43,8 @@ struct DesktopProps {
   // The `contextMenu` prop: the entries of the menu a secondary click shows, as the app sends them
   // (app-menus.h), or null for none.
   folly::dynamic contextMenu{nullptr};
+  // ModalHostView only.
+  ModalPresentation presentation{ModalPresentation::Sheet};
 
   bool operator==(const DesktopProps &other) const = default;
 };

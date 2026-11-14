@@ -25,6 +25,7 @@
 #include "ngn/app-menus.h"
 #include "ngn/core-modules.h"
 #include "ngn/default-menu.h"
+#include "ngn/desktop-modal.h"
 #include "ngn/input-dispatcher.h"
 #import "native-controls.h"
 #include "ngn/focus-order.h"
@@ -294,6 +295,9 @@ void showAppSurfaceIfUsed() {
   if (gHost.runtime) {
     gHost.runtime->shutdown();
   }
+  // The surface views still hold the input sink as exit destroys the host: it lives on until the
+  // process ends, so none of them reaches a sink that is gone.
+  (void)gHost.input.release();
 }
 // The app's own surface, when it is in a window.
 - (void)windowDidResize:(NSNotification *)note {
@@ -374,6 +378,14 @@ int main(int argc, const char *argv[]) {
       } else {
         gHost.mounting->tree().removeContainerRoot(static_cast<Tag>(tag));
       }
+    };
+    NGNModalHostView.sheetSizer = [](NSInteger surface, NSInteger tag, NSSize window) {
+      ngn::SheetNode empty;
+      auto node = gHost.runtime ? gHost.runtime->sheetNode(static_cast<SurfaceId>(surface), static_cast<Tag>(tag))
+                                : std::nullopt;
+      auto size = ngn::sheetSize(
+          node ? *node : empty, {static_cast<Float>(window.width), static_cast<Float>(window.height)});
+      return NSMakeSize(size.width, size.height);
     };
     NGNModalHostView.viewForTag = [](NSInteger tag) -> NSView * {
       return gHost.backend->view(static_cast<Tag>(tag));

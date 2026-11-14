@@ -4,14 +4,23 @@ The macOS desktop host for Angular Native: React Native's C++ core and Hermes, m
 views into AppKit, and the `ng-native-desktop` command that builds and launches it. You install the
 package and never import it.
 
-Alpha, and early: the host draws views, text, text fields, images, scroll views, modals (as an
-in-window cover, or as an NSPopover when the modal has an `anchor`), takes clicks, hover and the
+Alpha, and early: the host draws views, text, text fields, images, scroll views, modals (as a
+sheet, an in-window cover, or an NSPopover when the modal has an `anchor`), takes clicks, hover and the
 scroll wheel, loads the app from the dev server with reload and Fast Refresh, runs React Native's
 layout animations, and has the default menu bar. React Native's iOS modules answer from the core:
 Linking, Appearance, AppState, DeviceInfo, PlatformConstants, I18nManager, Alert (NSAlert),
 Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob, FileReader,
-ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no sheets or React
-Native DevTools yet.
+ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no React Native
+DevTools yet, and react-native-screens' modal presentations still show as stack cards.
+
+A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its
+window, stacked on a sheet already there. It takes its content root's CSS width and height, or
+480 points wide and as tall as its content lays out, measured from the shadow tree in a second
+commit, and stays between 320x200 and the window. `fullScreen`, `overFullScreen` and `transparent`
+are a cover in the window below its title bar and toolbar, and a transparent one shows the window
+through. Escape and Cmd-W ask a sheet or a cover to close (`requestClose`), the one in front
+first, and Cmd-W stays on Close Window even when the app's own menu bar leaves it out. An alert
+with no key window runs app-modally, so its answer always arrives.
 
 The app starts on a surface the host never shows, and every window it opens (`AppWindows`, through
 the `NgNativeWindows` module) is an NSWindow with a surface of its own on the one runtime, shown
