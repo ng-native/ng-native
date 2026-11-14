@@ -22,6 +22,12 @@ input. `scrollbar-width: thin` draws small scrollers and `none` hides them. A cl
 focusable view, and a focus a key moved reports `focusVisible` and draws AppKit's focus ring
 unless the view styles `outline`.
 
+The platform controls are AppKit's own, sized for Yoga at their `controlSize`: `<native-button>`
+is an NSButton (Return presses a `default` one and Escape a `cancel` one), `<switch>` an NSSwitch,
+`<activity-indicator>` an NSProgressIndicator, `<segmented-control>` an NSSegmentedControl and
+`<date-time-picker>` an NSDatePicker. A multiline `<text-input>` is an NSTextView and a
+`secureTextEntry` one an NSSecureTextField. `<search-field>` is not drawn yet.
+
 When the app has them installed, the host compiles in the Fabric components of
 `react-native-screens` and `react-native-safe-area-context`:
 

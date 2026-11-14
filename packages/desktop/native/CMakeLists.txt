@@ -69,6 +69,7 @@ add_library(ngn_core STATIC
     core/src/library-glue.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
+    core/src/native-controls.cpp
     core/src/native-module.cpp
     core/src/network.cpp
     core/src/text-layout-manager.cpp

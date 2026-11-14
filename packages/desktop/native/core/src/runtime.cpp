@@ -43,11 +43,13 @@ LayoutContext context(const SurfaceMetrics &metrics) {
 Runtime::Runtime(
     std::shared_ptr<MountingManager> mounting,
     std::shared_ptr<const TextMeasurer> textMeasurer,
+    std::shared_ptr<const ControlMeasurer> controlMeasurer,
     std::shared_ptr<ModuleRegistry> modules,
     NetworkClients clients,
     std::string bundle)
     : mounting_(std::move(mounting)),
       textMeasurer_(std::move(textMeasurer)),
+      controlMeasurer_(std::move(controlMeasurer)),
       modules_(std::move(modules)),
       clients_(std::move(clients)),
       bundle_(std::move(bundle)),
@@ -69,6 +71,7 @@ void Runtime::createHost() {
       WebSocketClientFactoryKey,
       clients_.webSockets ? webSocketClientFactory(clients_.webSockets) : getWebSocketClientFactory());
   installTextMeasurer(*contextContainer, textMeasurer_);
+  installControlMeasurer(*contextContainer, controlMeasurer_);
   // react-native-screens' header and tabs descriptors read React Native iOS's image loader from
   // here as they adopt a node, and throw when it is missing. They only keep it, for iOS's own
   // views, so nothing stands in for it.

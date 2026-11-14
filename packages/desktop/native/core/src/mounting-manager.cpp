@@ -1,6 +1,7 @@
 #include "ngn/mounting-manager.h"
 
 #include "ngn/desktop-modal.h"
+#include "ngn/native-controls.h"
 
 #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
@@ -33,6 +34,11 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<TextInputComponentDescriptor>(),
       concreteComponentDescriptorProvider<ImageComponentDescriptor>(),
       concreteComponentDescriptorProvider<DesktopModalComponentDescriptor>(),
+      concreteComponentDescriptorProvider<NativeButtonComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SwitchControlComponentDescriptor>(),
+      concreteComponentDescriptorProvider<ActivityIndicatorControlComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SegmentedControlComponentDescriptor>(),
+      concreteComponentDescriptorProvider<DatePickerComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : backend_->componentProviders()) {

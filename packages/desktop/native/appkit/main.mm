@@ -23,6 +23,7 @@
 #include "ngn/core-modules.h"
 #include "ngn/default-menu.h"
 #include "ngn/input-dispatcher.h"
+#import "native-controls.h"
 #include "ngn/layout-animations.h"
 #include "ngn/runtime.h"
 
@@ -224,7 +225,10 @@ int main(int argc, const char *argv[]) {
          .reactNativeVersion = NGN_REACT_NATIVE_VERSION});
 
     gHost.runtime = std::make_unique<ngn::Runtime>(
-        gHost.mounting, std::make_shared<ngn::CoreTextMeasurer>(), modules, network, bundle);
+        gHost.mounting,
+        std::make_shared<ngn::CoreTextMeasurer>(),
+        std::make_shared<ngn::appkit::AppKitControlMeasurer>(),
+        modules, network, bundle);
 
     bool developer = gHost.runtime->devServer().has_value();
     ngn::appkit::installMenuBar(

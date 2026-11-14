@@ -3,6 +3,7 @@
 #import "header-toolbar.h"
 #import "image-view.h"
 #import "modal-host-view.h"
+#import "native-controls.h"
 #import "scroll-view.h"
 
 #include "text-layout.h"
@@ -205,7 +206,10 @@ static BOOL focusFromKeyboard() {
 
 - (instancetype)initWithShadowView:(const ShadowView &)view {
   if ((self = [super initWithShadowView:view])) {
-    _field = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    // Secure entry is a field of its own class in AppKit, chosen as the view is made.
+    auto first = std::dynamic_pointer_cast<const TextInputProps>(view.props);
+    BOOL secure = first && first->traits.secureTextEntry;
+    _field = secure ? [[NSSecureTextField alloc] initWithFrame:NSZeroRect] : [[NSTextField alloc] initWithFrame:NSZeroRect];
     _field.bezeled = NO;
     _field.bordered = NO;
     _field.drawsBackground = NO;
@@ -354,9 +358,156 @@ static BOOL focusFromKeyboard() {
 
 @end
 
+#pragma mark - NGNMultilineTextInputView
+
+// A multiline TextInput: an NSTextView, which wraps, scrolls and takes Return as a new line.
+@interface NGNMultilineTextInputView : NGNView <NSTextViewDelegate>
+@end
+
+@implementation NGNMultilineTextInputView {
+  NSScrollView *_scroll;
+  NSTextView *_text;
+  int _eventCount;
+  BOOL _settingText;
+}
+
+- (instancetype)initWithShadowView:(const ShadowView &)view {
+  if ((self = [super initWithShadowView:view])) {
+    _scroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    _scroll.drawsBackground = NO;
+    _scroll.hasVerticalScroller = YES;
+    _scroll.autohidesScrollers = YES;
+    _text = [[NSTextView alloc] initWithFrame:NSZeroRect];
+    _text.drawsBackground = NO;
+    _text.richText = NO;
+    _text.allowsUndo = YES;
+    _text.verticallyResizable = YES;
+    _text.horizontallyResizable = NO;
+    _text.autoresizingMask = NSViewWidthSizable;
+    _text.textContainer.widthTracksTextView = YES;
+    _text.textContainerInset = NSZeroSize;
+    _text.textContainer.lineFragmentPadding = 0;
+    _text.delegate = self;
+    _scroll.documentView = _text;
+    [self addSubview:_scroll];
+  }
+  return self;
+}
+
+- (void)updateProps:(const Props::Shared &)props {
+  [super updateProps:props];
+  auto p = std::dynamic_pointer_cast<const TextInputProps>(props);
+  if (!p) {
+    return;
+  }
+  auto attrs = p->getEffectiveTextAttributes(1);
+  AttributedString probe;
+  probe.appendFragment(AttributedString::Fragment{.string = "x", .textAttributes = attrs, .parentShadowView = {}});
+  CFAttributedStringRef s = ngn::makeAttributedString(probe);
+  CTFontRef font = (CTFontRef)CFAttributedStringGetAttribute(s, 0, kCTFontAttributeName, nullptr);
+  _text.font = (__bridge NSFont *)font;
+  CFRelease(s);
+  _text.textColor = attrs.foregroundColor ? nsColor(attrs.foregroundColor) : NSColor.textColor;
+  _text.editable = p->editable;
+  if (p->mostRecentEventCount >= _eventCount && !p->text.empty() && !_text.hasMarkedText) {
+    NSString *text = nsString(p->text);
+    if (![_text.string isEqualToString:text]) {
+      _settingText = YES;
+      _text.string = text;
+      _settingText = NO;
+    }
+  }
+}
+
+- (void)updateLayout:(const LayoutMetrics &)metrics {
+  [super updateLayout:metrics];
+  const auto &i = metrics.contentInsets;
+  _scroll.frame = NSMakeRect(
+      i.left, i.top, metrics.frame.size.width - i.left - i.right, metrics.frame.size.height - i.top - i.bottom);
+  _text.frame = NSMakeRect(0, 0, _scroll.contentSize.width, std::max(_text.frame.size.height, _scroll.contentSize.height));
+}
+
+- (TextInputEventEmitter::Metrics)metrics {
+  NSRange sel = _text.selectedRange;
+  return TextInputEventEmitter::Metrics{
+      .text = std::string(_text.string.UTF8String),
+      .selectionRange = {.location = (int)sel.location, .length = (int)sel.length},
+      .eventCount = _eventCount,
+      .target = (Tag)self.reactTag,
+  };
+}
+
+- (std::shared_ptr<const TextInputEventEmitter>)inputEmitter {
+  return std::static_pointer_cast<const TextInputEventEmitter>(self.eventEmitter);
+}
+
+- (void)textDidChange:(NSNotification *)note {
+  if (_settingText) {
+    return;
+  }
+  _eventCount++;
+  if (auto e = [self inputEmitter]) {
+    e->onChange([self metrics]);
+  }
+}
+
+- (void)textDidBeginEditing:(NSNotification *)note {
+  if (auto e = [self inputEmitter]) {
+    e->onFocus([self metrics]);
+  }
+}
+
+- (void)textDidEndEditing:(NSNotification *)note {
+  if (auto e = [self inputEmitter]) {
+    e->onEndEditing([self metrics]);
+    e->onBlur([self metrics]);
+  }
+}
+
+- (void)textViewDidChangeSelection:(NSNotification *)note {
+  if (auto e = [self inputEmitter]) {
+    e->onSelectionChange([self metrics]);
+  }
+}
+
+- (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args {
+  if (name == "focus") {
+    [self.window makeFirstResponder:_text];
+  } else if (name == "blur") {
+    [self.window makeFirstResponder:nil];
+  } else if (name == "setTextAndSelection" && args.isArray() && args.size() >= 4) {
+    if ((int)args[0].asInt() < _eventCount) {
+      return;
+    }
+    if (args[1].isString() && !_text.hasMarkedText) {
+      NSString *text = nsString(args[1].asString());
+      if (![_text.string isEqualToString:text]) {
+        _settingText = YES;
+        _text.string = text;
+        _settingText = NO;
+      }
+    }
+    if (args[2].isNumber() && args[3].isNumber()) {
+      NSInteger start = args[2].asInt(), end = args[3].asInt();
+      if (start >= 0 && end >= start && (NSUInteger)end <= _text.string.length) {
+        _text.selectedRange = NSMakeRange(start, end - start);
+      }
+    }
+  }
+}
+
+@end
+
 NGNView *NGNMakeView(const ShadowView &view) {
+  if (NGNView *control = NGNMakeControlView(view)) {
+    return control;
+  }
   std::string_view name = view.componentName;
   if (name == "TextInput") {
+    auto props = std::dynamic_pointer_cast<const TextInputProps>(view.props);
+    if (props && props->multiline) {
+      return [[NGNMultilineTextInputView alloc] initWithShadowView:view];
+    }
     return [[NGNTextInputView alloc] initWithShadowView:view];
   }
   if (name == "Image") {
