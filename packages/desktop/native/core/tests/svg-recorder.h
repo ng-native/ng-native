@@ -4,6 +4,7 @@
 #include "ngn/svg.h"
 
 #include <cmath>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -84,6 +85,56 @@ struct Recorder : ngn::SvgCanvas {
   void beginMask(bool alpha) override { calls.push_back(alpha ? "mask alpha" : "mask"); }
   void endMask() override { calls.push_back("end mask"); }
   void endMasked() override { calls.push_back("end masked"); }
+  void clipToStroke(const ngn::SvgPath &p, const ngn::SvgStroke &s) override {
+    calls.push_back("clip stroke " + path(p) + " w" + n(s.width));
+  }
+  void pattern(const ngn::SvgPatternTile &t, double opacity, const std::function<void(ngn::SvgCanvas &)> &drawTile) override {
+    const auto &m = t.transform;
+    calls.push_back(
+        "pattern " + n(t.tile.x) + "," + n(t.tile.y) + " " + n(t.tile.width) + "x" + n(t.tile.height) + " t" + n(m.a) + "," + n(m.b) +
+        "," + n(m.c) + "," + n(m.d) + "," + n(m.e) + "," + n(m.f) + (opacity != 1 ? " @" + n(opacity) : ""));
+    calls.push_back("tile");
+    drawTile(*this);
+    calls.push_back("end tile");
+  }
+  static std::string step(const ngn::SvgFilterStep &s) {
+    using T = ngn::SvgFilterStep::Type;
+    std::ostringstream out;
+    switch (s.type) {
+      case T::GaussianBlur:
+        out << "blur(" << s.in1 << " " << n(s.stdDeviationX) << "," << n(s.stdDeviationY);
+        break;
+      case T::Offset:
+        out << "offset(" << s.in1 << " " << n(s.dx) << "," << n(s.dy);
+        break;
+      case T::ColorMatrix:
+        out << "matrix(" << s.in1 << " " << n(s.matrix[0]) << "," << n(s.matrix[1]) << "," << n(s.matrix[2]);
+        break;
+      case T::Flood:
+        out << "flood(#" << std::hex << s.argb << std::dec << " " << n(s.opacity);
+        break;
+      case T::Composite:
+        out << "composite(" << s.in1 << " " << s.in2 << " op" << s.op;
+        break;
+      case T::Merge:
+        out << "merge(";
+        for (size_t i = 0; i < s.inputs.size(); ++i) {
+          out << (i ? " " : "") << s.inputs[i];
+        }
+        break;
+    }
+    const auto &r = s.subregion;
+    out << " in " << n(r.x) << "," << n(r.y) << " " << n(r.width) << "x" << n(r.height) << " >" << s.result << ")";
+    return out.str();
+  }
+  void beginFilter(const ngn::SvgFilter &f) override {
+    std::string line = "filter " + n(f.region.x) + "," + n(f.region.y) + " " + n(f.region.width) + "x" + n(f.region.height);
+    for (const auto &s : f.steps) {
+      line += " " + step(s);
+    }
+    calls.push_back(line);
+  }
+  void endFilter() override { calls.push_back("end filter"); }
   void image(const std::string &uri, const ngn::SvgRect &r, const std::string &align, int meetOrSlice, double opacity) override {
     calls.push_back("image " + uri + " " + n(r.x) + "," + n(r.y) + " " + n(r.width) + "x" + n(r.height));
   }

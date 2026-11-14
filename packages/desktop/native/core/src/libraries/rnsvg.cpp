@@ -107,6 +107,14 @@ void common(SvgElement &e, const P &p) {
     e.mask = p.mask;
     e.hidden = p.display == "none";
   }
+  if constexpr (requires { p.filter; }) {
+    e.filter = p.filter;
+  }
+  if constexpr (requires { p.markerStart; }) {
+    e.markerStart = p.markerStart;
+    e.markerMid = p.markerMid;
+    e.markerEnd = p.markerEnd;
+  }
   if constexpr (requires { p.fill; }) {
     e.color = argbOf(p.color);
     e.propList = p.propList;
@@ -141,6 +149,29 @@ void text(SvgElement &e, const P &p) {
   e.ys = svgLengths(p.y);
   e.dxs = svgLengths(p.dx);
   e.dys = svgLengths(p.dy);
+}
+
+// What every filter step shares: its subregion, inputs and result.
+template <typename P>
+void primitive(SvgElement &e, const P &p) {
+  lengths(e, {{"x", &p.x}, {"y", &p.y}, {"width", &p.width}, {"height", &p.height}});
+  e.result = p.result;
+  if constexpr (requires { p.in1; }) {
+    e.in1 = p.in1;
+  }
+  if constexpr (requires { p.in2; }) {
+    e.in2 = p.in2;
+  }
+}
+
+template <typename P>
+void viewBox(SvgElement &e, const P &p) {
+  e.minX = p.minX;
+  e.minY = p.minY;
+  e.vbWidth = p.vbWidth;
+  e.vbHeight = p.vbHeight;
+  e.align = p.align;
+  e.meetOrSlice = p.meetOrSlice;
 }
 
 void stops(SvgElement &e, const GradientProps &p) {
@@ -242,6 +273,59 @@ std::optional<SvgElement> svgElement(const Props &props) {
     common(e, *p);
     text(e, *p);
     e.content = p->content;
+  } else if (const auto *p = dynamic_cast<const RNSVGMarkerProps *>(&props)) {
+    e.kind = SvgKind::Marker;
+    common(e, *p);
+    lengths(e, {{"refX", &p->refX}, {"refY", &p->refY}, {"markerWidth", &p->markerWidth}, {"markerHeight", &p->markerHeight}});
+    e.markerUnits = p->markerUnits;
+    e.orient = p->orient;
+    viewBox(e, *p);
+  } else if (const auto *p = dynamic_cast<const RNSVGPatternProps *>(&props)) {
+    e.kind = SvgKind::Pattern;
+    common(e, *p);
+    // A pattern's transform is its patternTransform, never the element's own.
+    e.matrix.reset();
+    lengths(e, {{"x", &p->x}, {"y", &p->y}, {"width", &p->width}, {"height", &p->height}});
+    e.units = p->patternUnits;
+    e.contentUnits = p->patternContentUnits;
+    e.gradientTransform = matrixOf(p->patternTransform);
+    viewBox(e, *p);
+  } else if (const auto *p = dynamic_cast<const RNSVGFilterProps *>(&props)) {
+    e.kind = SvgKind::Filter;
+    e.name = p->name;
+    lengths(e, {{"x", &p->x}, {"y", &p->y}, {"width", &p->width}, {"height", &p->height}});
+    e.units = p->filterUnits == RNSVGFilterFilterUnits::ObjectBoundingBox ? 0 : 1;
+    e.contentUnits = p->primitiveUnits == RNSVGFilterPrimitiveUnits::ObjectBoundingBox ? 0 : 1;
+  } else if (const auto *p = dynamic_cast<const RNSVGFeGaussianBlurProps *>(&props)) {
+    e.kind = SvgKind::FeGaussianBlur;
+    primitive(e, *p);
+    e.stdDeviationX = p->stdDeviationX;
+    e.stdDeviationY = p->stdDeviationY;
+  } else if (const auto *p = dynamic_cast<const RNSVGFeOffsetProps *>(&props)) {
+    e.kind = SvgKind::FeOffset;
+    primitive(e, *p);
+    lengths(e, {{"dx", &p->dx}, {"dy", &p->dy}});
+  } else if (const auto *p = dynamic_cast<const RNSVGFeColorMatrixProps *>(&props)) {
+    e.kind = SvgKind::FeColorMatrix;
+    primitive(e, *p);
+    e.op = static_cast<int>(p->type);
+    e.values.assign(p->values.begin(), p->values.end());
+  } else if (const auto *p = dynamic_cast<const RNSVGFeFloodProps *>(&props)) {
+    e.kind = SvgKind::FeFlood;
+    primitive(e, *p);
+    if (auto flood = svgBrush(p->floodColor); flood.type == SvgBrush::Type::Color) {
+      e.flood = flood;
+    }
+    e.floodOpacity = p->floodOpacity;
+  } else if (const auto *p = dynamic_cast<const RNSVGFeCompositeProps *>(&props)) {
+    e.kind = SvgKind::FeComposite;
+    primitive(e, *p);
+    e.op = static_cast<int>(p->operator1);
+    e.k = {p->k1, p->k2, p->k3, p->k4};
+  } else if (const auto *p = dynamic_cast<const RNSVGFeMergeProps *>(&props)) {
+    e.kind = SvgKind::FeMerge;
+    primitive(e, *p);
+    e.nodes = p->nodes;
   } else {
     return std::nullopt;
   }

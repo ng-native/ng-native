@@ -106,8 +106,7 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGPathRelease(p);
   }
 
-  void stroke(const ngn::SvgPath &path, const ngn::SvgStroke &stroke, const ngn::SvgPaint &paint) override {
-    CGContextSaveGState(context_);
+  void applyStroke(const ngn::SvgStroke &stroke) {
     CGContextSetLineWidth(context_, stroke.width);
     CGContextSetLineCap(context_, stroke.cap == 1 ? kCGLineCapRound : stroke.cap == 2 ? kCGLineCapSquare : kCGLineCapButt);
     CGContextSetLineJoin(context_, stroke.join == 1 ? kCGLineJoinRound : stroke.join == 2 ? kCGLineJoinBevel : kCGLineJoinMiter);
@@ -116,6 +115,11 @@ class CGCanvas final : public ngn::SvgCanvas {
       std::vector<CGFloat> dashes(stroke.dashes.begin(), stroke.dashes.end());
       CGContextSetLineDash(context_, stroke.dashOffset, dashes.data(), dashes.size());
     }
+  }
+
+  void stroke(const ngn::SvgPath &path, const ngn::SvgStroke &stroke, const ngn::SvgPaint &paint) override {
+    CGContextSaveGState(context_);
+    applyStroke(stroke);
     CGPathRef p = createPathImpl(path);
     CGContextAddPath(context_, p);
     CGPathRelease(p);
@@ -192,6 +196,97 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGContextRestoreGState(context_);
   }
 
+  void clipToStroke(const ngn::SvgPath &path, const ngn::SvgStroke &stroke) override {
+    applyStroke(stroke);
+    CGPathRef p = createPathImpl(path);
+    CGContextAddPath(context_, p);
+    CGPathRelease(p);
+    CGContextReplacePathWithStrokedPath(context_);
+    CGContextClip(context_);
+  }
+
+  // The tile is drawn once into a bitmap at the pixels it covers, and the bitmap tiled over the
+  // clip. The bitmap's rows run from the tile's top, as the view's do.
+  void pattern(const ngn::SvgPatternTile &tile, double opacity, const std::function<void(ngn::SvgCanvas &)> &drawTile) override {
+    ngn::SvgMatrix toView = matrix_ * tile.transform;
+    double density = scale_ * std::sqrt(std::abs(toView.a * toView.d - toView.b * toView.c));
+    if (!(density > 0)) {
+      return;
+    }
+    // At most 2048 pixels a side: a larger tile is drawn coarser.
+    density = std::min({density, 2048 / tile.tile.width, 2048 / tile.tile.height});
+    size_t width = std::max<size_t>(1, static_cast<size_t>(std::ceil(tile.tile.width * density)));
+    size_t height = std::max<size_t>(1, static_cast<size_t>(std::ceil(tile.tile.height * density)));
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef bitmap = CGBitmapContextCreate(nullptr, width, height, 8, 0, space, kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(space);
+    CGContextTranslateCTM(bitmap, 0, height);
+    CGContextScaleCTM(bitmap, width / tile.tile.width, -(height / tile.tile.height));
+    {
+      CGCanvas inner(bitmap, CGSizeMake(tile.tile.width, tile.tile.height), density, imageLoaded_);
+      drawTile(inner);
+    }
+    CGImageRef image = CGBitmapContextCreateImage(bitmap);
+    CGContextRelease(bitmap);
+    CGContextSaveGState(context_);
+    CGContextSetAlpha(context_, opacity);
+    CGContextConcatCTM(context_, affine(tile.transform));
+    CGContextTranslateCTM(context_, tile.tile.x, tile.tile.y);
+    // Drawn in a space whose y runs up, so the image stands the right way; the tiles keep their
+    // places, every tile's height apart.
+    CGContextScaleCTM(context_, 1, -1);
+    CGContextDrawTiledImage(context_, CGRectMake(0, 0, tile.tile.width, tile.tile.height), image);
+    CGContextRestoreGState(context_);
+    CGImageRelease(image);
+  }
+
+  // The source is drawn in a bitmap of the view's pixels, as a mask is, and the filter's result
+  // drawn back in its place.
+  void beginFilter(const ngn::SvgFilter &filter) override {
+    size_t width = std::max<size_t>(1, static_cast<size_t>(std::ceil(size_.width * scale_)));
+    size_t height = std::max<size_t>(1, static_cast<size_t>(std::ceil(size_.height * scale_)));
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef bitmap = CGBitmapContextCreate(nullptr, width, height, 8, width * 4, space, kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(space);
+    CGContextTranslateCTM(bitmap, 0, height);
+    CGContextScaleCTM(bitmap, scale_, -scale_);
+    CGContextConcatCTM(bitmap, affine(matrix_));
+    filters_.push_back({.parent = context_, .bitmap = bitmap, .saved = saved_, .filter = filter, .width = width, .height = height});
+    context_ = bitmap;
+  }
+
+  void endFilter() override {
+    if (filters_.empty()) {
+      return;
+    }
+    auto frame = std::move(filters_.back());
+    filters_.pop_back();
+    context_ = frame.parent;
+    saved_ = frame.saved;
+    ngn::SvgPixels source{.width = static_cast<int>(frame.width), .height = static_cast<int>(frame.height)};
+    const auto *data = static_cast<const uint8_t *>(CGBitmapContextGetData(frame.bitmap));
+    source.rgba.assign(data, data + frame.width * frame.height * 4);
+    CGContextRelease(frame.bitmap);
+    auto result = ngn::runSvgFilter(frame.filter, source, ngn::SvgMatrix::scale(scale_, scale_) * matrix_);
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CFDataRef bytes = CFDataCreate(nullptr, result.rgba.data(), static_cast<CFIndex>(result.rgba.size()));
+    CGDataProviderRef provider = CGDataProviderCreateWithCFData(bytes);
+    CGImageRef image = CGImageCreate(
+        frame.width, frame.height, 8, 32, frame.width * 4, space,
+        static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedLast), provider, nullptr, false, kCGRenderingIntentDefault);
+    CGDataProviderRelease(provider);
+    CFRelease(bytes);
+    CGColorSpaceRelease(space);
+    // In the view's coordinates, the image's top row at the view's top.
+    CGContextSaveGState(context_);
+    CGContextConcatCTM(context_, CGAffineTransformInvert(affine(matrix_)));
+    CGContextTranslateCTM(context_, 0, size_.height);
+    CGContextScaleCTM(context_, 1, -1);
+    CGContextDrawImage(context_, CGRectMake(0, 0, frame.width / scale_, frame.height / scale_), image);
+    CGContextRestoreGState(context_);
+    CGImageRelease(image);
+  }
+
   void image(const std::string &uri, const ngn::SvgRect &rect, const std::string &align, int meetOrSlice, double opacity) override {
     NSString *key = @(uri.c_str());
     NSImage *image = [imageCache() objectForKey:key];
@@ -259,6 +354,14 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGContextRef parent;
     CGContextRef mask;
     std::vector<ngn::SvgMatrix> saved;
+  };
+
+  struct Filter {
+    CGContextRef parent;
+    CGContextRef bitmap;
+    std::vector<ngn::SvgMatrix> saved;
+    ngn::SvgFilter filter;
+    size_t width, height;
   };
 
   void drawGradient(const ngn::SvgGradient &g, double opacity) {
@@ -331,6 +434,7 @@ class CGCanvas final : public ngn::SvgCanvas {
   ngn::SvgMatrix matrix_;
   std::vector<ngn::SvgMatrix> saved_;
   std::vector<Mask> masks_;
+  std::vector<Filter> filters_;
 };
 
 } // namespace

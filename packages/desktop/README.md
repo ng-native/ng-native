@@ -261,8 +261,16 @@ When the app has them installed, the host compiles in the Fabric components of
 - An svg (`RNSVGSvgView`, which `@ng-native/icons` commits) draws its elements with Core Graphics:
   groups, paths, rects, circles, ellipses and lines, linear and radial gradients, clip paths,
   luminance masks, `use` and `symbol`, images, and text in spans, with presentation inherited
-  through `propList` and `currentColor` from the svg's `color`. Markers, patterns, filters,
-  `foreignObject` and `textPath` draw nothing, and text has no anchor, path or letter spacing.
+  through `propList` and `currentColor` from the svg's `color`. Markers sit at a path's or line's
+  vertices with `orient` (`auto`, `auto-start-reverse` or an angle), `markerUnits`, `refX` and
+  `refY`, their viewBox and their box clipping them. A pattern fills or strokes with its tile,
+  drawn once and repeated, in either units, with its viewBox, content units and
+  `patternTransform`. A filter draws its element offscreen and runs its steps over the pixels:
+  `feGaussianBlur`, `feOffset`, `feColorMatrix` (all four types), `feFlood`, `feComposite` (every
+  operator) and `feMerge`, with named results, `SourceGraphic` and `SourceAlpha`, the region and
+  each step's subregion in either units, so a drop shadow drawn from them works. `feBlend`, the
+  other filter steps, `foreignObject` and `textPath` draw nothing, and text has no anchor, path or
+  letter spacing.
 - A web view (`RNCWebView`, which `<web-view>` and `@ng-native/web-compat`'s `<iframe>` commit) is
   a WKWebView loading `newSource` (a url with its method, body and headers, a `file:` url, or
   `html` at its `baseUrl`), with the library's iOS events, scripts and commands: the injected
