@@ -45,8 +45,8 @@ Each `<tray-icon>` is an NSStatusItem (`NgNativeTray`): an SF Symbol as a templa
 image, a title and a tooltip, with its menu on a click or a press when it has none. The `Dock`
 service's menu sits above the Dock menu's own items, and its bounce is
 `requestUserAttention`, cancelled by the function it answers. A reload clears the tray icons and
-the Dock menu until the reloaded app sets its own. The Dock badge is not drawn yet: it waits for a
-desktop Notifications source.
+the Dock menu until the reloaded app sets its own. The Dock badge is the count of
+`NgNativeNotifications` (see Notifications).
 
 The mouse reaches an app as on the web: every move goes to React Native's pointer events, which
 send `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)` and `(mouseout)` to the views
@@ -98,6 +98,47 @@ When the app has them installed, the host compiles in the Fabric components of
   click, `programmatic-js` for a request). The first tab shows until the app asks for one, and
   the tabs not selected stay mounted, neither drawn nor hit.
 
+## Drops, drags and opened files
+
+A view with `fileDrop` set takes files, text and URLs dragged onto it from Finder or another app. A
+drag goes to the nearest view under it that takes drops: that view gets `dropEnter` when the drag
+comes over it, `dropLeave` when the drag goes off without dropping, and `dropPerform` on a drop,
+which ends the drag without a leave. Enter and perform carry `{ files: [{ uri, name }], text, urls
+}`, a file as its `file://` URL and its name. While a drag is over a view that takes drops the
+pointer shows a copy. Dropped text is kept unless it only repeats a URL or a file's path.
+
+A view with `dragItem` set (`{ files, text, url }`) can be dragged out. A press that moves past
+AppKit's drag threshold on it, or on a view inside it, becomes an NSDraggingSession: Finder takes the files, a
+text field the text and a browser the URL, and a view that takes drops takes any of them. The press
+is cancelled for the views under it, so a drag out is not also a click.
+
+A file from Open With, a drop on the Dock icon or a double click on one of the app's document types
+reaches `Linking` as its `file://` URL: the initial URL when the app is still launching, a `url`
+event after that. Links to the app's scheme arrive the same way.
+
+## Undo
+
+`NgNativeUndo` keeps the app's undo history in one NSUndoManager shared by every window, which
+`UndoStack` in `@ng-native/device` registers actions with. Edit > Undo and Edit > Redo name the
+last action and send `{ type: 'undo', id }` or `{ type: 'redo', id }` on `ngNativeUndo`. A focused
+text input keeps its own history, so typing is undone there and the app's actions where nothing
+is focused. A reload clears the history.
+
+## Notifications
+
+`NgNativeNotifications` is `@ng-native/expo`'s `Notifications` over UNUserNotificationCenter:
+permission, scheduling (an interval, a date, or a calendar trigger, repeating or not), the pending
+and delivered lists, cancelling, dismissing and the badge count. Only `requestPermissionsAsync`
+asks the user. Without permission `scheduleNotificationAsync` resolves null and schedules nothing,
+and a host binary with no bundle identifier (a dev run outside an app) cannot use the notification
+centre and answers denied. A notification that arrives while the app is in front shows as a banner
+with its sound. The host sends `ngNativeNotifications` events on `DeviceEventEmitter`, `{ type:
+'received', notification }` as one is delivered and `{ type: 'response', response }` when the user
+clicks one, which the service reads as `latest()` and `response()`. A date crosses as milliseconds.
+
+The Dock badge is the badge count: `setBadgeCountAsync` sets it, 0 clears it, and a delivered
+notification with `content.badge` sets it too. It needs no permission.
+
 ## Sidebar
 
 `<split-view>` is `NgNativeSplitView`, holding the sidebar pane (`NgNativeSidebar`) and then the
@@ -130,15 +171,18 @@ events. A Mac App Store (`mas`) build spawns nothing.
 
 ## Expo modules
 
-Four of `@ng-native/expo`'s services answer from modules of the host's own, named `NgNative` and
+Some of `@ng-native/expo`'s services answer from modules of the host's own, named `NgNative` and
 the package's name after `expo-`, each with the methods the service calls on the Expo package:
 
-| Module                | What it does                                                                                                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NgNativeSecureStore` | Items in the Keychain, under the app's id or the `keychainService` a call names, refusing the keys `expo-secure-store` refuses.                                                  |
-| `NgNativeClipboard`   | Reads and writes the pasteboard's text. `Clipboard.changes()` counts its `ngNativeClipboard` events on `DeviceEventEmitter`, which the host does not send yet, so it stays at 0. |
-| `NgNativeKeepAwake`   | Keeps the display awake with an IOKit power assertion while any tag holds it.                                                                                                    |
-| `NgNativeHaptics`     | Plays the trackpad's feedback for an impact, a selection and a notification.                                                                                                     |
+| Module                | What it does                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NgNativeSecureStore` | Items in the Keychain, under the app's id or the `keychainService` a call names, refusing the keys `expo-secure-store` refuses.                                                 |
+| `NgNativeClipboard`   | Reads and writes the pasteboard's text. `Clipboard.changes()` counts its `ngNativeClipboard` events on `DeviceEventEmitter`, sent when the pasteboard's change count has moved. |
+| `NgNativeKeepAwake`   | Keeps the display awake with an IOKit power assertion while any tag holds it.                                                                                                   |
+| `NgNativeHaptics`     | Plays the trackpad's feedback for an impact, a selection and a notification.                                                                                                    |
+
+The clipboard has no change notification, so the host checks the count when the app becomes active
+and after each key press, click and menu command, and never polls.
 
 The other services with a desktop source in `DESKTOP_MODULES` throw `MissingModuleError` on first
 use until the host has their module.
@@ -222,6 +266,9 @@ React Native's resolver reads them beside an embedded bundle), and assembles
 signed ad hoc, `dmg` is signed with the hardened runtime, notarised and stapled (app and disk
 image), and `mas` is signed in the App Sandbox and wrapped by `productbuild`. `codesign`,
 `notarytool`, `stapler`, `hdiutil`, `ditto`, `sips`, `actool` and `productbuild` are Xcode's.
+
+`NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
+ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.
 
 The host reads these `Info.plist` keys when it is opened with no arguments:
 
