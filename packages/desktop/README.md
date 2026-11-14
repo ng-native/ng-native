@@ -153,6 +153,25 @@ When the app has them installed, the host compiles in the Fabric components of
   library's JavaScript does; `about:` and `data:` pages always pass. `incognito` is read when the
   view is made, and `clearHistory` and `clearFormData` do nothing, as WebKit has no way to.
 
+## `@expo/ui`
+
+`@expo/ui`'s views are the host's own: each is a Fabric component under the name
+`registerExpoUiViews` commits on iOS (`ViewManagerAdapter_ExpoUI_PickerView` and the rest), with
+iOS's props, drawn in SwiftUI (`expo-ui.h`, `appkit/expo-ui.swift`). The core keeps the views under
+each `HostView` as one tree and hands it to the HostView's view, an NSHostingController's view that
+draws it as expo/ui draws the same names on iOS: slots, children and modifiers included. The other
+views draw nothing of their own. A control keeps what the user set until its prop changes, and
+sends expo/ui's iOS event with its payload (`selectionChange`, `dateChange`, `isOnChange`,
+`valueChanged` and the rest). A HostView with `matchContents` takes its content's fitting size
+on the axes it matches, reported as its state, as `setViewSize` does on iOS. An `RNHostView`
+holds the app's own views in the SwiftUI content at their Yoga size.
+
+Every view whose SwiftUI type exists on macOS is drawn; `EXPO_UI_MACOS` in `@ng-native/expo`
+names each iOS view's SwiftUI view or the reason it is absent (`AccessoryWidgetBackgroundView`,
+`SyncToggleView` and `ToolbarView`), and a test holds the core's list to it. A modifier with no
+macOS meaning, or one the renderer does not take, is skipped. A pointer event on the app's own
+views inside an `RNHostView` is not delivered yet.
+
 ## Drops, drags and opened files
 
 A view with `fileDrop` set takes files, text and URLs dragged onto it from Finder or another app. A
