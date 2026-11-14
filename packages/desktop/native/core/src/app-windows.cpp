@@ -164,19 +164,30 @@ void WindowHost::quit() {
 }
 
 void WindowHost::answerQuit(bool proceed) {
-  // The app answered the SIGTERM's request: its hooks have run, and the process ends.
-  if (isTerminating()) {
-    finishTerminate();
-    return;
-  }
   bool asked;
+  bool terminating;
   {
     std::lock_guard lock(mutex_);
+    terminating = terminating_.has_value();
     asked = quitAsked_;
-    quitAsked_ = false;
-    if (!asked && proceed) {
+    // While a SIGTERM waits, only a no with a Cmd-Q still asked is that quit's (the SIGTERM's
+    // request asks no guard); any other answer is the SIGTERM's.
+    if (!terminating || !proceed) {
+      quitAsked_ = false;
+    }
+    if (!terminating && !asked && proceed) {
       quitAgreed_ = true;
     }
+  }
+  if (terminating) {
+    if (asked && !proceed) {
+      // The Cmd-Q's guard refused: that quit is off, and the SIGTERM waits on for willQuit.
+      backend_->replyToQuit(false);
+      return;
+    }
+    // The app answered the SIGTERM's request: its hooks have run, and the process ends.
+    finishTerminate();
+    return;
   }
   if (asked) {
     backend_->replyToQuit(proceed);

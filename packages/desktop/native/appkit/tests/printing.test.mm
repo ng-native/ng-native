@@ -6,10 +6,20 @@
 #include <doctest/doctest.h>
 
 #import <Foundation/Foundation.h>
+#import <WebKit/WebKit.h>
 
 #include <chrono>
 #include <filesystem>
 #include <optional>
+
+// A content view as the host's surface view is: flipped, y down.
+@interface NGNPrintTestFlippedView : NSView
+@end
+@implementation NGNPrintTestFlippedView
+- (BOOL)isFlipped {
+  return YES;
+}
+@end
 
 namespace {
 
@@ -52,6 +62,25 @@ std::string pngBytes() {
   NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nullptr pixelsWide:40 pixelsHigh:20 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:0 bitsPerPixel:0];
   NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
   return std::string(static_cast<const char *>(png.bytes), png.length);
+}
+
+PDFDocument *captured(NSView *content) {
+  PDFDocument *pdf = nil;
+  bool answered = false;
+  ngn::appkit::windowDocument(content, [&](PDFDocument *document) {
+    answered = true;
+    pdf = document;
+  });
+  REQUIRE(runUntil([&] { return answered; }, 10));
+  return pdf;
+}
+
+// The colour at a fraction of the way across and up a one-page document's page, in sRGB.
+NSColor *colorAt(PDFDocument *pdf, double x, double y) {
+  NSImage *drawn = [[NSImage alloc] initWithData:[[pdf pageAtIndex:0] dataRepresentation]];
+  NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:[drawn CGImageForProposedRect:nil context:nil hints:nil]];
+  return [[rep colorAtX:static_cast<NSInteger>(rep.pixelsWide * x) y:static_cast<NSInteger>(rep.pixelsHigh * (1 - y))]
+      colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
 }
 
 } // namespace
@@ -123,7 +152,7 @@ TEST_CASE("a window prints as what its content view draws, on one page of its si
   box.layer.backgroundColor = NSColor.redColor.CGColor;
   [content addSubview:box];
 
-  PDFDocument *pdf = ngn::appkit::windowDocument(content);
+  PDFDocument *pdf = captured(content);
   REQUIRE((pdf != nil));
   CHECK(pdf.pageCount == 1);
   NSRect page = [[pdf pageAtIndex:0] boundsForBox:kPDFDisplayBoxMediaBox];
@@ -131,19 +160,67 @@ TEST_CASE("a window prints as what its content view draws, on one page of its si
   CHECK(NSHeight(page) == doctest::Approx(200));
   // The page carries the window's pixels: the layer's red on the left half, and on the right the
   // window's own content view, which draws nothing.
-  NSImage *drawn = [[NSImage alloc] initWithData:[[pdf pageAtIndex:0] dataRepresentation]];
-  REQUIRE((drawn != nil));
-  NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:[drawn CGImageForProposedRect:nil context:nil hints:nil]];
-  NSColor *left = [[rep colorAtX:rep.pixelsWide / 4 y:rep.pixelsHigh / 2] colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
-  NSColor *right = [[rep colorAtX:rep.pixelsWide * 3 / 4 y:rep.pixelsHigh / 2] colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+  NSColor *left = colorAt(pdf, 0.25, 0.5);
+  NSColor *right = colorAt(pdf, 0.75, 0.5);
   CHECK(left.redComponent > 0.9);
   CHECK(left.greenComponent < 0.4);
   CHECK(right.redComponent < 0.5);
 
-  CHECK((ngn::appkit::windowDocument(nil) == nil));
+  CHECK((captured(nil) == nil));
   // The operation the panel would run: shown, scaled to the paper, and never run here.
   NSPrintOperation *operation = ngn::appkit::printOperation(pdf, true);
   CHECK(operation.showsPrintPanel);
   CHECK(operation.printInfo.orientation == NSPaperOrientationLandscape);
+  [window close];
+}
+
+TEST_CASE("a window prints a web view's page, which WebKit draws out of process, where the web view is") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NSView *content = window.contentView;
+  content.wantsLayer = YES;
+  // A web view in the bottom right quarter, inside a plain view, its page blue.
+  NSView *holder = [[NSView alloc] initWithFrame:NSMakeRect(150, 0, 150, 100)];
+  [content addSubview:holder];
+  WKWebView *web = [[WKWebView alloc] initWithFrame:holder.bounds configuration:[WKWebViewConfiguration new]];
+  [holder addSubview:web];
+  [web loadHTMLString:@"<html><body style='margin:0;background:rgb(0,0,255)'></body></html>" baseURL:nil];
+  REQUIRE(runUntil([&] { return !web.isLoading && web.estimatedProgress >= 1; }, 20));
+  PDFDocument *pdf = captured(content);
+  REQUIRE((pdf != nil));
+  NSColor *page = colorAt(pdf, 0.75, 0.25);
+  CHECK(page.blueComponent > 0.9);
+  CHECK(page.redComponent < 0.2);
+  CHECK(page.greenComponent < 0.2);
+  // Nowhere else.
+  CHECK(colorAt(pdf, 0.25, 0.25).blueComponent < 0.5);
+  CHECK(colorAt(pdf, 0.75, 0.75).blueComponent < 0.5);
+  [window close];
+}
+
+TEST_CASE("a web view prints where it is in a flipped content view, as the host's surface is") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NSView *content = [[NGNPrintTestFlippedView alloc] initWithFrame:NSMakeRect(0, 0, 300, 200)];
+  content.wantsLayer = YES;
+  window.contentView = content;
+  // Top right, y down.
+  WKWebView *web = [[WKWebView alloc] initWithFrame:NSMakeRect(150, 0, 150, 100) configuration:[WKWebViewConfiguration new]];
+  [content addSubview:web];
+  [web loadHTMLString:@"<html><body style='margin:0;background:rgb(0,0,255)'></body></html>" baseURL:nil];
+  REQUIRE(runUntil([&] { return !web.isLoading && web.estimatedProgress >= 1; }, 20));
+  PDFDocument *pdf = captured(content);
+  REQUIRE((pdf != nil));
+  CHECK(colorAt(pdf, 0.75, 0.75).blueComponent > 0.9);
+  CHECK(colorAt(pdf, 0.75, 0.75).redComponent < 0.2);
+  CHECK(colorAt(pdf, 0.75, 0.25).blueComponent < 0.5);
   [window close];
 }

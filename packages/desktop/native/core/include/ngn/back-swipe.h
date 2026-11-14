@@ -75,8 +75,13 @@ class BackSwipe {
   // After a mount, with the target stack's top screen now: true when a leaving swipe is over, the
   // app having gone back (or elsewhere), and the toolkit draws `rest()` on what is left.
   bool mounted(Tag stackTop);
-  // The app did not go back in time (a guard refused, say): the swipe ends where it began.
+  // The app did not go back in time (a guard refused, say), or the swipe's window closed: the
+  // swipe ends where it began.
   void abandon();
+  // New fingers began a scroll. A swipe still tracking never heard its fingers lift (its window
+  // closed, or the OS never sent the end): it is over, true, and the toolkit draws `rest()`. A
+  // swipe already lifted carries on.
+  bool fingersDown();
 
   // The frame with nothing moved: what every screen is drawn as once the swipe is over.
   static BackSwipeFrame rest() {

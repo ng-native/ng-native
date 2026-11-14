@@ -53,8 +53,10 @@ asks (`break-before: page`, `break-after: page`).
 ## Printing a window on macOS
 
 `print({ window })` prints what a window shows, drawn as it is on screen and scaled down to the
-paper, with the print dialog as a sheet on that window. It takes an `AppWindow`, from
-`AppWindows.open()` or `CURRENT_WINDOW`:
+paper, with the print dialog as a sheet on that window. A web view prints its page as WebKit's
+snapshot of it. A video, the camera preview and anything drawn with Metal print blank, since they
+draw outside the window's own drawing and capturing them would need the Screen Recording
+permission. It takes an `AppWindow`, from `AppWindows.open()` or `CURRENT_WINDOW`:
 
 ```ts
 import { inject } from '@angular/core';

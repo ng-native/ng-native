@@ -165,13 +165,24 @@ export class NavigationHistory {
     });
     const contexts = inject(ChildrenOutletContexts);
     const menus = inject(Menus);
-    // Each window's history, for the host's back and forward chevrons and their menus.
+    // Each window's history, for the host's back and forward chevrons and their menus. A window
+    // whose history went (its outlet shows nothing) gets empty lists, so no stale chevron stays.
+    const told = new Set<number>();
     effect(() => {
       this.opened();
-      for (const window of this.windows.windows()) {
+      const windows = this.windows.windows();
+      for (const surface of told) {
+        if (!windows.some((one) => one.surface === surface)) told.delete(surface);
+      }
+      for (const window of windows) {
         const outlet = window.key === 'main' ? PRIMARY_OUTLET : window.key;
         const history = outlet === null ? undefined : this.histories.get(outlet);
-        if (history) menus.setHistory(window.surface, history.around());
+        if (history) {
+          told.add(window.surface);
+          menus.setHistory(window.surface, history.around());
+        } else if (told.delete(window.surface)) {
+          menus.setHistory(window.surface, { back: [], forward: [] });
+        }
       }
     });
     const stop = menus.onNavigate((direction, surface, steps = 1) => {

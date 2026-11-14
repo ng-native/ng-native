@@ -120,8 +120,9 @@ class WindowHost {
   QuitReply quitRequested();
   // SIGTERM. The app is asked to run only its `willQuit` hooks, with no `canClose` guard, and
   // `done` runs on its `answerQuit` (either answer) or after kTerminateSeconds, whichever is first;
-  // it ends the process. With no app listening, `done` runs at once. A second SIGTERM while waiting
-  // asks nothing more. `done` runs once, on the thread that answered, the backend's timer or the caller.
+  // it ends the process. A SIGTERM takes over a Cmd-Q still asking: that quit's no (a guard
+  // refusing) is replied to the OS and the SIGTERM waits on, so `willQuit` still runs. With no app
+  // listening, `done` runs at once. A second SIGTERM while waiting asks nothing more. `done` runs once, on the thread that answered, the backend's timer or the caller.
   void terminateRequested(std::function<void()> done);
   static constexpr double kTerminateSeconds = 2;
   // The key window, or none when the app has none.

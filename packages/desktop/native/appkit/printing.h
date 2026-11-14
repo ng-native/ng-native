@@ -27,8 +27,10 @@ PDFDocument *printableDocument(const PrintSystem::Document &document);
 NSPrintOperation *printOperation(PDFDocument *document, bool landscape);
 
 // What a window's content view shows, as it is drawn, on one page of its size: what
-// `print({ window })` and File > Print print. Nil for a view with nothing to draw.
-PDFDocument *windowDocument(NSView *content);
+// `print({ window })` and File > Print print. Each web view's page is WebKit's snapshot of it,
+// since a web view draws out of process. Main thread; answers on it, with nil for a view with
+// nothing to draw.
+void windowDocument(NSView *content, std::function<void(PDFDocument *)> done);
 
 // Shows the print panel for what `window` shows, as a sheet on it, scaled down to the paper. Main
 // thread; answers once the panel closes, or why it could not show.

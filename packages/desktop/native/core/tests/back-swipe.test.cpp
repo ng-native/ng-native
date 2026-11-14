@@ -172,6 +172,32 @@ TEST_CASE("a swipe past a third, or flicked past a tenth, goes back and stays aw
   CHECK_FALSE(swipe.target());
 }
 
+TEST_CASE("new fingers end a swipe that never heard its fingers lift, and nothing else") {
+  BackSwipe swipe;
+  CHECK_FALSE(swipe.fingersDown());
+  swipe.begin(BackSwipeTarget{.stack = 2, .top = 20, .below = 10}, 300);
+  swipe.moved(50);
+  // Its window closed, or its end never came: the next scroll's start ends it, and a swipe can
+  // begin again.
+  CHECK(swipe.fingersDown());
+  CHECK(swipe.phase() == BackSwipe::Phase::Idle);
+  CHECK_FALSE(swipe.target());
+  CHECK(swipe.begin(BackSwipeTarget{.stack = 2, .top = 20, .below = 10}, 300));
+  CHECK(swipe.moved(30) == BackSwipeFrame{.offset = 30, .opacity = 1, .belowShown = true});
+
+  // A swipe already lifted carries on: its animation or the app's back ends it.
+  swipe.moved(-1);
+  CHECK_FALSE(swipe.lifted());
+  CHECK_FALSE(swipe.fingersDown());
+  CHECK(swipe.phase() == BackSwipe::Phase::Returning);
+  swipe.returned();
+  swipe.begin(BackSwipeTarget{.stack = 2, .top = 20, .below = 10}, 300);
+  swipe.moved(200);
+  swipe.lifted();
+  CHECK_FALSE(swipe.fingersDown());
+  CHECK(swipe.phase() == BackSwipe::Phase::Leaving);
+}
+
 TEST_CASE("a fading screen fades in place as the fingers move") {
   BackSwipe swipe;
   swipe.begin(BackSwipeTarget{.stack = 2, .top = 20, .below = 10, .style = SwipeStyle::Fade}, 400);
