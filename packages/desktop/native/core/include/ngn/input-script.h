@@ -11,7 +11,8 @@
 //   magnify <x> <y> <amount> began|changed|ended
 //   rotate <x> <y> <degrees> began|changed|ended     anticlockwise
 //   key <key> [cmd] [shift] [option] [ctrl]          to the key window, whichever it is: a
-//                         character, escape or return
+//                         character, escape or return; a character with no command or control
+//                         modifier is typed into a focused text field
 #pragma once
 
 #include "ngn/input.h"

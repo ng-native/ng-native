@@ -60,8 +60,9 @@ detector), the UI runtime's `_setGestureStateSync` (a worklet's state manager go
 Reanimated's `setGestureState`), and force touch.
 
 A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
-(`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies and rotations, as AppKit
-events sent through NSApp, which drives these screens without an accessibility grant.
+(`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
+AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
+goes to the key window, and a character is typed into a focused text field.
 
 A view's box is painted as React Native iOS paints it (`view-box.h`): one corner radius and one
 solid border are the layer's own, drawn over the children only when the view clips or the border
