@@ -31,7 +31,8 @@ export const CONTEXT_MENU = new InjectionToken<{ takesLongPress(): boolean }>(
  * it as a PopupMenu at the press point, and on iOS and iPadOS a long press, or a secondary click
  * from an iPad pointer, opens it through UIContextMenuInteraction. On Android and iOS that takes
  * the `NgNativeMenus` module, which Expo Go lacks, and where it is there `(longPress)` does not
- * also fire.
+ * also fire. On Android a `(longPress)` on a view inside the element keeps its long press, which
+ * then opens no menu: the innermost handler wins.
  *
  * The host contract: the view takes a `contextMenu` prop, the menu as `serializeMenu` makes it
  * (null to take it away), and sends `topContextMenuSelect` with the chosen item's `id`. React

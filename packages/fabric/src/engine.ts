@@ -490,6 +490,12 @@ export const DIRECT_EVENTS: ReadonlySet<string> = new Set([
   'topShow',
   'topDismiss',
   'topOrientationChange',
+  // macOS's host sends these to the view they happened on. A menu or a drop zone inside another
+  // would otherwise run the handlers of the one around it too.
+  'topContextMenuSelect',
+  'topDropEnter',
+  'topDropLeave',
+  'topDropPerform',
 ]);
 
 /**
@@ -940,6 +946,8 @@ export interface EngineNode extends HostNode {
    * it out. The native stack outlet tells a page's own binding from a value it carried this way.
    */
   writes?: Set<string>;
+  /** Who hears a prop change, by key. See `watchProp`. */
+  propWatches?: Map<string, Set<(value: unknown) => void>>;
   /** The child this node's background is painted on instead of itself. See `paintOn`. */
   paintsOn?: EngineNode;
   /** What this node's background colour is handed to instead of painted. See `takePaint`. */
@@ -6687,6 +6695,7 @@ const ENGINE_NODE_FIELDS = {
   attributeOnly: true,
   keptAttributes: true,
   writes: true,
+  propWatches: true,
   paintsOn: true,
   paintTaker: true,
   paintTaken: true,
@@ -9074,6 +9083,38 @@ export class Engine implements HostEngine {
     // another, `[data-on] ~ .x`: a point of a chart set as a finger moves leaves those after it.
     this.markProps(node, read || heirs, this.styles.readsBeside(key));
     if (SIZES_A_RUN.has(key)) this.markParagraph(node);
+    if (node.propWatches !== undefined) this.reportProp(node, key);
+  }
+
+  /**
+   * Call `listener` with the prop's new value each time `setProp` changes it on `node`, taking it
+   * away included: what follows an app's own `nativeID`, which a directive on the element names
+   * the view by. The function returned stops it.
+   */
+  watchProp(node: EngineNode, key: string, listener: (value: unknown) => void): () => void {
+    const watches = (node.propWatches ??= new Map());
+    let heard = watches.get(key);
+    if (!heard) watches.set(key, (heard = new Set()));
+    heard.add(listener);
+    return () => {
+      heard.delete(listener);
+      if (heard.size === 0) watches.delete(key);
+      if (watches.size === 0) delete node.propWatches;
+    };
+  }
+
+  private reportProp(node: EngineNode, key: string): void {
+    const heard = node.propWatches?.get(key);
+    if (!heard) return;
+    const value = node.props[key];
+    // One listener that throws stops neither the rest nor the write.
+    for (const listener of [...heard]) {
+      try {
+        listener(value);
+      } catch (error) {
+        this.reportEventError(error, 'prop');
+      }
+    }
   }
 
   /**

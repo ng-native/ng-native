@@ -25,9 +25,10 @@ function nativeIdOf(engine: HostEngine, node: HostNode): string {
 /**
  * Something about an element sent to a host module by its view's `nativeID`, where React Native's
  * view would drop it as a prop (Android, iOS). Answers the function that sends it: `send` runs
- * after the element's props are written, so a `nativeID` the app gave is there. A `nativeID` the
- * app changed since the last send is followed, with `clear` for the old one, and `clear` runs as
- * the element goes. Call in an injection context.
+ * after the element's props are written, so a `nativeID` the app gave is there. Once sent, a
+ * `nativeID` the app binds, changes or takes away is followed: `send` runs again with the new one
+ * (the given one where the app's went), with `clear` for the old, and `clear` runs as the element
+ * goes. Call in an injection context.
  */
 export function byNativeId(
   engine: HostEngine,
@@ -37,16 +38,34 @@ export function byNativeId(
 ): () => void {
   let sentAs: string | null = null;
   let destroyed = false;
+  let scheduled = false;
+  let flushing = false;
+  const flush = () => {
+    scheduled = false;
+    if (destroyed) return;
+    flushing = true;
+    try {
+      const id = nativeIdOf(engine, node);
+      if (sentAs !== null && sentAs !== id) clear(sentAs);
+      sentAs = id;
+      send(id);
+    } finally {
+      flushing = false;
+    }
+  };
+  const schedule = () => {
+    if (scheduled || destroyed) return;
+    scheduled = true;
+    engine.settle({ settleProps: flush });
+  };
+  // The app's own binding, which may arrive, change or go after the first send.
+  const unwatch = engine.watchProp(node, 'nativeID', (value) => {
+    if (!flushing && sentAs !== null && value !== sentAs) schedule();
+  });
   inject(DestroyRef).onDestroy(() => {
     destroyed = true;
+    unwatch();
     if (sentAs !== null) clear(sentAs);
   });
-  const flush = () => {
-    if (destroyed) return;
-    const id = nativeIdOf(engine, node);
-    if (sentAs !== null && sentAs !== id) clear(sentAs);
-    sentAs = id;
-    send(id);
-  };
-  return () => engine.settle({ settleProps: flush });
+  return schedule;
 }

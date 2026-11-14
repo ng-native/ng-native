@@ -179,6 +179,24 @@ describe('a window history', () => {
     assert.deepEqual(last(), { back: [], forward: ['Privacy'] });
   });
 
+  it("clears a window's chevrons when its outlet shows nothing and its history goes", async () => {
+    const { router, menus, windows } = await start(windowsHost());
+    const window = await windows.open({ outlet: 'preferences', path: 'general' });
+    const surface = window!.surface;
+    await idle();
+    await router.navigate([{ outlets: { preferences: ['privacy'] } }]);
+    await idle();
+    const last = () => menus.histories.filter(([one]) => one === surface).at(-1)?.[1];
+    assert.deepEqual(last(), { back: ['/general'], forward: [] });
+    await router.navigate([{ outlets: { preferences: null } }]);
+    await idle();
+    assert.ok(
+      windows.windows().some((one) => one.surface === surface),
+      'the window stays open',
+    );
+    assert.deepEqual(last(), { back: [], forward: [] });
+  });
+
   it('keeps the last 100 entries of a window, dropping the oldest, so a long session does not grow it', async () => {
     const { navigation, history } = await start();
     const main = history.for();

@@ -10,7 +10,10 @@ on macOS and iPadOS. On iPhone, Android and the web host neither does anything: 
 nothing can be dragged.
 
 On iPadOS both take the native side of `@ng-native/components`, which a development build has and
-Expo Go does not. The view is found by its `nativeID`, and an element without one is given one.
+Expo Go does not. The view is found by its `nativeID`, and an element without one is given one
+(on an iPad only). A view with a `nativeID` is a stacking context, as one with `opacity` below 1
+is: a `z-index` inside it orders its children against each other, not against the element's
+siblings, so a dropdown inside a drop zone can paint under the element after it.
 iPadOS shows nothing of a drag before it is dropped, so there `(fileDragEnter)` carries no files,
 text or urls, and a dropped file arrives as a copy in the app's temporary folder.
 

@@ -6,11 +6,21 @@
  * one does from a device, and Metro is a stand-in that serves one bundle.
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+  existsSync,
+} from 'node:fs';
 import { createServer as createHttpServer, type Server } from 'node:http';
+import Module, { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { dependents, modulesOf, scriptOf } from '@ng-native/testing/device/bundle-modules';
 import { mockedSpecifiers } from '@ng-native/testing/device/mocks';
@@ -380,6 +390,7 @@ describe('the device pool', () => {
 });
 
 describe('withDeviceTests', () => {
+  const require = createRequire(import.meta.url);
   const resolveOf = (config: { resolver: { resolveRequest: Function } }, name: string) =>
     config.resolver.resolveRequest({ resolveRequest: () => ({ type: 'empty' }) }, name, 'ios');
 
@@ -405,6 +416,58 @@ describe('withDeviceTests', () => {
     } finally {
       if (before === undefined) delete process.env['EXPO_PUBLIC_DEVICE_TESTS'];
       else process.env['EXPO_PUBLIC_DEVICE_TESTS'] = before;
+    }
+  });
+
+  it('leaves esbuild out of what an app installs with @ng-native/testing', () => {
+    // pnpm stops an app's install on a dependency's build script it was not told to allow, and
+    // esbuild has one: an app that never runs a test in the app would have to decide about it.
+    const manifest = JSON.parse(
+      readFileSync(require.resolve('@ng-native/testing/package.json'), 'utf8'),
+    ) as Record<string, Record<string, string> | undefined>;
+    for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+      assert.equal(manifest[field]?.['esbuild'], undefined, `esbuild in ${field}`);
+    }
+  });
+
+  it("bundles the project's Vitest for a device with the bundler its Vite brings", async () => {
+    const { withDeviceTests } = await import('@ng-native/testing/device/metro');
+    const testing = dirname(require.resolve('@ng-native/testing/package.json'));
+    const vitest = dirname(
+      realpathSync(require.resolve('vitest/package.json', { paths: [testing] })),
+    );
+    const project = mkdtempSync(join(tmpdir(), 'device-tests-runtime-'));
+    mkdirSync(join(project, 'node_modules'));
+    symlinkSync(vitest, join(project, 'node_modules/vitest'), 'dir');
+    const modules = Module as unknown as { _resolveFilename: Function };
+    const resolveFilename = modules._resolveFilename;
+    // An app that does not list esbuild has none to find.
+    modules._resolveFilename = function (request: string, ...rest: unknown[]) {
+      if (request === 'esbuild') throw new Error('esbuild is not installed');
+      return resolveFilename.call(this, request, ...rest);
+    };
+    const before = process.env['EXPO_PUBLIC_DEVICE_TESTS'];
+    process.env['EXPO_PUBLIC_DEVICE_TESTS'] = '1';
+    try {
+      const config = withDeviceTests({
+        projectRoot: project,
+        resolver: {},
+        transformer: {},
+      }) as unknown as { resolver: { resolveRequest: Function } };
+      const runtime = resolveOf(config, 'vitest').filePath as string;
+      assert.ok(runtime.startsWith(join(project, 'node_modules/.cache')), runtime);
+      const source = readFileSync(runtime, 'utf8');
+      // Metro refuses an import() with a computed path.
+      assert.doesNotMatch(source, /(^|[^.\w$])import\(/m);
+      const exports = createRequire(import.meta.url)(runtime) as Record<string, unknown>;
+      for (const name of ['describe', 'it', 'expect', 'startTests', 'silenceRegistration']) {
+        assert.equal(typeof exports[name], 'function', name);
+      }
+    } finally {
+      modules._resolveFilename = resolveFilename;
+      if (before === undefined) delete process.env['EXPO_PUBLIC_DEVICE_TESTS'];
+      else process.env['EXPO_PUBLIC_DEVICE_TESTS'] = before;
+      rmSync(project, { recursive: true, force: true });
     }
   });
 });

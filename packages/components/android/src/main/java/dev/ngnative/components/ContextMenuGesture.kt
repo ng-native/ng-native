@@ -21,6 +21,10 @@ import kotlin.math.hypot
  * A long press lets React Native have the touch until the menu opens, then cancels it there, so a
  * `<pressable>` neither presses nor long-presses; a right-click is never React Native's at all.
  * Either way the rest of the gesture is the menu's.
+ *
+ * The innermost handler wins a long press: a view on the way up that takes one itself (a
+ * `(longPress)`, in `MenuHost.longPressTakers`) keeps it, and no menu above it opens. A right-click
+ * still opens the menu.
  */
 internal class ContextMenuGesture(
   private val activity: Activity,
@@ -62,8 +66,9 @@ internal class ContextMenuGesture(
     stopWaiting()
     taken = false
     if (MenuHost.contextMenus.isEmpty()) return false
-    val (view, nativeId) = menuViewAt(event.x, event.y) ?: return false
-    if (isSecondaryClick(event)) {
+    val secondary = isSecondaryClick(event)
+    val (view, nativeId) = menuViewAt(event.x, event.y, longPress = !secondary) ?: return false
+    if (secondary) {
       taken = open(view, nativeId, event)
       return taken
     }
@@ -100,15 +105,17 @@ internal class ContextMenuGesture(
 
   /**
    * The view a press at (`x`, `y`) in the window lands on, as React Native finds its touch target,
-   * or the nearest view above it with a menu, and that menu's `nativeID`.
+   * or the nearest view above it with a menu, and that menu's `nativeID`. For a `longPress`, none
+   * where a view on the way takes the long press itself.
    */
-  private fun menuViewAt(x: Float, y: Float): Pair<View, String>? {
+  private fun menuViewAt(x: Float, y: Float, longPress: Boolean): Pair<View, String>? {
     val root = activity.window?.decorView as? ViewGroup ?: return null
     val path = TouchTargetHelper.findTargetPathAndCoordinatesForTouch(x, y, root, FloatArray(2))
     var view: View? = path.firstNotNullOfOrNull { it.getView() }
     while (view != null) {
       val nativeId = view.getTag(R.id.view_tag_native_id) as? String
       if (nativeId != null && MenuHost.contextMenus.containsKey(nativeId)) return view to nativeId
+      if (longPress && nativeId != null && nativeId in MenuHost.longPressTakers) return null
       view = view.parent as? View
     }
     return null

@@ -36,6 +36,9 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0)
 # resolve archives in any order; GNU ld does not, so Linux links with lld.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_link_options(-fuse-ld=lld)
+  # A std::atomic of a type wider than the hardware's lock-free size calls libatomic on Linux;
+  # Apple's runtime has those calls built in.
+  link_libraries(atomic)
 endif()
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
@@ -165,7 +168,7 @@ target_include_directories(ngn_core PUBLIC core/include)
 # The system's sqlite3, behind NgNativeSqlite (libsqlite3-dev on Linux).
 find_package(SQLite3 REQUIRED)
 target_link_libraries(ngn_core PUBLIC react_native SQLite::SQLite3)
-target_compile_options(ngn_core PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
+target_compile_options(ngn_core PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
 
 if(NGN_TESTS)
   file(GLOB core_test_SRC CONFIGURE_DEPENDS core/tests/*.cpp)
@@ -230,7 +233,7 @@ if(NGN_WITH_RUNTIME)
       core/src/layout-animations.cpp
       core/src/runtime.cpp)
   target_link_libraries(ngn_core_runtime PUBLIC ngn_core hermes-engine::hermesvm)
-  target_compile_options(ngn_core_runtime PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
+  target_compile_options(ngn_core_runtime PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
   if(REACT_NATIVE_DEBUG_OPTIMIZED)
     target_compile_definitions(ngn_core_runtime PRIVATE NGN_INSPECTOR=1)
   endif()

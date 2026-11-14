@@ -86,7 +86,9 @@ Quitting (Cmd-Q, a logout, an update's relaunch) asks every window's guards, the
 
 On macOS a SIGTERM to the host (`kill`, or a test pool ending its run) runs the `willQuit`
 handlers but asks no `canClose` guard, so an unsaved-changes dialog cannot hold it. The host ends
-once the handlers have finished or two seconds after the signal, whichever is first.
+once the handlers have finished or two seconds after the signal, whichever is first. A SIGTERM
+that arrives while a Command-Q waits on a guard takes that quit over: the guard saying no cancels
+the Command-Q, and the host still waits for the `willQuit` handlers.
 
 ## Windows on iPadOS
 

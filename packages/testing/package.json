@@ -108,8 +108,7 @@
   "dependencies": {
     "@ng-native/fabric": "workspace:*",
     "@ng-native/metro": "workspace:*",
-    "@ng-native/platform": "workspace:*",
-    "esbuild": "^0.28.2"
+    "@ng-native/platform": "workspace:*"
   },
   "peerDependencies": {
     "@angular/compiler": "^22.0.0",

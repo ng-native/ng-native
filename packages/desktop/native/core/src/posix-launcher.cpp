@@ -15,6 +15,39 @@
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
+#include <pthread.h>
+
+namespace {
+
+// A write to a pipe whose reader has gone. macOS turns SIGPIPE off for the pipe with
+// F_SETNOSIGPIPE; Linux has no such flag, so the signal is blocked on this thread for the write
+// and, when the write raised it, taken off the thread before it is unblocked again.
+ssize_t writeWithoutSigpipe(int fd, const char *data, size_t size) {
+#ifdef F_SETNOSIGPIPE
+  return ::write(fd, data, size);
+#else
+  sigset_t pipe;
+  sigemptyset(&pipe);
+  sigaddset(&pipe, SIGPIPE);
+  sigset_t pending;
+  sigpending(&pending);
+  bool alreadyPending = sigismember(&pending, SIGPIPE) == 1;
+  sigset_t old;
+  pthread_sigmask(SIG_BLOCK, &pipe, &old);
+  auto n = ::write(fd, data, size);
+  int saved = errno;
+  if (n < 0 && saved == EPIPE && !alreadyPending) {
+    timespec none{0, 0};
+    while (sigtimedwait(&pipe, nullptr, &none) == -1 && errno == EINTR) {
+    }
+  }
+  pthread_sigmask(SIG_SETMASK, &old, nullptr);
+  errno = saved;
+  return n;
+#endif
+}
+
+} // namespace
 
 namespace ngn {
 
@@ -192,7 +225,7 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
     void flushLocked() {
       while (!pending_.empty() && fd_ >= 0) {
         auto &front = pending_.front();
-        auto n = ::write(fd_, front.data() + offset_, front.size() - offset_);
+        auto n = writeWithoutSigpipe(fd_, front.data() + offset_, front.size() - offset_);
         if (n < 0 && errno == EINTR) {
           continue;
         }

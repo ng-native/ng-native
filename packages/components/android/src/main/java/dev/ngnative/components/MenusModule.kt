@@ -15,10 +15,14 @@ import expo.modules.kotlin.modules.ModuleDefinition
  *
  * `setContextMenu` keeps each `[contextMenu]` by its view's `nativeID`, since React Native's view
  * drops a `contextMenu` prop it does not know. A long press or a right-click on the view opens it
- * as a PopupMenu at the press point.
+ * as a PopupMenu at the press point. `setTakesLongPress` names views inside one that take a long
+ * press themselves, where a long press opens no menu.
  */
 class MenusModule : Module() {
   private val main = Handler(Looper.getMainLooper())
+
+  /** This module's own sender, which `MenuHost` holds while this module is the app's. */
+  private val sender: (Map<String, Any?>) -> Unit = { body -> sendEvent("ngNativeMenus", body) }
 
   override fun definition() = ModuleDefinition {
     Name("NgNativeMenus")
@@ -43,21 +47,29 @@ class MenusModule : Module() {
       }
     }
 
+    Function("setTakesLongPress") { nativeId: String, takes: Boolean ->
+      main.post {
+        if (takes) {
+          MenuHost.longPressTakers.add(nativeId)
+        } else {
+          MenuHost.longPressTakers.remove(nativeId)
+        }
+      }
+    }
+
+    // On the main thread, in order with the old module's `OnDestroy` and every call after.
     OnCreate {
-      MenuHost.send = { body -> sendEvent("ngNativeMenus", body) }
+      main.post { MenuHost.attach(sender) }
       watchActivity()
     }
 
     // A recreated activity is a new window, which the menus move to.
     OnActivityEntersForeground { watchActivity() }
 
-    // A reload makes a new module, which starts with no shortcuts or menus.
+    // A reload makes a new module, which starts with no shortcuts or menus. The old one lets go
+    // only of what it set: the new one may have attached first.
     OnDestroy {
-      main.post {
-        MenuHost.send = null
-        MenuHost.shortcuts = emptyList()
-        MenuHost.contextMenus.clear()
-      }
+      main.post { MenuHost.detach(sender) }
     }
   }
 
