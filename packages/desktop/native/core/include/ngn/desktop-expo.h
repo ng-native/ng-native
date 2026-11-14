@@ -10,6 +10,8 @@
 // - NgNativeKeepAwake: activateKeepAwakeAsync and deactivateKeepAwake by tag; the display stays
 //   awake while any tag holds it.
 // - NgNativeHaptics: impactAsync, notificationAsync and selectionAsync, as the trackpad's feedback.
+// - NgNativeLocalization: getLocales and getCalendars, in expo-localization's shapes, over a
+//   LocaleSource (the user's preferred languages and the region's formats).
 #pragma once
 
 #include "ngn/native-module.h"
@@ -19,6 +21,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -70,5 +73,40 @@ class HapticPlayer {
 std::optional<HapticPlayer::Pattern> hapticPattern(const std::string &method);
 
 std::shared_ptr<NativeModule> makeHapticsModule(std::shared_ptr<HapticPlayer> player);
+
+// One of the user's preferred languages, with the formats of the region the system is set to.
+struct LocaleFacts {
+  // BCP 47: "en-GB", "zh-Hant-TW", "ar".
+  std::string languageTag;
+  bool rightToLeft{false};
+  std::string decimalSeparator;
+  std::string groupingSeparator;
+  // As NSLocale says it: "Metric", "U.S." or "U.K.".
+  std::string measurementSystem;
+  std::string currencyCode;
+  std::string currencySymbol;
+  // "celsius" or "fahrenheit".
+  std::string temperatureUnit;
+};
+
+struct CalendarFacts {
+  // expo-localization's names: "gregorian", "buddhist", "japanese" and the rest.
+  std::string calendar;
+  std::string timeZone;
+  bool uses24hourClock{false};
+  // 1 is Sunday.
+  int firstWeekday{1};
+};
+
+class LocaleSource {
+ public:
+  virtual ~LocaleSource() = default;
+  // Most preferred first.
+  virtual std::vector<LocaleFacts> locales() = 0;
+  virtual CalendarFacts calendars() = 0;
+};
+
+// `regionCode` is the system's region ("GB"), which a language tag with no region of its own takes.
+std::shared_ptr<NativeModule> makeLocalizationModule(std::shared_ptr<LocaleSource> source, std::string regionCode);
 
 } // namespace ngn

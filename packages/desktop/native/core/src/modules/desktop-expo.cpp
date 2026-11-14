@@ -188,4 +188,85 @@ std::shared_ptr<NativeModule> makeHapticsModule(std::shared_ptr<HapticPlayer> pl
   return std::make_shared<Haptics>(std::move(player));
 }
 
+namespace {
+
+struct TagParts {
+  std::string language;
+  std::string script;
+  std::string region;
+};
+
+// The language, script and region subtags of a BCP 47 tag ("zh-Hant-TW"), as far as it has them.
+TagParts tagParts(const std::string &tag) {
+  TagParts parts;
+  size_t at = 0;
+  int index = 0;
+  while (at <= tag.size()) {
+    size_t end = tag.find_first_of("-_", at);
+    auto subtag = tag.substr(at, end == std::string::npos ? std::string::npos : end - at);
+    bool letters = std::all_of(subtag.begin(), subtag.end(), [](unsigned char c) { return std::isalpha(c); });
+    bool digits = std::all_of(subtag.begin(), subtag.end(), [](unsigned char c) { return std::isdigit(c); });
+    if (index == 0) {
+      parts.language = subtag;
+    } else if (parts.script.empty() && parts.region.empty() && subtag.size() == 4 && letters) {
+      parts.script = subtag;
+    } else if (parts.region.empty() && ((subtag.size() == 2 && letters) || (subtag.size() == 3 && digits))) {
+      parts.region = subtag;
+    }
+    if (end == std::string::npos) {
+      break;
+    }
+    at = end + 1;
+    index++;
+  }
+  return parts;
+}
+
+folly::dynamic orNull(const std::string &value) {
+  return value.empty() ? folly::dynamic(nullptr) : folly::dynamic(value);
+}
+
+const char *measurement(const std::string &system) {
+  if (system == "U.S.") {
+    return "us";
+  }
+  if (system == "U.K.") {
+    return "uk";
+  }
+  return "metric";
+}
+
+} // namespace
+
+std::shared_ptr<NativeModule> makeLocalizationModule(std::shared_ptr<LocaleSource> source, std::string regionCode) {
+  struct Localization : NativeModule {
+    Localization(std::shared_ptr<LocaleSource> source, std::string region) : NativeModule("NgNativeLocalization") {
+      sync("getLocales", [source, region](const folly::dynamic &) {
+        auto locales = source->locales();
+        if (locales.empty()) {
+          locales.push_back({.languageTag = "en-" + region});
+        }
+        folly::dynamic out = folly::dynamic::array();
+        for (const auto &locale : locales) {
+          auto parts = tagParts(locale.languageTag);
+          out.push_back(folly::dynamic::object("languageTag", locale.languageTag)("languageCode", orNull(parts.language))(
+              "languageScriptCode", orNull(parts.script))("regionCode", orNull(parts.region.empty() ? region : parts.region))(
+              "languageRegionCode", orNull(parts.region))("textDirection", locale.rightToLeft ? "rtl" : "ltr")(
+              "decimalSeparator", orNull(locale.decimalSeparator))("digitGroupingSeparator", orNull(locale.groupingSeparator))(
+              "measurementSystem", measurement(locale.measurementSystem))("currencyCode", orNull(locale.currencyCode))(
+              "currencySymbol", orNull(locale.currencySymbol))("languageCurrencyCode", orNull(locale.currencyCode))(
+              "languageCurrencySymbol", orNull(locale.currencySymbol))("temperatureUnit", orNull(locale.temperatureUnit)));
+        }
+        return out;
+      });
+      sync("getCalendars", [source](const folly::dynamic &) {
+        auto c = source->calendars();
+        return folly::dynamic::array(folly::dynamic::object("calendar", orNull(c.calendar))("timeZone", orNull(c.timeZone))(
+            "uses24hourClock", c.uses24hourClock)("firstWeekday", c.firstWeekday));
+      });
+    }
+  };
+  return std::make_shared<Localization>(std::move(source), std::move(regionCode));
+}
+
 } // namespace ngn

@@ -552,6 +552,10 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
+      static auto locales = ngn::appkit::makeLocaleSource();
+      ngn::addModule(*modules, "NgNativeLocalization", [] {
+        return ngn::makeLocalizationModule(locales, ngn::appkit::systemRegionCode());
+      });
     }
 
     // A bundle on disk runs the newest update the Expo Updates client keeps, when the app has an

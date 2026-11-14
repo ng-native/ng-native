@@ -114,3 +114,70 @@ TEST_CASE("each haptics call plays the trackpad's matching feedback") {
   using P = ngn::HapticPlayer::Pattern;
   CHECK(recorder->played == std::vector<P>{P::Generic, P::Alignment, P::LevelChange});
 }
+
+namespace {
+
+struct FixedLocales final : ngn::LocaleSource {
+  std::vector<ngn::LocaleFacts> preferred;
+  ngn::CalendarFacts calendar;
+  std::vector<ngn::LocaleFacts> locales() override {
+    return preferred;
+  }
+  ngn::CalendarFacts calendars() override {
+    return calendar;
+  }
+};
+
+} // namespace
+
+TEST_CASE("Localization answers expo-localization's locales and calendars") {
+  auto source = std::make_shared<FixedLocales>();
+  ngn::LocaleFacts formats{
+      .decimalSeparator = ",",
+      .groupingSeparator = ".",
+      .measurementSystem = "Metric",
+      .currencyCode = "EUR",
+      .currencySymbol = "€",
+      .temperatureUnit = "celsius",
+  };
+  auto german = formats;
+  german.languageTag = "de-DE";
+  auto arabic = formats;
+  arabic.languageTag = "ar";
+  arabic.rightToLeft = true;
+  auto british = formats;
+  british.languageTag = "en-GB";
+  british.measurementSystem = "U.K.";
+  auto chinese = formats;
+  chinese.languageTag = "zh-Hant-TW";
+  chinese.measurementSystem = "U.S.";
+  source->preferred = {german, arabic, british, chinese};
+  source->calendar = {.calendar = "gregorian", .timeZone = "Europe/Berlin", .uses24hourClock = true, .firstWeekday = 2};
+  auto module = ngn::makeLocalizationModule(source, "DE");
+
+  auto locales = module->call("getLocales");
+  REQUIRE(locales.size() == 4);
+  CHECK(locales[0] == dynamic::object("languageTag", "de-DE")("languageCode", "de")("languageScriptCode", nullptr)(
+                          "regionCode", "DE")("languageRegionCode", "DE")("textDirection", "ltr")(
+                          "decimalSeparator", ",")("digitGroupingSeparator", ".")("measurementSystem", "metric")(
+                          "currencyCode", "EUR")("currencySymbol", "€")("languageCurrencyCode", "EUR")(
+                          "languageCurrencySymbol", "€")("temperatureUnit", "celsius"));
+  // A tag with no region takes the system's, as on iOS; its language's own region stays null.
+  CHECK(locales[1]["textDirection"] == "rtl");
+  CHECK(locales[1]["regionCode"] == "DE");
+  CHECK(locales[1]["languageRegionCode"] == nullptr);
+  CHECK(locales[2]["measurementSystem"] == "uk");
+  CHECK(locales[3]["languageCode"] == "zh");
+  CHECK(locales[3]["languageScriptCode"] == "Hant");
+  CHECK(locales[3]["languageRegionCode"] == "TW");
+  CHECK(locales[3]["measurementSystem"] == "us");
+
+  CHECK(module->call("getCalendars") == dynamic::array(dynamic::object("calendar", "gregorian")("timeZone", "Europe/Berlin")(
+                                            "uses24hourClock", true)("firstWeekday", 2)));
+
+  // Never an empty list: Locale's first one is the one to format with.
+  source->preferred.clear();
+  auto fallback = module->call("getLocales");
+  REQUIRE(fallback.size() == 1);
+  CHECK(fallback[0]["languageTag"] == "en-DE");
+}
