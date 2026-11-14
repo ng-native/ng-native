@@ -18,6 +18,7 @@
 #import "network.h"
 #import "scroll-view.h"
 #import "system.h"
+#import "tray-and-dock.h"
 #import "surface-view.h"
 #include "text-layout.h"
 
@@ -50,6 +51,9 @@ struct Host {
   std::shared_ptr<ngn::appkit::AppKitWindows> windows;
   std::shared_ptr<ngn::WindowHost> windowHost;
   std::shared_ptr<ngn::MenuHost> menus;
+  std::shared_ptr<ngn::TrayHost> tray;
+  std::shared_ptr<ngn::DockHost> dockHost;
+  std::shared_ptr<ngn::appkit::AppKitDock> dock;
   NGNSurfaceView *appSurface;
   // The app's own surface in a window, for an app that renders there instead of opening windows.
   NSWindow *appWindow;
@@ -277,6 +281,10 @@ void showAppSurfaceIfUsed() {
   }
   return NSTerminateNow;
 }
+// The app's own items above the Dock menu's standard ones.
+- (NSMenu *)applicationDockMenu:(NSApplication *)sender {
+  return gHost.dock ? gHost.dock->menu() : nil;
+}
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)visible {
   gHost.windowHost->reopen(visible);
   return YES;
@@ -432,6 +440,13 @@ int main(int argc, const char *argv[]) {
         ngn::DefaultMenuOptions{
             .appName = std::string(title.UTF8String), .developer = ngn::DevServer::fromBundleUrl(bundle).has_value()});
     ngn::addModule(*modules, "NgNativeMenus", [] { return ngn::makeMenusModule(gHost.menus); });
+    gHost.tray = std::make_shared<ngn::TrayHost>(std::make_shared<ngn::appkit::AppKitTray>(
+        [](const std::string &icon) { gHost.tray->press(icon); },
+        [](const std::string &icon, const std::string &id) { gHost.tray->menuSelect(icon, id); }));
+    ngn::addModule(*modules, "NgNativeTray", [] { return ngn::makeTrayModule(gHost.tray); });
+    gHost.dock = std::make_shared<ngn::appkit::AppKitDock>([](const std::string &id) { gHost.dockHost->menuSelect(id); });
+    gHost.dockHost = std::make_shared<ngn::DockHost>(gHost.dock);
+    ngn::addModule(*modules, "NgNativeDock", [] { return ngn::makeDockModule(gHost.dockHost); });
 
     gHost.runtime = std::make_unique<ngn::Runtime>(
         gHost.mounting,

@@ -13,6 +13,7 @@ add_executable(ngn-macos
     network.mm
     scroll-view.mm
     surface-view.mm
+    tray-and-dock.mm
     system.mm
     text-layout.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries
