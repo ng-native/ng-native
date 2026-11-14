@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import type { ProviderToken, Signal } from '@angular/core';
 import * as device from '@ng-native/device';
 import { OS, OS_SUPPORT, SUPPORT_OSES, type SupportOs } from '@ng-native/device';
+import { DESKTOP_MODULES } from '@ng-native/expo';
 import * as components from '@ng-native/components';
 import * as router from '@ng-native/router';
 import { cleanup, injectService } from '@ng-native/testing';
@@ -174,6 +175,9 @@ const PLATFORM: Readonly<Record<SupportOs, 'ios' | 'macos' | 'android' | 'web'>>
 describe('each service the table lists', () => {
   for (const row of OS_SUPPORT) {
     for (const [name, module] of Object.entries(row.services ?? {})) {
+      // An Expo-backed service has no module to hand it here: `every-service.test.ts` runs it
+      // where the row says it is absent, and the tests below hold its source to the host.
+      if (!(name in device)) continue;
       it(`${name} is available where ${row.feature} is, from ${module}`, () => {
         const token = (device as Record<string, unknown>)[name] as ProviderToken<{
           available: Signal<boolean>;
@@ -214,9 +218,35 @@ describe('each service the table lists', () => {
   it('reads each service from the module the table names', () => {
     for (const row of OS_SUPPORT) {
       for (const [name, module] of Object.entries(row.services ?? {})) {
-        const file = name.replace(/[A-Z]/g, (letter, at) => (at ? '-' : '') + letter.toLowerCase());
-        assert.match(read(`packages/device/src/${file}.ts`), new RegExp(`'${module}'`), name);
+        // The Expo module the host module stands in for on macOS, where the service names it.
+        const expo = Object.entries(DESKTOP_MODULES)
+          .filter(([, host]) => host === module)
+          .map(([id]) => id);
+        const names = [module, ...expo].map((id) => `'${id}'`).join('|');
+        assert.match(sourceOf(name), new RegExp(names), name);
+      }
+    }
+  });
+
+  it('is absent on the web exactly where its Expo module is not written for it', () => {
+    for (const row of OS_SUPPORT) {
+      for (const name of Object.keys(row.services ?? {})) {
+        if (name in device) continue;
+        const written = /platforms: \[[^\]]*'web'/.test(sourceOf(name));
+        assert.equal(row.on.web !== 'absent', written, `${name} on the web`);
       }
     }
   });
 });
+
+/** The source of the device or Expo service called `name`, found by the class or token it exports. */
+function sourceOf(name: string): string {
+  for (const dir of ['packages/device/src', 'packages/expo/src']) {
+    for (const file of readdirSync(fileURLToPath(new URL(dir, root)))) {
+      if (!file.endsWith('.ts')) continue;
+      const source = read(`${dir}/${file}`);
+      if (new RegExp(`^export (class|const) ${name}\\b`, 'm').test(source)) return source;
+    }
+  }
+  assert.fail(`no source exports ${name}`);
+}

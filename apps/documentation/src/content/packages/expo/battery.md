@@ -8,6 +8,8 @@ summary: The battery level, charging state and Low Power Mode, as signals.
 `Battery` reports the level, charging state and power-saving mode, for the work an app should not
 be doing on 5%.
 
+<!-- platforms: Battery -->
+
 ## Install
 
 ```sh

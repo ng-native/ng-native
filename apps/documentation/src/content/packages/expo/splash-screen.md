@@ -10,6 +10,8 @@ the whole feature, and it is easy to get subtly wrong: the native splash hides i
 the first frame is drawn, so an app that loads fonts before mounting shows a blank window for as
 long as that takes.
 
+<!-- platforms: SplashScreen -->
+
 ## Install
 
 ```sh

@@ -10,6 +10,8 @@ with the platform before anything is laid out, or the first paint is in the fall
 reflows when the real one lands. `loadFonts()` is the call an app makes before it mounts, wired to
 `expo-font`.
 
+<!-- platforms: Fonts -->
+
 ## Install
 
 ```sh

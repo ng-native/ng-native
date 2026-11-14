@@ -10,6 +10,8 @@ summary: Resize, crop, rotate, flip and re-encode an image file, with the native
 far larger than anything the app shows or uploads, and this is how it becomes a thumbnail or an
 upload-sized JPEG.
 
+<!-- platforms: ImageEditor -->
+
 `edit()` takes the module's own actions and save options, and runs them through its contextual API:
 each action applied in order, the result rendered and saved to a new file in the cache. The context
 and the rendered image hold native memory that nothing else frees, so both are released once the

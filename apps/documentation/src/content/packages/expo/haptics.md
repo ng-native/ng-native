@@ -7,6 +7,8 @@ summary: Impact, notification and selection feedback, fired and forgotten.
 
 `Haptics` fires haptic feedback: a collision, a success or failure, a selection change.
 
+<!-- platforms: Haptics -->
+
 It talks to Expo's native module directly rather than through `expo-haptics`'s own JavaScript,
 which adds exactly one thing on top: a throw when the module is missing. Asking for it optionally
 answers the same question without the throw, and sidesteps the enum its functions take. The

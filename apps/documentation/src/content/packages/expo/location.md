@@ -9,6 +9,8 @@ summary: A position signal, filled once by current() or continuously by start().
 `current()` and a running `start()` both write to. Nothing is watched until you call one of them,
 and the accuracy is explicit - GPS at navigation accuracy is a battery the user notices.
 
+<!-- platforms: Location -->
+
 ## Install
 
 ```sh

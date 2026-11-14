@@ -9,6 +9,8 @@ summary: The calendars on the device, and the events and reminders in them.
 bound to `expo-calendar`: iCloud, Google, Exchange and local calendars, their events and, on iOS,
 their reminders.
 
+<!-- platforms: Calendar -->
+
 The service uses the module's object API. A calendar, an event, a reminder and an attendee are
 handles, each with its own `update()` and `delete()`, and a calendar makes its own events with
 `createEvent()`. The service is where the handles come from, and it holds the permissions: full

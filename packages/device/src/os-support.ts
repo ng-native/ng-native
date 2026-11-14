@@ -55,6 +55,19 @@ const row = (
 
 const MAC_ONLY = ['yes', 'absent', 'absent', 'absent', 'absent'] as const;
 
+/**
+ * An Expo-backed service whose `available()` is whether its module is there: the Expo module on
+ * iPadOS, iPhone and Android, the desktop host's module on macOS, and nothing on the web, where
+ * the Expo module is not written for it.
+ */
+const EXPO_MODULE = ['yes', 'yes', 'yes', 'yes', 'absent'] as const;
+
+const expoRow = (
+  service: string,
+  hostModule: string,
+  cells: readonly [string, string, string, string, string] = EXPO_MODULE,
+): OsSupportRow => row(`\`${service}\``, [], cells, { [service]: hostModule });
+
 export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`AppWindows.open`, `provideMainWindow`',
@@ -159,6 +172,28 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     undefined,
     ['BackgroundTask', 'Brightness', 'DeviceOrientation'],
   ),
+  expoRow('AppInfo', 'NgNativeApplication'),
+  expoRow('Battery', 'NgNativeBattery'),
+  expoRow('Browser', 'NgNativeWebBrowser'),
+  expoRow('Calendar', 'NgNativeCalendar'),
+  expoRow('Clipboard', 'NgNativeClipboard'),
+  expoRow('Crypto', 'NgNativeCrypto'),
+  expoRow('DocumentPicker', 'NgNativeDocumentPicker'),
+  expoRow('FileSystem', 'NgNativeFileSystem'),
+  expoRow('Fonts', 'NgNativeFont'),
+  expoRow('Haptics', 'NgNativeHaptics'),
+  expoRow('ImageEditor', 'NgNativeImageManipulator'),
+  expoRow('ImagePicker', 'NgNativeImagePicker'),
+  expoRow('KeepAwake', 'NgNativeKeepAwake'),
+  expoRow('Locale', 'NgNativeLocalization'),
+  expoRow('Location', 'NgNativeLocation'),
+  expoRow('MediaLibrary', 'NgNativeMediaLibrary'),
+  expoRow('Network', 'NgNativeNetwork'),
+  expoRow('Notifications', 'NgNativeNotifications'),
+  expoRow('Printing', 'NgNativePrint'),
+  expoRow('SplashScreen', 'NgNativeSplashScreen'),
+  expoRow('TextRecognition', 'NgNativeTextRecognition', ['yes', 'yes', 'yes', 'absent', 'absent']),
+  expoRow('Updates', 'NgNativeUpdates'),
 ];
 
 /** The row a service's `available()` follows, or undefined where the table has none for it. */

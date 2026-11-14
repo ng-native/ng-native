@@ -104,6 +104,9 @@ interface Entry {
   readonly madeWithModule?: boolean;
 }
 
+/** An entry that may leave `absentOn` to the support table. */
+type Raw = Omit<Entry, 'absentOn'> & { readonly absentOn?: readonly Os[] };
+
 const device = (token: ProviderToken<unknown>, file: string, absentOn: readonly Os[] = []) => ({
   token,
   file: `device/src/${file}.ts`,
@@ -114,11 +117,11 @@ const expo = (
   token: ProviderToken<unknown>,
   file: string,
   options: { cls?: string; absentOn?: readonly Os[]; madeWithModule?: boolean } = {},
-): Entry => ({
+): Raw => ({
   token,
   file: `expo/src/${file}.ts`,
   cls: options.cls ?? (token as { name: string }).name,
-  absentOn: options.absentOn ?? ['web'],
+  absentOn: options.absentOn,
   madeWithModule: options.madeWithModule,
 });
 
@@ -144,7 +147,7 @@ const desktop = (token: ProviderToken<unknown>, file: string) => {
 /** A service with no meaning on a desktop OS, so no desktop source: absent on a Mac for good. */
 const MOBILE_ONLY = { absentOn: ['macos', 'web'] as const };
 
-const SERVICES: Readonly<Record<string, Entry>> = {
+const RAW: Readonly<Record<string, Raw>> = {
   Accessibility: device(Accessibility, 'accessibility'),
   AppState: device(AppState, 'app-state'),
   ColorScheme: device(ColorScheme, 'color-scheme'),
@@ -223,6 +226,20 @@ const SERVICES: Readonly<Record<string, Entry>> = {
     madeWithModule: true,
   },
 };
+
+/**
+ * Where an entry names none, the OSes the support table says the service is absent on if it has a
+ * row, and the web alone if it has none: an Expo-backed service is not written for the web.
+ */
+const SERVICES: Readonly<Record<string, Entry>> = Object.fromEntries(
+  Object.entries(RAW).map(([name, entry]) => [
+    name,
+    {
+      ...entry,
+      absentOn: entry.absentOn ?? (supportRowOf(name) ? absentInTable(name) : ['web']),
+    },
+  ]),
+);
 
 /**
  * Calls that are not inert by design, each with why.

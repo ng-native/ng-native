@@ -9,6 +9,8 @@ summary: The cache and document directories, a folder the user picks, and writin
 hands back Expo's own `File`. It is a locator, not a file API: everything else - moving, listing,
 downloading, streaming - is on the object it returns, documented by `expo-file-system` itself.
 
+<!-- platforms: FileSystem -->
+
 ## Install
 
 ```sh
@@ -95,11 +97,11 @@ const stop = this.files.watch(this.files.paths.document!, (change) => this.reloa
 They reach what the app can: its own folders and the folders the user picked.
 
 On macOS everything else that takes a path or a `file:` uri from the app reaches no further than
-`FileSystem` does, and the app's own assets. That covers an image to edit, show, measure or read text
-from, a font, a file to print, share, drag out, open or save to the photo library, a request's file
-url or body, an audio or video source, a web view's file page and `Asset.downloadAsync`. A SQLite
-database opens or is made only where `FileSystem` can write. Anything else is refused with an error
-naming the path, the same whether or not a file is there.
+`FileSystem` does, and the app's own assets. That covers an image to edit, show, measure or read
+text from, a font, a file to print, share, drag out, open or save to the photo library, a request's
+file url or body, an audio or video source, a web view's file page and `Asset.downloadAsync`. A
+SQLite database opens or is made only where `FileSystem` can write. Anything else is refused with an
+error naming the path, the same whether or not a file is there.
 
 ## `paths`
 
