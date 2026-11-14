@@ -1,4 +1,5 @@
 #include "ngn/desktop-view-props.h"
+#include "ngn/screen-presentation.h"
 
 #include "ngn/desktop-modal.h"
 
@@ -58,6 +59,14 @@ DesktopProps desktopProps(const Props &props) {
     DesktopProps out{.presentation = modalPresentation(*modal)};
     if (modal->anchor != 0) {
       out.anchor = modal->anchor;
+    }
+    return out;
+  }
+  if (auto presented = screenPresentation(props)) {
+    // A presented screen shows as a modal does (screen-presentation.h).
+    DesktopProps out{.presentation = *presented};
+    if (const auto *screen = dynamic_cast<const ScreenProps *>(&props); screen && screen->anchor != 0) {
+      out.anchor = screen->anchor;
     }
     return out;
   }

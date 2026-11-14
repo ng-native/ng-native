@@ -1,7 +1,8 @@
 // ngn-macos: the macOS desktop host. Loads a bundle into one runtime, starts the app on a surface
 // that is never shown, and gives each window the app opens (NgNativeWindows) a surface of its own.
 //
-//   ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>]
+//   ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>]
+//   ngn-macos              (in a packaged app: the bundle and module its Info.plist names)
 //
 // <bundle> is a JavaScript or Hermes bytecode file on disk, or a Metro bundle URL, which turns on
 // the dev loop: reload and Fast Refresh from the dev server, and the Developer menu. The module
@@ -17,7 +18,10 @@
 #import "modal-host-view.h"
 #import "network.h"
 #import "scroll-view.h"
+#import "split-view.h"
 #import "system.h"
+#import "system-access.h"
+#import "desktop-expo.h"
 #import "tray-and-dock.h"
 #import "surface-view.h"
 #include "text-layout.h"
@@ -317,12 +321,18 @@ int main(int argc, const char *argv[]) {
     std::string module = "main";
     NSString *title = @"ng-native";
     std::string appId;
+    std::string capabilities;
+    if (const char *fromEnv = getenv("NGN_DESKTOP_CAPABILITIES")) {
+      capabilities = fromEnv;
+    }
     for (int i = 1; i < argc; i++) {
       std::string arg = argv[i];
       if (arg == "--module" && i + 1 < argc) {
         module = argv[++i];
       } else if (arg == "--app-id" && i + 1 < argc) {
         appId = argv[++i];
+      } else if (arg == "--capabilities" && i + 1 < argc) {
+        capabilities = argv[++i];
       } else if (arg == "--title" && i + 1 < argc) {
         title = [NSString stringWithUTF8String:argv[++i]];
       } else if (bundle.empty() && arg.rfind("--", 0) != 0) {
@@ -332,8 +342,19 @@ int main(int argc, const char *argv[]) {
         break;
       }
     }
+    // A packaged app, launched from Finder with no arguments: its Info.plist says what to run.
+    if (auto packaged = ngn::appkit::packagedApp(); packaged && argc == 1) {
+      bundle = packaged->bundlePath;
+      module = packaged->moduleName;
+      if (NSString *name = NSBundle.mainBundle.infoDictionary[@"CFBundleName"]; [name isKindOfClass:NSString.class]) {
+        title = name;
+      }
+      if (NSString *identifier = NSBundle.mainBundle.bundleIdentifier) {
+        appId = identifier.UTF8String;
+      }
+    }
     if (bundle.empty()) {
-      fprintf(stderr, "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>]\n");
+      fprintf(stderr, "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>]\n");
       return 2;
     }
 
@@ -378,6 +399,16 @@ int main(int argc, const char *argv[]) {
       } else {
         gHost.mounting->tree().removeContainerRoot(static_cast<Tag>(tag));
       }
+    };
+    NGNSplitView.input = gHost.input.get();
+    NGNSplitView.containerRootChanged = NGNHeaderToolbar.containerRootChanged;
+    NGNSplitView.rowContentTakesClick = [](NSInteger row, NSPoint point) {
+      const auto &tree = gHost.mounting->tree();
+      auto chain = tree.hitTest(static_cast<Tag>(row), {static_cast<Float>(point.x), static_cast<Float>(point.y)});
+      return ngn::rowContentTakesClick(tree, chain);
+    };
+    NGNTabsHostView.tabChosen = [](NSInteger surface, NSInteger host, NSInteger screen) {
+      gHost.mounting->chooseTab(static_cast<SurfaceId>(surface), static_cast<Tag>(host), static_cast<Tag>(screen));
     };
     NGNModalHostView.sheetSizer = [](NSInteger surface, NSInteger tag, NSSize window) {
       ngn::SheetNode empty;
@@ -459,6 +490,24 @@ int main(int argc, const char *argv[]) {
     gHost.dock = std::make_shared<ngn::appkit::AppKitDock>([](const std::string &id) { gHost.dockHost->menuSelect(id); });
     gHost.dockHost = std::make_shared<ngn::DockHost>(gHost.dock);
     ngn::addModule(*modules, "NgNativeDock", [] { return ngn::makeDockModule(gHost.dockHost); });
+    {
+      // One launcher and one declaration for the process: a reload gets a new module over them.
+      static auto launcher = ngn::makePosixLauncher();
+      static auto processes = ngn::appkit::processesSetup(capabilities);
+      static auto opener = ngn::appkit::makeShellOpener();
+      ngn::addModule(*modules, "NgNativeProcesses", [] { return ngn::makeProcessesModule(launcher, processes); });
+      ngn::addModule(*modules, "NgNativeShell", [] { return ngn::makeShellModule(opener); });
+      // The desktop Expo modules (DESKTOP_MODULES in @ng-native/expo).
+      static auto keychain = ngn::appkit::makeKeychain();
+      static auto keychainService = appId;
+      static auto expoSystem = system;
+      static auto awake = std::make_shared<ngn::KeepAwakeTags>(ngn::appkit::makeSleepPreventer());
+      static auto haptics = ngn::appkit::makeHapticPlayer();
+      ngn::addModule(*modules, "NgNativeSecureStore", [] { return ngn::makeSecureStoreModule(keychain, keychainService); });
+      ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem); });
+      ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
+      ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
+    }
 
     gHost.runtime = std::make_unique<ngn::Runtime>(
         gHost.mounting,

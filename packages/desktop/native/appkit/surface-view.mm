@@ -205,7 +205,8 @@ NSCursor *nsCursor(Cursor cursor) {
 }
 
 - (ngn::PointerInput)inputFor:(NSEvent *)event {
-  NSPoint inView = [self convertPoint:event.locationInWindow fromView:nil];
+  NSView *root = self.rootView != nil && [self.rootView isDescendantOf:self] ? self.rootView : self;
+  NSPoint inView = [root convertPoint:event.locationInWindow fromView:nil];
   NSPoint onScreen = [self.window convertPointToScreen:event.locationInWindow];
   // AppKit's screen coordinates start at the bottom left of the primary display.
   CGFloat top = NSMaxY(NSScreen.screens.firstObject.frame);
@@ -330,6 +331,18 @@ NSCursor *nsCursor(Cursor cursor) {
 }
 
 - (void)mouseExited:(NSEvent *)event {
+  // Into another container of the same surface (across a split view's divider, into a custom
+  // sidebar row or out of one): that one reports the move, and the pointer has not left.
+  NSView *content = self.window.contentView;
+  NSView *hit = [content hitTest:[content.superview convertPoint:event.locationInWindow fromView:nil]];
+  for (NSView *v = hit; v != nil; v = v.superview) {
+    if ([v isKindOfClass:NGNSurfaceView.class]) {
+      if (v != self && ((NGNSurfaceView *)v).surfaceId == _surfaceId) {
+        return;
+      }
+      break;
+    }
+  }
   _input->pointerLeave(_surfaceId, [self inputFor:event]);
 }
 

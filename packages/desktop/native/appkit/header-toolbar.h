@@ -28,6 +28,9 @@
 @property (class, nonatomic) std::function<void(NSInteger tag, BOOL isRoot)> containerRootChanged;
 
 - (instancetype)initWithWindow:(NSWindow *)window;
+// The window's content is a split view controller: the sidebar button and the tracking separator
+// lead, and the toolbar shows even when no header does.
+@property (nonatomic) BOOL sidebar;
 // The header in front, or nil for none. `screen` hears the back button.
 - (void)showConfig:(NGNHeaderConfigView *)config screen:(NGNView *)screen canGoBack:(BOOL)canGoBack;
 // Rebuilds the bar when the config in front (or a view under it) changed.

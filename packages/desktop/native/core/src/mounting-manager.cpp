@@ -2,6 +2,7 @@
 
 #include "ngn/desktop-modal.h"
 #include "ngn/native-controls.h"
+#include "ngn/split-view.h"
 
 #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
@@ -20,11 +21,13 @@ MountingManager::MountingManager(
     std::shared_ptr<MountingBackend> backend,
     std::shared_ptr<DesktopPropsSink> desktopProps,
     std::unique_ptr<ScreenStacks> screens,
-    std::unique_ptr<SafeAreas> safeAreas)
+    std::unique_ptr<SafeAreas> safeAreas,
+    std::unique_ptr<TabsHosts> tabs)
     : backend_(std::move(backend)),
       desktopProps_(std::move(desktopProps)),
       screens_(screens ? std::move(screens) : std::make_unique<ScreenStacks>()),
-      safeAreas_(safeAreas ? std::move(safeAreas) : std::make_unique<SafeAreas>()) {
+      safeAreas_(safeAreas ? std::move(safeAreas) : std::make_unique<SafeAreas>()),
+      tabs_(tabs ? std::move(tabs) : std::make_unique<TabsHosts>()) {
   components_ = {
       concreteComponentDescriptorProvider<DesktopViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<ParagraphComponentDescriptor>(),
@@ -39,6 +42,11 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<ActivityIndicatorControlComponentDescriptor>(),
       concreteComponentDescriptorProvider<SegmentedControlComponentDescriptor>(),
       concreteComponentDescriptorProvider<DatePickerComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SplitViewComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SidebarComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SplitContentComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SidebarSectionComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SidebarItemComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : backend_->componentProviders()) {
@@ -85,10 +93,13 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         safeAreas_->created(view);
         backend_->createView(view);
         reportDesktopProps(view, nullptr);
+        tabs_->propsChanged(tree_, view.tag);
         break;
       }
       case ShadowViewMutation::Delete:
         screens_->deleted(m.oldChildShadowView.tag);
+        sidebars_.deleted(m.oldChildShadowView.tag);
+        tabs_->deleted(m.oldChildShadowView.tag);
         safeAreas_->deleted(m.oldChildShadowView.tag);
         tree_.destroy(m.oldChildShadowView.tag);
         backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
@@ -98,11 +109,15 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         tree_.insert(m.parentTag, m.newChildShadowView.tag, m.index);
         backend_->insertChild(surfaceId, m.parentTag, m.newChildShadowView.tag, m.index);
         screens_->childrenChanged(tree_, m.parentTag);
+        sidebars_.childrenChanged(tree_, m.parentTag);
+        tabs_->childrenChanged(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Remove:
         tree_.remove(m.parentTag, m.oldChildShadowView.tag);
         backend_->removeChild(surfaceId, m.parentTag, m.oldChildShadowView.tag, m.index);
         screens_->childrenChanged(tree_, m.parentTag);
+        sidebars_.childrenChanged(tree_, m.parentTag);
+        tabs_->childrenChanged(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Update: {
         const auto &old = m.oldChildShadowView;
@@ -116,6 +131,9 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         if (old.props != view.props) {
           backend_->updateProps(view);
           reportDesktopProps(view, &old);
+          sidebars_.propsChanged(tree_, view.tag);
+          tabs_->propsChanged(tree_, view.tag);
+          screens_->propsChanged(tree_, view.tag);
         }
         if (old.state != view.state) {
           backend_->updateState(view);
@@ -132,7 +150,18 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   for (const auto &change : screens_->settle(tree_)) {
     backend_->setCovered(surfaceId, change.tag, change.covered);
   }
+  for (const auto &change : screens_->takePresented()) {
+    backend_->setPresented(surfaceId, change.tag, change.covered);
+  }
+  applyTabs(surfaceId);
   safeAreas_->settle(tree_);
+  auto sidebars = sidebars_.settle(tree_, surfaceId);
+  for (const auto &split : sidebars.splitViews) {
+    backend_->setSplitView(surfaceId, split.tag, split.window);
+  }
+  for (const auto &lists : sidebars.lists) {
+    backend_->setSourceLists(surfaceId, lists.parent, lists.lists);
+  }
   auto header = screens_->frontHeader(tree_, surfaceId);
   auto known = frontHeaders_.find(surfaceId);
   if (known == frontHeaders_.end() ? header.has_value() : known->second != header) {
@@ -143,6 +172,21 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   if (afterMount_) {
     afterMount_(surfaceId);
   }
+}
+
+void MountingManager::applyTabs(SurfaceId surfaceId) {
+  auto changes = tabs_->settle(tree_);
+  for (const auto &change : changes.covered) {
+    backend_->setCovered(surfaceId, change.tag, change.covered);
+  }
+  for (const auto &host : changes.hosts) {
+    backend_->setSourceLists(surfaceId, host.host, {host.list});
+  }
+}
+
+void MountingManager::chooseTab(SurfaceId surfaceId, Tag host, Tag screen) {
+  tabs_->userSelect(tree_, host, screen);
+  applyTabs(surfaceId);
 }
 
 void MountingManager::setContainerInsets(Tag root, const ContainerInsets &insets) {

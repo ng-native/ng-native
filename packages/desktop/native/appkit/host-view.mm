@@ -4,7 +4,9 @@
 #import "image-view.h"
 #import "modal-host-view.h"
 #import "native-controls.h"
+#import "presented-screen.h"
 #import "scroll-view.h"
+#import "split-view.h"
 
 #include "text-layout.h"
 
@@ -133,6 +135,7 @@ NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
   return _desktop.focusable.value_or(false) || _desktop.tabIndex.value_or(-1) >= 0;
 }
 
+
 // Whether the event AppKit is handling is a key's: a focus a key moved draws a ring and matches
 // `:focus-visible`, which the engine learns from `focusVisible` on the focus event.
 static BOOL focusFromKeyboard() {
@@ -185,6 +188,14 @@ static BOOL focusFromKeyboard() {
 
 - (Props::Shared)props {
   return _props;
+}
+
+- (State::Shared)state {
+  return _state;
+}
+
+- (const LayoutMetrics &)layoutMetrics {
+  return _layout;
 }
 
 - (const ngn::DesktopProps &)desktopProps {
@@ -652,6 +663,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   if (name == "ModalHostView") {
     return [[NGNModalHostView alloc] initWithShadowView:view];
   }
+  if (name == "RNSScreen") {
+    return [[NGNPresentedScreenView alloc] initWithShadowView:view];
+  }
   if (name == "RNSScreenStackHeaderConfig") {
     return [[NGNHeaderConfigView alloc] initWithShadowView:view];
   }
@@ -660,6 +674,24 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == "ScrollView") {
     return [[NGNScrollView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::SplitViewComponentName) {
+    return [[NGNSplitView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::SidebarComponentName || name == ngn::SplitContentComponentName) {
+    return [[NGNSplitPaneView alloc] initWithShadowView:view];
+  }
+  if (name == "RNSTabsHostIOS") {
+    return [[NGNTabsHostView alloc] initWithShadowView:view];
+  }
+  if (name == "RNSTabsScreenIOS") {
+    return [[NGNTabScreenView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::SidebarSectionComponentName) {
+    return [[NGNSidebarSectionView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::SidebarItemComponentName) {
+    return [[NGNSidebarItemView alloc] initWithShadowView:view];
   }
   return [[NGNView alloc] initWithShadowView:view];
 }

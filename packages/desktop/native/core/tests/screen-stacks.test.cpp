@@ -223,3 +223,31 @@ TEST_CASE("an inner stack's header wins over its screen's, and a screen without 
   f.mount(f.push(20, 1));
   CHECK(headerCalls(f.backend->calls) == Lines{"no header"});
 }
+
+TEST_CASE("a stack in a split view's content pane or a tab fills the window's header, and one in a modal does not") {
+  for (const char *pane : {"NgNativeSplitContent", "RNSTabsHostIOS", "ModalHostView"}) {
+    CAPTURE(pane);
+    Fixture f;
+    // The pane is a container of its own, as the toolkit makes it, and holds a stack with a header.
+    auto container = shadowView(50, pane, {{0, 0}, {400, 300}});
+    auto stack = shadowView(51, "RNSScreenStack", {{0, 0}, {400, 300}});
+    auto screen = shadowView(52, "RNSScreen", {{0, 0}, {400, 300}});
+    auto config = shadowView(53, "RNSScreenStackHeaderConfig", {{0, 0}, {400, 44}});
+    f.mounting->tree().addContainerRoot(50);
+    f.mount({
+        ShadowViewMutation::CreateMutation(container),
+        ShadowViewMutation::CreateMutation(stack),
+        ShadowViewMutation::CreateMutation(screen),
+        ShadowViewMutation::CreateMutation(config),
+        ShadowViewMutation::InsertMutation(52, config, 0),
+        ShadowViewMutation::InsertMutation(51, screen, 0),
+        ShadowViewMutation::InsertMutation(50, stack, 0),
+        ShadowViewMutation::InsertMutation(1, container, 1),
+    });
+    if (std::string_view(pane) == "ModalHostView") {
+      CHECK(headerCalls(f.backend->calls).empty());
+    } else {
+      CHECK(headerCalls(f.backend->calls) == Lines{"header 53 of 52"});
+    }
+  }
+}
