@@ -45,6 +45,7 @@
 #import "camera-view.h"
 #import "camera.h"
 #import "map-view.h"
+#import "apple-authentication.h"
 #include "ngn/web-view.h"
 #import "geocoder.h"
 #import "address-search.h"
@@ -845,6 +846,9 @@ int main(int argc, const char *argv[]) {
       static auto mapViews = std::make_shared<ngn::MapViews>();
       [NGNMapView useViews:mapViews location:location];
       ngn::addModule(*modules, "NgNativeMaps", [] { return ngn::makeMapsModule(mapViews); });
+      // Sign in with Apple: available only to an app signed with its entitlement.
+      static auto appleId = ngn::appkit::makeAppleIdProvider();
+      ngn::addModule(*modules, "NgNativeAppleAuthentication", [] { return ngn::makeAppleAuthenticationModule(appleId, noPrompts); });
       static auto printSystem = ngn::appkit::makePrintSystem();
       ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", noPrompts); });
       // react-native-webview's navigation answers; harmless in a host built without the library.

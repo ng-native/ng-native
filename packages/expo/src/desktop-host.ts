@@ -44,3 +44,18 @@ export function assetUri(source: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * A host's rejection, `CODE: message`, as an error with that `code`, as an Expo module's rejection
+ * carries one. A rejection in no such shape is thrown as it is.
+ */
+export async function coded<T>(answer: Promise<T>): Promise<T> {
+  try {
+    return await answer;
+  } catch (failure) {
+    const text = failure instanceof Error ? failure.message : String(failure);
+    const match = /^(ERR_[A-Z_]+): ([\s\S]*)$/.exec(text);
+    if (!match) throw failure;
+    throw Object.assign(new Error(match[2]), { code: match[1] });
+  }
+}

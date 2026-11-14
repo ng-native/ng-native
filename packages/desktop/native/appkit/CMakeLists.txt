@@ -26,6 +26,7 @@ add_executable(ngn-macos
     camera-view.mm
     maps.mm
     map-view.mm
+    apple-authentication.mm
     battery.mm
     header-toolbar.mm
     host-view.mm
