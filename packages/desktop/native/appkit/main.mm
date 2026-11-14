@@ -39,6 +39,12 @@
 #import "screen-capture.h"
 #import "photo-library.h"
 #import "tracking.h"
+#import "image-manipulator.h"
+#import "geocoder.h"
+#import "address-search.h"
+#include "ngn/asset.h"
+#import "symbol-drawing.h"
+#import "share-picker.h"
 #include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "file-system.h"
@@ -734,7 +740,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases); });
       static auto location = ngn::appkit::makeLocationSource();
       static bool noPrompts = std::getenv("NGN_NO_PROMPTS") != nullptr && std::string(std::getenv("NGN_NO_PROMPTS")) == "1";
-      ngn::addModule(*modules, "NgNativeLocation", [] { return ngn::makeLocationModule(location, noPrompts); });
+      static auto geocoder = ngn::appkit::makeGeocoder();
+      ngn::addModule(*modules, "NgNativeLocation", [] { return ngn::makeLocationModule(location, noPrompts, geocoder); });
       static auto authenticator = ngn::appkit::makeAuthenticator();
       ngn::addModule(*modules, "NgNativeLocalAuthentication", [] { return ngn::makeLocalAuthenticationModule(authenticator); });
       static auto bundleFacts = ngn::appkit::mainBundleFacts();
@@ -773,6 +780,18 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeImagePicker", [] { return ngn::makeImagePickerModule(photos, noPrompts); });
       static auto tracking = ngn::appkit::makeTrackingAuthority();
       ngn::addModule(*modules, "NgNativeTrackingTransparency", [] { return ngn::makeTrackingModule(tracking, noPrompts); });
+      static auto imageHttp = network.http;
+      static auto addressLookup = ngn::appkit::makeAddressLookup();
+      ngn::addModule(*modules, "NgNativeAddressSearch", [] { return ngn::makeAddressSearchModule(addressLookup); });
+      ngn::addModule(*modules, "NgNativeAsset", [] { return ngn::makeAssetModule(imageHttp, caches); });
+      static auto symbolMeasurer = ngn::appkit::makeSymbolMeasurer();
+      ngn::addModule(*modules, "NgNativeSymbol", [] { return ngn::makeSymbolModule(symbolMeasurer); });
+      static auto sharePicker = ngn::appkit::makeSharePicker();
+      ngn::addModule(*modules, "NgNativeSharing", [] { return ngn::makeSharingModule(sharePicker, noPrompts); });
+      static auto imageCodec = ngn::appkit::makeImageCodec();
+      ngn::addModule(*modules, "NgNativeImageManipulator", [] {
+        return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator");
+      });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
       static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });

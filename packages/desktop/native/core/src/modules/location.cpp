@@ -46,9 +46,44 @@ double metresOf(const folly::dynamic &options) {
   }
 }
 
+const char *const kExpoAddressFields[] = {
+    "city", "district", "streetNumber", "street", "region", "subregion",
+    "country", "postalCode", "name", "isoCountryCode", "timezone"};
+
+// Answers a geocoder's places through `shape`, or the rejection expo-location's iOS module gives.
+void settle(const Geocoder::Answer &answer, JsPromise &p, folly::dynamic (*shape)(const Geocoder::Place &)) {
+  switch (answer.failure) {
+    case Geocoder::Failure::Network: p.reject("Geocoding rate limit exceeded - too many requests"); return;
+    case Geocoder::Failure::Failed:
+      p.reject("Error while geocoding a location" + (answer.reason.empty() ? "" : ": " + answer.reason));
+      return;
+    case Geocoder::Failure::NoResult: p.resolve(folly::dynamic::array()); return;
+    case Geocoder::Failure::None: break;
+  }
+  folly::dynamic places = folly::dynamic::array();
+  for (const auto &place : answer.places) {
+    places.push_back(shape(place));
+  }
+  p.resolve(std::move(places));
+}
+
+folly::dynamic pointOf(const Geocoder::Place &place) {
+  return folly::dynamic::object("latitude", orNull(place.latitude))("longitude", orNull(place.longitude))(
+      "altitude", orNull(place.altitude))("accuracy", orNull(place.accuracy));
+}
+
+folly::dynamic addressOf(const Geocoder::Place &place) {
+  folly::dynamic address = folly::dynamic::object();
+  for (const char *field : kExpoAddressFields) {
+    auto found = place.address.find(field);
+    address[field] = found == place.address.end() ? folly::dynamic(nullptr) : folly::dynamic(found->second);
+  }
+  return address;
+}
+
 } // namespace
 
-std::shared_ptr<NativeModule> makeLocationModule(std::shared_ptr<LocationSource> source, bool noPrompts) {
+std::shared_ptr<NativeModule> makeLocationModule(std::shared_ptr<LocationSource> source, bool noPrompts, std::shared_ptr<Geocoder> geocoder) {
   // The watches still running, stopped when the module goes with its runtime.
   struct Watches {
     std::mutex mutex;
@@ -58,8 +93,29 @@ std::shared_ptr<NativeModule> makeLocationModule(std::shared_ptr<LocationSource>
     std::shared_ptr<LocationSource> source;
     std::shared_ptr<Watches> watches = std::make_shared<Watches>();
 
-    Location(std::shared_ptr<LocationSource> from, bool noPrompts) : NativeModule("NgNativeLocation"), source(std::move(from)) {
+    Location(std::shared_ptr<LocationSource> from, bool noPrompts, std::shared_ptr<Geocoder> geocoder)
+        : NativeModule("NgNativeLocation"), source(std::move(from)) {
       auto source = this->source;
+      if (geocoder) {
+        promise("geocodeAsync", [geocoder](const folly::dynamic &args, JsPromise p) {
+          if (args.empty() || !args[0].isString()) {
+            p.reject("Address to geocode must be a string");
+            return;
+          }
+          geocoder->geocode(args[0].asString(), [p](Geocoder::Answer answer) mutable { settle(answer, p, pointOf); });
+        });
+        promise("reverseGeocodeAsync", [geocoder](const folly::dynamic &args, JsPromise p) {
+          const auto *latitude = !args.empty() && args[0].isObject() ? args[0].get_ptr("latitude") : nullptr;
+          const auto *longitude = !args.empty() && args[0].isObject() ? args[0].get_ptr("longitude") : nullptr;
+          if (!latitude || !longitude || !latitude->isNumber() || !longitude->isNumber()) {
+            p.reject("Location to reverse-geocode must be an object with number properties `latitude` and `longitude`");
+            return;
+          }
+          geocoder->reverseGeocode(latitude->asDouble(), longitude->asDouble(), [p](Geocoder::Answer answer) mutable {
+            settle(answer, p, addressOf);
+          });
+        });
+      }
       promise("getForegroundPermissionsAsync", [source](const folly::dynamic &, JsPromise p) {
         p.resolve(permissionOf(source->authorization()));
       });
@@ -124,7 +180,7 @@ std::shared_ptr<NativeModule> makeLocationModule(std::shared_ptr<LocationSource>
       }
     }
   };
-  return std::make_shared<Location>(std::move(source), noPrompts);
+  return std::make_shared<Location>(std::move(source), noPrompts, std::move(geocoder));
 }
 
 } // namespace ngn

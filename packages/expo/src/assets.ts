@@ -17,7 +17,11 @@
  * loading different pictures are two separate waits, and a singleton holding one `loaded` signal
  * would have the second screen's load answer the first's. An app that wants assets warmed before
  * there is an injector at all calls `Asset.loadAsync` itself - there is nothing here to add.
+ *
+ * On macOS the desktop host's `NgNativeAsset` stands in for expo-asset (`desktopAssets`): each
+ * asset's `localUri` is its file, downloaded from the dev server into the caches in development.
  */
+import { desktopAssets } from './desktop-assets.ts';
 import { expoModuleNow } from './native.ts';
 
 import { resource, type Injector, type ResourceRef } from '@angular/core';
@@ -55,7 +59,8 @@ export function assetResource(
 function expoAssets(): NativeAssets | null {
   const expo = expoModuleNow(
     'expo-asset',
-    () => require('expo-asset') as typeof import('expo-asset'),
+    () => require('expo-asset') as Pick<typeof import('expo-asset'), 'Asset'>,
+    { desktop: desktopAssets },
   );
   if (!expo) return null;
   return { load: async (modules) => expo.Asset.loadAsync(modules as number[] | string[]) };

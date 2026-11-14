@@ -738,3 +738,140 @@ describe('Tracking on macOS', () => {
     assert.equal(tracking.advertisingId(), null);
   });
 });
+
+describe('ImageEditor on macOS', () => {
+  it("edits through NgNativeImageManipulator, sending a context's actions whole", async () => {
+    const calls: unknown[][] = [];
+    mac({
+      NgNativeImageManipulator: {
+        renderAsync: async (...args: unknown[]) => (
+          calls.push(['render', ...args]),
+          { width: 50, height: 25 }
+        ),
+        saveAsync: async (...args: unknown[]) => (
+          calls.push(['save', ...args]),
+          { uri: 'file:///caches/ImageManipulator/A.webp', width: 50, height: 25 }
+        ),
+      },
+    });
+    const { ImageEditor, SaveFormat, FlipType } = await import('@ng-native/expo/image-editor');
+    const editor = injectService(ImageEditor);
+    assert.equal(editor.available(), true);
+    const result = await editor.edit(
+      'file:///photo.png',
+      [{ resize: { width: 50 } }, { flip: FlipType.Vertical }, { rotate: 90 }],
+      { format: SaveFormat.PNG, compress: 0.5 },
+    );
+    assert.deepEqual(result, {
+      uri: 'file:///caches/ImageManipulator/A.webp',
+      width: 50,
+      height: 25,
+    });
+    const actions = [{ resize: { width: 50 } }, { flip: 'vertical' }, { rotate: 90 }];
+    assert.deepEqual(calls, [
+      ['render', 'file:///photo.png', actions, null],
+      ['save', 'file:///photo.png', actions, null, { format: 'png', compress: 0.5 }],
+    ]);
+
+    // A context by hand: reset drops what came before, and the image keeps the actions it rendered.
+    calls.length = 0;
+    const context = editor.manipulate('data:image/png;base64,AAAA');
+    assert.ok(context);
+    context.crop({ originX: 1, originY: 2, width: 3, height: 4 }).reset().rotate(-90);
+    const image = await context.renderAsync();
+    context.flip(FlipType.Horizontal);
+    assert.equal(image.width, 50);
+    assert.equal(image.height, 25);
+    await image.saveAsync();
+    assert.deepEqual(calls, [
+      ['render', 'data:image/png;base64,AAAA', [{ rotate: -90 }], null],
+      ['save', 'data:image/png;base64,AAAA', [{ rotate: -90 }], null, {}],
+    ]);
+    context.release();
+    image.release();
+  });
+});
+
+describe('AddressSearch on macOS', () => {
+  it("searches through the desktop host's NgNativeAddressSearch, its updates arriving as events", async () => {
+    const calls: unknown[][] = [];
+    const host = mac({
+      NgNativeAddressSearch: {
+        complete: async (...args: unknown[]) => (
+          calls.push(['complete', ...args]),
+          [{ id: '1:1:0', title: '22 Hyde Park Terrace', subtitle: 'Leeds' }]
+        ),
+        resolve: async (id: string) => (calls.push(['resolve', id]), null),
+        end: (session: number) => void calls.push(['end', session]),
+      },
+    });
+    const { AddressSearch } = await import('@ng-native/expo/address-search');
+    const native = injectService(AddressSearch.SOURCE);
+    assert.ok(native);
+    assert.equal(injectService(AddressSearch).available(), true);
+    const updates: unknown[] = [];
+    const subscription = native.addListener!('onSuggestions', (update) => updates.push(update));
+    const update = { session: 1, query: '22 H', suggestions: [] };
+    host.send('ngNativeAddressSearch', update);
+    subscription.remove();
+    host.send('ngNativeAddressSearch', update);
+    assert.deepEqual(updates, [update]);
+    assert.equal(host.listening('ngNativeAddressSearch'), 0);
+    assert.equal(
+      (await native.complete(1, '22 H', { region: 'GB' }))[0]?.title,
+      '22 Hyde Park Terrace',
+    );
+    assert.equal(await native.resolve('1:1:0'), null);
+    native.end(1);
+    assert.deepEqual(calls, [
+      ['complete', 1, '22 H', { region: 'GB' }],
+      ['resolve', '1:1:0'],
+      ['end', 1],
+    ]);
+  });
+});
+
+describe('assets() on macOS', () => {
+  it("downloads each asset through the desktop host's NgNativeAsset, sized as an image resolves it", async () => {
+    const asked: unknown[][] = [];
+    mac({
+      NgNativeAsset: {
+        downloadAsync: async (...args: unknown[]) => (
+          asked.push(args),
+          `file:///caches/ExponentAsset-${String(args[1] ?? 'x')}.png`
+        ),
+      },
+    });
+    const host = (globalThis as Record<string, unknown>)['require'] as (id: string) => object;
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => ({
+      ...host(id),
+      Image: {
+        resolveAssetSource: (id: number) => ({
+          uri: `http://localhost:8081/assets/hero-${id}.png?platform=macos&hash=h${id}`,
+          width: 40,
+          height: 30,
+        }),
+      },
+    });
+    const { assets } = await import('@ng-native/expo/assets');
+    const injector = injectService(Injector);
+    const loaded = runInInjectionContext(injector, () =>
+      assets(() => [7, 'https://example.com/logo.png']),
+    );
+    while (loaded.isLoading() || loaded.value() === undefined) {
+      if (loaded.error()) throw loaded.error();
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    assert.deepEqual(asked, [
+      ['http://localhost:8081/assets/hero-7.png?platform=macos&hash=h7', 'h7', 'png'],
+      ['https://example.com/logo.png', null, 'png'],
+    ]);
+    const [hero, logo] = loaded.value()!;
+    assert.equal(hero?.uri, 'http://localhost:8081/assets/hero-7.png?platform=macos&hash=h7');
+    assert.equal((hero as { localUri?: string }).localUri, 'file:///caches/ExponentAsset-h7.png');
+    assert.equal(hero?.width, 40);
+    assert.equal(hero?.height, 30);
+    assert.equal(logo?.width, null);
+    assert.equal((logo as { localUri?: string }).localUri, 'file:///caches/ExponentAsset-x.png');
+  });
+});

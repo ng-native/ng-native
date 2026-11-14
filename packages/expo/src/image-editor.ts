@@ -23,6 +23,9 @@
  * written, including when it fails. `manipulate()` hands over the module's context itself, for a
  * caller that chains its own steps and releases it after.
  *
+ * On macOS it edits through the desktop host's `NgNativeImageManipulator` (`desktopImageEditor`),
+ * which writes JPEG and PNG but not WebP.
+ *
  * Without the module installed, `edit()` resolves to null and `manipulate()` is null.
  */
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
@@ -34,6 +37,7 @@ import type {
   SaveFormat as ExpoSaveFormat,
   SaveOptions,
 } from 'expo-image-manipulator';
+import { desktopImageEditor } from './desktop-image-editor.ts';
 import { expoModule, presence } from './native.ts';
 
 type Expo = typeof import('expo-image-manipulator');
@@ -65,7 +69,9 @@ export class ImageEditor {
     'angular-native.imageEditorSource',
     {
       factory: () =>
-        expoModule('expo-image-manipulator', () => require('expo-image-manipulator') as Expo),
+        expoModule('expo-image-manipulator', () => require('expo-image-manipulator') as Expo, {
+          desktop: desktopImageEditor,
+        }),
     },
   );
 

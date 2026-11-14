@@ -94,13 +94,17 @@ add_library(ngn_core STATIC
     core/src/spawn-rules.cpp
     core/src/split-view.cpp
     core/src/svg.cpp
+    core/src/symbol.cpp
     core/src/tabs-host.cpp
+    core/src/download.cpp
     core/src/updates.cpp
     core/src/view-tree.cpp
     core/src/modules/accessibility-manager.cpp
+    core/src/modules/address-search.cpp
     core/src/modules/alert-manager.cpp
     core/src/modules/app-info.cpp
     core/src/modules/app-modules.cpp
+    core/src/modules/asset.cpp
     core/src/modules/async-storage.cpp
     core/src/modules/audio.cpp
     core/src/modules/battery.cpp
@@ -111,6 +115,7 @@ add_library(ngn_core STATIC
     core/src/modules/file-system.cpp
     core/src/modules/fonts.cpp
     core/src/modules/image-loader.cpp
+    core/src/modules/image-manipulator.cpp
     core/src/modules/language-model.cpp
     core/src/modules/local-authentication.cpp
     core/src/modules/location.cpp
@@ -155,9 +160,14 @@ if(NGN_TESTS)
         appkit/language-model.mm appkit/tests/language-model.test.mm
         appkit/screen-capture.mm appkit/tests/screen-capture.test.mm
         appkit/photo-library.mm appkit/tests/photo-library.test.mm
-        appkit/tracking.mm appkit/tests/tracking.test.mm)
+        appkit/tracking.mm appkit/tests/tracking.test.mm
+        appkit/image-manipulator.mm appkit/tests/image-manipulator.test.mm
+        appkit/geocoder.mm appkit/tests/geocoder.test.mm
+        appkit/address-search.mm appkit/tests/address-search.test.mm
+        appkit/symbol-drawing.mm appkit/tests/symbol.test.mm
+        appkit/share-picker.mm appkit/tests/share-picker.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

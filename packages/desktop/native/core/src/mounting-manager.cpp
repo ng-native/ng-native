@@ -7,6 +7,7 @@
 #include "ngn/desktop-modal.h"
 #include "ngn/native-controls.h"
 #include "ngn/split-view.h"
+#include "ngn/symbol.h"
 
 #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
@@ -52,6 +53,7 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<SplitContentComponentDescriptor>(),
       concreteComponentDescriptorProvider<SidebarSectionComponentDescriptor>(),
       concreteComponentDescriptorProvider<SidebarItemComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SymbolComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : backend_->componentProviders()) {

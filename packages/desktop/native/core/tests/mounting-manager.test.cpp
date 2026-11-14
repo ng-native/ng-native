@@ -200,7 +200,7 @@ TEST_CASE("desktop props reach the backend when set and when they change") {
 
 TEST_CASE("the core registers its components and the backend's") {
   Fixture f;
-  for (const char *name : {"View", "Paragraph", "Text", "RawText", "ScrollView", "TextInput", "Image", "ModalHostView", "UnimplementedNativeView"}) {
+  for (const char *name : {"View", "Paragraph", "Text", "RawText", "ScrollView", "TextInput", "Image", "ModalHostView", "ViewManagerAdapter_SymbolModule", "UnimplementedNativeView"}) {
     CHECK_MESSAGE(f.mounting->hasComponent(name), name);
   }
   CHECK_FALSE(f.mounting->hasComponent("RNSScreen"));

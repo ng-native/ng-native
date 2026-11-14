@@ -74,7 +74,7 @@ have to look each one up:
 | `expo-video`                           | `ExpoVideo` (`VideoView`)               | `SurfaceVideoView` on Android. Bind `player` to the player's `id`.     |
 | `expo-camera`                          | `ExpoCamera`                            | The module's default view. See [Camera](/packages/expo/camera).        |
 | `apple-sign-in-button`                 | `ExpoAppleAuthentication`               | See [Sign in with Apple](/packages/expo/apple-sign-in). iOS only.      |
-| `expo-symbol`                          | `SymbolModule`                          | SF Symbols, iOS only.                                                  |
+| `expo-symbol`                          | `SymbolModule`                          | SF Symbols, iOS and macOS.                                             |
 | `expo-gl`                              | `ExpoGL`                                | Its context is reached through an event rather than a prop.            |
 | `expo-glass`                           | `ExpoGlassEffect` (`GlassView`)         | The iOS 26 material. Renders as a plain view where unavailable.        |
 | `expo-glass-container`                 | `ExpoGlassEffect` (`GlassContainer`)    | Glass views inside merge when they come within `spacing` points.       |
@@ -137,6 +137,9 @@ weight and scale, which is wider or taller than `size` for most symbols, as Swif
 SwiftUI leaves the badge's overhang out of it, and `<expo-symbol>` keeps it in. This takes
 `@ng-native/expo`'s native module, so a development build. In Expo Go the view is `size` points
 square and the symbol is fitted into it, which draws most symbols smaller.
+
+On macOS the desktop host draws the symbol with AppKit and sizes its view the same way. It draws
+the type, weight, scale, colors and `resizeMode`, and plays no `animationSpec`.
 
 A glass view's corners are its own `border-radius`. Where Liquid Glass is unavailable - before iOS
 26, and on Android - `<expo-glass>` renders as a plain view, and `liquidGlassAvailable()` says
