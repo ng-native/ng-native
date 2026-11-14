@@ -1,5 +1,6 @@
 #import "host-view.h"
 
+#import "header-toolbar.h"
 #import "image-view.h"
 #import "modal-host-view.h"
 #import "scroll-view.h"
@@ -312,6 +313,12 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == "ModalHostView") {
     return [[NGNModalHostView alloc] initWithShadowView:view];
+  }
+  if (name == "RNSScreenStackHeaderConfig") {
+    return [[NGNHeaderConfigView alloc] initWithShadowView:view];
+  }
+  if (name == "RNSScreenStackHeaderSubview") {
+    return [[NGNHeaderSubviewView alloc] initWithShadowView:view];
   }
   if (name == "ScrollView") {
     return [[NGNScrollView alloc] initWithShadowView:view];

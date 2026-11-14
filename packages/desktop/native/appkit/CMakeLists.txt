@@ -2,6 +2,7 @@
 # nothing from outside itself but the system's frameworks.
 add_executable(ngn-macos
     appkit-backend.mm
+    header-toolbar.mm
     host-view.mm
     image-view.mm
     main.mm

@@ -10,6 +10,7 @@
 
 #include "ngn/view-tree.h"
 
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -36,6 +37,18 @@ class ScreenStacks {
 
   // The top screen of a stack, or -1.
   Tag top(Tag stack) const;
+
+  // The header a container shows: the RNSScreenStackHeaderConfig of the top screen of the
+  // innermost stack in the container that has one (a window has one toolbar, and the screen in
+  // front fills it). Stacks under a covered screen or in a container of their own do not count.
+  struct FrontHeader {
+    Tag config{-1};
+    Tag screen{-1};
+    // Whether the screen has one below it to go back to.
+    bool canGoBack{false};
+    bool operator==(const FrontHeader &) const = default;
+  };
+  std::optional<FrontHeader> frontHeader(const ViewTree &tree, Tag root) const;
 
  protected:
   // Where events leave the core: through the view's event emitter by default, recorded in tests.

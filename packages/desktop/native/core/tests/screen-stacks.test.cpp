@@ -148,3 +148,78 @@ TEST_CASE("only screens count: another child of a stack is never covered or the 
   CHECK(f.events.empty());
   CHECK_FALSE(f.mounting->tree().covered(10));
 }
+
+namespace {
+
+ShadowViewMutationList withHeader(Tag screen) {
+  auto config = shadowView(screen + 5, "RNSScreenStackHeaderConfig", {{0, 0}, {400, 44}});
+  return {ShadowViewMutation::CreateMutation(config), ShadowViewMutation::InsertMutation(screen, config, 1)};
+}
+
+Lines headerCalls(const Lines &calls) {
+  Lines out;
+  for (const auto &c : calls) {
+    if (c.rfind("header", 0) == 0 || c == "no header") {
+      out.push_back(c);
+    }
+  }
+  return out;
+}
+
+} // namespace
+
+TEST_CASE("the window shows the header of the screen in front, with back when one is below it") {
+  Fixture f;
+  auto first = f.push(10, 0);
+  for (auto &m : withHeader(10)) {
+    first.push_back(m);
+  }
+  f.mount(first);
+  CHECK(headerCalls(f.backend->calls) == Lines{"header 15 of 10"});
+
+  auto second = f.push(20, 1);
+  for (auto &m : withHeader(20)) {
+    second.push_back(m);
+  }
+  f.mount(second);
+  CHECK(headerCalls(f.backend->calls) == Lines{"header 25 of 20 with back"});
+
+  // A commit that moves nothing in front says nothing.
+  auto inner = shadowView(40, "View", {{0, 0}, {10, 10}});
+  f.mount({ShadowViewMutation::CreateMutation(inner), ShadowViewMutation::InsertMutation(21, inner, 0)});
+  CHECK(headerCalls(f.backend->calls).empty());
+
+  auto popped = f.pop(20, 1);
+  auto config = shadowView(25, "RNSScreenStackHeaderConfig", {{0, 0}, {400, 44}});
+  popped.insert(popped.begin() + 1, ShadowViewMutation::RemoveMutation(20, config, 1));
+  popped.push_back(ShadowViewMutation::DeleteMutation(config));
+  f.mount(popped);
+  CHECK(headerCalls(f.backend->calls) == Lines{"header 15 of 10"});
+}
+
+TEST_CASE("an inner stack's header wins over its screen's, and a screen without one shows none") {
+  Fixture f;
+  f.mount(f.push(10, 0));
+  CHECK(headerCalls(f.backend->calls).empty());
+
+  // Screen 10's box (11) holds a stack of its own, whose screen has a header.
+  auto inner = shadowView(30, "RNSScreenStack", {{0, 0}, {400, 300}});
+  auto screen = shadowView(31, "RNSScreen", {{0, 0}, {400, 300}});
+  auto config = shadowView(32, "RNSScreenStackHeaderConfig", {{0, 0}, {400, 44}});
+  auto outerConfig = shadowView(15, "RNSScreenStackHeaderConfig", {{0, 0}, {400, 44}});
+  f.mount({
+      ShadowViewMutation::CreateMutation(outerConfig),
+      ShadowViewMutation::InsertMutation(10, outerConfig, 1),
+      ShadowViewMutation::CreateMutation(inner),
+      ShadowViewMutation::CreateMutation(screen),
+      ShadowViewMutation::CreateMutation(config),
+      ShadowViewMutation::InsertMutation(31, config, 0),
+      ShadowViewMutation::InsertMutation(30, screen, 0),
+      ShadowViewMutation::InsertMutation(11, inner, 0),
+  });
+  CHECK(headerCalls(f.backend->calls) == Lines{"header 32 of 31"});
+
+  // Pushed away, the inner stack is under a covered screen and its header leaves with it.
+  f.mount(f.push(20, 1));
+  CHECK(headerCalls(f.backend->calls) == Lines{"no header"});
+}

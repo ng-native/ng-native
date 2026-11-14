@@ -41,6 +41,7 @@ class ViewTree {
   // lands on a popover's nodes.
   void addContainerRoot(Tag root);
   void removeContainerRoot(Tag root);
+  bool isContainerRoot(Tag tag) const;
 
   // The views under `point` (in `root`'s coordinates), from `root` down to the deepest, as React
   // Native iOS's hitTest:withEvent: finds them: later siblings are on top, `pointerEvents` is

@@ -90,6 +90,44 @@ std::vector<ScreenStacks::Covered> ScreenStacks::settle(ViewTree &tree) {
   return changes;
 }
 
+std::optional<ScreenStacks::FrontHeader> ScreenStacks::frontHeader(const ViewTree &tree, Tag root) const {
+  std::optional<FrontHeader> front;
+  int frontDepth = -1;
+  for (const auto &[stack, top] : tops_) {
+    const auto *screen = tree.find(top);
+    if (screen == nullptr || screen->parent != stack) {
+      continue;
+    }
+    // How deep the stack is in `root`'s container, or not in it at all.
+    int depth = 0;
+    Tag at = stack;
+    for (; at != root && at != -1; depth++) {
+      if (tree.covered(at) || tree.isContainerRoot(at)) {
+        at = -1;
+        break;
+      }
+      const auto *node = tree.find(at);
+      at = node == nullptr ? -1 : node->parent;
+    }
+    if (at != root || depth <= frontDepth) {
+      continue;
+    }
+    for (Tag child : screen->children) {
+      const auto *config = tree.find(child);
+      if (config != nullptr && std::string_view(config->view.componentName) == "RNSScreenStackHeaderConfig") {
+        int screens = 0;
+        for (Tag sibling : tree.find(stack)->children) {
+          screens += isScreen(tree.find(sibling)) ? 1 : 0;
+        }
+        front = FrontHeader{.config = child, .screen = top, .canGoBack = screens > 1};
+        frontDepth = depth;
+        break;
+      }
+    }
+  }
+  return front;
+}
+
 void ScreenStacks::emit(const ViewTree::Node &node, const char *event) {
   if (node.view.eventEmitter) {
     node.view.eventEmitter->dispatchEvent(event);

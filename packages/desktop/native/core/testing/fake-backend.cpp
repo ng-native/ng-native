@@ -81,6 +81,13 @@ void FakeBackend::setCovered(SurfaceId, Tag tag, bool covered) {
   calls.push_back((covered ? "cover " : "uncover ") + std::to_string(tag));
 }
 
+void FakeBackend::setFrontHeader(SurfaceId, const std::optional<ScreenStacks::FrontHeader> &header) {
+  calls.push_back(
+      header ? "header " + std::to_string(header->config) + " of " + std::to_string(header->screen) +
+              (header->canGoBack ? " with back" : "")
+             : "no header");
+}
+
 void FakeBackend::didMount(SurfaceId surfaceId) {
   calls.push_back("mounted " + std::to_string(surfaceId));
 }

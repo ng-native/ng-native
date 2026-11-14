@@ -55,7 +55,13 @@ std::vector<ComponentDescriptorProvider> libraryComponents() {
 } // namespace ngn
 ]] @ONLY)
 
-add_library(ngn_libraries STATIC ${CMAKE_BINARY_DIR}/generated/library-components.cpp)
-target_include_directories(ngn_libraries PUBLIC core/include)
-target_link_libraries(ngn_libraries PUBLIC react_native ${_lib_targets})
+# The core's reading of a library's props, where the core draws one of its components itself.
+if(TARGET ngn_library_rnscreens)
+  set(_lib_glue core/src/libraries/rnscreens.cpp)
+else()
+  set(_lib_glue core/src/libraries/no-rnscreens.cpp)
+endif()
+
+add_library(ngn_libraries STATIC ${CMAKE_BINARY_DIR}/generated/library-components.cpp ${_lib_glue})
+target_link_libraries(ngn_libraries PUBLIC ngn_core ${_lib_targets})
 target_compile_options(ngn_libraries PRIVATE -fexceptions -frtti -include cstdint -w)

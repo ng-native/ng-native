@@ -77,6 +77,10 @@ void ViewTree::removeContainerRoot(Tag root) {
   containerRoots_.erase(root);
 }
 
+bool ViewTree::isContainerRoot(Tag tag) const {
+  return containerRoots_.contains(tag);
+}
+
 void ViewTree::setCovered(Tag tag, bool covered) {
   if (covered) {
     covered_.insert(tag);

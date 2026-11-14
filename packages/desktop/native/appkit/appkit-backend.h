@@ -7,6 +7,7 @@
 #include "ngn/desktop-view-props.h"
 #include "ngn/mounting-backend.h"
 
+@class NGNHeaderToolbar;
 @class NGNSurfaceView;
 @class NGNView;
 
@@ -32,13 +33,20 @@ class AppKitBackend final : public MountingBackend, public DesktopPropsSink {
   void updateEventEmitter(const ShadowView &view) override;
   void dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) override;
   void setCovered(SurfaceId surfaceId, Tag tag, bool covered) override;
+  void setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) override;
   void didMount(SurfaceId surfaceId) override;
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
   std::vector<facebook::react::ComponentDescriptorProvider> componentProviders() const override;
 
  private:
   NSMutableDictionary<NSNumber *, NGNView *> *views_;
+  NGNHeaderToolbar *toolbarFor(SurfaceId surfaceId);
+  // A view whose change may change the header in front, rebuilt once the transaction is in.
+  void touched(NSView *view);
+
   NSMutableDictionary<NSNumber *, NGNSurfaceView *> *surfaces_;
+  NSMutableDictionary<NSNumber *, NGNHeaderToolbar *> *toolbars_;
+  NSMutableSet<NSView *> *touched_;
 };
 
 } // namespace ngn::appkit

@@ -11,6 +11,7 @@
 
 #include <functional>
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace ngn {
@@ -53,6 +54,7 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::function<void(SurfaceId)> afterMount_;
   ViewTree tree_;
   std::unique_ptr<ScreenStacks> screens_;
+  std::unordered_map<SurfaceId, std::optional<ScreenStacks::FrontHeader>> frontHeaders_;
 };
 
 } // namespace ngn

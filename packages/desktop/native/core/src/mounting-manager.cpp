@@ -122,6 +122,12 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   for (const auto &change : screens_->settle(tree_)) {
     backend_->setCovered(surfaceId, change.tag, change.covered);
   }
+  auto header = screens_->frontHeader(tree_, surfaceId);
+  auto known = frontHeaders_.find(surfaceId);
+  if (known == frontHeaders_.end() ? header.has_value() : known->second != header) {
+    frontHeaders_[surfaceId] = header;
+    backend_->setFrontHeader(surfaceId, header);
+  }
   backend_->didMount(surfaceId);
   if (afterMount_) {
     afterMount_(surfaceId);

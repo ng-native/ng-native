@@ -61,6 +61,7 @@ add_library(ngn_core STATIC
     core/src/desktop-view-props.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp
+    core/src/header-bar.cpp
     core/src/host-state.cpp
     core/src/input-dispatcher.cpp
     core/src/key-value-store.cpp

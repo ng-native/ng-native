@@ -11,6 +11,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #import "appkit-backend.h"
+#import "header-toolbar.h"
 #import "menu-bar.h"
 #import "modal-host-view.h"
 #import "network.h"
@@ -154,6 +155,14 @@ int main(int argc, const char *argv[]) {
     NGNModalHostView.input = gHost.input.get();
     NGNModalHostView.presentationChanged = [](NSInteger tag, BOOL presented) {
       if (presented) {
+        gHost.mounting->tree().addContainerRoot(static_cast<Tag>(tag));
+      } else {
+        gHost.mounting->tree().removeContainerRoot(static_cast<Tag>(tag));
+      }
+    };
+    NGNHeaderToolbar.input = gHost.input.get();
+    NGNHeaderToolbar.containerRootChanged = [](NSInteger tag, BOOL isRoot) {
+      if (isRoot) {
         gHost.mounting->tree().addContainerRoot(static_cast<Tag>(tag));
       } else {
         gHost.mounting->tree().removeContainerRoot(static_cast<Tag>(tag));
