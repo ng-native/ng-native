@@ -450,7 +450,15 @@ NSImage *symbol(const std::string &name, NSString *description) {
 }
 
 - (NGNHistoryControl *)historyControlWithTint:(NSColor *)tint {
-  NSArray *images = @[ symbol("chevron.backward", @"Back"), symbol("chevron.forward", @"Forward") ];
+  NSArray<NSImage *> *images = @[ symbol("chevron.backward", @"Back"), symbol("chevron.forward", @"Forward") ];
+  if (tint != nil) {
+    // The header's tint on the chevrons, as on the bar's other buttons: a segment has no content
+    // tint of its own, so the symbol is drawn in that colour.
+    NSImageSymbolConfiguration *colour = [NSImageSymbolConfiguration configurationWithPaletteColors:@[ tint ]];
+    images = @[
+      [images[0] imageWithSymbolConfiguration:colour], [images[1] imageWithSymbolConfiguration:colour]
+    ];
+  }
   NGNHistoryControl *control = [NGNHistoryControl segmentedControlWithImages:images
                                                                 trackingMode:NSSegmentSwitchTrackingMomentary
                                                                       target:self
@@ -460,9 +468,6 @@ NSImage *symbol(const std::string &name, NSString *description) {
   [control setToolTip:@"Forward" forSegment:1];
   [control setEnabled:_buttons.backEnabled forSegment:0];
   [control setEnabled:_buttons.forwardEnabled forSegment:1];
-  if (tint != nil) {
-    control.selectedSegmentBezelColor = tint;
-  }
   if (_history && _buttons.fromHistory) {
     [control setMenu:[self historyMenu:ngn::NavigationDirection::Back] forSegment:0];
     [control setMenu:[self historyMenu:ngn::NavigationDirection::Forward] forSegment:1];
