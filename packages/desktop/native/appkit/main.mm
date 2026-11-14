@@ -59,6 +59,7 @@
 #import "share-picker.h"
 #include "ngn/splash-screen.h"
 #import "store-review.h"
+#import "bookmarks.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
 #import "test-launch.h"
@@ -819,9 +820,18 @@ int main(int argc, const char *argv[]) {
       static auto caches = ngn::appkit::cacheDirectory(appId);
       // What the app may read and write: its folders, the user's picks, and the declared paths
       // (none in a Mac App Store build, whose sandbox reaches only picks).
-      static auto fileAccess = std::make_shared<ngn::FileAccess>(
-          ngn::appkit::fileFolders(system->appDataDirectory(), caches),
-          processes.sandboxed ? folly::dynamic::array() : processes.capabilities.paths);
+      static auto fileAccess = [&] {
+        auto access = std::make_shared<ngn::FileAccess>(
+            ngn::appkit::fileFolders(system->appDataDirectory(), caches),
+            processes.sandboxed ? folly::dynamic::array() : processes.capabilities.paths);
+        // Picks persist across launches through bookmarks, one store per app; a test launch starts
+        // with none and keeps none.
+        if (!settings.test) {
+          access->keepPicks(std::make_shared<ngn::PickStore>(
+              ngn::appkit::pickPersistence("NGNPickedPaths." + appId), ngn::appkit::makeBookmarks()));
+        }
+        return access;
+      }();
       static auto fileWatcher = ngn::appkit::makeFileWatcher();
       ngn::addModule(*modules, "NgNativeFileSystem", [] { return ngn::makeFileSystemModule(fileAccess, fileWatcher); });
       ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches, fileAccess); });

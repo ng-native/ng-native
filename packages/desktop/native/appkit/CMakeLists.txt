@@ -7,6 +7,7 @@ add_executable(ngn-macos
     crypto.mm
     desktop-expo.mm
     file-system.mm
+    bookmarks.mm
     fonts.mm
     appkit-backend.mm
     calendar.mm

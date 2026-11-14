@@ -409,6 +409,8 @@ export function entitlements(config, format, { bundleIdentifier, team, appleSign
     'com.apple.security.app-sandbox': true,
     'com.apple.security.network.client': true,
     'com.apple.security.files.user-selected.read-write': true,
+    // The bookmarks that keep the user's picks reachable in later launches.
+    'com.apple.security.files.bookmarks.app-scope': true,
     ...granted,
     'com.apple.application-identifier': `${team}.${bundleIdentifier}`,
     'com.apple.developer.team-identifier': team,

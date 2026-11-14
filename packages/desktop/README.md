@@ -420,9 +420,15 @@ list, and a geocoder out of reach (offline or rate limited) rejects.
 `NgNativeFileSystem` answers flat calls over `file:` uris, and the desktop loader builds the
 service's files on them: `paths` names `cache`, `document`, `appData`, `temp`, `home`, `desktop`
 and `downloads`, each left out where the app cannot reach it. `document` is `<appData>/Documents`,
-not `~/Documents`. A call reaches the app's own folders, the files and folders the user picked in
-a panel (until the app quits), and the paths the plugin options' `capabilities.paths` declare,
-read-only or read-write, after symbolic links are followed. `watch` reports changes from FSEvents.
+not `~/Documents`. A call reaches the app's own folders, the files and folders the user picked or
+saved to in a panel, and the paths the plugin options' `capabilities.paths` declare, read-only or
+read-write, after symbolic links are followed. `watch` reports changes from FSEvents.
+
+A pick stays reachable in later launches: the host keeps a security-scoped bookmark for each in the
+app's user defaults (where `FileSystem` cannot write), finds a picked file or folder again where it
+has moved, forgets one that is gone, and opens the sandbox to a pick only for the length of each
+call or watch. A Mac App Store build is signed with `com.apple.security.files.bookmarks.app-scope`
+for them.
 
 Each call is answered synchronously as well as with a promise (`statSync`, `readAsStringSync`,
 `writeAsStringSync`, `deleteSync` and the rest), so a file is synchronous where expo-file-system's

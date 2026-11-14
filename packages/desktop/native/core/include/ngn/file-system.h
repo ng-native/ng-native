@@ -42,6 +42,62 @@ std::string fileUri(const std::string &path);
 // another scheme or a relative path.
 std::optional<std::string> pathOfUri(const std::string &uri);
 
+// The toolkit's security-scoped bookmarks (macOS): what finds a file or folder the user picked
+// again in a later launch, wherever it has moved, and reopens the sandbox to it.
+class Bookmarks {
+ public:
+  struct Resolved {
+    std::string path;
+    // The bookmark still resolves but should be made again.
+    bool stale{false};
+  };
+  virtual ~Bookmarks() = default;
+  // A bookmark for `path`, or nothing where the toolkit cannot make one.
+  virtual std::optional<std::string> make(const std::string &path) = 0;
+  // Where a bookmark points now, or nothing for one that no longer resolves.
+  virtual std::optional<Resolved> resolve(const std::string &bookmark) = 0;
+  // Starts and stops using what a bookmark points at. Each start the toolkit agreed to (true) is
+  // matched by one stop; starts nest.
+  virtual bool startAccess(const std::string &bookmark) = 0;
+  virtual void stopAccess(const std::string &bookmark) = 0;
+};
+
+// The user's picks, kept across launches: a bookmark for each, stored through `load` and `save`
+// (somewhere JavaScript cannot write, since a bookmark opens the sandbox) as JSON:
+// {"version": 1, "picks": [{"path", "bookmark" (base64)}]}. Any thread.
+class PickStore {
+ public:
+  struct Persistence {
+    std::function<std::optional<std::string>()> load;
+    std::function<void(const std::string &)> save;
+  };
+  PickStore(Persistence persistence, std::shared_ptr<Bookmarks> bookmarks);
+
+  // The picks of earlier launches that still resolve, each at its path now. A stale bookmark is
+  // made again and one that no longer resolves is dropped, and the store is saved when either
+  // happens.
+  std::vector<std::string> restore();
+  // Keeps a pick for later launches; a path kept already gets a new bookmark.
+  void remember(const std::string &path);
+  // The bookmark of the innermost pick holding `path`.
+  std::optional<std::string> bookmarkFor(const std::string &path) const;
+  Bookmarks &bookmarks() const {
+    return *bookmarks_;
+  }
+
+ private:
+  struct Pick {
+    std::string path;
+    std::string bookmark;
+  };
+  void save();
+
+  Persistence persistence_;
+  std::shared_ptr<Bookmarks> bookmarks_;
+  mutable std::mutex mutex_;
+  std::vector<Pick> picks_;
+};
+
 class FileAccess {
  public:
   enum class Access { None, Read, ReadWrite };
@@ -65,8 +121,34 @@ class FileAccess {
   }
   // What the app may do at `path`, an absolute path.
   Access accessTo(const std::string &path) const;
-  // A file or folder the user chose in a panel, for the rest of the process.
+  // A file or folder the user chose in a panel: for the rest of the process, and in later
+  // launches once picks are kept.
   void allowPicked(const std::string &path);
+  // Keeps the picks in `store` from now on, and allows the ones earlier launches kept.
+  void keepPicks(std::shared_ptr<PickStore> store);
+
+  // The pick holding a path opened for as long as this lives: a picked file or folder of an earlier
+  // launch is reachable in the sandbox only while its bookmark's access is started.
+  class Use {
+   public:
+    Use() = default;
+    Use(std::shared_ptr<PickStore> store, std::string bookmark);
+    Use(Use &&other) noexcept;
+    Use &operator=(Use &&other) noexcept;
+    Use(const Use &) = delete;
+    Use &operator=(const Use &) = delete;
+    ~Use();
+    bool started() const {
+      return store_ != nullptr;
+    }
+
+   private:
+    void release();
+    std::shared_ptr<PickStore> store_;
+    std::string bookmark_;
+  };
+  // A Use for `path`; one that starts nothing outside picks.
+  Use use(const std::string &path) const;
 
  private:
   struct Root {
@@ -78,6 +160,7 @@ class FileAccess {
   Folders folders_;
   mutable std::mutex mutex_;
   std::vector<Root> roots_;
+  std::shared_ptr<PickStore> picks_;
 };
 
 // The OS's file events (FSEvents on macOS), for one path at a time.

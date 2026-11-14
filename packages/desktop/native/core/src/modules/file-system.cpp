@@ -2,6 +2,8 @@
 
 #include "ngn/bytes.h"
 
+#include <folly/json.h>
+
 #include <sys/stat.h>
 
 #include <algorithm>
@@ -101,6 +103,163 @@ void FileAccess::add(const std::string &path, Access access) {
 
 void FileAccess::allowPicked(const std::string &path) {
   add(path, Access::ReadWrite);
+  std::shared_ptr<PickStore> picks;
+  {
+    std::lock_guard lock(mutex_);
+    picks = picks_;
+  }
+  if (picks) {
+    picks->remember(resolved(path));
+  }
+}
+
+void FileAccess::keepPicks(std::shared_ptr<PickStore> store) {
+  for (const auto &path : store->restore()) {
+    add(path, Access::ReadWrite);
+  }
+  std::lock_guard lock(mutex_);
+  picks_ = std::move(store);
+}
+
+FileAccess::Use FileAccess::use(const std::string &path) const {
+  std::shared_ptr<PickStore> picks;
+  {
+    std::lock_guard lock(mutex_);
+    picks = picks_;
+  }
+  if (!picks || !path.starts_with('/')) {
+    return {};
+  }
+  auto bookmark = picks->bookmarkFor(resolved(path));
+  if (!bookmark || !picks->bookmarks().startAccess(*bookmark)) {
+    return {};
+  }
+  return Use(std::move(picks), std::move(*bookmark));
+}
+
+FileAccess::Use::Use(std::shared_ptr<PickStore> store, std::string bookmark)
+    : store_(std::move(store)), bookmark_(std::move(bookmark)) {}
+
+FileAccess::Use::Use(Use &&other) noexcept
+    : store_(std::move(other.store_)), bookmark_(std::move(other.bookmark_)) {
+  other.store_ = nullptr;
+}
+
+FileAccess::Use &FileAccess::Use::operator=(Use &&other) noexcept {
+  if (this != &other) {
+    release();
+    store_ = std::move(other.store_);
+    bookmark_ = std::move(other.bookmark_);
+    other.store_ = nullptr;
+  }
+  return *this;
+}
+
+FileAccess::Use::~Use() {
+  release();
+}
+
+void FileAccess::Use::release() {
+  if (store_) {
+    store_->bookmarks().stopAccess(bookmark_);
+    store_ = nullptr;
+  }
+}
+
+PickStore::PickStore(Persistence persistence, std::shared_ptr<Bookmarks> bookmarks)
+    : persistence_(std::move(persistence)), bookmarks_(std::move(bookmarks)) {
+  auto text = persistence_.load ? persistence_.load() : std::nullopt;
+  if (!text) {
+    return;
+  }
+  try {
+    auto json = folly::parseJson(*text);
+    if (!json.isObject() || json.getDefault("version", 0) != 1 || !json.getDefault("picks").isArray()) {
+      return;
+    }
+    for (const auto &pick : json["picks"]) {
+      if (!pick.isObject() || !pick.getDefault("path").isString() || !pick.getDefault("bookmark").isString()) {
+        continue;
+      }
+      if (auto bookmark = base64Decode(pick["bookmark"].asString())) {
+        picks_.push_back({.path = pick["path"].asString(), .bookmark = std::move(*bookmark)});
+      }
+    }
+  } catch (const std::exception &) {
+    // A store that does not parse holds nothing.
+  }
+}
+
+std::vector<std::string> PickStore::restore() {
+  std::lock_guard lock(mutex_);
+  bool changed = false;
+  std::vector<Pick> kept;
+  for (auto &pick : picks_) {
+    auto resolved = bookmarks_->resolve(pick.bookmark);
+    if (!resolved) {
+      changed = true;
+      continue;
+    }
+    if (resolved->stale) {
+      // Made again where it points now; one that cannot be made keeps the stale bookmark, which
+      // still resolves.
+      if (auto fresh = bookmarks_->make(resolved->path)) {
+        pick.bookmark = std::move(*fresh);
+      }
+      changed = true;
+    }
+    if (resolved->path != pick.path) {
+      pick.path = resolved->path;
+      changed = true;
+    }
+    kept.push_back(std::move(pick));
+  }
+  picks_ = std::move(kept);
+  if (changed) {
+    save();
+  }
+  std::vector<std::string> paths;
+  for (const auto &pick : picks_) {
+    paths.push_back(pick.path);
+  }
+  return paths;
+}
+
+void PickStore::remember(const std::string &path) {
+  auto bookmark = bookmarks_->make(path);
+  if (!bookmark) {
+    return;
+  }
+  std::lock_guard lock(mutex_);
+  auto it = std::find_if(picks_.begin(), picks_.end(), [&](const Pick &pick) { return pick.path == path; });
+  if (it != picks_.end()) {
+    it->bookmark = std::move(*bookmark);
+  } else {
+    picks_.push_back({.path = path, .bookmark = std::move(*bookmark)});
+  }
+  save();
+}
+
+std::optional<std::string> PickStore::bookmarkFor(const std::string &path) const {
+  std::lock_guard lock(mutex_);
+  const Pick *best = nullptr;
+  for (const auto &pick : picks_) {
+    if (inside(path, pick.path) && (!best || pick.path.size() > best->path.size())) {
+      best = &pick;
+    }
+  }
+  return best ? std::optional<std::string>(best->bookmark) : std::nullopt;
+}
+
+void PickStore::save() {
+  if (!persistence_.save) {
+    return;
+  }
+  folly::dynamic picks = folly::dynamic::array();
+  for (const auto &pick : picks_) {
+    picks.push_back(folly::dynamic::object("path", pick.path)("bookmark", base64Encode(pick.bookmark)));
+  }
+  persistence_.save(folly::toJson(folly::dynamic::object("version", 1)("picks", std::move(picks))));
 }
 
 FileAccess::Access FileAccess::accessTo(const std::string &path) const {
@@ -250,6 +409,8 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
     std::shared_ptr<WatchSink> sink = std::make_shared<WatchSink>();
     std::mutex watchesMutex;
     std::vector<int> watches;
+    // Each watch's pick, open until it stops.
+    std::map<int, std::shared_ptr<FileAccess::Use>> uses;
 
     FileSystem(std::shared_ptr<FileAccess> access, std::shared_ptr<FileWatcher> fileWatcher)
         : NativeModule("NgNativeFileSystem"), watcher(std::move(fileWatcher)) {
@@ -316,8 +477,9 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         });
       };
 
-      answer("readdir", [reach](const folly::dynamic &args) {
+      answer("readdir", [reach, access](const folly::dynamic &args) {
         auto path = reach(stringArg(args, 0), Read);
+        auto use = access->use(path);
         if (!fs::is_directory(path)) {
           throw FileError("Not a folder: " + path);
         }
@@ -330,16 +492,21 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         }
         return out;
       });
-      answer("stat", [reach](const folly::dynamic &args) {
+      answer("stat", [reach, access](const folly::dynamic &args) {
         auto uri = stringArg(args, 0);
-        return statOf(uri, reach(uri, Read));
+        auto path = reach(uri, Read);
+        auto use = access->use(path);
+        return statOf(uri, path);
       });
-      answer("readAsStringAsync", [reach](const folly::dynamic &args) {
-        auto bytes = readAll(reach(stringArg(args, 0), Read));
+      answer("readAsStringAsync", [reach, access](const folly::dynamic &args) {
+        auto path = reach(stringArg(args, 0), Read);
+        auto use = access->use(path);
+        auto bytes = readAll(path);
         return folly::dynamic(option(args, 1, "encoding") == "base64" ? base64Encode(bytes) : bytes);
       });
-      answer("writeAsStringAsync", [reach](const folly::dynamic &args) {
+      answer("writeAsStringAsync", [reach, access](const folly::dynamic &args) {
         auto path = reach(stringArg(args, 0), Write);
+        auto use = access->use(path);
         std::string bytes = stringArg(args, 1);
         if (option(args, 2, "encoding") == "base64") {
           auto decoded = base64Decode(bytes);
@@ -355,8 +522,9 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         }
         return folly::dynamic(nullptr);
       });
-      answer("deleteAsync", [reach](const folly::dynamic &args) {
+      answer("deleteAsync", [reach, access](const folly::dynamic &args) {
         auto path = reach(stringArg(args, 0), Write);
+        auto use = access->use(path);
         if (!fs::exists(fs::symlink_status(path))) {
           if (flagOption(args, 1, "idempotent")) {
             return folly::dynamic(nullptr);
@@ -366,8 +534,9 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         fs::remove_all(path);
         return folly::dynamic(nullptr);
       });
-      answer("makeDirectoryAsync", [reach](const folly::dynamic &args) {
+      answer("makeDirectoryAsync", [reach, access](const folly::dynamic &args) {
         auto path = reach(stringArg(args, 0), Write);
+        auto use = access->use(path);
         if (flagOption(args, 1, "intermediates")) {
           fs::create_directories(path);
         } else if (!fs::create_directory(path)) {
@@ -375,20 +544,25 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         }
         return folly::dynamic(nullptr);
       });
-      answer("moveAsync", [reach](const folly::dynamic &args) {
+      answer("moveAsync", [reach, access](const folly::dynamic &args) {
         auto from = reach(option(args, 0, "from").isString() ? option(args, 0, "from").asString() : "", Write);
         auto to = reach(option(args, 0, "to").isString() ? option(args, 0, "to").asString() : "", Write);
+        auto useFrom = access->use(from);
+        auto useTo = access->use(to);
         fs::rename(from, to);
         return folly::dynamic(nullptr);
       });
-      answer("copyAsync", [reach](const folly::dynamic &args) {
+      answer("copyAsync", [reach, access](const folly::dynamic &args) {
         auto from = reach(option(args, 0, "from").isString() ? option(args, 0, "from").asString() : "", Read);
         auto to = reach(option(args, 0, "to").isString() ? option(args, 0, "to").asString() : "", Write);
+        auto useFrom = access->use(from);
+        auto useTo = access->use(to);
         fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
         return folly::dynamic(nullptr);
       });
-      answer("createFile", [reach](const folly::dynamic &args) {
+      answer("createFile", [reach, access](const folly::dynamic &args) {
         auto folder = reach(stringArg(args, 0), Write);
+        auto use = access->use(folder);
         auto name = stringArg(args, 1);
         if (name.empty() || name == "." || name == ".." || name.find('/') != std::string::npos) {
           throw FileError("Not a file name: " + name);
@@ -406,13 +580,15 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         return folly::dynamic::object("uri", fileUri(path));
       });
 
-      sync("watch", [this, reach](const folly::dynamic &args) -> folly::dynamic {
+      sync("watch", [this, reach, access](const folly::dynamic &args) -> folly::dynamic {
         std::string path;
         try {
           path = reach(stringArg(args, 0), Read);
         } catch (const FileError &) {
           return nullptr;
         }
+        // Open for as long as the watch runs.
+        auto use = std::make_shared<FileAccess::Use>(access->use(path));
         if (!fs::exists(path)) {
           return nullptr;
         }
@@ -434,6 +610,7 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         *id = handle;
         std::lock_guard lock(watchesMutex);
         watches.push_back(handle);
+        uses[handle] = use;
         return handle;
       });
       sync("unwatch", [this](const folly::dynamic &args) -> folly::dynamic {
@@ -450,6 +627,8 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
           watches.erase(it);
         }
         watcher->stop(handle);
+        std::lock_guard lock(watchesMutex);
+        uses.erase(handle);
         return nullptr;
       });
     }

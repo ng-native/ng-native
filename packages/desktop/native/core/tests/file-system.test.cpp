@@ -6,6 +6,11 @@
 #include <fstream>
 #include <map>
 #include <random>
+#include <set>
+
+#include <folly/json.h>
+
+#include "ngn/bytes.h"
 
 using folly::dynamic;
 namespace fs = std::filesystem;
@@ -354,4 +359,202 @@ TEST_CASE("FileSystem watches a path it can reach, reports its changes with the 
   }
   // The module going, as on a reload, stops what it started.
   CHECK(watcher->watches.empty());
+}
+
+namespace {
+
+// Bookmarks that are the path they point at, with the moves the test makes, and a count of
+// accesses started and not stopped.
+struct FakeBookmarks final : ngn::Bookmarks {
+  std::map<std::string, std::string> moved;
+  std::set<std::string> gone;
+  std::set<std::string> stale;
+  std::map<std::string, int> open;
+  std::vector<std::string> log;
+  bool refuse{false};
+
+  std::optional<std::string> make(const std::string &path) override {
+    return "bm:" + path;
+  }
+  std::optional<Resolved> resolve(const std::string &bookmark) override {
+    auto path = bookmark.substr(3);
+    if (gone.count(path)) {
+      return std::nullopt;
+    }
+    if (moved.count(path)) {
+      return Resolved{.path = moved[path], .stale = true};
+    }
+    return Resolved{.path = path, .stale = stale.count(path) > 0};
+  }
+  bool startAccess(const std::string &bookmark) override {
+    if (refuse) {
+      return false;
+    }
+    open[bookmark]++;
+    log.push_back("start " + bookmark);
+    return true;
+  }
+  void stopAccess(const std::string &bookmark) override {
+    open[bookmark]--;
+    log.push_back("stop " + bookmark);
+  }
+  int opened() const {
+    int count = 0;
+    for (const auto &[bookmark, n] : open) {
+      count += n;
+    }
+    return count;
+  }
+};
+
+struct Saved {
+  std::optional<std::string> text;
+  int saves{0};
+  ngn::PickStore::Persistence persistence() {
+    return {
+        .load = [this] { return text; },
+        .save =
+            [this](const std::string &json) {
+              text = json;
+              saves++;
+            },
+    };
+  }
+};
+
+} // namespace
+
+TEST_CASE("picks are kept across launches through their bookmarks, and reachable again") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto picked = (dir.path / "outside").string();
+  write(dir.path / "outside/note.md", "kept");
+  Saved saved;
+  auto bookmarks = std::make_shared<FakeBookmarks>();
+
+  // The first launch: the user picks a folder outside the app's own.
+  {
+    auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+    access->keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+    access->allowPicked(picked);
+    CHECK(access->accessTo(picked + "/note.md") == Access::ReadWrite);
+  }
+  REQUIRE(saved.text.has_value());
+  auto json = folly::parseJson(*saved.text);
+  CHECK(json["version"] == 1);
+  CHECK(json["picks"][0]["path"] == picked);
+
+  // The next launch: reachable before anything is picked, opened only around each call.
+  auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  CHECK(access->accessTo(picked + "/note.md") == Access::None);
+  access->keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+  CHECK(access->accessTo(picked + "/note.md") == Access::ReadWrite);
+  auto module = ngn::makeFileSystemModule(access, std::make_shared<FakeWatcher>());
+  bookmarks->log.clear();
+  CHECK(module->call("readAsStringSync", dynamic::array(ngn::fileUri(picked + "/note.md"))) == dynamic("kept"));
+  CHECK(bookmarks->log == std::vector<std::string>{"start bm:" + picked, "stop bm:" + picked});
+  // The app's own folders are not picks.
+  bookmarks->log.clear();
+  module->call("writeAsStringSync", dynamic::array(ngn::fileUri(folders.document + "/a.txt"), "x"));
+  CHECK(bookmarks->log.empty());
+  // A failing call stops what it started too.
+  CHECK_THROWS_AS(module->call("readAsStringSync", dynamic::array(ngn::fileUri(picked + "/missing.md"))), std::exception);
+  CHECK(bookmarks->opened() == 0);
+}
+
+TEST_CASE("a pick that moved is found where it is now, and one that is gone is forgotten") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto first = (dir.path / "outside/a").string();
+  auto second = (dir.path / "outside/b").string();
+  auto third = (dir.path / "outside/c").string();
+  Saved saved;
+  auto bookmarks = std::make_shared<FakeBookmarks>();
+  {
+    ngn::PickStore store(saved.persistence(), bookmarks);
+    store.remember(first);
+    store.remember(second);
+    store.remember(third);
+    // Picked again: one entry, with a new bookmark.
+    store.remember(first);
+  }
+  CHECK(folly::parseJson(*saved.text)["picks"].size() == 3);
+
+  bookmarks->moved[first] = (dir.path / "outside/a-renamed").string();
+  bookmarks->gone.insert(second);
+  int before = saved.saves;
+  ngn::PickStore store(saved.persistence(), bookmarks);
+  auto paths = store.restore();
+  CHECK(paths == std::vector<std::string>{(dir.path / "outside/a-renamed").string(), third});
+  CHECK(saved.saves == before + 1);
+  auto json = folly::parseJson(*saved.text);
+  REQUIRE(json["picks"].size() == 2);
+  CHECK(json["picks"][0]["path"] == (dir.path / "outside/a-renamed").string());
+  // Made again where it is now.
+  CHECK(json["picks"][0]["bookmark"] == ngn::base64Encode("bm:" + (dir.path / "outside/a-renamed").string()));
+
+  // A pick gone with nothing else changed is forgotten too.
+  bookmarks->moved.clear();
+  bookmarks->gone.insert(third);
+  {
+    int saves = saved.saves;
+    ngn::PickStore forgetting(saved.persistence(), bookmarks);
+    CHECK(forgetting.restore().size() == 1);
+    CHECK(saved.saves == saves + 1);
+    CHECK(folly::parseJson(*saved.text)["picks"].size() == 1);
+  }
+  bookmarks->gone.clear();
+
+  // Nothing changed: nothing is written.
+  ngn::PickStore again(saved.persistence(), bookmarks);
+  int saves = saved.saves;
+  again.restore();
+  CHECK(saved.saves == saves);
+}
+
+TEST_CASE("the innermost pick holding a path opens it, and a store that does not parse holds nothing") {
+  Saved saved;
+  auto bookmarks = std::make_shared<FakeBookmarks>();
+  ngn::PickStore store(saved.persistence(), bookmarks);
+  store.remember("/Users/a/Projects");
+  store.remember("/Users/a/Projects/site");
+  CHECK(store.bookmarkFor("/Users/a/Projects/site/index.html") == "bm:/Users/a/Projects/site");
+  CHECK(store.bookmarkFor("/Users/a/Projects/other") == "bm:/Users/a/Projects");
+  CHECK_FALSE(store.bookmarkFor("/Users/a/Projectsx").has_value());
+  CHECK_FALSE(store.bookmarkFor("/Users/b").has_value());
+
+  for (const char *text : {"not json", "[]", R"({"version": 2, "picks": []})", R"({"version": 1, "picks": [{"path": 1}]})"}) {
+    Saved bad;
+    bad.text = text;
+    ngn::PickStore broken(bad.persistence(), bookmarks);
+    CHECK(broken.restore().empty());
+  }
+}
+
+TEST_CASE("a watch keeps its pick open until it stops, and a refused start opens nothing") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto picked = (dir.path / "outside").string();
+  Saved saved;
+  auto bookmarks = std::make_shared<FakeBookmarks>();
+  auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  access->keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+  access->allowPicked(picked);
+  auto watcher = std::make_shared<FakeWatcher>();
+  {
+    auto module = ngn::makeFileSystemModule(access, watcher);
+    auto id = module->call("watch", dynamic::array(ngn::fileUri(picked)));
+    REQUIRE(id.isNumber());
+    CHECK(bookmarks->opened() == 1);
+    module->call("unwatch", dynamic::array(id));
+    CHECK(bookmarks->opened() == 0);
+    module->call("watch", dynamic::array(ngn::fileUri(picked)));
+    CHECK(bookmarks->opened() == 1);
+  }
+  // The module going away stops the watches it still had.
+  CHECK(bookmarks->opened() == 0);
+
+  bookmarks->refuse = true;
+  auto use = access->use(picked + "/x");
+  CHECK_FALSE(use.started());
 }

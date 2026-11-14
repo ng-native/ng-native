@@ -308,7 +308,7 @@ describe('entitlements', () => {
     );
   });
 
-  it("sandboxes a mas build, with the network, the user's picks and the team's identity", () => {
+  it("sandboxes a mas build, with the network, the user's picks kept across launches and the team's identity", () => {
     const text = entitlements(config, 'mas', {
       bundleIdentifier: 'com.example.notes',
       team: 'T1',
@@ -317,6 +317,7 @@ describe('entitlements', () => {
       'com.apple.security.app-sandbox',
       'com.apple.security.network.client',
       'com.apple.security.files.user-selected.read-write',
+      'com.apple.security.files.bookmarks.app-scope',
       'com.apple.security.device.camera',
     ]) {
       assert.match(text, new RegExp(`<key>${key.replace(/\./g, '\\.')}</key>\\n\\t<true/>`), key);
