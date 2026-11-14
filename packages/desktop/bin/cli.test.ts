@@ -224,15 +224,20 @@ describe('run', () => {
       resolvePackage: (from, name) => {
         assert.equal(from, '/apps/demo');
         asked.push(name);
-        return name === 'react-native-screens' ? `/apps/demo/node_modules/${name}` : null;
+        return name === 'react-native-screens' || name === 'react-native-svg'
+          ? `/apps/demo/node_modules/${name}`
+          : null;
       },
     });
     await run({ module: 'main', universal: false }, sys);
     assert.deepEqual(asked, HOST_LIBRARIES);
+    // react-native-svg's views, which `@ng-native/icons` commits, are drawn by the host.
     assert.deepEqual(calls[0].args, [
       '/apps/demo/node_modules/react-native',
       '--library',
       '/apps/demo/node_modules/react-native-screens',
+      '--library',
+      '/apps/demo/node_modules/react-native-svg',
     ]);
   });
 
@@ -307,6 +312,8 @@ describe('run', () => {
       '/apps/demo/node_modules/react-native',
       '--library',
       '/apps/demo/node_modules/react-native-safe-area-context',
+      '--library',
+      '/apps/demo/node_modules/react-native-svg',
     ]);
   });
 

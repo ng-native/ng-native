@@ -102,6 +102,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         tree_.create(view);
         safeAreas_->created(view);
         backend_->createView(view);
+        svgs_.changed(tree_, view.tag);
         reportDesktopProps(view, nullptr);
         tabs_->propsChanged(tree_, view.tag);
         break;
@@ -111,6 +112,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         sidebars_.deleted(m.oldChildShadowView.tag);
         tabs_->deleted(m.oldChildShadowView.tag);
         safeAreas_->deleted(m.oldChildShadowView.tag);
+        svgs_.deleted(m.oldChildShadowView.tag);
         tree_.destroy(m.oldChildShadowView.tag);
         backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
         break;
@@ -121,6 +123,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         screens_->childrenChanged(tree_, m.parentTag);
         sidebars_.childrenChanged(tree_, m.parentTag);
         tabs_->childrenChanged(tree_, m.parentTag);
+        svgs_.changed(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Remove:
         tree_.remove(m.parentTag, m.oldChildShadowView.tag);
@@ -128,6 +131,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         screens_->childrenChanged(tree_, m.parentTag);
         sidebars_.childrenChanged(tree_, m.parentTag);
         tabs_->childrenChanged(tree_, m.parentTag);
+        svgs_.changed(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Update: {
         const auto &old = m.oldChildShadowView;
@@ -144,6 +148,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
           sidebars_.propsChanged(tree_, view.tag);
           tabs_->propsChanged(tree_, view.tag);
           screens_->propsChanged(tree_, view.tag);
+          svgs_.changed(tree_, view.tag);
         }
         if (old.state != view.state) {
           backend_->updateState(view);
@@ -171,6 +176,9 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   }
   for (const auto &lists : sidebars.lists) {
     backend_->setSourceLists(surfaceId, lists.parent, lists.lists);
+  }
+  for (auto &drawing : svgs_.settle(tree_)) {
+    backend_->setSvgDrawing(surfaceId, drawing.svg, std::move(drawing.document));
   }
   auto header = screens_->frontHeader(tree_, surfaceId);
   auto known = frontHeaders_.find(surfaceId);

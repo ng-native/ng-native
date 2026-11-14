@@ -1,5 +1,6 @@
 #include "fake-backend.h"
 #include "helpers.h"
+#include "ngn/library-glue.h"
 #include "ngn/mounting-manager.h"
 
 #include <doctest/doctest.h>
@@ -203,4 +204,72 @@ TEST_CASE("the core registers its components and the backend's") {
     CHECK_MESSAGE(f.mounting->hasComponent(name), name);
   }
   CHECK_FALSE(f.mounting->hasComponent("RNSScreen"));
+}
+
+namespace {
+
+// A view's svg element, read by the glue react-native-svg's build installs.
+struct SvgProps : Props {
+  ngn::SvgElement element;
+};
+
+std::shared_ptr<const Props> svgProps(ngn::SvgKind kind, std::string d = "") {
+  auto p = std::make_shared<SvgProps>();
+  p->element.kind = kind;
+  p->element.d = std::move(d);
+  return p;
+}
+
+// Installs the glue for a test, and takes it out again however the test ends.
+struct SvgGlue {
+  SvgGlue() {
+    ngn::libraryGlue().svgElement = [](const Props &p) -> std::optional<ngn::SvgElement> {
+      const auto *svg = dynamic_cast<const SvgProps *>(&p);
+      return svg ? std::optional<ngn::SvgElement>(svg->element) : std::nullopt;
+    };
+  }
+  ~SvgGlue() { ngn::libraryGlue().svgElement = nullptr; }
+};
+
+std::vector<std::string> svgCalls(const std::vector<std::string> &calls) {
+  std::vector<std::string> out;
+  for (const auto &c : calls) {
+    if (c.rfind("svg ", 0) == 0) {
+      out.push_back(c);
+    }
+  }
+  return out;
+}
+
+} // namespace
+
+TEST_CASE("an svg is drawn when it mounts, when an element in it is made, changed or removed, and not otherwise") {
+  SvgGlue glue;
+  Fixture f;
+  auto svg = shadowView(2, "RNSVGSvgView", {{0, 0}, {24, 24}}, svgProps(ngn::SvgKind::Svg));
+  auto path = shadowView(3, "RNSVGPath", {{0, 0}, {24, 0}}, svgProps(ngn::SvgKind::Path, "M0 0H1"));
+  f.mount({
+      ShadowViewMutation::CreateMutation(svg),
+      ShadowViewMutation::CreateMutation(path),
+      ShadowViewMutation::InsertMutation(2, path, 0),
+      ShadowViewMutation::InsertMutation(1, svg, 0),
+  });
+  CHECK(svgCalls(f.backend->calls) == std::vector<std::string>{"svg 2 with 1"});
+
+  f.backend->calls.clear();
+  auto changed = path;
+  changed.props = svgProps(ngn::SvgKind::Path, "M0 0H2");
+  f.mount({ShadowViewMutation::UpdateMutation(path, changed, 0)});
+  CHECK(svgCalls(f.backend->calls) == std::vector<std::string>{"svg 2 with 1"});
+
+  // New props equal to the old: the svg is not drawn again.
+  f.backend->calls.clear();
+  auto same = changed;
+  same.props = svgProps(ngn::SvgKind::Path, "M0 0H2");
+  f.mount({ShadowViewMutation::UpdateMutation(changed, same, 0)});
+  CHECK(svgCalls(f.backend->calls).empty());
+
+  f.backend->calls.clear();
+  f.mount({ShadowViewMutation::RemoveMutation(2, same, 0), ShadowViewMutation::DeleteMutation(same)});
+  CHECK(svgCalls(f.backend->calls) == std::vector<std::string>{"svg 2 with 0"});
 }

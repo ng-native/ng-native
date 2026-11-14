@@ -7,6 +7,7 @@
 
 #include "ngn/screen-stacks.h"
 #include "ngn/split-view.h"
+#include "ngn/svg.h"
 
 #include <react/renderer/core/ComponentDescriptor.h>
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
@@ -63,6 +64,9 @@ class MountingBackend {
   // The source lists among `parent`'s children changed: their sections, rows or rows' props. Empty
   // when the last of them went.
   virtual void setSourceLists(SurfaceId /*surfaceId*/, Tag /*parent*/, const std::vector<SourceList> & /*lists*/) {}
+
+  // An svg's elements changed (svg.h): its view draws `document` from now on.
+  virtual void setSvgDrawing(SurfaceId /*surfaceId*/, Tag /*svg*/, std::shared_ptr<const SvgDocument> /*document*/) {}
 
   // Called once a transaction's mutations have all been applied.
   virtual void didMount(SurfaceId /*surfaceId*/) {}

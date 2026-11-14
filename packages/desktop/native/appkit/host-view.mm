@@ -7,6 +7,7 @@
 #import "presented-screen.h"
 #import "scroll-view.h"
 #import "split-view.h"
+#import "svg-view.h"
 
 #include "text-layout.h"
 
@@ -707,6 +708,13 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == ngn::SidebarItemComponentName) {
     return [[NGNSidebarItemView alloc] initWithShadowView:view];
+  }
+  // react-native-svg's: the svg draws its elements, whose own views are hidden.
+  if (name == "RNSVGSvgView") {
+    return [[NGNSvgView alloc] initWithShadowView:view];
+  }
+  if (name.starts_with("RNSVG")) {
+    return [[NGNSvgElementView alloc] initWithShadowView:view];
   }
   if (Class library = libraryViews()[@(view.componentName)]) {
     return [[library alloc] initWithShadowView:view];

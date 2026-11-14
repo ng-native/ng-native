@@ -7,6 +7,7 @@
 #include "ngn/safe-areas.h"
 #include "ngn/screen-stacks.h"
 #include "ngn/split-view.h"
+#include "ngn/svg.h"
 #include "ngn/tabs-host.h"
 #include "ngn/view-tree.h"
 
@@ -80,6 +81,7 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::unique_ptr<SafeAreas> safeAreas_;
   bool safeAreasSettled_{false};
   Sidebars sidebars_;
+  SvgDrawings svgs_;
   std::unique_ptr<TabsHosts> tabs_;
   void applyTabs(SurfaceId surfaceId);
   std::unordered_map<SurfaceId, std::optional<ScreenStacks::FrontHeader>> frontHeaders_;

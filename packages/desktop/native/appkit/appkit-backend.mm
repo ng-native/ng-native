@@ -6,6 +6,7 @@
 #import "presented-screen.h"
 #import "split-view.h"
 #import "surface-view.h"
+#import "svg-view.h"
 
 #include "ngn/library-components.h"
 
@@ -184,6 +185,12 @@ void AppKitBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
   [view placeAsWindows:window];
   if (window) {
     toolbarFor(surfaceId).sidebar = view.ownWindow != nil;
+  }
+}
+
+void AppKitBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {
+  if (auto *view = (NGNSvgView *)views_[@(svg)]; [view isKindOfClass:NGNSvgView.class]) {
+    [view setDocument:std::move(document)];
   }
 }
 

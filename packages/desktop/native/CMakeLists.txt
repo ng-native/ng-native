@@ -89,6 +89,7 @@ add_library(ngn_core STATIC
     core/src/screen-stacks.cpp
     core/src/spawn-rules.cpp
     core/src/split-view.cpp
+    core/src/svg.cpp
     core/src/tabs-host.cpp
     core/src/updates.cpp
     core/src/view-tree.cpp

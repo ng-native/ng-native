@@ -20,6 +20,7 @@ add_executable(ngn-macos
     scroll-view.mm
     split-view.mm
     surface-view.mm
+    svg-view.mm
     tray-and-dock.mm
     system.mm
     system-access.mm

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ngn/header-bar.h"
+#include "ngn/svg.h"
 #include "ngn/tabs-host.h"
 
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
@@ -30,6 +31,8 @@ struct LibraryGlue {
       safeAreaMargins;
   std::function<std::optional<TabScreen>(const facebook::react::Props &)> tabScreen;
   std::function<std::optional<TabsRequest>(const facebook::react::Props &)> tabsRequest;
+  // The svg element a view's props are (svg.h), from react-native-svg's props.
+  std::function<std::optional<SvgElement>(const facebook::react::Props &)> svgElement;
   // Components the desktop draws its own way, registered before the library's own and in place of
   // any of theirs with the same name.
   std::vector<facebook::react::ComponentDescriptorProvider> components;
