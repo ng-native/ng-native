@@ -249,10 +249,12 @@ TEST_CASE("a prompt has a text field and sends what was typed with the key") {
 
 TEST_CASE("every core module is registered under its iOS name") {
   Fixture f;
+  f.services.storage = std::make_shared<ngn::KeyValueStore>("/nonexistent");
   ngn::ModuleRegistry registry;
   ngn::addCoreModules(registry, f.services);
   for (const char *name : {"PlatformConstants", "DeviceInfo", "AppState", "Appearance", "LinkingManager", "I18nManager",
-                           "AlertManager", "Clipboard", "SettingsManager", "StatusBarManager", "Vibration", "KeyboardObserver", "RNSModule"}) {
+                           "AlertManager", "Clipboard", "SettingsManager", "StatusBarManager", "Vibration", "KeyboardObserver", "RNSModule", "Networking", "WebSocketModule", "BlobModule",
+                           "FileReaderModule", "RNCAsyncStorage", "RNAsyncStorage"}) {
     CAPTURE(name);
     CHECK(registry.module(name, nullptr));
   }

@@ -136,7 +136,9 @@ class Adapter final : public TurboModule {
                 }
                 fn.call(rt, static_cast<const jsi::Value *>(jsArgs.data()), jsArgs.size());
               };
-          callback.callWithPriority(SchedulerPriority::NormalPriority, std::move(impl));
+          // The same queue, at the same priority, as emitDeviceEvent: a callback JavaScript is
+          // waiting on (Networking's request id) must not land after the events that follow it.
+          callback.call(std::move(impl));
         });
         values.push_back(nullptr);
       } else {

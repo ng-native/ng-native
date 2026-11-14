@@ -57,11 +57,13 @@ include(cmake/react-native.cmake)
 
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
+    core/src/bytes.cpp
     core/src/desktop-view-props.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp
     core/src/host-state.cpp
     core/src/input-dispatcher.cpp
+    core/src/key-value-store.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
     core/src/native-module.cpp
@@ -70,7 +72,10 @@ add_library(ngn_core STATIC
     core/src/view-tree.cpp
     core/src/modules/alert-manager.cpp
     core/src/modules/app-modules.cpp
-    core/src/modules/core-modules.cpp)
+    core/src/modules/async-storage.cpp
+    core/src/modules/core-modules.cpp
+    core/src/modules/networking.cpp
+    core/src/modules/web-socket.cpp)
 target_include_directories(ngn_core PUBLIC core/include)
 target_link_libraries(ngn_core PUBLIC react_native)
 target_compile_options(ngn_core PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
