@@ -106,6 +106,17 @@ TEST_CASE("cameraMount asks only when it can, starts only with the camera allowe
   CHECK(ngn::cameraMountError(ngn::CameraMount::Start).empty());
 }
 
+TEST_CASE("chooseCamera takes the built-in camera unless it is suspended, then any camera that is not") {
+  using Camera = ngn::CameraCandidate;
+  // A MacBook open, with a virtual camera listed first.
+  CHECK(ngn::chooseCamera({Camera{.builtIn = false}, Camera{.builtIn = true}}) == 1);
+  // The lid closed: the built-in camera is listed but suspended, and gives no frames.
+  CHECK(ngn::chooseCamera({Camera{.builtIn = true, .suspended = true}, Camera{.builtIn = false}}) == 1);
+  // Nothing that gives frames: no camera.
+  CHECK(ngn::chooseCamera({Camera{.builtIn = true, .suspended = true}}) == -1);
+  CHECK(ngn::chooseCamera({}) == -1);
+}
+
 TEST_CASE("NgNativeCamera answers the permission in expo's shape, asking only what is undetermined, never with no prompts") {
   auto hardware = std::make_shared<FakeHardware>();
   auto quiet = ngn::makeCameraModule(hardware, std::make_shared<ngn::CameraViews>(), "/tmp/unused", true);

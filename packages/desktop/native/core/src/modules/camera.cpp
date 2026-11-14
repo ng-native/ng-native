@@ -52,6 +52,20 @@ CameraMount cameraMount(CameraHardware::Access access, bool hasCamera, bool noPr
   return hasCamera ? CameraMount::Start : CameraMount::NoCamera;
 }
 
+int chooseCamera(const std::vector<CameraCandidate> &cameras) {
+  int other = -1;
+  for (size_t i = 0; i < cameras.size(); i++) {
+    if (cameras[i].suspended) {
+      continue;
+    }
+    if (cameras[i].builtIn) {
+      return static_cast<int>(i);
+    }
+    other = other < 0 ? static_cast<int>(i) : other;
+  }
+  return other;
+}
+
 std::string cameraMountError(CameraMount mount) {
   switch (mount) {
     case CameraMount::NotPermitted:

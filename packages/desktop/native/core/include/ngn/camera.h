@@ -33,6 +33,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -102,6 +103,16 @@ class CameraViews {
   mutable std::mutex mutex_;
   std::map<int, std::shared_ptr<CameraCapture>> captures_;
 };
+
+// A camera the host could start: the Mac's own, and whether it is suspended (a MacBook's with the
+// lid closed, which is listed but gives no frames).
+struct CameraCandidate {
+  bool builtIn{false};
+  bool suspended{false};
+};
+// The one to start, by index: the built-in camera, else the first other, never a suspended one;
+// -1 when none gives frames.
+int chooseCamera(const std::vector<CameraCandidate> &cameras);
 
 // What a view does as it mounts: ask for the permission, start the camera, or report why not.
 enum class CameraMount { Ask, Start, NotPermitted, NoCamera };
