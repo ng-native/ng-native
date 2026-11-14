@@ -1,0 +1,161 @@
+#include "ngn/mounting-manager.h"
+
+#include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
+#include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
+#include <react/renderer/components/iostextinput/TextInputComponentDescriptor.h>
+#include <react/renderer/components/scrollview/ScrollViewComponentDescriptor.h>
+#include <react/renderer/components/text/ParagraphComponentDescriptor.h>
+#include <react/renderer/components/text/RawTextComponentDescriptor.h>
+#include <react/renderer/components/text/TextComponentDescriptor.h>
+#include <react/renderer/mounting/MountingTransaction.h>
+
+using namespace facebook::react;
+
+namespace ngn {
+
+MountingManager::MountingManager(
+    std::shared_ptr<MountingBackend> backend,
+    std::shared_ptr<DesktopPropsSink> desktopProps)
+    : backend_(std::move(backend)), desktopProps_(std::move(desktopProps)) {
+  components_ = {
+      concreteComponentDescriptorProvider<DesktopViewComponentDescriptor>(),
+      concreteComponentDescriptorProvider<ParagraphComponentDescriptor>(),
+      concreteComponentDescriptorProvider<TextComponentDescriptor>(),
+      concreteComponentDescriptorProvider<RawTextComponentDescriptor>(),
+      concreteComponentDescriptorProvider<ScrollViewComponentDescriptor>(),
+      concreteComponentDescriptorProvider<TextInputComponentDescriptor>(),
+      concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
+  };
+  for (auto &provider : backend_->componentProviders()) {
+    components_.push_back(std::move(provider));
+  }
+  for (const auto &provider : components_) {
+    componentNames_.insert(provider.name);
+  }
+}
+
+void MountingManager::executeMount(SurfaceId surfaceId, MountingTransaction &&transaction) {
+  // The JS thread. A toolkit's views belong to its UI thread, whose queue runs tasks in the order
+  // they were posted, which keeps transactions in commit order.
+  auto mutations = std::make_shared<const ShadowViewMutationList>(transaction.getMutations());
+  std::weak_ptr<MountingManager> weak = weak_from_this();
+  backend_->runOnUiThread([weak, surfaceId, mutations] {
+    if (auto self = weak.lock()) {
+      self->apply(surfaceId, *mutations);
+    }
+  });
+}
+
+void MountingManager::ensureRoot(SurfaceId surfaceId, Tag tag) {
+  if (tag != surfaceId || tree_.contains(tag)) {
+    return;
+  }
+  // Fabric never creates a surface's root view with a mutation; it is made the first time a
+  // mutation names it, and the backend attaches it to the surface's main container.
+  ShadowView root;
+  root.componentName = "RootView";
+  root.surfaceId = surfaceId;
+  root.tag = tag;
+  root.layoutMetrics.frame = {};
+  tree_.create(root);
+  backend_->createView(root);
+}
+
+void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &mutations) {
+  for (const auto &m : mutations) {
+    switch (m.type) {
+      case ShadowViewMutation::Create: {
+        const auto &view = m.newChildShadowView;
+        tree_.create(view);
+        backend_->createView(view);
+        reportDesktopProps(view, nullptr);
+        break;
+      }
+      case ShadowViewMutation::Delete:
+        tree_.destroy(m.oldChildShadowView.tag);
+        backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
+        break;
+      case ShadowViewMutation::Insert:
+        ensureRoot(surfaceId, m.parentTag);
+        tree_.insert(m.parentTag, m.newChildShadowView.tag, m.index);
+        backend_->insertChild(surfaceId, m.parentTag, m.newChildShadowView.tag, m.index);
+        break;
+      case ShadowViewMutation::Remove:
+        tree_.remove(m.parentTag, m.oldChildShadowView.tag);
+        backend_->removeChild(surfaceId, m.parentTag, m.oldChildShadowView.tag, m.index);
+        break;
+      case ShadowViewMutation::Update: {
+        const auto &old = m.oldChildShadowView;
+        const auto &view = m.newChildShadowView;
+        ensureRoot(surfaceId, view.tag);
+        tree_.update(view);
+        // React Native iOS's order: event emitter, props, state, then layout.
+        if (old.eventEmitter != view.eventEmitter) {
+          backend_->updateEventEmitter(view);
+        }
+        if (old.props != view.props) {
+          backend_->updateProps(view);
+          reportDesktopProps(view, &old);
+        }
+        if (old.state != view.state) {
+          backend_->updateState(view);
+        }
+        if (old.layoutMetrics != view.layoutMetrics) {
+          backend_->updateLayout(view);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  backend_->didMount(surfaceId);
+  if (afterMount_) {
+    afterMount_(surfaceId);
+  }
+}
+
+void MountingManager::reportDesktopProps(const ShadowView &view, const ShadowView *old) {
+  if (!desktopProps_ || !view.props) {
+    return;
+  }
+  auto props = desktopProps(*view.props);
+  auto before = old && old->props ? desktopProps(*old->props) : DesktopProps{};
+  if (props != before) {
+    desktopProps_->updateDesktopProps(view.surfaceId, view.tag, props);
+  }
+}
+
+void MountingManager::dispatchCommand(const ShadowView &view, const std::string &name, const folly::dynamic &args) {
+  Tag tag = view.tag;
+  std::weak_ptr<MountingManager> weak = weak_from_this();
+  backend_->runOnUiThread([weak, tag, name, args] {
+    if (auto self = weak.lock()) {
+      self->backend_->dispatchCommand(tag, name, args);
+    }
+  });
+}
+
+void MountingManager::setAfterMountCallback(std::function<void(SurfaceId)> &&onAfterMount) {
+  afterMount_ = std::move(onAfterMount);
+}
+
+ComponentRegistryFactory MountingManager::getComponentRegistryFactory() {
+  auto registry = std::make_shared<ComponentDescriptorProviderRegistry>();
+  for (const auto &provider : components_) {
+    registry->add(provider);
+  }
+  return [registry](const EventDispatcher::Weak &eventDispatcher, const std::shared_ptr<const ContextContainer> &context) {
+    return registry->createComponentDescriptorRegistry({eventDispatcher, context, nullptr});
+  };
+}
+
+bool MountingManager::hasComponent(const std::string &name) {
+  return name == "RootView" || componentNames_.contains(name);
+}
+
+void MountingManager::setUIManager(std::weak_ptr<UIManager> uiManager) noexcept {
+  uiManager_ = std::move(uiManager);
+}
+
+} // namespace ngn
