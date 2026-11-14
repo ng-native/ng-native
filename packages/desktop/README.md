@@ -202,8 +202,10 @@ When the app has them installed, the host compiles in the Fabric components of
   `postMessage` dispatched in the page as a `MessageEvent`, `injectJavaScript`, back, forward,
   reload, stop and `loadUrl`. As on iOS each navigation waits for
   `RNCWebViewModule.shouldStartLoadWithLockIdentifier`. The view also takes `originWhitelist`: a
-  page navigation to an origin outside it is not made and the url opens in its own app, as the
-  library's JavaScript does; `about:` and `data:` pages always pass. `incognito` is read when the
+  page navigation to an origin outside it is not made, and the url opens in its own app only when
+  the user clicked a link or submitted a form to it and Linking would open it (not `file:`,
+  `javascript:`, `data:`, `vbscript:` or `blob:`); any other is cancelled, so a page's script
+  cannot open an app or a share on its own. `about:` and `data:` pages always pass. `incognito` is read when the
   view is made, and `clearHistory` and `clearFormData` do nothing, as WebKit has no way to.
 
 ## `@expo/ui`

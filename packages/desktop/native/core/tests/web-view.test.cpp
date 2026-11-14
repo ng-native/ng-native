@@ -31,15 +31,32 @@ TEST_CASE("passesOriginWhitelist matches each pattern from the start of the orig
   CHECK_FALSE(ngn::passesOriginWhitelist({}, "https://example.com"));
 }
 
-TEST_CASE("navigationStep hands a page navigation outside originWhitelist to the OS, and asks the app about the rest") {
+TEST_CASE("navigationStep hands a clicked page navigation outside originWhitelist to the OS, and asks the app about the rest") {
   ngn::WebViewConfig config;
   // No whitelist set: every navigation is the app's to decide.
-  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true) == ngn::NavigationStep::AskApp);
+  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true, "other") == ngn::NavigationStep::AskApp);
   config.originWhitelist = std::vector<std::string>{"https://*"};
-  CHECK(ngn::navigationStep(config, "https://example.com", true) == ngn::NavigationStep::AskApp);
-  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true) == ngn::NavigationStep::OpenExternally);
+  CHECK(ngn::navigationStep(config, "https://example.com", true, "other") == ngn::NavigationStep::AskApp);
+  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true, "click") == ngn::NavigationStep::OpenExternally);
+  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true, "formsubmit") == ngn::NavigationStep::OpenExternally);
   // A frame inside the page is not a page navigation.
-  CHECK(ngn::navigationStep(config, "http://ads.example.com", false) == ngn::NavigationStep::AskApp);
+  CHECK(ngn::navigationStep(config, "http://ads.example.com", false, "other") == ngn::NavigationStep::AskApp);
+}
+
+TEST_CASE("navigationStep cancels a navigation outside originWhitelist that no click made, or that Linking would refuse") {
+  ngn::WebViewConfig config;
+  config.originWhitelist = std::vector<std::string>{"https://*"};
+  // A script setting location on load: no user activation.
+  CHECK(ngn::navigationStep(config, "smb://attacker/share", true, "other") == ngn::NavigationStep::Cancel);
+  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true, "reload") == ngn::NavigationStep::Cancel);
+  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true, "backforward") == ngn::NavigationStep::Cancel);
+  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true, "formresubmit") == ngn::NavigationStep::Cancel);
+  // Clicked, but a scheme Linking refuses.
+  CHECK(ngn::navigationStep(config, "file:///System/Applications/Calculator.app", true, "click") == ngn::NavigationStep::Cancel);
+  CHECK(ngn::navigationStep(config, "FILE:///System/Applications/Calculator.app", true, "click") == ngn::NavigationStep::Cancel);
+  CHECK(ngn::navigationStep(config, "javascript:alert(1)", true, "click") == ngn::NavigationStep::Cancel);
+  CHECK(ngn::navigationStep(config, "vbscript:x", true, "formsubmit") == ngn::NavigationStep::Cancel);
+  CHECK(ngn::navigationStep(config, "blob:https://a/b", true, "click") == ngn::NavigationStep::Cancel);
 }
 
 TEST_CASE("The page scripts give it the library's bridge, and postMessage dispatches a MessageEvent with the data as JSON") {

@@ -1,5 +1,7 @@
 #include "ngn/web-view.h"
 
+#include "ngn/processes.h"
+
 #include <folly/json.h>
 
 #include <regex>
@@ -36,9 +38,10 @@ bool passesOriginWhitelist(const std::vector<std::string> &whitelist, const std:
   return false;
 }
 
-NavigationStep navigationStep(const WebViewConfig &config, const std::string &url, bool topFrame) {
+NavigationStep navigationStep(const WebViewConfig &config, const std::string &url, bool topFrame, std::string_view navigationType) {
   if (topFrame && config.originWhitelist && !passesOriginWhitelist(*config.originWhitelist, url)) {
-    return NavigationStep::OpenExternally;
+    bool userActivated = navigationType == "click" || navigationType == "formsubmit";
+    return userActivated && externalUrlAllowed(url) ? NavigationStep::OpenExternally : NavigationStep::Cancel;
   }
   return NavigationStep::AskApp;
 }
