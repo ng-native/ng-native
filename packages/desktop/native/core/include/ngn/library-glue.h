@@ -6,6 +6,7 @@
 #include "ngn/header-bar.h"
 #include "ngn/svg.h"
 #include "ngn/tabs-host.h"
+#include "ngn/web-view.h"
 
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
 
@@ -33,6 +34,8 @@ struct LibraryGlue {
   std::function<std::optional<TabsRequest>(const facebook::react::Props &)> tabsRequest;
   // The svg element a view's props are (svg.h), from react-native-svg's props.
   std::function<std::optional<SvgElement>(const facebook::react::Props &)> svgElement;
+  // A web view's config (web-view.h), from react-native-webview's props.
+  std::function<std::optional<WebViewConfig>(const facebook::react::Props &)> webViewConfig;
   // Components the desktop draws its own way, registered before the library's own and in place of
   // any of theirs with the same name.
   std::vector<facebook::react::ComponentDescriptorProvider> components;

@@ -229,7 +229,9 @@ describe('run', () => {
       resolvePackage: (from, name) => {
         assert.equal(from, '/apps/demo');
         asked.push(name);
-        return name === 'react-native-screens' || name === 'react-native-svg'
+        return name === 'react-native-screens' ||
+          name === 'react-native-svg' ||
+          name === 'react-native-webview'
           ? `/apps/demo/node_modules/${name}`
           : null;
       },
@@ -243,6 +245,8 @@ describe('run', () => {
       '/apps/demo/node_modules/react-native-screens',
       '--library',
       '/apps/demo/node_modules/react-native-svg',
+      '--library',
+      '/apps/demo/node_modules/react-native-webview',
     ]);
   });
 
@@ -319,6 +323,8 @@ describe('run', () => {
       '/apps/demo/node_modules/react-native-safe-area-context',
       '--library',
       '/apps/demo/node_modules/react-native-svg',
+      '--library',
+      '/apps/demo/node_modules/react-native-webview',
     ]);
   });
 

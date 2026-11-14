@@ -875,3 +875,31 @@ describe('assets() on macOS', () => {
     assert.equal((logo as { localUri?: string }).localUri, 'file:///caches/ExponentAsset-x.png');
   });
 });
+
+describe('Camera on macOS', () => {
+  it("calls the view's functions on the desktop host's NgNativeCamera with the view's tag", async () => {
+    const calls: unknown[][] = [];
+    mac({
+      NgNativeCamera: {
+        takePicture: async (...args: unknown[]) => (
+          calls.push(['takePicture', ...args]),
+          { uri: 'file:///caches/Camera/A.jpg', width: 1280, height: 720, format: 'jpg' }
+        ),
+        record: async (...args: unknown[]) => (calls.push(['record', ...args]), { uri: '' }),
+        stopRecording: async (...args: unknown[]) => void calls.push(['stopRecording', ...args]),
+      },
+    });
+    const { Camera } = await import('@ng-native/expo/camera');
+    const functions = injectService(Camera.SOURCE);
+    assert.ok(functions);
+    const picture = await functions.takePicture.call({ nativeTag: 12 }, { quality: 0.5 });
+    assert.equal(picture.uri, 'file:///caches/Camera/A.jpg');
+    await functions.record.call({ nativeTag: 12 }, { maxDuration: 3 });
+    await functions.stopRecording.call({ nativeTag: 12 });
+    assert.deepEqual(calls, [
+      ['takePicture', 12, { quality: 0.5 }],
+      ['record', 12, { maxDuration: 3 }],
+      ['stopRecording', 12],
+    ]);
+  });
+});
