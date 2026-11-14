@@ -20,12 +20,15 @@ import { ngNative } from '@ng-native/testing/vitest';
 export default defineConfig({
   test: {
     projects: [
-      { plugins: [ngNative({ os: 'ios' })], test: { name: 'ios' } },
-      { plugins: [ngNative({ os: 'macos' })], test: { name: 'macos' } },
+      { plugins: [ngNative({ os: 'ios' })], test: { name: 'node-ios' } },
+      { plugins: [ngNative({ os: 'macos' })], test: { name: 'node-macos' } },
     ],
   },
 });
 ```
+
+The Node projects take a `node-` prefix, because the projects that run inside the app are named
+for their platform: `vitest --project macos` runs the in-app tests on a Mac.
 
 An extensionless import resolves a platform file first, as Metro does: on macOS `./storage` is
 `storage.macos.ts`, then `storage.ios.ts`, then `storage.native.ts`, then `storage.ts`. On Android
