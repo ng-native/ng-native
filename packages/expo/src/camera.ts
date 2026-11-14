@@ -24,10 +24,13 @@
  * functions Expo defines on the view (`AsyncFunction("takePicture")` in the module, and `record`
  * and `stopRecording` beside it), which native
  * finds by reading `nativeTag` off whatever it is called on. So this calls the same function with
- * the tag the engine committed the view under, and no ref is needed.
+ * the tag the engine committed the view under, and no ref is needed. On macOS the functions are
+ * the desktop host's `NgNativeCamera`'s, which take the tag as their first argument; `record()`
+ * rejects there.
  */
 import { Directive, ElementRef, InjectionToken, inject } from '@angular/core';
 import { Engine, type EngineNode } from '@ng-native/fabric';
+import { desktopHost } from './desktop-host.ts';
 import { expoModule, optional, present } from './native.ts';
 
 export type PictureOptions = Omit<
@@ -59,10 +62,13 @@ export class Camera {
         const core = optional(
           () => require('expo-modules-core') as typeof import('expo-modules-core'),
         );
-        const module = expoModule('expo-camera', () =>
-          core?.requireOptionalNativeModule<{
-            ViewPrototypes?: Record<string, CameraViewFunctions>;
-          }>('ExpoCamera'),
+        const module = expoModule(
+          'expo-camera',
+          () =>
+            core?.requireOptionalNativeModule<{
+              ViewPrototypes?: Record<string, CameraViewFunctions>;
+            }>('ExpoCamera'),
+          { desktop: desktopCamera },
         );
         // Missing, the stand-in is the functions: taking a picture says what to install.
         if (module && !present(module)) return module as unknown as CameraViewFunctions;
@@ -105,4 +111,35 @@ export class Camera {
     if (!this.functions || nativeTag === null) return;
     await this.functions.stopRecording.call({ nativeTag });
   }
+}
+
+/** What the desktop host's `NgNativeCamera` takes: the view's functions, by the view's tag. */
+interface CameraHost {
+  takePicture(tag: number, options: PictureOptions): Promise<CameraPicture>;
+  record(tag: number, options: RecordingOptions): Promise<CameraRecording>;
+  stopRecording(tag: number): Promise<void>;
+}
+
+/**
+ * The camera view's functions over the desktop host's `NgNativeCamera`, for macOS, where the view
+ * is the host's own and a TurboModule has no view prototypes: each passes its view's tag.
+ */
+function desktopCamera(): { ViewPrototypes: Record<string, CameraViewFunctions> } | null {
+  const host = desktopHost<CameraHost>('NgNativeCamera')?.module;
+  if (!host) return null;
+  return {
+    ViewPrototypes: {
+      ExpoCamera: {
+        takePicture(options) {
+          return host.takePicture(this.nativeTag, options);
+        },
+        record(options) {
+          return host.record(this.nativeTag, options);
+        },
+        stopRecording() {
+          return host.stopRecording(this.nativeTag);
+        },
+      },
+    },
+  };
 }

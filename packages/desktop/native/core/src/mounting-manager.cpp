@@ -7,6 +7,7 @@
 #include "ngn/desktop-modal.h"
 #include "ngn/native-controls.h"
 #include "ngn/split-view.h"
+#include "ngn/camera.h"
 #include "ngn/expo-image.h"
 #include "ngn/symbol.h"
 
@@ -56,6 +57,7 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<SidebarItemComponentDescriptor>(),
       concreteComponentDescriptorProvider<SymbolComponentDescriptor>(),
       concreteComponentDescriptorProvider<ExpoImageComponentDescriptor>(),
+      concreteComponentDescriptorProvider<CameraComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : backend_->componentProviders()) {

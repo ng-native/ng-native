@@ -20,6 +20,8 @@ add_executable(ngn-macos
     web-view-component.mm
     expo-image-drawing.mm
     expo-image-view.mm
+    camera.mm
+    camera-view.mm
     battery.mm
     header-toolbar.mm
     host-view.mm

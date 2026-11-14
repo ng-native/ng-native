@@ -42,6 +42,8 @@
 #import "image-manipulator.h"
 #import "printing.h"
 #import "expo-image-view.h"
+#import "camera-view.h"
+#import "camera.h"
 #include "ngn/web-view.h"
 #import "geocoder.h"
 #import "address-search.h"
@@ -835,6 +837,10 @@ int main(int argc, const char *argv[]) {
       });
       // <expo-image>'s bytes: 64 MB of them in memory, the rest on disk in the caches.
       [NGNExpoImageView useHttp:imageHttp cache:std::make_shared<ngn::ImageCache>(caches + "/ExpoImage", 64 << 20)];
+      static auto cameraHardware = ngn::appkit::makeCameraHardware();
+      static auto cameraViews = std::make_shared<ngn::CameraViews>();
+      [NGNCameraView useHardware:cameraHardware views:cameraViews noPrompts:noPrompts];
+      ngn::addModule(*modules, "NgNativeCamera", [] { return ngn::makeCameraModule(cameraHardware, cameraViews, caches + "/Camera", noPrompts); });
       static auto printSystem = ngn::appkit::makePrintSystem();
       ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", noPrompts); });
       // react-native-webview's navigation answers; harmless in a host built without the library.

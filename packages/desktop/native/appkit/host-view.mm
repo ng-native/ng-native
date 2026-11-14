@@ -11,6 +11,7 @@
 #import "symbol-view.h"
 #import "web-view-component.h"
 #import "expo-image-view.h"
+#import "camera-view.h"
 
 #include "text-layout.h"
 
@@ -925,6 +926,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name.starts_with("RNSVG")) {
     return [[NGNSvgElementView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::CameraComponentName) {
+    return [[NGNCameraView alloc] initWithShadowView:view];
   }
   if (name == ngn::ExpoImageComponentName) {
     return [[NGNExpoImageView alloc] initWithShadowView:view];

@@ -111,6 +111,7 @@ add_library(ngn_core STATIC
     core/src/modules/audio.cpp
     core/src/modules/battery.cpp
     core/src/modules/calendar.cpp
+    core/src/modules/camera.cpp
     core/src/modules/core-modules.cpp
     core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
@@ -172,6 +173,7 @@ if(NGN_TESTS)
         appkit/printing.mm appkit/tests/printing.test.mm
         appkit/web-view.mm appkit/tests/web-view.test.mm
         appkit/expo-image-drawing.mm appkit/tests/expo-image.test.mm
+        appkit/camera.mm appkit/tests/camera.test.mm
         appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage")
