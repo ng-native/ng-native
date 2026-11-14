@@ -139,6 +139,11 @@ export {
   type PathCapability,
 } from './desktop-options.ts';
 export {
+  macosPermissions,
+  type ExpoPermissionConfig,
+  type MacosPermissions,
+} from './desktop-permissions.ts';
+export {
   Menus,
   serializeMenu,
   type NativeMenuEntry,

@@ -14,6 +14,7 @@ export {
   type PermissionResponse,
 } from './permissions.ts';
 export {
+  DESKTOP_MODULES,
   MissingModuleError,
   expoModule,
   optional,

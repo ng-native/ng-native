@@ -236,3 +236,4 @@ function list(
 }
 
 export * from './spawn-rules.ts';
+export * from './desktop-permissions.ts';
