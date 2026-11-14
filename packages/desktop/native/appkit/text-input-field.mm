@@ -1,3 +1,4 @@
+#include <dlfcn.h>
 #import "text-input-field.h"
 
 #import <objc/message.h>
@@ -73,15 +74,25 @@ BOOL shouldChange(NSTextView *text, NSRange range, NSString *replacement, const 
 
 } // namespace
 
+NSString *NGNAutomaticCapitalizationKey() {
+  static NSString *key = [] {
+    auto symbol = static_cast<NSString *__unsafe_unretained *>(
+        dlsym(RTLD_DEFAULT, "NSTextCheckingAutomaticCapitalizationEnabledKey"));
+    return symbol != nullptr ? *symbol : nil;
+  }();
+  return key;
+}
+
 NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
     NSDictionary<NSTextCheckingOptionKey, id> *options,
     const TextInputOptions &input) {
-  if (@available(macOS 26.0, *)) {
-    if (input.capitalize == Capitalize::None) {
-      NSMutableDictionary *out = options ? [options mutableCopy] : [NSMutableDictionary dictionary];
-      out[NSTextCheckingAutomaticCapitalizationEnabledKey] = @NO;
-      return out;
-    }
+  // Looked up at run time: the key is newer than some macOS 26 SDKs, so naming it would stop a host
+  // built against one of those, and a system without it leaves capitalization to the user.
+  NSString *key = NGNAutomaticCapitalizationKey();
+  if (key != nil && input.capitalize == Capitalize::None) {
+    NSMutableDictionary *out = options ? [options mutableCopy] : [NSMutableDictionary dictionary];
+    out[key] = @NO;
+    return out;
   }
   return options;
 }

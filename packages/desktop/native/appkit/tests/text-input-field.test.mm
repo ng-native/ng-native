@@ -102,8 +102,8 @@ TEST_CASE("NGNFitReplacement cuts to maxLength between characters and capitalize
 TEST_CASE("NGNTextCheckingOptions turns the user's capitalization off for autoCapitalize none") {
   NSDictionary *in = @{};
   NSDictionary *none = NGNTextCheckingOptions(in, {.capitalize = Capitalize::None});
-  if (@available(macOS 26.0, *)) {
-    CHECK([none[NSTextCheckingAutomaticCapitalizationEnabledKey] isEqual:@NO]);
+  if (NSString *key = NGNAutomaticCapitalizationKey()) {
+    CHECK([none[key] isEqual:@NO]);
   } else {
     CHECK(none.count == 0);
   }

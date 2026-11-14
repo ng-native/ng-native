@@ -20,6 +20,10 @@ NSString *NGNFitReplacement(NSString *current, NSRange range, NSString *replacem
 
 // A text-checking delegate's options with `options`' capitalization: `none` turns the user's
 // sentence capitalization off, on macOS 26 and later.
+// The text checking key that overrides the user's automatic capitalization, or nil where the
+// system has none.
+NSString *NGNAutomaticCapitalizationKey();
+
 NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
     NSDictionary<NSTextCheckingOptionKey, id> *checking,
     const ngn::TextInputOptions &options);
