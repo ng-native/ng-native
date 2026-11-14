@@ -14,11 +14,12 @@
 // - NgNativeDocumentPicker: getDocumentAsync in expo-document-picker's shape (copied into the
 //   cache unless copyToCacheDirectory is false), saveDocumentAsync (text, or bytes as {base64},
 //   written where the save panel says; null when dismissed) and pickDirectoryAsync ({uri} or null),
-//   over FileDialogs.
+//   over FileDialogs, with uris percent-encoded.
 // - NgNativeLocalization: getLocales and getCalendars, in expo-localization's shapes, over a
 //   LocaleSource (the user's preferred languages and the region's formats).
 #pragma once
 
+#include "ngn/file-system.h"
 #include "ngn/host-state.h"
 #include "ngn/native-module.h"
 #include "ngn/system.h"
@@ -103,8 +104,12 @@ class FileDialogs {
 // The MIME type of a file name's extension, or application/octet-stream.
 std::string mimeTypeOf(const std::string &name);
 
-// `cacheDirectory` is where picked files are copied.
-std::shared_ptr<NativeModule> makeDocumentPickerModule(std::shared_ptr<FileDialogs> dialogs, std::string cacheDirectory);
+// `cacheDirectory` is where picked files are copied. What the user picks or saves becomes
+// reachable through `access`, NgNativeFileSystem's, when there is one.
+std::shared_ptr<NativeModule> makeDocumentPickerModule(
+    std::shared_ptr<FileDialogs> dialogs,
+    std::string cacheDirectory,
+    std::shared_ptr<FileAccess> access = nullptr);
 
 // One of the user's preferred languages, with the formats of the region the system is set to.
 struct LocaleFacts {

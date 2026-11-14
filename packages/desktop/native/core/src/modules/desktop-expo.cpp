@@ -328,17 +328,27 @@ const folly::dynamic &field(const folly::dynamic &args, const char *key) {
 
 } // namespace
 
-std::shared_ptr<NativeModule> makeDocumentPickerModule(std::shared_ptr<FileDialogs> dialogs, std::string cacheDirectory) {
+std::shared_ptr<NativeModule> makeDocumentPickerModule(
+    std::shared_ptr<FileDialogs> dialogs,
+    std::string cacheDirectory,
+    std::shared_ptr<FileAccess> access) {
   namespace fs = std::filesystem;
   struct DocumentPicker : NativeModule {
-    DocumentPicker(std::shared_ptr<FileDialogs> dialogs, std::string cache) : NativeModule("NgNativeDocumentPicker") {
-      promise("getDocumentAsync", [dialogs, cache](const folly::dynamic &args, JsPromise p) {
+    DocumentPicker(std::shared_ptr<FileDialogs> dialogs, std::string cache, std::shared_ptr<FileAccess> access)
+        : NativeModule("NgNativeDocumentPicker") {
+      // What the user chose in a panel, the app may read and write.
+      auto allow = [access](const std::string &path) {
+        if (access) {
+          access->allowPicked(path);
+        }
+      };
+      promise("getDocumentAsync", [dialogs, cache, allow](const folly::dynamic &args, JsPromise p) {
         FileDialogs::OpenRequest request{
             .types = stringsIn(field(args, "type")), .multiple = field(args, "multiple").isBool() && field(args, "multiple").asBool()};
         // "*/*" is any file, as no types are.
         std::erase(request.types, "*/*");
         bool copy = !field(args, "copyToCacheDirectory").isBool() || field(args, "copyToCacheDirectory").asBool();
-        dialogs->openFiles(request, [p, copy, cache](std::optional<std::vector<std::string>> files) {
+        dialogs->openFiles(request, [p, copy, cache, allow](std::optional<std::vector<std::string>> files) {
           if (!files) {
             p.resolve(folly::dynamic::object("canceled", true)("assets", nullptr));
             return;
@@ -355,12 +365,14 @@ std::shared_ptr<NativeModule> makeDocumentPickerModule(std::shared_ptr<FileDialo
                 fs::create_directories(folder);
                 at = folder / source.filename();
                 fs::copy_file(source, at, fs::copy_options::overwrite_existing);
+              } else {
+                allow(source.string());
               }
               // The file clock's epoch to the system clock's, without C++20's clock_cast.
               auto written = fs::last_write_time(source);
               auto modified = std::chrono::duration_cast<std::chrono::milliseconds>(
                   (written - fs::file_time_type::clock::now() + std::chrono::system_clock::now()).time_since_epoch());
-              assets.push_back(folly::dynamic::object("uri", "file://" + at.string())("name", source.filename().string())(
+              assets.push_back(folly::dynamic::object("uri", fileUri(at.string()))("name", source.filename().string())(
                   "size", static_cast<int64_t>(fs::file_size(source)))("mimeType", mimeTypeOf(source.filename().string()))(
                   "lastModified", static_cast<int64_t>(modified.count())));
             }
@@ -371,7 +383,7 @@ std::shared_ptr<NativeModule> makeDocumentPickerModule(std::shared_ptr<FileDialo
           p.resolve(folly::dynamic::object("canceled", false)("assets", assets));
         });
       });
-      promise("saveDocumentAsync", [dialogs](const folly::dynamic &args, JsPromise p) {
+      promise("saveDocumentAsync", [dialogs, allow](const folly::dynamic &args, JsPromise p) {
         const auto &contents = field(args, "contents");
         std::optional<std::string> bytes;
         if (contents.isString()) {
@@ -386,7 +398,7 @@ std::shared_ptr<NativeModule> makeDocumentPickerModule(std::shared_ptr<FileDialo
         FileDialogs::SaveRequest request{
             .suggestedName = field(args, "suggestedName").isString() ? field(args, "suggestedName").asString() : "",
             .types = stringsIn(field(args, "types"))};
-        dialogs->saveFile(request, [p, bytes = std::move(*bytes)](std::optional<std::string> path) {
+        dialogs->saveFile(request, [p, allow, bytes = std::move(*bytes)](std::optional<std::string> path) {
           if (!path) {
             p.resolve(nullptr);
             return;
@@ -397,17 +409,21 @@ std::shared_ptr<NativeModule> makeDocumentPickerModule(std::shared_ptr<FileDialo
             p.reject("The file could not be written: " + *path);
             return;
           }
-          p.resolve("file://" + *path);
+          allow(*path);
+          p.resolve(fileUri(*path));
         });
       });
-      promise("pickDirectoryAsync", [dialogs](const folly::dynamic &, JsPromise p) {
-        dialogs->chooseFolder([p](std::optional<std::string> folder) {
-          p.resolve(folder ? folly::dynamic::object("uri", "file://" + *folder) : folly::dynamic(nullptr));
+      promise("pickDirectoryAsync", [dialogs, allow](const folly::dynamic &, JsPromise p) {
+        dialogs->chooseFolder([p, allow](std::optional<std::string> folder) {
+          if (folder) {
+            allow(*folder);
+          }
+          p.resolve(folder ? folly::dynamic::object("uri", fileUri(*folder)) : folly::dynamic(nullptr));
         });
       });
     }
   };
-  return std::make_shared<DocumentPicker>(std::move(dialogs), std::move(cacheDirectory));
+  return std::make_shared<DocumentPicker>(std::move(dialogs), std::move(cacheDirectory), std::move(access));
 }
 
 } // namespace ngn

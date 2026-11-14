@@ -11,8 +11,75 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ngn {
+
+// Listeners that can be dropped from any thread at any time. Dropping one waits for a call to it
+// already running elsewhere, so once its handle is gone nothing calls into what it captured (a
+// module a reload is destroying). A listener may drop its own handle while it is being called.
+template <typename T>
+class Listeners {
+ public:
+  using Listener = std::function<void(const T &)>;
+
+  // Listens until the returned handle is destroyed.
+  std::shared_ptr<void> add(Listener listener) {
+    auto entry = std::make_shared<Entry>();
+    entry->call = std::move(listener);
+    int id;
+    {
+      std::lock_guard lock(state_->mutex);
+      id = state_->next++;
+      state_->entries[id] = entry;
+    }
+    std::weak_ptr<State> state = state_;
+    return std::shared_ptr<void>(nullptr, [state, entry, id](void *) {
+      {
+        // Waits for a call in progress on another thread; the same thread re-enters.
+        std::lock_guard calling(entry->calling);
+        entry->live = false;
+      }
+      if (auto shared = state.lock()) {
+        std::lock_guard lock(shared->mutex);
+        shared->entries.erase(id);
+      }
+    });
+  }
+
+  bool empty() const {
+    std::lock_guard lock(state_->mutex);
+    return state_->entries.empty();
+  }
+
+  void notify(const T &value) const {
+    std::map<int, std::shared_ptr<Entry>> entries;
+    {
+      std::lock_guard lock(state_->mutex);
+      entries = state_->entries;
+    }
+    for (auto &[_, entry] : entries) {
+      std::lock_guard calling(entry->calling);
+      if (entry->live) {
+        entry->call(value);
+      }
+    }
+  }
+
+ private:
+  struct Entry {
+    std::recursive_mutex calling;
+    bool live{true};
+    Listener call;
+  };
+  // Shared with each handle, which may outlive these listeners.
+  struct State {
+    std::mutex mutex;
+    std::map<int, std::shared_ptr<Entry>> entries;
+    int next{0};
+  };
+  std::shared_ptr<State> state_ = std::make_shared<State>();
+};
 
 // A value with listeners. Setting it to what it already is notifies nobody.
 template <typename T>
@@ -28,36 +95,25 @@ class Watched {
   }
 
   void set(T value) {
-    std::map<int, Listener> listeners;
     {
       std::lock_guard lock(mutex_);
       if (value_ == value) {
         return;
       }
       value_ = value;
-      listeners = listeners_;
     }
-    for (auto &[_, listener] : listeners) {
-      listener(value);
-    }
+    listeners_.notify(value);
   }
 
   // Listens until the returned handle is destroyed.
   std::shared_ptr<void> listen(Listener listener) {
-    std::lock_guard lock(mutex_);
-    int id = next_++;
-    listeners_[id] = std::move(listener);
-    return std::shared_ptr<void>(nullptr, [this, id](void *) {
-      std::lock_guard lock(mutex_);
-      listeners_.erase(id);
-    });
+    return listeners_.add(std::move(listener));
   }
 
  private:
   mutable std::mutex mutex_;
   T value_;
-  std::map<int, Listener> listeners_;
-  int next_{0};
+  Listeners<T> listeners_;
 };
 
 enum class Activity { Active, Inactive, Background };
@@ -103,8 +159,7 @@ class HostState {
   mutable std::mutex mutex_;
   std::optional<std::string> initialUrl_;
   std::vector<std::string> pendingUrls_;
-  std::map<int, std::function<void(const std::string &)>> urlListeners_;
-  int next_{0};
+  Listeners<std::string> urlListeners_;
 };
 
 } // namespace ngn

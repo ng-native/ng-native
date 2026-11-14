@@ -91,6 +91,9 @@ struct UpdateResponse {
   std::string signature;
   // `noUpdateAvailable` or `rollBackToEmbedded`, or empty.
   std::string directive;
+  // The directive's bytes as sent, and its part's `expo-signature`, which covers them.
+  std::string directiveBody;
+  std::string directiveSignature;
 };
 
 // Reads a response body as the protocol allows it: a manifest as JSON (`application/json` or
@@ -130,8 +133,14 @@ class UpdatesClient {
   // The bundle to load at startup, recovering from a launch that crashed (see above), and marking
   // this launch. Call once, before the runtime starts.
   std::string launch();
-  // This launch ran long enough to count: an update that crashes after it is not rolled back.
+  // This launch ran long enough to count, or the app quit cleanly: an update that crashes after it
+  // is not rolled back.
   void markLaunchSucceeded();
+  // The same, only when `generation` is still the current launch's: a timer armed for a launch a
+  // reload has since replaced marks nothing.
+  void markLaunchSucceeded(uint64_t generation);
+  // Which launch is current; launch() and beginReload() each begin a new one.
+  uint64_t launchGeneration() const;
   // The update this launch runs, or nothing for the embedded bundle.
   std::optional<LaunchState::Update> running() const;
 
@@ -166,6 +175,11 @@ class UpdatesClient {
   void save(const LaunchState &state) const;
   std::string pathOf(const LaunchState::Update &update) const;
   bool usable(const LaunchState::Update &update, const LaunchState &state) const;
+  void markLocked();
+  // Why a manifest's (or the `what` named) signature header does not verify its bytes, when the
+  // app requires signing.
+  std::optional<std::string> signatureProblem(
+      const std::string &body, const std::string &header, const std::string &what = "manifest") const;
 
   UpdatesConfig config_;
   std::shared_ptr<Http> http_;
@@ -174,6 +188,9 @@ class UpdatesClient {
   std::optional<LaunchState::Update> running_;
   // What the last check found.
   std::optional<UpdateManifest> found_;
+  std::string foundBody_;
+  uint64_t generation_{0};
+  std::string foundSignature_;
   bool foundRollBack_{false};
   std::shared_ptr<HttpTask> task_;
 };

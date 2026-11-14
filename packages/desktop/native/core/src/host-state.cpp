@@ -24,36 +24,29 @@ void HostState::receiveUrl(std::string url, bool launched) {
 }
 
 void HostState::openUrl(const std::string &url) {
-  std::map<int, std::function<void(const std::string &)>> listeners;
   {
     std::lock_guard lock(mutex_);
     if (urlListeners_.empty()) {
       pendingUrls_.push_back(url);
       return;
     }
-    listeners = urlListeners_;
   }
-  for (auto &[_, listener] : listeners) {
-    listener(url);
-  }
+  urlListeners_.notify(url);
 }
 
 std::shared_ptr<void> HostState::listenForUrls(std::function<void(const std::string &)> listener) {
   std::vector<std::string> pending;
-  int id;
+  std::shared_ptr<void> handle;
   {
+    // Added under the lock openUrl checks, so a URL arriving now is either pending here or sent.
     std::lock_guard lock(mutex_);
-    id = next_++;
-    urlListeners_[id] = listener;
+    handle = urlListeners_.add(listener);
     pending.swap(pendingUrls_);
   }
   for (const auto &url : pending) {
     listener(url);
   }
-  return std::shared_ptr<void>(nullptr, [this, id](void *) {
-    std::lock_guard lock(mutex_);
-    urlListeners_.erase(id);
-  });
+  return handle;
 }
 
 } // namespace ngn

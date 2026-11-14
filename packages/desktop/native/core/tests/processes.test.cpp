@@ -1,6 +1,9 @@
 #include "ngn/processes.h"
 
 #include <doctest/doctest.h>
+#include <set>
+
+#include <map>
 #include <folly/json.h>
 
 #include <chrono>
@@ -49,6 +52,9 @@ struct FakeLauncher final : ngn::ProcessLauncher {
   }
   void kill(int handle, int signal) override {
     calls.push_back("kill " + std::to_string(handle) + " " + std::to_string(signal));
+  }
+  void killAll(int signal) override {
+    calls.push_back("kill all " + std::to_string(signal));
   }
 };
 
@@ -226,6 +232,7 @@ TEST_CASE("Shell hands on urls with a scheme that is not a file's or a script's,
 
   struct Opener final : ngn::ShellOpener {
     Lines calls;
+    ngn::ShellOpener::PathFacts facts(const std::string &) override { return {.exists = true}; }
     void openUrl(const std::string &u, std::function<void(bool)> d) override { calls.push_back("url " + u); d(true); }
     void openPath(const std::string &p, std::function<void(bool)> d) override { calls.push_back("path " + p); d(true); }
     void showItemInFolder(const std::string &p, std::function<void(bool)> d) override { calls.push_back("show " + p); d(false); }
@@ -243,4 +250,131 @@ TEST_CASE("Shell hands on urls with a scheme that is not a file's or a script's,
   ask("showItemInFolder", "/Users/me/a.md");
   CHECK(answers == std::vector<dynamic>{true, false, true, false, false});
   CHECK(opener->calls == Lines{"url https://ng-native.com", "path /Users/me/a.md", "show /Users/me/a.md"});
+}
+
+TEST_CASE("Shell.openPath opens a document or a folder, never something that runs: a program, an app or a script") {
+  struct Opener final : ngn::ShellOpener {
+    Lines calls;
+    std::map<std::string, ngn::ShellOpener::PathFacts> disk;
+    ngn::ShellOpener::PathFacts facts(const std::string &p) override {
+      auto it = disk.find(p);
+      return it == disk.end() ? ngn::ShellOpener::PathFacts{} : it->second;
+    }
+    void openUrl(const std::string &u, std::function<void(bool)> d) override { calls.push_back("url " + u); d(true); }
+    void openPath(const std::string &p, std::function<void(bool)> d) override { calls.push_back("path " + p); d(true); }
+    void showItemInFolder(const std::string &p, std::function<void(bool)> d) override { calls.push_back("show " + p); d(true); }
+  };
+  auto opener = std::make_shared<Opener>();
+  opener->disk = {
+      {"/Users/me/notes.md", {.exists = true}},
+      {"/Users/me/Projects", {.exists = true}},
+      {"/Users/me/tool", {.exists = true, .executable = true}},
+      {"/Applications/Evil.app", {.exists = true, .runsCode = true}},
+      {"/Users/me/run.command", {.exists = true, .runsCode = true}},
+  };
+  auto shell = ngn::makeShellModule(opener);
+  std::vector<dynamic> answers;
+  for (const char *path : {"/Users/me/notes.md", "/Users/me/Projects", "/Users/me/tool", "/Applications/Evil.app",
+                           "/Users/me/run.command", "/Users/me/missing"}) {
+    shell->callWithPromise("openPath", dynamic::array(path), {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
+  }
+  CHECK(answers == std::vector<dynamic>{true, true, false, false, false, false});
+  CHECK(opener->calls == Lines{"path /Users/me/notes.md", "path /Users/me/Projects"});
+
+  // Showing one in Finder runs nothing, so any that exists can be shown.
+  answers.clear();
+  shell->callWithPromise("showItemInFolder", dynamic::array("/Applications/Evil.app"),
+                         {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
+  CHECK(answers == std::vector<dynamic>{true});
+}
+
+TEST_CASE("the POSIX launcher's stdin writes never block the caller, and a closed reader never raises SIGPIPE") {
+  auto launcher = ngn::makePosixLauncher();
+  std::mutex mutex;
+  std::condition_variable done;
+  std::map<int, size_t> received;
+  std::set<int> exited;
+  launcher->setEvents({
+      .output = [&](int h, bool, std::string data) { std::lock_guard lock(mutex); received[h] += data.size(); },
+      .exit =
+          [&](int h, std::optional<int>, std::optional<std::string>) {
+            std::lock_guard lock(mutex);
+            exited.insert(h);
+            done.notify_all();
+          },
+  });
+  auto wait = [&](int h) {
+    std::unique_lock lock(mutex);
+    return done.wait_for(lock, std::chrono::seconds(10), [&] { return exited.contains(h); });
+  };
+  const std::string big(4 * 1024 * 1024, 'x');
+
+  // A program that never reads: the write is queued, not waited on.
+  auto idle = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
+  auto started = std::chrono::steady_clock::now();
+  launcher->write(idle, big);
+  CHECK(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(500));
+  // Nor does a write hold up calls for other programs.
+  CHECK(launcher->lastHandle() == idle);
+  launcher->kill(idle, SIGKILL);
+  REQUIRE(wait(idle));
+
+  // A reader that takes it all, in its own time.
+  auto cat = std::get<int>(launcher->spawn("/bin/cat", {}, std::nullopt, {}));
+  launcher->write(cat, big);
+  launcher->write(cat, "end");
+  launcher->closeStdin(cat);
+  REQUIRE(wait(cat));
+  CHECK(received[cat] == big.size() + 3);
+
+  // A program that closed its stdin: writing to it would raise SIGPIPE, which ends the host.
+  auto closed = std::get<int>(launcher->spawn("/bin/sh", {"-c", "exec 0<&-; sleep 2"}, std::nullopt, {}));
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  launcher->write(closed, "anyone there?");
+  launcher->write(closed, big);
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  launcher->kill(closed, SIGKILL);
+  REQUIRE(wait(closed));
+}
+
+TEST_CASE("a module going, as on a reload, stops the programs it started that are still running") {
+  auto launcher = std::make_shared<FakeLauncher>();
+  {
+    auto module = ngn::makeProcessesModule(launcher, setup());
+    REQUIRE(spawn(*module, dynamic::array("git", dynamic::array("status", "--porcelain"))).value == dynamic(7));
+  }
+  CHECK(launcher->calls.back() == "kill 7 " + std::to_string(SIGTERM));
+
+  // One that already exited is left alone.
+  launcher->calls.clear();
+  {
+    auto module = ngn::makeProcessesModule(launcher, setup());
+    launcher->issued = 6;
+    REQUIRE(spawn(*module, dynamic::array("git", dynamic::array("status", "--porcelain"))).value == dynamic(7));
+    launcher->events.exit(7, 0, std::nullopt);
+  }
+  CHECK(launcher->calls.size() == 1);
+}
+
+TEST_CASE("the POSIX launcher stops every program it started, for the host quitting") {
+  auto launcher = ngn::makePosixLauncher();
+  std::mutex mutex;
+  std::condition_variable done;
+  std::map<int, std::string> exits;
+  launcher->setEvents({
+      .output = [](int, bool, std::string) {},
+      .exit =
+          [&](int h, std::optional<int> code, std::optional<std::string> signal) {
+            std::lock_guard lock(mutex);
+            exits[h] = code ? "code " + std::to_string(*code) : *signal;
+            done.notify_all();
+          },
+  });
+  auto a = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
+  auto b = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
+  launcher->killAll(SIGKILL);
+  std::unique_lock lock(mutex);
+  REQUIRE(done.wait_for(lock, std::chrono::seconds(10), [&] { return exits.size() == 2; }));
+  CHECK(exits[a] == "SIGKILL");
+  CHECK(exits[b] == "SIGKILL");
 }

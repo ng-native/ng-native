@@ -70,6 +70,7 @@ add_library(ngn_core STATIC
     core/src/host-state.cpp
     core/src/input-dispatcher.cpp
     core/src/key-value-store.cpp
+    core/src/launch-settings.cpp
     core/src/library-glue.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
@@ -93,13 +94,18 @@ add_library(ngn_core STATIC
     core/src/modules/async-storage.cpp
     core/src/modules/core-modules.cpp
     core/src/modules/desktop-expo.cpp
+    core/src/modules/file-system.cpp
     core/src/modules/image-loader.cpp
+    core/src/modules/local-authentication.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
+    core/src/modules/sqlite.cpp
     core/src/modules/undo.cpp
     core/src/modules/web-socket.cpp)
 target_include_directories(ngn_core PUBLIC core/include)
-target_link_libraries(ngn_core PUBLIC react_native)
+# The system's sqlite3, behind NgNativeSqlite (libsqlite3-dev on Linux).
+find_package(SQLite3 REQUIRED)
+target_link_libraries(ngn_core PUBLIC react_native SQLite::SQLite3)
 target_compile_options(ngn_core PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
 
 if(NGN_TESTS)

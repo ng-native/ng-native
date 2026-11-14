@@ -2,7 +2,7 @@
 // that is never shown, and gives each window the app opens (NgNativeWindows) a surface of its own.
 //
 //   ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>]
-//   ngn-macos              (in a packaged app: the bundle and module its Info.plist names)
+//   ngn-macos              (a packaged app: what its Info.plist names; argv and env are ignored)
 //
 // <bundle> is a JavaScript or Hermes bytecode file on disk, or a Metro bundle URL, which turns on
 // the dev loop: reload and Fast Refresh from the dev server, and the Developer menu. The module
@@ -24,6 +24,8 @@
 #import "system.h"
 #import "system-access.h"
 #import "desktop-expo.h"
+#import "local-authentication.h"
+#import "file-system.h"
 #import "tray-and-dock.h"
 #import "updates.h"
 #import "surface-view.h"
@@ -37,7 +39,9 @@
 #import "native-controls.h"
 #include "ngn/focus-order.h"
 #include "ngn/layout-animations.h"
+#include "ngn/launch-settings.h"
 #include "ngn/runtime.h"
+#include "ngn/sqlite.h"
 
 #include <sys/sysctl.h>
 #include <unistd.h>
@@ -66,6 +70,7 @@ struct Host {
   // The app's own surface in a window, for an app that renders there instead of opening windows.
   NSWindow *appWindow;
   NSString *title;
+  std::shared_ptr<ngn::ProcessLauncher> launcher;
   // Ticks the layout animations while they run, at the display's rate.
   NSTimer *animationTimer;
   bool firstFrameLogged = false;
@@ -262,8 +267,10 @@ void markLaunchSucceededLater() {
   if (!gHost.updates || !gHost.updates->running()) {
     return;
   }
+  // For this launch only: a reload since begins another, with a timer of its own.
+  uint64_t generation = gHost.updates->launchGeneration();
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kLaunchSuccessDelay), dispatch_get_main_queue(), ^{
-    gHost.updates->markLaunchSucceeded();
+    gHost.updates->markLaunchSucceeded(generation);
   });
 }
 
@@ -399,6 +406,14 @@ void showAppWindow() {
   return YES;
 }
 - (void)applicationWillTerminate:(NSNotification *)note {
+  // A clean quit is no crash: the update running is not rolled back, however soon it quit.
+  if (gHost.updates) {
+    gHost.updates->markLaunchSucceeded();
+  }
+  // The programs the app started go with it, rather than run on with no one to read them.
+  if (gHost.launcher) {
+    gHost.launcher->killAll(SIGKILL);
+  }
   // Stop the surfaces and the runtime before exit tears down what they still use.
   if (gHost.runtime) {
     gHost.runtime->shutdown();
@@ -421,46 +436,32 @@ void showAppWindow() {
 
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
-    std::string bundle;
-    std::string module = "main";
-    NSString *title = @"ng-native";
-    std::string appId;
-    std::string capabilities;
-    if (const char *fromEnv = getenv("NGN_DESKTOP_CAPABILITIES")) {
-      capabilities = fromEnv;
-    }
-    for (int i = 1; i < argc; i++) {
-      std::string arg = argv[i];
-      if (arg == "--module" && i + 1 < argc) {
-        module = argv[++i];
-      } else if (arg == "--app-id" && i + 1 < argc) {
-        appId = argv[++i];
-      } else if (arg == "--capabilities" && i + 1 < argc) {
-        capabilities = argv[++i];
-      } else if (arg == "--title" && i + 1 < argc) {
-        title = [NSString stringWithUTF8String:argv[++i]];
-      } else if (bundle.empty() && arg.rfind("--", 0) != 0) {
-        bundle = arg;
-      } else {
-        bundle.clear();
-        break;
-      }
-    }
-    // A packaged app, launched from Finder with no arguments: its Info.plist says what to run.
-    if (auto packaged = ngn::appkit::packagedApp(); packaged && argc == 1) {
-      bundle = packaged->bundlePath;
-      module = packaged->moduleName;
-      if (NSString *name = NSBundle.mainBundle.infoDictionary[@"CFBundleName"]; [name isKindOfClass:NSString.class]) {
-        title = name;
-      }
-      if (NSString *identifier = NSBundle.mainBundle.bundleIdentifier) {
-        appId = identifier.UTF8String;
-      }
-    }
-    if (bundle.empty()) {
-      fprintf(stderr, "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>]\n");
+    // What to run: argv and the environment in a dev run, and only the Info.plist in a packaged
+    // app (launch-settings.h).
+    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+    std::vector<std::string> args(argv + 1, argv + argc);
+    auto launch = ngn::launchSettings({
+        .args = args,
+        .env = [](const std::string &name) -> std::optional<std::string> {
+          const char *value = getenv(name.c_str());
+          return value != nullptr ? std::optional<std::string>(value) : std::nullopt;
+        },
+        .plist = [info](const std::string &key) -> std::optional<std::string> {
+          NSString *value = info[[NSString stringWithUTF8String:key.c_str()]];
+          return [value isKindOfClass:NSString.class] ? std::optional<std::string>(value.UTF8String) : std::nullopt;
+        },
+        .resourcePath = NSBundle.mainBundle.resourcePath != nil ? NSBundle.mainBundle.resourcePath.UTF8String : "",
+    });
+    if (auto *usage = std::get_if<std::string>(&launch)) {
+      fprintf(stderr, "%s\n", usage->c_str());
       return 2;
     }
+    static const auto settings = std::get<ngn::LaunchSettings>(launch);
+    std::string bundle = settings.bundle;
+    std::string module = settings.module;
+    NSString *title = [NSString stringWithUTF8String:settings.title.c_str()];
+    std::string appId = settings.appId;
+    std::string capabilities = settings.capabilitiesJson;
 
     NSApplication *app = NSApplication.sharedApplication;
     app.activationPolicy = NSApplicationActivationPolicyRegular;
@@ -620,6 +621,7 @@ int main(int argc, const char *argv[]) {
     {
       // One launcher and one declaration for the process: a reload gets a new module over them.
       static auto launcher = ngn::makePosixLauncher();
+      gHost.launcher = launcher;
       static auto processes = ngn::appkit::processesSetup(capabilities);
       static auto opener = ngn::appkit::makeShellOpener();
       ngn::addModule(*modules, "NgNativeProcesses", [] { return ngn::makeProcessesModule(launcher, processes); });
@@ -643,7 +645,19 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
       static auto dialogs = ngn::appkit::makeFileDialogs();
       static auto caches = ngn::appkit::cacheDirectory(appId);
-      ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches); });
+      // What the app may read and write: its folders, the user's picks, and the declared paths
+      // (none in a Mac App Store build, whose sandbox reaches only picks).
+      static auto fileAccess = std::make_shared<ngn::FileAccess>(
+          ngn::appkit::fileFolders(system->appDataDirectory(), caches),
+          processes.sandboxed ? folly::dynamic::array() : processes.capabilities.paths);
+      static auto fileWatcher = ngn::appkit::makeFileWatcher();
+      ngn::addModule(*modules, "NgNativeFileSystem", [] { return ngn::makeFileSystemModule(fileAccess, fileWatcher); });
+      ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches, fileAccess); });
+      // expo-sqlite keeps its databases in the app's documents, under SQLite; here, in its data.
+      static auto databases = system->appDataDirectory() + "/SQLite";
+      ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases); });
+      static auto authenticator = ngn::appkit::makeAuthenticator();
+      ngn::addModule(*modules, "NgNativeLocalAuthentication", [] { return ngn::makeLocalAuthenticationModule(authenticator); });
       static auto locales = ngn::appkit::makeLocaleSource();
       ngn::addModule(*modules, "NgNativeLocalization", [] {
         return ngn::makeLocalizationModule(locales, ngn::appkit::systemRegionCode());
@@ -655,7 +669,7 @@ int main(int argc, const char *argv[]) {
     {
       bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
       gHost.updates = std::make_shared<ngn::UpdatesClient>(
-          ngn::appkit::updatesConfig(system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
+          ngn::updatesConfigFrom(settings, system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
       if (!fromDevServer && gHost.updates->enabled()) {
         bundle = gHost.updates->launch();
         if (auto running = gHost.updates->running()) {
@@ -670,9 +684,12 @@ int main(int argc, const char *argv[]) {
             if (!loaded) {
               fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
             }
-            dispatch_async(dispatch_get_main_queue(), ^{
-              markLaunchSucceededLater();
-            });
+            // A bundle that did not load never counts as a launch that succeeded.
+            if (loaded) {
+              dispatch_async(dispatch_get_main_queue(), ^{
+                markLaunchSucceededLater();
+              });
+            }
             done(loaded);
           });
         }, appUpdater);

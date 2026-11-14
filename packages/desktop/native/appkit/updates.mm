@@ -62,45 +62,10 @@ class AppleUpdateCrypto final : public UpdateCrypto {
   }
 };
 
-std::string setting(NSDictionary *info, NSString *key, const char *env) {
-  if (NSString *value = info[key]; [value isKindOfClass:NSString.class]) {
-    return value.UTF8String;
-  }
-  if (const char *value = getenv(env)) {
-    return value;
-  }
-  return "";
-}
-
 } // namespace
 
 std::shared_ptr<UpdateCrypto> makeUpdateCrypto() {
   return std::make_shared<AppleUpdateCrypto>();
-}
-
-UpdatesConfig updatesConfig(const std::string &appData, const std::string &embeddedBundle) {
-  NSDictionary *info = NSBundle.mainBundle.infoDictionary;
-  UpdatesConfig config{
-      .url = setting(info, @"NGNUpdatesURL", "NGN_UPDATES_URL"),
-      .runtimeVersion = setting(info, @"NGNRuntimeVersion", "NGN_RUNTIME_VERSION"),
-      .certificatePem = setting(info, @"NGNUpdatesCodeSigningCertificate", "NGN_UPDATES_CODE_SIGNING_CERTIFICATE"),
-      .directory = std::filesystem::path(appData) / "updates",
-      .embeddedBundle = embeddedBundle,
-  };
-  if (auto platform = setting(info, @"NGNUpdatesPlatform", "NGN_UPDATES_PLATFORM"); !platform.empty()) {
-    config.platform = platform;
-  }
-  if (auto keyId = setting(info, @"NGNUpdatesCodeSigningKeyId", "NGN_UPDATES_CODE_SIGNING_KEY_ID"); !keyId.empty()) {
-    config.keyId = keyId;
-  }
-  if (auto alg = setting(info, @"NGNUpdatesCodeSigningAlg", "NGN_UPDATES_CODE_SIGNING_ALG"); !alg.empty()) {
-    config.algorithm = alg;
-  }
-  // A server needs a runtime version to match against; without one, updates are off.
-  if (config.runtimeVersion.empty()) {
-    config.url.clear();
-  }
-  return config;
 }
 
 } // namespace ngn::appkit

@@ -54,6 +54,8 @@ class ProcessLauncher {
   virtual void write(int handle, const std::string &data) = 0;
   virtual void closeStdin(int handle) = 0;
   virtual void kill(int handle, int signal) = 0;
+  // Signals every program still running: the host is quitting.
+  virtual void killAll(int signal) = 0;
   // The last handle spawn gave out, or 0. Handles only grow and are never reused.
   virtual int lastHandle() const = 0;
 };
@@ -77,14 +79,24 @@ std::optional<int> signalNamed(const std::string &name);
 
 class ShellOpener {
  public:
+  // What is at a path, as far as opening it goes.
+  struct PathFacts {
+    bool exists{false};
+    // A regular file with an execute bit.
+    bool executable{false};
+    // Opening it runs code: an app, a script or a Terminal command file, an installer package, a
+    // workflow, or a location file that points at one of those.
+    bool runsCode{false};
+  };
   virtual ~ShellOpener() = default;
+  virtual PathFacts facts(const std::string &path) = 0;
   virtual void openUrl(const std::string &url, std::function<void(bool)> done) = 0;
   virtual void openPath(const std::string &path, std::function<void(bool)> done) = 0;
   virtual void showItemInFolder(const std::string &path, std::function<void(bool)> done) = 0;
 };
 
-// Whether `openExternal` hands this url on: one with a scheme, but not a file (openPath's), and
-// none that runs or embeds content.
+// Whether `openExternal`, and Linking's openURL, hand this url on: one with a scheme, but not a
+// file (openPath's, which checks what the file is), and none that runs or embeds content.
 bool externalUrlAllowed(const std::string &url);
 // Whether `path` is absolute and normalized, with nothing to walk out of where it says.
 bool plainPath(const std::string &path);

@@ -109,7 +109,8 @@ std::string header(const ngn::Headers &headers, const std::string &name) {
 }
 
 // A multipart/mixed body with a manifest part (signed when `signature` is set) and an extensions part.
-std::string multipart(const std::string &manifestJson, const std::string &signature = "", const std::string &directive = "") {
+std::string multipart(const std::string &manifestJson, const std::string &signature = "", const std::string &directive = "",
+                      const std::string &directiveSignature = "") {
   std::string out;
   if (!manifestJson.empty()) {
     out += "--BOUNDARY\r\nContent-Disposition: form-data; name=\"manifest\"\r\nContent-Type: application/json\r\n";
@@ -119,8 +120,11 @@ std::string multipart(const std::string &manifestJson, const std::string &signat
     out += "\r\n" + manifestJson + "\r\n";
   }
   if (!directive.empty()) {
-    out += "--BOUNDARY\r\nContent-Disposition: form-data; name=\"directive\"\r\nContent-Type: application/json\r\n\r\n" +
-        directive + "\r\n";
+    out += "--BOUNDARY\r\nContent-Disposition: form-data; name=\"directive\"\r\nContent-Type: application/json\r\n";
+    if (!directiveSignature.empty()) {
+      out += "expo-signature: " + directiveSignature + "\r\n";
+    }
+    out += "\r\n" + directive + "\r\n";
   }
   out += "--BOUNDARY\r\nContent-Disposition: form-data; name=\"extensions\"\r\nContent-Type: application/json\r\n\r\n"
          "{\"assetRequestHeaders\":{}}\r\n--BOUNDARY--\r\n";
@@ -143,12 +147,12 @@ TEST_CASE("a hash is base64url without padding, and a signature header is a dict
 }
 
 TEST_CASE("a response is a manifest as JSON, or multipart parts with a signature or a directive") {
-  auto json = folly::toJson(manifest("aaa"));
+  auto json = folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a"));
   auto plain = ngn::parseUpdateResponse(kJson, json);
   REQUIRE(plain.manifest);
-  CHECK(plain.manifest->id == "aaa");
+  CHECK(plain.manifest->id == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
   CHECK(plain.manifest->runtimeVersion == "1.0.0");
-  CHECK(plain.manifest->launchUrl == "https://u.example/aaa.js");
+  CHECK(plain.manifest->launchUrl == "https://u.example/1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a.js");
   CHECK(plain.manifest->launchHash == hashOf("bundle v2"));
   CHECK(plain.manifestBody == json);
 
@@ -179,13 +183,13 @@ TEST_CASE("a check asks with the protocol's headers and offers a manifest for th
   CHECK(header(request.headers, "accept") == "multipart/mixed,application/expo+json,application/json");
   // No code signing configured: no signature asked for.
   CHECK(header(request.headers, "expo-expect-signature").empty());
-  f.answer(200, kJson, folly::toJson(manifest("aaa")));
+  f.answer(200, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a")));
   REQUIRE(result);
   CHECK(result->isAvailable);
-  CHECK(result->manifest["id"] == "aaa");
+  CHECK(result->manifest["id"] == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
 
   // Another runtime's update is not one for this build.
-  CHECK_FALSE(f.check(*client, kJson, folly::toJson(manifest("bbb", "2.0.0"))).isAvailable);
+  CHECK_FALSE(f.check(*client, kJson, folly::toJson(manifest("2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b", "2.0.0"))).isAvailable);
   // Nor is there one when the server says so.
   CHECK_FALSE(f.check(*client, kMultipart, multipart("", "", R"({"type":"noUpdateAvailable"})")).isAvailable);
   // A server error is an error, not "no update".
@@ -205,7 +209,7 @@ TEST_CASE("with code signing on, only a manifest signed by the certificate is an
   client->check([&](auto r) { result = std::move(r); });
   CHECK(header(f.http->sent.back()->request.headers, "expo-expect-signature") ==
         R"(sig, keyid="main", alg="rsa-v1_5-sha256")");
-  auto json = folly::toJson(manifest("aaa"));
+  auto json = folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a"));
   f.answer(200, kMultipart, multipart(json, "sig=\"" + ngn::base64Encode("signed " + json) + "\", keyid=\"main\""));
   REQUIRE(result);
   CHECK(result->isAvailable);
@@ -225,32 +229,32 @@ TEST_CASE("a fetch keeps the launch asset only when its hash is the manifest's, 
   Fixture f;
   auto client = f.client();
   CHECK(client->launch() == "/app/Contents/Resources/main.jsbundle");
-  REQUIRE(f.check(*client, kJson, folly::toJson(manifest("aaa"))).isAvailable);
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a"))).isAvailable);
 
   // A corrupted download is refused and kept nowhere.
   auto corrupt = f.fetch(*client, "bundle v2, truncated");
   CHECK_FALSE(corrupt.isNew);
   CHECK(corrupt.error.find("hash") != std::string::npos);
   CHECK_FALSE(client->state().current);
-  CHECK(f.http->sent.back()->request.url == "https://u.example/aaa.js");
+  CHECK(f.http->sent.back()->request.url == "https://u.example/1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a.js");
 
   auto fetched = f.fetch(*client, "bundle v2");
   CHECK(fetched.isNew);
-  CHECK(fetched.manifest["id"] == "aaa");
+  CHECK(fetched.manifest["id"] == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
   auto state = client->state();
   REQUIRE(state.current);
-  CHECK(state.current->id == "aaa");
+  CHECK(state.current->id == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
   CHECK(read(f.dir / state.current->file) == "bundle v2");
   CHECK(client->bundleToRun() == (f.dir / state.current->file).string());
 
   // The running update is not offered again.
   auto next = f.client();
   CHECK(next->launch() == (f.dir / state.current->file).string());
-  CHECK(next->running()->id == "aaa");
+  CHECK(next->running()->id == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
   std::optional<ngn::UpdatesClient::CheckResult> again;
   next->check([&](auto r) { again = std::move(r); });
-  CHECK(header(f.http->sent.back()->request.headers, "expo-current-update-id") == "aaa");
-  f.answer(200, kJson, folly::toJson(manifest("aaa")));
+  CHECK(header(f.http->sent.back()->request.headers, "expo-current-update-id") == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
+  f.answer(200, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a")));
   CHECK_FALSE(again->isAvailable);
 }
 
@@ -259,34 +263,34 @@ TEST_CASE("a launch that crashes rolls back to the update before it, and that up
   {
     auto client = f.client();
     client->launch();
-    f.check(*client, kJson, folly::toJson(manifest("aaa", "1.0.0", "bundle a")));
+    f.check(*client, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a", "1.0.0", "bundle a")));
     REQUIRE(f.fetch(*client, "bundle a").isNew);
   }
   std::string bundleA;
   {
-    // aaa launches and runs long enough.
+    // The first update launches and runs long enough.
     auto client = f.client();
     bundleA = client->launch();
-    CHECK(client->running()->id == "aaa");
+    CHECK(client->running()->id == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
     client->markLaunchSucceeded();
-    f.check(*client, kJson, folly::toJson(manifest("bbb", "1.0.0", "bundle b")));
+    f.check(*client, kJson, folly::toJson(manifest("2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b", "1.0.0", "bundle b")));
     REQUIRE(f.fetch(*client, "bundle b").isNew);
   }
   {
-    // bbb launches and the process dies before it is marked a success.
+    // The second launches and the process dies before it is marked a success.
     auto client = f.client();
     CHECK(client->running() == std::nullopt);
     auto bundle = client->launch();
-    CHECK(client->running()->id == "bbb");
-    CHECK(client->state().launching == "bbb");
+    CHECK(client->running()->id == "2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b");
+    CHECK(client->state().launching == "2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b");
   }
   auto client = f.client();
   CHECK(client->launch() == bundleA);
-  CHECK(client->running()->id == "aaa");
-  CHECK(client->state().failed == std::vector<std::string>{"bbb"});
-  CHECK_FALSE(f.check(*client, kJson, folly::toJson(manifest("bbb", "1.0.0", "bundle b"))).isAvailable);
+  CHECK(client->running()->id == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
+  CHECK(client->state().failed == std::vector<std::string>{"2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b"});
+  CHECK_FALSE(f.check(*client, kJson, folly::toJson(manifest("2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b", "1.0.0", "bundle b"))).isAvailable);
 
-  // aaa crashes too: the embedded bundle.
+  // The first update crashes too: the embedded bundle.
   auto last = f.client();
   CHECK(last->launch() == "/app/Contents/Resources/main.jsbundle");
   CHECK_FALSE(last->running());
@@ -297,7 +301,7 @@ TEST_CASE("an update for another runtime version is not launched after the app i
   {
     auto client = f.client();
     client->launch();
-    f.check(*client, kJson, folly::toJson(manifest("aaa")));
+    f.check(*client, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a")));
     REQUIRE(f.fetch(*client, "bundle v2").isNew);
   }
   auto config = f.config();
@@ -323,10 +327,10 @@ TEST_CASE("NgNativeUpdates answers what Updates calls, and is off in development
 
   std::optional<dynamic> checked;
   module->callWithPromise("checkForUpdateAsync", dynamic::array(), {.resolve = [&](dynamic v) { checked = v; }});
-  f.answer(200, kJson, folly::toJson(manifest("aaa")));
+  f.answer(200, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a")));
   REQUIRE(checked);
   CHECK((*checked)["isAvailable"] == true);
-  CHECK((*checked)["manifest"]["id"] == "aaa");
+  CHECK((*checked)["manifest"]["id"] == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
 
   std::optional<dynamic> fetched;
   module->callWithPromise("fetchUpdateAsync", dynamic::array(), {.resolve = [&](dynamic v) { fetched = v; }});
@@ -339,8 +343,8 @@ TEST_CASE("NgNativeUpdates answers what Updates calls, and is off in development
   CHECK(reloadedOk);
   CHECK(reloaded == std::vector<std::string>{client->bundleToRun()});
   // The reload runs the fetched update, and marks its launch.
-  CHECK(client->running()->id == "aaa");
-  CHECK(client->state().launching == "aaa");
+  CHECK(client->running()->id == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
+  CHECK(client->state().launching == "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a");
 
   auto dev = ngn::makeUpdatesModule(client, true, nullptr);
   CHECK(dev->property("isEnabled") == dynamic(false));
@@ -397,4 +401,151 @@ TEST_CASE("the whole-app updater is Sparkle's where the build has it, and absent
   std::optional<dynamic> inert;
   none->callWithPromise("checkForAppUpdateAsync", dynamic::array(), {.resolve = [&](dynamic v) { inert = v; }});
   CHECK(inert == dynamic(false));
+}
+
+namespace {
+const std::string kIdA = "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a";
+
+void overwrite(const fs::path &file, const std::string &text) {
+  std::ofstream(file, std::ios::binary | std::ios::trunc) << text;
+}
+} // namespace
+
+TEST_CASE("a manifest whose id is not a UUID is never an update, since the id names its folder") {
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  for (const char *id : {"../../outside", "aaa", "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a/..", ""}) {
+    CAPTURE(id);
+    auto result = f.check(*client, kJson, folly::toJson(manifest(id)));
+    CHECK_FALSE(result.isAvailable);
+    CHECK(result.error.find("UUID") != std::string::npos);
+  }
+}
+
+TEST_CASE("a launch hashes the kept update again, and runs the embedded bundle when it changed on disk") {
+  Fixture f;
+  {
+    auto client = f.client();
+    client->launch();
+    REQUIRE(f.check(*client, kJson, folly::toJson(manifest(kIdA))).isAvailable);
+    REQUIRE(f.fetch(*client, "bundle v2").isNew);
+  }
+  {
+    auto client = f.client();
+    CHECK(client->launch() == (f.dir / kIdA / "launch-asset").string());
+    client->markLaunchSucceeded();
+  }
+  overwrite(f.dir / kIdA / "launch-asset", "tampered bundle");
+  auto client = f.client();
+  CHECK(client->launch() == "/app/Contents/Resources/main.jsbundle");
+  CHECK_FALSE(client->running());
+}
+
+TEST_CASE("a launch runs only <uuid>/launch-asset, whatever the state file names") {
+  Fixture f;
+  {
+    auto client = f.client();
+    client->launch();
+    REQUIRE(f.check(*client, kJson, folly::toJson(manifest(kIdA))).isAvailable);
+    REQUIRE(f.fetch(*client, "bundle v2").isNew);
+  }
+  fs::create_directories(f.dir / "elsewhere");
+  overwrite(f.dir / "elsewhere/evil.js", "bundle v2");
+  auto state = read(f.dir / "state.json");
+  auto at = state.find(kIdA + "/launch-asset");
+  REQUIRE(at != std::string::npos);
+  state.replace(at, (kIdA + "/launch-asset").size(), "elsewhere/evil.js");
+  overwrite(f.dir / "state.json", state);
+  // Not marked as launching: only the file it names keeps it from running.
+  CHECK(state.find("\"launching\": \"\"") != std::string::npos);
+  CHECK(f.client()->launch() == "/app/Contents/Resources/main.jsbundle");
+}
+
+TEST_CASE("with code signing on, a launch checks the kept manifest's signature and that it names the kept asset") {
+  Fixture f;
+  auto signedFetch = [&](ngn::UpdatesClient &client) {
+    auto json = folly::toJson(manifest(kIdA));
+    REQUIRE(f.check(client, kMultipart, multipart(json, "sig=\"" + ngn::base64Encode("signed " + json) + "\", keyid=\"main\""))
+                .isAvailable);
+    REQUIRE(f.fetch(client, "bundle v2").isNew);
+  };
+  {
+    auto client = f.client("CERT");
+    client->launch();
+    signedFetch(*client);
+  }
+  {
+    auto client = f.client("CERT");
+    CHECK(client->launch() == (f.dir / kIdA / "launch-asset").string());
+    // Ran long enough: the next launch does not take it for a crash.
+    client->markLaunchSucceeded();
+  }
+
+  // The asset and the kept manifest's hash both rewritten to match: the signature no longer does.
+  overwrite(f.dir / kIdA / "launch-asset", "evil bundle");
+  auto evil = manifest(kIdA);
+  evil["launchAsset"]["hash"] = hashOf("evil bundle");
+  overwrite(f.dir / kIdA / "manifest.json", folly::toJson(evil));
+  CHECK(f.client("CERT")->launch() == "/app/Contents/Resources/main.jsbundle");
+}
+
+TEST_CASE("a success mark counts only for the launch it was made for, not one a reload began since") {
+  Fixture f;
+  {
+    auto client = f.client();
+    client->launch();
+    REQUIRE(f.check(*client, kJson, folly::toJson(manifest(kIdA))).isAvailable);
+    REQUIRE(f.fetch(*client, "bundle v2").isNew);
+  }
+  auto client = f.client();
+  client->launch();
+  auto first = client->launchGeneration();
+  REQUIRE(client->state().launching == kIdA);
+
+  // A reload into the same update starts a new launch: the first launch's timer firing now says
+  // nothing about it.
+  client->beginReload();
+  CHECK(client->launchGeneration() != first);
+  client->markLaunchSucceeded(first);
+  CHECK(client->state().launching == kIdA);
+  client->markLaunchSucceeded(client->launchGeneration());
+  CHECK(client->state().launching.empty());
+}
+
+TEST_CASE("with code signing on, a plain JSON manifest is signed by its response's expo-signature header") {
+  Fixture f;
+  auto client = f.client("CERT");
+  client->launch();
+  auto json = folly::toJson(manifest(kIdA));
+  auto headers = kJson;
+  headers.emplace_back("expo-signature", "sig=\"" + ngn::base64Encode("signed " + json) + "\", keyid=\"main\"");
+  CHECK(f.check(*client, headers, json).isAvailable);
+  auto forged = kJson;
+  forged.emplace_back("expo-signature", "sig=\"" + ngn::base64Encode("signed {}") + "\", keyid=\"main\"");
+  CHECK_FALSE(f.check(*client, forged, json).isAvailable);
+  CHECK_FALSE(f.check(*client, kJson, json).isAvailable);
+}
+
+TEST_CASE("with code signing on, a rollback directive counts only when it is signed") {
+  Fixture f;
+  {
+    auto client = f.client("CERT");
+    client->launch();
+    auto json = folly::toJson(manifest(kIdA));
+    REQUIRE(f.check(*client, kMultipart, multipart(json, "sig=\"" + ngn::base64Encode("signed " + json) + "\", keyid=\"main\""))
+                .isAvailable);
+    REQUIRE(f.fetch(*client, "bundle v2").isNew);
+  }
+  auto client = f.client("CERT");
+  client->launch();
+  const std::string directive = R"({"type":"rollBackToEmbedded","parameters":{"commitTime":"2026-11-14T00:00:00.000Z"}})";
+  auto unsignedRollBack = f.check(*client, kMultipart, multipart("", "", directive));
+  CHECK_FALSE(unsignedRollBack.isRollBackToEmbedded);
+  CHECK(unsignedRollBack.error.find("signature") != std::string::npos);
+  auto forged = f.check(*client, kMultipart, multipart("", "", directive, "sig=\"" + ngn::base64Encode("signed {}") + "\""));
+  CHECK_FALSE(forged.isRollBackToEmbedded);
+  auto good = f.check(*client, kMultipart,
+                      multipart("", "", directive, "sig=\"" + ngn::base64Encode("signed " + directive) + "\", keyid=\"main\""));
+  CHECK(good.isRollBackToEmbedded);
 }

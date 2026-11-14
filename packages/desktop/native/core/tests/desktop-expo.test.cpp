@@ -1,5 +1,6 @@
 #include "fake-system.h"
 #include "ngn/desktop-expo.h"
+#include "ngn/file-system.h"
 #include "ngn/host-state.h"
 
 #include <folly/json.h>
@@ -326,4 +327,34 @@ TEST_CASE("DocumentPicker saves text or base64 bytes where the save panel says, 
   CHECK(ask(*module, "pickDirectoryAsync", dynamic::array()).value == dynamic(dynamic::object("uri", "file://" + home.path.string())));
   dialogs->folder = std::nullopt;
   CHECK(ask(*module, "pickDirectoryAsync", dynamic::array()).value == dynamic(nullptr));
+}
+
+TEST_CASE("DocumentPicker lets FileSystem reach what the user picked, and gives percent-encoded uris") {
+  TempDir home;
+  TempDir app;
+  fs::create_directories(home.path / "Picked Folder");
+  writeText(home.path / "My Notes.md", "notes");
+  auto access = std::make_shared<ngn::FileAccess>(
+      ngn::FileAccess::Folders{.cache = (app.path / "cache").string(), .appData = (app.path / "data").string()}, dynamic::array());
+  auto dialogs = std::make_shared<ScriptedDialogs>();
+  auto module = ngn::makeDocumentPickerModule(dialogs, (app.path / "cache").string(), access);
+  auto canonical = [](const fs::path &p) { return fs::canonical(p).string(); };
+  CHECK(access->accessTo(canonical(home.path / "Picked Folder")) == ngn::FileAccess::Access::None);
+
+  dialogs->folder = canonical(home.path / "Picked Folder");
+  CHECK(ask(*module, "pickDirectoryAsync", dynamic::array()).value ==
+        dynamic(dynamic::object("uri", ngn::fileUri(*dialogs->folder))));
+  CHECK(access->accessTo(*dialogs->folder + "/new.txt") == ngn::FileAccess::Access::ReadWrite);
+
+  auto notes = canonical(home.path / "My Notes.md");
+  dialogs->picked = std::vector<std::string>{notes};
+  auto direct = ask(*module, "getDocumentAsync", dynamic::array(dynamic::object("copyToCacheDirectory", false)));
+  CHECK((*direct.value)["assets"][0]["uri"] == dynamic(ngn::fileUri(notes)));
+  CHECK(access->accessTo(notes) == ngn::FileAccess::Access::ReadWrite);
+  CHECK(access->accessTo(canonical(home.path)) == ngn::FileAccess::Access::None);
+
+  auto saved = canonical(home.path) + "/Saved Copy.txt";
+  dialogs->savedAt = saved;
+  CHECK(ask(*module, "saveDocumentAsync", dynamic::array(dynamic::object("contents", "x"))).value == dynamic(ngn::fileUri(saved)));
+  CHECK(access->accessTo(saved) == ngn::FileAccess::Access::ReadWrite);
 }
