@@ -24,6 +24,7 @@
 #import "system.h"
 #import "system-access.h"
 #import "desktop-expo.h"
+#import "local-authentication.h"
 #import "tray-and-dock.h"
 #import "updates.h"
 #import "surface-view.h"
@@ -648,6 +649,8 @@ int main(int argc, const char *argv[]) {
       // expo-sqlite keeps its databases in the app's documents, under SQLite; here, in its data.
       static auto databases = system->appDataDirectory() + "/SQLite";
       ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases); });
+      static auto authenticator = ngn::appkit::makeAuthenticator();
+      ngn::addModule(*modules, "NgNativeLocalAuthentication", [] { return ngn::makeLocalAuthenticationModule(authenticator); });
       static auto locales = ngn::appkit::makeLocaleSource();
       ngn::addModule(*modules, "NgNativeLocalization", [] {
         return ngn::makeLocalizationModule(locales, ngn::appkit::systemRegionCode());

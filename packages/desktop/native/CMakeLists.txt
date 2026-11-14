@@ -94,6 +94,7 @@ add_library(ngn_core STATIC
     core/src/modules/core-modules.cpp
     core/src/modules/desktop-expo.cpp
     core/src/modules/image-loader.cpp
+    core/src/modules/local-authentication.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
     core/src/modules/sqlite.cpp
