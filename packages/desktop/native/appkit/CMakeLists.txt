@@ -22,6 +22,7 @@ add_executable(ngn-macos
     local-authentication.mm
     location.mm
     geocoder.mm
+    address-search.mm
     main.mm
     menu-bar.mm
     modal-host-view.mm
@@ -45,7 +46,7 @@ add_executable(ngn-macos
     web-browser.mm
     app-updater.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries ${NGN_LINKED}
-    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices" "-framework SystemConfiguration" "-framework Network" "-framework AuthenticationServices" "-framework Vision" "-framework EventKit" "-framework StoreKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport")
+    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices" "-framework SystemConfiguration" "-framework Network" "-framework AuthenticationServices" "-framework Vision" "-framework EventKit" "-framework StoreKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework MapKit")
 ngn_link_swift(ngn-macos)
 target_compile_options(ngn-macos PRIVATE -fobjc-arc -Wall -Wno-unused-parameter)
 # A Release build is what a packaged app ships: the linker drops the code nothing reaches.

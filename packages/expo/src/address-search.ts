@@ -10,8 +10,8 @@
  * const address = await this.search.resolve(suggestion);
  * ```
  *
- * On iOS it is MapKit's `MKLocalSearchCompleter`, which suggests as the query changes and holds
- * back while it is still changing, and `MKLocalSearch` for the picked one. On Android it is the
+ * On iOS and macOS it is MapKit's `MKLocalSearchCompleter`, which suggests as the query changes and
+ * holds back while it is still changing, and `MKLocalSearch` for the picked one. On Android it is the
  * platform's `Geocoder`, asked a moment after the query stops changing: whole addresses that match,
  * rather than completions. Neither needs a permission or an API key.
  *
@@ -28,7 +28,8 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
-import { optional, presence } from './native.ts';
+import { desktopHost } from './desktop-host.ts';
+import { currentPlatform, optional, presence } from './native.ts';
 
 /** One address the query could be, as the platform words it. */
 export interface AddressSuggestion {
@@ -102,8 +103,27 @@ declare const ngDevMode: unknown;
 
 const MODULE = 'NgNativeAddressSearch';
 
-/** The module where the build has it. */
+/**
+ * The module where the build has it: an Expo module on iOS and Android, and on macOS the desktop
+ * host's TurboModule of the same name, whose updates arrive as `ngNativeAddressSearch` events.
+ */
 function nativeAddressSearch(): NativeAddressSearch | null {
+  if (currentPlatform() === 'macos') {
+    return optional(() => {
+      const host = desktopHost<NativeAddressSearch>(MODULE);
+      if (!host) return null;
+      const module = host.module;
+      return {
+        complete: (session, query, options) => module.complete(session, query, options),
+        resolve: (id) => module.resolve(id),
+        end: (session) => module.end(session),
+        addListener: (_, listener) =>
+          host.listen('ngNativeAddressSearch', (update) =>
+            listener(update as AddressSuggestionsUpdate),
+          ),
+      };
+    });
+  }
   return optional(
     () =>
       (globalThis as { expo?: { modules?: Record<string, NativeAddressSearch | undefined> } }).expo

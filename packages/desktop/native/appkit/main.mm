@@ -41,6 +41,7 @@
 #import "tracking.h"
 #import "image-manipulator.h"
 #import "geocoder.h"
+#import "address-search.h"
 #include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "file-system.h"
@@ -752,6 +753,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeImagePicker", [] { return ngn::makeImagePickerModule(photos, noPrompts); });
       static auto tracking = ngn::appkit::makeTrackingAuthority();
       ngn::addModule(*modules, "NgNativeTrackingTransparency", [] { return ngn::makeTrackingModule(tracking, noPrompts); });
+      static auto addressLookup = ngn::appkit::makeAddressLookup();
+      ngn::addModule(*modules, "NgNativeAddressSearch", [] { return ngn::makeAddressSearchModule(addressLookup); });
       static auto imageCodec = ngn::appkit::makeImageCodec();
       static auto imageHttp = network.http;
       ngn::addModule(*modules, "NgNativeImageManipulator", [] {

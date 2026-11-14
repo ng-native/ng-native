@@ -791,3 +791,42 @@ describe('ImageEditor on macOS', () => {
     image.release();
   });
 });
+
+describe('AddressSearch on macOS', () => {
+  it("searches through the desktop host's NgNativeAddressSearch, its updates arriving as events", async () => {
+    const calls: unknown[][] = [];
+    const host = mac({
+      NgNativeAddressSearch: {
+        complete: async (...args: unknown[]) => (
+          calls.push(['complete', ...args]),
+          [{ id: '1:1:0', title: '22 Hyde Park Terrace', subtitle: 'Leeds' }]
+        ),
+        resolve: async (id: string) => (calls.push(['resolve', id]), null),
+        end: (session: number) => void calls.push(['end', session]),
+      },
+    });
+    const { AddressSearch } = await import('@ng-native/expo/address-search');
+    const native = injectService(AddressSearch.SOURCE);
+    assert.ok(native);
+    assert.equal(injectService(AddressSearch).available(), true);
+    const updates: unknown[] = [];
+    const subscription = native.addListener!('onSuggestions', (update) => updates.push(update));
+    const update = { session: 1, query: '22 H', suggestions: [] };
+    host.send('ngNativeAddressSearch', update);
+    subscription.remove();
+    host.send('ngNativeAddressSearch', update);
+    assert.deepEqual(updates, [update]);
+    assert.equal(host.listening('ngNativeAddressSearch'), 0);
+    assert.equal(
+      (await native.complete(1, '22 H', { region: 'GB' }))[0]?.title,
+      '22 Hyde Park Terrace',
+    );
+    assert.equal(await native.resolve('1:1:0'), null);
+    native.end(1);
+    assert.deepEqual(calls, [
+      ['complete', 1, '22 H', { region: 'GB' }],
+      ['resolve', '1:1:0'],
+      ['end', 1],
+    ]);
+  });
+});
