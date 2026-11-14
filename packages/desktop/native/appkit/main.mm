@@ -11,6 +11,8 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
+#import "notifications.h"
+#import "undo.h"
 #import "app-windows.h"
 #import "appkit-backend.h"
 #import "header-toolbar.h"
@@ -303,10 +305,76 @@ void showAppWindow() {
 
 } // namespace
 
+// The source of a `[dragItem]` view's drag out: a file url per file, and the text and url on one
+// more item. Finder takes the files, a text field the text, a browser the url.
+@interface NGNDragOutSource : NSObject <NSDraggingSource>
++ (void)begin:(const ngn::DragOutItem &)item from:(NSView *)view event:(NSEvent *)event;
+@end
+
+@implementation NGNDragOutSource
++ (void)begin:(const ngn::DragOutItem &)item from:(NSView *)view event:(NSEvent *)event {
+  static NGNDragOutSource *source = [NGNDragOutSource new];
+  // The view as it is drawn, under the pointer where the press started.
+  NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect:view.bounds];
+  NSImage *image = nil;
+  if (rep != nil) {
+    [view cacheDisplayInRect:view.bounds toBitmapImageRep:rep];
+    image = [[NSImage alloc] initWithSize:view.bounds.size];
+    [image addRepresentation:rep];
+  }
+  NSMutableArray<NSDraggingItem *> *items = [NSMutableArray array];
+  auto add = [&](id<NSPasteboardWriting> writer) {
+    NSDraggingItem *dragging = [[NSDraggingItem alloc] initWithPasteboardWriter:writer];
+    [dragging setDraggingFrame:view.bounds contents:image];
+    [items addObject:dragging];
+  };
+  for (const auto &file : item.files) {
+    if (NSURL *url = [NSURL URLWithString:[NSString stringWithUTF8String:file.c_str()]]) {
+      add(url);
+    }
+  }
+  if (item.text || item.url) {
+    NSPasteboardItem *extra = [NSPasteboardItem new];
+    if (item.url) {
+      [extra setString:[NSString stringWithUTF8String:item.url->c_str()] forType:NSPasteboardTypeURL];
+    }
+    const std::string &text = item.text ? *item.text : *item.url;
+    [extra setString:[NSString stringWithUTF8String:text.c_str()] forType:NSPasteboardTypeString];
+    add(extra);
+  }
+  if (items.count > 0) {
+    [view beginDraggingSessionWithItems:items event:event source:source];
+  }
+}
+- (NSDragOperation)draggingSession:(NSDraggingSession *)session
+    sourceOperationMaskForDraggingContext:(NSDraggingContext)context {
+  return NSDragOperationCopy | NSDragOperationGeneric;
+}
+@end
+
 @interface NGNAppDelegate : NSObject <NSApplicationDelegate, NSWindowDelegate>
 @end
 
-@implementation NGNAppDelegate
+@implementation NGNAppDelegate {
+  BOOL _launched;
+}
+- (NSUndoManager *)windowWillReturnUndoManager:(NSWindow *)window {
+  return ngn::appkit::undoManagerFor(window);
+}
+- (void)applicationDidFinishLaunching:(NSNotification *)note {
+  _launched = YES;
+}
+// Open With, a drop on the Dock icon and a double click on one of the app's document types in
+// Finder: each file reaches Linking (DeepLinks) as its file:// url. Links to the app's scheme come
+// through the AppleEvent handler (system.mm) instead.
+- (void)application:(NSApplication *)app openURLs:(NSArray<NSURL *> *)urls {
+  for (NSURL *url in urls) {
+    NSURL *plain = url.isFileReferenceURL ? url.filePathURL : url;
+    if (plain.absoluteString != nil && gHost.state) {
+      gHost.state->receiveUrl(plain.absoluteString.UTF8String, _launched);
+    }
+  }
+}
 // The app decides (AppWindows and provideAppLifecycle): closing the last window never quits.
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app {
   return gHost.appWindow != nil;
@@ -402,6 +470,11 @@ int main(int argc, const char *argv[]) {
     gHost.backend = std::make_shared<ngn::appkit::AppKitBackend>();
     gHost.mounting = std::make_shared<ngn::MountingManager>(gHost.backend, gHost.backend);
     gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
+    // Each commit's time, for the performance budget (pnpm bench:macos), when asked for: every
+    // frame of an animation commits, which would flood a dev run's terminal.
+    if (const char *log = getenv("NGN_LOG_COMMITS"); log != nullptr && std::string(log) == "1") {
+      gHost.mounting->onCommit = [](SurfaceId, double ms) { fprintf(stderr, "[ngn] commit %.1f ms\n", ms); };
+    }
     gHost.backend->onMount = [](SurfaceId surfaceId) {
       gHost.input->didMount(surfaceId);
       if (surfaceId == kAppSurface) {
@@ -415,6 +488,15 @@ int main(int argc, const char *argv[]) {
       }
     };
     gHost.input->onCursor = [](ngn::Cursor cursor) { [NGNSurfaceView showCursor:cursor]; };
+    // A press that became a drag out of a `[dragItem]` view: the mouse event that crossed the
+    // threshold starts the session, which has the mouse from there.
+    gHost.input->onDragOut = [](Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) {
+      NSView *view = gHost.backend->view(tag);
+      NSEvent *event = NSApp.currentEvent;
+      if (view != nil && event != nil && event.type == NSEventTypeLeftMouseDragged) {
+        [NGNDragOutSource begin:item from:view event:event];
+      }
+    };
     NGNModalHostView.input = gHost.input.get();
     NGNModalHostView.presentationChanged = [](NSInteger tag, BOOL presented) {
       if (presented) {
@@ -549,7 +631,14 @@ int main(int argc, const char *argv[]) {
       static auto awake = std::make_shared<ngn::KeepAwakeTags>(ngn::appkit::makeSleepPreventer());
       static auto haptics = ngn::appkit::makeHapticPlayer();
       ngn::addModule(*modules, "NgNativeSecureStore", [] { return ngn::makeSecureStoreModule(keychain, keychainService); });
-      ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem); });
+      ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem, gHost.state); });
+      static auto notificationEvents = std::make_shared<ngn::NotificationEvents>();
+      static auto notifications = ngn::appkit::makeNotificationCenter(notificationEvents);
+      ngn::addModule(*modules, "NgNativeNotifications", [] {
+        return ngn::makeNotificationsModule(notifications, notificationEvents);
+      });
+      static auto undo = ngn::appkit::makeUndoManager();
+      ngn::addModule(*modules, "NgNativeUndo", [] { return ngn::makeUndoModule(undo); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
       static auto dialogs = ngn::appkit::makeFileDialogs();

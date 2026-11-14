@@ -1,4 +1,5 @@
 #import "app-windows.h"
+#import "undo.h"
 
 #import "surface-view.h"
 
@@ -11,6 +12,10 @@ using ngn::appkit::AppKitWindows;
 @implementation NGNWindowDelegate {
   facebook::react::SurfaceId _surface;
   AppKitWindows *_windows;
+}
+
+- (NSUndoManager *)windowWillReturnUndoManager:(NSWindow *)window {
+  return ngn::appkit::undoManagerFor(window);
 }
 
 - (instancetype)initWithSurface:(facebook::react::SurfaceId)surface windows:(AppKitWindows *)windows {

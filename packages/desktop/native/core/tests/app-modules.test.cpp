@@ -141,6 +141,22 @@ TEST_CASE("a URL opened while running reaches JavaScript, even one that arrived 
   CHECK(f.events.size() == 3);
 }
 
+TEST_CASE("files opened from Finder reach Linking as file URLs: the first at launch is the initial URL") {
+  Fixture f;
+  // Open With on two files starts the app: the first is the URL it launched with, the second an
+  // event once the app listens. A drop on the Dock icon while running is an event too.
+  f.state->receiveUrl("file:///Users/me/a.md", false);
+  f.state->receiveUrl("file:///Users/me/b.md", false);
+  auto module = f.make(ngn::makeLinking(f.services));
+  std::string out;
+  module->callWithPromise("getInitialURL", dynamic::array(), recording(out));
+  CHECK(out == R"(resolved "file:///Users/me/a.md")");
+  module->call("addListener", dynamic::array("url"));
+  f.state->receiveUrl("file:///Users/me/c.md", true);
+  CHECK(f.events == std::vector<std::string>{R"(url {"url":"file:///Users/me/b.md"})",
+                                             R"(url {"url":"file:///Users/me/c.md"})"});
+}
+
 TEST_CASE("I18nManager follows the system's direction and persists allowRTL and forceRTL") {
   Fixture f;
   f.system->deviceFacts.rightToLeft = true;

@@ -94,6 +94,19 @@ TEST_CASE("a placeholder takes no option unless its pattern starts with -, and n
   CHECK(allows({flag}, "/usr/bin/tool", {"--verbose"}));
   CHECK_FALSE(allows({flag}, "/usr/bin/tool", {"--exec=x"}));
 
+  // Each top-level alternative must start with -: one that does not lets any option through.
+  SpawnCapability mixed{"/usr/bin/tool", {"{a:-v|.*}"}};
+  CHECK(allows({mixed}, "/usr/bin/tool", {"plain"}));
+  CHECK_FALSE(allows({mixed}, "/usr/bin/tool", {"--upload-pack=x"}));
+  CHECK_FALSE(allows({mixed}, "/usr/bin/tool", {"-v"}));
+  SpawnCapability anchored{"/usr/bin/tool", {"{a:^-v|\\-q}"}};
+  CHECK(allows({anchored}, "/usr/bin/tool", {"-v"}));
+  CHECK(allows({anchored}, "/usr/bin/tool", {"-q"}));
+  // A | inside a group or a class is not a top-level alternative.
+  SpawnCapability grouped{"/usr/bin/tool", {"{a:-(v|x)|-[|y]}"}};
+  CHECK(allows({grouped}, "/usr/bin/tool", {"-x"}));
+  CHECK(allows({grouped}, "/usr/bin/tool", {"-|"}));
+
   SpawnCapability name{"/usr/bin/tool", {"{name:[\\w.]+}"}};
   for (const char *value : {"$(reboot)", "`id`", "a|b", "a&&b", "a;b", "$HOME", "a>b", "*"}) {
     CAPTURE(value);

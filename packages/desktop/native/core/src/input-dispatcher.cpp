@@ -66,7 +66,8 @@ void InputDispatcher::pointerDown(const PointerInput &input) {
   if (chain.empty()) {
     return;
   }
-  press_ = Press{input.container, chain.back(), input.clickCount};
+  draggingOut_ = false;
+  press_ = Press{input.container, chain.back(), input.clickCount, input.point};
   sendTouch(TouchPhase::Start, input);
 }
 
@@ -75,13 +76,51 @@ void InputDispatcher::pointerMove(const PointerInput &input) {
   if (container == containers_.end()) {
     return;
   }
+  if (draggingOut_) {
+    return;
+  }
   updateHover(container->second, tree_.hitTest(container->second.root, input.point), input);
-  if (press_) {
+  if (press_ && !startDragOut(input)) {
     sendTouch(TouchPhase::Move, input);
   }
 }
 
+bool InputDispatcher::startDragOut(const PointerInput &input) {
+  if (input.container != press_->container) {
+    return false;
+  }
+  float dx = input.point.x - press_->start.x;
+  float dy = input.point.y - press_->start.y;
+  if (dx * dx + dy * dy < kDragThreshold * kDragThreshold) {
+    return false;
+  }
+  auto container = containers_.find(press_->container);
+  if (container == containers_.end()) {
+    return false;
+  }
+  auto chain = tree_.chain(press_->target, container->second.root);
+  for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+    const auto *node = tree_.find(*it);
+    if (node == nullptr || !node->view.props) {
+      continue;
+    }
+    auto item = dragItemOf(desktopProps(*node->view.props).dragItem);
+    if (!item) {
+      continue;
+    }
+    sendTouch(TouchPhase::Cancel, input);
+    press_.reset();
+    draggingOut_ = true;
+    if (onDragOut) {
+      onDragOut(*it, input, *item);
+    }
+    return true;
+  }
+  return false;
+}
+
 void InputDispatcher::pointerUp(const PointerInput &input) {
+  draggingOut_ = false;
   if (!press_) {
     return;
   }
@@ -163,6 +202,167 @@ bool InputDispatcher::wheel(const PointerInput &input, const WheelDelta &delta) 
       &DesktopProps::onWheel,
       "wheel",
       folly::dynamic::object("deltaX", delta.x)("deltaY", delta.y)("deltaZ", delta.z)("deltaMode", delta.mode));
+}
+
+namespace {
+
+int hexValue(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  }
+  if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  }
+  if (c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  }
+  return -1;
+}
+
+std::string percentDecoded(std::string_view text) {
+  std::string out;
+  for (size_t i = 0; i < text.size(); ++i) {
+    int high = 0;
+    int low = 0;
+    if (text[i] == '%' && i + 2 < text.size() && (high = hexValue(text[i + 1])) >= 0 &&
+        (low = hexValue(text[i + 2])) >= 0) {
+      out.push_back(static_cast<char>(high * 16 + low));
+      i += 2;
+    } else {
+      out.push_back(text[i]);
+    }
+  }
+  return out;
+}
+
+} // namespace
+
+std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop) {
+  if (!prop.isObject()) {
+    return std::nullopt;
+  }
+  DragOutItem item;
+  if (auto files = prop.get_ptr("files"); files != nullptr && files->isArray()) {
+    for (const auto &file : *files) {
+      if (file.isString() && file.asString().rfind("file:", 0) == 0) {
+        item.files.push_back(file.asString());
+      }
+    }
+  }
+  if (auto text = prop.get_ptr("text"); text != nullptr && text->isString()) {
+    item.text = text->asString();
+  }
+  if (auto url = prop.get_ptr("url"); url != nullptr && url->isString() && !url->asString().empty()) {
+    item.url = url->asString();
+  }
+  if (item.files.empty() && !item.text && !item.url) {
+    return std::nullopt;
+  }
+  return item;
+}
+
+DragItems dragItems(const std::vector<std::string> &urls, std::optional<std::string> text) {
+  DragItems items;
+  items.text = std::move(text);
+  for (const auto &url : urls) {
+    if (url.rfind("file:", 0) != 0) {
+      items.urls.push_back(url);
+      continue;
+    }
+    std::string_view path(url);
+    while (path.size() > 1 && path.back() == '/') {
+      path.remove_suffix(1);
+    }
+    auto slash = path.rfind('/');
+    auto last = slash == std::string_view::npos ? path : path.substr(slash + 1);
+    items.files.push_back({.uri = url, .name = percentDecoded(last)});
+  }
+  // The toolkit offers a dragged url as text too, and a file as its path.
+  if (items.text) {
+    for (const auto &url : urls) {
+      bool path = url.rfind("file://", 0) == 0 && percentDecoded(std::string_view(url).substr(7)) == *items.text;
+      if (url == *items.text || path) {
+        items.text.reset();
+        break;
+      }
+    }
+  }
+  return items;
+}
+
+folly::dynamic dropPayload(const DragItems &items) {
+  auto files = folly::dynamic::array();
+  for (const auto &file : items.files) {
+    files.push_back(folly::dynamic::object("uri", file.uri)("name", file.name));
+  }
+  auto urls = folly::dynamic::array();
+  for (const auto &url : items.urls) {
+    urls.push_back(url);
+  }
+  return folly::dynamic::object("files", std::move(files))(
+      "text", items.text ? folly::dynamic(*items.text) : folly::dynamic(nullptr))("urls", std::move(urls));
+}
+
+std::optional<Tag> InputDispatcher::dropTargetAt(const PointerInput &input) const {
+  auto container = containers_.find(input.container);
+  if (container == containers_.end()) {
+    return std::nullopt;
+  }
+  auto chain = tree_.hitTest(container->second.root, input.point);
+  for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+    const auto *node = tree_.find(*it);
+    if (node != nullptr && node->view.props && desktopProps(*node->view.props).fileDrop) {
+      return *it;
+    }
+  }
+  return std::nullopt;
+}
+
+void InputDispatcher::leaveDropTarget() {
+  if (!dropTarget_) {
+    return;
+  }
+  auto tag = dropTarget_->tag;
+  dropTarget_.reset();
+  if (const auto *node = tree_.find(tag)) {
+    emitElementEvent(*node, "dropLeave", folly::dynamic::object());
+  }
+}
+
+bool InputDispatcher::dragOver(const PointerInput &input, const DragItems &items) {
+  auto target = dropTargetAt(input);
+  if (dropTarget_ && target == dropTarget_->tag && dropTarget_->container == input.container) {
+    return true;
+  }
+  leaveDropTarget();
+  if (!target) {
+    return false;
+  }
+  dropTarget_ = DropTarget{input.container, *target};
+  if (const auto *node = tree_.find(*target)) {
+    emitElementEvent(*node, "dropEnter", dropPayload(items));
+  }
+  return true;
+}
+
+void InputDispatcher::dragExit(ContainerId container) {
+  if (dropTarget_ && dropTarget_->container == container) {
+    leaveDropTarget();
+  }
+}
+
+bool InputDispatcher::drop(const PointerInput &input, const DragItems &items) {
+  auto target = dropTargetAt(input);
+  if (dropTarget_ && dropTarget_->tag != target) {
+    leaveDropTarget();
+  }
+  dropTarget_.reset();
+  const auto *node = target ? tree_.find(*target) : nullptr;
+  if (node == nullptr) {
+    return false;
+  }
+  emitElementEvent(*node, "dropPerform", dropPayload(items));
+  return true;
 }
 
 void InputDispatcher::didMount(SurfaceId surfaceId) {
@@ -259,7 +459,7 @@ void InputDispatcher::sendTouch(TouchPhase phase, const PointerInput &input) {
   touch.timeStamp = HighResTimeStamp::now();
   TouchEvent event;
   event.changedTouches.insert(touch);
-  if (phase != TouchPhase::End) {
+  if (phase != TouchPhase::End && phase != TouchPhase::Cancel) {
     event.touches.insert(touch);
     event.targetTouches.insert(touch);
   }
@@ -302,6 +502,9 @@ void InputDispatcher::emitTouch(TouchPhase phase, const ViewTree::Node &target, 
       break;
     case TouchPhase::End:
       emitter->onTouchEnd(event);
+      break;
+    case TouchPhase::Cancel:
+      emitter->onTouchCancel(event);
       break;
   }
 }

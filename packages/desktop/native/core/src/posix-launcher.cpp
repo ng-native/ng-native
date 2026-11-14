@@ -144,6 +144,11 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
     }
   }
 
+  int lastHandle() const override {
+    std::lock_guard lock(mutex_);
+    return next_;
+  }
+
   void kill(int handle, int signal) override {
     std::lock_guard lock(mutex_);
     if (auto it = running_.find(handle); it != running_.end()) {
@@ -197,7 +202,7 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
     }
   }
 
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::shared_ptr<Events> events_;
   std::map<int, Running> running_;
   int next_{0};

@@ -34,6 +34,25 @@ std::shared_ptr<const Props> desktop(folly::dynamic raw) {
 
 } // namespace
 
+TEST_CASE("each commit's time is reported, from its transaction's telemetry") {
+  Fixture f;
+  std::vector<double> commits;
+  f.mounting->onCommit = [&](SurfaceId surfaceId, double ms) {
+    CHECK(surfaceId == 1);
+    commits.push_back(ms);
+  };
+  auto timed = transaction({});
+  timed.getTelemetry().willCommit();
+  timed.getTelemetry().didCommit();
+  f.mounting->executeMount(1, std::move(timed));
+  REQUIRE(commits.size() == 1);
+  CHECK(commits[0] >= 0);
+  CHECK(commits[0] < 1000);
+  // A transaction no commit timed (a mount the core made itself) reports nothing.
+  f.mounting->executeMount(1, transaction({}));
+  CHECK(commits.size() == 1);
+}
+
 TEST_CASE("a transaction reaches the backend in order, on the UI thread") {
   Fixture f;
   auto box = shadowView(2, "View", {{0, 0}, {100, 50}});

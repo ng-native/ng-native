@@ -82,6 +82,10 @@ class HostState {
   Watched<WindowMetrics> metrics;
   // "light" or "dark".
   Watched<std::string> colorScheme{"light"};
+  // The clipboard's change count (System::clipboardChangeCount), as the backend last checked it.
+  // There is no change notification: the backend checks when the app becomes active and after
+  // each key press, click and menu command, so an idle app never wakes to poll.
+  Watched<int64_t> clipboardChangeCount{0};
 
   // The URL the app was launched to open, if any.
   void setInitialUrl(std::string url);
@@ -89,6 +93,10 @@ class HostState {
   // A URL the app was asked to open while running. Each one is delivered once: to the listeners
   // there are, or, when there are none yet, to the first listener when it starts listening.
   void openUrl(const std::string &url);
+  // A URL from the OS: a link to the app's scheme, or a file from Open With or a drop on the Dock
+  // icon. Before the app has finished launching the first is the initial URL and the rest wait
+  // for a listener; once it has, each is an event.
+  void receiveUrl(std::string url, bool launched);
   std::shared_ptr<void> listenForUrls(std::function<void(const std::string &)> listener);
 
  private:

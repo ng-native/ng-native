@@ -40,6 +40,10 @@ class MountingManager final : public facebook::react::IMountingManager,
   facebook::react::ComponentRegistryFactory getComponentRegistryFactory() override;
   bool hasComponent(const std::string &name) override;
 
+  // Told on the JS thread of each commit a transaction carries: how long the commit took (layout
+  // and diff included), in milliseconds. The host logs it for the performance budget.
+  std::function<void(SurfaceId surfaceId, double ms)> onCommit;
+
   // UI thread only. A container's size and OS insets (safe-areas.h), which its safe-area views
   // follow at once.
   void setContainerInsets(Tag root, const ContainerInsets &insets);

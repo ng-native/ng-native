@@ -26,6 +26,10 @@ class FakeSystem final : public System {
   }
   void setClipboardText(const std::string &text) override {
     clipboard = text;
+    ++clipboardChanges;
+  }
+  int64_t clipboardChangeCount() override {
+    return clipboardChanges;
   }
   std::optional<folly::dynamic> preference(const std::string &key) override;
   void setPreference(const std::string &key, std::optional<folly::dynamic> value) override;
@@ -43,6 +47,7 @@ class FakeSystem final : public System {
   std::vector<AlertRequest> alerts;
   std::function<void(int, std::string)> answerAlert;
   std::optional<std::string> clipboard;
+  int64_t clipboardChanges{40};
   std::map<std::string, folly::dynamic> preferences;
   std::string dataDirectory;
   std::vector<std::string> log;

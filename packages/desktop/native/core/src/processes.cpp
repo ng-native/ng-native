@@ -181,16 +181,19 @@ std::shared_ptr<NativeModule> makeProcessesModule(std::shared_ptr<ProcessLaunche
   };
   auto module = std::make_shared<Processes>(launcher, std::move(setup));
   std::weak_ptr<Processes> weak = module;
+  // A reload's module hears only the programs it spawned: the JavaScript holds an event for a
+  // handle spawn() has not answered yet, and would hold an older runtime's events forever.
+  int floor = launcher->lastHandle();
   launcher->setEvents({
       .output =
-          [weak](int handle, bool isStderr, std::string data) {
-            if (auto self = weak.lock()) {
+          [weak, floor](int handle, bool isStderr, std::string data) {
+            if (auto self = weak.lock(); self && handle > floor) {
               self->emitEvent(folly::dynamic::object("type", isStderr ? "stderr" : "stdout")("handle", handle)("data", data));
             }
           },
       .exit =
-          [weak](int handle, std::optional<int> code, std::optional<std::string> signal) {
-            if (auto self = weak.lock()) {
+          [weak, floor](int handle, std::optional<int> code, std::optional<std::string> signal) {
+            if (auto self = weak.lock(); self && handle > floor) {
               self->emitEvent(folly::dynamic::object("type", "exit")("handle", handle)(
                   "code", code ? folly::dynamic(*code) : folly::dynamic(nullptr))(
                   "signal", signal ? folly::dynamic(*signal) : folly::dynamic(nullptr)));

@@ -21,7 +21,7 @@ class RecordingDispatcher final : public ngn::InputDispatcher {
 
  protected:
   void emitTouch(ngn::TouchPhase phase, const ngn::ViewTree::Node &target, const TouchEvent &event) override {
-    const char *names[] = {"start", "move", "end"};
+    const char *names[] = {"start", "move", "end", "cancel"};
     const auto &touch = *event.changedTouches.begin();
     events.push_back(
         std::string("touch ") + names[static_cast<int>(phase)] + " " + std::to_string(target.view.tag) + " page " +
@@ -328,4 +328,169 @@ TEST_CASE("the cursor follows a change to the views under a still pointer") {
   setProps(f.tree, 2, desktopView(folly::dynamic::object("desktopCursor", "move")));
   f.input.didMount(2);
   CHECK(cursors == std::vector<Cursor>{Cursor::Grab, Cursor::Grabbing, Cursor::Auto});
+}
+
+namespace {
+
+ngn::DragItems notes() {
+  return ngn::dragItems({"file:///Users/me/notes.md"}, std::nullopt);
+}
+
+} // namespace
+
+TEST_CASE("a drag's urls split into files, named by their last part, and other urls") {
+  auto items = ngn::dragItems(
+      {"file:///Users/me/My%20Notes.md", "file:///Users/me/Photos/", "https://example.com/a?b=1",
+       "file://localhost/tmp/caf%C3%A9.txt"},
+      std::string("hello"));
+  REQUIRE(items.files.size() == 3);
+  CHECK(items.files[0].uri == "file:///Users/me/My%20Notes.md");
+  CHECK(items.files[0].name == "My Notes.md");
+  // A folder's url ends in a slash; its name is the folder's.
+  CHECK(items.files[1].name == "Photos");
+  CHECK(items.files[2].name == "caf\xC3\xA9.txt");
+  CHECK(items.urls == std::vector<std::string>{"https://example.com/a?b=1"});
+  CHECK(items.text == "hello");
+
+  // A url is offered as text too, and a file as its path: that is not dragged text.
+  CHECK_FALSE(ngn::dragItems({"https://example.com/"}, std::string("https://example.com/")).text);
+  CHECK_FALSE(ngn::dragItems({"file:///Users/me/My%20Notes.md"}, std::string("/Users/me/My Notes.md")).text);
+  CHECK(ngn::dragItems({"https://example.com/"}, std::string("Example")).text == "Example");
+
+  folly::json::serialization_opts opts;
+  opts.sort_keys = true;
+  CHECK(
+      folly::json::serialize(ngn::dropPayload(notes()), opts) ==
+      R"({"files":[{"name":"notes.md","uri":"file:///Users/me/notes.md"}],"text":null,"urls":[]})");
+}
+
+TEST_CASE("a drag goes to the nearest view under it that takes drops, entering and leaving as it moves") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));
+  setProps(f.tree, 4, desktopView(folly::dynamic::object("fileDrop", true)));
+  const std::string enter2 =
+      R"(dropEnter 2 {"files":[{"name":"notes.md","uri":"file:///Users/me/notes.md"}],"text":null,"urls":[]})";
+
+  // Over 3, inside 2: the event goes to 2, the view that takes drops, not the deepest.
+  CHECK(f.input.dragOver(Fixture::at({35, 35}), notes()));
+  CHECK(f.input.events == Events{enter2});
+  // Moving within 2 sends nothing new.
+  CHECK(f.input.dragOver(Fixture::at({15, 15}), notes()));
+  CHECK(f.input.events.size() == 1);
+
+  // Onto 4: 2 is left and 4 entered.
+  f.input.events.clear();
+  CHECK(f.input.dragOver(Fixture::at({120, 120}), notes()));
+  CHECK(f.input.events.size() == 2);
+  CHECK(f.input.events[0] == "dropLeave 2 {}");
+  CHECK(f.input.events[1].rfind("dropEnter 4 ", 0) == 0);
+
+  // Over the root, which takes none: 4 is left, and the drag is refused there.
+  f.input.events.clear();
+  CHECK_FALSE(f.input.dragOver(Fixture::at({390, 290}), notes()));
+  CHECK(f.input.events == Events{"dropLeave 4 {}"});
+
+  // Back onto 2 and out of the window.
+  f.input.events.clear();
+  f.input.dragOver(Fixture::at({35, 35}), notes());
+  f.input.dragExit(0);
+  CHECK(f.input.events == Events{enter2, "dropLeave 2 {}"});
+  f.input.dragExit(0);
+  CHECK(f.input.events.size() == 2);
+}
+
+TEST_CASE("a drop goes to the view the drag is over, with no leave, and ends the drag") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));
+  f.input.dragOver(Fixture::at({35, 35}), notes());
+  f.input.events.clear();
+
+  CHECK(f.input.drop(Fixture::at({35, 35}), notes()));
+  CHECK(
+      f.input.events ==
+      Events{R"(dropPerform 2 {"files":[{"name":"notes.md","uri":"file:///Users/me/notes.md"}],"text":null,"urls":[]})"});
+  // The drag is over: an exit after it sends no leave.
+  f.input.dragExit(0);
+  CHECK(f.input.events.size() == 1);
+
+  // A drop where no view takes it is refused, and so is one in a container nobody added.
+  f.input.events.clear();
+  CHECK_FALSE(f.input.drop(Fixture::at({390, 290}), notes()));
+  CHECK_FALSE(f.input.drop(Fixture::at({35, 35}, 9), notes()));
+  CHECK(f.input.events.empty());
+}
+
+TEST_CASE("a drag forgets a view that stops taking drops or goes away") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));
+  f.input.dragOver(Fixture::at({35, 35}), notes());
+
+  // The prop is taken away while the drag is over it: the next move leaves it.
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", nullptr)));
+  f.input.events.clear();
+  CHECK_FALSE(f.input.dragOver(Fixture::at({35, 35}), notes()));
+  CHECK(f.input.events == Events{"dropLeave 2 {}"});
+
+  // A target deleted under the drag gets no leave: there is nothing to send it to.
+  setProps(f.tree, 4, desktopView(folly::dynamic::object("fileDrop", true)));
+  f.input.dragOver(Fixture::at({120, 120}), notes());
+  f.tree.remove(1, 4);
+  f.tree.destroy(4);
+  f.input.events.clear();
+  f.input.dragExit(0);
+  CHECK(f.input.events.empty());
+}
+
+TEST_CASE("a drag hit-tests as a click does, so a view that lets points through takes no drop") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)("pointerEvents", "none")));
+  CHECK_FALSE(f.input.dragOver(Fixture::at({35, 35}), notes()));
+  CHECK(f.input.events.empty());
+}
+
+TEST_CASE("a drag item is parsed from its prop, and one with nothing in it is none") {
+  auto item = ngn::dragItemOf(folly::dynamic::object(
+      "files", folly::dynamic::array("file:///Users/me/a%20b.md"))("text", "Hello")("url", "https://example.com/"));
+  REQUIRE(item);
+  CHECK(item->files == std::vector<std::string>{"file:///Users/me/a%20b.md"});
+  CHECK(item->text == "Hello");
+  CHECK(item->url == "https://example.com/");
+  CHECK_FALSE(ngn::dragItemOf(nullptr));
+  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array())("text", nullptr)("url", nullptr)));
+  // Files that are not file urls are left out.
+  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array("/no/scheme", 3))));
+}
+
+TEST_CASE("a press that moves on a view with a drag item drags it out, and cancels the press") {
+  Fixture f;
+  setProps(
+      f.tree, 2,
+      desktopView(folly::dynamic::object(
+          "dragItem", folly::dynamic::object("files", folly::dynamic::array("file:///tmp/a.md"))("text", nullptr)("url", nullptr))));
+  std::vector<std::pair<Tag, ngn::DragOutItem>> started;
+  f.input.onDragOut = [&](Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) { started.emplace_back(tag, item); };
+
+  f.input.pointerDown(Fixture::at({35, 35}));
+  // A wobble under the threshold is still a press.
+  f.input.pointerMove(Fixture::at({37, 36}));
+  CHECK(started.empty());
+  f.input.pointerMove(Fixture::at({45, 35}));
+  REQUIRE(started.size() == 1);
+  CHECK(started[0].first == 2);
+  CHECK(started[0].second.files == std::vector<std::string>{"file:///tmp/a.md"});
+  // The press is cancelled, so a pressable under it never sees a release as a press.
+  CHECK(only(f.input.events, "touch").back().rfind("touch cancel 3", 0) == 0);
+
+  // The drag owns the mouse now: the rest of the gesture sends no touches.
+  f.input.events.clear();
+  f.input.pointerMove(Fixture::at({80, 80}));
+  f.input.pointerUp(Fixture::at({80, 80}));
+  CHECK(only(f.input.events, "touch").empty());
+  CHECK(started.size() == 1);
+
+  // A press on a view with no drag item above it moves as a press.
+  f.input.pointerDown(Fixture::at({120, 120}));
+  f.input.pointerMove(Fixture::at({140, 140}));
+  CHECK(started.size() == 1);
+  CHECK(only(f.input.events, "touch move").size() == 1);
 }

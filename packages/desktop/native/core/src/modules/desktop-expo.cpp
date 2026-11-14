@@ -116,23 +116,29 @@ std::shared_ptr<NativeModule> makeSecureStoreModule(std::shared_ptr<SecretStore>
   return std::make_shared<SecureStore>(std::move(store), std::move(defaultService));
 }
 
-std::shared_ptr<NativeModule> makeDesktopClipboardModule(std::shared_ptr<System> system) {
+std::shared_ptr<NativeModule> makeDesktopClipboardModule(std::shared_ptr<System> system, std::shared_ptr<HostState> state) {
   struct Clipboard : NativeModule {
-    explicit Clipboard(std::shared_ptr<System> system) : NativeModule("NgNativeClipboard") {
+    Clipboard(std::shared_ptr<System> system, std::shared_ptr<HostState> state) : NativeModule("NgNativeClipboard") {
       promise("getStringAsync", [system](const folly::dynamic &, JsPromise promise) {
         promise.resolve(system->clipboardText().value_or(""));
       });
-      promise("setStringAsync", [system](const folly::dynamic &args, JsPromise promise) {
+      promise("setStringAsync", [system, state](const folly::dynamic &args, JsPromise promise) {
         system->setClipboardText(stringArg(args, 0));
+        state->clipboardChangeCount.set(system->clipboardChangeCount());
         promise.resolve(true);
       });
       promise("hasStringAsync", [system](const folly::dynamic &, JsPromise promise) {
         auto text = system->clipboardText();
         promise.resolve(text.has_value() && !text->empty());
       });
+      // DeviceEventEmitter's `ngNativeClipboard`, with no payload: the contents are read only when
+      // asked for.
+      subscription = state->clipboardChangeCount.listen(
+          [this](const int64_t &) { emit("ngNativeClipboard", folly::dynamic::object()); });
     }
+    std::shared_ptr<void> subscription;
   };
-  return std::make_shared<Clipboard>(std::move(system));
+  return std::make_shared<Clipboard>(std::move(system), std::move(state));
 }
 
 void KeepAwakeTags::activate(const std::string &tag) {

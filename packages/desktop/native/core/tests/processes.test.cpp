@@ -17,6 +17,10 @@ using Lines = std::vector<std::string>;
 
 struct FakeLauncher final : ngn::ProcessLauncher {
   Lines calls;
+  int issued{0};
+  int lastHandle() const override {
+    return issued;
+  }
   Events events;
   void setEvents(Events e) override {
     events = std::move(e);
@@ -146,6 +150,19 @@ TEST_CASE("stdin, kill and the program's output and exit go through the module")
   CHECK(events == Lines{"ngNativeProcesses stdout 7", "ngNativeProcesses stderr 7", "ngNativeProcesses exit 7"});
 }
 
+TEST_CASE("a reloaded module never sends the old runtime's programs' events") {
+  auto launcher = std::make_shared<FakeLauncher>();
+  launcher->issued = 7;
+  auto module = ngn::makeProcessesModule(launcher, setup());
+  Lines events;
+  module->setEmitter([&](const std::string &, dynamic body) { events.push_back(body["type"].asString() + " " + folly::toJson(body["handle"])); });
+  launcher->events.output(7, false, "from before the reload");
+  launcher->events.exit(7, 0, std::nullopt);
+  launcher->events.output(8, false, "mine");
+  launcher->events.exit(8, 0, std::nullopt);
+  CHECK(events == Lines{"stdout 8", "exit 8"});
+}
+
 TEST_CASE("the POSIX launcher runs a real program with only the environment given") {
   auto launcher = ngn::makePosixLauncher();
   std::mutex mutex;
@@ -194,6 +211,12 @@ TEST_CASE("Shell hands on urls with a scheme that is not a file's or a script's,
   CHECK_FALSE(ngn::externalUrlAllowed("file:///etc/passwd"));
   CHECK_FALSE(ngn::externalUrlAllowed("JavaScript:alert(1)"));
   CHECK_FALSE(ngn::externalUrlAllowed("data:text/html,x"));
+  CHECK_FALSE(ngn::externalUrlAllowed("VBScript:msgbox"));
+  CHECK_FALSE(ngn::externalUrlAllowed("blob:https://a/b"));
+  // The scheme is read from the very start: whitespace or a control character never hides one.
+  CHECK_FALSE(ngn::externalUrlAllowed(" file:///etc/passwd"));
+  CHECK_FALSE(ngn::externalUrlAllowed("\tjavascript:alert(1)"));
+  CHECK_FALSE(ngn::externalUrlAllowed("java\nscript:alert(1)"));
   CHECK_FALSE(ngn::externalUrlAllowed("no scheme"));
   CHECK_FALSE(ngn::externalUrlAllowed("/Users/me"));
   CHECK(ngn::plainPath("/Users/me/notes.md"));
