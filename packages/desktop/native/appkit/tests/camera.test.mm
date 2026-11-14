@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 
+#include <atomic>
 #include <optional>
 
 // A session that records where it is started and stopped, and stands for a camera that takes a
@@ -103,4 +104,51 @@ TEST_CASE("A capture session starts and stops off the main thread, and says it i
   capture = nullptr;
   CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false);
   CHECK(session.stops == 1);
+}
+
+TEST_CASE("A recording needs a running camera, and one with no video to record fails and leaves the session as it was") {
+  NGNRecordingSession *session = [NGNRecordingSession new];
+  session.sessionPreset = AVCaptureSessionPresetPhoto;
+  auto capture = ngn::appkit::sessionCapture(session, [AVCapturePhotoOutput new]);
+  // Sound asked for, which without the microphone allowed adds no microphone (and so asks for
+  // nothing); with it allowed, none is asked for, so no real microphone joins the session.
+  bool microphoneAllowed = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized;
+  ngn::CameraRecordingRequest request{.path = "/tmp/ngn-camera-test-never-written.mov", .sound = !microphoneAllowed};
+
+  std::optional<std::string> answered;
+  capture->startRecording(request, [&](const std::string &error) { answered = error; });
+  REQUIRE(answered);
+  CHECK(*answered == "the camera is not running");
+  CHECK_FALSE(capture->recording());
+
+  // Running, but with no camera in the session: nothing to record.
+  session.fakeRunning = YES;
+  std::atomic<bool> done{false};
+  std::string error;
+  capture->startRecording(request, [&](const std::string &e) {
+    error = e;
+    done = true;
+  });
+  CHECK(capture->recording());
+  REQUIRE(spinUntil([&] { return done.load(); }));
+  CHECK(error == "the camera gives no video to record");
+  REQUIRE(spinUntil([&] { return !capture->recording(); }));
+  CHECK(session.outputs.count == 0);
+  CHECK(session.inputs.count == 0);
+  CHECK([session.sessionPreset isEqualToString:AVCaptureSessionPresetPhoto]);
+  CHECK_FALSE([NSFileManager.defaultManager fileExistsAtPath:@"/tmp/ngn-camera-test-never-written.mov"]);
+  // Stopping with no recording does nothing.
+  capture->stopRecording();
+  session.fakeRunning = NO;
+}
+
+TEST_CASE("The microphone counts for a recording's sound only when allowed, which is never asked") {
+  auto hardware = ngn::appkit::makeCameraHardware();
+  bool allowed = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized;
+  if (!allowed) {
+    CHECK_FALSE(hardware->microphoneAllowed());
+  } else {
+    MESSAGE("the microphone is allowed here; only the absent path is checked");
+    CHECK(hardware->microphoneAllowed() == ([AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio] != nil));
+  }
 }

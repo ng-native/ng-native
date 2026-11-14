@@ -72,7 +72,8 @@ folly::dynamic permissionOf(CameraHardware::Access access) {
       "expires", "never");
 }
 
-std::string newJpegName() {
+// A new file's name: a random UUID with `extension`, as expo names its pictures and videos.
+std::string newFileName(const std::string &extension) {
   static std::mutex mutex;
   static std::random_device device;
   std::lock_guard lock(mutex);
@@ -82,7 +83,7 @@ std::string newJpegName() {
   }
   auto id = uuidV4(bytes);
   std::transform(id.begin(), id.end(), id.begin(), [](unsigned char c) { return std::toupper(c); });
-  return id + ".jpg";
+  return id + extension;
 }
 
 std::string contentsOf(const std::string &path) {
@@ -134,7 +135,7 @@ std::shared_ptr<NativeModule> makeCameraModule(
         }
         std::error_code ignored;
         std::filesystem::create_directories(pictures, ignored);
-        auto path = pictures + "/" + newJpegName();
+        auto path = pictures + "/" + newFileName(".jpg");
         capture->takePicture(quality, path, [promise, path, base64](int width, int height, const std::string &error) {
           if (!error.empty()) {
             promise.reject("Camera.takePicture: " + error);
@@ -147,8 +148,57 @@ std::shared_ptr<NativeModule> makeCameraModule(
           promise.resolve(std::move(picture));
         });
       });
-      promise("record", [](const folly::dynamic &, JsPromise promise) { promise.reject("Camera.record: macOS does not record video yet"); });
-      promise("stopRecording", [](const folly::dynamic &, JsPromise promise) { promise.resolve(nullptr); });
+      promise("record", [hardware, views, pictures](const folly::dynamic &args, JsPromise promise) {
+        int tag = !args.empty() && args[0].isNumber() ? static_cast<int>(args[0].asDouble()) : -1;
+        const folly::dynamic options = args.size() > 1 ? args[1] : folly::dynamic(nullptr);
+        if (hardware->access() != Access::Granted) {
+          promise.reject("Camera.record: camera permission has not been granted");
+          return;
+        }
+        auto capture = views->find(tag);
+        if (!capture) {
+          promise.reject("Camera is not ready yet. Wait for 'onCameraReady' callback");
+          return;
+        }
+        if (capture->recording()) {
+          promise.reject("Camera.record: a recording is already in progress");
+          return;
+        }
+        CameraRecordingRequest request;
+        bool mute = false;
+        if (options.isObject()) {
+          if (const auto *d = options.get_ptr("maxDuration"); d && d->isNumber()) {
+            request.maxDuration = std::max(0.0, d->asDouble());
+          }
+          if (const auto *f = options.get_ptr("maxFileSize"); f && f->isNumber()) {
+            request.maxFileSize = std::max(0.0, f->asDouble());
+          }
+          if (const auto *m = options.get_ptr("mute"); m && m->isBool()) {
+            mute = m->asBool();
+          }
+          if (const auto *c = options.get_ptr("codec"); c && c->isString()) {
+            request.codec = c->asString();
+          }
+        }
+        request.sound = !mute && hardware->microphoneAllowed();
+        std::error_code ignored;
+        std::filesystem::create_directories(pictures, ignored);
+        request.path = pictures + "/" + newFileName(".mov");
+        capture->startRecording(request, [promise, path = request.path](const std::string &error) {
+          if (!error.empty()) {
+            promise.reject("Camera.record: " + error);
+            return;
+          }
+          promise.resolve(folly::dynamic::object("uri", fileUri(path)));
+        });
+      });
+      promise("stopRecording", [views](const folly::dynamic &args, JsPromise promise) {
+        int tag = !args.empty() && args[0].isNumber() ? static_cast<int>(args[0].asDouble()) : -1;
+        if (auto capture = views->find(tag)) {
+          capture->stopRecording();
+        }
+        promise.resolve(nullptr);
+      });
     }
   };
   return std::make_shared<Camera>(std::move(hardware), std::move(views), std::move(pictures), noPrompts);

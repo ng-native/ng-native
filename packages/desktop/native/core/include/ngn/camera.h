@@ -9,7 +9,11 @@
 // - isAvailableAsync(): whether the Mac has a camera.
 // - takePicture(tag, options): expo's picture, {uri, width, height, format: 'jpg', base64?}, a
 //   JPEG at `quality` in `<caches>/Camera`, from the view `tag` once its camera runs.
-// - record(tag, options), stopRecording(tag): refused; macOS records nothing yet.
+// - record(tag, options): expo's recording, {uri}, a QuickTime movie in `<caches>/Camera` from the
+//   view `tag`, once it stops: stopRecording(tag), `maxDuration` seconds or `maxFileSize` bytes
+//   reached, or the view going. It has sound unless `mute`, and only with the microphone allowed
+//   (as on iOS, a recording without the microphone permission has none; nothing is asked). One
+//   recording a view at a time.
 //
 // A view starts its camera when it mounts with the camera allowed and present: it sends
 // `cameraReady`, and `mountError` ({message}, expo-camera's words) when the permission is not
@@ -59,6 +63,19 @@ class CameraHardware {
   // prompt, when the app's Info.plist gives no reason to ask. Any thread.
   virtual void requestAccess(std::function<void(Access)> done) = 0;
   virtual bool hasCamera() = 0;
+  // Whether a recording can have sound: the microphone allowed, and one there. Never asks.
+  virtual bool microphoneAllowed() = 0;
+};
+
+// What a recording is asked for.
+struct CameraRecordingRequest {
+  std::string path;
+  // Seconds and bytes; 0 for no limit.
+  double maxDuration{0};
+  double maxFileSize{0};
+  bool sound{true};
+  // expo-camera's VideoCodec ("avc1", "hvc1", "jpeg", "apcn", "ap4h"), or empty for the default.
+  std::string codec;
 };
 
 // A view's running camera.
@@ -67,6 +84,11 @@ class CameraCapture {
   virtual ~CameraCapture() = default;
   // Writes a JPEG at `quality` (0 to 1) to `path`; answers its size, or why not. Any thread.
   virtual void takePicture(double quality, const std::string &path, std::function<void(int width, int height, const std::string &error)> done) = 0;
+  // Records a movie until stopRecording or a limit; `done` gets why not, or empty once the file
+  // is finished. Any thread.
+  virtual void startRecording(const CameraRecordingRequest &request, std::function<void(const std::string &error)> done) = 0;
+  virtual void stopRecording() = 0;
+  virtual bool recording() const = 0;
 };
 
 // The running cameras by view tag, shared by the views and NgNativeCamera. Any thread.

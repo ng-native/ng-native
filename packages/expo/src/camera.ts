@@ -25,8 +25,7 @@
  * and `stopRecording` beside it), which native
  * finds by reading `nativeTag` off whatever it is called on. So this calls the same function with
  * the tag the engine committed the view under, and no ref is needed. On macOS the functions are
- * the desktop host's `NgNativeCamera`'s, which take the tag as their first argument; `record()`
- * rejects there.
+ * the desktop host's `NgNativeCamera`'s, which take the tag as their first argument.
  */
 import { Directive, ElementRef, InjectionToken, inject } from '@angular/core';
 import { Engine, type EngineNode } from '@ng-native/fabric';

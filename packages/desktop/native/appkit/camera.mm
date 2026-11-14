@@ -2,6 +2,8 @@
 
 #import <ImageIO/ImageIO.h>
 
+#include <atomic>
+
 // Answers one photo capture: the JPEG at its quality, written to its path.
 @interface NGNPhotoCapture : NSObject <AVCapturePhotoCaptureDelegate>
 - (instancetype)initWithQuality:(double)quality
@@ -48,6 +50,37 @@
     return;
   }
   done(static_cast<int>(CGImageGetWidth(image)), static_cast<int>(CGImageGetHeight(image)), "");
+}
+
+@end
+
+// Answers one movie recording once its file is finished. A recording a limit ended is finished
+// well: AVFoundation reports it as an error that says so.
+@interface NGNMovieRecording : NSObject <AVCaptureFileOutputRecordingDelegate>
+- (instancetype)initWithDone:(std::function<void(const std::string &)>)done;
+@end
+
+@implementation NGNMovieRecording {
+  std::function<void(const std::string &)> _done;
+}
+
+- (instancetype)initWithDone:(std::function<void(const std::string &)>)done {
+  if ((self = [super init])) {
+    _done = std::move(done);
+  }
+  return self;
+}
+
+- (void)captureOutput:(AVCaptureFileOutput *)output
+    didFinishRecordingToOutputFileAtURL:(NSURL *)url
+                        fromConnections:(NSArray<AVCaptureConnection *> *)connections
+                                  error:(NSError *)error {
+  bool finished = error == nil || [error.userInfo[AVErrorRecordingSuccessfullyFinishedKey] boolValue];
+  auto done = std::move(_done);
+  if (done) {
+    const char *reason = error.localizedDescription.UTF8String;
+    done(finished ? "" : (reason != nullptr ? reason : "the recording failed"));
+  }
 }
 
 @end
@@ -102,7 +135,21 @@ class AVHardware final : public CameraHardware {
   bool hasCamera() override {
     return cameras().count > 0;
   }
+  bool microphoneAllowed() override {
+    return [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized &&
+        [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio] != nil;
+  }
 };
+
+// The codec expo-camera names, if AVFoundation has it.
+AVVideoCodecType codecOf(const std::string &name) {
+  if (name == "hvc1") return AVVideoCodecTypeHEVC;
+  if (name == "avc1") return AVVideoCodecTypeH264;
+  if (name == "jpeg") return AVVideoCodecTypeJPEG;
+  if (name == "apcn") return AVVideoCodecTypeAppleProRes422;
+  if (name == "ap4h") return AVVideoCodecTypeAppleProRes4444;
+  return nil;
+}
 
 class AVSessionCapture final : public SessionCapture {
  public:
@@ -127,6 +174,7 @@ class AVSessionCapture final : public SessionCapture {
     });
   }
   void stop() override {
+    stopRecording();
     // The block holds the session, so it stops after this capture has gone.
     AVCaptureSession *session = session_;
     dispatch_async(queue_, ^{
@@ -134,6 +182,98 @@ class AVSessionCapture final : public SessionCapture {
         [session stopRunning];
       }
     });
+  }
+
+  // The movie output and, with sound, the microphone are added to the session for the recording
+  // and taken off after it, on the session's queue, since configuring a running session blocks.
+  void startRecording(const CameraRecordingRequest &request, std::function<void(const std::string &)> done) override {
+    if (!session_.running) {
+      done("the camera is not running");
+      return;
+    }
+    if (recording_->exchange(true)) {
+      done("a recording is already in progress");
+      return;
+    }
+    AVCaptureSession *session = session_;
+    auto recording = recording_;
+    auto movieHolder = movie_;
+    auto answer = std::make_shared<std::function<void(const std::string &)>>(std::move(done));
+    dispatch_queue_t queue = queue_;
+    dispatch_async(queue_, ^{
+      [session beginConfiguration];
+      NSString *preset = session.sessionPreset;
+      if ([session canSetSessionPreset:AVCaptureSessionPresetHigh]) {
+        session.sessionPreset = AVCaptureSessionPresetHigh;
+      }
+      AVCaptureDeviceInput *microphone = nil;
+      // Never without the microphone allowed: a microphone input in a session asks for it.
+      if (request.sound &&
+          [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized) {
+        AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio];
+        microphone = device != nil ? [AVCaptureDeviceInput deviceInputWithDevice:device error:nil] : nil;
+        if (microphone != nil && [session canAddInput:microphone]) {
+          [session addInput:microphone];
+        } else {
+          microphone = nil;
+        }
+      }
+      AVCaptureMovieFileOutput *movie = [AVCaptureMovieFileOutput new];
+      bool added = [session canAddOutput:movie];
+      if (added) {
+        [session addOutput:movie];
+      }
+      [session commitConfiguration];
+      void (^takeDown)(void) = ^{
+        [session beginConfiguration];
+        if (added) {
+          [session removeOutput:movie];
+        }
+        if (microphone != nil) {
+          [session removeInput:microphone];
+        }
+        if ([session canSetSessionPreset:preset]) {
+          session.sessionPreset = preset;
+        }
+        [session commitConfiguration];
+        *movieHolder = nil;
+        recording->store(false);
+      };
+      AVCaptureConnection *video = added ? [movie connectionWithMediaType:AVMediaTypeVideo] : nil;
+      if (video == nil || !video.active || !video.enabled) {
+        takeDown();
+        (*answer)("the camera gives no video to record");
+        return;
+      }
+      // A codec this Mac cannot write is refused by an exception; the default stays.
+      if (AVVideoCodecType codec = codecOf(request.codec)) {
+        @try {
+          [movie setOutputSettings:@{AVVideoCodecKey : codec} forConnection:video];
+        } @catch (NSException *) {
+        }
+      }
+      movie.maxRecordedDuration = request.maxDuration > 0 ? CMTimeMakeWithSeconds(request.maxDuration, 600) : kCMTimeInvalid;
+      movie.maxRecordedFileSize = static_cast<int64_t>(request.maxFileSize);
+      NSURL *url = [NSURL fileURLWithPath:@(request.path.c_str())];
+      [NSFileManager.defaultManager removeItemAtURL:url error:nil];
+      *movieHolder = movie;
+      NGNMovieRecording *delegate = [[NGNMovieRecording alloc] initWithDone:[answer, takeDown, queue](const std::string &error) {
+        dispatch_async(queue, takeDown);
+        (*answer)(error);
+      }];
+      [movie startRecordingToOutputFileURL:url recordingDelegate:delegate];
+    });
+  }
+
+  void stopRecording() override {
+    auto movieHolder = movie_;
+    dispatch_async(queue_, ^{
+      [*movieHolder stopRecording];
+    });
+  }
+
+  bool recording() const override {
+    return recording_->load();
   }
   void takePicture(double quality, const std::string &path, std::function<void(int, int, const std::string &)> done) override {
     if (!session_.running) {
@@ -148,6 +288,10 @@ class AVSessionCapture final : public SessionCapture {
   AVCaptureSession *session_;
   AVCapturePhotoOutput *output_;
   dispatch_queue_t queue_;
+  // Shared with the blocks on the queue, which can outlive the capture: whether a recording runs,
+  // and its output while it does (set and read on the queue).
+  std::shared_ptr<std::atomic<bool>> recording_ = std::make_shared<std::atomic<bool>>(false);
+  std::shared_ptr<AVCaptureMovieFileOutput *> movie_ = std::make_shared<AVCaptureMovieFileOutput *>(nil);
 };
 
 } // namespace

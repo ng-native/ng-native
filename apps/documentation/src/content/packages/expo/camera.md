@@ -146,6 +146,11 @@ permission (`ExpoCamera.Camera.requestMicrophonePermissionsAsync`, through `Perm
 the camera's): without it, Android rejects and iOS records without sound. With `mute`, it records
 without sound and needs no microphone permission.
 
+On macOS the movie is a QuickTime file (`.mov`) from the Mac's camera, with any `mode`. It has sound
+only with the microphone already allowed, and the host never asks for it, so it records without
+sound otherwise, as iOS does. One recording runs at a time for a view; a second `record()` rejects
+until the first stops.
+
 ## Reference
 
 <!-- api: Camera -->
