@@ -449,7 +449,8 @@ describe('Tailwind 3', () => {
 
 describe('the Tailwind 3 preset', () => {
   // Tailwind 3 reads no brace expansion in raw content, so each variant is written out.
-  const VARIANTS = 'hover press hovered focus focus-visible disabled ios android web native dark';
+  const VARIANTS =
+    'hover press hovered focus focus-visible disabled ios android web native macos desktop dark';
   const PRESET =
     VARIANTS.split(' ')
       .map((variant) => `${variant}:bg-red-500`)
@@ -476,19 +477,21 @@ describe('the Tailwind 3 preset', () => {
     assert.doesNotMatch(css, /box-sizing: border-box/, 'no preflight');
   });
 
-  it('gives hover: the press state, and a real hover where there is a pointer', () => {
+  it('gives hover: a real hover, the press state, and data-hover, as on the web', () => {
+    assert.match(selectorFor('hover:bg-red-500'), /:hover/);
     assert.match(selectorFor('hover:bg-red-500'), /:active/);
     assert.match(selectorFor('hover:bg-red-500'), /\[data-hover\]/);
-    assert.doesNotMatch(selectorFor('hover:bg-red-500'), /:hover/);
     assert.match(selectorFor('press:bg-red-500'), /:active/);
+    assert.match(selectorFor('hovered:bg-red-500'), /:hover/);
     assert.match(selectorFor('hovered:bg-red-500'), /\[data-hover\]/);
   });
 
-  it('makes focus-visible: focus, and both follow data-focus', () => {
+  it('tells focus-visible: from focus:, and both follow data-focus', () => {
+    assert.match(selectorFor('focus:bg-red-500'), /:focus\b/);
+    assert.match(selectorFor('focus-visible:bg-red-500'), /:focus-visible/);
+    assert.doesNotMatch(selectorFor('focus-visible:bg-red-500'), /:focus[^-]/);
     for (const variant of ['focus', 'focus-visible']) {
-      assert.match(selectorFor(`${variant}:bg-red-500`), /:focus\b/);
       assert.match(selectorFor(`${variant}:bg-red-500`), /\[data-focus\]/);
-      assert.doesNotMatch(selectorFor(`${variant}:bg-red-500`), /:focus-visible/);
     }
   });
 
@@ -505,6 +508,10 @@ describe('the Tailwind 3 preset', () => {
     assert.equal(on('platform-android', 'ios:bg-red-500'), undefined);
     assert.equal(on('platform-android', 'android:bg-red-500'), red);
     assert.equal(on('platform-android', 'native:bg-red-500'), red);
+    assert.equal(on('platform-macos', 'native:bg-red-500'), red);
+    assert.equal(on('platform-macos', 'macos:bg-red-500'), red);
+    assert.equal(on('platform-macos', 'desktop:bg-red-500'), red);
+    assert.equal(on('platform-ios', 'desktop:bg-red-500'), undefined);
     assert.equal(on('platform-web', 'web:bg-red-500'), red);
     assert.equal(on('dark', 'dark:bg-red-500'), red);
     assert.equal(on('', 'dark:bg-red-500'), undefined);
@@ -519,9 +526,12 @@ describe('the Tailwind 3 preset', () => {
       'peer-hover:bg-red-500 peer-focus:bg-green-500 group-disabled:bg-amber-500 peer-disabled:bg-amber-500';
     const built = build(classes);
     for (const variant of ['group-hover', 'peer-hover']) {
-      const line = built.split('\n').find((l) => l.includes(`${variant}\\:bg-red-500`)) ?? '';
+      const line = built
+        .split('\n')
+        .filter((l) => l.includes(`${variant}\\:bg-red-500`))
+        .join(' ');
       assert.match(line, /:active/, variant);
-      assert.doesNotMatch(line, /:hover/, variant);
+      assert.match(line, /:hover/, variant);
     }
     const refused: string[] = [];
     const sheet = compileCss(flattenTailwind(built), 'tailwind', {
@@ -651,6 +661,7 @@ describe('the Tailwind 3 preset', () => {
     const font = (platform: string) => render(sheet, platform, 'font-mono').child['fontFamily'];
     assert.equal(font('platform-ios'), 'Menlo');
     assert.equal(font('platform-android'), 'monospace');
+    assert.equal(font('platform-macos'), 'Menlo');
     assert.equal(font(''), 'Courier New');
   });
 
@@ -667,6 +678,7 @@ describe('the Tailwind 3 preset', () => {
     // wears `platform-ios` and `dark`, which `mount` and `watchConditions` set unprefixed.
     const classes =
       'ios:tw-pt-2 android:tw-pt-3 native:tw-pt-4 web:tw-pt-1 dark:tw-pt-5 dark:ios:tw-pt-6 ' +
+      'macos:tw-pt-8 ' +
       'tw-font-mono tw-group group-hover:tw-pt-7';
     const refused: string[] = [];
     const sheet = compileCss(flattenTailwind(build(classes, { prefix: 'tw-' })), 'tailwind', {
@@ -687,6 +699,10 @@ describe('the Tailwind 3 preset', () => {
     assert.equal(on('platform-ios dark', 'dark:ios:tw-pt-6')['paddingTop'], 24);
     assert.equal(on('platform-ios', 'tw-font-mono')['fontFamily'], 'Menlo');
     assert.equal(on('platform-android', 'tw-font-mono')['fontFamily'], 'monospace');
+    assert.equal(on('platform-macos', 'tw-font-mono')['fontFamily'], 'Menlo');
+    assert.equal(on('platform-macos', 'native:tw-pt-4')['paddingTop'], 16);
+    assert.equal(on('platform-macos', 'macos:tw-pt-8')['paddingTop'], 32);
+    assert.equal(on('platform-ios', 'macos:tw-pt-8')['paddingTop'], undefined);
     assert.equal(on('', 'tw-font-mono')['fontFamily'], 'Courier New');
     // A class of the app's own that the prefix applies to keeps it.
     assert.equal(on('tw-group', 'group-hover:tw-pt-7')['paddingTop'], undefined);

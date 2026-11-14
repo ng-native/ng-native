@@ -60,12 +60,19 @@ to work out: `opacity: 0` hides either and any other value leaves it alone. A pl
 a colour and an opacity, so anything else in the rule is dropped with a warning, and the rule
 matches those three elements only, as a browser's matches an input.
 
-`:hover` and `:focus-visible` are also unsupported, because there is no hover or focus cascade to
-answer them from: a phone has no pointer to hover with, and focus arriving from a keyboard or an
-assistive technology looks identical to focus arriving any other way. Use `:active` and `:focus`,
-which the engine does track, or drive the state with a bound attribute such as `[attr.data-hover]`.
-The `hover:` and `focus-visible:` variants in [`@ng-native/tailwind`](/packages/tailwind/variants)
-already point at them for you.
+`:hover`, `:focus-within` and `:focus-visible` are supported, beside `:active` and `:focus`.
+`:hover` matches while a mouse, a trackpad or a pencil is over the element or something inside
+it, never a finger. Only an element a `:hover` rule could match is told of the pointer, so an app
+with no such rule pays nothing for it. On iOS and Android it takes the pointer events an app
+[turns on](/packages/platform/renderer#pointer-events); on macOS they are always on.
+`:focus-within` matches the focused element and every element it is in. `:focus-visible` matches
+focus the keyboard moved, which the macOS host reports, and a focused text field however it was
+focused, as a browser does. iOS and Android report no keyboard focus, so there it matches a
+focused text field only.
+
+`@media (hover: hover)`, `(any-hover)`, `(pointer: fine)` and `(any-pointer)` are answered from the
+OS: `hover` and `fine` on macOS, `none` and `coarse` on iOS and Android, an iPad with a trackpad
+included.
 
 `:checked`, `:indeterminate`, `:valid`, `:invalid`, `:placeholder-shown` and the other form-state
 pseudo-classes are unsupported too: a native control keeps that state in its component's inputs,

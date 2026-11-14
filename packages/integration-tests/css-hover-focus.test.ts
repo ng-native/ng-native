@@ -288,8 +288,8 @@ describe(':focus-within', () => {
 describe(':focus-visible', () => {
   it('matches focus the host says came from the keyboard, and not a click', () => {
     const s = scene('.field:focus-visible { opacity: 0.5 } .field:focus { border-width: 1px }');
-    s.make('text-input', 'field');
-    s.make('text-input', 'other');
+    s.make('view', 'field');
+    s.make('view', 'other');
     s.engine.commit();
     s.fabric.emit(s.id('field'), 'topFocus', {});
     s.engine.commit();
@@ -301,5 +301,15 @@ describe(':focus-visible', () => {
     s.fabric.emit(s.id('field'), 'topBlur', {});
     s.engine.commit();
     assert.equal(s.id('field').props['opacity'], null);
+  });
+
+  it('matches a focused text field however it was focused, as a browser does', () => {
+    // It takes the keyboard whichever way focus arrived, so Chrome draws its ring on a click too.
+    const s = scene('.field:focus-visible { opacity: 0.5 }');
+    s.make('text-input', 'field');
+    s.engine.commit();
+    s.fabric.emit(s.id('field'), 'topFocus', {});
+    s.engine.commit();
+    assert.equal(s.id('field').props['opacity'], 0.5);
   });
 });

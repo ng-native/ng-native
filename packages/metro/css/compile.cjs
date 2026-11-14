@@ -3168,7 +3168,7 @@ const KEPT_BY_LIGHTNINGCSS = new Set(['UnsupportedPseudoClass', 'UnsupportedPseu
 const NATIVE = ['ios', 'android'];
 
 /** The class `mount` puts on the root for each platform, which is how a rule is scoped to one. */
-const PLATFORM_CLASS = { 'platform-ios': 'ios', 'platform-android': 'android' };
+const PLATFORM_CLASS = { 'platform-ios': 'ios', 'platform-android': 'android', 'platform-macos': 'macos' };
 
 /**
  * The platforms named by `.platform-*` classes in one selector: in any compound, or inside an

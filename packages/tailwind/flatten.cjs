@@ -828,7 +828,7 @@ const STACKED = new RegExp(
  * Tailwind 3's spelling of the same thing, `.dark .platform-ios .x`, which has no `:is()`. Only
  * the preset's own ancestor classes, so a selector an app wrote is never rewritten.
  */
-const ANCESTOR = String.raw`\.(?:dark|platform-(?:ios|android|web))`;
+const ANCESTOR = String.raw`\.(?:dark|platform-(?:ios|android|web|macos))`;
 const STACKED_PLAIN_ONE = new RegExp(
   String.raw`^\s*(${ANCESTOR})\s+(${ANCESTOR})\s+([^\s].*?)\s*$`,
 );
@@ -849,7 +849,7 @@ function unprefixAncestors(css) {
   if (!recorded) return css;
   const prefix = JSON.parse(`"${recorded[1]}"`).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const prefixed = new RegExp(
-    String.raw`\.${prefix}(dark|platform-(?:ios|android|web))(?![\w-]|\\)`,
+    String.raw`\.${prefix}(dark|platform-(?:ios|android|web|macos))(?![\w-]|\\)`,
     'g',
   );
   return css.replace(PREFIX_RECORD, '').replace(prefixed, '.$1');

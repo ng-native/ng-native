@@ -18,7 +18,7 @@ import { createFakeFabric } from '@ng-native/testing';
 import { build, committedProps } from './tailwind-cli.ts';
 
 const CLASSES =
-  '{hover:,press:,hovered:,focus-visible:,ios:,web:,native:,dark:}bg-red-500 pb-safe h-hairline font-mono';
+  '{hover:,press:,hovered:,focus-visible:,ios:,web:,native:,macos:,desktop:,dark:}bg-red-500 pb-safe h-hairline font-mono';
 
 describe('the two Tailwind presets', () => {
   let native = '';
@@ -43,15 +43,19 @@ describe('the two Tailwind presets', () => {
     assert.match(web, /--hairline/, 'and so does the web one');
   });
 
-  it('gives hover: a real hover on the web and not on a phone', () => {
-    // The one that would be silently wrong rather than loud: on native `:hover` is a hard compile
-    // error downstream, and on the web its absence is invisible until someone uses a mouse.
-    assert.doesNotMatch(selectorFor(native, 'hover:bg-red-500'), /:hover/);
-    assert.match(selectorFor(web, 'hover:bg-red-500'), /:hover/);
-
-    // Both keep the press state, which is what makes one class string work on both.
+  it("gives hover: and hovered: the web's exact form on native too", () => {
+    // A real hover on a desktop or with an iPad's pointer, and the press state on a phone, which
+    // is what makes one class string work everywhere.
+    for (const variant of ['hover', 'hovered']) {
+      assert.equal(
+        selectorFor(native, `${variant}:bg-red-500`),
+        selectorFor(web, `${variant}:bg-red-500`),
+        variant,
+      );
+    }
+    assert.match(selectorFor(native, 'hover:bg-red-500'), /:hover/);
     assert.match(selectorFor(native, 'hover:bg-red-500'), /:active/);
-    assert.match(selectorFor(web, 'hover:bg-red-500'), /:active/);
+    assert.match(selectorFor(native, 'hover:bg-red-500'), /data-hover/);
   });
 
   it('points press: at the :active the engine tracks, not an attribute nothing sets', () => {
@@ -77,11 +81,14 @@ describe('the two Tailwind presets', () => {
     assert.deepEqual(rule?.compounds.at(-1).pseudo, ['active']);
   });
 
-  it('tells focus-visible from focus on the web, and not on a phone', () => {
-    // Native aliases the two because there is no clicking; a browser has mice, so the browser's
-    // own heuristic is better than anything this could reimplement.
-    assert.doesNotMatch(selectorFor(native, 'focus-visible:bg-red-500'), /:focus-visible/);
-    assert.match(selectorFor(web, 'focus-visible:bg-red-500'), /:focus-visible/);
+  it('tells focus-visible from focus on native as on the web', () => {
+    // A Mac has clicking, so the ring is for focus the keyboard moved, which the host reports.
+    assert.match(selectorFor(native, 'focus-visible:bg-red-500'), /:focus-visible/);
+    assert.doesNotMatch(selectorFor(native, 'focus-visible:bg-red-500'), /:focus[^-]/);
+    assert.equal(
+      selectorFor(native, 'focus-visible:bg-red-500'),
+      selectorFor(web, 'focus-visible:bg-red-500'),
+    );
   });
 
   it('keeps the platform variants on both, so a shared class string is never an error', () => {
@@ -93,7 +100,21 @@ describe('the two Tailwind presets', () => {
     ] as const) {
       assert.match(selectorFor(css, 'ios:bg-red-500'), /platform-ios/, `${name} keeps ios:`);
       assert.match(selectorFor(css, 'web:bg-red-500'), /platform-web/, `${name} keeps web:`);
+      assert.match(selectorFor(css, 'macos:bg-red-500'), /platform-macos/, `${name} has macos:`);
+      assert.match(selectorFor(css, 'desktop:bg-red-500'), /platform-macos/, `${name} desktop:`);
     }
+  });
+
+  it('matches macos:, desktop: and native: on a Mac, and only native: on a phone', () => {
+    const background = (root: string, classes: string) =>
+      propsOn(native, root, classes)['backgroundColor'];
+    for (const variant of ['macos', 'desktop', 'native']) {
+      assert.notEqual(background('platform-macos', `${variant}:bg-red-500`), undefined, variant);
+    }
+    assert.equal(background('platform-ios', 'macos:bg-red-500'), undefined);
+    assert.equal(background('platform-ios', 'desktop:bg-red-500'), undefined);
+    assert.notEqual(background('platform-ios', 'native:bg-red-500'), undefined);
+    assert.equal(background('platform-web', 'native:bg-red-500'), undefined);
   });
 
   it('names a monospace font both platforms actually have', () => {
@@ -138,6 +159,7 @@ describe('the two Tailwind presets', () => {
   it("draws font-mono in each platform's monospace font", () => {
     assert.equal(fontOn(native, 'platform-ios'), 'Menlo');
     assert.equal(fontOn(native, 'platform-android'), 'monospace');
+    assert.equal(fontOn(native, 'platform-macos'), 'Menlo');
     assert.equal(fontOn(native, ''), 'Courier New');
   });
 
@@ -153,7 +175,7 @@ describe('the two Tailwind presets', () => {
     // variant's own selector, `.platform-ios &`, as the preset wrote it.
     const css = build(
       'native',
-      'tw:ios:pt-2 tw:android:pt-3 tw:dark:pt-5 tw:dark:ios:pt-6 tw:font-mono',
+      'tw:ios:pt-2 tw:android:pt-3 tw:dark:pt-5 tw:dark:ios:pt-6 tw:font-mono tw:macos:pt-8',
       '',
       'tw',
     );
@@ -165,6 +187,8 @@ describe('the two Tailwind presets', () => {
     assert.equal(propsOn(css, 'platform-ios', 'tw:font-mono')['fontFamily'], 'Menlo');
     assert.equal(propsOn(css, 'platform-android', 'tw:font-mono')['fontFamily'], 'monospace');
     assert.equal(propsOn(css, '', 'tw:font-mono')['fontFamily'], 'Courier New');
+    assert.equal(propsOn(css, 'platform-macos', 'tw:macos:pt-8')['paddingTop'], 32);
+    assert.equal(propsOn(css, 'platform-macos', 'tw:font-mono')['fontFamily'], 'Menlo');
   });
 
   it('wires the safe area to env() on the web, and leaves native to its own provider', () => {

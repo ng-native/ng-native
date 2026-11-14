@@ -37,25 +37,16 @@ const firstFamily = (value) =>
 const on = (attribute) => `[${attribute}]:where(:not([${attribute}="false"]))`;
 
 /**
- * The states each variant reads. On native, `hover:` is the pressed state, or a real hover where
- * there is a pointer, and `focus-visible:` is `focus:`. A browser has `:hover` and `:focus-visible`
- * for real, so there they lead and the others stay, as in `web.css`.
+ * The states each variant reads, the same on native as in a browser, as in `native.css` and
+ * `web.css`: the engine answers `:hover` from a pointer and `:focus-visible` from the keyboard, so
+ * they lead, and the pressed state and the attributes a component sets stay beside them.
  */
 const STATES = {
-  native: {
-    hover: [':active', on('data-hover')],
-    hovered: [on('data-hover')],
-    focus: [':focus', on('data-focus')],
-    'focus-visible': [':focus', on('data-focus')],
-    disabled: [on('data-disabled'), ':disabled'],
-  },
-  web: {
-    hover: [':hover', ':active', on('data-hover')],
-    hovered: [':hover', on('data-hover')],
-    focus: [':focus', on('data-focus')],
-    'focus-visible': [':focus-visible', on('data-focus')],
-    disabled: [on('data-disabled'), ':disabled'],
-  },
+  hover: [':hover', ':active', on('data-hover')],
+  hovered: [':hover', on('data-hover')],
+  focus: [':focus', on('data-focus')],
+  'focus-visible': [':focus-visible', on('data-focus')],
+  disabled: [on('data-disabled'), ':disabled'],
 };
 
 /**
@@ -91,7 +82,7 @@ function presetPlugin(
   platform,
   { addBase, addUtilities, addVariant, config, matchUtilities, theme },
 ) {
-  const states = STATES[platform];
+  const states = STATES;
   const on = (selectors) => selectors.map((s) => `&${s}`);
   addVariant('hover', on(states.hover));
   addVariant('press', '&:active');
@@ -117,7 +108,13 @@ function presetPlugin(
   addVariant('ios', beneath(platform, 'platform-ios'));
   addVariant('android', beneath(platform, 'platform-android'));
   addVariant('web', beneath(platform, 'platform-web'));
-  addVariant('native', [beneath(platform, 'platform-ios'), beneath(platform, 'platform-android')]);
+  addVariant('macos', beneath(platform, 'platform-macos'));
+  addVariant('desktop', beneath(platform, 'platform-macos'));
+  addVariant('native', [
+    beneath(platform, 'platform-ios'),
+    beneath(platform, 'platform-android'),
+    beneath(platform, 'platform-macos'),
+  ]);
   if (platform === 'web') addBase(WEB_BASE);
   else if (config('prefix')) {
     // Read by `flattenTailwind`, which takes the prefix back off the root classes.
@@ -180,6 +177,7 @@ function presetPlugin(
       '.font-mono': { 'font-family': 'Courier New' },
       '.platform-ios .font-mono': { 'font-family': 'Menlo' },
       '.platform-android .font-mono': { 'font-family': 'monospace' },
+      '.platform-macos .font-mono': { 'font-family': 'Menlo' },
     });
   }
 }

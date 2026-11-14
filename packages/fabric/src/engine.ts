@@ -7631,7 +7631,8 @@ export class Engine implements HostEngine {
     this.focusedNode = node;
     if (node) {
       node.focused = true;
-      if (visible) node.focusVisible = true;
+      // A text field takes the keyboard however focus arrived, so a browser rings it on a click too.
+      if (visible || TEXT_INPUTS.has(viewNameOf(node))) node.focusVisible = true;
       this.markProps(node);
     }
     this.setFocusWithin(node);

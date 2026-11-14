@@ -1019,7 +1019,7 @@
     }
   },
   "tailwind": {
-    "rules": 1048,
+    "rules": 1052,
     "dropped": 100,
     "emitted": [
       "$animation",
@@ -1144,7 +1144,7 @@
     }
   },
   "tailwind-v3": {
-    "rules": 1045,
+    "rules": 1054,
     "dropped": 79,
     "emitted": [
       "$animation",

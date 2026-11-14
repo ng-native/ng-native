@@ -62,15 +62,6 @@ const DELIBERATE: readonly Accounted[] = [
       'Native has no scale-down; contain is what it comes to for any image larger than its box.',
   },
   {
-    world: 'dark',
-    property: /./,
-    case: /^!?ios:dark:/,
-    reason:
-      'Tailwind 3 writes `ios:dark:` as `.dark .platform-ios .x`, which on the web needs the two ' +
-      'classes on two ancestors in that order. `mount` puts both on the root, so the engine takes ' +
-      'the two in either order or on one element, as it does for Tailwind 4 (expandStackedVariants).',
-  },
-  {
     property: /^\(ours only\) experimental_backgroundImage$/,
     case: /^bg-gradient-to-\w+ via-/,
     reason:
