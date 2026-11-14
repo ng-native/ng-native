@@ -532,8 +532,10 @@ Run it from the app's directory. The app's Expo config must list `macos` in `exp
 With no bundle, the host loads
 `http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=macos&dev=true` straight from the
 dev server and stays connected to it: an edit Fast Refreshes and keeps state, the dev server's
-reload reloads, and so does Developer > Reload (Command-R). A bundle path (from
-`npx expo export -p macos`) or another URL can be given instead.
+reload reloads, and so does Developer > Reload (Command-R). A bundle path or another URL can be
+given instead. A bundle's images and other assets are read beside it as React Native lays them out
+for an embedded bundle, so make it with `npx expo export:embed --platform macos --dev false
+--bundle-output <dir>/main.jsbundle --assets-dest <dir>`; `npx expo export` puts them elsewhere.
 
 The host is built against the app's own `react-native` (0.88), the first time into
 `~/Library/Caches/ng-native/desktop/rn-<version>`, which takes a few minutes and needs Xcode's
