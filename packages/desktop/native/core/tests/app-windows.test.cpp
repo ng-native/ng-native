@@ -225,6 +225,33 @@ TEST_CASE("SIGTERM asks the app to run its willQuit hooks only, and ends on its 
   CHECK(ended == 1);
 }
 
+TEST_CASE("SIGTERM takes over a Cmd-Q still asking, so a guard's no does not end it before willQuit") {
+  Fixture f;
+  f.open(request("main"));
+  CHECK(f.host->quitRequested() == ngn::QuitReply::Later);
+  int ended = 0;
+  f.host->terminateRequested([&] { ended++; });
+  CHECK(f.events.back() == "ngNativeWindows {\"terminate\":true,\"type\":\"quitRequest\"}");
+
+  // The Cmd-Q's "Save changes?" is cancelled: that quit is refused, and the SIGTERM waits on.
+  f.app().call("answerQuit", dynamic::array(false));
+  CHECK(ended == 0);
+  CHECK(f.windows->quits == std::vector<std::string>{"reply no"});
+  // The SIGTERM's own answer, once willQuit has run, ends it.
+  f.app().call("answerQuit", dynamic::array(true));
+  CHECK(ended == 1);
+  CHECK(f.windows->quits == std::vector<std::string>{"reply no"});
+
+  // The SIGTERM answered first ends it at once, as with no Cmd-Q.
+  Fixture g;
+  g.open(request("main"));
+  CHECK(g.host->quitRequested() == ngn::QuitReply::Later);
+  int gEnded = 0;
+  g.host->terminateRequested([&] { gEnded++; });
+  g.app().call("answerQuit", dynamic::array(true));
+  CHECK(gEnded == 1);
+}
+
 TEST_CASE("SIGTERM ends after the wait when the app never answers, and with no app at once") {
   Fixture f;
   f.open(request("main"));
