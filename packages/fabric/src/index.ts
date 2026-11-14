@@ -101,6 +101,7 @@ export {
 export { reportUnboundFormsInput, type NamedHostNode } from './forms-inputs.ts';
 export { HostEngine, type HostNode, type Settling } from './host.ts';
 export { getFabricUIManager } from './fabric.ts';
+export { joinEvents, type EventReceiver } from './event-dispatcher.ts';
 export {
   pinnedRange,
   type DrivenProperty,

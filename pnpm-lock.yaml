@@ -2029,6 +2029,9 @@ importers:
 
   packages/platform:
     dependencies:
+      '@ng-native/device':
+        specifier: workspace:*
+        version: link:../device
       '@ng-native/fabric':
         specifier: workspace:*
         version: link:../fabric

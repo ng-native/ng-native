@@ -8,6 +8,7 @@ import { describe, it } from 'node:test';
 import {
   isEditingShortcut,
   matchesShortcut,
+  navigationShortcut,
   parseShortcut,
   shortcutFires,
 } from '@ng-native/device';
@@ -93,5 +94,27 @@ describe('the text-input rule', () => {
   it('fires any other shortcut wherever focus is', () => {
     assert.equal(shortcutFires('mod+s', { key: 's', meta: true }, 'macos', true), true);
     assert.equal(shortcutFires('mod+s', { key: 'd', meta: true }, 'macos', false), false);
+  });
+});
+
+describe('the back and forward keys', () => {
+  it('are Cmd-[ and Cmd-] on Apple OSes, and Alt with an arrow elsewhere', () => {
+    const keys = (os: 'ios' | 'macos' | 'android' | 'web') =>
+      (['back', 'forward'] as const).map((direction) => {
+        const { key, meta, alt, ctrl } = navigationShortcut(direction, os);
+        return { key, meta, alt, ctrl };
+      });
+    const apple = [
+      { key: '[', meta: true, alt: false, ctrl: false },
+      { key: ']', meta: true, alt: false, ctrl: false },
+    ];
+    const others = [
+      { key: 'ArrowLeft', meta: false, alt: true, ctrl: false },
+      { key: 'ArrowRight', meta: false, alt: true, ctrl: false },
+    ];
+    assert.deepEqual(keys('macos'), apple);
+    assert.deepEqual(keys('ios'), apple);
+    assert.deepEqual(keys('android'), others);
+    assert.deepEqual(keys('web'), others);
   });
 });

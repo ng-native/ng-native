@@ -158,6 +158,15 @@ describe('a stack page under its header', () => {
     assert.equal(own['top'], true);
   });
 
+  it('commits the content in a safe area view on macOS, under the title bar and toolbar', async () => {
+    // macOS 15: any version, since every Mac window puts its content under its title bar.
+    await open('macos', 15);
+    const content = holder();
+    assert.equal(content.viewName, 'RNSSafeAreaView');
+    assert.equal(content.parent?.viewName, 'RNSScreen');
+    assert.deepEqual(content.props['edges'], TOP);
+  });
+
   it('commits the content straight into the screen on Android', async () => {
     await open('android', 36);
     assert.equal(holder().viewName, 'RNSScreen');

@@ -112,6 +112,7 @@ import {
   type FlowPlan,
   type FlowTree,
 } from './flow.ts';
+import { joinEvents } from './event-dispatcher.ts';
 import { FontFaces } from './font-faces.ts';
 import { premultipliedStops } from './premultiplied-stops.ts';
 
@@ -16792,12 +16793,26 @@ export class Engine implements HostEngine {
 
   // --- events -----------------------------------------------------------
 
+  /**
+   * Through the runtime's one dispatcher, which every surface shares: Fabric keeps a single
+   * handler, and a second engine's would take the first one's events. See `event-dispatcher.ts`.
+   */
   private registerEventHandler(): void {
-    if (this.eventsRegistered || !this.fabric.registerEventHandler) return;
+    if (this.eventsRegistered) return;
     this.eventsRegistered = true;
-    this.fabric.registerEventHandler((instanceHandle, topLevelType, nativeEvent) =>
-      this.dispatchEvent(instanceHandle, topLevelType, nativeEvent),
-    );
+    this.leave = joinEvents(this.fabric, this);
+  }
+
+  private leave: (() => void) | null = null;
+
+  /**
+   * Stop taking events, as the surface goes: a closed window's engine is told nothing more, and
+   * the dispatcher lets go of it. It takes them again if a listener is added after.
+   */
+  leaveEvents(): void {
+    this.leave?.();
+    this.leave = null;
+    this.eventsRegistered = false;
   }
 
   /**

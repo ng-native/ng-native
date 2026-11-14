@@ -24,6 +24,8 @@ import {
   type RouterFeatures,
   type Routes,
 } from '@angular/router';
+import { NavigationHistory } from './navigation-history.ts';
+import { routeWindows } from './route-windows.ts';
 import {
   DestroyRef,
   ErrorHandler,
@@ -165,6 +167,8 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
     provideEnvironmentInitializer(refuseScreensUnderFullScreen),
     provideEnvironmentInitializer(copyPresentedPages),
     provideEnvironmentInitializer(keepHistoryAcrossReloads),
+    routeWindows,
+    provideEnvironmentInitializer(() => void inject(NavigationHistory)),
   ];
   if (!parentOf) {
     return [

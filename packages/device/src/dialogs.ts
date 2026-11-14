@@ -160,7 +160,8 @@ export class Dialogs {
        *
        * Android's dialog holds three buttons: a negative, a neutral and a positive. Anything past
        * that is dropped by the platform without a word, and a choice the user cannot see is worse
-       * than a list that refused to open, so it says so.
+       * than a list that refused to open, so it says so. A Mac's alert, the same call, has a
+       * button for every choice, with Cancel bound to Escape.
        */
       const buttons = choices.map((choice, index) => ({
         text: choice.label,
@@ -170,7 +171,7 @@ export class Dialogs {
       if (cancelAt < 0) {
         buttons.push({ text: 'Cancel', style: 'cancel', onPress: () => resolve(null) });
       }
-      if (buttons.length > 3) {
+      if (this.native.platform === 'android' && buttons.length > 3) {
         console.error(
           `[angular-native] Dialogs.choose was given ${choices.length} choices and Android shows ` +
             'at most three buttons, counting the cancel. The rest will not appear. Use a ' +
