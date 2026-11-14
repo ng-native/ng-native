@@ -55,9 +55,10 @@ with no button down. A handler that activates cancels the touch React Native was
 library's root recogniser does on iOS. A native handler on a scroll view activates as it scrolls by
 the wheel or trackpad, since a mouse drag does not scroll it. Worklet gestures' events reach
 Reanimated on the UI runtime; JavaScript ones arrive as `onGestureHandlerStateChange` device events.
-Not there yet: `hitSlop`, the library's own components (`RNGestureHandlerButton`, the version 3
-detector), the UI runtime's `_setGestureStateSync` (a worklet's state manager goes through
-Reanimated's `setGestureState`), and force touch.
+The version 3 detector's shadow node and descriptor compile in through `--library`, but the host
+gives it no view of its own yet. Not there yet: `hitSlop`, the library's own components
+(`RNGestureHandlerButton`, the version 3 detector's view), the UI runtime's `_setGestureStateSync`
+(a worklet's state manager goes through Reanimated's `setGestureState`), and force touch.
 
 A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
 (`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
@@ -690,9 +691,12 @@ with `expo-updates` on iOS and Android.
 - `native/appkit`: the AppKit backend and the `ngn-macos` binary.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
-  <dir>` compiles a library's component codegen and its `common/cpp` in, as React Native's Android
-  build does (`codegen-library.sh`, `cmake/libraries.cmake`); the core reads a library's own props
-  and state through `core/src/libraries/<name>.cpp`.
+  <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android
+  build does (`codegen-library.sh`, `cmake/libraries.cmake`): `common/cpp`, or the one other folder
+  holding `react/renderer/components/<name>` (react-native-gesture-handler's `shared/shadowNodes`),
+  with each registered descriptor's header found by what it declares, whatever its file is named
+  (react-native-keyboard-controller's `RNKC` prefix). The core reads a library's own props and
+  state through `core/src/libraries/<name>.cpp`.
 
 ```sh
 pnpm --filter @ng-native/desktop test:native   # the core and its tests, no Hermes, any OS

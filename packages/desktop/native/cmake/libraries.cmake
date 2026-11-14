@@ -39,10 +39,12 @@ foreach(dir ${NGN_LIBRARIES})
     if(NGN_LIBRARY_COMMON_DIR AND EXISTS ${_common}/${d}.h)
       string(APPEND _lib_includes "#include <react/renderer/components/${_name}/${d}.h>\n")
     elseif(NGN_LIBRARY_COMMON_DIR)
-      # Or in one header that declares several, as react-native-svg's RNSVGComponentDescriptors.h.
-      file(GLOB _shared_headers ${_common}/*ComponentDescriptors.h)
+      # Or in a header named otherwise: one that declares several, as react-native-svg's
+      # RNSVGComponentDescriptors.h, or one with the library's prefix, as react-native-keyboard-
+      # controller's RNKCKeyboardControllerViewComponentDescriptor.h.
+      file(GLOB _shared_headers ${_common}/*ComponentDescriptor*.h)
       foreach(h ${_shared_headers})
-        file(STRINGS ${h} _declares REGEX "using ${d} =")
+        file(STRINGS ${h} _declares REGEX "(using|class) ${d}( |$)")
         get_filename_component(_header ${h} NAME)
         if(_declares AND NOT _header IN_LIST _common_included)
           list(APPEND _common_included ${_header})

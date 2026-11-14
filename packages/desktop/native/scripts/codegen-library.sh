@@ -16,7 +16,9 @@
 #
 # What a library declares for Android's C++ build is what the host uses: its codegen name
 # (react-native.config.js's android.libraryName, or package.json's codegenConfig.name), its shared
-# C++ in common/cpp/react/renderer/components/<name>, and the component descriptors it lists in
+# C++ in common/cpp/react/renderer/components/<name> (or the one other folder holding
+# react/renderer/components/<name>, as react-native-gesture-handler's shared/shadowNodes, which
+# declares the descriptor its codegen leaves out), and the component descriptors it lists in
 # react-native.config.js (every codegen descriptor when it lists none). A library with no codegen
 # config is refused.
 set -euo pipefail
@@ -29,8 +31,7 @@ modules=0
 [ "${3:-}" = "--modules" ] && modules=1
 
 # A library the host builds by a recipe of its own (cmake/libraries/<package>.cmake), for its C++
-# beyond Fabric components: react-native-worklets, react-native-reanimated and
-# react-native-gesture-handler. Its library.cmake names the recipe and the package, and no codegen
+# beyond Fabric components: react-native-worklets and react-native-reanimated. Its library.cmake names the recipe and the package, and no codegen
 # runs: the host's glue implements the modules by hand, and their components are not registered.
 PKG_NAME="$(node -p 'require(process.argv[1]).name' "$LIB/package.json")"
 RECIPE="$here/../cmake/libraries/$PKG_NAME.cmake"
@@ -99,7 +100,7 @@ DESCRIPTORS="$(sed -n 3p <<< "$info")"
 OUT="$CACHE/libraries/$NAME"
 [ "$modules" = 1 ] && OUT="$CACHE/linked/$NAME"
 # The layout's own version last, so a cache written by an older script is made again.
-STAMP="$VERSION $LIB 2"
+STAMP="$VERSION $LIB 3"
 if [ -f "$OUT/stamp" ] && [ "$(cat "$OUT/stamp")" = "$STAMP" ]; then
   echo "$OUT"
   exit 0
@@ -132,8 +133,21 @@ fi
 if [ -z "$DESCRIPTORS" ]; then
   DESCRIPTORS="$(sed -n 's/^using \([A-Za-z0-9_]*ComponentDescriptor\) = .*/\1/p' "$GEN/ComponentDescriptors.h" | paste -sd ';' -)"
 fi
-COMMON="$LIB/common/cpp"
-[ -d "$COMMON/react/renderer/components/$NAME" ] || COMMON=""
+# The library's own C++ beside its codegen: common/cpp, or else the folder in the package (outside
+# its build output, dependencies and other platforms' sources) that holds
+# react/renderer/components/<name>.
+COMMON=""
+if [ -d "$LIB/common/cpp/react/renderer/components/$NAME" ]; then
+  COMMON="$LIB/common/cpp"
+else
+  found="$(cd "$LIB" && find . \( -name node_modules -o -name build -o -name lib -o -name android -o -name ios -o -name apple -o -name macos -o -name windows \) -prune \
+    -o -type d -path "*/react/renderer/components/$NAME" -print)"
+  found="${found%%$'\n'*}"
+  if [ -n "$found" ]; then
+    COMMON="$LIB/${found#./}"
+    COMMON="${COMMON%/react/renderer/components/$NAME}"
+  fi
+fi
 
 rm -rf "$OUT"
 mkdir -p "$OUT/codegen/react/renderer/components"
