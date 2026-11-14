@@ -18,6 +18,8 @@ browser-only parts do not: there is no `NgOptimizedImage` (use `<image>`), and n
 npm start           # Metro, the dev server the app loads from
 npm run macos       # builds the desktop host (the first time) and opens the app from Metro
 npm test            # Vitest, in Node against a fake native layer: no app window needed
+npx vitest --project macos   # tests in src/**/*.device.ts, inside the running app; needs
+                             # EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start in another terminal
 npm run typecheck
 npm run package     # the .app; --format dmg for a signed, notarised download
 ```
