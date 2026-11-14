@@ -96,10 +96,13 @@ add_library(ngn_core STATIC
     core/src/modules/image-loader.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
+    core/src/modules/sqlite.cpp
     core/src/modules/undo.cpp
     core/src/modules/web-socket.cpp)
 target_include_directories(ngn_core PUBLIC core/include)
-target_link_libraries(ngn_core PUBLIC react_native)
+# The system's sqlite3, behind NgNativeSqlite (libsqlite3-dev on Linux).
+find_package(SQLite3 REQUIRED)
+target_link_libraries(ngn_core PUBLIC react_native SQLite::SQLite3)
 target_compile_options(ngn_core PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
 
 if(NGN_TESTS)

@@ -38,6 +38,7 @@
 #include "ngn/focus-order.h"
 #include "ngn/layout-animations.h"
 #include "ngn/runtime.h"
+#include "ngn/sqlite.h"
 
 #include <sys/sysctl.h>
 #include <unistd.h>
@@ -644,6 +645,9 @@ int main(int argc, const char *argv[]) {
       static auto dialogs = ngn::appkit::makeFileDialogs();
       static auto caches = ngn::appkit::cacheDirectory(appId);
       ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches); });
+      // expo-sqlite keeps its databases in the app's documents, under SQLite; here, in its data.
+      static auto databases = system->appDataDirectory() + "/SQLite";
+      ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases); });
       static auto locales = ngn::appkit::makeLocaleSource();
       ngn::addModule(*modules, "NgNativeLocalization", [] {
         return ngn::makeLocalizationModule(locales, ngn::appkit::systemRegionCode());
