@@ -552,6 +552,9 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
+      static auto dialogs = ngn::appkit::makeFileDialogs();
+      static auto caches = ngn::appkit::cacheDirectory(appId);
+      ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches); });
       static auto locales = ngn::appkit::makeLocaleSource();
       ngn::addModule(*modules, "NgNativeLocalization", [] {
         return ngn::makeLocalizationModule(locales, ngn::appkit::systemRegionCode());

@@ -10,6 +10,10 @@
 // - NgNativeKeepAwake: activateKeepAwakeAsync and deactivateKeepAwake by tag; the display stays
 //   awake while any tag holds it.
 // - NgNativeHaptics: impactAsync, notificationAsync and selectionAsync, as the trackpad's feedback.
+// - NgNativeDocumentPicker: getDocumentAsync in expo-document-picker's shape (copied into the
+//   cache unless copyToCacheDirectory is false), saveDocumentAsync (text, or bytes as {base64},
+//   written where the save panel says; null when dismissed) and pickDirectoryAsync ({uri} or null),
+//   over FileDialogs.
 // - NgNativeLocalization: getLocales and getCalendars, in expo-localization's shapes, over a
 //   LocaleSource (the user's preferred languages and the region's formats).
 #pragma once
@@ -17,6 +21,7 @@
 #include "ngn/native-module.h"
 #include "ngn/system.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <set>
@@ -73,6 +78,31 @@ class HapticPlayer {
 std::optional<HapticPlayer::Pattern> hapticPattern(const std::string &method);
 
 std::shared_ptr<NativeModule> makeHapticsModule(std::shared_ptr<HapticPlayer> player);
+
+// The OS's open and save panels. Each answers on any thread, with nothing when dismissed.
+class FileDialogs {
+ public:
+  struct OpenRequest {
+    // MIME types ("text/plain", "image/*"); empty for any file.
+    std::vector<std::string> types;
+    bool multiple{false};
+  };
+  struct SaveRequest {
+    std::string suggestedName;
+    // MIME types the file may be saved as, the first the default.
+    std::vector<std::string> types;
+  };
+  virtual ~FileDialogs() = default;
+  virtual void openFiles(const OpenRequest &request, std::function<void(std::optional<std::vector<std::string>>)> done) = 0;
+  virtual void saveFile(const SaveRequest &request, std::function<void(std::optional<std::string>)> done) = 0;
+  virtual void chooseFolder(std::function<void(std::optional<std::string>)> done) = 0;
+};
+
+// The MIME type of a file name's extension, or application/octet-stream.
+std::string mimeTypeOf(const std::string &name);
+
+// `cacheDirectory` is where picked files are copied.
+std::shared_ptr<NativeModule> makeDocumentPickerModule(std::shared_ptr<FileDialogs> dialogs, std::string cacheDirectory);
 
 // One of the user's preferred languages, with the formats of the region the system is set to.
 struct LocaleFacts {
