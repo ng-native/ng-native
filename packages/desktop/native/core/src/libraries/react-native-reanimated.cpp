@@ -130,9 +130,9 @@ class ReanimatedModule final : public TurboModule {
 
   ~ReanimatedModule() override {
     auto &host = workletHost();
-    host.reanimatedEvent = nullptr;
-    if (listener_ && host.runOnScheduler) {
-      host.runOnScheduler([listener = listener_](Scheduler &scheduler) { scheduler.removeEventListener(listener); });
+    host.reanimatedEvent.set(nullptr);
+    if (listener_) {
+      host.runOnScheduler.call([listener = listener_](Scheduler &scheduler) { scheduler.removeEventListener(listener); });
     }
     proxy_.reset();
   }
@@ -145,9 +145,7 @@ class ReanimatedModule final : public TurboModule {
       return jsi::Value(true);
     }
     std::shared_ptr<UIManager> uiManager;
-    if (host.runOnScheduler) {
-      host.runOnScheduler([&](Scheduler &scheduler) { uiManager = scheduler.getUIManager(); });
-    }
+    host.runOnScheduler.call([&](Scheduler &scheduler) { uiManager = scheduler.getUIManager(); });
     if (!uiManager) {
       return jsi::Value(false);
     }
@@ -180,12 +178,12 @@ class ReanimatedModule final : public TurboModule {
       }
       return false;
     });
-    host.runOnScheduler([listener = self.listener_](Scheduler &scheduler) { scheduler.addEventListener(listener); });
+    host.runOnScheduler.call([listener = self.listener_](Scheduler &scheduler) { scheduler.addEventListener(listener); });
 
     // The gesture handler's events for a worklet gesture, as REANodesManager's dispatchEvent takes
     // RNGestureHandler's: handled on the UI runtime, then the updates they queued performed.
     std::weak_ptr<FrameLoop> loop = self.loop_;
-    host.reanimatedEvent = [weak, loop, uiWorkletRuntime](const std::string &name, Tag tag, const folly::dynamic &payload) {
+    host.reanimatedEvent.set([weak, loop, uiWorkletRuntime](const std::string &name, Tag tag, const folly::dynamic &payload) {
       auto proxy = weak.lock();
       if (!proxy) {
         return;
@@ -193,13 +191,11 @@ class ReanimatedModule final : public TurboModule {
       auto &uiRuntime = worklets::getJSIRuntimeFromWorkletRuntime(uiWorkletRuntime);
       proxy->handleEvent(name, tag, jsi::valueFromDynamic(uiRuntime, payload), workletHost().now());
       // The handler may have moved a shared value, whose mappers run on the next frame.
-      if (auto wake = workletHost().wakeUiFrames) {
-        wake();
-      }
+      workletHost().wakeUiFrames.call();
       if (auto frames = loop.lock()) {
         frames->perform();
       }
-    };
+    });
     return jsi::Value(true);
   }
 

@@ -623,9 +623,7 @@ int main(int argc, const char *argv[]) {
     // A worklet gesture's events go to Reanimated's handlers on the UI runtime, and a worklet's
     // state manager comes back to the recognisers, while Reanimated is running.
     gestures->onWorkletEvent = [](const std::string &name, Tag view, const folly::dynamic &body) {
-      if (auto event = ngn::workletHost().reanimatedEvent) {
-        event(name, view, body);
-      }
+      ngn::workletHost().reanimatedEvent.call(name, view, body);
     };
     ngn::workletHost().setGestureState = [](int handlerTag, int state) { gestures->setState(handlerTag, state); };
     // Each commit's time, for the performance budget (pnpm bench:macos), when asked for: every

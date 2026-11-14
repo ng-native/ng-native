@@ -77,9 +77,7 @@ class DesktopUIScheduler final : public worklets::UIScheduler,
 
  protected:
   static void wake() {
-    if (auto wake = workletHost().wakeUiFrames) {
-      wake();
-    }
+    workletHost().wakeUiFrames.call();
   }
 
   bool queryIsOnUIThread() const override {
@@ -105,7 +103,7 @@ class WorkletsModule final : public TurboModule {
   }
 
   ~WorkletsModule() override {
-    workletHost().wakeUiFrames = nullptr;
+    workletHost().wakeUiFrames.set(nullptr);
     status_->setDead();
     if (initializer_) {
       initializer_->invalidate();
@@ -162,7 +160,7 @@ class WorkletsModule final : public TurboModule {
       ui.evaluateJavaScript(std::make_shared<jsi::StringBuffer>(kWorkletsIdleFrames), "ngn-worklets-idle-frames.js");
     });
     std::weak_ptr<worklets::WorkletRuntime> ui = self.proxy_->getUIWorkletRuntime();
-    workletHost().wakeUiFrames = [ui] {
+    workletHost().wakeUiFrames.set([ui] {
       auto runtime = ui.lock();
       if (!runtime) {
         return;
@@ -173,7 +171,7 @@ class WorkletsModule final : public TurboModule {
           wake.asObject(rt).asFunction(rt).call(rt);
         }
       });
-    };
+    });
     return jsi::Value(true);
   }
 
