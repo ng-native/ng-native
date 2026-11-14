@@ -78,5 +78,30 @@ export { SCREEN_IN_FRONT } from './screen-in-front.ts';
 export { SCREEN_SHOWN } from './screen-shown.ts';
 export { NATIVE_HISTORY } from './native-history.ts';
 export { DESKTOP, OS } from './os.ts';
+export {
+  MENU_MODEL,
+  createMenuModel,
+  defaultMenuBar,
+  isSeparator,
+  mergeMenuBar,
+  type MenuEntry,
+  type MenuGroupModel,
+  type MenuGroupRole,
+  type MenuItemModel,
+  type MenuModel,
+  type MenuRole,
+  type MenuSeparator,
+} from './menu-model.ts';
+export {
+  isEditingShortcut,
+  matchesShortcut,
+  parseShortcut,
+  shortcutFires,
+  type KeyChord,
+  type ParsedShortcut,
+  type ShortcutOs,
+} from './shortcut.ts';
+export { SIDEBAR_SELECTION } from './sidebar-selection.ts';
+export { WINDOW_NAVIGATOR, type WindowNavigator } from './window-navigator.ts';
 export { OS_VERSION } from './os-version.ts';
 export { injectToken, type InjectTokenOptions } from './inject-token.ts';
