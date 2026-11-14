@@ -369,6 +369,12 @@ The host reads these `Info.plist` keys when it is opened with no arguments:
 `--feed-url` copies `Sparkle.framework` from the host build's `appkit` folder, and stops when the
 build has none, or when there is no public key to check updates with.
 
+With `NGNUpdatesURL` set, the host takes Expo Updates (protocol 1) from that server: the launch
+asset and each of the update's other assets, every one checked against the manifest's hash. React
+Native's resolver finds a bundle's images beside it, through `SourceCode`'s `scriptURL`, so the host
+lays an update's assets out as its bundle registers them, from the `registerAsset` calls Metro
+writes into a JavaScript bundle. An asset the bundle does not register is kept but never found.
+
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and

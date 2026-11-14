@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <regex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -62,6 +64,13 @@ std::string mediaType(const std::string &contentType) {
 }
 
 // 8-4-4-4-12 hex digits: what the protocol's ids are, and all a folder name may be.
+// Letters, digits, `.`, `-` and `_`, at least one.
+bool fileNamePart(const std::string &text) {
+  return !text.empty() && std::all_of(text.begin(), text.end(), [](unsigned char c) {
+    return std::isalnum(c) || c == '.' || c == '-' || c == '_';
+  });
+}
+
 bool isUuid(const std::string &id) {
   if (id.size() != 36) {
     return false;
@@ -96,12 +105,31 @@ UpdateManifest readManifest(const std::string &body) {
   if (!isUuid(text(json, "id"))) {
     throw std::runtime_error("the manifest's id is not a UUID");
   }
+  std::vector<UpdateAsset> assets;
+  if (const auto *list = json.get_ptr("assets"); list != nullptr && list->isArray()) {
+    for (const auto &entry : *list) {
+      const auto *extension = entry.isObject() ? entry.get_ptr("fileExtension") : nullptr;
+      UpdateAsset asset{
+          .key = text(entry, "key"),
+          .hash = text(entry, "hash"),
+          .url = text(entry, "url"),
+          .fileExtension = extension != nullptr && extension->isString() ? extension->asString() : "",
+      };
+      // Both name a file in the update's folder, so neither may lead out of it.
+      if (!fileNamePart(asset.key) || asset.key == "." || asset.key == ".." ||
+          !(asset.fileExtension.empty() || (asset.fileExtension[0] == '.' && fileNamePart(asset.fileExtension.substr(1))))) {
+        throw std::runtime_error("the manifest's asset key or fileExtension is not part of a file name: " + asset.key + asset.fileExtension);
+      }
+      assets.push_back(std::move(asset));
+    }
+  }
   return UpdateManifest{
       .id = text(json, "id"),
       .createdAt = text(json, "createdAt"),
       .runtimeVersion = text(json, "runtimeVersion"),
       .launchUrl = text(*launch, "url"),
       .launchHash = text(*launch, "hash"),
+      .assets = std::move(assets),
       .raw = json,
   };
 }
@@ -210,6 +238,76 @@ struct Download {
 };
 
 } // namespace
+
+std::map<std::string, std::string> assetPathsInBundle(const std::string &bundle) {
+  // A field of the registration, its key quoted (as JSON) or not (minified).
+  static const std::regex text(R"re("?(httpServerLocation|name|type)"?\s*:\s*"([^"]*)")re");
+  static const std::regex list(R"re("?(scales|fileHashes)"?\s*:\s*\[([^\]]*)\])re");
+  static const std::set<std::string> kept{"launch-asset", "manifest.json", "signature", "assets.json"};
+  auto items = [](const std::string &inside) {
+    std::vector<std::string> out;
+    std::stringstream in(inside);
+    std::string item;
+    while (std::getline(in, item, ',')) {
+      std::erase_if(item, [](char c) { return c == '"' || std::isspace(static_cast<unsigned char>(c)); });
+      out.push_back(item);
+    }
+    return out;
+  };
+  std::map<std::string, std::string> out;
+  constexpr std::string_view call = "registerAsset(";
+  for (size_t at = bundle.find(call); at != std::string::npos; at = bundle.find(call, at)) {
+    at += call.size();
+    // The registration is one flat object: no braces inside it.
+    auto end = bundle.find('}', at);
+    if (end == std::string::npos) {
+      break;
+    }
+    auto object = bundle.substr(at, end - at);
+    std::map<std::string, std::string> fields;
+    std::map<std::string, std::vector<std::string>> lists;
+    for (std::sregex_iterator m(object.begin(), object.end(), text), none; m != none; ++m) {
+      fields[(*m)[1]] = (*m)[2];
+    }
+    for (std::sregex_iterator m(object.begin(), object.end(), list), none; m != none; ++m) {
+      lists[(*m)[1]] = items((*m)[2]);
+    }
+    if (!fields.contains("httpServerLocation") || !fields.contains("name") || !fields.contains("type")) {
+      continue;
+    }
+    auto folder = fields["httpServerLocation"];
+    while (folder.starts_with('/')) {
+      folder.erase(0, 1);
+    }
+    const auto &scales = lists["scales"];
+    const auto &hashes = lists["fileHashes"];
+    for (size_t i = 0; i < scales.size() && i < hashes.size(); i++) {
+      double scale = 1;
+      try {
+        scale = std::stod(scales[i]);
+      } catch (const std::exception &) {
+        continue;
+      }
+      auto path = folder + "/" + fields["name"] + (scale == 1 ? "" : "@" + scales[i] + "x") + "." + fields["type"];
+      // As the resolver writes it: `../` as `_`, and a leading slash dropped.
+      for (size_t dots = path.find("../"); dots != std::string::npos; dots = path.find("../", dots)) {
+        path.replace(dots, 3, "_");
+      }
+      while (path.starts_with('/')) {
+        path.erase(0, 1);
+      }
+      auto parts = fs::path(path);
+      bool safe = !path.empty() && !kept.contains(*parts.begin());
+      for (const auto &part : parts) {
+        safe = safe && part != "." && part != "..";
+      }
+      if (safe && !hashes[i].empty()) {
+        out[hashes[i]] = path;
+      }
+    }
+  }
+  return out;
+}
 
 std::string base64Url(const std::string &bytes) {
   auto text = base64Encode(bytes);
@@ -349,6 +447,16 @@ bool UpdatesClient::usable(const LaunchState::Update &update, const LaunchState 
     auto body = readFile(folder / "manifest.json");
     auto manifest = readManifest(body);
     std::string signature = fs::exists(folder / "signature") ? readFile(folder / "signature") : "";
+    // The assets are only looked for: hashing each at every launch would hold up the start.
+    if (!manifest.assets.empty()) {
+      auto paths = folly::parseJson(readFile(folder / "assets.json"));
+      for (const auto &asset : manifest.assets) {
+        const auto *path = paths.get_ptr(asset.key);
+        if (path == nullptr || !path->isString() || !fs::exists(folder / path->asString())) {
+          return false;
+        }
+      }
+    }
     return manifest.id == update.id && !signatureProblem(body, signature) &&
         base64Url(crypto_->sha256(readFile(pathOf(update)))) == manifest.launchHash;
   } catch (const std::exception &) {
@@ -557,64 +665,151 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
     done({});
     return;
   }
-  auto download = std::make_shared<Download>();
-  auto task = http_->send(
-      HttpRequest{.url = found->launchUrl, .withCredentials = false},
-      {
-          .onResponse = [download](const HttpResponse &response) { download->status = response.status; },
-          .onData = [download](std::string chunk, int64_t) { download->body += chunk; },
-          .onComplete =
-              [this, download, found, foundBody, foundSignature, done](const std::string &error, bool) {
-                FetchResult result;
-                if (!error.empty() || download->status != 200) {
-                  result.error = error.empty() ? "the launch asset's server answered " + std::to_string(download->status)
-                                               : "the launch asset could not be downloaded: " + error;
-                  done(std::move(result));
-                  return;
-                }
-                if (base64Url(crypto_->sha256(download->body)) != found->launchHash) {
-                  result.error = "the launch asset's hash is not the manifest's: it was not kept";
-                  done(std::move(result));
-                  return;
-                }
-                try {
-                  std::lock_guard lock(mutex_);
-                  LaunchState::Update update{
-                      .id = found->id,
-                      .createdAt = found->createdAt,
-                      .runtimeVersion = found->runtimeVersion,
-                      .file = found->id + "/launch-asset",
-                  };
-                  writeFile(config_.directory / update.file, download->body);
-                  // What the next launch checks the asset against, signature and all.
-                  writeFile(config_.directory / update.id / "manifest.json", foundBody);
-                  writeFile(config_.directory / update.id / "signature", foundSignature);
-                  auto state = load();
-                  if (state.current && state.current->id != update.id) {
-                    state.previous = state.current;
+  // What has been downloaded and checked so far, as files relative to the update's folder.
+  struct Fetching {
+    UpdateManifest manifest;
+    std::vector<std::pair<std::string, std::string>> files;
+    // Each asset's key to where it goes, relative to the update's folder.
+    std::map<std::string, std::string> paths;
+    size_t next{0};
+    std::function<void()> step;
+  };
+  auto fetching = std::make_shared<Fetching>();
+  fetching->manifest = *found;
+  // Folders of the updates kept now, where an asset with the same hash may already be.
+  std::vector<fs::path> kept;
+  {
+    std::lock_guard lock(mutex_);
+    auto state = load();
+    for (const auto &update : {state.current, state.previous, running_}) {
+      if (update && isUuid(update->id) && update->id != found->id) {
+        kept.push_back(config_.directory / update->id);
+      }
+    }
+  }
+
+  // Sends one request, and calls `got` with its body, or `done` with why it failed.
+  auto download = [this, done](const std::string &url, const std::string &what, std::function<void(std::string)> got) {
+    auto body = std::make_shared<Download>();
+    auto task = http_->send(
+        HttpRequest{.url = url, .withCredentials = false},
+        {
+            .onResponse = [body](const HttpResponse &response) { body->status = response.status; },
+            .onData = [body](std::string chunk, int64_t) { body->body += chunk; },
+            .onComplete =
+                [body, what, done, got = std::move(got)](const std::string &error, bool) {
+                  if (!error.empty() || body->status != 200) {
+                    done({.error = error.empty() ? what + "'s server answered " + std::to_string(body->status)
+                                                 : what + " could not be downloaded: " + error});
+                    return;
                   }
-                  state.current = update;
-                  save(state);
-                  // Only the updates the state names, and the one running, are kept.
-                  for (const auto &entry : fs::directory_iterator(config_.directory)) {
-                    auto name = entry.path().filename().string();
-                    bool keep = !entry.is_directory() || name == update.id || (state.previous && name == state.previous->id) ||
-                        (running_ && name == running_->id);
-                    if (!keep) {
-                      fs::remove_all(entry.path());
-                    }
-                  }
-                  found_.reset();
-                  result.isNew = true;
-                  result.manifest = found->raw;
-                } catch (const std::exception &e) {
-                  result.error = e.what();
-                }
-                done(std::move(result));
-              },
-      });
-  std::lock_guard lock(mutex_);
-  task_ = std::move(task);
+                  got(std::move(body->body));
+                },
+        });
+    std::lock_guard lock(mutex_);
+    task_ = std::move(task);
+  };
+
+  auto finish = [this, fetching, foundBody, foundSignature, done] {
+    FetchResult result;
+    const auto &found = fetching->manifest;
+    try {
+      std::lock_guard lock(mutex_);
+      LaunchState::Update update{
+          .id = found.id,
+          .createdAt = found.createdAt,
+          .runtimeVersion = found.runtimeVersion,
+          .file = found.id + "/launch-asset",
+      };
+      for (const auto &[file, bytes] : fetching->files) {
+        writeFile(config_.directory / update.id / file, bytes);
+      }
+      folly::dynamic paths = folly::dynamic::object();
+      for (const auto &[key, path] : fetching->paths) {
+        paths[key] = path;
+      }
+      writeFile(config_.directory / update.id / "assets.json", folly::toJson(paths));
+      // What the next launch checks the asset against, signature and all.
+      writeFile(config_.directory / update.id / "manifest.json", foundBody);
+      writeFile(config_.directory / update.id / "signature", foundSignature);
+      auto state = load();
+      if (state.current && state.current->id != update.id) {
+        state.previous = state.current;
+      }
+      state.current = update;
+      save(state);
+      // Only the updates the state names, and the one running, are kept.
+      for (const auto &entry : fs::directory_iterator(config_.directory)) {
+        auto name = entry.path().filename().string();
+        bool keep = !entry.is_directory() || name == update.id || (state.previous && name == state.previous->id) ||
+            (running_ && name == running_->id);
+        if (!keep) {
+          fs::remove_all(entry.path());
+        }
+      }
+      found_.reset();
+      result.isNew = true;
+      result.manifest = found.raw;
+    } catch (const std::exception &e) {
+      result.error = e.what();
+    }
+    done(std::move(result));
+  };
+
+  // Each asset in turn, from a kept update when one has it with the same hash, else the server.
+  // Holds `fetching` weakly, as `fetching` holds it: the request in flight keeps both alive.
+  fetching->step = [this, weak = std::weak_ptr<Fetching>(fetching), kept, download, finish, done] {
+    auto fetching = weak.lock();
+    if (!fetching) {
+      return;
+    }
+    if (fetching->next == fetching->manifest.assets.size()) {
+      finish();
+      return;
+    }
+    const auto asset = fetching->manifest.assets[fetching->next++];
+    const auto path = fetching->paths.at(asset.key);
+    for (const auto &folder : kept) {
+      try {
+        auto keptPaths = folly::parseJson(readFile(folder / "assets.json"));
+        const auto *keptPath = keptPaths.get_ptr(asset.key);
+        if (keptPath == nullptr || !keptPath->isString() || !fs::exists(folder / keptPath->asString())) {
+          continue;
+        }
+        auto bytes = readFile(folder / keptPath->asString());
+        if (base64Url(crypto_->sha256(bytes)) == asset.hash) {
+          fetching->files.emplace_back(path, std::move(bytes));
+          fetching->step();
+          return;
+        }
+      } catch (const std::exception &) {
+        // A kept update with no readable assets.json has nothing to give.
+      }
+    }
+    download(asset.url, "the asset " + asset.key, [this, fetching, asset, path, done](std::string bytes) {
+      if (base64Url(crypto_->sha256(bytes)) != asset.hash) {
+        done({.error = "the asset " + asset.key + "'s hash is not the manifest's: the update was not kept"});
+        return;
+      }
+      fetching->files.emplace_back(path, std::move(bytes));
+      fetching->step();
+    });
+  };
+
+  download(found->launchUrl, "the launch asset", [this, fetching, done](std::string bytes) {
+    if (base64Url(crypto_->sha256(bytes)) != fetching->manifest.launchHash) {
+      done({.error = "the launch asset's hash is not the manifest's: it was not kept"});
+      return;
+    }
+    // Where the bundle asks for each asset, or by its key where it does not register it.
+    auto registered = assetPathsInBundle(bytes);
+    for (const auto &asset : fetching->manifest.assets) {
+      auto at = registered.find(asset.key);
+      fetching->paths[asset.key] = at != registered.end() ? at->second : "assets/" + asset.key + asset.fileExtension;
+    }
+    fetching->files.emplace_back("launch-asset", std::move(bytes));
+    fetching->step();
+  });
 }
 
 std::shared_ptr<NativeModule> makeUpdatesModule(

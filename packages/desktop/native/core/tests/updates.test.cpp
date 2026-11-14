@@ -1,5 +1,6 @@
 #include "fake-network.h"
 #include "ngn/bytes.h"
+#include "ngn/file-system.h"
 #include "ngn/native-module.h"
 #include "ngn/updates.h"
 
@@ -548,4 +549,157 @@ TEST_CASE("with code signing on, a rollback directive counts only when it is sig
   auto good = f.check(*client, kMultipart,
                       multipart("", "", directive, "sig=\"" + ngn::base64Encode("signed " + directive) + "\", keyid=\"main\""));
   CHECK(good.isRollBackToEmbedded);
+}
+
+namespace {
+
+const std::string kAssetsId = "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+
+// A bundle as Metro writes one, registering its two pictures: minified, and one as JSON from a
+// folder outside the project (`..`), at twice the scale.
+const std::string kBundle =
+    R"(__d(function(g,r,i,a,m,e,d){m.exports=r(d[0]).registerAsset({__packager_asset:!0,httpServerLocation:"/assets/img",)"
+    R"(width:64,height:64,scales:[1,2],hash:"x",name:"logo",type:"png",fileHashes:["a1b2c3","ffffff"]})},7,[8]);)"
+    "\n"
+    R"(__d(function(g,r,i,a,m,e,d){m.exports=r(d[0]).registerAsset({"__packager_asset":true,"httpServerLocation":"/assets/../shared",)"
+    R"("scales":[2],"hash":"y","name":"icon","type":"png","fileHashes":["d4e5f6"]})},9,[8]);)";
+
+// A manifest with two image assets besides its launch asset, kBundle unless `bundle` says.
+dynamic manifestWithAssets(const std::string &id, const std::string &logo = "logo bytes", const std::string &bundle = kBundle) {
+  auto m = manifest(id, "1.0.0", bundle);
+  m["assets"] = dynamic::array(
+      dynamic::object("key", "a1b2c3")("hash", hashOf(logo))("contentType", "image/png")("fileExtension", ".png")(
+          "url", "https://u.example/assets/a1b2c3?v=" + logo),
+      dynamic::object("key", "d4e5f6")("hash", hashOf("icon bytes"))("contentType", "image/png")("fileExtension", ".png")(
+          "url", "https://u.example/assets/d4e5f6"));
+  return m;
+}
+
+// Answers each request the fetch sends in turn, by URL, until it is done.
+ngn::UpdatesClient::FetchResult fetchAll(Fixture &f, ngn::UpdatesClient &client, const std::map<std::string, std::string> &bodies) {
+  std::optional<ngn::UpdatesClient::FetchResult> result;
+  size_t answered = f.http->sent.size();
+  client.fetch([&](auto r) { result = std::move(r); });
+  while (!result && answered < f.http->sent.size()) {
+    auto sent = f.http->sent[answered++];
+    auto body = bodies.find(sent->request.url);
+    uint16_t status = body == bodies.end() ? 404 : 200;
+    sent->callbacks.onResponse({.status = status, .headers = {}, .url = sent->request.url});
+    if (body != bodies.end()) {
+      sent->callbacks.onData(body->second, static_cast<int64_t>(body->second.size()));
+    }
+    sent->callbacks.onComplete("", false);
+  }
+  REQUIRE(result);
+  return *result;
+}
+
+} // namespace
+
+TEST_CASE("the paths a bundle registers its assets at are where React Native's resolver looks beside it") {
+  CHECK(ngn::assetPathsInBundle(kBundle) ==
+        std::map<std::string, std::string>{
+            {"a1b2c3", "assets/img/logo.png"}, {"ffffff", "assets/img/logo@2x.png"}, {"d4e5f6", "assets/_shared/icon@2x.png"}});
+  CHECK(ngn::assetPathsInBundle("no assets here").empty());
+  // A registration cut short, or with fewer scales than hashes, gives what it can.
+  CHECK(ngn::assetPathsInBundle(R"(registerAsset({httpServerLocation:"/a",scales:[1],name:"n",type:"png",fileHashes:["h1","h2"]}))") ==
+        std::map<std::string, std::string>{{"h1", "a/n.png"}});
+  CHECK(ngn::assetPathsInBundle(R"(registerAsset({httpServerLocation:"/a",name:"n")").empty());
+  // Nothing that leads out of the update's folder, or onto the files the client keeps there.
+  CHECK(ngn::assetPathsInBundle(R"(registerAsset({httpServerLocation:"/..",scales:[1],name:"x",type:"png",fileHashes:["h"]}))") ==
+        std::map<std::string, std::string>{{"h", "_x.png"}});
+  CHECK(ngn::assetPathsInBundle(R"(registerAsset({httpServerLocation:"/",scales:[1],name:"manifest",type:"json",fileHashes:["h"]}))").empty());
+  CHECK(ngn::assetPathsInBundle(R"(registerAsset({httpServerLocation:"/a",scales:[1],name:".",type:"",fileHashes:["h"]}))").empty());
+}
+
+TEST_CASE("a fetch downloads the update's other assets, checks each hash, and lays them out beside its bundle") {
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifestWithAssets(kAssetsId))).isAvailable);
+  auto launchUrl = "https://u.example/" + kAssetsId + ".js";
+  auto logoUrl = "https://u.example/assets/a1b2c3?v=logo bytes";
+
+  // One asset that does not hash to the manifest's: nothing is kept.
+  auto corrupt = fetchAll(
+      f, *client, {{launchUrl, kBundle}, {logoUrl, "logo bytes"}, {"https://u.example/assets/d4e5f6", "icon, truncated"}});
+  CHECK_FALSE(corrupt.isNew);
+  CHECK(corrupt.error.find("d4e5f6") != std::string::npos);
+  CHECK_FALSE(client->state().current);
+  CHECK_FALSE(fs::exists(f.dir / kAssetsId));
+
+  // One that is not there: nothing is kept either.
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifestWithAssets(kAssetsId))).isAvailable);
+  auto missing = fetchAll(f, *client, {{launchUrl, kBundle}, {logoUrl, "logo bytes"}});
+  CHECK_FALSE(missing.isNew);
+  CHECK(missing.error.find("404") != std::string::npos);
+  CHECK_FALSE(client->state().current);
+
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifestWithAssets(kAssetsId))).isAvailable);
+  auto fetched =
+      fetchAll(f, *client, {{launchUrl, kBundle}, {logoUrl, "logo bytes"}, {"https://u.example/assets/d4e5f6", "icon bytes"}});
+  CHECK(fetched.isNew);
+  CHECK(read(f.dir / kAssetsId / "assets/img/logo.png") == "logo bytes");
+  CHECK(read(f.dir / kAssetsId / "assets/_shared/icon@2x.png") == "icon bytes");
+
+  auto next = f.client();
+  CHECK(next->launch() == (f.dir / kAssetsId / "launch-asset").string());
+  next->markLaunchSucceeded();
+
+  // An asset gone from disk: the update is not launched, though its launch did not crash.
+  fs::remove(f.dir / kAssetsId / "assets/_shared/icon@2x.png");
+  auto after = f.client();
+  CHECK(after->launch() == "/app/Contents/Resources/main.jsbundle");
+}
+
+TEST_CASE("an asset the bundle does not register is kept by its key, where nothing looks for it") {
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  const std::string bundle = "no registrations";
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifestWithAssets(kAssetsId, "logo bytes", bundle))).isAvailable);
+  REQUIRE(fetchAll(f, *client,
+                   {{"https://u.example/" + kAssetsId + ".js", bundle},
+                    {"https://u.example/assets/a1b2c3?v=logo bytes", "logo bytes"},
+                    {"https://u.example/assets/d4e5f6", "icon bytes"}})
+              .isNew);
+  CHECK(read(f.dir / kAssetsId / "assets/a1b2c3.png") == "logo bytes");
+}
+
+TEST_CASE("a fetch takes an asset the kept update has with the same hash from disk, not the server") {
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifestWithAssets(kAssetsId))).isAvailable);
+  REQUIRE(fetchAll(f, *client,
+                   {{"https://u.example/" + kAssetsId + ".js", kBundle},
+                    {"https://u.example/assets/a1b2c3?v=logo bytes", "logo bytes"},
+                    {"https://u.example/assets/d4e5f6", "icon bytes"}})
+              .isNew);
+
+  const std::string later = "3b2c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifestWithAssets(later, "new logo"))).isAvailable);
+  auto before = f.http->sent.size();
+  auto fetched = fetchAll(
+      f, *client, {{"https://u.example/" + later + ".js", kBundle}, {"https://u.example/assets/a1b2c3?v=new logo", "new logo"}});
+  CHECK(fetched.isNew);
+  std::vector<std::string> urls;
+  for (size_t i = before; i < f.http->sent.size(); i++) {
+    urls.push_back(f.http->sent[i]->request.url);
+  }
+  CHECK(urls == std::vector<std::string>{"https://u.example/" + later + ".js", "https://u.example/assets/a1b2c3?v=new logo"});
+  CHECK(read(f.dir / later / "assets/img/logo.png") == "new logo");
+  CHECK(read(f.dir / later / "assets/_shared/icon@2x.png") == "icon bytes");
+}
+
+TEST_CASE("a manifest whose asset key or extension is not part of a file name is refused") {
+  for (auto [key, extension] : std::vector<std::pair<std::string, std::string>>{
+           {"../escape", ".png"}, {"", ".png"}, {"a/b", ".png"}, {"ok", "/png"}, {"ok", ".p/ng"}}) {
+    auto m = manifest(kAssetsId);
+    m["assets"] = dynamic::array(dynamic::object("key", key)("hash", hashOf("x"))("fileExtension", extension)("url", "https://u.example/x"));
+    CHECK_THROWS_AS(ngn::parseUpdateResponse(kJson, folly::toJson(m)), std::runtime_error);
+  }
+  auto ok = manifest(kAssetsId);
+  ok["assets"] = dynamic::array(dynamic::object("key", "ok")("hash", hashOf("x"))("url", "https://u.example/x"));
+  CHECK(ngn::parseUpdateResponse(kJson, folly::toJson(ok)).manifest->assets.size() == 1);
 }

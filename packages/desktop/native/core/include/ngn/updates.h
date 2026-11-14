@@ -1,4 +1,4 @@
-// The Expo Updates protocol client (protocol version 1), for bundle-only updates from a
+// The Expo Updates protocol client (protocol version 1), for updates from a
 // self-hosted server: EAS Update refuses `macos`, and the iOS client is Swift over RCT and
 // ExpoModulesCore, neither of which the desktop host has. Toolkit-free: requests go through the
 // Http interface (network.h), the hash and the signature through UpdateCrypto, which a backend
@@ -11,16 +11,19 @@
 //   multipart/mixed. A manifest is an update only when its runtime version is this build's, it is
 //   not the running update nor one that failed to launch, and, with code signing on, its
 //   `expo-signature` verifies against the certificate (RSASSA-PKCS1-v1_5 over SHA-256).
-// - fetch: downloads the checked update's launch asset and keeps it only when its SHA-256 is the
-//   manifest's `hash` (base64url). The update becomes the one the next launch runs.
+// - fetch: downloads the checked update's launch asset and its other assets, one after another,
+//   and keeps the update only when each one's SHA-256 is the manifest's `hash` (base64url). An
+//   asset a kept update already has with the same hash is taken from disk. Each asset goes where
+//   React Native's resolver looks for it beside the bundle (SourceCode's scriptURL), found from the
+//   bundle's own registration of it (assetPathsInBundle); `assets.json` in the update's folder
+//   records where. The update becomes the one the next launch runs.
 // - launch: what the host loads at startup, the newest kept update or the embedded bundle. A launch
 //   of a downloaded update is marked before it starts and cleared once it has run for a while
 //   (markLaunchSucceeded); a marker still set at the next startup means that launch crashed, so the
 //   update is marked failed and the one before it, or the embedded bundle, runs instead. Expo's own
 //   recovery covers JavaScript errors only; a native crash needs this marker.
 //
-// Only the launch asset is downloaded: a bundle that loads its other assets from the server by URL
-// works, and assets packaged with the app keep working, but a new asset only in the update does not.
+// `assetRequestHeaders` from a multipart response's extensions are not sent with the asset requests.
 #pragma once
 
 #include "ngn/network.h"
@@ -72,12 +75,29 @@ std::string base64Url(const std::string &bytes);
 // Nothing when it does not parse.
 std::optional<std::map<std::string, std::string>> parseSignatureHeader(const std::string &header);
 
+// One of a manifest's `assets`: its `key`, the file hash the bundle registers it by, and where it
+// comes from.
+struct UpdateAsset {
+  std::string key;
+  std::string hash;
+  std::string url;
+  // With its dot, as `.png`, or empty.
+  std::string fileExtension;
+};
+
+// Where a bundle's assets go beside it, by file hash, read from Metro's `registerAsset` calls in
+// it: `<httpServerLocation>/<name>[@<scale>x].<type>`, as React Native's resolver asks for them
+// next to a bundle on disk, with `../` as `_`. A path that would lead out of the folder, or onto a
+// file the client keeps there, is left out. Plain JavaScript only: Hermes bytecode gives nothing.
+std::map<std::string, std::string> assetPathsInBundle(const std::string &bundle);
+
 struct UpdateManifest {
   std::string id;
   std::string createdAt;
   std::string runtimeVersion;
   std::string launchUrl;
   std::string launchHash;
+  std::vector<UpdateAsset> assets;
   // The manifest as the server sent it, which JavaScript gets.
   folly::dynamic raw;
 };
