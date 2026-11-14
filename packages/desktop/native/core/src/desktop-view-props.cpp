@@ -32,6 +32,7 @@ DesktopProps parseDesktopProps(const PropsParserContext &context, const DesktopP
       .onDoubleClick = convertRawProp(context, rawProps, "onDoubleClick", source.onDoubleClick, false),
       .onContextMenu = convertRawProp(context, rawProps, "onContextMenu", source.onContextMenu, false),
       .onWheel = convertRawProp(context, rawProps, "onWheel", source.onWheel, false),
+      .contextMenu = convertRawProp(context, rawProps, "contextMenu", source.contextMenu, folly::dynamic(nullptr)),
   };
 }
 
@@ -53,8 +54,12 @@ DesktopProps desktopProps(const Props &props) {
   if (const auto *desktop = dynamic_cast<const HasDesktopProps *>(&props)) {
     return desktop->desktop;
   }
-  if (const auto *modal = dynamic_cast<const DesktopModalProps *>(&props); modal && modal->anchor != 0) {
-    return DesktopProps{.anchor = modal->anchor};
+  if (const auto *modal = dynamic_cast<const DesktopModalProps *>(&props)) {
+    DesktopProps out{.presentation = modalPresentation(*modal)};
+    if (modal->anchor != 0) {
+      out.anchor = modal->anchor;
+    }
+    return out;
   }
   return {};
 }

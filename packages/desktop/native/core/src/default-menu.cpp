@@ -50,7 +50,14 @@ std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options) {
               item("Delete", MenuCommand::Delete),
               item("Select All", MenuCommand::SelectAll, "a"),
           }),
-      menu("View", {item("Enter Full Screen", MenuCommand::ToggleFullScreen, "f", Command | Control)}),
+      menu(
+          "View",
+          {
+              item("Back", MenuCommand::Back, "["),
+              item("Forward", MenuCommand::Forward, "]"),
+              separator(),
+              item("Enter Full Screen", MenuCommand::ToggleFullScreen, "f", Command | Control),
+          }),
       menu(
           "Window",
           {

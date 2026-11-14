@@ -5,6 +5,8 @@
 #include <react/http/IHttpClient.h>
 #include <react/http/IWebSocketClient.h>
 #include <react/logging/DefaultOnJsErrorHandler.h>
+#include <react/renderer/scheduler/Scheduler.h>
+#include <react/renderer/uimanager/UIManager.h>
 #include <react/runtime/ReactHost.h>
 #include <react/utils/RunLoopObserverManager.h>
 
@@ -120,6 +122,13 @@ void Runtime::startSurface(SurfaceId surfaceId, const std::string &moduleName, c
   host_->startSurface(surfaceId, moduleName, folly::dynamic::object(), constraints(metrics), context(metrics));
 }
 
+void Runtime::stopSurface(SurfaceId surfaceId) {
+  std::lock_guard lock(mutex_);
+  if (surfaces_.erase(surfaceId) != 0 && host_) {
+    host_->stopSurface(surfaceId);
+  }
+}
+
 void Runtime::updateSurface(SurfaceId surfaceId, const SurfaceMetrics &metrics) {
   std::unique_lock lock(mutex_, std::try_to_lock);
   if (auto it = surfaces_.find(surfaceId); it != surfaces_.end()) {
@@ -129,6 +138,34 @@ void Runtime::updateSurface(SurfaceId surfaceId, const SurfaceMetrics &metrics) 
   if (lock.owns_lock() && host_ && !reloading_) {
     host_->setSurfaceConstraints(surfaceId, constraints(metrics), context(metrics));
   }
+}
+
+std::optional<SheetNode> Runtime::sheetNode(SurfaceId surfaceId, Tag tag) {
+  std::unique_lock lock(mutex_, std::try_to_lock);
+  std::optional<SheetNode> found;
+  if (!lock.owns_lock() || !host_ || reloading_) {
+    return found;
+  }
+  host_->runOnScheduler([&](Scheduler &scheduler) {
+    scheduler.getUIManager()->getShadowTreeRegistry().visit(surfaceId, [&](const ShadowTree &tree) {
+      std::function<const ShadowNode *(const ShadowNode &)> find = [&](const ShadowNode &node) -> const ShadowNode * {
+        if (node.getTag() == tag) {
+          return &node;
+        }
+        for (const auto &child : node.getChildren()) {
+          if (const auto *hit = find(*child)) {
+            return hit;
+          }
+        }
+        return nullptr;
+      };
+      auto root = tree.getCurrentRevision().rootShadowNode;
+      if (const auto *node = root ? find(*root) : nullptr) {
+        found = ngn::sheetNode(*node);
+      }
+    });
+  });
+  return found;
 }
 
 void Runtime::animationTick() {

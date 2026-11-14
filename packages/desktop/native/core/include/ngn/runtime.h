@@ -3,6 +3,7 @@
 // event beat, and owns the windows the surfaces mount into.
 #pragma once
 
+#include "ngn/desktop-modal.h"
 #include "ngn/dev-server.h"
 #include "ngn/module-registry.h"
 #include "ngn/mounting-manager.h"
@@ -66,8 +67,15 @@ class Runtime {
   // dropped. `done` gets whether the bundle loaded, on the reload's thread.
   void reload(std::function<void(bool)> done = nullptr);
 
+  // An empty `moduleName` starts a surface that runs nothing: one the app renders into itself, such
+  // as a second window's.
   void startSurface(SurfaceId surfaceId, const std::string &moduleName, const SurfaceMetrics &metrics);
+  void stopSurface(SurfaceId surfaceId);
   void updateSurface(SurfaceId surfaceId, const SurfaceMetrics &metrics);
+
+  // The view `tag` on `surfaceId` and those under it, as the shadow tree last laid them out: what
+  // a sheet sizes itself by (desktop-modal.h). Nothing when it is not there. Any thread.
+  std::optional<SheetNode> sheetNode(SurfaceId surfaceId, Tag tag);
 
   // The event beat: the backend calls it each time its UI thread's run loop is about to wait.
   void beat();

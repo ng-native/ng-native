@@ -58,6 +58,8 @@ include(cmake/react-native.cmake)
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
     core/src/accessibility.cpp
+    core/src/app-menus.cpp
+    core/src/app-windows.cpp
     core/src/bytes.cpp
     core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp
@@ -75,6 +77,7 @@ add_library(ngn_core STATIC
     core/src/native-module.cpp
     core/src/network.cpp
     core/src/text-layout-manager.cpp
+    core/src/tray-and-dock.cpp
     core/src/safe-areas.cpp
     core/src/screen-stacks.cpp
     core/src/view-tree.cpp

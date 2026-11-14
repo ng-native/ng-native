@@ -69,7 +69,9 @@ TEST_CASE("a modal's anchor is parsed and reported, and goes again when unset") 
   // A modal's props are still a View's, for the hit test.
   CHECK(dynamic_cast<const ViewProps *>(anchored.get()) != nullptr);
   auto unset = descriptor.cloneProps(parserContext, anchored, RawProps(folly::dynamic::object("anchor", nullptr)));
-  CHECK(ngn::desktopProps(*unset) == ngn::DesktopProps{});
+  CHECK_FALSE(ngn::desktopProps(*unset).anchor);
+  // Still transparent: a cover.
+  CHECK(ngn::desktopProps(*unset).presentation == ngn::ModalPresentation::Cover);
   CHECK(descriptor.getComponentName() == std::string("ModalHostView"));
 }
 

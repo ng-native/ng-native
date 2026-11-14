@@ -4,14 +4,49 @@ The macOS desktop host for Angular Native: React Native's C++ core and Hermes, m
 views into AppKit, and the `ng-native-desktop` command that builds and launches it. You install the
 package and never import it.
 
-Alpha, and early: the host draws views, text, text fields, images, scroll views, modals (as an
-in-window cover, or as an NSPopover when the modal has an `anchor`), takes clicks, hover and the
+Alpha, and early: the host draws views, text, text fields, images, scroll views, modals (as a
+sheet, an in-window cover, or an NSPopover when the modal has an `anchor`), takes clicks, hover and the
 scroll wheel, loads the app from the dev server with reload and Fast Refresh, runs React Native's
 layout animations, and has the default menu bar. React Native's iOS modules answer from the core:
 Linking, Appearance, AppState, DeviceInfo, PlatformConstants, I18nManager, Alert (NSAlert),
 Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob, FileReader,
-ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no sheets, second
-windows or React Native DevTools yet.
+ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no React Native
+DevTools yet, and react-native-screens' modal presentations still show as stack cards.
+
+A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its
+window, stacked on a sheet already there. It takes its content root's CSS width and height, or
+480 points wide and as tall as its content lays out, measured from the shadow tree in a second
+commit, and stays between 320x200 and the window. `fullScreen`, `overFullScreen` and `transparent`
+are a cover in the window below its title bar and toolbar, and a transparent one shows the window
+through. Escape and Cmd-W ask a sheet or a cover to close (`requestClose`), the one in front
+first, and Cmd-W stays on Close Window even when the app's own menu bar leaves it out. An alert
+with no key window runs app-modally, so its answer always arrives.
+
+The app starts on a surface the host never shows, and every window it opens (`AppWindows`, through
+the `NgNativeWindows` module) is an NSWindow with a surface of its own on the one runtime, shown
+when its first frame mounts. The close button, Cmd-W, Cmd-Q and a logout ask the app, which closes
+the window or answers the quit; the host never closes a window or quits on its own, and closing the
+last window leaves the app running. A Dock click with no window open sends `reopen`. A window's
+frame autosaves under its key (`main`, a route outlet or a `restoreKey`) in the app's preferences
+and comes back there, within its size limits, when a window with that key opens again. A reload
+closes the windows with no key and keeps the rest for five seconds for the reloaded app to open
+again. An app that renders on its own surface instead gets that surface in a window.
+
+The menu bar is the app's (`<menu-bar>`, through `NgNativeMenus`), drawn as NSApp's main menu
+once the app sets it, with the host's Developer menu kept before Help; until then the host's own
+default bar shows. An item with a `menuRole` is AppKit's own command (Copy reaches the focused
+field) unless the app handles it. An app's `[shortcut]` takes its key press before the menus do,
+except that Cmd-Z, X, C, V and A still reach a focused text input. A view's `[contextMenu]` shows
+as an NSMenu on a secondary click, and its choice comes back to the view. View > Back and Forward
+(Cmd-[ and Cmd-]), mouse buttons 4 and 5, a three-finger swipe and, with "Swipe between pages",
+a two-finger sideways swipe that nothing scrolls send `navigate` with the window's surface.
+
+Each `<tray-icon>` is an NSStatusItem (`NgNativeTray`): an SF Symbol as a template image or a named
+image, a title and a tooltip, with its menu on a click or a press when it has none. The `Dock`
+service's menu sits above the Dock menu's own items, and its bounce is
+`requestUserAttention`, cancelled by the function it answers. A reload clears the tray icons and
+the Dock menu until the reloaded app sets its own. The Dock badge is not drawn yet: it waits for a
+desktop Notifications source.
 
 The mouse reaches an app as on the web: every move goes to React Native's pointer events, which
 send `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)` and `(mouseout)` to the views
@@ -78,7 +113,8 @@ libraries above recompiles only that library.
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and
-  hover, Tab order, the accessibility mapping, the native controls' props and measuring, text
+  hover, Tab order, the app's windows and their autosaved frames (`app-windows.h`), menus, shortcuts and the back and
+  forward inputs (`app-menus.h`), the tray and the Dock (`tray-and-dock.h`), the accessibility mapping, the native controls' props and measuring, text
   measurement, the module registry and desktop view props, the dev server connection,
   the default menu bar and React Native's iOS-shaped modules in `src/modules`), with tests on an
   in-memory backend that run on Linux and macOS. A backend answers the OS calls through narrow

@@ -4,6 +4,7 @@
 // with an event listener or a cursor.
 #pragma once
 
+#include <folly/dynamic.h>
 #include <react/renderer/components/view/primitives.h>
 #include <react/renderer/core/ReactPrimitives.h>
 
@@ -17,6 +18,10 @@ using facebook::react::Tag;
 // CSS's `scrollbar-width` and `scrollbar-gutter`.
 enum class ScrollbarWidth { Auto, Thin, None };
 enum class ScrollbarGutter { Auto, Stable };
+
+// How a ModalHostView shows (desktop-modal.h): a sheet on its window, a cover in the window, or a
+// popover at its anchor.
+enum class ModalPresentation { Sheet, Cover, Popover };
 
 struct DesktopProps {
   // Unset means the toolkit's default for the component.
@@ -35,6 +40,11 @@ struct DesktopProps {
   bool onDoubleClick{false};
   bool onContextMenu{false};
   bool onWheel{false};
+  // The `contextMenu` prop: the entries of the menu a secondary click shows, as the app sends them
+  // (app-menus.h), or null for none.
+  folly::dynamic contextMenu{nullptr};
+  // ModalHostView only.
+  ModalPresentation presentation{ModalPresentation::Sheet};
 
   bool operator==(const DesktopProps &other) const = default;
 };
@@ -48,7 +58,7 @@ struct HasDesktopProps {
 // hit test, the cursor and Tab order all read it, and a flattened view is not mounted.
 inline bool formsStackingContext(const DesktopProps &props) {
   return props.focusable.value_or(false) || props.tabIndex.has_value() || props.cursor.has_value() ||
-      props.onDoubleClick || props.onContextMenu || props.onWheel;
+      props.onDoubleClick || props.onContextMenu || props.onWheel || !props.contextMenu.isNull();
 }
 
 } // namespace ngn

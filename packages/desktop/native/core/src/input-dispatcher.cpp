@@ -1,5 +1,7 @@
 #include "ngn/input-dispatcher.h"
 
+#include "ngn/app-menus.h"
+
 #include <react/renderer/components/view/TouchEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
 
@@ -122,6 +124,31 @@ bool InputDispatcher::contextMenu(const PointerInput &input) {
       &DesktopProps::onContextMenu,
       "contextMenu",
       locationPayload(container->second, chain.back(), input.point));
+}
+
+std::optional<InputDispatcher::ContextMenuTarget> InputDispatcher::contextMenuAt(const PointerInput &input) const {
+  auto container = containers_.find(input.container);
+  if (container == containers_.end()) {
+    return std::nullopt;
+  }
+  auto chain = tree_.hitTest(container->second.root, input.point);
+  for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+    const auto *node = tree_.find(*it);
+    if (node == nullptr || !node->view.props) {
+      continue;
+    }
+    auto menu = parseMenu(desktopProps(*node->view.props).contextMenu);
+    if (!menu.empty()) {
+      return ContextMenuTarget{.tag = *it, .items = std::move(menu)};
+    }
+  }
+  return std::nullopt;
+}
+
+void InputDispatcher::contextMenuSelect(Tag tag, const std::string &id) {
+  if (const auto *node = tree_.find(tag)) {
+    emitElementEvent(*node, "contextMenuSelect", folly::dynamic::object("id", id));
+  }
 }
 
 bool InputDispatcher::wheel(const PointerInput &input, const WheelDelta &delta) {

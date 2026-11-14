@@ -18,6 +18,9 @@
 // Set once by the host: each container's size and safe-area insets as they change (and nullopt
 // as it goes), keyed by the tag its hit test starts from.
 @property (class, nonatomic) std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> insetsChanged;
+// Set once by the host: shows the context menu of the view under a secondary click, if one has a
+// `contextMenu` prop. True when it showed one.
+@property (class, nonatomic) std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)> contextMenuShower;
 // Shows the cursor the core asked for (input-dispatcher.h), and keeps showing it over the views
 // AppKit would reset it on.
 + (void)showCursor:(facebook::react::Cursor)cursor;

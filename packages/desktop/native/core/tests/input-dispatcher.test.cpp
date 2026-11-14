@@ -241,6 +241,31 @@ TEST_CASE("a context menu goes to a view that opts in, and says whether one did"
   CHECK(f.input.events.empty());
 }
 
+TEST_CASE("a right click finds the nearest view with a context menu, and the choice goes back to that view") {
+  Fixture f;
+  auto menu = folly::dynamic::array(
+      folly::dynamic::object("id", "0")("label", "Rename"), folly::dynamic::object("separator", true),
+      folly::dynamic::object("id", "2")("label", "Copy")("menuRole", "copy"));
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("contextMenu", menu)));
+
+  auto target = f.input.contextMenuAt(Fixture::at({35, 36}));
+  REQUIRE(target);
+  CHECK(target->tag == 2);
+  REQUIRE(target->items.size() == 3);
+  CHECK(target->items[0].title == "Rename");
+  CHECK(target->items[1].separator);
+  CHECK(target->items[2].command == ngn::MenuCommand::Copy);
+  CHECK_FALSE(f.input.contextMenuAt(Fixture::at({120, 120})));
+  CHECK_FALSE(f.input.contextMenuAt(Fixture::at({35, 36}, 9)));
+
+  f.input.contextMenuSelect(2, "0");
+  CHECK(f.input.events == Events{R"(contextMenuSelect 2 {"id":"0"})"});
+
+  // A menu taken away (null) is gone.
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("contextMenu", nullptr)));
+  CHECK_FALSE(f.input.contextMenuAt(Fixture::at({35, 36})));
+}
+
 TEST_CASE("a wheel turn goes to a view that opts in, with its deltas") {
   Fixture f;
   setProps(f.tree, 4, desktopView(folly::dynamic::object("onWheel", true)));

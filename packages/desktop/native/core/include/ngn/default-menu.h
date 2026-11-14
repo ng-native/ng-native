@@ -1,6 +1,7 @@
 // The menu bar every desktop app gets at launch, before any JavaScript runs: the app menu with
-// Quit, the standard text editing commands, the window commands and, for a bundle from a dev
-// server, the developer commands. A backend draws it and maps each command to the toolkit's own.
+// Quit, the standard text editing commands, View's Back and Forward, the window commands and, for
+// a bundle from a dev server, the developer commands. A backend draws it and maps each command to
+// the toolkit's own. The app's own bar replaces it once the app sets one (app-menus.h).
 #pragma once
 
 #include <string>
@@ -29,6 +30,14 @@ enum class MenuCommand {
   Zoom,
   BringAllToFront,
   Reload,
+  Find,
+  ToggleSidebar,
+  Print,
+  // Back and forward through the window's history: the app hears them as `navigate`.
+  Back,
+  Forward,
+  // An app's own item: the app hears it as `menuSelect` with the item's id.
+  AppItem,
 };
 
 // The key equivalent's modifiers, as a bitmask. Command is the platform's primary modifier
@@ -46,12 +55,24 @@ enum class MenuRole { None, App, Services, Window, Help };
 struct MenuItem {
   std::string title;
   MenuCommand command{MenuCommand::None};
-  // A key equivalent such as "q", or empty for none.
+  // A key equivalent: a character such as "q", a key named as the web names it ("ArrowLeft",
+  // "Enter", "F5"), or empty for none.
   std::string key;
   unsigned modifiers{0};
   bool separator{false};
   MenuRole role{MenuRole::None};
   std::vector<MenuItem> items;
+  // An app's item: the id the app knows it by, and how it is drawn.
+  std::string id;
+  bool disabled{false};
+  bool checked{false};
+  bool destructive{false};
+  std::string subtitle;
+  std::string sfSymbol;
+  // Its items are drawn in place, between separators, rather than as a submenu.
+  bool inlineItems{false};
+
+  bool operator==(const MenuItem &) const = default;
 };
 
 struct DefaultMenuOptions {

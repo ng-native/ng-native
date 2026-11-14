@@ -19,6 +19,15 @@ void AppKitBackend::addSurface(NGNSurfaceView *surfaceView) {
   surfaces_[@(surfaceView.surfaceId)] = surfaceView;
 }
 
+void AppKitBackend::removeSurface(SurfaceId surfaceId) {
+  [surfaces_ removeObjectForKey:@(surfaceId)];
+  [toolbars_ removeObjectForKey:@(surfaceId)];
+}
+
+NGNSurfaceView *AppKitBackend::surface(SurfaceId surfaceId) const {
+  return surfaces_[@(surfaceId)];
+}
+
 NGNView *AppKitBackend::view(Tag tag) const {
   return views_[@(tag)];
 }
