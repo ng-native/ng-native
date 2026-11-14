@@ -3,7 +3,7 @@
   "ceilings": {
     "launchMs": 500,
     "idleCpu": 0.1,
-    "idleWakeups": 0,
+    "idleWakeups": 2,
     "memoryMb": 80,
     "commitMs": 16
   },

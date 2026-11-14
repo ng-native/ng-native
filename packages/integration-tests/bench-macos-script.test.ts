@@ -13,7 +13,13 @@ const script = new URL('../../scripts/bench-macos.mjs', import.meta.url);
 const bench = (await import(script.href)) as {
   firstFrameMs(log: string): number | null;
   commitMs(log: string): number | null;
-  idleFromTop(output: string): { cpu: number; wakeups: number } | null;
+  idleFromCounter(output: string): { cpu: number; wakeups: number } | null;
+  median(values: (number | null)[]): number | null;
+  summarize(
+    runs: Record<string, number | null>[],
+    warmups?: number,
+  ): { cold: Record<string, number | null>[]; judged: Record<string, number | null> };
+  hostEnv(env: Record<string, string | undefined>): Record<string, string | undefined>;
   footprintMb(output: string): number | null;
   judge(
     measured: Record<string, number | null>,
@@ -37,18 +43,18 @@ describe('reading the host and the OS', () => {
     assert.equal(bench.commitMs(''), null);
   });
 
-  it("reads CPU and idle wakeups from top's second sample, the one over the interval", () => {
-    const top = [
-      'Processes: 600 total',
-      'PID    %CPU IDLEW',
-      '4242   12.3 300',
-      'Processes: 600 total',
-      'PID    %CPU IDLEW',
-      '4242   0.0  0',
-      '',
-    ].join('\n');
-    assert.deepEqual(bench.idleFromTop(top), { cpu: 0, wakeups: 0 });
-    assert.equal(bench.idleFromTop('Processes: 1 total\n'), null);
+  it('reads CPU and interrupt wakeups from the counter helper, and nothing from a failed run', () => {
+    assert.deepEqual(bench.idleFromCounter('cpu 0.012\nwakeups 3.50\n'), {
+      cpu: 0.012,
+      wakeups: 3.5,
+    });
+    assert.equal(bench.idleFromCounter('cpu 0.1\n'), null);
+    assert.equal(bench.idleFromCounter('rusage: No such process\n'), null);
+  });
+
+  it('asks the host to log its commit times', () => {
+    assert.equal(bench.hostEnv({ PATH: '/bin' }).NGN_LOG_COMMITS, '1');
+    assert.equal(bench.hostEnv({ PATH: '/bin' }).PATH, '/bin');
   });
 
   it('reads phys_footprint in megabytes, in whichever unit footprint prints', () => {
@@ -56,6 +62,31 @@ describe('reading the host and the OS', () => {
     assert.equal(bench.footprintMb('phys_footprint: 81920 KB'), 80);
     assert.equal(bench.footprintMb('phys_footprint: 1.5 GB'), 1536);
     assert.equal(bench.footprintMb('nothing here'), null);
+  });
+});
+
+describe('the cold launch rule', () => {
+  it('takes the median, and a missing value among the values is missing', () => {
+    assert.equal(bench.median([3, 1, 2]), 2);
+    assert.equal(bench.median([4, 1, 3, 2]), 2.5);
+    assert.equal(bench.median([1, null, 2]), null);
+    assert.equal(bench.median([]), null);
+  });
+
+  it('reports the warm-up launch apart and judges the median of the rest', () => {
+    const runs = [
+      { launchMs: 623, idleCpu: 0 },
+      { launchMs: 240, idleCpu: 0 },
+      { launchMs: 170, idleCpu: 0.2 },
+      { launchMs: 200, idleCpu: 0 },
+    ];
+    const { cold, judged } = bench.summarize(runs, 1);
+    assert.deepEqual(cold, [runs[0]]);
+    assert.deepEqual(judged, { launchMs: 200, idleCpu: 0 });
+  });
+
+  it('judges nothing when every launch was a warm-up', () => {
+    assert.deepEqual(bench.summarize([{ launchMs: 1 }], 1).judged, {});
   });
 });
 

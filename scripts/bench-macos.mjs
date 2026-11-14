@@ -9,18 +9,22 @@
  *
  * It measures, each against its ceiling in `bench-macos-budget.json`:
  * - `launchMs`: launch to the first frame, as the host logs it (`[ngn] first frame N ms`).
- * - `idleCpu` and `idleWakeups`: CPU and idle wakeups over 30 s once settled, from `top`'s second
- *   sample, which covers the interval.
+ * - `idleCpu` and `idleWakeups`: CPU and interrupt wakeups per second over 30 s once settled,
+ *   from `proc_pid_rusage` through `macos-wakeups.c`, compiled with `cc` on demand. It counts
+ *   timer wakeups, which `top`'s IDLEW misses.
  * - `memoryMb`: `phys_footprint` of the first window, from `footprint`.
  * - `commitMs`: the slowest commit the host logs (`[ngn] commit N ms`).
+ *
+ * The first launch of a bundle is cold: `--runs N` (default 3) launches follow one warm-up launch,
+ * which is reported on its own line and not judged; each metric is the median of the N.
  *
  * It fails closed: no host, no bundle, or a metric it could not read fails the run, as a breach
  * does. A breach passes only where the budget file waives it, with the reason and the pull request
  * that raised the ceiling. The release checklist (verify-release) runs it before every release.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -39,19 +43,46 @@ export function commitMs(log) {
 }
 
 /**
- * CPU and idle wakeups from `top -l 2 -s 30 -pid <pid> -stats pid,cpu,idlew`: the second sample,
- * since the first covers no interval.
+ * CPU and interrupt wakeups per second from `macos-wakeups.c`, which reads `proc_pid_rusage`.
+ * `top`'s IDLEW misses timer wakeups, which this counts.
  *
  * @param {string} output
  */
-export function idleFromTop(output) {
-  const rows = output
-    .split('\n')
-    .map((line) => line.trim().split(/\s+/))
-    .filter((cells) => cells.length >= 3 && /^\d+$/.test(cells[0] ?? ''));
-  const last = rows.at(-1);
-  if (rows.length < 2 || !last) return null;
-  return { cpu: Number(last[1]), wakeups: Number(last[2]) };
+export function idleFromCounter(output) {
+  const cpu = /^cpu ([\d.]+)$/m.exec(output);
+  const wakeups = /^wakeups ([\d.]+)$/m.exec(output);
+  return cpu && wakeups ? { cpu: Number(cpu[1]), wakeups: Number(wakeups[1]) } : null;
+}
+
+/** The host's environment: the caller's, with commit logging on. @param {NodeJS.ProcessEnv} env */
+export function hostEnv(env) {
+  return { ...env, NGN_LOG_COMMITS: '1' };
+}
+
+/** @param {(number | null)[]} values */
+export function median(values) {
+  if (!values.length || values.some((value) => value === null)) return null;
+  const sorted = /** @type {number[]} */ (values).toSorted((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * The cold launch rule: the first `warmups` launches are reported, not judged (a newly exported
+ * bundle compiles and caches on its first launch), and each metric is the median of the rest. A
+ * metric missing from any judged launch is missing.
+ *
+ * @param {Record<string, number | null>[]} runs
+ */
+export function summarize(runs, warmups = 1) {
+  const judgedRuns = runs.slice(warmups);
+  const metrics = new Set(judgedRuns.flatMap((run) => Object.keys(run)));
+  return {
+    cold: runs.slice(0, warmups),
+    judged: Object.fromEntries(
+      [...metrics].map((metric) => [metric, median(judgedRuns.map((run) => run[metric] ?? null))]),
+    ),
+  };
 }
 
 /** `phys_footprint` in megabytes, from `footprint <pid>`. @param {string} output */
@@ -124,10 +155,21 @@ function findBundle(given) {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** The wakeup counter, compiled into `dir` with the system C compiler. */
+function buildCounter(dir) {
+  const out = path.join(dir, 'macos-wakeups');
+  const built = spawnSync('cc', ['-O1', '-o', out, path.join(root, 'scripts', 'macos-wakeups.c')], {
+    stdio: 'inherit',
+  });
+  if (built.status !== 0) throw new Error('Could not compile scripts/macos-wakeups.c with cc.');
+  return out;
+}
+
 /** Launch the host on `bundle`, measure it, and quit it. */
-async function measure(host, bundle) {
+async function measure(host, bundle, counterBinary) {
   const child = spawn(host, [bundle, '--title', 'bench:macos'], {
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: hostEnv(process.env),
   });
   let log = '';
   child.stdout.on('data', (chunk) => (log += chunk));
@@ -137,10 +179,8 @@ async function measure(host, bundle) {
       await wait(100);
     await wait(5_000);
     const pid = String(child.pid);
-    const top = spawnSync('top', ['-l', '2', '-s', '30', '-pid', pid, '-stats', 'pid,cpu,idlew'], {
-      encoding: 'utf8',
-    });
-    const idle = idleFromTop(top.stdout ?? '');
+    const counter = spawnSync(counterBinary, [pid, '30'], { encoding: 'utf8' });
+    const idle = idleFromCounter(counter.stdout ?? '');
     const footprint = spawnSync('footprint', [pid], { encoding: 'utf8' });
     return {
       launchMs: firstFrameMs(log),
@@ -173,7 +213,21 @@ async function main(argv) {
   const bundle = findBundle(option('--bundle'));
   if (!bundle)
     throw new Error('No macOS bundle: the canary did not export, or --bundle is missing.');
-  const { results, ok } = judge(await measure(host, bundle), budget);
+  const runs = Number(option('--runs') ?? 3);
+  if (!Number.isInteger(runs) || runs < 1)
+    throw new Error('--runs takes a whole number, 1 or more.');
+  const dir = mkdtempSync(path.join(tmpdir(), 'bench-macos-'));
+  const all = [];
+  try {
+    const counter = buildCounter(dir);
+    for (let launch = 0; launch <= runs; launch += 1)
+      all.push(await measure(host, bundle, counter));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const { cold, judged } = summarize(all, 1);
+  console.log(`cold      (warm-up, not judged) ${JSON.stringify(cold[0])}`);
+  const { results, ok } = judge(judged, budget);
   for (const { metric, value, ceiling, status } of results) {
     console.log(`${status.padEnd(8)} ${metric.padEnd(12)} ${value ?? '-'} (ceiling ${ceiling})`);
   }
