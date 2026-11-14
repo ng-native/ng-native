@@ -100,6 +100,14 @@ describe('on macOS', () => {
     assert.equal(getByTestId('storage').children.length, 1, 'a custom row keeps its views');
   });
 
+  it('lets the content of a custom row fill the cell the host puts it in', async () => {
+    const { getByTestId } = await render(Fixture);
+    const row = getByTestId('storage').props;
+    assert.notEqual(row['flexDirection'], 'row', 'a column, whose content stretches across');
+    assert.notEqual(row['alignItems'], 'center');
+    assert.equal(row['paddingLeft'] ?? row['paddingHorizontal'] ?? row['padding'], undefined);
+  });
+
   it('selects an item the host reports, deselecting the others', async () => {
     const { instance, getByTestId, fabric } = await render(Fixture);
     let selects = 0;
@@ -162,6 +170,7 @@ describe('drawn, beside the content', () => {
         assert.ok(getByText('Inbox'));
         assert.ok(getByText('3'), 'the badge');
         assert.equal(getByTestId('inbox').props['label'], undefined);
+        assert.equal(getByTestId('storage').props['flexDirection'], 'row', 'a drawn row');
       } finally {
         registerPlatformComponents('ios');
       }

@@ -55,7 +55,8 @@ export type SidebarItemIcon = ButtonIcon;
     </ng-content>
   `,
   styles: `
-    :host {
+    /* A row drawn here. On macOS the host's cell is the row, and custom content fills it. */
+    :host(.sidebar-item-drawn) {
       flex-direction: row;
       align-items: center;
       gap: 8px;
@@ -82,6 +83,7 @@ export type SidebarItemIcon = ButtonIcon;
     '[drawable]': 'drawnHere ? undefined : drawableResource()',
     '[selected]': 'drawnHere ? undefined : selected()',
     '[attr.data-selected]': "selected() ? '' : null",
+    '[class.sidebar-item-drawn]': 'drawnHere',
   },
 })
 export class SidebarItem extends ControlBase implements SidebarRow {
