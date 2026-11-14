@@ -43,3 +43,13 @@ export function inAppWith<S, T>(
   const injector = Injector.create({ providers: [{ provide: token, useValue: source }] });
   return { service: runInInjectionContext(injector, make), destroy: () => injector.destroy() };
 }
+
+/**
+ * A service's `available()` once the platform has answered, for a service whose answer comes from
+ * an asynchronous question: the first read asks it, and the answer is there a turn later.
+ */
+export async function answered(service: { available(): boolean }): Promise<boolean> {
+  service.available();
+  await new Promise((resolve) => setTimeout(resolve));
+  return service.available();
+}

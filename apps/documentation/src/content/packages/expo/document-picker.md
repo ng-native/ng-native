@@ -64,6 +64,28 @@ component, or `.bytes()` for anything that is not text.
     leaves the platform's own reference, which only some readers understand.
   - `base64` - on the web, whether each `uri` is the file's contents as base64. On by default.
 
+- **`pickDirectory()`** - opens the system folder picker and resolves to the folder chosen, so a
+  file can be saved somewhere the user can find it, such as Files on iOS or a Drive folder on
+  Android. `null` when the user dismisses it, and where the platform has no folder picker; any
+  other failure is rethrown. It uses `expo-file-system`'s picker, so that package must be installed
+  too. Make a file in the folder with `createFile(name, mimeType)`, then write it with
+  [`FileSystem.write()`](/packages/expo/file-system).
+- **`save(options)`** - writes a file where the user chooses and resolves to where it went, or
+  `null` if they dismissed the dialog or there is nowhere to save. On iOS and Android the user
+  picks a folder and the file is made in it.
+  - `suggestedName` - the name to give the file, with its extension.
+  - `contents` - text, or bytes for anything that is not text. Or `fromFile`, a file to copy, such
+    as one from [the file system](/packages/expo/file-system).
+  - `types` - the MIME types it may be saved as, the first the default.
+
+```ts
+const where = await this.documents.save({
+  suggestedName: 'export.csv',
+  contents: csv,
+  types: ['text/csv'],
+});
+```
+
 ## Without the module
 
 On iOS and Android, a missing `expo-document-picker` - never installed, or installed without the app
@@ -72,7 +94,8 @@ a value only the module knows, throws a `MissingModuleError`. Its message names 
 commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `pick()` resolves to an empty list.
+On the web, and in a test that provides no fake, `pick()` resolves to an empty list and
+`pickDirectory()` and `save()` to `null`.
 
 ## Reference
 

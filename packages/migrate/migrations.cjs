@@ -17,6 +17,7 @@
  * @property {(host: import('./host.cjs').Host) => string[]} run Changes the files, and answers
  *   what is left for the developer to do, one line each.
  */
+const { availableSignal } = require('./available-signal.cjs');
 const { deviceReactNativeImport } = require('./device-react-native-import.cjs');
 const { engineNodeFields } = require('./engine-node-fields.cjs');
 const { engineNodeTag } = require('./engine-node-tag.cjs');
@@ -104,6 +105,13 @@ const migrations = [
     description:
       "Note each comparison with 'ios', each !== 'android' and each OS_VERSION comparison, which answer differently now that macOS is reported as 'macos'.",
     run: osComparisonsOnMacos,
+  },
+  {
+    name: 'available-signal',
+    version: '0.23.0',
+    description:
+      "Call each service's available, now a Signal<boolean> on every service, and stop awaiting it.",
+    run: availableSignal,
   },
 ];
 

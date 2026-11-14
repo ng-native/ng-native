@@ -1,3 +1,5 @@
+import { computed, signal, untracked, type Signal } from '@angular/core';
+
 /**
  * Reaching an Expo module without importing one.
  *
@@ -34,8 +36,35 @@ export function optional<T>(load: () => T): T | null {
   }
 }
 
-/** The platforms an Expo module is written for. */
-export type ModulePlatform = 'ios' | 'android' | 'web';
+/** The platforms an Expo module is written for, and the desktop OSes a desktop host serves. */
+export type ModulePlatform = 'ios' | 'android' | 'macos' | 'web';
+
+/** Whether `platform` is one of Apple's OSes, which share most of what iOS's native modules do. */
+export const isApple = (platform: ModulePlatform | null): boolean =>
+  platform === 'ios' || platform === 'macos';
+
+/** The OSes whose modules are the desktop host's TurboModules, never an Expo module. */
+const DESKTOP_PLATFORMS: ReadonlySet<ModulePlatform> = new Set(['macos']);
+
+/**
+ * Where a module exists, as `expoModule` takes it: the platforms its Expo module is written for,
+ * as a list, or that and the name of the desktop host's TurboModule that implements the same slice
+ * on a desktop OS.
+ */
+export type ModuleOptions =
+  | readonly ModulePlatform[]
+  | {
+      /** The platforms the Expo module is written for. iOS and Android when left out. */
+      readonly platforms?: readonly ModulePlatform[];
+      /**
+       * The desktop host's TurboModule that stands in for the Expo module on a desktop OS:
+       * `'NgNativeHaptics'`. Or, for a package that is not emptied on a desktop OS because the
+       * desktop host registers the native module its JavaScript uses, the loader to call there.
+       * Naming either counts the desktop OSes among the module's platforms, so a desktop host
+       * without it throws a `MissingModuleError` rather than going inert.
+       */
+      readonly desktop?: string | (() => unknown);
+    };
 
 /**
  * A module the app needs and does not have: the package is not installed, or it is and the app was
@@ -52,9 +81,12 @@ export class MissingModuleError extends Error {
       message ??
         (platform === 'web'
           ? `${module} is not installed. Install it with "npx expo install ${module}", then restart the dev server.`
-          : `${module} is not in this build of the app. Install it with "npx expo install ${module}", ` +
-            `then rebuild the app ("npx expo run:${platform}", or a new EAS build): a development ` +
-            `build, and Expo Go, contain only the native modules they were built with.`),
+          : DESKTOP_PLATFORMS.has(platform)
+            ? `${module} has no module in this build of the desktop host. Rebuild it with "npm run macos": ` +
+              `the desktop host contains only the native modules it was built with.`
+            : `${module} is not in this build of the app. Install it with "npx expo install ${module}", ` +
+              `then rebuild the app ("npx expo run:${platform}", or a new EAS build): a development ` +
+              `build, and Expo Go, contain only the native modules they were built with.`),
       { cause },
     );
     this.module = module;
@@ -115,6 +147,7 @@ const NATIVE_MODULES: Readonly<Record<string, string>> = {
   'expo-media-library': 'ExpoMediaLibrary',
   'expo-network': 'ExpoNetwork',
   'expo-notifications': 'ExpoNotificationPresenter',
+  'expo-print': 'ExpoPrint',
   'expo-screen-capture': 'ExpoScreenCapture',
   'expo-screen-orientation': 'ExpoScreenOrientation',
   'expo-secure-store': 'ExpoSecureStore',
@@ -154,13 +187,23 @@ function nativeHalfMissing(module: string, platform: ModulePlatform | null): boo
  * `load` answering null or undefined counts as missing too: `requireOptionalNativeModule` answers
  * null rather than throwing. So does a package whose native half is not in the build, which `load`
  * is not called for: see `nativeHalfMissing`.
+ *
+ * On a desktop OS `load` is never called, because every `expo-*` package is an empty module there.
+ * The module is the desktop host's TurboModule `options.desktop` names, which implements the same
+ * slice, or what its desktop loader answers, and where it gives neither the service is inert.
  */
 export function expoModule<T>(
   module: string,
   load: () => T | null | undefined,
-  platforms: readonly ModulePlatform[] = ['ios', 'android'],
+  options: ModuleOptions = {},
 ): T | null {
   const platform = currentPlatform();
+  const { platforms = ['ios', 'android'], desktop } = Array.isArray(options)
+    ? { platforms: options as readonly ModulePlatform[] }
+    : (options as Exclude<ModuleOptions, readonly ModulePlatform[]>);
+  if (platform !== null && DESKTOP_PLATFORMS.has(platform)) {
+    return desktopModule<T>(module, platform, desktop);
+  }
   let failure: unknown;
   try {
     const loaded = nativeHalfMissing(module, platform) ? null : load();
@@ -170,6 +213,35 @@ export function expoModule<T>(
   }
   if (platform === null || !platforms.includes(platform)) return null;
   return missing(new MissingModuleError(module, platform, failure));
+}
+
+/**
+ * The desktop host's TurboModule named `desktop`, on a desktop OS, where every `expo-*` package is
+ * an empty module and an Expo loader is never called. Null when the call names none, so the
+ * service is inert; the stand-in that says to rebuild the desktop host when it names one the
+ * desktop host does not have.
+ */
+function desktopModule<T>(
+  module: string,
+  platform: ModulePlatform,
+  desktop?: string | (() => unknown),
+): T | null {
+  if (!desktop) return null;
+  let failure: unknown;
+  try {
+    const found = typeof desktop === 'function' ? desktop() : turboModule(desktop);
+    if (found != null) return found as T;
+  } catch (error) {
+    failure = error;
+  }
+  return missing(new MissingModuleError(module, platform, failure));
+}
+
+/** The TurboModule registered as `name`, or null. */
+function turboModule(name: string): unknown {
+  const registry = (require('react-native') as typeof import('react-native'))
+    .TurboModuleRegistry as { get(name: string): unknown };
+  return registry.get(name);
 }
 
 /** What Angular asks of any injected value, and `await` of any value: never the module's. */
@@ -224,6 +296,52 @@ export function present<T>(value: T | null | undefined): T | null {
 }
 
 /**
+ * Whether a service's module is here, as its `available` signal: false where it is null, and where
+ * it is missing from the build. Fixed for the life of the app, since a build's modules do not change.
+ */
+export function presence(native: unknown): Signal<boolean> {
+  return signal(present(native) !== null).asReadonly();
+}
+
+/**
+ * The answer to an asynchronous question, as a signal: false until it is answered, and false when
+ * asking fails. The question is first asked when the answer is first read, so a service nobody asks
+ * calls nothing native, and again each time the returned `ask` is called after that.
+ */
+export function asked(question: () => Promise<boolean> | null | undefined): {
+  readonly answer: Signal<boolean>;
+  ask(): void;
+} {
+  const answer = signal(false);
+  let started = false;
+  const send = () => {
+    let pending: Promise<boolean> | null | undefined;
+    try {
+      pending = question();
+    } catch {
+      pending = null;
+    }
+    void Promise.resolve(pending ?? false).then(
+      (yes) => answer.set(yes === true),
+      () => answer.set(false),
+    );
+  };
+  const read = computed(() => {
+    if (!started) {
+      started = true;
+      untracked(send);
+    }
+    return answer();
+  });
+  return {
+    answer: read,
+    ask: () => {
+      if (started) send();
+    },
+  };
+}
+
+/**
  * As `expoModule`, throwing at once where the module is missing: for a function an app calls
  * itself, a player, a database or the splash screen, where no token is left marked and a failure
  * after the call would be caught and lost.
@@ -231,9 +349,9 @@ export function present<T>(value: T | null | undefined): T | null {
 export function expoModuleNow<T>(
   module: string,
   load: () => T | null | undefined,
-  platforms?: readonly ModulePlatform[],
+  options?: ModuleOptions,
 ): T | null {
-  const found = expoModule(module, load, platforms);
+  const found = expoModule(module, load, options);
   const error = found && missingErrors.get(found as object);
   if (error) throw error;
   return found;

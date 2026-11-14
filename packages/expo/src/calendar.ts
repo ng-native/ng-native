@@ -24,14 +24,14 @@
  * with their own `update()` and `delete()`, and a calendar makes its own events and reminders. The
  * service is where the handles are reached from, so a test can provide them, and where the
  * permissions are: full access to the calendars, the write-only access iOS 17 added for an app
- * that only adds events, and on iOS the reminders.
+ * that only adds events, and on iOS and macOS the reminders.
  *
- * What exists on iOS alone - the default calendar, the calendar picker, the sources and the
- * reminders - answers null, nothing or refused on Android rather than throwing, so code shared by
- * both runs on both. Without the module installed, every list answers empty, every lookup null,
+ * What exists on Apple's OSes alone - the default calendar, the sources and the reminders, and on
+ * iOS the calendar picker - answers null, nothing or refused on Android rather than throwing, so
+ * code shared by both runs on both. Without the module installed, every list answers empty, every lookup null,
  * and the permissions are refused.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import type {
   Availability as ExpoAvailability,
   EntityTypes as ExpoEntityTypes,
@@ -41,7 +41,7 @@ import type {
   Frequency as ExpoFrequency,
   Source,
 } from 'expo-calendar';
-import { currentPlatform, expoModule, type ModulePlatform } from './native.ts';
+import { currentPlatform, expoModule, isApple, type ModulePlatform, presence } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-calendar');
@@ -102,13 +102,16 @@ export class Calendar {
     { factory: () => expoModule('expo-calendar', () => require('expo-calendar') as Expo) },
   );
 
-  /** Overridden in a test to be on iOS, where the calls only iOS has can be made. */
+  /** Overridden in a test to be on iOS or macOS, where the calls only Apple's OSes have can be made. */
   static readonly PLATFORM = new InjectionToken<ModulePlatform | null>(
     'angular-native.calendarPlatform',
     { factory: currentPlatform },
   );
 
   private readonly native = inject(Calendar.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
   private readonly platform = inject(Calendar.PLATFORM);
 
   /** Full access: reading the calendars and their events, as well as adding to them. */
@@ -120,10 +123,11 @@ export class Calendar {
    */
   readonly writePermission: Permission = this.calendarPermission(true);
 
-  /** The reminders, on iOS. Refused on Android, which keeps none in its calendars. */
+  /** The reminders, on iOS and macOS. Refused on Android, which keeps none in its calendars. */
   readonly remindersPermission: Permission = Permission.of(
-    () => (this.ios() ? this.native!.getRemindersPermissions() : Promise.resolve(UNAVAILABLE)),
-    () => (this.ios() ? this.native!.requestRemindersPermissions() : Promise.resolve(UNAVAILABLE)),
+    () => (this.apple() ? this.native!.getRemindersPermissions() : Promise.resolve(UNAVAILABLE)),
+    () =>
+      this.apple() ? this.native!.requestRemindersPermissions() : Promise.resolve(UNAVAILABLE),
   );
 
   /**
@@ -139,9 +143,9 @@ export class Calendar {
     return (await this.native?.ExpoCalendar.get(id)) ?? null;
   }
 
-  /** The calendar new events go in unless another is chosen, on iOS. Null on Android. */
+  /** The calendar new events go in unless another is chosen, on iOS and macOS. Null on Android. */
   defaultCalendar(): ExpoCalendar | null {
-    return this.ios() ? this.native!.getDefaultCalendarSync() : null;
+    return this.apple() ? this.native!.getDefaultCalendarSync() : null;
   }
 
   /** A new calendar, with the module's own details: `title`, `color`, `entityType` and the rest. */
@@ -149,9 +153,12 @@ export class Calendar {
     return (await this.native?.createCalendar(...details)) ?? null;
   }
 
-  /** On iOS, the system's calendar picker. Null if the user cancels it, and on Android. */
+  /**
+   * On iOS, the system's calendar picker. Null if the user cancels it, and elsewhere: EventKitUI is
+   * iOS only.
+   */
   async pickCalendar(): Promise<ExpoCalendar | null> {
-    return this.ios() ? this.native!.presentPicker() : null;
+    return this.native !== null && this.platform === 'ios' ? this.native.presentPicker() : null;
   }
 
   /**
@@ -173,14 +180,14 @@ export class Calendar {
     return (await this.native?.ExpoCalendarEvent.get(id)) ?? null;
   }
 
-  /** The reminder with this id, on iOS, or null. */
+  /** The reminder with this id, on iOS and macOS, or null. */
   async reminder(id: string): Promise<ExpoCalendarReminder | null> {
-    return this.ios() ? this.native!.ExpoCalendarReminder.get(id) : null;
+    return this.apple() ? this.native!.ExpoCalendarReminder.get(id) : null;
   }
 
-  /** The accounts the calendars belong to, on iOS: iCloud, Exchange, a subscription. */
+  /** The accounts the calendars belong to, on iOS and macOS: iCloud, Exchange, a subscription. */
   sources(): Source[] {
-    return this.ios() ? this.native!.getSourcesSync() : [];
+    return this.apple() ? this.native!.getSourcesSync() : [];
   }
 
   private calendarPermission(writeOnly: boolean): Permission {
@@ -190,8 +197,8 @@ export class Calendar {
     );
   }
 
-  /** The module is here and the app is on iOS, where the calls it has only there exist. */
-  private ios(): boolean {
-    return this.native !== null && this.platform === 'ios';
+  /** The module is here and the app is on an Apple OS, where the calls EventKit has exist. */
+  private apple(): boolean {
+    return this.native !== null && isApple(this.platform);
   }
 }

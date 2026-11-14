@@ -10,8 +10,8 @@
  * Constants, read once, rather than signals: none of them changes while the app runs. Anything the
  * platform does not say is null, and so is everything from a module that is not installed.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule } from './native.ts';
+import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
+import { expoModule, present } from './native.ts';
 
 export type DeviceKind = 'phone' | 'tablet' | 'desktop' | 'tv' | 'unknown';
 
@@ -59,6 +59,11 @@ export class AppInfo {
   });
 
   private readonly native = inject(AppInfo.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = signal(
+    present(this.native.application) !== null || present(this.native.device) !== null,
+  ).asReadonly();
 
   /** The version people see: `CFBundleShortVersionString`, or Android's `versionName`. */
   // Read when asked, so a module missing from the build says so then, not as the service is made.

@@ -18,6 +18,7 @@ export {
   expoModule,
   optional,
   unavailable,
+  type ModuleOptions,
   type ModulePlatform,
 } from './native.ts';
 export { NATIVE_VIEWS, registerNativeViews } from './community-views.ts';

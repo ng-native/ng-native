@@ -9,8 +9,8 @@
  * question without the throw, and sidesteps the enum its functions take. The package still has
  * to be installed - that is what links the native side.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule, optional, present } from './native.ts';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
+import { expoModule, optional, presence } from './native.ts';
 
 /** How hard the collision felt. `rigid` and `soft` are iOS 13+. */
 export type ImpactStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
@@ -55,9 +55,7 @@ export class Haptics {
   private readonly native = inject(Haptics.SOURCE);
 
   /** Whether the native module is installed at all. */
-  get available(): boolean {
-    return present(this.native) !== null;
-  }
+  readonly available: Signal<boolean> = presence(this.native);
 
   /** A collision between interface elements. */
   impact(style: ImpactStyle = 'medium'): void {

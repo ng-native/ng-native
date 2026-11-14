@@ -12,11 +12,24 @@ import { reactNative } from './react-native.ts';
  * too. A test provides the OS it wants.
  */
 export const OS = new InjectionToken<'ios' | 'android' | 'macos' | 'web'>('angular-native.os', {
-  factory: () => {
-    const os = reactNative()?.Platform.OS ?? nativePlatform();
-    return os === 'android' || os === 'macos' || os === 'web' ? os : 'ios';
-  },
+  factory: platformOs,
 });
+
+/** The OS as React Native, or off a device the engine, reports it: what `OS` answers unprovided. */
+function platformOs(): 'ios' | 'android' | 'macos' | 'web' {
+  const os = reactNative()?.Platform.OS ?? nativePlatform();
+  return os === 'android' || os === 'macos' || os === 'web' ? os : 'ios';
+}
+
+/**
+ * The `OS` a service is made under: the one provided, or, in an injector with no root to make it
+ * in, the platform's own.
+ */
+export const injectOs = (): 'ios' | 'android' | 'macos' | 'web' =>
+  inject(OS, { optional: true }) ?? platformOs();
+
+/** Whether `os` is a phone and tablet OS, with a status bar and a software keyboard. */
+export const isPhoneOs = (os: string): boolean => os === 'ios' || os === 'android';
 
 /**
  * Whether the app runs on a desktop OS: macOS today. Worked out from `OS`, so the two cannot
@@ -24,4 +37,16 @@ export const OS = new InjectionToken<'ios' | 'android' | 'macos' | 'web'>('angul
  */
 export const DESKTOP = new InjectionToken<boolean>('angular-native.desktop', {
   factory: () => inject(OS) === 'macos',
+});
+
+/**
+ * Whether the app runs on one of Apple's OSes: iOS (iPadOS included) or macOS. For a check that
+ * Apple's OSes share, written as `inject(APPLE)` rather than `OS === 'ios'`, which a Mac fails.
+ * Worked out from `OS`, as `DESKTOP` is.
+ */
+export const APPLE = new InjectionToken<boolean>('angular-native.apple', {
+  factory: () => {
+    const os = inject(OS);
+    return os === 'ios' || os === 'macos';
+  },
 });

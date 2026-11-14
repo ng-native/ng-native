@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { StoreReview, type NativeStoreReview } from '@ng-native/expo/store-review';
-import { serviceWith } from './injected.ts';
+import { answered, serviceWith } from './injected.ts';
 
 function platform(options: { available?: boolean; url?: string | null } = {}) {
   const { available = true, url = 'https://apps.apple.com/app/id1' } = options;
@@ -28,7 +28,7 @@ describe('store review', () => {
   it('reaches every function of the module under its own name, and hands back its answers', async () => {
     const native = platform();
     const review = serviceOn(native);
-    assert.equal(await review.available(), true);
+    assert.equal(await answered(review), true);
     assert.equal(await review.hasAction(), true);
     assert.equal(review.storeUrl(), 'https://apps.apple.com/app/id1');
     await review.request();
@@ -37,14 +37,14 @@ describe('store review', () => {
 
   it('passes on a store with no review prompt and no URL', async () => {
     const review = serviceOn(platform({ available: false, url: null }));
-    assert.equal(await review.available(), false);
+    assert.equal(await answered(review), false);
     assert.equal(await review.hasAction(), false);
     assert.equal(review.storeUrl(), null);
   });
 
   it('is inert rather than broken with no module installed', async () => {
     const review = serviceOn(null);
-    assert.equal(await review.available(), false);
+    assert.equal(await answered(review), false);
     assert.equal(await review.hasAction(), false);
     assert.equal(review.storeUrl(), null);
     await review.request();

@@ -70,6 +70,9 @@ export class Direction implements DirectionContext {
   });
 
   private readonly source = inject(Direction.SOURCE);
+
+  /** Whether the service is here: on every OS, where it answers what the OS reports. */
+  readonly available: Signal<boolean> = signal(true).asReadonly();
   private readonly direction = signal<LayoutDirection>(this.source.current());
 
   readonly current: Signal<LayoutDirection> = this.direction.asReadonly();

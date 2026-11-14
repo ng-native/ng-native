@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { ScreenCapture, type NativeScreenCapture } from '@ng-native/expo/screen-capture';
-import { inAppWith, serviceWith } from './injected.ts';
+import { answered, inAppWith, serviceWith } from './injected.ts';
 
 function platform(granted = true) {
   const calls: unknown[][] = [];
@@ -49,7 +49,7 @@ describe('screen capture', () => {
   it('reaches every function of the module under its own name, with its arguments', async () => {
     const native = platform();
     const capture = serviceOn(native);
-    assert.equal(await capture.available(), true);
+    assert.equal(await answered(capture), true);
     await capture.prevent('payment');
     await capture.allow('payment');
     await capture.prevent();
@@ -90,7 +90,7 @@ describe('screen capture', () => {
   it('is inert rather than broken with no module installed', async () => {
     const capture = serviceOn(null);
     assert.equal(capture.screenshots(), 0);
-    assert.equal(await capture.available(), false);
+    assert.equal(await answered(capture), false);
     assert.equal(await capture.permission.ensure(), false);
     await capture.prevent();
     await capture.allow();

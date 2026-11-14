@@ -68,6 +68,9 @@ export class ColorScheme {
   );
 
   private readonly source = inject(ColorScheme.SOURCE);
+
+  /** Whether the service is here: on every OS, where it answers what the OS reports. */
+  readonly available: Signal<boolean> = signal(true).asReadonly();
   private readonly scheme = signal<Scheme>(this.source.current());
 
   readonly current: Signal<Scheme> = this.scheme.asReadonly();

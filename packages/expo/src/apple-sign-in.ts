@@ -31,7 +31,7 @@ import type {
   AppleAuthenticationCredentialState as ExpoCredentialState,
   AppleAuthenticationScope as ExpoScope,
 } from 'expo-apple-authentication';
-import { expoModule, present } from './native.ts';
+import { expoModule, present, asked } from './native.ts';
 
 type Expo = typeof import('expo-apple-authentication');
 
@@ -115,10 +115,12 @@ export class AppleSignIn {
   /** How many times the user has revoked the app's Apple ID credential while it ran. */
   readonly revoked: Signal<number> = this.revocations.asReadonly();
 
-  /** Whether Sign in with Apple can be offered: iOS 13 and later, with the module installed. */
-  async available(): Promise<boolean> {
-    return (await present(this.native)?.isAvailableAsync()) ?? false;
-  }
+  /**
+   * Whether Sign in with Apple can be offered: iOS 13 and later, with the module installed. False
+   * until the platform answers.
+   */
+  readonly available: Signal<boolean> = asked(() => present(this.native)?.isAvailableAsync())
+    .answer;
 
   /**
    * Shows Apple's sign-in sheet. The name and email in the credential are only there the first

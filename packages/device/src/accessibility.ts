@@ -100,6 +100,9 @@ export class Accessibility {
   );
 
   private readonly source = inject(Accessibility.SOURCE);
+
+  /** Whether the service is here: on every OS, where it answers what the OS reports. */
+  readonly available: Signal<boolean> = signal(true).asReadonly();
   private readonly settings = signal<AccessibilitySettings>({
     screenReader: false,
     reduceMotion: false,

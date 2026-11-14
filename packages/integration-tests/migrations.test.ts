@@ -1106,3 +1106,93 @@ describe('os-comparisons-on-macos, through nx migrate, ng update and ng-native-m
     assert.deepEqual(cli, nx);
   });
 });
+
+describe('available-signal, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/privacy.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Biometrics } from '@ng-native/expo/biometrics';",
+      "import { Haptics as Buzz } from '@ng-native/expo/haptics';",
+      "import { StoreReview } from '@ng-native/expo/store-review';",
+      "import { splashScreen } from '@ng-native/expo/splash-screen';",
+      '',
+      '@Component({',
+      "  selector: 'app-privacy',",
+      '  template: `@if (buzz.available) { <text>Buzz</text> }`,',
+      '})',
+      'export class Privacy {',
+      '  protected readonly buzz = inject(Buzz);',
+      '  private readonly biometrics = inject(Biometrics);',
+      '',
+      '  async ask(): Promise<boolean> {',
+      '    return this.buzz.available && !(await this.biometrics.available());',
+      '  }',
+      '',
+      '  later(review: StoreReview) {',
+      '    return review.available().then((yes) => yes);',
+      '  }',
+      '}',
+      '',
+      'export const held = () => splashScreen.available || inject(Buzz).available;',
+      'export const other = (thing: { available: boolean }) => thing.available;',
+      '',
+    ].join('\n'),
+    'src/app/settings.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Watch } from '@ng-native/expo/watch';",
+      '',
+      "@Component({ selector: 'app-settings', templateUrl: './settings.html' })",
+      'export class Settings {',
+      '  readonly watch = inject(Watch);',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/settings.html': "<text>{{ watch.available ? 'on' : 'off' }}</text>\n",
+    'src/app/sensor.ts': [
+      "import { inject } from '@angular/core';",
+      "import { Barometer } from '@ng-native/expo/sensors';",
+      '',
+      'const barometer = inject(Barometer);',
+      'export const known = barometer.available() !== null;',
+      'export const shown = barometer.available() ?? false;',
+      'export const plain = barometer.available();',
+      '',
+    ].join('\n'),
+    'src/app/everything.ts': "import * as review from '@ng-native/expo/store-review';\n",
+    'src/app/plain.ts': 'export const answer = 42;\n',
+  };
+
+  it("calls each service's available, stops awaiting it, and notes what it cannot rewrite", async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'available-signal', '0.22.2');
+    const privacy = nx.files['src/app/privacy.ts']!;
+    assert.match(privacy, /template: `@if \(buzz\.available\(\)\) \{/);
+    assert.match(
+      privacy,
+      /return this\.buzz\.available\(\) && !\(this\.biometrics\.available\(\)\);/,
+    );
+    assert.match(
+      privacy,
+      /return review\.available\(\)\.then\(\(yes\) => yes\);/,
+      'left as it was',
+    );
+    assert.match(
+      privacy,
+      /held = \(\) => splashScreen\.available\(\) \|\| inject\(Buzz\)\.available\(\);/,
+    );
+    assert.match(privacy, /other = \(thing: \{ available: boolean \}\) => thing\.available;/);
+    assert.equal(
+      nx.files['src/app/settings.html'],
+      "<text>{{ watch.available() ? 'on' : 'off' }}</text>\n",
+    );
+    assert.equal(nx.files['src/app/sensor.ts'], files['src/app/sensor.ts']);
+    assert.equal(nx.files['src/app/plain.ts'], files['src/app/plain.ts']);
+    assert.deepEqual(nx.notes, [
+      "src/app/everything.ts:1: A namespace import of '@ng-native/expo/store-review' cannot be followed automatically. A service's available is a signal now: read it as available(), and do not await it.",
+      'src/app/privacy.ts:20: available() is a signal now, not a promise. Read it as available(), without awaiting it or calling then().',
+      "src/app/sensor.ts:5: A sensor's available() is never null now: it is false until the platform answers.",
+      "src/app/sensor.ts:6: A sensor's available() is never null now: it is false until the platform answers.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+});

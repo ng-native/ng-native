@@ -302,7 +302,7 @@ describe('registering what a sheet declared', () => {
 
   it('is inert rather than broken when expo-font is not installed', async () => {
     const fonts = new FontRegistry(null);
-    assert.equal(fonts.available, false);
+    assert.equal(fonts.available(), false);
     assert.equal(fonts.has('Inter'), false);
     await fonts.loadSheet({ fonts: [{ family: 'Inter', source: 1 }] });
   });

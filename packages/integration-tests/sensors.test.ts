@@ -109,9 +109,8 @@ describe('a sensor', () => {
 
   it('is inert with no sensor at all', async () => {
     const accelerometer = new Sensor<Vector>(null, ORIGIN);
-    // Null rather than false first: a template asking `@if (sensor.available())` should show
-    // nothing while the platform is still answering, not "this device has no accelerometer".
-    assert.equal(accelerometer.available(), null);
+    // False until the platform answers, as every service's available() is a Signal<boolean>.
+    assert.equal(accelerometer.available(), false);
     await settle();
     assert.equal(accelerometer.available(), false);
     accelerometer.start()();

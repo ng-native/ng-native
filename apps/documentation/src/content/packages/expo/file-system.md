@@ -74,22 +74,36 @@ exist, then writes - text or bytes - replacing whatever was there.
 this.files.write(this.files.cache('thumb.jpg'), imageBytes);
 ```
 
-## `pickDirectory()`
+## `readdir(folder)`, `stat(path)` and `watch(path, listener)`
 
-Opens the system folder picker and answers the folder the user chose, so a file can be saved
-somewhere they can find it, such as an export in Files on iOS or a Drive folder on Android. It
-answers `null` when the user dismisses the picker, like `DocumentPicker.pick()` answering no
-files, and rethrows any other failure. No permission is asked for.
+Each takes a uri, or anything with one: a file, a folder from `paths`, a folder the user picked.
+
+- **`readdir(folder)`** resolves to the folder's entries, each with its `name`, `uri` and whether
+  it is a `directory`.
+- **`stat(path)`** resolves to what is there, `uri`, `directory`, `size` and the `modified` and
+  `created` times in milliseconds (null where the platform does not say), or `null` where nothing
+  is.
+- **`watch(path, listener)`** calls the listener with each change to a file, or to what is in a
+  folder: its `type` (`created`, `modified`, `deleted` or `renamed`), its `uri`, and for a rename
+  the `newUri`. It answers the function that stops watching.
 
 ```ts
-const folder = await this.files.pickDirectory();
-if (folder) this.files.write(folder.createFile('export.csv', 'text/csv'), csv);
+const entries = await this.files.readdir(this.files.paths.document!);
+const stop = this.files.watch(this.files.paths.document!, (change) => this.reload(change.uri));
 ```
 
-`createFile(name, mimeType)` makes the file inside the folder, empty, so `write()` finds it there
-and only writes. Use `mimeType` for the type of the content (Android uses it, `null` means text).
-Its type has only `uri` and `createFile()`. To list, move or delete, make Expo's own `Directory`
-from the uri, `new Directory(folder.uri)`, imported from `expo-file-system`.
+They reach what the app can: its own folders and the folders the user picked.
+
+## `paths`
+
+The folders an app writes to, as uris: `cache` and `document`, and the user's `home`, `desktop` and
+`downloads`, `temp` and the app's `appData`. Each is `null` where the OS has no such folder or the
+app cannot reach it, which on iOS and Android is all but `cache` and `document`.
+
+## `pickDirectory()`
+
+Deprecated: use [`DocumentPicker.pickDirectory()`](/packages/expo/document-picker), which answers
+the same. This one goes in a later release.
 
 ## Without the module
 
@@ -99,10 +113,10 @@ a value only the module knows, throws a `MissingModuleError`. Its message names 
 commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `FileSystem` still does not fall back to reporting
-nothing, unlike most services in this package: `cache()` and `document()` throw
-`[angular-native] expo-file-system is not installed`, so there is no file to `write()` to. A file
-that silently failed to write is worse than an error that says why.
+On the web, on macOS until the desktop host has its module, and in a test that provides no fake,
+`FileSystem` is absent: `available()` is `false`, `cache()`, `document()` and `file()` answer a file
+that is not there, which `write()` leaves alone and which reads as empty, `readdir()` answers no
+entries, `stat()` answers `null`, `watch()` reports nothing and every folder in `paths` is `null`.
 
 ## Reference
 

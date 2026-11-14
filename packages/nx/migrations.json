@@ -54,6 +54,11 @@
       "version": "0.23.0",
       "description": "Note each comparison with 'ios', each !== 'android' and each OS_VERSION comparison, which answer differently now that macOS is reported as 'macos'.",
       "implementation": "./migrations/run.cjs#os-comparisons-on-macos"
+    },
+    "available-signal": {
+      "version": "0.23.0",
+      "description": "Call each service's available, now a Signal<boolean> on every service, and stop awaiting it.",
+      "implementation": "./migrations/run.cjs#available-signal"
     }
   }
 }

@@ -43,7 +43,7 @@ import type {
   NotificationResponse,
   SchedulableTriggerInputTypes,
 } from 'expo-notifications';
-import { currentPlatform, expoModule, optional, present } from './native.ts';
+import { currentPlatform, expoModule, optional, presence, present } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-notifications');
@@ -152,6 +152,9 @@ export class Notifications {
   );
 
   private readonly native = inject(Notifications.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
   private readonly received = signal<Notification | null>(null);
   private readonly responded = signal<NotificationResponse | null>(null);
   private readonly rolled = signal<DevicePushToken | null>(null);

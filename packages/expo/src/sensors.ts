@@ -38,21 +38,21 @@ export interface NativeSensor<T> {
 export class Sensor<T> {
   private readonly native: NativeSensor<T> | null;
   private readonly current: ReturnType<typeof signal<T>>;
-  private readonly present = signal<boolean | null>(null);
+  private readonly present = signal(false);
   private subscription: { remove(): void } | null = null;
 
   /** The most recent reading, or the stated zero until the sensor has said anything. */
   readonly reading: Signal<T>;
 
   /**
-   * Whether the device has this sensor. Null until the platform has answered, which is one turn
+   * Whether the device has this sensor. False until the platform has answered, which is one turn
    * away: `isAvailableAsync` is asynchronous even where the answer is a constant.
    *
    * A signal rather than the promise the module offers, because the question is asked in a
    * template - `@if (barometer.available())` - and a promise there is truthy on the first frame
    * and every frame after, which is the failure this project keeps guarding against.
    */
-  readonly available: Signal<boolean | null> = this.present.asReadonly();
+  readonly available: Signal<boolean> = this.present.asReadonly();
 
   constructor(native: NativeSensor<T> | null, zero: T) {
     this.native = native;

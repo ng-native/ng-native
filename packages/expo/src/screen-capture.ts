@@ -20,7 +20,7 @@
  */
 import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
 import { onWindowFront, sharedBySource } from '@ng-native/device';
-import { currentPlatform, expoModule, present } from './native.ts';
+import { currentPlatform, expoModule, present, asked } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-screen-capture');
@@ -111,10 +111,9 @@ export class ScreenCapture {
     });
   }
 
-  /** Whether the platform can prevent capture. */
-  async available(): Promise<boolean> {
-    return (await this.native?.isAvailableAsync()) ?? false;
-  }
+  /** Whether the platform can prevent capture. False until it answers. */
+  readonly available: Signal<boolean> = asked(() => present(this.native)?.isAvailableAsync())
+    .answer;
 
   /**
    * Keeps the app out of screenshots and screen recordings until `allow()` is called with the same

@@ -181,6 +181,25 @@ describe('Calendar', () => {
     ]);
   });
 
+  it('reaches what EventKit has on macOS too, but not the iOS calendar picker', async () => {
+    const { native, calls } = platform();
+    const calendar = calendarWith(native, 'macos');
+    assert.equal(calendar.defaultCalendar()?.id, 'default');
+    assert.equal(await calendar.pickCalendar(), null, 'EventKitUI is iOS only');
+    assert.equal((await calendar.reminder('milk'))?.id, 'milk');
+    assert.deepEqual(
+      calendar.sources().map((source) => source.id),
+      ['icloud'],
+    );
+    assert.equal(await calendar.remindersPermission.request(), true);
+    assert.deepEqual(names(calls), [
+      'getDefaultCalendarSync',
+      'ExpoCalendarReminder.get',
+      'getSourcesSync',
+      'requestRemindersPermissions',
+    ]);
+  });
+
   it('answers empty on Android for what only iOS has, without calling the module that throws', async () => {
     const { native, calls } = platform();
     const calendar = calendarWith(native, 'android');

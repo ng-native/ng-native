@@ -14,8 +14,8 @@
  * when it declines, so a call that resolves is not a prompt that was shown. Without the module
  * installed, every question answers no and `request()` does nothing.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule } from './native.ts';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
+import { expoModule, asked, present } from './native.ts';
 
 type Expo = typeof import('expo-store-review');
 
@@ -35,10 +35,12 @@ export class StoreReview {
 
   private readonly native = inject(StoreReview.SOURCE);
 
-  /** Whether the platform has an in-app review prompt: iOS, and Android with the Play Store. */
-  async available(): Promise<boolean> {
-    return (await this.native?.isAvailableAsync()) ?? false;
-  }
+  /**
+   * Whether the platform has an in-app review prompt: iOS, and Android with the Play Store. False
+   * until it answers.
+   */
+  readonly available: Signal<boolean> = asked(() => present(this.native)?.isAvailableAsync())
+    .answer;
 
   /**
    * Whether `request()` would do anything: show the prompt, or failing that open the store page

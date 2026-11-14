@@ -53,7 +53,7 @@ describe('the splash screen', () => {
 
   it('is inert rather than broken when the module is not installed', async () => {
     const splash = new Splash(null);
-    assert.equal(splash.available, false);
+    assert.equal(splash.available(), false);
     splash.hold();
     await splash.hide();
   });

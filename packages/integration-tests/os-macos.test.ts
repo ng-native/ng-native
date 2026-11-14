@@ -11,7 +11,7 @@ import {
   type StaticProvider,
   ɵINJECTOR_SCOPE as INJECTOR_SCOPE,
 } from '@angular/core';
-import { DESKTOP, OS } from '@ng-native/device';
+import { APPLE, DESKTOP, OS } from '@ng-native/device';
 import {
   isApplePlatform,
   nativePlatform,
@@ -45,6 +45,17 @@ describe('the OS on a Mac', () => {
       ['web', false],
     ] as const) {
       assert.equal(read(DESKTOP, [{ provide: OS, useValue: os }]), desktop, os);
+    }
+  });
+
+  it('is an Apple OS in APPLE, as iOS is, and Android and the web are not', () => {
+    for (const [os, apple] of [
+      ['macos', true],
+      ['ios', true],
+      ['android', false],
+      ['web', false],
+    ] as const) {
+      assert.equal(read(APPLE, [{ provide: OS, useValue: os }]), apple, os);
     }
   });
 
