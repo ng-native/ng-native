@@ -6793,6 +6793,11 @@ function removeMember(name: string, descriptor: PropertyDescriptor): void {
 /**
  * RN-specific helpers, injected rather than imported so the engine stays runnable under Node.
  */
+/** What `Engine.watchShared` reports. A `sheet` change with no `sheet` removes `replacing`. */
+export type SharedChange =
+  | { kind: 'sheet'; sheet: StyleSheet | null; replacing?: StyleSheet }
+  | { kind: 'tokens'; tokens: Readonly<Record<string, TokenValue>> };
+
 export interface EngineOptions {
   /**
    * React Native's `NativeAnimatedHelper`, which lets native move a view by a scroll with no
@@ -7933,6 +7938,7 @@ export class Engine implements HostEngine {
     this.watchGenerated(sheet);
     this.markPath(this.root);
     this.sheetsAdded.push(sheet);
+    this.sharedChanged({ kind: 'sheet', sheet, replacing });
     return true;
   }
 
@@ -7972,7 +7978,34 @@ export class Engine implements HostEngine {
     if (!this.styles.removeGlobalSheet(sheet)) return false;
     this.sheetReplaced(sheet, null);
     this.markPath(this.root);
+    this.sharedChanged({ kind: 'sheet', sheet: null, replacing: sheet });
     return true;
+  }
+
+  /** The global sheets added since the engine was made and not removed, in order. */
+  get globalSheetsAdded(): readonly StyleSheet[] {
+    return this.styles.sheetsAdded;
+  }
+
+  /** The custom properties the host has supplied, which `updateTokens` adds to. */
+  get tokens(): Readonly<Record<string, TokenValue>> {
+    return this.styles.rootTokens;
+  }
+
+  private readonly sharedWatchers = new Set<(change: SharedChange) => void>();
+
+  /**
+   * Calls `listener` after each change to what a platform with several surfaces keeps the same
+   * on all of them: a global sheet added, replaced or removed, and tokens updated. The engine of
+   * a surface that follows this one applies the change to itself.
+   */
+  watchShared(listener: (change: SharedChange) => void): () => void {
+    this.sharedWatchers.add(listener);
+    return () => this.sharedWatchers.delete(listener);
+  }
+
+  private sharedChanged(change: SharedChange): void {
+    for (const watcher of this.sharedWatchers) watcher(change);
   }
 
   updateTokens(next: Readonly<Record<string, TokenValue>>): void {
@@ -7981,6 +8014,7 @@ export class Engine implements HostEngine {
     this.root.subtreeDirty = true;
     this.layoutStale = true;
     this.commit();
+    this.sharedChanged({ kind: 'tokens', tokens: next });
   }
 
   /**

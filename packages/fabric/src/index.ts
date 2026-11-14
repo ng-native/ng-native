@@ -85,6 +85,7 @@ export {
   isTextInputView,
   type EngineNode,
   type EngineOptions,
+  type SharedChange,
   type EngineStats,
   type FabricNode,
   type FabricNodeSet,

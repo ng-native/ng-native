@@ -31,10 +31,16 @@ import {
   WINDOW_RESTORE_STORE,
   provideRestorableWindows,
 } from '@ng-native/device';
-import type { Conditions } from '@ng-native/fabric';
+import type { Conditions, Engine, StyleSheet } from '@ng-native/fabric';
 import { mount, type MountResult } from '@ng-native/platform';
 import { provideNativeRouter } from '@ng-native/router';
-import { createFakeFabric, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import {
+  compileCss,
+  createFakeFabric,
+  settle,
+  type FakeFabric,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
 let fixtures: Record<string, Type<unknown>>;
@@ -354,6 +360,75 @@ describe('what each window has of its own', () => {
     );
     assert.ok(platform);
     assert.equal(made().at(-1)!.engine.root.classList.contains(platform), true);
+  });
+});
+
+describe('the app engine state each window shares', () => {
+  type Made = { engine: unknown };
+  const made = () => (fixtures['ScreenWindow'] as unknown as { made: Made[] }).made;
+  const brand = (window: Made) => (window.engine as Engine).token('--brand');
+  const sheet = (css: string) => compileCss(css, 'shared.css') as StyleSheet;
+
+  it('gives a window already open a global sheet the app adds, and takes it away again', async () => {
+    const host = fakeHost();
+    const { windows, app } = start('MainWindowApp', host);
+    await windows.open(fixtures['ScreenWindow']!);
+    await settle();
+    const window = made().at(-1)!;
+    const added = sheet(':root { --brand: red }');
+    assert.equal(brand(window), undefined);
+    app.engine.addGlobalSheet(added);
+    assert.equal(brand(window), 'red');
+    const swapped = sheet(':root { --brand: blue }');
+    app.engine.addGlobalSheet(swapped, added);
+    assert.equal(brand(window), 'blue', 'a replaced sheet is replaced in the window');
+    app.engine.removeGlobalSheet(swapped);
+    assert.equal(brand(window), undefined, 'a removed sheet is gone from the window');
+  });
+
+  it('gives a window opened after the sheet the sheet, and not one removed before', async () => {
+    const host = fakeHost();
+    const { windows, app } = start('MainWindowApp', host);
+    const kept = sheet(':root { --brand: red }');
+    const gone = sheet(':root { --other: green }');
+    app.engine.addGlobalSheet(kept);
+    app.engine.addGlobalSheet(gone);
+    app.engine.removeGlobalSheet(gone);
+    await windows.open(fixtures['ScreenWindow']!);
+    await settle();
+    const window = made().at(-1)!;
+    assert.equal(brand(window), 'red');
+    assert.equal((window.engine as Engine).token('--other'), undefined);
+  });
+
+  it('keeps a window that has closed from hearing of a sheet', async () => {
+    const host = fakeHost();
+    const { windows, app } = start('MainWindowApp', host);
+    const note = (await windows.open(fixtures['ScreenWindow']!))!;
+    await settle();
+    const window = made().at(-1)!;
+    await note.close();
+    await settle();
+    app.engine.addGlobalSheet(sheet(':root { --brand: red }'));
+    assert.equal(brand(window), undefined);
+  });
+
+  it('gives each window the tokens the app has, opened before or after', async () => {
+    const host = fakeHost();
+    const { windows, app } = start('MainWindowApp', host);
+    await windows.open(fixtures['ScreenWindow']!);
+    await settle();
+    app.engine.updateTokens({ '--hairline': { length: 0.5 } });
+    app.engine.updateTokens({ '--extra': { length: 2 } });
+    const before = made().at(-1)!;
+    await windows.open(fixtures['ScreenWindow']!);
+    await settle();
+    const after = made().at(-1)!;
+    for (const window of [before, after]) {
+      const engine = window.engine as Engine;
+      assert.equal(engine.token('--hairline'), '0.5px');
+      assert.equal(engine.token('--extra'), '2px');
+    }
   });
 });
 
