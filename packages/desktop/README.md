@@ -5,13 +5,13 @@ views into AppKit, and the `ng-native-desktop` command that builds and launches 
 package and never import it.
 
 Alpha, and early: the host draws views, text, text fields, images, scroll views, modals (as a
-sheet, an in-window cover, or an NSPopover when the modal has an `anchor`), takes clicks, hover and the
-scroll wheel, loads the app from the dev server with reload and Fast Refresh, runs React Native's
-layout animations, and has the default menu bar. React Native's iOS modules answer from the core:
-Linking, Appearance, AppState, DeviceInfo, PlatformConstants, I18nManager, Alert (NSAlert),
-Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob, FileReader,
-ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no React Native
-DevTools yet, and react-native-screens' modal presentations still show as stack cards.
+sheet, an in-window cover, or an NSPopover when the modal has an `anchor`), takes clicks, hover
+and the scroll wheel, loads the app from the dev server with reload and Fast Refresh, runs React
+Native's layout animations, and has the default menu bar. React Native's iOS modules answer from
+the core: Linking, Appearance, AppState, DeviceInfo, PlatformConstants, I18nManager, Alert
+(NSAlert), Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob,
+FileReader, ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no
+React Native DevTools yet.
 
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its
 window, stacked on a sheet already there. It takes its content root's CSS width and height, or
@@ -82,6 +82,66 @@ When the app has them installed, the host compiles in the Fabric components of
 - The window's content runs under the title bar and toolbar, and each safe-area view gets the part
   of the window's safe area it overlaps: `RNCSafeAreaProvider`'s `insetsChange` (with the window
   controls' width as `titlebarLeading`), `RNCSafeAreaView` and `RNSSafeAreaView`.
+- A screen whose `stackPresentation` is not `push` is presented over its stack, as a `<modal>`
+  is: `modal`, `formSheet` and `pageSheet` as a sheet on the window, `fullScreenModal`,
+  `transparentModal` and the contained ones as a cover in the window, and one with an `anchor`
+  (which `present()` writes) as an NSPopover at that view. The screen under it stays showing and
+  keeps the toolbar. A sheet has no toolbar, so it draws the screen's header itself: the title as
+  a heading at the top, and the bar buttons as a row at the bottom right, the left ones first,
+  the first of those on Escape, and the last of the row the default button on Return. A popover
+  draws no header and takes the title as its accessibility label. Escape, Cmd-W and a click
+  outside a popover send `dismissed`.
+- The tabs (`RNSTabsHostIOS`) are the window's sidebar: its source list holds the tabs and the
+  content pane shows the selected screen. The tabs outlet commits the props it commits on iOS,
+  and the host keeps iOS's selection handshake: the app's `navStateRequest`, stale and repeated
+  requests refused, `preventNativeSelection`, and `tabSelected` with its provenance (`user` for a
+  click, `programmatic-js` for a request). The first tab shows until the app asks for one, and
+  the tabs not selected stay mounted, neither drawn nor hit.
+
+## Sidebar
+
+`<split-view>` is `NgNativeSplitView`, holding the sidebar pane (`NgNativeSidebar`) and then the
+content pane (`NgNativeSplitContent`). The first split view in a window is the window's
+NSSplitViewController, with the full-height sidebar, the toolbar's sidebar button and tracking
+separator, View > Show Sidebar and an autosaved width; one inside another split view, a modal or
+the tabs is a plain NSSplitView in the content. Each pane is sized by AppKit, and the size goes
+back into layout, at most once a display frame. The sidebar's collapsed state follows the app's
+`collapsed`, and the title bar button, the View menu and a restored autosave report theirs with
+`topSidebarCollapse`.
+
+Neighbouring `<sidebar-section>`s (`NgNativeSidebarSection`) in one parent are one NSOutlineView
+source list, laid out where Yoga put them, and each `<sidebar-item>` (`NgNativeSidebarItem`) is a
+row of it with its label, badge and SF Symbol. A click selects a row and sends
+`topSidebarSelect` to its item. An item with content is a custom row: its views sit in a cell of
+their own, which they fill, and a click on a pressable in it reaches the pressable while other
+clicks select the row.
+
+## Processes and Shell
+
+`NgNativeProcesses` runs the programs the plugin options' `capabilities` declare, with
+`posix_spawn` and never through a shell. The core checks every call again against those
+capabilities, from `NGNCapabilities` in a packaged app's `Info.plist` or the `--capabilities` that
+`ng-native-desktop run` passes: a program and its arguments must match a `spawn` rule, the program
+gets only the `env` variables declared, and its output and exit arrive as `ngNativeProcesses`
+events. A Mac App Store (`mas`) build spawns nothing.
+
+`NgNativeShell` hands a URL, a path or a Finder selection to the OS through NSWorkspace. It refuses
+`file:`, script and `data:` URLs, and paths that are not absolute and normalised.
+
+## Expo modules
+
+Four of `@ng-native/expo`'s services answer from modules of the host's own, named `NgNative` and
+the package's name after `expo-`, each with the methods the service calls on the Expo package:
+
+| Module                | What it does                                                                                                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NgNativeSecureStore` | Items in the Keychain, under the app's id or the `keychainService` a call names, refusing the keys `expo-secure-store` refuses.                                                  |
+| `NgNativeClipboard`   | Reads and writes the pasteboard's text. `Clipboard.changes()` counts its `ngNativeClipboard` events on `DeviceEventEmitter`, which the host does not send yet, so it stays at 0. |
+| `NgNativeKeepAwake`   | Keeps the display awake with an IOKit power assertion while any tag holds it.                                                                                                    |
+| `NgNativeHaptics`     | Plays the trackpad's feedback for an impact, a selection and a notification.                                                                                                     |
+
+The other services with a desktop source in `DESKTOP_MODULES` throw `MissingModuleError` on first
+use until the host has their module.
 
 ## Run the app
 
@@ -180,10 +240,14 @@ build has none.
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and
-  hover, Tab order, the app's windows and their autosaved frames (`app-windows.h`), menus, shortcuts and the back and
-  forward inputs (`app-menus.h`), the tray and the Dock (`tray-and-dock.h`), the accessibility mapping, the native controls' props and measuring, text
-  measurement, the module registry and desktop view props, the dev server connection,
-  the default menu bar and React Native's iOS-shaped modules in `src/modules`), with tests on an
+  hover, Tab order, the app's windows and their autosaved frames (`app-windows.h`), menus,
+  shortcuts and the back and forward inputs (`app-menus.h`), the tray and the Dock
+  (`tray-and-dock.h`), the split view and the tabs (`split-view.h`, `tabs-host.h`), presented
+  screens (`screen-presentation.h`), processes and the shell (`processes.h`), the desktop Expo
+  modules (`desktop-expo.h`), the accessibility mapping, the native controls' props and
+  measuring, text measurement, the module registry and desktop view props, the dev server
+  connection, the default menu bar and React Native's iOS-shaped modules in `src/modules`), with
+  tests on an
   in-memory backend that run on Linux and macOS. A backend answers the OS calls through narrow
   interfaces: `network.h` (HTTP and WebSocket) and `system.h` (URLs, alerts, appearance,
   clipboard, preferences, image sizes and the app's data directory).
