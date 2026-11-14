@@ -1,4 +1,5 @@
 #include "fake-network.h"
+#include "helpers.h"
 #include "ngn/bytes.h"
 #include "ngn/printing.h"
 
@@ -79,7 +80,7 @@ TEST_CASE("pageSetupOf sizes the page as expo's iOS module does: US Letter, swap
 TEST_CASE("NgNativePrint writes a PDF into the print folder and answers its uri, its pages and, when asked, its base64") {
   Folder folder;
   auto system = std::make_shared<FakePrintSystem>();
-  auto module = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), folder.path.string());
+  auto module = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), folder.path.string(), ngn::testing::readsEverywhere());
   auto answer = call(*module, "printToFileAsync", dynamic::object("html", "<h1>Invoice</h1>")("width", 400)("base64", true));
   REQUIRE(answer.value);
   auto uri = (*answer.value)["uri"].asString();
@@ -103,7 +104,7 @@ TEST_CASE("NgNativePrint writes a PDF into the print folder and answers its uri,
 
 TEST_CASE("NgNativePrint shows the panel for HTML, and resolves once it closes") {
   auto system = std::make_shared<FakePrintSystem>();
-  auto module = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), "/tmp/unused");
+  auto module = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), "/tmp/unused", ngn::testing::readsEverywhere());
   Answer answer;
   call(*module, "printAsync", dynamic::object("html", "<p>Hi</p>")("orientation", "landscape")("printerUrl", "ipp://x"), &answer);
   REQUIRE(system->shown.size() == 1);
@@ -125,7 +126,7 @@ TEST_CASE("NgNativePrint shows the panel for HTML, and resolves once it closes")
 TEST_CASE("NgNativePrint reads a uri's file through the HTTP client and prints it as a PDF or an image") {
   auto system = std::make_shared<FakePrintSystem>();
   auto http = std::make_shared<ngn::testing::FakeHttp>();
-  auto module = ngn::makePrintModule(system, http, "/tmp/unused");
+  auto module = ngn::makePrintModule(system, http, "/tmp/unused", ngn::testing::readsEverywhere());
   auto serve = [&](size_t index, const std::string &body, uint16_t status = 200) {
     REQUIRE(http->sent.size() > index);
     auto &callbacks = http->sent[index]->callbacks;
@@ -163,14 +164,39 @@ TEST_CASE("NgNativePrint reads a uri's file through the HTTP client and prints i
 TEST_CASE("NgNativePrint refuses a print with nothing to print, and shows nothing with no prompts") {
   auto system = std::make_shared<FakePrintSystem>();
   auto http = std::make_shared<ngn::testing::FakeHttp>();
-  auto module = ngn::makePrintModule(system, http, "/tmp/unused");
+  auto module = ngn::makePrintModule(system, http, "/tmp/unused", ngn::testing::readsEverywhere());
   CHECK(call(*module, "printAsync", dynamic::object()).error == "Print: No data to print. You must specify `uri` or `html` option");
   CHECK(call(*module, "printAsync", dynamic::object("uri", "content://x")).error == "Print: content://x is not a file, data or http(s) uri");
   CHECK(http->sent.empty());
 
-  auto quiet = ngn::makePrintModule(system, http, "/tmp/unused", true);
+  auto quiet = ngn::makePrintModule(system, http, "/tmp/unused", ngn::testing::readsEverywhere(), true);
   CHECK(call(*quiet, "printAsync", dynamic::object("html", "<p>Hi</p>")).resolved);
   CHECK(call(*quiet, "printAsync", dynamic::object("uri", "/tmp/a.pdf")).resolved);
   CHECK(system->shown.empty());
   CHECK(http->sent.empty());
+}
+
+TEST_CASE("NgNativePrint prints only files FileSystem could read, with or without prompts") {
+  Folder folder;
+  std::filesystem::create_directories(folder.path / "cache");
+  std::filesystem::create_directories(folder.path / "home");
+  ngn::FileAccess::Folders folders{.cache = (folder.path / "cache").string(), .home = (folder.path / "home").string()};
+  auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  auto system = std::make_shared<FakePrintSystem>();
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  auto outside = (folder.path / "home/tax return.pdf").string();
+  for (bool quiet : {false, true}) {
+    auto module = ngn::makePrintModule(system, http, folders.cache + "/Print", access, quiet);
+    auto refused = call(*module, "printAsync", dynamic::object("uri", ngn::fileUri(outside)));
+    REQUIRE(refused.error);
+    CHECK(refused.error->find("Print: " + outside + " is outside the files this app may read") == 0);
+    CHECK_FALSE(refused.resolved);
+  }
+  CHECK(http->sent.empty());
+  CHECK(system->shown.empty());
+
+  // The app's own file is read.
+  auto module = ngn::makePrintModule(system, http, folders.cache + "/Print", access);
+  call(*module, "printAsync", dynamic::object("uri", folders.cache + "/Print/a.pdf"));
+  CHECK(http->sent.size() == 1);
 }

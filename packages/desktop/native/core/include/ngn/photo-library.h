@@ -13,7 +13,8 @@
 // - createAsset(fileUri, albumId) -> id, deleteAssets(ids), setFavorite(id, favorite),
 //   albums() -> [AlbumMetadata], albumAssets(albumId) -> [id], createAlbum(name, ids, move),
 //   deleteAlbums(ids, deleteAssets), addAssets(albumId, ids), removeAssets(albumId, ids). A write
-//   without access rejects.
+//   without access rejects. createAsset reads its file only where `files` lets it
+//   (FileAccess::readFor).
 // - startObserving(): `ngNativeMediaLibrary` events {hasIncrementalChanges: false} as the library
 //   changes, once read access is granted; asked before that, it watches nothing.
 //
@@ -22,6 +23,8 @@
 // get/requestMediaLibraryPermissionsAsync() as above; launchCameraAsync() answers canceled and
 // the camera permissions denied, since macOS has no system camera to open.
 #pragma once
+
+#include "ngn/file-system.h"
 
 #include "ngn/native-module.h"
 
@@ -121,7 +124,7 @@ class PhotoLibrary {
 // The query a JS Query describes; throws for a field or operator the library has none of.
 PhotoLibrary::Query photoQueryOf(const folly::dynamic &query);
 
-std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts);
+std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::shared_ptr<FileAccess> files);
 std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts);
 
 } // namespace ngn

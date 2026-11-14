@@ -1,4 +1,5 @@
 #include "fake-network.h"
+#include "helpers.h"
 #include "ngn/fonts.h"
 
 #include <doctest/doctest.h>
@@ -64,7 +65,7 @@ TEST_CASE("NgNativeFont registers a file and makes its name stand for the font's
   Folder folder;
   auto registrar = std::make_shared<FakeRegistrar>();
   auto library = std::make_shared<ngn::FontLibrary>();
-  auto module = ngn::makeFontModule(registrar, library, nullptr, folder.path.string());
+  auto module = ngn::makeFontModule(registrar, library, nullptr, folder.path.string(), ngn::testing::readsEverywhere());
   auto file = folder.write("inter.ttf", "font:Inter");
   CHECK(module->call("isLoaded", dynamic::array("Inter-700")) == dynamic(false));
   auto answer = load(*module, "Inter-700", "file://" + file);
@@ -83,7 +84,7 @@ TEST_CASE("NgNativeFont registers a file and makes its name stand for the font's
 TEST_CASE("NgNativeFont refuses what it cannot register, and loads nothing under the name") {
   Folder folder;
   auto library = std::make_shared<ngn::FontLibrary>();
-  auto module = ngn::makeFontModule(std::make_shared<FakeRegistrar>(), library, nullptr, folder.path.string());
+  auto module = ngn::makeFontModule(std::make_shared<FakeRegistrar>(), library, nullptr, folder.path.string(), ngn::testing::readsEverywhere());
   auto answer = load(*module, "Broken", "file://" + folder.write("broken.ttf", "png"));
   REQUIRE(answer.error);
   CHECK(answer.error->find("not a font") != std::string::npos);
@@ -97,7 +98,7 @@ TEST_CASE("NgNativeFont downloads a font the dev server serves, then registers i
   Folder folder;
   auto http = std::make_shared<ngn::testing::FakeHttp>();
   auto registrar = std::make_shared<FakeRegistrar>();
-  auto module = ngn::makeFontModule(registrar, std::make_shared<ngn::FontLibrary>(), http, folder.path.string() + "/fonts");
+  auto module = ngn::makeFontModule(registrar, std::make_shared<ngn::FontLibrary>(), http, folder.path.string() + "/fonts", ngn::testing::readsEverywhere());
   auto answer = load(*module, "Inter", "http://localhost:8081/assets/Inter.ttf?platform=macos&hash=1");
   REQUIRE(http->sent.size() == 1);
   CHECK(http->sent[0]->request.url == "http://localhost:8081/assets/Inter.ttf?platform=macos&hash=1");
@@ -119,7 +120,7 @@ TEST_CASE("NgNativeFont refuses a download that fails") {
   Folder folder;
   auto http = std::make_shared<ngn::testing::FakeHttp>();
   auto registrar = std::make_shared<FakeRegistrar>();
-  auto module = ngn::makeFontModule(registrar, std::make_shared<ngn::FontLibrary>(), http, folder.path.string());
+  auto module = ngn::makeFontModule(registrar, std::make_shared<ngn::FontLibrary>(), http, folder.path.string(), ngn::testing::readsEverywhere());
   auto missing = load(*module, "Missing", "https://example.com/missing.otf");
   http->sent[0]->callbacks.onResponse({.status = 404});
   http->sent[0]->callbacks.onComplete("", false);
@@ -130,4 +131,32 @@ TEST_CASE("NgNativeFont refuses a download that fails") {
   CHECK(offline.error);
   CHECK(registrar->registered.empty());
   CHECK(module->call("getLoadedFonts") == dynamic::array());
+}
+
+TEST_CASE("NgNativeFont registers only files FileSystem could read, and says nothing of what is elsewhere") {
+  Folder folder;
+  std::filesystem::create_directories(folder.path / "cache");
+  std::filesystem::create_directories(folder.path / "home/Library/Fonts");
+  ngn::FileAccess::Folders folders{.cache = (folder.path / "cache").string(), .home = (folder.path / "home").string()};
+  auto registrar = std::make_shared<FakeRegistrar>();
+  auto module = ngn::makeFontModule(
+      registrar, std::make_shared<ngn::FontLibrary>(), nullptr, folders.cache + "/fonts", std::make_shared<ngn::FileAccess>(folders, dynamic::array()));
+  auto there = folder.write("home/Library/Fonts/Secret.ttf", "font:Secret");
+  auto present = load(*module, "Secret", ngn::fileUri(there));
+  auto absent = load(*module, "Secret", ngn::fileUri((folder.path / "home/Library/Fonts/None.ttf").string()));
+  auto notFont = load(*module, "Secret", ngn::fileUri(folder.write("home/Library/Fonts/note.txt", "png")));
+  REQUIRE(present.error);
+  REQUIRE(absent.error);
+  REQUIRE(notFont.error);
+  CHECK(present.error->find("is outside the files this app may read") != std::string::npos);
+  // One answer whether the file is there, missing or not a font: no way to tell them apart.
+  auto tail = [](const std::string &error) { return error.substr(error.find(" is outside")); };
+  CHECK(tail(*present.error) == tail(*absent.error));
+  CHECK(tail(*present.error) == tail(*notFont.error));
+  CHECK(registrar->registered.empty());
+
+  // The app's own files are registered.
+  auto own = folder.write("cache/Own.ttf", "font:Own");
+  CHECK_FALSE(load(*module, "Own", own).error);
+  CHECK(registrar->registered == std::vector<std::string>{own});
 }

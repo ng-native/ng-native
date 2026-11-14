@@ -3,13 +3,16 @@
 //
 // - loadAsync(name, uri): registers the font file a `file:` uri or an absolute path names, or that
 //   an `http(s):` uri serves (an asset from the dev server), downloaded into the cache first, and
-//   makes `name` stand for its family. A file registered before is not registered again.
+//   makes `name` stand for its family. A file registered before is not registered again. A file
+//   is read only where `files` lets it (FileAccess::readFor), and refused in the same words
+//   whether or not it is there.
 // - isLoaded(name), getLoadedFonts(): the names loaded, in the order they were.
 // Text asks for a font by its name: FontLibrary::familyOf answers the family it stands for, as
 // expo-font's alias does on iOS, so text in that family picks its weight among the faces loaded.
 #pragma once
 
 #include "ngn/native-module.h"
+#include "ngn/file-system.h"
 #include "ngn/network.h"
 
 #include <map>
@@ -55,6 +58,7 @@ std::shared_ptr<NativeModule> makeFontModule(
     std::shared_ptr<FontRegistrar> registrar,
     std::shared_ptr<FontLibrary> library,
     std::shared_ptr<Http> http,
-    std::string downloads);
+    std::string downloads,
+    std::shared_ptr<FileAccess> files);
 
 } // namespace ngn

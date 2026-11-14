@@ -437,6 +437,13 @@ not `~/Documents`. A call reaches the app's own folders, the files and folders t
 saved to in a panel, and the paths the plugin options' `capabilities.paths` declare, read-only or
 read-write, after symbolic links are followed. `watch` reports changes from FSEvents.
 
+The same rules bound every module that reads a file JavaScript names: `ImageEditor`,
+`TextRecognition`, `Fonts`, `Printing`, `MediaLibrary`'s `createAsset` and an `XMLHttpRequest` or
+`fetch` body's `{uri}` (a form part's too) read only what `FileSystem` could, and a packaged app's
+own assets in its bundle. Assets from the dev server come over http and are read as before.
+Anything else is refused with an error naming the path, in the same words whether or not a file is
+there, so `ImageEditor`'s copies in the caches never hold an image `FileSystem` could not read.
+
 A pick stays reachable in later launches: the host keeps a security-scoped bookmark for each in the
 app's user defaults (where `FileSystem` cannot write), finds a picked file or folder again where it
 has moved, forgets one that is gone, and opens the sandbox to a pick only for the length of each

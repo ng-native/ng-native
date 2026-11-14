@@ -137,6 +137,30 @@ FileAccess::Use FileAccess::use(const std::string &path) const {
   return Use(std::move(picks), std::move(*bookmark));
 }
 
+FileRefused::FileRefused(const std::string &path)
+    : std::runtime_error(
+          path + " is outside the files this app may read: its own folders, the files the user picked, the paths its "
+                 "capabilities declare and its bundle's assets") {}
+
+std::shared_ptr<FileAccess::Use> FileAccess::readFor(const std::string &path) const {
+  if (!path.starts_with('/')) {
+    throw FileRefused(path);
+  }
+  if (accessTo(path) < Access::Read) {
+    if (folders_.bundle.empty() || !inside(resolved(path), resolved(folders_.bundle))) {
+      throw FileRefused(path);
+    }
+  }
+  return std::make_shared<Use>(use(path));
+}
+
+std::shared_ptr<FileAccess::Use> readableFile(const FileAccess *access, const std::string &path) {
+  if (access == nullptr) {
+    throw FileRefused(path);
+  }
+  return access->readFor(path);
+}
+
 FileAccess::Use::Use(std::shared_ptr<PickStore> store, std::string bookmark)
     : store_(std::move(store)), bookmark_(std::move(bookmark)) {}
 

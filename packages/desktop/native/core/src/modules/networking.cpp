@@ -18,15 +18,23 @@ namespace ngn {
 
 namespace {
 
-std::optional<std::string> readFileUri(const std::string &uri) {
-  std::string path = uri;
-  if (path.rfind("file://", 0) == 0) {
-    path = path.substr(7);
-  } else if (path.empty() || path[0] != '/') {
+// The file a body's uri names, where `files` lets it be read; nothing, with `error` set, otherwise.
+std::optional<std::string> readFileUri(const std::string &uri, const FileAccess *files, std::string &error) {
+  auto path = pathOfUri(uri);
+  if (!path) {
+    error = "Could not read " + uri;
     return std::nullopt;
   }
-  std::ifstream in(path, std::ios::binary);
+  std::shared_ptr<FileAccess::Use> use;
+  try {
+    use = readableFile(files, *path);
+  } catch (const FileRefused &refused) {
+    error = refused.what();
+    return std::nullopt;
+  }
+  std::ifstream in(*path, std::ios::binary);
   if (!in) {
+    error = "Could not read " + uri;
     return std::nullopt;
   }
   std::stringstream out;
@@ -62,7 +70,7 @@ std::string headerValue(const Headers &headers, const std::string &name) {
 
 } // namespace
 
-RequestBody requestBody(const folly::dynamic &data, const BlobStore &blobs, const std::string &boundary) {
+RequestBody requestBody(const folly::dynamic &data, const BlobStore &blobs, const std::string &boundary, const FileAccess *files) {
   RequestBody body;
   if (!data.isObject()) {
     return body;
@@ -85,10 +93,8 @@ RequestBody requestBody(const folly::dynamic &data, const BlobStore &blobs, cons
       body.contentType = str(data["blob"], "type");
     }
   } else if (data.count("uri") && data["uri"].isString()) {
-    auto bytes = readFileUri(data["uri"].asString());
-    if (!bytes) {
-      body.error = "Could not read " + data["uri"].asString();
-    } else {
+    auto bytes = readFileUri(data["uri"].asString(), files, body.error);
+    if (bytes) {
       body.bytes = *bytes;
     }
   } else if (data.count("formData") && data["formData"].isArray()) {
@@ -101,9 +107,8 @@ RequestBody requestBody(const folly::dynamic &data, const BlobStore &blobs, cons
       if (part.count("string") && part["string"].isString()) {
         bytes = part["string"].asString();
       } else if (part.count("uri") && part["uri"].isString()) {
-        auto file = readFileUri(part["uri"].asString());
+        auto file = readFileUri(part["uri"].asString(), files, body.error);
         if (!file) {
-          body.error = "Could not read " + part["uri"].asString();
           return body;
         }
         bytes = *file;
@@ -153,7 +158,7 @@ RequestBody requestBody(const folly::dynamic &data, const BlobStore &blobs, cons
 
 std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
   struct Networking : NativeModule, std::enable_shared_from_this<Networking> {
-    explicit Networking(const CoreModuleServices &s) : NativeModule("Networking"), http(s.http), blobs(s.blobs) {
+    explicit Networking(const CoreModuleServices &s) : NativeModule("Networking"), http(s.http), blobs(s.blobs), files(s.files) {
       async("sendRequest", [this](const folly::dynamic &args, std::vector<JsCallback> callbacks) {
         int id = ++nextId;
         if (!callbacks.empty() && callbacks[0]) {
@@ -192,7 +197,7 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
 
     void send(int id, const folly::dynamic &query) {
       std::string boundary = "ngn-boundary-" + std::to_string(id) + "-" + std::to_string(reinterpret_cast<uintptr_t>(this));
-      auto body = requestBody(query.getDefault("data", folly::dynamic::object()), *blobs, boundary);
+      auto body = requestBody(query.getDefault("data", folly::dynamic::object()), *blobs, boundary, files.get());
       if (!body.error.empty()) {
         emit("didCompleteNetworkResponse", folly::dynamic::array(id, body.error, false));
         return;
@@ -352,6 +357,7 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
 
     std::shared_ptr<Http> http;
     std::shared_ptr<BlobStore> blobs;
+    std::shared_ptr<FileAccess> files;
     std::atomic<int> nextId{0};
     std::mutex mutex;
     std::map<int, std::shared_ptr<HttpTask>> tasks;

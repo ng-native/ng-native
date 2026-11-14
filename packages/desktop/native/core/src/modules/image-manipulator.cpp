@@ -187,19 +187,27 @@ std::vector<ImageStep> planImageEdits(ImageSize source, const folly::dynamic &ac
   return steps;
 }
 
-std::shared_ptr<NativeModule> makeImageManipulatorModule(std::shared_ptr<ImageCodec> codec, std::shared_ptr<Http> http, std::string folder) {
+std::shared_ptr<NativeModule> makeImageManipulatorModule(
+    std::shared_ptr<ImageCodec> codec, std::shared_ptr<Http> http, std::string folder, std::shared_ptr<FileAccess> files) {
   struct ImageManipulator : NativeModule {
     // Reads the image `args[0]` names and plans `args[1]` and `args[2]` on it, then hands the
     // bytes and the steps on, or rejects.
     using Planned = std::function<void(std::string bytes, std::vector<ImageStep> steps, ImageSize size, JsPromise promise)>;
 
-    ImageManipulator(std::shared_ptr<ImageCodec> codec, std::shared_ptr<Http> http, std::string folder)
+    ImageManipulator(std::shared_ptr<ImageCodec> codec, std::shared_ptr<Http> http, std::string folder, std::shared_ptr<FileAccess> files)
         : NativeModule("NgNativeImageManipulator") {
-      auto withPlan = [codec, http](const folly::dynamic &args, JsPromise promise, Planned next) {
+      auto withPlan = [codec, http, files](const folly::dynamic &args, JsPromise promise, Planned next) {
         auto uri = !args.empty() && args[0].isString() ? args[0].asString() : "";
         auto fail = [promise](const std::string &why) { promise.reject("ImageManipulator: Could not load the image: " + why); };
         std::string url;
+        std::shared_ptr<FileAccess::Use> use;
         if (auto path = pathOfUri(uri)) {
+          try {
+            use = readableFile(files.get(), *path);
+          } catch (const FileRefused &refused) {
+            fail(refused.what());
+            return;
+          }
           url = fileUri(*path);
         } else if (isHttpOrData(uri)) {
           url = uri;
@@ -213,8 +221,10 @@ std::shared_ptr<NativeModule> makeImageManipulatorModule(std::shared_ptr<ImageCo
           uint16_t status{0};
           std::string bytes;
           std::unique_ptr<HttpTask> task;
+          std::shared_ptr<FileAccess::Use> use;
         };
         auto read = std::make_shared<Read>();
+        read->use = std::move(use);
         auto label = uri.rfind("data:", 0) == 0 ? std::string("the data uri") : uri;
         read->task = http->send(
             {.url = url},
@@ -223,6 +233,7 @@ std::shared_ptr<NativeModule> makeImageManipulatorModule(std::shared_ptr<ImageCo
              .onComplete =
                  [read, codec, actions, load, label, fail, promise, next](const std::string &error, bool) {
                    auto keep = std::move(read->task);
+                   read->use.reset();
                    if (!error.empty()) {
                      fail(error);
                      return;
@@ -288,7 +299,7 @@ std::shared_ptr<NativeModule> makeImageManipulatorModule(std::shared_ptr<ImageCo
       });
     }
   };
-  return std::make_shared<ImageManipulator>(std::move(codec), std::move(http), std::move(folder));
+  return std::make_shared<ImageManipulator>(std::move(codec), std::move(http), std::move(folder), std::move(files));
 }
 
 } // namespace ngn

@@ -53,14 +53,21 @@ std::optional<std::string> visionLanguage(const std::string &code, const std::ve
   return std::nullopt;
 }
 
-std::shared_ptr<NativeModule> makeTextRecognitionModule(std::shared_ptr<TextReader> reader) {
+std::shared_ptr<NativeModule> makeTextRecognitionModule(std::shared_ptr<TextReader> reader, std::shared_ptr<FileAccess> files) {
   struct TextRecognition : NativeModule {
-    explicit TextRecognition(std::shared_ptr<TextReader> reader) : NativeModule("NgNativeTextRecognition") {
-      promise("recognize", [reader](const folly::dynamic &args, JsPromise promise) {
+    TextRecognition(std::shared_ptr<TextReader> reader, std::shared_ptr<FileAccess> files) : NativeModule("NgNativeTextRecognition") {
+      promise("recognize", [reader, files](const folly::dynamic &args, JsPromise promise) {
         std::string uri = !args.empty() && args[0].isString() ? args[0].asString() : "";
         auto path = pathOfUri(uri);
         if (!path) {
           promise.reject("No image could be read at " + uri);
+          return;
+        }
+        std::shared_ptr<FileAccess::Use> use;
+        try {
+          use = readableFile(files.get(), *path);
+        } catch (const FileRefused &refused) {
+          promise.reject(refused.what());
           return;
         }
         const folly::dynamic options = args.size() > 1 && args[1].isObject() ? args[1] : folly::dynamic::object();
@@ -84,7 +91,7 @@ std::shared_ptr<NativeModule> makeTextRecognitionModule(std::shared_ptr<TextRead
             return;
           }
         }
-        reader->read(*path, languages, fast, [promise](std::optional<TextReader::Reading> reading, std::string error) {
+        reader->read(*path, languages, fast, [promise, use](std::optional<TextReader::Reading> reading, std::string error) {
           if (reading) {
             promise.resolve(readingOf(*reading));
           } else {
@@ -94,7 +101,7 @@ std::shared_ptr<NativeModule> makeTextRecognitionModule(std::shared_ptr<TextRead
       });
     }
   };
-  return std::make_shared<TextRecognition>(std::move(reader));
+  return std::make_shared<TextRecognition>(std::move(reader), std::move(files));
 }
 
 } // namespace ngn

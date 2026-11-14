@@ -60,9 +60,14 @@ std::shared_ptr<NativeModule> makeFontModule(
     std::shared_ptr<FontRegistrar> registrar,
     std::shared_ptr<FontLibrary> library,
     std::shared_ptr<Http> http,
-    std::string downloads) {
+    std::string downloads,
+    std::shared_ptr<FileAccess> files) {
   struct Fonts : NativeModule {
-    Fonts(std::shared_ptr<FontRegistrar> registrar, std::shared_ptr<FontLibrary> library, std::shared_ptr<Http> http, std::string downloads)
+    Fonts(std::shared_ptr<FontRegistrar> registrar,
+          std::shared_ptr<FontLibrary> library,
+          std::shared_ptr<Http> http,
+          std::string downloads,
+          std::shared_ptr<FileAccess> files)
         : NativeModule("NgNativeFont") {
       auto load = [registrar, library](const std::string &name, const std::string &path, JsPromise promise) {
         try {
@@ -72,7 +77,7 @@ std::shared_ptr<NativeModule> makeFontModule(
           promise.reject("Fonts: " + name + " could not be loaded from " + path + ": " + error.what());
         }
       };
-      promise("loadAsync", [load, http, downloads](const folly::dynamic &args, JsPromise promise) {
+      promise("loadAsync", [load, http, downloads, files](const folly::dynamic &args, JsPromise promise) {
         if (args.size() < 2 || !args[0].isString() || args[0].asString().empty() || !args[1].isString()) {
           promise.reject("Fonts.loadAsync: takes a font's name and the uri of its file");
           return;
@@ -80,6 +85,13 @@ std::shared_ptr<NativeModule> makeFontModule(
         auto name = args[0].asString();
         auto uri = args[1].asString();
         if (auto path = pathOfUri(uri)) {
+          std::shared_ptr<FileAccess::Use> use;
+          try {
+            use = readableFile(files.get(), *path);
+          } catch (const FileRefused &refused) {
+            promise.reject("Fonts: " + name + " could not be loaded: " + refused.what());
+            return;
+          }
           load(name, *path, std::move(promise));
           return;
         }
@@ -108,7 +120,7 @@ std::shared_ptr<NativeModule> makeFontModule(
       });
     }
   };
-  return std::make_shared<Fonts>(std::move(registrar), std::move(library), std::move(http), std::move(downloads));
+  return std::make_shared<Fonts>(std::move(registrar), std::move(library), std::move(http), std::move(downloads), std::move(files));
 }
 
 } // namespace ngn

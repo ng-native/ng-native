@@ -8,6 +8,8 @@
 //   Without languages, Vision detects the language.
 #pragma once
 
+#include "ngn/file-system.h"
+
 #include "ngn/native-module.h"
 
 #include <functional>
@@ -47,6 +49,7 @@ class TextReader {
 // The code Vision lists for `code`: itself, or the first with its primary language.
 std::optional<std::string> visionLanguage(const std::string &code, const std::vector<std::string> &supported);
 
-std::shared_ptr<NativeModule> makeTextRecognitionModule(std::shared_ptr<TextReader> reader);
+// The image is read only where `files` lets it (FileAccess::readFor).
+std::shared_ptr<NativeModule> makeTextRecognitionModule(std::shared_ptr<TextReader> reader, std::shared_ptr<FileAccess> files);
 
 } // namespace ngn
