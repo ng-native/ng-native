@@ -78,7 +78,10 @@ std::shared_ptr<UndoManager> makeUndoManager() {
 }
 
 NSUndoManager *undoManagerFor(NSWindow *window) {
-  if ([window.firstResponder isKindOfClass:NSTextView.class]) {
+  // The field editor (an NSTextView), or a text field about to hand over to it: the field
+  // editor asks once as editing starts and keeps what it got.
+  NSResponder *focus = window.firstResponder;
+  if ([focus isKindOfClass:NSText.class] || [focus isKindOfClass:NSTextField.class]) {
     NSUndoManager *text = objc_getAssociatedObject(window, kTextUndoKey);
     if (text == nil) {
       text = [NSUndoManager new];
