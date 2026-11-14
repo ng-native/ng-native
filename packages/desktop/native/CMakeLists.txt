@@ -122,6 +122,7 @@ add_library(ngn_core STATIC
     core/src/modules/sqlite.cpp
     core/src/modules/store-review.cpp
     core/src/modules/text-recognition.cpp
+    core/src/modules/tracking.cpp
     core/src/modules/undo.cpp
     core/src/modules/web-browser.cpp
     core/src/modules/web-socket.cpp)
@@ -151,9 +152,10 @@ if(NGN_TESTS)
         appkit/audio.mm appkit/tests/audio.test.mm
         appkit/language-model.mm appkit/tests/language-model.test.mm
         appkit/screen-capture.mm appkit/tests/screen-capture.test.mm
-        appkit/photo-library.mm appkit/tests/photo-library.test.mm)
+        appkit/photo-library.mm appkit/tests/photo-library.test.mm
+        appkit/tracking.mm appkit/tests/tracking.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

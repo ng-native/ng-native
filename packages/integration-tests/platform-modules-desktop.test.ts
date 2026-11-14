@@ -712,3 +712,29 @@ describe('ImagePicker on macOS', () => {
     assert.deepEqual(await picker.capture(), []);
   });
 });
+
+describe('Tracking on macOS', () => {
+  it("reads the permission and the identifier from the desktop host's NgNativeTrackingTransparency", async () => {
+    mac({
+      NgNativeTrackingTransparency: {
+        isAvailable: () => true,
+        getTrackingPermissionsAsync: async () => ({
+          status: 'denied',
+          granted: false,
+          canAskAgain: false,
+        }),
+        requestTrackingPermissionsAsync: async () => ({
+          status: 'denied',
+          granted: false,
+          canAskAgain: false,
+        }),
+        getAdvertisingId: () => null,
+      },
+    });
+    const { Tracking } = await import('@ng-native/expo/tracking');
+    const tracking = injectService(Tracking);
+    assert.equal(tracking.available(), true);
+    assert.equal(await tracking.permission.ensure(), false);
+    assert.equal(tracking.advertisingId(), null);
+  });
+});
