@@ -82,6 +82,123 @@ CalendarStore::Calendar calendarOf(EKCalendar *calendar, EKCalendar *primary) {
   };
 }
 
+NSString *nsString(const std::string &value) {
+  NSString *out = [NSString stringWithUTF8String:value.c_str()];
+  return out != nil ? out : @"";
+}
+
+NSDate *dateOf(double ms) {
+  return [NSDate dateWithTimeIntervalSince1970:ms / 1000];
+}
+
+std::vector<CalendarStore::Alarm> alarmsOf(NSArray<EKAlarm *> *alarms) {
+  std::vector<CalendarStore::Alarm> out;
+  for (EKAlarm *alarm in alarms) {
+    if (alarm.absoluteDate != nil) {
+      out.push_back({.relativeOffset = std::nullopt, .absoluteDate = ms(alarm.absoluteDate)});
+    } else {
+      out.push_back({.relativeOffset = alarm.relativeOffset / 60, .absoluteDate = std::nullopt});
+    }
+  }
+  return out;
+}
+
+NSArray<EKAlarm *> *ekAlarms(const std::vector<CalendarStore::Alarm> &alarms) {
+  NSMutableArray<EKAlarm *> *out = [NSMutableArray array];
+  for (const auto &alarm : alarms) {
+    [out addObject:alarm.absoluteDate ? [EKAlarm alarmWithAbsoluteDate:dateOf(*alarm.absoluteDate)]
+                                      : [EKAlarm alarmWithRelativeOffset:alarm.relativeOffset.value_or(0) * 60]];
+  }
+  return out;
+}
+
+std::optional<CalendarStore::Recurrence> recurrenceOf(NSArray<EKRecurrenceRule *> *rules) {
+  static const char *const kFrequencies[] = {"daily", "weekly", "monthly", "yearly"};
+  EKRecurrenceRule *rule = rules.firstObject;
+  if (rule == nil) {
+    return std::nullopt;
+  }
+  auto frequency = static_cast<NSInteger>(rule.frequency);
+  CalendarStore::Recurrence out{.frequency = frequency >= 0 && frequency < 4 ? kFrequencies[frequency] : "daily",
+                                .interval = static_cast<int>(rule.interval)};
+  if (rule.recurrenceEnd.endDate != nil) {
+    out.endDate = ms(rule.recurrenceEnd.endDate);
+  } else if (rule.recurrenceEnd.occurrenceCount > 0) {
+    out.occurrence = static_cast<int>(rule.recurrenceEnd.occurrenceCount);
+  }
+  return out;
+}
+
+EKRecurrenceRule *ekRule(const CalendarStore::Recurrence &rule) {
+  EKRecurrenceFrequency frequency = rule.frequency == "weekly"    ? EKRecurrenceFrequencyWeekly
+                                    : rule.frequency == "monthly" ? EKRecurrenceFrequencyMonthly
+                                    : rule.frequency == "yearly"  ? EKRecurrenceFrequencyYearly
+                                                                  : EKRecurrenceFrequencyDaily;
+  EKRecurrenceEnd *end = rule.endDate      ? [EKRecurrenceEnd recurrenceEndWithEndDate:dateOf(*rule.endDate)]
+                         : rule.occurrence ? [EKRecurrenceEnd recurrenceEndWithOccurrenceCount:static_cast<NSUInteger>(*rule.occurrence)]
+                                           : nil;
+  return [[EKRecurrenceRule alloc] initRecurrenceWithFrequency:frequency interval:std::max(1, rule.interval) end:end];
+}
+
+// What events and reminders share: their text, time zone, alarms and recurrence.
+void applyItem(EKCalendarItem *item, const CalendarStore::Details &d) {
+  auto cleared = [&](const char *name) { return d.cleared.contains(name); };
+  if (d.title) {
+    item.title = nsString(*d.title);
+  } else if (cleared("title")) {
+    item.title = @"";
+  }
+  if (d.location) {
+    item.location = nsString(*d.location);
+  } else if (cleared("location")) {
+    item.location = nil;
+  }
+  if (d.notes) {
+    item.notes = nsString(*d.notes);
+  } else if (cleared("notes")) {
+    item.notes = nil;
+  }
+  if (d.url) {
+    item.URL = [NSURL URLWithString:nsString(*d.url)];
+  } else if (cleared("url")) {
+    item.URL = nil;
+  }
+  if (d.timeZone) {
+    item.timeZone = [NSTimeZone timeZoneWithName:nsString(*d.timeZone)];
+  } else if (cleared("timeZone")) {
+    item.timeZone = nil;
+  }
+  if (d.alarms) {
+    item.alarms = ekAlarms(*d.alarms);
+  } else if (cleared("alarms")) {
+    item.alarms = nil;
+  }
+  if (d.recurrence) {
+    item.recurrenceRules = @[ ekRule(*d.recurrence) ];
+  } else if (cleared("recurrenceRule")) {
+    item.recurrenceRules = nil;
+  }
+}
+
+NSDateComponents *componentsOf(double ms, NSTimeZone *zone) {
+  NSCalendar *calendar = [NSCalendar calendarWithIdentifier:NSCalendarIdentifierGregorian];
+  calendar.timeZone = zone != nil ? zone : NSTimeZone.defaultTimeZone;
+  NSDateComponents *out = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour |
+                                               NSCalendarUnitMinute | NSCalendarUnitSecond | NSCalendarUnitTimeZone
+                                      fromDate:dateOf(ms)];
+  out.calendar = calendar;
+  return out;
+}
+
+std::optional<double> msOf(NSDateComponents *components) {
+  if (components == nil) {
+    return std::nullopt;
+  }
+  NSCalendar *calendar = components.calendar != nil ? components.calendar : [NSCalendar calendarWithIdentifier:NSCalendarIdentifierGregorian];
+  NSDate *date = [calendar dateFromComponents:components];
+  return date != nil ? std::optional(ms(date)) : std::nullopt;
+}
+
 CalendarStore::Event eventOf(EKEvent *event) {
   static const char *const kStatuses[] = {"none", "confirmed", "tentative", "canceled"};
   static const char *const kAvailabilities[] = {"busy", "free", "tentative", "unavailable"};
@@ -100,7 +217,82 @@ CalendarStore::Event eventOf(EKEvent *event) {
       .url = event.URL != nil ? std::optional(text(event.URL.absoluteString)) : std::nullopt,
       .availability = availability >= 0 && availability < 4 ? kAvailabilities[availability] : "notSupported",
       .status = status >= 0 && status < 4 ? kStatuses[status] : "none",
+      .alarms = alarmsOf(event.alarms),
+      .recurrence = recurrenceOf(event.recurrenceRules),
   };
+}
+
+void applyEvent(EKEvent *event, const CalendarStore::Details &d) {
+  applyItem(event, d);
+  if (d.start) {
+    event.startDate = dateOf(*d.start);
+  }
+  if (d.end) {
+    event.endDate = dateOf(*d.end);
+  }
+  if (d.allDay) {
+    event.allDay = *d.allDay;
+  }
+  if (d.availability) {
+    static const std::pair<const char *, EKEventAvailability> kAvailabilities[] = {
+        {"busy", EKEventAvailabilityBusy},
+        {"free", EKEventAvailabilityFree},
+        {"tentative", EKEventAvailabilityTentative},
+        {"unavailable", EKEventAvailabilityUnavailable},
+    };
+    for (const auto &[name, value] : kAvailabilities) {
+      if (*d.availability == name) {
+        event.availability = value;
+      }
+    }
+  }
+}
+
+CalendarStore::Reminder reminderOf(EKReminder *reminder) {
+  NSDateComponents *due = reminder.dueDateComponents;
+  return {
+      .id = text(reminder.calendarItemIdentifier),
+      .calendarId = text(reminder.calendar.calendarIdentifier),
+      .title = text(reminder.title),
+      .location = reminder.location.length > 0 ? std::optional(text(reminder.location)) : std::nullopt,
+      .notes = text(reminder.notes),
+      .url = reminder.URL != nil ? std::optional(text(reminder.URL.absoluteString)) : std::nullopt,
+      .timeZone = text(reminder.timeZone.name),
+      .start = msOf(reminder.startDateComponents),
+      .due = msOf(due),
+      // A due date with no time of day is a whole day's.
+      .allDay = due != nil && due.hour == NSDateComponentUndefined,
+      .completed = static_cast<bool>(reminder.completed),
+      .completionDate = reminder.completionDate != nil ? std::optional(ms(reminder.completionDate)) : std::nullopt,
+      .alarms = alarmsOf(reminder.alarms),
+      .recurrence = recurrenceOf(reminder.recurrenceRules),
+  };
+}
+
+void applyReminder(EKReminder *reminder, const CalendarStore::Details &d) {
+  applyItem(reminder, d);
+  if (d.start) {
+    reminder.startDateComponents = componentsOf(*d.start, reminder.timeZone);
+  } else if (d.cleared.contains("startDate")) {
+    reminder.startDateComponents = nil;
+  }
+  if (d.due) {
+    reminder.dueDateComponents = componentsOf(*d.due, reminder.timeZone);
+  } else if (d.cleared.contains("dueDate")) {
+    reminder.dueDateComponents = nil;
+  }
+  if (d.completed) {
+    reminder.completed = *d.completed;
+  }
+  if (d.completionDate) {
+    reminder.completionDate = dateOf(*d.completionDate);
+  } else if (d.cleared.contains("completionDate")) {
+    reminder.completionDate = nil;
+  }
+}
+
+NSString *idOf(const std::string &id) {
+  return nsString(id);
 }
 
 class EventKitStore final : public CalendarStore {
@@ -193,7 +385,168 @@ class EventKitStore final : public CalendarStore {
     return event != nil ? std::optional(eventOf(event)) : std::nullopt;
   }
 
+  Event createEvent(const std::string &calendarId, const Details &details) override {
+    auto granted = access(Entity::Event);
+    if (granted != Access::FullAccess && granted != Access::WriteOnly) {
+      throw Failure("Calendar: no access to add events");
+    }
+    EKEventStore *events = store();
+    EKCalendar *calendar = [events calendarWithIdentifier:idOf(calendarId)];
+    // Write-only access sees no calendars: the event goes in the default one, as on iOS.
+    if (calendar == nil && granted == Access::WriteOnly) {
+      calendar = events.defaultCalendarForNewEvents;
+    }
+    writable(calendar, calendarId);
+    EKEvent *event = [EKEvent eventWithEventStore:events];
+    event.calendar = calendar;
+    applyEvent(event, details);
+    NSError *error = nil;
+    if (![events saveEvent:event span:EKSpanThisEvent commit:YES error:&error]) {
+      throw Failure(failure("Calendar.createEvent", error));
+    }
+    return eventOf(event);
+  }
+
+  Event updateEvent(const std::string &id, const Details &details) override {
+    EKEventStore *events = store();
+    EKEvent *event = existingEvent(id);
+    applyEvent(event, details);
+    NSError *error = nil;
+    if (![events saveEvent:event span:EKSpanThisEvent commit:YES error:&error]) {
+      throw Failure(failure("Calendar.update", error));
+    }
+    return eventOf(event);
+  }
+
+  void deleteEvent(const std::string &id) override {
+    EKEventStore *events = store();
+    EKEvent *event = existingEvent(id);
+    NSError *error = nil;
+    if (![events removeEvent:event span:EKSpanThisEvent commit:YES error:&error]) {
+      throw Failure(failure("Calendar.delete", error));
+    }
+  }
+
+  void reminders(
+      const std::vector<std::string> &calendarIds,
+      const std::optional<std::string> &status,
+      std::optional<double> start,
+      std::optional<double> end,
+      std::function<void(std::vector<Reminder>)> done) override {
+    if (access(Entity::Reminder) != Access::FullAccess) {
+      done({});
+      return;
+    }
+    EKEventStore *events = store();
+    NSMutableArray<EKCalendar *> *calendars = [NSMutableArray array];
+    for (const auto &id : calendarIds) {
+      if (EKCalendar *calendar = [events calendarWithIdentifier:idOf(id)]) {
+        [calendars addObject:calendar];
+      }
+    }
+    if (calendars.count == 0) {
+      done({});
+      return;
+    }
+    NSDate *from = start ? dateOf(*start) : nil;
+    NSDate *to = end ? dateOf(*end) : nil;
+    NSPredicate *predicate = status == "incomplete"
+                                 ? [events predicateForIncompleteRemindersWithDueDateStarting:from ending:to calendars:calendars]
+                             : status == "completed"
+                                 ? [events predicateForCompletedRemindersWithCompletionDateStarting:from ending:to calendars:calendars]
+                                 : [events predicateForRemindersInCalendars:calendars];
+    auto answer = std::make_shared<std::function<void(std::vector<Reminder>)>>(std::move(done));
+    [events fetchRemindersMatchingPredicate:predicate
+                                 completion:^(NSArray<EKReminder *> *found) {
+                                   std::vector<Reminder> out;
+                                   for (EKReminder *reminder in found) {
+                                     out.push_back(reminderOf(reminder));
+                                   }
+                                   (*answer)(std::move(out));
+                                 }];
+  }
+
+  std::optional<Reminder> reminder(const std::string &id) override {
+    if (access(Entity::Reminder) != Access::FullAccess) {
+      return std::nullopt;
+    }
+    EKCalendarItem *item = [store() calendarItemWithIdentifier:idOf(id)];
+    return [item isKindOfClass:EKReminder.class] ? std::optional(reminderOf((EKReminder *)item)) : std::nullopt;
+  }
+
+  Reminder createReminder(const std::string &calendarId, const Details &details) override {
+    if (access(Entity::Reminder) != Access::FullAccess) {
+      throw Failure("Calendar: no access to the reminders");
+    }
+    EKEventStore *events = store();
+    EKCalendar *calendar = [events calendarWithIdentifier:idOf(calendarId)];
+    writable(calendar, calendarId);
+    EKReminder *reminder = [EKReminder reminderWithEventStore:events];
+    reminder.calendar = calendar;
+    applyReminder(reminder, details);
+    NSError *error = nil;
+    if (![events saveReminder:reminder commit:YES error:&error]) {
+      throw Failure(failure("Calendar.createReminder", error));
+    }
+    return reminderOf(reminder);
+  }
+
+  Reminder updateReminder(const std::string &id, const Details &details) override {
+    EKEventStore *events = store();
+    EKReminder *reminder = existingReminder(id);
+    applyReminder(reminder, details);
+    NSError *error = nil;
+    if (![events saveReminder:reminder commit:YES error:&error]) {
+      throw Failure(failure("Calendar.update", error));
+    }
+    return reminderOf(reminder);
+  }
+
+  void deleteReminder(const std::string &id) override {
+    EKEventStore *events = store();
+    EKReminder *reminder = existingReminder(id);
+    NSError *error = nil;
+    if (![events removeReminder:reminder commit:YES error:&error]) {
+      throw Failure(failure("Calendar.delete", error));
+    }
+  }
+
  private:
+  static std::string failure(const char *what, NSError *error) {
+    return std::string(what) + ": " + (error != nil ? text(error.localizedDescription) : "the save failed");
+  }
+
+  static void writable(EKCalendar *calendar, const std::string &id) {
+    if (calendar == nil) {
+      throw Failure("Calendar: no calendar with the id " + id);
+    }
+    if (!calendar.allowsContentModifications) {
+      throw Failure("Calendar: the calendar " + text(calendar.title) + " takes no changes");
+    }
+  }
+
+  EKEvent *existingEvent(const std::string &id) {
+    if (access(Entity::Event) != Access::FullAccess) {
+      throw Failure("Calendar: no full access to the calendars");
+    }
+    EKEvent *event = [store() eventWithIdentifier:idOf(id)];
+    if (event == nil) {
+      throw Failure("Calendar: no event with the id " + id);
+    }
+    return event;
+  }
+
+  EKReminder *existingReminder(const std::string &id) {
+    if (access(Entity::Reminder) != Access::FullAccess) {
+      throw Failure("Calendar: no access to the reminders");
+    }
+    EKCalendarItem *item = [store() calendarItemWithIdentifier:idOf(id)];
+    if (![item isKindOfClass:EKReminder.class]) {
+      throw Failure("Calendar: no reminder with the id " + id);
+    }
+    return (EKReminder *)item;
+  }
+
   // Made when first needed: to ask, or to read with access.
   EKEventStore *store() {
     std::lock_guard lock(mutex_);
@@ -214,3 +567,19 @@ std::shared_ptr<CalendarStore> makeCalendarStore() {
 }
 
 } // namespace ngn::appkit
+
+void NGNApplyEventDetails(EKEvent *event, const ngn::CalendarStore::Details &details) {
+  ngn::appkit::applyEvent(event, details);
+}
+
+void NGNApplyReminderDetails(EKReminder *reminder, const ngn::CalendarStore::Details &details) {
+  ngn::appkit::applyReminder(reminder, details);
+}
+
+ngn::CalendarStore::Event NGNEventRecord(EKEvent *event) {
+  return ngn::appkit::eventOf(event);
+}
+
+ngn::CalendarStore::Reminder NGNReminderRecord(EKReminder *reminder) {
+  return ngn::appkit::reminderOf(reminder);
+}

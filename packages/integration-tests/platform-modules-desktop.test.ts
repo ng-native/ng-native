@@ -302,6 +302,147 @@ describe('Calendar on macOS', () => {
     assert.deepEqual(calls.slice(-1), [['listEventsAsync', ['c1', 'c2'], 1_000, 2_000]]);
     assert.deepEqual(calls[0], ['getCalendarPermissionsAsync', true]);
     await assert.rejects(calendar.createCalendar({ title: 'x' }), /not available on macOS/);
+    // A host built before the writes rejects them, and reads no reminders.
+    const [home] = await calendar.calendars();
+    await assert.rejects(home!.createEvent({ title: 'x' }), /Build it again/);
+    assert.deepEqual(await home!.listReminders(), []);
+  });
+
+  /** A host whose writes answer records, or reject as the host does without access. */
+  function writingHost(denied = false) {
+    const calls: unknown[][] = [];
+    const answer =
+      (name: string, make: (...args: unknown[]) => unknown) =>
+      async (...args: unknown[]) => {
+        calls.push([name, ...args]);
+        if (denied && /create|update|delete/.test(name)) {
+          throw new Error('Calendar: no access to the reminders.');
+        }
+        return make(...args);
+      };
+    mac({
+      NgNativeCalendar: {
+        getCalendarsAsync: answer('getCalendarsAsync', () => [{ id: 'c1', title: 'Home' }]),
+        getCalendarAsync: answer('getCalendarAsync', (id) => ({ id })),
+        listEventsAsync: answer('listEventsAsync', () => [{ id: 'e1', title: 'Padel' }]),
+        getEventAsync: answer('getEventAsync', (id) => ({ id, title: 'Padel' })),
+        createEventAsync: answer('createEventAsync', (_id, details) => ({
+          id: 'e2',
+          ...(details as object),
+        })),
+        updateEventAsync: answer('updateEventAsync', (id, details) => ({
+          id,
+          ...(details as object),
+        })),
+        deleteEventAsync: answer('deleteEventAsync', () => null),
+        listRemindersAsync: answer('listRemindersAsync', () => [{ id: 'r1', completed: false }]),
+        getReminderAsync: answer('getReminderAsync', (id) => (id === 'r1' ? { id } : null)),
+        createReminderAsync: answer('createReminderAsync', () => ({
+          id: 'r2',
+          title: 'Book court',
+        })),
+        updateReminderAsync: answer('updateReminderAsync', (id, details) => ({
+          id,
+          ...(details as object),
+        })),
+        deleteReminderAsync: answer('deleteReminderAsync', () => null),
+        getDefaultCalendarSync: () => ({ id: 'c1' }),
+        getSourcesSync: () => [],
+      },
+    });
+    return calls;
+  }
+
+  it('creates an event in a calendar, then updates and deletes it, with dates as milliseconds', async () => {
+    const calls = writingHost();
+    const { Calendar } = await import('@ng-native/expo/calendar');
+    const service = injectService(Calendar);
+    const [home] = await service.calendars();
+    // A record still compares as its fields.
+    assert.deepEqual(home, { id: 'c1', title: 'Home' });
+    const event = await home!.createEvent({
+      title: 'Padel',
+      startDate: new Date(1_000),
+      endDate: '1970-01-01T00:00:02.000Z',
+      alarms: [{ relativeOffset: -30 }, { absoluteDate: '1970-01-01T00:00:00.500Z' }],
+      recurrenceRule: { frequency: 'weekly', endDate: new Date(9_000) } as never,
+      location: undefined,
+    });
+    assert.deepEqual(calls.at(-1), [
+      'createEventAsync',
+      'c1',
+      {
+        title: 'Padel',
+        startDate: 1_000,
+        endDate: 2_000,
+        alarms: [{ relativeOffset: -30 }, { absoluteDate: 500 }],
+        recurrenceRule: { frequency: 'weekly', endDate: 9_000 },
+      },
+    ]);
+    assert.equal(event.id, 'e2');
+    // The fields to empty, which expo-calendar's newer handles take as a second argument.
+    const update = event.update as (details: object, nullableFields: string[]) => Promise<void>;
+    await update.call(event, { title: 'Tennis', endDate: new Date(3_000) }, ['location']);
+    assert.deepEqual(calls.at(-1), [
+      'updateEventAsync',
+      'e2',
+      { title: 'Tennis', endDate: 3_000 },
+      ['location'],
+    ]);
+    // The handle takes what the host answered.
+    assert.equal(event.title, 'Tennis');
+    await event.delete();
+    assert.deepEqual(calls.at(-1), ['deleteEventAsync', 'e2']);
+    const [listed] = await home!.listEvents(new Date(0), new Date(10));
+    assert.deepEqual(calls.at(-1), ['listEventsAsync', ['c1'], 0, 10]);
+    await listed!.delete();
+    assert.deepEqual(calls.at(-1), ['deleteEventAsync', 'e1']);
+    const found = await service.event('e1');
+    await found!.update({ notes: 'x' });
+    assert.deepEqual(calls.at(-1), ['updateEventAsync', 'e1', { notes: 'x' }, []]);
+    await assert.rejects(home!.update({ title: 'x' }), /not available on macOS/);
+  });
+
+  it('lists, reads, creates, completes and deletes reminders', async () => {
+    const calls = writingHost();
+    const { Calendar } = await import('@ng-native/expo/calendar');
+    const service = injectService(Calendar);
+    const [tasks] = await service.calendars();
+    const [open] = await tasks!.listReminders(new Date(0), null, 'incomplete' as never);
+    assert.deepEqual(calls.at(-1), ['listRemindersAsync', ['c1'], 0, null, 'incomplete']);
+    await open!.update({ completed: true, completionDate: new Date(7) });
+    assert.deepEqual(calls.at(-1), [
+      'updateReminderAsync',
+      'r1',
+      { completed: true, completionDate: 7 },
+      [],
+    ]);
+    assert.equal(open!.completed, true);
+    const created = await tasks!.createReminder({ title: 'Book court', dueDate: new Date(5) });
+    assert.deepEqual(calls.at(-1), [
+      'createReminderAsync',
+      'c1',
+      { title: 'Book court', dueDate: 5 },
+    ]);
+    await created.delete();
+    assert.deepEqual(calls.at(-1), ['deleteReminderAsync', 'r2']);
+    const read = await service.reminder('r1');
+    assert.equal(read!.id, 'r1');
+    await read!.delete();
+    assert.deepEqual(calls.at(-1), ['deleteReminderAsync', 'r1']);
+    assert.equal(await service.reminder('r0'), null);
+  });
+
+  it('passes a write the host refuses on as a rejection, leaving the handle as it was', async () => {
+    writingHost(true);
+    const { Calendar } = await import('@ng-native/expo/calendar');
+    const service = injectService(Calendar);
+    const tasks = await service.calendar('c1');
+    await assert.rejects(tasks!.createReminder({ title: 'x' }), /no access to the reminders/);
+    const reminder = await service.reminder('r1');
+    await assert.rejects(reminder!.update({ completed: true }), /no access/);
+    assert.equal(reminder!.completed, undefined);
+    await assert.rejects(reminder!.delete(), /no access/);
   });
 });
 

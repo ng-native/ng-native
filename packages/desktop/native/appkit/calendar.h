@@ -12,3 +12,14 @@ namespace ngn::appkit {
 std::shared_ptr<CalendarStore> makeCalendarStore();
 
 } // namespace ngn::appkit
+
+#ifdef __OBJC__
+#import <EventKit/EventKit.h>
+
+// What a create or an update writes onto an event or a reminder, and how one reads back, apart
+// from the store: in memory, with no access needed.
+void NGNApplyEventDetails(EKEvent *event, const ngn::CalendarStore::Details &details);
+void NGNApplyReminderDetails(EKReminder *reminder, const ngn::CalendarStore::Details &details);
+ngn::CalendarStore::Event NGNEventRecord(EKEvent *event);
+ngn::CalendarStore::Reminder NGNReminderRecord(EKReminder *reminder);
+#endif

@@ -127,6 +127,14 @@ has text for. `writePermission` needs `writeOnlyAccess: true`, and `permission` 
 { "plugins": [["expo-calendar", { "writeOnlyAccess": true }]] }
 ```
 
+On macOS the desktop host's EventKit answers: the permissions, reading calendars and events, and,
+on the handles, `createEvent()`, `createReminder()`, `listEvents()` and `listReminders()` on a
+calendar and `update()` and `delete()` on an event or a reminder. Adding an event needs
+`writePermission` or `permission`; changing or deleting one needs `permission`; every reminder call
+needs `remindersPermission`. Without the access asked for, a write rejects with a message naming the
+permission. An event's attendees, `createCalendar()` and a calendar's own `update()` and `delete()`
+are not available there.
+
 ## Without the module
 
 On iOS and Android, a missing `expo-calendar` (never installed, or installed without the app being
