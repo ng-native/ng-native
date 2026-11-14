@@ -119,6 +119,36 @@ describe('Processes.spawn', () => {
     assert.deepEqual(sent, ['1:write:y', '1:end', '1:kill:SIGTERM']);
   });
 
+  it('keeps what a fast program said before its spawn resolved', async () => {
+    // The host's reader threads can queue a short program's output and exit ahead of the spawn's
+    // answer: dropped, the exit never settled.
+    const fake = fakeHost();
+    const processes = injectService(Processes, {
+      providers: [
+        {
+          provide: Processes.SOURCE,
+          useValue: {
+            ...fake.host,
+            spawn: async () => {
+              fake.emit({ type: 'stdout', handle: 7, data: 'hi\n' });
+              fake.emit({ type: 'exit', handle: 7, code: 0, signal: null });
+              return 7;
+            },
+          },
+        },
+      ],
+    });
+    const git = await processes.spawn('git', ['status', '--porcelain']);
+    const out: string[] = [];
+    git!.onStdout((chunk) => out.push(chunk));
+    const exit = await Promise.race([
+      git!.exit,
+      new Promise((resolve) => setTimeout(() => resolve('never settled'), 50)),
+    ]);
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.deepEqual(out, ['hi\n']);
+  });
+
   it('throws for a call the app did not declare, and runs nothing', async () => {
     const { host, spawned } = fakeHost();
     const processes = injectService(Processes, {

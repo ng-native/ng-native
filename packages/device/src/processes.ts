@@ -180,6 +180,13 @@ export class Processes {
     this.native?.spawnCapabilities ?? []
   ).map(compileCapability);
   private readonly running = new Map<number, Running>();
+  /**
+   * What the host said of a program before its spawn resolved with the handle: its reader threads
+   * can queue a short program's output and exit ahead of that answer.
+   */
+  private readonly early = new Map<number, ProcessEvent[]>();
+  /** Spawns waiting on the host, while which an unknown handle's events are kept. */
+  private spawning = 0;
   private readonly unsubscribe = this.native?.subscribe?.((event) => this.heard(event)) ?? null;
 
   /** Whether the OS gives the app processes: a desktop OS with the desktop host's module. */
@@ -216,8 +223,17 @@ export class Processes {
       options.env ?? this.env,
       native.envNames ?? Object.keys(this.env),
     );
-    const handle = await native.spawn(match.path, args, options.cwd ?? null, env);
-    return this.child(native, handle);
+    this.spawning++;
+    let handle: number;
+    try {
+      handle = await native.spawn(match.path, args, options.cwd ?? null, env);
+    } finally {
+      this.spawning--;
+    }
+    const child = this.child(native, handle);
+    // Nothing is waiting for the rest: they were another program's, gone before the app heard it.
+    if (!this.spawning) this.early.clear();
+    return child;
   }
 
   private child(native: NativeProcesses, handle: number): ChildProcess {
@@ -226,6 +242,12 @@ export class Processes {
     let exited!: (exit: ProcessExit) => void;
     const exit = new Promise<ProcessExit>((resolve) => (exited = resolve));
     this.running.set(handle, { stdout, stderr, exited });
+    const early = this.early.get(handle);
+    if (early) {
+      this.early.delete(handle);
+      // A turn later, as the host's events arrive, so the caller has listened by then.
+      setTimeout(() => early.forEach((event) => this.heard(event)), 0);
+    }
     const listen = (set: Set<(chunk: string) => void>, listener: (chunk: string) => void) => {
       set.add(listener);
       return () => void set.delete(listener);
@@ -242,7 +264,13 @@ export class Processes {
 
   private heard(event: ProcessEvent): void {
     const running = this.running.get(event.handle);
-    if (!running) return;
+    if (!running) {
+      if (!this.spawning) return;
+      const early = this.early.get(event.handle);
+      if (early) early.push(event);
+      else this.early.set(event.handle, [event]);
+      return;
+    }
     if (event.type === 'exit') {
       this.running.delete(event.handle);
       running.exited({ code: event.code, signal: event.signal });
