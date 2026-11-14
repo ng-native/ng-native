@@ -89,6 +89,9 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources) 
   }
   settings.test = std::get<std::optional<TestLaunch>>(test);
   settings.noPrompts = settings.noPrompts || (settings.test && settings.test->fakeSystemUI);
+  settings.inputScript = sources.env ? sources.env("NGN_INPUT_SCRIPT").value_or("") : "";
+  settings.logRotors = is(sources, "NGN_LOG_ROTORS", "1");
+  settings.logCommits = is(sources, "NGN_LOG_COMMITS", "1");
   if (auto capabilities = sources.env ? sources.env("NGN_DESKTOP_CAPABILITIES") : std::nullopt) {
     settings.capabilitiesJson = *capabilities;
   }

@@ -606,7 +606,8 @@ needs `NGN_SIGN_IDENTITY` there, since it loads only into an app signed with a T
 `NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
 ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.
 `NGN_LOG_ROTORS=1` logs each VoiceOver rotor's items in the first window a second after its first
-frame, for checking them without a screen reader.
+frame, for checking them without a screen reader. Both, and `NGN_INPUT_SCRIPT`, work only in a dev
+run: a packaged app ignores them, as it ignores the rest of its environment.
 
 The host reads these `Info.plist` keys when it is opened with no arguments:
 

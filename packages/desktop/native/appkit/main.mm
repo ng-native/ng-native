@@ -114,6 +114,8 @@ struct Host {
   // Ticks the layout animations while they run, at the display's rate.
   NSTimer *animationTimer;
   bool firstFrameLogged = false;
+  // What the host runs and how (launch-settings.h), set once at launch.
+  const ngn::LaunchSettings *launch = nullptr;
   // The app window is ordered front once, when its safe areas settle (showAppWindowWhenSettled).
   bool appWindowShown = false;
   // The Expo Updates client, for a bundle on disk (updates.h).
@@ -181,16 +183,16 @@ void logFirstFrame(NSWindow *window) {
   [CATransaction flush];
   fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", msSinceLaunch());
   // A dev run's input script (input-script.h), played into the first window once it shows.
-  if (const char *path = getenv("NGN_INPUT_SCRIPT"); path != nullptr && gHost.runtime && gHost.runtime->devServer()) {
-    NSString *text = [NSString stringWithContentsOfFile:@(path) encoding:NSUTF8StringEncoding error:nil];
+  if (const auto &path = gHost.launch->inputScript; !path.empty() && gHost.runtime && gHost.runtime->devServer()) {
+    NSString *text = [NSString stringWithContentsOfFile:@(path.c_str()) encoding:NSUTF8StringEncoding error:nil];
     auto script = ngn::parseInputScript(text ? std::string(text.UTF8String) : std::string());
     if (!text || script.error) {
-      fprintf(stderr, "[ngn] input script %s: %s\n", path, text ? script.error->c_str() : "cannot be read");
+      fprintf(stderr, "[ngn] input script %s: %s\n", path.c_str(), text ? script.error->c_str() : "cannot be read");
     } else {
       ngn::appkit::replayInputScript(window, std::move(script));
     }
   }
-  if (const char *log = getenv("NGN_LOG_ROTORS"); log != nullptr && std::string(log) == "1") {
+  if (gHost.launch->logRotors) {
     // A second after the first frame, when the app has settled.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
       if (auto *surface = (NGNSurfaceView *)window.contentView; [surface isKindOfClass:NGNSurfaceView.class]) {
@@ -588,6 +590,7 @@ int main(int argc, const char *argv[]) {
       return 2;
     }
     static const auto settings = std::get<ngn::LaunchSettings>(launch);
+    gHost.launch = &settings;
     std::string bundle = settings.bundle;
     std::string module = settings.module;
     NSString *title = [NSString stringWithUTF8String:settings.title.c_str()];
@@ -628,7 +631,7 @@ int main(int argc, const char *argv[]) {
     ngn::workletHost().setGestureState = [](int handlerTag, int state) { gestures->setState(handlerTag, state); };
     // Each commit's time, for the performance budget (pnpm bench:macos), when asked for: every
     // frame of an animation commits, which would flood a dev run's terminal.
-    if (const char *log = getenv("NGN_LOG_COMMITS"); log != nullptr && std::string(log) == "1") {
+    if (settings.logCommits) {
       gHost.mounting->onCommit = [](SurfaceId, double ms) { fprintf(stderr, "[ngn] commit %.1f ms\n", ms); };
     }
     gHost.backend->onMount = [](SurfaceId surfaceId) {
