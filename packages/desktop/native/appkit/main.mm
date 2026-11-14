@@ -12,6 +12,7 @@
 
 #import "appkit-backend.h"
 #import "menu-bar.h"
+#import "modal-host-view.h"
 #import "network.h"
 #import "scroll-view.h"
 #import "system.h"
@@ -150,6 +151,14 @@ int main(int argc, const char *argv[]) {
     gHost.mounting = std::make_shared<ngn::MountingManager>(gHost.backend, gHost.backend);
     gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
     gHost.backend->onMount = logFirstFrame;
+    NGNModalHostView.input = gHost.input.get();
+    NGNModalHostView.presentationChanged = [](NSInteger tag, BOOL presented) {
+      if (presented) {
+        gHost.mounting->tree().addContainerRoot(static_cast<Tag>(tag));
+      } else {
+        gHost.mounting->tree().removeContainerRoot(static_cast<Tag>(tag));
+      }
+    };
     NGNScrollView.offsetChanged = [](NSInteger tag, CGPoint offset) {
       gHost.mounting->tree().setScrollOffset(
           static_cast<Tag>(tag), {static_cast<Float>(offset.x), static_cast<Float>(offset.y)});

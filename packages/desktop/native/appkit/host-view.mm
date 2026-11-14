@@ -1,6 +1,7 @@
 #import "host-view.h"
 
 #import "image-view.h"
+#import "modal-host-view.h"
 #import "scroll-view.h"
 
 #include "text-layout.h"
@@ -43,6 +44,7 @@ NSString *nsString(const std::string &s) {
 - (instancetype)initWithShadowView:(const ShadowView &)view {
   if ((self = [super initWithFrame:NSZeroRect])) {
     _reactTag = view.tag;
+    _surfaceId = view.surfaceId;
     _componentName = [NSString stringWithUTF8String:view.componentName];
     self.wantsLayer = YES;
     self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawOnSetNeedsDisplay;
@@ -302,6 +304,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == "Image") {
     return [[NGNImageView alloc] initWithShadowView:view];
+  }
+  if (name == "ModalHostView") {
+    return [[NGNModalHostView alloc] initWithShadowView:view];
   }
   if (name == "ScrollView") {
     return [[NGNScrollView alloc] initWithShadowView:view];

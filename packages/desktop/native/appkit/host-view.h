@@ -10,6 +10,7 @@
 
 @interface NGNView : NSView
 @property (nonatomic, readonly) NSInteger reactTag;
+@property (nonatomic, readonly) NSInteger surfaceId;
 @property (nonatomic, readonly, copy) NSString *componentName;
 - (instancetype)initWithShadowView:(const facebook::react::ShadowView &)view;
 - (void)updateProps:(const facebook::react::Props::Shared &)props;

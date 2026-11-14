@@ -2,20 +2,30 @@
 
 @implementation NGNSurfaceView {
   ngn::InputSink *_input;
+  ngn::ContainerId _container;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame surfaceId:(facebook::react::SurfaceId)surfaceId input:(ngn::InputSink *)input {
+  // The surface's main container hit-tests from the surface's root view.
+  return [self initWithFrame:frame surfaceId:surfaceId container:surfaceId rootTag:surfaceId input:input];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame
+                    surfaceId:(facebook::react::SurfaceId)surfaceId
+                    container:(ngn::ContainerId)container
+                      rootTag:(facebook::react::Tag)rootTag
+                        input:(ngn::InputSink *)input {
   if ((self = [super initWithFrame:frame])) {
     _surfaceId = surfaceId;
+    _container = container;
     _input = input;
-    // The surface's main container hit-tests from the surface's root view.
-    _input->addContainer(surfaceId, surfaceId, surfaceId);
+    _input->addContainer(container, surfaceId, rootTag);
   }
   return self;
 }
 
 - (void)dealloc {
-  _input->removeContainer(_surfaceId);
+  _input->removeContainer(_container);
 }
 
 - (BOOL)isFlipped {
@@ -45,7 +55,7 @@
   // AppKit's screen coordinates start at the bottom left of the primary display.
   CGFloat top = NSMaxY(NSScreen.screens.firstObject.frame);
   ngn::PointerInput input;
-  input.container = _surfaceId;
+  input.container = _container;
   input.point = {static_cast<float>(inView.x), static_cast<float>(inView.y)};
   input.screenPoint = {static_cast<float>(onScreen.x), static_cast<float>(top - onScreen.y)};
   input.buttons = static_cast<int>(NSEvent.pressedMouseButtons);
@@ -67,12 +77,30 @@
   _input->pointerUp([self inputFor:event]);
 }
 
+// Whether this container is the innermost one under the pointer. A container presented over
+// this one (a modal's cover) reports its own moves, so this one stays out of them: hover never
+// lands on what is under a cover.
+- (BOOL)ownsPointer:(NSEvent *)event {
+  NSView *content = self.window.contentView;
+  NSView *hit = [content hitTest:[content.superview convertPoint:event.locationInWindow fromView:nil]];
+  for (NSView *v = hit; v != nil; v = v.superview) {
+    if ([v isKindOfClass:NGNSurfaceView.class]) {
+      return v == self;
+    }
+  }
+  return NO;
+}
+
 - (void)mouseMoved:(NSEvent *)event {
-  _input->pointerMove([self inputFor:event]);
+  if ([self ownsPointer:event]) {
+    _input->pointerMove([self inputFor:event]);
+  }
 }
 
 - (void)mouseEntered:(NSEvent *)event {
-  _input->pointerMove([self inputFor:event]);
+  if ([self ownsPointer:event]) {
+    _input->pointerMove([self inputFor:event]);
+  }
 }
 
 - (void)mouseExited:(NSEvent *)event {
