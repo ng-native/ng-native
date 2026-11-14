@@ -8,6 +8,7 @@
 #include "ngn/module-registry.h"
 #include "ngn/mounting-manager.h"
 #include "ngn/network.h"
+#include "ngn/surface-book.h"
 #include "ngn/native-controls.h"
 #include "ngn/text-measurer.h"
 
@@ -98,7 +99,8 @@ class Runtime {
   std::string bundle_;
   std::optional<DevServer> devServer_;
   std::shared_ptr<facebook::react::RunLoopObserverManager> runLoop_;
-  // Guards host_ and surfaces_ against a reload on another thread.
+  // Guards host_, which a reload holds while it tears the runtime down and loads the bundle. The
+  // UI thread never waits on it during a reload: it writes to the book instead.
   std::recursive_mutex mutex_;
   std::atomic<bool> reloading_{false};
   std::unique_ptr<facebook::react::ReactHost> host_;
@@ -106,7 +108,9 @@ class Runtime {
     std::string moduleName;
     SurfaceMetrics metrics;
   };
-  std::map<SurfaceId, Surface> surfaces_;
+  // Taken before mutex_ when both are, and never held by a reload while it holds mutex_.
+  std::mutex surfacesMutex_;
+  SurfaceBook<Surface> surfaces_;
 };
 
 } // namespace ngn

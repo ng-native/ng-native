@@ -12,6 +12,7 @@
 
 #include <glog/logging.h>
 
+#include <set>
 #include <thread>
 
 using namespace facebook::react;
@@ -117,25 +118,35 @@ bool Runtime::loadBundle() {
 }
 
 void Runtime::startSurface(SurfaceId surfaceId, const std::string &moduleName, const SurfaceMetrics &metrics) {
+  std::lock_guard book(surfacesMutex_);
+  if (!surfaces_.start(surfaceId, {moduleName, metrics})) {
+    return;
+  }
   std::lock_guard lock(mutex_);
-  surfaces_[surfaceId] = {moduleName, metrics};
-  host_->startSurface(surfaceId, moduleName, folly::dynamic::object(), constraints(metrics), context(metrics));
+  if (host_) {
+    host_->startSurface(surfaceId, moduleName, folly::dynamic::object(), constraints(metrics), context(metrics));
+  }
 }
 
 void Runtime::stopSurface(SurfaceId surfaceId) {
+  std::lock_guard book(surfacesMutex_);
+  if (!surfaces_.stop(surfaceId)) {
+    return;
+  }
   std::lock_guard lock(mutex_);
-  if (surfaces_.erase(surfaceId) != 0 && host_) {
+  if (host_) {
     host_->stopSurface(surfaceId);
   }
 }
 
 void Runtime::updateSurface(SurfaceId surfaceId, const SurfaceMetrics &metrics) {
-  std::unique_lock lock(mutex_, std::try_to_lock);
-  if (auto it = surfaces_.find(surfaceId); it != surfaces_.end()) {
-    it->second.metrics = metrics;
+  std::lock_guard book(surfacesMutex_);
+  // During a reload the restarted surface takes the metrics recorded here.
+  if (!surfaces_.update(surfaceId, [&](Surface &surface) { surface.metrics = metrics; })) {
+    return;
   }
-  // During a reload the restarted surface takes the metrics recorded above.
-  if (lock.owns_lock() && host_ && !reloading_) {
+  std::lock_guard lock(mutex_);
+  if (host_) {
     host_->setSurfaceConstraints(surfaceId, constraints(metrics), context(metrics));
   }
 }
@@ -169,7 +180,9 @@ std::optional<SheetNode> Runtime::sheetNode(SurfaceId surfaceId, Tag tag) {
 }
 
 void Runtime::animationTick() {
-  if (host_ && !reloading_) {
+  // A frame skipped while a reload holds the host is no loss; reading host_ without the lock is.
+  std::unique_lock lock(mutex_, std::try_to_lock);
+  if (lock.owns_lock() && host_ && !reloading_) {
     host_->runOnScheduler([](Scheduler &scheduler) { scheduler.animationTick(); });
   }
 }
@@ -181,13 +194,18 @@ void Runtime::beat() {
 }
 
 void Runtime::reload(std::function<void(bool)> done) {
-  if (reloading_.exchange(true)) {
-    return;
+  {
+    std::lock_guard book(surfacesMutex_);
+    if (!surfaces_.beginReload()) {
+      return;
+    }
+    reloading_ = true;
   }
   // Tearing down waits for the JS thread and the download blocks, so neither runs on the UI
   // thread, whose queue the mounting of the stopped surfaces still needs.
   std::thread([this, done = std::move(done)] {
     bool loaded = false;
+    bool restarted = false;
     {
       std::lock_guard lock(mutex_);
       if (host_) {
@@ -195,17 +213,39 @@ void Runtime::reload(std::function<void(bool)> done) {
         host_.reset();
         createHost();
         loaded = devServer_ ? host_->loadScript("", bundle_) : host_->loadScript(bundle_, bundle_);
-        for (const auto &[surfaceId, surface] : surfaces_) {
-          host_->startSurface(
-              surfaceId,
-              surface.moduleName,
-              folly::dynamic::object(),
-              constraints(surface.metrics),
-              context(surface.metrics));
-        }
+        restarted = true;
       }
     }
-    reloading_ = false;
+    // Brings the new runtime to the surfaces the book has, which the UI thread may change
+    // meanwhile, until they match and the reload ends. mutex_ is never held while the book's lock
+    // is taken, which the UI thread takes first.
+    std::set<SurfaceId> started;
+    while (true) {
+      std::optional<SurfaceBook<Surface>::Step> step;
+      {
+        std::lock_guard book(surfacesMutex_);
+        if (!restarted) {
+          for (const auto &[id, surface] : surfaces_.surfaces()) {
+            started.insert(id);
+          }
+        }
+        step = surfaces_.settle(started);
+        if (!step) {
+          reloading_ = false;
+          break;
+        }
+      }
+      std::lock_guard lock(mutex_);
+      for (const auto &[surfaceId, surface] : step->start) {
+        host_->startSurface(
+            surfaceId, surface.moduleName, folly::dynamic::object(), constraints(surface.metrics), context(surface.metrics));
+        started.insert(surfaceId);
+      }
+      for (auto surfaceId : step->stop) {
+        host_->stopSurface(surfaceId);
+        started.erase(surfaceId);
+      }
+    }
     if (done) {
       done(loaded);
     }
