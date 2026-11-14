@@ -17,7 +17,7 @@
  * answers granted there. Without the module installed, the permission is refused and there is no
  * identifier.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, computed, type Signal } from '@angular/core';
 import { expoModule, present } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
@@ -58,9 +58,9 @@ export class Tracking {
   );
 
   /** Whether the device has the tracking API. Where it does not, the permission answers granted. */
-  get available(): boolean {
-    return present(this.native)?.isAvailable() ?? false;
-  }
+  readonly available: Signal<boolean> = computed(
+    () => present(this.native)?.isAvailable() ?? false,
+  );
 
   /**
    * The advertising identifier: the IDFA on iOS, the advertising ID on Android. Null on iOS until

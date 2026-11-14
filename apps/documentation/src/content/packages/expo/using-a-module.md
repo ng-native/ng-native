@@ -133,18 +133,26 @@ package's own types with `import type`, which a test does not evaluate.
 
 ## Whether a feature is available
 
-A service that can say whether its feature is there says it as `available`, in one of three shapes,
-by what the answer is like:
+Every service says whether its feature is there as `available`, a `Signal<boolean>` read as
+`available()`, in code and in templates alike: `@if (haptics.available())`. Where the answer is
+known at once, such as whether the module is in the build, it never changes. Where it is a native
+check, such as whether a face or fingerprint is enrolled for
+[Biometrics](/packages/expo/biometrics), Sign in with Apple, screen capture, the store review
+prompt or a sensor, it is `false` until the
+platform answers, which is a turn after it is first read. [Biometrics](/packages/expo/biometrics)
+asks again each time the app comes back to the front. The hinge of a
+[foldable](/packages/expo/foldable) and the on-device language model follow the feature as it comes
+and goes.
 
-- **A getter**, `available`, when the answer is known at once and does not change: whether the
-  module is in the build, as for [Haptics](/packages/expo/haptics),
-  [Fonts](/packages/expo/fonts) and [Tracking](/packages/expo/tracking).
-- **A method that resolves**, `await available()`, when the answer is a fresh native check that can
-  change while the app runs: whether a face or fingerprint is enrolled for
-  [Biometrics](/packages/expo/biometrics), and likewise for Sign in with Apple, screen capture and
-  the store review prompt. Ask it just before offering the feature.
-- **A signal**, `available()`, when the feature comes and goes and a template follows it: the hinge
-  of a [foldable](/packages/expo/foldable), the on-device language model, a sensor.
+A signal is a function, so `if (haptics.available)` is always true. Call it.
+
+Where a service is absent, `available()` is `false` and every call is inert: it answers its return
+type's empty value (`[]`, `null`, `false`, an empty string, or nothing) and never throws or hangs.
+A permission the user denied is not absence: the call answers empty and the permission says why. A
+call throws only on a misconfiguration, such as a module the app installed but the build does not
+have. `Crypto` throws where it has no module, since random bytes have no safe empty value;
+`LanguageModel`'s generating calls reject with the model's state, and sending to a watch rejects, as
+they do on a device where the model or the watch is not ready.
 
 ## What is on the bare import
 

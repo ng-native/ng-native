@@ -6,7 +6,7 @@
  * expects. `expo-haptics`'s JavaScript adds none of that, which is why `./haptics.ts` skips it.
  */
 import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { expoModule, present } from './native.ts';
+import { expoModule, presence, present } from './native.ts';
 
 /** The slice of `expo-clipboard` this needs. */
 export interface NativeClipboard {
@@ -50,6 +50,9 @@ export class Clipboard {
   );
 
   private readonly native = inject(Clipboard.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
   private readonly count = signal(0);
 
   /** How many times the pasteboard has changed since the app started reading it. */

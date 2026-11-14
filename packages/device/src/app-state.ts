@@ -49,6 +49,9 @@ export class AppState {
   });
 
   private readonly source = inject(AppState.SOURCE);
+
+  /** Whether the service is here: on every OS, where it answers what the OS reports. */
+  readonly available: Signal<boolean> = signal(true).asReadonly();
   private readonly state = signal<AppStatus>(this.source.current());
 
   readonly current: Signal<AppStatus> = this.state.asReadonly();

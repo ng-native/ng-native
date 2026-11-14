@@ -31,7 +31,7 @@
  * code shared by both runs on both. Without the module installed, every list answers empty, every lookup null,
  * and the permissions are refused.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import type {
   Availability as ExpoAvailability,
   EntityTypes as ExpoEntityTypes,
@@ -41,7 +41,7 @@ import type {
   Frequency as ExpoFrequency,
   Source,
 } from 'expo-calendar';
-import { currentPlatform, expoModule, isApple, type ModulePlatform } from './native.ts';
+import { currentPlatform, expoModule, isApple, type ModulePlatform, presence } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-calendar');
@@ -109,6 +109,9 @@ export class Calendar {
   );
 
   private readonly native = inject(Calendar.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
   private readonly platform = inject(Calendar.PLATFORM);
 
   /** Full access: reading the calendars and their events, as well as adding to them. */

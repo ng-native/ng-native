@@ -62,6 +62,9 @@ export interface NativeTextRecognition {
 
 const MODULE = 'NgNativeTextRecognition';
 
+/** What `recognize` answers where it is absent: an image with no text in it. */
+const NOTHING_READ: RecognizedText = Object.freeze({ text: '', lines: [], width: 0, height: 0 });
+
 /** The module where the build has it. */
 function nativeTextRecognition(): NativeTextRecognition | null {
   return optional(
@@ -86,10 +89,17 @@ export class TextRecognition {
 
   /**
    * The text in the image at `imageUri`, a `file://` URI such as the camera, the image picker or
-   * a downloaded asset gives. Rejects when the image cannot be read.
+   * a downloaded asset gives. Rejects when the image cannot be read. On Android and the web, where
+   * there is no Vision, it answers no text; on iOS and macOS a missing module rejects with a
+   * `MissingModuleError`.
    */
   recognize(imageUri: string, options: TextRecognitionOptions = {}): Promise<RecognizedText> {
-    if (!this.native) return Promise.reject(missing());
+    if (!this.native) {
+      // Absent where Vision cannot exist: nothing is read, as from an image with no text.
+      const platform = currentPlatform();
+      if (platform === 'android' || platform === 'web') return Promise.resolve(NOTHING_READ);
+      return Promise.reject(missing());
+    }
     const languages = options.languages?.map(byScript);
     return this.native.recognize(imageUri, languages ? { ...options, languages } : options);
   }

@@ -1,7 +1,15 @@
 /**
  * Links that arrive from outside the app: a `canary://` url, a universal link, a notification.
  */
-import { ErrorHandler, InjectionToken, Injector, Service, inject } from '@angular/core';
+import {
+  ErrorHandler,
+  InjectionToken,
+  Injector,
+  Service,
+  inject,
+  signal,
+  type Signal,
+} from '@angular/core';
 import { reactNative } from './react-native.ts';
 
 export interface DeepLinkSource {
@@ -112,6 +120,9 @@ export class DeepLinks {
   });
 
   private readonly source = inject(DeepLinks.SOURCE);
+
+  /** Whether the service is here: on every OS, where it answers what the OS reports. */
+  readonly available: Signal<boolean> = signal(true).asReadonly();
   private readonly injector = inject(Injector);
   private launch: string | null = null;
   private readonly listeners = new Set<(path: string) => void>();

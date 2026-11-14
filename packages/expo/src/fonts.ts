@@ -103,9 +103,7 @@ export class FontRegistry {
   }
 
   /** Whether `expo-font` is installed at all. Without it a custom face simply never appears. */
-  get available(): boolean {
-    return present(this.native) !== null;
-  }
+  readonly available: Signal<boolean> = computed(() => present(this.native) !== null);
 
   /** Every family the platform can currently find, custom or bundled. */
   readonly families: Signal<readonly string[]> = computed(() => {

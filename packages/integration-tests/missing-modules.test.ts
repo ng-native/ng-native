@@ -272,9 +272,9 @@ describe('a service whose module is missing', () => {
           );
         }
       }
-      assert.equal(app.get(Haptics).available, false, 'and says it is not there');
-      assert.equal(app.get(Watch).available, false);
-      assert.equal(app.get(Fonts).available, false);
+      assert.equal(app.get(Haptics).available(), false, 'and says it is not there');
+      assert.equal(app.get(Watch).available(), false);
+      assert.equal(app.get(Fonts).available(), false);
       // A write or a read that needs the module says so, rather than holding it or answering like
       // a phone without a hinge.
       const watch = 'react-native-watch-connectivity';
@@ -285,7 +285,7 @@ describe('a service whose module is missing', () => {
       assert.throws(() => app.get(Foldable).posture(), fixes('expo-foldables', 'ios'));
       assert.throws(() => app.get(Foldable).fold(), fixes('expo-foldables', 'ios'));
       assert.throws(() => app.get(Foldable).angle(), fixes('expo-foldables', 'ios'));
-      assert.equal(app.get(Tracking).available, false);
+      assert.equal(app.get(Tracking).available(), false);
       assert.throws(() => app.get(Network).status(), fixes('expo-network', 'ios'));
       assert.throws(() => app.get(AppInfo).version, fixes('expo-application', 'ios'));
     });
@@ -327,12 +327,14 @@ describe('a service whose module is missing', () => {
     });
   });
 
-  it('answers available() with false rather than rejecting, as the getters read false', async () => {
-    const asked = on('ios', () => [
-      app.get(Biometrics).available(),
-      app.get(AppleSignIn).available(),
-    ]);
-    assert.deepEqual(await Promise.all(asked), [false, false]);
+  it('answers available() with false rather than throwing, once the platform has answered', async () => {
+    const services = on('ios', () => [app.get(Biometrics), app.get(AppleSignIn)]);
+    for (const service of services) service.available();
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.deepEqual(
+      services.map((service) => service.available()),
+      [false, false],
+    );
   });
 
   it('is inert in Node, where there is no platform to ask', () => {

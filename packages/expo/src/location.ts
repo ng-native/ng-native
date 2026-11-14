@@ -15,7 +15,7 @@
  * geocoder does not need it; on Android `expo-location` refuses to geocode without it.
  */
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { currentPlatform, expoModule, isApple } from './native.ts';
+import { currentPlatform, expoModule, isApple, presence } from './native.ts';
 import { Permission, UNAVAILABLE, type PermissionResponse } from './permissions.ts';
 
 /** How precise, in Expo's order: `lowest` is kilometres, `navigation` is metres and a hot GPS. */
@@ -90,6 +90,9 @@ export class Location {
   );
 
   private readonly native = inject(Location.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
   private readonly latest = signal<Position | null>(null);
   /**
    * Whether geocoding asks for the permission first: everywhere but Apple's OSes, whose

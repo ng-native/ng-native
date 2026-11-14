@@ -44,6 +44,8 @@ interface Binding {
 
 export class Store {
   private readonly native: NativeStore | null;
+  /** Whether the store's module is here. Where it is not, every read answers what it started at. */
+  readonly available: Signal<boolean> = computed(() => present(this.native) !== null);
   private readonly bound = new Map<string, Binding>();
   /** Keys written by the app before their read came back. The read must not undo a write. */
   private readonly written = new Set<string>();

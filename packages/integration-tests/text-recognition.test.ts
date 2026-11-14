@@ -106,6 +106,23 @@ describe('TextRecognition', () => {
 });
 
 describe('TextRecognition without its native module', () => {
+  for (const platform of ['android', 'web']) {
+    it(`reads no text on ${platform}, where there is no Vision`, async () => {
+      (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+        if (id === 'react-native') return { Platform: { OS: platform } };
+        throw new Error(`Cannot find module '${id}'`);
+      };
+      const ocr = injectService(TextRecognition);
+      assert.equal(ocr.available(), false);
+      assert.deepEqual(await ocr.recognize('file:///photo.jpg'), {
+        text: '',
+        lines: [],
+        width: 0,
+        height: 0,
+      });
+    });
+  }
+
   it('is unavailable, and rejects in Node, saying to provide a stand-in', async () => {
     const ocr = injectService(TextRecognition);
     assert.equal(ocr.available(), false);
@@ -118,7 +135,6 @@ describe('TextRecognition without its native module', () => {
 
   for (const [platform, expected] of [
     ['ios', /Expo Go cannot load it: run a development build/],
-    ['android', /not available on android/],
     ['macos', /desktop host does not have it: rebuild it with "npm run macos"/],
   ] as const) {
     it(`says what is missing on ${platform}`, async () => {

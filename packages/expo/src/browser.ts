@@ -12,8 +12,8 @@
  * to exchange. For the full OAuth flow with PKCE, `expo-auth-session`'s `AuthRequest` is a plain
  * class that needs no React; its `promptAsync` opens this same session.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule } from './native.ts';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
+import { expoModule, presence } from './native.ts';
 
 type Expo = typeof import('expo-web-browser');
 
@@ -38,6 +38,9 @@ export class Browser {
   );
 
   private readonly native = inject(Browser.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
 
   /** Open a page in the in-app browser. Resolves when it is closed. */
   async open(url: string): Promise<void> {

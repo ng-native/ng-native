@@ -1,3 +1,5 @@
+import { computed, signal, untracked, type Signal } from '@angular/core';
+
 /**
  * Reaching an Expo module without importing one.
  *
@@ -290,6 +292,52 @@ const isMissing = (value: unknown): boolean =>
  */
 export function present<T>(value: T | null | undefined): T | null {
   return value == null || isMissing(value) ? null : value;
+}
+
+/**
+ * Whether a service's module is here, as its `available` signal: false where it is null, and where
+ * it is missing from the build. Fixed for the life of the app, since a build's modules do not change.
+ */
+export function presence(native: unknown): Signal<boolean> {
+  return signal(present(native) !== null).asReadonly();
+}
+
+/**
+ * The answer to an asynchronous question, as a signal: false until it is answered, and false when
+ * asking fails. The question is first asked when the answer is first read, so a service nobody asks
+ * calls nothing native, and again each time the returned `ask` is called after that.
+ */
+export function asked(question: () => Promise<boolean> | null | undefined): {
+  readonly answer: Signal<boolean>;
+  ask(): void;
+} {
+  const answer = signal(false);
+  let started = false;
+  const send = () => {
+    let pending: Promise<boolean> | null | undefined;
+    try {
+      pending = question();
+    } catch {
+      pending = null;
+    }
+    void Promise.resolve(pending ?? false).then(
+      (yes) => answer.set(yes === true),
+      () => answer.set(false),
+    );
+  };
+  const read = computed(() => {
+    if (!started) {
+      started = true;
+      untracked(send);
+    }
+    return answer();
+  });
+  return {
+    answer: read,
+    ask: () => {
+      if (started) send();
+    },
+  };
 }
 
 /**

@@ -34,7 +34,7 @@ export class Wallet {
   private readonly biometrics = inject(Biometrics);
 
   protected async unlock(): Promise<void> {
-    if (!(await this.biometrics.available())) return;
+    if (!this.biometrics.available()) return;
     const result = await this.biometrics.authenticate('Unlock your wallet');
     if (result.success) this.reveal();
   }

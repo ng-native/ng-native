@@ -171,12 +171,12 @@ describe('haptics', () => {
     haptics.notify('success');
     haptics.select();
     assert.deepEqual(calls, ['impact:medium', 'impact:heavy', 'notify:success', 'select']);
-    assert.equal(haptics.available, true);
+    assert.equal(haptics.available(), true);
   });
 
   it('does nothing at all when the module is not installed', () => {
     const haptics = serviceWith(Haptics.SOURCE, null, () => new Haptics());
-    assert.equal(haptics.available, false);
+    assert.equal(haptics.available(), false);
     haptics.impact();
     assert.deepEqual(calls, [], 'and no throw, because nobody awaits a vibration');
   });
@@ -395,12 +395,19 @@ describe('the file system', () => {
     await assert.rejects(system.pickDirectory(), /no pickDirectoryAsync\(\)/);
   });
 
-  it('says there is no module to load rather than failing on a directory it does not have', () => {
+  it('is inert without a module: files that are not there, and no folder picked', async () => {
     const system = serviceWith(FileSystem.SOURCE, null, () => new FileSystem());
-    const notInstalled = { message: /expo-file-system has no native module to load in Node/ };
-    assert.throws(() => system.cache('canary.txt'), notInstalled);
-    assert.throws(() => system.document('canary.txt'), notInstalled);
-    return assert.rejects(system.pickDirectory(), notInstalled);
+    assert.equal(system.available(), false);
+    for (const file of [
+      system.cache('a.txt'),
+      system.document('a.txt'),
+      system.file('file:///a'),
+    ]) {
+      system.write(file, 'nothing');
+      assert.deepEqual([file.exists, await file.text()], [false, '']);
+    }
+    assert.equal(system.file('file:///a').uri, 'file:///a');
+    assert.equal(await system.pickDirectory(), null);
   });
 });
 

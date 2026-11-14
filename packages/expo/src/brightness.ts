@@ -19,7 +19,7 @@ import {
 } from '@angular/core';
 import { TopClaim, onWindowFront, sharedBySource } from '@ng-native/device';
 import { nativePlatform } from '@ng-native/fabric';
-import { expoModule, present } from './native.ts';
+import { expoModule, presence, present } from './native.ts';
 
 export interface NativeBrightness {
   get(): Promise<number>;
@@ -89,6 +89,9 @@ export class Brightness {
   );
 
   private readonly native = inject(Brightness.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
   /** Every app's levels: the screen is the runtime's, not an app's. */
   private readonly window = sharedBySource(
     BrightnessWindow,

@@ -10,6 +10,7 @@
  * `expo-status-bar` is the same statics with a React component around them, so nothing here needs
  * that package installed.
  */
+import { injectOs, isPhoneOs } from './os.ts';
 import {
   DestroyRef,
   InjectionToken,
@@ -156,6 +157,9 @@ export class StatusBar {
   });
 
   private readonly source = inject(StatusBar.SOURCE);
+
+  /** Whether there is a status bar: on iOS and Android, and not on a Mac or the web. */
+  readonly available: Signal<boolean> = signal(isPhoneOs(injectOs())).asReadonly();
   /** This app, among the apps claiming the bar: its scheme is what an `auto` style it claims follows. */
   private readonly owner: Owner = { scheme: inject(ColorScheme) };
   /** Every app's claims on this bar: the window is the runtime's, not an app's. */

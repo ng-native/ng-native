@@ -12,6 +12,7 @@ import { before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
+import { AppState } from '@ng-native/device';
 import { registerExpoViews } from '@ng-native/expo';
 import { AppInfo } from '@ng-native/expo/app-info';
 import { Biometrics, type NativeBiometrics } from '@ng-native/expo/biometrics';
@@ -21,7 +22,7 @@ import { ImagePicker, type NativeImagePicker } from '@ng-native/expo/image-picke
 import { Location, type NativeLocation, type Position } from '@ng-native/expo/location';
 import type { PermissionResponse } from '@ng-native/expo';
 import { compileFixture } from './compile.ts';
-import { serviceWith } from './injected.ts';
+import { answered, serviceWith, servicesWith } from './injected.ts';
 
 const GRANTED: PermissionResponse = { status: 'granted', granted: true, canAskAgain: true };
 const DENIED: PermissionResponse = { status: 'denied', granted: false, canAskAgain: false };
@@ -290,15 +291,39 @@ describe('biometrics', () => {
   }
 
   it('is available only with the hardware and something enrolled on it', async () => {
-    assert.equal(await biometrics().service.available(), true);
+    assert.equal(await answered(biometrics().service), true);
+    assert.equal(await answered(biometrics({ isEnrolledAsync: async () => false }).service), false);
     assert.equal(
-      await biometrics({ isEnrolledAsync: async () => false }).service.available(),
+      await answered(biometrics({ hasHardwareAsync: async () => false }).service),
       false,
     );
-    assert.equal(
-      await biometrics({ hasHardwareAsync: async () => false }).service.available(),
-      false,
+  });
+
+  it('asks again when the app comes back, where the user may have enrolled in Settings', async () => {
+    let enrolled = false;
+    let changed: (state: string) => void = () => {};
+    const native = { hasHardwareAsync: async () => true, isEnrolledAsync: async () => enrolled };
+    const service = servicesWith(
+      [
+        [Biometrics.SOURCE, native],
+        [
+          AppState.SOURCE,
+          {
+            current: () => 'active',
+            subscribe: (listener: never) => ((changed = listener), () => {}),
+          },
+        ],
+      ],
+      () => new Biometrics(),
     );
+    assert.equal(await answered(service), false);
+    enrolled = true;
+    changed('background' as never);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(service.available(), false, 'not asked again in the background');
+    changed('active' as never);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(service.available(), true);
   });
 
   it('names the kinds the device has, rather than numbering them', async () => {
@@ -323,7 +348,7 @@ describe('biometrics', () => {
 
   it('is unavailable, and fails rather than passes, without the module', async () => {
     const service = serviceWith(Biometrics.SOURCE, null, () => new Biometrics());
-    assert.equal(await service.available(), false);
+    assert.equal(await answered(service), false);
     assert.deepEqual(await service.authenticate('Unlock'), {
       success: false,
       error: 'not_available',

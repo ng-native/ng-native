@@ -15,8 +15,8 @@
  *
  * Moving and listing stay on Expo's `File` and `Directory`.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule, unavailable } from './native.ts';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
+import { expoModule, presence } from './native.ts';
 
 /**
  * A file. Structural on purpose: this is Expo's `File`, described in terms a test can satisfy, so
@@ -101,24 +101,31 @@ export class FileSystem {
 
   private readonly native = inject(FileSystem.SOURCE);
 
-  /** A file the system may delete when the device runs low on storage. */
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
+
+  /**
+   * A file the system may delete when the device runs low on storage. Where the service is absent,
+   * a file that is not there: writing it does nothing, and reading it answers nothing.
+   */
   cache(name: string): NativeFile {
-    const native = this.installed();
-    return native.file(native.cacheDirectory, name);
+    const native = this.native;
+    return native ? native.file(native.cacheDirectory, name) : noFile();
   }
 
-  /** A file that survives, and is included in backups. */
+  /** A file that survives, and is included in backups. Where absent, as `cache`. */
   document(name: string): NativeFile {
-    const native = this.installed();
-    return native.file(native.documentDirectory, name);
+    const native = this.native;
+    return native ? native.file(native.documentDirectory, name) : noFile();
   }
 
   /**
    * The file at a uri: a document the user picked, a photo from the library, a download. What a
-   * picker answers with is a uri, and this is the file to read from it.
+   * picker answers with is a uri, and this is the file to read from it. Where absent, as `cache`.
    */
   file(uri: string): NativeFile {
-    const native = this.installed();
+    const native = this.native;
+    if (!native) return noFile(uri);
     if (!native.fileAt) {
       throw new Error(
         '[angular-native] this FileSystem.SOURCE has no fileAt(uri), which file() opens a uri with.',
@@ -130,10 +137,12 @@ export class FileSystem {
   /**
    * Opens the system folder picker and answers the folder the user chose, or null if they
    * dismissed it. Create a file in it with `createFile(name, mimeType)`, which makes it, then
-   * `write()` it. Any other failure is rethrown. Needs no permission.
+   * `write()` it. Any other failure is rethrown. Needs no permission. Null where the service is
+   * absent.
    */
   async pickDirectory(): Promise<PickedDirectory | null> {
-    const native = this.installed();
+    const native = this.native;
+    if (!native) return null;
     if (!native.pickDirectoryAsync) {
       throw new Error(
         '[angular-native] this FileSystem.SOURCE has no pickDirectoryAsync(), which pickDirectory() opens the picker with.',
@@ -158,13 +167,25 @@ export class FileSystem {
     if (file.writeSync) file.writeSync(content);
     else file.write(content);
   }
+}
 
-  private installed(): NativeFiles {
-    if (!this.native) {
-      throw unavailable('expo-file-system', 'Provide FileSystem.SOURCE with a stand-in.');
-    }
-    return this.native;
-  }
+/**
+ * A file that is not there, which is what `FileSystem` hands back where it is absent: it never
+ * exists, writing or deleting it does nothing, and reading it answers nothing.
+ */
+function noFile(uri = ''): NativeFile {
+  return {
+    uri,
+    exists: false,
+    size: 0,
+    create: () => {},
+    write: () => {},
+    writeSync: () => {},
+    text: () => Promise.resolve(''),
+    textSync: () => '',
+    bytes: () => Promise.resolve(new Uint8Array()),
+    delete: () => {},
+  };
 }
 
 /** Android codes a dismissed picker ERR_PICKER_CANCELLED, iOS ERR_FILE_PICKING_CANCELLED. */
