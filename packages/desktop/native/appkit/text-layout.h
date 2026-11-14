@@ -2,6 +2,7 @@
 // (NGNView, on the main thread), so both break lines the same way.
 #pragma once
 
+#include "ngn/fonts.h"
 #include "ngn/text-measurer.h"
 
 #include <CoreText/CoreText.h>
@@ -27,6 +28,10 @@ struct TextLayout {
   TextLayout(TextLayout &&other) noexcept;
   ~TextLayout();
 };
+
+// The names fonts were loaded under (NgNativeFont), which text asks for by: one stands for the
+// family of the font loaded under it. Set once, before any text is laid out.
+void useFontLibrary(std::shared_ptr<const FontLibrary> library);
 
 // The fragments' text attributes already carry the surface's font size multiplier.
 CFAttributedStringRef makeAttributedString(const facebook::react::AttributedString &attributedString);

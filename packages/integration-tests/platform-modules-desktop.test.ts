@@ -176,3 +176,44 @@ describe('Battery on macOS', () => {
     assert.equal(battery.low(), false);
   });
 });
+
+describe('Fonts on macOS', () => {
+  function host() {
+    const loaded: [string, string][] = [];
+    mac({
+      NgNativeFont: {
+        loadAsync: async (name: string, uri: string) => {
+          if (uri.includes('broken')) throw new Error('not a font');
+          loaded.push([name, uri]);
+        },
+        isLoaded: (name: string) => loaded.some(([loadedName]) => loadedName === name),
+        getLoadedFonts: () => loaded.map(([name]) => name),
+      },
+    });
+    return loaded;
+  }
+
+  it('loads each face by the uri its source names, an asset resolved as an image is', async () => {
+    const loaded = host();
+    const { Fonts } = await import('@ng-native/expo/fonts');
+    const fonts = injectService(Fonts);
+    assert.equal(fonts.available(), true);
+    await fonts.load({ Inter: 7, Mono: 'file:///fonts/mono.otf', Serif: { uri: 'file:///s.ttf' } });
+    assert.deepEqual(loaded, [
+      ['Inter', 'http://localhost:8081/assets/font-7.ttf'],
+      ['Mono', 'file:///fonts/mono.otf'],
+      ['Serif', 'file:///s.ttf'],
+    ]);
+    assert.equal(fonts.has('Inter'), true);
+    assert.deepEqual(fonts.families(), ['Inter', 'Mono', 'Serif']);
+  });
+
+  it('rejects a face the host cannot load, and one with no file', async () => {
+    host();
+    const { Fonts } = await import('@ng-native/expo/fonts');
+    const fonts = injectService(Fonts);
+    await assert.rejects(fonts.load({ Broken: 'file:///broken.ttf' }), /not a font/);
+    await assert.rejects(fonts.load({ Nothing: null }), /Nothing has no file/);
+    assert.equal(fonts.has('Broken'), false);
+  });
+});

@@ -6,6 +6,7 @@ add_executable(ngn-macos
     crypto.mm
     desktop-expo.mm
     file-system.mm
+    fonts.mm
     appkit-backend.mm
     battery.mm
     header-toolbar.mm

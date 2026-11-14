@@ -9,6 +9,8 @@ namespace ngn {
 
 namespace {
 
+std::shared_ptr<const FontLibrary> gFontLibrary;
+
 CGFloat appKitWeight(FontWeight weight) {
   switch (static_cast<int>(weight)) {
     case 100: return NSFontWeightUltraLight;
@@ -46,12 +48,18 @@ CTFontRef makeFont(const TextAttributes &a) {
   } else if (family == "monospace" || family == "Menlo") {
     font = [NSFont monospacedSystemFontOfSize:size weight:weight];
   } else {
-    NSString *name = [NSString stringWithUTF8String:family.c_str()];
+    // A name a font was loaded under stands for that font's family, as expo-font's alias does on
+    // iOS, so the weight is picked among the faces loaded in it.
+    auto loaded = gFontLibrary ? gFontLibrary->fontOf(family) : std::nullopt;
+    NSString *name = [NSString stringWithUTF8String:(loaded ? loaded->family : family).c_str()];
     NSFontDescriptor *d = [NSFontDescriptor fontDescriptorWithFontAttributes:@{
       NSFontFamilyAttribute : name,
       NSFontTraitsAttribute : @{NSFontWeightTrait : @(weight)},
     }];
     font = [NSFont fontWithDescriptor:d size:size];
+    if (font == nil && loaded) {
+      font = [NSFont fontWithName:[NSString stringWithUTF8String:loaded->postScriptName.c_str()] size:size];
+    }
     if (font == nil) {
       font = [NSFont fontWithName:name size:size];
     }
@@ -110,6 +118,10 @@ TextLayout::~TextLayout() {
   if (string != nullptr) {
     CFRelease(string);
   }
+}
+
+void useFontLibrary(std::shared_ptr<const FontLibrary> library) {
+  gFontLibrary = std::move(library);
 }
 
 CFAttributedStringRef makeAttributedString(const AttributedString &attributedString) {
