@@ -6,7 +6,7 @@
 import type { Type } from '@angular/core';
 import { cleanup, render, screen, type FakeFabricNode, compileCss } from '@ng-native/testing';
 import assert from 'node:assert/strict';
-import { before, describe, it } from 'node:test';
+import { afterEach, before, describe, it } from 'node:test';
 import { compileFixture } from './compile.ts';
 
 const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
@@ -36,6 +36,32 @@ describe('an image', () => {
     assert.equal(screen.getByTestId('quiet').props['shouldNotifyLoadEvents'], undefined);
     cleanup();
   });
+});
+
+/**
+ * An image covers its box unless told otherwise, as React Native's `Image` does. Native's own
+ * default is to stretch, and the components send no `resizeMode` when the app sets none, so the
+ * engine's base style for an image supplies it, beneath a class's `object-fit` and a bound
+ * `resizeMode`.
+ */
+describe("an image's default fit", () => {
+  afterEach(async () => {
+    cleanup();
+    const { registerPlatformComponents } = await import('@ng-native/fabric');
+    registerPlatformComponents('ios');
+  });
+
+  for (const platform of ['ios', 'android', 'macos']) {
+    it(`covers its box on ${platform}, and gives way to object-fit and resizeMode`, async () => {
+      const { registerPlatformComponents } = await import('@ng-native/fabric');
+      registerPlatformComponents(platform);
+      const mod = await compileFixture('fixtures/rounded-image.ts');
+      await render(mod['FittedImages'] as Type<unknown>);
+      assert.equal(screen.getByTestId('bare').props['resizeMode'], 'cover');
+      assert.equal(screen.getByTestId('explicit').props['resizeMode'], 'stretch');
+      assert.equal(screen.getByTestId('css').props['resizeMode'], 'contain');
+    });
+  }
 });
 
 /**

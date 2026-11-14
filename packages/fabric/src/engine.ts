@@ -1312,8 +1312,11 @@ const DEFAULT_PROPS: Record<string, Record<string, unknown>> = {
     flexDirection: 'row',
     overflow: 'scroll',
   },
-  // RN's Image.ios.js: without it a border radius rounds the view but not the picture.
-  Image: { overflow: 'hidden' },
+  // RN's Image.ios.js: without it a border radius rounds the view but not the picture. And its
+  // `resizeMode` of `cover`, which native's own default of `stretch` is not: a default rather
+  // than a prop the component writes, so `object-fit` in a stylesheet and a bound `resizeMode`
+  // both stand over it.
+  Image: { overflow: 'hidden', resizeMode: 'cover' },
   // RN's Modal.js gives the native host this; without it the modal does not lay out.
   ModalHostView: { position: 'absolute' },
   // RN's InputAccessoryView.js does the same for the keyboard bar.
