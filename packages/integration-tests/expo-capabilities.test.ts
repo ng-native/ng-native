@@ -244,12 +244,14 @@ describe('the location', () => {
     }
   }
 
-  it('geocodes on iOS without asking for the permission, which CLGeocoder does not need', async () => {
-    const { asked, service } = geocoderOn('ios');
-    assert.deepEqual(await service.geocode('LS6 1BJ'), [{ latitude: 1, longitude: 2 }]);
-    const [address] = await service.reverseGeocode({ latitude: 1, longitude: 2 });
-    assert.equal(address?.city, 'Leeds');
-    assert.deepEqual(asked, ['LS6 1BJ', 'reverse'], 'no prompt');
+  it('geocodes on iOS and macOS without asking for the permission, which CLGeocoder does not need', async () => {
+    for (const os of ['ios', 'macos']) {
+      const { asked, service } = geocoderOn(os);
+      assert.deepEqual(await service.geocode('LS6 1BJ'), [{ latitude: 1, longitude: 2 }], os);
+      const [address] = await service.reverseGeocode({ latitude: 1, longitude: 2 });
+      assert.equal(address?.city, 'Leeds', os);
+      assert.deepEqual(asked, ['LS6 1BJ', 'reverse'], `no prompt on ${os}`);
+    }
   });
 
   it('asks for the permission before geocoding on Android, where expo-location refuses without it', async () => {

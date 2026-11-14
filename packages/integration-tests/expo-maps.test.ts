@@ -38,7 +38,10 @@ describe('the map view', () => {
     Fixture = mod['ExpoMapFixture'] as Type<unknown>;
   });
 
-  const render = (platform: 'ios' | 'android', functions: MapViewFunctions | null = null) => {
+  const render = (
+    platform: 'ios' | 'android' | 'macos',
+    functions: MapViewFunctions | null = null,
+  ) => {
     registerExpoMap(platform);
     const fabric = createFakeFabric();
     const app = mount(1, Fixture, fabric, {
@@ -54,6 +57,11 @@ describe('the map view', () => {
     // `requireNativeView('ExpoAppleMaps')`, no view name. `ExpoMaps` is the permissions module
     // and has no view at all, so `ExpoMaps_AppleMapsView` would commit as nothing.
     const { fabric } = render('ios');
+    assert.equal(view(fabric).viewName, 'ViewManagerAdapter_ExpoAppleMaps');
+  });
+
+  it("commits as expo-maps' Apple view on macOS, where MapKit is the map too", () => {
+    const { fabric } = render('macos');
     assert.equal(view(fabric).viewName, 'ViewManagerAdapter_ExpoAppleMaps');
   });
 

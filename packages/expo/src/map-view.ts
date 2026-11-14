@@ -153,11 +153,12 @@ export interface MapViewFunctions {
 }
 
 /**
- * Make `<expo-map>` commit as the platform's map: `ExpoAppleMaps` on iOS, `ExpoGoogleMaps` on
- * Android. Each is its module's only view, so its default. Call once, before the first map.
+ * Make `<expo-map>` commit as the platform's map: `ExpoAppleMaps` on iOS and macOS, where MapKit
+ * draws it, `ExpoGoogleMaps` on Android. Each is its module's only view, so its default. Call once,
+ * before the first map.
  */
-export function registerExpoMap(platform: 'ios' | 'android'): void {
-  registerExpoView('expo-map', platform === 'ios' ? 'ExpoAppleMaps' : 'ExpoGoogleMaps');
+export function registerExpoMap(platform: 'ios' | 'android' | 'macos'): void {
+  registerExpoView('expo-map', platform === 'android' ? 'ExpoGoogleMaps' : 'ExpoAppleMaps');
 }
 
 @Component({

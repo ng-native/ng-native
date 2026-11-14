@@ -123,7 +123,9 @@ function missing(): MissingModuleError {
       ? 'Node, where a test runs, has no native module: provide TextRecognition.SOURCE with a stand-in.'
       : platform === 'ios'
         ? 'This build does not have it, and Expo Go cannot load it: run a development build.'
-        : `It is not available on ${platform}.`;
+        : platform === 'macos'
+          ? 'This build of the desktop host does not have it: rebuild it with "npm run macos".'
+          : `It is not available on ${platform}.`;
   return new MissingModuleError(
     '@ng-native/expo',
     platform ?? 'web',

@@ -119,6 +119,7 @@ describe('TextRecognition without its native module', () => {
   for (const [platform, expected] of [
     ['ios', /Expo Go cannot load it: run a development build/],
     ['android', /not available on android/],
+    ['macos', /desktop host does not have it: rebuild it with "npm run macos"/],
   ] as const) {
     it(`says what is missing on ${platform}`, async () => {
       (globalThis as Record<string, unknown>)['require'] = (id: string) => {
