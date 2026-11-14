@@ -349,3 +349,52 @@ TEST_CASE("NgNativeUpdates answers what Updates calls, and is off in development
   REQUIRE(refused);
   CHECK(refused->find("development") != std::string::npos);
 }
+
+namespace {
+
+struct FakeAppUpdater final : ngn::AppUpdater {
+  int checks{0};
+  std::function<void(bool)> listener;
+  bool found{false};
+  void check() override {
+    checks++;
+  }
+  bool updateAvailable() override {
+    return found;
+  }
+  void onUpdateAvailable(std::function<void(bool)> fn) override {
+    listener = std::move(fn);
+  }
+};
+
+} // namespace
+
+TEST_CASE("the whole-app updater is Sparkle's where the build has it, and absent elsewhere") {
+  Fixture f;
+  auto client = f.client();
+  auto sparkle = std::make_shared<FakeAppUpdater>();
+  auto module = ngn::makeUpdatesModule(client, false, nullptr, sparkle);
+  std::vector<std::string> events;
+  module->setEmitter([&](const std::string &event, dynamic body) { events.push_back(event + " " + folly::toJson(body)); });
+  CHECK(module->property("isAppUpdaterAvailable") == dynamic(true));
+  CHECK(module->call("isAppUpdateAvailable") == dynamic(false));
+
+  std::optional<dynamic> shown;
+  module->callWithPromise("checkForAppUpdateAsync", dynamic::array(), {.resolve = [&](dynamic v) { shown = v; }});
+  CHECK(shown == dynamic(true));
+  CHECK(sparkle->checks == 1);
+
+  // Sparkle finds one in the background: JavaScript hears it, and asks the same.
+  sparkle->found = true;
+  sparkle->listener(true);
+  CHECK(events == std::vector<std::string>{R"(appUpdateAvailable {"available":true})"});
+  CHECK(module->call("isAppUpdateAvailable") == dynamic(true));
+
+  // An app or mas build, or development: no updater, and the calls are inert.
+  auto none = ngn::makeUpdatesModule(client, false, nullptr, nullptr);
+  CHECK(none->property("isAppUpdaterAvailable") == dynamic(false));
+  CHECK(none->call("isAppUpdateAvailable") == dynamic(false));
+  std::optional<dynamic> inert;
+  none->callWithPromise("checkForAppUpdateAsync", dynamic::array(), {.resolve = [&](dynamic v) { inert = v; }});
+  CHECK(inert == dynamic(false));
+}

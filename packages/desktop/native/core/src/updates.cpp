@@ -547,10 +547,45 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
 std::shared_ptr<NativeModule> makeUpdatesModule(
     std::shared_ptr<UpdatesClient> client,
     bool development,
-    std::function<void(const std::string &bundle, std::function<void(bool)> done)> reload) {
+    std::function<void(const std::string &bundle, std::function<void(bool)> done)> reload,
+    std::shared_ptr<AppUpdater> appUpdater) {
+  // Where the updater's news goes: this module while it lives, which a reload replaces.
+  struct Sink {
+    std::mutex mutex;
+    NativeModule *module{nullptr};
+  };
   struct Updates : NativeModule {
-    Updates(std::shared_ptr<UpdatesClient> client, bool development, std::function<void(const std::string &, std::function<void(bool)>)> reload)
+    std::shared_ptr<Sink> sink = std::make_shared<Sink>();
+    ~Updates() override {
+      std::lock_guard lock(sink->mutex);
+      sink->module = nullptr;
+    }
+    Updates(
+        std::shared_ptr<UpdatesClient> client,
+        bool development,
+        std::function<void(const std::string &, std::function<void(bool)>)> reload,
+        std::shared_ptr<AppUpdater> appUpdater)
         : NativeModule("NgNativeUpdates") {
+      listeners();
+      property("isAppUpdaterAvailable", [appUpdater] { return folly::dynamic(appUpdater != nullptr); });
+      sync("isAppUpdateAvailable", [appUpdater](const folly::dynamic &) {
+        return folly::dynamic(appUpdater != nullptr && appUpdater->updateAvailable());
+      });
+      promise("checkForAppUpdateAsync", [appUpdater](const folly::dynamic &, JsPromise p) {
+        if (appUpdater) {
+          appUpdater->check();
+        }
+        p.resolve(appUpdater != nullptr);
+      });
+      if (appUpdater) {
+        sink->module = this;
+        appUpdater->onUpdateAvailable([sink = sink](bool available) {
+          std::lock_guard lock(sink->mutex);
+          if (sink->module != nullptr) {
+            static_cast<Updates *>(sink->module)->announce(available);
+          }
+        });
+      }
       bool on = client->enabled() && !development;
       property("isEnabled", [on] { return folly::dynamic(on); });
       property("runtimeVersion", [client] { return folly::dynamic(client->config().runtimeVersion); });
@@ -608,8 +643,11 @@ std::shared_ptr<NativeModule> makeUpdatesModule(
         reload(bundle, [](bool) {});
       });
     }
+    void announce(bool available) {
+      emit("appUpdateAvailable", folly::dynamic::object("available", available));
+    }
   };
-  return std::make_shared<Updates>(std::move(client), development, std::move(reload));
+  return std::make_shared<Updates>(std::move(client), development, std::move(reload), std::move(appUpdater));
 }
 
 } // namespace ngn

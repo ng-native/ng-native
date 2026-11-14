@@ -566,6 +566,8 @@ int main(int argc, const char *argv[]) {
           fprintf(stderr, "[ngn] running update %s\n", running->id.c_str());
         }
       }
+      // Sparkle starts with the app, as its own updater does: one for the process.
+      static auto appUpdater = ngn::appkit::makeSparkleUpdater();
       ngn::addModule(*modules, "NgNativeUpdates", [fromDevServer] {
         return ngn::makeUpdatesModule(gHost.updates, fromDevServer, [](const std::string &next, std::function<void(bool)> done) {
           gHost.runtime->reload(next, [next, done](bool loaded) {
@@ -577,7 +579,7 @@ int main(int argc, const char *argv[]) {
             });
             done(loaded);
           });
-        });
+        }, appUpdater);
       });
     }
 

@@ -178,15 +178,33 @@ class UpdatesClient {
   std::shared_ptr<HttpTask> task_;
 };
 
+// The whole-app updater: Sparkle, in a `dmg` build only (the Mac App Store updates a `mas` build,
+// and an `app` build has none).
+class AppUpdater {
+ public:
+  virtual ~AppUpdater() = default;
+  // Checks now, with the updater's own window.
+  virtual void check() = 0;
+  // Whether a background check found an update.
+  virtual bool updateAvailable() = 0;
+  // Told when a check finds an update, or finds none. One listener: a later one replaces it.
+  virtual void onUpdateAvailable(std::function<void(bool available)> listener) = 0;
+};
+
 class NativeModule;
 // NgNativeUpdates: what @ng-native/expo's Updates calls on expo-updates. `isEnabled`, `updateId`,
 // `runtimeVersion` and `isEmbeddedLaunch` as properties; checkForUpdateAsync, fetchUpdateAsync and
 // reloadAsync, which resolves and then restarts the runtime on the fetched bundle through `reload`
 // (the promise's runtime does not outlive the reload). Disabled (every
 // call refused) in development, where the bundle comes from Metro.
+//
+// The whole-app half, over `appUpdater`: the `isAppUpdaterAvailable` property, isAppUpdateAvailable,
+// checkForAppUpdateAsync (true once the updater's window is up) and the `appUpdateAvailable` event
+// ({available}). Without an updater it is absent: the property is false and the calls answer false.
 std::shared_ptr<NativeModule> makeUpdatesModule(
     std::shared_ptr<UpdatesClient> client,
     bool development,
-    std::function<void(const std::string &bundle, std::function<void(bool)> done)> reload);
+    std::function<void(const std::string &bundle, std::function<void(bool)> done)> reload,
+    std::shared_ptr<AppUpdater> appUpdater = nullptr);
 
 } // namespace ngn

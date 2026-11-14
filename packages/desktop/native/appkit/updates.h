@@ -11,6 +11,9 @@ namespace ngn::appkit {
 
 std::shared_ptr<UpdateCrypto> makeUpdateCrypto();
 
+// Sparkle, in a packaged `dmg` build with a feed (app-updater.mm); null anywhere else.
+std::shared_ptr<AppUpdater> makeSparkleUpdater();
+
 // The client's settings: from a packaged app's Info.plist (NGNUpdatesURL, NGNRuntimeVersion,
 // NGNUpdatesPlatform, and the code signing certificate as PEM in NGNUpdatesCodeSigningCertificate
 // with NGNUpdatesCodeSigningKeyId and NGNUpdatesCodeSigningAlg), otherwise from the environment
