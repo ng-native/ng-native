@@ -266,6 +266,17 @@ clicks one, which the service reads as `latest()` and `response()`. A date cross
 The Dock badge is the badge count: `setBadgeCountAsync` sets it, 0 clears it, and a delivered
 notification with `content.badge` sets it too. It needs no permission.
 
+Remote notifications come through APNs. `getDevicePushTokenAsync` registers and resolves `{ type:
+'macos', data }`, the token in hex to send to APNs from your server, and a new token while the app
+runs arrives as a `{ type: 'token', token }` event, the service's `devicePushToken()`. A remote
+notification reaches the same events as a local one, with the trigger `{ type: 'push', payload }`
+from which the service reads its data; one with no alert is heard only while the app runs. APNs
+registers only an app signed with `com.apple.developer.aps-environment`: `package` adds it
+(`production`) to a `mas` build of an app that uses `expo-notifications`, and to a `dmg` when
+`ios.entitlements['aps-environment']` is set, which then needs a Developer ID profile, as Sign in
+with Apple does. A development host has no such entitlement, so there the token rejects with what
+to do. Expo's push service does not deliver to macOS, so `getExpoPushTokenAsync` rejects.
+
 ## Sidebar
 
 `<split-view>` is `NgNativeSplitView`, holding the sidebar pane (`NgNativeSidebar`) and then the

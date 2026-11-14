@@ -290,6 +290,12 @@ describe('notifications on macOS', () => {
                   ),
                   getLastNotificationResponseAsync: async () => null,
                   setBadgeCountAsync: async (count: number) => (calls.push(['badge', count]), true),
+                  getDevicePushTokenAsync: async () => (
+                    calls.push(['token', null]),
+                    { type: 'macos', data: '0aff' }
+                  ),
+                  unregisterForNotificationsAsync: async () =>
+                    void calls.push(['unregister', null]),
                 }
               : null,
         },
@@ -317,7 +323,7 @@ describe('notifications on macOS', () => {
     const { injectService } = await import('@ng-native/testing');
     const notifications = injectService(Notifications);
     assert.equal(notifications.available(), true);
-    assert.equal(listeners.size, 2);
+    assert.equal(listeners.size, 3);
     send({ type: 'received', notification: notification('a') });
     assert.equal(notifications.latest()?.request.identifier, 'a');
     assert.equal(notifications.response(), null);
@@ -353,6 +359,42 @@ describe('notifications on macOS', () => {
       { type: 'daily', hour: 9, minute: 0 },
       { type: 'date', date: 1_800_000_000_000 },
     ]);
+  });
+
+  it("answers APNs' device token from the host, and hears a new one", async () => {
+    const { calls, send } = host();
+    const { Notifications } = await import('@ng-native/expo/notifications');
+    const { injectService } = await import('@ng-native/testing');
+    const notifications = injectService(Notifications);
+    assert.deepEqual(await notifications.getDevicePushToken(), { type: 'macos', data: '0aff' });
+    assert.equal(notifications.devicePushToken(), null);
+    send({ type: 'token', token: { type: 'macos', data: '0102' } });
+    assert.deepEqual(notifications.devicePushToken(), { type: 'macos', data: '0102' });
+    await notifications.unregister();
+    assert.deepEqual(
+      calls.map(([name]) => name),
+      ['token', 'unregister'],
+    );
+    await assert.rejects(notifications.getExpoPushToken(), /getDevicePushToken/);
+  });
+
+  it("reads a remote notification's data from its APNs payload, as on iOS", async () => {
+    const { send } = host();
+    const { Notifications } = await import('@ng-native/expo/notifications');
+    const { injectService } = await import('@ng-native/testing');
+    const notifications = injectService(Notifications);
+    send({
+      type: 'received',
+      notification: {
+        date: 1_700_000_000_000,
+        request: {
+          identifier: 'push-1',
+          content: { title: 'Order', body: 'Table 4', data: null },
+          trigger: { type: 'push', payload: { aps: { alert: 'x' }, orderId: 42 } },
+        },
+      },
+    });
+    assert.deepEqual(notifications.latest()?.request.content.data, { orderId: 42 });
   });
 
   it('answers what the host has no counterpart for, rather than throwing', async () => {

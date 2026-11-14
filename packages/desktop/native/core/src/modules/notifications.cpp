@@ -204,9 +204,132 @@ folly::dynamic notificationRequestJson(const NotificationRequest &request) {
           "dateComponents", std::move(components)));
       break;
     }
+    case NotificationTrigger::Kind::Push:
+      trigger = folly::dynamic(folly::dynamic::object("type", "push")("payload", request.trigger.payload));
+      break;
   }
   return folly::dynamic::object("identifier", request.identifier)("content", contentJson(request))(
       "trigger", std::move(trigger));
+}
+
+NotificationRequest remoteNotificationRequest(const std::string &identifier, const folly::dynamic &payload) {
+  NotificationRequest out;
+  out.identifier = identifier;
+  out.trigger.kind = NotificationTrigger::Kind::Push;
+  out.trigger.payload = payload.isObject() ? payload : folly::dynamic::object();
+  // The app's data is the payload past `aps`, as expo-notifications reads it on iOS.
+  out.data = nullptr;
+  const auto *aps = payload.isObject() ? payload.get_ptr("aps") : nullptr;
+  if (!aps || !aps->isObject()) {
+    return out;
+  }
+  if (const auto *alert = aps->get_ptr("alert")) {
+    if (alert->isString()) {
+      out.body = alert->asString();
+    } else if (alert->isObject()) {
+      auto text = [&](const char *key) {
+        const auto *value = alert->get_ptr(key);
+        return value && value->isString() ? value->asString() : std::string{};
+      };
+      out.title = text("title");
+      out.subtitle = text("subtitle");
+      out.body = text("body");
+    }
+  }
+  if (const auto *sound = aps->get_ptr("sound")) {
+    out.sound = sound->isString() ? sound->asString() : (sound->isObject() ? "default" : "");
+  }
+  if (const auto *badge = aps->get_ptr("badge"); badge && badge->isNumber()) {
+    out.badge = static_cast<int>(badge->asDouble());
+  }
+  return out;
+}
+
+bool silentPush(const folly::dynamic &payload) {
+  const auto *aps = payload.isObject() ? payload.get_ptr("aps") : nullptr;
+  return !aps || !aps->isObject() || aps->get_ptr("alert") == nullptr;
+}
+
+std::string pushTokenHex(const std::string &deviceToken) {
+  static const char *digits = "0123456789abcdef";
+  std::string out;
+  out.reserve(deviceToken.size() * 2);
+  for (unsigned char byte : deviceToken) {
+    out.push_back(digits[byte >> 4]);
+    out.push_back(digits[byte & 0xf]);
+  }
+  return out;
+}
+
+std::string pushFailure(const std::string &message) {
+  if (message.find("aps-environment") != std::string::npos) {
+    return "Remote notifications need the app signed with the aps-environment entitlement, which a "
+           "development host does not have: package it with expo-notifications or "
+           "ios.entitlements['aps-environment'] (" +
+        message + ")";
+  }
+  return "The device could not register for remote notifications: " + message;
+}
+
+PushTokens::PushTokens(std::shared_ptr<PushRegistrar> registrar, std::shared_ptr<NotificationEvents> events)
+    : registrar_(std::move(registrar)), events_(std::move(events)) {}
+
+void PushTokens::request(Answer answer) {
+  std::optional<std::string> known;
+  bool start = false;
+  {
+    std::lock_guard lock(mutex_);
+    known = token_;
+    if (!known) {
+      waiting_.push_back(std::move(answer));
+      start = !registering_;
+      registering_ = true;
+    }
+  }
+  if (known) {
+    answer(known, {});
+  } else if (start) {
+    registrar_->registerForRemoteNotifications();
+  }
+}
+
+void PushTokens::registered(const std::string &deviceToken) {
+  auto hex = pushTokenHex(deviceToken);
+  std::vector<Answer> waiting;
+  bool rolled = false;
+  {
+    std::lock_guard lock(mutex_);
+    rolled = token_ && *token_ != hex;
+    token_ = hex;
+    registering_ = false;
+    waiting.swap(waiting_);
+  }
+  for (auto &answer : waiting) {
+    answer(hex, {});
+  }
+  if (rolled && events_) {
+    events_->tokenChanged(hex);
+  }
+}
+
+void PushTokens::failed(const std::string &message) {
+  std::vector<Answer> waiting;
+  {
+    std::lock_guard lock(mutex_);
+    registering_ = false;
+    waiting.swap(waiting_);
+  }
+  for (auto &answer : waiting) {
+    answer(std::nullopt, pushFailure(message));
+  }
+}
+
+void PushTokens::unregister() {
+  {
+    std::lock_guard lock(mutex_);
+    token_.reset();
+  }
+  registrar_->unregisterForRemoteNotifications();
 }
 
 std::string badgeLabel(int count) {
@@ -234,6 +357,10 @@ void NotificationEvents::responded(double date, const NotificationRequest &reque
     lastResponse_ = response;
   }
   send(folly::dynamic::object("type", "response")("response", response));
+}
+
+void NotificationEvents::tokenChanged(const std::string &token) {
+  send(folly::dynamic::object("type", "token")("token", folly::dynamic::object("type", "macos")("data", token)));
 }
 
 std::optional<folly::dynamic> NotificationEvents::lastResponse() const {
@@ -269,7 +396,10 @@ std::string stringArg(const folly::dynamic &args, size_t index) {
 }
 
 struct Notifications : NativeModule {
-  Notifications(std::shared_ptr<NotificationCenter> center, std::shared_ptr<NotificationEvents> events)
+  Notifications(
+      std::shared_ptr<NotificationCenter> center,
+      std::shared_ptr<NotificationEvents> events,
+      std::shared_ptr<PushTokens> push)
       : NativeModule("NgNativeNotifications") {
     auto permissions = [center](bool ask) {
       return [center, ask](const folly::dynamic &, JsPromise promise) {
@@ -390,6 +520,25 @@ struct Notifications : NativeModule {
       center->setBadge(static_cast<int>(args[0].asDouble()));
       promise.resolve(true);
     });
+    promise("getDevicePushTokenAsync", [push](const folly::dynamic &, JsPromise promise) {
+      if (!push) {
+        promise.reject("Remote notifications are not available in this build of the desktop host.");
+        return;
+      }
+      push->request([promise](std::optional<std::string> token, std::string error) {
+        if (token) {
+          promise.resolve(folly::dynamic::object("type", "macos")("data", *token));
+        } else {
+          promise.reject(error);
+        }
+      });
+    });
+    promise("unregisterForNotificationsAsync", [push](const folly::dynamic &, JsPromise promise) {
+      if (push) {
+        push->unregister();
+      }
+      promise.resolve(nullptr);
+    });
     listeners();
     subscription_ = events->listen([this](const folly::dynamic &event) { emit("ngNativeNotifications", event); });
   }
@@ -400,8 +549,9 @@ struct Notifications : NativeModule {
 
 std::shared_ptr<NativeModule> makeNotificationsModule(
     std::shared_ptr<NotificationCenter> center,
-    std::shared_ptr<NotificationEvents> events) {
-  return std::make_shared<Notifications>(std::move(center), std::move(events));
+    std::shared_ptr<NotificationEvents> events,
+    std::shared_ptr<PushTokens> push) {
+  return std::make_shared<Notifications>(std::move(center), std::move(events), std::move(push));
 }
 
 } // namespace ngn

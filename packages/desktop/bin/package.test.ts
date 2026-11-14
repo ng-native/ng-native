@@ -11,6 +11,7 @@ import {
   notaryArguments,
   packageApp,
   parsePackage,
+  remotePush,
   sandboxProblems,
 } from './package.mjs';
 import { plist } from './plist.mjs';
@@ -384,6 +385,47 @@ describe('entitlements with Sign in with Apple', () => {
       /<key>com\.apple\.developer\.team-identifier<\/key>\n\t<string>T1<\/string>/,
     );
     assert.doesNotMatch(entitlements(config, 'dmg', { bundleIdentifier: 'a.b' })!, /applesignin/);
+  });
+});
+
+describe('remotePush', () => {
+  it('signs a mas build for APNs when the app uses expo-notifications, as iOS does', () => {
+    assert.deepEqual(remotePush({}, false), { mas: false, dmg: false });
+    assert.deepEqual(remotePush({ plugins: ['expo-notifications'] }, false), {
+      mas: true,
+      dmg: false,
+    });
+    assert.deepEqual(
+      remotePush({ plugins: [['expo-notifications', { mode: 'production' }]] }, false),
+      {
+        mas: true,
+        dmg: false,
+      },
+    );
+    assert.deepEqual(remotePush({}, true), { mas: true, dmg: false });
+  });
+
+  it("signs a dmg for it only when the config sets ios.entitlements['aps-environment']", () => {
+    assert.deepEqual(
+      remotePush({ ios: { entitlements: { 'aps-environment': 'production' } } }, false),
+      {
+        mas: true,
+        dmg: true,
+      },
+    );
+  });
+
+  it('adds production APNs to a mas build that receives pushes, and to a dmg with its identity', () => {
+    const config = desktopAppConfig({});
+    const identity = { bundleIdentifier: 'com.example.notes', team: 'T1' };
+    const aps =
+      /<key>com\.apple\.developer\.aps-environment<\/key>\n\t<string>production<\/string>/;
+    assert.match(entitlements(config, 'mas', { ...identity, push: true })!, aps);
+    assert.doesNotMatch(entitlements(config, 'mas', identity)!, /aps-environment/);
+    const dmg = entitlements(config, 'dmg', { ...identity, push: true })!;
+    assert.match(dmg, aps);
+    assert.match(dmg, /<string>T1\.com\.example\.notes<\/string>/);
+    assert.equal(entitlements(config, 'app', { ...identity, push: true }), null);
   });
 });
 
@@ -952,6 +994,51 @@ describe('packageApp', () => {
     assert.match(text, /com\.apple\.developer\.applesignin/);
     assert.match(text, /<string>TEAM123\.com\.example\.notes<\/string>/);
     assert.ok(calls.some((call) => call.command === 'codesign' && call.args.at(-1) === app));
+  });
+
+  it('signs for APNs when the app uses expo-notifications, and a dmg only with its profile', async () => {
+    const entitlementsFile = '/apps/notes/.expo/ng-native-desktop/package/entitlements.plist';
+    const app = (extra: object) => () => ({
+      name: 'Notes',
+      platforms: ['macos'],
+      experiments: { outOfTreePlatforms: true },
+      ...extra,
+      ios: { bundleIdentifier: 'com.example.notes', ...(extra as { ios?: object }).ios },
+    });
+    const installed = fakeMac({
+      env: MAS_ENV,
+      expoConfig: app({}),
+      resolvePackage: (_, name) =>
+        name === 'expo-notifications' ? '/apps/notes/node_modules/expo-notifications' : null,
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), installed.sys));
+    assert.match(installed.written[entitlementsFile]!, /com\.apple\.developer\.aps-environment/);
+
+    // A dmg of an app that only has the package is signed as before.
+    const plain = fakeMac({ env: DMG_ENV, expoConfig: app({ plugins: ['expo-notifications'] }) });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), plain.sys));
+    assert.doesNotMatch(plain.written[entitlementsFile]!, /aps-environment/);
+
+    const asking = app({ ios: { entitlements: { 'aps-environment': 'production' } } });
+    const { sys } = fakeMac({
+      env: { NGN_SIGN_IDENTITY: DMG_ENV.NGN_SIGN_IDENTITY },
+      expoConfig: asking,
+    });
+    await assert.rejects(
+      packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys),
+      /Remote notifications \(ios\.entitlements\['aps-environment'\]\) in a dmg needs [\s\S]*NGN_PROVISIONING_PROFILE/,
+    );
+    const signed = fakeMac({
+      env: {
+        ...DMG_ENV,
+        NGN_PROVISIONING_PROFILE: '/secrets/dev-id.provisionprofile',
+        APPLE_TEAM_ID: 'TEAM123',
+      },
+      expoConfig: asking,
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), signed.sys));
+    assert.match(signed.written[entitlementsFile]!, /com\.apple\.developer\.aps-environment/);
+    assert.ok(signed.copied.some(([, to]) => to.endsWith('embedded.provisionprofile')));
   });
 
   it('writes into --output, relative to the app', async () => {

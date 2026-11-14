@@ -50,6 +50,7 @@ add_executable(ngn-macos
     modal-host-view.mm
     native-controls.mm
     presented-screen.mm
+    push.mm
     network.mm
     network-state.mm
     notifications.mm

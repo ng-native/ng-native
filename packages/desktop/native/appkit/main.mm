@@ -60,6 +60,7 @@
 #include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "bookmarks.h"
+#import "push.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
 #import "test-launch.h"
@@ -117,6 +118,9 @@ struct Host {
   bool appWindowShown = false;
   // The Expo Updates client, for a bundle on disk (updates.h).
   std::shared_ptr<ngn::UpdatesClient> updates;
+  // Remote notifications: the device token's registration, and where a silent one is heard.
+  std::shared_ptr<ngn::PushTokens> push;
+  std::shared_ptr<ngn::NotificationEvents> notificationEvents;
 };
 
 Host gHost;
@@ -511,6 +515,26 @@ void showAppWindow() {
   gHost.windowHost->reopen(visible);
   return YES;
 }
+// APNs' answers to registerForRemoteNotifications (push.mm), for the core's PushTokens.
+- (void)application:(NSApplication *)app didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)token {
+  if (gHost.push) {
+    gHost.push->registered(std::string(static_cast<const char *>(token.bytes), token.length));
+  }
+}
+- (void)application:(NSApplication *)app didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
+  if (gHost.push) {
+    gHost.push->failed(error.localizedDescription.UTF8String);
+  }
+}
+// Every remote notification while the app runs. One with an alert is heard through the
+// notification centre's delegate as it is presented (notifications.mm); a silent one only here.
+- (void)application:(NSApplication *)app didReceiveRemoteNotification:(NSDictionary<NSString *, id> *)userInfo {
+  auto payload = ngn::appkit::pushPayload(userInfo);
+  if (gHost.notificationEvents && ngn::silentPush(payload)) {
+    gHost.notificationEvents->received(
+        NSDate.date.timeIntervalSince1970 * 1000, ngn::remoteNotificationRequest(NSUUID.UUID.UUIDString.UTF8String, payload));
+  }
+}
 - (void)applicationWillTerminate:(NSNotification *)note {
   ngn::appkit::endTestLaunch();
   // A clean quit is no crash: the update running is not rolled back, however soon it quit.
@@ -808,8 +832,11 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem, gHost.state); });
       static auto notificationEvents = std::make_shared<ngn::NotificationEvents>();
       static auto notifications = ngn::appkit::makeNotificationCenter(notificationEvents);
+      static auto pushTokens = std::make_shared<ngn::PushTokens>(ngn::appkit::makePushRegistrar(), notificationEvents);
+      gHost.push = pushTokens;
+      gHost.notificationEvents = notificationEvents;
       ngn::addModule(*modules, "NgNativeNotifications", [] {
-        return ngn::makeNotificationsModule(notifications, notificationEvents);
+        return ngn::makeNotificationsModule(notifications, notificationEvents, pushTokens);
       });
       static auto undo = ngn::appkit::makeUndoManager();
       ngn::addModule(*modules, "NgNativeUndo", [] { return ngn::makeUndoModule(undo); });

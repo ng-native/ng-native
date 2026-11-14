@@ -27,7 +27,12 @@
 // - `ngNativeNotifications` on DeviceEventEmitter: `{ type: 'received', notification }` as one is
 //   delivered while the app runs, and `{ type: 'response', response }` when the user clicks one,
 //   with `response = { actionIdentifier: 'expo.modules.notifications.actions.DEFAULT',
-//   notification }` and `notification = { date, request }`.
+//   notification }` and `notification = { date, request }`. A remote notification's request has
+//   the trigger `{ type: 'push', payload }`, the APNs payload, as on iOS. `{ type: 'token', token }`
+//   when the OS hands the app a new device token while it runs.
+// - getDevicePushTokenAsync() registers with APNs and resolves `{ type: 'macos', data }`, the
+//   token in hex, or rejects with why the OS refused (an app signed without the
+//   `aps-environment` entitlement, or no network). unregisterForNotificationsAsync() unregisters.
 #pragma once
 
 #include "ngn/native-module.h"
@@ -46,7 +51,7 @@
 namespace ngn {
 
 struct NotificationTrigger {
-  enum class Kind { Now, Interval, Date, Calendar };
+  enum class Kind { Now, Interval, Date, Calendar, Push };
   Kind kind{Kind::Now};
   double seconds{0};
   // Date: ms since the epoch.
@@ -55,6 +60,8 @@ struct NotificationTrigger {
   // Calendar: the components that must match, in the user's calendar and time zone. Months are
   // 1 to 12 and weekdays 1 (Sunday) to 7, as NSDateComponents has them.
   std::map<std::string, int> components;
+  // Push: the APNs payload as it came.
+  folly::dynamic payload = nullptr;
   bool operator==(const NotificationTrigger &) const = default;
 };
 
@@ -78,6 +85,13 @@ std::variant<NotificationTrigger, std::string> parseNotificationTrigger(const fo
 folly::dynamic notificationRequestJson(const NotificationRequest &request);
 // The Dock badge's label for a count: none at 0 or below.
 std::string badgeLabel(int count);
+
+// A remote notification's request from its APNs payload: the alert's title, subtitle and body
+// (an alert that is a string is the body), its sound and badge, and the payload as its trigger's.
+NotificationRequest remoteNotificationRequest(const std::string &identifier, const folly::dynamic &payload);
+// Whether a payload has nothing to show (no alert): the OS's notification centre never presents
+// it, so the app hears it only from the application delegate.
+bool silentPush(const folly::dynamic &payload);
 
 enum class NotificationAuthorization { NotDetermined, Denied, Authorized };
 folly::dynamic permissionResponse(NotificationAuthorization authorization, bool canPost);
@@ -104,12 +118,51 @@ class NotificationCenter {
   virtual void setBadge(int count) = 0;
 };
 
+// Registration with the OS's push service (APNs). Answers come to PushTokens.
+class PushRegistrar {
+ public:
+  virtual ~PushRegistrar() = default;
+  virtual void registerForRemoteNotifications() = 0;
+  virtual void unregisterForRemoteNotifications() = 0;
+};
+
+class NotificationEvents;
+
+// The device's push token: asked for once however many callers wait, answered from what the OS
+// reported last, and its rolls sent out as `token` events. Any thread.
+class PushTokens {
+ public:
+  using Answer = std::function<void(std::optional<std::string> token, std::string error)>;
+  PushTokens(std::shared_ptr<PushRegistrar> registrar, std::shared_ptr<NotificationEvents> events);
+  // The token in hex, registering first when there is none.
+  void request(Answer answer);
+  // The OS's answers to a registration.
+  void registered(const std::string &deviceToken);
+  void failed(const std::string &message);
+  void unregister();
+
+ private:
+  std::shared_ptr<PushRegistrar> registrar_;
+  std::shared_ptr<NotificationEvents> events_;
+  std::mutex mutex_;
+  std::optional<std::string> token_;
+  std::vector<Answer> waiting_;
+  bool registering_{false};
+};
+
+// A device token's bytes as the hex APNs servers are given.
+std::string pushTokenHex(const std::string &deviceToken);
+// Why a registration failed, said for the app: the missing entitlement named, with what to do.
+std::string pushFailure(const std::string &message);
+
 // What the backend reports as notifications arrive and are clicked, kept for the app's modules:
 // the response that launched the app waits for getLastNotificationResponseAsync.
 class NotificationEvents {
  public:
   void received(double date, const NotificationRequest &request);
   void responded(double date, const NotificationRequest &request);
+  // A new device token, in hex, while the app runs.
+  void tokenChanged(const std::string &token);
   std::optional<folly::dynamic> lastResponse() const;
   std::shared_ptr<void> listen(std::function<void(const folly::dynamic &event)> listener);
 
@@ -121,8 +174,10 @@ class NotificationEvents {
   int next_{0};
 };
 
+// `push` absent (a host that cannot register) rejects getDevicePushTokenAsync.
 std::shared_ptr<NativeModule> makeNotificationsModule(
     std::shared_ptr<NotificationCenter> center,
-    std::shared_ptr<NotificationEvents> events);
+    std::shared_ptr<NotificationEvents> events,
+    std::shared_ptr<PushTokens> push = nullptr);
 
 } // namespace ngn

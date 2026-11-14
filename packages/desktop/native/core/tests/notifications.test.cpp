@@ -250,3 +250,108 @@ TEST_CASE("a delivered notification and a click reach the app, and the click tha
   events->received(4000, request);
   CHECK(heard.size() == 2);
 }
+
+namespace {
+
+struct FakeRegistrar final : ngn::PushRegistrar {
+  int registers{0};
+  int unregisters{0};
+  void registerForRemoteNotifications() override {
+    registers++;
+  }
+  void unregisterForRemoteNotifications() override {
+    unregisters++;
+  }
+};
+
+} // namespace
+
+TEST_CASE("a remote notification reads as Expo's iOS one, with its payload as the trigger's") {
+  auto payload = folly::parseJson(
+      R"({"aps": {"alert": {"title": "Order", "subtitle": "Ready", "body": "Table 4"}, "sound": "bell.caf", "badge": 3},
+          "orderId": 42})");
+  auto request = ngn::remoteNotificationRequest("push-1", payload);
+  CHECK(request.title == "Order");
+  CHECK(request.subtitle == "Ready");
+  CHECK(request.body == "Table 4");
+  CHECK(request.sound == "bell.caf");
+  CHECK(request.badge == 3);
+  auto json = ngn::notificationRequestJson(request);
+  CHECK(json["identifier"] == "push-1");
+  CHECK(json["trigger"]["type"] == "push");
+  CHECK(json["trigger"]["payload"]["orderId"] == 42);
+  // The data is left to the app's side, which takes it from the payload.
+  CHECK(json["content"]["data"].isNull());
+
+  auto plain = ngn::remoteNotificationRequest("push-2", folly::parseJson(R"({"aps": {"alert": "Hello"}})"));
+  CHECK(plain.body == "Hello");
+  CHECK(plain.title.empty());
+  CHECK_FALSE(plain.badge.has_value());
+  CHECK(ngn::remoteNotificationRequest("push-3", nullptr).trigger.payload == dynamic::object());
+
+  CHECK_FALSE(ngn::silentPush(payload));
+  CHECK(ngn::silentPush(folly::parseJson(R"({"aps": {"content-available": 1}, "sync": true})")));
+  CHECK(ngn::silentPush(folly::parseJson(R"({"sync": true})")));
+}
+
+TEST_CASE("the device token is asked for once however many wait, in hex, and its roll is sent out") {
+  auto registrar = std::make_shared<FakeRegistrar>();
+  auto events = std::make_shared<ngn::NotificationEvents>();
+  auto push = std::make_shared<ngn::PushTokens>(registrar, events);
+  auto module = ngn::makeNotificationsModule(std::make_shared<FakeCenter>(), events, push);
+  std::vector<dynamic> heard;
+  module->setEmitter([&](const std::string &, dynamic body) { heard.push_back(body); });
+
+  Answer first, second;
+  module->callWithPromise("getDevicePushTokenAsync", dynamic::array(),
+                          {.resolve = [&](dynamic v) { first.value = v; }, .reject = [&](const std::string &e) { first.error = e; }});
+  module->callWithPromise("getDevicePushTokenAsync", dynamic::array(),
+                          {.resolve = [&](dynamic v) { second.value = v; }, .reject = [&](const std::string &e) { second.error = e; }});
+  CHECK(registrar->registers == 1);
+  CHECK_FALSE(first.value.has_value());
+  push->registered(std::string("\x0a\xff\x00\x12", 4));
+  REQUIRE(first.value.has_value());
+  CHECK(*first.value == dynamic::object("type", "macos")("data", "0aff0012"));
+  CHECK(*second.value == *first.value);
+  // Known now: answered without asking the OS again.
+  CHECK(ask(*module, "getDevicePushTokenAsync").value == *first.value);
+  CHECK(registrar->registers == 1);
+  CHECK(heard.empty());
+
+  // The OS hands over a new token while the app runs: the app hears it.
+  push->registered(std::string("\x01\x02", 2));
+  REQUIRE(heard.size() == 1);
+  CHECK(heard[0] == dynamic::object("type", "token")("token", dynamic::object("type", "macos")("data", "0102")));
+  // The same token again is no roll.
+  push->registered(std::string("\x01\x02", 2));
+  CHECK(heard.size() == 1);
+
+  // Unregistering forgets it, so the next ask registers again.
+  ask(*module, "unregisterForNotificationsAsync");
+  CHECK(registrar->unregisters == 1);
+  ask(*module, "getDevicePushTokenAsync");
+  CHECK(registrar->registers == 2);
+}
+
+TEST_CASE("a host without the entitlement rejects the token with what to do, and one without push rejects") {
+  auto registrar = std::make_shared<FakeRegistrar>();
+  auto events = std::make_shared<ngn::NotificationEvents>();
+  auto push = std::make_shared<ngn::PushTokens>(registrar, events);
+  auto module = ngn::makeNotificationsModule(std::make_shared<FakeCenter>(), events, push);
+  Answer refused;
+  module->callWithPromise("getDevicePushTokenAsync", dynamic::array(),
+                          {.resolve = [&](dynamic v) { refused.value = v; }, .reject = [&](const std::string &e) { refused.error = e; }});
+  // What AppKit says for an app signed without it.
+  push->failed("no valid \"aps-environment\" entitlement string found for application");
+  REQUIRE(refused.error.has_value());
+  CHECK(refused.error->find("aps-environment entitlement") != std::string::npos);
+  CHECK(refused.error->find("expo-notifications") != std::string::npos);
+  // A failure lets the next ask try again.
+  ask(*module, "getDevicePushTokenAsync");
+  CHECK(registrar->registers == 2);
+  push->failed("The Internet connection appears to be offline.");
+
+  auto without = ngn::makeNotificationsModule(std::make_shared<FakeCenter>(), events);
+  CHECK(ask(*without, "getDevicePushTokenAsync").error.value_or("").find("not available") != std::string::npos);
+  CHECK(ask(*without, "unregisterForNotificationsAsync").value == dynamic(nullptr));
+}

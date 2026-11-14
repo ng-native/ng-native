@@ -38,6 +38,7 @@ export const PLUGIN_NAME = '@ng-native/desktop';
  *     icon?: string | { light?: string, dark?: string, tinted?: string },
  *     infoPlist?: Record<string, unknown>,
  *     usesAppleSignIn?: boolean,
+ *     entitlements?: Record<string, unknown>,
  *   },
  *   plugins?: unknown[],
  * }} ExpoConfig

@@ -305,6 +305,12 @@ For a device push token instead, send through APNs or FCM's own HTTP API directl
 service has no part in that path. _Both the curl example and a real send have not been run against
 a device for this change; verify the token format and response shape before relying on them._
 
+On macOS the device push token is `{ type: 'macos', data }`, the APNs token in hex, and it is the
+only push token there: Expo's push service does not deliver to macOS, so `getExpoPushToken()`
+rejects. APNs registers only an app signed for it, which `ng-native-desktop package` does for a
+Mac App Store build of an app that uses `expo-notifications`, and for a `dmg` when
+`ios.entitlements['aps-environment']` is set. In development the token rejects, saying so.
+
 ## Everything else
 
 Each method is the module's function of the same purpose, with the module's own arguments and

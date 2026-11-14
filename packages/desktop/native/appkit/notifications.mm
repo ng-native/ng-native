@@ -1,4 +1,5 @@
 #import "notifications.h"
+#import "push.h"
 
 #import <AppKit/AppKit.h>
 #import <UserNotifications/UserNotifications.h>
@@ -25,6 +26,10 @@ folly::dynamic requestRecord(const ngn::NotificationRequest &request) {
 }
 
 ngn::NotificationRequest fromRecord(UNNotificationRequest *request) {
+  // A remote notification: read from its APNs payload, as expo-notifications reads one on iOS.
+  if ([request.trigger isKindOfClass:UNPushNotificationTrigger.class]) {
+    return ngn::remoteNotificationRequest(str(request.identifier), ngn::appkit::pushPayload(request.content.userInfo));
+  }
   ngn::NotificationRequest out;
   out.identifier = str(request.identifier);
   out.title = str(request.content.title);
@@ -90,6 +95,7 @@ NSDateComponents *componentsOf(const ngn::NotificationTrigger &trigger) {
 UNNotificationTrigger *triggerOf(const ngn::NotificationTrigger &trigger) {
   switch (trigger.kind) {
     case ngn::NotificationTrigger::Kind::Now:
+    case ngn::NotificationTrigger::Kind::Push:
       return nil;
     case ngn::NotificationTrigger::Kind::Interval:
       return [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:trigger.seconds repeats:trigger.repeats];

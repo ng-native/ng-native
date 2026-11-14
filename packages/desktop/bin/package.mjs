@@ -355,6 +355,61 @@ export function appleSignIn(expo, installed) {
   return { mas: asked || listed || installed, dmg: asked };
 }
 
+/** The package whose use signs an app for remote notifications. */
+const NOTIFICATIONS = 'expo-notifications';
+
+/**
+ * Whether each format is signed for remote notifications (APNs), decided as the iOS build decides
+ * it: a `mas` build whenever the app uses `expo-notifications` (its config plugin listed, or the
+ * package installed) or sets `ios.entitlements['aps-environment']`; a `dmg` only when that
+ * entitlement is set, since it then needs a Developer ID profile, as Sign in with Apple does.
+ *
+ * @param {import('./app-config.mjs').ExpoConfig} expo
+ * @param {boolean} installed whether the app has `expo-notifications` installed
+ */
+export function remotePush(expo, installed) {
+  const listed = (expo.plugins ?? []).some(
+    (entry) => (Array.isArray(entry) ? entry[0] : entry) === NOTIFICATIONS,
+  );
+  const asked = typeof expo.ios?.entitlements?.['aps-environment'] === 'string';
+  return { mas: asked || listed || installed, dmg: asked };
+}
+
+/**
+ * Whether a dmg asking for `capability` can be signed for it: a signing identity, a Developer ID
+ * profile and its team, checked before anything is built, since macOS opens no app with a
+ * restricted entitlement and no profile granting it.
+ *
+ * @param {System} sys
+ * @param {string} capability what asked, as the error names it
+ */
+function requireDmgProfile(sys, capability) {
+  const missing = DMG_SIGN_IN.filter((name) => !sys.env[name]);
+  if (missing.length > 0) {
+    throw new UsageError(
+      `${capability} in a dmg needs ${missing.join(', ')} set in the environment: a Developer ID ` +
+        'provisioning profile with the capability, and its team. Without them macOS would not ' +
+        'open the app.',
+    );
+  }
+}
+
+/**
+ * Whether this build is signed for remote notifications (`remotePush`), with the dmg's profile
+ * checked as for Sign in with Apple.
+ *
+ * @param {System} sys
+ * @param {import('./app-config.mjs').ExpoConfig} expo
+ * @param {'app' | 'dmg' | 'mas'} format
+ */
+function receivesPush(sys, expo, format) {
+  const uses = remotePush(expo, sys.resolvePackage(sys.cwd(), NOTIFICATIONS) !== null);
+  if (format === 'mas') return uses.mas;
+  if (format !== 'dmg' || !uses.dmg) return false;
+  requireDmgProfile(sys, "Remote notifications (ios.entitlements['aps-environment'])");
+  return true;
+}
+
 /**
  * Whether this build is signed for Sign in with Apple (`appleSignIn`). A dmg that is needs a
  * signing identity, a Developer ID profile and its team, checked before anything is built: macOS
@@ -368,14 +423,7 @@ function signsInWithApple(sys, expo, format) {
   const uses = appleSignIn(expo, sys.resolvePackage(sys.cwd(), APPLE_AUTHENTICATION) !== null);
   if (format === 'mas') return uses.mas;
   if (format !== 'dmg' || !uses.dmg) return false;
-  const missing = DMG_SIGN_IN.filter((name) => !sys.env[name]);
-  if (missing.length > 0) {
-    throw new UsageError(
-      `Sign in with Apple (ios.usesAppleSignIn) in a dmg needs ${missing.join(', ')} set in the ` +
-        'environment: a Developer ID provisioning profile with the Sign in with Apple capability, ' +
-        'and its team. Without them macOS would not open the app.',
-    );
-  }
+  requireDmgProfile(sys, 'Sign in with Apple (ios.usesAppleSignIn)');
   return true;
 }
 
@@ -383,22 +431,28 @@ function signsInWithApple(sys, expo, format) {
  * The entitlements the app is signed with: none for `app`; for `dmg` the hardened runtime's for
  * the devices and data the usage strings declare; for `mas` the App Sandbox with those, the
  * network, the files the user picks, and the app's identity on the team. `appleSignIn` adds Sign
- * in with Apple, and to a `dmg` the app's identity on the team, which its profile is for.
+ * in with Apple and `push` remote notifications (production APNs, which both distribution formats
+ * use), and either adds to a `dmg` the app's identity on the team, which its profile is for.
  *
  * @param {DesktopAppConfig} config
  * @param {'app' | 'dmg' | 'mas'} format
- * @param {{ bundleIdentifier: string, team?: string, appleSignIn?: boolean }} identity
+ * @param {{ bundleIdentifier: string, team?: string, appleSignIn?: boolean, push?: boolean }} identity
  * @returns {string | null}
  */
-export function entitlements(config, format, { bundleIdentifier, team, appleSignIn = false }) {
+export function entitlements(
+  config,
+  format,
+  { bundleIdentifier, team, appleSignIn = false, push = false },
+) {
   if (format === 'app') return null;
   /** @type {import('./plist.mjs').PlistDict} */
   const granted = Object.fromEntries(
     config.permissions.sandboxEntitlements.map((entitlement) => [entitlement, true]),
   );
   if (appleSignIn) granted['com.apple.developer.applesignin'] = ['Default'];
+  if (push) granted['com.apple.developer.aps-environment'] = 'production';
   if (format === 'dmg') {
-    if (!appleSignIn) return plist(granted);
+    if (!appleSignIn && !push) return plist(granted);
     return plist({
       ...granted,
       'com.apple.application-identifier': `${team}.${bundleIdentifier}`,
@@ -625,6 +679,7 @@ export async function packageApp(options, sys) {
   checkXcode(sys);
   const expo = readExpoConfig(sys, sys.cwd());
   const signIn = signsInWithApple(sys, expo, options.format);
+  const push = receivesPush(sys, expo, options.format);
   const keys = credentials(options, sys.env);
   const sparkleKey = sparkleKeyFor(options, sys.env);
   const { cwd, config, buildDir } = prepareHost(sys, { universal: true, release: true, expo });
@@ -684,10 +739,20 @@ export async function packageApp(options, sys) {
     expectSuccess(sys.run('codesign', ['--force', '--sign', '-', app]), 'codesign failed.');
   } else if (options.format === 'dmg' && keys) {
     made.push(
-      ...shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, options, signIn }),
+      ...shipDmg(sys, {
+        config,
+        app,
+        output,
+        staging,
+        bundleIdentifier,
+        keys,
+        options,
+        signIn,
+        push,
+      }),
     );
   } else if (keys) {
-    made.push(shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn }));
+    made.push(shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn, push }));
   }
   for (const file of made) console.log(path.relative(cwd, file));
   return 0;
@@ -736,16 +801,20 @@ function embedSparkle(sys, buildDir, contents) {
  * only a real identity can get.
  *
  * @param {System} sys
- * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: PackageCommand, signIn: boolean }} build
+ * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: PackageCommand, signIn: boolean, push: boolean }} build
  * @returns {string[]} the files made beside the app
  */
-function shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, options, signIn }) {
-  if (signIn) embedProfile(sys, keys, app);
+function shipDmg(
+  sys,
+  { config, app, output, staging, bundleIdentifier, keys, options, signIn, push },
+) {
+  if (signIn || push) embedProfile(sys, keys, app);
   const file = path.join(staging, 'entitlements.plist');
   const granted = entitlements(config, 'dmg', {
     bundleIdentifier,
     team: keys.team,
     appleSignIn: signIn,
+    push,
   });
   sys.writeFile(file, /** @type {string} */ (granted));
   const timestamp = keys.identity === '-' ? '--timestamp=none' : '--timestamp';
@@ -840,15 +909,16 @@ function embedProfile(sys, keys, app) {
  * Embeds the provisioning profile, signs inside the App Sandbox and makes the installer package.
  *
  * @param {System} sys
- * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, signIn: boolean }} build
+ * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, signIn: boolean, push: boolean }} build
  */
-function shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn }) {
+function shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn, push }) {
   embedProfile(sys, keys, app);
   const file = path.join(staging, 'entitlements.plist');
   const granted = entitlements(config, 'mas', {
     bundleIdentifier,
     team: keys.team,
     appleSignIn: signIn,
+    push,
   });
   sys.writeFile(file, /** @type {string} */ (granted));
   expectSuccess(
