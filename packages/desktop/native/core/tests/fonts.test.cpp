@@ -160,3 +160,36 @@ TEST_CASE("NgNativeFont registers only files FileSystem could read, and says not
   CHECK_FALSE(load(*module, "Own", own).error);
   CHECK(registrar->registered == std::vector<std::string>{own});
 }
+
+TEST_CASE("NgNativeFont downloads a url once while it is downloading, however many loads ask for it") {
+  Folder folder;
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  auto registrar = std::make_shared<FakeRegistrar>();
+  auto library = std::make_shared<ngn::FontLibrary>();
+  auto module = ngn::makeFontModule(registrar, library, http, folder.path.string(), ngn::testing::readsEverywhere());
+  const std::string url = "http://localhost:8081/assets/Inter.ttf";
+  // A family and its alias, loaded at once: the second must not write the file the first reads.
+  auto family = load(*module, "Inter", url);
+  auto alias = load(*module, "Inter-Regular", url);
+  REQUIRE(http->sent.size() == 1);
+  auto &callbacks = http->sent[0]->callbacks;
+  callbacks.onResponse({.status = 200});
+  callbacks.onData("font:Inter", -1);
+  callbacks.onComplete("", false);
+  CHECK(family.done);
+  CHECK(alias.done);
+  CHECK_FALSE(family.error);
+  CHECK_FALSE(alias.error);
+  CHECK(library->names() == std::vector<std::string>{"Inter", "Inter-Regular"});
+
+  // A failed download fails every load waiting on it, and the next load tries again.
+  auto first = load(*module, "Gone", "https://example.com/gone.ttf");
+  auto second = load(*module, "Gone2", "https://example.com/gone.ttf");
+  REQUIRE(http->sent.size() == 2);
+  http->sent[1]->callbacks.onResponse({.status = 404});
+  http->sent[1]->callbacks.onComplete("", false);
+  CHECK(first.error);
+  CHECK(second.error);
+  load(*module, "Gone", "https://example.com/gone.ttf");
+  CHECK(http->sent.size() == 3);
+}
