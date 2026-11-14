@@ -100,7 +100,8 @@ arch_key="${archs//;/-}"
 hermes_args=()
 if [ "$backend" != "none" ]; then
   hermes="$CACHE/hermes-$arch_key"
-  if [ ! -f "$hermes/lib/libhermesvm_a.a" ]; then
+  # Built again when missing, or built for another macOS than the host's.
+  if ! "$here/hermes-built.sh" "$hermes"; then
     "$here/build-hermes.sh" "$RN_PKG" "$archs" >&2
   fi
   hermes_args=(-DNGN_HERMES_BUILD="$hermes")

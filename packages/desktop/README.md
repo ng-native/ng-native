@@ -534,9 +534,23 @@ reload reloads, and so does Developer > Reload (Command-R). A bundle path (from
 `npx expo export -p macos`) or another URL can be given instead.
 
 The host is built against the app's own `react-native` (0.88), the first time into
-`~/Library/Caches/ng-native/desktop/rn-<version>`, which takes a few minutes and needs Xcode's
-command line tools, CMake and Ninja. Later runs reuse it, and adding or removing one of the
-libraries above recompiles only that library.
+`~/Library/Caches/ng-native/desktop/rn-<version>`, which takes about 4 minutes on an Apple silicon
+Mac (about 6 for a universal release build), and the command says so before it starts. Later runs
+reuse it, and adding or removing one of the libraries above recompiles only that library. The host
+is built for macOS 14 and later (`native/CMakeLists.txt`, which `scripts/macos-target.sh` reads for
+Hermes too; a cached Hermes built for another macOS is built again).
+
+Before a from-source build the command checks the toolchain (`bin/toolchain.mjs`) and stops with a
+fix-it line for each problem:
+
+| Tool                            | Minimum                | Fix-it when missing or older                 |
+| ------------------------------- | ---------------------- | -------------------------------------------- |
+| Xcode or the Command Line Tools | installed and selected | `xcode-select --install`                     |
+| `swiftc`                        | Swift 6.0 (Xcode 16)   | Software Update, or `xcode-select --install` |
+| CMake                           | 3.25                   | `brew install cmake` / `brew upgrade cmake`  |
+| Ninja                           | 1.10                   | `brew install ninja` / `brew upgrade ninja`  |
+
+A prebuilt host needs none of them.
 
 | Option            | What it does                                              |
 | ----------------- | --------------------------------------------------------- |

@@ -18,6 +18,7 @@ import {
   system,
   UsageError,
 } from './cli.mjs';
+import { FIRST_BUILD_NOTE } from './toolchain.mjs';
 
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -113,6 +114,14 @@ describe('parseCommand', () => {
   });
 });
 
+/** What the toolchain check (toolchain.mjs) asks, answered by a Mac that has every tool. */
+const TOOLCHAIN: Record<string, string> = {
+  'xcode-select --print-path': '/Applications/Xcode.app/Contents/Developer\n',
+  'xcrun swiftc --version': 'Apple Swift version 6.2 (swiftlang-6.2.0.19.9 clang-1700.3.19.1)\n',
+  'cmake --version': 'cmake version 3.31.6\n',
+  'ninja --version': '1.12.1\n',
+};
+
 /** A system that records what run() asks of it. */
 function fakeSystem(overrides: Partial<typeof system> = {}) {
   const calls: { command: string; args: string[]; env?: Record<string, string> }[] = [];
@@ -138,6 +147,8 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
       return Promise.resolve(this.run(command, args).status);
     },
     run(command, args, options) {
+      const probe = TOOLCHAIN[[command, ...args].join(' ')];
+      if (probe !== undefined) return { status: 0, stdout: probe };
       calls.push({ command, args, ...(options?.env && { env: options.env }) });
       return command.endsWith('build.sh')
         ? {
@@ -443,9 +454,61 @@ describe('run', () => {
     assert.equal(calls.length, 0);
   });
 
+  it('checks the toolchain before it builds, and stops on a missing tool without building', async () => {
+    const asked: string[] = [];
+    const { sys, calls } = fakeSystem({
+      run(command, args) {
+        const line = [command, ...args].join(' ');
+        asked.push(line);
+        if (line === 'ninja --version') throw new Error('spawnSync ninja ENOENT');
+        const probe = TOOLCHAIN[line];
+        if (probe !== undefined) return { status: 0, stdout: probe };
+        calls.push({ command, args });
+        return { status: 0, stdout: '/b\n' };
+      },
+    });
+    await assert.rejects(
+      run({ bundle: 'a.js', module: 'main', universal: false }, sys),
+      (error: unknown) =>
+        error instanceof UsageError &&
+        /Ninja is not installed\. Install it: brew install ninja/.test(error.message),
+    );
+    assert.deepEqual(calls, []);
+    assert.deepEqual(asked, [
+      'xcode-select --print-path',
+      'xcrun swiftc --version',
+      'cmake --version',
+      'ninja --version',
+    ]);
+  });
+
+  it('says how long the first build takes, once, before building for a React Native version the cache lacks', async () => {
+    const files: Record<string, string> = {
+      '/apps/demo/node_modules/react-native/package.json': '{"version":"0.88.0"}',
+    };
+    const first = fakeSystem({
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: (file) => files[file] ?? '',
+    });
+    await run({ bundle: 'a.js', module: 'main', universal: false }, first.sys);
+    assert.deepEqual(first.warnings, [FIRST_BUILD_NOTE]);
+    assert.match(FIRST_BUILD_NOTE, /about 4 minutes/);
+
+    const later = fakeSystem({
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: (file) => files[file] ?? '',
+      exists: (file) => file === '/cache/rn-0.88.0/host',
+    });
+    await run({ bundle: 'a.js', module: 'main', universal: false }, later.sys);
+    assert.deepEqual(later.warnings, []);
+  });
+
   it('stops when the build fails, without launching', async () => {
     const { sys, calls } = fakeSystem({
-      run: (command, args) => (calls.push({ command, args }), { status: 1, stdout: '' }),
+      run: (command, args) =>
+        TOOLCHAIN[[command, ...args].join(' ')] !== undefined
+          ? { status: 0, stdout: TOOLCHAIN[[command, ...args].join(' ')]! }
+          : (calls.push({ command, args }), { status: 1, stdout: '' }),
     });
     await assert.rejects(
       run({ bundle: 'a.js', module: 'main', universal: false }, sys),
@@ -500,7 +563,10 @@ describe('main', () => {
       console.error = original;
     }
     const exiting = fakeSystem({
-      run: (command) => ({ status: command.endsWith('ngn-macos') ? 3 : 0, stdout: '/b\n' }),
+      run: (command, args) => ({
+        status: command.endsWith('ngn-macos') ? 3 : 0,
+        stdout: TOOLCHAIN[[command, ...args].join(' ')] ?? '/b\n',
+      }),
     });
     assert.equal(await main(['run', 'a.js'], exiting.sys), 3);
   });

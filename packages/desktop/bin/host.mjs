@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { desktopAppConfig } from './app-config.mjs';
 import { desktopLinks, linkWarnings } from './autolink.mjs';
 import { choosePrebuilt, fetchPrebuilt, readManifest } from './prebuilt.mjs';
+import { checkToolchain, FIRST_BUILD_NOTE } from './toolchain.mjs';
 
 export const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -377,6 +378,14 @@ function prebuiltHost(sys, reactNative, { deny, linked }) {
  * @param {string} link the file `linkFile` names
  */
 function buildHost(sys, reactNative, libraries, { universal, release }, link) {
+  checkToolchain(sys);
+  const version = versionIn(sys, reactNative);
+  if (
+    version &&
+    !sys.exists(path.join(cacheDir(version, { env: sys.env, platform: sys.platform }), 'host'))
+  ) {
+    sys.warn(FIRST_BUILD_NOTE);
+  }
   const buildArgs = [reactNative, ...libraries.flatMap((dir) => ['--library', dir])];
   if (universal) buildArgs.push('--universal');
   if (release) buildArgs.push('--release');

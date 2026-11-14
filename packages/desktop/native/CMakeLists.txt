@@ -30,7 +30,8 @@ endforeach()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0)
+# The oldest macOS the host runs on (scripts/macos-target.sh reads it from here).
+set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0)
 # React Native's libraries reference each other in both directions. Apple's linker and lld
 # resolve archives in any order; GNU ld does not, so Linux links with lld.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
