@@ -330,10 +330,17 @@ and the plugin options.
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),
-`--bundleIdentifier`, `--tags`, `--linter`, `--skipInstall` and `--skipFormat`, which leaves the
+`--bundleIdentifier`, `--tags`, `--linter`, `--desktopOnly`, `--skipInstall` and `--skipFormat`, which leaves the
 generated files unformatted. `--linter=eslint` adds an `eslint.config.mjs` with
 [`@ng-native/eslint-plugin`](/packages/eslint-plugin)'s recommended rules, its four packages and a
 `lint` target; `--linter=none`, the default, adds none of them.
+
+`--desktopOnly` makes a macOS-only app from the desktop template (`@ng-native/template-desktop`):
+`macos` alone in `expo.platforms`, its sidebar and menu bar starter screen, `@ng-native/desktop`
+and `@ng-native/expo` in place of the phone's status bar and system UI packages, and `macos` and
+`package` targets (see [macOS](#macos)) where a mobile app has its own `run-ios` and
+`run-android`. `nx g @ng-native/nx:init --desktopOnly`, the generator `nx add` runs, makes it the default
+of every app generated in the workspace, in `nx.json`.
 
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`; it defaults to
 `com.<scope>.<name>`, from the workspace's npm scope and the app's name with anything but letters

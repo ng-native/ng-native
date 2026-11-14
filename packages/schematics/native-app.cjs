@@ -27,9 +27,19 @@ const SOURCE_FILES = [
   'tsconfig.json',
 ];
 
-/** @param {string} name */
-function sourceFile(name) {
-  return readFileSync(path.join(__dirname, 'files', name), 'utf8');
+/**
+ * The desktop template's files that differ from the template's, which a desktop-only app takes in
+ * their place, from `files/desktop/`: its starter screen, the screen's test and its `AGENTS.md`.
+ */
+const DESKTOP_SOURCE_FILES = ['src/app/app.ts', 'src/app/app.test.ts'];
+
+/**
+ * @param {string} name
+ * @param {boolean} [desktopOnly] the desktop template's copy, where it has one of its own
+ */
+function sourceFile(name, desktopOnly = false) {
+  const own = desktopOnly && (DESKTOP_SOURCE_FILES.includes(name) || name === 'AGENTS.md');
+  return readFileSync(path.join(__dirname, 'files', own ? 'desktop' : '', name), 'utf8');
 }
 
 /**
@@ -37,9 +47,10 @@ function sourceFile(name) {
  * describes the framework, which is the same wherever the app lives.
  *
  * @param {string} commands the markdown that goes under the Commands heading
+ * @param {boolean} [desktopOnly] the desktop template's, for a desktop-only app
  */
-function agentsFile(commands) {
-  return sourceFile('AGENTS.md').replace(
+function agentsFile(commands, desktopOnly = false) {
+  return sourceFile('AGENTS.md', desktopOnly).replace(
     /## Commands\n[\s\S]*?(?=\n## )/,
     `## Commands\n\n${commands}\n`,
   );
@@ -52,14 +63,22 @@ function agentsFile(commands) {
  * @param {string} name
  * @param {{ dependencies?: Record<string, string>, devDependencies?: Record<string, string> }} root
  *   the workspace's root `package.json`, once this app's dependencies are in it
+ * @param {boolean} [desktopOnly] a desktop-only app, with the desktop template's dependencies
  */
-function projectManifest(name, root) {
-  return { name, private: true, main: 'src/main.ts', dependencies: shared.prebuildPins(root) };
+function projectManifest(name, root, desktopOnly = false) {
+  const wanted = desktopOnly ? shared.desktopOnlyDependencies : shared.dependencies;
+  return {
+    name,
+    private: true,
+    main: 'src/main.ts',
+    dependencies: shared.prebuildPins(root, wanted),
+  };
 }
 
 module.exports = {
   ...shared,
   SOURCE_FILES,
+  DESKTOP_SOURCE_FILES,
   sourceFile,
   agentsFile,
   projectManifest,

@@ -191,6 +191,37 @@ describe('the generated app', () => {
   });
 });
 
+describe('the generated desktop-only app', () => {
+  const desktop = path.resolve(import.meta.dirname, '../../template-desktop');
+  const desktopFile = (file: string) => readFileSync(path.join(desktop, file), 'utf8');
+
+  for (const file of [...native.DESKTOP_SOURCE_FILES, 'AGENTS.md']) {
+    it(`copies the desktop template's ${file} as it is`, () => {
+      assert.equal(native.sourceFile(file, true), desktopFile(file));
+    });
+  }
+
+  it("installs the desktop template's dependencies, at its versions", () => {
+    const theirs = JSON.parse(desktopFile('package.json')).dependencies;
+    assert.deepEqual(
+      Object.keys(native.desktopOnlyDependencies).sort(),
+      Object.keys(theirs).sort(),
+    );
+    for (const [name, range] of Object.entries(theirs)) {
+      if (range !== 'workspace:*') assert.equal(native.desktopOnlyDependencies[name], range, name);
+    }
+  });
+
+  it("writes the desktop template's app.json, with the app's name and bundle identifier", () => {
+    const { expo } = JSON.parse(native.appJson('notes', 'com.acme.notes', ['macos']));
+    const theirs = JSON.parse(desktopFile('app.json')).expo;
+    for (const key of ['version', 'platforms', 'experiments', 'userInterfaceStyle', 'extra']) {
+      assert.deepEqual(expo[key], theirs[key], key);
+    }
+    assert.deepEqual(expo.plugins, theirs.plugins);
+  });
+});
+
 describe('withDesktop', () => {
   it('adds macos, the out-of-tree platforms flag and the plugin, keeping what is there', () => {
     const expo = native.withDesktop({

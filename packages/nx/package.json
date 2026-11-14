@@ -62,7 +62,8 @@
       "layer:build"
     ],
     "implicitDependencies": [
-      "@ng-native/template"
+      "@ng-native/template",
+      "@ng-native/template-desktop"
     ]
   },
   "scripts": {

@@ -178,11 +178,27 @@ function declineBuilds(tree) {
 }
 
 /**
+ * With `desktopOnly`, makes it the default of the `application` generator in `nx.json`, so every
+ * app generated here starts from the desktop template: macOS alone, with no phone settings.
+ */
+function defaultToDesktopOnly(tree) {
+  const nxJson = readNxJson(tree) ?? {};
+  const key = '@ng-native/nx:application';
+  const current = nxJson.generators?.[key] ?? {};
+  if (current.desktopOnly === true) return;
+  updateNxJson(tree, {
+    ...nxJson,
+    generators: { ...nxJson.generators, [key]: { ...current, desktopOnly: true } },
+  });
+}
+
+/**
  * @param {import('@nx/devkit').Tree} tree
- * @param {{ skipInstall?: boolean, skipFormat?: boolean }} options
+ * @param {{ skipInstall?: boolean, skipFormat?: boolean, desktopOnly?: boolean }} options
  */
 async function init(tree, options = {}) {
   registerExpoPlugin(tree);
+  if (options.desktopOnly) defaultToDesktopOnly(tree);
   declineBuilds(tree);
   const { dependencies, devDependencies } = readJson(tree, 'package.json');
   const existing = Object.keys({ ...dependencies, ...devDependencies });

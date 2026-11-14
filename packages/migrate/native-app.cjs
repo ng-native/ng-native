@@ -162,6 +162,19 @@ const DESKTOP_PACKAGE = '@ng-native/desktop';
 const desktopDependencies = { [DESKTOP_PACKAGE]: version };
 
 /**
+ * A desktop-only app's dependencies, the desktop template's: the mobile app's, less the two that
+ * only set up a phone's status bar and system UI, with the desktop host and `@ng-native/expo`, whose
+ * services the desktop starter uses.
+ *
+ * @type {Record<string, string>}
+ */
+const desktopOnlyDependencies = Object.fromEntries(
+  Object.entries({ ...dependencies, ...desktopDependencies, '@ng-native/expo': version })
+    .filter(([name]) => name !== 'expo-status-bar' && name !== 'expo-system-ui')
+    .sort(([a], [b]) => (a < b ? -1 : 1)),
+);
+
+/**
  * The scripts a desktop app adds: `npm run macos` builds the host and opens the app from the dev
  * server `npm start` runs, and `npm run package` makes the `.app`, `.dmg` or Mac App Store package.
  * The Expo CLI has no `run:macos`: its `run` commands are a fixed list.
@@ -262,12 +275,12 @@ function desktopOnlyExpo(slug, bundle) {
  * second copy of React Native beside the root's.
  *
  * @param {{ dependencies?: Record<string, string>, devDependencies?: Record<string, string> }} root
+ * @param {Record<string, string>} [wanted] the app's dependencies, a desktop-only app's in place of
+ *   the mobile app's
  */
-function prebuildPins(root) {
+function prebuildPins(root, wanted = dependencies) {
   const installed = { ...root.devDependencies, ...root.dependencies };
-  return Object.fromEntries(
-    Object.keys(dependencies).map((pkg) => [pkg, installed[pkg] ?? dependencies[pkg]]),
-  );
+  return Object.fromEntries(Object.keys(wanted).map((pkg) => [pkg, installed[pkg] ?? wanted[pkg]]));
 }
 
 /**
@@ -323,6 +336,7 @@ module.exports = {
   DESKTOP_SCRIPTS,
   DESKTOP_GITIGNORE,
   desktopDependencies,
+  desktopOnlyDependencies,
   withDesktop,
   appJson,
   bundleIdentifier,
