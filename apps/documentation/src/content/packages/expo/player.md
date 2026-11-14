@@ -209,6 +209,10 @@ Then use it as a plain element, with `player` bound to `player.id`:
 The view is `VideoView` on iOS and `SurfaceVideoView` on Android, as `expo-video` names them;
 `registerExpoViews('expo-video')` registers each on its own platform.
 
+On macOS the desktop host plays a `videoPlayer` with AVPlayer and draws `<expo-video>` with
+AVPlayerView, under the iOS view's name and with its props. `requiresLinearPlayback` does nothing
+there, and the player has no tracks, thumbnails or now-playing controls.
+
 The props are `expo-video`'s own `VideoViewProps`, unwrapped: `player`, `nativeControls` (default
 `true`), `contentFit` (`'contain'`, `'cover'` or `'fill'`, default `'contain'`),
 `requiresLinearPlayback`, `fullscreenOptions`, and a few platform-specific ones (`showsTimecodes`

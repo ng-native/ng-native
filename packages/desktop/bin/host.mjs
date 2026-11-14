@@ -252,7 +252,7 @@ function resolveReactNative(sys, cwd) {
  * @param {typeof system} sys
  * @param {string} cwd
  */
-function readExpoConfig(sys, cwd) {
+export function readExpoConfig(sys, cwd) {
   /** @type {ExpoConfig} */
   let config;
   try {
@@ -282,8 +282,9 @@ export function linkFile(appDir) {
  * host built (a no-op when nothing changed).
  *
  * @param {typeof system} sys
- * @param {{ universal: boolean, release?: boolean }} options `release` builds the host as a
- *   packaged app ships it, without the core tests
+ * @param {{ universal: boolean, release?: boolean, expo?: ExpoConfig }} options `release` builds
+ *   the host as a packaged app ships it, without the core tests; `expo` is the app's config when
+ *   the caller has read it already
  */
 export function prepareHost(sys, options) {
   if (sys.platform !== 'darwin') {
@@ -291,7 +292,7 @@ export function prepareHost(sys, options) {
   }
   const cwd = sys.cwd();
   const reactNative = resolveReactNative(sys, cwd);
-  const expo = readExpoConfig(sys, cwd);
+  const expo = options.expo ?? readExpoConfig(sys, cwd);
   const config = desktopAppConfig(expo);
   if (/[/\\]/.test(config.name) || config.name === '.' || config.name === '..') {
     throw new UsageError(

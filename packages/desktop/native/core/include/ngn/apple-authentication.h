@@ -14,9 +14,19 @@
 //   `medium`, `long` or `abbreviated` style. Synchronous.
 // The OS's word that the user revoked the app's credential arrives as an `ngNativeAppleAuthentication`
 // event, {type: 'revoked'}.
+//
+// `<apple-sign-in-button>` is expo's button view (ViewManagerAdapter_ExpoAppleAuthentication), a
+// Fabric component of the desktop's own that the AppKit backend draws as ASAuthorizationAppleIDButton,
+// with expo's `buttonType`, `buttonStyle` and `cornerRadius`, sending `buttonPress` on a click.
 #pragma once
 
+#include "ngn/desktop-props.h"
 #include "ngn/native-module.h"
+
+#include <react/renderer/components/view/ConcreteViewShadowNode.h>
+#include <react/renderer/components/view/ViewEventEmitter.h>
+#include <react/renderer/components/view/ViewProps.h>
+#include <react/renderer/core/ConcreteComponentDescriptor.h>
 
 #include <functional>
 #include <memory>
@@ -81,5 +91,26 @@ class AppleIdProvider {
 std::string appleAuthenticationFailure(AppleIdProvider::Failure failure);
 
 std::shared_ptr<NativeModule> makeAppleAuthenticationModule(std::shared_ptr<AppleIdProvider> provider, bool noPrompts);
+
+extern const char AppleButtonComponentName[];
+
+class AppleButtonProps final : public facebook::react::ViewProps, public HasDesktopProps {
+ public:
+  AppleButtonProps() = default;
+  AppleButtonProps(
+      const facebook::react::PropsParserContext &context,
+      const AppleButtonProps &sourceProps,
+      const facebook::react::RawProps &rawProps);
+  // expo's enums, which are AuthenticationServices' own: sign in 0, continue 1, sign up 2; white 0,
+  // white outline 1, black 2. Out of range is the default, as on iOS.
+  int buttonType{0};
+  int buttonStyle{0};
+  // In points; expo sets 0 when none is given.
+  double cornerRadius{0};
+};
+
+using AppleButtonShadowNode =
+    facebook::react::ConcreteViewShadowNode<AppleButtonComponentName, AppleButtonProps, facebook::react::ViewEventEmitter>;
+using AppleButtonComponentDescriptor = facebook::react::ConcreteComponentDescriptor<AppleButtonShadowNode>;
 
 } // namespace ngn

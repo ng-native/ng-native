@@ -1,6 +1,10 @@
+#include "fake-backend.h"
 #include "ngn/apple-authentication.h"
+#include "ngn/mounting-manager.h"
 
 #include <doctest/doctest.h>
+#include <react/renderer/core/PropsParserContext.h>
+#include <react/utils/ContextContainer.h>
 
 #include <optional>
 
@@ -159,4 +163,31 @@ TEST_CASE("A revoked credential is an event, until the module goes") {
     CHECK(events == std::vector<dynamic>{dynamic::object("type", "revoked")});
   }
   CHECK(provider->stopped);
+}
+
+TEST_CASE("<apple-sign-in-button> commits under expo's view name, with its type, style and corners") {
+  using namespace facebook::react;
+  CHECK(std::string(ngn::AppleButtonComponentName) == "ViewManagerAdapter_ExpoAppleAuthentication");
+  auto backend = std::make_shared<ngn::testing::FakeBackend>();
+  CHECK(std::make_shared<ngn::MountingManager>(backend, backend)->hasComponent(ngn::AppleButtonComponentName));
+
+  static auto context = std::make_shared<const ContextContainer>();
+  static ngn::AppleButtonComponentDescriptor descriptor({{}, context, nullptr});
+  PropsParserContext parserContext{1, *context};
+  auto parse = [&](dynamic raw, Props::Shared source = nullptr) {
+    return std::static_pointer_cast<const ngn::AppleButtonProps>(descriptor.cloneProps(parserContext, source, RawProps(std::move(raw))));
+  };
+  auto plain = parse(dynamic::object());
+  CHECK(plain->buttonType == 0);
+  CHECK(plain->buttonStyle == 0);
+  CHECK(plain->cornerRadius == 0);
+  auto set = parse(dynamic::object("buttonType", 1)("buttonStyle", 2)("cornerRadius", 12));
+  CHECK(set->buttonType == 1);
+  CHECK(set->buttonStyle == 2);
+  CHECK(set->cornerRadius == 12);
+  // A later commit keeps what it does not set, and a value out of expo's enum is its default.
+  auto later = parse(dynamic::object("buttonType", 7), set);
+  CHECK(later->buttonType == 0);
+  CHECK(later->buttonStyle == 2);
+  CHECK(later->cornerRadius == 12);
 }

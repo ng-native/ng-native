@@ -18,6 +18,8 @@
 #import "expo-image-view.h"
 #import "expo-ui-view.h"
 #import "camera-view.h"
+#import "video-view.h"
+#import "apple-button-view.h"
 #import "map-view.h"
 
 #include "text-layout.h"
@@ -1013,6 +1015,12 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == ngn::CameraComponentName) {
     return [[NGNCameraView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::VideoViewComponentName) {
+    return [[NGNVideoView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::AppleButtonComponentName) {
+    return [[NGNAppleButtonView alloc] initWithShadowView:view];
   }
   if (NGNView *expoUI = NGNMakeExpoUIView(view)) {
     return expoUI;

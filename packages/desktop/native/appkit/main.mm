@@ -39,6 +39,7 @@
 #import "text-recognition.h"
 #import "calendar.h"
 #import "audio.h"
+#import "video.h"
 #import "language-model.h"
 #import "screen-capture.h"
 #import "photo-library.h"
@@ -860,6 +861,8 @@ int main(int argc, const char *argv[]) {
       static auto audioOutput = ngn::appkit::makeAudioOutput();
       static auto audioInput = ngn::appkit::makeAudioInput();
       ngn::addModule(*modules, "NgNativeAudio", [] { return ngn::makeAudioModule(audioOutput, audioInput, caches + "/Audio", noPrompts); });
+      static auto videoOutput = ngn::appkit::makeVideoOutput();
+      ngn::addModule(*modules, "NgNativeVideo", [] { return ngn::makeVideoModule(videoOutput); });
       static auto languageModel = ngn::appkit::makeLanguageModelEngine();
       ngn::addModule(*modules, "NgNativeLocalLlm", [] { return ngn::makeLocalLlmModule(languageModel); });
       ngn::addModule(*modules, "NgNativeScreenCapture", [] { return ngn::makeScreenCaptureModule(ngn::appkit::captureShield()); });
