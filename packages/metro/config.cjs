@@ -19,6 +19,13 @@ const { createHash } = require('node:crypto');
 const { existsSync, readdirSync, readFileSync, watch } = require('node:fs');
 const { iconSetVersions } = require('./inline-icons.cjs');
 const { checkingResources, rereadingResources } = require('./resource-cache.cjs');
+const {
+  checkOutOfTreePlatforms,
+  expoConfig,
+  macosOverride,
+  macosRequest,
+  runtimeContext,
+} = require('./macos.cjs');
 
 const SOURCE_EXTS = ['html', 'css', 'scss', 'md'];
 const WEB_FONT_EXTS = ['woff', 'woff2'];
@@ -324,13 +331,20 @@ const WRAPPED = Symbol.for('ng-native.resolveRequest');
  * pnpm those files find `node_modules/.pnpm/node_modules` before the project's copy, and an install
  * from before the app's pin can leave Babel 8's runtime there, which has no `regenerator`.
  *
+ * In a `macos` bundle, Expo's packages and React Native's `Platform` resolve as `macos.cjs` says.
+ *
  * @param {Function | undefined} next
  * @param {string | undefined} projectRoot
+ * @param {ReadonlySet<string>} [kept] requests Expo's config adds to every bundle, left to resolve
+ *   as they would on iOS: see `macosRequest`
  */
-function withTypeScriptJsImports(next, projectRoot) {
+function withTypeScriptJsImports(next, projectRoot, kept = new Set()) {
   if (next?.[WRAPPED]) return next;
-  const resolveRequest = (context, name, platform) => {
-    const resolve = next ?? context.resolveRequest;
+  const resolveRequest = (asked, name, platform) => {
+    const resolve = next ?? asked.resolveRequest;
+    const macos = macosRequest(asked, name, platform, kept);
+    if (macos) return macos;
+    const context = runtimeContext(asked, projectRoot);
     const chunkUrl = expoChunkUrl(context, name, platform);
     if (chunkUrl) return chunkUrl;
     const helper = nativeAnimatedHelper(resolve, context, name, platform);
@@ -356,7 +370,7 @@ function withTypeScriptJsImports(next, projectRoot) {
         projectRoot,
       );
       noteSecondCopy(resolution, name, context);
-      return resolution;
+      return macosOverride(resolution, asked, platform);
     } catch (error) {
       if (!/^\.{1,2}\/.*\.[mc]?js$/.test(name)) throw error;
       try {
@@ -796,9 +810,13 @@ function withAngularNative(config, options = {}) {
 
   listWebFonts(config);
 
+  // Expo bundles macOS only with its out-of-tree flag, and leaves it out without a word otherwise.
+  checkOutOfTreePlatforms(expoConfig(config.projectRoot));
   config.resolver.resolveRequest = withTypeScriptJsImports(
     config.resolver.resolveRequest,
     projectRoot,
+    // The module a lazy `import()` loads, which Expo's config names from its own package.
+    new Set([config.transformer.asyncRequireModulePath].filter(Boolean)),
   );
 
   withChunksOutsideServerRoot(config);

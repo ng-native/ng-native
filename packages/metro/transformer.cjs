@@ -12,6 +12,7 @@ const { TraceMap, originalPositionFor } = require('@jridgewell/trace-mapping');
 const { transformAngular } = require('./angular-transform.cjs');
 const { isAngularDomComponent, domComponentReference } = require('./dom-component.cjs');
 const { markdownModule, markdownVersions } = require('./markdown-module.cjs');
+const { withMacosPlugins } = require('./macos.cjs');
 
 /**
  * Expo's transformer, from the app's `expo`, so it is the SDK the app is on. A copy beside this
@@ -239,7 +240,7 @@ module.exports = {
     return `${upstream.getCacheKey?.(...args) ?? ''}${ownVersion}`;
   },
   transform(params) {
-    params = nativeScriptBabel(params);
+    params = withMacosPlugins(nativeScriptBabel(params));
     // A `.md` file is data: see `markdown-module.cjs`.
     if (params.filename.endsWith('.md')) {
       return upstream.transform({ ...params, src: markdownModule(params.src, params.filename) });

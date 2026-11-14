@@ -60,6 +60,7 @@
     "*.cjs",
     "*.d.ts",
     "css/*.cjs",
+    "macos/*.js",
     "polyfills/*.js"
   ],
   "publishConfig": {
