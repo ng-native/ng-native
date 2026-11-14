@@ -4,8 +4,8 @@
  * The desktop host keeps a window that has a key across a reload, and closes it unless the
  * reloaded app opens that key again within a few seconds. So `AppWindows` writes down each window
  * with a key as it opens and forgets it as it closes, and a starting app opens every one it finds:
- * the main window, a route window at the path it last showed, and a `restoreKey` component window
- * with its inputs. A relaunch takes the same path, with the frames the host autosaved.
+ * the main window, a route window at the path it was last opened at, and a `restoreKey` component
+ * window with its inputs. A relaunch takes the same path, with the frames the host autosaved.
  *
  * A component is written down by the name `provideRestorableWindows` gives it, since a class name
  * does not survive minifying.
