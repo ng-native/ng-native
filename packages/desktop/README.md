@@ -62,7 +62,10 @@ Reanimated's `setGestureState`), and force touch.
 A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
 (`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
 AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
-goes to the key window, and a character is typed into a focused text field.
+goes to the key window, and a character is typed into a focused text field. A scroll or gesture
+goes to the view under its point, wherever the real pointer is, so a web view scrolls and a map
+pans and zooms. A `choose` step names the item the next menu to open picks a second after it
+opens (a picker's, a pop-up button's or a context menu), since a menu follows the real pointer.
 
 A view's box is painted as React Native iOS paints it (`view-box.h`): one corner radius and one
 solid border are the layer's own, drawn over the children only when the view clips or the border
