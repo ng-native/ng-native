@@ -23,6 +23,7 @@
 #import "system-access.h"
 #import "desktop-expo.h"
 #import "tray-and-dock.h"
+#import "updates.h"
 #import "surface-view.h"
 #include "text-layout.h"
 
@@ -68,6 +69,8 @@ struct Host {
   bool firstFrameLogged = false;
   // The app window is ordered front once, when its safe areas settle (showAppWindowWhenSettled).
   bool appWindowShown = false;
+  // The Expo Updates client, for a bundle on disk (updates.h).
+  std::shared_ptr<ngn::UpdatesClient> updates;
 };
 
 Host gHost;
@@ -249,6 +252,19 @@ void navigate(ngn::NavigationDirection direction, NSWindow *window) {
 // ng-native app with AppWindows) gets that surface in a window once it has something on it.
 void showAppWindow();
 
+// A launch counts once its window has been up this long: an update that crashes before then is
+// rolled back at the next launch (updates.h).
+constexpr int64_t kLaunchSuccessDelay = 10 * NSEC_PER_SEC;
+
+void markLaunchSucceededLater() {
+  if (!gHost.updates || !gHost.updates->running()) {
+    return;
+  }
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kLaunchSuccessDelay), dispatch_get_main_queue(), ^{
+    gHost.updates->markLaunchSucceeded();
+  });
+}
+
 void showAppSurfaceIfUsed() {
   const auto *root = gHost.mounting->tree().find(kAppSurface);
   if (gHost.appWindow != nil || root == nullptr || root->children.empty()) {
@@ -282,6 +298,7 @@ void showAppWindow() {
   gHost.appWindowShown = true;
   [gHost.appWindow makeKeyAndOrderFront:nil];
   logFirstFrame(gHost.appWindow);
+  markLaunchSucceededLater();
 }
 
 } // namespace
@@ -535,6 +552,33 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
+    }
+
+    // A bundle on disk runs the newest update the Expo Updates client keeps, when the app has an
+    // updates URL; one from a dev server never does.
+    {
+      bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
+      gHost.updates = std::make_shared<ngn::UpdatesClient>(
+          ngn::appkit::updatesConfig(system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
+      if (!fromDevServer && gHost.updates->enabled()) {
+        bundle = gHost.updates->launch();
+        if (auto running = gHost.updates->running()) {
+          fprintf(stderr, "[ngn] running update %s\n", running->id.c_str());
+        }
+      }
+      ngn::addModule(*modules, "NgNativeUpdates", [fromDevServer] {
+        return ngn::makeUpdatesModule(gHost.updates, fromDevServer, [](const std::string &next, std::function<void(bool)> done) {
+          gHost.runtime->reload(next, [next, done](bool loaded) {
+            if (!loaded) {
+              fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+              markLaunchSucceededLater();
+            });
+            done(loaded);
+          });
+        });
+      });
     }
 
     gHost.runtime = std::make_unique<ngn::Runtime>(

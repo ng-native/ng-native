@@ -19,7 +19,8 @@ add_executable(ngn-macos
     tray-and-dock.mm
     system.mm
     system-access.mm
-    text-layout.mm)
+    text-layout.mm
+    updates.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries ${NGN_LINKED}
     "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit")
 target_compile_options(ngn-macos PRIVATE -fobjc-arc -Wall -Wno-unused-parameter)
