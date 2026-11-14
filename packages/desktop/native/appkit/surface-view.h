@@ -27,6 +27,9 @@
 // Shows the cursor the core asked for (input-dispatcher.h), and keeps showing it over the views
 // AppKit would reset it on.
 + (void)showCursor:(facebook::react::Cursor)cursor;
+// Every item of each of VoiceOver's rotors over this container, one line a rotor, searched as
+// VoiceOver searches them. For checking the rotors without a screen reader (NGN_LOG_ROTORS=1).
+- (NSString *)rotorItemsDescription;
 // The sink must outlive the view.
 - (instancetype)initWithFrame:(NSRect)frame surfaceId:(facebook::react::SurfaceId)surfaceId input:(ngn::InputSink *)input;
 // A container for part of a surface (a modal's in-window cover), hit-testing from `rootTag`.

@@ -192,6 +192,9 @@ AxInfo accessibilityInfo(const ViewProps &props) {
         break;
     }
   }
+  static const std::unordered_set<std::string> landmarks{
+      "banner", "main", "navigation", "complementary", "contentinfo", "form", "region"};
+  info.landmark = landmarks.contains(name);
   if (const auto *desktop = dynamic_cast<const HasDesktopProps *>(&props); desktop && info.role == AxRole::Heading) {
     info.level = desktop->desktop.accessibilityLevel;
   }
@@ -251,6 +254,35 @@ std::string paragraphText(const State::Shared &state) {
   }
   // A Paragraph's state is always ParagraphState (its component descriptor makes it).
   return std::static_pointer_cast<const ConcreteState<ParagraphState>>(state)->getData().attributedString.getString();
+}
+
+std::vector<AxRotor> rotorsOf(const AxInfo &info) {
+  if (!info.element) {
+    return {};
+  }
+  if (info.role == AxRole::Heading) {
+    return {AxRotor::Headings};
+  }
+  if (info.role == AxRole::Link) {
+    return {AxRotor::Links};
+  }
+  if (info.landmark) {
+    return {AxRotor::Landmarks};
+  }
+  return {};
+}
+
+std::optional<size_t> rotorStep(size_t count, std::optional<size_t> current, bool forward) {
+  if (count == 0) {
+    return std::nullopt;
+  }
+  if (!current) {
+    return forward ? 0 : count - 1;
+  }
+  if (forward) {
+    return *current + 1 < count ? std::optional<size_t>(*current + 1) : std::nullopt;
+  }
+  return *current > 0 ? std::optional<size_t>(*current - 1) : std::nullopt;
 }
 
 AxDispatch axDispatch(const ViewProps &props, AxVerb verb) {

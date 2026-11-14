@@ -223,3 +223,27 @@ TEST_CASE("a control's text is read as the control, while a container's children
   CHECK_FALSE(info(folly::dynamic::object("accessibilityLabel", "Settings")).hidesChildren);
   CHECK_FALSE(info(folly::dynamic::object()).hidesChildren);
 }
+
+TEST_CASE("the rotors list headings, links and landmarks") {
+  using ngn::AxRotor;
+  CHECK(ngn::rotorsOf(info(folly::dynamic::object("role", "heading"))) == std::vector<AxRotor>{AxRotor::Headings});
+  CHECK(ngn::rotorsOf(info(folly::dynamic::object("accessibilityRole", "header"))) == std::vector<AxRotor>{AxRotor::Headings});
+  CHECK(ngn::rotorsOf(info(folly::dynamic::object("role", "link"))) == std::vector<AxRotor>{AxRotor::Links});
+  for (const char *landmark : {"banner", "main", "navigation", "complementary", "contentinfo", "form", "region"}) {
+    CAPTURE(landmark);
+    CHECK(ngn::rotorsOf(info(folly::dynamic::object("role", landmark))) == std::vector<AxRotor>{AxRotor::Landmarks});
+  }
+  CHECK(ngn::rotorsOf(info(folly::dynamic::object("role", "button"))).empty());
+  // Hidden from VoiceOver, it is on no rotor.
+  CHECK(ngn::rotorsOf(info(folly::dynamic::object("role", "heading")("accessibilityElementsHidden", true))).empty());
+}
+
+TEST_CASE("a rotor steps from the item VoiceOver is on, and from either end when it is on none") {
+  CHECK(ngn::rotorStep(3, std::nullopt, true) == 0);
+  CHECK(ngn::rotorStep(3, std::nullopt, false) == 2);
+  CHECK(ngn::rotorStep(3, 0, true) == 1);
+  CHECK(ngn::rotorStep(3, 2, true) == std::nullopt);
+  CHECK(ngn::rotorStep(3, 0, false) == std::nullopt);
+  CHECK(ngn::rotorStep(3, 2, false) == 1);
+  CHECK(ngn::rotorStep(0, std::nullopt, true) == std::nullopt);
+}

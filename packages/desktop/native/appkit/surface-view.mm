@@ -84,7 +84,70 @@ NSCursor *nsCursor(Cursor cursor) {
 
 } // namespace
 
+// One of VoiceOver's rotors over a container's views (accessibility.h): its items are the views
+// listed on it, in tree order, read again on each search so they follow the app.
+@interface NGNRotorSearch : NSObject <NSAccessibilityCustomRotorItemSearchDelegate>
+@property (nonatomic, weak) NSView *container;
+@property (nonatomic) ngn::AxRotor kind;
+@end
+
+@implementation NGNRotorSearch
+
+- (void)collect:(NSView *)view into:(NSMutableArray<NGNView *> *)items {
+  for (NSView *child in view.subviews) {
+    if (child.hidden) {
+      continue;
+    }
+    if ([child isKindOfClass:NGNView.class]) {
+      NGNView *drawn = (NGNView *)child;
+      auto info = [drawn axInfo];
+      auto rotors = ngn::rotorsOf(info);
+      if (std::find(rotors.begin(), rotors.end(), self.kind) != rotors.end()) {
+        [items addObject:drawn];
+      }
+      if (info.hidesChildren) {
+        continue;
+      }
+    }
+    [self collect:child into:items];
+  }
+}
+
+- (NSAccessibilityCustomRotorItemResult *)rotor:(NSAccessibilityCustomRotor *)rotor
+                      resultForSearchParameters:(NSAccessibilityCustomRotorSearchParameters *)parameters {
+  NSMutableArray<NGNView *> *items = [NSMutableArray array];
+  if (self.container) {
+    [self collect:self.container into:items];
+  }
+  NSString *filter = parameters.filterString;
+  if (filter.length > 0) {
+    [items filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NGNView *item, NSDictionary *) {
+             return [item.accessibilityLabel localizedCaseInsensitiveContainsString:filter];
+           }]];
+  }
+  std::optional<size_t> current;
+  id target = parameters.currentItem.targetElement;
+  NSUInteger at = target ? [items indexOfObjectIdenticalTo:target] : NSNotFound;
+  if (at != NSNotFound) {
+    current = at;
+  }
+  auto next = ngn::rotorStep(
+      items.count, current, parameters.searchDirection == NSAccessibilityCustomRotorSearchDirectionNext);
+  if (!next) {
+    return nil;
+  }
+  NGNView *item = items[*next];
+  NSAccessibilityCustomRotorItemResult *result = [[NSAccessibilityCustomRotorItemResult alloc] initWithTargetElement:item];
+  result.customLabel = item.accessibilityLabel;
+  return result;
+}
+
+@end
+
 @implementation NGNSurfaceView {
+  // Made once: a rotor holds its search delegate weakly, so the view keeps them.
+  NSArray<NSAccessibilityCustomRotor *> *_rotors;
+  NSArray<NGNRotorSearch *> *_rotorSearches;
   ngn::InputSink *_input;
   ngn::ContainerId _container;
   std::optional<ngn::ContainerInsets> _reported;
@@ -404,6 +467,57 @@ NSCursor *nsCursor(Cursor cursor) {
 
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)info {
   return _input->drop([self inputAt:info.draggingLocation], [self dragItemsOf:info]);
+}
+
+// VoiceOver's Headings, Links and Landmarks rotors over the container's views. AppKit fills none of
+// them for drawn views; its heading role arrives only in macOS 26, and it has no landmark role.
+// The app's content as one group in the window, which is where VoiceOver finds the rotors: an
+// element AppKit ignores has none it can see.
+- (BOOL)isAccessibilityElement {
+  return YES;
+}
+
+- (NSAccessibilityRole)accessibilityRole {
+  return NSAccessibilityGroupRole;
+}
+
+- (NSArray<NSAccessibilityCustomRotor *> *)accessibilityCustomRotors {
+  if (_rotors) {
+    return _rotors;
+  }
+  NSMutableArray<NSAccessibilityCustomRotor *> *rotors = [NSMutableArray array];
+  NSMutableArray<NGNRotorSearch *> *searches = [NSMutableArray array];
+  const std::pair<NSAccessibilityCustomRotorType, ngn::AxRotor> kinds[] = {
+      {NSAccessibilityCustomRotorTypeHeading, ngn::AxRotor::Headings},
+      {NSAccessibilityCustomRotorTypeLink, ngn::AxRotor::Links},
+      {NSAccessibilityCustomRotorTypeLandmark, ngn::AxRotor::Landmarks},
+  };
+  for (const auto &[type, kind] : kinds) {
+    NGNRotorSearch *search = [NGNRotorSearch new];
+    search.container = self;
+    search.kind = kind;
+    [searches addObject:search];
+    [rotors addObject:[[NSAccessibilityCustomRotor alloc] initWithRotorType:type itemSearchDelegate:search]];
+  }
+  _rotorSearches = searches;
+  _rotors = rotors;
+  return _rotors;
+}
+
+- (NSString *)rotorItemsDescription {
+  NSMutableArray<NSString *> *lines = [NSMutableArray array];
+  for (NSAccessibilityCustomRotor *rotor in [self accessibilityCustomRotors]) {
+    NSMutableArray<NSString *> *items = [NSMutableArray array];
+    NSAccessibilityCustomRotorSearchParameters *parameters = [NSAccessibilityCustomRotorSearchParameters new];
+    parameters.searchDirection = NSAccessibilityCustomRotorSearchDirectionNext;
+    while (NSAccessibilityCustomRotorItemResult *result = [rotor.itemSearchDelegate rotor:rotor
+                                                                    resultForSearchParameters:parameters]) {
+      [items addObject:result.customLabel != nil ? result.customLabel : @"?"];
+      parameters.currentItem = result;
+    }
+    [lines addObject:[NSString stringWithFormat:@"%@: %@", rotor.label, [items componentsJoinedByString:@" | "]]];
+  }
+  return [lines componentsJoinedByString:@"\n"];
 }
 
 @end

@@ -4,6 +4,7 @@
 
 #import <AppKit/AppKit.h>
 
+#include "ngn/accessibility.h"
 #include "ngn/desktop-view-props.h"
 #include "ngn/input-dispatcher.h"
 
@@ -30,6 +31,8 @@
 - (facebook::react::Props::Shared)props;
 - (facebook::react::State::Shared)state;
 - (const facebook::react::LayoutMetrics &)layoutMetrics;
+// What VoiceOver is told about the view (accessibility.h).
+- (ngn::AxInfo)axInfo;
 // Where Fabric children mount: the view itself, or a scroll view's document view.
 - (NSView *)contentContainer;
 // What takes the keyboard when Tab moves the focus here: the view itself, or the AppKit control

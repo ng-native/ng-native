@@ -66,6 +66,9 @@ struct AxInfo {
   // Whether the view is read as one element, its text and images part of it rather than elements
   // of their own: an `accessible` view, as on iOS, and a control or heading.
   bool hidesChildren{false};
+  // A landmark role (banner, main, navigation, complementary, contentinfo, form, region). `search` is
+  // React Native's search field, not ARIA's landmark.
+  bool landmark{false};
   // A heading's level, from 1.
   std::optional<int> level;
   bool disabled{false};
@@ -98,6 +101,17 @@ AxInfo paragraphAccessibilityInfo(const facebook::react::ViewProps &props, const
 std::string paragraphText(const facebook::react::ShadowView &view);
 // The same from a Paragraph's state.
 std::string paragraphText(const facebook::react::State::Shared &state);
+
+// VoiceOver's rotors the host fills: its own Headings list has nothing in it before macOS 26, and
+// AppKit has no landmark role or links list for a drawn view.
+enum class AxRotor { Headings, Links, Landmarks };
+
+// The rotors a view is listed on: none for one that is no element.
+std::vector<AxRotor> rotorsOf(const AxInfo &info);
+
+// The item a rotor moves to, of `count` in tree order, from `current` (the item VoiceOver is on, if
+// it is on one), forwards or back. Nothing past either end.
+std::optional<size_t> rotorStep(size_t count, std::optional<size_t> current, bool forward);
 
 // AppKit's standard actions on a view.
 enum class AxVerb { Press, Increment, Decrement, Cancel };

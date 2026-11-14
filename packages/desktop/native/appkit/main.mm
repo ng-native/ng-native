@@ -141,6 +141,14 @@ void logFirstFrame(NSWindow *window) {
   [window displayIfNeeded];
   [CATransaction flush];
   fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", msSinceLaunch());
+  if (const char *log = getenv("NGN_LOG_ROTORS"); log != nullptr && std::string(log) == "1") {
+    // A second after the first frame, when the app has settled.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+      if (auto *surface = (NGNSurfaceView *)window.contentView; [surface isKindOfClass:NGNSurfaceView.class]) {
+        fprintf(stderr, "[ngn] rotors\n%s\n", surface.rotorItemsDescription.UTF8String);
+      }
+    });
+  }
 }
 
 // Tab and Shift-Tab, walked in the core (focus-order.h) over the container the focus is in, in

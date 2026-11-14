@@ -92,6 +92,11 @@ interrupting. Its text is its label, or else the text of the views under it, whi
 under it rather than letting Fabric flatten them beside it (`live-regions.h`). macOS reports no end
 to an announcement, so `announcementFinished` never fires.
 
+The app's content in a window is one group to VoiceOver, holding its Headings, Links and Landmarks
+rotors over the views inside it, in tree order: headings, links, and the views with a landmark role
+(`banner`, `main`, `navigation`, `complementary`, `contentinfo`, `form`, `region`). AppKit fills
+none of these for drawn views.
+
 When the app has them installed, the host compiles in the Fabric components of
 `react-native-screens`, `react-native-safe-area-context` and `react-native-svg`:
 
@@ -411,6 +416,8 @@ needs `NGN_SIGN_IDENTITY` there, since it loads only into an app signed with a T
 
 `NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
 ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.
+`NGN_LOG_ROTORS=1` logs each VoiceOver rotor's items in the first window a second after its first
+frame, for checking them without a screen reader.
 
 The host reads these `Info.plist` keys when it is opened with no arguments:
 
