@@ -9,6 +9,7 @@
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
 
 #include <react/renderer/core/State.h>
+#include <react/renderer/mounting/ShadowView.h>
 #include <react/renderer/graphics/RectangleEdges.h>
 
 #include <functional>
@@ -23,6 +24,10 @@ struct LibraryGlue {
   std::function<std::optional<std::string>(const facebook::react::Props &)> headerItemType;
   // Each sets a safe-area view's insets through its state, and answers false for another state.
   std::vector<std::function<bool(const facebook::react::State &, facebook::react::EdgeInsets)>> safeAreaStates;
+  // Each reads how far a safe-area view's mounted state moves it (the margin its insets add), and
+  // answers nothing for a view that pads its content instead, or another library's view.
+  std::vector<std::function<std::optional<facebook::react::EdgeInsets>(const facebook::react::ShadowView &)>>
+      safeAreaMargins;
   std::function<std::optional<TabScreen>(const facebook::react::Props &)> tabScreen;
   std::function<std::optional<TabsRequest>(const facebook::react::Props &)> tabsRequest;
   // Components the desktop draws its own way, registered before the library's own and in place of

@@ -58,6 +58,13 @@ class NativeModule {
   using Emitter = std::function<void(const std::string &event, folly::dynamic body)>;
   void setEmitter(Emitter emitter);
 
+  // A property as JavaScript reads it off the module (an Expo module's `isEnabled`), read once per
+  // runtime, as a TurboModule keeps what it first answers. Null for one the module does not have.
+  folly::dynamic property(const std::string &name) const;
+  const std::map<std::string, std::function<folly::dynamic()>> &properties() const {
+    return properties_;
+  }
+
   // Calls a method as JavaScript would. For tests; the TurboModule calls the same functions.
   folly::dynamic call(const std::string &method, const folly::dynamic &args = folly::dynamic::array()) const;
   void callWithCallbacks(const std::string &method, const folly::dynamic &args, std::vector<JsCallback> callbacks) const;
@@ -69,6 +76,7 @@ class NativeModule {
   void promise(const std::string &method, Promise fn);
   // The listener bookkeeping every event-emitting module answers; events go out regardless.
   void listeners();
+  void property(const std::string &name, std::function<folly::dynamic()> fn);
   // Constants as getConstants returns them.
   void constants(std::function<folly::dynamic()> fn);
   void emit(const std::string &event, folly::dynamic body) const;
@@ -76,6 +84,7 @@ class NativeModule {
  private:
   std::string name_;
   std::map<std::string, Method> methods_;
+  std::map<std::string, std::function<folly::dynamic()>> properties_;
   mutable std::mutex emitterMutex_;
   Emitter emitter_;
 };

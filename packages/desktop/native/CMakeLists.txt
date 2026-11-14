@@ -86,6 +86,7 @@ add_library(ngn_core STATIC
     core/src/spawn-rules.cpp
     core/src/split-view.cpp
     core/src/tabs-host.cpp
+    core/src/updates.cpp
     core/src/view-tree.cpp
     core/src/modules/alert-manager.cpp
     core/src/modules/app-modules.cpp
@@ -121,6 +122,11 @@ endif()
 
 # --- libraries' components (react-native-screens, react-native-safe-area-context) ---------------
 include(cmake/libraries.cmake)
+
+# --- autolinked libraries and app modules ------------------------------------------------------
+if(NGN_WITH_RUNTIME)
+  include(cmake/linked-modules.cmake)
+endif()
 
 # --- backends -------------------------------------------------------------------------------------
 if(NGN_BACKEND STREQUAL "appkit")

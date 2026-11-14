@@ -14,6 +14,11 @@
 #   --library       a library whose Fabric components the host compiles in (its codegen, by
 #                   scripts/codegen-library.sh); repeatable. A build without one drops them all.
 #
+# NGN_DESKTOP_LINK names the app's link.json (bin/autolink.mjs): the libraries and app modules
+# compiled in (cmake/linked-modules.cmake). An app that links any builds in a directory of its own,
+# so its native code never rebuilds another app's host, and adding or removing one recompiles that
+# one and relinks.
+#
 # NGN_JOBS caps parallel compiles (default 8).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -54,6 +59,34 @@ for lib in ${libraries[@]+"${libraries[@]}"}; do
   library_dirs="$library_dirs${library_dirs:+;}$("$here/codegen-library.sh" "$RN_PKG" "$lib")"
 done
 
+link_args=()
+host_dir="$CACHE/host"
+if [ -n "${NGN_DESKTOP_LINK:-}" ] && [ "$backend" != "none" ]; then
+  link="$(cd "$(dirname "$NGN_DESKTOP_LINK")" && pwd -P)/$(basename "$NGN_DESKTOP_LINK")"
+  # The libraries' package names and directories, one per line, when the app links anything.
+  linked="$(node -e '
+    const link = require(process.argv[1]);
+    if (link.version !== 1) { console.error(`build.sh: ${process.argv[1]} is version ${link.version}, not 1`); process.exit(1); }
+    if (link.libraries.length + link.appModules.length === 0) process.exit(0);
+    console.log("linked");
+    for (const lib of link.libraries) console.log(`${lib.name}\t${lib.dir}`);
+  ' "$link")"
+  if [ -n "$linked" ]; then
+    codegen=""
+    while IFS=$'\t' read -r name dir; do
+      out="$("$here/codegen-library.sh" "$RN_PKG" "$dir" --modules)"
+      [ -n "$out" ] && codegen="$codegen${codegen:+;}$name|$out"
+    done < <(tail -n +2 <<< "$linked")
+    # The app is link.json's .expo/ng-native-desktop/..
+    app="$(cd "$(dirname "$link")/../.." && pwd -P)"
+    host_dir="$CACHE/host/app-$(printf '%s' "$app" | shasum | cut -c1-12)"
+    mkdir -p "$host_dir"
+    echo "$app" > "$host_dir/app"
+    link_args=(-DNGN_DESKTOP_LINK="$link" -DNGN_LINK_CODEGEN="$codegen")
+  fi
+fi
+[ ${#link_args[@]} -eq 0 ] && link_args=(-DNGN_DESKTOP_LINK= -DNGN_LINK_CODEGEN=)
+
 arch_key="${archs//;/-}"
 hermes_args=()
 if [ "$backend" != "none" ]; then
@@ -64,7 +97,7 @@ if [ "$backend" != "none" ]; then
   hermes_args=(-DNGN_HERMES_BUILD="$hermes")
 fi
 
-BUILD="$CACHE/host/$backend-${arch_key:-native}-$config"
+BUILD="$host_dir/$backend-${arch_key:-native}-$config"
 cmake --log-level=WARNING -G Ninja -S "$here/.." -B "$BUILD" \
   -DCMAKE_BUILD_TYPE="$config" \
   -DCMAKE_OSX_ARCHITECTURES="$archs" \
@@ -72,6 +105,7 @@ cmake --log-level=WARNING -G Ninja -S "$here/.." -B "$BUILD" \
   -DRN_DIR="$RN_PKG" \
   -DNGN_SOURCES="$CACHE/src" \
   -DNGN_LIBRARIES="$library_dirs" \
+  "${link_args[@]}" \
   ${hermes_args[@]+"${hermes_args[@]}"} >&2
 nice -n 10 cmake --build "$BUILD" -j "$JOBS" >&2
 if [ "$run_tests" = 1 ]; then

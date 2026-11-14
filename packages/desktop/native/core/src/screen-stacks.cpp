@@ -159,6 +159,17 @@ std::optional<ScreenStacks::FrontHeader> ScreenStacks::frontHeader(const ViewTre
     if (screen == nullptr || presented(screen)) {
       continue;
     }
+    // A cover fills the window under its toolbar, so the topmost one presented over the stack
+    // shows its header there, with nothing to go back to. Sheets and popovers draw their own.
+    bool cover = false;
+    for (size_t i = screens.size(); i > baseIndex + 1; i--) {
+      const auto *over = tree.find(screens[i - 1]);
+      if (over != nullptr && over->view.props && screenPresentation(*over->view.props) == ModalPresentation::Cover) {
+        screen = over;
+        cover = true;
+        break;
+      }
+    }
     // How deep the stack is in `root`'s container, or not in it at all.
     int depth = 0;
     Tag at = stack;
@@ -176,7 +187,7 @@ std::optional<ScreenStacks::FrontHeader> ScreenStacks::frontHeader(const ViewTre
     for (Tag child : screen->children) {
       const auto *config = tree.find(child);
       if (config != nullptr && std::string_view(config->view.componentName) == "RNSScreenStackHeaderConfig") {
-        front = FrontHeader{.config = child, .screen = screen->view.tag, .canGoBack = baseIndex > 0};
+        front = FrontHeader{.config = child, .screen = screen->view.tag, .canGoBack = !cover && baseIndex > 0};
         frontDepth = depth;
         break;
       }

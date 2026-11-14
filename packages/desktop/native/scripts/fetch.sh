@@ -7,7 +7,8 @@
 # ReactCommon comes from the installed react-native package; everything else is fetched here:
 # ReactCxxPlatform (in the git tag, not the npm package), Hermes, folly and the libraries React
 # Native's Android build would normally download (glog, fmt, double-conversion, boost headers,
-# fast_float), nlohmann_json for the dev-server client, and doctest for the core tests.
+# fast_float), nlohmann_json for the dev-server client, doctest for the core tests, and on macOS
+# Sparkle's framework, which `package --format dmg` embeds for whole-app updates.
 # Each source records what it was fetched at, so a changed pin fetches it again. A download whose
 # checksum or commit does not match fails the script; nothing is ever used unverified.
 #
@@ -46,6 +47,8 @@ NLOHMANN_URL=https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_incl
 NLOHMANN_SHA256=9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6
 DOCTEST_URL=https://raw.githubusercontent.com/doctest/doctest/v2.4.12/doctest/doctest.h
 DOCTEST_SHA256=94029a7d32da24a56249658147dbd2b33ff0b9ed665295cbbaf19aafff5b0ced
+SPARKLE_URL=https://github.com/sparkle-project/Sparkle/releases/download/2.6.4/Sparkle-2.6.4.tar.xz
+SPARKLE_SHA256=50612a06038abc931f16011d7903b8326a362c1074dabccb718404ce8e585f0b
 
 if [ "$(cat "$RN_PKG/sdks/.hermesv1version")" != "$HERMES_TAG" ]; then
   echo "fetch.sh: react-native names Hermes $(cat "$RN_PKG/sdks/.hermesv1version"), pinned $HERMES_TAG" >&2
@@ -128,6 +131,18 @@ if ! fresh doctest "$DOCTEST_SHA256"; then
   mkdir -p "$SRC/doctest/doctest"
   download "$DOCTEST_URL" "$DOCTEST_SHA256" "$SRC/doctest/doctest/doctest.h"
   stamp doctest "$DOCTEST_SHA256"
+fi
+
+# Sparkle's framework, links and all; the host loads it at runtime only in a dmg build.
+if [ "$(uname -s)" = "Darwin" ] && ! fresh sparkle "$SPARKLE_SHA256"; then
+  echo "==> sparkle"
+  rm -rf "$SRC/sparkle" "$SRC/.sparkle.tmp"
+  mkdir -p "$SRC/.sparkle.tmp/x"
+  download "$SPARKLE_URL" "$SPARKLE_SHA256" "$SRC/.sparkle.tmp/sparkle.tar.xz"
+  tar -xJf "$SRC/.sparkle.tmp/sparkle.tar.xz" -C "$SRC/.sparkle.tmp/x" Sparkle.framework LICENSE
+  mv "$SRC/.sparkle.tmp/x" "$SRC/sparkle"
+  rm -rf "$SRC/.sparkle.tmp"
+  stamp sparkle "$SPARKLE_SHA256"
 fi
 t1=$(date +%s)
 

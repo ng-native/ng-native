@@ -23,6 +23,7 @@
 #import "system-access.h"
 #import "desktop-expo.h"
 #import "tray-and-dock.h"
+#import "updates.h"
 #import "surface-view.h"
 #include "text-layout.h"
 
@@ -66,6 +67,10 @@ struct Host {
   // Ticks the layout animations while they run, at the display's rate.
   NSTimer *animationTimer;
   bool firstFrameLogged = false;
+  // The app window is ordered front once, when its safe areas settle (showAppWindowWhenSettled).
+  bool appWindowShown = false;
+  // The Expo Updates client, for a bundle on disk (updates.h).
+  std::shared_ptr<ngn::UpdatesClient> updates;
 };
 
 Host gHost;
@@ -245,6 +250,21 @@ void navigate(ngn::NavigationDirection direction, NSWindow *window) {
 
 // An app that renders on its own surface rather than opening windows (one that is not an
 // ng-native app with AppWindows) gets that surface in a window once it has something on it.
+void showAppWindow();
+
+// A launch counts once its window has been up this long: an update that crashes before then is
+// rolled back at the next launch (updates.h).
+constexpr int64_t kLaunchSuccessDelay = 10 * NSEC_PER_SEC;
+
+void markLaunchSucceededLater() {
+  if (!gHost.updates || !gHost.updates->running()) {
+    return;
+  }
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kLaunchSuccessDelay), dispatch_get_main_queue(), ^{
+    gHost.updates->markLaunchSucceeded();
+  });
+}
+
 void showAppSurfaceIfUsed() {
   const auto *root = gHost.mounting->tree().find(kAppSurface);
   if (gHost.appWindow != nil || root == nullptr || root->children.empty()) {
@@ -262,7 +282,23 @@ void showAppSurfaceIfUsed() {
   gHost.appWindow.delegate = (id<NSWindowDelegate>)NSApp.delegate;
   gHost.appWindow.contentView = gHost.appSurface;
   [gHost.appWindow setFrameTopLeftPoint:NSMakePoint(NSMinX(visible) + 40, NSMaxY(visible) - 40)];
+  // Shown once the content has the insets of the title bar and toolbar it runs under, a commit or
+  // two later, or after kSettleWait at the latest: shown at once, its first frames would draw under
+  // the toolbar and then jump down.
+  constexpr int64_t kSettleWait = 300 * NSEC_PER_MSEC;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kSettleWait), dispatch_get_main_queue(), ^{
+    showAppWindow();
+  });
+}
+
+void showAppWindow() {
+  if (gHost.appWindowShown || gHost.appWindow == nil) {
+    return;
+  }
+  gHost.appWindowShown = true;
   [gHost.appWindow makeKeyAndOrderFront:nil];
+  logFirstFrame(gHost.appWindow);
+  markLaunchSucceededLater();
 }
 
 } // namespace
@@ -370,7 +406,9 @@ int main(int argc, const char *argv[]) {
       gHost.input->didMount(surfaceId);
       if (surfaceId == kAppSurface) {
         showAppSurfaceIfUsed();
-        logFirstFrame(gHost.appWindow);
+        if (gHost.mounting->safeAreasSettled()) {
+          showAppWindow();
+        }
       } else {
         gHost.windows->didMount(surfaceId);
         logFirstFrame(gHost.windows->window(surfaceId));
@@ -416,6 +454,13 @@ int main(int argc, const char *argv[]) {
                                 : std::nullopt;
       auto size = ngn::sheetSize(
           node ? *node : empty, {static_cast<Float>(window.width), static_cast<Float>(window.height)});
+      return NSMakeSize(size.width, size.height);
+    };
+    NGNModalHostView.popoverSizer = [](NSInteger surface, NSInteger tag, NSSize window) {
+      auto node = gHost.runtime ? gHost.runtime->sheetNode(static_cast<SurfaceId>(surface), static_cast<Tag>(tag))
+                                : std::nullopt;
+      auto size = node ? ngn::popoverSize(*node, {static_cast<Float>(window.width), static_cast<Float>(window.height)})
+                       : facebook::react::Size{0, 0};
       return NSMakeSize(size.width, size.height);
     };
     NGNModalHostView.viewForTag = [](NSInteger tag) -> NSView * {
@@ -507,6 +552,42 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
+      static auto dialogs = ngn::appkit::makeFileDialogs();
+      static auto caches = ngn::appkit::cacheDirectory(appId);
+      ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches); });
+      static auto locales = ngn::appkit::makeLocaleSource();
+      ngn::addModule(*modules, "NgNativeLocalization", [] {
+        return ngn::makeLocalizationModule(locales, ngn::appkit::systemRegionCode());
+      });
+    }
+
+    // A bundle on disk runs the newest update the Expo Updates client keeps, when the app has an
+    // updates URL; one from a dev server never does.
+    {
+      bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
+      gHost.updates = std::make_shared<ngn::UpdatesClient>(
+          ngn::appkit::updatesConfig(system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
+      if (!fromDevServer && gHost.updates->enabled()) {
+        bundle = gHost.updates->launch();
+        if (auto running = gHost.updates->running()) {
+          fprintf(stderr, "[ngn] running update %s\n", running->id.c_str());
+        }
+      }
+      // Sparkle starts with the app, as its own updater does: one for the process.
+      static auto appUpdater = ngn::appkit::makeSparkleUpdater();
+      ngn::addModule(*modules, "NgNativeUpdates", [fromDevServer] {
+        return ngn::makeUpdatesModule(gHost.updates, fromDevServer, [](const std::string &next, std::function<void(bool)> done) {
+          gHost.runtime->reload(next, [next, done](bool loaded) {
+            if (!loaded) {
+              fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+              markLaunchSucceededLater();
+            });
+            done(loaded);
+          });
+        }, appUpdater);
+      });
     }
 
     gHost.runtime = std::make_unique<ngn::Runtime>(

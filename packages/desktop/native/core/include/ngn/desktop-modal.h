@@ -53,6 +53,8 @@ struct SheetNode {
   // The definite CSS width and height, in points, where the view has them.
   std::optional<facebook::react::Float> width;
   std::optional<facebook::react::Float> height;
+  // Its padding and border, which its content's extent leaves out.
+  facebook::react::EdgeInsets insets;
   std::vector<SheetNode> children;
 };
 
@@ -66,6 +68,14 @@ SheetNode sheetNode(const facebook::react::ShadowNode &node);
 // The size a sheet takes for `modal`, laid out at the size it has now, on a window whose content
 // is `window`.
 facebook::react::Size sheetSize(const SheetNode &modal, facebook::react::Size window);
+
+// The most a popover measures its content against, before it fits.
+constexpr facebook::react::Float kPopoverMax = 640;
+
+// The size a popover takes for `presented` (a <modal> or a presented screen), laid out at the size
+// it has now: its root's definite CSS size where it has one, or what its content laid out to, no
+// larger than the window or kPopoverMax. Zero before the content lays out.
+facebook::react::Size popoverSize(const SheetNode &presented, facebook::react::Size window);
 
 class DesktopModalShadowNode final : public facebook::react::ConcreteViewShadowNode<
                                          facebook::react::ModalHostViewComponentName,

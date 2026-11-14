@@ -46,6 +46,12 @@ class MountingManager final : public facebook::react::IMountingManager,
   // UI thread only. The user chose the tab `screen` of the tabs host `host` (tabs-host.h).
   void chooseTab(SurfaceId surfaceId, Tag host, Tag screen);
   void removeContainerInsets(Tag root);
+  // UI thread only. Whether the last mount told no safe-area view anything new and no container's
+  // insets changed since: the views have the insets they will draw with. A window is shown then,
+  // so its first frame is not drawn under its toolbar.
+  bool safeAreasSettled() const {
+    return safeAreasSettled_;
+  }
 
   // UI thread only.
   const ViewTree &tree() const {
@@ -68,6 +74,7 @@ class MountingManager final : public facebook::react::IMountingManager,
   ViewTree tree_;
   std::unique_ptr<ScreenStacks> screens_;
   std::unique_ptr<SafeAreas> safeAreas_;
+  bool safeAreasSettled_{false};
   Sidebars sidebars_;
   std::unique_ptr<TabsHosts> tabs_;
   void applyTabs(SurfaceId surfaceId);

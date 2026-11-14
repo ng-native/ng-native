@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 #include <react/renderer/mounting/MountingTransaction.h>
 
+#include <map>
 #include <sstream>
 
 using namespace facebook::react;
@@ -23,7 +24,13 @@ std::string text(EdgeInsets i) {
 
 struct RecordingAreas final : ngn::SafeAreas {
   Lines *out;
-  explicit RecordingAreas(Lines *out) : out(out) {}
+  // The margin each view's state applies, as a library's glue reads it from the mounted state.
+  std::map<Tag, EdgeInsets> *margins;
+  RecordingAreas(Lines *out, std::map<Tag, EdgeInsets> *margins) : out(out), margins(margins) {}
+  std::optional<EdgeInsets> appliedMargin(const ngn::ViewTree::Node &node) const override {
+    auto it = margins->find(node.view.tag);
+    return it == margins->end() ? std::nullopt : std::optional(it->second);
+  }
   void emitInsetsChange(const ngn::ViewTree::Node &node, EdgeInsets insets, Rect frame, double leading) override {
     std::ostringstream line;
     line << "provider " << node.view.tag << " " << text(insets) << " at " << frame.origin.x << "," << frame.origin.y
@@ -37,9 +44,10 @@ struct RecordingAreas final : ngn::SafeAreas {
 
 struct Fixture {
   Lines sent;
+  std::map<Tag, EdgeInsets> margins;
   std::shared_ptr<FakeBackend> backend = std::make_shared<FakeBackend>();
   std::shared_ptr<ngn::MountingManager> mounting = std::make_shared<ngn::MountingManager>(
-      backend, backend, nullptr, std::make_unique<RecordingAreas>(&sent));
+      backend, backend, nullptr, std::make_unique<RecordingAreas>(&sent, &margins));
 
   void mount(ShadowViewMutationList mutations) {
     sent.clear();
@@ -128,4 +136,49 @@ TEST_CASE("a view in a container of its own takes that container's insets") {
   f.sent.clear();
   f.mounting->setContainerInsets(6, {.size = {300, 200}, .insets = {}});
   CHECK(f.sent == Lines{"view 7 0,0,0,0"});
+}
+
+TEST_CASE("a view that applies its insets as a margin keeps them once the margin moves it") {
+  // react-native-screens' safe-area view, and react-native-safe-area-context's in margin mode, move
+  // themselves by their insets. Measured from where the margin put it, the view would be told it
+  // is clear of the toolbar, drop the margin, move back under it, and so on every frame.
+  Fixture f;
+  f.mounting->setContainerInsets(1, kWindow);
+  auto view = shadowView(4, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  f.mount({ShadowViewMutation::CreateMutation(view), ShadowViewMutation::InsertMutation(1, view, 0)});
+  CHECK(f.sent == Lines{"view 4 52,0,0,0"});
+
+  // The state's commit lands: 52 points of margin, and the view below the toolbar.
+  auto moved = view;
+  moved.layoutMetrics.frame = {{0, 52}, {800, 548}};
+  f.margins[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
+  f.mount({ShadowViewMutation::UpdateMutation(view, moved, 1)});
+  CHECK(f.sent.empty());
+
+  // The toolbar goes: measured from where it would be without its margin, the view is told 28.
+  f.sent.clear();
+  f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 28, .right = 0, .bottom = 0}});
+  CHECK(f.sent == Lines{"view 4 28,0,0,0"});
+}
+
+TEST_CASE("the safe areas are settled once a mount tells no view anything new") {
+  // What the host waits for before it shows a window, so the first frame drawn has its insets.
+  Fixture f;
+  f.mounting->setContainerInsets(1, kWindow);
+  auto view = shadowView(4, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  f.mount({ShadowViewMutation::CreateMutation(view), ShadowViewMutation::InsertMutation(1, view, 0)});
+  CHECK_FALSE(f.mounting->safeAreasSettled());
+
+  // The state's commit lands and moves the view: nothing new to say.
+  auto moved = view;
+  moved.layoutMetrics.frame = {{0, 52}, {800, 548}};
+  f.margins[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
+  f.mount({ShadowViewMutation::UpdateMutation(view, moved, 1)});
+  CHECK(f.mounting->safeAreasSettled());
+
+  // The toolbar grows: unsettled until a mount says nothing again.
+  f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 60, .right = 0, .bottom = 0}});
+  CHECK_FALSE(f.mounting->safeAreasSettled());
+  f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 60, .right = 0, .bottom = 0}});
+  CHECK_FALSE(f.mounting->safeAreasSettled());
 }

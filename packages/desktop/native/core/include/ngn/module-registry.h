@@ -2,7 +2,8 @@
 //
 // The core registers the modules it implements once for every toolkit; a backend registers a
 // ModuleProvider for what only the toolkit can answer. A backend's provider is asked first, so a
-// toolkit can replace a core module, then the core's own, in the order they were added.
+// toolkit can replace a core module, then the core's own, in the order they were added, then the
+// modules autolinked libraries and the app register in React Native's global C++ module map.
 #pragma once
 
 #include <ReactCommon/CallInvoker.h>

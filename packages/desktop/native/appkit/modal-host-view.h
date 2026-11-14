@@ -33,6 +33,8 @@
 // The size a sheet takes for the modal `tag` on `surface`, on a window of `window`'s size
 // (ngn::sheetSize).
 @property (class, nonatomic) std::function<NSSize(NSInteger surface, NSInteger tag, NSSize window)> sheetSizer;
+// The size a popover takes for its content, which the core works out (ngn::popoverSize).
+@property (class, nonatomic) std::function<NSSize(NSInteger surface, NSInteger tag, NSSize window)> popoverSizer;
 
 // Fits each open popover and sheet to its content, after a transaction is mounted.
 + (void)fitPopovers;

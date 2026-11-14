@@ -66,6 +66,8 @@ class Runtime {
   // running surface restarted. Runs off the calling thread; a second call while one runs is
   // dropped. `done` gets whether the bundle loaded, on the reload's thread.
   void reload(std::function<void(bool)> done = nullptr);
+  // The same, on another bundle on disk: an update's (updates.h). Ignored for a dev server's bundle.
+  void reload(std::string bundle, std::function<void(bool)> done);
 
   // An empty `moduleName` starts a surface that runs nothing: one the app renders into itself, such
   // as a second window's.
