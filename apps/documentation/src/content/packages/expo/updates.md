@@ -71,6 +71,24 @@ does not - not mid-form, not mid-upload, usually on next foreground.
   available" banner here rather than show one that can never resolve; `check()` itself is a no-op
   and resolves `false` when this is false, so it is safe to call unconditionally.
 
+## A new version of the whole app
+
+A macOS app packaged with `npm run package -- --format dmg` embeds Sparkle, which updates the whole
+app rather than its bundle:
+
+```ts
+// Check for Updates..., in the app's menu.
+await updates.checkForAppUpdate();
+```
+
+- **`checkForAppUpdate()`** - shows Sparkle's check, as Check for Updates... does in other Mac apps,
+  and resolves `true`. Where there is no whole-app updater it shows nothing and resolves `false`.
+- **`appUpdateAvailable`** - `true` once Sparkle has found a newer version, from its own scheduled
+  checks or from `checkForAppUpdate()`.
+
+A `dmg` build is the only one with Sparkle. In development, in `app` and `mas` builds, and on iOS,
+Android and the web, both are inert: `appUpdateAvailable()` stays `false`.
+
 ## Without the module
 
 On iOS and Android, a missing `expo-updates` - never installed, or installed without the app being

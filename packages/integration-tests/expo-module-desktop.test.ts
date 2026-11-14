@@ -258,3 +258,70 @@ describe('the clipboard on macOS', () => {
     assert.equal(await clipboard.read(), 'copied');
   });
 });
+
+/**
+ * The host contract for the whole-app updater on `NgNativeUpdates` (Sparkle, in a `dmg` build):
+ * the `isAppUpdaterAvailable` property, `isAppUpdateAvailable()` answering at once,
+ * `checkForAppUpdateAsync()` showing Sparkle's check and resolving whether there was an updater to
+ * ask, and an `appUpdateAvailable` event on `DeviceEventEmitter` with `{ available }` whenever that
+ * changes. In development and in `app` and `mas` builds the property is false and the rest is
+ * inert.
+ */
+describe('the app updater on macOS', () => {
+  function host(updater: boolean, startsAvailable = false) {
+    const listeners = new Set<(event: unknown) => void>();
+    const calls: string[] = [];
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) =>
+            name === 'NgNativeUpdates'
+              ? {
+                  isEnabled: false,
+                  isAppUpdaterAvailable: updater,
+                  isAppUpdateAvailable: () => updater && startsAvailable,
+                  checkForAppUpdateAsync: async () => (calls.push('check'), updater),
+                  checkForUpdateAsync: async () => ({ isAvailable: false }),
+                  fetchUpdateAsync: async () => ({ isNew: false }),
+                  reloadAsync: async () => {},
+                }
+              : null,
+        },
+        DeviceEventEmitter: {
+          addListener: (event: string, listener: (event: unknown) => void) => {
+            calls.push(`listen ${event}`);
+            listeners.add(listener);
+            return { remove: () => void listeners.delete(listener) };
+          },
+        },
+      };
+    };
+    return { calls, send: (body: unknown) => listeners.forEach((listener) => listener(body)) };
+  }
+
+  it('follows Sparkle: what it found at launch, what it finds later, and a check on demand', async () => {
+    const sparkle = host(true, true);
+    const { Updates } = await import('@ng-native/expo/updates');
+    const { injectService } = await import('@ng-native/testing');
+    const updates = injectService(Updates);
+    assert.equal(updates.appUpdateAvailable(), true);
+    sparkle.send({ available: false });
+    assert.equal(updates.appUpdateAvailable(), false);
+    sparkle.send({ available: true });
+    assert.equal(updates.appUpdateAvailable(), true);
+    assert.equal(await updates.checkForAppUpdate(), true);
+    assert.deepEqual(sparkle.calls, ['listen appUpdateAvailable', 'check']);
+  });
+
+  it('is inert in a build with no updater, and never asks the host to check', async () => {
+    const none = host(false);
+    const { Updates } = await import('@ng-native/expo/updates');
+    const { injectService } = await import('@ng-native/testing');
+    const updates = injectService(Updates);
+    assert.equal(updates.appUpdateAvailable(), false);
+    assert.equal(await updates.checkForAppUpdate(), false);
+    assert.deepEqual(none.calls, []);
+  });
+});

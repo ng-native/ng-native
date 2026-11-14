@@ -93,6 +93,11 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     UndoStack: 'NgNativeUndo',
   }),
   row(
+    '`Updates.checkForAppUpdate()`, `appUpdateAvailable`',
+    ['appUpdateAvailable'],
+    ['`dmg` builds', 'absent', 'absent', 'absent', 'absent'],
+  ),
+  row(
     'Drag and drop: `(fileDrop)`, `[dragItem]`',
     ['FileDrop', 'DragItem', '(fileDrop)', '(fileDragEnter)', '(fileDragLeave)', 'dragItem'],
     ['yes', 'yes', 'absent', 'absent', 'absent'],
