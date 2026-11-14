@@ -355,6 +355,7 @@ bool UpdatesClient::usable(const LaunchState::Update &update, const LaunchState 
 
 std::string UpdatesClient::launch() {
   std::lock_guard lock(mutex_);
+  generation_++;
   running_.reset();
   if (!enabled()) {
     return config_.embeddedBundle;
@@ -384,6 +385,10 @@ std::string UpdatesClient::launch() {
 
 void UpdatesClient::markLaunchSucceeded() {
   std::lock_guard lock(mutex_);
+  markLocked();
+}
+
+void UpdatesClient::markLocked() {
   if (!enabled()) {
     return;
   }
@@ -392,6 +397,18 @@ void UpdatesClient::markLaunchSucceeded() {
     state.launching.clear();
     save(state);
   }
+}
+
+void UpdatesClient::markLaunchSucceeded(uint64_t generation) {
+  std::lock_guard lock(mutex_);
+  if (generation == generation_) {
+    markLocked();
+  }
+}
+
+uint64_t UpdatesClient::launchGeneration() const {
+  std::lock_guard lock(mutex_);
+  return generation_;
 }
 
 std::optional<LaunchState::Update> UpdatesClient::running() const {
@@ -412,6 +429,7 @@ std::string UpdatesClient::bundleToRun() const {
 
 std::string UpdatesClient::beginReload() {
   std::lock_guard lock(mutex_);
+  generation_++;
   auto state = load();
   running_.reset();
   state.launching.clear();

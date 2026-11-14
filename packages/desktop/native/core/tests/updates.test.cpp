@@ -485,3 +485,26 @@ TEST_CASE("with code signing on, a launch checks the kept manifest's signature a
   overwrite(f.dir / kIdA / "manifest.json", folly::toJson(evil));
   CHECK(f.client("CERT")->launch() == "/app/Contents/Resources/main.jsbundle");
 }
+
+TEST_CASE("a success mark counts only for the launch it was made for, not one a reload began since") {
+  Fixture f;
+  {
+    auto client = f.client();
+    client->launch();
+    REQUIRE(f.check(*client, kJson, folly::toJson(manifest(kIdA))).isAvailable);
+    REQUIRE(f.fetch(*client, "bundle v2").isNew);
+  }
+  auto client = f.client();
+  client->launch();
+  auto first = client->launchGeneration();
+  REQUIRE(client->state().launching == kIdA);
+
+  // A reload into the same update starts a new launch: the first launch's timer firing now says
+  // nothing about it.
+  client->beginReload();
+  CHECK(client->launchGeneration() != first);
+  client->markLaunchSucceeded(first);
+  CHECK(client->state().launching == kIdA);
+  client->markLaunchSucceeded(client->launchGeneration());
+  CHECK(client->state().launching.empty());
+}

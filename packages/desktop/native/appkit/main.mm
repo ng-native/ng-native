@@ -266,8 +266,10 @@ void markLaunchSucceededLater() {
   if (!gHost.updates || !gHost.updates->running()) {
     return;
   }
+  // For this launch only: a reload since begins another, with a timer of its own.
+  uint64_t generation = gHost.updates->launchGeneration();
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kLaunchSuccessDelay), dispatch_get_main_queue(), ^{
-    gHost.updates->markLaunchSucceeded();
+    gHost.updates->markLaunchSucceeded(generation);
   });
 }
 
@@ -403,6 +405,10 @@ void showAppWindow() {
   return YES;
 }
 - (void)applicationWillTerminate:(NSNotification *)note {
+  // A clean quit is no crash: the update running is not rolled back, however soon it quit.
+  if (gHost.updates) {
+    gHost.updates->markLaunchSucceeded();
+  }
   // Stop the surfaces and the runtime before exit tears down what they still use.
   if (gHost.runtime) {
     gHost.runtime->shutdown();
@@ -672,9 +678,12 @@ int main(int argc, const char *argv[]) {
             if (!loaded) {
               fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
             }
-            dispatch_async(dispatch_get_main_queue(), ^{
-              markLaunchSucceededLater();
-            });
+            // A bundle that did not load never counts as a launch that succeeded.
+            if (loaded) {
+              dispatch_async(dispatch_get_main_queue(), ^{
+                markLaunchSucceededLater();
+              });
+            }
             done(loaded);
           });
         }, appUpdater);
