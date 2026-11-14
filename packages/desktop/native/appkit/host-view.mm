@@ -84,9 +84,14 @@ NSString *nsString(const std::string &s) {
   _layout = metrics;
   const auto &f = metrics.frame;
   self.frame = NSMakeRect(f.origin.x, f.origin.y, f.size.width, f.size.height);
-  self.hidden = metrics.displayType == DisplayType::None;
+  self.hidden = metrics.displayType == DisplayType::None || _covered;
   [self applyVisuals];
   [self setNeedsDisplay:YES];
+}
+
+- (void)setCovered:(BOOL)covered {
+  _covered = covered;
+  self.hidden = _layout.displayType == DisplayType::None || covered;
 }
 
 - (void)updateState:(const State::Shared &)state {

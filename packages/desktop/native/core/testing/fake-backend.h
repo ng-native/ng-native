@@ -25,6 +25,7 @@ class FakeBackend final : public MountingBackend, public DesktopPropsSink {
   void updateLayout(const ShadowView &view) override;
   void updateEventEmitter(const ShadowView &view) override;
   void dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) override;
+  void setCovered(SurfaceId surfaceId, Tag tag, bool covered) override;
   void didMount(SurfaceId surfaceId) override;
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
 

@@ -48,6 +48,10 @@ class ViewTree {
   // clips its content or nothing of it overflows. Empty when nothing is hit.
   std::vector<Tag> hitTest(Tag root, Point point) const;
 
+  // A screen below the top of its stack: kept mounted, but neither drawn nor hit.
+  void setCovered(Tag tag, bool covered);
+  bool covered(Tag tag) const;
+
   // How far a scrolling view has scrolled its content: the content's origin is drawn at minus
   // this. The backend reports it as the user scrolls; the view's state lags behind.
   void setScrollOffset(Tag tag, Point offset);
@@ -61,6 +65,7 @@ class ViewTree {
 
   std::unordered_map<Tag, Node> nodes_;
   std::unordered_set<Tag> containerRoots_;
+  std::unordered_set<Tag> covered_;
   std::unordered_map<Tag, Point> scrollOffsets_;
 };
 

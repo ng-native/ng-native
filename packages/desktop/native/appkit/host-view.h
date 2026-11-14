@@ -12,6 +12,8 @@
 @property (nonatomic, readonly) NSInteger reactTag;
 @property (nonatomic, readonly) NSInteger surfaceId;
 @property (nonatomic, readonly, copy) NSString *componentName;
+// A screen below the top of its stack: hidden, and kept mounted.
+@property (nonatomic) BOOL covered;
 - (instancetype)initWithShadowView:(const facebook::react::ShadowView &)view;
 - (void)updateProps:(const facebook::react::Props::Shared &)props;
 - (void)updateLayout:(const facebook::react::LayoutMetrics &)metrics;

@@ -8,6 +8,7 @@ import {
   cacheDir,
   checkExpoConfig,
   devServerBundleUrl,
+  HOST_LIBRARIES,
   main,
   parseCommand,
   run,
@@ -116,6 +117,7 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     platform: 'darwin',
     cwd: () => '/apps/demo',
     resolveReactNative: () => '/apps/demo/node_modules/react-native',
+    resolvePackage: () => null,
     run(command, args) {
       calls.push({ command, args });
       return command.endsWith('build.sh')
@@ -159,6 +161,24 @@ describe('run', () => {
           'com.example.demo',
         ],
       },
+    ]);
+  });
+
+  it('compiles in the host libraries the app has installed, and only those', async () => {
+    const asked: string[] = [];
+    const { sys, calls } = fakeSystem({
+      resolvePackage: (from, name) => {
+        assert.equal(from, '/apps/demo');
+        asked.push(name);
+        return name === 'react-native-screens' ? `/apps/demo/node_modules/${name}` : null;
+      },
+    });
+    await run({ module: 'main', universal: false }, sys);
+    assert.deepEqual(asked, HOST_LIBRARIES);
+    assert.deepEqual(calls[0].args, [
+      '/apps/demo/node_modules/react-native',
+      '--library',
+      '/apps/demo/node_modules/react-native-screens',
     ]);
   });
 

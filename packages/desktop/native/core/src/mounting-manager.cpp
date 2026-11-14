@@ -17,8 +17,11 @@ namespace ngn {
 
 MountingManager::MountingManager(
     std::shared_ptr<MountingBackend> backend,
-    std::shared_ptr<DesktopPropsSink> desktopProps)
-    : backend_(std::move(backend)), desktopProps_(std::move(desktopProps)) {
+    std::shared_ptr<DesktopPropsSink> desktopProps,
+    std::unique_ptr<ScreenStacks> screens)
+    : backend_(std::move(backend)),
+      desktopProps_(std::move(desktopProps)),
+      screens_(screens ? std::move(screens) : std::make_unique<ScreenStacks>()) {
   components_ = {
       concreteComponentDescriptorProvider<DesktopViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<ParagraphComponentDescriptor>(),
@@ -76,6 +79,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         break;
       }
       case ShadowViewMutation::Delete:
+        screens_->deleted(m.oldChildShadowView.tag);
         tree_.destroy(m.oldChildShadowView.tag);
         backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
         break;
@@ -83,10 +87,12 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         ensureRoot(surfaceId, m.parentTag);
         tree_.insert(m.parentTag, m.newChildShadowView.tag, m.index);
         backend_->insertChild(surfaceId, m.parentTag, m.newChildShadowView.tag, m.index);
+        screens_->childrenChanged(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Remove:
         tree_.remove(m.parentTag, m.oldChildShadowView.tag);
         backend_->removeChild(surfaceId, m.parentTag, m.oldChildShadowView.tag, m.index);
+        screens_->childrenChanged(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Update: {
         const auto &old = m.oldChildShadowView;
@@ -112,6 +118,9 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
       default:
         break;
     }
+  }
+  for (const auto &change : screens_->settle(tree_)) {
+    backend_->setCovered(surfaceId, change.tag, change.covered);
   }
   backend_->didMount(surfaceId);
   if (afterMount_) {

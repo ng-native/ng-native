@@ -3,6 +3,7 @@
 # pinned sources and building Hermes first when they are missing. Prints the build directory.
 #
 #   build.sh [node_modules/react-native] [--backend appkit|none] [--universal] [--debug] [--test]
+#            [--library <node_modules/library>]...
 #
 # Without a path, react-native is resolved from the current directory.
 #
@@ -10,6 +11,8 @@
 #   --universal     arm64 and x86_64 in one binary (default: this machine's architecture)
 #   --debug         a Debug build (default: RelWithDebInfo)
 #   --test          run the core tests after building
+#   --library       a library whose Fabric components the host compiles in (its codegen, by
+#                   scripts/codegen-library.sh); repeatable. A build without one drops them all.
 #
 # NGN_JOBS caps parallel compiles (default 8).
 set -euo pipefail
@@ -25,12 +28,14 @@ backend=none
 archs="$(uname -m)"
 config=RelWithDebInfo
 run_tests=0
+libraries=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --backend) backend="$2"; shift ;;
     --universal) archs="arm64;x86_64" ;;
     --debug) config=Debug ;;
     --test) run_tests=1 ;;
+    --library) libraries+=("$2"); shift ;;
     *) echo "build.sh: unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -43,6 +48,11 @@ RN_VERSION="$(node -p "require('$RN_PKG/package.json').version")"
 CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 
 "$here/fetch.sh" "$RN_PKG" >&2
+
+library_dirs=""
+for lib in ${libraries[@]+"${libraries[@]}"}; do
+  library_dirs="$library_dirs${library_dirs:+;}$("$here/codegen-library.sh" "$RN_PKG" "$lib")"
+done
 
 arch_key="${archs//;/-}"
 hermes_args=()
@@ -61,6 +71,7 @@ cmake --log-level=WARNING -G Ninja -S "$here/.." -B "$BUILD" \
   -DNGN_BACKEND="$backend" \
   -DRN_DIR="$RN_PKG" \
   -DNGN_SOURCES="$CACHE/src" \
+  -DNGN_LIBRARIES="$library_dirs" \
   ${hermes_args[@]+"${hermes_args[@]}"} >&2
 nice -n 10 cmake --build "$BUILD" -j "$JOBS" >&2
 if [ "$run_tests" = 1 ]; then

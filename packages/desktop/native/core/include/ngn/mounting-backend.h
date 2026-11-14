@@ -41,6 +41,10 @@ class MountingBackend {
 
   virtual void dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) = 0;
 
+  // A screen below the top of its stack (screen-stacks.h): hidden without being unmounted, and
+  // shown again as it returns to the top.
+  virtual void setCovered(SurfaceId /*surfaceId*/, Tag /*tag*/, bool /*covered*/) {}
+
   // Called once a transaction's mutations have all been applied.
   virtual void didMount(SurfaceId /*surfaceId*/) {}
 

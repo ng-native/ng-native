@@ -69,6 +69,7 @@ add_library(ngn_core STATIC
     core/src/native-module.cpp
     core/src/network.cpp
     core/src/text-layout-manager.cpp
+    core/src/screen-stacks.cpp
     core/src/view-tree.cpp
     core/src/modules/alert-manager.cpp
     core/src/modules/app-modules.cpp
@@ -99,6 +100,9 @@ if(NGN_WITH_RUNTIME)
   target_link_libraries(ngn_core_runtime PUBLIC ngn_core hermes-engine::hermesvm)
   target_compile_options(ngn_core_runtime PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
 endif()
+
+# --- libraries' components (react-native-screens, react-native-safe-area-context) ---------------
+include(cmake/libraries.cmake)
 
 # --- backends -------------------------------------------------------------------------------------
 if(NGN_BACKEND STREQUAL "appkit")

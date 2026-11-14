@@ -4,6 +4,8 @@
 #import "modal-host-view.h"
 #import "surface-view.h"
 
+#include "ngn/library-components.h"
+
 namespace ngn::appkit {
 
 AppKitBackend::AppKitBackend()
@@ -98,6 +100,10 @@ void AppKitBackend::dispatchCommand(Tag tag, const std::string &name, const foll
   [views_[@(tag)] handleCommand:name args:args];
 }
 
+void AppKitBackend::setCovered(SurfaceId, Tag tag, bool covered) {
+  views_[@(tag)].covered = covered;
+}
+
 void AppKitBackend::didMount(SurfaceId surfaceId) {
   if (onMount) {
     onMount(surfaceId);
@@ -106,6 +112,10 @@ void AppKitBackend::didMount(SurfaceId surfaceId) {
 
 void AppKitBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &props) {
   [views_[@(tag)] updateDesktopProps:props];
+}
+
+std::vector<facebook::react::ComponentDescriptorProvider> AppKitBackend::componentProviders() const {
+  return libraryComponents();
 }
 
 } // namespace ngn::appkit
