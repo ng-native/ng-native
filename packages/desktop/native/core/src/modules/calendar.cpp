@@ -104,6 +104,8 @@ constexpr const char *kNoEventWrite =
 constexpr const char *kNoEventChange =
     "Calendar: no full access to the calendars, which changing or deleting an event needs. Ask with Calendar.permission first.";
 constexpr const char *kNoReminders = "Calendar: no access to the reminders. Ask with Calendar.remindersPermission first.";
+constexpr const char *kNoCalendarChange =
+    "Calendar: no full access to the calendars, which creating or deleting a calendar needs. Ask with Calendar.permission first.";
 
 Entity entityOf(const folly::dynamic &args) {
   return !args.empty() && args[0].isString() && args[0].asString() == "reminder" ? Entity::Reminder : Entity::Event;
@@ -373,6 +375,35 @@ std::shared_ptr<NativeModule> makeCalendarModule(std::shared_ptr<CalendarStore> 
         });
       });
 
+      promise("createCalendarAsync", [store, reads](const folly::dynamic &args, JsPromise promise) {
+        const folly::dynamic details = !args.empty() && args[0].isObject() ? args[0] : folly::dynamic::object();
+        auto field = [&](const char *name) {
+          const auto *value = details.get_ptr(name);
+          return value != nullptr && value->isString() ? value->asString() : std::string();
+        };
+        auto entity = field("entityType") == "reminder" ? Entity::Reminder : Entity::Event;
+        if (!reads(entity)) {
+          promise.reject(entity == Entity::Event ? kNoCalendarChange : kNoReminders);
+          return;
+        }
+        CalendarStore::NewCalendar calendar{.title = field("title"), .color = field("color"), .sourceId = field("sourceId")};
+        if (calendar.title.empty()) {
+          promise.reject("Calendar.createCalendar: a calendar needs a title");
+          return;
+        }
+        try {
+          promise.resolve(calendarOf(store->createCalendar(entity, calendar), entity));
+        } catch (const CalendarStore::Failure &e) {
+          promise.reject(e.what());
+        }
+      });
+      promise("deleteCalendarAsync", [store, reads, write](const folly::dynamic &args, JsPromise promise) {
+        bool allowed = reads(Entity::Event) || reads(Entity::Reminder);
+        write("delete", allowed, kNoCalendarChange, args, promise, [&](const std::string &id, const auto &) {
+          store->deleteCalendar(id);
+          return folly::dynamic(nullptr);
+        });
+      });
       promise("listRemindersAsync", [store, reads](const folly::dynamic &args, JsPromise promise) {
         std::vector<std::string> ids;
         if (!args.empty() && args[0].isArray()) {

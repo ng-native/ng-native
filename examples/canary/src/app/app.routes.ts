@@ -288,6 +288,10 @@ export const routes: Routes = [
     loadComponent: () => import('./desktop/desktop-page.ts').then((m) => m.DesktopPage),
   },
   {
+    path: 'permissions',
+    loadComponent: () => import('./desktop/permissions-page.ts').then((m) => m.PermissionsPage),
+  },
+  {
     path: 'desktop-split',
     loadComponent: () => import('./desktop/split-page.ts').then((m) => m.SplitPage),
   },

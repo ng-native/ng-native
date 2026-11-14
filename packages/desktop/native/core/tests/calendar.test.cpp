@@ -113,6 +113,14 @@ struct FakeStore final : ngn::CalendarStore {
     return {.id = id, .calendarId = "r1", .completed = details.completed.value_or(false)};
   }
   void deleteReminder(const std::string &id) override { write("deleteReminder", id, {}); }
+
+  Calendar createCalendar(Entity entity, const NewCalendar &calendar) override {
+    write(std::string("createCalendar ") + (entity == Entity::Event ? "event " : "reminder ") + calendar.title + " " + calendar.color + " " +
+              calendar.sourceId,
+          "", {});
+    return {.id = "new-cal", .title = calendar.title, .source = home, .type = "caldav", .color = calendar.color, .allowsModifications = true};
+  }
+  void deleteCalendar(const std::string &id) override { write("deleteCalendar", id, {}); }
 };
 
 // A promise's rejection message, or nothing when it resolved.
@@ -355,4 +363,36 @@ TEST_CASE("calendarDetails reads each field by its type, and names one of the wr
   // A recurrence rule given as null stops the repeating.
   CHECK(ngn::calendarDetails(dynamic::object("recurrenceRule", nullptr), dynamic::array()).cleared ==
         std::set<std::string>{"recurrenceRule"});
+}
+
+TEST_CASE("NgNativeCalendar creates a calendar or a reminder list with full access to its kind, and deletes one") {
+  auto store = std::make_shared<FakeStore>();
+  auto module = ngn::makeCalendarModule(store, false);
+  dynamic details = dynamic::object("title", "Trips")("color", "#FF6600")("entityType", "event");
+  CHECK(refusal(*module, "createCalendarAsync", dynamic::array(details)) ==
+        "Calendar: no full access to the calendars, which creating or deleting a calendar needs. Ask with Calendar.permission first.");
+  CHECK(refusal(*module, "deleteCalendarAsync", dynamic::array("c1")).has_value());
+  store->eventAccess = Access::WriteOnly;
+  CHECK(refusal(*module, "createCalendarAsync", dynamic::array(details)).has_value());
+  CHECK(store->writes.empty());
+
+  store->eventAccess = Access::FullAccess;
+  auto created = ask(*module, "createCalendarAsync", dynamic::array(details));
+  CHECK(created["id"] == dynamic("new-cal"));
+  CHECK(created["title"] == dynamic("Trips"));
+  CHECK(created["entityType"] == dynamic("event"));
+  CHECK(store->writes.back() == "createCalendar event Trips #FF6600  ");
+  // A reminder list needs the reminders, in the source asked for.
+  dynamic list = dynamic::object("title", "Errands")("entityType", "reminder")("sourceId", "s2");
+  CHECK(refusal(*module, "createCalendarAsync", dynamic::array(list)) == "Calendar: no access to the reminders. Ask with Calendar.remindersPermission first.");
+  store->reminderAccess = Access::FullAccess;
+  CHECK(ask(*module, "createCalendarAsync", dynamic::array(list))["entityType"] == dynamic("reminder"));
+  CHECK(store->writes.back() == "createCalendar reminder Errands  s2 ");
+  CHECK(refusal(*module, "createCalendarAsync", dynamic::array(dynamic(dynamic::object("color", "#000000")))) ==
+        "Calendar.createCalendar: a calendar needs a title");
+
+  CHECK(ask(*module, "deleteCalendarAsync", dynamic::array("new-cal")) == dynamic(nullptr));
+  CHECK(store->writes.back() == "deleteCalendar new-cal");
+  store->refuses = "Calendar: no calendar with the id gone";
+  CHECK(refusal(*module, "deleteCalendarAsync", dynamic::array("gone")) == "Calendar: no calendar with the id gone");
 }

@@ -142,6 +142,49 @@ TEST_CASE("A recording needs a running camera, and one with no video to record f
   session.fakeRunning = NO;
 }
 
+TEST_CASE("A recording keeps its own copy of the request, which the caller may let go of at once, and answers at its limit") {
+  // A screen input stands in for a camera: it gives the session video with no camera permission.
+  AVCaptureScreenInput *screen = [[AVCaptureScreenInput alloc] initWithDisplayID:CGMainDisplayID()];
+  AVCaptureSession *session = [AVCaptureSession new];
+  if (screen == nil || ![session canAddInput:screen]) {
+    MESSAGE("no screen input here; skipped");
+    return;
+  }
+  [session addInput:screen];
+  auto capture = ngn::appkit::sessionCapture(session, [AVCapturePhotoOutput new]);
+  bool running = false;
+  capture->start([&] { running = true; });
+  REQUIRE(spinUntil([&] { return running; }));
+  if (!session.running) {
+    MESSAGE("the screen input does not run here; skipped");
+    capture->stop();
+    return;
+  }
+  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"ngn-camera-test-copy.mov"];
+  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+  // Shared, so a late answer has somewhere to go.
+  auto answer = std::make_shared<std::optional<std::string>>();
+  {
+    // Gone, and its memory written over, before the session's queue reads it.
+    auto request = std::make_unique<ngn::CameraRecordingRequest>(
+        ngn::CameraRecordingRequest{.path = path.UTF8String, .maxDuration = 0.5, .sound = false});
+    capture->startRecording(*request, [answer](const std::string &e) { *answer = e; });
+    request->path.assign(4096, 'x');
+    request.reset();
+  }
+  // With a dangling request the queue threw on the path, which ends the process. And the answer
+  // comes at the limit: the movie output keeps no delegate of its own.
+  for (int i = 0; i < 3 && !answer->has_value(); i++) {
+    spinUntil([&] { return answer->has_value(); });
+  }
+  REQUIRE(answer->has_value());
+  CHECK(answer->value() == "");
+  CHECK([NSFileManager.defaultManager fileExistsAtPath:path]);
+  capture->stop();
+  spinUntil([&] { return !capture->recording(); });
+  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+}
+
 TEST_CASE("The microphone counts for a recording's sound only when allowed, which is never asked") {
   auto hardware = ngn::appkit::makeCameraHardware();
   bool allowed = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized;

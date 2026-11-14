@@ -62,11 +62,14 @@
 
 @implementation NGNMovieRecording {
   std::function<void(const std::string &)> _done;
+  // The movie output does not keep its delegate, so it keeps itself until the recording ends.
+  NGNMovieRecording *_keep;
 }
 
 - (instancetype)initWithDone:(std::function<void(const std::string &)>)done {
   if ((self = [super init])) {
     _done = std::move(done);
+    _keep = self;
   }
   return self;
 }
@@ -77,6 +80,7 @@
                                   error:(NSError *)error {
   bool finished = error == nil || [error.userInfo[AVErrorRecordingSuccessfullyFinishedKey] boolValue];
   auto done = std::move(_done);
+  _keep = nil;
   if (done) {
     const char *reason = error.localizedDescription.UTF8String;
     done(finished ? "" : (reason != nullptr ? reason : "the recording failed"));
@@ -133,7 +137,7 @@ class AVHardware final : public CameraHardware {
                              completionHandler:^(BOOL granted) { (*answer)(granted ? Access::Granted : Access::Denied); }];
   }
   bool hasCamera() override {
-    return cameras().count > 0;
+    return cameraFor("front") != nil;
   }
   bool microphoneAllowed() override {
     return [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized &&
@@ -186,7 +190,10 @@ class AVSessionCapture final : public SessionCapture {
 
   // The movie output and, with sound, the microphone are added to the session for the recording
   // and taken off after it, on the session's queue, since configuring a running session blocks.
-  void startRecording(const CameraRecordingRequest &request, std::function<void(const std::string &)> done) override {
+  void startRecording(const CameraRecordingRequest &asked, std::function<void(const std::string &)> done) override {
+    // The block runs later on the session's queue: a reference it captured would be to the
+    // caller's request, gone by then.
+    CameraRecordingRequest request = asked;
     if (!session_.running) {
       done("the camera is not running");
       return;
@@ -302,13 +309,15 @@ std::shared_ptr<CameraHardware> makeCameraHardware() {
 
 AVCaptureDevice *cameraFor(const std::string &facing) {
   NSArray<AVCaptureDevice *> *all = cameras();
-  // A Mac's built-in camera faces the user; `front` and `back` both mean it.
+  // A Mac's built-in camera faces the user; `front` and `back` both mean it. With the lid closed it
+  // is suspended and gives no frames, so another camera is taken, or none.
+  std::vector<CameraCandidate> candidates;
   for (AVCaptureDevice *device in all) {
-    if ([device.deviceType isEqualToString:AVCaptureDeviceTypeBuiltInWideAngleCamera]) {
-      return device;
-    }
+    candidates.push_back({.builtIn = [device.deviceType isEqualToString:AVCaptureDeviceTypeBuiltInWideAngleCamera],
+                          .suspended = static_cast<bool>(device.suspended)});
   }
-  return all.firstObject;
+  int chosen = chooseCamera(candidates);
+  return chosen < 0 ? nil : all[static_cast<NSUInteger>(chosen)];
 }
 
 std::shared_ptr<SessionCapture> sessionCapture(AVCaptureSession *session, AVCapturePhotoOutput *output) {

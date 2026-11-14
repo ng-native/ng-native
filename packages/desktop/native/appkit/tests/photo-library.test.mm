@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 
 using Access = ngn::PhotoLibrary::Access;
@@ -47,4 +48,21 @@ TEST_CASE("The media library and the picker over PhotoKit read and write nothing
                           {.resolve = [&](folly::dynamic v) { picked = v; }, .reject = {}});
   REQUIRE(picked);
   CHECK((*picked)["canceled"] == folly::dynamic(true));
+}
+
+TEST_CASE("The picker's sheet has a picker's size, not its content's fitting size, and fits its window") {
+  // The photo picker fits to almost nothing (a title and Cancel); a plain view stands in for it.
+  NSViewController *content = [NSViewController new];
+  content.view = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSWindow *large = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1040, 720) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:YES];
+  NSWindow *sheet = ngn::appkit::pickerSheet(content, large);
+  CHECK((sheet.contentViewController == content));
+  CHECK(sheet.contentLayoutRect.size.width == 780);
+  CHECK(sheet.contentLayoutRect.size.height == 560);
+  NSWindow *small = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 500, 400) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:YES];
+  NSViewController *other = [NSViewController new];
+  other.view = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSSize fitted = ngn::appkit::pickerSheet(other, small).contentLayoutRect.size;
+  CHECK(fitted.width == 460);
+  CHECK(fitted.height == 340);
 }

@@ -285,7 +285,9 @@ function desktopCalendar(): NativeCalendar | null {
       createReminder: async (details: Record<string, unknown>) =>
         reminder(await write('createReminderAsync')(record!.id, wire(details))),
       update: unavailable('update on a calendar'),
-      delete: unavailable('delete on a calendar'),
+      delete: async () => {
+        await write('deleteCalendarAsync')(record!.id);
+      },
     });
   const native: NativeCalendar = {
     getCalendarPermissions: (writeOnly?: boolean) =>
@@ -307,7 +309,8 @@ function desktopCalendar(): NativeCalendar | null {
           end.getTime(),
         )) as Row[]
       ).map(event),
-    createCalendar: unavailable('createCalendar'),
+    createCalendar: async (details: Record<string, unknown> = {}) =>
+      calendar(await write('createCalendarAsync')(wire(details))),
     presentPicker: async () => null,
     ExpoCalendar: {
       get: async (id: string) =>

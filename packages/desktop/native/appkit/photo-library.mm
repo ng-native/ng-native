@@ -1,5 +1,7 @@
 #include "photo-library.h"
 
+#include <algorithm>
+
 #import <AVFoundation/AVFoundation.h>
 #import <AppKit/AppKit.h>
 #import <ImageIO/ImageIO.h>
@@ -440,7 +442,7 @@ class PhotoKitLibrary final : public ngn::PhotoLibrary {
       picker.delegate = delegate;
       // The delegate lives as long as the picker's sheet.
       objc_setAssociatedObject(picker, @selector(delegate), delegate, OBJC_ASSOCIATION_RETAIN);
-      NSWindow *sheet = [NSWindow windowWithContentViewController:picker];
+      NSWindow *sheet = ngn::appkit::pickerSheet(picker, window);
       delegate.sheet = sheet;
       [window beginSheet:sheet completionHandler:nil];
     });
@@ -519,6 +521,18 @@ class PhotoKitLibrary final : public ngn::PhotoLibrary {
 @end
 
 namespace ngn::appkit {
+
+NSWindow *pickerSheet(NSViewController *picker, NSWindow *window) {
+  NSSize room = window.contentLayoutRect.size;
+  NSSize size = NSMakeSize(std::min<CGFloat>(780, std::max<CGFloat>(room.width - 40, 320)),
+                           std::min<CGFloat>(560, std::max<CGFloat>(room.height - 60, 240)));
+  NSWindow *sheet = [NSWindow windowWithContentViewController:picker];
+  // The content view controller sizes the window to its fitting size as it is set; the picker's
+  // size comes after.
+  [sheet setContentSize:size];
+  sheet.contentMinSize = NSMakeSize(std::min<CGFloat>(size.width, 320), std::min<CGFloat>(size.height, 240));
+  return sheet;
+}
 
 std::shared_ptr<PhotoLibrary> makePhotoLibrary(const std::string &caches) {
   return std::make_shared<PhotoKitLibrary>(caches);

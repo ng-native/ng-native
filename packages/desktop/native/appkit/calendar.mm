@@ -62,6 +62,15 @@ std::string hexOf(NSColor *color) {
   return out;
 }
 
+// "#RRGGBB" as a colour, or nil.
+NSColor *colorOf(const std::string &hex) {
+  unsigned value = 0;
+  if (hex.size() != 7 || hex[0] != '#' || std::sscanf(hex.c_str() + 1, "%6x", &value) != 1) {
+    return nil;
+  }
+  return [NSColor colorWithSRGBRed:((value >> 16) & 0xFF) / 255.0 green:((value >> 8) & 0xFF) / 255.0 blue:(value & 0xFF) / 255.0 alpha:1];
+}
+
 CalendarStore::Source sourceOf(EKSource *source) {
   static const char *const kTypes[] = {"local", "exchange", "caldav", "mobileme", "subscribed", "birthdays"};
   auto type = static_cast<NSInteger>(source.sourceType);
@@ -416,6 +425,53 @@ class EventKitStore final : public CalendarStore {
       throw Failure(failure("Calendar.update", error));
     }
     return eventOf(event);
+  }
+
+  Calendar createCalendar(Entity entity, const NewCalendar &asked) override {
+    if (access(entity) != Access::FullAccess) {
+      throw Failure(entity == Entity::Event ? "Calendar: no full access to the calendars" : "Calendar: no access to the reminders");
+    }
+    EKEventStore *events = store();
+    EKSource *source = nil;
+    for (EKSource *each in events.sources) {
+      if (!asked.sourceId.empty() && [each.sourceIdentifier isEqualToString:idOf(asked.sourceId)]) {
+        source = each;
+      }
+    }
+    if (source == nil && !asked.sourceId.empty()) {
+      throw Failure("Calendar: no source with the id " + asked.sourceId);
+    }
+    if (source == nil) {
+      EKCalendar *fallback = entity == Entity::Event ? events.defaultCalendarForNewEvents : events.defaultCalendarForNewReminders;
+      source = fallback.source;
+    }
+    EKCalendar *calendar = [EKCalendar calendarForEntityType:entityTypeOf(entity) eventStore:events];
+    calendar.title = nsString(asked.title);
+    calendar.source = source;
+    if (NSColor *color = colorOf(asked.color)) {
+      calendar.color = color;
+    }
+    NSError *error = nil;
+    if (![events saveCalendar:calendar commit:YES error:&error]) {
+      throw Failure(failure("Calendar.createCalendar", error));
+    }
+    EKCalendar *primary = entity == Entity::Event ? events.defaultCalendarForNewEvents : events.defaultCalendarForNewReminders;
+    return calendarOf(calendar, primary);
+  }
+
+  void deleteCalendar(const std::string &id) override {
+    EKEventStore *events = store();
+    EKCalendar *calendar = [events calendarWithIdentifier:idOf(id)];
+    if (calendar == nil) {
+      throw Failure("Calendar: no calendar with the id " + id);
+    }
+    if (access(calendar.allowedEntityTypes & EKEntityMaskReminder ? Entity::Reminder : Entity::Event) != Access::FullAccess) {
+      throw Failure("Calendar: no full access to the calendar " + id);
+    }
+    NSError *error = nil;
+    if (![events removeCalendar:calendar commit:YES error:&error]) {
+      throw Failure(failure("Calendar.delete", error));
+    }
   }
 
   void deleteEvent(const std::string &id) override {
