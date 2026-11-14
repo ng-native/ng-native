@@ -8,7 +8,7 @@ namespace ngn {
 namespace {
 
 const char *kUsage =
-    "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>]";
+    "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>] [--url <link>]";
 
 bool is(const LaunchSources &sources, const char *name, const char *value) {
   auto found = sources.env ? sources.env(name) : std::nullopt;
@@ -102,6 +102,8 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources) 
       settings.appId = args[++i];
     } else if (arg == "--capabilities" && hasValue) {
       settings.capabilitiesJson = args[++i];
+    } else if (arg == "--url" && hasValue) {
+      settings.initialUrl = args[++i];
     } else if (arg == "--title" && hasValue) {
       settings.title = args[++i];
     } else if (settings.bundle.empty() && !arg.starts_with("--")) {

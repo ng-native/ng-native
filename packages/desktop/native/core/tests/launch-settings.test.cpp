@@ -47,6 +47,10 @@ TEST_CASE("A dev run takes its bundle, module, title, app id and capabilities fr
   CHECK(settings.title == "Notes");
   CHECK(settings.appId == "dev.notes");
   CHECK(settings.capabilitiesJson == "{}");
+  CHECK(settings.initialUrl.empty());
+  auto linked = std::get<ngn::LaunchSettings>(
+      ngn::launchSettings({.args = {"/tmp/b.js", "--url", "notes://note/7"}, .env = from({}), .plist = from({})}));
+  CHECK(linked.initialUrl == "notes://note/7");
 
   // The environment's capabilities when argv has none.
   auto env = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(kUpdatesEnv), .plist = from({})}));
@@ -61,7 +65,7 @@ TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the e
   for (std::vector<std::string> args : std::vector<std::vector<std::string>>{
            {},
            {"/tmp/evil.js", "--module", "evil", "--app-id", "com.other.app", "--title", "Evil", "--capabilities",
-            R"({"spawn":[{"program":"/bin/sh"}]})"},
+            R"({"spawn":[{"program":"/bin/sh"}]})", "--url", "notes://evil"},
            {"-psn_0_12345"},
        }) {
     CAPTURE(args.size());
@@ -75,6 +79,7 @@ TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the e
     CHECK(settings.title == "Notes");
     CHECK(settings.appId == "com.example.notes");
     CHECK(settings.capabilitiesJson.empty());
+    CHECK(settings.initialUrl.empty());
   }
 }
 

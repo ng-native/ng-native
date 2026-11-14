@@ -60,6 +60,9 @@ struct LaunchSettings {
   // A dev run's --capabilities (or NGN_DESKTOP_CAPABILITIES) JSON; a packaged app's are in its
   // Info.plist as NGNCapabilities.
   std::string capabilitiesJson;
+  // A dev run's --url: the link the app opens as it launches (Linking's initial URL), as a click on
+  // a link to the app's scheme would. Empty when none; a packaged app is opened on a link by the OS.
+  std::string initialUrl;
   // Set for a test launch.
   std::optional<TestLaunch> test;
   // No system prompt is ever shown (NGN_NO_PROMPTS=1, or a test launch's fake system UI): a

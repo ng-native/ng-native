@@ -2,7 +2,7 @@
  * The `ng-native-desktop` command: builds the desktop host when it needs building and launches it,
  * or packages the app (`package.mjs`).
  *
- *     ng-native-desktop run [bundle path or URL] [--module <name>] [--port <port>] [--universal]
+ *     ng-native-desktop run [bundle path or URL] [--module <name>] [--port <port>] [--url <link>] [--universal]
  *     ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
  *
  * The host is built in the per-user cache (see `cacheDir`) from the pinned sources
@@ -26,13 +26,15 @@ export {
   UsageError,
 } from './host.mjs';
 
-export const USAGE = `Usage: ng-native-desktop run [bundle path or URL] [--module <name>] [--port <port>] [--universal]
+export const USAGE = `Usage: ng-native-desktop run [bundle path or URL] [--module <name>] [--port <port>] [--url <link>]
+                          [--universal]
 
 Builds the macOS desktop host if it needs building, then opens the app in it: from the dev server
 (start it with npm start) unless a bundle path or URL is given.
 
   --module <name>   the registered app to start (default: main)
   --port <port>     the dev server's port (default: 8081)
+  --url <link>      a link to open the app on, as Linking's initial URL (myapp://settings)
   --universal       build for arm64 and x86_64 (default: this Mac's architecture)
 
 ${PACKAGE_USAGE}`;
@@ -49,7 +51,7 @@ export function devServerBundleUrl(port) {
 
 /**
  * @param {string[]} argv the arguments after the command name
- * @returns {{ command: 'help' } | { command: 'run', bundle: string | undefined, module: string, port: number, universal: boolean } | import('./package.mjs').PackageCommand}
+ * @returns {{ command: 'help' } | { command: 'run', bundle: string | undefined, module: string, port: number, universal: boolean, url?: string } | import('./package.mjs').PackageCommand}
  */
 export function parseCommand(argv) {
   const [command, ...rest] = argv;
@@ -67,6 +69,7 @@ export function parseCommand(argv) {
       module: { type: 'string', default: 'main' },
       port: { type: 'string', default: '8081' },
       universal: { type: 'boolean', default: false },
+      url: { type: 'string' },
     },
   });
   if (positionals.length > 1) {
@@ -82,6 +85,7 @@ export function parseCommand(argv) {
     module: values.module,
     port,
     universal: values.universal,
+    ...(values.url !== undefined && { url: values.url }),
   };
 }
 
@@ -94,7 +98,7 @@ export function isUrl(bundle) {
  * Builds the host (a no-op when nothing changed) and runs it on the bundle. Returns the host's
  * exit status.
  *
- * @param {{ bundle?: string, module: string, port?: number, universal: boolean }} options
+ * @param {{ bundle?: string, module: string, port?: number, universal: boolean, url?: string }} options
  * @param {typeof system} [sys]
  */
 export async function run(options, sys = system) {
@@ -111,6 +115,7 @@ export async function run(options, sys = system) {
     '--app-id',
     appId,
     ...(capabilities ? ['--capabilities', JSON.stringify(capabilities)] : []),
+    ...(options.url ? ['--url', options.url] : []),
   ]);
 }
 

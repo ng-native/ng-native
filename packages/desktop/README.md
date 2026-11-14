@@ -341,6 +341,7 @@ libraries above recompiles only that library.
 | ----------------- | --------------------------------------------------------- |
 | `--module <name>` | The registered app to start. Default `main`.              |
 | `--port <port>`   | The dev server's port. Default `8081`.                    |
+| `--url <link>`    | A link to open the app on, as `Linking`'s initial URL.    |
 | `--universal`     | Build for arm64 and x86_64. Default: this Mac's own arch. |
 
 ## Config

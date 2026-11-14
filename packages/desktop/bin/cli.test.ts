@@ -332,6 +332,21 @@ describe('run', () => {
     assert.equal(devServerBundleUrl(8081), calls[1].args[0].replace('8082', '8081'));
   });
 
+  it('opens the app on a link given with --url, as its initial URL', async () => {
+    assert.deepEqual(parseCommand(['run', '--url', 'demo://settings']), {
+      command: 'run',
+      bundle: undefined,
+      module: 'main',
+      port: 8081,
+      universal: false,
+      url: 'demo://settings',
+    });
+    assert.equal('url' in parseCommand(['run']), false);
+    const { sys, calls } = fakeSystem();
+    await run({ module: 'main', universal: false, url: 'demo://settings' }, sys);
+    assert.deepEqual(calls[1].args.slice(-2), ['--url', 'demo://settings']);
+  });
+
   it('passes a bundle URL to the host as it is, so it stays connected to the dev server', async () => {
     const { sys, calls } = fakeSystem();
     const url = 'http://localhost:8081/index.bundle?platform=macos&dev=true';

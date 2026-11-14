@@ -654,6 +654,9 @@ int main(int argc, const char *argv[]) {
           .screen = {.width = screen.width, .height = screen.height, .scale = scale, .fontScale = 1},
       });
     }
+    if (!settings.initialUrl.empty()) {
+      gHost.state->setInitialUrl(settings.initialUrl);
+    }
     ngn::appkit::watchApp(gHost.state, system);
     ngn::NetworkClients network{ngn::appkit::makeHttp(), ngn::appkit::makeWebSockets()};
     // Kept for the process: ReactHost asks it for modules on every reload.
