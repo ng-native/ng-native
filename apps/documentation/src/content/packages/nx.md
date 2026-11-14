@@ -307,6 +307,26 @@ nothing. A `src/main.ts` it cannot follow, or whose providers are not written as
 left as it is, with a warning saying what to add by hand. The app needs rebuilding afterwards, as
 for any native module.
 
+## macOS
+
+```sh
+nx g @ng-native/nx:desktop mobile
+```
+
+This adds macOS to an app: `@ng-native/desktop` where the app's dependencies go, `macos` in
+`expo.platforms` with `experiments.outOfTreePlatforms: true` (Expo drops `macos` from every bundle
+and export without it, and says nothing), `@ng-native/desktop` among the config plugins in
+`app.json`, `/dist/macos` in the app's `.gitignore`, and two targets:
+
+| Command                 | What runs                                                                 |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `nx run mobile:macos`   | `ng-native-desktop run`: builds the desktop host and opens the app in it. |
+| `nx run mobile:package` | `ng-native-desktop package`: the `.app`, `.dmg` or Mac App Store package. |
+
+`macos` loads the app from the dev server `nx start` runs, on the app's own port. Running the
+generator again changes nothing. See [`@ng-native/desktop`](/packages/desktop) for both commands
+and the plugin options.
+
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),

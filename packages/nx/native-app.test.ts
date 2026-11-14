@@ -174,6 +174,54 @@ describe('the generated app', () => {
     assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
     assert.equal(JSON.parse(native.appJson('mobile')).expo.experiments, undefined);
   });
+
+  it('lists the desktop config plugin beside macos, and only there', () => {
+    const { expo } = JSON.parse(native.appJson('mobile', undefined, ['ios', 'android', 'macos']));
+    assert.deepEqual(expo.plugins, ['@ng-native/metro', '@ng-native/desktop']);
+    assert.deepEqual(JSON.parse(native.appJson('mobile')).expo.plugins, ['@ng-native/metro']);
+  });
+
+  it('writes a desktop-only app.json with no phone settings, keeping the bundle identifier', () => {
+    const { expo } = JSON.parse(native.appJson('@org/notes', 'com.org.notes', ['macos']));
+    assert.deepEqual(expo.platforms, ['macos']);
+    assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
+    assert.deepEqual(expo.ios, { bundleIdentifier: 'com.org.notes' });
+    for (const key of ['android', 'orientation']) assert.equal(expo[key], undefined, key);
+    assert.deepEqual(expo.plugins, ['@ng-native/metro', '@ng-native/desktop']);
+  });
+});
+
+describe('withDesktop', () => {
+  it('adds macos, the out-of-tree platforms flag and the plugin, keeping what is there', () => {
+    const expo = native.withDesktop({
+      platforms: ['ios', 'android'],
+      experiments: { typedRoutes: true },
+      plugins: ['@ng-native/metro', ['expo-camera', {}]],
+    });
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos']);
+    assert.deepEqual(expo.experiments, { typedRoutes: true, outOfTreePlatforms: true });
+    assert.deepEqual(expo.plugins, ['@ng-native/metro', ['expo-camera', {}], '@ng-native/desktop']);
+  });
+
+  it("keeps Expo's default iOS and Android where the config names no platforms", () => {
+    assert.deepEqual(native.withDesktop({}).platforms, ['ios', 'android', 'macos']);
+  });
+
+  it('changes nothing the second time, and keeps the options of a plugin entry', () => {
+    const entry = ['@ng-native/desktop', { deny: ['x'] }];
+    const once = native.withDesktop({ platforms: ['macos'], plugins: [entry] });
+    assert.deepEqual(native.withDesktop(once), once);
+    assert.deepEqual(once.plugins, [entry]);
+  });
+
+  it('adds the desktop package at the version the framework is released at', () => {
+    const { version } = require('./package.json');
+    assert.deepEqual(native.desktopDependencies, { '@ng-native/desktop': version });
+    assert.deepEqual(native.DESKTOP_SCRIPTS, {
+      macos: 'ng-native-desktop run',
+      package: 'ng-native-desktop package',
+    });
+  });
 });
 
 describe('conflicts', () => {

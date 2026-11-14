@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "NgNativeDesktop",
+  "title": "macOS in an Angular Native app",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "The Angular Native app, by its name in angular.json.",
+      "$default": {
+        "$source": "argv",
+        "index": 0
+      },
+      "x-prompt": "Which native app should run on macOS?"
+    },
+    "skipInstall": {
+      "type": "boolean",
+      "description": "Write the files and package.json without installing.",
+      "default": false
+    }
+  },
+  "required": ["project"]
+}

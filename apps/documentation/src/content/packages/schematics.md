@@ -67,6 +67,27 @@ compiled by the same transform Metro uses.
 script does, so that once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports
 exists on a fresh checkout. A project without a Metro config runs `ngc` alone.
 
+## macOS
+
+```sh
+ng generate @ng-native/schematics:desktop native
+```
+
+This adds macOS to a native app: `@ng-native/desktop` in the root `package.json`, `macos` in
+`expo.platforms` with `experiments.outOfTreePlatforms: true` (Expo drops `macos` from every bundle
+and export without it, and says nothing), `@ng-native/desktop` among the config plugins in
+`app.json`, `/dist/macos` in the project's `.gitignore`, and two targets on the `expo` builder:
+
+| Command                 | What runs                                                                 |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `ng run native:macos`   | `ng-native-desktop run`: builds the desktop host and opens the app in it. |
+| `ng run native:package` | `ng-native-desktop package`: the `.app`, `.dmg` or Mac App Store package. |
+
+The Expo CLI has no `run:macos`, so the builder runs `ng-native-desktop` from
+[`@ng-native/desktop`](/packages/desktop) for these two. `macos` loads the app from the dev server
+`ng serve native` runs, and takes `--port` for another one. Running the schematic again changes
+nothing.
+
 ## ng generate
 
 ```sh
