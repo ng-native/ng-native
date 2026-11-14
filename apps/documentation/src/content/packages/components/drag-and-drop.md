@@ -9,6 +9,11 @@ Two directives from `@ng-native/components` carry drags between an app and the r
 on macOS and iPadOS. On iPhone, Android and the web host neither does anything: no event fires and
 nothing can be dragged.
 
+On iPadOS both take the native side of `@ng-native/components`, which a development build has and
+Expo Go does not. The view is found by its `nativeID`, and an element without one is given one.
+iPadOS shows nothing of a drag before it is dropped, so there `(fileDragEnter)` carries no files,
+text or urls, and a dropped file arrives as a copy in the app's temporary folder.
+
 ## Dropping onto a view
 
 Import `FileDrop` and bind any of its three outputs on a view:

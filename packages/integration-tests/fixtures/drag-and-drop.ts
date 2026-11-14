@@ -20,6 +20,7 @@ import { View } from '../../components/src/view.ts';
     <view testID="enter-only" (fileDragEnter)="log('enter', $event)"></view>
     <view testID="plain"></view>
     <view testID="source" [dragItem]="item()"></view>
+    <view testID="both" (fileDrop)="log('both', $event)" [dragItem]="item()"></view>
   `,
 })
 export class DragAndDrop {
