@@ -1073,3 +1073,36 @@ describe('native-typecheck-target, through nx migrate, ng update and ng-native-m
     assert.deepEqual((await viaNx(plain, 'native-typecheck-target')).files, plain);
   });
 });
+
+describe('os-comparisons-on-macos, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/platform.ts': [
+      "import { Platform } from 'react-native';",
+      "import { OS, OS_VERSION } from '@ng-native/device';",
+      "import { inject } from '@angular/core';",
+      '',
+      "export const ios = Platform.OS === 'ios';",
+      "export const notAndroid = () => inject(OS) !== 'android';",
+      "export const android = Platform.OS === 'android';",
+      'export const glass = () => (inject(OS_VERSION) ?? 0) >= 26;',
+      "export const label = 'ios';",
+      '',
+    ].join('\n'),
+    'src/app/screen.html': ["@if (os === 'ios') {", '  <text>iPhone</text>', '}', ''].join('\n'),
+    'src/app/plain.ts': 'export const answer = 42;\n',
+    'node_modules/lib/index.js': "export const ios = Platform.OS === 'ios';\n",
+  };
+
+  it('says where each comparison a Mac now answers differently is, and changes nothing', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'os-comparisons-on-macos', '0.22.2');
+    assert.deepEqual(nx.files, files);
+    assert.deepEqual(nx.notes, [
+      "src/app/platform.ts:5: Platform.OS === 'ios' is false on macOS, where the OS is now 'macos'. If the branch is for every Apple OS, check for 'macos' too.",
+      "src/app/platform.ts:6: inject(OS) !== 'android' is true on macOS too, so a Mac takes this branch. Check that it is right there.",
+      'src/app/platform.ts:8: (inject(OS_VERSION) ?? 0) >= 26 also compares the macOS version on a Mac, where macOS 26 matches too. Check the OS as well if it is about iOS.',
+      "src/app/screen.html:1: os === 'ios' is false on macOS, where the OS is now 'macos'. If the branch is for every Apple OS, check for 'macos' too.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+});

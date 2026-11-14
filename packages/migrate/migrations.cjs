@@ -22,6 +22,7 @@ const { engineNodeFields } = require('./engine-node-fields.cjs');
 const { engineNodeTag } = require('./engine-node-tag.cjs');
 const { libraryTypecheckDeclarationMap } = require('./library-typecheck-declaration-map.cjs');
 const { nativeTypecheckTarget } = require('./native-typecheck-target.cjs');
+const { osComparisonsOnMacos } = require('./os-comparisons-on-macos.cjs');
 const { splitStoreAndPlayer } = require('./split-store-and-player.cjs');
 const { stopWatchingConditions } = require('./stop-watching-conditions.cjs');
 const { syncAppVersions } = require('./sync-app-versions.cjs');
@@ -96,6 +97,13 @@ const migrations = [
     description:
       "Resolve the workspace's path aliases in Nx Vitest configs with vite-tsconfig-paths, as nxViteTsPaths does nothing from Nx 24.",
     run: vitestTsconfigPaths,
+  },
+  {
+    name: 'os-comparisons-on-macos',
+    version: '0.23.0',
+    description:
+      "Note each comparison with 'ios', each !== 'android' and each OS_VERSION comparison, which answer differently now that macOS is reported as 'macos'.",
+    run: osComparisonsOnMacos,
   },
 ];
 
