@@ -666,6 +666,47 @@ TEST_CASE("an asset the bundle does not register is kept by its key, where nothi
   CHECK(read(f.dir / kAssetsId / "assets/a1b2c3.png") == "logo bytes");
 }
 
+TEST_CASE("NgNativeUpdates answers the running update's assets by file hash, for a bundle that registers none") {
+  // Hermes bytecode: the bundle's registrations cannot be read, so each asset is kept by its key,
+  // and JavaScript finds it by the file hash it registers it with.
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  CHECK(ngn::makeUpdatesModule(client, false, nullptr)->property("localAssets") == dynamic::object());
+  const std::string bundle = "bytecode";
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifestWithAssets(kAssetsId, "logo bytes", bundle))).isAvailable);
+  REQUIRE(fetchAll(f, *client,
+                   {{"https://u.example/" + kAssetsId + ".js", bundle},
+                    {"https://u.example/assets/a1b2c3?v=logo bytes", "logo bytes"},
+                    {"https://u.example/assets/d4e5f6", "icon bytes"}})
+              .isNew);
+  // Not the running update yet: nothing until the launch that runs it.
+  CHECK(ngn::makeUpdatesModule(client, false, nullptr)->property("localAssets") == dynamic::object());
+
+  auto next = f.client();
+  REQUIRE(next->launch() == (f.dir / kAssetsId / "launch-asset").string());
+  auto assets = ngn::makeUpdatesModule(next, false, nullptr)->property("localAssets");
+  CHECK(assets == dynamic::object("a1b2c3", ngn::fileUri((f.dir / kAssetsId / "assets/a1b2c3.png").string()))(
+                      "d4e5f6", ngn::fileUri((f.dir / kAssetsId / "assets/d4e5f6.png").string())));
+}
+
+TEST_CASE("NgNativeUpdates answers a JavaScript bundle's assets where it registers them") {
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifestWithAssets(kAssetsId))).isAvailable);
+  REQUIRE(fetchAll(f, *client,
+                   {{"https://u.example/" + kAssetsId + ".js", kBundle},
+                    {"https://u.example/assets/a1b2c3?v=logo bytes", "logo bytes"},
+                    {"https://u.example/assets/d4e5f6", "icon bytes"}})
+              .isNew);
+  auto next = f.client();
+  next->launch();
+  auto assets = ngn::makeUpdatesModule(next, false, nullptr)->property("localAssets");
+  CHECK(assets["a1b2c3"] == ngn::fileUri((f.dir / kAssetsId / "assets/img/logo.png").string()));
+  CHECK(assets["d4e5f6"] == ngn::fileUri((f.dir / kAssetsId / "assets/_shared/icon@2x.png").string()));
+}
+
 TEST_CASE("a fetch takes an asset the kept update has with the same hash from disk, not the server") {
   Fixture f;
   auto client = f.client();

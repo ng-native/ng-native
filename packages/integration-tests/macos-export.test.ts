@@ -20,6 +20,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -31,6 +32,7 @@ const expoCli = path.join(path.dirname(require.resolve('expo/package.json')), 'b
 
 const ENTRY = `import 'expo';
 import { Alert, Platform } from 'react-native';
+import resolveAssetSource from 'react-native/Libraries/Image/resolveAssetSource';
 import crypto from 'expo-crypto';
 import { picked as macos } from './macos-first';
 import { picked as ios } from './ios-before-native';
@@ -47,8 +49,18 @@ globalThis.__probe = {
   url: () => new URL('https://example.com/a?b=c').searchParams.get('b'),
   clone: () => structuredClone({ a: [1] }).a[0],
   fetch: () => void fetch('https://example.com/a'),
+  image: () => resolveAssetSource(require('./logo.png')).uri,
 };
 `;
+
+/** A 1x1 PNG, for an asset the bundle registers. */
+const LOGO = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+const LOGO_HASH = createHash('md5').update(LOGO).digest('hex');
+/** Where the desktop host answers an Expo update keeps the logo, by its file hash. */
+const UPDATE_LOGO = `file:///updates/2a1b/assets/${LOGO_HASH}.png`;
 
 const FILES: Record<string, string> = {
   'package.json': '{ "name": "macos-export", "private": true, "main": "index.js" }',
@@ -86,6 +98,7 @@ interface Probe {
   url(): string;
   clone(): number;
   fetch(): void;
+  image(): string;
 }
 
 // Real, because Metro watches the project under the path it is given and macOS links the temp
@@ -94,6 +107,7 @@ let root = '';
 before(() => {
   root = mkdtempSync(path.join(realpathSync(tmpdir()), 'macos-export-'));
   for (const [name, text] of Object.entries(FILES)) writeFileSync(path.join(root, name), text);
+  writeFileSync(path.join(root, 'logo.png'), LOGO);
   // This package's own dependencies, as the app's: expo, react-native and @ng-native/metro.
   symlinkSync(path.join(import.meta.dirname, 'node_modules'), path.join(root, 'node_modules'));
 });
@@ -126,7 +140,10 @@ function exportMacos(mode: 'dev' | 'release'): string {
  * Runs the app's own module and nothing Metro runs before it (React Native's setup, which needs
  * a device), and answers every native module with a recorder.
  */
-function run(bundle: string): { probe: Probe; calls: string[] } {
+function run(
+  bundle: string,
+  localAssets: Record<string, string> = {},
+): { probe: Probe; calls: string[] } {
   const lines = bundle.split('\n');
   const starts = lines.filter((line) => /^__r\(\d+\);$/.test(line));
   const entry = starts.at(-1);
@@ -137,6 +154,10 @@ function run(bundle: string): { probe: Probe; calls: string[] } {
     osVersion: '26.0',
     interfaceIdiom: 'mac',
     reactNativeVersion: { major: 0, minor: 88, patch: 0 },
+    Dimensions: {
+      window: { width: 800, height: 600, scale: 2, fontScale: 1 },
+      screen: { width: 1440, height: 900, scale: 2, fontScale: 1 },
+    },
   };
   // What Hermes has built in and a bare V8 context does not.
   const context: Record<string, unknown> = {
@@ -155,9 +176,11 @@ function run(bundle: string): { probe: Probe; calls: string[] } {
         {},
         {
           get: (_, method) =>
-            method === 'getConstants'
-              ? () => constants
-              : () => void calls.push(`${name}.${String(method)}`),
+            name === 'NgNativeUpdates' && method === 'localAssets'
+              ? localAssets
+              : method === 'getConstants'
+                ? () => constants
+                : () => void calls.push(`${name}.${String(method)}`),
         },
       ),
   };
@@ -170,8 +193,11 @@ function run(bundle: string): { probe: Probe; calls: string[] } {
 for (const mode of ['release', 'dev'] as const) {
   describe(`expo export -p macos, ${mode}`, () => {
     let app: { probe: Probe; calls: string[] };
+    let updated: { probe: Probe; calls: string[] };
     before(() => {
-      app = run(exportMacos(mode));
+      const bundle = exportMacos(mode);
+      app = run(bundle);
+      updated = run(bundle, { [LOGO_HASH]: UPDATE_LOGO });
     });
 
     it("shows the app Platform.OS as 'macos'", () => {
@@ -191,6 +217,11 @@ for (const mode of ['release', 'dev'] as const) {
 
     it('resolves a file .macos first, then .ios, then .native', () => {
       assert.deepEqual([...app.probe.chain], ['macos', 'ios', 'native']);
+    });
+
+    it("resolves an image from the running update's assets by its file hash, else beside the bundle", () => {
+      assert.equal(updated.probe.image(), UPDATE_LOGO);
+      assert.match(app.probe.image(), /\/logo\.png$/);
     });
 
     it('empties every expo- package, and gives expo its runtime', () => {

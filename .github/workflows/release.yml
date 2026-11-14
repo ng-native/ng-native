@@ -76,6 +76,74 @@ jobs:
         run: pnpm --filter @ng-native/web exec playwright install chromium
       - run: pnpm coverage
 
+  # The prebuilt desktop host for the React Native version the packages support: the universal
+  # Release build, signed, packed with its hermesc and Sparkle, so an app with no native desktop
+  # code of its own compiles nothing (packages/desktop/bin/prebuilt.mjs). Built against the canary,
+  # which has every host library. Signed with the Developer ID when the secrets are set and this is
+  # not a dry run, ad hoc otherwise. The archive goes up with the GitHub release; its SHA-256 goes
+  # into packages/desktop/prebuilt.json, inside the npm package, before it is packed.
+  desktop-host:
+    needs: validate
+    if: github.ref == 'refs/heads/main' || inputs.dry_run
+    runs-on: macos-latest
+    # Budget: a cold universal release build within 15 minutes on this runner (spec).
+    timeout-minutes: 45
+    env:
+      NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
+      NGN_JOBS: '4'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: brew install ninja
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
+          key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+
+      # The Developer ID certificate into a keychain of the job's own, which goes with the runner.
+      - name: Signing identity
+        id: identity
+        if: ${{ !inputs.dry_run }}
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_P12 }}
+          PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD }}
+          IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_IDENTITY }}
+        run: |
+          if [ -z "$CERTIFICATE" ] || [ -z "$IDENTITY" ]; then
+            echo "No Developer ID secrets: the host is signed ad hoc." >&2
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p "$GITHUB_RUN_ID" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$GITHUB_RUN_ID" "$keychain"
+          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/id.p12"
+          security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/id.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$GITHUB_RUN_ID" "$keychain"
+          read -r -a existing <<< "$(security list-keychains -d user | tr -d '"' | xargs)"
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - name: Build, sign and pack the host
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          NGN_SIGN_IDENTITY: ${{ steps.identity.outputs.identity }}
+        run: |
+          start=$(date +%s)
+          node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary .prebuilt \
+            --version "$VERSION" \
+            --base-url "https://github.com/${{ github.repository }}/releases/download/v$VERSION"
+          echo "Prebuilt host made in $(( $(date +%s) - start ))s"
+          ls -l .prebuilt
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: desktop-host
+          path: .prebuilt
+          if-no-files-found: error
+
   # One setup route in a fresh project: ng new with ng add, Nx's angular-monorepo preset with
   # nx add and the library generators, or the manual setup guide followed from its code blocks.
   # Too slow for every push, and exactly what a release of the schematics, the Nx plugin or the
@@ -153,7 +221,7 @@ jobs:
         run: cat verdaccio.log
 
   release:
-    needs: [validate, native, verify, generators, storybook]
+    needs: [validate, native, verify, generators, storybook, desktop-host]
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: ubuntu-latest
     outputs:
@@ -166,6 +234,11 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: desktop-host
+          path: .prebuilt
 
       - name: Version
         id: version
@@ -188,6 +261,17 @@ jobs:
               "$file" > "$file.tmp" && mv "$file.tmp" "$file"
             git add "$file"
           done
+          # The prebuilt desktop host's entry, with its SHA-256, into the manifest @ng-native/desktop
+          # ships, so the package names the archive the GitHub release below serves.
+          node --input-type=module -e "
+            import { readFileSync, writeFileSync } from 'node:fs';
+            import { readManifest, withHost } from './packages/desktop/bin/prebuilt.mjs';
+            const file = 'packages/desktop/prebuilt.json';
+            const host = JSON.parse(readFileSync('.prebuilt/prebuilt-host.json', 'utf8'));
+            const manifest = withHost(readManifest(readFileSync(file, 'utf8')), host);
+            writeFileSync(file, JSON.stringify(manifest, null, 2) + '\\n');
+          "
+          git add packages/desktop/prebuilt.json
           # The version plans in .nx/version-plans become this release's CHANGELOG.md entry and are
           # deleted; the versions staged above go into the same `Release <version>` commit and tag.
           npx nx release changelog "$version"
@@ -258,6 +342,7 @@ jobs:
           awk '/^## /{n++} n==1' CHANGELOG.md | tail -n +2 > .release/notes.md
           gh release create 'v${{ steps.version.outputs.version }}' \
             --notes-file .release/notes.md \
+            .prebuilt/*.tar.gz \
             ${{ steps.version.outputs.tag != 'latest' && '--prerelease' || '' }}
 
       - name: Dry run summary
@@ -272,6 +357,12 @@ jobs:
             echo 'Nothing was published, pushed or deployed. These tarballs would be published:'
             echo
             for tarball in .release/*.tgz; do echo "- \`$(basename "$tarball")\`"; done
+            echo
+            echo 'This prebuilt desktop host would go up with the GitHub release:'
+            echo
+            echo '```json'
+            cat .prebuilt/prebuilt-host.json
+            echo '```'
             echo
             echo '### Changelog entry'
             echo

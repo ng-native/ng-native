@@ -345,17 +345,41 @@ the component's name as it loads:
 Events go out through the codegen's `EventEmitter`, cast from `self.eventEmitter`. A component
 with no view registered mounts as a plain view, and the host's own components keep theirs.
 
+## Prebuilt hosts
+
+An app with no native desktop code of its own compiles nothing: `run` and `package` download the
+prebuilt host its React Native version has in `prebuilt.json`, the universal Release build each
+release publishes with its `hermesc` and Sparkle, and unpack it into the per-user cache under its
+hash. The archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does
+not match it is deleted and stops the command. The host is built from source instead when the app
+links a library's or its own native desktop code, when a host library it has installed
+(`react-native-screens`, `react-native-safe-area-context`) is another version than the prebuilt one
+or denied, when the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
+
+`native/scripts/make-prebuilt.mjs <app> <out>` builds and packs one, signed with
+`NGN_SIGN_IDENTITY` or ad hoc, and writes its `prebuilt.json` entry; the release workflow runs it
+and uploads the archive with the GitHub release.
+
 ## Package the app
 
 `ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
-[--sparkle-key <key>]` builds a
-universal release host, bundles with `expo export:embed --platform macos` (the assets laid out as
-React Native's resolver reads them beside an embedded bundle), and assembles
-`<output>/<name>.app`: the host binary as `Contents/MacOS/<name>`, the bundle and assets in
-`Resources`, the icon compiled by `actool`, and an `Info.plist` from the Expo keys. Then `app` is
+[--sparkle-key <key>] [--skip-notarize]` builds a
+universal Release host (arm64 and x86_64, without the core tests, dead code stripped), bundles
+with `expo export:embed --platform macos` (the assets laid out as React Native's resolver reads
+them beside an embedded bundle), compiles the bundle to Hermes bytecode with the `hermesc` the
+host build puts beside its binary, built from the same Hermes, and assembles
+`<output>/<name>.app`: the host binary as `Contents/MacOS/<name>` with its local symbols stripped,
+the bytecode bundle and assets in `Resources`, the icon compiled by `actool`, and an `Info.plist`
+from the Expo keys. Then `app` is
 signed ad hoc, `dmg` is signed with the hardened runtime, notarised and stapled (app and disk
 image), and `mas` is signed in the App Sandbox and wrapped by `productbuild`. `codesign`,
 `notarytool`, `stapler`, `hdiutil`, `ditto`, `sips`, `actool` and `productbuild` are Xcode's.
+
+A `dmg` stops before anything builds when its signing identity or notary credentials are missing,
+naming them. `--skip-notarize`, for testing a `dmg` on this Mac only, makes it without them: signed
+with `NGN_SIGN_IDENTITY` when that is set and ad hoc when not, with the hardened runtime, and never
+sent to Apple. Gatekeeper refuses such a disk image on any other Mac. Sparkle (`--feed-url`) still
+needs `NGN_SIGN_IDENTITY` there, since it loads only into an app signed with a Team ID.
 
 `NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
 ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.
@@ -383,7 +407,11 @@ With `NGNUpdatesURL` set, the host takes Expo Updates (protocol 1) from that ser
 asset and each of the update's other assets, every one checked against the manifest's hash. React
 Native's resolver finds a bundle's images beside it, through `SourceCode`'s `scriptURL`, so the host
 lays an update's assets out as its bundle registers them, from the `registerAsset` calls Metro
-writes into a JavaScript bundle. An asset the bundle does not register is kept but never found.
+writes into a JavaScript bundle. A Hermes bytecode bundle's registrations cannot be read, so its
+assets are kept by their key, the file hash, and `NgNativeUpdates.localAssets` maps each key to its
+`file:` URL. In a `macos` bundle, `@ng-native/metro` gives React Native's `resolveAssetSource` a
+transformer that looks there first, by the file hash of the scale it picks, as `expo-asset` does
+with `expo-updates` on iOS and Android.
 
 ## Layout
 

@@ -5,7 +5,16 @@
  * through `system`, which the tests replace.
  */
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -13,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { desktopAppConfig } from './app-config.mjs';
 import { desktopLinks, linkWarnings } from './autolink.mjs';
+import { choosePrebuilt, fetchPrebuilt, readManifest } from './prebuilt.mjs';
 
 export const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -139,6 +149,15 @@ export const system = {
   },
   /** @param {string} file */
   readFile: (file) => readFileSync(file, 'utf8'),
+  /** @param {string} file the file's SHA-256, in hex */
+  sha256: (file) => createHash('sha256').update(readFileSync(file)).digest('hex'),
+  /**
+   * @param {string} from
+   * @param {string} to
+   */
+  rename(from, to) {
+    renameSync(from, to);
+  },
   /**
    * @param {string} file
    * @param {string} text
@@ -225,7 +244,8 @@ export function linkFile(appDir) {
  * host built (a no-op when nothing changed).
  *
  * @param {typeof system} sys
- * @param {{ universal: boolean }} options
+ * @param {{ universal: boolean, release?: boolean }} options `release` builds the host as a
+ *   packaged app ships it, without the core tests
  */
 export function prepareHost(sys, options) {
   if (sys.platform !== 'darwin') {
@@ -251,8 +271,61 @@ export function prepareHost(sys, options) {
   const hostLibraries = HOST_LIBRARIES.filter((name) => !deny.includes(name))
     .map((name) => sys.resolvePackage(cwd, name))
     .filter((dir) => dir !== null);
-  const buildDir = buildHost(sys, reactNative, hostLibraries, options.universal, file);
+  const buildDir =
+    prebuiltHost(sys, reactNative, { deny, linked: libraries.length + appModules.length }) ??
+    buildHost(sys, reactNative, hostLibraries, options, file);
   return { cwd, expo, config, buildDir, reactNative };
+}
+
+/**
+ * A package's version, from its folder, or null when it has none.
+ *
+ * @param {typeof system} sys
+ * @param {string | null} dir
+ */
+function versionIn(sys, dir) {
+  if (!dir) return null;
+  try {
+    return String(JSON.parse(sys.readFile(path.join(dir, 'package.json'))).version);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The prebuilt host's build folder when `prebuilt.json` has one this app can run on (see
+ * `choosePrebuilt`), downloaded into the cache once; null when the host is built from source.
+ *
+ * @param {typeof system} sys
+ * @param {string} reactNative
+ * @param {{ deny: readonly string[], linked: number }} app
+ */
+function prebuiltHost(sys, reactNative, { deny, linked }) {
+  let text = '';
+  try {
+    text = sys.readFile(path.join(packageDir, 'prebuilt.json'));
+  } catch {
+    return null;
+  }
+  const version = versionIn(sys, reactNative);
+  if (!version) return null;
+  const cwd = sys.cwd();
+  const libraries = Object.fromEntries(
+    HOST_LIBRARIES.map((name) => [name, versionIn(sys, sys.resolvePackage(cwd, name))]),
+  );
+  const choice = choosePrebuilt(readManifest(text), {
+    reactNative: version,
+    linked,
+    libraries,
+    deny,
+    env: sys.env,
+  });
+  if (!('host' in choice)) return null;
+  return fetchPrebuilt(
+    sys,
+    choice.host,
+    cacheDir(version, { env: sys.env, platform: sys.platform }),
+  );
 }
 
 /**
@@ -261,12 +334,13 @@ export function prepareHost(sys, options) {
  * @param {typeof system} sys
  * @param {string} reactNative
  * @param {string[]} libraries
- * @param {boolean} universal
+ * @param {{ universal: boolean, release?: boolean }} options
  * @param {string} link the file `linkFile` names
  */
-function buildHost(sys, reactNative, libraries, universal, link) {
+function buildHost(sys, reactNative, libraries, { universal, release }, link) {
   const buildArgs = [reactNative, ...libraries.flatMap((dir) => ['--library', dir])];
   if (universal) buildArgs.push('--universal');
+  if (release) buildArgs.push('--release');
   const build = sys.run(path.join(packageDir, 'native', 'scripts', 'build.sh'), buildArgs, {
     capture: true,
     env: { NGN_DESKTOP_LINK: link },

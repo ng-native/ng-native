@@ -10,7 +10,8 @@
  *   brought that the app relies on. Expo's own files keep their imports of each other: they are in
  *   the bundle only where Expo's config put them there, as the module a lazy `import()` loads.
  * - A file whose iOS behaviour is wrong for a Mac gets a hand-written override, listed in
- *   `OVERRIDES`. Only `Platform`, which reports `'macos'`.
+ *   `OVERRIDES`: `Platform`, which reports `'macos'`, and `resolveAssetSource`, which finds an
+ *   Expo update's assets by file hash, as `expo-asset` does where Expo runs.
  * - React Native's iOS branches are kept, and `Platform.select` answered for `macos`, by the Babel
  *   plugin in `macos-babel.cjs`, which the transformer runs ahead of the preset's.
  *
@@ -33,6 +34,10 @@ const OVERRIDES = new Map([
   [
     ['Libraries', 'Utilities', 'Platform.ios.js'].join(path.sep),
     require.resolve('./macos/Platform.macos.js'),
+  ],
+  [
+    ['Libraries', 'Image', 'resolveAssetSource.js'].join(path.sep),
+    require.resolve('./macos/resolveAssetSource.macos.js'),
   ],
 ]);
 

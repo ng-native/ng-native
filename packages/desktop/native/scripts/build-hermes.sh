@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds Hermes as a static library (hermesvm_a) against React Native's jsi, into the cache.
+# Builds Hermes as a static library (hermesvm_a) against React Native's jsi, and its compiler
+# (hermesc), into the cache.
 #
 #   build-hermes.sh <node_modules/react-native> [architectures, default: this Mac's]
 #
@@ -30,5 +31,6 @@ cmake --log-level=ERROR -G Ninja -S "$CACHE/src/hermes" -B "$OUT" \
   -DHERMES_ENABLE_TEST_SUITE=OFF \
   -DHERMES_BUILD_APPLE_FRAMEWORK=OFF \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-nice -n 10 cmake --build "$OUT" --target hermesvm_a -j "$JOBS"
+# hermesc too, which compiles a packaged app's bundle to this Hermes's bytecode.
+nice -n 10 cmake --build "$OUT" --target hermesvm_a hermesc -j "$JOBS"
 echo "$OUT"
