@@ -14169,6 +14169,10 @@ export class Engine implements HostEngine {
     const inScript = [...state.values()].some(
       (eased) => !eased.done && !eased.native && !eased.laid,
     );
+    // A layout animation ends at its last frame when a later commit updates the view it moves,
+    // and one eased here commits the view every frame: a box whose colour is eased here has its
+    // size and place eased here too.
+    if (inScript) this.easeLaidHere(node, state, props, now);
     if (!inScript) this.running.delete(node);
     // As Animated does: Fabric flattens a view that only lays out, and then there is no native
     // view for a transition to move.
@@ -14354,6 +14358,25 @@ export class Engine implements HostEngine {
     this.flushTransitionEvents();
     // And what a listener did, taking away an element that has left, is committed.
     if (this.pending) this.commit();
+  }
+
+  /** Take back to ease from here each of the node's transitions native was to lay out. */
+  private easeLaidHere(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    props: Record<string, unknown>,
+    now: number,
+  ): void {
+    let took = false;
+    for (const [key, eased] of state) {
+      if (!eased.laid || eased.done) continue;
+      const progress = Math.min(1, Math.max(0, (now - eased.start) / eased.duration));
+      eased.current = interpolate(eased.from, eased.to, bezier(eased.easing, progress));
+      eased.laid = undefined;
+      props[key] = eased.current;
+      took = true;
+    }
+    if (took) this.laying = this.laying.filter((one) => one.node !== node);
   }
 
   /**
