@@ -160,7 +160,15 @@ class Adapter final : public TurboModule {
     const auto &method = module_->methods().at(name);
     switch (kind) {
       case NativeModule::Method::Kind::Sync:
-        return toJs(rt, method.sync(values));
+        // Thrown as a JavaScript Error with the module's own message, rather than Hermes's
+        // "Exception in HostFunction: " in front of it.
+        try {
+          return toJs(rt, method.sync(values));
+        } catch (const jsi::JSIException &) {
+          throw;
+        } catch (const std::exception &error) {
+          throw jsi::JSError(rt, error.what());
+        }
       case NativeModule::Method::Kind::Async:
         method.async(values, std::move(callbacks));
         return jsi::Value::undefined();
