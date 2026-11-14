@@ -22,6 +22,7 @@ export {
 export {
   fakeDeepLinks,
   fakeDock,
+  fakeUndo,
   fakeMenus,
   fakeProcesses,
   fakeTray,
@@ -30,6 +31,7 @@ export {
   type DesktopFakes,
   type FakeDeepLinks,
   type FakeDock,
+  type FakeUndo,
   type FakeMenus,
   type MenuItemQuery,
   type FakeProcesses,

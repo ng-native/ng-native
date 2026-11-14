@@ -4,6 +4,10 @@
     "slug": "canary",
     "scheme": "canary",
     "newArchEnabled": true,
+    "platforms": ["ios", "android", "macos"],
+    "experiments": {
+      "outOfTreePlatforms": true
+    },
     "ios": {
       "bundleIdentifier": "dev.angularnative.canary",
       "supportsTablet": true,
@@ -15,10 +19,18 @@
     "userInterfaceStyle": "automatic",
     "plugins": [
       "@ng-native/metro",
+      "@ng-native/desktop",
       "expo-calendar",
       "expo-localization",
       "expo-secure-store",
-      ["expo-build-properties", { "android": { "minSdkVersion": 26 } }]
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {

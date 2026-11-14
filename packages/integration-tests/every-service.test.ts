@@ -21,21 +21,27 @@ import { cleanup, injectService } from '@ng-native/testing';
 import {
   Accessibility,
   AppState,
+  AppWindows,
   ColorScheme,
   DeepLinks,
   DevMenu,
   Dialogs,
   Direction,
+  Dock,
   HardwareBack,
   Keyboard,
   LayoutAnimation,
   NavigationBar,
   OS,
+  OS_SUPPORT,
   Processes,
   SafeArea,
   Screen,
   Sharing,
+  Shell,
   StatusBar,
+  Tray,
+  UndoStack,
   Vibration,
 } from '@ng-native/device';
 import { AddressSearch } from '@ng-native/expo/address-search';
@@ -116,6 +122,25 @@ const expo = (
   madeWithModule: options.madeWithModule,
 });
 
+/**
+ * The OSes the support table (`OS_SUPPORT`) says a service is absent on, iPhone's as `ios`: one
+ * source for the table on the documentation site and for what this test checks.
+ */
+function absentInTable(name: string): Os[] {
+  const row = OS_SUPPORT.find((one) => one.services?.[name]);
+  assert.ok(row, `${name} has a row in OS_SUPPORT`);
+  const os = { macos: 'macos', iphone: 'ios', android: 'android', web: 'web' } as const;
+  return (Object.keys(os) as (keyof typeof os)[])
+    .filter((column) => row.on[column] === 'absent')
+    .map((column) => os[column]);
+}
+
+/** A desktop service, absent where the support table says. */
+const desktop = (token: ProviderToken<unknown>, file: string) => {
+  const name = (token as { name: string }).name;
+  return device(token, file, absentInTable(name));
+};
+
 /** A service with no meaning on a desktop OS, so no desktop source: absent on a Mac for good. */
 const MOBILE_ONLY = { absentOn: ['macos', 'web'] as const };
 
@@ -130,8 +155,12 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   HardwareBack: device(HardwareBack, 'hardware-back', ['ios', 'macos', 'web']),
   Keyboard: device(Keyboard, 'keyboard', ['macos', 'web']),
   LayoutAnimation: device(LayoutAnimation, 'layout-animation'),
-  // The desktop host's, which is not built yet, so absent on a Mac too.
-  Processes: device(Processes, 'processes', ['ios', 'android', 'macos', 'web']),
+  AppWindows: desktop(AppWindows, 'app-windows'),
+  Dock: desktop(Dock, 'dock'),
+  Processes: desktop(Processes, 'processes'),
+  Shell: desktop(Shell, 'shell'),
+  Tray: desktop(Tray, 'tray'),
+  UndoStack: desktop(UndoStack, 'undo-stack'),
   NavigationBar: device(NavigationBar, 'navigation-bar', ['ios', 'macos', 'web']),
   SafeArea: device(SafeArea, 'safe-area'),
   Screen: device(Screen, 'screen'),
@@ -233,6 +262,7 @@ const EMPTY_ANSWERS: Readonly<Record<string, (answer: unknown) => boolean>> = {
 
 /** Arguments a call needs before it can reach the question of whether its module is there. */
 const ARGUMENTS: Readonly<Record<string, (service: Record<string, unknown>) => unknown[]>> = {
+  'AppWindows.open': () => [{ outlet: 'detail', path: '/' }],
   'NavigationBar.set': () => [{}],
   'NavigationBar.push': () => [{}],
   'StatusBar.set': () => [{}],

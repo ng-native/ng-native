@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "coverage": "node scripts/coverage.mjs --min 95",
     "coverage:report": "node scripts/coverage.mjs --report",
-    "export": "nx run-many -t export --parallel=1"
+    "export": "nx run-many -t export --parallel=1",
+    "bench:macos": "node scripts/bench-macos.mjs"
   },
   "dependencies": {
     "@angular/common": "22.2.0",

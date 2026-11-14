@@ -284,6 +284,10 @@ export const routes: Routes = [
   { path: 'icons', loadComponent: () => import('./components/icons.ts').then((m) => m.IconsPage) },
   { path: 'device', loadComponent: () => import('./device/device.ts').then((m) => m.DevicePage) },
   {
+    path: 'desktop',
+    loadComponent: () => import('./desktop/desktop-page.ts').then((m) => m.DesktopPage),
+  },
+  {
     path: 'native-gestures',
     loadComponent: () => import('./gestures/native-gestures.ts').then((m) => m.NativeGesturesPage),
   },

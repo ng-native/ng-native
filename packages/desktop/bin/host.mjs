@@ -5,7 +5,7 @@
  * through `system`, which the tests replace.
  */
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -137,6 +137,8 @@ export const system = {
     mkdirSync(path.dirname(to), { recursive: true });
     cpSync(from, to, { recursive: true, verbatimSymlinks: true });
   },
+  /** @param {string} file */
+  readFile: (file) => readFileSync(file, 'utf8'),
   /**
    * @param {string} file
    * @param {string} text

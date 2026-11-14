@@ -258,3 +258,130 @@ describe('the clipboard on macOS', () => {
     assert.equal(await clipboard.read(), 'copied');
   });
 });
+
+/**
+ * The host contract for the whole-app updater on `NgNativeUpdates` (Sparkle, in a `dmg` build):
+ * the `isAppUpdaterAvailable` property, `isAppUpdateAvailable()` answering at once,
+ * `checkForAppUpdateAsync()` showing Sparkle's check and resolving whether there was an updater to
+ * ask, and an `appUpdateAvailable` event on `DeviceEventEmitter` with `{ available }` whenever that
+ * changes. In development and in `app` and `mas` builds the property is false and the rest is
+ * inert.
+ */
+describe('the app updater on macOS', () => {
+  function host(updater: boolean, startsAvailable = false) {
+    const listeners = new Set<(event: unknown) => void>();
+    const calls: string[] = [];
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) =>
+            name === 'NgNativeUpdates'
+              ? {
+                  isEnabled: false,
+                  isAppUpdaterAvailable: updater,
+                  isAppUpdateAvailable: () => updater && startsAvailable,
+                  checkForAppUpdateAsync: async () => (calls.push('check'), updater),
+                  checkForUpdateAsync: async () => ({ isAvailable: false }),
+                  fetchUpdateAsync: async () => ({ isNew: false }),
+                  reloadAsync: async () => {},
+                }
+              : null,
+        },
+        DeviceEventEmitter: {
+          addListener: (event: string, listener: (event: unknown) => void) => {
+            calls.push(`listen ${event}`);
+            listeners.add(listener);
+            return { remove: () => void listeners.delete(listener) };
+          },
+        },
+      };
+    };
+    return { calls, send: (body: unknown) => listeners.forEach((listener) => listener(body)) };
+  }
+
+  it('follows Sparkle: what it found at launch, what it finds later, and a check on demand', async () => {
+    const sparkle = host(true, true);
+    const { Updates } = await import('@ng-native/expo/updates');
+    const { injectService } = await import('@ng-native/testing');
+    const updates = injectService(Updates);
+    assert.equal(updates.appUpdateAvailable(), true);
+    sparkle.send({ available: false });
+    assert.equal(updates.appUpdateAvailable(), false);
+    sparkle.send({ available: true });
+    assert.equal(updates.appUpdateAvailable(), true);
+    assert.equal(await updates.checkForAppUpdate(), true);
+    assert.deepEqual(sparkle.calls, ['listen appUpdateAvailable', 'check']);
+  });
+
+  it('is inert in a build with no updater, and never asks the host to check', async () => {
+    const none = host(false);
+    const { Updates } = await import('@ng-native/expo/updates');
+    const { injectService } = await import('@ng-native/testing');
+    const updates = injectService(Updates);
+    assert.equal(updates.appUpdateAvailable(), false);
+    assert.equal(await updates.checkForAppUpdate(), false);
+    assert.deepEqual(none.calls, []);
+  });
+});
+
+/**
+ * The host contract for `NgNativeDocumentPicker`: `getDocumentAsync` as Expo's, plus
+ * `saveDocumentAsync({ suggestedName, contents, types })`, which writes the file where the user
+ * chose and answers its `file://` url or null when dismissed, with `contents` as text or as
+ * `{ base64 }` for bytes; and `pickDirectoryAsync()`, which answers `{ uri }` or null when
+ * dismissed.
+ */
+describe('the file dialogs on macOS', () => {
+  function host() {
+    const saved: unknown[] = [];
+    let folder: { uri: string } | null = { uri: 'file:///Users/me/Exports' };
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) =>
+            name === 'NgNativeDocumentPicker'
+              ? {
+                  getDocumentAsync: async () => ({ canceled: true, assets: null }),
+                  saveDocumentAsync: async (options: unknown) => {
+                    saved.push(options);
+                    return 'file:///Users/me/export.csv';
+                  },
+                  pickDirectoryAsync: async () => folder,
+                }
+              : null,
+        },
+      };
+    };
+    return { saved, dismiss: () => void (folder = null) };
+  }
+
+  it('saves through the save panel, with bytes as base64', async () => {
+    const panel = host();
+    const { DocumentPicker } = await import('@ng-native/expo/document-picker');
+    const { injectService } = await import('@ng-native/testing');
+    const picker = injectService(DocumentPicker);
+    assert.equal(
+      await picker.save({ suggestedName: 'a.csv', contents: 'a,b', types: ['text/csv'] }),
+      'file:///Users/me/export.csv',
+    );
+    await picker.save({ suggestedName: 'a.bin', contents: new Uint8Array([0, 255, 104, 105]) });
+    assert.deepEqual(panel.saved, [
+      { suggestedName: 'a.csv', contents: 'a,b', types: ['text/csv'] },
+      { suggestedName: 'a.bin', contents: { base64: 'AP9oaQ==' }, types: [] },
+    ]);
+  });
+
+  it('picks a folder as its url, and answers null when dismissed', async () => {
+    const panel = host();
+    const { DocumentPicker } = await import('@ng-native/expo/document-picker');
+    const { injectService } = await import('@ng-native/testing');
+    const picker = injectService(DocumentPicker);
+    assert.equal((await picker.pickDirectory())?.uri, 'file:///Users/me/Exports');
+    panel.dismiss();
+    assert.equal(await picker.pickDirectory(), null);
+  });
+});

@@ -78,9 +78,24 @@ export class DocumentPicker {
           () => require('expo-file-system') as typeof import('expo-file-system'),
         );
         const folders = files?.Directory?.pickDirectoryAsync;
+        const desktop = expo as Partial<DesktopDialogs>;
         return {
           getDocumentAsync: (options) => expo!.getDocumentAsync(options),
           ...(folders && { pickDirectoryAsync: () => folders() }),
+          // The desktop host's own dialogs, which an `expo-*` package has none of on a desktop OS.
+          ...(desktop.pickDirectoryAsync && {
+            pickDirectoryAsync: () => desktopFolder(desktop.pickDirectoryAsync!()),
+          }),
+          ...(desktop.saveDocumentAsync && {
+            saveDocumentAsync: (options: NativeSaveOptions) =>
+              desktop.saveDocumentAsync!({
+                ...options,
+                contents:
+                  typeof options.contents === 'string'
+                    ? options.contents
+                    : { base64: base64Of(options.contents) },
+              }),
+          }),
         };
       },
     },
@@ -140,6 +155,52 @@ export class DocumentPicker {
     else file.write(contents);
     return file.uri;
   }
+}
+
+/**
+ * The desktop host's `NgNativeDocumentPicker`, beside Expo's `getDocumentAsync`: a folder as
+ * `{ uri }` or null when dismissed, and a save panel taking bytes as `{ base64 }`.
+ */
+interface DesktopDialogs {
+  pickDirectoryAsync(): Promise<{ uri: string } | null>;
+  saveDocumentAsync(
+    options: Omit<NativeSaveOptions, 'contents'> & { contents: string | { base64: string } },
+  ): Promise<string | null>;
+}
+
+/**
+ * The host's folder as a `PickedDirectory`, and a dismissed panel as the cancelled error the
+ * other OSes reject with. The desktop host has no file system module to make a file in it with
+ * yet, so `createFile` says so; `save()` writes through the save panel instead.
+ */
+async function desktopFolder(picked: Promise<{ uri: string } | null>): Promise<PickedDirectory> {
+  const folder = await picked;
+  if (!folder)
+    throw Object.assign(new Error('The folder picker was dismissed.'), { code: CANCELLED[0] });
+  return {
+    uri: folder.uri,
+    createFile: () => {
+      throw new Error(
+        '[angular-native] the desktop host cannot create a file in a picked folder yet. Use ' +
+          'DocumentPicker.save(), which writes the file through the save panel.',
+      );
+    },
+  };
+}
+
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** Bytes as base64, written here: Hermes has had no `btoa` in every version, and it takes text. */
+function base64Of(bytes: Uint8Array): string {
+  let out = '';
+  for (let at = 0; at < bytes.length; at += 3) {
+    const [a = 0, b = 0, c = 0] = [bytes[at], bytes[at + 1], bytes[at + 2]];
+    const chunk = (a << 16) | (b << 8) | c;
+    out += BASE64[(chunk >> 18) & 63]! + BASE64[(chunk >> 12) & 63]!;
+    out += at + 1 < bytes.length ? BASE64[(chunk >> 6) & 63]! : '=';
+    out += at + 2 < bytes.length ? BASE64[chunk & 63]! : '=';
+  }
+  return out;
 }
 
 /** Android codes a dismissed picker ERR_PICKER_CANCELLED, iOS ERR_FILE_PICKING_CANCELLED. */

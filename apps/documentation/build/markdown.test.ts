@@ -32,3 +32,14 @@ describe("TypeScript and HTML, highlighted with Angular's grammars", () => {
     expect(await render(`\`\`\`html\n${template}\n\`\`\`\n`)).toContain('>@if</span>');
   });
 });
+
+describe('the OS support table', () => {
+  test('draws a row for each entry of OS_SUPPORT where a page has the marker', async () => {
+    const html = await render('# Support\n\n<!-- os-support -->\n\nAfter.\n');
+    expect(html).toContain('<th>iPadOS</th>');
+    expect(html).toContain('<code>UndoStack</code>');
+    expect(html).toContain('list pane at expanded widths');
+    expect(html).not.toContain('os-support');
+    expect(html).toContain('After.');
+  });
+});

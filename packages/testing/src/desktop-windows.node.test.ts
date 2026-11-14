@@ -1,17 +1,22 @@
 /**
  * A macOS app's windows, menus and lifecycle in a test: the windows' fake every macOS render gets,
  * `screen.windows()`, the menu fakes queried by role, a right-click's context menu, a file drop,
- * and the lifecycle verbs (`closeWindow`, `quit`, `reopen`, `openUrl`).
- *
- * The host contract for a file drop, which no other test records: a view with `(fileDragEnter)`,
- * `(fileDragLeave)` or `(fileDrop)` hears `topFileDragEnter` and `topFileDragLeave` as files are
- * dragged over and off it, and `topFileDrop` as they are dropped, each with `files`, an array of
- * `{ uri, name }`: the file's `file://` url and its name.
+ * and the lifecycle verbs (`closeWindow`, `quit`, `reopen`, `openUrl`). The host contract for a
+ * drop is in `drag-and-drop.test.ts` in `@ng-native/integration-tests`.
  */
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { Component, inject, signal } from '@angular/core';
-import { ContextMenu, MenuBar, MenuGroup, MenuItem, Text, View } from '@ng-native/components';
+import {
+  ContextMenu,
+  FileDrop,
+  MenuBar,
+  MenuGroup,
+  MenuItem,
+  Text,
+  View,
+  type DroppedFile,
+} from '@ng-native/components';
 import { AppWindows, CURRENT_WINDOW, DeepLinks, provideMainWindow } from '@ng-native/device';
 import { cleanup, fakeMenus, render, screen, settle, userEvent } from '@ng-native/testing';
 import { Menus } from '@ng-native/device';
@@ -37,7 +42,7 @@ class Note {
 
 @Component({
   selector: 'app-notes',
-  imports: [Text, View, ContextMenu, MenuItem, MenuBar, MenuGroup],
+  imports: [Text, View, ContextMenu, FileDrop, MenuItem, MenuBar, MenuGroup],
   template: `
     <menu-bar>
       <menu-group label="File" menuRole="file">
@@ -49,7 +54,7 @@ class Note {
       testID="list"
       [contextMenu]="rowMenu"
       (fileDragEnter)="log('enter')"
-      (fileDrop)="dropped($any($event).nativeEvent.files)"
+      (fileDrop)="dropped($event.files)"
     >
       <text>Notes</text>
     </view>
@@ -72,7 +77,7 @@ class Notes {
     this.heard.update((lines) => [...lines, line]);
   }
 
-  dropped(files: { uri: string; name: string }[]): void {
+  dropped(files: readonly DroppedFile[]): void {
     this.log(`drop ${files.map((file) => `${file.name} ${file.uri}`).join(', ')}`);
   }
 }

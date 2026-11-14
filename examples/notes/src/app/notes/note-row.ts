@@ -2,7 +2,7 @@ import { Component, computed, input, output } from '@angular/core';
 import { provideIcons } from '@ng-icons/core';
 import { lucidePin } from '@ng-icons/lucide';
 import { NgIcon } from '@ng-native/icons';
-import { Pressable, Text, View } from '@ng-native/components';
+import { ContextMenu, DragItem, MenuItem, Pressable, Text, View } from '@ng-native/components';
 import { excerpt, type Note } from '../data/note.ts';
 
 const DAY = 1000 * 60 * 60 * 24;
@@ -26,13 +26,15 @@ function startOfDay(ms: number): number {
 /** One row in the notes list: title, a preview of the body, when it changed, and a pin. */
 @Component({
   selector: 'app-note-row',
-  imports: [NgIcon, Pressable, Text, View],
+  imports: [ContextMenu, DragItem, MenuItem, NgIcon, Pressable, Text, View],
   providers: [provideIcons({ lucidePin })],
   template: `
     <pressable
-      class="flex-row items-start gap-3 border-b-hairline border-zinc-200 px-5 py-4 active:bg-zinc-100 dark:border-zinc-800 dark:active:bg-zinc-900"
+      class="flex-row items-start gap-3 border-b-hairline border-zinc-200 px-5 py-4 active:bg-zinc-100 dark:border-zinc-800 dark:active:bg-zinc-900 macos:px-4 macos:py-2"
       accessibilityRole="button"
       [accessibilityLabel]="note().title || 'Untitled note'"
+      [contextMenu]="rowMenu"
+      [dragItem]="dragged()"
       (press)="open.emit()"
       (longPress)="pin.emit()"
     >
@@ -42,17 +44,25 @@ function startOfDay(ms: number): number {
             <ng-icon name="lucidePin" size="13" color="#f59e0b" />
           }
           <text
-            class="flex-1 text-base font-semibold text-zinc-900 dark:text-white"
+            class="flex-1 text-base font-semibold text-zinc-900 dark:text-white macos:text-[13px]"
             [numberOfLines]="1"
             >{{ note().title || 'Untitled note' }}</text
           >
-          <text class="text-xs text-zinc-400">{{ updated() }}</text>
+          <text class="text-xs text-zinc-400 macos:text-[11px]">{{ updated() }}</text>
         </view>
         @if (preview()) {
-          <text class="mt-1 text-sm text-zinc-500" [numberOfLines]="2">{{ preview() }}</text>
+          <text
+            class="mt-1 text-sm text-zinc-500 macos:mt-0.5 macos:text-[11px]"
+            [numberOfLines]="2"
+            >{{ preview() }}</text
+          >
         }
       </view>
     </pressable>
+    <ng-template #rowMenu>
+      <menu-item label="Open" (select)="open.emit()" />
+      <menu-item [label]="note().pinned ? 'Unpin' : 'Pin'" (select)="pin.emit()" />
+    </ng-template>
   `,
 })
 export class NoteRow {
@@ -63,4 +73,8 @@ export class NoteRow {
 
   protected readonly preview = computed(() => excerpt(this.note().body, 120));
   protected readonly updated = computed(() => formatUpdated(this.note().updatedAt));
+  /** Dragged out of the list on macOS and iPadOS, the note goes as its text. */
+  protected readonly dragged = computed(() => ({
+    text: [this.note().title, this.note().body].filter(Boolean).join('\n\n'),
+  }));
 }

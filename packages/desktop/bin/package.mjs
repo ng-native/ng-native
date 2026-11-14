@@ -28,7 +28,7 @@ export const DEFAULT_OUTPUT = 'dist/macos';
 
 const FORMATS = ['app', 'dmg', 'mas'];
 
-export const PACKAGE_USAGE = `Usage: ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
+export const PACKAGE_USAGE = `Usage: ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url> [--sparkle-key <key>]]
 
 Builds the app for release, universal for arm64 and x86_64, into dist/macos. Needs full Xcode.
 
@@ -37,6 +37,8 @@ Builds the app for release, universal for arm64 and x86_64, into dist/macos. Nee
   --format mas      a sandboxed Mac App Store .pkg
   --output <dir>    where the packages go (default: dist/macos)
   --feed-url <url>  dmg only: the Sparkle appcast the app updates from, embedding Sparkle
+  --sparkle-key <key>  with --feed-url: Sparkle's public EdDSA key, which updates are checked
+                    against (or NGN_SPARKLE_PUBLIC_KEY)
 
 Signing and notarising read the environment:
   NGN_SIGN_IDENTITY             the codesign identity (dmg: Developer ID Application, mas: Apple Distribution)
@@ -46,7 +48,7 @@ Signing and notarising read the environment:
   mas: NGN_INSTALLER_IDENTITY, NGN_PROVISIONING_PROFILE and APPLE_TEAM_ID`;
 
 /**
- * @typedef {{ command: 'package', format: 'app' | 'dmg' | 'mas', output: string, feedUrl: string | undefined }} PackageCommand
+ * @typedef {{ command: 'package', format: 'app' | 'dmg' | 'mas', output: string, feedUrl: string | undefined, sparkleKey: string | undefined }} PackageCommand
  * @typedef {import('./host.mjs').system} System
  * @typedef {import('./app-config.mjs').DesktopAppConfig} DesktopAppConfig
  */
@@ -62,6 +64,7 @@ export function parsePackage(args) {
       format: { type: 'string', default: 'app' },
       output: { type: 'string', default: DEFAULT_OUTPUT },
       'feed-url': { type: 'string' },
+      'sparkle-key': { type: 'string' },
     },
   });
   const format = values.format;
@@ -81,11 +84,18 @@ export function parsePackage(args) {
       );
     }
   }
+  const sparkleKey = values['sparkle-key'];
+  if (sparkleKey !== undefined && feedUrl === undefined) {
+    throw new UsageError(
+      '--sparkle-key goes with --feed-url, the appcast whose updates it checks.',
+    );
+  }
   return {
     command: 'package',
     format: /** @type {'app' | 'dmg' | 'mas'} */ (format),
     output: values.output,
     feedUrl,
+    sparkleKey,
   };
 }
 
@@ -202,12 +212,24 @@ export function sandboxProblems(config) {
 /**
  * The app's `Info.plist`: the Expo keys' settings, the document types and URL schemes, what the
  * host reads before JavaScript runs (the bundle, the capabilities, the updates server and how it
- * was distributed), and Sparkle's feed in a `dmg` that has one.
+ * was distributed, and the certificate updates are signed with), and Sparkle's feed and public key
+ * in a `dmg` that has one. Sparkle checks for updates on its own schedule by default
+ * (`SUEnableAutomaticChecks`), so it does not ask the user on the second launch whether to.
  *
  * @param {DesktopAppConfig} config
- * @param {{ format: 'app' | 'dmg' | 'mas', executable: string, bundleIdentifier: string, iconName: string | null, feedUrl?: string }} options
+ * @param {{ format: 'app' | 'dmg' | 'mas', executable: string, bundleIdentifier: string, iconName: string | null, feedUrl?: string, sparkleKey?: string, updatesCertificate?: string }} options
  */
-export function infoPlist(config, { format, executable, bundleIdentifier, iconName, feedUrl }) {
+export function infoPlist(
+  config,
+  { format, executable, bundleIdentifier, iconName, feedUrl, sparkleKey, updatesCertificate },
+) {
+  const signing = updatesCertificate
+    ? {
+        NGNUpdatesCodeSigningCertificate: updatesCertificate,
+        NGNUpdatesCodeSigningKeyId: config.updatesCodeSigning?.keyId ?? 'main',
+        NGNUpdatesCodeSigningAlg: config.updatesCodeSigning?.alg ?? 'rsa-v1_5-sha256',
+      }
+    : {};
   const { options, permissions } = config;
   return plist({
     CFBundleDevelopmentRegion: 'en',
@@ -242,7 +264,10 @@ export function infoPlist(config, { format, executable, bundleIdentifier, iconNa
     NGNCapabilities: hostCapabilities(options),
     NGNUpdatesURL: config.updatesUrl,
     NGNRuntimeVersion: config.runtimeVersion,
+    ...signing,
     SUFeedURL: feedUrl,
+    SUPublicEDKey: feedUrl ? sparkleKey : undefined,
+    SUEnableAutomaticChecks: feedUrl ? true : undefined,
   });
 }
 
@@ -382,6 +407,37 @@ function notarise(sys, file, notary) {
 }
 
 /**
+ * Sparkle's public EdDSA key for a package with a feed: `--sparkle-key`, else
+ * `NGN_SPARKLE_PUBLIC_KEY`. Without one Sparkle would refuse every update, so it stops first.
+ *
+ * @param {PackageCommand} options
+ * @param {Record<string, string | undefined>} env
+ */
+function sparkleKeyFor(options, env) {
+  if (!options.feedUrl) return undefined;
+  const key = options.sparkleKey ?? env['NGN_SPARKLE_PUBLIC_KEY'];
+  if (!key) {
+    throw new UsageError(
+      "--feed-url needs Sparkle's public EdDSA key, which Sparkle checks each update against: " +
+        "pass --sparkle-key or set NGN_SPARKLE_PUBLIC_KEY to the key Sparkle's generate_keys prints.",
+    );
+  }
+  return key;
+}
+
+/**
+ * The PEM certificate update manifests are signed with, read from `updates.codeSigningCertificate`.
+ *
+ * @param {System} sys
+ * @param {string} cwd
+ * @param {DesktopAppConfig} config
+ */
+function certificateOf(sys, cwd, config) {
+  const signing = config.updatesCodeSigning;
+  return signing ? sys.readFile(path.resolve(cwd, signing.certificate)) : undefined;
+}
+
+/**
  * Builds the app and makes the package `options.format` asks for. Returns the exit status.
  *
  * @param {PackageCommand} options
@@ -393,6 +449,7 @@ export async function packageApp(options, sys) {
   }
   checkXcode(sys);
   const keys = credentials(options.format, sys.env);
+  const sparkleKey = sparkleKeyFor(options, sys.env);
   const { cwd, expo, config, buildDir } = prepareHost(sys, { universal: true });
   if (options.format === 'mas') for (const line of sandboxProblems(config)) sys.warn(line);
   const bundleIdentifier = config.bundleIdentifier ?? fallbackIdentifier(options.format, expo);
@@ -432,6 +489,8 @@ export async function packageApp(options, sys) {
       bundleIdentifier,
       iconName,
       feedUrl: options.feedUrl,
+      sparkleKey,
+      updatesCertificate: certificateOf(sys, cwd, config),
     }),
   );
   sys.writeFile(path.join(contents, 'PkgInfo'), 'APPL????');

@@ -213,7 +213,8 @@ for the desktop. `deny` in the plugin options keeps a package out.
 
 ## Package the app
 
-`ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]` builds a
+`ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
+[--sparkle-key <key>]` builds a
 universal release host, bundles with `expo export:embed --platform macos` (the assets laid out as
 React Native's resolver reads them beside an embedded bundle), and assembles
 `<output>/<name>.app`: the host binary as `Contents/MacOS/<name>`, the bundle and assets in
@@ -224,18 +225,22 @@ image), and `mas` is signed in the App Sandbox and wrapped by `productbuild`. `c
 
 The host reads these `Info.plist` keys when it is opened with no arguments:
 
-| Key                 | What it holds                                                  |
-| ------------------- | -------------------------------------------------------------- |
-| `NGNBundleFile`     | The bundle in `Resources`: `main.jsbundle`                     |
-| `NGNModuleName`     | The registered app to start: `main`                            |
-| `NGNDistribution`   | `app`, `dmg` or `mas`, which says what is absent               |
-| `NGNCapabilities`   | The plugin options' `capabilities`: `spawn`, `env` and `paths` |
-| `NGNUpdatesURL`     | `updates.url`, the bundle server                               |
-| `NGNRuntimeVersion` | `runtimeVersion`, where it is a string                         |
-| `SUFeedURL`         | Sparkle's appcast, in a `dmg` packaged with `--feed-url`       |
+| Key                                                      | What it holds                                                                              |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `NGNBundleFile`                                          | The bundle in `Resources`: `main.jsbundle`                                                 |
+| `NGNModuleName`                                          | The registered app to start: `main`                                                        |
+| `NGNDistribution`                                        | `app`, `dmg` or `mas`, which says what is absent                                           |
+| `NGNCapabilities`                                        | The plugin options' `capabilities`: `spawn`, `env` and `paths`                             |
+| `NGNUpdatesURL`                                          | `updates.url`, the bundle server                                                           |
+| `NGNRuntimeVersion`                                      | `runtimeVersion`, where it is a string                                                     |
+| `SUFeedURL`                                              | Sparkle's appcast, in a `dmg` packaged with `--feed-url`                                   |
+| `SUPublicEDKey`                                          | Sparkle's public EdDSA key, from `--sparkle-key` or `NGN_SPARKLE_PUBLIC_KEY`               |
+| `SUEnableAutomaticChecks`                                | `true` beside a feed, so Sparkle checks without asking first                               |
+| `NGNUpdatesCodeSigningCertificate`                       | The PEM at `updates.codeSigningCertificate`, which update manifests are checked against    |
+| `NGNUpdatesCodeSigningKeyId`, `NGNUpdatesCodeSigningAlg` | `updates.codeSigningMetadata`'s `keyid` and `alg`: `main` and `rsa-v1_5-sha256` unless set |
 
 `--feed-url` copies `Sparkle.framework` from the host build's `appkit` folder, and stops when the
-build has none.
+build has none, or when there is no public key to check updates with.
 
 ## Layout
 

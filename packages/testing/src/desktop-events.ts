@@ -142,8 +142,9 @@ export interface DesktopUserEvent {
    */
   rightClick(node: FakeFabricNode): Promise<FakeContextMenu | null>;
   /**
-   * Drag files from Finder onto `node` and drop them: `(fileDragEnter)`, then `(fileDrop)` with
-   * each file's `file://` url and name.
+   * Drag files from Finder onto `node`, a view with the `FileDrop` directive, and drop them:
+   * `(fileDragEnter)`, then `(fileDrop)`, each with `files` holding each file's `file://` url and
+   * name.
    */
   dropFiles(node: FakeFabricNode, paths: readonly string[]): Promise<void>;
   /**
@@ -189,8 +190,8 @@ export const desktopUserEvent: DesktopUserEvent = {
       uri: `file://${file.split('/').map(encodeURIComponent).join('/')}`,
       name: file.split('/').at(-1) ?? file,
     }));
-    emit(node, 'topFileDragEnter', { files });
-    emit(node, 'topFileDrop', { files });
+    emit(node, 'topDropEnter', { files, text: null, urls: [] });
+    emit(node, 'topDropPerform', { files, text: null, urls: [] });
     await settle();
   },
   async closeWindow(window) {

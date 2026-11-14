@@ -113,6 +113,50 @@ import { Component } from '@angular/core';
       }
 
       /*
+       * A Mac's sizes. Nothing resizes an app on macOS, so the canary reaches them itself: 13 pt
+       * body text, 11 pt captions, and tighter rows and padding.
+       */
+      .platform-macos .heading {
+        font-size: 20px;
+      }
+      .platform-macos .body,
+      .platform-macos .button-label {
+        font-size: 13px;
+      }
+      .platform-macos .hint,
+      .platform-macos .hint-on-accent {
+        font-size: 11px;
+      }
+      .platform-macos .card,
+      .platform-macos .button {
+        padding: 8px 12px;
+        border-radius: 8px;
+      }
+      .platform-macos .field {
+        padding: 4px 8px;
+        border-radius: 6px;
+      }
+
+      /* The desktop screen. */
+      .desktop-row {
+        flex-direction: row;
+        gap: 8px;
+      }
+      .desktop-drop {
+        border-width: 2px;
+        border-style: dashed;
+        border-color: var(--line);
+      }
+      .desktop-drop-over {
+        border-color: var(--accent);
+      }
+      .desktop-pane {
+        flex: 1;
+        padding: 20px;
+        gap: 8px;
+      }
+
+      /*
        * The three CSS features nothing had ever rendered. Each fails silently when it is wrong -
        * a selector that matches nothing, a colour that resolves to nothing, a gradient that
        * paints nothing - so each is written here to be looked at rather than asserted about.

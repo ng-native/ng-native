@@ -1,0 +1,11 @@
+{
+  "$comment": "The desktop performance budget's timed ceilings, for pnpm bench:macos, measured on a base M-series Mac on macOS 14 with a release build of the canary. A waiver is { metric, reason, pr }. commitMs is the slowest commit; the spec's ceiling is 10% over the iOS simulator release on the same Mac, which this file holds as a number until the script measures both.",
+  "ceilings": {
+    "launchMs": 500,
+    "idleCpu": 0.1,
+    "idleWakeups": 0,
+    "memoryMb": 80,
+    "commitMs": 16
+  },
+  "waivers": []
+}

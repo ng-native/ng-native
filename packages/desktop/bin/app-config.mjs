@@ -25,7 +25,12 @@ export const PLUGIN_NAME = '@ng-native/desktop';
  *   runtimeVersion?: unknown,
  *   platforms?: string[],
  *   experiments?: { outOfTreePlatforms?: boolean },
- *   updates?: { url?: string, enabled?: boolean },
+ *   updates?: {
+ *     url?: string,
+ *     enabled?: boolean,
+ *     codeSigningCertificate?: string,
+ *     codeSigningMetadata?: { keyid?: string, alg?: string },
+ *   },
  *   ios?: {
  *     bundleIdentifier?: string,
  *     buildNumber?: string,
@@ -44,6 +49,7 @@ export const PLUGIN_NAME = '@ng-native/desktop';
  *   schemes: string[],
  *   icon: string | null,
  *   updatesUrl: string | null,
+ *   updatesCodeSigning: { certificate: string, keyId: string, alg: string } | null,
  *   runtimeVersion: string | null,
  *   permissions: MacosPermissions,
  *   options: DesktopOptions,
@@ -97,6 +103,9 @@ export function hostCapabilities(options) {
  * - `icon` is `ios.icon` (an Icon Composer `.icon` folder or an image, its light variant when it
  *   has variants), else `icon`.
  * - `updatesUrl` is `updates.url`, the bundle server, unless updates are turned off.
+ * - `updatesCodeSigning` is `updates.codeSigningCertificate`, the PEM file's path from the project,
+ *   with `codeSigningMetadata`'s key id and algorithm, defaulting as expo-updates does to `main`
+ *   and `rsa-v1_5-sha256`. Null without a certificate, or with updates turned off.
  *
  * @param {ExpoConfig} config
  * @returns {DesktopAppConfig}
@@ -113,6 +122,7 @@ export function desktopAppConfig(config) {
     schemes: schemes(config),
     icon: iosIcon(ios.icon) ?? config.icon ?? null,
     updatesUrl: updatesUrl(config.updates),
+    updatesCodeSigning: updatesCodeSigning(config.updates),
     runtimeVersion: typeof config.runtimeVersion === 'string' ? config.runtimeVersion : null,
     permissions: macosPermissions(config),
     options,
@@ -139,4 +149,18 @@ function iosIcon(icon) {
 /** @param {ExpoConfig['updates']} updates */
 function updatesUrl(updates) {
   return updates?.enabled === false ? null : (updates?.url ?? null);
+}
+
+/** @param {ExpoConfig['updates']} updates */
+function updatesCodeSigning(updates) {
+  const certificate = updates?.codeSigningCertificate;
+  if (updates?.enabled === false || typeof certificate !== 'string' || certificate === '') {
+    return null;
+  }
+  const metadata = updates?.codeSigningMetadata ?? {};
+  return {
+    certificate,
+    keyId: metadata.keyid ?? 'main',
+    alg: metadata.alg ?? 'rsa-v1_5-sha256',
+  };
 }

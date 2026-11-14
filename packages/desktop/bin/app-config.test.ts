@@ -60,7 +60,10 @@ describe('desktopAppConfig', () => {
       scheme: ['notes', 'notes-dev'],
       icon: './assets/icon.png',
       runtimeVersion: '2.1',
-      updates: { url: 'https://updates.example.com/manifest' },
+      updates: {
+        url: 'https://updates.example.com/manifest',
+        codeSigningCertificate: './certs/certificate.pem',
+      },
       ios: {
         bundleIdentifier: 'com.example.notes',
         buildNumber: '42',
@@ -81,6 +84,11 @@ describe('desktopAppConfig', () => {
       schemes: ['notes', 'notes-dev'],
       icon: './assets/notes.icon',
       updatesUrl: 'https://updates.example.com/manifest',
+      updatesCodeSigning: {
+        certificate: './certs/certificate.pem',
+        keyId: 'main',
+        alg: 'rsa-v1_5-sha256',
+      },
       runtimeVersion: '2.1',
       permissions: {
         usageStrings: {
@@ -105,6 +113,7 @@ describe('desktopAppConfig', () => {
     assert.deepEqual(config.schemes, []);
     assert.equal(config.icon, './assets/icon.png');
     assert.equal(config.updatesUrl, null);
+    assert.equal(config.updatesCodeSigning, null);
     assert.equal(config.runtimeVersion, null);
     assert.deepEqual(config.options, {});
   });
@@ -113,7 +122,11 @@ describe('desktopAppConfig', () => {
     const config = desktopAppConfig({
       icon: './assets/icon.png',
       ios: { icon: { light: './assets/light.png', dark: './assets/dark.png' } },
-      updates: { url: 'https://updates.example.com', enabled: false },
+      updates: {
+        url: 'https://updates.example.com',
+        enabled: false,
+        codeSigningCertificate: './certs/certificate.pem',
+      },
       // A policy is resolved by Expo's own tools, which the desktop build does not run.
       runtimeVersion: { policy: 'appVersion' },
     });
