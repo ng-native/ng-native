@@ -27,6 +27,10 @@ export interface ReactNative {
       handler: (value: boolean) => void,
     ): { remove(): void };
   };
+  /** Optional: a host without it (the web host's stand-in) has no surfaces it starts itself. */
+  AppRegistry?: {
+    registerRunnable(name: string, run: (parameters: { rootTag: number }) => void): void;
+  };
   AppState: {
     currentState: string | null;
     addEventListener(event: 'change', handler: (state: string) => void): { remove(): void };

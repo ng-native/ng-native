@@ -139,7 +139,9 @@ export type NativeWindowEvent =
   | { readonly type: 'reopen' };
 
 /**
- * The host's windows: the desktop host on macOS, the scene plugin on iPadOS. The module is
+ * The host's windows: the desktop host on macOS, and on iPadOS the components pod, whose windows
+ * are scenes. iPadOS asks no app before it closes a scene, so it sends `closed` and never
+ * `closeRequest`, and it has no quitting, so never `quitRequest`. The module is
  * `NgNativeWindows`, whose constant `multipleWindows` says whether the OS has windows at all,
  * and whose events arrive as `ngNativeWindows` on `DeviceEventEmitter`.
  */
@@ -170,12 +172,22 @@ interface WindowsTurboModule {
   answerQuit?(proceed: boolean): void;
 }
 
-/** The host's module, or null where the OS has one window: phones, Android, an older host. */
-function windowsSource(): NativeWindows | null {
+/**
+ * The runnable each window's surface runs on an iPad, where the host makes the surface through
+ * React Native's own host: it renders nothing, as the window's root is mounted from the app.
+ */
+const WINDOW_RUNNABLE = 'NgNativeWindow';
+
+/**
+ * The host's module, or null where the OS has one window: phones, Android, Expo Go, an older
+ * host. Registers the windows' runnable where there is one.
+ */
+export function windowsSource(): NativeWindows | null {
   const native = reactNative();
   const module = native?.TurboModuleRegistry?.get?.('NgNativeWindows') as
     WindowsTurboModule | null | undefined;
   if (!module?.getConstants?.().multipleWindows) return null;
+  native?.AppRegistry?.registerRunnable(WINDOW_RUNNABLE, () => {});
   return {
     open: async (request) => (await module.open?.(request)) ?? null,
     close: (surface) => module.close?.(surface),
@@ -277,7 +289,10 @@ export class AppWindows {
     ),
   );
 
-  /** Whether the OS has windows the app can open: macOS, and iPadOS with the scene plugin. */
+  /**
+   * Whether the OS has windows the app can open: macOS, and iPadOS with the components pod and the
+   * config plugin's `ios.multipleWindows`.
+   */
   readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
 
   private readonly open$ = signal<readonly Open[]>([]);

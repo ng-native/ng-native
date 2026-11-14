@@ -18,7 +18,7 @@
     },
     "userInterfaceStyle": "automatic",
     "plugins": [
-      "@ng-native/metro",
+      ["@ng-native/metro", { "ios": { "multipleWindows": true } }],
       "@ng-native/desktop",
       "expo-calendar",
       "expo-localization",

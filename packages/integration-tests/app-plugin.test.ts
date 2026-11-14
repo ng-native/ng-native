@@ -8,7 +8,10 @@ const require = createRequire(import.meta.url);
 const { adoptScenes, adoptInfoPlist, enableLayoutAnimations } =
   require('@ng-native/metro/app.plugin.cjs') as {
     adoptScenes(contents: string): string;
-    adoptInfoPlist(plist: Record<string, unknown>): Record<string, unknown>;
+    adoptInfoPlist(
+      plist: Record<string, unknown>,
+      options?: { ios?: { multipleWindows?: unknown } },
+    ): Record<string, unknown>;
     enableLayoutAnimations(contents: string): string;
   };
 
@@ -201,6 +204,58 @@ describe('the config plugin', () => {
       const plist = adoptInfoPlist({ UIApplicationSceneManifest: manifest });
       assert.deepEqual(plist['UIApplicationSceneManifest'], manifest);
       assert.equal(plist['UIViewControllerBasedStatusBarAppearance'], true);
+    });
+  });
+
+  // `AppWindows` on an iPad opens each window as a scene of its own, which iOS allows only where the
+  // manifest says the app supports several. Asked for, since iPadOS then also offers New Window.
+  describe('with ios.multipleWindows', () => {
+    const manifest = {
+      UIApplicationSupportsMultipleScenes: false,
+      UISceneConfigurations: {
+        UIWindowSceneSessionRoleApplication: [
+          {
+            UISceneConfigurationName: 'Default Configuration',
+            UISceneDelegateClassName: '$(PRODUCT_MODULE_NAME).SceneDelegate',
+          },
+        ],
+      },
+    };
+
+    it("supports several scenes, keeping Expo's configurations, and declares the window activity", () => {
+      const plist = adoptInfoPlist(
+        { UIApplicationSceneManifest: manifest, NSUserActivityTypes: ['com.example.open'] },
+        { ios: { multipleWindows: true } },
+      );
+      assert.deepEqual(plist['UIApplicationSceneManifest'], {
+        ...manifest,
+        UIApplicationSupportsMultipleScenes: true,
+      });
+      assert.deepEqual(plist['NSUserActivityTypes'], ['com.example.open', 'dev.ngnative.window']);
+      const again = adoptInfoPlist(plist, { ios: { multipleWindows: true } });
+      assert.deepEqual(again['NSUserActivityTypes'], plist['NSUserActivityTypes'], 'once');
+    });
+
+    it('supports several scenes where the plugin writes the manifest, on Expo SDK 57', () => {
+      const plist = adoptInfoPlist({}, { ios: { multipleWindows: true } });
+      const written = plist['UIApplicationSceneManifest'] as Record<string, unknown>;
+      assert.equal(written['UIApplicationSupportsMultipleScenes'], true);
+      assert.deepEqual(plist['NSUserActivityTypes'], ['dev.ngnative.window']);
+    });
+
+    it('leaves one scene unless asked', () => {
+      for (const options of [undefined, {}, { ios: {} }, { ios: { multipleWindows: false } }]) {
+        const plist = adoptInfoPlist({ UIApplicationSceneManifest: manifest }, options);
+        assert.deepEqual(plist['UIApplicationSceneManifest'], manifest);
+        assert.equal(plist['NSUserActivityTypes'], undefined);
+      }
+    });
+
+    it('refuses an option that is not true or false', () => {
+      assert.throws(
+        () => adoptInfoPlist({}, { ios: { multipleWindows: 'yes' } }),
+        /ios\.multipleWindows must be true or false/,
+      );
     });
   });
 

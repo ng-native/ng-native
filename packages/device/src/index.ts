@@ -203,6 +203,7 @@ export {
   type WindowMount,
   type WindowMounter,
   type WindowOptions,
+  windowsSource,
 } from './app-windows.ts';
 export {
   APP_LIFECYCLE_OPTIONS,

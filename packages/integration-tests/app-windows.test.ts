@@ -17,6 +17,12 @@
  *   asks no `canClose` guard, and answers `answerQuit(true)`; the host ends within two seconds
  *   with or without the answer.
  * - `quit()` starts quitting as Cmd-Q does, so it comes back as a `quitRequest`.
+ *
+ * On an iPad (the components pod, with the config plugin's `ios.multipleWindows`) each window is a
+ * UIWindowScene: the first takes the scene the app launched in, and each later one is a scene
+ * iPadOS is asked for. iPadOS closes a scene without asking, so it sends `closed` and never
+ * `closeRequest`; it has no quitting, so `quit` and `answerQuit` do nothing and no `quitRequest`
+ * comes. A scene the user makes sends `reopen`.
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
@@ -33,6 +39,7 @@ import {
   type WindowRestoreStore,
   WINDOW_RESTORE_STORE,
   provideRestorableWindows,
+  windowsSource,
 } from '@ng-native/device';
 import type { Conditions, Engine, StyleSheet } from '@ng-native/fabric';
 import { mount, type MountResult } from '@ng-native/platform';
@@ -785,5 +792,57 @@ describe('fonts in a window', () => {
     await settle();
 
     assert.equal(fabric.calls.completeRoot, commits);
+  });
+});
+
+/**
+ * The host's module on a device. On an iPad (`multipleWindows` with the components pod and
+ * `ios.multipleWindows`) each window is a UIWindowScene whose surface runs the runnable
+ * `NgNativeWindow`, which renders nothing: the window's root is mounted from the app, as on
+ * macOS. So the source registers it where the module says the OS has windows.
+ */
+describe("the windows' platform source", () => {
+  function onDevice<T>(turbo: Record<string, unknown>, run: (registered: string[]) => T): T {
+    const host = globalThis as Record<string, unknown>;
+    const registered: string[] = [];
+    host['require'] = (id: string) =>
+      id === 'react-native'
+        ? {
+            TurboModuleRegistry: { get: (name: string) => turbo[name] },
+            AppRegistry: {
+              registerRunnable: (name: string, run: () => void) => {
+                assert.equal(run(), undefined, 'renders nothing');
+                registered.push(name);
+              },
+            },
+          }
+        : undefined;
+    host['nativeFabricUIManager'] = {};
+    try {
+      return run(registered);
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+    }
+  }
+
+  it("registers the windows' runnable where the OS has windows", () => {
+    const module = { getConstants: () => ({ multipleWindows: true }) };
+    onDevice({ NgNativeWindows: module }, (registered) => {
+      assert.ok(windowsSource());
+      assert.deepEqual(registered, ['NgNativeWindow']);
+    });
+  });
+
+  it('is absent, and registers nothing, where it has one window: an iPhone, Expo Go', () => {
+    for (const turbo of [
+      { NgNativeWindows: { getConstants: () => ({ multipleWindows: false }) } },
+      {},
+    ]) {
+      onDevice(turbo, (registered) => {
+        assert.equal(windowsSource(), null);
+        assert.deepEqual(registered, []);
+      });
+    }
   });
 });
