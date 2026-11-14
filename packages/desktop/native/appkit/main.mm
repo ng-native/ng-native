@@ -390,6 +390,7 @@ struct Swipe {
   NGNView *top;
   NGNView *below;
   NSWindow *window;
+  SurfaceId surface = 0;
   // The momentum scrolls after a swipe's fingers lift are the swipe's, not the content's.
   bool swallowMomentum = false;
   // Bumped as a swipe starts or ends, so a late animation step or timeout of an old one stops.
@@ -412,7 +413,16 @@ void endSwipe() {
   gSwipe.top = nil;
   gSwipe.below = nil;
   gSwipe.window = nil;
+  gSwipe.surface = 0;
   gSwipe.generation++;
+}
+
+// A window closed: a swipe in it ends, whatever its phase, or it would hold every later swipe.
+void swipeWindowClosed(SurfaceId surface) {
+  if (gSwipe.window != nil && gSwipe.surface == surface) {
+    gSwipe.swipe.abandon();
+    endSwipe();
+  }
 }
 
 // Eases the moving screen from where it is to `to` over a fifth of a second, then calls `done`.
@@ -486,6 +496,9 @@ void swipeMounted() {
 // swipe over a stack with a screen below drags the screen in front; any other goes when it ends.
 // Answers the event to send on, or nil where the swipe took it.
 NSEvent *swipeScroll(NSEvent *event, NSWindow *window) {
+  if (event.phase == NSEventPhaseBegan && gSwipe.swipe.fingersDown()) {
+    endSwipe();
+  }
   if (gSwipe.swipe.phase() == ngn::BackSwipe::Phase::Tracking) {
     if (window != gSwipe.window) {
       return event;
@@ -524,6 +537,7 @@ NSEvent *swipeScroll(NSEvent *event, NSWindow *window) {
       gSwipe.top = top;
       gSwipe.below = below;
       gSwipe.window = window;
+      gSwipe.surface = *surface;
       gSwipe.swallowMomentum = true;
       drawSwipe(gSwipe.swipe.moved(dx));
       return nil;
@@ -1050,6 +1064,7 @@ int main(int argc, const char *argv[]) {
           gHost.runtime->updateSurface(surface, metricsFor(window));
         },
         .stopSurface = [](SurfaceId surface) {
+          swipeWindowClosed(surface);
           gHost.menus->forgetHistory(surface);
           gHost.runtime->stopSurface(surface);
           gHost.backend->removeSurface(surface);

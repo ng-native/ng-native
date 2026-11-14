@@ -76,6 +76,14 @@ void BackSwipe::abandon() {
   lastMove_ = 0;
 }
 
+bool BackSwipe::fingersDown() {
+  if (phase_ != Phase::Tracking) {
+    return false;
+  }
+  abandon();
+  return true;
+}
+
 SwipeBounds swipeBounds(bool canGoBack, bool canGoForward) {
   return {.min = canGoForward ? -1.0 : 0.0, .max = canGoBack ? 1.0 : 0.0};
 }
