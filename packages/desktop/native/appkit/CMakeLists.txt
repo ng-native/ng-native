@@ -21,6 +21,7 @@ add_executable(ngn-macos
     image-view.mm
     local-authentication.mm
     location.mm
+    geocoder.mm
     main.mm
     menu-bar.mm
     modal-host-view.mm

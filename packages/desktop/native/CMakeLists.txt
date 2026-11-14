@@ -155,9 +155,10 @@ if(NGN_TESTS)
         appkit/screen-capture.mm appkit/tests/screen-capture.test.mm
         appkit/photo-library.mm appkit/tests/photo-library.test.mm
         appkit/tracking.mm appkit/tests/tracking.test.mm
-        appkit/image-manipulator.mm appkit/tests/image-manipulator.test.mm)
+        appkit/image-manipulator.mm appkit/tests/image-manipulator.test.mm
+        appkit/geocoder.mm appkit/tests/geocoder.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

@@ -40,6 +40,7 @@
 #import "photo-library.h"
 #import "tracking.h"
 #import "image-manipulator.h"
+#import "geocoder.h"
 #include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "file-system.h"
@@ -711,7 +712,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases); });
       static auto location = ngn::appkit::makeLocationSource();
       static bool noPrompts = std::getenv("NGN_NO_PROMPTS") != nullptr && std::string(std::getenv("NGN_NO_PROMPTS")) == "1";
-      ngn::addModule(*modules, "NgNativeLocation", [] { return ngn::makeLocationModule(location, noPrompts); });
+      static auto geocoder = ngn::appkit::makeGeocoder();
+      ngn::addModule(*modules, "NgNativeLocation", [] { return ngn::makeLocationModule(location, noPrompts, geocoder); });
       static auto authenticator = ngn::appkit::makeAuthenticator();
       ngn::addModule(*modules, "NgNativeLocalAuthentication", [] { return ngn::makeLocalAuthenticationModule(authenticator); });
       static auto bundleFacts = ngn::appkit::mainBundleFacts();

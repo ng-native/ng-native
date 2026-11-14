@@ -142,3 +142,90 @@ TEST_CASE("NgNativeLocation stops the watches still running when it goes, as on 
   }
   CHECK(mac->watches.empty());
 }
+
+namespace {
+
+// A geocoder that answers what the test gives it, and keeps what it was asked.
+struct FakeGeocoder final : ngn::Geocoder {
+  Answer answer;
+  std::vector<std::string> asked;
+  void geocode(const std::string &address, std::function<void(Answer)> done) override {
+    asked.push_back(address);
+    done(answer);
+  }
+  void reverseGeocode(double latitude, double longitude, std::function<void(Answer)> done) override {
+    asked.push_back(std::to_string(latitude).substr(0, 7) + "," + std::to_string(longitude).substr(0, 9));
+    done(answer);
+  }
+};
+
+} // namespace
+
+TEST_CASE("NgNativeLocation geocodes without the permission, in expo-location's iOS shape") {
+  auto location = std::make_shared<FakeLocation>();
+  location->now = Authorization::Denied;
+  auto geocoder = std::make_shared<FakeGeocoder>();
+  geocoder->answer.places = {
+      {.latitude = 37.3349, .longitude = -122.009, .altitude = 30, .accuracy = 100},
+      {.latitude = 37.33, .longitude = -122.0},
+  };
+  auto module = ngn::makeLocationModule(location, false, geocoder);
+  auto found = ask(*module, "geocodeAsync", dynamic::array("1 Apple Park Way, Cupertino"));
+  REQUIRE(found.value);
+  CHECK(geocoder->asked == std::vector<std::string>{"1 Apple Park Way, Cupertino"});
+  CHECK(*found.value == dynamic::array(
+      dynamic::object("latitude", 37.3349)("longitude", -122.009)("altitude", 30)("accuracy", 100),
+      dynamic::object("latitude", 37.33)("longitude", -122.0)("altitude", nullptr)("accuracy", nullptr)));
+  CHECK(location->asked == 0);
+}
+
+TEST_CASE("NgNativeLocation reverse geocodes a point into expo's address fields") {
+  auto geocoder = std::make_shared<FakeGeocoder>();
+  ngn::Geocoder::Place place;
+  place.address = {
+      {"city", "Cupertino"}, {"street", "Apple Park Way"}, {"streetNumber", "1"}, {"region", "CA"},
+      {"country", "United States"}, {"isoCountryCode", "US"}, {"postalCode", "95014"}, {"name", "Apple Park"},
+      {"timezone", "America/Los_Angeles"}};
+  geocoder->answer.places = {place};
+  auto module = ngn::makeLocationModule(std::make_shared<FakeLocation>(), false, geocoder);
+  auto found = ask(*module, "reverseGeocodeAsync", dynamic::array(dynamic::object("latitude", 37.3349)("longitude", -122.009)));
+  REQUIRE(found.value);
+  CHECK(geocoder->asked == std::vector<std::string>{"37.3349,-122.0090"});
+  REQUIRE(found.value->size() == 1);
+  const auto &address = (*found.value)[0];
+  CHECK(address["city"] == dynamic("Cupertino"));
+  CHECK(address["streetNumber"] == dynamic("1"));
+  CHECK(address["timezone"] == dynamic("America/Los_Angeles"));
+  // Every field expo names is there, null where the geocoder has none.
+  for (const char *field : {"district", "subregion"}) {
+    CHECK(address[field] == dynamic(nullptr));
+  }
+  CHECK(address.size() == 11);
+}
+
+TEST_CASE("NgNativeLocation answers no places as none, and rejects a bad request or a failure as iOS does") {
+  auto geocoder = std::make_shared<FakeGeocoder>();
+  auto module = ngn::makeLocationModule(std::make_shared<FakeLocation>(), false, geocoder);
+  geocoder->answer.failure = ngn::Geocoder::Failure::NoResult;
+  CHECK(*ask(*module, "geocodeAsync", dynamic::array("nowhere at all")).value == dynamic::array());
+  geocoder->answer.failure = ngn::Geocoder::Failure::Network;
+  CHECK(*ask(*module, "geocodeAsync", dynamic::array("a")).error == "Geocoding rate limit exceeded - too many requests");
+  geocoder->answer.failure = ngn::Geocoder::Failure::Failed;
+  geocoder->answer.reason = "The operation couldn't be completed. (kCLErrorDomain error 8.)";
+  CHECK(*ask(*module, "reverseGeocodeAsync", dynamic::array(dynamic::object("latitude", 1)("longitude", 2))).error ==
+        "Error while geocoding a location: The operation couldn't be completed. (kCLErrorDomain error 8.)");
+
+  geocoder->asked.clear();
+  CHECK(*ask(*module, "geocodeAsync", dynamic::array(5)).error == "Address to geocode must be a string");
+  CHECK(*ask(*module, "reverseGeocodeAsync", dynamic::array(dynamic::object("latitude", "1")("longitude", 2))).error ==
+        "Location to reverse-geocode must be an object with number properties `latitude` and `longitude`");
+  CHECK(*ask(*module, "reverseGeocodeAsync", dynamic::array()).error ==
+        "Location to reverse-geocode must be an object with number properties `latitude` and `longitude`");
+  CHECK(geocoder->asked.empty());
+}
+
+TEST_CASE("NgNativeLocation without a geocoder has no geocoding methods, so the service gives no places") {
+  auto module = ngn::makeLocationModule(std::make_shared<FakeLocation>(), false);
+  CHECK(module->methods().count("geocodeAsync") == 0);
+  CHECK(module->methods().count("reverseGeocodeAsync") == 0);
+}
