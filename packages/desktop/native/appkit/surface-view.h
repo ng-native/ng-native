@@ -7,6 +7,8 @@
 #include "ngn/input.h"
 #include "ngn/safe-areas.h"
 
+#include <react/renderer/components/view/primitives.h>
+
 #include <functional>
 
 @interface NGNSurfaceView : NSView
@@ -14,6 +16,9 @@
 // Set once by the host: each container's size and safe-area insets as they change (and nullopt
 // as it goes), keyed by the tag its hit test starts from.
 @property (class, nonatomic) std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> insetsChanged;
+// Shows the cursor the core asked for (input-dispatcher.h), and keeps showing it over the views
+// AppKit would reset it on.
++ (void)showCursor:(facebook::react::Cursor)cursor;
 // The sink must outlive the view.
 - (instancetype)initWithFrame:(NSRect)frame surfaceId:(facebook::react::SurfaceId)surfaceId input:(ngn::InputSink *)input;
 // A container for part of a surface (a modal's in-window cover), hit-testing from `rootTag`.

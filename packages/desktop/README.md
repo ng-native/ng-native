@@ -13,6 +13,15 @@ Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob
 ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no sheets, second
 windows or React Native DevTools yet.
 
+The mouse reaches an app as on the web: every move goes to React Native's pointer events, which
+send `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)` and `(mouseout)` to the views
+that listen, and `(dblclick)`, `(contextmenu)` (a secondary click or Control-click) and `(wheel)`
+reach the view under the pointer. The cursor is the nearest CSS `cursor` under the pointer, shown
+as AppKit's cursor for it (the arrow for one AppKit has none of), and the I-beam over a text
+input. `scrollbar-width: thin` draws small scrollers and `none` hides them. A click focuses a
+focusable view, and a focus a key moved reports `focusVisible` and draws AppKit's focus ring
+unless the view styles `outline`.
+
 When the app has them installed, the host compiles in the Fabric components of
 `react-native-screens` and `react-native-safe-area-context`:
 

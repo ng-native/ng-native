@@ -154,7 +154,11 @@ int main(int argc, const char *argv[]) {
     gHost.backend = std::make_shared<ngn::appkit::AppKitBackend>();
     gHost.mounting = std::make_shared<ngn::MountingManager>(gHost.backend, gHost.backend);
     gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
-    gHost.backend->onMount = logFirstFrame;
+    gHost.backend->onMount = [](SurfaceId surfaceId) {
+      gHost.input->didMount(surfaceId);
+      logFirstFrame(surfaceId);
+    };
+    gHost.input->onCursor = [](ngn::Cursor cursor) { [NGNSurfaceView showCursor:cursor]; };
     NGNModalHostView.input = gHost.input.get();
     NGNModalHostView.presentationChanged = [](NSInteger tag, BOOL presented) {
       if (presented) {

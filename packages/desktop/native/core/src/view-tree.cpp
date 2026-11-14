@@ -177,3 +177,23 @@ std::optional<Point> ViewTree::originIn(Tag tag, Tag root) const {
 }
 
 } // namespace ngn
+
+namespace ngn {
+
+std::vector<Tag> ViewTree::chain(Tag tag, Tag root) const {
+  std::vector<Tag> chain;
+  for (Tag current = tag;;) {
+    const Node *node = find(current);
+    if (node == nullptr) {
+      return {};
+    }
+    chain.push_back(current);
+    if (current == root) {
+      break;
+    }
+    current = node->parent;
+  }
+  return {chain.rbegin(), chain.rend()};
+}
+
+} // namespace ngn

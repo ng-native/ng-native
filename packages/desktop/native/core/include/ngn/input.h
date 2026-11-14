@@ -23,6 +23,17 @@ struct PointerInput {
   float pressure{0};
   // Seconds, on the clock the toolkit stamps its events with.
   double timestamp{0};
+  // Which press of a run of quick ones this is: 2 for a double click. A press only.
+  int clickCount{1};
+};
+
+// A scroll wheel's or trackpad's movement, as the DOM's WheelEvent has it.
+struct WheelDelta {
+  double x{0};
+  double y{0};
+  double z{0};
+  // 0 in pixels (points), 1 in lines, 2 in pages.
+  int mode{0};
 };
 
 class InputSink {
@@ -41,6 +52,11 @@ class InputSink {
   virtual void pointerUp(const PointerInput &input) = 0;
   // The pointer left every container of this surface.
   virtual void pointerLeave(facebook::react::SurfaceId surfaceId, const PointerInput &input) = 0;
+  // A secondary click (or Control-click). True when a view took it, so the toolkit shows no menu
+  // of its own.
+  virtual bool contextMenu(const PointerInput &input) = 0;
+  // A wheel turn over the container. It still scrolls what it is over; true when a view heard it.
+  virtual bool wheel(const PointerInput &input, const WheelDelta &delta) = 0;
 };
 
 } // namespace ngn

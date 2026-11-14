@@ -57,6 +57,9 @@ class ViewTree {
   // this. The backend reports it as the user scrolls; the view's state lags behind.
   void setScrollOffset(Tag tag, Point offset);
 
+  // The views from `root` down to `tag`, or nothing when `tag` is not under `root`.
+  std::vector<Tag> chain(Tag tag, Tag root) const;
+
   // Where `tag`'s origin is in `root`'s coordinates, or nothing when `tag` is not under `root`.
   std::optional<Point> originIn(Tag tag, Tag root) const;
 

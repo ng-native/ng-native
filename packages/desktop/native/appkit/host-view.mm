@@ -40,6 +40,7 @@ NSString *nsString(const std::string &s) {
   State::Shared _state;
   EventEmitter::Shared _emitter;
   ngn::DesktopProps _desktop;
+  BOOL _focusVisible;
 }
 
 - (instancetype)initWithShadowView:(const ShadowView &)view {
@@ -58,7 +59,53 @@ NSString *nsString(const std::string &s) {
 }
 
 - (BOOL)acceptsFirstResponder {
-  return _desktop.focusable.value_or(false);
+  return _desktop.focusable.value_or(false) || _desktop.tabIndex.value_or(-1) >= 0;
+}
+
+// Whether the event AppKit is handling is a key's: a focus a key moved draws a ring and matches
+// `:focus-visible`, which the engine learns from `focusVisible` on the focus event.
+static BOOL focusFromKeyboard() {
+  NSEventType type = NSApp.currentEvent.type;
+  return type == NSEventTypeKeyDown || type == NSEventTypeKeyUp;
+}
+
+- (BOOL)becomeFirstResponder {
+  if (![super becomeFirstResponder]) {
+    return NO;
+  }
+  _focusVisible = focusFromKeyboard();
+  self.focusRingType = _focusVisible ? NSFocusRingTypeDefault : NSFocusRingTypeNone;
+  [self noteFocusRingMaskChanged];
+  if (_emitter) {
+    _emitter->dispatchEvent("focus", folly::dynamic::object("target", (int)_reactTag)("focusVisible", (bool)_focusVisible));
+  }
+  return YES;
+}
+
+- (BOOL)resignFirstResponder {
+  if (![super resignFirstResponder]) {
+    return NO;
+  }
+  _focusVisible = NO;
+  [self noteFocusRingMaskChanged];
+  if (_emitter) {
+    _emitter->dispatchEvent("blur", folly::dynamic::object("target", (int)_reactTag));
+  }
+  return YES;
+}
+
+// AppKit's focus ring, in the view's shape, while the focus came from the keyboard. An app that
+// styles `outline` draws its own.
+- (void)drawFocusRingMask {
+  auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
+  CGFloat radius = viewProps ? viewProps->resolveBorderMetrics(_layout).borderRadii.topLeft.horizontal : 0;
+  [[NSBezierPath bezierPathWithRoundedRect:self.bounds xRadius:radius yRadius:radius] fill];
+}
+
+- (NSRect)focusRingMaskBounds {
+  auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
+  BOOL ownOutline = viewProps && (viewProps->outlineWidth > 0 || viewProps->outlineColor);
+  return _focusVisible && !ownOutline ? self.bounds : NSZeroRect;
 }
 
 - (EventEmitter::Shared)eventEmitter {
