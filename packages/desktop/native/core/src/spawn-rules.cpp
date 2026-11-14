@@ -100,6 +100,34 @@ std::optional<std::string> programProblem(const std::string &program) {
   return std::nullopt;
 }
 
+// A pattern's top-level alternatives: `-v|.*` is `-v` and `.*`. A `|` in a group, in a class or
+// escaped is not one. The pattern has compiled, so its groups and classes are balanced.
+static std::vector<std::string> topLevelAlternatives(const std::string &source) {
+  std::vector<std::string> found;
+  int depth = 0;
+  bool inClass = false;
+  size_t start = 0;
+  for (size_t at = 0; at < source.size(); at++) {
+    char c = source[at];
+    if (c == '\\') {
+      at++;
+    } else if (inClass) {
+      inClass = c != ']';
+    } else if (c == '[') {
+      inClass = true;
+    } else if (c == '(') {
+      depth++;
+    } else if (c == ')') {
+      depth--;
+    } else if (c == '|' && depth == 0) {
+      found.push_back(source.substr(start, at - start));
+      start = at + 1;
+    }
+  }
+  found.push_back(source.substr(start));
+  return found;
+}
+
 ArgumentRule parseArgument(const std::string &arg) {
   if (hasNul(arg)) {
     throw SpawnRuleError("an argument cannot hold a NUL character");
@@ -121,8 +149,17 @@ ArgumentRule parseArgument(const std::string &arg) {
   } catch (const std::regex_error &error) {
     throw SpawnRuleError("{" + name + "} has a pattern that does not compile: " + error.what());
   }
-  std::string unanchored = !source.empty() && source[0] == '^' ? source.substr(1) : source;
-  rule.option = (!unanchored.empty() && unanchored[0] == '-') || source.rfind("\\-", 0) == 0;
+  rule.option = true;
+  for (const auto &alternative : topLevelAlternatives(source)) {
+    std::string_view rest(alternative);
+    if (!rest.empty() && rest[0] == '^') {
+      rest.remove_prefix(1);
+    }
+    if (!rest.empty() && rest[0] == '\\') {
+      rest.remove_prefix(1);
+    }
+    rule.option = rule.option && !rest.empty() && rest[0] == '-';
+  }
   return rule;
 }
 
