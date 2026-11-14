@@ -235,6 +235,12 @@ export function prepareHost(sys, options) {
   const reactNative = resolveReactNative(sys, cwd);
   const expo = readExpoConfig(sys, cwd);
   const config = desktopAppConfig(expo);
+  if (/[/\\]/.test(config.name) || config.name === '.' || config.name === '..') {
+    throw new UsageError(
+      `The app name "${config.name}" cannot contain a path separator or be . or .., because the ` +
+        'app, its executable and its packages are named for it. Change "name" in app.json.',
+    );
+  }
   const deny = config.options.deny ?? [];
   const links = sys.links(cwd, { deny, builtIn: HOST_LIBRARIES });
   for (const line of linkWarnings(links)) sys.warn(line);

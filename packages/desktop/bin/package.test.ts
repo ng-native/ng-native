@@ -400,6 +400,25 @@ describe('packageApp', () => {
     });
   });
 
+  it('refuses an app name that would leave the output folder, before anything builds', async () => {
+    for (const name of ['../evil', 'a/b', '..', 'a\\b']) {
+      const { sys, calls, removed } = fakeMac({
+        expoConfig: () => ({
+          name,
+          platforms: ['macos'],
+          experiments: { outOfTreePlatforms: true },
+          ios: { bundleIdentifier: 'com.example.notes' },
+        }),
+      });
+      await assert.rejects(
+        () => quiet(() => packageApp(parsePackage([]), sys)),
+        /app name .* cannot contain a path separator or be \. or \.\./,
+      );
+      assert.equal(removed.length, 0);
+      assert.ok(!calls.some((call) => call.args[0] === 'export:embed'));
+    }
+  });
+
   it('compiles an Icon Composer .icon as it is, named for the file', async () => {
     const { sys, calls, written } = fakeMac({
       expoConfig: () => ({
