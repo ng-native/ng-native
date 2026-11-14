@@ -7,6 +7,7 @@
 #include "ngn/text-measurer.h"
 
 #include <deque>
+#include <map>
 #include <functional>
 #include <string>
 #include <vector>
@@ -31,6 +32,9 @@ class FakeBackend final : public MountingBackend, public DesktopPropsSink {
   void setSplitView(SurfaceId surfaceId, Tag split, bool window) override;
   void setSourceLists(SurfaceId surfaceId, Tag parent, const std::vector<SourceList> &lists) override;
   void setSvgDrawing(SurfaceId surfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) override;
+  void setExpoUITree(SurfaceId surfaceId, Tag host, std::shared_ptr<const ExpoUINode> root) override;
+  // The trees setExpoUITree was given, by host.
+  std::map<Tag, std::shared_ptr<const ExpoUINode>> expoUITrees;
   void announce(SurfaceId surfaceId, const Announcement &announcement) override;
   void didMount(SurfaceId surfaceId) override;
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;

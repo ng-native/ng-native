@@ -9,6 +9,7 @@
 #include "ngn/split-view.h"
 #include "ngn/camera.h"
 #include "ngn/expo-image.h"
+#include "ngn/expo-ui.h"
 #include "ngn/symbol.h"
 
 #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
@@ -60,6 +61,9 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<CameraComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
+  for (auto &provider : expoUIComponentProviders()) {
+    components_.push_back(std::move(provider));
+  }
   for (auto &provider : backend_->componentProviders()) {
     components_.push_back(std::move(provider));
   }
@@ -113,6 +117,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         safeAreas_->created(view);
         backend_->createView(view);
         svgs_.changed(tree_, view.tag);
+        expoUI_.changed(tree_, view.tag);
         reportDesktopProps(view, nullptr);
         tabs_->propsChanged(tree_, view.tag);
         break;
@@ -123,6 +128,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         tabs_->deleted(m.oldChildShadowView.tag);
         safeAreas_->deleted(m.oldChildShadowView.tag);
         svgs_.deleted(m.oldChildShadowView.tag);
+        expoUI_.deleted(m.oldChildShadowView.tag);
         liveRegions_.remove(m.oldChildShadowView.tag);
         tree_.destroy(m.oldChildShadowView.tag);
         backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
@@ -135,6 +141,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         sidebars_.childrenChanged(tree_, m.parentTag);
         tabs_->childrenChanged(tree_, m.parentTag);
         svgs_.changed(tree_, m.parentTag);
+        expoUI_.changed(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Remove:
         tree_.remove(m.parentTag, m.oldChildShadowView.tag);
@@ -143,6 +150,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         sidebars_.childrenChanged(tree_, m.parentTag);
         tabs_->childrenChanged(tree_, m.parentTag);
         svgs_.changed(tree_, m.parentTag);
+        expoUI_.changed(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Update: {
         const auto &old = m.oldChildShadowView;
@@ -152,6 +160,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         // React Native iOS's order: event emitter, props, state, then layout.
         if (old.eventEmitter != view.eventEmitter) {
           backend_->updateEventEmitter(view);
+          expoUI_.changed(tree_, view.tag);
         }
         if (old.props != view.props) {
           backend_->updateProps(view);
@@ -161,6 +170,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
           tabs_->propsChanged(tree_, view.tag);
           screens_->propsChanged(tree_, view.tag);
           svgs_.changed(tree_, view.tag);
+          expoUI_.changed(tree_, view.tag);
         }
         if (old.state != view.state) {
           backend_->updateState(view);
@@ -191,6 +201,9 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   }
   for (auto &drawing : svgs_.settle(tree_)) {
     backend_->setSvgDrawing(surfaceId, drawing.svg, std::move(drawing.document));
+  }
+  for (auto &change : expoUI_.settle(tree_)) {
+    backend_->setExpoUITree(surfaceId, change.host, std::move(change.root));
   }
   auto header = screens_->frontHeader(tree_, surfaceId);
   auto known = frontHeaders_.find(surfaceId);

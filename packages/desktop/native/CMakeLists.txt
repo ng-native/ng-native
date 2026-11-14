@@ -100,6 +100,7 @@ add_library(ngn_core STATIC
     core/src/updates.cpp
     core/src/view-box.cpp
     core/src/expo-image.cpp
+    core/src/expo-ui.cpp
     core/src/view-tree.cpp
     core/src/web-view.cpp
     core/src/modules/accessibility-manager.cpp
