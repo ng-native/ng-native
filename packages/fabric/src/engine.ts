@@ -1202,11 +1202,23 @@ export const ANDROID_VIEW_NAMES: Record<string, string> = {
 };
 
 /**
- * iOS's names for the elements Android names differently, so reporting iOS after Android puts
- * them back.
+ * The views only an iPhone or iPad has, as a Mac draws them: a plain view, as on Android. Pull to
+ * refresh has no meaning with a mouse, and an input accessory rides a software keyboard.
+ */
+const MACOS_VIEW_NAMES: Record<string, string> = {
+  'refresh-control': 'View',
+  'input-accessory-view': 'View',
+};
+
+/**
+ * iOS's names for the elements Android and macOS name differently, so reporting iOS after either
+ * puts them back.
  */
 const IOS_VIEW_NAMES: Record<string, string> = Object.fromEntries(
-  Object.keys(ANDROID_VIEW_NAMES).map((element) => [element, VIEW_NAMES[element] as string]),
+  [...Object.keys(ANDROID_VIEW_NAMES), ...Object.keys(MACOS_VIEW_NAMES)].map((element) => [
+    element,
+    VIEW_NAMES[element] as string,
+  ]),
 );
 
 /**
@@ -1238,7 +1250,12 @@ export function isApplePlatform(): boolean {
  */
 export function registerPlatformComponents(platform: string): void {
   platformOS = platform;
-  const names = platform === 'android' ? ANDROID_VIEW_NAMES : IOS_VIEW_NAMES;
+  const names =
+    platform === 'android'
+      ? ANDROID_VIEW_NAMES
+      : platform === 'macos'
+        ? { ...IOS_VIEW_NAMES, ...MACOS_VIEW_NAMES }
+        : IOS_VIEW_NAMES;
   for (const [element, viewName] of Object.entries(names)) registerViewName(element, viewName);
 }
 

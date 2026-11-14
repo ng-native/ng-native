@@ -212,6 +212,8 @@ export function dialogSource(
   if (!native) return null;
 
   const ios = native.Platform.OS === 'ios';
+  // A Mac's alert module is iOS's, and React Native's `Alert.prompt` takes its iOS body there.
+  const apple = ios || native.Platform.OS === 'macos';
   const android = native.Platform.OS === 'android';
 
   return {
@@ -219,7 +221,7 @@ export function dialogSource(
     alert: (title, message, buttons) => native.Alert.alert(title, message, [...buttons]),
     // Buttons rather than a callback: given a callback, `Alert.prompt` answers OK alone, and the
     // Cancel the native alert adds calls nothing, so a cancelled `ask` never settled.
-    ...(ios && native.Alert.prompt
+    ...(apple && native.Alert.prompt
       ? {
           prompt: (title, message, onResult, defaultValue) =>
             native.Alert.prompt!(

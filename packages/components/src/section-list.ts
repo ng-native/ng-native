@@ -9,7 +9,7 @@ import {
   output,
   viewChild,
 } from '@angular/core';
-import { nativePlatform } from '@ng-native/fabric';
+import { isApplePlatform } from '@ng-native/fabric';
 import { TemplateSlot } from './template-slot.ts';
 import { numberOr, optionalBoolean } from './transforms.ts';
 import { View } from './view.ts';
@@ -334,9 +334,7 @@ export class SectionList<T, S extends SectionListSection<T> = SectionListSection
 
   protected readonly rows = computed(() => flattenSections<T, S>(this.sections()));
 
-  private readonly sticky = computed(
-    () => this.stickySectionHeadersEnabled() ?? nativePlatform() === 'ios',
-  );
+  private readonly sticky = computed(() => this.stickySectionHeadersEnabled() ?? isApplePlatform());
 
   /** The header rows, pinned in turn, when headers stick and there is a header to draw. */
   protected readonly stickyRows = computed(() => {

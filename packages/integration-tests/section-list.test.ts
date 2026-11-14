@@ -270,6 +270,18 @@ describe('section list', () => {
   });
 });
 
+describe('section list on a Mac', () => {
+  before(() => registerPlatformComponents('macos'));
+  after(() => registerPlatformComponents('ios'));
+
+  it("pins the current section header by default, as iOS does and React Native's does on a Mac", async () => {
+    const { fabric, app } = await boot();
+    await scrollTo(fabric, 3 * SECTION + 100);
+    assert.equal(slotOf(fabric, 'S3#3')?.props['zIndex'], 1);
+    app.unmount();
+  });
+});
+
 describe('section list on Android', () => {
   before(() => registerPlatformComponents('android'));
   after(() => {

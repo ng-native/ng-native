@@ -345,6 +345,13 @@ describe('reading the platform off React Native', () => {
     assert.equal(source.toast, undefined, 'no toast on iOS, whatever the module says');
   });
 
+  it("takes iOS's prompt on a Mac, whose alert module is iOS's, and no action sheet", () => {
+    const source = dialogSource(modules('macos'))!;
+    assert.equal(typeof source.prompt, 'function');
+    assert.equal(source.actionSheet, undefined, 'a Mac has no action sheet: choose is an alert');
+    assert.equal(source.toast, undefined);
+  });
+
   it('leaves the iOS-only ones behind on Android, module or no module', () => {
     const source = dialogSource(modules('android'))!;
     assert.equal(source.prompt, undefined, 'Alert.prompt is there and does nothing: a hang');

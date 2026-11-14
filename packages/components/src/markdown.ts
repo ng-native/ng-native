@@ -22,7 +22,7 @@ import {
   type Provider,
 } from '@angular/core';
 import { DeepLinks } from '@ng-native/device';
-import { nativePlatform } from '@ng-native/fabric';
+import { isApplePlatform, nativePlatform } from '@ng-native/fabric';
 import { lexer, type Token } from 'marked';
 import type { ImageLoadEvent, LayoutEvent } from './events.ts';
 import { Image } from './image.ts';
@@ -276,7 +276,7 @@ function imageBlocks(
   `,
   styleUrl: './markdown.css',
   host: {
-    '[class.md-ios]': "platform === 'ios'",
+    '[class.md-ios]': 'apple',
     '[class.md-android]': "platform === 'android'",
   },
 })
@@ -284,6 +284,8 @@ export class Markdown {
   private readonly injector = inject(Injector);
   /** Which monospace font code is drawn in, as the platform names it. */
   protected readonly platform = nativePlatform();
+  /** Menlo, which iOS and macOS both have. */
+  protected readonly apple = isApplePlatform();
 
   /** The Markdown to draw. */
   readonly source = input<string>();

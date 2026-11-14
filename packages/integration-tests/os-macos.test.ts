@@ -72,6 +72,15 @@ describe('view names on a Mac', () => {
     assert.equal(viewNameOf(element('activity-indicator')), 'ActivityIndicatorView');
   });
 
+  it('draw the views only an iPhone has as plain ones, and give them back to iOS', () => {
+    registerPlatformComponents('macos');
+    assert.equal(viewNameOf(element('refresh-control')), 'View');
+    assert.equal(viewNameOf(element('input-accessory-view')), 'View');
+    registerPlatformComponents('ios');
+    assert.equal(viewNameOf(element('refresh-control')), 'PullToRefreshView');
+    assert.equal(viewNameOf(element('input-accessory-view')), 'InputAccessoryView');
+  });
+
   it('draw the full-window overlay as a plain view, which is all a Mac window needs', () => {
     provideNativeRouter([]);
     registerPlatformComponents('macos');

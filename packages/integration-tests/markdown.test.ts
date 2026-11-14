@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Provider, Type } from '@angular/core';
 import { DeepLinks, type DeepLinkSource } from '@ng-native/device';
+import { registerPlatformComponents } from '@ng-native/fabric';
 import { cleanup, compileCss, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
 import {
   getDefaults,
@@ -90,6 +91,16 @@ describe('a paragraph', () => {
     );
     assert.equal(paragraph!.children[1]!.props['fontStyle'], 'italic');
     assert.equal(paragraph!.children[3]!.props['fontFamily'], 'Menlo');
+  });
+
+  it('draws code in Menlo on a Mac too, which has it', async () => {
+    registerPlatformComponents('macos');
+    try {
+      const { blocks } = await show('Some `code`.');
+      assert.equal(blocks()[0]!.children[1]!.props['fontFamily'], 'Menlo');
+    } finally {
+      registerPlatformComponents('ios');
+    }
   });
 
   it('runs the lines the source wrapped it at together, and breaks only at a hard break', async () => {
