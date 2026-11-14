@@ -75,7 +75,8 @@ InputScript parseInputScript(const std::string &text) {
       if (!(words >> step.key)) {
         return fail("key needs a key");
       }
-      if (step.key.size() != 1 && step.key != "escape" && step.key != "return") {
+      if (step.key.size() != 1 && step.key != "escape" && step.key != "return" && step.key != "space" &&
+          step.key != "tab" && step.key != "delete") {
         return fail("unknown key " + step.key);
       }
       std::string modifier;
@@ -92,14 +93,14 @@ InputScript parseInputScript(const std::string &text) {
           return fail("unknown modifier " + modifier);
         }
       }
-    } else if (verb == "choose") {
-      step.kind = InputStep::Kind::Choose;
+    } else if (verb == "choose" || verb == "type") {
+      step.kind = verb == "choose" ? InputStep::Kind::Choose : InputStep::Kind::Type;
       std::string rest;
       std::getline(words, rest);
       auto first = rest.find_first_not_of(" \t");
       auto last = rest.find_last_not_of(" \t\r");
       if (first == std::string::npos) {
-        return fail("choose needs an item's title");
+        return fail(verb == "choose" ? "choose needs an item's title" : "type needs some text");
       }
       step.key = rest.substr(first, last - first + 1);
     } else {

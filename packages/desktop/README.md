@@ -63,7 +63,9 @@ gives it no view of its own yet. Not there yet: `hitSlop`, the library's own com
 A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
 (`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
 AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
-goes to the key window, and a character is typed into a focused text field. A scroll or gesture
+goes to the key window (a character, `space`, `tab`, `delete`, `escape` or `return`), and a
+character or a space is typed into a focused text field; a `type` step types the rest of its line
+there a character at a time, so smart quotes and capitals follow it. A scroll or gesture
 goes to the view under its point, wherever the real pointer is, so a web view scrolls and a map
 pans and zooms. A `secondary` step is a secondary click. The steps after a `down` go on from a run
 loop timer, so a view that tracks the press in a loop of its own (a source list row) gets its `up`
