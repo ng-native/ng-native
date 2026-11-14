@@ -53,7 +53,6 @@
     "projects": [
       "@ng-native/analog",
       "@ng-native/components",
-      "@ng-native/desktop",
       "@ng-native/device",
       "@ng-native/eslint-plugin",
       "@ng-native/expo",
