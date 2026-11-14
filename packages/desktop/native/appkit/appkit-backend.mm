@@ -48,16 +48,17 @@ void AppKitBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
     return;
   }
   // The index counts Fabric children only: a TextInput holds an NSTextField of its own.
+  NSView *container = parentView.contentContainer;
   NSMutableArray<NSView *> *siblings = [NSMutableArray array];
-  for (NSView *v in parentView.subviews) {
+  for (NSView *v in container.subviews) {
     if ([v isKindOfClass:NGNView.class]) {
       [siblings addObject:v];
     }
   }
   if (index >= (int)siblings.count) {
-    [parentView addSubview:childView];
+    [container addSubview:childView];
   } else {
-    [parentView addSubview:childView positioned:NSWindowBelow relativeTo:siblings[index]];
+    [container addSubview:childView positioned:NSWindowBelow relativeTo:siblings[index]];
   }
 }
 

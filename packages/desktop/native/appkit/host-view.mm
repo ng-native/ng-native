@@ -1,5 +1,7 @@
 #import "host-view.h"
 
+#import "scroll-view.h"
+
 #include "text-layout.h"
 
 #include <react/renderer/components/iostextinput/TextInputProps.h>
@@ -57,6 +59,14 @@ NSString *nsString(const std::string &s) {
 
 - (EventEmitter::Shared)eventEmitter {
   return _emitter;
+}
+
+- (Props::Shared)props {
+  return _props;
+}
+
+- (NSView *)contentContainer {
+  return self;
 }
 
 - (void)updateProps:(const Props::Shared &)props {
@@ -285,8 +295,12 @@ NSString *nsString(const std::string &s) {
 @end
 
 NGNView *NGNMakeView(const ShadowView &view) {
-  if (std::string_view(view.componentName) == "TextInput") {
+  std::string_view name = view.componentName;
+  if (name == "TextInput") {
     return [[NGNTextInputView alloc] initWithShadowView:view];
+  }
+  if (name == "ScrollView") {
+    return [[NGNScrollView alloc] initWithShadowView:view];
   }
   return [[NGNView alloc] initWithShadowView:view];
 }

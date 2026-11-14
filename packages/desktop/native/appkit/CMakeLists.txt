@@ -6,6 +6,7 @@ add_executable(ngn-macos
     main.mm
     menu-bar.mm
     network.mm
+    scroll-view.mm
     surface-view.mm
     system.mm
     text-layout.mm)

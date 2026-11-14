@@ -13,6 +13,7 @@
 #import "appkit-backend.h"
 #import "menu-bar.h"
 #import "network.h"
+#import "scroll-view.h"
 #import "system.h"
 #import "surface-view.h"
 #include "text-layout.h"
@@ -149,6 +150,10 @@ int main(int argc, const char *argv[]) {
     gHost.mounting = std::make_shared<ngn::MountingManager>(gHost.backend, gHost.backend);
     gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
     gHost.backend->onMount = logFirstFrame;
+    NGNScrollView.offsetChanged = [](NSInteger tag, CGPoint offset) {
+      gHost.mounting->tree().setScrollOffset(
+          static_cast<Tag>(tag), {static_cast<Float>(offset.x), static_cast<Float>(offset.y)});
+    };
 
     NSRect visible = NSScreen.mainScreen.visibleFrame;
     NSRect frame = NSMakeRect(0, 0, 1040, 720);
