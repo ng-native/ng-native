@@ -4,7 +4,8 @@
  *
  * The contract for a host that draws it: the props are `title` (the projected text), `kind`
  * (`default`, `cancel`, `destructive` or `plain`; `default` takes Return and `cancel` takes
- * Escape in its window), `controlSize` (`mini`, `small`, `regular` or `large`), `sfSymbol` and
+ * Escape in its window; absent when the app sets none, which the host draws as a plain push
+ * button that takes no key), `controlSize` (`mini`, `small`, `regular` or `large`), `sfSymbol` and
  * `enabled`. A click, a tap, or a key that activates it sends `topButtonPress` to the view. The engine's
  * responder does not press it there, so one activation is one `(press)`.
  */
@@ -46,7 +47,11 @@ for (const os of ['ios', 'macos'] as const) {
       assert.equal(button.props['sfSymbol'], 'trash');
       assert.equal(button.props['accessibilityRole'], 'button');
       assert.equal(button.children.length, 0, 'the label is a prop, not a child');
-      assert.equal(getByTestId('plain').props['kind'], 'default');
+      assert.equal(
+        getByTestId('plain').props['kind'],
+        undefined,
+        'a button with no kind is not the default button, so Return does not press it',
+      );
       assert.equal(getByTestId('symbol').props['sfSymbol'], 'star');
       assert.equal(getByTestId('drawn').props['drawable'], 'ic_star');
     });

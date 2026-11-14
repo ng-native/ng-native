@@ -21,7 +21,8 @@ greys it out.
 ## Inputs
 
 - **`kind`** - `default`, `cancel`, `destructive` or `plain`. On macOS a `default` button takes
-  Return and a `cancel` one takes Escape in its window. `default` when unset.
+  Return and a `cancel` one takes Escape in its window. Unset, the button is a plain push button
+  that takes neither key.
 - **`controlSize`** - `mini`, `small`, `regular` or `large`: AppKit's control sizes on macOS, and
   UIKit's on iOS 26 and later. Android and the web ignore it. `regular` when unset.
 - **`sfSymbol`** - an SF Symbol beside the label, on iOS and macOS.
