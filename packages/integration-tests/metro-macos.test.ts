@@ -241,6 +241,21 @@ describe("Expo's out-of-tree platforms flag", () => {
     assert.doesNotThrow(() => checkOutOfTreePlatforms({ platforms: ['macos'], ...flag }, []));
   });
 
+  it('is asked for with the exact line to add, and where', () => {
+    assert.throws(
+      () => checkOutOfTreePlatforms({ platforms: ['macos'] }, []),
+      (error: Error) => {
+        assert.match(error.message, /Add this to app\.json:/);
+        assert.ok(
+          error.message.includes('"expo": { "experiments": { "outOfTreePlatforms": true } }'),
+          error.message,
+        );
+        assert.match(error.message, /app\.config\.js|app\.config\.ts/);
+        return true;
+      },
+    );
+  });
+
   it('is asked for when the command names macos', () => {
     for (const argv of [
       ['export', '-p', 'macos'],

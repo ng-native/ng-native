@@ -151,8 +151,12 @@ function checkOutOfTreePlatforms(expo, argv = process.argv) {
   const listed = Array.isArray(expo.platforms) && expo.platforms.includes(PLATFORM);
   if (!listed && !requestedPlatforms(argv).includes(PLATFORM)) return;
   throw new Error(
-    '[angular-native] macOS needs "experiments": { "outOfTreePlatforms": true } in app.json\'s ' +
-      '"expo" config. Without it Expo leaves macos out of every bundle and export, and says nothing.',
+    '[angular-native] macOS needs "experiments": { "outOfTreePlatforms": true } in the "expo" config. ' +
+      'Without it Expo leaves macos out of every bundle and export, and says nothing.\n' +
+      'Add this to app.json:\n' +
+      '  "expo": { "experiments": { "outOfTreePlatforms": true } }\n' +
+      '(merge it into the "expo" object already there). In app.config.js or app.config.ts, ' +
+      'return experiments: { outOfTreePlatforms: true } from the config.',
   );
 }
 
