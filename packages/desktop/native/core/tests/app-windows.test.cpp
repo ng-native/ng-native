@@ -181,6 +181,10 @@ TEST_CASE("quitting waits for the app's answer, and asks once while it waits") {
   CHECK(f.events.size() == 2);
   f.app().call("answerQuit", dynamic::array(true));
   CHECK(f.windows->quits == std::vector<std::string>{"reply no", "reply yes"});
+  // Quitting closes no window and sends nothing more: the app's list of windows to restore on
+  // the next launch is what it was when it agreed.
+  CHECK(f.events.size() == 2);
+  CHECK(f.windows->closed.empty());
 }
 
 TEST_CASE("quit() starts quitting as Cmd-Q does, and comes back as a request") {

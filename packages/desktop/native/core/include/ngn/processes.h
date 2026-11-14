@@ -54,6 +54,8 @@ class ProcessLauncher {
   virtual void write(int handle, const std::string &data) = 0;
   virtual void closeStdin(int handle) = 0;
   virtual void kill(int handle, int signal) = 0;
+  // The last handle spawn gave out, or 0. Handles only grow and are never reused.
+  virtual int lastHandle() const = 0;
 };
 
 // posix_spawn with a pipe for each standard stream, read on threads of their own.
