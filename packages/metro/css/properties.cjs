@@ -2146,7 +2146,9 @@ function cursor(property, value, out) {
 function scrollbarWidth(property, value, out) {
   const word = typeof value === 'string' ? value : keyword(value, property);
   if (!['auto', 'thin', 'none'].includes(word)) {
-    throw new CssUnsupported(`${property}: ${word} is not supported. Native has auto, thin and none.`);
+    throw new CssUnsupported(
+      `${property}: ${word} is not supported. Native has auto, thin and none.`,
+    );
   }
   out.scrollbarWidth = word;
   out.showsVerticalScrollIndicator = word !== 'none';

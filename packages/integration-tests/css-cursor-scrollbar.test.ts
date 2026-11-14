@@ -104,7 +104,9 @@ describe('scroll bars', () => {
 describe('on the committed view', () => {
   const committed = (css: string, element = 'view') => {
     const fabric = createFakeFabric();
-    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as StyleSheet });
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(css, 'app.css') as StyleSheet,
+    });
     const box = engine.createElement(element);
     engine.setClasses(box, 'a');
     engine.appendChild(box, engine.createElement('view'));

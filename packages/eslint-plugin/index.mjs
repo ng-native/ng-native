@@ -6,41 +6,11 @@
  * never sent, the button draws as a plain view and `document` is undefined. Each rule names what
  * to write instead.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import domEvents from '@ng-native/metro/dom-events.cjs';
 import angular from 'angular-eslint';
 import tseslint from 'typescript-eslint';
-
-const PRESS = '(press) on a <pressable>, or <text pressable (press)="...">';
-
-/**
- * DOM events no native view sends, with what to listen for instead. An event the renderer is
- * given is the native one of the same name (`(scroll)` is `topScroll`), so only names no native
- * view or Angular Native component uses are here: `change`, `load`, `error`, `focus` and `blur`
- * are outputs or native events of some element and are left alone.
- */
-const DOM_EVENTS = new Map([
-  ['click', PRESS],
-  ['dblclick', PRESS],
-  ['contextmenu', '(longPress) on a <pressable>'],
-  ['mousedown', '(pressIn) on a <pressable>'],
-  ['mouseup', '(pressOut) on a <pressable>'],
-  ['input', '(changeText) or [(value)] on a <text-input>'],
-  ['beforeinput', '(changeText) on a <text-input>'],
-  ['keydown', '(keyPress) or (submitEditing) on a <text-input>'],
-  ['keyup', '(keyPress) or (submitEditing) on a <text-input>'],
-  ['keypress', '(keyPress) on a <text-input>'],
-  ['submit', '(submitEditing) on a <text-input>, or (press) on a submit <pressable>'],
-  ['wheel', '(scroll) on a <scroll-view>'],
-  ...['mousemove', 'mouseover', 'mouseout', 'mouseenter', 'mouseleave'].map((name) => [
-    name,
-    'a [gesture] from @ng-native/components',
-  ]),
-  ...['drag', 'dragstart', 'dragend', 'dragenter', 'dragleave', 'dragover', 'drop'].map((name) => [
-    name,
-    'a pan [gesture] from @ng-native/components',
-  ]),
-  ...['copy', 'cut', 'paste'].map((name) => [name, '(changeText) on a <text-input>']),
-]);
 
 /** HTML elements that draw as a plain view or text, without the behaviour they have in a browser. */
 const HTML_CONTROLS = new Map([
@@ -163,31 +133,37 @@ const DOM_MEMBERS = new Map([
   ].map((name) => [name, 'a binding in the template: [class.name], [style.name] or an input']),
 ]);
 
+const { DOM_EVENTS, DESKTOP_PLATFORMS, isNativeElement } = domEvents;
+
+/** `expo.platforms` from the `app.json` nearest `directory`, by directory. */
+const PLATFORMS = new Map();
+
 /**
- * The elements from @ng-native/components whose names have a hyphen. An element without one is
- * HTML's or a primitive's; any other hyphenated one is a component, which may declare an output
- * called `drag` or `drop`, so its events are its own business.
+ * Whether the project a file is in builds for a desktop OS: one its `app.json` lists in
+ * `expo.platforms`. A project with no `app.json`, or none listed, builds for iOS and Android,
+ * Expo's default.
  */
-const NATIVE_ELEMENTS = new Set([
-  'activity-indicator',
-  'gesture-root',
-  'gradient-text',
-  'image-background',
-  'input-accessory-view',
-  'keyboard-avoiding-view',
-  'keyboard-controller-view',
-  'keyboard-dock',
-  'keyboard-gesture-area',
-  'keyboard-motion-view',
-  'refresh-control',
-  'safe-area-provider',
-  'safe-area-view',
-  'scroll-view',
-  'section-list',
-  'text-input',
-  'touchable-opacity',
-  'virtual-list',
-]);
+function buildsForDesktop(context) {
+  const filename = context.physicalFilename ?? context.filename;
+  return platformsAbove(dirname(filename)).some((os) => DESKTOP_PLATFORMS.has(os));
+}
+
+function platformsAbove(directory) {
+  if (PLATFORMS.has(directory)) return PLATFORMS.get(directory);
+  const file = join(directory, 'app.json');
+  let platforms;
+  if (existsSync(file)) {
+    try {
+      platforms = JSON.parse(readFileSync(file, 'utf8'))?.expo?.platforms;
+    } catch {
+      platforms = undefined;
+    }
+  }
+  const parent = dirname(directory);
+  if (!Array.isArray(platforms)) platforms = parent === directory ? [] : platformsAbove(parent);
+  PLATFORMS.set(directory, platforms);
+  return platforms;
+}
 
 const DOCS = 'https://ng-native.com/packages/eslint-plugin';
 
@@ -221,6 +197,8 @@ const noDomEvents = {
       routerLink:
         'routerLink listens for a DOM click and never navigates on a device. Use nativeRouterLink from @ng-native/router, on a <pressable>.',
       event: '({{name}}) is a DOM event and never fires on a device. Use {{instead}}.',
+      desktop:
+        '({{name}}) fires only on macOS, and expo.platforms in app.json lists no desktop OS, so it never fires here. Use {{instead}}.',
       global:
         '({{target}}:{{name}}) never fires: there is no {{target}} on a device. Use @ng-native/device for app-wide events.',
     },
@@ -228,6 +206,7 @@ const noDomEvents = {
   },
   create(context) {
     if (isDomComponent(context)) return {};
+    const desktop = () => buildsForDesktop(context);
     /**
      * Report the event `name` on `target` (a global's name, or null for the element's own), with
      * `fixes` naming the replacement of an event a fix or a suggestion can rename.
@@ -239,9 +218,12 @@ const noDomEvents = {
       }
       // `(keydown.enter)` is the event `keydown` with a key filter.
       const event = name.split('.')[0];
-      const instead = DOM_EVENTS.get(event);
-      if (!instead) return;
-      const report = { ...where, messageId: 'event', data: { name: event, instead } };
+      const known = DOM_EVENTS.get(event);
+      if (!known) return;
+      // One a desktop sends is `desktop-only-events`' where the project builds for one.
+      if (known.desktop && desktop()) return;
+      const messageId = known.desktop ? 'desktop' : 'event';
+      const report = { ...where, messageId, data: { name: event, instead: known.instead } };
       if (fixes.press) report.fix = fixes.press;
       if (fixes.changeText) report.suggest = [{ messageId: 'changeText', fix: fixes.changeText }];
       context.report(report);
@@ -253,8 +235,7 @@ const noDomEvents = {
       },
       BoundEvent(event) {
         const element = event.parent?.type === 'Element' ? event.parent : null;
-        const native =
-          element && (!element.name.includes('-') || NATIVE_ELEMENTS.has(element.name));
+        const native = element && isNativeElement(element.name);
         if (event.target || native) {
           const fixes = element ? renames(context, element, event) : {};
           check({ loc: spanLoc(event) }, event.target, event.name, fixes);
@@ -272,6 +253,54 @@ const noDomEvents = {
       'Decorator > CallExpression[callee.name="HostListener"] > Literal:first-child'(literal) {
         const listener = /^(?:(window|document|body):)?(.+)$/.exec(String(literal.value));
         if (listener) check({ node: literal }, listener[1] ?? null, listener[2]);
+      },
+    };
+  },
+};
+
+/** @type {import('eslint').Rule.RuleModule} */
+const desktopOnlyEvents = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'Warn of a DOM event only a desktop OS sends, in a project that builds for one',
+      url: `${DOCS}#desktop-only-events`,
+    },
+    messages: {
+      event:
+        '({{name}}) fires only on macOS: iOS and Android never send it. Where it has to work there too, use {{instead}} as well.',
+    },
+    schema: [],
+  },
+  create(context) {
+    if (isDomComponent(context) || !buildsForDesktop(context)) return {};
+    const check = (where, name) => {
+      const event = name.split('.')[0];
+      const known = DOM_EVENTS.get(event);
+      if (!known?.desktop) return;
+      context.report({
+        ...where,
+        messageId: 'event',
+        data: { name: event, instead: known.instead },
+      });
+    };
+    return {
+      BoundEvent(event) {
+        const element = event.parent?.type === 'Element' ? event.parent : null;
+        if (!event.target && element && isNativeElement(element.name)) {
+          check({ loc: spanLoc(event) }, event.name);
+        }
+      },
+      'Decorator > CallExpression > ObjectExpression > Property[key.name="host"] > ObjectExpression > Property'(
+        property,
+      ) {
+        const key = property.key.type === 'Literal' ? String(property.key.value) : '';
+        const listener = /^\(([^:)]+)\)$/.exec(key);
+        if (listener) check({ node: property.key }, listener[1]);
+      },
+      'Decorator > CallExpression[callee.name="HostListener"] > Literal:first-child'(literal) {
+        const name = String(literal.value);
+        if (!name.includes(':')) check({ node: literal }, name);
       },
     };
   },
@@ -582,6 +611,7 @@ const plugin = {
   meta: { name: '@ng-native/eslint-plugin' },
   rules: {
     'no-dom-events': noDomEvents,
+    'desktop-only-events': desktopOnlyEvents,
     'no-html-controls': noHtmlControls,
     'no-browser-apis': noBrowserApis,
     'no-dom-node-access': noDomNodeAccess,
@@ -606,6 +636,7 @@ const recommended = [
     rules: {
       '@ng-native/no-browser-apis': 'error',
       '@ng-native/no-dom-events': 'error',
+      '@ng-native/desktop-only-events': 'warn',
       '@ng-native/no-dom-node-access': 'error',
       '@ng-native/no-uncalled-available': 'error',
     },
@@ -617,6 +648,7 @@ const recommended = [
     plugins: { '@ng-native': plugin },
     rules: {
       '@ng-native/no-dom-events': 'error',
+      '@ng-native/desktop-only-events': 'warn',
       '@ng-native/no-html-controls': 'error',
       '@ng-native/lowercase-elements': 'error',
     },

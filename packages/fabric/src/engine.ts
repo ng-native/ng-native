@@ -596,6 +596,13 @@ const EVENT_OPT_IN_PROPS: Record<string, string> = {
    */
   topPointerEnter: 'onPointerEnter',
   topPointerLeave: 'onPointerLeave',
+  topPointerMove: 'onPointerMove',
+  topPointerOver: 'onPointerOver',
+  topPointerOut: 'onPointerOut',
+  // A desktop host's, for `(dblclick)`, `(contextmenu)` and `(wheel)`: see `DOM_EVENT_TYPES`.
+  topDoubleClick: 'onDoubleClick',
+  topContextMenu: 'onContextMenu',
+  topWheel: 'onWheel',
 };
 
 /**

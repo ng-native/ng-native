@@ -25,9 +25,9 @@ it('draws code in Menlo on a Mac, as on iOS', () => {
     engine.appendChild(engine.root, code);
     engine.appendChild(code, engine.createText('x'));
     engine.commit();
-    return /"fontFamily":"([^"]+)"/.exec(JSON.stringify(fabric.committed, (key, value) =>
-      key === 'parent' ? undefined : value,
-    ))?.[1];
+    return /"fontFamily":"([^"]+)"/.exec(
+      JSON.stringify(fabric.committed, (key, value) => (key === 'parent' ? undefined : value)),
+    )?.[1];
   };
   assert.equal(font('ios'), 'Menlo');
   assert.equal(font('macos'), 'Menlo');

@@ -11,6 +11,7 @@
 const { createHash } = require('node:crypto');
 const { existsSync, readdirSync, readFileSync, statSync } = require('node:fs');
 const path = require('node:path');
+const { unsentEvents } = require('./dom-events.cjs');
 const { compileError } = require('./compile-error.cjs');
 const { assertTemplateFileParses, assertTemplatesParse } = require('./template-syntax.cjs');
 const { compileCss } = require('./css/compile.cjs');
@@ -58,6 +59,19 @@ function assertLowercaseElements(code, filename) {
     `${filename}: element <${capitalized[1]}> is capitalized; element names in a template are ` +
       `lowercase, such as <${capitalized[1].toLowerCase()}>.`,
   );
+}
+
+/**
+ * A binding to a DOM event no device sends compiles and never fires: `(click)` on a `<view>`. Say
+ * so at build time, from the table `@ng-native/eslint-plugin` reads, for an app without the lint.
+ */
+function warnUnsentEvents(code, filename) {
+  for (const { where, instead } of unsentEvents(code)) {
+    console.warn(
+      `[angular-native] ${filename}: ${where} is a DOM event and never fires on a device. ` +
+        `Use ${instead}.`,
+    );
+  }
 }
 
 /**
@@ -1568,6 +1582,7 @@ function transformAngular(src, filename, options = {}) {
         mapLineOffset: dependencies.length,
       };
     }
+    warnUnsentEvents(result.code, filename);
     const warn = buildWarnings();
     const sheets = styleBlock(src, filename, components, resources, platform, warn);
     const { quiet, hmr } = hotParts(src, filename, components, resources, options, warn);
