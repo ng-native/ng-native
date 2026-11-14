@@ -2,7 +2,7 @@
 // that is never shown, and gives each window the app opens (NgNativeWindows) a surface of its own.
 //
 //   ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>]
-//   ngn-macos              (in a packaged app: the bundle and module its Info.plist names)
+//   ngn-macos              (a packaged app: what its Info.plist names; argv and env are ignored)
 //
 // <bundle> is a JavaScript or Hermes bytecode file on disk, or a Metro bundle URL, which turns on
 // the dev loop: reload and Fast Refresh from the dev server, and the Developer menu. The module
@@ -39,6 +39,7 @@
 #import "native-controls.h"
 #include "ngn/focus-order.h"
 #include "ngn/layout-animations.h"
+#include "ngn/launch-settings.h"
 #include "ngn/runtime.h"
 #include "ngn/sqlite.h"
 
@@ -424,46 +425,32 @@ void showAppWindow() {
 
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
-    std::string bundle;
-    std::string module = "main";
-    NSString *title = @"ng-native";
-    std::string appId;
-    std::string capabilities;
-    if (const char *fromEnv = getenv("NGN_DESKTOP_CAPABILITIES")) {
-      capabilities = fromEnv;
-    }
-    for (int i = 1; i < argc; i++) {
-      std::string arg = argv[i];
-      if (arg == "--module" && i + 1 < argc) {
-        module = argv[++i];
-      } else if (arg == "--app-id" && i + 1 < argc) {
-        appId = argv[++i];
-      } else if (arg == "--capabilities" && i + 1 < argc) {
-        capabilities = argv[++i];
-      } else if (arg == "--title" && i + 1 < argc) {
-        title = [NSString stringWithUTF8String:argv[++i]];
-      } else if (bundle.empty() && arg.rfind("--", 0) != 0) {
-        bundle = arg;
-      } else {
-        bundle.clear();
-        break;
-      }
-    }
-    // A packaged app, launched from Finder with no arguments: its Info.plist says what to run.
-    if (auto packaged = ngn::appkit::packagedApp(); packaged && argc == 1) {
-      bundle = packaged->bundlePath;
-      module = packaged->moduleName;
-      if (NSString *name = NSBundle.mainBundle.infoDictionary[@"CFBundleName"]; [name isKindOfClass:NSString.class]) {
-        title = name;
-      }
-      if (NSString *identifier = NSBundle.mainBundle.bundleIdentifier) {
-        appId = identifier.UTF8String;
-      }
-    }
-    if (bundle.empty()) {
-      fprintf(stderr, "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>]\n");
+    // What to run: argv and the environment in a dev run, and only the Info.plist in a packaged
+    // app (launch-settings.h).
+    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+    std::vector<std::string> args(argv + 1, argv + argc);
+    auto launch = ngn::launchSettings({
+        .args = args,
+        .env = [](const std::string &name) -> std::optional<std::string> {
+          const char *value = getenv(name.c_str());
+          return value != nullptr ? std::optional<std::string>(value) : std::nullopt;
+        },
+        .plist = [info](const std::string &key) -> std::optional<std::string> {
+          NSString *value = info[[NSString stringWithUTF8String:key.c_str()]];
+          return [value isKindOfClass:NSString.class] ? std::optional<std::string>(value.UTF8String) : std::nullopt;
+        },
+        .resourcePath = NSBundle.mainBundle.resourcePath != nil ? NSBundle.mainBundle.resourcePath.UTF8String : "",
+    });
+    if (auto *usage = std::get_if<std::string>(&launch)) {
+      fprintf(stderr, "%s\n", usage->c_str());
       return 2;
     }
+    static const auto settings = std::get<ngn::LaunchSettings>(launch);
+    std::string bundle = settings.bundle;
+    std::string module = settings.module;
+    NSString *title = [NSString stringWithUTF8String:settings.title.c_str()];
+    std::string appId = settings.appId;
+    std::string capabilities = settings.capabilitiesJson;
 
     NSApplication *app = NSApplication.sharedApplication;
     app.activationPolicy = NSApplicationActivationPolicyRegular;
@@ -670,7 +657,7 @@ int main(int argc, const char *argv[]) {
     {
       bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
       gHost.updates = std::make_shared<ngn::UpdatesClient>(
-          ngn::appkit::updatesConfig(system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
+          ngn::updatesConfigFrom(settings, system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
       if (!fromDevServer && gHost.updates->enabled()) {
         bundle = gHost.updates->launch();
         if (auto running = gHost.updates->running()) {

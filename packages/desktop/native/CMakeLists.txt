@@ -70,6 +70,7 @@ add_library(ngn_core STATIC
     core/src/host-state.cpp
     core/src/input-dispatcher.cpp
     core/src/key-value-store.cpp
+    core/src/launch-settings.cpp
     core/src/library-glue.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
