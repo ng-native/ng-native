@@ -121,10 +121,9 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
   }                                                                                                        \
   -(BOOL)textView : (NSTextView *)textView shouldChangeTextInRange : (NSRange)range replacementString      \
       : (NSString *)string {                                                                               \
-    if (!callSuperShouldChange(self, self.superclass, textView, range, string)) {                          \
-      return NO;                                                                                           \
-    }                                                                                                      \
-    return self.box ? shouldChange(textView, range, string, self.box.options, &_inserting) : YES;          \
+    static const TextInputOptions none{};                                                                  \
+    return NGNControlShouldChangeText(                                                                     \
+        self, self.superclass, textView, range, string, self.box ? self.box.options : none, &_inserting);  \
   }                                                                                                        \
   -(NSDictionary<NSTextCheckingOptionKey, id> *)textView : (NSTextView *)view willCheckTextInRange         \
       : (NSRange)range options : (NSDictionary<NSTextCheckingOptionKey, id> *)options types                 \
@@ -158,6 +157,18 @@ BOOL callSuperShouldChange(id self, Class superclass, NSTextView *textView, NSRa
 }
 
 } // namespace
+
+BOOL NGNControlShouldChangeText(
+    NSControl *control,
+    Class superclass,
+    NSTextView *editor,
+    NSRange range,
+    NSString *replacement,
+    const TextInputOptions &options,
+    BOOL *inserting) {
+  return callSuperShouldChange(control, superclass, editor, range, replacement) &&
+      shouldChange(editor, range, replacement, options, inserting);
+}
 
 @interface NGNPlainFieldCell : NSTextFieldCell
 @end

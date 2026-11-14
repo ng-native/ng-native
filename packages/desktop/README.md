@@ -100,7 +100,11 @@ unless the view styles `outline`.
 The platform controls are AppKit's own, sized for Yoga at their `controlSize`: `<native-button>`
 is an NSButton (Return presses a `default` one and Escape a `cancel` one), `<switch>` an NSSwitch,
 `<activity-indicator>` an NSProgressIndicator, `<segmented-control>` an NSSegmentedControl and
-`<date-time-picker>` an NSDatePicker. `<search-field>` is not drawn yet.
+`<date-time-picker>` an NSDatePicker and `<search-field>` an NSSearchField, drawn at its control
+size's height in the middle of its element, with `@ng-native/expo`'s iOS contract: a text older
+than what has been typed since is skipped, Return sends `(search)`, the clear button and Escape
+empty the field and send `(cancel)` (keeping the keyboard), and `focus()` and `blur()` are its view
+commands. Its type is its CSS's, and `tintColor` colours the cursor.
 
 A `<text-input>` is an NSTextField, or an NSSecureTextField for `secureTextEntry` (swapped in place
 as the prop changes, keeping the text and the keyboard), and a multiline one an NSTextView. Its

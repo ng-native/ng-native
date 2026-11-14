@@ -119,9 +119,50 @@ TEST_CASE("a control measures as nothing without a measurer") {
 TEST_CASE("every native control is a component the core knows, by the name the element commits") {
   auto backend = std::make_shared<ngn::testing::FakeBackend>();
   auto mounting = std::make_shared<ngn::MountingManager>(backend, backend);
-  for (const char *name : {"NgNativeButton", "Switch", "ActivityIndicatorView", "RNCSegmentedControl", "RNDateTimePicker"}) {
+  for (const char *name :
+       {"NgNativeButton",
+        "Switch",
+        "ActivityIndicatorView",
+        "RNCSegmentedControl",
+        "RNDateTimePicker",
+        "ViewManagerAdapter_NgNativeSearchField"}) {
     CHECK(mounting->hasComponent(name));
     CHECK(ngn::controlKind(name).has_value());
   }
   CHECK_FALSE(ngn::controlKind("View").has_value());
+}
+
+TEST_CASE("a search field parses what <search-field> commits, its type included") {
+  Control<ngn::SearchFieldComponentDescriptor> c;
+  auto p = c.props(folly::dynamic::object("text", "teal")("mostRecentEventCount", 3)("placeholder", "Search colours")(
+      "autoCapitalize", "none")("enabled", false)("controlSize", "small")("tintColor", 0xff00ff00)(
+      "fontFamily", "Georgia")("fontSize", 20)("fontWeight", "bold")("fontStyle", "italic"));
+  CHECK(p->text == "teal");
+  CHECK(p->mostRecentEventCount == 3);
+  CHECK(p->placeholder == "Search colours");
+  CHECK(p->autoCapitalize == "none");
+  CHECK_FALSE(p->enabled);
+  CHECK(p->controlSize == ngn::ControlSize::Small);
+  CHECK(p->tintColor);
+  CHECK(p->fontFamily == "Georgia");
+  CHECK(p->fontSize == 20);
+  CHECK(p->fontWeight == 700);
+  CHECK(p->italic);
+
+  // A weight as a number or a numeric string, and an update that keeps what it does not mention.
+  auto next = c.props(folly::dynamic::object("fontWeight", 300)("text", ""), p);
+  CHECK(next->fontWeight == 300);
+  CHECK(next->text.empty());
+  CHECK(next->italic);
+  CHECK(next->fontFamily == "Georgia");
+  CHECK(c.props(folly::dynamic::object("fontWeight", "600"), next)->fontWeight == 600);
+  CHECK(c.props(folly::dynamic::object("fontWeight", "normal"), next)->fontWeight == 400);
+  auto cleared = c.props(folly::dynamic::object("fontWeight", nullptr)("fontStyle", nullptr)("fontSize", nullptr), next);
+  CHECK_FALSE(cleared->fontWeight.has_value());
+  CHECK_FALSE(cleared->italic);
+  CHECK_FALSE(cleared->fontSize.has_value());
+
+  measure(*c.node(folly::dynamic::object("controlSize", "large")));
+  CHECK(c.measurer->kinds == std::vector<ngn::ControlKind>{ngn::ControlKind::SearchField});
+  CHECK(c.measurer->sizes == std::vector<ngn::ControlSize>{ngn::ControlSize::Large});
 }

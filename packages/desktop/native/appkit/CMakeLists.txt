@@ -53,6 +53,7 @@ add_executable(ngn-macos
     network-state.mm
     notifications.mm
     scroll-view.mm
+    search-field.mm
     split-view.mm
     surface-view.mm
     svg-view.mm

@@ -24,6 +24,18 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
     NSDictionary<NSTextCheckingOptionKey, id> *checking,
     const ngn::TextInputOptions &options);
 
+// textView:shouldChangeTextInRange:replacementString: for an NSTextField subclass whose field editor
+// `editor` is: `superclass`'s answer (a formatter's), then NGNFitReplacement's, putting what fits in
+// place of the change when it differs. `inserting` is the control's own flag for that re-entry.
+BOOL NGNControlShouldChangeText(
+    NSControl *control,
+    Class superclass,
+    NSTextView *editor,
+    NSRange range,
+    NSString *replacement,
+    const ngn::TextInputOptions &options,
+    BOOL *inserting);
+
 // A single-line field: an NSTextField, or an NSSecureTextField for secure entry, in a box that swaps
 // one for the other.
 @interface NGNTextField : NSView

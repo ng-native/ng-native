@@ -1,5 +1,7 @@
 #import "native-controls.h"
 
+#import "search-field.h"
+
 #include <react/renderer/components/view/ViewEventEmitter.h>
 
 using namespace facebook::react;
@@ -144,6 +146,10 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
         cell.dateValue = [NSDate dateWithTimeIntervalSince1970:p.date.value_or(0) / 1000];
         cell.bezeled = YES;
         return cellSize(cell);
+      }
+      case ControlKind::SearchField: {
+        NSSize size = NGNSearchFieldSize(p);
+        return {static_cast<Float>(size.width), static_cast<Float>(size.height)};
       }
     }
   }
@@ -338,6 +344,74 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
 }
 @end
 
+// `<search-field>`: NGNSearchField (search-field.mm), with expo's event names.
+@interface NGNSearchFieldView : NGNView
+@end
+
+@implementation NGNSearchFieldView {
+  NGNSearchField *_search;
+}
+
+- (instancetype)initWithShadowView:(const ShadowView &)view {
+  if ((self = [super initWithShadowView:view])) {
+    _search = [[NGNSearchField alloc] initWithFrame:self.bounds];
+    _search.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    __weak NGNSearchFieldView *weakSelf = self;
+    _search.changed = ^(NSString *text, int eventCount) {
+      [weakSelf send:"changeText" payload:folly::dynamic::object("text", text.UTF8String)("eventCount", eventCount)];
+    };
+    _search.submitted = ^(NSString *text) {
+      [weakSelf send:"submitSearch" payload:folly::dynamic::object("text", text.UTF8String)];
+    };
+    _search.cancelled = ^{
+      [weakSelf send:"pressCancel" payload:folly::dynamic::object()];
+    };
+    _search.began = ^{
+      [weakSelf send:"beginEditing" payload:folly::dynamic::object()];
+    };
+    _search.ended = ^{
+      [weakSelf send:"endEditing" payload:folly::dynamic::object()];
+    };
+    [self addSubview:_search];
+  }
+  return self;
+}
+
+- (void)send:(const std::string &)name payload:(folly::dynamic)payload {
+  if (auto emitter = self.eventEmitter) {
+    emitter->dispatchEvent(name, std::move(payload), RawEvent::Category::Discrete);
+  }
+}
+
+- (void)updateProps:(const Props::Shared &)props {
+  [super updateProps:props];
+  if (const auto *p = dynamic_cast<const NativeControlProps *>(props.get())) {
+    [_search apply:*p];
+  }
+}
+
+- (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args {
+  if (name == "focus") {
+    [_search focus];
+  } else if (name == "blur") {
+    [_search blur];
+  }
+}
+
+- (NSResponder *)keyboardResponder {
+  return _search.field;
+}
+
+- (BOOL)isAccessibilityElement {
+  return NO;
+}
+
+- (BOOL)acceptsFirstResponder {
+  return NO;
+}
+
+@end
+
 NGNView *NGNMakeControlView(const ShadowView &view) {
   auto kind = ngn::controlKind(view.componentName);
   if (!kind) {
@@ -354,6 +428,8 @@ NGNView *NGNMakeControlView(const ShadowView &view) {
       return [[NGNDatePickerView alloc] initWithShadowView:view control:[NSDatePicker new]];
     case ControlKind::ActivityIndicator:
       return [[NGNActivityIndicatorView alloc] initWithShadowView:view];
+    case ControlKind::SearchField:
+      return [[NGNSearchFieldView alloc] initWithShadowView:view];
   }
   return nil;
 }

@@ -1,6 +1,7 @@
 // The platform controls a desktop host draws, as Fabric components: `<native-button>`
 // (NgNativeButton), `<switch>` (Switch), `<activity-indicator>` (ActivityIndicatorView),
-// `<segmented-control>` (RNCSegmentedControl) and `<date-time-picker>` (RNDateTimePicker).
+// `<segmented-control>` (RNCSegmentedControl), `<date-time-picker>` (RNDateTimePicker) and
+// `<search-field>` (`@ng-native/expo`'s NgNativeSearchField view).
 //
 // Every control has the same props class, the union of what the elements commit, and measures its
 // intrinsic size for Yoga through the ControlMeasurer in the ContextContainer, as a toolkit draws
@@ -23,7 +24,7 @@
 
 namespace ngn {
 
-enum class ControlKind { Button, Switch, ActivityIndicator, SegmentedControl, DatePicker };
+enum class ControlKind { Button, Switch, ActivityIndicator, SegmentedControl, DatePicker, SearchField };
 
 // AppKit's control sizes, and UIKit's on iOS 26 and later.
 enum class ControlSize { Mini, Small, Regular, Large };
@@ -69,6 +70,20 @@ class NativeControlProps final : public facebook::react::ViewProps, public HasDe
   std::string mode{"date"};
   // `default`, `spinner`, `compact` or `inline`.
   std::string display{"default"};
+
+  // Search field: the text JavaScript holds, and the keystroke it answers (React Native's text
+  // input rule: a text older than what has been typed since is skipped).
+  std::string text;
+  int mostRecentEventCount{0};
+  std::string placeholder;
+  std::string autoCapitalize;
+  facebook::react::SharedColor tintColor;
+  // The face, size, weight (CSS's 100 to 900) and slant the field's CSS resolves to; unset is the
+  // control's own font.
+  std::string fontFamily;
+  std::optional<double> fontSize;
+  std::optional<int> fontWeight;
+  bool italic{false};
 };
 
 // How big a toolkit draws a control. Called on the JS thread, while the UI thread draws.
@@ -94,6 +109,7 @@ extern const char SwitchControlComponentName[];
 extern const char ActivityIndicatorControlComponentName[];
 extern const char SegmentedControlComponentName[];
 extern const char DatePickerComponentName[];
+extern const char SearchFieldComponentName[];
 
 template <const char *Name, ControlKind Kind>
 class NativeControlShadowNode final
@@ -136,5 +152,7 @@ using ActivityIndicatorControlComponentDescriptor =
 using SegmentedControlComponentDescriptor =
     NativeControlComponentDescriptor<SegmentedControlComponentName, ControlKind::SegmentedControl>;
 using DatePickerComponentDescriptor = NativeControlComponentDescriptor<DatePickerComponentName, ControlKind::DatePicker>;
+using SearchFieldComponentDescriptor =
+    NativeControlComponentDescriptor<SearchFieldComponentName, ControlKind::SearchField>;
 
 } // namespace ngn

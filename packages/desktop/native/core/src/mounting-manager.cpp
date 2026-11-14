@@ -54,6 +54,7 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<ActivityIndicatorControlComponentDescriptor>(),
       concreteComponentDescriptorProvider<SegmentedControlComponentDescriptor>(),
       concreteComponentDescriptorProvider<DatePickerComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SearchFieldComponentDescriptor>(),
       concreteComponentDescriptorProvider<SplitViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<SidebarComponentDescriptor>(),
       concreteComponentDescriptorProvider<SplitContentComponentDescriptor>(),
