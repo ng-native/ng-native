@@ -54,12 +54,12 @@ const AUTOSAVE_DELAY_MS = 500;
       </native-header>
 
       <scroll-view
-        class="flex-1 px-5 pt-4"
+        class="flex-1 px-5 pt-4 macos:px-4 macos:pt-3"
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
       >
         <text-input
-          class="text-2xl font-bold text-zinc-900 dark:text-white"
+          class="text-2xl font-bold text-zinc-900 dark:text-white macos:text-[22px]"
           placeholder="Title"
           accessibilityLabel="Title"
           autoCapitalize="sentences"
@@ -67,7 +67,7 @@ const AUTOSAVE_DELAY_MS = 500;
           (changeText)="scheduleSave()"
         />
         <text-input
-          class="mt-3 min-h-32 text-base text-zinc-700 dark:text-zinc-300"
+          class="mt-3 min-h-32 text-base text-zinc-700 dark:text-zinc-300 macos:mt-2 macos:text-[13px]"
           placeholder="Start writing..."
           accessibilityLabel="Note body"
           [multiline]="true"
@@ -80,8 +80,8 @@ const AUTOSAVE_DELAY_MS = 500;
         [class.keyboard-up]="keyboardUp()"
         class="bottom-bar flex-row items-center justify-between border-t-hairline border-zinc-200 bg-white px-5 pt-2 dark:border-zinc-800 dark:bg-black"
       >
-        <text class="text-xs text-zinc-400">{{ wordCountLabel() }}</text>
-        <text class="text-xs text-zinc-400">{{ savedLabel() }}</text>
+        <text class="text-xs text-zinc-400 macos:text-[11px]">{{ wordCountLabel() }}</text>
+        <text class="text-xs text-zinc-400 macos:text-[11px]">{{ savedLabel() }}</text>
       </view>
     </keyboard-avoiding-view>
   `,
