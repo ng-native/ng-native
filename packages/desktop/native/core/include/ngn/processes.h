@@ -63,6 +63,11 @@ class ProcessLauncher {
 // posix_spawn with a pipe for each standard stream, read on threads of their own.
 std::shared_ptr<ProcessLauncher> makePosixLauncher();
 
+// Waits for the child `pid` to exit, calls `forget` while it is still unreaped (its pid cannot be
+// handed to another process yet), then reaps it and answers its waitpid status. A launcher forgets
+// a program in `forget`, so a kill that finds it never signals a stranger that reused the pid.
+int reapAfter(int pid, const std::function<void()> &forget);
+
 struct ProcessesSetup {
   DeclaredCapabilities capabilities;
   // The environment the app was started with.

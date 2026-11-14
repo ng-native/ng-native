@@ -110,10 +110,7 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
       std::thread errReader([&] { read(errFd, handle, true, events); });
       read(outFd, handle, false, events);
       errReader.join();
-      int status = 0;
-      while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
-      }
-      self->finished(handle);
+      int status = reapAfter(pid, [&] { self->finished(handle); });
       if (events && events->exit) {
         if (WIFSIGNALED(status)) {
           events->exit(handle, std::nullopt, signalName(WTERMSIG(status)));
@@ -302,6 +299,18 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
 };
 
 } // namespace
+
+int reapAfter(int pid, const std::function<void()> &forget) {
+  // WNOWAIT leaves the child a zombie, which keeps its pid from being reused until it is reaped.
+  siginfo_t info{};
+  while (waitid(P_PID, static_cast<id_t>(pid), &info, WEXITED | WNOWAIT) < 0 && errno == EINTR) {
+  }
+  forget();
+  int status = 0;
+  while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+  }
+  return status;
+}
 
 std::shared_ptr<ProcessLauncher> makePosixLauncher() {
   return std::make_shared<PosixLauncher>();

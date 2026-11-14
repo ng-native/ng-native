@@ -12,6 +12,9 @@
 #include <mutex>
 #include <thread>
 
+#include <sys/wait.h>
+#include <unistd.h>
+
 using folly::dynamic;
 
 namespace {
@@ -377,4 +380,22 @@ TEST_CASE("the POSIX launcher stops every program it started, for the host quitt
   REQUIRE(done.wait_for(lock, std::chrono::seconds(10), [&] { return exits.size() == 2; }));
   CHECK(exits[a] == "SIGKILL");
   CHECK(exits[b] == "SIGKILL");
+}
+
+TEST_CASE("the POSIX launcher forgets a program while its pid is still held, so a kill never reaches a reused pid") {
+  pid_t pid = fork();
+  REQUIRE(pid >= 0);
+  if (pid == 0) {
+    _exit(3);
+  }
+  bool heldWhenForgotten = false;
+  int status = ngn::reapAfter(pid, [&] {
+    // The program has exited but is not reaped: its pid is still its own, not free for reuse.
+    heldWhenForgotten = ::kill(pid, 0) == 0;
+  });
+  CHECK(heldWhenForgotten);
+  CHECK(WIFEXITED(status));
+  CHECK(WEXITSTATUS(status) == 3);
+  // Reaped now.
+  CHECK(::kill(pid, 0) == -1);
 }
