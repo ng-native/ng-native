@@ -358,6 +358,9 @@ importers:
       '@ng-native/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@ng-native/desktop':
+        specifier: workspace:*
+        version: link:../../packages/desktop
       '@ng-native/device':
         specifier: workspace:*
         version: link:../../packages/device
