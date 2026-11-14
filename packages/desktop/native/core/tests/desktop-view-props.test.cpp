@@ -72,3 +72,70 @@ TEST_CASE("a modal's anchor is parsed and reported, and goes again when unset") 
   CHECK(ngn::desktopProps(*unset) == ngn::DesktopProps{});
   CHECK(descriptor.getComponentName() == std::string("ModalHostView"));
 }
+
+TEST_CASE("the cursor and the element event opt-ins are parsed from a View's props") {
+  Parser p;
+  auto props = p.clone(
+      nullptr,
+      folly::dynamic::object("desktopCursor", "not-allowed")("cursor", "auto")("onDoubleClick", true)(
+          "onContextMenu", true)("onWheel", true));
+  auto desktop = ngn::desktopProps(*props);
+  CHECK(desktop.cursor == Cursor::NotAllowed);
+  CHECK(desktop.onDoubleClick);
+  CHECK(desktop.onContextMenu);
+  CHECK(desktop.onWheel);
+
+  auto unset = ngn::desktopProps(*p.clone(props, folly::dynamic::object("desktopCursor", nullptr)("onWheel", nullptr)));
+  CHECK_FALSE(unset.cursor.has_value());
+  CHECK_FALSE(unset.onWheel);
+  CHECK(unset.onDoubleClick);
+}
+
+TEST_CASE("a scroll view's props carry the scroll bar properties, and are still a scroll view's") {
+  auto context = std::make_shared<const ContextContainer>();
+  ngn::DesktopScrollViewComponentDescriptor descriptor{{{}, context, nullptr}};
+  PropsParserContext parserContext{1, *context};
+  auto props = descriptor.cloneProps(
+      parserContext,
+      nullptr,
+      RawProps(folly::dynamic::object("scrollbarWidth", "thin")("scrollbarGutter", "stable")("scrollEnabled", false)));
+  CHECK(ngn::desktopProps(*props).scrollbarWidth == ngn::ScrollbarWidth::Thin);
+  CHECK(ngn::desktopProps(*props).scrollbarGutter == ngn::ScrollbarGutter::Stable);
+  CHECK_FALSE(static_cast<const ScrollViewProps &>(*props).scrollEnabled);
+
+  auto none = descriptor.cloneProps(parserContext, props, RawProps(folly::dynamic::object("scrollbarWidth", "none")));
+  CHECK(ngn::desktopProps(*none).scrollbarWidth == ngn::ScrollbarWidth::None);
+  CHECK(ngn::desktopProps(*none).scrollbarGutter == ngn::ScrollbarGutter::Stable);
+
+  auto reset = descriptor.cloneProps(
+      parserContext, none, RawProps(folly::dynamic::object("scrollbarWidth", nullptr)("scrollbarGutter", "auto")));
+  CHECK(ngn::desktopProps(*reset) == ngn::DesktopProps{});
+  CHECK(descriptor.getComponentName() == std::string("ScrollView"));
+}
+
+TEST_CASE("a view with desktop props is mounted with its children under it, not flattened away") {
+  Parser p;
+  auto traitsOf = [&](const folly::dynamic &raw) {
+    auto props = p.clone(nullptr, raw);
+    auto family = p.descriptor.createFamily({.tag = 7, .surfaceId = 1, .instanceHandle = nullptr});
+    auto node = p.descriptor.createShadowNode(ShadowNodeFragment{.props = props}, family);
+    return node->getTraits();
+  };
+  // A box with a background is a view, but Fabric mounts its children beside it.
+  auto plain = traitsOf(folly::dynamic::object("backgroundColor", 0xff0000ff));
+  CHECK(plain.check(ShadowNodeTraits::Trait::FormsView));
+  CHECK_FALSE(plain.check(ShadowNodeTraits::Trait::FormsStackingContext));
+
+  std::vector<folly::dynamic> asking{
+      folly::dynamic::object("desktopCursor", "grab"),
+      folly::dynamic::object("onDoubleClick", true),
+      folly::dynamic::object("onContextMenu", true),
+      folly::dynamic::object("onWheel", true),
+      folly::dynamic::object("tabIndex", 0),
+  };
+  for (const auto &raw : asking) {
+    CHECK(traitsOf(raw).check(ShadowNodeTraits::Trait::FormsStackingContext));
+  }
+  CHECK(traitsOf(folly::dynamic::object("focusable", true)).check(ShadowNodeTraits::Trait::KeyboardFocusable));
+  CHECK_FALSE(traitsOf(folly::dynamic::object("tabIndex", -1)).check(ShadowNodeTraits::Trait::KeyboardFocusable));
+}

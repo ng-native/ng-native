@@ -1,22 +1,47 @@
 // The core's InputSink: hit tests each pointer event against the ViewTree from the container's
-// root, turns a press into Fabric touches on the deepest view, and diffs the hovered chain per
-// surface into pointer enter and leave events for the views whose props ask for them (React
-// Native iOS gates them the same way). UI thread only, like the tree it reads.
+// root, turns a press into Fabric touches on the deepest view, and sends the desktop's mouse
+// events. UI thread only, like the tree it reads.
+//
+// The contract with the engine (packages/integration-tests/mouse-events.test.ts):
+//
+// - Every move goes to the deepest view under the pointer as a pointer move, and a pointer leave
+//   follows the pointer out of the surface, as React Native iOS sends them. React Native's
+//   PointerEventsProcessor turns those into over, out, enter and leave for the views that listen,
+//   and passes the move on only when a view in the path listens for it.
+// - Double click, context menu and wheel are the element events `doubleClick`, `contextMenu` and
+//   `wheel`, sent to the deepest view when it or an ancestor opts in through its desktop props
+//   (desktop-view-props.h). The engine bubbles them up from there.
+//
+// It also decides the cursor: the nearest view under the pointer that names one, `text` over a
+// text input, and the default otherwise.
 #pragma once
 
+#include "ngn/desktop-view-props.h"
 #include "ngn/input.h"
 #include "ngn/view-tree.h"
 
 #include <react/renderer/components/view/PointerEvent.h>
 #include <react/renderer/components/view/TouchEvent.h>
+#include <react/renderer/components/view/primitives.h>
 
+#include <folly/dynamic.h>
+
+#include <functional>
 #include <map>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ngn {
 
 enum class TouchPhase { Start, Move, End };
+enum class PointerKind { Enter, Leave, Move, Over, Out };
+
+using facebook::react::Cursor;
+
+// The cursor the views under the pointer ask for, `chain` running from the container's root to
+// the deepest. `Cursor::Auto` when none does: the toolkit's default.
+Cursor cursorFor(const ViewTree &tree, const std::vector<Tag> &chain);
 
 class InputDispatcher : public InputSink {
  public:
@@ -28,16 +53,26 @@ class InputDispatcher : public InputSink {
   void pointerMove(const PointerInput &input) override;
   void pointerUp(const PointerInput &input) override;
   void pointerLeave(SurfaceId surfaceId, const PointerInput &input) override;
+  bool contextMenu(const PointerInput &input) override;
+  bool wheel(const PointerInput &input, const WheelDelta &delta) override;
+
+  // After a transaction: the views under a still pointer may have changed what cursor they ask
+  // for.
+  void didMount(SurfaceId surfaceId);
 
   // The hovered views of a surface, outermost first.
   const std::vector<Tag> &hovered(SurfaceId surfaceId) const;
 
+  // Told each time the cursor should change.
+  std::function<void(Cursor)> onCursor;
+
  protected:
-  // Where events leave the core. The defaults send them through the view's TouchEventEmitter;
-  // tests record them instead.
+  // Where events leave the core. The defaults send them through the view's event emitter; tests
+  // record them instead.
   virtual void emitTouch(TouchPhase phase, const ViewTree::Node &target, const facebook::react::TouchEvent &event);
-  virtual void emitPointerEnter(const ViewTree::Node &node, const facebook::react::PointerEvent &event);
-  virtual void emitPointerLeave(const ViewTree::Node &node, const facebook::react::PointerEvent &event);
+  virtual void emitPointer(PointerKind kind, const ViewTree::Node &node, const facebook::react::PointerEvent &event);
+  // `name` without React Native's `top` prefix: `doubleClick`, `contextMenu` or `wheel`.
+  virtual void emitElementEvent(const ViewTree::Node &node, const std::string &name, folly::dynamic payload);
 
  private:
   struct Container {
@@ -47,18 +82,31 @@ class InputDispatcher : public InputSink {
   struct Press {
     ContainerId container;
     Tag target;
+    int clickCount;
   };
 
   void updateHover(const Container &container, std::vector<Tag> chain, const PointerInput &input);
   void sendTouch(TouchPhase phase, const PointerInput &input);
+  // Sends an element event to the deepest view of `chain` when it or an ancestor opted in.
+  bool sendElementEvent(
+      const Container &container,
+      const std::vector<Tag> &chain,
+      bool DesktopProps::*optIn,
+      const std::string &name,
+      folly::dynamic payload);
+  folly::dynamic locationPayload(const Container &container, Tag target, Point point) const;
   // Where a container's root sits in its surface: page coordinates are the surface's.
   Point pageOrigin(const Container &container) const;
   facebook::react::PointerEvent pointerEvent(const PointerInput &input, Point pageOrigin) const;
+  void setCursor(Cursor cursor);
 
   const ViewTree &tree_;
   std::map<ContainerId, Container> containers_;
   std::map<SurfaceId, std::vector<Tag>> hovered_;
   std::optional<Press> press_;
+  // The surface the pointer is over, if any, and the cursor last asked for.
+  std::optional<SurfaceId> pointerSurface_;
+  std::optional<Cursor> cursor_;
 };
 
 } // namespace ngn

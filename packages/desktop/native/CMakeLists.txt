@@ -57,11 +57,13 @@ include(cmake/react-native.cmake)
 
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
+    core/src/accessibility.cpp
     core/src/bytes.cpp
     core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp
+    core/src/focus-order.cpp
     core/src/header-bar.cpp
     core/src/host-state.cpp
     core/src/input-dispatcher.cpp
@@ -69,6 +71,7 @@ add_library(ngn_core STATIC
     core/src/library-glue.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
+    core/src/native-controls.cpp
     core/src/native-module.cpp
     core/src/network.cpp
     core/src/text-layout-manager.cpp

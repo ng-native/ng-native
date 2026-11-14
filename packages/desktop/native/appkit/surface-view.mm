@@ -1,14 +1,98 @@
 #import "surface-view.h"
 
+#import "host-view.h"
+
+using facebook::react::Cursor;
+
 namespace {
 std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> gInsetsChanged;
+NSCursor *gCursor = nil;
+
+// A cursor of nothing, for `cursor: none`.
+NSCursor *noCursor() {
+  static NSCursor *none = [[NSCursor alloc] initWithImage:[[NSImage alloc] initWithSize:NSMakeSize(1, 1)]
+                                                  hotSpot:NSZeroPoint];
+  return none;
+}
+
+// CSS's cursors, as AppKit draws them. One AppKit has no picture for is the arrow.
+NSCursor *nsCursor(Cursor cursor) {
+  switch (cursor) {
+    case Cursor::Pointer:
+      return NSCursor.pointingHandCursor;
+    case Cursor::Text:
+      return NSCursor.IBeamCursor;
+    case Cursor::NotAllowed:
+    case Cursor::NoDrop:
+      return NSCursor.operationNotAllowedCursor;
+    case Cursor::Grab:
+      return NSCursor.openHandCursor;
+    case Cursor::Grabbing:
+      return NSCursor.closedHandCursor;
+    case Cursor::Crosshair:
+    case Cursor::Cell:
+      return NSCursor.crosshairCursor;
+    case Cursor::Copy:
+      return NSCursor.dragCopyCursor;
+    case Cursor::Alias:
+      return NSCursor.dragLinkCursor;
+    case Cursor::ContextMenu:
+      return NSCursor.contextualMenuCursor;
+    case Cursor::ColResize:
+    case Cursor::EWResize:
+    case Cursor::EResize:
+    case Cursor::WResize:
+      return NSCursor.resizeLeftRightCursor;
+    case Cursor::RowResize:
+    case Cursor::NSResize:
+    case Cursor::NResize:
+    case Cursor::SResize:
+      return NSCursor.resizeUpDownCursor;
+    case Cursor::NWSEResize:
+    case Cursor::NWResize:
+    case Cursor::SEResize:
+      if (@available(macOS 15.0, *)) {
+        return [NSCursor frameResizeCursorFromPosition:NSCursorFrameResizePositionTopLeft
+                                          inDirections:NSCursorFrameResizeDirectionsAll];
+      }
+      return NSCursor.arrowCursor;
+    case Cursor::NESWResize:
+    case Cursor::NEResize:
+    case Cursor::SWResize:
+      if (@available(macOS 15.0, *)) {
+        return [NSCursor frameResizeCursorFromPosition:NSCursorFrameResizePositionTopRight
+                                          inDirections:NSCursorFrameResizeDirectionsAll];
+      }
+      return NSCursor.arrowCursor;
+    case Cursor::ZoomIn:
+      if (@available(macOS 15.0, *)) {
+        return NSCursor.zoomInCursor;
+      }
+      return NSCursor.arrowCursor;
+    case Cursor::ZoomOut:
+      if (@available(macOS 15.0, *)) {
+        return NSCursor.zoomOutCursor;
+      }
+      return NSCursor.arrowCursor;
+    case Cursor::None:
+      return noCursor();
+    default:
+      return NSCursor.arrowCursor;
+  }
+}
+
 } // namespace
 
 @implementation NGNSurfaceView {
   ngn::InputSink *_input;
   ngn::ContainerId _container;
-  facebook::react::Tag _rootTag;
   std::optional<ngn::ContainerInsets> _reported;
+  id _wheelMonitor;
+}
+
++ (void)showCursor:(Cursor)cursor {
+  gCursor = nsCursor(cursor);
+  [gCursor set];
 }
 
 + (std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)>)insetsChanged {
@@ -34,11 +118,20 @@ std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> g
     _rootTag = rootTag;
     _input = input;
     _input->addContainer(container, surfaceId, rootTag);
+    // The wheel reaches the core before the scroll view under the pointer takes it, and still
+    // scrolls it: a `(wheel)` listener hears the turn without stopping the scroll, as on the web.
+    __weak NGNSurfaceView *weakSelf = self;
+    _wheelMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
+                                                          handler:^NSEvent *(NSEvent *event) {
+                                                            [weakSelf wheelEvent:event];
+                                                            return event;
+                                                          }];
   }
   return self;
 }
 
 - (void)dealloc {
+  [NSEvent removeMonitor:_wheelMonitor];
   _input->removeContainer(_container);
   if (gInsetsChanged && _reported) {
     gInsetsChanged(_rootTag, std::nullopt);
@@ -113,14 +206,68 @@ std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> g
   input.point = {static_cast<float>(inView.x), static_cast<float>(inView.y)};
   input.screenPoint = {static_cast<float>(onScreen.x), static_cast<float>(top - onScreen.y)};
   input.buttons = static_cast<int>(NSEvent.pressedMouseButtons);
-  input.pressure = event.type == NSEventTypeMouseMoved ? 0 : event.pressure;
+  // Only a button's events have a pressure: asking a wheel's or a move's throws.
+  switch (event.type) {
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeLeftMouseDragged:
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeRightMouseUp:
+    case NSEventTypeOtherMouseDown:
+    case NSEventTypeOtherMouseUp:
+      input.pressure = event.pressure;
+      break;
+    default:
+      input.pressure = 0;
+  }
   input.timestamp = event.timestamp;
+  if (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseUp) {
+    input.clickCount = static_cast<int>(event.clickCount);
+  }
   return input;
 }
 
 - (void)mouseDown:(NSEvent *)event {
-  [self.window makeFirstResponder:self];
+  // Control-click is the Mac's secondary click.
+  if ((event.modifierFlags & NSEventModifierFlagControl) != 0 && _input->contextMenu([self inputFor:event])) {
+    return;
+  }
+  // A click focuses the focusable view it lands in, as on the web, without a focus ring.
+  NSView *hit = [self hitTest:[self.superview convertPoint:event.locationInWindow fromView:nil]];
+  NSResponder *focus = self;
+  for (NSView *v = hit; v != nil && v != self; v = v.superview) {
+    if ([v isKindOfClass:NGNView.class] && v.acceptsFirstResponder) {
+      focus = v;
+      break;
+    }
+  }
+  if (self.window.firstResponder != focus) {
+    [self.window makeFirstResponder:focus];
+  }
   _input->pointerDown([self inputFor:event]);
+}
+
+- (void)rightMouseDown:(NSEvent *)event {
+  if (!_input->contextMenu([self inputFor:event])) {
+    [super rightMouseDown:event];
+  }
+}
+
+- (void)wheelEvent:(NSEvent *)event {
+  if (event.window != self.window || ![self ownsPointer:event]) {
+    return;
+  }
+  // The DOM's deltas are how far the content would move, down and right positive: AppKit's are
+  // the other way round. A wheel without precise deltas counts lines.
+  ngn::WheelDelta delta{
+      .x = -event.scrollingDeltaX,
+      .y = -event.scrollingDeltaY,
+      .z = 0,
+      .mode = event.hasPreciseScrollingDeltas ? 0 : 1,
+  };
+  if (delta.x != 0 || delta.y != 0) {
+    _input->wheel([self inputFor:event], delta);
+  }
 }
 
 - (void)mouseDragged:(NSEvent *)event {
@@ -153,12 +300,15 @@ std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> g
 - (void)mouseMoved:(NSEvent *)event {
   if ([self ownsPointer:event]) {
     _input->pointerMove([self inputFor:event]);
+    // A text field's cursor rect sets the I-beam behind the core's back as the pointer crosses it.
+    [gCursor set];
   }
 }
 
 - (void)mouseEntered:(NSEvent *)event {
   if ([self ownsPointer:event]) {
     _input->pointerMove([self inputFor:event]);
+    [gCursor set];
   }
 }
 

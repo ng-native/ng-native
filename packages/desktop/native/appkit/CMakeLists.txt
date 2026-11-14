@@ -8,6 +8,7 @@ add_executable(ngn-macos
     main.mm
     menu-bar.mm
     modal-host-view.mm
+    native-controls.mm
     network.mm
     scroll-view.mm
     surface-view.mm

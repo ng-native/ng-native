@@ -15,6 +15,11 @@ set(REACT_CXX_PLATFORM_DIR ${NGN_SOURCES}/react-native/packages/react-native/Rea
 
 include(${REACT_COMMON_DIR}/cmake-utils/internal/react-native-platform-selector.cmake)
 
+# The shim's view traits replace the cxx platform's (shim/view-platform), so they come first; they
+# read the core's desktop props.
+include_directories(BEFORE SYSTEM
+    ${CMAKE_CURRENT_LIST_DIR}/../shim/view-platform
+    ${CMAKE_CURRENT_LIST_DIR}/../core/include)
 include_directories(SYSTEM
     ${REACT_COMMON_DIR}/react/renderer/graphics/platform/cxx
     ${REACT_COMMON_DIR}/react/renderer/components/view/platform/cxx

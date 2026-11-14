@@ -7,6 +7,7 @@
 #include "ngn/module-registry.h"
 #include "ngn/mounting-manager.h"
 #include "ngn/network.h"
+#include "ngn/native-controls.h"
 #include "ngn/text-measurer.h"
 
 #include <react/renderer/graphics/Size.h>
@@ -46,6 +47,7 @@ class Runtime {
   Runtime(
       std::shared_ptr<MountingManager> mounting,
       std::shared_ptr<const TextMeasurer> textMeasurer,
+      std::shared_ptr<const ControlMeasurer> controlMeasurer,
       std::shared_ptr<ModuleRegistry> modules,
       NetworkClients clients,
       std::string bundle);
@@ -80,6 +82,7 @@ class Runtime {
 
   std::shared_ptr<MountingManager> mounting_;
   std::shared_ptr<const TextMeasurer> textMeasurer_;
+  std::shared_ptr<const ControlMeasurer> controlMeasurer_;
   std::shared_ptr<ModuleRegistry> modules_;
   NetworkClients clients_;
   std::string bundle_;

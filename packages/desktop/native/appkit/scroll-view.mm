@@ -87,11 +87,25 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   [self updateScrollers];
 }
 
-// A scroller only along an axis the content overflows.
+- (void)updateDesktopProps:(const ngn::DesktopProps &)props {
+  [super updateDesktopProps:props];
+  [self updateScrollers];
+}
+
+// A scroller only along an axis the content overflows, or always for `scrollbar-gutter: stable`
+// (which only a legacy scroller shows). `scrollbar-width: none` hides them, and `thin` draws
+// AppKit's small ones.
 - (void)updateScrollers {
+  const auto &desktop = self.desktopProps;
+  BOOL none = desktop.scrollbarWidth == ngn::ScrollbarWidth::None;
+  BOOL stable = desktop.scrollbarGutter == ngn::ScrollbarGutter::Stable;
   NSSize content = _document.frame.size, view = self.bounds.size;
-  _scrollView.hasVerticalScroller = _showsVertical && content.height > view.height + 0.5;
-  _scrollView.hasHorizontalScroller = _showsHorizontal && content.width > view.width + 0.5;
+  _scrollView.hasVerticalScroller = !none && _showsVertical && (stable || content.height > view.height + 0.5);
+  _scrollView.hasHorizontalScroller = !none && _showsHorizontal && content.width > view.width + 0.5;
+  _scrollView.autohidesScrollers = !stable;
+  NSControlSize size = desktop.scrollbarWidth == ngn::ScrollbarWidth::Thin ? NSControlSizeSmall : NSControlSizeRegular;
+  _scrollView.verticalScroller.controlSize = size;
+  _scrollView.horizontalScroller.controlSize = size;
 }
 
 - (void)updateState:(const State::Shared &)state {

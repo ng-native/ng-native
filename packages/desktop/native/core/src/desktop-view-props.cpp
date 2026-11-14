@@ -2,66 +2,61 @@
 
 #include "ngn/desktop-modal.h"
 
+#include <react/renderer/components/view/conversions.h>
 #include <react/renderer/core/propsConversions.h>
 
 using namespace facebook::react;
 
 namespace ngn {
 
+// CSS keywords: anything else is the initial value.
+void fromRawValue(const PropsParserContext &, const RawValue &value, ScrollbarWidth &result) {
+  auto keyword = value.hasType<std::string>() ? static_cast<std::string>(value) : std::string{};
+  result = keyword == "thin" ? ScrollbarWidth::Thin : keyword == "none" ? ScrollbarWidth::None : ScrollbarWidth::Auto;
+}
+
+void fromRawValue(const PropsParserContext &, const RawValue &value, ScrollbarGutter &result) {
+  auto keyword = value.hasType<std::string>() ? static_cast<std::string>(value) : std::string{};
+  result = keyword == "stable" ? ScrollbarGutter::Stable : ScrollbarGutter::Auto;
+}
+
+DesktopProps parseDesktopProps(const PropsParserContext &context, const DesktopProps &source, const RawProps &rawProps) {
+  return DesktopProps{
+      .focusable = convertRawProp(context, rawProps, "focusable", source.focusable, {}),
+      .tabIndex = convertRawProp(context, rawProps, "tabIndex", source.tabIndex, {}),
+      .anchor = source.anchor,
+      .cursor = convertRawProp(context, rawProps, "desktopCursor", source.cursor, {}),
+      .scrollbarWidth = convertRawProp(context, rawProps, "scrollbarWidth", source.scrollbarWidth, ScrollbarWidth::Auto),
+      .scrollbarGutter =
+          convertRawProp(context, rawProps, "scrollbarGutter", source.scrollbarGutter, ScrollbarGutter::Auto),
+      .onDoubleClick = convertRawProp(context, rawProps, "onDoubleClick", source.onDoubleClick, false),
+      .onContextMenu = convertRawProp(context, rawProps, "onContextMenu", source.onContextMenu, false),
+      .onWheel = convertRawProp(context, rawProps, "onWheel", source.onWheel, false),
+  };
+}
+
 DesktopViewProps::DesktopViewProps(
     const PropsParserContext &context,
     const DesktopViewProps &sourceProps,
     const RawProps &rawProps)
     : ViewProps(context, sourceProps, rawProps),
-      desktop{
-          .focusable = convertRawProp(context, rawProps, "focusable", sourceProps.desktop.focusable, {}),
-          .tabIndex = convertRawProp(context, rawProps, "tabIndex", sourceProps.desktop.tabIndex, {}),
-      } {}
+      HasDesktopProps{parseDesktopProps(context, sourceProps.desktop, rawProps)} {}
+
+DesktopScrollViewProps::DesktopScrollViewProps(
+    const PropsParserContext &context,
+    const DesktopScrollViewProps &sourceProps,
+    const RawProps &rawProps)
+    : ScrollViewProps(context, sourceProps, rawProps),
+      HasDesktopProps{parseDesktopProps(context, sourceProps.desktop, rawProps)} {}
 
 DesktopProps desktopProps(const Props &props) {
-  if (const auto *desktopView = dynamic_cast<const DesktopViewProps *>(&props)) {
-    return desktopView->desktop;
+  if (const auto *desktop = dynamic_cast<const HasDesktopProps *>(&props)) {
+    return desktop->desktop;
   }
   if (const auto *modal = dynamic_cast<const DesktopModalProps *>(&props); modal && modal->anchor != 0) {
     return DesktopProps{.anchor = modal->anchor};
   }
   return {};
-}
-
-namespace {
-
-// The parser records the keys a props class reads the first time it is prepared, so it has to be
-// prepared for DesktopViewProps before ConcreteComponentDescriptor prepares it for ViewProps,
-// whose keys are a subset and add nothing once the parser is ready.
-RawPropsParser desktopViewPropsParser() {
-  RawPropsParser parser;
-  parser.prepare<DesktopViewProps>();
-  return parser;
-}
-
-} // namespace
-
-DesktopViewComponentDescriptor::DesktopViewComponentDescriptor(const ComponentDescriptorParameters &parameters)
-    : ConcreteComponentDescriptor(parameters, desktopViewPropsParser()) {}
-
-// ConcreteComponentDescriptor::cloneProps's classic path, constructing DesktopViewProps, which
-// ViewShadowNode reads as the ViewProps it derives from.
-Props::Shared DesktopViewComponentDescriptor::cloneProps(
-    const PropsParserContext &context,
-    const Props::Shared &props,
-    RawProps rawProps) const {
-  if (!props && rawProps.isEmpty()) {
-    return ViewShadowNode::defaultSharedProps();
-  }
-  rawProps.parse(rawPropsParser_);
-  static const DesktopViewProps defaults;
-  const auto *source = props ? dynamic_cast<const DesktopViewProps *>(props.get()) : &defaults;
-  if (source == nullptr) {
-    // A View's props made before this descriptor (Fabric's shared defaults): start from them.
-    DesktopViewProps upgraded{static_cast<const ViewProps &>(*props)};
-    return std::make_shared<const DesktopViewProps>(context, upgraded, rawProps);
-  }
-  return std::make_shared<const DesktopViewProps>(context, *source, rawProps);
 }
 
 } // namespace ngn

@@ -1,12 +1,12 @@
 #include "ngn/mounting-manager.h"
 
 #include "ngn/desktop-modal.h"
+#include "ngn/native-controls.h"
 
 #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
 #include <react/renderer/components/image/ImageComponentDescriptor.h>
 #include <react/renderer/components/iostextinput/TextInputComponentDescriptor.h>
-#include <react/renderer/components/scrollview/ScrollViewComponentDescriptor.h>
 #include <react/renderer/components/text/ParagraphComponentDescriptor.h>
 #include <react/renderer/components/text/RawTextComponentDescriptor.h>
 #include <react/renderer/components/text/TextComponentDescriptor.h>
@@ -30,10 +30,15 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<ParagraphComponentDescriptor>(),
       concreteComponentDescriptorProvider<TextComponentDescriptor>(),
       concreteComponentDescriptorProvider<RawTextComponentDescriptor>(),
-      concreteComponentDescriptorProvider<ScrollViewComponentDescriptor>(),
+      concreteComponentDescriptorProvider<DesktopScrollViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<TextInputComponentDescriptor>(),
       concreteComponentDescriptorProvider<ImageComponentDescriptor>(),
       concreteComponentDescriptorProvider<DesktopModalComponentDescriptor>(),
+      concreteComponentDescriptorProvider<NativeButtonComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SwitchControlComponentDescriptor>(),
+      concreteComponentDescriptorProvider<ActivityIndicatorControlComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SegmentedControlComponentDescriptor>(),
+      concreteComponentDescriptorProvider<DatePickerComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : backend_->componentProviders()) {
