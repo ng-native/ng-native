@@ -135,7 +135,15 @@ function tsconfig(workspaceBase, conditions = []) {
 }
 
 /** The `@ng-native` packages with entry points beside their main one, each published in `dist`. */
-const WITH_ENTRY_POINTS = ['components', 'device', 'expo', 'platform', 'testing', 'web', 'web-compat'];
+const WITH_ENTRY_POINTS = [
+  'components',
+  'device',
+  'expo',
+  'platform',
+  'testing',
+  'web',
+  'web-compat',
+];
 
 /** `nx typecheck` in a workspace whose libraries are the package manager's links. */
 const TYPECHECK_ONE_COPY = TYPECHECK.replace('tsconfig.json', 'tsconfig.typecheck.json');
