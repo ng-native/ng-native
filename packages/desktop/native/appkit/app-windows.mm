@@ -1,4 +1,5 @@
 #import "app-windows.h"
+#import "test-launch.h"
 #import "undo.h"
 #import "screen-capture.h"
 
@@ -210,7 +211,7 @@ void AppKitWindows::show(SurfaceId surface) {
     return;
   }
   [unshown_ removeObjectForKey:@(surface)];
-  [window makeKeyAndOrderFront:nil];
+  showWindow(window);
   // The app learns the size the window opened at, which a restored frame decides.
   if (host_) {
     host_->resized(surface, frameOf(window), window.backingScaleFactor);
@@ -234,8 +235,7 @@ void AppKitWindows::focusWindow(SurfaceId surface) {
       if (window.miniaturized) {
         [window deminiaturize:nil];
       }
-      [window makeKeyAndOrderFront:nil];
-      [NSApp activateIgnoringOtherApps:YES];
+      activateWith(window);
     }
   });
 }

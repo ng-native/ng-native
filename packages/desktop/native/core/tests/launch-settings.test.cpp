@@ -121,3 +121,73 @@ TEST_CASE("Updates settings come from the Info.plist, and from the environment o
       {.args = {"/tmp/b.js"}, .env = from({{"NGN_UPDATES_URL", "https://x"}}), .plist = from({})}));
   CHECK(ngn::updatesConfigFrom(noVersion, "/data", "b").url.empty());
 }
+
+TEST_CASE("A test launch keeps its state under NGN_STATE_DIR and names the rest by NGN_RUN_ID") {
+  const Map env{
+      {"NGN_TESTS", "1"},
+      {"NGN_STATE_DIR", "/tmp/state-1/"},
+      {"NGN_RUN_ID", "6f1c-AB12"},
+      {"NGN_TESTS_FAKE_SYSTEM_UI", "1"},
+  };
+  auto settings = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})}));
+  REQUIRE(settings.test.has_value());
+  CHECK(settings.test->stateDir == "/tmp/state-1");
+  CHECK(settings.test->applicationSupport() == "/tmp/state-1/Application Support");
+  CHECK(settings.test->caches() == "/tmp/state-1/Caches");
+  CHECK(settings.test->temp() == "/tmp/state-1/tmp");
+  CHECK(settings.test->keychainPrefix() == "ngn-test-6f1c-AB12.");
+  CHECK(settings.test->defaultsSuite() == "ngn-test-6f1c-AB12.defaults");
+  CHECK(settings.test->fakeSystemUI);
+  CHECK(settings.noPrompts);
+
+  // Real system UI when the run asks for it.
+  Map real = env;
+  real.erase("NGN_TESTS_FAKE_SYSTEM_UI");
+  auto withUi = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(real), .plist = from({})}));
+  CHECK_FALSE(withUi.test->fakeSystemUI);
+  CHECK_FALSE(withUi.noPrompts);
+
+  // Not a test launch without NGN_TESTS=1, whatever else is set.
+  for (const char *value : {"0", "", "true"}) {
+    Map off = env;
+    off["NGN_TESTS"] = value;
+    auto plain = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(off), .plist = from({})}));
+    CHECK_FALSE(plain.test.has_value());
+    CHECK_FALSE(plain.noPrompts);
+  }
+  auto prompts = std::get<ngn::LaunchSettings>(
+      ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from({{"NGN_NO_PROMPTS", "1"}}), .plist = from({})}));
+  CHECK(prompts.noPrompts);
+  CHECK_FALSE(prompts.test.has_value());
+}
+
+TEST_CASE("A test launch with no usable state directory or run id does not start") {
+  for (Map env : std::vector<Map>{
+           {{"NGN_TESTS", "1"}, {"NGN_RUN_ID", "abc"}},
+           {{"NGN_TESTS", "1"}, {"NGN_STATE_DIR", "relative"}, {"NGN_RUN_ID", "abc"}},
+           {{"NGN_TESTS", "1"}, {"NGN_STATE_DIR", "/tmp/s"}},
+           {{"NGN_TESTS", "1"}, {"NGN_STATE_DIR", "/tmp/s"}, {"NGN_RUN_ID", "a/../b"}},
+           {{"NGN_TESTS", "1"}, {"NGN_STATE_DIR", "/tmp/s"}, {"NGN_RUN_ID", "a b"}},
+       }) {
+    CAPTURE(env.size());
+    auto result = ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})});
+    REQUIRE(std::holds_alternative<std::string>(result));
+    CHECK(std::get<std::string>(result).find("NGN_TESTS=1") != std::string::npos);
+  }
+}
+
+TEST_CASE("A packaged app is never a test launch") {
+  const Map env{{"NGN_TESTS", "1"}, {"NGN_STATE_DIR", "/tmp/s"}, {"NGN_RUN_ID", "abc"}, {"NGN_TESTS_FAKE_SYSTEM_UI", "1"}};
+  auto settings = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+      {.args = {}, .env = from(env), .plist = from(kPackagedPlist), .resourcePath = "/A.app/Contents/Resources"}));
+  CHECK_FALSE(settings.test.has_value());
+  CHECK_FALSE(settings.noPrompts);
+}
+
+TEST_CASE("Another test launch's Keychain services are stale, this one's and the app's own are not") {
+  ngn::TestLaunch own{.stateDir = "/s", .runId = "run-1"};
+  CHECK(ngn::isStaleTestService("ngn-test-run-0.com.example", own));
+  CHECK(ngn::isStaleTestService("ngn-test-run-10.com.example", own));
+  CHECK_FALSE(ngn::isStaleTestService("ngn-test-run-1.com.example", own));
+  CHECK_FALSE(ngn::isStaleTestService("com.example", own));
+}

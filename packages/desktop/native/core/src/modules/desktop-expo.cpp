@@ -37,6 +37,48 @@ bool secureStoreKeyValid(const std::string &key) {
   });
 }
 
+std::optional<std::string> PrefixedSecretStore::get(const std::string &service, const std::string &key) {
+  return inner_->get(prefix_ + service, key);
+}
+
+void PrefixedSecretStore::set(const std::string &service, const std::string &key, const std::string &value) {
+  inner_->set(prefix_ + service, key, value);
+  std::lock_guard lock(mutex_);
+  written_.insert({prefix_ + service, key});
+}
+
+void PrefixedSecretStore::remove(const std::string &service, const std::string &key) {
+  inner_->remove(prefix_ + service, key);
+  std::lock_guard lock(mutex_);
+  written_.erase({prefix_ + service, key});
+}
+
+void PrefixedSecretStore::clear() {
+  std::set<std::pair<std::string, std::string>> written;
+  {
+    std::lock_guard lock(mutex_);
+    written.swap(written_);
+  }
+  for (const auto &[service, key] : written) {
+    try {
+      inner_->remove(service, key);
+    } catch (const std::exception &) {
+      // Left for the next test launch, which removes what a run before it left.
+    }
+  }
+}
+
+std::shared_ptr<FileDialogs> makeDismissedFileDialogs() {
+  struct Dismissed final : FileDialogs {
+    void openFiles(const OpenRequest &, std::function<void(std::optional<std::vector<std::string>>)> done) override {
+      done(std::nullopt);
+    }
+    void saveFile(const SaveRequest &, std::function<void(std::optional<std::string>)> done) override { done(std::nullopt); }
+    void chooseFolder(std::function<void(std::optional<std::string>)> done) override { done(std::nullopt); }
+  };
+  return std::make_shared<Dismissed>();
+}
+
 std::optional<std::string> MovingSecretStore::get(const std::string &service, const std::string &key) {
   if (auto value = now_->get(service, key)) {
     return value;

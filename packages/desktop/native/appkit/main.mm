@@ -43,6 +43,7 @@
 #import "store-review.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
+#import "test-launch.h"
 #import "updates.h"
 #import "surface-view.h"
 #include "text-layout.h"
@@ -353,13 +354,34 @@ void showAppSurfaceIfUsed() {
   });
 }
 
+// SIGTERM (a test pool ending its run, or `kill`) ends the host as a clean quit does, without asking
+// the app: the programs it started go with it and a test launch removes what it leaves behind.
+// A main thread that does not get to it within kTermWait is not waited for.
+void endOnTerminateSignal() {
+  constexpr int64_t kTermWait = 2500 * NSEC_PER_MSEC;
+  signal(SIGTERM, SIG_IGN);
+  static dispatch_source_t source =
+      dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGTERM, 0, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+  dispatch_source_set_event_handler(source, ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kTermWait), dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      _exit(0);
+    });
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [NSApp.delegate applicationWillTerminate:[NSNotification notificationWithName:NSApplicationWillTerminateNotification
+                                                                             object:NSApp]];
+      exit(0);
+    });
+  });
+  dispatch_resume(source);
+}
+
 void showAppWindow() {
   if (gHost.appWindowShown || gHost.appWindow == nil) {
     return;
   }
   gHost.appWindowShown = true;
   showPastSplash([] {
-    [gHost.appWindow makeKeyAndOrderFront:nil];
+    ngn::appkit::showWindow(gHost.appWindow);
     logFirstFrame(gHost.appWindow);
     markLaunchSucceededLater();
   });
@@ -461,6 +483,7 @@ void showAppWindow() {
   return YES;
 }
 - (void)applicationWillTerminate:(NSNotification *)note {
+  ngn::appkit::endTestLaunch();
   // A clean quit is no crash: the update running is not rolled back, however soon it quit.
   if (gHost.updates) {
     gHost.updates->markLaunchSucceeded();
@@ -517,9 +540,12 @@ int main(int argc, const char *argv[]) {
     NSString *title = [NSString stringWithUTF8String:settings.title.c_str()];
     std::string appId = settings.appId;
     std::string capabilities = settings.capabilitiesJson;
+    ngn::appkit::beginTestLaunch(settings.test);
 
     NSApplication *app = NSApplication.sharedApplication;
-    app.activationPolicy = NSApplicationActivationPolicyRegular;
+    // A test launch has no Dock icon, and never takes focus, until a test asks for the key window.
+    app.activationPolicy = settings.test ? NSApplicationActivationPolicyAccessory : NSApplicationActivationPolicyRegular;
+    endOnTerminateSignal();
     NGNAppDelegate *delegate = [NGNAppDelegate new];
     app.delegate = delegate;
 
@@ -657,7 +683,8 @@ int main(int argc, const char *argv[]) {
              NSAccessibilityPostNotificationWithUserInfo(
                  view.window, NSAccessibilityLayoutChangedNotification, @{NSAccessibilityUIElementsKey : @[ view ]});
            });
-         }});
+         },
+         .fakeSystemUI = settings.test && settings.test->fakeSystemUI});
 
     gHost.windows = std::make_shared<ngn::appkit::AppKitWindows>(ngn::appkit::AppKitWindows::Hooks{
         .makeSurface = [](SurfaceId surface, NSRect bounds) -> NGNSurfaceView * {
@@ -703,8 +730,15 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeProcesses", [] { return ngn::makeProcessesModule(launcher, processes); });
       ngn::addModule(*modules, "NgNativeShell", [] { return ngn::makeShellModule(opener); });
       // The desktop Expo modules (DESKTOP_MODULES in @ng-native/expo).
-      static auto keychain = ngn::appkit::makeKeychain();
+      static std::shared_ptr<ngn::SecretStore> keychain = ngn::appkit::makeKeychain();
       static auto keychainService = appId;
+      if (settings.test) {
+        // The run's own items, removed as it ends, and any a crashed run left.
+        ngn::appkit::removeStaleTestItems(*settings.test);
+        auto prefixed = std::make_shared<ngn::PrefixedSecretStore>(keychain, settings.test->keychainPrefix());
+        ngn::appkit::onTestLaunchEnd([prefixed] { prefixed->clear(); });
+        keychain = prefixed;
+      }
       static auto expoSystem = system;
       static auto awake = std::make_shared<ngn::KeepAwakeTags>(ngn::appkit::makeSleepPreventer());
       static auto haptics = ngn::appkit::makeHapticPlayer();
@@ -719,7 +753,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeUndo", [] { return ngn::makeUndoModule(undo); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
-      static auto dialogs = ngn::appkit::makeFileDialogs();
+      static auto dialogs = settings.test && settings.test->fakeSystemUI ? ngn::makeDismissedFileDialogs()
+                                                                          : ngn::appkit::makeFileDialogs();
       static auto caches = ngn::appkit::cacheDirectory(appId);
       // What the app may read and write: its folders, the user's picks, and the declared paths
       // (none in a Mac App Store build, whose sandbox reaches only picks).
@@ -733,9 +768,9 @@ int main(int argc, const char *argv[]) {
       static auto databases = system->appDataDirectory() + "/SQLite";
       ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases); });
       static auto location = ngn::appkit::makeLocationSource();
-      static bool noPrompts = std::getenv("NGN_NO_PROMPTS") != nullptr && std::string(std::getenv("NGN_NO_PROMPTS")) == "1";
+      static bool noPrompts = settings.noPrompts;
       ngn::addModule(*modules, "NgNativeLocation", [] { return ngn::makeLocationModule(location, noPrompts); });
-      static auto authenticator = ngn::appkit::makeAuthenticator();
+      static auto authenticator = ngn::appkit::makeAuthenticator(noPrompts);
       ngn::addModule(*modules, "NgNativeLocalAuthentication", [] { return ngn::makeLocalAuthenticationModule(authenticator); });
       static auto bundleFacts = ngn::appkit::mainBundleFacts();
       static auto appName = std::string(title.UTF8String);
@@ -945,7 +980,9 @@ int main(int argc, const char *argv[]) {
                                                                  }];
                                             return event;
                                           }];
-    [app activateIgnoringOtherApps:YES];
+    if (!settings.test) {
+      [app activateIgnoringOtherApps:YES];
+    }
     [app run];
   }
   return 0;

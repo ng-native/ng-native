@@ -26,6 +26,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -57,6 +58,23 @@ class MovingSecretStore final : public SecretStore {
   void removeOld(const std::string &service, const std::string &key);
   std::shared_ptr<SecretStore> now_;
   std::shared_ptr<SecretStore> old_;
+};
+
+// A test launch's store: each service is `prefix` and the service asked for, so a run's items
+// never meet the app's own or another run's. `clear()` removes every item this store wrote.
+class PrefixedSecretStore final : public SecretStore {
+ public:
+  PrefixedSecretStore(std::shared_ptr<SecretStore> inner, std::string prefix) : inner_(std::move(inner)), prefix_(std::move(prefix)) {}
+  std::optional<std::string> get(const std::string &service, const std::string &key) override;
+  void set(const std::string &service, const std::string &key, const std::string &value) override;
+  void remove(const std::string &service, const std::string &key) override;
+  void clear();
+
+ private:
+  std::shared_ptr<SecretStore> inner_;
+  std::string prefix_;
+  std::mutex mutex_;
+  std::set<std::pair<std::string, std::string>> written_;
 };
 
 // Whether the app can use the Data Protection keychain: its signature has a Team ID, and an
@@ -122,6 +140,9 @@ class FileDialogs {
   virtual void saveFile(const SaveRequest &request, std::function<void(std::optional<std::string>)> done) = 0;
   virtual void chooseFolder(std::function<void(std::optional<std::string>)> done) = 0;
 };
+
+// Panels that answer as dismissed at once, never shown: a test launch's fake system UI.
+std::shared_ptr<FileDialogs> makeDismissedFileDialogs();
 
 // The MIME type of a file name's extension, or application/octet-stream.
 std::string mimeTypeOf(const std::string &name);

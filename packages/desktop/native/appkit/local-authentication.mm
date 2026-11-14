@@ -52,6 +52,7 @@ Authenticator::Failure failureOf(NSError *error) {
 
 class LAAuthenticator final : public Authenticator {
  public:
+  explicit LAAuthenticator(bool noPrompts) : noPrompts_(noPrompts) {}
   Facts facts() override {
     LAContext *context = [LAContext new];
     NSError *error = nil;
@@ -86,8 +87,7 @@ class LAAuthenticator final : public Authenticator {
     if (request.fallbackTitle) {
       context.localizedFallbackTitle = ns(*request.fallbackTitle);
     }
-    const char *noPrompts = std::getenv("NGN_NO_PROMPTS");
-    if (noPrompts != nullptr && std::string(noPrompts) == "1") {
+    if (noPrompts_) {
       context.interactionNotAllowed = YES;
     }
     {
@@ -118,14 +118,15 @@ class LAAuthenticator final : public Authenticator {
   }
 
  private:
+  bool noPrompts_;
   std::mutex mutex_;
   LAContext *current_{nil};
 };
 
 } // namespace
 
-std::shared_ptr<Authenticator> makeAuthenticator() {
-  return std::make_shared<LAAuthenticator>();
+std::shared_ptr<Authenticator> makeAuthenticator(bool noPrompts) {
+  return std::make_shared<LAAuthenticator>(noPrompts);
 }
 
 } // namespace ngn::appkit

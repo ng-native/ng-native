@@ -1,6 +1,7 @@
 // The OS half of the desktop Expo modules (the core's desktop-expo.h): the Keychain, IOKit's power
 // assertions and the trackpad's haptic feedback.
 #import "desktop-expo.h"
+#import "test-launch.h"
 
 #import <AppKit/AppKit.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
@@ -151,6 +152,28 @@ std::shared_ptr<SecretStore> makeKeychain() {
   // Items an earlier build kept in the file keychain move over as they are read.
   return std::make_shared<MovingSecretStore>(std::make_shared<Keychain>(true), std::make_shared<Keychain>(false));
 }
+void removeStaleTestItems(const TestLaunch &own) {
+  NSDictionary *query = @{
+    (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+    (__bridge id)kSecMatchLimit : (__bridge id)kSecMatchLimitAll,
+    (__bridge id)kSecReturnAttributes : @YES,
+  };
+  CFTypeRef found = nullptr;
+  if (SecItemCopyMatching((__bridge CFDictionaryRef)query, &found) != errSecSuccess || found == nullptr) {
+    return;
+  }
+  NSArray<NSDictionary *> *items = (__bridge_transfer NSArray *)found;
+  for (NSDictionary *item in items) {
+    NSString *service = item[(__bridge id)kSecAttrService];
+    NSString *account = item[(__bridge id)kSecAttrAccount];
+    if (![service isKindOfClass:NSString.class] || ![account isKindOfClass:NSString.class] ||
+        !isStaleTestService(service.UTF8String, own)) {
+      continue;
+    }
+    SecItemDelete((__bridge CFDictionaryRef)itemQuery(service.UTF8String, account.UTF8String, false));
+  }
+}
+
 std::shared_ptr<SleepPreventer> makeSleepPreventer() {
   return std::make_shared<PowerAssertion>();
 }
@@ -347,7 +370,8 @@ std::shared_ptr<FileDialogs> makeFileDialogs() {
 }
 
 std::string cacheDirectory(const std::string &appId) {
-  NSURL *caches = [NSFileManager.defaultManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject;
+  NSURL *caches = testLaunch() ? [NSURL fileURLWithPath:ns(testLaunch()->caches()) isDirectory:YES]
+                               : [NSFileManager.defaultManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject;
   NSString *bundleId = NSBundle.mainBundle.bundleIdentifier;
   NSURL *dir = [caches URLByAppendingPathComponent:bundleId != nil ? bundleId : ns(appId) isDirectory:YES];
   [NSFileManager.defaultManager createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];

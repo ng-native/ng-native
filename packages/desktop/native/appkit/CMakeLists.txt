@@ -36,6 +36,7 @@ add_executable(ngn-macos
     store-review.mm
     system.mm
     system-access.mm
+    test-launch.mm
     text-layout.mm
     text-recognition.mm
     undo.mm
