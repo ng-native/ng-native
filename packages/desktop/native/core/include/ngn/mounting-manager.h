@@ -4,12 +4,15 @@
 
 #include "ngn/desktop-view-props.h"
 #include "ngn/mounting-backend.h"
+#include "ngn/safe-areas.h"
+#include "ngn/screen-stacks.h"
 #include "ngn/view-tree.h"
 
 #include <react/renderer/uimanager/IMountingManager.h>
 
 #include <functional>
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace ngn {
@@ -18,7 +21,13 @@ class MountingManager final : public facebook::react::IMountingManager,
                               public std::enable_shared_from_this<MountingManager> {
  public:
   // `desktopProps` may be null for a backend that has no use for focusable and tabIndex yet.
-  MountingManager(std::shared_ptr<MountingBackend> backend, std::shared_ptr<DesktopPropsSink> desktopProps);
+  // `screens` and `safeAreas` replace the native stack's and the safe area's rules (tests record
+  // what they send); null keeps the defaults.
+  MountingManager(
+      std::shared_ptr<MountingBackend> backend,
+      std::shared_ptr<DesktopPropsSink> desktopProps,
+      std::unique_ptr<ScreenStacks> screens = nullptr,
+      std::unique_ptr<SafeAreas> safeAreas = nullptr);
 
   // JS thread: the mutations are applied later, on the backend's UI thread, in order.
   void executeMount(SurfaceId surfaceId, facebook::react::MountingTransaction &&transaction) override;
@@ -27,6 +36,11 @@ class MountingManager final : public facebook::react::IMountingManager,
 
   facebook::react::ComponentRegistryFactory getComponentRegistryFactory() override;
   bool hasComponent(const std::string &name) override;
+
+  // UI thread only. A container's size and OS insets (safe-areas.h), which its safe-area views
+  // follow at once.
+  void setContainerInsets(Tag root, const ContainerInsets &insets);
+  void removeContainerInsets(Tag root);
 
   // UI thread only.
   const ViewTree &tree() const {
@@ -47,6 +61,9 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::unordered_set<std::string> componentNames_;
   std::function<void(SurfaceId)> afterMount_;
   ViewTree tree_;
+  std::unique_ptr<ScreenStacks> screens_;
+  std::unique_ptr<SafeAreas> safeAreas_;
+  std::unordered_map<SurfaceId, std::optional<ScreenStacks::FrontHeader>> frontHeaders_;
 };
 
 } // namespace ngn

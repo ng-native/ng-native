@@ -58,17 +58,22 @@ include(cmake/react-native.cmake)
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
     core/src/bytes.cpp
+    core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp
+    core/src/header-bar.cpp
     core/src/host-state.cpp
     core/src/input-dispatcher.cpp
     core/src/key-value-store.cpp
+    core/src/library-glue.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
     core/src/native-module.cpp
     core/src/network.cpp
     core/src/text-layout-manager.cpp
+    core/src/safe-areas.cpp
+    core/src/screen-stacks.cpp
     core/src/view-tree.cpp
     core/src/modules/alert-manager.cpp
     core/src/modules/app-modules.cpp
@@ -95,10 +100,14 @@ if(NGN_WITH_RUNTIME)
   add_library(ngn_core_runtime STATIC
       core/src/dev-server-helper.cpp
       core/src/host-services.cpp
+      core/src/layout-animations.cpp
       core/src/runtime.cpp)
   target_link_libraries(ngn_core_runtime PUBLIC ngn_core hermes-engine::hermesvm)
   target_compile_options(ngn_core_runtime PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
 endif()
+
+# --- libraries' components (react-native-screens, react-native-safe-area-context) ---------------
+include(cmake/libraries.cmake)
 
 # --- backends -------------------------------------------------------------------------------------
 if(NGN_BACKEND STREQUAL "appkit")

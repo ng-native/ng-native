@@ -106,7 +106,37 @@ if(NGN_WITH_RUNTIME)
   get_target_property(_dsh react_cxx_platform_react_devsupport SOURCES)
   list(FILTER _dsh EXCLUDE REGEX "/devsupport/DevServerHelper.cpp$")
   set_target_properties(react_cxx_platform_react_devsupport PROPERTIES SOURCES "${_dsh}")
+
+  # ReactHost makes its Scheduler with no animation delegate, so layout animations (and the
+  # engine's transitions of sizes and places, which rely on them) do nothing. The build compiles a
+  # copy that makes it through the core's ngn::makeScheduler (ngn/layout-animations.h), with React
+  # Native's LayoutAnimationDriver; the pattern must match, or the build stops.
+  set(_rh_src ${REACT_CXX_PLATFORM_DIR}/react/runtime/ReactHost.cpp)
+  file(READ ${_rh_src} _rh)
+  set(_rh_from "std::make_unique<Scheduler>(toolbox, nullptr, schedulerDelegate.get());")
+  string(FIND "${_rh}" "${_rh_from}" _rh_at)
+  if(_rh_at EQUAL -1)
+    message(FATAL_ERROR "ReactHost.cpp no longer makes its Scheduler as cmake/react-native.cmake expects")
+  endif()
+  string(REPLACE "${_rh_from}" "ngn::makeScheduler(toolbox, schedulerDelegate.get());" _rh "${_rh}")
+  string(REPLACE "#include \"ReactHost.h\"" "#include \"ReactHost.h\"\n#include \"ngn/layout-animations.h\"" _rh "${_rh}")
+  file(WRITE ${CMAKE_BINARY_DIR}/generated/ReactHost.cpp.in "${_rh}")
+  configure_file(${CMAKE_BINARY_DIR}/generated/ReactHost.cpp.in ${CMAKE_BINARY_DIR}/generated/ReactHost.cpp COPYONLY)
+  get_target_property(_rhs react_cxx_platform_react_runtime SOURCES)
+  list(FILTER _rhs EXCLUDE REGEX "/runtime/ReactHost.cpp$")
+  list(APPEND _rhs ${CMAKE_BINARY_DIR}/generated/ReactHost.cpp)
+  set_target_properties(react_cxx_platform_react_runtime PROPERTIES SOURCES "${_rhs}")
+  target_include_directories(react_cxx_platform_react_runtime PRIVATE ${REACT_CXX_PLATFORM_DIR}/react/runtime
+      ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
 endif()
+
+# React Native's layout animation driver, an object library like the rest (its own CMakeLists
+# makes a static library that wants Android's glog_init).
+file(GLOB animations_SRC CONFIGURE_DEPENDS ${REACT_COMMON_DIR}/react/renderer/animations/*.cpp)
+add_library(rn_animations OBJECT ${animations_SRC})
+target_link_libraries(rn_animations folly_runtime glog jsi react_debug react_renderer_componentregistry
+    react_renderer_core react_renderer_debug react_renderer_graphics react_renderer_mounting
+    react_renderer_uimanager rrc_view yoga)
 
 # Every React Native object library, as one static archive: a binary takes only the objects it
 # references, so the core tests link without Hermes even though some objects mention it.

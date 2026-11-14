@@ -5,6 +5,8 @@
 // other; the backend attaches it to the surface's main container.
 #pragma once
 
+#include "ngn/screen-stacks.h"
+
 #include <react/renderer/core/ComponentDescriptor.h>
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
 #include <react/renderer/mounting/ShadowView.h>
@@ -40,6 +42,14 @@ class MountingBackend {
   virtual void updateEventEmitter(const ShadowView &view) = 0;
 
   virtual void dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) = 0;
+
+  // A screen below the top of its stack (screen-stacks.h): hidden without being unmounted, and
+  // shown again as it returns to the top.
+  virtual void setCovered(SurfaceId /*surfaceId*/, Tag /*tag*/, bool /*covered*/) {}
+
+  // The header the surface's main container shows changed: another screen came to the front, or
+  // its stack gained or lost the screen below it. Nothing when no screen in front has a header.
+  virtual void setFrontHeader(SurfaceId /*surfaceId*/, const std::optional<ScreenStacks::FrontHeader> & /*header*/) {}
 
   // Called once a transaction's mutations have all been applied.
   virtual void didMount(SurfaceId /*surfaceId*/) {}

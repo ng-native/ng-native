@@ -41,12 +41,17 @@ class ViewTree {
   // lands on a popover's nodes.
   void addContainerRoot(Tag root);
   void removeContainerRoot(Tag root);
+  bool isContainerRoot(Tag tag) const;
 
   // The views under `point` (in `root`'s coordinates), from `root` down to the deepest, as React
   // Native iOS's hitTest:withEvent: finds them: later siblings are on top, `pointerEvents` is
   // honoured, hidden views are skipped, and a view clips the hit test to its bounds when it
   // clips its content or nothing of it overflows. Empty when nothing is hit.
   std::vector<Tag> hitTest(Tag root, Point point) const;
+
+  // A screen below the top of its stack: kept mounted, but neither drawn nor hit.
+  void setCovered(Tag tag, bool covered);
+  bool covered(Tag tag) const;
 
   // How far a scrolling view has scrolled its content: the content's origin is drawn at minus
   // this. The backend reports it as the user scrolls; the view's state lags behind.
@@ -61,6 +66,7 @@ class ViewTree {
 
   std::unordered_map<Tag, Node> nodes_;
   std::unordered_set<Tag> containerRoots_;
+  std::unordered_set<Tag> covered_;
   std::unordered_map<Tag, Point> scrollOffsets_;
 };
 

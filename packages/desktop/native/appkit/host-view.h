@@ -12,6 +12,8 @@
 @property (nonatomic, readonly) NSInteger reactTag;
 @property (nonatomic, readonly) NSInteger surfaceId;
 @property (nonatomic, readonly, copy) NSString *componentName;
+// A screen below the top of its stack: hidden, and kept mounted.
+@property (nonatomic) BOOL covered;
 - (instancetype)initWithShadowView:(const facebook::react::ShadowView &)view;
 - (void)updateProps:(const facebook::react::Props::Shared &)props;
 - (void)updateLayout:(const facebook::react::LayoutMetrics &)metrics;
@@ -20,6 +22,7 @@
 - (void)updateDesktopProps:(const ngn::DesktopProps &)props;
 - (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args;
 - (facebook::react::EventEmitter::Shared)eventEmitter;
+- (const ngn::DesktopProps &)desktopProps;
 - (facebook::react::Props::Shared)props;
 // Where Fabric children mount: the view itself, or a scroll view's document view.
 - (NSView *)contentContainer;

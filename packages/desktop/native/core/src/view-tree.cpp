@@ -28,6 +28,7 @@ void ViewTree::destroy(Tag tag) {
     }
   }
   containerRoots_.erase(tag);
+  covered_.erase(tag);
   nodes_.erase(it);
 }
 
@@ -76,6 +77,22 @@ void ViewTree::removeContainerRoot(Tag root) {
   containerRoots_.erase(root);
 }
 
+bool ViewTree::isContainerRoot(Tag tag) const {
+  return containerRoots_.contains(tag);
+}
+
+void ViewTree::setCovered(Tag tag, bool covered) {
+  if (covered) {
+    covered_.insert(tag);
+  } else {
+    covered_.erase(tag);
+  }
+}
+
+bool ViewTree::covered(Tag tag) const {
+  return covered_.contains(tag);
+}
+
 void ViewTree::setScrollOffset(Tag tag, Point offset) {
   if (offset == Point{0, 0}) {
     scrollOffsets_.erase(tag);
@@ -99,7 +116,7 @@ std::vector<Tag> ViewTree::hitTest(Tag root, Point point) const {
 // `point` is in `tag`'s own coordinates. Appends the deepest hit first, then each ancestor.
 bool ViewTree::hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) const {
   const Node *node = find(tag);
-  if (node == nullptr || (tag != root && containerRoots_.contains(tag))) {
+  if (node == nullptr || (tag != root && containerRoots_.contains(tag)) || covered_.contains(tag)) {
     return false;
   }
   const auto &layout = node->view.layoutMetrics;

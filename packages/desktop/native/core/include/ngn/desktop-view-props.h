@@ -22,6 +22,8 @@ struct DesktopProps {
   std::optional<bool> focusable;
   // Unset means no explicit place in Tab order. Negative leaves the view out of it.
   std::optional<int> tabIndex;
+  // ModalHostView only: the view it is anchored to, as a popover (desktop-modal.h).
+  std::optional<Tag> anchor;
 
   bool operator==(const DesktopProps &other) const = default;
 };

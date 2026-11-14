@@ -102,6 +102,13 @@ export function isUrl(bundle) {
 }
 
 /**
+ * The libraries whose Fabric components the host compiles in when the app has them installed:
+ * the stack, its header and the safe area that `@ng-native/router` and `<safe-area-view>` commit.
+ * Expo autolinking for `macos` replaces this list.
+ */
+export const HOST_LIBRARIES = ['react-native-screens', 'react-native-safe-area-context'];
+
+/**
  * The real side effects, replaced in tests.
  */
 export const system = {
@@ -111,6 +118,21 @@ export const system = {
   resolveReactNative(from) {
     const require = createRequire(path.join(from, 'package.json'));
     return path.dirname(require.resolve('react-native/package.json'));
+  },
+  /**
+   * An installed package's directory, or null when the app does not have it.
+   *
+   * @param {string} from
+   * @param {string} name
+   * @returns {string | null}
+   */
+  resolvePackage(from, name) {
+    const require = createRequire(path.join(from, 'package.json'));
+    try {
+      return path.dirname(require.resolve(`${name}/package.json`));
+    } catch {
+      return null;
+    }
   },
   /**
    * @param {string} command
@@ -188,7 +210,10 @@ export async function run(options, sys = system) {
   const cwd = sys.cwd();
   const reactNative = resolveReactNative(sys, cwd);
   const config = readExpoConfig(sys, cwd);
-  const buildDir = buildHost(sys, reactNative, options.universal);
+  const libraries = HOST_LIBRARIES.map((name) => sys.resolvePackage(cwd, name)).filter(
+    (dir) => dir !== null,
+  );
+  const buildDir = buildHost(sys, reactNative, libraries, options.universal);
   const title = config.name ?? config.slug ?? 'ng-native';
   const appId = config.ios?.bundleIdentifier ?? config.slug ?? title;
   return sys.run(path.join(buildDir, 'appkit', 'ngn-macos'), [
@@ -241,10 +266,11 @@ function readExpoConfig(sys, cwd) {
  *
  * @param {typeof system} sys
  * @param {string} reactNative
+ * @param {string[]} libraries
  * @param {boolean} universal
  */
-function buildHost(sys, reactNative, universal) {
-  const buildArgs = [reactNative];
+function buildHost(sys, reactNative, libraries, universal) {
+  const buildArgs = [reactNative, ...libraries.flatMap((dir) => ['--library', dir])];
   if (universal) buildArgs.push('--universal');
   const build = sys.run(path.join(packageDir, 'native', 'scripts', 'build.sh'), buildArgs, {
     capture: true,

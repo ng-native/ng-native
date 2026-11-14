@@ -1,5 +1,6 @@
 #import "host-view.h"
 
+#import "header-toolbar.h"
 #import "image-view.h"
 #import "modal-host-view.h"
 #import "scroll-view.h"
@@ -68,6 +69,10 @@ NSString *nsString(const std::string &s) {
   return _props;
 }
 
+- (const ngn::DesktopProps &)desktopProps {
+  return _desktop;
+}
+
 - (NSView *)contentContainer {
   return self;
 }
@@ -84,9 +89,14 @@ NSString *nsString(const std::string &s) {
   _layout = metrics;
   const auto &f = metrics.frame;
   self.frame = NSMakeRect(f.origin.x, f.origin.y, f.size.width, f.size.height);
-  self.hidden = metrics.displayType == DisplayType::None;
+  self.hidden = metrics.displayType == DisplayType::None || _covered;
   [self applyVisuals];
   [self setNeedsDisplay:YES];
+}
+
+- (void)setCovered:(BOOL)covered {
+  _covered = covered;
+  self.hidden = _layout.displayType == DisplayType::None || covered;
 }
 
 - (void)updateState:(const State::Shared &)state {
@@ -307,6 +317,12 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == "ModalHostView") {
     return [[NGNModalHostView alloc] initWithShadowView:view];
+  }
+  if (name == "RNSScreenStackHeaderConfig") {
+    return [[NGNHeaderConfigView alloc] initWithShadowView:view];
+  }
+  if (name == "RNSScreenStackHeaderSubview") {
+    return [[NGNHeaderSubviewView alloc] initWithShadowView:view];
   }
   if (name == "ScrollView") {
     return [[NGNScrollView alloc] initWithShadowView:view];

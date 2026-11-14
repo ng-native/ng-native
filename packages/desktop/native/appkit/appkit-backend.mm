@@ -1,16 +1,26 @@
 #import "appkit-backend.h"
 
+#import "header-toolbar.h"
 #import "host-view.h"
 #import "modal-host-view.h"
 #import "surface-view.h"
 
+#include "ngn/library-components.h"
+
 namespace ngn::appkit {
 
 AppKitBackend::AppKitBackend()
-    : views_([NSMutableDictionary dictionary]), surfaces_([NSMutableDictionary dictionary]) {}
+    : views_([NSMutableDictionary dictionary]),
+      surfaces_([NSMutableDictionary dictionary]),
+      toolbars_([NSMutableDictionary dictionary]),
+      touched_([NSMutableSet set]) {}
 
 void AppKitBackend::addSurface(NGNSurfaceView *surfaceView) {
   surfaces_[@(surfaceView.surfaceId)] = surfaceView;
+}
+
+NGNView *AppKitBackend::view(Tag tag) const {
+  return views_[@(tag)];
 }
 
 void AppKitBackend::runOnUiThread(std::function<void()> task) {
@@ -60,6 +70,7 @@ void AppKitBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
       [siblings addObject:v];
     }
   }
+  touched(parentView);
   if (index >= (int)siblings.count) {
     [container addSubview:childView];
   } else {
@@ -73,11 +84,13 @@ void AppKitBackend::removeChild(SurfaceId, Tag, Tag child, int) {
     [(NGNModalHostView *)view dismiss];
     return;
   }
+  touched(view.superview);
   [view removeFromSuperview];
 }
 
 void AppKitBackend::updateProps(const ShadowView &view) {
   [views_[@(view.tag)] updateProps:view.props];
+  touched(views_[@(view.tag)]);
 }
 
 void AppKitBackend::updateState(const ShadowView &view) {
@@ -98,7 +111,42 @@ void AppKitBackend::dispatchCommand(Tag tag, const std::string &name, const foll
   [views_[@(tag)] handleCommand:name args:args];
 }
 
+void AppKitBackend::setCovered(SurfaceId, Tag tag, bool covered) {
+  views_[@(tag)].covered = covered;
+}
+
+NGNHeaderToolbar *AppKitBackend::toolbarFor(SurfaceId surfaceId) {
+  NGNHeaderToolbar *toolbar = toolbars_[@(surfaceId)];
+  NSWindow *window = surfaces_[@(surfaceId)].window;
+  if (toolbar == nil && window != nil) {
+    toolbar = [[NGNHeaderToolbar alloc] initWithWindow:window];
+    toolbars_[@(surfaceId)] = toolbar;
+  }
+  return toolbar;
+}
+
+void AppKitBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) {
+  NGNView *config = header ? views_[@(header->config)] : nil;
+  [toolbarFor(surfaceId) showConfig:[config isKindOfClass:NGNHeaderConfigView.class] ? (NGNHeaderConfigView *)config : nil
+                             screen:header ? views_[@(header->screen)] : nil
+                          canGoBack:header && header->canGoBack];
+  [touched_ removeAllObjects];
+}
+
+void AppKitBackend::touched(NSView *view) {
+  if (view != nil && toolbars_.count > 0) {
+    [touched_ addObject:view];
+  }
+}
+
 void AppKitBackend::didMount(SurfaceId surfaceId) {
+  [NGNModalHostView fitPopovers];
+  for (NSView *view in touched_) {
+    for (NGNHeaderToolbar *toolbar in toolbars_.allValues) {
+      [toolbar refreshIfShowing:(NGNView *)view];
+    }
+  }
+  [touched_ removeAllObjects];
   if (onMount) {
     onMount(surfaceId);
   }
@@ -106,6 +154,10 @@ void AppKitBackend::didMount(SurfaceId surfaceId) {
 
 void AppKitBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &props) {
   [views_[@(tag)] updateDesktopProps:props];
+}
+
+std::vector<facebook::react::ComponentDescriptorProvider> AppKitBackend::componentProviders() const {
+  return libraryComponents();
 }
 
 } // namespace ngn::appkit
