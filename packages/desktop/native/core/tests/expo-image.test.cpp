@@ -234,3 +234,12 @@ TEST_CASE("loadImageBytes reads an <expo-image> file source only inside the file
   CHECK(errors.back().find("outside the files this app may read") != std::string::npos);
   CHECK(http->sent.empty());
 }
+
+TEST_CASE("a recycling key changed from one key to another clears the image shown, as on iOS") {
+  CHECK(ngn::recyclingKeyClears("row-1", "row-2"));
+  CHECK(ngn::recyclingKeyClears("row-1", ""));
+  CHECK_FALSE(ngn::recyclingKeyClears("row-1", "row-1"));
+  // No key before: the first key set keeps what is there.
+  CHECK_FALSE(ngn::recyclingKeyClears("", "row-1"));
+  CHECK_FALSE(ngn::recyclingKeyClears("", ""));
+}

@@ -421,8 +421,10 @@ the package's name after `expo-`, each with the methods the service calls on the
 the source nearest the view's size in pixels, placed by `contentFit` and `contentPosition`, with
 its `tintColor` and `blurRadius`, faded in over `transition`'s duration (every effect is a
 cross-dissolve). The placeholder shows until the image arrives, a `blurhash:` or `thumbhash:` one
-decoded in the core. Remote images are kept by `cachePolicy` in memory (64 MB) and on disk in the
-app's caches, by their `cacheKey` or url; `file:` and `data:` sources are read each time. It sends
+decoded in the core. A `recyclingKey` changed from one key to another clears the image shown at
+once, so a reused view never shows the last item's image while its own loads. Remote images are
+kept by `cachePolicy` in memory (64 MB) and on disk in the app's caches, by their `cacheKey` or url;
+`file:` and `data:` sources are read each time. It sends
 `loadStart`, `load` (with `cacheType` and the source's size and media type), `error` and
 `display`. Animated images show their first frame, and `expo-image`'s module (prefetch, clearing
 the caches) is not there.

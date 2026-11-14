@@ -100,6 +100,9 @@ struct ImageTransition {
 };
 // expo-image's transition from its prop: a number is the duration in milliseconds.
 ImageTransition imageTransition(const folly::dynamic &transition);
+// Whether a recycling key going from `before` to `after` clears the image shown, so a reused view
+// never shows the last item's image while its own loads: a key changed from one that was set.
+bool recyclingKeyClears(const std::string &before, const std::string &after);
 
 struct DecodedPixels {
   int width{0};

@@ -227,6 +227,10 @@ ImageRect placeImage(const std::string &fit, const folly::dynamic &position, std
   return {x, y, width, height};
 }
 
+bool recyclingKeyClears(const std::string &before, const std::string &after) {
+  return !before.empty() && before != after;
+}
+
 ImageTransition imageTransition(const folly::dynamic &transition) {
   ImageTransition out;
   if (transition.isNumber()) {
