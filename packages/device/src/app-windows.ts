@@ -355,6 +355,15 @@ export class AppWindows {
     return opened;
   }
 
+  /**
+   * Start quitting the app, as Cmd-Q does: every window's `canClose` guard, then the `willQuit`
+   * handlers, then the app quits. One guard that says no keeps the app running. Does nothing where
+   * the OS has no windows, since iOS and Android end an app themselves.
+   */
+  quit(): void {
+    this.native?.quit();
+  }
+
   private async openWindow(
     component: Type<unknown>,
     options: WindowOptions & {

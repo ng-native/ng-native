@@ -319,6 +319,22 @@ describe('the app lifecycle', () => {
     assert.equal(windows.windows().length, 2);
   });
 
+  it('quits when the app asks, through the guards as Cmd-Q does', async () => {
+    const host = fakeHost();
+    const { windows } = start('MainWindowApp', host);
+    await windows.open(fixtures['NoteWindow']!);
+    await settle();
+    findNote(windows).unsaved.set(true);
+    windows.quit();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(host.quits(), 1);
+    assert.deepEqual(host.answers, [false], 'the unsaved note kept the app');
+    findNote(windows).unsaved.set(false);
+    windows.quit();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(host.answers, [false, true]);
+  });
+
   it('runs willQuit after the guards and waits for it, up to its deadline', async () => {
     const host = fakeHost();
     const { app } = start('MainWindowApp', host);
