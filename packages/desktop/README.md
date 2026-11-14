@@ -186,15 +186,15 @@ app, or take updates from another server.
 Some of `@ng-native/expo`'s services answer from modules of the host's own, named `NgNative` and
 the package's name after `expo-`, each with the methods the service calls on the Expo package:
 
-| Module                        | What it does                                                                                                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NgNativeSecureStore`         | Items in the Keychain, under the app's id or the `keychainService` a call names, refusing the keys `expo-secure-store` refuses.                                                 |
-| `NgNativeClipboard`           | Reads and writes the pasteboard's text. `Clipboard.changes()` counts its `ngNativeClipboard` events on `DeviceEventEmitter`, sent when the pasteboard's change count has moved. |
-| `NgNativeKeepAwake`           | Keeps the display awake with an IOKit power assertion while any tag holds it.                                                                                                   |
-| `NgNativeHaptics`             | Plays the trackpad's feedback for an impact, a selection and a notification.                                                                                                    |
-| `NgNativeSqlite`              | `expo-sqlite`'s databases over the system's sqlite3. See Sqlite.                                                                                                                |
-| `NgNativeLocalAuthentication` | `Biometrics` over LAContext. See Local authentication.                                                                                                                          |
-| `NgNativeFileSystem`          | `FileSystem`'s files over uris. See File system.                                                                                                                                |
+| Module                        | What it does                                                                                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NgNativeSecureStore`         | Items in the Keychain (the Data Protection keychain when the app is signed with a Team ID and an app identity), under the app's id or the `keychainService` a call names, refusing the keys `expo-secure-store` refuses. |
+| `NgNativeClipboard`           | Reads and writes the pasteboard's text. `Clipboard.changes()` counts its `ngNativeClipboard` events on `DeviceEventEmitter`, sent when the pasteboard's change count has moved.                                          |
+| `NgNativeKeepAwake`           | Keeps the display awake with an IOKit power assertion while any tag holds it.                                                                                                                                            |
+| `NgNativeHaptics`             | Plays the trackpad's feedback for an impact, a selection and a notification.                                                                                                                                             |
+| `NgNativeSqlite`              | `expo-sqlite`'s databases over the system's sqlite3. See Sqlite.                                                                                                                                                         |
+| `NgNativeLocalAuthentication` | `Biometrics` over LAContext. See Local authentication.                                                                                                                                                                   |
+| `NgNativeFileSystem`          | `FileSystem`'s files over uris. See File system.                                                                                                                                                                         |
 
 The clipboard has no change notification, so the host checks the count when the app becomes active
 and after each key press, click and menu command, and never polls.
