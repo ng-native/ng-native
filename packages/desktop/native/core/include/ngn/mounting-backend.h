@@ -5,6 +5,7 @@
 // other; the backend attaches it to the surface's main container.
 #pragma once
 
+#include "ngn/expo-ui.h"
 #include "ngn/screen-stacks.h"
 #include "ngn/split-view.h"
 #include "ngn/svg.h"
@@ -68,6 +69,10 @@ class MountingBackend {
 
   // An svg's elements changed (svg.h): its view draws `document` from now on.
   virtual void setSvgDrawing(SurfaceId /*surfaceId*/, Tag /*svg*/, std::shared_ptr<const SvgDocument> /*document*/) {}
+
+  // The expo/ui views under a HostView changed (expo-ui.h): its view draws `root` in SwiftUI from now
+  // on.
+  virtual void setExpoUITree(SurfaceId /*surfaceId*/, Tag /*host*/, std::shared_ptr<const ExpoUINode> /*root*/) {}
 
   // A live region on the surface changed its text (live-regions.h): the screen reader says it.
   virtual void announce(SurfaceId /*surfaceId*/, const Announcement & /*announcement*/) {}

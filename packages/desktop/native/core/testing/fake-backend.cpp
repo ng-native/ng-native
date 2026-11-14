@@ -102,6 +102,11 @@ void FakeBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDoc
   calls.push_back("svg " + std::to_string(svg) + " with " + std::to_string(document->root.children.size()));
 }
 
+void FakeBackend::setExpoUITree(SurfaceId, Tag host, std::shared_ptr<const ExpoUINode> root) {
+  calls.push_back("expo-ui " + std::to_string(host) + " with " + std::to_string(root->children.size()));
+  expoUITrees[host] = std::move(root);
+}
+
 void FakeBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<SourceList> &lists) {
   std::string line = "lists of " + std::to_string(parent) + ":";
   for (const auto &list : lists) {

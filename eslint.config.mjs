@@ -214,6 +214,7 @@ export default tseslint.config(
       'packages/integration-tests/dialogs.test.ts',
       'packages/integration-tests/engine-commit.test.ts',
       'packages/integration-tests/expo.test.ts',
+      'packages/integration-tests/expo-ui-macos.test.ts',
       'packages/integration-tests/markdown-files.test.ts',
       'packages/integration-tests/markdown.test.ts',
       'packages/integration-tests/fabric-facade.test.ts',

@@ -1,6 +1,6 @@
-# The AppKit backend's Swift: what only Swift can call (Foundation Models), compiled by swiftc for
-# each architecture and joined with lipo into one object, which a target takes as a source with
-# ngn_link_swift. CMake's own Swift support is not used: it does not build one Swift object for
+# The AppKit backend's Swift: what only Swift can call (Foundation Models, and SwiftUI for
+# `@expo/ui`), compiled by swiftc for each architecture and joined with lipo into one object, which
+# a target takes as a source with ngn_link_swift. CMake's own Swift support is not used: it does not build one Swift object for
 # several architectures, which a universal host needs.
 execute_process(COMMAND xcrun --find swiftc OUTPUT_VARIABLE NGN_SWIFTC OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE _ngn_sdk OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
@@ -10,7 +10,7 @@ set(_ngn_swift_archs ${CMAKE_OSX_ARCHITECTURES})
 if(NOT _ngn_swift_archs)
   set(_ngn_swift_archs ${CMAKE_HOST_SYSTEM_PROCESSOR})
 endif()
-set(_ngn_swift_sources ${CMAKE_CURRENT_SOURCE_DIR}/appkit/language-model.swift)
+set(_ngn_swift_sources ${CMAKE_CURRENT_SOURCE_DIR}/appkit/language-model.swift ${CMAKE_CURRENT_SOURCE_DIR}/appkit/expo-ui.swift)
 set(_ngn_swift_objects)
 foreach(arch ${_ngn_swift_archs})
   set(_object ${CMAKE_CURRENT_BINARY_DIR}/swift/ngn-swift-${arch}.o)

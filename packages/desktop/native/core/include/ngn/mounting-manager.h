@@ -3,6 +3,7 @@
 #pragma once
 
 #include "ngn/desktop-view-props.h"
+#include "ngn/expo-ui.h"
 #include "ngn/live-regions.h"
 #include "ngn/mounting-backend.h"
 #include "ngn/safe-areas.h"
@@ -84,6 +85,7 @@ class MountingManager final : public facebook::react::IMountingManager,
   bool safeAreasSettled_{false};
   Sidebars sidebars_;
   SvgDrawings svgs_;
+  ExpoUITrees expoUI_;
   std::unique_ptr<TabsHosts> tabs_;
   void applyTabs(SurfaceId surfaceId);
   std::unordered_map<SurfaceId, std::optional<ScreenStacks::FrontHeader>> frontHeaders_;
