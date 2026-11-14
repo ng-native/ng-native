@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { MissingModuleError, expoModule } from '@ng-native/expo';
+import { Storage } from '@ng-native/expo/async-storage';
 
 /** A device on `os` whose desktop host registers the TurboModules in `registered`. */
 function on(os: string, registered: Record<string, object> = {}): void {
@@ -97,5 +98,34 @@ describe('expoModule with an options object', () => {
     assert.deepEqual(expoModule('expo-x', loader().load, { desktop: 'NgNativeHaptics' }), {
       from: 'expo',
     });
+  });
+});
+
+describe('a package the desktop host serves as it is', () => {
+  it('loads through the desktop loader a call gives', () => {
+    on('macos');
+    const { calls, load } = loader();
+    assert.deepEqual(
+      expoModule('a-package', () => null, { desktop: load }),
+      { from: 'expo' },
+    );
+    assert.deepEqual(calls, ['load']);
+  });
+
+  it('keeps Storage on macOS, whose desktop host registers RNCAsyncStorage', async () => {
+    const asked: string[] = [];
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id === 'react-native') return { Platform: { OS: 'macos' } };
+      if (id === '@react-native-async-storage/async-storage') {
+        return {
+          default: { getItem: async (key: string) => (asked.push(key), JSON.stringify('dark')) },
+        };
+      }
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    const provider = (Storage as unknown as { ɵprov: { factory(): Storage } }).ɵprov;
+    const theme = provider.factory().signal('theme', 'light');
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.deepEqual([asked, theme()], [['theme'], 'dark']);
   });
 });

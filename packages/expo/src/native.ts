@@ -56,10 +56,12 @@ export type ModuleOptions =
       readonly platforms?: readonly ModulePlatform[];
       /**
        * The desktop host's TurboModule that stands in for the Expo module on a desktop OS:
-       * `'NgNativeHaptics'`. Naming one counts the desktop OSes among the module's platforms, so a
-       * desktop host without it throws a `MissingModuleError` rather than going inert.
+       * `'NgNativeHaptics'`. Or, for a package that is not emptied on a desktop OS because the
+       * desktop host registers the native module its JavaScript uses, the loader to call there.
+       * Naming either counts the desktop OSes among the module's platforms, so a desktop host
+       * without it throws a `MissingModuleError` rather than going inert.
        */
-      readonly desktop?: string;
+      readonly desktop?: string | (() => unknown);
     };
 
 /**
@@ -185,7 +187,7 @@ function nativeHalfMissing(module: string, platform: ModulePlatform | null): boo
  *
  * On a desktop OS `load` is never called, because every `expo-*` package is an empty module there.
  * The module is the desktop host's TurboModule `options.desktop` names, which implements the same
- * slice, and where it names none the service is inert.
+ * slice, or what its desktop loader answers, and where it gives neither the service is inert.
  */
 export function expoModule<T>(
   module: string,
@@ -216,17 +218,27 @@ export function expoModule<T>(
  * service is inert; the stand-in that says to rebuild the desktop host when it names one the
  * desktop host does not have.
  */
-function desktopModule<T>(module: string, platform: ModulePlatform, desktop?: string): T | null {
+function desktopModule<T>(
+  module: string,
+  platform: ModulePlatform,
+  desktop?: string | (() => unknown),
+): T | null {
   if (!desktop) return null;
-  const registry = optional(
-    () =>
-      (require('react-native') as typeof import('react-native')).TurboModuleRegistry as {
-        get(name: string): unknown;
-      },
-  );
-  const found = optional(() => registry?.get(desktop));
-  if (found != null) return found as T;
-  return missing(new MissingModuleError(module, platform));
+  let failure: unknown;
+  try {
+    const found = typeof desktop === 'function' ? desktop() : turboModule(desktop);
+    if (found != null) return found as T;
+  } catch (error) {
+    failure = error;
+  }
+  return missing(new MissingModuleError(module, platform, failure));
+}
+
+/** The TurboModule registered as `name`, or null. */
+function turboModule(name: string): unknown {
+  const registry = (require('react-native') as typeof import('react-native'))
+    .TurboModuleRegistry as { get(name: string): unknown };
+  return registry.get(name);
 }
 
 /** What Angular asks of any injected value, and `await` of any value: never the module's. */

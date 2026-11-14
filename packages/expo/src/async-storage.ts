@@ -13,13 +13,12 @@ import { expoModule, present } from './native.ts';
 import { Store, type NativeStore } from './store.ts';
 
 const plain = (): NativeStore | null => {
-  const module = expoModule(
-    '@react-native-async-storage/async-storage',
-    () =>
-      require('@react-native-async-storage/async-storage') as {
-        default: typeof import('@react-native-async-storage/async-storage').default;
-      },
-  );
+  const load = () =>
+    require('@react-native-async-storage/async-storage') as {
+      default: typeof import('@react-native-async-storage/async-storage').default;
+    };
+  // Not emptied on a desktop OS: the desktop host registers RNCAsyncStorage, which it talks to.
+  const module = expoModule('@react-native-async-storage/async-storage', load, { desktop: load });
   // Missing from the build: the stand-in, to say so when it is used.
   if (module && !present(module)) return module as never;
   const store = module?.default;
