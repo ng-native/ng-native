@@ -79,7 +79,14 @@ bool gNoPrompts = false;
     return;
   }
   std::string error;
-  _capture = ngn::appkit::startCapture(ngn::appkit::cameraFor(props->facing), error);
+  __weak NGNCameraView *weakSelf = self;
+  auto ready = [weakSelf] {
+    NGNCameraView *view = weakSelf;
+    if (view != nil && view->_capture) {
+      [view send:"cameraReady" payload:folly::dynamic::object()];
+    }
+  };
+  _capture = ngn::appkit::startCapture(ngn::appkit::cameraFor(props->facing), error, ready);
   if (!_capture) {
     [self reportOnce:error];
     return;
@@ -90,7 +97,6 @@ bool gNoPrompts = false;
   self.wantsLayer = YES;
   [self.layer insertSublayer:_preview atIndex:0];
   gViews->attach(static_cast<int>(self.reactTag), _capture);
-  [self send:"cameraReady" payload:folly::dynamic::object()];
 }
 
 - (void)reportOnce:(const std::string &)message {

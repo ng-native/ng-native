@@ -106,17 +106,34 @@ class AVHardware final : public CameraHardware {
 
 class AVSessionCapture final : public SessionCapture {
  public:
-  AVSessionCapture(AVCaptureSession *session, AVCapturePhotoOutput *output) : session_(session), output_(output) {}
+  AVSessionCapture(AVCaptureSession *session, AVCapturePhotoOutput *output)
+      : session_(session), output_(output), queue_(dispatch_queue_create("ngn.camera.session", DISPATCH_QUEUE_SERIAL)) {}
   ~AVSessionCapture() override {
     stop();
   }
   AVCaptureSession *session() const override {
     return session_;
   }
+  void start(std::function<void()> running) override {
+    AVCaptureSession *session = session_;
+    auto ready = std::make_shared<std::function<void()>>(std::move(running));
+    dispatch_async(queue_, ^{
+      [session startRunning];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (*ready) {
+          (*ready)();
+        }
+      });
+    });
+  }
   void stop() override {
-    if (session_.running) {
-      [session_ stopRunning];
-    }
+    // The block holds the session, so it stops after this capture has gone.
+    AVCaptureSession *session = session_;
+    dispatch_async(queue_, ^{
+      if (session.running) {
+        [session stopRunning];
+      }
+    });
   }
   void takePicture(double quality, const std::string &path, std::function<void(int, int, const std::string &)> done) override {
     if (!session_.running) {
@@ -130,6 +147,7 @@ class AVSessionCapture final : public SessionCapture {
  private:
   AVCaptureSession *session_;
   AVCapturePhotoOutput *output_;
+  dispatch_queue_t queue_;
 };
 
 } // namespace
@@ -149,7 +167,11 @@ AVCaptureDevice *cameraFor(const std::string &facing) {
   return all.firstObject;
 }
 
-std::shared_ptr<SessionCapture> startCapture(AVCaptureDevice *device, std::string &error) {
+std::shared_ptr<SessionCapture> sessionCapture(AVCaptureSession *session, AVCapturePhotoOutput *output) {
+  return std::make_shared<AVSessionCapture>(session, output);
+}
+
+std::shared_ptr<SessionCapture> startCapture(AVCaptureDevice *device, std::string &error, std::function<void()> running) {
   if ([AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo] != AVAuthorizationStatusAuthorized) {
     error = cameraMountError(CameraMount::NotPermitted);
     return nullptr;
@@ -175,8 +197,9 @@ std::shared_ptr<SessionCapture> startCapture(AVCaptureDevice *device, std::strin
         (failure != nil ? failure.localizedDescription.UTF8String : "the camera cannot be used");
     return nullptr;
   }
-  [session startRunning];
-  return std::make_shared<AVSessionCapture>(session, output);
+  auto capture = sessionCapture(session, output);
+  capture->start(std::move(running));
+  return capture;
 }
 
 } // namespace ngn::appkit
