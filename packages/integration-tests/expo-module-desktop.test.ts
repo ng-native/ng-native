@@ -260,6 +260,113 @@ describe('the clipboard on macOS', () => {
 });
 
 /**
+ * The host contract for `NgNativeNotifications`: expo-notifications' methods over the OS's
+ * notification centre, and an `ngNativeNotifications` event on `DeviceEventEmitter` with
+ * `{ type: 'received', notification }` or `{ type: 'response', response }`. Dates cross as
+ * milliseconds, since a Date does not cross a TurboModule. A TurboModule cannot hand back the
+ * subscription `add*Listener` answers, so the listeners are the emitter's.
+ */
+describe('notifications on macOS', () => {
+  function host() {
+    const listeners = new Set<(event: unknown) => void>();
+    const calls: [string, unknown][] = [];
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) =>
+            name === 'NgNativeNotifications'
+              ? {
+                  getPermissionsAsync: async () => ({ status: 'granted', granted: true }),
+                  requestPermissionsAsync: async () => ({ status: 'granted', granted: true }),
+                  scheduleNotificationAsync: async (request: unknown) => (
+                    calls.push(['schedule', request]),
+                    'id-1'
+                  ),
+                  getNextTriggerDateAsync: async (trigger: unknown) => (
+                    calls.push(['next', trigger]),
+                    null
+                  ),
+                  getLastNotificationResponseAsync: async () => null,
+                  setBadgeCountAsync: async (count: number) => (calls.push(['badge', count]), true),
+                }
+              : null,
+        },
+        DeviceEventEmitter: {
+          addListener: (event: string, listener: (event: unknown) => void) => {
+            assert.equal(event, 'ngNativeNotifications');
+            listeners.add(listener);
+            return { remove: () => void listeners.delete(listener) };
+          },
+        },
+      };
+    };
+    const send = (event: unknown) => listeners.forEach((listener) => listener(event));
+    return { listeners, calls, send };
+  }
+
+  const notification = (identifier: string) => ({
+    date: 1_700_000_000_000,
+    request: { identifier, content: { title: 'Hi', data: { a: 1 } }, trigger: null },
+  });
+
+  it('surfaces the host events as the received and tapped notification, and nothing else', async () => {
+    const { listeners, send } = host();
+    const { Notifications } = await import('@ng-native/expo/notifications');
+    const { injectService } = await import('@ng-native/testing');
+    const notifications = injectService(Notifications);
+    assert.equal(notifications.available(), true);
+    assert.equal(listeners.size, 2);
+    send({ type: 'received', notification: notification('a') });
+    assert.equal(notifications.latest()?.request.identifier, 'a');
+    assert.equal(notifications.response(), null);
+    send({
+      type: 'response',
+      response: { actionIdentifier: 'default', notification: notification('b') },
+    });
+    assert.equal(notifications.response()?.notification.request.identifier, 'b');
+    assert.equal(notifications.latest()?.request.identifier, 'a');
+    send({ type: 'unknown', notification: notification('c') });
+    send(null);
+    assert.equal(notifications.latest()?.request.identifier, 'a');
+  });
+
+  it('sends dates to the host as milliseconds', async () => {
+    const { calls } = host();
+    const { Notifications, TriggerType } = await import('@ng-native/expo/notifications');
+    const { injectService } = await import('@ng-native/testing');
+    const notifications = injectService(Notifications);
+    const when = new Date(1_800_000_000_000);
+    await notifications.schedule({
+      content: { title: 'x' },
+      trigger: { type: TriggerType.DATE, date: when },
+    });
+    await notifications.schedule({
+      content: { title: 'z' },
+      trigger: { type: TriggerType.DAILY, hour: 9, minute: 0 },
+    });
+    await notifications.nextTriggerDate({ type: TriggerType.DATE, date: when });
+    const triggers = calls.map(([, call]) => (call as { trigger?: unknown }).trigger ?? call);
+    assert.deepEqual(triggers, [
+      { type: 'date', date: 1_800_000_000_000 },
+      { type: 'daily', hour: 9, minute: 0 },
+      { type: 'date', date: 1_800_000_000_000 },
+    ]);
+  });
+
+  it('answers what the host has no counterpart for, rather than throwing', async () => {
+    host();
+    const { Notifications } = await import('@ng-native/expo/notifications');
+    const { injectService } = await import('@ng-native/testing');
+    const notifications = injectService(Notifications);
+    assert.deepEqual(await notifications.channels(), []);
+    assert.deepEqual(await notifications.categories(), []);
+    assert.equal(await notifications.dismissAll(), undefined);
+  });
+});
+
+/**
  * The host contract for the whole-app updater on `NgNativeUpdates` (Sparkle, in a `dmg` build):
  * the `isAppUpdaterAvailable` property, `isAppUpdateAvailable()` answering at once,
  * `checkForAppUpdateAsync()` showing Sparkle's check and resolving whether there was an updater to
