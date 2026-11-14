@@ -4,23 +4,34 @@ The macOS desktop host for Angular Native: React Native's C++ core and Hermes, m
 views into AppKit, and the `ng-native-desktop` command that builds and launches it. You install the
 package and never import it.
 
-Alpha, and early: the host draws views, text and text fields and takes clicks and hover. It has no
-dev server, menu bar, scrolling or networking yet.
+Alpha, and early: the host draws views, text and text fields, takes clicks and hover, loads the app
+from the dev server with reload and Fast Refresh, and has the default menu bar. It has no scrolling
+or images yet.
 
-## Run a bundle
+## Run the app
 
 ```sh
-npx ng-native-desktop run dist/main.hbc
+npm start            # the Expo CLI's dev server, in one terminal
+npx ng-native-desktop run
 ```
 
-Run it from the app's directory: the host is built against the app's own `react-native`
-(0.88), the first time into `~/Library/Caches/ng-native/desktop/rn-<version>`, which takes a few
-minutes and needs Xcode's command line tools, CMake and Ninja. Later runs reuse it. A bundle URL is
-downloaded and opened from disk.
+Run it from the app's directory. The app's Expo config must list `macos` in `expo.platforms` with
+`expo.experiments.outOfTreePlatforms` set to `true`; the command says so when it does not.
+
+With no bundle, the host loads
+`http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=macos&dev=true` straight from the
+dev server and stays connected to it: an edit Fast Refreshes and keeps state, the dev server's
+reload reloads, and so does Developer > Reload (Command-R). A bundle path (from
+`npx expo export -p macos`) or another URL can be given instead.
+
+The host is built against the app's own `react-native` (0.88), the first time into
+`~/Library/Caches/ng-native/desktop/rn-<version>`, which takes a few minutes and needs Xcode's
+command line tools, CMake and Ninja. Later runs reuse it.
 
 | Option            | What it does                                              |
 | ----------------- | --------------------------------------------------------- |
 | `--module <name>` | The registered app to start. Default `main`.              |
+| `--port <port>`   | The dev server's port. Default `8081`.                    |
 | `--universal`     | Build for arm64 and x86_64. Default: this Mac's own arch. |
 
 ## Layout
