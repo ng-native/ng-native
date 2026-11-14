@@ -93,6 +93,7 @@ add_library(ngn_core STATIC
     core/src/updates.cpp
     core/src/view-tree.cpp
     core/src/modules/alert-manager.cpp
+    core/src/modules/app-info.cpp
     core/src/modules/app-modules.cpp
     core/src/modules/async-storage.cpp
     core/src/modules/core-modules.cpp
@@ -122,9 +123,10 @@ if(NGN_TESTS)
   if(APPLE)
     target_sources(ngn_core_tests PRIVATE
         appkit/updates.mm appkit/tests/update-crypto.test.mm
-        appkit/crypto.mm appkit/tests/crypto.test.mm)
+        appkit/crypto.mm appkit/tests/crypto.test.mm
+        appkit/app-info.mm appkit/tests/app-info.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

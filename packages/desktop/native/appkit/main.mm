@@ -27,6 +27,7 @@
 #import "local-authentication.h"
 #import "location.h"
 #import "crypto.h"
+#import "app-info.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
 #import "updates.h"
@@ -680,6 +681,11 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeLocation", [] { return ngn::makeLocationModule(location, noPrompts); });
       static auto authenticator = ngn::appkit::makeAuthenticator();
       ngn::addModule(*modules, "NgNativeLocalAuthentication", [] { return ngn::makeLocalAuthenticationModule(authenticator); });
+      static auto bundleFacts = ngn::appkit::mainBundleFacts();
+      static auto appName = std::string(title.UTF8String);
+      ngn::addModule(*modules, "NgNativeApplication", [] { return ngn::makeApplicationModule(bundleFacts, keychainService, appName); });
+      static auto machine = ngn::appkit::machineFacts();
+      ngn::addModule(*modules, "NgNativeDevice", [] { return ngn::makeDeviceModule(machine); });
       static auto crypto = ngn::appkit::makeCryptoSource();
       ngn::addModule(*modules, "NgNativeCrypto", [] { return ngn::makeCryptoModule(crypto); });
       static auto locales = ngn::appkit::makeLocaleSource();
