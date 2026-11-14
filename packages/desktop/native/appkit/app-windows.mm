@@ -188,8 +188,24 @@ void AppKitWindows::openWindow(
 }
 
 void AppKitWindows::didMount(SurfaceId surface) {
+  if (unshown_[@(surface)] == nil || windows_[@(surface)] == nil || held_.count(surface) > 0) {
+    return;
+  }
+  if (!hooks_.whenShown) {
+    show(surface);
+    return;
+  }
+  held_.insert(surface);
+  hooks_.whenShown([this, surface] {
+    held_.erase(surface);
+    show(surface);
+  });
+}
+
+void AppKitWindows::show(SurfaceId surface) {
   NSNumber *fullScreen = unshown_[@(surface)];
   NSWindow *window = windows_[@(surface)];
+  // A window closed while the splash held it is not shown.
   if (fullScreen == nil || window == nil) {
     return;
   }

@@ -587,3 +587,21 @@ describe('ScreenCapture on macOS', () => {
     assert.equal(capture.screenshots(), 0);
   });
 });
+
+describe('SplashScreen on macOS', () => {
+  it("holds and hides the first windows through the desktop host's NgNativeSplashScreen", async () => {
+    const calls: string[] = [];
+    mac({
+      NgNativeSplashScreen: {
+        preventAutoHideAsync: async () => (calls.push('hold'), true),
+        hideAsync: async () => void calls.push('hide'),
+      },
+    });
+    const { Splash, expoSplashScreen } = await import('@ng-native/expo/splash-screen');
+    const splash = new Splash(expoSplashScreen);
+    assert.equal(splash.available(), true);
+    splash.hold();
+    await splash.hideWhenReady(Promise.resolve(), async () => {});
+    assert.deepEqual(calls, ['hold', 'hide']);
+  });
+});

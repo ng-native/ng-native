@@ -117,6 +117,7 @@ add_library(ngn_core STATIC
     core/src/modules/notifications.cpp
     core/src/modules/screen-capture.cpp
     core/src/modules/sharing.cpp
+    core/src/modules/splash-screen.cpp
     core/src/modules/sqlite.cpp
     core/src/modules/store-review.cpp
     core/src/modules/text-recognition.cpp

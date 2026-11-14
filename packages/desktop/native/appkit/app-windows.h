@@ -2,6 +2,8 @@
 // delegate's part in closing and quitting, which the core decides (app-windows.h).
 #pragma once
 
+#include <set>
+
 #import <AppKit/AppKit.h>
 
 #include "ngn/app-windows.h"
@@ -25,6 +27,8 @@ class AppKitWindows final : public WindowBackend {
     std::function<void(SurfaceId)> stopSurface;
     // The key window changed, or its size did.
     std::function<void(NSWindow *)> keyWindowChanged;
+    // Runs a first show now, or once the splash screen lets the windows go, on the main thread.
+    std::function<void(std::function<void()>)> whenShown;
   };
 
   explicit AppKitWindows(Hooks hooks);
@@ -60,7 +64,11 @@ class AppKitWindows final : public WindowBackend {
   void keyChanged(SurfaceId surface, bool key);
 
  private:
+  // Shows a mounted window that has not shown yet. Main thread.
+  void show(SurfaceId surface);
   Hooks hooks_;
+  // Mounted, and waiting for the splash screen to show them.
+  std::set<SurfaceId> held_;
   std::shared_ptr<WindowHost> host_;
   NSMutableDictionary<NSNumber *, NSWindow *> *windows_;
   NSMutableDictionary<NSNumber *, id> *delegates_;

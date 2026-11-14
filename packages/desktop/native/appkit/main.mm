@@ -37,6 +37,7 @@
 #import "audio.h"
 #import "language-model.h"
 #import "screen-capture.h"
+#include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
@@ -300,6 +301,22 @@ void markLaunchSucceededLater() {
   });
 }
 
+// The splash screen: the first windows wait for the app to hide it (NgNativeSplashScreen).
+std::shared_ptr<ngn::SplashGate> gSplash = std::make_shared<ngn::SplashGate>();
+
+// Runs a window's first show now, or on the main thread once the app hides the splash screen.
+void showPastSplash(std::function<void()> show) {
+  gSplash->show([show = std::move(show)] {
+    if (NSThread.isMainThread) {
+      show();
+    } else {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        show();
+      });
+    }
+  });
+}
+
 void showAppSurfaceIfUsed() {
   const auto *root = gHost.mounting->tree().find(kAppSurface);
   if (gHost.appWindow != nil || root == nullptr || root->children.empty()) {
@@ -331,9 +348,11 @@ void showAppWindow() {
     return;
   }
   gHost.appWindowShown = true;
-  [gHost.appWindow makeKeyAndOrderFront:nil];
-  logFirstFrame(gHost.appWindow);
-  markLaunchSucceededLater();
+  showPastSplash([] {
+    [gHost.appWindow makeKeyAndOrderFront:nil];
+    logFirstFrame(gHost.appWindow);
+    markLaunchSucceededLater();
+  });
 }
 
 } // namespace
@@ -631,6 +650,7 @@ int main(int argc, const char *argv[]) {
           gHost.backend->removeSurface(surface);
         },
         .keyWindowChanged = [](NSWindow *window) { gHost.state->metrics.set(windowMetrics(window)); },
+        .whenShown = [](std::function<void()> show) { showPastSplash(std::move(show)); },
     });
     gHost.windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
     gHost.windows->setHost(gHost.windowHost);
@@ -721,6 +741,7 @@ int main(int argc, const char *argv[]) {
       static auto languageModel = ngn::appkit::makeLanguageModelEngine();
       ngn::addModule(*modules, "NgNativeLocalLlm", [] { return ngn::makeLocalLlmModule(languageModel); });
       ngn::addModule(*modules, "NgNativeScreenCapture", [] { return ngn::makeScreenCaptureModule(ngn::appkit::captureShield()); });
+      ngn::addModule(*modules, "NgNativeSplashScreen", [] { return ngn::makeSplashScreenModule(gSplash); });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
       static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });
