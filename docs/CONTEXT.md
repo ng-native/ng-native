@@ -14,7 +14,23 @@ _Avoid_: renderer, reconciler
 **Platform**:
 The one Angular-aware layer, which implements `Renderer2` over the engine and bootstraps an
 application. The same role `@angular/platform-browser` plays for the DOM.
-_Avoid_: adapter, bridge, integration
+_Avoid_: adapter, bridge, integration, platform meaning the OS
+
+**OS**:
+The operating system an app runs on: iOS, Android, macOS, Windows, Linux, or the web. What
+`Platform.OS` reports, and what a file's `.ios`, `.android` or `.macos` extension selects.
+_Avoid_: platform, target, device
+
+**Desktop**:
+macOS, Windows and Linux as a family, set against iOS and Android. macOS is the one desktop OS
+ng-native runs on.
+_Avoid_: computer, PC, Mac when every desktop OS is meant
+
+**Desktop host**:
+The native application that embeds React Native's C++ core and Hermes, and mounts the engine's
+commits into a desktop toolkit's views. It plays the part React Native's own app plays on iOS and
+Android.
+_Avoid_: host (a host node is the node a component is mounted on), shell, runtime, wrapper
 
 **Node**:
 One entry in the engine's retained tree. May be an element, a text node, or an anchor.
