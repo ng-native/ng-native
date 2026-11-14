@@ -39,4 +39,15 @@ void NgNativeSetUndoHost(id<NgNativeUndoHost> _Nullable host);
 // Whether the first responder in the key window edits text.
 BOOL NgNativeTextInputFocused(void);
 
+// Whether a window answers the app's shared undo manager while `firstResponder` is first: with
+// none, or one of React Native's views or a view controller. A text input, or another view that
+// keeps an undo history of its own (a canvas), keeps its window's.
+BOOL NgNativeAnswersSharedUndo(UIResponder *_Nullable firstResponder);
+
+// Replaces `selector` on `cls` with the block `make` answers, which receives the implementation it
+// replaces to call: the class's own, the one it inherited, or NULL where it had none, and `types`
+// is the method's type encoding then. A method the class only inherited is added to the class, so
+// its superclass is untouched.
+void NgNativeHook(Class cls, SEL selector, const char *types, id (^make)(IMP _Nullable previous));
+
 NS_ASSUME_NONNULL_END

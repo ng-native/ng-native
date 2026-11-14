@@ -1,5 +1,6 @@
 #import "NgNativeResponderHooks.h"
 
+#import <React/RCTViewComponentView.h>
 #import <objc/runtime.h>
 
 // Edit > Undo and Redo's actions, which UIKit's menus name and no public header declares.
@@ -65,13 +66,7 @@ static UIWindow *keyWindow(void)
   return nil;
 }
 
-/**
- Replaces `selector` on `cls` with what `make` answers, which receives the implementation it
- replaces to call: the class's own, the one it inherited, or NULL where it had none, and `types`
- is the method's type encoding then. A method the class only inherited is added to the class, so
- its superclass is untouched.
- */
-static void hook(Class cls, SEL selector, const char *types, id (^make)(IMP _Nullable previous))
+void NgNativeHook(Class cls, SEL selector, const char *types, id (^make)(IMP _Nullable previous))
 {
   Method method = class_getInstanceMethod(cls, selector);
   IMP previous = method != NULL ? method_getImplementation(method) : NULL;
@@ -80,6 +75,21 @@ static void hook(Class cls, SEL selector, const char *types, id (^make)(IMP _Nul
   if (!class_addMethod(cls, selector, replacement, encoding)) {
     method_setImplementation(method, replacement);
   }
+}
+
+BOOL NgNativeAnswersSharedUndo(UIResponder *firstResponder)
+{
+  if (firstResponder == nil) {
+    return YES;
+  }
+  if ([firstResponder conformsToProtocol:@protocol(UITextInput)]) {
+    return NO;
+  }
+  if ([firstResponder isKindOfClass:[UIView class]]) {
+    return [firstResponder isKindOfClass:[RCTViewComponentView class]] ||
+        [firstResponder isKindOfClass:[UIWindow class]];
+  }
+  return YES;
 }
 
 @implementation UIApplication (NgNative)
@@ -99,7 +109,7 @@ static void hook(Class cls, SEL selector, const char *types, id (^make)(IMP _Nul
 /** The app delegate's hooks: the shortcuts' key commands, and the app's groups in the menu bar. */
 static void hookAppDelegate(Class delegate)
 {
-  hook(delegate, @selector(keyCommands), "@@:", ^id(IMP previous) {
+  NgNativeHook(delegate, @selector(keyCommands), "@@:", ^id(IMP previous) {
     return ^NSArray<UIKeyCommand *> *(UIResponder *self) {
       NSArray<UIKeyCommand *> *own =
           previous != NULL ? ((NSArray * (*)(id, SEL)) previous)(self, @selector(keyCommands)) : nil;
@@ -111,7 +121,7 @@ static void hookAppDelegate(Class delegate)
     };
   });
 
-  hook(delegate, @selector(buildMenuWithBuilder:), "v@:@", ^id(IMP previous) {
+  NgNativeHook(delegate, @selector(buildMenuWithBuilder:), "v@:@", ^id(IMP previous) {
     return ^(UIResponder *self, id<UIMenuBuilder> builder) {
       if (previous != NULL) {
         ((void (*)(id, SEL, id))previous)(self, @selector(buildMenuWithBuilder:), builder);
@@ -128,7 +138,7 @@ static void hookAppDelegate(Class delegate)
  */
 static void hookUndoAction(SEL selector, BOOL redo)
 {
-  hook([UIApplication class], selector, "v@:@", ^id(IMP previous) {
+  NgNativeHook([UIApplication class], selector, "v@:@", ^id(IMP previous) {
     return ^(UIResponder *self, id sender) {
       if ([undoHost sharedUndoManager] == nil) {
         if (previous != NULL) {
@@ -164,7 +174,7 @@ void NgNativeInstallResponderHooks(void)
 
     // Undo and Redo named for the action, and disabled with none, or with no module to undo when
     // UIApplication had no Undo of its own.
-    hook([UIApplication class], @selector(validateCommand:), "v@:@", ^id(IMP previous) {
+    NgNativeHook([UIApplication class], @selector(validateCommand:), "v@:@", ^id(IMP previous) {
       return ^(UIResponder *self, UICommand *command) {
         if (previous != NULL) {
           ((void (*)(id, SEL, id))previous)(self, @selector(validateCommand:), command);
@@ -189,12 +199,13 @@ void NgNativeInstallResponderHooks(void)
 
     // Undo and Redo outside a text input: shake to undo, mod+z, and Edit > Undo on an iPad all
     // reach the window's undo manager, which is then the one the app's actions are in. While a
-    // text input has focus the window answers its own, so typing keeps a history of its own, as
-    // on macOS. Without the module, each window has its own again.
-    hook([UIWindow class], @selector(undoManager), "@@:", ^id(IMP previous) {
+    // text input, or a view of another kind with a history of its own, is first responder the
+    // window answers its own, so typing keeps a history of its own, as on macOS, and the app's
+    // history holds only the app's actions. Without the module, each window has its own again.
+    NgNativeHook([UIWindow class], @selector(undoManager), "@@:", ^id(IMP previous) {
       return ^NSUndoManager *(UIWindow *self) {
         NSUndoManager *shared = [undoHost sharedUndoManager];
-        if (shared != nil && !NgNativeTextInputFocused()) {
+        if (shared != nil && NgNativeAnswersSharedUndo(firstResponder())) {
           return shared;
         }
         return previous != NULL ? ((NSUndoManager * (*)(id, SEL)) previous)(self, @selector(undoManager)) : nil;

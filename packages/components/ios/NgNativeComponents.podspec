@@ -21,6 +21,8 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.source_files = '**/*.{h,mm}'
+  # The unit tests build on their own: `tests/run-tests.sh`.
+  s.exclude_files = 'tests/**/*'
   s.dependency 'React-Core'
   install_modules_dependencies(s)
 end

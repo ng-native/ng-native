@@ -25,4 +25,16 @@ NSArray<UIMenuElement *> *NgNativeMenuElements(
 // for a key UIKit cannot name.
 NSString *_Nullable NgNativeKeyInput(NSDictionary *shortcut, UIKeyModifierFlags *flags);
 
+// A key command's input and modifier flags as one string, for telling chords apart.
+NSString *NgNativeKeyChord(NSString *input, UIKeyModifierFlags flags);
+
+// Adds to `chords` the chord of every key command in `element` and under it.
+void NgNativeCollectKeyChords(UIMenuElement *element, NSMutableSet<NSString *> *chords);
+
+// `elements` with each key command whose chord is in `taken` made a plain command with the same
+// title, action and id but no keys, and the chords of the others added to `taken`. UIKit's main
+// menu throws on a key command whose chord it already has, which an app item with a standard role
+// (Find on mod+f) or two items with one chord would otherwise insert.
+NSArray<UIMenuElement *> *NgNativeWithoutTakenKeys(NSArray<UIMenuElement *> *elements, NSMutableSet<NSString *> *taken);
+
 NS_ASSUME_NONNULL_END

@@ -5,6 +5,8 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
+#import "NgNativeResponderHooks.h"
+
 /**
  The `NgNativeWindows` module on an iPad (`NativeWindows` in @ng-native/device): each of the app's
  windows is a UIWindowScene with a surface of its own, on React Native's one host, so every window
@@ -151,16 +153,6 @@ static BOOL isWindowActivity(NSSet<NSUserActivity *> *activities)
   return NO;
 }
 
-static void hookMethod(Class cls, SEL selector, const char *types, id (^make)(IMP _Nullable previous))
-{
-  Method method = class_getInstanceMethod(cls, selector);
-  IMP previous = method != NULL ? method_getImplementation(method) : NULL;
-  IMP replacement = imp_implementationWithBlock(make(previous));
-  if (!class_addMethod(cls, selector, replacement, method != NULL ? method_getTypeEncoding(method) : types)) {
-    method_setImplementation(method, replacement);
-  }
-}
-
 /** Whether a scene of the app's own (Expo's scene delegate) is connected: the app has launched. */
 static BOOL appSceneConnected(void)
 {
@@ -179,7 +171,7 @@ static BOOL appSceneConnected(void)
 static void hookSceneConfiguration(Class delegate)
 {
   SEL selector = @selector(application:configurationForConnectingSceneSession:options:);
-  hookMethod(delegate, selector, "@@:@@@", ^id(IMP previous) {
+  NgNativeHook(delegate, selector, "@@:@@@", ^id(IMP previous) {
     return ^UISceneConfiguration *(id self, UIApplication *app, UISceneSession *session, UISceneConnectionOptions *options) {
       if (multipleWindows() && (isWindowActivity(options.userActivities) || appSceneConnected())) {
         UISceneConfiguration *configuration = [UISceneConfiguration configurationWithName:nil
@@ -202,7 +194,7 @@ static void hookSceneConfiguration(Class delegate)
   // React Native's host, as it starts: every window's surface is made on it.
   Class host = NSClassFromString(@"RCTHost");
   if (host != Nil) {
-    hookMethod(host, @selector(start), "v@:", ^id(IMP previous) {
+    NgNativeHook(host, @selector(start), "v@:", ^id(IMP previous) {
       return ^(id self) {
         reactHost = self;
         if (previous != NULL) {
@@ -213,7 +205,7 @@ static void hookSceneConfiguration(Class delegate)
   }
   // The app delegate's scene configurations, hooked as it becomes the delegate: UIApplication reads
   // which methods its delegate has then, and a method added later is never called.
-  hookMethod([UIApplication class], @selector(setDelegate:), "v@:@", ^id(IMP previous) {
+  NgNativeHook([UIApplication class], @selector(setDelegate:), "v@:@", ^id(IMP previous) {
     return ^(UIApplication *self, id<UIApplicationDelegate> delegate) {
       static dispatch_once_t once;
       if (delegate != nil) {

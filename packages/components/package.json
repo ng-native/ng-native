@@ -105,7 +105,8 @@
   },
   "scripts": {
     "build": "ngc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:ios": "ios/tests/run-tests.sh"
   },
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/components",
@@ -143,6 +144,7 @@
   "files": [
     "dist",
     "ios",
+    "!ios/tests",
     "android/build.gradle",
     "android/src",
     "expo-module.config.json"

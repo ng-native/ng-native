@@ -13,6 +13,10 @@
    that menu, another is a menu of its own after View. Role items the OS does itself stay its own.
  - `setShortcuts(shortcuts)`: a UIKeyCommand for each, from a hardware keyboard, on the app
    delegate, so they work wherever focus is.
+ - `setTakesLongPress(nativeID, takes)`: the view with that `nativeID` takes a long press itself,
+   with a `(longPress)` of its own, so a long press on it or inside it opens no context menu of a
+   view around it. iOS tells a long press from a secondary click only by the gesture, so an iPad
+   pointer's secondary click there opens none either.
  - `setContextMenu(nativeID, entries)`: a UIContextMenuInteraction on React Native's own view with
    that `nativeID`, added once the view is mounted, its menu read as it opens, and removed with
    null, or as the view is unmounted, recycled or renamed. A long press opens it, and a secondary
@@ -24,6 +28,7 @@
  */
 @interface NgNativeMenus : NSObject <RCTBridgeModule, RCTInvalidating, NgNativeMenusHost>
 - (nullable NSArray *)contextMenuFor:(NSString *)nativeID;
+- (BOOL)longPressTakenAt:(CGPoint)location in:(UIView *)view;
 - (void)send:(NSDictionary *)event;
 @end
 
@@ -50,6 +55,10 @@
 - (UIContextMenuConfiguration *)contextMenuInteraction:(UIContextMenuInteraction *)interaction
                         configurationForMenuAtLocation:(CGPoint)location
 {
+  // A long press a view inside takes itself, with a `(longPress)` of its own, opens no menu here.
+  if ([_module longPressTakenAt:location in:interaction.view]) {
+    return nil;
+  }
   // The menu as it is when it opens.
   NSArray *entries = [_module contextMenuFor:_nativeID];
   if (entries.count == 0) {
@@ -97,6 +106,8 @@ static UIMenuIdentifier standardMenu(NSString *role)
   NSArray<UIKeyCommand *> *_shortcuts;
   NSMutableDictionary<NSString *, NSArray *> *_contextMenus;
   NgNativeViewBinder *_contextMenuViews;
+  // The views inside a context menu's that take a long press themselves, by `nativeID`.
+  NSMutableSet<NSString *> *_longPressTakers;
 }
 
 @synthesize callableJSModules = _callableJSModules;
@@ -119,6 +130,7 @@ RCT_EXPORT_MODULE()
     _menuBar = @[];
     _shortcuts = @[];
     _contextMenus = [NSMutableDictionary dictionary];
+    _longPressTakers = [NSMutableSet set];
     __weak NgNativeMenus *weakSelf = self;
     _contextMenuViews = [[NgNativeViewBinder alloc]
         initWithAttach:^id(UIView *view, NSString *nativeID) {
@@ -148,6 +160,7 @@ RCT_EXPORT_MODULE()
   dispatch_async(dispatch_get_main_queue(), ^{
     [self->_contextMenuViews unbindAll];
     [self->_contextMenus removeAllObjects];
+    [self->_longPressTakers removeAllObjects];
   });
 }
 
@@ -206,9 +219,26 @@ RCT_EXPORT_METHOD(setContextMenu : (NSString *)nativeID entries : (nullable NSAr
   }
 }
 
+RCT_EXPORT_METHOD(setTakesLongPress : (NSString *)nativeID takes : (BOOL)takes)
+{
+  if (![nativeID isKindOfClass:[NSString class]] || nativeID.length == 0) {
+    return;
+  }
+  if (takes) {
+    [_longPressTakers addObject:nativeID];
+  } else {
+    [_longPressTakers removeObject:nativeID];
+  }
+}
+
 - (NSArray *)contextMenuFor:(NSString *)nativeID
 {
   return _contextMenus[nativeID];
+}
+
+- (BOOL)longPressTakenAt:(CGPoint)location in:(UIView *)view
+{
+  return NgNativeLongPressTaken([view hitTest:location withEvent:nil], view, _longPressTakers);
 }
 
 - (void)send:(NSDictionary *)event
@@ -230,13 +260,21 @@ RCT_EXPORT_METHOD(setContextMenu : (NSString *)nativeID entries : (nullable NSAr
   }
   UIMenuIdentifier after = UIMenuView;
   NSUInteger index = 0;
+  // The chords UIKit's menus have, and each app item's as it goes in: a second one would throw.
+  NSMutableSet<NSString *> *taken = [NSMutableSet set];
+  UIMenu *root = [builder menuForIdentifier:UIMenuRoot];
+  if (root != nil) {
+    NgNativeCollectKeyChords(root, taken);
+  }
   for (NSDictionary *group in _menuBar) {
     index++;
     if (![group isKindOfClass:[NSDictionary class]] || ![group[@"items"] isKindOfClass:[NSArray class]]) {
       continue;
     }
-    NSArray<UIMenuElement *> *elements = NgNativeMenuElements(group[@"items"], ^(NSString *itemId) {
-    }, @selector(ngn_menuBarItem:));
+    NSArray<UIMenuElement *> *elements = NgNativeWithoutTakenKeys(
+        NgNativeMenuElements(group[@"items"], ^(NSString *itemId) {
+        }, @selector(ngn_menuBarItem:)),
+        taken);
     if (elements.count == 0) {
       continue;
     }

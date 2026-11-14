@@ -12,7 +12,10 @@ A focused text input keeps its own undo history, so these reach the app's action
 text input has focus.
 
 On iOS and iPadOS the undo manager comes from the native side of `@ng-native/components`, which a
-development build has and Expo Go does not: in Expo Go `available()` is `false`.
+development build has and Expo Go does not: in Expo Go `available()` is `false`. It holds only the
+app's actions there: a view that keeps an undo history of its own (a PencilKit canvas, an editor
+view from another library) keeps its window's while it has focus, and `clear()` leaves its actions
+alone.
 
 <!-- platforms: UndoStack -->
 

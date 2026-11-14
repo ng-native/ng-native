@@ -7,8 +7,8 @@
 /**
  The `NgNativeUndo` module on iOS (`NativeUndo` in @ng-native/device), over one NSUndoManager that
  every window answers as its `undoManager`: shake to undo, mod+z and mod+shift+z from a hardware
- keyboard, and Edit > Undo and Redo on an iPad reach the app's actions while no text input takes
- them first.
+ keyboard, and Edit > Undo and Redo on an iPad reach the app's actions while no text input, or
+ other view with a history of its own, is first responder.
  - `register(id, label)` registers an action named `label`. Undoing it sends
    `{ type: 'undo', id }` on `ngNativeUndo` and registers its redo under the same id; redoing sends
    `{ type: 'redo', id }`.
@@ -49,9 +49,10 @@ RCT_EXPORT_MODULE()
 
 - (void)invalidate
 {
-  // A reload starts the history again; the app that registered it is gone.
+  // A reload starts the history again; the app that registered it is gone. Only the app's own
+  // actions are this module's to remove.
   dispatch_async(dispatch_get_main_queue(), ^{
-    [self->_manager removeAllActions];
+    [self->_manager removeAllActionsWithTarget:self];
   });
 }
 
@@ -101,7 +102,7 @@ RCT_EXPORT_METHOD(redo)
 
 RCT_EXPORT_METHOD(clear)
 {
-  [_manager removeAllActions];
+  [_manager removeAllActionsWithTarget:self];
 }
 
 @end

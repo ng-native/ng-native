@@ -159,3 +159,59 @@ NSArray<UIMenuElement *> *NgNativeMenuElements(NSArray *entries, NgNativeMenuCho
   }
   return elements;
 }
+
+NSString *NgNativeKeyChord(NSString *input, UIKeyModifierFlags flags)
+{
+  return [NSString stringWithFormat:@"%ld %@", (long)flags, input.lowercaseString];
+}
+
+void NgNativeCollectKeyChords(UIMenuElement *element, NSMutableSet<NSString *> *chords)
+{
+  if ([element isKindOfClass:[UIKeyCommand class]]) {
+    UIKeyCommand *command = (UIKeyCommand *)element;
+    if (command.input != nil) {
+      [chords addObject:NgNativeKeyChord(command.input, command.modifierFlags)];
+    }
+  } else if ([element isKindOfClass:[UIMenu class]]) {
+    for (UIMenuElement *child in ((UIMenu *)element).children) {
+      NgNativeCollectKeyChords(child, chords);
+    }
+  }
+}
+
+/** A key command as a plain command, keeping everything but its keys. */
+static UICommand *withoutKeys(UIKeyCommand *command)
+{
+  UICommand *plain = [UICommand commandWithTitle:command.title
+                                           image:command.image
+                                          action:command.action
+                                    propertyList:command.propertyList];
+  plain.attributes = command.attributes;
+  plain.state = command.state;
+  plain.discoverabilityTitle = command.discoverabilityTitle;
+  plain.subtitle = command.subtitle;
+  return plain;
+}
+
+NSArray<UIMenuElement *> *NgNativeWithoutTakenKeys(NSArray<UIMenuElement *> *elements, NSMutableSet<NSString *> *taken)
+{
+  NSMutableArray<UIMenuElement *> *out = [NSMutableArray arrayWithCapacity:elements.count];
+  for (UIMenuElement *element in elements) {
+    if ([element isKindOfClass:[UIKeyCommand class]]) {
+      UIKeyCommand *command = (UIKeyCommand *)element;
+      NSString *chord = command.input != nil ? NgNativeKeyChord(command.input, command.modifierFlags) : nil;
+      if (chord == nil || [taken containsObject:chord]) {
+        [out addObject:withoutKeys(command)];
+        continue;
+      }
+      [taken addObject:chord];
+      [out addObject:command];
+    } else if ([element isKindOfClass:[UIMenu class]]) {
+      UIMenu *menu = (UIMenu *)element;
+      [out addObject:[menu menuByReplacingChildren:NgNativeWithoutTakenKeys(menu.children, taken)]];
+    } else {
+      [out addObject:element];
+    }
+  }
+  return out;
+}
