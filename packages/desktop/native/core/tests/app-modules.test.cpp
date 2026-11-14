@@ -230,6 +230,22 @@ TEST_CASE("StatusBarManager, Vibration and RNSModule exist and do nothing") {
   CHECK(ngn::makeKeyboardObserver(f.services)->methods().count("addListener") == 1);
 }
 
+TEST_CASE("RNGestureHandlerModule answers every method of its spec and recognises nothing") {
+  Fixture f;
+  auto module = ngn::makeGestureHandlerModule(f.services);
+  CHECK(module->name() == "RNGestureHandlerModule");
+  for (const char *method : {"createGestureHandler", "attachGestureHandler", "setGestureHandlerConfig", "updateGestureHandlerConfig",
+                             "configureRelations", "dropGestureHandler", "flushOperations", "installUIRuntimeBindings"}) {
+    CAPTURE(method);
+    CHECK(module->methods().count(method) == 1);
+  }
+  module->call("createGestureHandler", dynamic::array("PanGestureHandler", 1, dynamic::object()));
+  module->call("attachGestureHandler", dynamic::array(1, 42, 1));
+  module->call("dropGestureHandler", dynamic::array(1));
+  // No worklet runtime is installed, so the library keeps its callbacks on the JavaScript thread.
+  CHECK(module->call("installUIRuntimeBindings") == false);
+}
+
 TEST_CASE("an alert puts its default button on the right, then Cancel, and answers with the key") {
   // Alert.alert('Delete?', 'Gone for good', [{ text: 'Cancel', style: 'cancel' }, { text: 'Keep' },
   // { text: 'Delete', style: 'destructive' }])
@@ -303,7 +319,7 @@ TEST_CASE("every core module is registered under its iOS name") {
   ngn::ModuleRegistry registry;
   ngn::addCoreModules(registry, f.services);
   for (const char *name : {"PlatformConstants", "DeviceInfo", "AppState", "Appearance", "LinkingManager", "I18nManager",
-                           "AlertManager", "Clipboard", "SettingsManager", "StatusBarManager", "Vibration", "KeyboardObserver", "RNSModule", "Networking", "WebSocketModule", "BlobModule",
+                           "AlertManager", "Clipboard", "SettingsManager", "StatusBarManager", "Vibration", "KeyboardObserver", "RNSModule", "RNGestureHandlerModule", "Networking", "WebSocketModule", "BlobModule",
                            "FileReaderModule", "RNCAsyncStorage", "RNAsyncStorage", "ImageLoader"}) {
     CAPTURE(name);
     CHECK(registry.module(name, nullptr));

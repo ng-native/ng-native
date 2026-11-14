@@ -28,6 +28,7 @@ void addCoreModules(ModuleRegistry &registry, const CoreModuleServices &given) {
       {"Vibration", makeVibration},
       {"KeyboardObserver", makeKeyboardObserver},
       {"RNSModule", makeScreensModule},
+      {"RNGestureHandlerModule", makeGestureHandlerModule},
       {"Networking", makeNetworking},
       {"ImageLoader", makeImageLoader},
       {"WebSocketModule", makeWebSocket},

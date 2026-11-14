@@ -11,7 +11,9 @@ Native's layout animations, and has the default menu bar. React Native's iOS mod
 the core: Linking, Appearance, AccessibilityInfo, AppState, DeviceInfo, PlatformConstants,
 I18nManager, Alert (NSAlert), Clipboard, Networking (streaming, progress, cookies, redirects),
 WebSocket, Blob, FileReader, ImageLoader and `@react-native-async-storage` (2.x and 3.x,
-file-backed). It has no React Native DevTools yet.
+file-backed). It has no React Native DevTools yet. `react-native-gesture-handler`'s module is
+there so the library loads, and recognises nothing: a gesture attached to a view never fires. `react-native-worklets` and
+`react-native-reanimated` have no native part on macOS, so a screen that imports them throws.
 
 A view's box is painted as React Native iOS paints it (`view-box.h`): one corner radius and one
 solid border are the layer's own, drawn over the children only when the view clips or the border

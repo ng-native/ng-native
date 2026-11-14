@@ -316,4 +316,17 @@ std::shared_ptr<NativeModule> makeScreensModule(const CoreModuleServices &) {
   return std::make_shared<NativeModule>("RNSModule");
 }
 
+std::shared_ptr<NativeModule> makeGestureHandlerModule(const CoreModuleServices &) {
+  struct GestureHandler : NativeModule {
+    GestureHandler() : NativeModule("RNGestureHandlerModule") {
+      for (const char *method : {"createGestureHandler", "attachGestureHandler", "setGestureHandlerConfig",
+                                 "updateGestureHandlerConfig", "configureRelations", "dropGestureHandler", "flushOperations"}) {
+        sync(method, [](const folly::dynamic &) { return folly::dynamic(nullptr); });
+      }
+      sync("installUIRuntimeBindings", [](const folly::dynamic &) { return folly::dynamic(false); });
+    }
+  };
+  return std::make_shared<GestureHandler>();
+}
+
 } // namespace ngn

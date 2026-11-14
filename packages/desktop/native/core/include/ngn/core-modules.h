@@ -58,6 +58,10 @@ std::shared_ptr<NativeModule> makeStatusBarManager(const CoreModuleServices &ser
 std::shared_ptr<NativeModule> makeVibration(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeKeyboardObserver(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeScreensModule(const CoreModuleServices &services);
+// react-native-gesture-handler's module, which its JavaScript requires as it loads. The host has
+// no recognisers: every method is there and does nothing, so a gesture attached to a view never
+// fires and the app draws as it does without one.
+std::shared_ptr<NativeModule> makeGestureHandlerModule(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeImageLoader(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeWebSocket(const CoreModuleServices &services);
