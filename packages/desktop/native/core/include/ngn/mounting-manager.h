@@ -6,6 +6,7 @@
 #include "ngn/mounting-backend.h"
 #include "ngn/safe-areas.h"
 #include "ngn/screen-stacks.h"
+#include "ngn/split-view.h"
 #include "ngn/view-tree.h"
 
 #include <react/renderer/uimanager/IMountingManager.h>
@@ -63,6 +64,7 @@ class MountingManager final : public facebook::react::IMountingManager,
   ViewTree tree_;
   std::unique_ptr<ScreenStacks> screens_;
   std::unique_ptr<SafeAreas> safeAreas_;
+  Sidebars sidebars_;
   std::unordered_map<SurfaceId, std::optional<ScreenStacks::FrontHeader>> frontHeaders_;
 };
 

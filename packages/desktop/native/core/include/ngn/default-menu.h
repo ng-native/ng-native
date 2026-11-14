@@ -1,5 +1,5 @@
 // The menu bar every desktop app gets at launch, before any JavaScript runs: the app menu with
-// Quit, the standard text editing commands, View's Back and Forward, the window commands and, for
+// Quit, the standard text editing commands, View's Back, Forward and Show Sidebar, the window commands and, for
 // a bundle from a dev server, the developer commands. A backend draws it and maps each command to
 // the toolkit's own. The app's own bar replaces it once the app sets one (app-menus.h).
 #pragma once

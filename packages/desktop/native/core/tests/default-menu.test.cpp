@@ -77,6 +77,15 @@ TEST_CASE("View has Back and Forward on Command-[ and Command-] before the app s
   CHECK(back->modifiers == ngn::Command);
 }
 
+TEST_CASE("View has Show Sidebar on Control-Command-S, which a window's split view answers") {
+  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto sidebar = ngn::findMenuItem(bar[3].items, MenuCommand::ToggleSidebar);
+  REQUIRE(sidebar);
+  CHECK(sidebar->title == "Show Sidebar");
+  CHECK(sidebar->key == "s");
+  CHECK(sidebar->modifiers == (ngn::Command | ngn::Control));
+}
+
 TEST_CASE("a bundle from a dev server adds the Developer menu with Reload on Command-R") {
   CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes"}), MenuCommand::Reload));
   auto bar = ngn::defaultMenuBar({.appName = "Notes", .developer = true});

@@ -56,6 +56,7 @@ std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options) {
               item("Back", MenuCommand::Back, "["),
               item("Forward", MenuCommand::Forward, "]"),
               separator(),
+              item("Show Sidebar", MenuCommand::ToggleSidebar, "s", Command | Control),
               item("Enter Full Screen", MenuCommand::ToggleFullScreen, "f", Command | Control),
           }),
       menu(

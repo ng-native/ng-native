@@ -88,6 +88,45 @@ void FakeBackend::setFrontHeader(SurfaceId, const std::optional<ScreenStacks::Fr
              : "no header");
 }
 
+void FakeBackend::setSplitView(SurfaceId, Tag split, bool window) {
+  calls.push_back("split view " + std::to_string(split) + (window ? " of the window" : " in the content"));
+}
+
+// "lists of 3: [4 Mail: 5 Inbox (3) *, 6 custom] [9: 10 Sent]": a list per run of sections, each
+// section's tag and title, then each row's tag, label, badge, selected (*) and custom.
+void FakeBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<SourceList> &lists) {
+  std::string line = "lists of " + std::to_string(parent) + ":";
+  for (const auto &list : lists) {
+    line += " [";
+    for (size_t g = 0; g < list.groups.size(); g++) {
+      const auto &group = list.groups[g];
+      line += (g > 0 ? " | " : "") + std::to_string(group.tag) + (group.title.empty() ? "" : " " + group.title) +
+          (group.collapsible ? " (collapsible)" : "") + ":";
+      for (size_t r = 0; r < group.rows.size(); r++) {
+        const auto &row = group.rows[r];
+        line += (r > 0 ? ", " : " ") + std::to_string(row.tag);
+        if (!row.label.empty()) {
+          line += " " + row.label;
+        }
+        if (!row.badge.empty()) {
+          line += " (" + row.badge + ")";
+        }
+        if (!row.sfSymbol.empty()) {
+          line += " <" + row.sfSymbol + ">";
+        }
+        if (row.selected) {
+          line += " *";
+        }
+        if (row.custom) {
+          line += " custom";
+        }
+      }
+    }
+    line += "]";
+  }
+  calls.push_back(line);
+}
+
 void FakeBackend::didMount(SurfaceId surfaceId) {
   calls.push_back("mounted " + std::to_string(surfaceId));
 }

@@ -12,6 +12,7 @@ add_executable(ngn-macos
     native-controls.mm
     network.mm
     scroll-view.mm
+    split-view.mm
     surface-view.mm
     tray-and-dock.mm
     system.mm

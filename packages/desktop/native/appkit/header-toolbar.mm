@@ -125,6 +125,13 @@ NSImage *symbol(const std::string &name, NSString *description) {
   return self;
 }
 
+- (void)setSidebar:(BOOL)sidebar {
+  if (_sidebar != sidebar) {
+    _sidebar = sidebar;
+    [self rebuild];
+  }
+}
+
 - (void)showConfig:(NGNHeaderConfigView *)config screen:(NGNView *)screen canGoBack:(BOOL)canGoBack {
   _config = config;
   _screen = screen;
@@ -193,6 +200,10 @@ NSImage *symbol(const std::string &name, NSString *description) {
   _bar = bar.value_or(ngn::HeaderBar{});
 
   NSMutableArray<NSToolbarItemIdentifier> *ids = [NSMutableArray array];
+  if (_sidebar) {
+    [ids addObject:NSToolbarToggleSidebarItemIdentifier];
+    [ids addObject:NSToolbarSidebarTrackingSeparatorItemIdentifier];
+  }
   if (bar) {
     NSArray *left = [self itemsOfType:"left"];
     NSArray *center = [self itemsOfType:"center"];
@@ -230,10 +241,11 @@ NSImage *symbol(const std::string &name, NSString *description) {
   for (NSUInteger i = 0; i < ids.count; i++) {
     [_toolbar insertItemWithItemIdentifier:ids[i] atIndex:(NSInteger)i];
   }
-  if (bar && !_bar.hidden) {
+  if ((bar && !_bar.hidden) || _sidebar) {
     window.toolbar = _toolbar;
     window.toolbarStyle = NSWindowToolbarStyleUnified;
-    window.titlebarSeparatorStyle = _bar.hideShadow ? NSTitlebarSeparatorStyleNone : NSTitlebarSeparatorStyleAutomatic;
+    window.titlebarSeparatorStyle =
+        bar && _bar.hideShadow ? NSTitlebarSeparatorStyleNone : NSTitlebarSeparatorStyleAutomatic;
   } else {
     window.toolbar = nil;
   }
@@ -407,7 +419,10 @@ NSImage *symbol(const std::string &name, NSString *description) {
 }
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar {
-  return [_identifiers arrayByAddingObject:NSToolbarFlexibleSpaceItemIdentifier];
+  return [_identifiers arrayByAddingObjectsFromArray:@[
+    NSToolbarFlexibleSpaceItemIdentifier, NSToolbarToggleSidebarItemIdentifier,
+    NSToolbarSidebarTrackingSeparatorItemIdentifier
+  ]];
 }
 
 @end

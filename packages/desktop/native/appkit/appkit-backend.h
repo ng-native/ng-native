@@ -8,6 +8,7 @@
 #include "ngn/mounting-backend.h"
 
 @class NGNHeaderToolbar;
+@class NGNSourceLists;
 @class NGNSurfaceView;
 @class NGNView;
 
@@ -38,6 +39,8 @@ class AppKitBackend final : public MountingBackend, public DesktopPropsSink {
   void dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) override;
   void setCovered(SurfaceId surfaceId, Tag tag, bool covered) override;
   void setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) override;
+  void setSplitView(SurfaceId surfaceId, Tag split, bool window) override;
+  void setSourceLists(SurfaceId surfaceId, Tag parent, const std::vector<SourceList> &lists) override;
   void didMount(SurfaceId surfaceId) override;
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
   std::vector<facebook::react::ComponentDescriptorProvider> componentProviders() const override;
@@ -51,6 +54,8 @@ class AppKitBackend final : public MountingBackend, public DesktopPropsSink {
   NSMutableDictionary<NSNumber *, NGNSurfaceView *> *surfaces_;
   NSMutableDictionary<NSNumber *, NGNHeaderToolbar *> *toolbars_;
   NSMutableSet<NSView *> *touched_;
+  // The source lists of each parent that has some, by the parent's tag.
+  NSMutableDictionary<NSNumber *, NGNSourceLists *> *sourceLists_;
 };
 
 } // namespace ngn::appkit

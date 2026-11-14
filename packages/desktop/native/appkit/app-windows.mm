@@ -170,6 +170,8 @@ void AppKitWindows::openWindow(
     delegates_[@(surface)] = delegate;
     window.delegate = delegate;
     NSRect bounds = NSMakeRect(0, 0, NSWidth(content), NSHeight(content));
+    // A split view controller a reloaded app's window had gives way to the new surface.
+    window.contentViewController = nil;
     window.contentView = hooks_.makeSurface(surface, bounds);
     windows_[@(surface)] = window;
     unshown_[@(surface)] = @(request.fullScreen);

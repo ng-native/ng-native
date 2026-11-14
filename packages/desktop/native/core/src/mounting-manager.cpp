@@ -2,6 +2,7 @@
 
 #include "ngn/desktop-modal.h"
 #include "ngn/native-controls.h"
+#include "ngn/split-view.h"
 
 #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
@@ -39,6 +40,11 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<ActivityIndicatorControlComponentDescriptor>(),
       concreteComponentDescriptorProvider<SegmentedControlComponentDescriptor>(),
       concreteComponentDescriptorProvider<DatePickerComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SplitViewComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SidebarComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SplitContentComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SidebarSectionComponentDescriptor>(),
+      concreteComponentDescriptorProvider<SidebarItemComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : backend_->componentProviders()) {
@@ -89,6 +95,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
       }
       case ShadowViewMutation::Delete:
         screens_->deleted(m.oldChildShadowView.tag);
+        sidebars_.deleted(m.oldChildShadowView.tag);
         safeAreas_->deleted(m.oldChildShadowView.tag);
         tree_.destroy(m.oldChildShadowView.tag);
         backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
@@ -98,11 +105,13 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         tree_.insert(m.parentTag, m.newChildShadowView.tag, m.index);
         backend_->insertChild(surfaceId, m.parentTag, m.newChildShadowView.tag, m.index);
         screens_->childrenChanged(tree_, m.parentTag);
+        sidebars_.childrenChanged(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Remove:
         tree_.remove(m.parentTag, m.oldChildShadowView.tag);
         backend_->removeChild(surfaceId, m.parentTag, m.oldChildShadowView.tag, m.index);
         screens_->childrenChanged(tree_, m.parentTag);
+        sidebars_.childrenChanged(tree_, m.parentTag);
         break;
       case ShadowViewMutation::Update: {
         const auto &old = m.oldChildShadowView;
@@ -116,6 +125,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         if (old.props != view.props) {
           backend_->updateProps(view);
           reportDesktopProps(view, &old);
+          sidebars_.propsChanged(tree_, view.tag);
         }
         if (old.state != view.state) {
           backend_->updateState(view);
@@ -133,6 +143,13 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
     backend_->setCovered(surfaceId, change.tag, change.covered);
   }
   safeAreas_->settle(tree_);
+  auto sidebars = sidebars_.settle(tree_, surfaceId);
+  for (const auto &split : sidebars.splitViews) {
+    backend_->setSplitView(surfaceId, split.tag, split.window);
+  }
+  for (const auto &lists : sidebars.lists) {
+    backend_->setSourceLists(surfaceId, lists.parent, lists.lists);
+  }
   auto header = screens_->frontHeader(tree_, surfaceId);
   auto known = frontHeaders_.find(surfaceId);
   if (known == frontHeaders_.end() ? header.has_value() : known->second != header) {

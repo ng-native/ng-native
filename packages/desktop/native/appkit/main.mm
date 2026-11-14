@@ -17,6 +17,7 @@
 #import "modal-host-view.h"
 #import "network.h"
 #import "scroll-view.h"
+#import "split-view.h"
 #import "system.h"
 #import "tray-and-dock.h"
 #import "surface-view.h"
@@ -378,6 +379,13 @@ int main(int argc, const char *argv[]) {
       } else {
         gHost.mounting->tree().removeContainerRoot(static_cast<Tag>(tag));
       }
+    };
+    NGNSplitView.input = gHost.input.get();
+    NGNSplitView.containerRootChanged = NGNHeaderToolbar.containerRootChanged;
+    NGNSplitView.rowContentTakesClick = [](NSInteger row, NSPoint point) {
+      const auto &tree = gHost.mounting->tree();
+      auto chain = tree.hitTest(static_cast<Tag>(row), {static_cast<Float>(point.x), static_cast<Float>(point.y)});
+      return ngn::rowContentTakesClick(tree, chain);
     };
     NGNModalHostView.sheetSizer = [](NSInteger surface, NSInteger tag, NSSize window) {
       ngn::SheetNode empty;

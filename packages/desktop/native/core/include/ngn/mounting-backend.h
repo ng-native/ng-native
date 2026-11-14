@@ -6,6 +6,7 @@
 #pragma once
 
 #include "ngn/screen-stacks.h"
+#include "ngn/split-view.h"
 
 #include <react/renderer/core/ComponentDescriptor.h>
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
@@ -50,6 +51,14 @@ class MountingBackend {
   // The header the surface's main container shows changed: another screen came to the front, or
   // its stack gained or lost the screen below it. Nothing when no screen in front has a header.
   virtual void setFrontHeader(SurfaceId /*surfaceId*/, const std::optional<ScreenStacks::FrontHeader> & /*header*/) {}
+
+  // A split view mounted (split-view.h): the window's own, or a plain one in the content. Sent once,
+  // after its panes are in it.
+  virtual void setSplitView(SurfaceId /*surfaceId*/, Tag /*split*/, bool /*window*/) {}
+
+  // The source lists among `parent`'s children changed: their sections, rows or rows' props. Empty
+  // when the last of them went.
+  virtual void setSourceLists(SurfaceId /*surfaceId*/, Tag /*parent*/, const std::vector<SourceList> & /*lists*/) {}
 
   // Called once a transaction's mutations have all been applied.
   virtual void didMount(SurfaceId /*surfaceId*/) {}
