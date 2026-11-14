@@ -58,6 +58,18 @@ void installGlue_rnscreens() {
     const auto *p = dynamic_cast<const RNSScreenStackHeaderSubviewProps *>(&props);
     return p == nullptr ? std::nullopt : std::optional<std::string>(toString(p->type));
   };
+  glue.searchBarConfig = [](const Props &props) -> std::optional<SearchBarConfig> {
+    const auto *p = dynamic_cast<const RNSSearchBarProps *>(&props);
+    if (p == nullptr) {
+      return std::nullopt;
+    }
+    return SearchBarConfig{
+        .placeholder = p->placeholder,
+        .autoCapitalize = toString(p->autoCapitalize),
+        .tintColor = p->tintColor,
+        .textColor = p->textColor,
+    };
+  };
   glue.tabScreen = [](const Props &props) -> std::optional<TabScreen> {
     const auto *p = dynamic_cast<const RNSTabsScreenIOSProps *>(&props);
     if (p == nullptr) {

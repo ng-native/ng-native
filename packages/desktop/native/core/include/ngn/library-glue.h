@@ -26,6 +26,7 @@ namespace ngn {
 struct LibraryGlue {
   std::function<std::optional<HeaderBar>(const facebook::react::Props &)> headerBar;
   std::function<std::optional<std::string>(const facebook::react::Props &)> headerItemType;
+  std::function<std::optional<SearchBarConfig>(const facebook::react::Props &)> searchBarConfig;
   // Each sets a safe-area view's insets through its state, and answers false for another state.
   std::vector<std::function<bool(const facebook::react::State &, facebook::react::EdgeInsets)>> safeAreaStates;
   // Each reads how far a safe-area view's mounted state moves it (the margin its insets add), and

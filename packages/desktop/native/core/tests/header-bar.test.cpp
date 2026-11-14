@@ -46,3 +46,42 @@ TEST_CASE("a bar button's menu keeps its actions and submenus, without hidden en
   CHECK(m.items[1].items[0].destructive);
   CHECK(m.items[1].items[0].menuId == "item-1/delete");
 }
+
+TEST_CASE("a toolbar search field reports to JavaScript as react-native-screens' iOS search bar does") {
+  using ngn::SearchBarInput;
+  auto names = [](SearchBarInput input, const std::string &text) {
+    std::vector<std::string> out;
+    for (const auto &event : ngn::searchBarEvents(input, text)) {
+      out.push_back(event.name + (event.payload.isObject() && event.payload.count("text") != 0
+                                      ? ":" + event.payload["text"].asString()
+                                      : ""));
+    }
+    return out;
+  };
+  CHECK(names(SearchBarInput::Typed, "ab") == std::vector<std::string>{"changeText:ab"});
+  CHECK(names(SearchBarInput::Submitted, "ab") == std::vector<std::string>{"searchButtonPress:ab"});
+  // Cancel empties the field first, so the text it reports is empty whatever was there.
+  CHECK(names(SearchBarInput::Cancelled, "ab") == std::vector<std::string>{"cancelButtonPress", "changeText:"});
+  CHECK(names(SearchBarInput::Began, "ab") == std::vector<std::string>{"searchFocus"});
+  CHECK(names(SearchBarInput::Ended, "ab") == std::vector<std::string>{"searchBlur"});
+}
+
+TEST_CASE("a search bar's commands read as RNSSearchBar's, and others are ignored") {
+  using ngn::SearchBarCommand;
+  auto focus = ngn::searchBarCommand("focus", folly::dynamic::array());
+  REQUIRE(focus);
+  CHECK(focus->kind == SearchBarCommand::Focus);
+  CHECK(ngn::searchBarCommand("blur", folly::dynamic::array())->kind == SearchBarCommand::Blur);
+  CHECK(ngn::searchBarCommand("clearText", folly::dynamic::array())->kind == SearchBarCommand::ClearText);
+  CHECK(ngn::searchBarCommand("cancelSearch", folly::dynamic::array())->kind == SearchBarCommand::Cancel);
+  auto set = ngn::searchBarCommand("setText", folly::dynamic::array("teal"));
+  REQUIRE(set);
+  CHECK(set->kind == SearchBarCommand::SetText);
+  CHECK(set->text == "teal");
+  // setText without a string sets nothing rather than emptying the field.
+  CHECK_FALSE(ngn::searchBarCommand("setText", folly::dynamic::array()));
+  CHECK_FALSE(ngn::searchBarCommand("setText", folly::dynamic::array(3)));
+  // The Cancel button is the field's own on macOS: there is none to toggle.
+  CHECK_FALSE(ngn::searchBarCommand("toggleCancelButton", folly::dynamic::array(true)));
+  CHECK_FALSE(ngn::searchBarCommand("scroll", folly::dynamic::array()));
+}

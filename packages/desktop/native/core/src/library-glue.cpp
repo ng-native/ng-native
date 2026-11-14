@@ -17,6 +17,11 @@ std::optional<std::string> headerItemType(const facebook::react::Props &props) {
   return read ? read(props) : std::nullopt;
 }
 
+std::optional<SearchBarConfig> searchBarConfig(const facebook::react::Props &props) {
+  const auto &read = libraryGlue().searchBarConfig;
+  return read ? read(props) : std::nullopt;
+}
+
 std::optional<TabScreen> tabScreen(const facebook::react::Props &props) {
   const auto &read = libraryGlue().tabScreen;
   return read ? read(props) : std::nullopt;

@@ -65,4 +65,40 @@ std::vector<BarButton> barButtons(const std::vector<folly::dynamic> &items) {
   return result;
 }
 
+std::vector<SearchBarEvent> searchBarEvents(SearchBarInput input, const std::string &text) {
+  auto withText = [](const std::string &value) { return folly::dynamic::object("text", value); };
+  switch (input) {
+    case SearchBarInput::Typed:
+      return {{"changeText", withText(text)}};
+    case SearchBarInput::Submitted:
+      return {{"searchButtonPress", withText(text)}};
+    case SearchBarInput::Cancelled:
+      return {{"cancelButtonPress", folly::dynamic::object()}, {"changeText", withText("")}};
+    case SearchBarInput::Began:
+      return {{"searchFocus", folly::dynamic::object()}};
+    case SearchBarInput::Ended:
+      return {{"searchBlur", folly::dynamic::object()}};
+  }
+  return {};
+}
+
+std::optional<SearchBarCommand> searchBarCommand(const std::string &name, const folly::dynamic &args) {
+  if (name == "focus") {
+    return SearchBarCommand{.kind = SearchBarCommand::Focus, .text = {}};
+  }
+  if (name == "blur") {
+    return SearchBarCommand{.kind = SearchBarCommand::Blur, .text = {}};
+  }
+  if (name == "clearText") {
+    return SearchBarCommand{.kind = SearchBarCommand::ClearText, .text = {}};
+  }
+  if (name == "cancelSearch") {
+    return SearchBarCommand{.kind = SearchBarCommand::Cancel, .text = {}};
+  }
+  if (name == "setText" && args.isArray() && !args.empty() && args[0].isString()) {
+    return SearchBarCommand{.kind = SearchBarCommand::SetText, .text = args[0].getString()};
+  }
+  return std::nullopt;
+}
+
 } // namespace ngn

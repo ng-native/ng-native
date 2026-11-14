@@ -231,6 +231,15 @@ When the app has them installed, the host compiles in the Fabric components of
   header too; a press and hold or a secondary click on one lists that way's entries by title, and
   a pick goes that many steps. An app with no router history gets a back chevron while the stack
   has a screen below. `hideBackButton` hides the pair, and the header's own left items replace it.
+- A header's `<native-search-bar>` (`RNSSearchBar` in a `searchBar` header item) is an
+  NSSearchToolbarItem at the toolbar's trailing end, which collapses to a button in a narrow
+  window. It takes `placeholder` (also its label), `autoCapitalize`, `textColor` and `tintColor`
+  (the caret), and sends what iOS sends: `changeText` as the text changes (the clear button
+  included), `searchButtonPress` on Return, `cancelButtonPress` and an empty `changeText` on
+  Escape, and `searchFocus` and `searchBlur`. The `focus`, `blur`, `setText`, `clearText` and
+  `cancelSearch` commands work; `placement`, `hideWhenScrolling`, `obscureBackground`,
+  `hideNavigationBar` and `cancelButtonText` are iOS's and do nothing. A toolbar rebuilt while
+  the field is being typed in keeps it typing.
 - The window's content runs under the title bar and toolbar, and each safe-area view gets the part
   of the window's safe area it overlaps: `RNCSafeAreaProvider`'s `insetsChange` (with the window
   controls' width as `titlebarLeading`), `RNCSafeAreaView` and `RNSSafeAreaView`.

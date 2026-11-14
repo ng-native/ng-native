@@ -1,5 +1,6 @@
 #import "header-toolbar.h"
 
+#import "search-toolbar-item.h"
 #import "surface-view.h"
 
 #include "ngn/header-bar.h"
@@ -72,6 +73,45 @@ NSImage *symbol(const std::string &name, NSString *description) {
 }
 @end
 
+@implementation NGNSearchBarView
+
+- (instancetype)initWithShadowView:(const ShadowView &)view {
+  if ((self = [super initWithShadowView:view])) {
+    _item = [[NGNSearchToolbarItem alloc]
+        initWithItemIdentifier:[NSString stringWithFormat:@"ngn.search.%ld", (long)view.tag]];
+    __weak NGNSearchBarView *weakSelf = self;
+    _item.input = ^(ngn::SearchBarInput input, NSString *text) {
+      auto emitter = weakSelf.eventEmitter;
+      if (!emitter) {
+        return;
+      }
+      for (auto &event : ngn::searchBarEvents(input, text.UTF8String != nullptr ? text.UTF8String : "")) {
+        emitter->dispatchEvent(event.name, std::move(event.payload), RawEvent::Category::Discrete);
+      }
+    };
+  }
+  return self;
+}
+
+- (void)updateProps:(const Props::Shared &)props {
+  [super updateProps:props];
+  if (auto config = props ? ngn::searchBarConfig(*props) : std::nullopt) {
+    [_item apply:*config];
+  }
+}
+
+- (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args {
+  if (auto command = ngn::searchBarCommand(name, args)) {
+    [_item run:*command];
+  }
+}
+
+- (void)setHidden:(BOOL)hidden {
+  [super setHidden:YES];
+}
+
+@end
+
 #pragma mark - Toolbar
 
 // The back and forward chevrons as one control, Finder's and Safari's: a click on a segment goes
@@ -111,6 +151,8 @@ NSImage *symbol(const std::string &name, NSString *description) {
   // Header item views now in the toolbar, by identifier, and the config each came from.
   NSMutableDictionary<NSToolbarItemIdentifier, NGNHeaderSubviewView *> *_hosted;
   NSMapTable<NGNHeaderSubviewView *, NSView *> *_homes;
+  // The search items now in the toolbar, by identifier.
+  NSMutableDictionary<NSToolbarItemIdentifier, NGNSearchToolbarItem *> *_searchItems;
 }
 
 + (ngn::InputSink *)input {
@@ -168,6 +210,7 @@ NSImage *symbol(const std::string &name, NSString *description) {
     _identifiers = @[];
     _hosted = [NSMutableDictionary dictionary];
     _homes = [NSMapTable weakToWeakObjectsMapTable];
+    _searchItems = [NSMutableDictionary dictionary];
     _toolbar = [[NSToolbar alloc] initWithIdentifier:@"ngn.header"];
     _toolbar.delegate = self;
     _toolbar.displayMode = NSToolbarDisplayModeIconOnly;
@@ -242,11 +285,28 @@ NSImage *symbol(const std::string &name, NSString *description) {
 }
 
 - (void)rebuild {
+  NGNSearchToolbarItem *editing = nil;
+  for (NGNSearchToolbarItem *item in _searchItems.allValues) {
+    if (item.searchField.currentEditor != nil) {
+      editing = item;
+    }
+  }
+  if (editing != nil) {
+    [editing keepFocusAcross:^{
+      [self rebuildItems];
+    }];
+  } else {
+    [self rebuildItems];
+  }
+}
+
+- (void)rebuildItems {
   NSWindow *window = _window;
   if (window == nil) {
     return;
   }
   [self returnHostedViews];
+  [_searchItems removeAllObjects];
   auto bar = _config && _config.props ? ngn::headerBar(*_config.props) : std::nullopt;
   _bar = bar.value_or(ngn::HeaderBar{});
 
@@ -290,6 +350,15 @@ NSImage *symbol(const std::string &name, NSString *description) {
     for (NGNHeaderSubviewView *v in right) {
       [ids addObject:[self host:v]];
     }
+    for (NGNHeaderSubviewView *v in [self itemsOfType:"searchBar"]) {
+      for (NSView *child in v.subviews) {
+        if ([child isKindOfClass:NGNSearchBarView.class]) {
+          NGNSearchToolbarItem *item = ((NGNSearchBarView *)child).item;
+          _searchItems[item.itemIdentifier] = item;
+          [ids addObject:item.itemIdentifier];
+        }
+      }
+    }
   }
   _identifiers = ids;
 
@@ -331,6 +400,8 @@ NSImage *symbol(const std::string &name, NSString *description) {
     item.label = @"Back/Forward";
     // Before the title, as Finder's and Safari's are.
     item.navigational = YES;
+  } else if (NGNSearchToolbarItem *search = _searchItems[identifier]) {
+    item = search;
   } else if (NGNHeaderSubviewView *view = _hosted[identifier]) {
     item = [self itemHosting:view identifier:identifier];
   } else if ([identifier hasPrefix:@"ngn.button."]) {

@@ -1135,6 +1135,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   if (name == "RNSScreenStackHeaderSubview") {
     return [[NGNHeaderSubviewView alloc] initWithShadowView:view];
   }
+  if (name == "RNSSearchBar") {
+    return [[NGNSearchBarView alloc] initWithShadowView:view];
+  }
   if (name == "ScrollView") {
     return [[NGNScrollView alloc] initWithShadowView:view];
   }

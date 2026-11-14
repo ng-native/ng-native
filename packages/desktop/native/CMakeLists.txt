@@ -205,6 +205,7 @@ if(NGN_TESTS)
         appkit/apple-id-button.mm appkit/tests/apple-id-button.test.mm
         appkit/text-input-field.mm appkit/tests/text-input-field.test.mm
         appkit/search-field.mm appkit/tests/search-field.test.mm
+        appkit/search-toolbar-item.mm appkit/tests/search-toolbar-item.test.mm
         appkit/scrollers.mm appkit/tests/scrollers.test.mm
         appkit/bookmarks.mm appkit/tests/bookmarks.test.mm
         appkit/push.mm appkit/tests/push.test.mm

@@ -61,6 +61,7 @@ add_executable(ngn-macos
     scroll-view.mm
     scrollers.mm
     search-field.mm
+    search-toolbar-item.mm
     split-view.mm
     surface-view.mm
     svg-view.mm

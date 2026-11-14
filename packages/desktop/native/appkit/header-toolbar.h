@@ -2,9 +2,10 @@
 // RNSScreenStackHeaderConfig fills it. Its title is the window title; the back and forward chevrons
 // lead when the window has history (or back alone when the app reports none and the screen has
 // one below it), each listing its way's entries on a long press or a secondary click; left bar
-// buttons and left header items follow it, and right ones
-// trail. A header item's Angular content (an RNSScreenStackHeaderSubview) moves into its toolbar
-// item as a container of its own, hit-tested from the item's root.
+// buttons and left header items follow it, and right ones trail, then the search bar of a
+// searchBar header item as an NSSearchToolbarItem. A header item's Angular content (an
+// RNSScreenStackHeaderSubview) moves into its toolbar item as a container of its own, hit-tested
+// from the item's root.
 //
 // The config view itself stays in the screen, hidden: on macOS the header is the window's.
 #pragma once
@@ -22,6 +23,15 @@
 
 // RNSScreenStackHeaderSubview: placed by its toolbar item rather than by Yoga's origin.
 @interface NGNHeaderSubviewView : NGNView
+@end
+
+@class NGNSearchToolbarItem;
+
+// RNSSearchBar, in a header item of type searchBar: never drawn in content. Its field is the
+// toolbar's NGNSearchToolbarItem (search-toolbar-item.h), which this view owns, so commands reach it
+// whether or not the header is in front.
+@interface NGNSearchBarView : NGNView
+@property (nonatomic, readonly) NGNSearchToolbarItem *item;
 @end
 
 @interface NGNHeaderToolbar : NSObject <NSToolbarDelegate>
