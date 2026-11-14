@@ -5,11 +5,18 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { NativeButton, Text } from '@ng-native/components';
 import { APPLE, DESKTOP, Dock, Menus, OS, OS_VERSION, Processes } from '@ng-native/device';
 import { nativePlatform } from '@ng-native/fabric';
-import { cleanup, fakeDock, provideDesktopFakes, render, screen } from '@ng-native/testing';
+import {
+  cleanup,
+  fakeDock,
+  provideDesktopFakes,
+  render,
+  screen,
+  userEvent,
+} from '@ng-native/testing';
 
 afterEach(cleanup);
 
@@ -41,6 +48,21 @@ test('renders as macOS: its tokens, its view names and recording fakes of its se
   assert.equal(instance.processes.available(), true);
 });
 
+test("renders as the project's OS when the render names none, fakes included", async () => {
+  // The Vitest preset's `os`, from `expo.platforms`: a desktop-only app tests as macOS.
+  const before = process.env['NG_NATIVE_TEST_OS'];
+  process.env['NG_NATIVE_TEST_OS'] = 'macos';
+  try {
+    const { instance } = await render(Gate);
+    assert.ok(screen.getByText('macos  true true'));
+    assert.equal(instance.menus.available(), true);
+    assert.equal(instance.dock.available(), true);
+  } finally {
+    if (before === undefined) delete process.env['NG_NATIVE_TEST_OS'];
+    else process.env['NG_NATIVE_TEST_OS'] = before;
+  }
+});
+
 test('puts the platform back once the render goes', async () => {
   const before = nativePlatform();
   await render(Gate, { os: 'android' });
@@ -48,6 +70,36 @@ test('puts the platform back once the render goes', async () => {
   assert.ok(screen.getByText('android  false false'));
   cleanup();
   assert.equal(nativePlatform(), before);
+});
+
+test("names a view that takes its text as a prop by that text, as a native button's title", async () => {
+  await render(Gate, { os: 'macos' });
+  assert.equal(screen.getByRole('button', { name: 'Save' }), screen.getByTestId('button'));
+  cleanup();
+  await render(Gate, { os: 'ios' });
+  assert.equal(screen.getByRole('button', { name: 'Save' }), screen.getByTestId('button'));
+});
+
+@Component({
+  selector: 'app-counter',
+  imports: [NativeButton],
+  template: `
+    <native-button (press)="count.set(count() + 1)">Add</native-button>
+    <native-button disabled (press)="count.set(count() + 10)">Off</native-button>
+  `,
+})
+class Counter {
+  readonly count = signal(0);
+}
+
+test('presses a native button as the host does, with the press the button sends', async () => {
+  for (const os of ['macos', 'ios'] as const) {
+    const { instance } = await render(Counter, { os });
+    await userEvent.press(screen.getByRole('button', { name: 'Add' }));
+    await userEvent.press(screen.getByRole('button', { name: 'Off' }));
+    assert.equal(instance.count(), 1, os);
+    cleanup();
+  }
 });
 
 test('leaves the desktop services absent on a phone OS', async () => {

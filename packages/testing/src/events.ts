@@ -103,12 +103,17 @@ function changeText(field: FakeFabricNode, text: string): void {
 
 /**
  * The finger lifting: the touch's end, and on `@expo/ui`'s button the press SwiftUI or Compose
- * fires for it, which a disabled one does not.
+ * fires for it, and on a native button the press AppKit or UIKit fires, which a disabled one does
+ * not.
  */
 function release(node: FakeFabricNode): void {
   emit(node, 'topTouchEnd', touch(node, 'end'));
   const current = currentOf(node) ?? node;
   if (isExpoUiButton(current) && !expoUiButtonDisabled(current)) emit(node, expoUiButtonPress());
+  // NSButton and UIButton send their own press, which a disabled one does not.
+  if (current.viewName === 'NgNativeButton' && current.props['enabled'] !== false) {
+    emit(node, 'topButtonPress', {});
+  }
 }
 
 async function press(node: FakeFabricNode): Promise<void> {

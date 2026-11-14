@@ -43,6 +43,17 @@ function presses(shortcut: ParsedShortcut, chord: KeyChord): boolean {
   );
 }
 
+/** The id of the enabled menu item, at any depth, whose shortcut `chord` presses. */
+function keyEquivalent(entries: readonly NativeMenuEntry[], chord: KeyChord): string | null {
+  for (const entry of entries) {
+    if ('separator' in entry) continue;
+    if (entry.shortcut && !entry.disabled && presses(entry.shortcut, chord)) return entry.id;
+    const inner = keyEquivalent(entry.items ?? [], chord);
+    if (inner) return inner;
+  }
+  return null;
+}
+
 /** A set of listeners a fake host sends its events to. */
 function channel<E>() {
   const listeners = new Set<(event: E) => void>();
@@ -142,8 +153,17 @@ export function fakeMenus(options: { menuBar?: boolean; appName?: string } = {})
     select: (id) => events.emit({ type: 'menuSelect', id }),
     press(chord, textInputFocused = false) {
       const found = state.shortcuts.find((shortcut) => presses(shortcut.chord, chord));
-      if (found) events.emit({ type: 'shortcut', id: found.id, textInputFocused });
-      return found !== undefined;
+      if (found) {
+        events.emit({ type: 'shortcut', id: found.id, textInputFocused });
+        return true;
+      }
+      // A drawn menu bar's key equivalents are the menus', which AppKit matches after the app's.
+      const item = keyEquivalent(
+        state.menuBarGroups.flatMap((group) => group.items),
+        chord,
+      );
+      if (item) events.emit({ type: 'menuSelect', id: item });
+      return item !== null;
     },
   };
 }
