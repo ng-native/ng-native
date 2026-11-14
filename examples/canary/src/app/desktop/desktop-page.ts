@@ -7,6 +7,7 @@ import {
   MenuGroup,
   MenuItem,
   NativeButton,
+  Pressable,
   ScrollView,
   Shortcut,
   Text,
@@ -34,6 +35,7 @@ import { LibraryWindow } from './library-window.ts';
     MenuItem,
     NativeButton,
     NativeHeader,
+    Pressable,
     ScrollView,
     Shortcut,
     Text,
@@ -67,10 +69,22 @@ import { LibraryWindow } from './library-window.ts';
       </text>
 
       <text class="heading">Context menu</text>
-      <view class="card" testID="menu-card" [contextMenu]="cardMenu">
+      <view class="card" testID="menu-card" [nativeID]="cardName()" [contextMenu]="cardMenu">
         <text class="body">Right-click, or long press, for a menu.</text>
         <text class="hint">{{ chosen() }}</text>
+        <pressable
+          class="card"
+          testID="menu-handle"
+          (press)="chosen.set('The handle was pressed.')"
+          (longPress)="chosen.set('The handle was long pressed.')"
+        >
+          <text class="body">A long press here is the handle's own, not the menu's.</text>
+        </pressable>
       </view>
+      <native-button testID="rename-card" (press)="renameCard()">
+        Rename the card's nativeID
+      </native-button>
+      <text class="hint">The card is named {{ cardName() ?? 'by the menu' }}.</text>
       <ng-template #cardMenu>
         <menu-item label="Add a Star" (select)="addStar()" />
         <menu-item label="Clear Stars" destructive (select)="clearStars()" />
@@ -119,6 +133,8 @@ export class DesktopPage {
 
   protected readonly stars = signal(0);
   protected readonly chosen = signal('Nothing chosen yet.');
+  /** The card's own nativeID, renamed and taken away in turn: its menu follows each. */
+  protected readonly cardName = signal<string | undefined>(undefined);
   protected readonly over = signal(false);
   protected readonly drops = signal<readonly string[]>([]);
   protected readonly windowNote = signal('');
@@ -134,6 +150,11 @@ export class DesktopPage {
       undo: () => this.stars.update((count) => count - 1),
       redo: () => this.stars.update((count) => count + 1),
     });
+  }
+
+  protected renameCard(): void {
+    const names = [undefined, 'menu-card-1', 'menu-card-2'];
+    this.cardName.update((name) => names[(names.indexOf(name) + 1) % names.length]);
   }
 
   protected clearStars(): void {

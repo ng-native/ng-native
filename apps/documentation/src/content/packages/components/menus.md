@@ -75,6 +75,22 @@ fire. A destructive item's label is red, `icon` names a drawable resource shown 
 `nativeID`, so an element without one is given one. Menus inside a `<modal>` do not open on
 Android yet.
 
+A view with a `nativeID` is a stacking context, as one with `opacity` below 1 is: a `z-index`
+inside an element with a menu orders its children against each other, not against the element's
+siblings. A `<pressable>` is one already. On Android and iOS, put a dropdown that has to paint
+over the next row outside the element with the menu, or give it a `z-index` on the element itself.
+
+On Android the innermost handler wins a long press, as in a native app: a `<pressable>` with its
+own `(longPress)` inside the element keeps its long press, and the menu opens only on a long press
+nothing inside it takes. A right-click there still opens the menu.
+
+```angular-html
+<view [contextMenu]="rowMenu">
+  <text>{{ note.title }}</text>
+  <pressable (longPress)="startReorder(note)"><text>Move</text></pressable>
+</view>
+```
+
 On iOS and iPadOS a long press opens it, as does a secondary click from an iPad pointer, and the
 long press is the menu's there too. iOS adds the menu to the element's own view, found by its
 `nativeID` as on Android, so a `nativeID` the app gives should be unique on screen. Both need the

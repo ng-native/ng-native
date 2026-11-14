@@ -18,6 +18,9 @@
  * - On iOS it is a TurboModule with `setContextMenu(nativeID, entries)` too, for the same reason.
  *   React Native's iOS view sends no event it does not know either, so the module sends the item
  *   chosen as `{ type: 'contextMenuSelect', nativeID, id }`.
+ * - Where it draws context menus, `setTakesLongPress(nativeID, takes)` names a view inside one
+ *   whose own `(longPress)` takes a long press first: a long press there opens no menu around it,
+ *   as the innermost handler wins in a native app. A right-click still opens the menu.
  */
 import {
   InjectionToken,
@@ -153,6 +156,11 @@ export interface NativeMenus {
    * views read no `contextMenu` prop: the host finds the view by its `nativeID`.
    */
   setContextMenu?(nativeID: string, entries: readonly NativeMenuEntry[] | null): void;
+  /**
+   * Whether the view with `nativeID` takes a long press itself, so a context menu around it does
+   * not open on one there. Android and iOS, beside `setContextMenu`.
+   */
+  setTakesLongPress?(nativeID: string, takes: boolean): void;
   subscribe(listener: (event: NativeMenuEvent) => void): () => void;
 }
 
@@ -165,6 +173,7 @@ interface MenusModule {
   setShortcuts?(shortcuts: unknown): void;
   setHistory?(surface: number, history: unknown): void;
   setContextMenu?(nativeID: string, entries: unknown): void;
+  setTakesLongPress?(nativeID: string, takes: boolean): void;
   /** An Expo module's own events. */
   addListener?(event: string, listener: (event: unknown) => void): { remove(): void };
 }
@@ -187,7 +196,6 @@ export function menusSource(): NativeMenus | null {
   const module = turbo ?? expo;
   if (!module) return null;
   const constants = module.getConstants?.() ?? module;
-  const setContextMenu = module.setContextMenu?.bind(module);
   // An Expo module sends its events itself; a TurboModule's come through DeviceEventEmitter.
   const listen = (hear: (event: unknown) => void) =>
     expo
@@ -199,11 +207,23 @@ export function menusSource(): NativeMenus | null {
     setMenuBar: (groups) => module.setMenuBar?.(groups),
     setShortcuts: (shortcuts) => module.setShortcuts?.(shortcuts),
     setHistory: (surface, history) => module.setHistory?.(surface, history),
-    ...(setContextMenu && { setContextMenu }),
+    ...contextMenuMethods(module),
     subscribe: (listener) => {
       const subscription = listen((event) => listener(event as NativeMenuEvent));
       return () => subscription?.remove();
     },
+  };
+}
+
+/** The context menu methods a module has, bound, and none it lacks: a host without them reads props. */
+function contextMenuMethods(
+  module: MenusModule,
+): Pick<NativeMenus, 'setContextMenu' | 'setTakesLongPress'> {
+  const setContextMenu = module.setContextMenu?.bind(module);
+  const setTakesLongPress = module.setTakesLongPress?.bind(module);
+  return {
+    ...(setContextMenu && { setContextMenu }),
+    ...(setTakesLongPress && { setTakesLongPress }),
   };
 }
 
@@ -244,6 +264,21 @@ export class Menus {
    * menu on a long press.
    */
   readonly contextMenuByNativeId: boolean = this.native?.setContextMenu !== undefined;
+
+  /**
+   * Whether the host, which draws context menus on a long press, can be told which views inside
+   * one take a long press themselves (`setTakesLongPress`).
+   */
+  readonly longPressByNativeId: boolean =
+    this.contextMenuByNativeId && this.native?.setTakesLongPress !== undefined;
+
+  /**
+   * Say whether the view with `nativeID` takes a long press itself: one there then opens no
+   * context menu around it.
+   */
+  setTakesLongPress(nativeID: string, takes: boolean): void {
+    this.native?.setTakesLongPress?.(nativeID, takes);
+  }
 
   /** What choosing an item does, by the `nativeID` of the view whose menu it is in. */
   private readonly contextMenuChoices = new Map<string, (id: string) => void>();

@@ -34,7 +34,13 @@ import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
 import { describe } from 'node:test';
 import { signal, type Type, type WritableSignal } from '@angular/core';
-import { DragAndDrop, OS, type NativeDragAndDrop, type NativeDropEvent } from '@ng-native/device';
+import {
+  DragAndDrop,
+  OS,
+  dragAndDropSource,
+  type NativeDragAndDrop,
+  type NativeDropEvent,
+} from '@ng-native/device';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -231,10 +237,86 @@ describe("on iOS, through the host's module", () => {
     assert.deepEqual(host.calls.sort(), ['drag tray null', 'drop tray false']);
   });
 
+  it('follows a nativeID the app binds late, renames and takes away', async () => {
+    const host = fakeModule();
+    const id = signal<string | null>(null);
+    const { FileDrop, DragItem, View } = await import('@ng-native/components');
+    const app = await render(
+      `<view testID="tray" [nativeID]="id()" (fileDrop)="dropped()" [dragItem]="{ text: 'Hi' }"></view>`,
+      {
+        imports: [View, FileDrop, DragItem],
+        providers: [
+          { provide: OS, useValue: 'ios' },
+          { provide: DragAndDrop.SOURCE, useValue: host.native },
+        ],
+        componentProperties: { id, dropped: () => host.calls.push('dropped') },
+      },
+    );
+    await settle();
+    const given = screen.getByTestId('tray').props['nativeID'] as string;
+    const item = JSON.stringify({ files: [], text: 'Hi', url: null });
+    const moved = (from: string, to: string) =>
+      [`drag ${from} null`, `drag ${to} ${item}`, `drop ${from} false`, `drop ${to} true`].sort();
+
+    host.calls.length = 0;
+    id.set('tray-1');
+    await app.detectChanges();
+    await settle();
+    assert.deepEqual(host.calls.sort(), moved(given, 'tray-1'));
+
+    host.calls.length = 0;
+    id.set('tray-2');
+    await app.detectChanges();
+    await settle();
+    assert.deepEqual(host.calls.sort(), moved('tray-1', 'tray-2'));
+    await host.send({ type: 'dropPerform', nativeID: 'tray-1', text: 'Old' });
+    await host.send({ type: 'dropPerform', nativeID: 'tray-2', text: 'New' });
+    assert.deepEqual(host.calls.slice(4), ['dropped'], 'only the new name drops');
+
+    host.calls.length = 0;
+    id.set(null);
+    await app.detectChanges();
+    await settle();
+    assert.equal(screen.getByTestId('tray').props['nativeID'], given);
+    assert.deepEqual(host.calls.sort(), moved('tray-2', given));
+  });
+
   it('leaves macOS to the props, naming nothing and calling no module', async () => {
     const { host } = await open('macos');
     assert.deepEqual(host.calls, []);
     assert.equal(screen.getByTestId('target').props['nativeID'], undefined);
     assert.equal(screen.getByTestId('target').props['fileDrop'], true);
+  });
+});
+
+describe("the drag and drop module's platform source", () => {
+  /** A device for one call: React Native on `Platform`, with the module linked. */
+  function onDevice<T>(platform: { OS: string; isPad?: boolean }, run: () => T): T {
+    const host = globalThis as Record<string, unknown>;
+    const module = { setFileDrop: () => {}, setDragItem: () => {} };
+    host['require'] = (id: string) =>
+      id === 'react-native'
+        ? {
+            Platform: platform,
+            TurboModuleRegistry: {
+              get: (name: string) => name === 'NgNativeDragAndDrop' && module,
+            },
+          }
+        : undefined;
+    host['nativeFabricUIManager'] = {};
+    try {
+      return run();
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+    }
+  }
+
+  it('reaches the module on an iPad', () => {
+    assert.notEqual(onDevice({ OS: 'ios', isPad: true }, dragAndDropSource), null);
+  });
+
+  it('is absent on an iPhone, whose module ignores every view, so none is named', () => {
+    assert.equal(onDevice({ OS: 'ios', isPad: false }, dragAndDropSource), null);
   });
 });

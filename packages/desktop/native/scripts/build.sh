@@ -21,6 +21,9 @@
 # one and relinks.
 #
 # NGN_JOBS caps parallel compiles (default 8).
+#
+# NGN_COMPILER_LAUNCHER, e.g. ccache, runs every compile of the host and of Hermes through it.
+# Unset, the build is as it was.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then
@@ -96,6 +99,11 @@ if [ -n "${NGN_DESKTOP_LINK:-}" ] && [ "$backend" != "none" ]; then
 fi
 [ ${#link_args[@]} -eq 0 ] && link_args=(-DNGN_DESKTOP_LINK= -DNGN_LINK_CODEGEN=)
 
+launcher_args=()
+while IFS= read -r arg; do
+  launcher_args+=("$arg")
+done < <("$here/compiler-launcher.sh" "${NGN_COMPILER_LAUNCHER:-}")
+
 arch_key="${archs//;/-}"
 hermes_args=()
 if [ "$backend" != "none" ]; then
@@ -117,6 +125,7 @@ cmake --log-level=WARNING -G Ninja -S "$here/.." -B "$BUILD" \
   -DNGN_LIBRARIES="$library_dirs" \
   -DNGN_TESTS="$tests" \
   "${link_args[@]}" \
+  ${launcher_args[@]+"${launcher_args[@]}"} \
   ${hermes_args[@]+"${hermes_args[@]}"} >&2
 nice -n 10 cmake --build "$BUILD" -j "$JOBS" >&2
 if [ "$run_tests" = 1 ]; then

@@ -18,4 +18,5 @@ dependencies {
   // TouchTargetHelper, which finds the view a press lands on as React Native's touches do, and the
   // event dispatcher that sends a menu's choice to the view.
   implementation 'com.facebook.react:react-android'
+  testImplementation 'junit:junit:4.13.2'
 }

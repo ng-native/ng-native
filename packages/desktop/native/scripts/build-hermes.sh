@@ -21,6 +21,10 @@ TARGET="$("$here/macos-target.sh")"
 
 intl=OFF
 [ "$(uname -s)" = "Darwin" ] && intl=ON
+launcher_args=()
+while IFS= read -r arg; do
+  launcher_args+=("$arg")
+done < <("$here/compiler-launcher.sh" "${NGN_COMPILER_LAUNCHER:-}")
 cmake --log-level=ERROR -G Ninja -S "$CACHE/src/hermes" -B "$OUT" \
   -DJSI_DIR="$RN_PKG/ReactCommon/jsi" \
   -DCMAKE_BUILD_TYPE=Release \
@@ -31,7 +35,8 @@ cmake --log-level=ERROR -G Ninja -S "$CACHE/src/hermes" -B "$OUT" \
   -DHERMESVM_HEAP_HV_MODE=HEAP_HV_PREFER32 \
   -DHERMES_ENABLE_TEST_SUITE=OFF \
   -DHERMES_BUILD_APPLE_FRAMEWORK=OFF \
-  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  ${launcher_args[@]+"${launcher_args[@]}"}
 # hermesc too, which compiles a packaged app's bundle to this Hermes's bytecode.
 nice -n 10 cmake --build "$OUT" --target hermesvm_a hermesc -j "$JOBS"
 # What hermes-built.sh checks: the macOS this build is for.

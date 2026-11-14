@@ -134,6 +134,14 @@ export abstract class HostEngine {
   }
 
   /**
+   * Call `listener` with a prop's new value each time `setProp` changes it on `node`, taking it
+   * away included. The function returned stops it. A host that keeps no props never calls it.
+   */
+  watchProp(_node: HostNode, _key: string, _listener: (value: unknown) => void): () => void {
+    return () => {};
+  }
+
+  /**
    * Call `target.settleProps()` before the next commit, once the element's static inputs are set.
    *
    * A host primitive writes its props from `ngOnChanges` and `ngOnInit`, which run in its parent
