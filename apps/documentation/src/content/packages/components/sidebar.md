@@ -1,15 +1,18 @@
 ---
 title: Sidebar and split view
-summary: A sidebar beside the content, a source list on macOS and two columns or a stack elsewhere.
+summary: A sidebar beside the content, native on macOS and iPad, two columns or a stack elsewhere.
 ---
 
 # Sidebar and split view
 
 `<split-view>` holds a `<sidebar>` and the content beside it. On macOS the first one in a window
 is its NSSplitViewController, with the full-height sidebar and the toolbar's sidebar button, and a
-nested or second one is a plain NSSplitView. On iOS, Android and the web host it is drawn from
-views: two columns, and below `Screen.compact`'s width a stack whose root is the sidebar. On Android
-the columns wait for Material's expanded width, 840dp, as its list-detail layout does.
+nested or second one is a plain NSSplitView. On an iPad it is a UISplitViewController, in a
+development build (not in Expo Go): the sidebar is its sidebar column, with the system's sidebar
+button, and the content its other column. On iPhone, Android and the web host, and in Expo Go, it
+is drawn from views: two columns, and below `Screen.compact`'s width a stack whose root is the
+sidebar. On Android the columns wait for Material's expanded width, 840dp, as its list-detail
+layout does.
 
 ```html
 <split-view>
@@ -73,6 +76,12 @@ the item with the longest path that starts the url is selected, so `mail/sent` w
 navigation a guard refuses leaves the selection on the route that is showing.
 
 ## Compact widths
+
+On an iPad, UIKit collapses the split view controller into a navigation stack at a compact width,
+in Slide Over or a narrow window: the sidebar is its root, choosing an item pushes the content, and
+the back button returns to the sidebar. Where an item was chosen before the width shrank, the
+content stays in front. Both columns stay mounted through the change, so the router's page and its
+selection are kept. `showSidebar()` pops back to the sidebar.
 
 Drawn below `Screen.compact`'s width (840dp on Android), the split view is a stack: the sidebar
 fills the screen, and choosing an item shows the content in its place. `showSidebar()` on the

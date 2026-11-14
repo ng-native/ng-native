@@ -5,7 +5,8 @@ summary: Several windows from one app on macOS and iPadOS, guarded closing, and 
 
 # Windows
 
-On macOS, and on iPadOS with the scene plugin, an app can have several windows. They are one app:
+On macOS, and on iPadOS with the config plugin's `ios.multipleWindows` in a development build, an
+app can have several windows. They are one app:
 root services, the Router and change detection are shared, so a change in one window shows in every
 other. On iPhone and Android `AppWindows.available()` is `false` and `open` resolves to `null`.
 
@@ -86,6 +87,28 @@ Quitting (Cmd-Q, a logout, an update's relaunch) asks every window's guards, the
 On macOS a SIGTERM to the host (`kill`, or a test pool ending its run) runs the `willQuit`
 handlers but asks no `canClose` guard, so an unsaved-changes dialog cannot hold it. The host ends
 once the handlers have finished or two seconds after the signal, whichever is first.
+
+## Windows on iPadOS
+
+Each window on an iPad is a scene of its own, with the app's one runtime behind every scene. Turn
+them on in the config plugin of [`@ng-native/metro`](/packages/metro), which tells iPadOS the app
+supports several scenes:
+
+```json
+// app.json
+{
+  "expo": {
+    "plugins": [["@ng-native/metro", { "ios": { "multipleWindows": true } }]]
+  }
+}
+```
+
+The main window takes the scene the app launched in, and `open` asks iPadOS for a new scene for
+each window after it. iPadOS places and sizes every scene itself, so the size options and
+`titleBar` are ignored, and `setTitle` names the scene in the app switcher. iPadOS closes a scene
+without asking the app, so the `canClose` guards are not asked there, and there is no quitting:
+`quit()` does nothing. A window the user makes from the system, with New Window, opens the main
+window when none is open, and closes after a few seconds otherwise.
 
 ## Reference
 

@@ -72,7 +72,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`AppWindows.open`, `provideMainWindow`',
     ['AppWindows', 'CURRENT_WINDOW', 'provideMainWindow', 'provideRestorableWindows'],
-    ['yes', 'yes', 'absent', 'absent', 'absent'],
+    ['yes', 'scenes, with `ios.multipleWindows`', 'absent', 'absent', 'absent'],
     { AppWindows: 'NgNativeWindows' },
   ),
   row(
@@ -102,7 +102,13 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`<split-view>`, `<sidebar>`',
     ['SplitView', 'Sidebar', 'SidebarSection', 'SidebarItem', 'SidebarItemPath'],
-    ['yes', 'yes', 'stack root', 'list pane from 840dp, a stack below', 'two columns'],
+    [
+      'yes',
+      'UISplitViewController, a stack at compact widths',
+      'stack root',
+      'list pane from 840dp, a stack below',
+      'two columns',
+    ],
   ),
   row('`Processes`, `Processes.env`', ['Processes'], MAC_ONLY, {
     Processes: 'NgNativeProcesses',
