@@ -135,6 +135,11 @@ std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> g
 // this one (a modal's cover) reports its own moves, so this one stays out of them: hover never
 // lands on what is under a cover.
 - (BOOL)ownsPointer:(NSEvent *)event {
+  // A window over this one (a popover's) takes the pointer where it covers this window.
+  NSPoint onScreen = [self.window convertPointToScreen:event.locationInWindow];
+  if ([NSWindow windowNumberAtPoint:onScreen belowWindowWithWindowNumber:0] != self.window.windowNumber) {
+    return NO;
+  }
   NSView *content = self.window.contentView;
   NSView *hit = [content hitTest:[content.superview convertPoint:event.locationInWindow fromView:nil]];
   for (NSView *v = hit; v != nil; v = v.superview) {

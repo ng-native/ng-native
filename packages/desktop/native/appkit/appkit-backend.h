@@ -19,6 +19,8 @@ class AppKitBackend final : public MountingBackend, public DesktopPropsSink {
 
   // The view a surface's root mounts into. Main thread.
   void addSurface(NGNSurfaceView *surfaceView);
+  // The view mounted for `tag`, or nil. Main thread.
+  NGNView *view(Tag tag) const;
   // Called on the main thread after each mounted transaction.
   std::function<void(SurfaceId)> onMount;
 

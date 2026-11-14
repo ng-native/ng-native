@@ -58,6 +58,7 @@ include(cmake/react-native.cmake)
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
     core/src/bytes.cpp
+    core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp

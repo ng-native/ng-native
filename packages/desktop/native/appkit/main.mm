@@ -175,6 +175,9 @@ int main(int argc, const char *argv[]) {
         gHost.mounting->tree().removeContainerRoot(static_cast<Tag>(tag));
       }
     };
+    NGNModalHostView.viewForTag = [](NSInteger tag) -> NSView * {
+      return gHost.backend->view(static_cast<Tag>(tag));
+    };
     NGNScrollView.offsetChanged = [](NSInteger tag, CGPoint offset) {
       gHost.mounting->tree().setScrollOffset(
           static_cast<Tag>(tag), {static_cast<Float>(offset.x), static_cast<Float>(offset.y)});

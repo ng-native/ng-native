@@ -19,6 +19,10 @@ void AppKitBackend::addSurface(NGNSurfaceView *surfaceView) {
   surfaces_[@(surfaceView.surfaceId)] = surfaceView;
 }
 
+NGNView *AppKitBackend::view(Tag tag) const {
+  return views_[@(tag)];
+}
+
 void AppKitBackend::runOnUiThread(std::function<void()> task) {
   // The main queue is FIFO, which keeps transactions in commit order.
   auto shared = std::make_shared<std::function<void()>>(std::move(task));
@@ -136,6 +140,7 @@ void AppKitBackend::touched(NSView *view) {
 }
 
 void AppKitBackend::didMount(SurfaceId surfaceId) {
+  [NGNModalHostView fitPopovers];
   for (NSView *view in touched_) {
     for (NGNHeaderToolbar *toolbar in toolbars_.allValues) {
       [toolbar refreshIfShowing:(NGNView *)view];

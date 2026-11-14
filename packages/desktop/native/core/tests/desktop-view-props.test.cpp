@@ -1,3 +1,4 @@
+#include "ngn/desktop-modal.h"
 #include "ngn/desktop-view-props.h"
 
 #include <doctest/doctest.h>
@@ -57,4 +58,17 @@ TEST_CASE("the descriptor is React Native's View in every other way") {
   Parser p;
   CHECK(std::string(p.descriptor.getComponentName()) == "View");
   CHECK(p.descriptor.getComponentHandle() == ViewShadowNode::Handle());
+}
+
+TEST_CASE("a modal's anchor is parsed and reported, and goes again when unset") {
+  auto context = std::make_shared<const ContextContainer>();
+  ngn::DesktopModalComponentDescriptor descriptor{{{}, context, nullptr}};
+  PropsParserContext parserContext{1, *context};
+  auto anchored = descriptor.cloneProps(parserContext, nullptr, RawProps(folly::dynamic::object("anchor", 42)("transparent", true)));
+  CHECK(ngn::desktopProps(*anchored).anchor == 42);
+  // A modal's props are still a View's, for the hit test.
+  CHECK(dynamic_cast<const ViewProps *>(anchored.get()) != nullptr);
+  auto unset = descriptor.cloneProps(parserContext, anchored, RawProps(folly::dynamic::object("anchor", nullptr)));
+  CHECK(ngn::desktopProps(*unset) == ngn::DesktopProps{});
+  CHECK(descriptor.getComponentName() == std::string("ModalHostView"));
 }

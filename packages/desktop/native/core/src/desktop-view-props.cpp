@@ -1,5 +1,7 @@
 #include "ngn/desktop-view-props.h"
 
+#include "ngn/desktop-modal.h"
+
 #include <react/renderer/core/propsConversions.h>
 
 using namespace facebook::react;
@@ -19,6 +21,9 @@ DesktopViewProps::DesktopViewProps(
 DesktopProps desktopProps(const Props &props) {
   if (const auto *desktopView = dynamic_cast<const DesktopViewProps *>(&props)) {
     return desktopView->desktop;
+  }
+  if (const auto *modal = dynamic_cast<const DesktopModalProps *>(&props); modal && modal->anchor != 0) {
+    return DesktopProps{.anchor = modal->anchor};
   }
   return {};
 }

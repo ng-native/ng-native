@@ -69,6 +69,10 @@ NSString *nsString(const std::string &s) {
   return _props;
 }
 
+- (const ngn::DesktopProps &)desktopProps {
+  return _desktop;
+}
+
 - (NSView *)contentContainer {
   return self;
 }
