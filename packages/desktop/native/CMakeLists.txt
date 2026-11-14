@@ -110,6 +110,7 @@ add_library(ngn_core STATIC
     core/src/modules/notifications.cpp
     core/src/modules/sqlite.cpp
     core/src/modules/undo.cpp
+    core/src/modules/web-browser.cpp
     core/src/modules/web-socket.cpp)
 target_include_directories(ngn_core PUBLIC core/include)
 # The system's sqlite3, behind NgNativeSqlite (libsqlite3-dev on Linux).

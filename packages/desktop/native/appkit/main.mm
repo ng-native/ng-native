@@ -31,6 +31,7 @@
 #import "network-state.h"
 #import "battery.h"
 #import "fonts.h"
+#import "web-browser.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
 #import "updates.h"
@@ -701,6 +702,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeFont", [] {
         return ngn::makeFontModule(fontRegistrar, fontLibrary, fontHttp, caches + "/fonts");
       });
+      static auto authSession = ngn::appkit::makeAuthSession();
+      ngn::addModule(*modules, "NgNativeWebBrowser", [] { return ngn::makeWebBrowserModule(expoSystem, authSession, noPrompts); });
       static auto crypto = ngn::appkit::makeCryptoSource();
       ngn::addModule(*modules, "NgNativeCrypto", [] { return ngn::makeCryptoModule(crypto); });
       static auto locales = ngn::appkit::makeLocaleSource();

@@ -31,9 +31,10 @@ add_executable(ngn-macos
     text-layout.mm
     undo.mm
     updates.mm
+    web-browser.mm
     app-updater.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries ${NGN_LINKED}
-    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices" "-framework SystemConfiguration" "-framework Network")
+    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices" "-framework SystemConfiguration" "-framework Network" "-framework AuthenticationServices")
 target_compile_options(ngn-macos PRIVATE -fobjc-arc -Wall -Wno-unused-parameter)
 # A Release build is what a packaged app ships: the linker drops the code nothing reaches.
 target_link_options(ngn-macos PRIVATE $<$<CONFIG:Release>:-Wl,-dead_strip>)
