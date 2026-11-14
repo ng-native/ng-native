@@ -560,6 +560,36 @@ const noUncalledAvailable = {
   },
 };
 
+/** @type {import('eslint').Rule.RuleModule} */
+const preferHairlineToken = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description:
+        'Suggest the --hairline token over StyleSheet.hairlineWidth, which never updates',
+      url: `${DOCS}#prefer-hairline-token`,
+    },
+    messages: {
+      stale:
+        "StyleSheet.hairlineWidth is worked out once, at startup, so it keeps the first screen's " +
+        'after a window moves to one of another density. Use var(--hairline) in a stylesheet, ' +
+        'which watchConditions() keeps current.',
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      // ponytail: read by name, as React Native's `StyleSheet` is usually imported under it; one
+      // renamed on import is not followed.
+      'MemberExpression[computed=false][object.name="StyleSheet"][property.name="hairlineWidth"]'(
+        node,
+      ) {
+        context.report({ node, messageId: 'stale' });
+      },
+    };
+  },
+};
+
 /** Report `window.document`, `globalThis.localStorage`, `window.addEventListener` and the like. */
 function checkWindowMember(context, identifier) {
   const member = identifier.parent;
@@ -617,6 +647,7 @@ const plugin = {
     'no-dom-node-access': noDomNodeAccess,
     'lowercase-elements': lowercaseElements,
     'no-uncalled-available': noUncalledAvailable,
+    'prefer-hairline-token': preferHairlineToken,
   },
 };
 
@@ -639,6 +670,7 @@ const recommended = [
       '@ng-native/desktop-only-events': 'warn',
       '@ng-native/no-dom-node-access': 'error',
       '@ng-native/no-uncalled-available': 'error',
+      '@ng-native/prefer-hairline-token': 'warn',
     },
   },
   {

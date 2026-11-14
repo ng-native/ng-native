@@ -370,6 +370,31 @@ test('available read uncalled is fixed to a call', async () => {
   );
 });
 
+const HAIRLINE =
+  '@ng-native/prefer-hairline-token: StyleSheet.hairlineWidth is worked out once, at startup, so ' +
+  "it keeps the first screen's after a window moves to one of another density. Use " +
+  'var(--hairline) in a stylesheet, which watchConditions() keeps current.';
+
+test('StyleSheet.hairlineWidth is a warning to use --hairline', async () => {
+  const code = [
+    "import { StyleSheet } from 'react-native';",
+    'const width = StyleSheet.hairlineWidth;',
+    'const style = { borderBottomWidth: StyleSheet.hairlineWidth };',
+    '',
+  ].join('\n');
+  assert.deepEqual(await lint(code, 'a.ts'), [`2:15 ${HAIRLINE}`, `3:36 ${HAIRLINE}`]);
+});
+
+test('another hairlineWidth, or another member of StyleSheet, is left alone', async () => {
+  const code = [
+    'const a = theme.hairlineWidth;',
+    'const b = StyleSheet.create({});',
+    "const c = StyleSheet['hairlineWidth' + suffix];",
+    '',
+  ].join('\n');
+  assert.deepEqual(await lint(code, 'a.ts'), []);
+});
+
 test('a mouse event is an error in a project that builds for no desktop OS', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ng-native-eslint-'));
   try {
