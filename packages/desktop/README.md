@@ -99,7 +99,8 @@ rotors over the views inside it, in tree order: headings, links, and the views w
 none of these for drawn views.
 
 When the app has them installed, the host compiles in the Fabric components of
-`react-native-screens`, `react-native-safe-area-context` and `react-native-svg`:
+`react-native-screens`, `react-native-safe-area-context`, `react-native-svg` and
+`react-native-webview`:
 
 - A native stack keeps every screen mounted, shows the top one and hides those below it, and sends
   `willAppear` and `appear` (which the router waits for) as a screen comes to the top. Push and pop
@@ -130,6 +131,16 @@ When the app has them installed, the host compiles in the Fabric components of
   luminance masks, `use` and `symbol`, images, and text in spans, with presentation inherited
   through `propList` and `currentColor` from the svg's `color`. Markers, patterns, filters,
   `foreignObject` and `textPath` draw nothing, and text has no anchor, path or letter spacing.
+- A web view (`RNCWebView`, which `<web-view>` and `@ng-native/web-compat`'s `<iframe>` commit) is
+  a WKWebView loading `newSource` (a url with its method, body and headers, a `file:` url, or
+  `html` at its `baseUrl`), with the library's iOS events, scripts and commands: the injected
+  scripts before and after the content, `window.ReactNativeWebView.postMessage` sent as `message`,
+  `postMessage` dispatched in the page as a `MessageEvent`, `injectJavaScript`, back, forward,
+  reload, stop and `loadUrl`. As on iOS each navigation waits for
+  `RNCWebViewModule.shouldStartLoadWithLockIdentifier`. The view also takes `originWhitelist`: a
+  page navigation to an origin outside it is not made and the url opens in its own app, as the
+  library's JavaScript does; `about:` and `data:` pages always pass. `incognito` is read when the
+  view is made, and `clearHistory` and `clearFormData` do nothing, as WebKit has no way to.
 
 ## Drops, drags and opened files
 
@@ -430,7 +441,8 @@ release publishes with its `hermesc` and Sparkle, and unpack it into the per-use
 hash. The archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does
 not match it is deleted and stops the command. The host is built from source instead when the app
 links a library's or its own native desktop code, when a host library it has installed
-(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`) is another version
+(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`,
+`react-native-webview`) is another version
 than the prebuilt one or denied, when the download fails (with a warning), and when
 `NGN_DESKTOP_FROM_SOURCE=1` is set.
 

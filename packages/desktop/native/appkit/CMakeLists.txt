@@ -16,6 +16,8 @@ add_executable(ngn-macos
     tracking.mm
     image-manipulator.mm
     printing.mm
+    web-view.mm
+    web-view-component.mm
     battery.mm
     header-toolbar.mm
     host-view.mm

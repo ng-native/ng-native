@@ -41,6 +41,7 @@
 #import "tracking.h"
 #import "image-manipulator.h"
 #import "printing.h"
+#include "ngn/web-view.h"
 #import "geocoder.h"
 #import "address-search.h"
 #include "ngn/asset.h"
@@ -833,6 +834,8 @@ int main(int argc, const char *argv[]) {
       });
       static auto printSystem = ngn::appkit::makePrintSystem();
       ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", noPrompts); });
+      // react-native-webview's navigation answers; harmless in a host built without the library.
+      ngn::addModule(*modules, "RNCWebViewModule", [] { return ngn::makeWebViewModule(ngn::sharedNavigationLocks()); });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
       static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });

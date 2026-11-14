@@ -99,6 +99,7 @@ add_library(ngn_core STATIC
     core/src/download.cpp
     core/src/updates.cpp
     core/src/view-tree.cpp
+    core/src/web-view.cpp
     core/src/modules/accessibility-manager.cpp
     core/src/modules/address-search.cpp
     core/src/modules/alert-manager.cpp
@@ -168,6 +169,7 @@ if(NGN_TESTS)
         appkit/symbol-drawing.mm appkit/tests/symbol.test.mm
         appkit/share-picker.mm appkit/tests/share-picker.test.mm
         appkit/printing.mm appkit/tests/printing.test.mm
+        appkit/web-view.mm appkit/tests/web-view.test.mm
         appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit")
