@@ -111,6 +111,17 @@ describe(':hover', () => {
     assert.equal(s.id('other').props['onPointerEnter'], undefined);
   });
 
+  it('opts in a view by a class after its first, or by a :hover rule that names no class', () => {
+    const s = scene('.a.b:hover { opacity: 0.5 } :is(.x, .y):hover { opacity: 0.2 }');
+    s.make('view', 'a b');
+    s.make('view', 'b');
+    s.make('view', 'y');
+    s.engine.commit();
+    assert.equal(s.id('a b').props['onPointerEnter'], true);
+    assert.equal(s.id('b').props['onPointerEnter'], undefined, 'one of the two classes');
+    assert.equal(s.id('y').props['onPointerEnter'], true);
+  });
+
   it('commits no pointer opt-in at all in an app with no :hover rule', () => {
     const s = scene('.btn:active { opacity: 0.5 } .card { opacity: 0.9 }');
     const card = s.make('view', 'card');
