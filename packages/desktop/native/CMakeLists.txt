@@ -100,6 +100,7 @@ add_library(ngn_core STATIC
     core/src/modules/file-system.cpp
     core/src/modules/image-loader.cpp
     core/src/modules/local-authentication.cpp
+    core/src/modules/location.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
     core/src/modules/sqlite.cpp

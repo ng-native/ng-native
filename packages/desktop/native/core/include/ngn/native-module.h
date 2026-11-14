@@ -35,11 +35,17 @@ class NativeModule {
   using Async = std::function<void(const folly::dynamic &args, std::vector<JsCallback> callbacks)>;
   using Promise = std::function<void(const folly::dynamic &args, JsPromise promise)>;
 
+  // Starts something that calls `callback` again and again (a watch), and answers how to stop it.
+  // Throws when it cannot start. JavaScript gets a promise of `{remove()}`, as expo-location's
+  // watchPositionAsync answers, or its rejection.
+  using Subscribe = std::function<std::function<void()>(const folly::dynamic &args, JsCallback callback)>;
+
   struct Method {
-    enum class Kind { Sync, Async, Promise } kind;
+    enum class Kind { Sync, Async, Promise, Subscription } kind;
     Sync sync;
     Async async;
     Promise promise;
+    Subscribe subscribe;
   };
 
   explicit NativeModule(std::string name) : name_(std::move(name)) {}
@@ -69,11 +75,15 @@ class NativeModule {
   folly::dynamic call(const std::string &method, const folly::dynamic &args = folly::dynamic::array()) const;
   void callWithCallbacks(const std::string &method, const folly::dynamic &args, std::vector<JsCallback> callbacks) const;
   void callWithPromise(const std::string &method, const folly::dynamic &args, JsPromise promise) const;
+  // The stop function, which does nothing after its first call.
+  std::function<void()> subscribe(const std::string &method, const folly::dynamic &args, JsCallback callback) const;
 
  protected:
   void sync(const std::string &method, Sync fn);
   void async(const std::string &method, Async fn);
   void promise(const std::string &method, Promise fn);
+  // The callback is the first function argument; its place in `args` holds null.
+  void subscription(const std::string &method, Subscribe fn);
   // The listener bookkeeping every event-emitting module answers; events go out regardless.
   void listeners();
   void property(const std::string &name, std::function<folly::dynamic()> fn);

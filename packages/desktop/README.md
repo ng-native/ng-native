@@ -195,6 +195,7 @@ the package's name after `expo-`, each with the methods the service calls on the
 | `NgNativeSqlite`              | `expo-sqlite`'s databases over the system's sqlite3. See Sqlite.                                                                                                                                                         |
 | `NgNativeLocalAuthentication` | `Biometrics` over LAContext. See Local authentication.                                                                                                                                                                   |
 | `NgNativeFileSystem`          | `FileSystem`'s files over uris. See File system.                                                                                                                                                                         |
+| `NgNativeLocation`            | The foreground permission, one fix and a watch over CLLocationManager. See Location.                                                                                                                                     |
 
 The clipboard has no change notification, so the host checks the count when the app becomes active
 and after each key press, click and menu command, and never polls.
@@ -220,6 +221,15 @@ an Apple Watch. The password stands in for Touch ID unless `disableDeviceFallbac
 it set a call that Touch ID cannot answer (no sensor, nothing enrolled, locked out, the lid closed)
 fails at once with no prompt. With `NGN_NO_PROMPTS=1` in the environment no prompt is ever shown,
 and every evaluation fails as `not_interactive`, so an automated run never waits on a dialog.
+
+### Location
+
+`NgNativeLocation` answers `Location`'s permission, `current()` and `start()` over
+CLLocationManager. It asks for the permission only when the app's `Info.plist` explains why
+(`NSLocationUsageDescription` or `NSLocationWhenInUseUsageDescription`), since macOS shows no prompt
+without one, and with `NGN_NO_PROMPTS=1` never. Without the permission it reads nothing, and
+`current()` answers null. Geocoding is not answered, so `geocode()` and `reverseGeocode()` are
+empty.
 
 ### File system
 

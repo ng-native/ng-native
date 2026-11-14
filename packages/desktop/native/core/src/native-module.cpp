@@ -1,5 +1,7 @@
 #include "ngn/native-module.h"
 
+#include <atomic>
+
 #include <jsi/JSIDynamic.h>
 #include <react/bridging/Dynamic.h>
 #include <react/bridging/Function.h>
@@ -38,6 +40,28 @@ void NativeModule::async(const std::string &method, Async fn) {
 
 void NativeModule::promise(const std::string &method, Promise fn) {
   methods_[method] = Method{.kind = Method::Kind::Promise, .promise = std::move(fn)};
+}
+
+void NativeModule::subscription(const std::string &method, Subscribe fn) {
+  methods_[method] = Method{.kind = Method::Kind::Subscription, .subscribe = std::move(fn)};
+}
+
+namespace {
+
+// `stop` that runs once, however often it is called.
+std::function<void()> once(std::function<void()> stop) {
+  auto pending = std::make_shared<std::atomic<bool>>(true);
+  return [pending, stop = std::move(stop)] {
+    if (pending->exchange(false) && stop) {
+      stop();
+    }
+  };
+}
+
+} // namespace
+
+std::function<void()> NativeModule::subscribe(const std::string &method, const folly::dynamic &args, JsCallback callback) const {
+  return once(methods_.at(method).subscribe(args, std::move(callback)));
 }
 
 void NativeModule::listeners() {
@@ -181,6 +205,26 @@ class Adapter final : public TurboModule {
                 .reject = [promise](const std::string &message) mutable { promise.reject(Error(message)); },
             });
         return bridging::toJs(rt, promise, jsInvoker_);
+      }
+      case NativeModule::Method::Kind::Subscription: {
+        auto promiseClass = rt.global().getPropertyAsObject(rt, "Promise");
+        std::function<void()> stop;
+        try {
+          stop = module_->subscribe(name, values, callbacks.empty() ? JsCallback{} : callbacks[0]);
+        } catch (const std::exception &error) {
+          auto rejected = promiseClass.getPropertyAsFunction(rt, "reject");
+          return rejected.callWithThis(rt, promiseClass, jsi::JSError(rt, error.what()).value());
+        }
+        auto subscription = jsi::Object(rt);
+        subscription.setProperty(
+            rt, "remove",
+            jsi::Function::createFromHostFunction(
+                rt, jsi::PropNameID::forAscii(rt, "remove"), 0,
+                [stop](jsi::Runtime &, const jsi::Value &, const jsi::Value *, size_t) {
+                  stop();
+                  return jsi::Value::undefined();
+                }));
+        return promiseClass.getPropertyAsFunction(rt, "resolve").callWithThis(rt, promiseClass, subscription);
       }
     }
     return jsi::Value::undefined();
