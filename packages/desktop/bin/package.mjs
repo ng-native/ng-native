@@ -20,7 +20,7 @@ import { parseArgs } from 'node:util';
 
 import { hostCapabilities } from './app-config.mjs';
 import { plist } from './plist.mjs';
-import { prepareHost, UsageError } from './host.mjs';
+import { prepareHost, readExpoConfig, UsageError } from './host.mjs';
 
 /** The oldest macOS a packaged app runs on. */
 export const MINIMUM_MACOS = '14.0';
@@ -48,7 +48,8 @@ Signing and notarising read the environment:
   NGN_SIGN_IDENTITY             the codesign identity (dmg: Developer ID Application, mas: Apple Distribution)
   NGN_NOTARY_PROFILE            a notarytool keychain profile (xcrun notarytool store-credentials), or
   APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER        an App Store Connect API key
-  mas: NGN_INSTALLER_IDENTITY, NGN_PROVISIONING_PROFILE and APPLE_TEAM_ID`;
+  mas: NGN_INSTALLER_IDENTITY, NGN_PROVISIONING_PROFILE and APPLE_TEAM_ID
+  dmg with ios.usesAppleSignIn: NGN_PROVISIONING_PROFILE (Developer ID) and APPLE_TEAM_ID`;
 
 /**
  * @typedef {{ command: 'package', format: 'app' | 'dmg' | 'mas', output: string, feedUrl: string | undefined, sparkleKey: string | undefined, skipNotarize: boolean }} PackageCommand
@@ -191,11 +192,18 @@ function localSigning(feedUrl, env) {
   return {
     identity: identity || '-',
     installer: undefined,
-    profile: undefined,
-    team: undefined,
+    // A dmg signed for Sign in with Apple embeds a profile, under --skip-notarize too.
+    profile: env['NGN_PROVISIONING_PROFILE'],
+    team: env['APPLE_TEAM_ID'],
     notary: null,
   };
 }
+
+/**
+ * What a dmg signed for Sign in with Apple needs: a restricted entitlement is honoured only in an
+ * app signed with a Team ID whose embedded profile grants it, a Developer ID profile for a dmg.
+ */
+const DMG_SIGN_IN = ['NGN_SIGN_IDENTITY', 'NGN_PROVISIONING_PROFILE', 'APPLE_TEAM_ID'];
 
 /**
  * The environment variables a format needs, by name, each checked before anything is built. A
@@ -326,23 +334,77 @@ export function infoPlist(
   });
 }
 
+/** The package whose use signs an app for Sign in with Apple. */
+const APPLE_AUTHENTICATION = 'expo-apple-authentication';
+
+/**
+ * Whether each format is signed with the Sign in with Apple entitlement, decided as the iOS build
+ * decides it: a `mas` build whenever the app uses `expo-apple-authentication` (its config plugin
+ * listed, or the package installed, which Expo applies the plugin for) or sets
+ * `ios.usesAppleSignIn`; a `dmg` only when `ios.usesAppleSignIn` asks, since it then needs a
+ * Developer ID profile that a dmg has no other use for.
+ *
+ * @param {import('./app-config.mjs').ExpoConfig} expo
+ * @param {boolean} installed whether the app has `expo-apple-authentication` installed
+ */
+export function appleSignIn(expo, installed) {
+  const listed = (expo.plugins ?? []).some(
+    (entry) => (Array.isArray(entry) ? entry[0] : entry) === APPLE_AUTHENTICATION,
+  );
+  const asked = expo.ios?.usesAppleSignIn === true;
+  return { mas: asked || listed || installed, dmg: asked };
+}
+
+/**
+ * Whether this build is signed for Sign in with Apple (`appleSignIn`). A dmg that is needs a
+ * signing identity, a Developer ID profile and its team, checked before anything is built: macOS
+ * opens no app with a restricted entitlement and no profile granting it.
+ *
+ * @param {System} sys
+ * @param {import('./app-config.mjs').ExpoConfig} expo
+ * @param {'app' | 'dmg' | 'mas'} format
+ */
+function signsInWithApple(sys, expo, format) {
+  const uses = appleSignIn(expo, sys.resolvePackage(sys.cwd(), APPLE_AUTHENTICATION) !== null);
+  if (format === 'mas') return uses.mas;
+  if (format !== 'dmg' || !uses.dmg) return false;
+  const missing = DMG_SIGN_IN.filter((name) => !sys.env[name]);
+  if (missing.length > 0) {
+    throw new UsageError(
+      `Sign in with Apple (ios.usesAppleSignIn) in a dmg needs ${missing.join(', ')} set in the ` +
+        'environment: a Developer ID provisioning profile with the Sign in with Apple capability, ' +
+        'and its team. Without them macOS would not open the app.',
+    );
+  }
+  return true;
+}
+
 /**
  * The entitlements the app is signed with: none for `app`; for `dmg` the hardened runtime's for
  * the devices and data the usage strings declare; for `mas` the App Sandbox with those, the
- * network, the files the user picks, and the app's identity on the team.
+ * network, the files the user picks, and the app's identity on the team. `appleSignIn` adds Sign
+ * in with Apple, and to a `dmg` the app's identity on the team, which its profile is for.
  *
  * @param {DesktopAppConfig} config
  * @param {'app' | 'dmg' | 'mas'} format
- * @param {{ bundleIdentifier: string, team?: string }} identity
+ * @param {{ bundleIdentifier: string, team?: string, appleSignIn?: boolean }} identity
  * @returns {string | null}
  */
-export function entitlements(config, format, { bundleIdentifier, team }) {
+export function entitlements(config, format, { bundleIdentifier, team, appleSignIn = false }) {
   if (format === 'app') return null;
-  /** @type {Record<string, string | boolean>} */
+  /** @type {import('./plist.mjs').PlistDict} */
   const granted = Object.fromEntries(
     config.permissions.sandboxEntitlements.map((entitlement) => [entitlement, true]),
   );
-  if (format === 'dmg') return plist(granted);
+  if (appleSignIn) granted['com.apple.developer.applesignin'] = ['Default'];
+  if (format === 'dmg') {
+    if (!appleSignIn) return plist(granted);
+    return plist({
+      ...granted,
+      'com.apple.application-identifier': `${team}.${bundleIdentifier}`,
+      'com.apple.developer.team-identifier': team,
+    });
+  }
   return plist({
     'com.apple.security.app-sandbox': true,
     'com.apple.security.network.client': true,
@@ -559,9 +621,11 @@ export async function packageApp(options, sys) {
     throw new UsageError('Packaging for macOS runs on macOS only.');
   }
   checkXcode(sys);
+  const expo = readExpoConfig(sys, sys.cwd());
+  const signIn = signsInWithApple(sys, expo, options.format);
   const keys = credentials(options, sys.env);
   const sparkleKey = sparkleKeyFor(options, sys.env);
-  const { cwd, expo, config, buildDir } = prepareHost(sys, { universal: true, release: true });
+  const { cwd, config, buildDir } = prepareHost(sys, { universal: true, release: true, expo });
   const hermesc = hermesCompiler(sys, buildDir);
   if (options.format === 'mas') for (const line of sandboxProblems(config)) sys.warn(line);
   const bundleIdentifier = config.bundleIdentifier ?? fallbackIdentifier(options.format, expo);
@@ -617,9 +681,11 @@ export async function packageApp(options, sys) {
   if (options.format === 'app') {
     expectSuccess(sys.run('codesign', ['--force', '--sign', '-', app]), 'codesign failed.');
   } else if (options.format === 'dmg' && keys) {
-    made.push(...shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, options }));
+    made.push(
+      ...shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, options, signIn }),
+    );
   } else if (keys) {
-    made.push(shipMas(sys, { config, app, output, staging, bundleIdentifier, keys }));
+    made.push(shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn }));
   }
   for (const file of made) console.log(path.relative(cwd, file));
   return 0;
@@ -668,12 +734,18 @@ function embedSparkle(sys, buildDir, contents) {
  * only a real identity can get.
  *
  * @param {System} sys
- * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: PackageCommand }} build
+ * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: PackageCommand, signIn: boolean }} build
  * @returns {string[]} the files made beside the app
  */
-function shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, options }) {
+function shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, options, signIn }) {
+  if (signIn) embedProfile(sys, keys, app);
   const file = path.join(staging, 'entitlements.plist');
-  sys.writeFile(file, /** @type {string} */ (entitlements(config, 'dmg', { bundleIdentifier })));
+  const granted = entitlements(config, 'dmg', {
+    bundleIdentifier,
+    team: keys.team,
+    appleSignIn: signIn,
+  });
+  sys.writeFile(file, /** @type {string} */ (granted));
   const timestamp = keys.identity === '-' ? '--timestamp=none' : '--timestamp';
   /** @param {string} target @param {boolean} withEntitlements */
   const sign = (target, withEntitlements) =>
@@ -749,18 +821,33 @@ function zip(sys, app, to) {
 }
 
 /**
- * Embeds the provisioning profile, signs inside the App Sandbox and makes the installer package.
+ * The provisioning profile in `NGN_PROVISIONING_PROFILE`, embedded where macOS reads it.
  *
  * @param {System} sys
- * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>> }} build
+ * @param {NonNullable<ReturnType<typeof credentials>>} keys
+ * @param {string} app
  */
-function shipMas(sys, { config, app, output, staging, bundleIdentifier, keys }) {
+function embedProfile(sys, keys, app) {
   sys.copy(
     path.resolve(String(keys.profile)),
     path.join(app, 'Contents', 'embedded.provisionprofile'),
   );
+}
+
+/**
+ * Embeds the provisioning profile, signs inside the App Sandbox and makes the installer package.
+ *
+ * @param {System} sys
+ * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, signIn: boolean }} build
+ */
+function shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn }) {
+  embedProfile(sys, keys, app);
   const file = path.join(staging, 'entitlements.plist');
-  const granted = entitlements(config, 'mas', { bundleIdentifier, team: keys.team });
+  const granted = entitlements(config, 'mas', {
+    bundleIdentifier,
+    team: keys.team,
+    appleSignIn: signIn,
+  });
   sys.writeFile(file, /** @type {string} */ (granted));
   expectSuccess(
     sys.run('codesign', [

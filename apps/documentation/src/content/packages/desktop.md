@@ -85,18 +85,26 @@ A `dmg` or `mas` needs `ios.bundleIdentifier`. Credentials come from the environ
 A rejected notarisation stops the command with the submission's id, for
 `xcrun notarytool log <id>`.
 
+Sign in with Apple is an entitlement, as on iOS. A `mas` build of an app that uses
+`expo-apple-authentication` (installed, its plugin listed, or `ios.usesAppleSignIn` set) is signed
+with it, so its profile needs the Sign in with Apple capability. A `dmg` is signed with it only
+when `ios.usesAppleSignIn` is `true`, and then needs `NGN_SIGN_IDENTITY`, a Developer ID
+provisioning profile with the capability in `NGN_PROVISIONING_PROFILE`, and its team in
+`APPLE_TEAM_ID`, with `--skip-notarize` too. The command embeds the profile.
+
 ## Config
 
 The macOS build reads what Expo already has a key for from that key, the one the iOS build reads:
 
-| Setting           | Expo key                                                       |
-| ----------------- | -------------------------------------------------------------- |
-| Bundle identifier | `ios.bundleIdentifier`                                         |
-| URL schemes       | `scheme` and `ios.scheme`                                      |
-| Icon              | `ios.icon` (an Icon Composer `.icon` or an image), else `icon` |
-| Version and build | `version` and `ios.buildNumber`                                |
-| Updates server    | `updates.url`                                                  |
-| Usage strings     | `ios.infoPlist`, and each `expo-*` plugin's permission option  |
+| Setting            | Expo key                                                         |
+| ------------------ | ---------------------------------------------------------------- |
+| Bundle identifier  | `ios.bundleIdentifier`                                           |
+| URL schemes        | `scheme` and `ios.scheme`                                        |
+| Icon               | `ios.icon` (an Icon Composer `.icon` or an image), else `icon`   |
+| Version and build  | `version` and `ios.buildNumber`                                  |
+| Updates server     | `updates.url`                                                    |
+| Usage strings      | `ios.infoPlist`, and each `expo-*` plugin's permission option    |
+| Sign in with Apple | `ios.usesAppleSignIn`, and `expo-apple-authentication` installed |
 
 The plugin options hold only what has no Expo key:
 

@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { main, system } from './cli.mjs';
 import { desktopAppConfig } from './app-config.mjs';
 import {
+  appleSignIn,
   checkXcode,
   entitlements,
   infoPlist,
@@ -324,6 +325,64 @@ describe('entitlements', () => {
       text,
       /<key>com\.apple\.application-identifier<\/key>\n\t<string>T1\.com\.example\.notes<\/string>/,
     );
+  });
+});
+
+describe('appleSignIn', () => {
+  it('signs a mas build for Sign in with Apple when the app uses expo-apple-authentication, as iOS does', () => {
+    assert.deepEqual(appleSignIn({}, false), { mas: false, dmg: false });
+    assert.deepEqual(appleSignIn({ plugins: ['expo-apple-authentication'] }, false), {
+      mas: true,
+      dmg: false,
+    });
+    assert.deepEqual(appleSignIn({ plugins: [['expo-apple-authentication', {}]] }, false), {
+      mas: true,
+      dmg: false,
+    });
+    // Installed is enough: Expo applies the package's plugin itself.
+    assert.deepEqual(appleSignIn({}, true), { mas: true, dmg: false });
+  });
+
+  it('signs a dmg for it only when the config asks, with ios.usesAppleSignIn', () => {
+    assert.deepEqual(appleSignIn({ ios: { usesAppleSignIn: true } }, true), {
+      mas: true,
+      dmg: true,
+    });
+    assert.deepEqual(appleSignIn({ ios: { usesAppleSignIn: false } }, true), {
+      mas: true,
+      dmg: false,
+    });
+  });
+});
+
+describe('entitlements with Sign in with Apple', () => {
+  const config = desktopAppConfig({});
+  const signIn =
+    /<key>com\.apple\.developer\.applesignin<\/key>\n\t<array>\n\t\t<string>Default<\/string>\n\t<\/array>/;
+
+  it('adds the entitlement to a mas build that signs in, and to no other', () => {
+    const identity = { bundleIdentifier: 'com.example.notes', team: 'T1' };
+    assert.match(entitlements(config, 'mas', { ...identity, appleSignIn: true })!, signIn);
+    assert.doesNotMatch(entitlements(config, 'mas', identity)!, /applesignin/);
+    assert.equal(entitlements(config, 'app', { ...identity, appleSignIn: true }), null);
+  });
+
+  it("adds it to a dmg with the app's identity on the team, which its profile names", () => {
+    const text = entitlements(config, 'dmg', {
+      bundleIdentifier: 'com.example.notes',
+      team: 'T1',
+      appleSignIn: true,
+    })!;
+    assert.match(text, signIn);
+    assert.match(
+      text,
+      /<key>com\.apple\.application-identifier<\/key>\n\t<string>T1\.com\.example\.notes<\/string>/,
+    );
+    assert.match(
+      text,
+      /<key>com\.apple\.developer\.team-identifier<\/key>\n\t<string>T1<\/string>/,
+    );
+    assert.doesNotMatch(entitlements(config, 'dmg', { bundleIdentifier: 'a.b' })!, /applesignin/);
   });
 });
 
@@ -808,6 +867,90 @@ describe('packageApp', () => {
     });
     assert.ok(!calls.some((call) => call.args[0] === 'notarytool'), 'the App Store reviews it');
     assert.match(warnings.join('\n'), /Processes\.spawn is absent in a mas build/);
+  });
+
+  it('signs a mas build for Sign in with Apple when expo-apple-authentication is listed or installed', async () => {
+    const entitlementsFile = '/apps/notes/.expo/ng-native-desktop/package/entitlements.plist';
+    const app = (extra: object) => () => ({
+      name: 'Notes',
+      platforms: ['macos'],
+      experiments: { outOfTreePlatforms: true },
+      ios: { bundleIdentifier: 'com.example.notes' },
+      ...extra,
+    });
+    const listed = fakeMac({
+      env: MAS_ENV,
+      expoConfig: app({ plugins: ['expo-apple-authentication'] }),
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), listed.sys));
+    assert.match(listed.written[entitlementsFile]!, /com\.apple\.developer\.applesignin/);
+
+    const installed = fakeMac({
+      env: MAS_ENV,
+      expoConfig: app({}),
+      resolvePackage: (_, name) =>
+        name === 'expo-apple-authentication'
+          ? '/apps/notes/node_modules/expo-apple-authentication'
+          : null,
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), installed.sys));
+    assert.match(installed.written[entitlementsFile]!, /com\.apple\.developer\.applesignin/);
+
+    const without = fakeMac({ env: MAS_ENV, expoConfig: app({}) });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), without.sys));
+    assert.doesNotMatch(without.written[entitlementsFile]!, /applesignin/);
+
+    // A dmg of an app that only lists the plugin is signed as before, with no profile.
+    const dmg = fakeMac({
+      env: DMG_ENV,
+      expoConfig: app({ plugins: ['expo-apple-authentication'] }),
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), dmg.sys));
+    assert.doesNotMatch(dmg.written[entitlementsFile]!, /applesignin/);
+    assert.ok(!dmg.copied.some(([, to]) => to.endsWith('embedded.provisionprofile')));
+  });
+
+  it('signs a dmg for Sign in with Apple when ios.usesAppleSignIn asks, embedding its Developer ID profile', async () => {
+    const config = () => ({
+      name: 'Notes',
+      platforms: ['macos'],
+      experiments: { outOfTreePlatforms: true },
+      ios: { bundleIdentifier: 'com.example.notes', usesAppleSignIn: true },
+    });
+    for (const [args, env] of [
+      [['--format', 'dmg'], DMG_ENV],
+      [['--format', 'dmg', '--skip-notarize'], {}],
+      [['--format', 'dmg', '--skip-notarize'], { NGN_SIGN_IDENTITY: DMG_ENV.NGN_SIGN_IDENTITY }],
+    ] as const) {
+      const { sys, calls } = fakeMac({ env, expoConfig: config });
+      await assert.rejects(
+        packageApp(parsePackage([...args]), sys),
+        /Sign in with Apple \(ios\.usesAppleSignIn\) in a dmg needs [\s\S]*NGN_PROVISIONING_PROFILE[\s\S]*APPLE_TEAM_ID/,
+      );
+      assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
+    }
+
+    const { sys, calls, copied, written } = fakeMac({
+      env: {
+        ...DMG_ENV,
+        NGN_PROVISIONING_PROFILE: '/secrets/notes-developer-id.provisionprofile',
+        APPLE_TEAM_ID: 'TEAM123',
+      },
+      expoConfig: config,
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), sys));
+    const app = '/apps/notes/dist/macos/Notes.app';
+    assert.ok(
+      copied.some(
+        ([from, to]) =>
+          from === '/secrets/notes-developer-id.provisionprofile' &&
+          to === `${app}/Contents/embedded.provisionprofile`,
+      ),
+    );
+    const text = written['/apps/notes/.expo/ng-native-desktop/package/entitlements.plist']!;
+    assert.match(text, /com\.apple\.developer\.applesignin/);
+    assert.match(text, /<string>TEAM123\.com\.example\.notes<\/string>/);
+    assert.ok(calls.some((call) => call.command === 'codesign' && call.args.at(-1) === app));
   });
 
   it('writes into --output, relative to the app', async () => {
