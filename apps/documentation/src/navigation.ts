@@ -204,6 +204,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/device/processes', title: 'Processes' },
         { path: 'packages/device/app-windows', title: 'Windows' },
         { path: 'packages/device/dock', title: 'Dock and tray' },
+        { path: 'packages/device/undo-stack', title: 'Undo' },
         { path: 'packages/device/layout-animation', title: 'Layout animation' },
         { path: 'packages/device/dialogs', title: 'Dialogs', group: 'Feedback' },
         { path: 'packages/device/sharing', title: 'Sharing' },

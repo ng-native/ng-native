@@ -9,7 +9,7 @@ summary: The package each macOS API is imported from, in one table.
 | ------------------------------------------------------------------------------- | ------------------------------------ |
 | `AppWindows`, `CURRENT_WINDOW`, `provideMainWindow`, `provideRestorableWindows` | `@ng-native/device`                  |
 | `AppLifecycle`, `provideAppLifecycle`                                           | `@ng-native/device`                  |
-| `Menus`, `Dock`, `Tray`                                                         | `@ng-native/device`                  |
+| `Menus`, `Dock`, `Tray`, `UndoStack`                                            | `@ng-native/device`                  |
 | `Processes`, `Shell`                                                            | `@ng-native/device`                  |
 | `OS`, `OS_VERSION`, `DESKTOP`, `APPLE`                                          | `@ng-native/device`                  |
 | `Dialogs`, `DeepLinks`, `Screen`, `SafeArea`                                    | `@ng-native/device`                  |
@@ -24,7 +24,7 @@ summary: The package each macOS API is imported from, in one table.
 | `Haptics`                                                                       | `@ng-native/expo/haptics`            |
 | `KeepAwake`                                                                     | `@ng-native/expo/keep-awake`         |
 | `SecureStorage`                                                                 | `@ng-native/expo/secure-store`       |
-| `fakeWindows`, `fakeMenus`, `fakeDock`, `fakeTray`, `fakeProcesses`             | `@ng-native/testing`                 |
+| `fakeWindows`, `fakeMenus`, `fakeDock`, `fakeTray`, `fakeProcesses`, `fakeUndo` | `@ng-native/testing`                 |
 | `provideDesktopFakes`, `fakeDeepLinks`                                          | `@ng-native/testing`                 |
 | The `ng-native-desktop` command and the config plugin                           | `@ng-native/desktop`, never imported |
 

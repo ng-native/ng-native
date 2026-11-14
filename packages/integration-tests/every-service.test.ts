@@ -36,6 +36,7 @@ import {
   Screen,
   Sharing,
   StatusBar,
+  UndoStack,
   Vibration,
 } from '@ng-native/device';
 import { AddressSearch } from '@ng-native/expo/address-search';
@@ -137,6 +138,7 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   Screen: device(Screen, 'screen'),
   Sharing: device(Sharing, 'sharing'),
   StatusBar: device(StatusBar, 'status-bar', ['macos', 'web']),
+  UndoStack: device(UndoStack, 'undo-stack', ['android', 'web']),
   Vibration: device(Vibration, 'vibration', ['macos']),
   AddressSearch: expo(AddressSearch, 'address-search'),
   AppInfo: expo(AppInfo, 'app-info'),

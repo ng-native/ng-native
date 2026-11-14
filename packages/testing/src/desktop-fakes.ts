@@ -15,6 +15,7 @@ import {
   Menus,
   Processes,
   Tray,
+  UndoStack,
   type DeepLinkSource,
   type KeyChord,
   type MenuRole,
@@ -28,6 +29,8 @@ import {
   type NativeTray,
   type NativeTrayEvent,
   type NativeTrayIcon,
+  type NativeUndo,
+  type NativeUndoEvent,
   type NativeWindowEvent,
   type NativeWindowRequest,
   type NativeWindows,
@@ -398,6 +401,62 @@ export function fakeDeepLinks(launchUrl: string | null = null): FakeDeepLinks {
   };
 }
 
+/**
+ * The OS's undo manager, as NSUndoManager orders it: undoing an action makes it the next redo,
+ * and registering a new one clears the redo history. `chooseUndo()` and `chooseRedo()` play
+ * Edit > Undo and Edit > Redo, with no text input focused.
+ */
+export interface FakeUndo extends NativeUndo {
+  /** Edit > Undo's title, `Undo <label>`, or null while it is disabled. */
+  readonly undoTitle: string | null;
+  /** Edit > Redo's title, `Redo <label>`, or null while it is disabled. */
+  readonly redoTitle: string | null;
+  chooseUndo(): void;
+  chooseRedo(): void;
+}
+
+export function fakeUndo(): FakeUndo {
+  const events = channel<NativeUndoEvent>();
+  type Action = { id: string; label: string };
+  const undos: Action[] = [];
+  const redos: Action[] = [];
+  const undo = () => {
+    const action = undos.pop();
+    if (!action) return;
+    redos.push(action);
+    events.emit({ type: 'undo', id: action.id });
+  };
+  const redo = () => {
+    const action = redos.pop();
+    if (!action) return;
+    undos.push(action);
+    events.emit({ type: 'redo', id: action.id });
+  };
+  return {
+    get undoTitle() {
+      const top = undos.at(-1);
+      return top ? `Undo ${top.label}` : null;
+    },
+    get redoTitle() {
+      const top = redos.at(-1);
+      return top ? `Redo ${top.label}` : null;
+    },
+    register(id, label) {
+      undos.push({ id, label });
+      redos.length = 0;
+    },
+    undo,
+    redo,
+    clear() {
+      undos.length = 0;
+      redos.length = 0;
+    },
+    subscribe: events.subscribe,
+    chooseUndo: undo,
+    chooseRedo: redo,
+  };
+}
+
 /** The fakes a render on a desktop OS gets, each one replaceable. */
 export interface DesktopFakes {
   readonly windows?: FakeWindows;
@@ -406,11 +465,12 @@ export interface DesktopFakes {
   readonly dock?: FakeDock;
   readonly tray?: FakeTray;
   readonly processes?: FakeProcesses;
+  readonly undo?: FakeUndo;
 }
 
 /**
  * Providers that put the recording fakes in place of the desktop host's menus, Dock, tray,
- * processes and deep links. A fake given here is used as it is; the rest are made new. The
+ * processes, deep links and undo manager. A fake given here is used as it is; the rest are made new. The
  * windows' fake goes in only when one is given, as `render`'s `os: 'macos'` gives one: with it,
  * the root component waits for `AppWindows` to open the main window, where a render without it
  * mounts on the render's own surface.
@@ -423,5 +483,6 @@ export function provideDesktopFakes(fakes: DesktopFakes = {}): Provider[] {
     { provide: Tray.SOURCE, useValue: fakes.tray ?? fakeTray() },
     { provide: Processes.SOURCE, useValue: fakes.processes ?? fakeProcesses() },
     { provide: DeepLinks.SOURCE, useValue: fakes.deepLinks ?? fakeDeepLinks() },
+    { provide: UndoStack.SOURCE, useValue: fakes.undo ?? fakeUndo() },
   ];
 }

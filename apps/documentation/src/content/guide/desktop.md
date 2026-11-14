@@ -43,8 +43,9 @@ app, and the desktop host runs it. To add macOS to an app you have, see
   `(dblclick)`, `(contextmenu)` and Tab order all work, and `<native-button>` is an AppKit button.
 - **Drag and drop.** `(fileDrop)` takes files, text and urls dragged onto a view, and `[dragItem]`
   lets a view be dragged out. See [Drag and drop](/packages/components/drag-and-drop).
-- **The system.** The [Dock and a menu bar icon](/packages/device/dock), and declared programs,
-  urls and files through [Processes and Shell](/packages/device/processes).
+- **The system.** The [Dock and a menu bar icon](/packages/device/dock), declared programs, urls
+  and files through [Processes and Shell](/packages/device/processes), and the app's own actions on
+  Edit > Undo through [UndoStack](/packages/device/undo-stack).
 
 The pages under this one cover [what differs](/guide/desktop-differences) from iOS and Android,
 [how big things are](/guide/desktop-sizing) on a Mac, [where each desktop API is imported
