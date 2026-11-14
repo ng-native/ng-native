@@ -104,6 +104,33 @@ export {
 } from './shortcut.ts';
 export { Processes, type NativeProcesses } from './processes.ts';
 export {
+  SEARCH_PATH,
+  SpawnRuleError,
+  compileCapability,
+  filterEnvironment,
+  matchArguments,
+  matchSpawn,
+  parseArgument,
+  programProblem,
+  resolveProgram,
+  type ArgumentRule,
+  type CompiledCapability,
+  type PlaceholderValues,
+  type ProgramLookup,
+  type SpawnCapability,
+  type SpawnMatch,
+} from './spawn-rules.ts';
+export {
+  desktopOptionProblems,
+  pathAllowed,
+  pathProblem,
+  validateDesktopOptions,
+  type DesktopCapabilities,
+  type DesktopOptions,
+  type DocumentType,
+  type PathCapability,
+} from './desktop-options.ts';
+export {
   Menus,
   serializeMenu,
   type NativeMenuEntry,
