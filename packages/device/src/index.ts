@@ -158,6 +158,7 @@ export {
   type SerializedMenu,
 } from './menus.ts';
 export { Dock, type NativeDock } from './dock.ts';
+export { nativeSplitViews } from './split-views.ts';
 export {
   DragAndDrop,
   dragAndDropSource,

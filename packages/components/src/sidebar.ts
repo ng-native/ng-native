@@ -7,16 +7,24 @@ import {
   type OnDestroy,
   type OnInit,
 } from '@angular/core';
-import { nativePlatform, registerViewName } from '@ng-native/fabric';
+import { nativeSplitViews } from '@ng-native/device';
+import { registerViewName } from '@ng-native/fabric';
 import { optionalNumber } from './transforms.ts';
-import { SplitView } from './split-view.ts';
+import { SplitView, hostDraws } from './split-view.ts';
 import { ViewBase } from './view-base.ts';
 
 /**
- * On macOS the sidebar pane of the desktop host's split view, which owns its width: Yoga gets the
- * pane's frame back from the host. Elsewhere a view, drawn here.
+ * On macOS the sidebar pane of the desktop host's split view, and on an iPad the sidebar column of
+ * a UISplitViewController: the host owns its width, and Yoga gets the pane's frame back from it.
+ * Elsewhere a view, drawn here.
  */
-registerViewName('sidebar', { ios: 'View', android: 'View', macos: 'NgNativeSidebar' });
+registerViewName('sidebar', {
+  get ios() {
+    return nativeSplitViews() ? 'NgNativeSidebar' : 'View';
+  },
+  android: 'View',
+  macos: 'NgNativeSidebar',
+});
 
 /** The width a drawn sidebar starts at, in points, where nothing styles one. */
 const DRAWN_WIDTH = 240;
@@ -33,8 +41,9 @@ export interface SidebarRow {
  * styled by CSS on every OS.
  *
  * `[(collapsed)]` follows the title bar's sidebar button, View > Show Sidebar and a drag that shuts
- * it, on macOS. `minWidth` and `maxWidth` bound a drag of the divider, and `autosave` names where
- * macOS keeps the width and collapsed state across launches. Drawn, a collapsed sidebar is hidden,
+ * it, on macOS, and the sidebar button and swipe of a UISplitViewController on an iPad. `minWidth`
+ * and `maxWidth` bound a drag of the divider on macOS and the sidebar column's width on an iPad,
+ * and `autosave` names where macOS keeps the width and collapsed state across launches. Drawn, a collapsed sidebar is hidden,
  * the widths bound its style, and `autosave` is ignored.
  */
 @Component({
@@ -54,8 +63,8 @@ export interface SidebarRow {
 })
 export class Sidebar extends ViewBase implements OnInit, OnDestroy {
   protected readonly split = inject(SplitView, { optional: true });
-  /** Whether the desktop host draws this sidebar. */
-  protected readonly native = nativePlatform() === 'macos';
+  /** Whether the host draws this sidebar: on macOS, and on an iPad. */
+  protected readonly native = hostDraws('sidebar');
 
   /** Whether the sidebar is shut. Kept in step with the user's own toggles on macOS. */
   readonly collapsed = model(false);

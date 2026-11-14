@@ -3,8 +3,9 @@ import { Sidebar, SidebarItem, SidebarSection, SplitView, Text, View } from '@ng
 import { NativeHeader } from '@ng-native/router';
 
 /**
- * A sidebar beside its content: the window's sidebar on macOS, two columns on an iPad and on
- * Android from Material's expanded width (840dp), and a stack whose root is the sidebar on a phone.
+ * A sidebar beside its content: the window's sidebar on macOS, a UISplitViewController on an iPad,
+ * two columns on Android from Material's expanded width (840dp), and a stack whose root is the
+ * sidebar on a phone.
  */
 @Component({
   selector: 'x-desktop-split',

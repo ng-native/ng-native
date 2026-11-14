@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, viewChild } from '@angular/core';
 import { Pressable } from '../../components/src/pressable.ts';
 import { Sidebar } from '../../components/src/sidebar.ts';
 import { SidebarItem } from '../../components/src/sidebar-item.ts';
@@ -56,4 +56,5 @@ export class SidebarFixture {
   readonly unread = signal(3);
   readonly chosen = signal('');
   readonly bumps = signal(0);
+  readonly split = viewChild.required(SplitView);
 }

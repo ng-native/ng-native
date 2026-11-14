@@ -16,14 +16,19 @@
  *   `drawable` and `selected`. It has no children unless it is a custom row, whose views the host
  *   puts in a cell of its own. A click that selects the row sends `topSidebarSelect` to the item.
  *
- * On every other OS they are drawn here from views: two columns, or at a compact width a stack
+ * On an iPad the iOS host draws the split view, its sidebar and its content (below). On every other
+ * OS they are drawn here from views: two columns, or at a compact width a stack
  * whose root is the sidebar. On Android the columns wait for Material's expanded width, 840dp, as
  * its list-detail layout does; below that it is the stack.
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
-import { registerPlatformComponents } from '@ng-native/fabric';
+import {
+  registerPlatformComponents,
+  registerViewName,
+  registeredViewName,
+} from '@ng-native/fabric';
 import { HardwareBack, Screen, type ScreenSource } from '@ng-native/device';
 import { cleanup, fireEvent, render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -36,6 +41,7 @@ type Fixture = {
   unread: Signalish<number>;
   chosen: Signalish<string>;
   bumps: Signalish<number>;
+  split: () => { showSidebar(): boolean };
 };
 let Fixture: Type<Fixture>;
 
@@ -253,4 +259,143 @@ describe('drawn on Android', () => {
       assert.equal(getByTestId('split').props['flexDirection'] === 'row', columns);
     });
   }
+});
+
+/**
+ * On an iPad with `@ng-native/components`' pod, whose `NgNativeSplitViews` module has the constant
+ * `available`, the iOS host draws `<split-view>` as a UISplitViewController: `NgNativeSplitView`
+ * with the sidebar column (`NgNativeSidebar`, whose props and `topSidebarCollapse` are macOS's)
+ * and the content column (`NgNativeSplitContent`). Each column's size comes back into layout from
+ * the host, which collapses the two into a stack itself at a compact width. Sections and items
+ * stay drawn here, inside the sidebar column. A choice in the sidebar sends the split view the
+ * command `showContent`, and `showSidebar()` sends `showSidebar`, which push and pop the content
+ * where the columns are collapsed. Without the module (an iPhone, Expo Go) it is drawn, as above.
+ */
+describe('on iPadOS', () => {
+  /** A device for one call: React Native with `turbo` as its modules. */
+  function onDevice<T>(turbo: Record<string, unknown>, run: () => T): T {
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) =>
+      id === 'react-native'
+        ? { TurboModuleRegistry: { get: (name: string) => turbo[name] } }
+        : undefined;
+    host['nativeFabricUIManager'] = {};
+    try {
+      return run();
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+    }
+  }
+
+  const iPad = { NgNativeSplitViews: { getConstants: () => ({ available: true }) } };
+  const iPhone = { NgNativeSplitViews: { getConstants: () => ({ available: false }) } };
+  const elements = [
+    'split-view',
+    'split-view-content',
+    'sidebar',
+    'sidebar-section',
+    'sidebar-item',
+  ];
+
+  it("names the host's views where the module says it draws them, and views elsewhere", () => {
+    registerPlatformComponents('ios');
+    const names = (turbo: Record<string, unknown>) =>
+      onDevice(turbo, () => elements.map((element) => registeredViewName(element)));
+    assert.deepEqual(names(iPad), [
+      'NgNativeSplitView',
+      'NgNativeSplitContent',
+      'NgNativeSidebar',
+      'View',
+      'View',
+    ]);
+    assert.deepEqual(names(iPhone), ['View', 'View', 'View', 'View', 'View']);
+    assert.deepEqual(names({}), ['View', 'View', 'View', 'View', 'View'], 'Expo Go');
+    registerPlatformComponents('android');
+    try {
+      assert.equal(
+        onDevice(iPad, () => registeredViewName('split-view')),
+        'View',
+      );
+    } finally {
+      registerPlatformComponents('ios');
+    }
+  });
+
+  /** Render as the iPad does: the names its module gives, for the length of one test. */
+  let undo: (() => void)[] = [];
+  const asIPad = () => {
+    undo = [
+      registerViewName('split-view', { ios: 'NgNativeSplitView', android: 'View' }),
+      registerViewName('split-view-content', { ios: 'NgNativeSplitContent', android: 'View' }),
+      registerViewName('sidebar', { ios: 'NgNativeSidebar', android: 'View' }),
+    ];
+  };
+  afterEach(() => {
+    for (const one of undo.reverse()) one();
+    undo = [];
+  });
+
+  it('commits the split view controller, its columns, and the drawn rows in the sidebar', async () => {
+    asIPad();
+    const { getByTestId, getByText } = await render(Fixture, {
+      providers: [{ provide: Screen.SOURCE, useValue: screenOf(1024) }],
+    });
+    const split = getByTestId('split');
+    assert.equal(split.viewName, 'NgNativeSplitView');
+    assert.notEqual(split.props['flexDirection'], 'row', 'the host places the columns');
+    assert.deepEqual(
+      split.children.map((child) => child.viewName),
+      ['NgNativeSidebar', 'NgNativeSplitContent'],
+    );
+    const sidebar = getByTestId('sidebar');
+    assert.equal(sidebar.props['collapsed'], false);
+    assert.equal(sidebar.props['paneMinWidth'], 180);
+    assert.equal(sidebar.props['paneMaxWidth'], 400);
+    assert.equal(sidebar.props['width'], undefined, 'the host owns the width');
+    assert.equal(sidebar.props['minWidth'], undefined);
+    assert.equal(getByTestId('inbox').viewName, 'View', 'a row drawn here');
+    assert.ok(getByText('Inbox'));
+  });
+
+  it('keeps both columns at a compact width, where the host collapses them', async () => {
+    asIPad();
+    const { getByTestId, queryByTestId } = await render(Fixture, {
+      providers: [{ provide: Screen.SOURCE, useValue: screenOf(390) }],
+    });
+    assert.ok(queryByTestId('content'));
+    assert.equal(getByTestId('sidebar').props['flex'], undefined);
+  });
+
+  it('follows the collapsed state the host reports, and sends the one the app sets', async () => {
+    asIPad();
+    const { instance, getByTestId, fabric, rerender } = await render(Fixture);
+    fabric.emit(getByTestId('sidebar'), 'topSidebarCollapse', { collapsed: true });
+    await settle();
+    assert.equal(instance.collapsed(), true);
+    assert.ok(getByTestId('sidebar'), 'still committed: the host hides the column');
+    instance.collapsed.set(false);
+    await rerender();
+    assert.equal(getByTestId('sidebar').props['collapsed'], false);
+  });
+
+  it('asks the host to show the content on a choice, and the sidebar on showSidebar()', async () => {
+    asIPad();
+    const { instance, getByTestId, fabric } = await render(Fixture);
+    await touch(getByTestId('sent'));
+    assert.equal(instance.chosen(), 'sent');
+    const sent = fabric.commands.filter((command) => command.viewName === 'NgNativeSplitView');
+    assert.deepEqual(
+      sent.map((command) => command.name),
+      ['showContent'],
+    );
+    assert.equal(sent[0]!.node?.reactTag, getByTestId('split').reactTag);
+    instance.split().showSidebar();
+    assert.deepEqual(
+      fabric.commands
+        .filter((command) => command.viewName === 'NgNativeSplitView')
+        .map((command) => command.name),
+      ['showContent', 'showSidebar'],
+    );
+  });
 });
