@@ -1,5 +1,7 @@
 #include "ngn/input-dispatcher.h"
 
+#include "ngn/gestures.h"
+
 #include "ngn/app-menus.h"
 
 #include <react/renderer/components/view/TouchEventEmitter.h>
@@ -68,7 +70,12 @@ void InputDispatcher::pointerDown(const PointerInput &input) {
   }
   draggingOut_ = false;
   press_ = Press{input.container, chain.back(), input.clickCount, input.point};
+  lastInput_ = input;
   sendTouch(TouchPhase::Start, input);
+  if (gestures_) {
+    gesturePressed_ = true;
+    gestures_->pointerDown(container->second.surfaceId, chain, gesturePointer(container->second, input));
+  }
 }
 
 void InputDispatcher::pointerMove(const PointerInput &input) {
@@ -79,9 +86,20 @@ void InputDispatcher::pointerMove(const PointerInput &input) {
   if (draggingOut_) {
     return;
   }
-  updateHover(container->second, tree_.hitTest(container->second.root, input.point), input);
+  auto chain = tree_.hitTest(container->second.root, input.point);
+  updateHover(container->second, chain, input);
   if (press_ && !startDragOut(input)) {
+    lastInput_ = input;
     sendTouch(TouchPhase::Move, input);
+  }
+  if (gestures_) {
+    // A press's moves go to the handlers it began on wherever it goes; the pointer's others hover.
+    auto pointer = gesturePointer(container->second, input);
+    if (gesturePressed_) {
+      gestures_->pointerMove(pointer);
+    } else {
+      gestures_->hover(container->second.surfaceId, chain, pointer);
+    }
   }
 }
 
@@ -121,6 +139,13 @@ bool InputDispatcher::startDragOut(const PointerInput &input) {
 
 void InputDispatcher::pointerUp(const PointerInput &input) {
   draggingOut_ = false;
+  if (gestures_ && gesturePressed_) {
+    gesturePressed_ = false;
+    auto container = containers_.find(input.container);
+    if (container != containers_.end()) {
+      gestures_->pointerUp(gesturePointer(container->second, input));
+    }
+  }
   if (!press_) {
     return;
   }
@@ -176,6 +201,9 @@ bool InputDispatcher::activate(SurfaceId surfaceId, Tag tag) {
 
 void InputDispatcher::pointerLeave(SurfaceId surfaceId, const PointerInput &input) {
   updateHover({surfaceId, surfaceId}, {}, input);
+  if (gestures_) {
+    gestures_->hover(surfaceId, {}, gesturePointer({surfaceId, surfaceId}, input));
+  }
   if (pointerSurface_ == surfaceId) {
     pointerSurface_.reset();
     setCursor(Cursor::Auto);
@@ -230,6 +258,21 @@ bool InputDispatcher::wheel(const PointerInput &input, const WheelDelta &delta) 
     return false;
   }
   auto chain = tree_.hitTest(container->second.root, input.point);
+  if (gestures_) {
+    // The fingers' movement: the DOM's deltas are the content's, which natural scrolling moves
+    // with the fingers.
+    float sign = delta.naturalScrolling ? -1 : 1;
+    gestures_->scroll(
+        container->second.surfaceId,
+        chain,
+        gesturePointer(container->second, input),
+        {static_cast<float>(delta.x) * sign, static_cast<float>(delta.y) * sign},
+        delta.phase);
+  }
+  // A trackpad scroll's beginning and end, which only the gestures needed, move nothing.
+  if (delta.x == 0 && delta.y == 0 && delta.z == 0) {
+    return false;
+  }
   return sendElementEvent(
       container->second,
       chain,
@@ -425,6 +468,55 @@ bool InputDispatcher::sendElementEvent(
   }
   emitElementEvent(*target, name, std::move(payload));
   return true;
+}
+
+void InputDispatcher::setGestures(Gestures *gestures) {
+  gestures_ = gestures;
+  if (gestures_) {
+    gestures_->onClaim = [this] { claimPress(); };
+  }
+}
+
+GesturePointer InputDispatcher::gesturePointer(const Container &container, const PointerInput &input) const {
+  auto origin = pageOrigin(container);
+  return {
+      .id = 1,
+      .page = {input.point.x + origin.x, input.point.y + origin.y},
+      .time = input.timestamp * 1000,
+      .button = 0,
+  };
+}
+
+void InputDispatcher::claimPress() {
+  if (!press_ || !lastInput_) {
+    return;
+  }
+  sendTouch(TouchPhase::Cancel, *lastInput_);
+  press_.reset();
+}
+
+void InputDispatcher::magnify(const PointerInput &input, double magnification, GesturePhase phase) {
+  auto container = containers_.find(input.container);
+  if (gestures_ && container != containers_.end()) {
+    gestures_->magnify(
+        container->second.surfaceId,
+        tree_.hitTest(container->second.root, input.point),
+        gesturePointer(container->second, input),
+        magnification,
+        phase);
+  }
+}
+
+void InputDispatcher::rotate(const PointerInput &input, double degrees, GesturePhase phase) {
+  auto container = containers_.find(input.container);
+  if (gestures_ && container != containers_.end()) {
+    gestures_->rotate(
+        container->second.surfaceId,
+        tree_.hitTest(container->second.root, input.point),
+        gesturePointer(container->second, input),
+        degrees,
+        phase);
+  }
 }
 
 folly::dynamic InputDispatcher::locationPayload(const Container &container, Tag target, Point point) const {

@@ -144,6 +144,24 @@ NSCursor *nsCursor(Cursor cursor) {
 
 @end
 
+// AppKit's phase of a trackpad gesture or scroll; nothing for a wheel's click, a momentum scroll
+// or a step with no phase of its own (mayBegin, stationary).
+static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
+  if (phase & NSEventPhaseBegan) {
+    return ngn::GesturePhase::Began;
+  }
+  if (phase & NSEventPhaseChanged) {
+    return ngn::GesturePhase::Changed;
+  }
+  if (phase & NSEventPhaseEnded) {
+    return ngn::GesturePhase::Ended;
+  }
+  if (phase & NSEventPhaseCancelled) {
+    return ngn::GesturePhase::Cancelled;
+  }
+  return std::nullopt;
+}
+
 @implementation NGNSurfaceView {
   // Made once: a rotor holds its search delegate weakly, so the view keeps them.
   NSArray<NSAccessibilityCustomRotor *> *_rotors;
@@ -354,9 +372,25 @@ NSCursor *nsCursor(Cursor cursor) {
       .y = -event.scrollingDeltaY,
       .z = 0,
       .mode = event.hasPreciseScrollingDeltas ? 0 : 1,
+      .phase = phaseOf(event.phase),
+      .naturalScrolling = event.isDirectionInvertedFromDevice == YES,
   };
-  if (delta.x != 0 || delta.y != 0) {
+  // A trackpad scroll's beginning and end carry no movement, and a gesture needs both.
+  if (delta.x != 0 || delta.y != 0 || delta.phase) {
     _input->wheel([self inputFor:event], delta);
+  }
+}
+
+// A trackpad's pinch and rotation, for the gesture handler's pinch and rotation.
+- (void)magnifyWithEvent:(NSEvent *)event {
+  if (auto phase = phaseOf(event.phase)) {
+    _input->magnify([self inputFor:event], event.magnification, *phase);
+  }
+}
+
+- (void)rotateWithEvent:(NSEvent *)event {
+  if (auto phase = phaseOf(event.phase)) {
+    _input->rotate([self inputFor:event], event.rotation, *phase);
   }
 }
 

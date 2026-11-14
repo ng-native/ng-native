@@ -1,6 +1,7 @@
 // The small modules: what the app and its window are like, and the iOS-only ones that have
 // nothing to do on a desktop.
 #include "ngn/core-modules.h"
+#include "ngn/gestures.h"
 #include "ngn/processes.h"
 
 #include <cstdlib>
@@ -316,17 +317,83 @@ std::shared_ptr<NativeModule> makeScreensModule(const CoreModuleServices &) {
   return std::make_shared<NativeModule>("RNSModule");
 }
 
-std::shared_ptr<NativeModule> makeGestureHandlerModule(const CoreModuleServices &) {
-  struct GestureHandler : NativeModule {
-    GestureHandler() : NativeModule("RNGestureHandlerModule") {
-      for (const char *method : {"createGestureHandler", "attachGestureHandler", "setGestureHandlerConfig",
-                                 "updateGestureHandlerConfig", "configureRelations", "dropGestureHandler", "flushOperations"}) {
-        sync(method, [](const folly::dynamic &) { return folly::dynamic(nullptr); });
-      }
+std::shared_ptr<NativeModule> makeGestureHandlerModule(const CoreModuleServices &services) {
+  // react-native-gesture-handler's module over the core's recognisers (gestures.h). JavaScript
+  // calls it on its own thread; each call runs on the UI thread, in order, where the recognisers
+  // and the views they read live, as the library's iOS module queues its operations for the main
+  // queue. A runtime going away takes its handlers with it.
+  struct GestureHandler : NativeModule, std::enable_shared_from_this<GestureHandler> {
+    std::shared_ptr<Gestures> gestures;
+    std::function<void(std::function<void()>)> onUi;
+
+    GestureHandler(std::shared_ptr<Gestures> g, std::function<void(std::function<void()>)> ui)
+        : NativeModule("RNGestureHandlerModule"), gestures(std::move(g)), onUi(std::move(ui)) {
+      auto post = [this](std::function<void(Gestures &)> op) {
+        if (!gestures || !onUi) {
+          return;
+        }
+        onUi([g = gestures, op = std::move(op)] { op(*g); });
+      };
+      auto tag = [](const folly::dynamic &value) { return value.isNumber() ? static_cast<int>(value.asDouble()) : -1; };
+      sync("createGestureHandler", [post, tag](const folly::dynamic &args) {
+        post([name = args[0].asString(), handler = tag(args[1]), config = args[2]](Gestures &g) { g.create(name, handler, config); });
+        return folly::dynamic(nullptr);
+      });
+      sync("attachGestureHandler", [post, tag](const folly::dynamic &args) {
+        post([handler = tag(args[0]), view = tag(args[1]), action = tag(args[2])](Gestures &g) {
+          g.attach(handler, view, static_cast<GestureAction>(action));
+        });
+        return folly::dynamic(nullptr);
+      });
+      sync("setGestureHandlerConfig", [post, tag](const folly::dynamic &args) {
+        post([handler = tag(args[0]), config = args[1]](Gestures &g) { g.configure(handler, config, true); });
+        return folly::dynamic(nullptr);
+      });
+      sync("updateGestureHandlerConfig", [post, tag](const folly::dynamic &args) {
+        post([handler = tag(args[0]), config = args[1]](Gestures &g) { g.configure(handler, config, false); });
+        return folly::dynamic(nullptr);
+      });
+      sync("configureRelations", [post, tag](const folly::dynamic &args) {
+        post([handler = tag(args[0]), relations = args[1]](Gestures &g) { g.relations(handler, relations); });
+        return folly::dynamic(nullptr);
+      });
+      sync("dropGestureHandler", [post, tag](const folly::dynamic &args) {
+        post([handler = tag(args[0])](Gestures &g) { g.drop(handler); });
+        return folly::dynamic(nullptr);
+      });
+      // Each call is already queued for the UI thread as it is made.
+      sync("flushOperations", [](const folly::dynamic &) { return folly::dynamic(nullptr); });
+      // The worklet runtime's `_setGestureStateSync` is not installed: a worklet's state manager
+      // reaches the handlers through Reanimated's setGestureState instead (worklet-host.h).
       sync("installUIRuntimeBindings", [](const folly::dynamic &) { return folly::dynamic(false); });
     }
+
+    void send(const std::string &event, folly::dynamic body) const {
+      emit(event, std::move(body));
+    }
+
+    ~GestureHandler() override {
+      if (gestures && onUi) {
+        onUi([g = gestures] {
+          g->onDeviceEvent = nullptr;
+          g->clear();
+        });
+      }
+    }
   };
-  return std::make_shared<GestureHandler>();
+  auto module = std::make_shared<GestureHandler>(services.gestures, services.runOnUiThread);
+  if (services.gestures && services.runOnUiThread) {
+    std::weak_ptr<GestureHandler> weak = module;
+    services.runOnUiThread([g = services.gestures, weak] {
+      // A JavaScript gesture's events, as the library's iOS module sends every one of them.
+      g->onDeviceEvent = [weak](const folly::dynamic &body) {
+        if (auto module = weak.lock()) {
+          module->send("onGestureHandlerStateChange", body);
+        }
+      };
+    });
+  }
+  return module;
 }
 
 } // namespace ngn

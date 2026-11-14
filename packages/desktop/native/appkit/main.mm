@@ -12,6 +12,9 @@
 #import <QuartzCore/QuartzCore.h>
 
 #import "animation-frames.h"
+#import "input-replay.h"
+#include "ngn/gestures.h"
+#include "ngn/worklet-host.h"
 #import "notifications.h"
 #import "undo.h"
 #import "app-windows.h"
@@ -169,6 +172,16 @@ void logFirstFrame(NSWindow *window) {
   [window displayIfNeeded];
   [CATransaction flush];
   fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", msSinceLaunch());
+  // A dev run's input script (input-script.h), played into the first window once it shows.
+  if (const char *path = getenv("NGN_INPUT_SCRIPT"); path != nullptr && gHost.runtime && gHost.runtime->devServer()) {
+    NSString *text = [NSString stringWithContentsOfFile:@(path) encoding:NSUTF8StringEncoding error:nil];
+    auto script = ngn::parseInputScript(text ? std::string(text.UTF8String) : std::string());
+    if (!text || script.error) {
+      fprintf(stderr, "[ngn] input script %s: %s\n", path, text ? script.error->c_str() : "cannot be read");
+    } else {
+      ngn::appkit::replayInputScript(window, std::move(script));
+    }
+  }
   if (const char *log = getenv("NGN_LOG_ROTORS"); log != nullptr && std::string(log) == "1") {
     // A second after the first frame, when the app has settled.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
@@ -565,6 +578,28 @@ int main(int argc, const char *argv[]) {
     gHost.mounting = std::make_shared<ngn::MountingManager>(gHost.backend, gHost.backend);
     gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
     ngn::appkit::installWorkletHost(gHost.mounting);
+    // react-native-gesture-handler's recognisers over the view tree, fed by the input dispatcher,
+    // their timers on the main queue.
+    static auto gestures = std::make_shared<ngn::Gestures>(
+        gHost.mounting->tree(), [](double ms, std::function<void()> fn) -> std::function<void()> {
+          auto cancelled = std::make_shared<std::atomic<bool>>(false);
+          auto shared = std::make_shared<std::function<void()>>(std::move(fn));
+          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(ms * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (!*cancelled) {
+              (*shared)();
+            }
+          });
+          return [cancelled] { *cancelled = true; };
+        });
+    gHost.input->setGestures(gestures.get());
+    // A worklet gesture's events go to Reanimated's handlers on the UI runtime, and a worklet's
+    // state manager comes back to the recognisers, while Reanimated is running.
+    gestures->onWorkletEvent = [](const std::string &name, Tag view, const folly::dynamic &body) {
+      if (auto event = ngn::workletHost().reanimatedEvent) {
+        event(name, view, body);
+      }
+    };
+    ngn::workletHost().setGestureState = [](int handlerTag, int state) { gestures->setState(handlerTag, state); };
     // Each commit's time, for the performance budget (pnpm bench:macos), when asked for: every
     // frame of an animation commits, which would flood a dev run's terminal.
     if (const char *log = getenv("NGN_LOG_COMMITS"); log != nullptr && std::string(log) == "1") {
@@ -700,7 +735,14 @@ int main(int argc, const char *argv[]) {
                  view.window, NSAccessibilityLayoutChangedNotification, @{NSAccessibilityUIElementsKey : @[ view ]});
            });
          },
-         .fakeSystemUI = settings.test && settings.test->fakeSystemUI});
+         .fakeSystemUI = settings.test && settings.test->fakeSystemUI,
+         .gestures = gestures,
+         .runOnUiThread = [](std::function<void()> task) {
+           auto shared = std::make_shared<std::function<void()>>(std::move(task));
+           dispatch_async(dispatch_get_main_queue(), ^{
+             (*shared)();
+           });
+         }});
 
     gHost.windows = std::make_shared<ngn::appkit::AppKitWindows>(ngn::appkit::AppKitWindows::Hooks{
         .makeSurface = [](SurfaceId surface, NSRect bounds) -> NGNSurfaceView * {

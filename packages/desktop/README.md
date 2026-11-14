@@ -11,9 +11,37 @@ Native's layout animations, and has the default menu bar. React Native's iOS mod
 the core: Linking, Appearance, AccessibilityInfo, AppState, DeviceInfo, PlatformConstants,
 I18nManager, Alert (NSAlert), Clipboard, Networking (streaming, progress, cookies, redirects),
 WebSocket, Blob, FileReader, ImageLoader and `@react-native-async-storage` (2.x and 3.x,
-file-backed). It has no React Native DevTools yet. `react-native-gesture-handler`'s module is
-there so the library loads, and recognises nothing: a gesture attached to a view never fires. `react-native-worklets` and
-`react-native-reanimated` have no native part on macOS, so a screen that imports them throws.
+file-backed). It has no React Native DevTools yet. A view's `transform` is drawn on its layer, about
+its `transform-origin`, as React Native iOS draws it.
+
+## Gestures, worklets and Reanimated
+
+When the app has them installed, the host builds `react-native-worklets` and
+`react-native-reanimated` from their own shared C++ (`native/cmake/libraries/`), with the host's
+glue in place of their iOS modules: worklets run on a UI runtime on the main thread, and
+Reanimated's shared values, animations and worklet styles commit to the shadow tree from there, at
+the display's rate, from a display link that runs only while something animates. The worklets' UI
+runtime asks for a frame at the end of every frame; the host parks that loop while it has no work
+(`worklets-idle-frames.js`) and wakes it for a gesture's event or a job sent to the UI runtime, so
+a still app takes no frames.
+
+`react-native-gesture-handler`'s recognisers are the core's (`gestures.h`): pan, tap, long press,
+pinch, rotation, hover, fling, manual and native view handlers, with the library's state machine
+and relations (simultaneous, `requireToFail`, `blocksHandlers`), ported from its shared
+implementation. A press and its drag are the primary mouse button's, unless a handler asks for
+another with `mouseButton`. A pan with `enableTrackpadTwoFingerGesture` follows a trackpad's
+two-finger scroll, a pinch the trackpad's magnify and a rotation its rotate, and hover the pointer
+with no button down. A handler that activates cancels the touch React Native was told of, as the
+library's root recogniser does on iOS. A native handler on a scroll view activates as it scrolls by
+the wheel or trackpad, since a mouse drag does not scroll it. Worklet gestures' events reach
+Reanimated on the UI runtime; JavaScript ones arrive as `onGestureHandlerStateChange` device events.
+Not there yet: `hitSlop`, the library's own components (`RNGestureHandlerButton`, the version 3
+detector), the UI runtime's `_setGestureStateSync` (a worklet's state manager goes through
+Reanimated's `setGestureState`), and force touch.
+
+A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
+(`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies and rotations, as AppKit
+events sent through NSApp, which drives these screens without an accessibility grant.
 
 A view's box is painted as React Native iOS paints it (`view-box.h`): one corner radius and one
 solid border are the layer's own, drawn over the children only when the view clips or the border

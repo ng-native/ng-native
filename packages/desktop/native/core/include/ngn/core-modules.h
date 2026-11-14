@@ -17,6 +17,8 @@
 
 namespace ngn {
 
+class Gestures;
+
 struct CoreModuleServices {
   std::shared_ptr<System> system;
   std::shared_ptr<HostState> state;
@@ -37,6 +39,10 @@ struct CoreModuleServices {
   // A test launch's fake system UI: an alert is never shown and answers at once with its cancel
   // button, or not at all when it has none, as a person must pick one of its buttons.
   bool fakeSystemUI{false};
+  // The gesture handler's recognisers (gestures.h), which RNGestureHandlerModule drives, and the
+  // UI thread they live on. Without them the module recognises nothing.
+  std::shared_ptr<Gestures> gestures;
+  std::function<void(std::function<void()>)> runOnUiThread;
 };
 
 // Registers every core module.

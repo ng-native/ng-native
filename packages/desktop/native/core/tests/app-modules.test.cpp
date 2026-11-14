@@ -1,5 +1,7 @@
+#include "helpers.h"
 #include "fake-system.h"
 #include "ngn/core-modules.h"
+#include "ngn/gestures.h"
 
 #include <doctest/doctest.h>
 #include <folly/json.h>
@@ -230,20 +232,59 @@ TEST_CASE("StatusBarManager, Vibration and RNSModule exist and do nothing") {
   CHECK(ngn::makeKeyboardObserver(f.services)->methods().count("addListener") == 1);
 }
 
-TEST_CASE("RNGestureHandlerModule answers every method of its spec and recognises nothing") {
+TEST_CASE("RNGestureHandlerModule drives the recognisers on the UI thread, and its events reach JavaScript") {
   Fixture f;
-  auto module = ngn::makeGestureHandlerModule(f.services);
-  CHECK(module->name() == "RNGestureHandlerModule");
-  for (const char *method : {"createGestureHandler", "attachGestureHandler", "setGestureHandlerConfig", "updateGestureHandlerConfig",
-                             "configureRelations", "dropGestureHandler", "flushOperations", "installUIRuntimeBindings"}) {
-    CAPTURE(method);
-    CHECK(module->methods().count(method) == 1);
+  ngn::ViewTree tree;
+  tree.create(ngn::testing::shadowView(1, "RootView", {{0, 0}, {400, 400}}));
+  tree.create(ngn::testing::shadowView(42, "View", {{10, 10}, {100, 100}}));
+  tree.insert(1, 42, 0);
+  auto gestures = std::make_shared<ngn::Gestures>(tree, nullptr);
+  std::vector<std::function<void()>> ui;
+  f.services.gestures = gestures;
+  f.services.runOnUiThread = [&](std::function<void()> task) { ui.push_back(std::move(task)); };
+  auto drain = [&] {
+    while (!ui.empty()) {
+      auto task = ui.front();
+      ui.erase(ui.begin());
+      task();
+    }
+  };
+  {
+    auto module = f.make(ngn::makeGestureHandlerModule(f.services));
+    CHECK(module->name() == "RNGestureHandlerModule");
+    for (const char *method : {"createGestureHandler", "attachGestureHandler", "setGestureHandlerConfig", "updateGestureHandlerConfig",
+                               "configureRelations", "dropGestureHandler", "flushOperations", "installUIRuntimeBindings"}) {
+      CAPTURE(method);
+      CHECK(module->methods().count(method) == 1);
+    }
+    module->call("createGestureHandler", dynamic::array("TapGestureHandler", 7, dynamic::object()));
+    module->call("attachGestureHandler", dynamic::array(7, 42, 4));
+    module->call("setGestureHandlerConfig", dynamic::array(7, dynamic::object("numberOfTaps", 1)));
+    module->call("configureRelations", dynamic::array(7, dynamic::object("waitFor", dynamic::array())));
+    module->call("flushOperations");
+    // Nothing reaches the recognisers off the UI thread.
+    CHECK(gestures->find(7) == nullptr);
+    drain();
+    REQUIRE(gestures->find(7) != nullptr);
+    CHECK(gestures->find(7)->view() == 42);
+
+    gestures->pointerDown(1, tree.hitTest(1, {50, 50}), {.id = 1, .page = {50, 50}, .time = 0});
+    gestures->pointerUp({.id = 1, .page = {50, 50}, .time = 50});
+    REQUIRE(f.events.size() == 4);
+    CHECK(f.events[0].rfind("onGestureHandlerStateChange ", 0) == 0);
+    CHECK(f.events.back().find("\"oldState\":4") != std::string::npos);
+    CHECK(f.events.back().find("\"state\":5") != std::string::npos);
+    CHECK(module->call("installUIRuntimeBindings") == false);
   }
-  module->call("createGestureHandler", dynamic::array("PanGestureHandler", 1, dynamic::object()));
-  module->call("attachGestureHandler", dynamic::array(1, 42, 1));
-  module->call("dropGestureHandler", dynamic::array(1));
-  // No worklet runtime is installed, so the library keeps its callbacks on the JavaScript thread.
-  CHECK(module->call("installUIRuntimeBindings") == false);
+  // The runtime went: its handlers and its event sink go with it.
+  drain();
+  CHECK(gestures->find(7) == nullptr);
+  CHECK_FALSE(gestures->onDeviceEvent);
+
+  // A host with no recognisers answers every method and recognises nothing.
+  auto bare = ngn::makeGestureHandlerModule(Fixture{}.services);
+  bare->call("createGestureHandler", dynamic::array("PanGestureHandler", 1, dynamic::object()));
+  CHECK(bare->call("installUIRuntimeBindings") == false);
 }
 
 TEST_CASE("an alert puts its default button on the right, then Cancel, and answers with the key") {

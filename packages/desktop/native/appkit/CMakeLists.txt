@@ -26,6 +26,7 @@ add_executable(ngn-macos
     battery.mm
     header-toolbar.mm
     host-view.mm
+    input-replay.mm
     image-view.mm
     local-authentication.mm
     location.mm

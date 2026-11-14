@@ -43,6 +43,9 @@
 
 namespace ngn {
 
+class Gestures;
+struct GesturePointer;
+
 enum class TouchPhase { Start, Move, End, Cancel };
 enum class PointerKind { Enter, Leave, Move, Over, Out };
 
@@ -81,6 +84,13 @@ class InputDispatcher : public InputSink {
   bool dragOver(const PointerInput &input, const DragItems &items) override;
   void dragExit(ContainerId container) override;
   bool drop(const PointerInput &input, const DragItems &items) override;
+  void magnify(const PointerInput &input, double magnification, GesturePhase phase) override;
+  void rotate(const PointerInput &input, double degrees, GesturePhase phase) override;
+
+  // The gesture handler's recognisers (gestures.h), which see every press, move, hover, scroll and
+  // trackpad gesture before JavaScript's touches do. One that activates cancels the press
+  // JavaScript was told of. Null for none.
+  void setGestures(Gestures *gestures);
 
   // The context menu a secondary click at `input` shows: the nearest view under it with a
   // `contextMenu` prop, and its entries. Nothing when no view there has one.
@@ -152,7 +162,16 @@ class InputDispatcher : public InputSink {
   std::optional<Tag> dropTargetAt(const PointerInput &input) const;
   void leaveDropTarget();
 
+  // The surface's coordinates of a point in a container, and the gesture pointer for it.
+  GesturePointer gesturePointer(const Container &container, const PointerInput &input) const;
+  // A gesture took the press: JavaScript's touch is cancelled.
+  void claimPress();
+
   const ViewTree &tree_;
+  Gestures *gestures_{nullptr};
+  std::optional<PointerInput> lastInput_;
+  // The press the gestures saw, which they keep after one of them takes it from JavaScript.
+  bool gesturePressed_{false};
   std::map<ContainerId, Container> containers_;
   std::map<SurfaceId, std::vector<Tag>> hovered_;
   std::optional<Press> press_;

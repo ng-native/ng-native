@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include "ngn/gestures.h"
 #include "ngn/input-dispatcher.h"
 
 #include <doctest/doctest.h>
@@ -525,4 +526,51 @@ TEST_CASE("a press that moves on a view with a drag item drags it out, and cance
   f.input.pointerMove(Fixture::at({140, 140}));
   CHECK(started.size() == 1);
   CHECK(only(f.input.events, "touch move").size() == 1);
+}
+
+TEST_CASE("a gesture handler sees the press, its moves and the pointer's hover, and one that activates cancels JavaScript's touch") {
+  Fixture f;
+  ngn::Gestures gestures(f.tree, nullptr);
+  f.input.setGestures(&gestures);
+  std::vector<std::string> sent;
+  gestures.onDeviceEvent = [&](const folly::dynamic &body) {
+    sent.push_back(std::to_string(body["handlerTag"].asInt()) + " " + std::to_string(body["state"].asInt()));
+  };
+  gestures.create("PanGestureHandler", 1, folly::dynamic::object());
+  gestures.attach(1, 2, ngn::GestureAction::JsFunctionNewApi);
+  gestures.create("HoverGestureHandler", 2, folly::dynamic::object());
+  gestures.attach(2, 4, ngn::GestureAction::JsFunctionNewApi);
+
+  f.input.pointerDown(Fixture::at({30, 30}));
+  CHECK(sent == std::vector<std::string>{"1 2"});
+  f.input.events.clear();
+  f.input.pointerMove(Fixture::at({34, 30}));
+  // Under the slop: JavaScript's touch moves, the pan has not decided.
+  CHECK(std::count(f.input.events.begin(), f.input.events.end(), "touch move 3 page 34,30 offset 4,0 touches 1") == 1);
+  f.input.events.clear();
+  f.input.pointerMove(Fixture::at({60, 30}));
+  // Past it: the pan activates and the touch is cancelled, and the release goes to the pan alone.
+  CHECK(sent.back() == "1 4");
+  bool cancelled = false;
+  for (const auto &event : f.input.events) {
+    cancelled = cancelled || event.rfind("touch cancel 3", 0) == 0;
+  }
+  CHECK(cancelled);
+  // The pan keeps the moves after it took the press from JavaScript.
+  sent.clear();
+  f.input.pointerMove(Fixture::at({70, 40}));
+  CHECK(sent == std::vector<std::string>{"1 4"});
+  f.input.events.clear();
+  f.input.pointerUp(Fixture::at({70, 40}));
+  CHECK(sent.back() == "1 5");
+  for (const auto &event : f.input.events) {
+    CHECK(event.rfind("touch", 0) != 0);
+  }
+
+  // With no button down the pointer hovers: the hover handler on 4 activates over it and ends off it.
+  sent.clear();
+  f.input.pointerMove(Fixture::at({120, 120}));
+  CHECK(sent == std::vector<std::string>{"2 2", "2 4", "2 4"});
+  f.input.pointerLeave(1, Fixture::at({390, 290}));
+  CHECK(sent.back() == "2 5");
 }

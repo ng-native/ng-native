@@ -31,6 +31,10 @@ struct PointerInput {
   int clickCount{1};
 };
 
+// Where a trackpad gesture or scroll is: it begins, changes and ends, or is cancelled. A wheel's
+// clicks and a scroll's momentum have none.
+enum class GesturePhase { Began, Changed, Ended, Cancelled };
+
 // A scroll wheel's or trackpad's movement, as the DOM's WheelEvent has it.
 struct WheelDelta {
   double x{0};
@@ -38,6 +42,10 @@ struct WheelDelta {
   double z{0};
   // 0 in pixels (points), 1 in lines, 2 in pages.
   int mode{0};
+  // A trackpad's own scroll, by its phase, and whether the content moves with the fingers
+  // (natural scrolling): what turns the deltas into the fingers' movement for a gesture.
+  std::optional<GesturePhase> phase;
+  bool naturalScrolling{true};
 };
 
 // A file dragged onto a view: its `file://` url and its name.
@@ -86,6 +94,10 @@ class InputSink {
   virtual void dragExit(ContainerId container) = 0;
   // The drag was dropped on the container. True when a view took it.
   virtual bool drop(const PointerInput &input, const DragItems &items) = 0;
+  // A trackpad's pinch (`magnification` since the last step, 0.1 for a tenth bigger) and rotation
+  // (degrees since the last step, anticlockwise) over the container.
+  virtual void magnify(const PointerInput & /*input*/, double /*magnification*/, GesturePhase /*phase*/) {}
+  virtual void rotate(const PointerInput & /*input*/, double /*degrees*/, GesturePhase /*phase*/) {}
 };
 
 } // namespace ngn
