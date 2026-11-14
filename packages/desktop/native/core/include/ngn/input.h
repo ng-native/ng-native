@@ -8,6 +8,10 @@
 #include <react/renderer/graphics/Point.h>
 #include <react/renderer/core/ReactPrimitives.h>
 
+#include <optional>
+#include <string>
+#include <vector>
+
 namespace ngn {
 
 using ContainerId = int;
@@ -36,6 +40,24 @@ struct WheelDelta {
   int mode{0};
 };
 
+// A file dragged onto a view: its `file://` url and its name.
+struct DroppedFile {
+  std::string uri;
+  std::string name;
+};
+
+// What a drag from Finder or another app carries, as far as the toolkit shows it: files, plain
+// text, and urls that are not files.
+struct DragItems {
+  std::vector<DroppedFile> files;
+  std::optional<std::string> text;
+  std::vector<std::string> urls;
+};
+
+// The items of a drag's urls (`file://` ones are files, named by their last part decoded) and
+// its plain text.
+DragItems dragItems(const std::vector<std::string> &urls, std::optional<std::string> text);
+
 class InputSink {
  public:
   virtual ~InputSink() = default;
@@ -57,6 +79,13 @@ class InputSink {
   virtual bool contextMenu(const PointerInput &input) = 0;
   // A wheel turn over the container. It still scrolls what it is over; true when a view heard it.
   virtual bool wheel(const PointerInput &input, const WheelDelta &delta) = 0;
+  // A drag over the container, as it enters and each time it moves. True when a view under it
+  // takes drops, so the toolkit shows a copy; false and it shows none.
+  virtual bool dragOver(const PointerInput &input, const DragItems &items) = 0;
+  // The drag left the container without dropping, or was cancelled.
+  virtual void dragExit(ContainerId container) = 0;
+  // The drag was dropped on the container. True when a view took it.
+  virtual bool drop(const PointerInput &input, const DragItems &items) = 0;
 };
 
 } // namespace ngn

@@ -134,6 +134,9 @@ NSCursor *nsCursor(Cursor cursor) {
                                                             [weakSelf wheelEvent:event];
                                                             return event;
                                                           }];
+    // Files, urls and text dragged in from Finder and other apps go to the view under the drag
+    // that takes drops (input-dispatcher.h); a text field under it takes text itself.
+    [self registerForDraggedTypes:@[ NSPasteboardTypeFileURL, NSPasteboardTypeURL, NSPasteboardTypeString ]];
   }
   return self;
 }
@@ -204,16 +207,22 @@ NSCursor *nsCursor(Cursor cursor) {
                                 userInfo:nil]];
 }
 
-- (ngn::PointerInput)inputFor:(NSEvent *)event {
+// A point in the window as the core takes it: in the root's coordinates and the screen's.
+- (ngn::PointerInput)inputAt:(NSPoint)locationInWindow {
   NSView *root = self.rootView != nil && [self.rootView isDescendantOf:self] ? self.rootView : self;
-  NSPoint inView = [root convertPoint:event.locationInWindow fromView:nil];
-  NSPoint onScreen = [self.window convertPointToScreen:event.locationInWindow];
+  NSPoint inView = [root convertPoint:locationInWindow fromView:nil];
+  NSPoint onScreen = [self.window convertPointToScreen:locationInWindow];
   // AppKit's screen coordinates start at the bottom left of the primary display.
   CGFloat top = NSMaxY(NSScreen.screens.firstObject.frame);
   ngn::PointerInput input;
   input.container = _container;
   input.point = {static_cast<float>(inView.x), static_cast<float>(inView.y)};
   input.screenPoint = {static_cast<float>(onScreen.x), static_cast<float>(top - onScreen.y)};
+  return input;
+}
+
+- (ngn::PointerInput)inputFor:(NSEvent *)event {
+  ngn::PointerInput input = [self inputAt:event.locationInWindow];
   input.buttons = static_cast<int>(NSEvent.pressedMouseButtons);
   // Only a button's events have a pressure: asking a wheel's or a move's throws.
   switch (event.type) {
@@ -344,6 +353,58 @@ NSCursor *nsCursor(Cursor cursor) {
     }
   }
   _input->pointerLeave(_surfaceId, [self inputFor:event]);
+}
+
+#pragma mark - Drops
+
+// What the drag carries: its urls (files among them) and, when it has no url, its plain text.
+- (ngn::DragItems)dragItemsOf:(id<NSDraggingInfo>)info {
+  NSPasteboard *pasteboard = info.draggingPasteboard;
+  std::vector<std::string> urls;
+  for (NSURL *url in [pasteboard readObjectsForClasses:@[ NSURL.class ] options:nil]) {
+    // Finder can hand over a file reference url (file:///.file/id=...): the app wants the path.
+    NSURL *plain = url.isFileReferenceURL ? url.filePathURL : url;
+    if (plain.absoluteString != nil) {
+      urls.emplace_back(plain.absoluteString.UTF8String);
+    }
+  }
+  std::optional<std::string> text;
+  // A dragged url is offered as text too: the text is only what is dragged without one.
+  if (NSString *string = [pasteboard stringForType:NSPasteboardTypeString]; string != nil && urls.empty()) {
+    text = string.UTF8String;
+  }
+  return ngn::dragItems(urls, std::move(text));
+}
+
+- (NSDragOperation)dragOver:(id<NSDraggingInfo>)info {
+  return _input->dragOver([self inputAt:info.draggingLocation], [self dragItemsOf:info]) ? NSDragOperationCopy
+                                                                                          : NSDragOperationNone;
+}
+
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)info {
+  return [self dragOver:info];
+}
+
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)info {
+  return [self dragOver:info];
+}
+
+// A drag held still asks nothing more: the target only changes as it moves.
+- (BOOL)wantsPeriodicDraggingUpdates {
+  return NO;
+}
+
+- (void)draggingExited:(id<NSDraggingInfo>)info {
+  _input->dragExit(_container);
+}
+
+- (void)draggingEnded:(id<NSDraggingInfo>)info {
+  // A cancelled drag (Escape, or dropped where nothing takes it) ends without a drop.
+  _input->dragExit(_container);
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)info {
+  return _input->drop([self inputAt:info.draggingLocation], [self dragItemsOf:info]);
 }
 
 @end

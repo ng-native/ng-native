@@ -329,3 +329,116 @@ TEST_CASE("the cursor follows a change to the views under a still pointer") {
   f.input.didMount(2);
   CHECK(cursors == std::vector<Cursor>{Cursor::Grab, Cursor::Grabbing, Cursor::Auto});
 }
+
+namespace {
+
+ngn::DragItems notes() {
+  return ngn::dragItems({"file:///Users/me/notes.md"}, std::nullopt);
+}
+
+} // namespace
+
+TEST_CASE("a drag's urls split into files, named by their last part, and other urls") {
+  auto items = ngn::dragItems(
+      {"file:///Users/me/My%20Notes.md", "file:///Users/me/Photos/", "https://example.com/a?b=1",
+       "file://localhost/tmp/caf%C3%A9.txt"},
+      std::string("hello"));
+  REQUIRE(items.files.size() == 3);
+  CHECK(items.files[0].uri == "file:///Users/me/My%20Notes.md");
+  CHECK(items.files[0].name == "My Notes.md");
+  // A folder's url ends in a slash; its name is the folder's.
+  CHECK(items.files[1].name == "Photos");
+  CHECK(items.files[2].name == "caf\xC3\xA9.txt");
+  CHECK(items.urls == std::vector<std::string>{"https://example.com/a?b=1"});
+  CHECK(items.text == "hello");
+
+  folly::json::serialization_opts opts;
+  opts.sort_keys = true;
+  CHECK(
+      folly::json::serialize(ngn::dropPayload(notes()), opts) ==
+      R"({"files":[{"name":"notes.md","uri":"file:///Users/me/notes.md"}],"text":null,"urls":[]})");
+}
+
+TEST_CASE("a drag goes to the nearest view under it that takes drops, entering and leaving as it moves") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));
+  setProps(f.tree, 4, desktopView(folly::dynamic::object("fileDrop", true)));
+  const std::string enter2 =
+      R"(dropEnter 2 {"files":[{"name":"notes.md","uri":"file:///Users/me/notes.md"}],"text":null,"urls":[]})";
+
+  // Over 3, inside 2: the event goes to 2, the view that takes drops, not the deepest.
+  CHECK(f.input.dragOver(Fixture::at({35, 35}), notes()));
+  CHECK(f.input.events == Events{enter2});
+  // Moving within 2 sends nothing new.
+  CHECK(f.input.dragOver(Fixture::at({15, 15}), notes()));
+  CHECK(f.input.events.size() == 1);
+
+  // Onto 4: 2 is left and 4 entered.
+  f.input.events.clear();
+  CHECK(f.input.dragOver(Fixture::at({120, 120}), notes()));
+  CHECK(f.input.events.size() == 2);
+  CHECK(f.input.events[0] == "dropLeave 2 {}");
+  CHECK(f.input.events[1].rfind("dropEnter 4 ", 0) == 0);
+
+  // Over the root, which takes none: 4 is left, and the drag is refused there.
+  f.input.events.clear();
+  CHECK_FALSE(f.input.dragOver(Fixture::at({390, 290}), notes()));
+  CHECK(f.input.events == Events{"dropLeave 4 {}"});
+
+  // Back onto 2 and out of the window.
+  f.input.events.clear();
+  f.input.dragOver(Fixture::at({35, 35}), notes());
+  f.input.dragExit(0);
+  CHECK(f.input.events == Events{enter2, "dropLeave 2 {}"});
+  f.input.dragExit(0);
+  CHECK(f.input.events.size() == 2);
+}
+
+TEST_CASE("a drop goes to the view the drag is over, with no leave, and ends the drag") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));
+  f.input.dragOver(Fixture::at({35, 35}), notes());
+  f.input.events.clear();
+
+  CHECK(f.input.drop(Fixture::at({35, 35}), notes()));
+  CHECK(
+      f.input.events ==
+      Events{R"(dropPerform 2 {"files":[{"name":"notes.md","uri":"file:///Users/me/notes.md"}],"text":null,"urls":[]})"});
+  // The drag is over: an exit after it sends no leave.
+  f.input.dragExit(0);
+  CHECK(f.input.events.size() == 1);
+
+  // A drop where no view takes it is refused, and so is one in a container nobody added.
+  f.input.events.clear();
+  CHECK_FALSE(f.input.drop(Fixture::at({390, 290}), notes()));
+  CHECK_FALSE(f.input.drop(Fixture::at({35, 35}, 9), notes()));
+  CHECK(f.input.events.empty());
+}
+
+TEST_CASE("a drag forgets a view that stops taking drops or goes away") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));
+  f.input.dragOver(Fixture::at({35, 35}), notes());
+
+  // The prop is taken away while the drag is over it: the next move leaves it.
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", nullptr)));
+  f.input.events.clear();
+  CHECK_FALSE(f.input.dragOver(Fixture::at({35, 35}), notes()));
+  CHECK(f.input.events == Events{"dropLeave 2 {}"});
+
+  // A target deleted under the drag gets no leave: there is nothing to send it to.
+  setProps(f.tree, 4, desktopView(folly::dynamic::object("fileDrop", true)));
+  f.input.dragOver(Fixture::at({120, 120}), notes());
+  f.tree.remove(1, 4);
+  f.tree.destroy(4);
+  f.input.events.clear();
+  f.input.dragExit(0);
+  CHECK(f.input.events.empty());
+}
+
+TEST_CASE("a drag hit-tests as a click does, so a view that lets points through takes no drop") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)("pointerEvents", "none")));
+  CHECK_FALSE(f.input.dragOver(Fixture::at({35, 35}), notes()));
+  CHECK(f.input.events.empty());
+}

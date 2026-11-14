@@ -12,6 +12,11 @@
 //   `wheel`, sent to the deepest view when it or an ancestor opts in through its desktop props
 //   (desktop-view-props.h). The engine bubbles them up from there.
 //
+// - A drag of files, text or urls goes to the nearest view under it whose `fileDrop` prop is true,
+//   as `dropEnter` when it comes over that view, `dropLeave` when it goes off it without dropping
+//   and `dropPerform` on a drop, which ends the drag without a leave. Enter and perform carry
+//   `{ files: [{ uri, name }], text, urls }` (packages/integration-tests/drag-and-drop.test.ts).
+//
 // It also decides the cursor: the nearest view under the pointer that names one, `text` over a
 // text input, and the default otherwise.
 #pragma once
@@ -56,6 +61,9 @@ class InputDispatcher : public InputSink {
   void pointerLeave(SurfaceId surfaceId, const PointerInput &input) override;
   bool contextMenu(const PointerInput &input) override;
   bool wheel(const PointerInput &input, const WheelDelta &delta) override;
+  bool dragOver(const PointerInput &input, const DragItems &items) override;
+  void dragExit(ContainerId container) override;
+  bool drop(const PointerInput &input, const DragItems &items) override;
 
   // The context menu a secondary click at `input` shows: the nearest view under it with a
   // `contextMenu` prop, and its entries. Nothing when no view there has one.
@@ -82,8 +90,8 @@ class InputDispatcher : public InputSink {
   // record them instead.
   virtual void emitTouch(TouchPhase phase, const ViewTree::Node &target, const facebook::react::TouchEvent &event);
   virtual void emitPointer(PointerKind kind, const ViewTree::Node &node, const facebook::react::PointerEvent &event);
-  // `name` without React Native's `top` prefix: `doubleClick`, `contextMenu`, `contextMenuSelect`
-  // or `wheel`.
+  // `name` without React Native's `top` prefix: `doubleClick`, `contextMenu`, `contextMenuSelect`,
+  // `wheel`, `dropEnter`, `dropLeave` or `dropPerform`.
   virtual void emitElementEvent(const ViewTree::Node &node, const std::string &name, folly::dynamic payload);
 
  private:
@@ -111,6 +119,9 @@ class InputDispatcher : public InputSink {
   Point pageOrigin(const Container &container) const;
   facebook::react::PointerEvent pointerEvent(const PointerInput &input, Point pageOrigin) const;
   void setCursor(Cursor cursor);
+  // The nearest view under `input` that takes drops.
+  std::optional<Tag> dropTargetAt(const PointerInput &input) const;
+  void leaveDropTarget();
 
   const ViewTree &tree_;
   std::map<ContainerId, Container> containers_;
@@ -119,6 +130,15 @@ class InputDispatcher : public InputSink {
   // The surface the pointer is over, if any, and the cursor last asked for.
   std::optional<SurfaceId> pointerSurface_;
   std::optional<Cursor> cursor_;
+  // The view a drag is over, and the container it came through.
+  struct DropTarget {
+    ContainerId container;
+    Tag tag;
+  };
+  std::optional<DropTarget> dropTarget_;
 };
+
+// A drag's items as the drop events carry them: `{ files: [{ uri, name }], text, urls }`.
+folly::dynamic dropPayload(const DragItems &items);
 
 } // namespace ngn

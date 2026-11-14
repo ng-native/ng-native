@@ -33,6 +33,7 @@ DesktopProps parseDesktopProps(const PropsParserContext &context, const DesktopP
       .onDoubleClick = convertRawProp(context, rawProps, "onDoubleClick", source.onDoubleClick, false),
       .onContextMenu = convertRawProp(context, rawProps, "onContextMenu", source.onContextMenu, false),
       .onWheel = convertRawProp(context, rawProps, "onWheel", source.onWheel, false),
+      .fileDrop = convertRawProp(context, rawProps, "fileDrop", source.fileDrop, false),
       .contextMenu = convertRawProp(context, rawProps, "contextMenu", source.contextMenu, folly::dynamic(nullptr)),
   };
 }

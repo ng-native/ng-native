@@ -93,6 +93,13 @@ TEST_CASE("the cursor and the element event opt-ins are parsed from a View's pro
   CHECK(unset.onDoubleClick);
 }
 
+TEST_CASE("a view takes drops while its fileDrop prop is true") {
+  Parser p;
+  auto props = p.clone(nullptr, folly::dynamic::object("fileDrop", true));
+  CHECK(ngn::desktopProps(*props).fileDrop);
+  CHECK_FALSE(ngn::desktopProps(*p.clone(props, folly::dynamic::object("fileDrop", nullptr))).fileDrop);
+}
+
 TEST_CASE("a scroll view's props carry the scroll bar properties, and are still a scroll view's") {
   auto context = std::make_shared<const ContextContainer>();
   ngn::DesktopScrollViewComponentDescriptor descriptor{{{}, context, nullptr}};
@@ -133,6 +140,7 @@ TEST_CASE("a view with desktop props is mounted with its children under it, not 
       folly::dynamic::object("onDoubleClick", true),
       folly::dynamic::object("onContextMenu", true),
       folly::dynamic::object("onWheel", true),
+      folly::dynamic::object("fileDrop", true),
       folly::dynamic::object("tabIndex", 0),
   };
   for (const auto &raw : asking) {
