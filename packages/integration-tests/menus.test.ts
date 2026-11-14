@@ -337,6 +337,48 @@ for (const os of ['android', 'ios'] as const) {
       await app.detectChanges();
       assert.equal(host.contextMenus.get('note-7'), null);
     });
+
+    it('follows a nativeID the app binds late, renames and takes away', async () => {
+      registerPlatformComponents(os);
+      const host = fakeHost(false, true);
+      const id = signal<string | null>(null);
+      const { ContextMenu, MenuItem, View } = await import('@ng-native/components');
+      const app = await render(
+        `<view testID="target" [nativeID]="id()" [contextMenu]="menu"></view>
+        <ng-template #menu><menu-item label="Pin" /></ng-template>`,
+        {
+          imports: [View, ContextMenu, MenuItem],
+          providers: [
+            { provide: Menus.SOURCE, useValue: host.native },
+            { provide: OS, useValue: os },
+          ],
+          componentProperties: { id },
+        },
+      );
+      await settle();
+      const given = screen.getByTestId('target').props['nativeID'] as string;
+      assert.deepEqual(host.contextMenus.get(given), [{ id: '0', label: 'Pin' }]);
+      const held = () =>
+        [...host.contextMenus].filter(([, entries]) => entries !== null).map(([name]) => name);
+
+      id.set('note-1');
+      await app.detectChanges();
+      await settle();
+      assert.equal(screen.getByTestId('target').props['nativeID'], 'note-1');
+      assert.deepEqual(held(), ['note-1'], 'the bound id holds the menu, the given one none');
+
+      id.set('note-2');
+      await app.detectChanges();
+      await settle();
+      assert.deepEqual(held(), ['note-2'], 'a rename moves the menu');
+
+      id.set(null);
+      await app.detectChanges();
+      await settle();
+      const back = screen.getByTestId('target').props['nativeID'];
+      assert.equal(back, given, 'the element is named again once the app takes its id away');
+      assert.deepEqual(held(), [given], 'and the menu goes back to that name');
+    });
   });
 }
 
