@@ -61,8 +61,9 @@ the call again before it runs anything.
   Line Tools, is absent. Shells, `env`, programs that run their arguments as a command (such as
   `xargs` and `sudo`), and `.bat` and `.cmd` files are refused.
 - **`args`** are literal strings, matched exactly, and `{name:regex}` placeholders. A placeholder's
-  pattern matches the whole argument, and it never takes an argument starting with `-` unless the
-  pattern starts with one, so an option cannot be slipped in where a value was declared. A
+  pattern matches the whole argument, and it never takes an argument starting with `-` unless each
+  alternative of the pattern starts with one (`-v|--verbose`, not `-v|.*`), so an option cannot be
+  slipped in where a value was declared. A
   placeholder followed by `...` takes zero or more arguments, each by the same rules; an entry may
   have one.
 - **`env`** lists the variables `Processes.env` holds and a spawned program may be given. Any

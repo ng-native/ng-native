@@ -167,6 +167,20 @@ describe('matching a call', () => {
     assert.ok(!allows([flag], '/usr/bin/tool', ['--exec=x']));
   });
 
+  it('lets a placeholder take an option only where every alternative of its pattern is one', () => {
+    // `-v|.*` starts with -, but its second alternative would take any option.
+    for (const source of ['-v|.*', '-v|\\S+', '^--verbose|[\\w=-]+']) {
+      const mixed = { program: '/usr/bin/git', args: [`{a:${source}}`] };
+      assert.ok(!allows([mixed], '/usr/bin/git', ['--upload-pack=x']), source);
+      assert.ok(allows([mixed], '/usr/bin/git', ['plain']), source);
+    }
+    const options = { program: '/usr/bin/tool', args: ['{flag:-v|\\-q|^--(?:a|b)}'] };
+    assert.ok(allows([options], '/usr/bin/tool', ['-q']));
+    assert.ok(allows([options], '/usr/bin/tool', ['--b']));
+    const inClass = { program: '/usr/bin/tool', args: ['{flag:-[a|b]}'] };
+    assert.ok(allows([inClass], '/usr/bin/tool', ['-a']), 'a | in a class is not an alternative');
+  });
+
   it('passes shell metacharacters as plain text, never to a shell', () => {
     // Whether one gets through is the pattern's business: nothing interprets it.
     const name = { program: '/usr/bin/tool', args: ['{name:[\\w.]+}'] };
