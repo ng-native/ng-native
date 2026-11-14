@@ -23,6 +23,8 @@ add_executable(ngn-macos
     location.mm
     geocoder.mm
     address-search.mm
+    symbol-drawing.mm
+    symbol-view.mm
     main.mm
     menu-bar.mm
     modal-host-view.mm

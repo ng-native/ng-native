@@ -1,6 +1,7 @@
 /**
  * `<expo-symbol>`: an SF Symbol, from `expo-symbols`, typed so a template is checked against the
- * props. iOS only. Registered with `registerExpoViews('expo-symbol')`.
+ * props. iOS, and macOS through the desktop host, which draws it with AppKit. Registered with
+ * `registerExpoViews('expo-symbol')`.
  *
  * It does what the module's React component does before native sees the props: `type` is
  * `monochrome` unless set, one colour or several become the list native takes, and an
@@ -18,6 +19,7 @@
  * ```
  */
 import { Component, computed, input } from '@angular/core';
+import { currentPlatform, optional } from './native.ts';
 import { optionalNumber } from './transforms.ts';
 
 export type SymbolType = 'monochrome' | 'hierarchical' | 'palette' | 'multicolor';
@@ -105,7 +107,10 @@ export class ExpoSymbol {
   });
 }
 
-/** This package's native symbol module, iOS only and absent from Expo Go. */
+/**
+ * This package's native symbol module: an Expo module on iOS, absent from Expo Go, and the
+ * desktop host's TurboModule of the same name on macOS.
+ */
 interface NativeSymbol {
   imageSize?(
     name: string,
@@ -122,8 +127,17 @@ function symbolImageSize(
   weight: SymbolWeight | undefined,
   scale: SymbolScale | undefined,
 ): readonly [number, number] | null {
-  const native = (globalThis as { expo?: { modules?: { NgNativeSymbol?: NativeSymbol } } }).expo
-    ?.modules?.NgNativeSymbol;
-  const size = native?.imageSize?.(name, pointSize, weight, scale);
+  const size = nativeSymbol()?.imageSize?.(name, pointSize, weight, scale);
   return size ? [size[0]!, size[1]!] : null;
+}
+
+function nativeSymbol(): NativeSymbol | null | undefined {
+  if (currentPlatform() === 'macos') {
+    return optional(() => {
+      const { TurboModuleRegistry } = require('react-native') as typeof import('react-native');
+      return TurboModuleRegistry.get('NgNativeSymbol') as NativeSymbol | null;
+    });
+  }
+  return (globalThis as { expo?: { modules?: { NgNativeSymbol?: NativeSymbol } } }).expo?.modules
+    ?.NgNativeSymbol;
 }

@@ -43,6 +43,7 @@
 #import "geocoder.h"
 #import "address-search.h"
 #include "ngn/asset.h"
+#import "symbol-drawing.h"
 #include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "file-system.h"
@@ -758,6 +759,8 @@ int main(int argc, const char *argv[]) {
       static auto addressLookup = ngn::appkit::makeAddressLookup();
       ngn::addModule(*modules, "NgNativeAddressSearch", [] { return ngn::makeAddressSearchModule(addressLookup); });
       ngn::addModule(*modules, "NgNativeAsset", [] { return ngn::makeAssetModule(imageHttp, caches); });
+      static auto symbolMeasurer = ngn::appkit::makeSymbolMeasurer();
+      ngn::addModule(*modules, "NgNativeSymbol", [] { return ngn::makeSymbolModule(symbolMeasurer); });
       static auto imageCodec = ngn::appkit::makeImageCodec();
       ngn::addModule(*modules, "NgNativeImageManipulator", [] {
         return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator");

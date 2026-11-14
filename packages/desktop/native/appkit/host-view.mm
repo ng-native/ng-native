@@ -8,10 +8,12 @@
 #import "scroll-view.h"
 #import "split-view.h"
 #import "svg-view.h"
+#import "symbol-view.h"
 
 #include "text-layout.h"
 
 #include "ngn/accessibility.h"
+#include "ngn/symbol.h"
 
 #include <react/renderer/components/iostextinput/TextInputProps.h>
 #include <react/renderer/components/text/ParagraphState.h>
@@ -708,6 +710,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == ngn::SidebarItemComponentName) {
     return [[NGNSidebarItemView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::SymbolComponentName) {
+    return [[NGNSymbolView alloc] initWithShadowView:view];
   }
   // react-native-svg's: the svg draws its elements, whose own views are hidden.
   if (name == "RNSVGSvgView") {

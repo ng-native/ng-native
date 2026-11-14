@@ -93,6 +93,7 @@ add_library(ngn_core STATIC
     core/src/spawn-rules.cpp
     core/src/split-view.cpp
     core/src/svg.cpp
+    core/src/symbol.cpp
     core/src/tabs-host.cpp
     core/src/download.cpp
     core/src/updates.cpp
@@ -160,7 +161,8 @@ if(NGN_TESTS)
         appkit/tracking.mm appkit/tests/tracking.test.mm
         appkit/image-manipulator.mm appkit/tests/image-manipulator.test.mm
         appkit/geocoder.mm appkit/tests/geocoder.test.mm
-        appkit/address-search.mm appkit/tests/address-search.test.mm)
+        appkit/address-search.mm appkit/tests/address-search.test.mm
+        appkit/symbol-drawing.mm appkit/tests/symbol.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit")
   endif()
