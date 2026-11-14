@@ -201,6 +201,25 @@ describe('offering a choice', () => {
     assert.equal(await chosen, null, 'declining is not a choice');
   });
 
+  it('shows every choice on a Mac, as an alert with no limit to its buttons', async () => {
+    const native = Object.assign(android(), { platform: 'macos', toast: undefined });
+    const dialogs = serviceWith(Dialogs.SOURCE, native as never, () => new Dialogs());
+    const errors: unknown[] = [];
+    const error = console.error;
+    console.error = (...args: unknown[]) => void errors.push(args);
+    try {
+      const five = ['One', 'Two', 'Three', 'Four', 'Five'].map((label) => ({ label }));
+      void dialogs.choose('Count', five);
+    } finally {
+      console.error = error;
+    }
+    const labels = (native as unknown as { buttons: { text: string }[] }).buttons.map(
+      (b) => b.text,
+    );
+    assert.deepEqual(labels, ['One', 'Two', 'Three', 'Four', 'Five', 'Cancel']);
+    assert.deepEqual(errors, [], 'the three-button limit is Android');
+  });
+
   it('does not add a second Cancel when the caller supplied one', async () => {
     const native = android();
     const dialogs = serviceWith(Dialogs.SOURCE, native as never, () => new Dialogs());
