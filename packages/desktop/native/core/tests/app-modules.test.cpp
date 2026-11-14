@@ -254,7 +254,7 @@ TEST_CASE("every core module is registered under its iOS name") {
   ngn::addCoreModules(registry, f.services);
   for (const char *name : {"PlatformConstants", "DeviceInfo", "AppState", "Appearance", "LinkingManager", "I18nManager",
                            "AlertManager", "Clipboard", "SettingsManager", "StatusBarManager", "Vibration", "KeyboardObserver", "RNSModule", "Networking", "WebSocketModule", "BlobModule",
-                           "FileReaderModule", "RNCAsyncStorage", "RNAsyncStorage"}) {
+                           "FileReaderModule", "RNCAsyncStorage", "RNAsyncStorage", "ImageLoader"}) {
     CAPTURE(name);
     CHECK(registry.module(name, nullptr));
   }

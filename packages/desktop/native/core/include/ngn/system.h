@@ -69,6 +69,10 @@ class System {
   virtual std::optional<folly::dynamic> preference(const std::string &key) = 0;
   virtual void setPreference(const std::string &key, std::optional<folly::dynamic> value) = 0;
 
+  // The pixel size of an encoded image (PNG, JPEG, GIF, HEIC and what else the OS decodes), or
+  // nothing when it is not one.
+  virtual std::optional<std::pair<double, double>> imageSize(const std::string &bytes) = 0;
+
   // Where the app keeps its own files, created if missing.
   virtual std::string appDataDirectory() = 0;
 };

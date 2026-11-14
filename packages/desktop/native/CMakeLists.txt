@@ -74,6 +74,7 @@ add_library(ngn_core STATIC
     core/src/modules/app-modules.cpp
     core/src/modules/async-storage.cpp
     core/src/modules/core-modules.cpp
+    core/src/modules/image-loader.cpp
     core/src/modules/networking.cpp
     core/src/modules/web-socket.cpp)
 target_include_directories(ngn_core PUBLIC core/include)

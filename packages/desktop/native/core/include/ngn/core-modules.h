@@ -47,6 +47,7 @@ std::shared_ptr<NativeModule> makeVibration(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeKeyboardObserver(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeScreensModule(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &services);
+std::shared_ptr<NativeModule> makeImageLoader(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeWebSocket(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeBlobModule(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeFileReader(const CoreModuleServices &services);

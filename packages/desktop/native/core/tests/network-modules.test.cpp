@@ -297,3 +297,40 @@ TEST_CASE("a module destroyed with requests and sockets open cancels and closes 
   c->callbacks.onText("late");
   CHECK(f.events.empty());
 }
+
+TEST_CASE("ImageLoader measures an image it fetches, with headers, and rejects what is not one") {
+  Fixture f;
+  auto system = std::make_shared<ngn::testing::FakeSystem>();
+  f.services.system = system;
+  auto loader = ngn::makeImageLoader(f.services);
+  std::string out;
+  ngn::JsPromise promise{[&](dynamic v) { out = folly::toJson(v); }, [&](const std::string &m) { out = "rejected " + m; }};
+
+  loader->callWithPromise("getSize", dynamic::array("https://img/a.png"), promise);
+  auto &a = f.http->sent[0]->callbacks;
+  a.onResponse({.status = 200});
+  a.onData("IMG 64x", 7);
+  a.onData("32", 9);
+  a.onComplete("", false);
+  CHECK(out == "[64,32]");
+
+  loader->callWithPromise("getSizeWithHeaders", dynamic::array("https://img/b.png", dynamic::object("Authorization", "x")), promise);
+  CHECK(f.http->sent[1]->request.headers == ngn::Headers{{"Authorization", "x"}});
+  f.http->sent[1]->callbacks.onData("IMG 3x4", 7);
+  f.http->sent[1]->callbacks.onComplete("", false);
+  CHECK(folly::parseJson(out) == dynamic::object("width", 3)("height", 4));
+
+  loader->callWithPromise("prefetchImage", dynamic::array("https://img/c.txt"), promise);
+  f.http->sent[2]->callbacks.onData("hello", 5);
+  f.http->sent[2]->callbacks.onComplete("", false);
+  CHECK(out == "rejected Not an image: https://img/c.txt");
+
+  loader->callWithPromise("getSize", dynamic::array("https://img/missing.png"), promise);
+  f.http->sent[3]->callbacks.onResponse({.status = 404});
+  f.http->sent[3]->callbacks.onData("IMG 1x1", 7);
+  f.http->sent[3]->callbacks.onComplete("", false);
+  CHECK(out == "rejected HTTP 404 for https://img/missing.png");
+
+  loader->callWithPromise("queryCache", dynamic::array(dynamic::array("https://img/a.png")), promise);
+  CHECK(out == "{}");
+}

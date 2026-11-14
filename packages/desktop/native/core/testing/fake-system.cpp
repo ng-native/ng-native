@@ -1,5 +1,7 @@
 #include "fake-system.h"
 
+#include <cstdio>
+
 namespace ngn::testing {
 
 void FakeSystem::openUrl(const std::string &url, std::function<void(bool)> done) {
@@ -33,6 +35,14 @@ void FakeSystem::setColorScheme(std::optional<std::string> scheme) {
 void FakeSystem::showAlert(const AlertRequest &request, std::function<void(int, std::string)> done) {
   alerts.push_back(request);
   answerAlert = std::move(done);
+}
+
+std::optional<std::pair<double, double>> FakeSystem::imageSize(const std::string &bytes) {
+  double w = 0, h = 0;
+  if (std::sscanf(bytes.c_str(), "IMG %lfx%lf", &w, &h) == 2) {
+    return std::pair{w, h};
+  }
+  return std::nullopt;
 }
 
 std::optional<folly::dynamic> FakeSystem::preference(const std::string &key) {

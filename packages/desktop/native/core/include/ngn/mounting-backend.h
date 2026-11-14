@@ -45,7 +45,7 @@ class MountingBackend {
   virtual void didMount(SurfaceId /*surfaceId*/) {}
 
   // Components the toolkit draws beyond the core's own (View, Paragraph, Text, RawText,
-  // ScrollView, TextInput and UnimplementedNativeView).
+  // ScrollView, TextInput, Image, ModalHostView and UnimplementedNativeView).
   virtual std::vector<facebook::react::ComponentDescriptorProvider> componentProviders() const {
     return {};
   }

@@ -135,3 +135,6 @@ add_library(react_native STATIC)
 # definitions and link dependencies carry on to whatever links the archive.
 target_link_libraries(react_native PUBLIC ${RN_OBJECT_LIBRARIES})
 target_link_libraries(react_native PUBLIC yogacore folly_runtime glog fmt double-conversion boost fast_float)
+# The modal component is a static library upstream, not an object library.
+target_link_libraries(react_native PUBLIC rrc_modal)
+target_compile_options(rrc_modal PRIVATE -include cstdint -w)

@@ -1,5 +1,6 @@
 #import "host-view.h"
 
+#import "image-view.h"
 #import "scroll-view.h"
 
 #include "text-layout.h"
@@ -298,6 +299,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   std::string_view name = view.componentName;
   if (name == "TextInput") {
     return [[NGNTextInputView alloc] initWithShadowView:view];
+  }
+  if (name == "Image") {
+    return [[NGNImageView alloc] initWithShadowView:view];
   }
   if (name == "ScrollView") {
     return [[NGNScrollView alloc] initWithShadowView:view];

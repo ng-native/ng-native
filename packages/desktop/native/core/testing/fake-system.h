@@ -29,6 +29,8 @@ class FakeSystem final : public System {
   }
   std::optional<folly::dynamic> preference(const std::string &key) override;
   void setPreference(const std::string &key, std::optional<folly::dynamic> value) override;
+  // An "image" here is the text "IMG <width>x<height>".
+  std::optional<std::pair<double, double>> imageSize(const std::string &bytes) override;
   std::string appDataDirectory() override {
     return dataDirectory;
   }

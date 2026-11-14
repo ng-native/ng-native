@@ -1,6 +1,7 @@
 #import "system.h"
 
 #import <AppKit/AppKit.h>
+#import <ImageIO/ImageIO.h>
 
 #include <folly/json.h>
 
@@ -177,6 +178,25 @@ class AppKitSystem final : public System {
     } else {
       [defaults removeObjectForKey:ns(prefixed(key))];
     }
+  }
+
+  std::optional<std::pair<double, double>> imageSize(const std::string &bytes) override {
+    NSData *data = [NSData dataWithBytesNoCopy:(void *)bytes.data() length:bytes.size() freeWhenDone:NO];
+    CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, nullptr);
+    if (source == nullptr) {
+      return std::nullopt;
+    }
+    std::optional<std::pair<double, double>> size;
+    if (CGImageSourceGetCount(source) > 0) {
+      NSDictionary *props = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex(source, 0, nullptr);
+      NSNumber *w = props[(__bridge NSString *)kCGImagePropertyPixelWidth];
+      NSNumber *h = props[(__bridge NSString *)kCGImagePropertyPixelHeight];
+      if (w != nil && h != nil) {
+        size = std::pair{w.doubleValue, h.doubleValue};
+      }
+    }
+    CFRelease(source);
+    return size;
   }
 
   std::string appDataDirectory() override {

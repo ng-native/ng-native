@@ -26,6 +26,7 @@ void addCoreModules(ModuleRegistry &registry, const CoreModuleServices &given) {
       {"KeyboardObserver", makeKeyboardObserver},
       {"RNSModule", makeScreensModule},
       {"Networking", makeNetworking},
+      {"ImageLoader", makeImageLoader},
       {"WebSocketModule", makeWebSocket},
       {"BlobModule", makeBlobModule},
       {"FileReaderModule", makeFileReader},
