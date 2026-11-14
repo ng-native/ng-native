@@ -70,6 +70,13 @@ export {
 export { MenuBar, MenuGroup, MenuItem, MenuSeparator, treeOrder } from './menu.ts';
 export { CONTEXT_MENU, ContextMenu } from './context-menu.ts';
 export { Shortcut } from './shortcut.ts';
+export {
+  DragItem,
+  FileDrop,
+  type DragItemValue,
+  type DroppedFile,
+  type FileDropEvent,
+} from './drag-and-drop.ts';
 export { TrayIcon } from './tray-icon.ts';
 export { SplitView, SplitViewContent, type SplitViewShowing } from './split-view.ts';
 export { Sidebar, type SidebarRow } from './sidebar.ts';

@@ -59,8 +59,9 @@ it('offers the menu bar on macOS only', async () => {
   `(contextmenu)` and `(wheel)`. `rightClick` resolves to the context menu of the view, or of the
   nearest view it is inside with a `[contextMenu]`, with its `items` and `choose(label)`, or to
   null where there is none.
-- **`dropFiles(node, ['/Users/me/notes.md'])`** - files dragged from Finder and dropped on a view:
-  `(fileDragEnter)`, then `(fileDrop)` with each file's `file://` url and name.
+- **`dropFiles(node, ['/Users/me/notes.md'])`** - files dragged from Finder and dropped on a view
+  with the `FileDrop` directive: `(fileDragEnter)`, then `(fileDrop)`, each with `files` holding
+  each file's `file://` url and name.
 - **`keyboard('mod+k')`** - a chord as `[shortcut]` writes one, with `mod` as Cmd on Apple's OSes
   and Ctrl elsewhere. The menus host matches it against the app's shortcuts and menu key
   equivalents, and a focused text input keeps the editing keys. Resolves to whether a shortcut

@@ -168,6 +168,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/components/modal', title: 'Modal', group: 'Presentation' },
         { path: 'packages/components/menus', title: 'Menus and shortcuts', group: 'Presentation' },
         { path: 'packages/components/sidebar', title: 'Sidebar and split view' },
+        { path: 'packages/components/drag-and-drop', title: 'Drag and drop' },
         { path: 'packages/components/animation', title: 'Animation' },
       ],
     },
