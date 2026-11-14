@@ -1114,29 +1114,19 @@ describe('os-comparisons-on-macos: Platform.select and double-quoted templates',
       '',
       'export const a = Platform.select({ ios: 1, android: 2 });',
       'export const b = Platform.select({ ios: 1, default: 3 });',
-      'export const c = Platform.select({ ios: 1, macos: 4, default: 3 });',
-      'export const d = Platform.select({ android: 2, default: 3 });',
-      'export const e = Platform.select({ ios: 1, native: 5 });',
       '',
     ].join('\n'),
     'src/app/screen.html': ['@if (os === "ios") {', '  <text>iPhone</text>', '}', ''].join('\n'),
   };
 
-  it('notes a select with an ios entry and no macos one, and a double-quoted comparison', async () => {
+  // A Mac answers a select from `macos`, then `ios`, then `native`, then `default`, so an `ios`
+  // entry keeps its value there and needs no note.
+  it('notes a double-quoted comparison and leaves Platform.select alone', async () => {
     const { nx } = await acrossAdapters(files, 'os-comparisons-on-macos', '0.22.2');
     assert.deepEqual(nx.files, files);
     assert.deepEqual(
       nx.notes.map((note) => note.split(' ')[0]),
-      [
-        'src/app/screen.html:1:',
-        'src/app/select.ts:3:',
-        'src/app/select.ts:4:',
-        'src/app/select.ts:7:',
-      ],
-    );
-    assert.match(
-      nx.notes.find((note) => note.includes('select.ts:4'))!,
-      /Platform\.select/,
+      ['src/app/screen.html:1:'],
     );
   });
 });
