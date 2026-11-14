@@ -79,8 +79,11 @@ add_library(ngn_core STATIC
     core/src/text-layout-manager.cpp
     core/src/tray-and-dock.cpp
     core/src/safe-areas.cpp
+    core/src/posix-launcher.cpp
+    core/src/processes.cpp
     core/src/screen-presentation.cpp
     core/src/screen-stacks.cpp
+    core/src/spawn-rules.cpp
     core/src/split-view.cpp
     core/src/tabs-host.cpp
     core/src/view-tree.cpp

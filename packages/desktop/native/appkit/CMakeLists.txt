@@ -17,6 +17,7 @@ add_executable(ngn-macos
     surface-view.mm
     tray-and-dock.mm
     system.mm
+    system-access.mm
     text-layout.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries
     "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore")
