@@ -332,7 +332,8 @@ reloads, and every program still running gets SIGKILL when the app quits.
 `file:`, script and `data:` URLs, and paths that are not absolute and normalised. `Linking`
 refuses the same URLs. `openPath` opens a document in its app and refuses a path that is not
 there, a program, an app, a script and a location file, since those would run or follow a link past
-the `spawn` rules.
+the `spawn` rules. `openPath` and `showItemInFolder` take only a path `FileSystem` could read, and
+answer false for any other before looking at it.
 
 ## Launch settings
 
@@ -458,12 +459,25 @@ not `~/Documents`. A call reaches the app's own folders, the files and folders t
 saved to in a panel, and the paths the plugin options' `capabilities.paths` declare, read-only or
 read-write, after symbolic links are followed. `watch` reports changes from FSEvents.
 
-The same rules bound every module that reads a file JavaScript names: `ImageEditor`,
-`TextRecognition`, `Fonts`, `Printing`, `MediaLibrary`'s `createAsset` and an `XMLHttpRequest` or
-`fetch` body's `{uri}` (a form part's too) read only what `FileSystem` could, and a packaged app's
-own assets in its bundle. Assets from the dev server come over http and are read as before.
-Anything else is refused with an error naming the path, in the same words whether or not a file is
-there, so `ImageEditor`'s copies in the caches never hold an image `FileSystem` could not read.
+The same rules bound every module and view that takes a path or a `file:` uri from JavaScript.
+These read only what `FileSystem` could, and a packaged app's own assets in its bundle (or, in a
+dev run of an exported bundle, the folder beside it):
+
+- `ImageEditor`, `TextRecognition`, `Fonts`, `Printing` and `MediaLibrary`'s `createAsset`;
+- an `XMLHttpRequest` or `fetch` to a `file:` url, and a body's `{uri}` (a form part's too);
+- `Image.getSize` and `prefetch`, `<image>` and `<expo-image>` sources and an SVG `<image>`'s href;
+- audio and video players' sources, and a web view's `file:` page or `baseUrl`;
+- `Asset.downloadAsync`'s file, `Sharing.share`'s url, a `dragItem`'s files, and `Shell.openPath`
+  and `showItemInFolder`.
+
+`SQLite` opens, makes and deletes a database only where `FileSystem` could write, its `directory`
+argument included. A `file:` uri is checked without its query or fragment, in any case, and only
+as `file:///path`: `file://host/...` is refused. Assets from the dev server come over http and are
+read as before. Anything else is refused with an error naming the path, in the same words whether
+or not a file is there: a player's status is an error and a web view reports a loading error, while
+`Shell` answers false, an SVG `<image>` draws nothing and a drag leaves the file out. So no answer
+says whether a file outside is there, and `ImageEditor`'s copies in the caches never hold an image
+`FileSystem` could not read.
 
 A pick stays reachable in later launches: the host keeps a security-scoped bookmark for each in the
 app's user defaults (where `FileSystem` cannot write), finds a picked file or folder again where it

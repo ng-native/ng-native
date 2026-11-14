@@ -46,4 +46,18 @@ inline std::shared_ptr<ngn::FileAccess> readsEverywhere() {
       ngn::FileAccess::Folders{}, folly::dynamic::array(folly::dynamic::object("path", "/")("access", "read")));
 }
 
+// The views' file access (ngn::viewFileAccess) set for a test, and the one before put back however
+// the test ends.
+struct ViewFileAccess {
+  std::shared_ptr<ngn::FileAccess> before = ngn::viewFileAccess();
+  explicit ViewFileAccess(std::shared_ptr<ngn::FileAccess> access) {
+    ngn::useViewFileAccess(std::move(access));
+  }
+  ViewFileAccess(const ViewFileAccess &) = delete;
+  ViewFileAccess &operator=(const ViewFileAccess &) = delete;
+  ~ViewFileAccess() {
+    ngn::useViewFileAccess(before);
+  }
+};
+
 } // namespace ngn::testing

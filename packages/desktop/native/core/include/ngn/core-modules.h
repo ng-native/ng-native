@@ -27,7 +27,8 @@ struct CoreModuleServices {
   std::shared_ptr<WebSockets> webSockets;
   // Made by addCoreModules when not given: one for every runtime, shared by its modules.
   std::shared_ptr<BlobStore> blobs;
-  // What a request body's `{uri}` may read (FileAccess::readFor); without it, no file is read.
+  // What a request's file url, a body's `{uri}` and Image.getSize's file source may read
+  // (FileAccess::readFor); without it, no file is read.
   std::shared_ptr<FileAccess> files;
   // AsyncStorage's files. Made by addCoreModules when not given, in the app's data directory.
   std::shared_ptr<KeyValueStore> storage;

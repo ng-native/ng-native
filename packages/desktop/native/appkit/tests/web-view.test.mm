@@ -1,6 +1,7 @@
 // NGNWebViewController (web-view.mm) on a WKWebView that is never shown, loading local HTML: the
 // navigation lock, the load events, injected scripts and messages both ways, and originWhitelist.
 #include "../web-view.h"
+#include "helpers.h"
 
 #include <doctest/doctest.h>
 
@@ -184,6 +185,7 @@ TEST_CASE("NGNWebViewController loads a local file, and reports one that is not 
   auto folder = std::filesystem::temp_directory_path() / ("ngn-web-view-" + std::to_string(rand()));
   std::filesystem::create_directories(folder);
   std::ofstream(folder / "page.html") << "<title>File</title>";
+  ngn::testing::ViewFileAccess files(ngn::testing::readsEverywhere());
   Harness harness;
   ngn::WebViewConfig config;
   config.source.uri = "file://" + (folder / "page.html").string();
@@ -202,4 +204,35 @@ TEST_CASE("NGNWebViewController loads a local file, and reports one that is not 
   CHECK(error["code"].asInt() != 0);
   CHECK_FALSE(error["description"].asString().empty());
   std::filesystem::remove_all(folder);
+}
+
+TEST_CASE("NGNWebViewController loads no file outside the file boundary, reporting it as a loading error") {
+  auto folder = std::filesystem::temp_directory_path() / ("ngn-web-view-" + std::to_string(rand()));
+  std::filesystem::create_directories(folder / "app");
+  std::filesystem::create_directories(folder / "outside");
+  struct Cleanup {
+    std::filesystem::path folder;
+    ~Cleanup() {
+      std::error_code ignored;
+      std::filesystem::remove_all(folder, ignored);
+    }
+  } cleanup{folder};
+  std::ofstream(folder / "outside/secret.html") << "<title>Secret</title>";
+  std::ofstream(folder / "app/page.html") << "<title>Mine</title>";
+  ngn::testing::ViewFileAccess files(
+      std::make_shared<ngn::FileAccess>(ngn::FileAccess::Folders{.cache = (folder / "app").string()}, folly::dynamic::array()));
+  Harness harness;
+  ngn::WebViewConfig config;
+  config.source.uri = ngn::fileUri((folder / "outside/secret.html").string());
+  [harness.controller apply:config];
+  REQUIRE(harness.waitFor("loadingError"));
+  CHECK(harness.last("loadingError")["code"].asInt() == NSURLErrorNoPermissionsToReadFile);
+  CHECK(harness.last("loadingError")["description"].asString().find("outside the files this app may read") != std::string::npos);
+  bool loadedSecret = harness.count("loadingFinish") > 0 && harness.last("loadingFinish")["url"] == config.source.uri;
+  CHECK_FALSE(loadedSecret);
+
+  // The app's own page loads.
+  config.source.uri = ngn::fileUri((folder / "app/page.html").string());
+  [harness.controller apply:config];
+  REQUIRE(runUntil([&] { return harness.count("loadingFinish") > 0 && harness.last("loadingFinish")["url"] == config.source.uri; }, 10));
 }

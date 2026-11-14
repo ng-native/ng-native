@@ -1,7 +1,9 @@
 // ImageLoader, in React Native iOS's shapes: Image.getSize, getSizeWithHeaders and prefetch. The
 // bytes come over the backend's HTTP client (which also reads file and data URLs and shares the
-// OS's URL cache with the views that draw images); the backend only measures them.
+// OS's URL cache with the views that draw images); the backend only measures them. A file is read
+// only inside the file boundary (readableSource).
 #include "ngn/core-modules.h"
+#include "ngn/file-system.h"
 
 namespace ngn {
 
@@ -17,16 +19,24 @@ void measure(
     uint16_t status{0};
     std::string bytes;
   };
+  ReadableSource source;
+  try {
+    source = readableSource(s.files.get(), uri);
+  } catch (const FileRefused &refused) {
+    done(std::nullopt, refused.what());
+    return;
+  }
   auto download = std::make_shared<Download>();
   auto system = s.system;
   // The task is not kept: nothing cancels an image measurement, and the callbacks hold what they need.
   s.http->send(
-      HttpRequest{.url = uri, .headers = std::move(headers)},
+      HttpRequest{.url = source.uri, .headers = std::move(headers)},
       HttpCallbacks{
           .onResponse = [download](const HttpResponse &r) { download->status = r.status; },
           .onData = [download](std::string chunk, int64_t) { download->bytes += chunk; },
           .onComplete =
-              [download, system, uri, done](const std::string &error, bool) {
+              // The pick holding a file stays open until it is read.
+              [download, system, uri, done, use = source.use](const std::string &error, bool) {
                 if (!error.empty()) {
                   done(std::nullopt, error);
                 } else if (download->status >= 400) {

@@ -25,6 +25,7 @@
 //   session; they resolve.
 #pragma once
 
+#include "ngn/file-system.h"
 #include "ngn/native-module.h"
 
 #include <functional>
@@ -113,7 +114,9 @@ class AudioInput {
   virtual std::unique_ptr<AudioRecording> prepare(const std::string &path, const RecordingSettings &settings, std::string &error) = 0;
 };
 
+// A file source plays only inside the file boundary `files` draws (readableSource); one outside is
+// a player whose status is failed, with the refusal as its error, and is never opened.
 std::shared_ptr<NativeModule> makeAudioModule(std::shared_ptr<AudioOutput> output, std::shared_ptr<AudioInput> input,
-                                              std::string recordings, bool noPrompts);
+                                              std::string recordings, bool noPrompts, std::shared_ptr<FileAccess> files);
 
 } // namespace ngn

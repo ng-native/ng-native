@@ -90,7 +90,19 @@ struct Player {
   bool loop{false};
   bool preservesPitch{true};
   double interval{0};
+  // Why the source is not loaded: a file outside the file boundary.
+  std::optional<std::string> refused;
+  // The pick holding a file source, open while the player holds it.
+  std::shared_ptr<FileAccess::Use> use;
 };
+
+// The player's state: a refused source has failed without the player loading it.
+VideoState currentState(Player &player) {
+  if (player.refused) {
+    return VideoState{.load = VideoState::Load::Failed, .error = *player.refused};
+  }
+  return player.source ? player.playback->state() : VideoState{};
+}
 
 struct Shared {
   std::recursive_mutex mutex;
@@ -125,7 +137,7 @@ std::string statusOf(Player &player, const VideoState &state) {
 
 // Sends what changed since the last look: the status, the source's load, and whether it plays.
 void refresh(Shared &shared, int id, Player &player) {
-  VideoState state = player.source ? player.playback->state() : VideoState{};
+  VideoState state = currentState(player);
   auto status = statusOf(player, state);
   if (status != player.status) {
     dynamic payload = dynamic::object("status", status)("oldStatus", player.status);
@@ -168,13 +180,27 @@ void changed(Shared &shared, int id, Player &player, Change change) {
   }
 }
 
-void load(const std::shared_ptr<Shared> &shared, int id, Player &player, const std::optional<std::string> &uri) {
+void load(const std::shared_ptr<Shared> &shared, const FileAccess *files, int id, Player &player, const std::optional<std::string> &uri) {
   auto old = player.source;
   player.source = uri;
   player.loaded = false;
+  player.refused.reset();
+  player.use.reset();
+  // A file is played only inside the file boundary, and exactly the file checked.
+  std::optional<std::string> loading = uri;
+  if (uri) {
+    try {
+      auto source = readableSource(files, *uri);
+      loading = source.uri;
+      player.use = source.use;
+    } catch (const FileRefused &refused) {
+      player.refused = refused.what();
+      loading.reset();
+    }
+  }
   int generation = ++player.generation;
   std::weak_ptr<Shared> weak = shared;
-  player.playback->load(uri, [weak, id, generation](Change change) {
+  player.playback->load(loading, [weak, id, generation](Change change) {
     auto alive = weak.lock();
     if (!alive) {
       return;
@@ -197,7 +223,7 @@ void load(const std::shared_ptr<Shared> &shared, int id, Player &player, const s
 }
 
 dynamic stateOf(Player &player) {
-  VideoState state = player.source ? player.playback->state() : VideoState{};
+  VideoState state = currentState(player);
   return dynamic::object("status", statusOf(player, state))("playing", state.playing)("currentTime", state.currentTime)(
       "duration", state.duration)("bufferedPosition", state.bufferedPosition)("playbackRate", player.rate)("volume", player.volume)(
       "muted", player.muted)("loop", player.loop)("preservesPitch", player.preservesPitch)("timeUpdateEventInterval", player.interval);
@@ -205,11 +231,11 @@ dynamic stateOf(Player &player) {
 
 } // namespace
 
-std::shared_ptr<NativeModule> makeVideoModule(std::shared_ptr<VideoOutput> output) {
+std::shared_ptr<NativeModule> makeVideoModule(std::shared_ptr<VideoOutput> output, std::shared_ptr<FileAccess> files) {
   struct Video : NativeModule {
     std::shared_ptr<Shared> shared = std::make_shared<Shared>();
 
-    explicit Video(std::shared_ptr<VideoOutput> output) : NativeModule("NgNativeVideo") {
+    Video(std::shared_ptr<VideoOutput> output, std::shared_ptr<FileAccess> files) : NativeModule("NgNativeVideo") {
       listeners();
       shared->send = [this](dynamic body) { emit("ngNativeVideo", std::move(body)); };
       auto state = shared;
@@ -231,16 +257,16 @@ std::shared_ptr<NativeModule> makeVideoModule(std::shared_ptr<VideoOutput> outpu
         }
       };
 
-      sync("createPlayer", [state, output](const dynamic &args) {
+      sync("createPlayer", [state, output, files](const dynamic &args) {
         std::lock_guard lock(state->mutex);
         int id = ++state->next;
         auto &player = state->players[id];
         player.playback = output->make(id);
-        load(state, id, player, stringArg(args, 0));
+        load(state, files.get(), id, player, stringArg(args, 0));
         return dynamic(id);
       });
-      sync("replace", [state, with](const dynamic &args) {
-        with(args, [&](int id, Player &player) { load(state, id, player, stringArg(args, 1)); });
+      sync("replace", [state, with, files](const dynamic &args) {
+        with(args, [&](int id, Player &player) { load(state, files.get(), id, player, stringArg(args, 1)); });
         return dynamic(nullptr);
       });
       sync("release", [state](const dynamic &args) {
@@ -334,7 +360,7 @@ std::shared_ptr<NativeModule> makeVideoModule(std::shared_ptr<VideoOutput> outpu
       shared->players.clear();
     }
   };
-  return std::make_shared<Video>(std::move(output));
+  return std::make_shared<Video>(std::move(output), std::move(files));
 }
 
 } // namespace ngn

@@ -22,6 +22,7 @@
 #pragma once
 
 #include "ngn/desktop-props.h"
+#include "ngn/file-system.h"
 #include "ngn/native-module.h"
 
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
@@ -79,7 +80,9 @@ class VideoOutput {
   virtual std::unique_ptr<VideoPlayback> make(int id) = 0;
 };
 
-std::shared_ptr<NativeModule> makeVideoModule(std::shared_ptr<VideoOutput> output);
+// A file source plays only inside the file boundary `files` draws (readableSource); one outside is
+// a source whose status is error, with the refusal as its message, and is never opened.
+std::shared_ptr<NativeModule> makeVideoModule(std::shared_ptr<VideoOutput> output, std::shared_ptr<FileAccess> files);
 
 // --- the view ------------------------------------------------------------------------------------
 

@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "ngn/processes.h"
 
 #include <doctest/doctest.h>
@@ -241,7 +242,7 @@ TEST_CASE("Shell hands on urls with a scheme that is not a file's or a script's,
     void showItemInFolder(const std::string &p, std::function<void(bool)> d) override { calls.push_back("show " + p); d(false); }
   };
   auto opener = std::make_shared<Opener>();
-  auto shell = ngn::makeShellModule(opener);
+  auto shell = ngn::makeShellModule(opener, ngn::testing::readsEverywhere());
   std::vector<dynamic> answers;
   auto ask = [&](const char *method, const char *arg) {
     shell->callWithPromise(method, dynamic::array(arg), {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
@@ -275,7 +276,7 @@ TEST_CASE("Shell.openPath opens a document or a folder, never something that run
       {"/Applications/Evil.app", {.exists = true, .runsCode = true}},
       {"/Users/me/run.command", {.exists = true, .runsCode = true}},
   };
-  auto shell = ngn::makeShellModule(opener);
+  auto shell = ngn::makeShellModule(opener, ngn::testing::readsEverywhere());
   std::vector<dynamic> answers;
   for (const char *path : {"/Users/me/notes.md", "/Users/me/Projects", "/Users/me/tool", "/Applications/Evil.app",
                            "/Users/me/run.command", "/Users/me/missing"}) {
@@ -289,6 +290,40 @@ TEST_CASE("Shell.openPath opens a document or a folder, never something that run
   shell->callWithPromise("showItemInFolder", dynamic::array("/Applications/Evil.app"),
                          {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
   CHECK(answers == std::vector<dynamic>{true});
+}
+
+TEST_CASE("Shell.openPath and showItemInFolder take a path only inside the file boundary, before looking at it") {
+  struct Opener final : ngn::ShellOpener {
+    Lines calls;
+    ngn::ShellOpener::PathFacts facts(const std::string &p) override {
+      calls.push_back("facts " + p);
+      return {.exists = true};
+    }
+    void openUrl(const std::string &, std::function<void(bool)> d) override { d(true); }
+    void openPath(const std::string &p, std::function<void(bool)> d) override { calls.push_back("path " + p); d(true); }
+    void showItemInFolder(const std::string &p, std::function<void(bool)> d) override { calls.push_back("show " + p); d(true); }
+  };
+  auto opener = std::make_shared<Opener>();
+  auto access = std::make_shared<ngn::FileAccess>(
+      ngn::FileAccess::Folders{.document = "/app/Documents", .home = "/Users/me"},
+      dynamic::array(dynamic::object("path", "~/Reports")("access", "read")));
+  auto shell = ngn::makeShellModule(opener, access);
+  std::vector<dynamic> answers;
+  auto ask = [&](const char *method, const char *arg) {
+    shell->callWithPromise(method, dynamic::array(arg), {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
+  };
+  ask("openPath", "/Users/me/Desktop/private.pdf");
+  ask("showItemInFolder", "/Users/me/.ssh/id_ed25519");
+  CHECK(answers == std::vector<dynamic>{false, false});
+  CHECK(opener->calls.empty());
+  ask("openPath", "/app/Documents/a.pdf");
+  ask("showItemInFolder", "/Users/me/Reports/q3.pdf");
+  CHECK(answers == std::vector<dynamic>{false, false, true, true});
+  CHECK(opener->calls == Lines{"facts /app/Documents/a.pdf", "path /app/Documents/a.pdf", "show /Users/me/Reports/q3.pdf"});
+  // Without file access, no path at all.
+  auto closed = ngn::makeShellModule(opener, nullptr);
+  closed->callWithPromise("openPath", dynamic::array("/app/Documents/a.pdf"), {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
+  CHECK(answers.back() == false);
 }
 
 TEST_CASE("the POSIX launcher's stdin writes never block the caller, and a closed reader never raises SIGPIPE") {

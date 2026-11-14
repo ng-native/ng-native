@@ -12,6 +12,7 @@
 #pragma once
 
 #include "ngn/desktop-props.h"
+#include "ngn/file-system.h"
 #include "ngn/network.h"
 
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
@@ -148,10 +149,12 @@ const char *cacheTypeName(ImageCache::Hit hit);
 
 // Reads `source`'s bytes: from the cache by its cacheKey (or uri) when `policy` keeps it, else
 // through `http` with its headers, then into the cache. `file:` and `data:` sources are read and
-// never cached. Answers once, on any thread: the bytes and the hit, or an error.
+// never cached, a file only inside the file boundary `files` draws (readableSource). Answers once,
+// on any thread: the bytes and the hit, or an error.
 void loadImageBytes(
     const std::shared_ptr<Http> &http,
     const std::shared_ptr<ImageCache> &cache,
+    const FileAccess *files,
     const ImageSourceRef &source,
     const std::string &policy,
     std::function<void(std::string bytes, ImageCache::Hit hit, const std::string &error)> done);

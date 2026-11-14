@@ -99,10 +99,11 @@ class PickStore {
   std::vector<Pick> picks_;
 };
 
-// A path JavaScript named that is outside what the app may read (FileAccess::readFor).
+// A path JavaScript named that is outside what the app may read (FileAccess::readFor) or write
+// (FileAccess::writeFor).
 class FileRefused : public std::runtime_error {
  public:
-  explicit FileRefused(const std::string &path);
+  explicit FileRefused(const std::string &path, bool write = false);
 };
 
 class FileAccess {
@@ -165,6 +166,10 @@ class FileAccess {
   // open; hold it until the read is done. Throws FileRefused for anything else, in the same words
   // whether or not a file is there.
   std::shared_ptr<Use> readFor(const std::string &path) const;
+  // The same check for a module that writes or creates a file where JavaScript says (SQLite's
+  // databases): what accessTo lets FileSystem write, never the bundle. Throws FileRefused for
+  // anything else, in the same words whether or not a file is there.
+  std::shared_ptr<Use> writeFor(const std::string &path) const;
 
  private:
   struct Root {
@@ -181,6 +186,25 @@ class FileAccess {
 
 // FileAccess::readFor through `access`, refusing every path when there is none.
 std::shared_ptr<FileAccess::Use> readableFile(const FileAccess *access, const std::string &path);
+
+// A source JavaScript hands to something that reads it through a uri (an image, a player, a
+// request's url, a web view's page): the uri to hand on, and the pick it reads, held open.
+struct ReadableSource {
+  std::string uri;
+  std::shared_ptr<FileAccess::Use> use;
+};
+// A file source (an absolute path, or a uri in the `file:` scheme however it is spelled) checked
+// with readFor and answered as fileUri of the path checked, without its query or fragment, so the
+// loader reads exactly that file. Any other uri is answered as it is. Throws FileRefused for a file
+// outside the boundary, a `file:` uri naming a host or no absolute path, and with no `access`.
+ReadableSource readableSource(const FileAccess *access, const std::string &uri);
+// Whether a uri is in the `file:` scheme, in any case: what a URL loader reads from disk.
+bool isFileScheme(const std::string &uri);
+
+// The FileAccess the host made, for what loads a source JavaScript names outside a module (the
+// views drawing an image or a page, a drag out of the app). Without one, every file is refused.
+void useViewFileAccess(std::shared_ptr<FileAccess> access);
+std::shared_ptr<FileAccess> viewFileAccess();
 
 // The OS's file events (FSEvents on macOS), for one path at a time.
 class FileWatcher {

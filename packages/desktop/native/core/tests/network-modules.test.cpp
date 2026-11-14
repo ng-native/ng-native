@@ -417,3 +417,57 @@ TEST_CASE("a request body reads a file only where FileSystem could, and fails th
   CHECK(f.events[0].find("didCompleteNetworkResponse [1,\"" + outside + " is outside") == 0);
   std::filesystem::remove_all(root);
 }
+
+TEST_CASE("a request's file url and Image.getSize's file source are read only inside the file boundary") {
+  auto root = std::filesystem::temp_directory_path() / ("ngn-url-" + std::to_string(rand()));
+  struct Cleanup {
+    std::filesystem::path root;
+    ~Cleanup() {
+      std::error_code ignored;
+      std::filesystem::remove_all(root, ignored);
+    }
+  } cleanup{root};
+  std::filesystem::create_directories(root / "cache");
+  std::filesystem::create_directories(root / "home/Desktop");
+  std::ofstream(root / "home/Desktop/secret.png") << "IMG 1x1";
+  std::ofstream(root / "cache/own image.png") << "IMG 2x2";
+  ngn::FileAccess::Folders folders{.cache = (root / "cache").string(), .home = (root / "home").string()};
+  auto outside = ngn::fileUri((root / "home/Desktop/secret.png").string());
+  auto own = ngn::fileUri(folders.cache + "/own image.png");
+
+  Fixture f;
+  f.services.files = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  f.services.system = std::make_shared<ngn::testing::FakeSystem>();
+  auto networking = f.make(ngn::makeNetworking(f.services));
+
+  // fetch and XMLHttpRequest: refused before anything is sent, however the file url is spelled.
+  for (const auto &url : {outside, "FILE://" + (root / "home/Desktop/secret.png").string(), (root / "home/Desktop/secret.png").string(),
+                          outside + "#/../../../cache/own%20image.png"}) {
+    CAPTURE(url);
+    f.events.clear();
+    f.send(*networking, query(dynamic::object("url", url)));
+    CHECK(f.http->sent.empty());
+    REQUIRE(f.events.size() == 1);
+    CHECK(f.events[0].find("is outside the files this app may read") != std::string::npos);
+  }
+  // The app's own file is read, without a query or fragment that could name another; an http url
+  // goes out as it is.
+  f.send(*networking, query(dynamic::object("url", own + "#/../../../home/Desktop/secret.png")));
+  REQUIRE(f.http->sent.size() == 1);
+  CHECK(f.http->sent[0]->request.url == own);
+  f.send(*networking, query(dynamic::object("url", "https://example.com/a")));
+  CHECK(f.http->sent[1]->request.url == "https://example.com/a");
+
+  // Image.getSize and prefetch the same.
+  auto loader = ngn::makeImageLoader(f.services);
+  std::string out;
+  ngn::JsPromise promise{[&](dynamic v) { out = folly::toJson(v); }, [&](const std::string &m) { out = "rejected " + m; }};
+  loader->callWithPromise("getSize", dynamic::array(outside), promise);
+  CHECK(out.find("rejected " + (root / "home/Desktop/secret.png").string() + " is outside the files this app may read") == 0);
+  loader->callWithPromise("prefetchImage", dynamic::array(outside), promise);
+  CHECK(out.find("is outside the files this app may read") != std::string::npos);
+  CHECK(f.http->sent.size() == 2);
+  loader->callWithPromise("getSize", dynamic::array(own), promise);
+  REQUIRE(f.http->sent.size() == 3);
+  CHECK(f.http->sent[2]->request.url == own);
+}

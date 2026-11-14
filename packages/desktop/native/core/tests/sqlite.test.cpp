@@ -4,6 +4,7 @@
 #include <sqlite3.h>
 
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <random>
 
@@ -39,6 +40,11 @@ struct TempDir {
   }
 };
 
+// File access whose only folder is `root`, as the app's data.
+std::shared_ptr<ngn::FileAccess> writesIn(const fs::path &root) {
+  return std::make_shared<ngn::FileAccess>(ngn::FileAccess::Folders{.appData = root.string()}, dynamic::array());
+}
+
 dynamic open(const ngn::NativeModule &module, const std::string &name) {
   auto answer = ask(module, "openDatabaseAsync", dynamic::array(name));
   REQUIRE(answer.value);
@@ -49,7 +55,7 @@ dynamic open(const ngn::NativeModule &module, const std::string &name) {
 
 TEST_CASE("Sqlite opens a database in its default folder, runs statements and reads rows back") {
   TempDir dir;
-  auto module = ngn::makeSqliteModule((dir.path / "SQLite").string());
+  auto module = ngn::makeSqliteModule((dir.path / "SQLite").string(), writesIn(dir.path));
   CHECK(module->property("defaultDatabaseDirectory") == dynamic((dir.path / "SQLite").string()));
 
   auto opened = ask(*module, "openDatabaseAsync", dynamic::array("notes.db"));
@@ -85,7 +91,7 @@ TEST_CASE("Sqlite opens a database in its default folder, runs statements and re
 
 TEST_CASE("Sqlite binds named params as written, booleans as integers, and bytes as {base64} both ways") {
   TempDir dir;
-  auto module = ngn::makeSqliteModule(dir.path.string());
+  auto module = ngn::makeSqliteModule(dir.path.string(), writesIn(dir.path));
   auto id = open(*module, ":memory:");
   module->call("execSync", dynamic::array(id, "CREATE TABLE t (a, b, c, d)"));
   module->call("runSync", dynamic::array(id, "INSERT INTO t VALUES ($a, :b, @c, $d)",
@@ -107,7 +113,7 @@ TEST_CASE("Sqlite binds named params as written, booleans as integers, and bytes
 
 TEST_CASE("Sqlite reports SQL errors and calls on a closed database, and knows when it is in a transaction") {
   TempDir dir;
-  auto module = ngn::makeSqliteModule(dir.path.string());
+  auto module = ngn::makeSqliteModule(dir.path.string(), writesIn(dir.path));
   auto id = open(*module, "t.db");
   auto bad = ask(*module, "execAsync", dynamic::array(id, "SELEKT 1"));
   REQUIRE(bad.error);
@@ -128,7 +134,7 @@ TEST_CASE("Sqlite reports SQL errors and calls on a closed database, and knows w
 
 TEST_CASE("Sqlite keeps two opens of one file apart, and refuses to delete a database that is open") {
   TempDir dir;
-  auto module = ngn::makeSqliteModule(dir.path.string());
+  auto module = ngn::makeSqliteModule(dir.path.string(), writesIn(dir.path));
   auto a = open(*module, "shared.db");
   auto b = open(*module, "shared.db");
   CHECK(a != b);
@@ -147,7 +153,7 @@ TEST_CASE("Sqlite keeps two opens of one file apart, and refuses to delete a dat
 
 TEST_CASE("Sqlite opens and deletes in the folder a call names") {
   TempDir dir;
-  auto module = ngn::makeSqliteModule((dir.path / "default").string());
+  auto module = ngn::makeSqliteModule((dir.path / "default").string(), writesIn(dir.path));
   auto other = (dir.path / "elsewhere").string();
   auto opened = module->call("openDatabaseSync", dynamic::array("x.db", dynamic::object(), other));
   CHECK(opened["databasePath"] == dynamic((dir.path / "elsewhere" / "x.db").string()));
@@ -157,9 +163,54 @@ TEST_CASE("Sqlite opens and deletes in the folder a call names") {
   CHECK_FALSE(fs::exists(dir.path / "default"));
 }
 
+TEST_CASE("Sqlite opens, makes and deletes a database only where the app may write") {
+  TempDir dir;
+  TempDir outside;
+  fs::create_directories(outside.path / "read");
+  fs::create_directories(outside.path / "picked");
+  fs::create_directories(outside.path / "other");
+  {
+    std::ofstream(outside.path / "other" / "there.db") << "";
+  }
+  auto access = std::make_shared<ngn::FileAccess>(
+      ngn::FileAccess::Folders{.appData = (dir.path / "data").string()},
+      dynamic::array(dynamic::object("path", (outside.path / "read").string())("access", "read")));
+  auto module = ngn::makeSqliteModule((dir.path / "data" / "SQLite").string(), access);
+
+  // The app's own folders, as a path or a file uri, and a pick.
+  CHECK(module->call("openDatabaseSync", dynamic::array("a.db", dynamic::object(), ngn::fileUri((dir.path / "data" / "Mine").string())))["databasePath"] ==
+        dynamic((dir.path / "data" / "Mine" / "a.db").string()));
+  access->allowPicked((outside.path / "picked").string());
+  auto picked = module->call("openDatabaseSync", dynamic::array("p.db", dynamic::object(), (outside.path / "picked").string()));
+  module->call("closeSync", dynamic::array(picked["id"]));
+  CHECK(module->call("deleteDatabaseSync", dynamic::array("p.db", (outside.path / "picked").string())) == dynamic(nullptr));
+
+  // A folder declared read-only, one never named and a way up are refused, and nothing is made.
+  for (const auto &where : {(outside.path / "read").string(), (outside.path / "other").string(),
+                            ngn::fileUri((outside.path / "new").string()), (dir.path / "data" / ".." / "up").string(), std::string("relative"),
+                            std::string("file://localhost") + (dir.path / "data").string()}) {
+    CAPTURE(where);
+    auto refused = ask(*module, "openDatabaseAsync", dynamic::array("x.db", dynamic::object(), where));
+    REQUIRE(refused.error);
+    CHECK(refused.error->find("outside the files this app may write") != std::string::npos);
+    CHECK_THROWS(module->call("openDatabaseSync", dynamic::array("x.db", dynamic::object(), where)));
+  }
+  CHECK_FALSE(fs::exists(outside.path / "read" / "x.db"));
+  CHECK_FALSE(fs::exists(outside.path / "new"));
+  CHECK_FALSE(fs::exists(dir.path / "up"));
+
+  // Deleting outside is refused in the same words whether or not the database is there.
+  auto there = ask(*module, "deleteDatabaseAsync", dynamic::array("there.db", (outside.path / "other").string()));
+  auto missing = ask(*module, "deleteDatabaseAsync", dynamic::array("none.db", (outside.path / "other").string()));
+  REQUIRE(there.error);
+  REQUIRE(missing.error);
+  CHECK(there.error->substr(there.error->find(" is outside")) == missing.error->substr(missing.error->find(" is outside")));
+  CHECK(fs::exists(outside.path / "other" / "there.db"));
+}
+
 TEST_CASE("Sqlite refuses a name that leaves its folder") {
   TempDir dir;
-  auto module = ngn::makeSqliteModule((dir.path / "SQLite").string());
+  auto module = ngn::makeSqliteModule((dir.path / "SQLite").string(), writesIn(dir.path));
   for (const char *name : {"", "../escape.db", "a/../../escape.db", "/etc/passwd"}) {
     CAPTURE(name);
     CHECK(ask(*module, "openDatabaseAsync", dynamic::array(name)).error);
@@ -181,7 +232,7 @@ bool canWriteAlone(const fs::path &file) {
 TEST_CASE("Sqlite closes every database it opened when the module goes, as on a reload") {
   TempDir dir;
   {
-    auto module = ngn::makeSqliteModule(dir.path.string());
+    auto module = ngn::makeSqliteModule(dir.path.string(), writesIn(dir.path));
     auto id = open(*module, "kept.db");
     module->call("execSync", dynamic::array(id, "CREATE TABLE t (x); BEGIN; INSERT INTO t VALUES (1)"));
     CHECK_FALSE(canWriteAlone(dir.path / "kept.db"));

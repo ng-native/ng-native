@@ -263,10 +263,22 @@ bool plainPath(const std::string &path) {
   return true;
 }
 
-std::shared_ptr<NativeModule> makeShellModule(std::shared_ptr<ShellOpener> opener) {
+std::shared_ptr<NativeModule> makeShellModule(std::shared_ptr<ShellOpener> opener, std::shared_ptr<FileAccess> files) {
   struct Shell : NativeModule {
-    explicit Shell(std::shared_ptr<ShellOpener> opener) : NativeModule("NgNativeShell") {
+    Shell(std::shared_ptr<ShellOpener> opener, std::shared_ptr<FileAccess> files) : NativeModule("NgNativeShell") {
       auto answer = [](JsPromise promise) { return [promise](bool done) { promise.resolve(done); }; };
+      // A plain path inside the file boundary, with its pick held open; checked before anything
+      // looks at the path, so an answer never says whether a file outside is there.
+      auto reachable = [files](const folly::dynamic &args) -> std::optional<std::shared_ptr<FileAccess::Use>> {
+        if (args.size() < 1 || !args[0].isString() || !plainPath(args[0].asString())) {
+          return std::nullopt;
+        }
+        try {
+          return readableFile(files.get(), args[0].asString());
+        } catch (const FileRefused &) {
+          return std::nullopt;
+        }
+      };
       promise("openExternal", [opener, answer](const folly::dynamic &args, JsPromise promise) {
         if (args.size() < 1 || !args[0].isString() || !externalUrlAllowed(args[0].asString())) {
           promise.resolve(false);
@@ -274,8 +286,9 @@ std::shared_ptr<NativeModule> makeShellModule(std::shared_ptr<ShellOpener> opene
         }
         opener->openUrl(args[0].asString(), answer(promise));
       });
-      promise("openPath", [opener, answer](const folly::dynamic &args, JsPromise promise) {
-        if (args.size() < 1 || !args[0].isString() || !plainPath(args[0].asString())) {
+      promise("openPath", [opener, reachable](const folly::dynamic &args, JsPromise promise) {
+        auto use = reachable(args);
+        if (!use) {
           promise.resolve(false);
           return;
         }
@@ -286,18 +299,19 @@ std::shared_ptr<NativeModule> makeShellModule(std::shared_ptr<ShellOpener> opene
           promise.resolve(false);
           return;
         }
-        opener->openPath(args[0].asString(), answer(promise));
+        opener->openPath(args[0].asString(), [promise, use = *use](bool done) { promise.resolve(done); });
       });
-      promise("showItemInFolder", [opener, answer](const folly::dynamic &args, JsPromise promise) {
-        if (args.size() < 1 || !args[0].isString() || !plainPath(args[0].asString())) {
+      promise("showItemInFolder", [opener, reachable](const folly::dynamic &args, JsPromise promise) {
+        auto use = reachable(args);
+        if (!use) {
           promise.resolve(false);
           return;
         }
-        opener->showItemInFolder(args[0].asString(), answer(promise));
+        opener->showItemInFolder(args[0].asString(), [promise, use = *use](bool done) { promise.resolve(done); });
       });
     }
   };
-  return std::make_shared<Shell>(std::move(opener));
+  return std::make_shared<Shell>(std::move(opener), std::move(files));
 }
 
 } // namespace ngn

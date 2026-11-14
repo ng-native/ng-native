@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "ngn/audio.h"
 
 #include <doctest/doctest.h>
@@ -122,8 +123,8 @@ struct Setup {
   std::shared_ptr<FakeInput> input = std::make_shared<FakeInput>();
   std::shared_ptr<ngn::NativeModule> module;
   std::vector<dynamic> events;
-  explicit Setup(bool noPrompts = false) {
-    module = ngn::makeAudioModule(output, input, "/tmp/Audio", noPrompts);
+  explicit Setup(bool noPrompts = false, std::shared_ptr<ngn::FileAccess> files = ngn::testing::readsEverywhere()) {
+    module = ngn::makeAudioModule(output, input, "/tmp/Audio", noPrompts, std::move(files));
     module->setEmitter([this](const std::string &event, dynamic body) {
       CHECK(event == "ngNativeAudio");
       events.push_back(std::move(body));
@@ -417,4 +418,30 @@ TEST_CASE("NgNativeAudio's audio mode and session calls resolve with nothing to 
   Setup s;
   CHECK(s.ask("setAudioModeAsync", dynamic::array(dynamic::object("playsInSilentMode", true))) == dynamic(nullptr));
   CHECK(s.ask("setIsAudioActiveAsync", dynamic::array(true)) == dynamic(nullptr));
+}
+
+TEST_CASE("NgNativeAudio plays a file only inside the file boundary, and a file outside fails without opening") {
+  auto access = std::make_shared<ngn::FileAccess>(ngn::FileAccess::Folders{.cache = "/app/caches"}, dynamic::array());
+  Setup s(false, access);
+  s.output->uri.clear();
+  auto id = s.call("createPlayer", dynamic::array("file:///Users/someone/Desktop/private.wav", 500));
+  CHECK(s.output->uri.empty());
+  auto status = s.call("status", dynamic::array(id));
+  CHECK(status["playbackState"] == "failed");
+  CHECK(status["isLoaded"] == false);
+  CHECK(status["error"].asString().find("outside the files this app may read") != std::string::npos);
+  // Playing and seeking a refused source do nothing, and answer.
+  s.call("play", dynamic::array(id));
+  CHECK(s.call("status", dynamic::array(id))["playing"] == false);
+
+  // The app's own file opens as the file uri of the path checked; an http source as it is.
+  s.call("replace", dynamic::array(id, "file:///app/caches/a.wav#t=1"));
+  CHECK(s.output->uri == "file:///app/caches/a.wav");
+  s.call("replace", dynamic::array(id, "https://example.com/a.mp3"));
+  CHECK(s.output->uri == "https://example.com/a.mp3");
+  // Without file access, no file plays.
+  Setup closed(false, nullptr);
+  closed.output->uri.clear();
+  closed.call("createPlayer", dynamic::array("file:///app/caches/a.wav", 500));
+  CHECK(closed.output->uri.empty());
 }

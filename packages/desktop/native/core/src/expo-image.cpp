@@ -501,13 +501,22 @@ const char *cacheTypeName(ImageCache::Hit hit) {
 void loadImageBytes(
     const std::shared_ptr<Http> &http,
     const std::shared_ptr<ImageCache> &cache,
+    const FileAccess *files,
     const ImageSourceRef &source,
     const std::string &policy,
     std::function<void(std::string, ImageCache::Hit, const std::string &)> done) {
   std::string url;
+  std::shared_ptr<FileAccess::Use> use;
   bool remote = source.uri.rfind("http://", 0) == 0 || source.uri.rfind("https://", 0) == 0;
-  if (auto path = pathOfUri(source.uri)) {
-    url = fileUri(*path);
+  if (source.uri.starts_with('/') || isFileScheme(source.uri)) {
+    try {
+      auto readable = readableSource(files, source.uri);
+      url = readable.uri;
+      use = readable.use;
+    } catch (const FileRefused &refused) {
+      done("", ImageCache::Hit::None, refused.what());
+      return;
+    }
   } else if (remote || source.uri.rfind("data:", 0) == 0) {
     url = source.uri;
   } else {
@@ -525,7 +534,7 @@ void loadImageBytes(
   for (const auto &[name, value] : source.headers) {
     request.headers.emplace_back(name, value);
   }
-  fetchBytes(http, std::move(request), [cache, key, policy, remote, done](std::string body, const std::string &error) {
+  fetchBytes(http, std::move(request), [cache, key, policy, remote, done, use](std::string body, const std::string &error) {
     if (!error.empty()) {
       done("", ImageCache::Hit::None, error);
       return;

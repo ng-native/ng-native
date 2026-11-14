@@ -1,4 +1,5 @@
 #include "fake-backend.h"
+#include "helpers.h"
 #include "ngn/mounting-manager.h"
 #include "ngn/video.h"
 
@@ -89,9 +90,10 @@ struct FakeOutput final : ngn::VideoOutput {
 
 struct Setup {
   std::shared_ptr<FakeOutput> output = std::make_shared<FakeOutput>();
-  std::shared_ptr<ngn::NativeModule> module = ngn::makeVideoModule(output);
+  std::shared_ptr<ngn::NativeModule> module;
   std::vector<dynamic> events;
-  Setup() {
+  explicit Setup(std::shared_ptr<ngn::FileAccess> files = ngn::testing::readsEverywhere())
+      : module(ngn::makeVideoModule(output, std::move(files))) {
     module->setEmitter([this](const std::string &event, dynamic body) {
       CHECK(event == "ngNativeVideo");
       events.push_back(std::move(body));
@@ -344,4 +346,28 @@ TEST_CASE("The video view's props drop a value committed as null") {
   auto shown = ngn::videoViewModel(second->values);
   CHECK(shown.player == std::nullopt);
   CHECK(shown.contentFit == ngn::VideoViewModel::Fit::Cover);
+}
+
+TEST_CASE("NgNativeVideo plays a file only inside the file boundary, and a file outside is an error it never opens") {
+  auto access = std::make_shared<ngn::FileAccess>(ngn::FileAccess::Folders{.cache = "/app/caches"}, dynamic::array());
+  Setup setup(access);
+  auto id = setup.call("createPlayer", dynamic::array("file:///Users/someone/Desktop/private.mov"));
+  CHECK(setup.output->last->uri == std::nullopt);
+  CHECK(types(setup.events) == std::vector<std::string>{"sourceChange", "statusChange"});
+  CHECK(setup.events[0]["payload"]["source"]["uri"] == "file:///Users/someone/Desktop/private.mov");
+  CHECK(setup.events[1]["payload"]["status"] == "error");
+  CHECK(setup.events[1]["payload"]["error"]["message"].asString().find("outside the files this app may read") != std::string::npos);
+  CHECK(setup.call("state", dynamic::array(id))["status"] == "error");
+
+  // The app's own file loads, as the file uri of the path checked; an http source as it is.
+  setup.events.clear();
+  setup.call("replace", dynamic::array(id, "file:///app/caches/clip.mov?t=1"));
+  CHECK(setup.output->last->uri == "file:///app/caches/clip.mov");
+  CHECK(setup.call("state", dynamic::array(id))["status"] == "loading");
+  setup.call("replace", dynamic::array(id, "https://example.com/clip.mp4"));
+  CHECK(setup.output->last->uri == "https://example.com/clip.mp4");
+  // Without file access, no file plays.
+  Setup closed(nullptr);
+  closed.call("createPlayer", dynamic::array("file:///app/caches/clip.mov"));
+  CHECK(closed.output->last->uri == std::nullopt);
 }

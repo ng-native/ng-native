@@ -10,6 +10,7 @@
 // makePosixLauncher) and ShellOpener (NSWorkspace on macOS).
 #pragma once
 
+#include "ngn/file-system.h"
 #include "ngn/native-module.h"
 #include "ngn/spawn-rules.h"
 
@@ -106,6 +107,8 @@ bool externalUrlAllowed(const std::string &url);
 // Whether `path` is absolute and normalized, with nothing to walk out of where it says.
 bool plainPath(const std::string &path);
 
-std::shared_ptr<NativeModule> makeShellModule(std::shared_ptr<ShellOpener> opener);
+// openPath and showItemInFolder take a path only inside the file boundary `files` draws
+// (FileAccess::readFor), answering false for anything else before looking at it.
+std::shared_ptr<NativeModule> makeShellModule(std::shared_ptr<ShellOpener> opener, std::shared_ptr<FileAccess> files);
 
 } // namespace ngn

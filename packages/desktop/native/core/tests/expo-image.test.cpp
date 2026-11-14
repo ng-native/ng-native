@@ -188,7 +188,7 @@ TEST_CASE("loadImageBytes fetches with the source's headers once, then answers f
   ngn::ImageSourceRef source{.uri = "https://example.com/a.png?token=1", .headers = {{"Authorization", "Bearer x"}}, .cacheKey = "a"};
   std::vector<std::tuple<std::string, ngn::ImageCache::Hit, std::string>> answers;
   auto record = [&](std::string bytes, ngn::ImageCache::Hit hit, const std::string &error) { answers.emplace_back(bytes, hit, error); };
-  ngn::loadImageBytes(http, cache, source, "memory-disk", record);
+  ngn::loadImageBytes(http, cache, nullptr, source, "memory-disk", record);
   REQUIRE(http->sent.size() == 1);
   CHECK(http->sent[0]->request.headers == ngn::Headers{{"Authorization", "Bearer x"}});
   serve(*http, 0, "PNG");
@@ -196,17 +196,41 @@ TEST_CASE("loadImageBytes fetches with the source's headers once, then answers f
   CHECK(answers[0] == std::tuple{std::string("PNG"), ngn::ImageCache::Hit::None, std::string()});
   // Another uri with the same cache key is the same image.
   source.uri = "https://example.com/a.png?token=2";
-  ngn::loadImageBytes(http, cache, source, "memory-disk", record);
+  ngn::loadImageBytes(http, cache, nullptr, source, "memory-disk", record);
   CHECK(http->sent.size() == 1);
   CHECK(answers[1] == std::tuple{std::string("PNG"), ngn::ImageCache::Hit::Memory, std::string()});
   // With no cache policy it fetches again.
-  ngn::loadImageBytes(http, cache, source, "none", record);
+  ngn::loadImageBytes(http, cache, nullptr, source, "none", record);
   CHECK(http->sent.size() == 2);
   serve(*http, 1, "", 404);
   CHECK(std::get<2>(answers[2]) == "HTTP 404");
-  // A file is read, never cached.
-  ngn::loadImageBytes(http, cache, {.uri = "/tmp/x.png"}, "memory-disk", record);
-  CHECK(http->sent[2]->request.url == "file:///tmp/x.png");
-  ngn::loadImageBytes(http, cache, {.uri = "content://x"}, "memory", record);
+  // A file inside the boundary is read, never cached.
+  ngn::FileAccess files({.cache = folder.path.string()}, dynamic::array());
+  auto file = (folder.path / "x.png").string();
+  ngn::loadImageBytes(http, cache, &files, {.uri = file}, "memory-disk", record);
+  CHECK(http->sent[2]->request.url == ngn::fileUri(file));
+  ngn::loadImageBytes(http, cache, nullptr, {.uri = "content://x"}, "memory", record);
   CHECK(std::get<2>(answers.back()) == "content://x is not a file, data or http(s) uri");
+}
+
+TEST_CASE("loadImageBytes reads an <expo-image> file source only inside the file boundary") {
+  Folder folder;
+  Folder outside;
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  auto cache = std::make_shared<ngn::ImageCache>((folder.path / "images").string(), 1 << 20);
+  ngn::FileAccess files({.cache = folder.path.string()}, dynamic::array());
+  std::vector<std::string> errors;
+  auto record = [&](std::string, ngn::ImageCache::Hit, const std::string &error) { errors.push_back(error); };
+
+  auto secret = (outside.path / "secret.png").string();
+  for (const auto &uri : {secret, ngn::fileUri(secret), "FILE://" + secret, "file://localhost" + secret}) {
+    CAPTURE(uri);
+    ngn::loadImageBytes(http, cache, &files, {.uri = uri}, "memory-disk", record);
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors.back().find("outside the files this app may read") != std::string::npos);
+  }
+  // Without file access, no file at all.
+  ngn::loadImageBytes(http, cache, nullptr, {.uri = ngn::fileUri((folder.path / "a.png").string())}, "none", record);
+  CHECK(errors.back().find("outside the files this app may read") != std::string::npos);
+  CHECK(http->sent.empty());
 }

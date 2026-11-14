@@ -85,7 +85,7 @@ struct Shown {
   __weak NGNExpoImageView *weakSelf = self;
   auto policy = props->cachePolicy;
   auto url = source->uri;
-  ngn::loadImageBytes(gHttp, gCache, *source, policy, [weakSelf, generation, url](std::string bytes, ngn::ImageCache::Hit hit, const std::string &error) {
+  ngn::loadImageBytes(gHttp, gCache, ngn::viewFileAccess().get(), *source, policy, [weakSelf, generation, url](std::string bytes, ngn::ImageCache::Hit hit, const std::string &error) {
     auto decoded = error.empty() ? ngn::appkit::decodeImage(bytes) : std::nullopt;
     auto shared = std::make_shared<std::optional<ngn::appkit::DecodedImage>>(std::move(decoded));
     std::string why = !error.empty() ? error : (*shared ? "" : url + " is not an image");
@@ -107,7 +107,7 @@ struct Shown {
   }
   __weak NGNExpoImageView *weakSelf = self;
   auto wanted = *source;
-  ngn::loadImageBytes(gHttp, gCache, wanted, policy, [weakSelf, wanted](std::string bytes, ngn::ImageCache::Hit, const std::string &error) {
+  ngn::loadImageBytes(gHttp, gCache, ngn::viewFileAccess().get(), wanted, policy, [weakSelf, wanted](std::string bytes, ngn::ImageCache::Hit, const std::string &error) {
     if (!error.empty()) {
       return;
     }

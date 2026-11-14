@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "ngn/file-system.h"
 
 #include <doctest/doctest.h>
@@ -507,6 +508,84 @@ TEST_CASE("readFor lets a module read a file JavaScript names where FileSystem c
   CHECK_THROWS_AS(access.readFor((dir.path / "data/../home/Desktop/shot.png").string()), ngn::FileRefused);
   CHECK_THROWS_AS(access.readFor((dir.path / "App.app/Contents/Resources/../../../home/Desktop/shot.png").string()), ngn::FileRefused);
   CHECK_THROWS_AS(access.readFor("relative.png"), ngn::FileRefused);
+}
+
+TEST_CASE("writeFor lets a module write where FileSystem could, and nowhere it could only read") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  fs::create_directories(dir.path / "App.app/Contents/Resources");
+  folders.bundle = (dir.path / "App.app/Contents/Resources").string();
+  ngn::FileAccess access(folders, dynamic::array(dynamic::object("path", "~/Downloads")("access", "read"),
+                                                 dynamic::object("path", "~/Desktop")("access", "readwrite")));
+
+  CHECK(access.writeFor(folders.appData + "/SQLite/notes.db") != nullptr);
+  CHECK(access.writeFor(folders.document + "/new/notes.db") != nullptr);
+  CHECK(access.writeFor((dir.path / "home/Desktop/notes.db").string()) != nullptr);
+  access.allowPicked((dir.path / "outside").string());
+  CHECK(access.writeFor((dir.path / "outside/notes.db").string()) != nullptr);
+
+  // Read-only declarations, the bundle, anything else and a way out are refused, in one set of words.
+  std::string readOnly;
+  try {
+    access.writeFor((dir.path / "home/Downloads/notes.db").string());
+  } catch (const ngn::FileRefused &refused) {
+    readOnly = refused.what();
+  }
+  CHECK(readOnly.find("outside the files this app may write") != std::string::npos);
+  CHECK_THROWS_AS(access.writeFor(folders.bundle + "/notes.db"), ngn::FileRefused);
+  CHECK_THROWS_AS(access.writeFor((dir.path / "home/notes.db").string()), ngn::FileRefused);
+  CHECK_THROWS_AS(access.writeFor(folders.appData + "/../home/notes.db"), ngn::FileRefused);
+  CHECK_THROWS_AS(access.writeFor("notes.db"), ngn::FileRefused);
+}
+
+TEST_CASE("readableSource checks a file source with readFor and hands on exactly the file it checked") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  fs::create_directories(dir.path / "App.app/Contents/Resources/assets");
+  folders.bundle = (dir.path / "App.app/Contents/Resources").string();
+  write(dir.path / "cache/a b.png", "png");
+  write(dir.path / "home/Desktop/shot.png", "png");
+  ngn::FileAccess access(folders, dynamic::array());
+
+  // Other schemes pass as they are, with nothing to hold open.
+  for (const char *uri : {"https://example.com/a.png", "http://localhost:8081/assets/a.png", "data:image/png;base64,AA=="}) {
+    auto source = ngn::readableSource(&access, uri);
+    CHECK(source.uri == uri);
+    CHECK(source.use == nullptr);
+  }
+  // A file in the app's folders, the bundle's assets, and a plain path, each as the file uri of its path.
+  auto cached = ngn::fileUri(folders.cache + "/a b.png");
+  CHECK(ngn::readableSource(&access, cached).uri == cached);
+  CHECK(ngn::readableSource(&access, cached).use != nullptr);
+  CHECK(ngn::readableSource(&access, folders.cache + "/a b.png").uri == cached);
+  CHECK(ngn::readableSource(&access, "FILE://" + folders.cache + "/a%20b.png").uri == cached);
+  CHECK(ngn::readableSource(&access, ngn::fileUri(folders.bundle + "/assets/logo.png")).uri ==
+        ngn::fileUri(folders.bundle + "/assets/logo.png"));
+  // A query or fragment is not part of the file, and cannot walk the check somewhere else.
+  CHECK(ngn::readableSource(&access, cached + "?v=2").uri == cached);
+  auto desktop = ngn::fileUri((dir.path / "home/Desktop/shot.png").string());
+  CHECK_THROWS_AS(ngn::readableSource(&access, desktop + "#/../../../cache/a.png"), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::readableSource(&access, desktop + "?/../../../cache/a.png"), ngn::FileRefused);
+
+  // Outside the boundary, however the uri is spelled.
+  CHECK_THROWS_AS(ngn::readableSource(&access, desktop), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::readableSource(&access, "File://" + (dir.path / "home/Desktop/shot.png").string()), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::readableSource(&access, (dir.path / "home/Desktop/shot.png").string()), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::readableSource(&access, "file:" + (dir.path / "home/Desktop/shot.png").string()), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::readableSource(&access, "file://localhost" + folders.cache + "/a%20b.png"), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::readableSource(nullptr, cached), ngn::FileRefused);
+}
+
+TEST_CASE("The views' file access is the host's, and refuses every file until it is set") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  ngn::testing::ViewFileAccess restore(nullptr);
+  CHECK_THROWS_AS(ngn::readableSource(ngn::viewFileAccess().get(), ngn::fileUri(folders.cache + "/a.png")), ngn::FileRefused);
+  auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  ngn::useViewFileAccess(access);
+  CHECK(ngn::viewFileAccess() == access);
+  CHECK(ngn::readableSource(ngn::viewFileAccess().get(), ngn::fileUri(folders.cache + "/a.png")).uri ==
+        ngn::fileUri(folders.cache + "/a.png"));
 }
 
 TEST_CASE("readFor opens a pick of an earlier launch for as long as the module reads it") {

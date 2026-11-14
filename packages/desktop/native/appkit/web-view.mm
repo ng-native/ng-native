@@ -60,6 +60,8 @@ bool sameScripts(const WebViewConfig &a, const WebViewConfig &b) {
   std::optional<WebViewConfig> _config;
   std::set<int> _held;
   WKWebView *_webView;
+  // The pick holding the page's file, open while the page is shown.
+  std::shared_ptr<ngn::FileAccess::Use> _fileUse;
 }
 
 - (instancetype)initWithLocks:(std::shared_ptr<ngn::NavigationLocks>)locks
@@ -144,9 +146,33 @@ bool sameScripts(const WebViewConfig &a, const WebViewConfig &b) {
 }
 
 - (void)load:(const ngn::WebViewSource &)source {
+  _fileUse.reset();
   if (!source.html.empty()) {
     NSURL *base = source.baseUrl.empty() ? [NSURL URLWithString:@"about:blank"] : [NSURL URLWithString:ns(source.baseUrl)];
+    // A file base url only inside the file boundary: WebKit lets the page read beside it.
+    try {
+      if (auto file = ngn::webViewFile(ngn::viewFileAccess().get(), source.baseUrl)) {
+        base = [NSURL URLWithString:ns(file->uri)];
+        _fileUse = file->use;
+      }
+    } catch (const ngn::FileRefused &) {
+      base = [NSURL URLWithString:@"about:blank"];
+    }
     [_webView loadHTMLString:ns(source.html) baseURL:base];
+    return;
+  }
+  // A file page only inside the file boundary, reading no further than the app may.
+  try {
+    if (auto file = ngn::webViewFile(ngn::viewFileAccess().get(), source.uri)) {
+      _fileUse = file->use;
+      [_webView loadFileURL:[NSURL URLWithString:ns(file->uri)] allowingReadAccessToURL:[NSURL URLWithString:ns(file->readAccess)]];
+      return;
+    }
+  } catch (const ngn::FileRefused &refused) {
+    [_webView loadHTMLString:@"" baseURL:[NSURL URLWithString:@"about:blank"]];
+    [self failed:[NSError errorWithDomain:NSURLErrorDomain
+                                     code:NSURLErrorNoPermissionsToReadFile
+                                 userInfo:@{NSLocalizedDescriptionKey : ns(refused.what())}]];
     return;
   }
   NSURL *url = source.uri.empty() ? nil : [NSURL URLWithString:ns(source.uri)];
@@ -155,7 +181,8 @@ bool sameScripts(const WebViewConfig &a, const WebViewConfig &b) {
     return;
   }
   if (url.isFileURL) {
-    [_webView loadFileURL:url allowingReadAccessToURL:url.URLByDeletingLastPathComponent];
+    // A file url webViewFile did not take (no path): nothing to load.
+    [_webView loadHTMLString:@"" baseURL:[NSURL URLWithString:@"about:blank"]];
     return;
   }
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];

@@ -116,4 +116,22 @@ std::shared_ptr<NativeModule> makeWebViewModule(std::shared_ptr<NavigationLocks>
   return std::make_shared<WebViewModule>(std::move(locks));
 }
 
+std::optional<WebViewFile> webViewFile(const FileAccess *access, const std::string &uri) {
+  if (!uri.starts_with('/') && !isFileScheme(uri)) {
+    return std::nullopt;
+  }
+  auto source = readableSource(access, uri);
+  auto path = *pathOfUri(source.uri);
+  auto folder = path.substr(0, path.rfind('/'));
+  std::string readAccess = source.uri;
+  if (!folder.empty()) {
+    try {
+      readableFile(access, folder);
+      readAccess = fileUri(folder) + "/";
+    } catch (const FileRefused &) {
+    }
+  }
+  return WebViewFile{.uri = source.uri, .readAccess = readAccess, .use = source.use};
+}
+
 } // namespace ngn

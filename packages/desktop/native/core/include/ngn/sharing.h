@@ -5,8 +5,12 @@
 //   shared through, or {action: 'dismissedAction', activityType: null}. A request with neither a
 //   message nor a url is refused, and one at a time is shown. With `noPrompts`
 //   (NGN_NO_PROMPTS=1) nothing is shown, and the share answers as dismissed.
+//
+// A file url is shared only inside the file boundary `files` draws (readableSource), and refused
+// otherwise before anything is shown; without `files`, no file is shared.
 #pragma once
 
+#include "ngn/file-system.h"
 #include "ngn/native-module.h"
 
 #include <functional>
@@ -29,6 +33,7 @@ class SharePicker {
   virtual void show(const Request &request, std::function<void(std::optional<std::string> service)> done) = 0;
 };
 
-std::shared_ptr<NativeModule> makeSharingModule(std::shared_ptr<SharePicker> picker, bool noPrompts = false);
+std::shared_ptr<NativeModule> makeSharingModule(
+    std::shared_ptr<SharePicker> picker, bool noPrompts = false, std::shared_ptr<FileAccess> files = nullptr);
 
 } // namespace ngn

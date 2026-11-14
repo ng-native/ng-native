@@ -80,7 +80,9 @@ content, not against a hostile app.
 `Shell` hands a url, a file or a folder to macOS. `openExternal(url)` opens a url in the app the
 user chose for its scheme, and refuses `file:`, `javascript:` and `data:` urls. `openPath(path)`
 opens a file or folder as a double click in Finder does, and `showItemInFolder(path)` reveals it in
-a Finder window. Each resolves to whether macOS took it, and to `false` on every other OS.
+a Finder window. Each resolves to whether macOS took it, and to `false` on every other OS. Both
+take only a path the app's `FileSystem` can read (its own folders, the user's picks and the declared
+`capabilities.paths`), and resolve to `false` for any other.
 
 ## Reference
 

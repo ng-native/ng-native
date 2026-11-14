@@ -1,6 +1,7 @@
 #include "ngn/sqlite.h"
 
 #include "ngn/bytes.h"
+#include "ngn/file-system.h"
 
 #include <sqlite3.h>
 
@@ -24,13 +25,13 @@ std::string stringArg(const folly::dynamic &args, size_t index) {
   return args.size() > index && args[index].isString() ? args[index].asString() : std::string{};
 }
 
-// A path or a file:// uri, as a directory argument may be.
-std::string pathOf(std::string where) {
-  constexpr std::string_view scheme = "file://";
-  if (where.starts_with(scheme)) {
-    where.erase(0, scheme.size());
+// A path or a file:// uri, as a directory argument may be; one that is neither is refused.
+std::string pathOf(const std::string &where) {
+  auto path = pathOfUri(where);
+  if (!path) {
+    throw FileRefused(where, true);
   }
-  return where;
+  return *path;
 }
 
 // The file a database name names in `directory`, refusing one that would leave it.
@@ -166,7 +167,8 @@ class Statement {
 
 class Databases {
  public:
-  explicit Databases(std::string defaultDirectory) : defaultDirectory_(std::move(defaultDirectory)) {}
+  Databases(std::string defaultDirectory, std::shared_ptr<FileAccess> files)
+      : defaultDirectory_(std::move(defaultDirectory)), files_(std::move(files)) {}
   ~Databases() {
     for (auto &[id, open] : open_) {
       sqlite3_close_v2(open.db);
@@ -180,8 +182,10 @@ class Databases {
   folly::dynamic open(const folly::dynamic &args) {
     auto name = stringArg(args, 0);
     std::string path = ":memory:";
+    std::shared_ptr<FileAccess::Use> use;
     if (name != ":memory:") {
       auto file = fileFor(name, directoryArg(args, 2));
+      use = writable(file);
       fs::create_directories(file.parent_path());
       path = file.string();
     }
@@ -197,7 +201,7 @@ class Databases {
     }
     std::lock_guard lock(mutex_);
     int id = ++next_;
-    open_[id] = Open{.db = db, .path = path};
+    open_[id] = Open{.db = db, .path = path, .use = std::move(use)};
     return folly::dynamic::object("id", id)("databasePath", path)("databaseName", name);
   }
 
@@ -214,6 +218,7 @@ class Databases {
   void remove(const folly::dynamic &args) {
     auto name = stringArg(args, 0);
     auto file = fileFor(name, directoryArg(args, 1));
+    auto use = writable(file);
     {
       std::lock_guard lock(mutex_);
       for (const auto &[id, open] : open_) {
@@ -244,7 +249,18 @@ class Databases {
   struct Open {
     sqlite3 *db;
     std::string path;
+    // A pick of an earlier launch holding the file, open while the database is.
+    std::shared_ptr<FileAccess::Use> use;
   };
+
+  // The database file, and its -wal and -shm beside it, only where the app may write: its own
+  // folders, picks and readwrite declarations (FileAccess::writeFor).
+  std::shared_ptr<FileAccess::Use> writable(const fs::path &file) const {
+    if (!files_) {
+      throw FileRefused(file.string(), true);
+    }
+    return files_->writeFor(file.string());
+  }
 
   std::string directoryArg(const folly::dynamic &args, size_t index) const {
     auto directory = stringArg(args, index);
@@ -256,6 +272,7 @@ class Databases {
   }
 
   std::string defaultDirectory_;
+  std::shared_ptr<FileAccess> files_;
   std::mutex mutex_;
   std::map<int, Open> open_;
   int next_{0};
@@ -298,10 +315,10 @@ folly::dynamic rows(sqlite3 *db, const folly::dynamic &args, bool firstOnly) {
 
 } // namespace
 
-std::shared_ptr<NativeModule> makeSqliteModule(std::string defaultDatabaseDirectory) {
+std::shared_ptr<NativeModule> makeSqliteModule(std::string defaultDatabaseDirectory, std::shared_ptr<FileAccess> files) {
   struct Sqlite : NativeModule {
-    explicit Sqlite(std::string directory)
-        : NativeModule("NgNativeSqlite"), databases(std::make_shared<Databases>(std::move(directory))) {
+    Sqlite(std::string directory, std::shared_ptr<FileAccess> files)
+        : NativeModule("NgNativeSqlite"), databases(std::make_shared<Databases>(std::move(directory), std::move(files))) {
       auto dbs = databases;
       property("defaultDatabaseDirectory", [dbs] { return folly::dynamic(dbs->defaultDirectory()); });
       constants([dbs] { return folly::dynamic::object("defaultDatabaseDirectory", dbs->defaultDirectory()); });
@@ -342,7 +359,7 @@ std::shared_ptr<NativeModule> makeSqliteModule(std::string defaultDatabaseDirect
     }
     std::shared_ptr<Databases> databases;
   };
-  return std::make_shared<Sqlite>(std::move(defaultDatabaseDirectory));
+  return std::make_shared<Sqlite>(std::move(defaultDatabaseDirectory), std::move(files));
 }
 
 } // namespace ngn

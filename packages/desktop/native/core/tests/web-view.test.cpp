@@ -91,3 +91,30 @@ TEST_CASE("NavigationLocks holds each navigation until RNCWebViewModule answers 
   CHECK(locks->settle(third, true));
   CHECK(locks->pending() == 1);
 }
+
+TEST_CASE("webViewFile loads a page from a file only inside the file boundary, reading no further than the app may") {
+  ngn::FileAccess access({.cache = "/app/caches", .bundle = "/App.app/Contents/Resources"}, dynamic::array());
+  // Not a file: nothing to check.
+  CHECK_FALSE(ngn::webViewFile(&access, "https://example.com/"));
+  CHECK_FALSE(ngn::webViewFile(&access, "about:blank"));
+
+  // A page in the app's folders reads its own folder; one in the bundle too.
+  auto cached = ngn::webViewFile(&access, "file:///app/caches/site/index.html?x=1");
+  REQUIRE(cached);
+  CHECK(cached->uri == "file:///app/caches/site/index.html");
+  CHECK(cached->readAccess == "file:///app/caches/site/");
+  auto bundled = ngn::webViewFile(&access, "/App.app/Contents/Resources/web/a.html");
+  REQUIRE(bundled);
+  CHECK(bundled->readAccess == "file:///App.app/Contents/Resources/web/");
+  // A picked file reads only itself, not the folder it sits in.
+  access.allowPicked("/Users/me/Desktop/page.html");
+  auto picked = ngn::webViewFile(&access, "file:///Users/me/Desktop/page.html");
+  REQUIRE(picked);
+  CHECK(picked->readAccess == "file:///Users/me/Desktop/page.html");
+
+  // Anything else is refused, however it is spelled.
+  CHECK_THROWS_AS(ngn::webViewFile(&access, "file:///etc/hosts"), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::webViewFile(&access, "FILE:///Users/me/Desktop/other.html"), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::webViewFile(&access, "file://localhost/app/caches/site/index.html"), ngn::FileRefused);
+  CHECK_THROWS_AS(ngn::webViewFile(nullptr, "file:///app/caches/site/index.html"), ngn::FileRefused);
+}

@@ -3,6 +3,8 @@
 #include "ngn/download.h"
 #include "ngn/file-system.h"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <functional>
 #include <sstream>
@@ -26,22 +28,36 @@ std::string extensionOf(const std::string &uri) {
   return path.substr(dot + 1);
 }
 
+// Whether `part` can be a piece of a file name in the caches: letters, digits, `_` and `-`, so a
+// hash or a type cannot name a folder or lead out of it.
+bool namePart(const std::string &part) {
+  return std::all_of(part.begin(), part.end(), [](unsigned char c) { return std::isalnum(c) || c == '_' || c == '-'; });
+}
+
 std::string text(const folly::dynamic &args, size_t index) {
   return args.size() > index && args[index].isString() ? args[index].asString() : "";
 }
 
 } // namespace
 
-std::shared_ptr<NativeModule> makeAssetModule(std::shared_ptr<Http> http, std::string caches) {
+std::shared_ptr<NativeModule> makeAssetModule(std::shared_ptr<Http> http, std::string caches, std::shared_ptr<FileAccess> files) {
   struct Asset : NativeModule {
-    Asset(std::shared_ptr<Http> http, std::string caches) : NativeModule("NgNativeAsset") {
-      promise("downloadAsync", [http, caches](const folly::dynamic &args, JsPromise promise) {
+    Asset(std::shared_ptr<Http> http, std::string caches, std::shared_ptr<FileAccess> files) : NativeModule("NgNativeAsset") {
+      promise("downloadAsync", [http, caches, files](const folly::dynamic &args, JsPromise promise) {
         auto uri = text(args, 0);
         if (uri.empty()) {
           promise.reject("Asset.downloadAsync: takes the asset's uri");
           return;
         }
         if (auto path = pathOfUri(uri)) {
+          // Checked before anything looks, so a file outside answers as one that is not there would.
+          std::shared_ptr<FileAccess::Use> use;
+          try {
+            use = readableFile(files.get(), *path);
+          } catch (const FileRefused &refused) {
+            promise.reject(std::string("Asset: ") + refused.what());
+            return;
+          }
           std::error_code ignored;
           if (std::filesystem::is_regular_file(*path, ignored)) {
             promise.resolve(fileUri(*path));
@@ -58,6 +74,10 @@ std::shared_ptr<NativeModule> makeAssetModule(std::shared_ptr<Http> http, std::s
         auto type = text(args, 2);
         if (type.empty()) {
           type = extensionOf(uri);
+        }
+        if (!namePart(hash) || !namePart(type)) {
+          promise.reject("Asset: the hash and type of " + uri + " must be letters, digits, '_' and '-'");
+          return;
         }
         std::ostringstream name;
         name << "ExponentAsset-";
@@ -85,7 +105,7 @@ std::shared_ptr<NativeModule> makeAssetModule(std::shared_ptr<Http> http, std::s
       });
     }
   };
-  return std::make_shared<Asset>(std::move(http), std::move(caches));
+  return std::make_shared<Asset>(std::move(http), std::move(caches), std::move(files));
 }
 
 } // namespace ngn

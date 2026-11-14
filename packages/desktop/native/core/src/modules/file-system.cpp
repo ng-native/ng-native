@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -137,10 +138,12 @@ FileAccess::Use FileAccess::use(const std::string &path) const {
   return Use(std::move(picks), std::move(*bookmark));
 }
 
-FileRefused::FileRefused(const std::string &path)
+FileRefused::FileRefused(const std::string &path, bool write)
     : std::runtime_error(
-          path + " is outside the files this app may read: its own folders, the files the user picked, the paths its "
-                 "capabilities declare and its bundle's assets") {}
+          write ? path + " is outside the files this app may write: its own folders, the files the user picked and the "
+                         "paths its capabilities declare readwrite"
+                : path + " is outside the files this app may read: its own folders, the files the user picked, the paths "
+                         "its capabilities declare and its bundle's assets") {}
 
 std::shared_ptr<FileAccess::Use> FileAccess::readFor(const std::string &path) const {
   if (!path.starts_with('/')) {
@@ -152,6 +155,47 @@ std::shared_ptr<FileAccess::Use> FileAccess::readFor(const std::string &path) co
     }
   }
   return std::make_shared<Use>(use(path));
+}
+
+std::shared_ptr<FileAccess::Use> FileAccess::writeFor(const std::string &path) const {
+  if (!path.starts_with('/') || accessTo(path) < Access::ReadWrite) {
+    throw FileRefused(path, true);
+  }
+  return std::make_shared<Use>(use(path));
+}
+
+bool isFileScheme(const std::string &uri) {
+  return uri.size() >= 5 && uri[4] == ':' &&
+      std::equal(uri.begin(), uri.begin() + 4, "file", [](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == b; });
+}
+
+ReadableSource readableSource(const FileAccess *access, const std::string &uri) {
+  bool scheme = isFileScheme(uri);
+  if (!scheme && !uri.starts_with('/')) {
+    return {.uri = uri, .use = nullptr};
+  }
+  // A uri's query and fragment are not part of the file it names.
+  auto file = scheme ? "file" + uri.substr(4, uri.find_first_of("?#") - 4) : uri;
+  auto path = pathOfUri(file);
+  if (!path) {
+    throw FileRefused(uri);
+  }
+  return {.uri = fileUri(*path), .use = readableFile(access, *path)};
+}
+
+namespace {
+std::mutex viewAccessMutex;
+std::shared_ptr<FileAccess> viewAccess;
+} // namespace
+
+void useViewFileAccess(std::shared_ptr<FileAccess> access) {
+  std::lock_guard lock(viewAccessMutex);
+  viewAccess = std::move(access);
+}
+
+std::shared_ptr<FileAccess> viewFileAccess() {
+  std::lock_guard lock(viewAccessMutex);
+  return viewAccess;
 }
 
 std::shared_ptr<FileAccess::Use> readableFile(const FileAccess *access, const std::string &path) {

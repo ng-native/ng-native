@@ -13,6 +13,7 @@
 // the OS to open, as the library's JavaScript does with Linking.
 #pragma once
 
+#include "ngn/file-system.h"
 #include "ngn/native-module.h"
 
 #include <folly/dynamic.h>
@@ -38,6 +39,17 @@ struct WebViewSource {
   std::string baseUrl;
   bool operator==(const WebViewSource &) const = default;
 };
+
+// A web view's page from a file (a source's `uri`, or the `baseUrl` of its `html`), inside the file
+// boundary: the file uri checked, what the page may read beside it (its folder where the app may
+// read that, else the file alone) and the pick held open. Nothing for a uri that is not a file;
+// throws FileRefused for one outside.
+struct WebViewFile {
+  std::string uri;
+  std::string readAccess;
+  std::shared_ptr<FileAccess::Use> use;
+};
+std::optional<WebViewFile> webViewFile(const FileAccess *access, const std::string &uri);
 
 struct WebViewConfig {
   WebViewSource source;

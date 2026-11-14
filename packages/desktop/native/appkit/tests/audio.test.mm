@@ -103,7 +103,7 @@ TEST_CASE("AVInput asks for nothing without a usage string, and the module recor
     MESSAGE("this test binary has microphone access; the denied path is not checked");
     return;
   }
-  auto module = ngn::makeAudioModule(ngn::appkit::makeAudioOutput(), input, NSTemporaryDirectory().UTF8String, false);
+  auto module = ngn::makeAudioModule(ngn::appkit::makeAudioOutput(), input, NSTemporaryDirectory().UTF8String, false, nullptr);
   auto id = module->call("createRecorder", folly::dynamic::array(folly::dynamic::object()));
   std::optional<std::string> rejected;
   module->callWithPromise("prepareToRecordAsync", folly::dynamic::array(id, nullptr),

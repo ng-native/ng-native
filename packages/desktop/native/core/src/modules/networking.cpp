@@ -202,7 +202,16 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
         emit("didCompleteNetworkResponse", folly::dynamic::array(id, body.error, false));
         return;
       }
-      HttpRequest request{.method = str(query, "method"), .url = str(query, "url"), .body = std::move(body.bytes)};
+      // A file url is read only inside the file boundary, as a body's {uri} is: the OS's client
+      // would read any file it names.
+      ReadableSource source;
+      try {
+        source = readableSource(files.get(), str(query, "url"));
+      } catch (const FileRefused &refused) {
+        emit("didCompleteNetworkResponse", folly::dynamic::array(id, refused.what(), false));
+        return;
+      }
+      HttpRequest request{.method = str(query, "method"), .url = source.uri, .body = std::move(body.bytes)};
       if (request.method.empty()) {
         request.method = "GET";
       }
@@ -282,7 +291,7 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
                 }
               },
           .onComplete =
-              [weak, id, response, responseType, incrementalUpdates](const std::string &error, bool timedOut) {
+              [weak, id, response, responseType, incrementalUpdates, use = source.use](const std::string &error, bool timedOut) {
                 auto self = weak.lock();
                 if (!self) {
                   return;

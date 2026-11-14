@@ -141,10 +141,6 @@ void open(const std::shared_ptr<Shared> &shared, AudioOutput &output, const std:
   applyVolume(player);
 }
 
-std::string fileUri(const std::string &path) {
-  return "file://" + path;
-}
-
 double fileSize(const std::string &path) {
   struct stat info{};
   return ::stat(path.c_str(), &info) == 0 ? static_cast<double>(info.st_size) : 0;
@@ -224,8 +220,83 @@ RecordingSettings recordingSettingsOf(const folly::dynamic &options) {
   return settings;
 }
 
+namespace {
+
+// A source outside the file boundary: failed with the refusal, and never opened.
+class RefusedTrack final : public AudioTrack {
+ public:
+  explicit RefusedTrack(std::string error) : error_(std::move(error)) {}
+  TrackState state() override {
+    return {.load = TrackState::Load::Failed, .error = error_};
+  }
+  void play(double) override {}
+  void pause() override {}
+  void seek(double, std::function<void()> done) override {
+    done();
+  }
+  void setRate(double) override {}
+  void setVolume(double) override {}
+
+ private:
+  std::string error_;
+};
+
+// A track, and the pick holding its file open for as long as it plays.
+class HeldTrack final : public AudioTrack {
+ public:
+  HeldTrack(std::unique_ptr<AudioTrack> track, std::shared_ptr<FileAccess::Use> use) : track_(std::move(track)), use_(std::move(use)) {}
+  TrackState state() override {
+    return track_->state();
+  }
+  void play(double rate) override {
+    track_->play(rate);
+  }
+  void pause() override {
+    track_->pause();
+  }
+  void seek(double seconds, std::function<void()> done) override {
+    track_->seek(seconds, std::move(done));
+  }
+  void setRate(double rate) override {
+    track_->setRate(rate);
+  }
+  void setVolume(double volume) override {
+    track_->setVolume(volume);
+  }
+
+ private:
+  std::unique_ptr<AudioTrack> track_;
+  std::shared_ptr<FileAccess::Use> use_;
+};
+
+// The output, opening a file source only inside the file boundary, exactly the file checked.
+class BoundedOutput final : public AudioOutput {
+ public:
+  BoundedOutput(std::shared_ptr<AudioOutput> output, std::shared_ptr<FileAccess> files)
+      : output_(std::move(output)), files_(std::move(files)) {}
+  std::unique_ptr<AudioTrack> open(const std::string &uri, double interval, std::function<void(Change)> changed) override {
+    ReadableSource source;
+    try {
+      source = readableSource(files_.get(), uri);
+    } catch (const FileRefused &refused) {
+      return std::make_unique<RefusedTrack>(refused.what());
+    }
+    auto track = output_->open(source.uri, interval, std::move(changed));
+    if (!source.use || !track) {
+      return track;
+    }
+    return std::make_unique<HeldTrack>(std::move(track), std::move(source.use));
+  }
+
+ private:
+  std::shared_ptr<AudioOutput> output_;
+  std::shared_ptr<FileAccess> files_;
+};
+
+} // namespace
+
 std::shared_ptr<NativeModule> makeAudioModule(std::shared_ptr<AudioOutput> output, std::shared_ptr<AudioInput> input,
-                                              std::string recordings, bool noPrompts) {
+                                              std::string recordings, bool noPrompts, std::shared_ptr<FileAccess> files) {
   struct Audio : NativeModule {
     std::shared_ptr<Shared> shared = std::make_shared<Shared>();
 
@@ -460,7 +531,8 @@ std::shared_ptr<NativeModule> makeAudioModule(std::shared_ptr<AudioOutput> outpu
       shared->recorders.clear();
     }
   };
-  return std::make_shared<Audio>(std::move(output), std::move(input), std::move(recordings), noPrompts);
+  return std::make_shared<Audio>(std::make_shared<BoundedOutput>(std::move(output), std::move(files)), std::move(input),
+                                 std::move(recordings), noPrompts);
 }
 
 } // namespace ngn

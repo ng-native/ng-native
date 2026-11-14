@@ -3,6 +3,7 @@
 #include "ngn/gestures.h"
 
 #include "ngn/app-menus.h"
+#include "ngn/file-system.h"
 
 #include <react/renderer/components/view/TouchEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
@@ -122,7 +123,7 @@ bool InputDispatcher::startDragOut(const PointerInput &input) {
     if (node == nullptr || !node->view.props) {
       continue;
     }
-    auto item = dragItemOf(desktopProps(*node->view.props).dragItem);
+    auto item = dragItemOf(desktopProps(*node->view.props).dragItem, viewFileAccess().get());
     if (!item) {
       continue;
     }
@@ -314,15 +315,25 @@ std::string percentDecoded(std::string_view text) {
 
 } // namespace
 
-std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop) {
+std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop, const FileAccess *files) {
   if (!prop.isObject()) {
     return std::nullopt;
   }
+  // A file only inside the file boundary, as the file uri checked: dropped in Finder, it is copied.
+  auto readable = [files](const std::string &uri) -> std::optional<std::string> {
+    try {
+      return readableSource(files, uri).uri;
+    } catch (const FileRefused &) {
+      return std::nullopt;
+    }
+  };
   DragOutItem item;
-  if (auto files = prop.get_ptr("files"); files != nullptr && files->isArray()) {
-    for (const auto &file : *files) {
-      if (file.isString() && file.asString().rfind("file:", 0) == 0) {
-        item.files.push_back(file.asString());
+  if (auto list = prop.get_ptr("files"); list != nullptr && list->isArray()) {
+    for (const auto &file : *list) {
+      if (file.isString() && isFileScheme(file.asString())) {
+        if (auto uri = readable(file.asString())) {
+          item.files.push_back(*uri);
+        }
       }
     }
   }
@@ -330,7 +341,7 @@ std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop) {
     item.text = text->asString();
   }
   if (auto url = prop.get_ptr("url"); url != nullptr && url->isString() && !url->asString().empty()) {
-    item.url = url->asString();
+    item.url = isFileScheme(url->asString()) ? readable(url->asString()) : url->asString();
   }
   if (item.files.empty() && !item.text && !item.url) {
     return std::nullopt;

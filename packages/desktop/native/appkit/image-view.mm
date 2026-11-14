@@ -1,5 +1,7 @@
 #import "image-view.h"
 
+#include "ngn/file-system.h"
+
 #include <react/renderer/components/image/ImageEventEmitter.h>
 #include <react/renderer/components/image/ImageProps.h>
 
@@ -65,7 +67,20 @@ using namespace facebook::react;
   [_task cancel];
   _task = nil;
   self.layer.contents = nil;
-  NSURL *url = _uri ? [NSURL URLWithString:_uri] : nil;
+  // A file is drawn only inside the file boundary, and exactly the file checked.
+  std::shared_ptr<ngn::FileAccess::Use> use;
+  NSString *load = _uri;
+  if (_uri != nil) {
+    try {
+      auto source = ngn::readableSource(ngn::viewFileAccess().get(), _uri.UTF8String);
+      load = [NSString stringWithUTF8String:source.uri.c_str()];
+      use = std::move(source.use);
+    } catch (const ngn::FileRefused &refused) {
+      [self failed:[NSString stringWithUTF8String:refused.what()]];
+      return;
+    }
+  }
+  NSURL *url = load ? [NSURL URLWithString:load] : nil;
   if (url == nil) {
     if (_uri) {
       [self failed:[NSString stringWithFormat:@"Invalid image URL: %@", _uri]];
@@ -80,6 +95,8 @@ using namespace facebook::react;
   _task = [NSURLSession.sharedSession
         dataTaskWithURL:url
       completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        // The pick holding a file stays open until it is read.
+        (void)use;
         NSImage *image = data ? [[NSImage alloc] initWithData:data] : nil;
         NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class] ? ((NSHTTPURLResponse *)response).statusCode : 200;
         dispatch_async(dispatch_get_main_queue(), ^{

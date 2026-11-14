@@ -752,6 +752,9 @@ int main(int argc, const char *argv[]) {
       auto folders = ngn::appkit::fileFolders(system->appDataDirectory(), caches);
       if (settings.packaged && NSBundle.mainBundle.resourcePath != nil) {
         folders.bundle = NSBundle.mainBundle.resourcePath.UTF8String;
+      } else if (auto path = ngn::pathOfUri(bundle); path && !settings.packaged) {
+        // A dev run of an exported bundle on disk: its assets are beside it.
+        folders.bundle = [NSString stringWithUTF8String:path->c_str()].stringByDeletingLastPathComponent.UTF8String;
       }
       auto access = std::make_shared<ngn::FileAccess>(
           folders, processes.sandboxed ? folly::dynamic::array() : processes.capabilities.paths);
@@ -763,6 +766,9 @@ int main(int argc, const char *argv[]) {
       }
       return access;
     }();
+    // The views that load a source JavaScript names (images, players' views, web views, a drag out)
+    // check it against the same rules.
+    ngn::useViewFileAccess(fileAccess);
     // Kept for the process: ReactHost asks it for modules on every reload.
     static auto modules = std::make_shared<ngn::ModuleRegistry>();
     ngn::addCoreModules(
@@ -842,7 +848,7 @@ int main(int argc, const char *argv[]) {
       gHost.launcher = launcher;
       static auto opener = ngn::appkit::makeShellOpener();
       ngn::addModule(*modules, "NgNativeProcesses", [] { return ngn::makeProcessesModule(launcher, processes); });
-      ngn::addModule(*modules, "NgNativeShell", [] { return ngn::makeShellModule(opener); });
+      ngn::addModule(*modules, "NgNativeShell", [] { return ngn::makeShellModule(opener, fileAccess); });
       // The desktop Expo modules (DESKTOP_MODULES in @ng-native/expo).
       static std::shared_ptr<ngn::SecretStore> keychain = ngn::appkit::makeKeychain();
       static auto keychainService = appId;
@@ -877,7 +883,7 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches, fileAccess); });
       // expo-sqlite keeps its databases in the app's documents, under SQLite; here, in its data.
       static auto databases = system->appDataDirectory() + "/SQLite";
-      ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases); });
+      ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases, fileAccess); });
       static auto location = ngn::appkit::makeLocationSource();
       static bool noPrompts = settings.noPrompts;
       static auto geocoder = ngn::appkit::makeGeocoder();
@@ -910,9 +916,9 @@ int main(int argc, const char *argv[]) {
       // Players and recorders end with the runtime: a reload stops what the app played.
       static auto audioOutput = ngn::appkit::makeAudioOutput();
       static auto audioInput = ngn::appkit::makeAudioInput();
-      ngn::addModule(*modules, "NgNativeAudio", [] { return ngn::makeAudioModule(audioOutput, audioInput, caches + "/Audio", noPrompts); });
+      ngn::addModule(*modules, "NgNativeAudio", [] { return ngn::makeAudioModule(audioOutput, audioInput, caches + "/Audio", noPrompts, fileAccess); });
       static auto videoOutput = ngn::appkit::makeVideoOutput();
-      ngn::addModule(*modules, "NgNativeVideo", [] { return ngn::makeVideoModule(videoOutput); });
+      ngn::addModule(*modules, "NgNativeVideo", [] { return ngn::makeVideoModule(videoOutput, fileAccess); });
       static auto languageModel = ngn::appkit::makeLanguageModelEngine();
       ngn::addModule(*modules, "NgNativeLocalLlm", [] { return ngn::makeLocalLlmModule(languageModel); });
       ngn::addModule(*modules, "NgNativeScreenCapture", [] { return ngn::makeScreenCaptureModule(ngn::appkit::captureShield()); });
@@ -925,11 +931,11 @@ int main(int argc, const char *argv[]) {
       static auto imageHttp = network.http;
       static auto addressLookup = ngn::appkit::makeAddressLookup();
       ngn::addModule(*modules, "NgNativeAddressSearch", [] { return ngn::makeAddressSearchModule(addressLookup); });
-      ngn::addModule(*modules, "NgNativeAsset", [] { return ngn::makeAssetModule(imageHttp, caches); });
+      ngn::addModule(*modules, "NgNativeAsset", [] { return ngn::makeAssetModule(imageHttp, caches, fileAccess); });
       static auto symbolMeasurer = ngn::appkit::makeSymbolMeasurer();
       ngn::addModule(*modules, "NgNativeSymbol", [] { return ngn::makeSymbolModule(symbolMeasurer); });
       static auto sharePicker = ngn::appkit::makeSharePicker();
-      ngn::addModule(*modules, "NgNativeSharing", [] { return ngn::makeSharingModule(sharePicker, noPrompts); });
+      ngn::addModule(*modules, "NgNativeSharing", [] { return ngn::makeSharingModule(sharePicker, noPrompts, fileAccess); });
       static auto imageCodec = ngn::appkit::makeImageCodec();
       ngn::addModule(*modules, "NgNativeImageManipulator", [] {
         return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator", fileAccess);

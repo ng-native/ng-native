@@ -482,19 +482,37 @@ TEST_CASE("a drag hit-tests as a click does, so a view that lets points through 
 }
 
 TEST_CASE("a drag item is parsed from its prop, and one with nothing in it is none") {
+  auto everywhere = ngn::testing::readsEverywhere();
   auto item = ngn::dragItemOf(folly::dynamic::object(
-      "files", folly::dynamic::array("file:///Users/me/a%20b.md"))("text", "Hello")("url", "https://example.com/"));
+      "files", folly::dynamic::array("file:///Users/me/a%20b.md"))("text", "Hello")("url", "https://example.com/"), everywhere.get());
   REQUIRE(item);
   CHECK(item->files == std::vector<std::string>{"file:///Users/me/a%20b.md"});
   CHECK(item->text == "Hello");
   CHECK(item->url == "https://example.com/");
-  CHECK_FALSE(ngn::dragItemOf(nullptr));
-  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array())("text", nullptr)("url", nullptr)));
+  CHECK_FALSE(ngn::dragItemOf(nullptr, everywhere.get()));
+  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array())("text", nullptr)("url", nullptr), everywhere.get()));
   // Files that are not file urls are left out.
-  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array("/no/scheme", 3))));
+  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array("/no/scheme", 3)), everywhere.get()));
+}
+
+TEST_CASE("a drag item offers a file only inside the file boundary") {
+  ngn::FileAccess access({.cache = "/app/caches"}, folly::dynamic::array());
+  auto item = ngn::dragItemOf(
+      folly::dynamic::object("files", folly::dynamic::array("file:///app/caches/out.pdf", "file:///Users/me/.ssh/id_ed25519",
+                                                            "FILE:///etc/hosts", "file://localhost/app/caches/out.pdf"))(
+          "url", "file:///Users/me/Desktop/secret.txt")("text", "Hi"),
+      &access);
+  REQUIRE(item);
+  CHECK(item->files == std::vector<std::string>{"file:///app/caches/out.pdf"});
+  CHECK_FALSE(item->url);
+  // Only files outside, and nothing else: no item at all. Without file access, no file.
+  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array("file:///etc/hosts")), &access));
+  CHECK_FALSE(ngn::dragItemOf(folly::dynamic::object("files", folly::dynamic::array("file:///app/caches/out.pdf")), nullptr));
+  CHECK(ngn::dragItemOf(folly::dynamic::object("url", "file:///app/caches/out.pdf"), &access)->url == "file:///app/caches/out.pdf");
 }
 
 TEST_CASE("a press that moves on a view with a drag item drags it out, and cancels the press") {
+  ngn::testing::ViewFileAccess files(ngn::testing::readsEverywhere());
   Fixture f;
   setProps(
       f.tree, 2,

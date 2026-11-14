@@ -1,5 +1,7 @@
 #import "cg-canvas.h"
 
+#include "ngn/file-system.h"
+
 #include <cmath>
 #include <vector>
 
@@ -291,7 +293,16 @@ class CGCanvas final : public ngn::SvgCanvas {
     if ([loading containsObject:uri]) {
       return;
     }
-    NSURL *url = [NSURL URLWithString:uri];
+    // An <image> href's file only inside the file boundary, and exactly the file checked.
+    std::shared_ptr<ngn::FileAccess::Use> use;
+    NSURL *url = nil;
+    try {
+      auto source = ngn::readableSource(ngn::viewFileAccess().get(), uri.UTF8String);
+      url = [NSURL URLWithString:[NSString stringWithUTF8String:source.uri.c_str()]];
+      use = std::move(source.use);
+    } catch (const ngn::FileRefused &) {
+      return;
+    }
     if (url == nil) {
       return;
     }
@@ -299,6 +310,7 @@ class CGCanvas final : public ngn::SvgCanvas {
     void (^loaded)(void) = imageLoaded_;
     [[NSURLSession.sharedSession dataTaskWithURL:url
                                completionHandler:^(NSData *data, NSURLResponse *, NSError *) {
+                                 (void)use;
                                  NSImage *image = data ? [[NSImage alloc] initWithData:data] : nil;
                                  dispatch_async(dispatch_get_main_queue(), ^{
                                    [loading removeObject:uri];

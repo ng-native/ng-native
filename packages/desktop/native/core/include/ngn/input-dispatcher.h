@@ -26,6 +26,7 @@
 
 #include "ngn/default-menu.h"
 #include "ngn/desktop-view-props.h"
+#include "ngn/file-system.h"
 #include "ngn/input.h"
 #include "ngn/view-tree.h"
 
@@ -63,8 +64,10 @@ struct DragOutItem {
   bool operator==(const DragOutItem &) const = default;
 };
 
-// The item of a `dragItem` prop, or nothing when it is null or offers nothing.
-std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop);
+// The item of a `dragItem` prop, or nothing when it is null or offers nothing. A file (in `files`,
+// or a file `url`) is offered only inside the file boundary `files` draws (readableSource), as the
+// file uri checked; the dispatcher uses the views' (viewFileAccess).
+std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop, const FileAccess *files);
 
 // How far a press moves before it becomes a drag, in points (AppKit's own threshold).
 constexpr float kDragThreshold = 4;
