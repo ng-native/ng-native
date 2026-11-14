@@ -91,6 +91,7 @@ add_library(ngn_core STATIC
     core/src/modules/app-modules.cpp
     core/src/modules/async-storage.cpp
     core/src/modules/core-modules.cpp
+    core/src/modules/desktop-expo.cpp
     core/src/modules/image-loader.cpp
     core/src/modules/networking.cpp
     core/src/modules/web-socket.cpp)

@@ -21,6 +21,7 @@
 #import "split-view.h"
 #import "system.h"
 #import "system-access.h"
+#import "desktop-expo.h"
 #import "tray-and-dock.h"
 #import "surface-view.h"
 #include "text-layout.h"
@@ -496,6 +497,16 @@ int main(int argc, const char *argv[]) {
       static auto opener = ngn::appkit::makeShellOpener();
       ngn::addModule(*modules, "NgNativeProcesses", [] { return ngn::makeProcessesModule(launcher, processes); });
       ngn::addModule(*modules, "NgNativeShell", [] { return ngn::makeShellModule(opener); });
+      // The desktop Expo modules (DESKTOP_MODULES in @ng-native/expo).
+      static auto keychain = ngn::appkit::makeKeychain();
+      static auto keychainService = appId;
+      static auto expoSystem = system;
+      static auto awake = std::make_shared<ngn::KeepAwakeTags>(ngn::appkit::makeSleepPreventer());
+      static auto haptics = ngn::appkit::makeHapticPlayer();
+      ngn::addModule(*modules, "NgNativeSecureStore", [] { return ngn::makeSecureStoreModule(keychain, keychainService); });
+      ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem); });
+      ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
+      ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
     }
 
     gHost.runtime = std::make_unique<ngn::Runtime>(

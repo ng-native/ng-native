@@ -2,6 +2,7 @@
 # nothing from outside itself but the system's frameworks.
 add_executable(ngn-macos
     app-windows.mm
+    desktop-expo.mm
     appkit-backend.mm
     header-toolbar.mm
     host-view.mm
@@ -20,7 +21,7 @@ add_executable(ngn-macos
     system-access.mm
     text-layout.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries
-    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore")
+    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit")
 target_compile_options(ngn-macos PRIVATE -fobjc-arc -Wall -Wno-unused-parameter)
 # The React Native the host is built from, which PlatformConstants reports and React Native's
 # JavaScript checks against its own.
