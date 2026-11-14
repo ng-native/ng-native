@@ -31,6 +31,7 @@ import {
   LayoutAnimation,
   NavigationBar,
   OS,
+  Processes,
   SafeArea,
   Screen,
   Sharing,
@@ -124,6 +125,8 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   HardwareBack: device(HardwareBack, 'hardware-back', ['ios', 'macos', 'web']),
   Keyboard: device(Keyboard, 'keyboard', ['macos', 'web']),
   LayoutAnimation: device(LayoutAnimation, 'layout-animation'),
+  // The desktop host's, which is not built yet, so absent on a Mac too.
+  Processes: device(Processes, 'processes', ['ios', 'android', 'macos', 'web']),
   NavigationBar: device(NavigationBar, 'navigation-bar', ['ios', 'macos', 'web']),
   SafeArea: device(SafeArea, 'safe-area'),
   Screen: device(Screen, 'screen'),

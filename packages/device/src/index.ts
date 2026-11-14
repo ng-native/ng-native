@@ -101,6 +101,7 @@ export {
   type ParsedShortcut,
   type ShortcutOs,
 } from './shortcut.ts';
+export { Processes, type NativeProcesses } from './processes.ts';
 export { SIDEBAR_SELECTION } from './sidebar-selection.ts';
 export { WINDOW_NAVIGATOR, type WindowNavigator } from './window-navigator.ts';
 export { OS_VERSION } from './os-version.ts';
