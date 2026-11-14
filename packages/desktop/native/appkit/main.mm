@@ -25,6 +25,7 @@
 #import "system-access.h"
 #import "desktop-expo.h"
 #import "local-authentication.h"
+#import "file-system.h"
 #import "tray-and-dock.h"
 #import "updates.h"
 #import "surface-view.h"
@@ -645,7 +646,14 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
       static auto dialogs = ngn::appkit::makeFileDialogs();
       static auto caches = ngn::appkit::cacheDirectory(appId);
-      ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches); });
+      // What the app may read and write: its folders, the user's picks, and the declared paths
+      // (none in a Mac App Store build, whose sandbox reaches only picks).
+      static auto fileAccess = std::make_shared<ngn::FileAccess>(
+          ngn::appkit::fileFolders(system->appDataDirectory(), caches),
+          processes.sandboxed ? folly::dynamic::array() : processes.capabilities.paths);
+      static auto fileWatcher = ngn::appkit::makeFileWatcher();
+      ngn::addModule(*modules, "NgNativeFileSystem", [] { return ngn::makeFileSystemModule(fileAccess, fileWatcher); });
+      ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches, fileAccess); });
       // expo-sqlite keeps its databases in the app's documents, under SQLite; here, in its data.
       static auto databases = system->appDataDirectory() + "/SQLite";
       ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases); });
