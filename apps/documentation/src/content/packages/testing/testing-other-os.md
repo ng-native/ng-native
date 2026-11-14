@@ -90,8 +90,8 @@ expect(main.queryByText('Groceries')).toBeNull();
 - **`quit()`** - Cmd-Q: every window's guards, then the `willQuit` handlers. Resolves to whether
   the app agreed to quit.
 - **`reopen()`** - a click on the Dock icon with no window open, which opens the main window.
-- **`openUrl(url)`** - the app opened with a url, as a link in another app, Open With or a Dock
-  drop does, which `DeepLinks` delivers.
+- **`openUrl(url)`** - the app opened with a url, as a link to its scheme in another app does,
+  which `DeepLinks` delivers.
 
 ## The desktop's services
 

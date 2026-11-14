@@ -155,7 +155,7 @@ export interface DesktopUserEvent {
   quit(): Promise<boolean>;
   /** A click on the Dock icon with no window open, which opens the main window. */
   reopen(): Promise<void>;
-  /** Open the app with `url`, as a link in another app, Open With or a Dock drop does. */
+  /** Open the app with `url`, as a link to its scheme in another app does. */
   openUrl(url: string): Promise<void>;
   /** Scroll with a mouse wheel or a trackpad: `(wheel)`. */
   wheel(node: FakeFabricNode, delta: { deltaX?: number; deltaY?: number }): Promise<void>;

@@ -381,7 +381,7 @@ export function fakeProcesses(options: FakeProcessesOptions = {}): FakeProcesses
 export interface FakeDeepLinks extends DeepLinkSource {
   /** The urls the app asked the OS to open. */
   readonly opened: string[];
-  /** Open the app with `url`, as Open With, a Dock drop or a link in another app does. */
+  /** Open the app with `url`, as a link to its scheme in another app does. */
   emit(url: string): void;
 }
 
