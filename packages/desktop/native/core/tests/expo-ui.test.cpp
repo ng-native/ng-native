@@ -184,6 +184,24 @@ TEST_CASE("a HostView takes its content's size on the axes it matches, and its s
   CHECK(layOut(neither, {400, 600}).size == Size{400, 50});
 }
 
+TEST_CASE("an RNHostView sized from its children takes their size, not the width its container gives") {
+  auto content = [] { return node("GroupView", 3, dynamic::object("width", 120)("height", 40)); };
+  auto fitted = node("RNHostView", 2, dynamic::object("expoInternalSizeFromChildren", true), {content()});
+  CHECK(layOut(fitted, {400, 600}).size == Size{120, 40});
+
+  // Without it, it stretches across its container as any view does.
+  auto stretched = node("RNHostView", 2, dynamic::object(), {content()});
+  CHECK(layOut(stretched, {400, 600}).size == Size{400, 40});
+
+  // And it stretches again once the prop goes.
+  auto cleared = descriptor("RNHostView")
+                     .cloneShadowNode(
+                         *fitted,
+                         {.props = props(
+                              "RNHostView", dynamic::object("expoInternalSizeFromChildren", nullptr), fitted->getProps())});
+  CHECK(layOut(cleared, {400, 600}).size == Size{400, 40});
+}
+
 TEST_CASE("the views under a HostView reach the backend as one tree, with their props and event emitters") {
   Fixture f;
   auto root = shadowView(1, "RootView", {});

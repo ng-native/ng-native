@@ -49,6 +49,11 @@ NGNSearchField *makeField(NSWindow *window, Events &events) {
   return search;
 }
 
+// Runs the main queue's blocks: a blur is reported a turn after the editing ends.
+void settle() {
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+}
+
 NSTextView *editor(NGNSearchField *search) {
   return [search.field.currentEditor isKindOfClass:NSTextView.class] ? (NSTextView *)search.field.currentEditor : nil;
 }
@@ -145,14 +150,42 @@ TEST_CASE("a search field reports the keyboard going, and blur and disabling tak
   [search apply:p];
   [search focus];
   [search blur];
+  settle();
   CHECK(events.log == std::vector<std::string>{"focus", "blur"});
   CHECK((search.field.currentEditor == nil));
 
   [search focus];
   p.enabled = false;
   [search apply:p];
+  settle();
   CHECK((search.field.currentEditor == nil));
   CHECK(events.log.back() == "blur");
+  [window close];
+}
+
+TEST_CASE("a click into a search field that ends its editing and starts it again is no blur") {
+  NSWindow *window = offscreenWindow();
+  Events events;
+  NGNSearchField *search = makeField(window, events);
+  NativeControlProps p;
+  [search apply:p];
+  // What NSTextField's click does: the field takes the keyboard, then its editing ends and starts
+  // again at the click's point, with the field editor still in the field.
+  [search focus];
+  [window endEditingFor:search.field];
+  NSText *fieldEditor = [window fieldEditor:YES forObject:search.field];
+  [search.field.cell editWithFrame:search.field.bounds
+                            inView:search.field
+                            editor:fieldEditor
+                          delegate:search.field
+                             event:nil];
+  settle();
+  REQUIRE((search.field.currentEditor != nil));
+  CHECK(events.log == std::vector<std::string>{"focus"});
+
+  [search blur];
+  settle();
+  CHECK(events.log == std::vector<std::string>{"focus", "blur"});
   [window close];
 }
 

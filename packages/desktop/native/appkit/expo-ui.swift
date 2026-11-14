@@ -885,10 +885,39 @@ func uiModified(_ view: AnyView, _ modifiers: [[String: Any]]) -> AnyView {
 
 // One of expo/ui's modifiers, by its `$type`. One with no macOS meaning, or none here yet, is
 // skipped.
+/// A sheet's height in a window `window` points tall from its detents, as a macOS sheet has none:
+/// its smallest, as iOS opens a sheet at its smallest (`medium` half the window, `large` nine
+/// tenths, a fraction of it, or a height), never taller than the window. Nil for none it knows.
+func uiSheetHeight(_ detents: Any?, window: CGFloat) -> CGFloat? {
+  let heights = (detents as? [Any] ?? []).compactMap { detent -> CGFloat? in
+    switch detent {
+    case let name as String:
+      return name == "medium" ? window / 2 : name == "large" ? window * 0.9 : nil
+    case let shape as [String: Any]:
+      if let fraction = shape["fraction"] as? NSNumber { return window * CGFloat(fraction.doubleValue) }
+      if let height = shape["height"] as? NSNumber { return CGFloat(height.doubleValue) }
+      return nil
+    default:
+      return nil
+    }
+  }
+  return heights.min().map { min($0, window) }
+}
+
+@_cdecl("ngn_ui_sheet_height")
+public func ngnUISheetHeight(_ detents: UnsafePointer<CChar>, _ window: Double) -> Double {
+  let parsed = try? JSONSerialization.jsonObject(with: Data(String(cString: detents).utf8))
+  return uiSheetHeight(parsed, window: CGFloat(window)).map(Double.init) ?? -1
+}
+
 func uiModifier(_ view: AnyView, _ m: [String: Any]) -> AnyView {
   switch m["$type"] as? String {
   case "padding":
     return uiPadded(view, m)
+  case "presentationDetents":
+    // The key window's content height: a sheet opens on the window in front.
+    let window = (NSApp.keyWindow ?? NSApp.mainWindow)?.contentLayoutRect.height ?? 600
+    return uiSheetHeight(m["detents"], window: window).map { AnyView(view.frame(height: $0)) } ?? view
   case "frame":
     if m["width"] != nil || m["height"] != nil {
       return AnyView(view.frame(width: uiCGFloat(m["width"]), height: uiCGFloat(m["height"]), alignment: uiAlignment(m["alignment"])))

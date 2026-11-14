@@ -55,7 +55,28 @@ TEST_CASE("a key step names a key and its modifiers, for the key window") {
   CHECK(script.steps[2].modifiers == (ngn::InputStep::Command | ngn::InputStep::Option));
   CHECK(ngn::parseInputScript("key").error == "line 1: key needs a key");
   CHECK(ngn::parseInputScript("key r hyper").error == "line 1: unknown modifier hyper");
-  CHECK(ngn::parseInputScript("key tab").error == "line 1: unknown key tab");
+  CHECK(ngn::parseInputScript("key home").error == "line 1: unknown key home");
+}
+
+TEST_CASE("a key step names space, tab and delete by name") {
+  auto script = ngn::parseInputScript("key space\nkey tab shift\nkey delete");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 3);
+  CHECK(script.steps[0].key == "space");
+  CHECK(script.steps[1].key == "tab");
+  CHECK(script.steps[1].modifiers == ngn::InputStep::Shift);
+  CHECK(script.steps[2].key == "delete");
+}
+
+TEST_CASE("a type step types the rest of its line, inner spaces and all, into the focused field") {
+  auto script = ngn::parseInputScript("type  \"teh\" wrold -- ok # a comment\ntype a");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 2);
+  CHECK(script.steps[0].kind == Kind::Type);
+  CHECK(script.steps[0].key == "\"teh\" wrold -- ok");
+  CHECK(script.steps[1].key == "a");
+  CHECK(ngn::parseInputScript("type").error == "line 1: type needs some text");
+  CHECK(ngn::parseInputScript("type   ").error == "line 1: type needs some text");
 }
 
 TEST_CASE("a choose step names the item, spaces and all, that the next menu to open picks") {

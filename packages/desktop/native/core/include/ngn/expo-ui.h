@@ -60,6 +60,9 @@ class ExpoUIProps final : public facebook::react::ViewProps {
   // The HostView's, read here for layout.
   bool matchContentsHorizontal{false};
   bool matchContentsVertical{false};
+  // An RNHostView sized from the app's views it holds (`expoInternalSizeFromChildren`, which
+  // `matchContents` sets), as iOS measures it, rather than stretched across its container.
+  bool sizeFromChildren{false};
 };
 
 // The size of a HostView's SwiftUI content, as the toolkit measured it. Zero until it reports.
@@ -77,7 +80,8 @@ class ExpoUIShadowNode final : public facebook::react::ConcreteViewShadowNode<
  public:
   using ConcreteViewShadowNode::ConcreteViewShadowNode;
 
-  // Takes the content size the state holds on each axis the props match, over the style's.
+  // Takes the content size the state holds on each axis the props match, over the style's, and
+  // fits a view sized from its children to them.
   void applyContentSize();
 };
 

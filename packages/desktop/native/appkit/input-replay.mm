@@ -117,19 +117,25 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
 }
 
 // A key press and its release, to the key window (a red box or a sheet, not only the app's).
-void sendKey(const InputStep &step) {
-  NSWindow *window = NSApp.keyWindow;
-  if (window == nil) {
-    return;
-  }
+void sendKey(NSWindow *scriptWindow, const InputStep &step) {
+  NSWindow *window = NSApp.keyWindow != nil ? NSApp.keyWindow : scriptWindow;
   NSString *characters = step.key == "escape" ? @"\x1b"
       : step.key == "return"                  ? @"\r"
+      : step.key == "space"                   ? @" "
+      : step.key == "tab"                     ? @"\t"
+      : step.key == "delete"                  ? @"\x7f"
                                               : [NSString stringWithUTF8String:step.key.c_str()];
-  unsigned short code = step.key == "escape" ? 53 : step.key == "return" ? 36 : 0;
+  unsigned short code = step.key == "escape" ? 53
+      : step.key == "return"                 ? 36
+      : step.key == "space"                  ? 49
+      : step.key == "tab"                    ? 48
+      : step.key == "delete"                 ? 51
+                                             : 0;
   // A character typed into text goes in as the input method puts it, through NSTextInputClient: a
   // made-up key event reaches the field editor's keyDown, but the text system inserts nothing for
   // one no keyboard sent.
-  bool typed = step.key.size() == 1 && (step.modifiers & (InputStep::Command | InputStep::Control)) == 0;
+  bool typed = (step.key.size() == 1 || step.key == "space") &&
+      (step.modifiers & (InputStep::Command | InputStep::Control)) == 0;
   id responder = window.firstResponder;
   if (typed && [responder conformsToProtocol:@protocol(NSTextInputClient)]) {
     [(id<NSTextInputClient>)responder insertText:characters replacementRange:NSMakeRange(NSNotFound, 0)];
@@ -153,6 +159,22 @@ void sendKey(const InputStep &step) {
                                        keyCode:code];
     [NSApp sendEvent:event];
   }
+}
+
+// Types `text` into the key window's focused field (the script's window's when none is key) a character at a time, each as the input
+// method puts a keystroke's character, so the text system's substitutions and capitals follow
+// each one as they follow typing.
+void typeText(NSWindow *window, NSString *text) {
+  id responder = (NSApp.keyWindow != nil ? NSApp.keyWindow : window).firstResponder;
+  if (![responder conformsToProtocol:@protocol(NSTextInputClient)]) {
+    return;
+  }
+  [text enumerateSubstringsInRange:NSMakeRange(0, text.length)
+                           options:NSStringEnumerationByComposedCharacterSequences
+                        usingBlock:^(NSString *character, NSRange, NSRange, BOOL *) {
+                          [(id<NSTextInputClient>)responder insertText:character
+                                                     replacementRange:NSMakeRange(NSNotFound, 0)];
+                        }];
 }
 
 // The title a choose step left for the next menu to open, and the observer waiting for it.
@@ -211,7 +233,10 @@ void play(NSWindow *window, const InputStep &step) {
       chooseInNextMenu([NSString stringWithUTF8String:step.key.c_str()]);
       break;
     case InputStep::Kind::Key:
-      sendKey(step);
+      sendKey(window, step);
+      break;
+    case InputStep::Kind::Type:
+      typeText(window, [NSString stringWithUTF8String:step.key.c_str()]);
       break;
     case InputStep::Kind::Wait:
       break;

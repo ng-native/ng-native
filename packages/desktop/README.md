@@ -63,7 +63,9 @@ gives it no view of its own yet. Not there yet: `hitSlop`, the library's own com
 A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
 (`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
 AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
-goes to the key window, and a character is typed into a focused text field. A scroll or gesture
+goes to the key window (a character, `space`, `tab`, `delete`, `escape` or `return`), and a
+character or a space is typed into a focused text field; a `type` step types the rest of its line
+there a character at a time, so smart quotes and capitals follow it. A scroll or gesture
 goes to the view under its point, wherever the real pointer is, so a web view scrolls and a map
 pans and zooms. A `secondary` step is a secondary click. The steps after a `down` go on from a run
 loop timer, so a view that tracks the press in a loop of its own (a source list row) gets its `up`
@@ -299,7 +301,11 @@ views draw nothing of their own. A control keeps what the user set until its pro
 sends expo/ui's iOS event with its payload (`selectionChange`, `dateChange`, `isOnChange`,
 `valueChanged` and the rest). A HostView with `matchContents` takes its content's fitting size
 on the axes it matches, reported as its state, as `setViewSize` does on iOS. An `RNHostView`
-holds the app's own views in the SwiftUI content at their Yoga size.
+holds the app's own views in the SwiftUI content at their Yoga size, fitted to them rather than
+stretched across its container with `matchContents`, as iOS measures it (`layoutRoot`, which takes
+SwiftUI's size into Yoga on iOS, is not taken yet). A sheet opens at its smallest
+`presentationDetents` height in the window (`medium` half of it, `large` nine tenths), as a macOS
+sheet has no detents.
 
 Every view whose SwiftUI type exists on macOS is drawn; `EXPO_UI_MACOS` in `@ng-native/expo`
 names each iOS view's SwiftUI view or the reason it is absent (`AccessoryWidgetBackgroundView`,
@@ -475,8 +481,10 @@ SwiftUI's on macOS).
 the source nearest the view's size in pixels, placed by `contentFit` and `contentPosition`, with
 its `tintColor` and `blurRadius`, faded in over `transition`'s duration (every effect is a
 cross-dissolve). The placeholder shows until the image arrives, a `blurhash:` or `thumbhash:` one
-decoded in the core. Remote images are kept by `cachePolicy` in memory (64 MB) and on disk in the
-app's caches, by their `cacheKey` or url; `file:` and `data:` sources are read each time. It sends
+decoded in the core. A `recyclingKey` changed from one key to another clears the image shown at
+once, so a reused view never shows the last item's image while its own loads. Remote images are
+kept by `cachePolicy` in memory (64 MB) and on disk in the app's caches, by their `cacheKey` or url;
+`file:` and `data:` sources are read each time. It sends
 `loadStart`, `load` (with `cacheType` and the source's size and media type), `error` and
 `display`. Animated images show their first frame, and `expo-image`'s module (prefetch, clearing
 the caches) is not there.
@@ -580,8 +588,10 @@ Run it from the app's directory. The app's Expo config must list `macos` in `exp
 With no bundle, the host loads
 `http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=macos&dev=true` straight from the
 dev server and stays connected to it: an edit Fast Refreshes and keeps state, the dev server's
-reload reloads, and so does Developer > Reload (Command-R). A bundle path (from
-`npx expo export -p macos`) or another URL can be given instead.
+reload reloads, and so does Developer > Reload (Command-R). A bundle path or another URL can be
+given instead. A bundle's images and other assets are read beside it as React Native lays them out
+for an embedded bundle, so make it with `npx expo export:embed --platform macos --dev false
+--bundle-output <dir>/main.jsbundle --assets-dest <dir>`; `npx expo export` puts them elsewhere.
 
 The host is built against the app's own `react-native` (0.88), the first time into
 `~/Library/Caches/ng-native/desktop/rn-<version>`, which takes about 4 minutes on an Apple silicon

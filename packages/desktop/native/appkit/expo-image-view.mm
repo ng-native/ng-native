@@ -29,6 +29,7 @@ struct Shown {
   std::optional<ngn::ImageSourceRef> _source;
   std::optional<ngn::ImageSourceRef> _placeholderSource;
   uint64_t _generation;
+  std::string _recyclingKey;
 }
 
 + (void)useHttp:(std::shared_ptr<ngn::Http>)http cache:(std::shared_ptr<ngn::ImageCache>)cache {
@@ -64,6 +65,11 @@ struct Shown {
   if (!props || self.bounds.size.width <= 0 || self.bounds.size.height <= 0) {
     return;
   }
+  if (ngn::recyclingKeyClears(_recyclingKey, props->recyclingKey)) {
+    _image.set(nullptr);
+    [self setNeedsDisplay:YES];
+  }
+  _recyclingKey = props->recyclingKey;
   double scale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
   auto placeholder = ngn::bestImageSource(ngn::imageSources(props->placeholder), self.bounds.size.width, self.bounds.size.height, scale);
   if (placeholder != _placeholderSource) {

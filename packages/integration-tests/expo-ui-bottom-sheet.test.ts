@@ -83,11 +83,11 @@ function fakeHide() {
 }
 
 async function boot<T = Fixture>(
-  platform: 'ios' | 'android',
+  platform: 'ios' | 'android' | 'macos',
   options: { fixture?: Type<T>; functions?: unknown; toolbar?: boolean } = {},
 ) {
   registerPlatformComponents(platform);
-  registerExpoUiViews(platform);
+  registerExpoUiViews(platform as 'ios' | 'android');
   const fabric = createFakeFabric();
   const app = mount(1, (options.fixture ?? Sheet) as Type<T>, fabric, {
     conditions: { width: 390, height: 844, colorScheme: 'light' },
@@ -118,6 +118,16 @@ function modifiersOf(node: FakeFabricNode): Record<string, Record<string, unknow
   const modifiers = (node.props['modifiers'] ?? []) as { $type: string }[];
   return Object.fromEntries(modifiers.map((modifier) => [modifier.$type, modifier]));
 }
+
+describe('a bottom sheet on macOS, which the desktop host draws in SwiftUI as on iOS', () => {
+  it('is the SwiftUI sheet, presented when the model opens, and no Compose sheet', async () => {
+    const { named, every, instance, pass } = await boot('macos');
+    instance.open.set(true);
+    await pass();
+    assert.equal(named(/ExpoUI_BottomSheetView$/)?.props['isPresented'], true);
+    assert.deepEqual(every(/ModalBottomSheetView$/), []);
+  });
+});
 
 describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
   it('is in the tree while closed, not presented, with its content left out', async () => {

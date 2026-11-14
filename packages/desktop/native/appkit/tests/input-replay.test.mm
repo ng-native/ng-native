@@ -82,3 +82,23 @@ TEST_CASE("a choose step picks the item with its title in the next menu that ope
   opens(menuOf(@[ @"United States" ]));
   CHECK((target.chosen == nil));
 }
+
+TEST_CASE("a type step types its text, spaces and all, into the focused field a character at a time") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(10, 10, 200, 24)];
+  [window.contentView addSubview:field];
+  REQUIRE([window makeFirstResponder:field]);
+
+  auto script = ngn::parseInputScript("type hello big\nkey space\ntype world");
+  REQUIRE_FALSE(script.error);
+  for (const auto &step : script.steps) {
+    ngn::appkit::playInputStep(window, step);
+  }
+  CHECK([field.currentEditor.string isEqualToString:@"hello big world"]);
+  [window close];
+}
