@@ -15,6 +15,10 @@ label is the text inside it.
 <native-button kind="cancel" (press)="close()">Cancel</native-button>
 ```
 
+On iOS 26 and later it is a glass button, `default` the prominent one, and a filled or grey button
+before. The iOS button is native code in `@ng-native/components`, so it draws in a development
+build and not in Expo Go.
+
 It is a button to a screen reader on every OS, and it takes focus. `[disabled]` stops presses and
 greys it out.
 
@@ -24,7 +28,7 @@ greys it out.
   Return and a `cancel` one takes Escape in its window. Unset, the button is a plain push button
   that takes neither key.
 - **`controlSize`** - `mini`, `small`, `regular` or `large`: AppKit's control sizes on macOS, and
-  UIKit's on iOS 26 and later. Android and the web ignore it. `regular` when unset.
+  UIKit's button sizes on iOS. Android and the web ignore it. `regular` when unset.
 - **`sfSymbol`** - an SF Symbol beside the label, on iOS and macOS.
 - **`drawable`** - a drawable resource beside the label, on Android.
 - **`icon`** - either of the two as one value, `{ sfSymbol }` or `{ drawable }`, as on

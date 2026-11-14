@@ -141,7 +141,9 @@
     "directory": "packages/components"
   },
   "files": [
-    "dist"
+    "dist",
+    "ios",
+    "expo-module.config.json"
   ],
   "devDependencies": {
     "@angular/core": "22.2.0",

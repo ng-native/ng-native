@@ -74,4 +74,4 @@ each fires only on a desktop OS.
 ## Not on a Mac
 
 `refresh-control`, `input-accessory-view` and `full-window-overlay` are a plain view. `controlSize`
-sizes the native controls on macOS and on iOS 26 and later, and Android ignores it.
+sizes the native controls on macOS and `<native-button>` on iOS, and Android ignores it.

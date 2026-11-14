@@ -49,7 +49,7 @@ export class NativeButton extends ControlBase {
    * it is a plain push button that takes neither.
    */
   readonly kind = input<ButtonKind>();
-  /** AppKit's control size on macOS, and UIKit's on iOS 26 and later. Ignored elsewhere. */
+  /** AppKit's control size on macOS, and UIKit's button size on iOS. Ignored elsewhere. */
   readonly controlSize = input<ControlSize>();
   /** An SF Symbol beside the label, on iOS and macOS. */
   readonly sfSymbol = input<string>();

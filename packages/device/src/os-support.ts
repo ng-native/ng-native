@@ -120,7 +120,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`controlSize`',
     ['controlSize'],
-    ['yes', 'iOS 26 and later', 'iOS 26 and later', 'ignored', 'ignored'],
+    ['yes', '`<native-button>`', '`<native-button>`', 'ignored', 'ignored'],
   ),
   row('`anchor` on `<modal>`', ['anchor'], ['popover', 'popover', 'ignored', 'ignored', 'ignored']),
   row(
