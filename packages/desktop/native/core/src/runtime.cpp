@@ -212,6 +212,20 @@ void Runtime::reload(std::function<void(bool)> done) {
   }).detach();
 }
 
+void Runtime::reload(std::string bundle, std::function<void(bool)> done) {
+  if (devServer_) {
+    if (done) {
+      done(false);
+    }
+    return;
+  }
+  {
+    std::lock_guard lock(mutex_);
+    bundle_ = std::move(bundle);
+  }
+  reload(std::move(done));
+}
+
 void Runtime::shutdown() {
   std::lock_guard lock(mutex_);
   if (host_) {

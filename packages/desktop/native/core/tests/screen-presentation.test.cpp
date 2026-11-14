@@ -132,6 +132,25 @@ TEST_CASE("a presented screen leaves the screen under it showing, its header in 
         Lines{"cover 10", "cover 20", "unpresent 20", "unpresent 30", "header 35 of 30 with back"});
 }
 
+TEST_CASE("a cover's header takes the window's toolbar while it is presented, a sheet's does not") {
+  Fixture f;
+  f.mount(f.add(screen(10), 0, true));
+  // A cover fills the window under its toolbar, so its header is the toolbar's, with nothing to
+  // go back to: on iOS a full-screen modal has a navigation bar of its own.
+  f.mount(f.add(screen(20, "fullScreenModal"), 1, true));
+  CHECK(f.calls() == Lines{"present 20", "header 25 of 20"});
+
+  // A sheet over the cover draws its own header; the toolbar keeps the cover's.
+  f.mount(f.add(screen(30, "formSheet"), 2, true));
+  CHECK(f.calls() == Lines{"present 30"});
+
+  // Dismissed, the cover gives the toolbar back to the screen under it.
+  f.mount({ShadowViewMutation::RemoveMutation(2, screen(30, "formSheet"), 2), ShadowViewMutation::DeleteMutation(screen(30, "formSheet"))});
+  f.mount({ShadowViewMutation::RemoveMutation(2, screen(20, "fullScreenModal"), 1),
+           ShadowViewMutation::DeleteMutation(screen(20, "fullScreenModal"))});
+  CHECK(f.calls() == Lines{"header 15 of 10"});
+}
+
 TEST_CASE("a sheet's header is a heading and a row of buttons, Cancel first and the last one default") {
   ngn::HeaderBar header{.title = "Filters", .left = {button("cancel", "Cancel")}, .right = {button("reset", "Reset"), button("done", "Done")}};
   auto chrome = ngn::sheetChrome(header, ModalPresentation::Sheet);

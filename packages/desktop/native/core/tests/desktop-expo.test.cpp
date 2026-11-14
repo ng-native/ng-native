@@ -3,6 +3,9 @@
 
 #include <doctest/doctest.h>
 
+#include <filesystem>
+#include <fstream>
+
 using folly::dynamic;
 
 namespace {
@@ -113,4 +116,182 @@ TEST_CASE("each haptics call plays the trackpad's matching feedback") {
   ask(*module, "notificationAsync", dynamic::array("success"));
   using P = ngn::HapticPlayer::Pattern;
   CHECK(recorder->played == std::vector<P>{P::Generic, P::Alignment, P::LevelChange});
+}
+
+namespace {
+
+struct FixedLocales final : ngn::LocaleSource {
+  std::vector<ngn::LocaleFacts> preferred;
+  ngn::CalendarFacts calendar;
+  std::vector<ngn::LocaleFacts> locales() override {
+    return preferred;
+  }
+  ngn::CalendarFacts calendars() override {
+    return calendar;
+  }
+};
+
+} // namespace
+
+TEST_CASE("Localization answers expo-localization's locales and calendars") {
+  auto source = std::make_shared<FixedLocales>();
+  ngn::LocaleFacts formats{
+      .decimalSeparator = ",",
+      .groupingSeparator = ".",
+      .measurementSystem = "Metric",
+      .currencyCode = "EUR",
+      .currencySymbol = "€",
+      .temperatureUnit = "celsius",
+  };
+  auto german = formats;
+  german.languageTag = "de-DE";
+  auto arabic = formats;
+  arabic.languageTag = "ar";
+  arabic.rightToLeft = true;
+  auto british = formats;
+  british.languageTag = "en-GB";
+  british.measurementSystem = "U.K.";
+  auto chinese = formats;
+  chinese.languageTag = "zh-Hant-TW";
+  chinese.measurementSystem = "U.S.";
+  source->preferred = {german, arabic, british, chinese};
+  source->calendar = {.calendar = "gregorian", .timeZone = "Europe/Berlin", .uses24hourClock = true, .firstWeekday = 2};
+  auto module = ngn::makeLocalizationModule(source, "DE");
+
+  auto locales = module->call("getLocales");
+  REQUIRE(locales.size() == 4);
+  CHECK(locales[0] == dynamic::object("languageTag", "de-DE")("languageCode", "de")("languageScriptCode", nullptr)(
+                          "regionCode", "DE")("languageRegionCode", "DE")("textDirection", "ltr")(
+                          "decimalSeparator", ",")("digitGroupingSeparator", ".")("measurementSystem", "metric")(
+                          "currencyCode", "EUR")("currencySymbol", "€")("languageCurrencyCode", "EUR")(
+                          "languageCurrencySymbol", "€")("temperatureUnit", "celsius"));
+  // A tag with no region takes the system's, as on iOS; its language's own region stays null.
+  CHECK(locales[1]["textDirection"] == "rtl");
+  CHECK(locales[1]["regionCode"] == "DE");
+  CHECK(locales[1]["languageRegionCode"] == nullptr);
+  CHECK(locales[2]["measurementSystem"] == "uk");
+  CHECK(locales[3]["languageCode"] == "zh");
+  CHECK(locales[3]["languageScriptCode"] == "Hant");
+  CHECK(locales[3]["languageRegionCode"] == "TW");
+  CHECK(locales[3]["measurementSystem"] == "us");
+
+  CHECK(module->call("getCalendars") == dynamic::array(dynamic::object("calendar", "gregorian")("timeZone", "Europe/Berlin")(
+                                            "uses24hourClock", true)("firstWeekday", 2)));
+
+  // Never an empty list: Locale's first one is the one to format with.
+  source->preferred.clear();
+  auto fallback = module->call("getLocales");
+  REQUIRE(fallback.size() == 1);
+  CHECK(fallback[0]["languageTag"] == "en-DE");
+}
+
+namespace {
+
+namespace fs = std::filesystem;
+
+struct ScriptedDialogs final : ngn::FileDialogs {
+  std::vector<std::string> log;
+  std::optional<std::vector<std::string>> picked;
+  std::optional<std::string> savedAt;
+  std::optional<std::string> folder;
+  void openFiles(const OpenRequest &request, std::function<void(std::optional<std::vector<std::string>>)> done) override {
+    std::string types;
+    for (const auto &t : request.types) {
+      types += t + " ";
+    }
+    log.push_back("open " + types + (request.multiple ? "multiple" : "one"));
+    done(picked);
+  }
+  void saveFile(const SaveRequest &request, std::function<void(std::optional<std::string>)> done) override {
+    log.push_back("save " + request.suggestedName + " " + (request.types.empty() ? "" : request.types[0]));
+    done(savedAt);
+  }
+  void chooseFolder(std::function<void(std::optional<std::string>)> done) override {
+    log.push_back("folder");
+    done(folder);
+  }
+};
+
+struct TempDir {
+  fs::path path = fs::temp_directory_path() / ("ngn-docs-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
+  TempDir() {
+    fs::remove_all(path);
+    fs::create_directories(path);
+  }
+  ~TempDir() {
+    fs::remove_all(path);
+  }
+};
+
+void writeText(const fs::path &file, const std::string &text) {
+  std::ofstream(file, std::ios::binary) << text;
+}
+
+std::string readText(const fs::path &file) {
+  std::ifstream in(file, std::ios::binary);
+  return std::string(std::istreambuf_iterator<char>(in), {});
+}
+
+} // namespace
+
+TEST_CASE("DocumentPicker opens files as expo-document-picker answers them, copied to the cache by default") {
+  TempDir home;
+  TempDir cache;
+  writeText(home.path / "notes.txt", "hello");
+  writeText(home.path / "photo.PNG", "png bytes");
+  auto dialogs = std::make_shared<ScriptedDialogs>();
+  auto module = ngn::makeDocumentPickerModule(dialogs, cache.path.string());
+
+  dialogs->picked = std::vector<std::string>{(home.path / "notes.txt").string(), (home.path / "photo.PNG").string()};
+  auto picked = ask(*module, "getDocumentAsync", dynamic::array(dynamic::object("type", dynamic::array("text/plain", "image/*"))("multiple", true)));
+  REQUIRE(picked.value);
+  CHECK(dialogs->log == Lines{"open text/plain image/* multiple"});
+  CHECK((*picked.value)["canceled"] == false);
+  const auto &assets = (*picked.value)["assets"];
+  REQUIRE(assets.size() == 2);
+  CHECK(assets[0]["name"] == "notes.txt");
+  CHECK(assets[0]["size"] == 5);
+  CHECK(assets[0]["mimeType"] == "text/plain");
+  CHECK(assets[1]["mimeType"] == "image/png");
+  // A copy in the cache, so it can be read after the user moves the original.
+  auto uri = assets[0]["uri"].asString();
+  CHECK(uri.rfind("file://" + cache.path.string(), 0) == 0);
+  CHECK(readText(uri.substr(7)) == "hello");
+
+  // Without the copy, the file where it is.
+  dialogs->picked = std::vector<std::string>{(home.path / "notes.txt").string()};
+  auto direct = ask(*module, "getDocumentAsync", dynamic::array(dynamic::object("copyToCacheDirectory", false)));
+  CHECK((*direct.value)["assets"][0]["uri"] == "file://" + (home.path / "notes.txt").string());
+
+  // Dismissed: canceled, no assets.
+  dialogs->picked = std::nullopt;
+  auto cancelled = ask(*module, "getDocumentAsync", dynamic::array());
+  CHECK((*cancelled.value)["canceled"] == true);
+  CHECK((*cancelled.value)["assets"] == nullptr);
+}
+
+TEST_CASE("DocumentPicker saves text or base64 bytes where the save panel says, and picks a folder") {
+  TempDir home;
+  auto dialogs = std::make_shared<ScriptedDialogs>();
+  auto module = ngn::makeDocumentPickerModule(dialogs, home.path.string());
+
+  dialogs->savedAt = (home.path / "export.csv").string();
+  auto saved = ask(*module, "saveDocumentAsync", dynamic::array(dynamic::object("suggestedName", "export.csv")(
+                                                     "contents", "a,b\n")("types", dynamic::array("text/csv"))));
+  CHECK(dialogs->log == Lines{"save export.csv text/csv"});
+  CHECK(saved.value == dynamic("file://" + (home.path / "export.csv").string()));
+  CHECK(readText(home.path / "export.csv") == "a,b\n");
+
+  // Bytes come as base64, which a TurboModule carries where a Uint8Array would not.
+  dialogs->savedAt = (home.path / "blob.bin").string();
+  ask(*module, "saveDocumentAsync", dynamic::array(dynamic::object("suggestedName", "blob.bin")("contents", dynamic::object("base64", "AAEC"))));
+  CHECK(readText(home.path / "blob.bin") == std::string("\x00\x01\x02", 3));
+
+  dialogs->savedAt = std::nullopt;
+  CHECK(ask(*module, "saveDocumentAsync", dynamic::array(dynamic::object("suggestedName", "x.txt")("contents", "x"))).value == dynamic(nullptr));
+
+  dialogs->folder = home.path.string();
+  CHECK(ask(*module, "pickDirectoryAsync", dynamic::array()).value == dynamic(dynamic::object("uri", "file://" + home.path.string())));
+  dialogs->folder = std::nullopt;
+  CHECK(ask(*module, "pickDirectoryAsync", dynamic::array()).value == dynamic(nullptr));
 }

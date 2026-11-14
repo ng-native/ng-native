@@ -45,6 +45,15 @@ void NativeModule::listeners() {
   async("removeListeners", [](const folly::dynamic &, std::vector<JsCallback>) {});
 }
 
+void NativeModule::property(const std::string &name, std::function<folly::dynamic()> fn) {
+  properties_[name] = std::move(fn);
+}
+
+folly::dynamic NativeModule::property(const std::string &name) const {
+  auto it = properties_.find(name);
+  return it == properties_.end() ? folly::dynamic(nullptr) : it->second();
+}
+
 void NativeModule::constants(std::function<folly::dynamic()> fn) {
   sync("getConstants", [fn = std::move(fn)](const folly::dynamic &) { return fn(); });
 }
@@ -98,6 +107,9 @@ class Adapter final : public TurboModule {
 
   jsi::Value create(jsi::Runtime &rt, const jsi::PropNameID &propName) override {
     std::string name = propName.utf8(rt);
+    if (auto property = module_->properties().find(name); property != module_->properties().end()) {
+      return toJs(rt, property->second());
+    }
     auto it = module_->methods().find(name);
     if (it == module_->methods().end()) {
       return jsi::Value::undefined();

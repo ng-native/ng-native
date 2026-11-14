@@ -13,6 +13,7 @@
 
 #include <react/renderer/graphics/RectangleEdges.h>
 
+#include <optional>
 #include <unordered_map>
 
 namespace ngn {
@@ -44,14 +45,18 @@ class SafeAreas {
   void setContainer(Tag root, const ContainerInsets &metrics);
   void removeContainer(Tag root);
 
-  // Brings every safe-area view up to date with the tree and the containers.
-  void settle(const ViewTree &tree);
+  // Brings every safe-area view up to date with the tree and the containers. True when it told
+  // any of them something new.
+  bool settle(const ViewTree &tree);
 
  protected:
   // Where the insets leave the core: the provider's event, and the views' state through the
   // library's glue. Tests record them instead.
   virtual void emitInsetsChange(const ViewTree::Node &provider, EdgeInsets insets, Rect frame, double titlebarLeading);
   virtual void setStateInsets(const ViewTree::Node &view, EdgeInsets insets);
+  // The margin a view's mounted state adds for its insets, for a view that moves itself by them
+  // (library-glue.h); nothing for one that pads its content instead.
+  virtual std::optional<EdgeInsets> appliedMargin(const ViewTree::Node &view) const;
 
  private:
   enum class Kind { Provider, View };

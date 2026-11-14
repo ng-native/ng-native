@@ -1,5 +1,7 @@
 #include "ngn/module-registry.h"
 
+#include <ReactCommon/CxxTurboModuleUtils.h>
+
 using namespace facebook::react;
 
 namespace ngn {
@@ -21,6 +23,12 @@ std::shared_ptr<TurboModule> ModuleRegistry::module(
     }
   }
   if (auto it = factories_.find(name); it != factories_.end()) {
+    return it->second(jsInvoker);
+  }
+  // Autolinked libraries' and the app's own modules, which register themselves as they load, the
+  // way React Native's iOS host finds a C++ TurboModule.
+  auto &linked = globalExportedCxxTurboModuleMap();
+  if (auto it = linked.find(name); it != linked.end()) {
     return it->second(jsInvoker);
   }
   return nullptr;

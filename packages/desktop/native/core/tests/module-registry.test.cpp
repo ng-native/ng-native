@@ -1,5 +1,7 @@
 #include "ngn/module-registry.h"
 
+#include <ReactCommon/CxxTurboModuleUtils.h>
+
 #include <doctest/doctest.h>
 
 using namespace facebook::react;
@@ -59,4 +61,22 @@ TEST_CASE("ReactHost asks the registry through its providers") {
   // Modules added after the providers were taken are still found.
   registry.add("AppState", [](const auto &invoker) { return named("AppState", invoker); });
   CHECK(nameOf(providers[0]("AppState", nullptr)) == "AppState");
+}
+
+TEST_CASE("a module a library registers in React Native's C++ module map comes after the host's own") {
+  // What an autolinked library's desktop code does as it loads, as React Native's iOS host has it.
+  registerCxxModuleToGlobalModuleMap("LinkedMath", [](auto invoker) { return named("linked LinkedMath", invoker); });
+  registerCxxModuleToGlobalModuleMap("Appearance", [](auto invoker) { return named("linked Appearance", invoker); });
+  struct Restore {
+    ~Restore() {
+      globalExportedCxxTurboModuleMap().erase("LinkedMath");
+      globalExportedCxxTurboModuleMap().erase("Appearance");
+    }
+  } restore;
+  ngn::ModuleRegistry registry;
+  registry.add("Appearance", [](const auto &invoker) { return named("core Appearance", invoker); });
+
+  CHECK(nameOf(registry.module("LinkedMath", nullptr)) == "linked LinkedMath");
+  CHECK(nameOf(registry.module("Appearance", nullptr)) == "core Appearance");
+  CHECK(nameOf(registry.providers()[0]("LinkedMath", nullptr)) == "linked LinkedMath");
 }

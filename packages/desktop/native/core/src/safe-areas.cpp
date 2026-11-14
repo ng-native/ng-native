@@ -38,7 +38,8 @@ void SafeAreas::removeContainer(Tag root) {
   containers_.erase(root);
 }
 
-void SafeAreas::settle(const ViewTree &tree) {
+bool SafeAreas::settle(const ViewTree &tree) {
+  bool told = false;
   for (auto &[tag, tracked] : tracked_) {
     // The container the view is in: the nearest ancestor with metrics.
     const ContainerInsets *container = nullptr;
@@ -58,12 +59,23 @@ void SafeAreas::settle(const ViewTree &tree) {
       continue;
     }
     Rect frame{*origin, node->view.layoutMetrics.frame.size};
-    auto insets = insetsWithin(*container, frame);
+    // A view that moves itself by its insets is measured from where it would be without them, as
+    // iOS measures it against its provider; from where the margin put it, it would be told it is
+    // clear, drop the margin, and move back.
+    Rect unmoved = frame;
+    if (auto margin = tracked.kind == Kind::View ? appliedMargin(*node) : std::nullopt) {
+      unmoved.origin.x -= margin->left;
+      unmoved.origin.y -= margin->top;
+      unmoved.size.width += margin->left + margin->right;
+      unmoved.size.height += margin->top + margin->bottom;
+    }
+    auto insets = insetsWithin(*container, unmoved);
     bool changed = !tracked.known || insets != tracked.insets ||
         (tracked.kind == Kind::Provider && frame != tracked.frame);
     if (!changed) {
       continue;
     }
+    told = true;
     tracked.known = true;
     tracked.insets = insets;
     tracked.frame = frame;
@@ -73,6 +85,7 @@ void SafeAreas::settle(const ViewTree &tree) {
       setStateInsets(*node, insets);
     }
   }
+  return told;
 }
 
 void SafeAreas::emitInsetsChange(const ViewTree::Node &provider, EdgeInsets insets, Rect frame, double titlebarLeading) {
@@ -98,6 +111,19 @@ void SafeAreas::setStateInsets(const ViewTree::Node &view, EdgeInsets insets) {
       return;
     }
   }
+}
+
+} // namespace ngn
+
+namespace ngn {
+
+std::optional<EdgeInsets> SafeAreas::appliedMargin(const ViewTree::Node &view) const {
+  for (const auto &read : libraryGlue().safeAreaMargins) {
+    if (auto margin = read(view.view)) {
+      return margin;
+    }
+  }
+  return std::nullopt;
 }
 
 } // namespace ngn

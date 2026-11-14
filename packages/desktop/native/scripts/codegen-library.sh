@@ -2,7 +2,11 @@
 # Generates a library's Fabric component codegen for the host build, the way React Native's
 # Android build does for its C++ half, and prints the directory the CMake build reads it from.
 #
-#   codegen-library.sh <node_modules/react-native> <node_modules/library>
+#   codegen-library.sh <node_modules/react-native> <node_modules/library> [--modules]
+#
+# --modules is for an autolinked library (cmake/linked-modules.cmake): its TurboModule spec's
+# codegen only, the <Name>JSI.h its C++ module implements, in <cache>/linked/<name>. A library
+# with no codegen config prints nothing, since its module needs none.
 #
 # The directory, <cache>/libraries/<name>, holds:
 #   codegen/react/renderer/components/<name>/   the codegen output (props, events, shadow nodes)
@@ -19,6 +23,11 @@ RN_PKG="$(cd "${1:?usage: codegen-library.sh <react-native> <library>}" && pwd -
 LIB="$(cd "${2:?usage: codegen-library.sh <react-native> <library>}" && pwd -P)"
 RN_VERSION="$(node -p "require('$RN_PKG/package.json').version")"
 CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
+modules=0
+[ "${3:-}" = "--modules" ] && modules=1
+if [ "$modules" = 1 ] && ! node -e 'process.exit(require(process.argv[1]).codegenConfig?.name ? 0 : 1)' "$LIB/package.json"; then
+  exit 0
+fi
 
 # name, version and the descriptor list, one per line.
 info="$(node -e '
@@ -42,6 +51,7 @@ VERSION="$(sed -n 2p <<< "$info")"
 DESCRIPTORS="$(sed -n 3p <<< "$info")"
 
 OUT="$CACHE/libraries/$NAME"
+[ "$modules" = 1 ] && OUT="$CACHE/linked/$NAME"
 STAMP="$VERSION $LIB"
 if [ -f "$OUT/stamp" ] && [ "$(cat "$OUT/stamp")" = "$STAMP" ]; then
   echo "$OUT"
@@ -53,6 +63,20 @@ tmp="$(mktemp -d)"
 # The codegen also generates the library's own dependencies' specs; only its own are kept.
 (cd "$RN_PKG" && node scripts/generate-codegen-artifacts.js -p "$LIB" -t android -o "$tmp" -s library) > "$tmp.log" 2>&1 || true
 GEN="$tmp/android/app/build/generated/source/codegen/jni/react/renderer/components/$NAME"
+if [ "$modules" = 1 ]; then
+  if [ ! -f "$GEN/${NAME}JSI.h" ]; then
+    cat "$tmp.log" >&2
+    echo "codegen-library.sh: the codegen wrote no module spec for $VERSION" >&2
+    exit 1
+  fi
+  rm -rf "$OUT"
+  mkdir -p "$OUT/codegen/react/renderer/components/$NAME"
+  cp "$GEN"/*JSI.h "$OUT/codegen/react/renderer/components/$NAME/"
+  echo "$STAMP" > "$OUT/stamp"
+  rm -rf "$tmp" "$tmp.log"
+  echo "$OUT"
+  exit 0
+fi
 if [ ! -f "$GEN/ComponentDescriptors.h" ]; then
   cat "$tmp.log" >&2
   echo "codegen-library.sh: the codegen wrote no components for $VERSION" >&2
