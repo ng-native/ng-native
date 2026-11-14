@@ -86,7 +86,6 @@ NSCursor *nsCursor(Cursor cursor) {
 @implementation NGNSurfaceView {
   ngn::InputSink *_input;
   ngn::ContainerId _container;
-  facebook::react::Tag _rootTag;
   std::optional<ngn::ContainerInsets> _reported;
   id _wheelMonitor;
 }

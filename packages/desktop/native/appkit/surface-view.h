@@ -13,6 +13,8 @@
 
 @interface NGNSurfaceView : NSView
 @property (nonatomic, readonly) facebook::react::SurfaceId surfaceId;
+// The view this container's hit test and Tab order start from.
+@property (nonatomic, readonly) facebook::react::Tag rootTag;
 // Set once by the host: each container's size and safe-area insets as they change (and nullopt
 // as it goes), keyed by the tag its hit test starts from.
 @property (class, nonatomic) std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> insetsChanged;

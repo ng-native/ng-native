@@ -8,6 +8,8 @@
 
 #include "text-layout.h"
 
+#include "ngn/accessibility.h"
+
 #include <react/renderer/components/iostextinput/TextInputProps.h>
 #include <react/renderer/components/text/ParagraphState.h>
 #include <react/renderer/components/textinput/TextInputEventEmitter.h>
@@ -29,6 +31,74 @@ NSColor *nsColor(const SharedColor &color) {
 NSString *nsString(const std::string &s) {
   NSString *result = [NSString stringWithUTF8String:s.c_str()];
   return result != nil ? result : @"";
+}
+
+NSAccessibilityRole nsRole(ngn::AxRole role) {
+  switch (role) {
+    case ngn::AxRole::Group:
+      return NSAccessibilityGroupRole;
+    case ngn::AxRole::Button:
+      return NSAccessibilityButtonRole;
+    case ngn::AxRole::Link:
+      return NSAccessibilityLinkRole;
+    case ngn::AxRole::Image:
+      return NSAccessibilityImageRole;
+    case ngn::AxRole::StaticText:
+      return NSAccessibilityStaticTextRole;
+    case ngn::AxRole::CheckBox:
+      return NSAccessibilityCheckBoxRole;
+    case ngn::AxRole::RadioButton:
+      return NSAccessibilityRadioButtonRole;
+    case ngn::AxRole::RadioGroup:
+      return NSAccessibilityRadioGroupRole;
+    case ngn::AxRole::Slider:
+      return NSAccessibilitySliderRole;
+    case ngn::AxRole::TextField:
+      return NSAccessibilityTextFieldRole;
+    case ngn::AxRole::List:
+      return NSAccessibilityListRole;
+    case ngn::AxRole::Menu:
+      return NSAccessibilityMenuRole;
+    case ngn::AxRole::MenuItem:
+      return NSAccessibilityMenuItemRole;
+    case ngn::AxRole::MenuBar:
+      return NSAccessibilityMenuBarRole;
+    case ngn::AxRole::ProgressIndicator:
+      return NSAccessibilityProgressIndicatorRole;
+    case ngn::AxRole::ComboBox:
+      return NSAccessibilityComboBoxRole;
+    case ngn::AxRole::TabGroup:
+      return NSAccessibilityTabGroupRole;
+    case ngn::AxRole::Toolbar:
+      return NSAccessibilityToolbarRole;
+    case ngn::AxRole::ScrollBar:
+      return NSAccessibilityScrollBarRole;
+    case ngn::AxRole::Table:
+      return NSAccessibilityTableRole;
+    case ngn::AxRole::Row:
+      return NSAccessibilityRowRole;
+    case ngn::AxRole::Cell:
+      return NSAccessibilityCellRole;
+    case ngn::AxRole::Incrementor:
+      return NSAccessibilityIncrementorRole;
+  }
+  return NSAccessibilityGroupRole;
+}
+
+NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
+  switch (subrole) {
+    case ngn::AxSubrole::Switch:
+      return NSAccessibilitySwitchSubrole;
+    case ngn::AxSubrole::Toggle:
+      return NSAccessibilityToggleSubrole;
+    case ngn::AxSubrole::Tab:
+      return NSAccessibilityTabButtonSubrole;
+    case ngn::AxSubrole::SearchField:
+      return NSAccessibilitySearchFieldSubrole;
+    case ngn::AxSubrole::None:
+      return nil;
+  }
+  return nil;
 }
 
 } // namespace
@@ -123,6 +193,64 @@ static BOOL focusFromKeyboard() {
 
 - (NSView *)contentContainer {
   return self;
+}
+
+- (NSResponder *)keyboardResponder {
+  return self;
+}
+
+#pragma mark Accessibility
+
+// React Native's accessibility props, mapped in the core (accessibility.h).
+- (ngn::AxInfo)axInfo {
+  auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
+  return viewProps ? ngn::accessibilityInfo(*viewProps) : ngn::AxInfo{};
+}
+
+- (BOOL)isAccessibilityElement {
+  return [self axInfo].element;
+}
+
+- (NSAccessibilityRole)accessibilityRole {
+  return nsRole([self axInfo].role);
+}
+
+- (NSAccessibilitySubrole)accessibilitySubrole {
+  return nsSubrole([self axInfo].subrole);
+}
+
+- (NSString *)accessibilityRoleDescription {
+  auto info = [self axInfo];
+  if (!info.roleDescription.empty()) {
+    return nsString(info.roleDescription);
+  }
+  return NSAccessibilityRoleDescription(nsRole(info.role), nsSubrole(info.subrole));
+}
+
+- (NSString *)accessibilityLabel {
+  auto info = [self axInfo];
+  return info.label.empty() ? nil : nsString(info.label);
+}
+
+- (NSString *)accessibilityHelp {
+  auto info = [self axInfo];
+  return info.hint.empty() ? nil : nsString(info.hint);
+}
+
+- (id)accessibilityValue {
+  auto info = [self axInfo];
+  if (info.checked) {
+    return @(*info.checked);
+  }
+  return info.value.empty() ? nil : nsString(info.value);
+}
+
+- (BOOL)isAccessibilityEnabled {
+  return ![self axInfo].disabled;
+}
+
+- (BOOL)isAccessibilitySelected {
+  return [self axInfo].selected;
 }
 
 - (void)updateProps:(const Props::Shared &)props {
@@ -261,6 +389,10 @@ static BOOL focusFromKeyboard() {
   // The single line, centred vertically in the content box.
   CGFloat h = std::min<CGFloat>(content.size.height, _field.intrinsicContentSize.height);
   _field.frame = NSMakeRect(content.origin.x, content.origin.y + (content.size.height - h) / 2, content.size.width, h);
+}
+
+- (NSResponder *)keyboardResponder {
+  return _field;
 }
 
 - (BOOL)composing {
@@ -425,6 +557,10 @@ static BOOL focusFromKeyboard() {
   _scroll.frame = NSMakeRect(
       i.left, i.top, metrics.frame.size.width - i.left - i.right, metrics.frame.size.height - i.top - i.bottom);
   _text.frame = NSMakeRect(0, 0, _scroll.contentSize.width, std::max(_text.frame.size.height, _scroll.contentSize.height));
+}
+
+- (NSResponder *)keyboardResponder {
+  return _text;
 }
 
 - (TextInputEventEmitter::Metrics)metrics {

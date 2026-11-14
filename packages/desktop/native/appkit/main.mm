@@ -24,6 +24,7 @@
 #include "ngn/default-menu.h"
 #include "ngn/input-dispatcher.h"
 #import "native-controls.h"
+#include "ngn/focus-order.h"
 #include "ngn/layout-animations.h"
 #include "ngn/runtime.h"
 
@@ -93,6 +94,54 @@ void logFirstFrame(SurfaceId surfaceId) {
   [gHost.window displayIfNeeded];
   [CATransaction flush];
   fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", msSinceLaunch());
+}
+
+// Tab and Shift-Tab, walked in the core (focus-order.h) over the container the focus is in, in
+// place of AppKit's key-view loop. True when the focus moved.
+bool moveFocus(NSEvent *event) {
+  NSWindow *window = event.window;
+  NSResponder *first = window.firstResponder;
+  NGNSurfaceView *container = nil;
+  NGNView *focused = nil;
+  // A field editor stands in for its text field, inside the field's view.
+  for (NSView *v = [first isKindOfClass:NSView.class] ? (NSView *)first : nil; v != nil; v = v.superview) {
+    if (focused == nil && [v isKindOfClass:NGNView.class]) {
+      focused = (NGNView *)v;
+    }
+    if ([v isKindOfClass:NGNSurfaceView.class]) {
+      container = (NGNSurfaceView *)v;
+      break;
+    }
+  }
+  if (container == nil) {
+    container = [window.contentView isKindOfClass:NGNSurfaceView.class] ? (NGNSurfaceView *)window.contentView : nil;
+  }
+  if (container == nil) {
+    return false;
+  }
+  // Option-Tab reaches every focusable view, whatever the keyboard navigation setting.
+  bool everything = NSApp.isFullKeyboardAccessEnabled || (event.modifierFlags & NSEventModifierFlagOption) != 0;
+  auto reach = everything ? ngn::TabReach::All : ngn::TabReach::TextInputs;
+  bool backwards = (event.modifierFlags & NSEventModifierFlagShift) != 0;
+  const auto &tree = gHost.mounting->tree();
+  auto count = ngn::tabOrder(tree, container.rootTag, reach).size();
+  std::optional<Tag> from;
+  if (focused != nil) {
+    from = static_cast<Tag>(focused.reactTag);
+  }
+  // A control AppKit will not focus (a button, with keyboard navigation off) passes Tab on.
+  for (size_t tries = 0; tries < count; tries++) {
+    auto next = ngn::nextInTabOrder(tree, container.rootTag, from, backwards, reach);
+    if (!next) {
+      return false;
+    }
+    NGNView *view = gHost.backend->view(*next);
+    if (view != nil && [window makeFirstResponder:view.keyboardResponder]) {
+      return true;
+    }
+    from = next;
+  }
+  return false;
 }
 
 } // namespace
@@ -283,6 +332,16 @@ int main(int argc, const char *argv[]) {
     }
     gHost.runtime->startSurface(kMainSurface, module, metricsFor(gHost.window));
 
+    [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                          handler:^NSEvent *(NSEvent *event) {
+                                            constexpr unsigned short kTab = 48;
+                                            auto mods = event.modifierFlags &
+                                                (NSEventModifierFlagCommand | NSEventModifierFlagControl);
+                                            if (event.keyCode == kTab && mods == 0 && moveFocus(event)) {
+                                              return nil;
+                                            }
+                                            return event;
+                                          }];
     [gHost.window makeKeyAndOrderFront:nil];
     [app activateIgnoringOtherApps:YES];
     [app run];

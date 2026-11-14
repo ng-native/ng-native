@@ -26,6 +26,9 @@
 - (facebook::react::Props::Shared)props;
 // Where Fabric children mount: the view itself, or a scroll view's document view.
 - (NSView *)contentContainer;
+// What takes the keyboard when Tab moves the focus here: the view itself, or the AppKit control
+// or field it holds.
+- (NSResponder *)keyboardResponder;
 @end
 
 // Hosts a real NSTextField, so the field editor, NSTextInputClient and IME are AppKit's own.

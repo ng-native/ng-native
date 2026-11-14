@@ -28,6 +28,13 @@ is an NSButton (Return presses a `default` one and Escape a `cancel` one), `<swi
 `<date-time-picker>` an NSDatePicker. A multiline `<text-input>` is an NSTextView and a
 `secureTextEntry` one an NSSecureTextField. `<search-field>` is not drawn yet.
 
+Tab and Shift-Tab move the focus in the order the core walks (`focus-order.h`), not AppKit's
+key-view loop: positive `tabIndex` first, then focusable views, text inputs and controls in tree
+order, inside the container the focus is in. With the Mac's default keyboard navigation Tab
+reaches text inputs only, and Option-Tab reaches everything. A view's accessibility props give it
+its NSAccessibility role, subrole, label, hint, value and state (`accessibility.h`); a role AppKit
+lacks, such as a heading, is a group with that role's name spoken.
+
 When the app has them installed, the host compiles in the Fabric components of
 `react-native-screens` and `react-native-safe-area-context`:
 
@@ -71,7 +78,8 @@ libraries above recompiles only that library.
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and
-  hover, text measurement, the module registry and desktop view props, the dev server connection,
+  hover, Tab order, the accessibility mapping, the native controls' props and measuring, text
+  measurement, the module registry and desktop view props, the dev server connection,
   the default menu bar and React Native's iOS-shaped modules in `src/modules`), with tests on an
   in-memory backend that run on Linux and macOS. A backend answers the OS calls through narrow
   interfaces: `network.h` (HTTP and WebSocket) and `system.h` (URLs, alerts, appearance,

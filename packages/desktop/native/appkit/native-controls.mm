@@ -47,6 +47,8 @@ void configureButton(NSButton *button, const NativeControlProps &p) {
   button.hasDestructiveAction = p.kind == "destructive";
   button.contentTintColor = p.kind == "destructive" ? NSColor.systemRedColor : nil;
   button.enabled = p.enabled;
+  // VoiceOver reads the title, not the symbol's name.
+  button.accessibilityLabel = p.title.empty() ? nil : nsString(p.title);
 }
 
 NSDatePickerElementFlags dateElements(const std::string &mode) {
@@ -196,6 +198,15 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
   }
 }
 
+- (NSResponder *)keyboardResponder {
+  return self.control;
+}
+
+// The AppKit control is the accessibility element, with its own role, title and state.
+- (BOOL)isAccessibilityElement {
+  return NO;
+}
+
 // The control takes the clicks: the core's touches would press the element a second time.
 - (BOOL)acceptsFirstResponder {
   return NO;
@@ -316,6 +327,9 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
 - (void)updateLayout:(const LayoutMetrics &)metrics {
   [super updateLayout:metrics];
   [self centreSpinner];
+}
+- (BOOL)isAccessibilityElement {
+  return NO;
 }
 - (void)centreSpinner {
   [_spinner sizeToFit];
