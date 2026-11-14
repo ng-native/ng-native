@@ -70,6 +70,7 @@ struct Host {
   // The app's own surface in a window, for an app that renders there instead of opening windows.
   NSWindow *appWindow;
   NSString *title;
+  std::shared_ptr<ngn::ProcessLauncher> launcher;
   // Ticks the layout animations while they run, at the display's rate.
   NSTimer *animationTimer;
   bool firstFrameLogged = false;
@@ -409,6 +410,10 @@ void showAppWindow() {
   if (gHost.updates) {
     gHost.updates->markLaunchSucceeded();
   }
+  // The programs the app started go with it, rather than run on with no one to read them.
+  if (gHost.launcher) {
+    gHost.launcher->killAll(SIGKILL);
+  }
   // Stop the surfaces and the runtime before exit tears down what they still use.
   if (gHost.runtime) {
     gHost.runtime->shutdown();
@@ -616,6 +621,7 @@ int main(int argc, const char *argv[]) {
     {
       // One launcher and one declaration for the process: a reload gets a new module over them.
       static auto launcher = ngn::makePosixLauncher();
+      gHost.launcher = launcher;
       static auto processes = ngn::appkit::processesSetup(capabilities);
       static auto opener = ngn::appkit::makeShellOpener();
       ngn::addModule(*modules, "NgNativeProcesses", [] { return ngn::makeProcessesModule(launcher, processes); });

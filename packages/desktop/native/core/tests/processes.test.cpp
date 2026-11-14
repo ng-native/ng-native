@@ -53,6 +53,9 @@ struct FakeLauncher final : ngn::ProcessLauncher {
   void kill(int handle, int signal) override {
     calls.push_back("kill " + std::to_string(handle) + " " + std::to_string(signal));
   }
+  void killAll(int signal) override {
+    calls.push_back("kill all " + std::to_string(signal));
+  }
 };
 
 dynamic gitCapabilities() {
@@ -332,4 +335,46 @@ TEST_CASE("the POSIX launcher's stdin writes never block the caller, and a close
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
   launcher->kill(closed, SIGKILL);
   REQUIRE(wait(closed));
+}
+
+TEST_CASE("a module going, as on a reload, stops the programs it started that are still running") {
+  auto launcher = std::make_shared<FakeLauncher>();
+  {
+    auto module = ngn::makeProcessesModule(launcher, setup());
+    REQUIRE(spawn(*module, dynamic::array("git", dynamic::array("status", "--porcelain"))).value == dynamic(7));
+  }
+  CHECK(launcher->calls.back() == "kill 7 " + std::to_string(SIGTERM));
+
+  // One that already exited is left alone.
+  launcher->calls.clear();
+  {
+    auto module = ngn::makeProcessesModule(launcher, setup());
+    launcher->issued = 6;
+    REQUIRE(spawn(*module, dynamic::array("git", dynamic::array("status", "--porcelain"))).value == dynamic(7));
+    launcher->events.exit(7, 0, std::nullopt);
+  }
+  CHECK(launcher->calls.size() == 1);
+}
+
+TEST_CASE("the POSIX launcher stops every program it started, for the host quitting") {
+  auto launcher = ngn::makePosixLauncher();
+  std::mutex mutex;
+  std::condition_variable done;
+  std::map<int, std::string> exits;
+  launcher->setEvents({
+      .output = [](int, bool, std::string) {},
+      .exit =
+          [&](int h, std::optional<int> code, std::optional<std::string> signal) {
+            std::lock_guard lock(mutex);
+            exits[h] = code ? "code " + std::to_string(*code) : *signal;
+            done.notify_all();
+          },
+  });
+  auto a = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
+  auto b = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
+  launcher->killAll(SIGKILL);
+  std::unique_lock lock(mutex);
+  REQUIRE(done.wait_for(lock, std::chrono::seconds(10), [&] { return exits.size() == 2; }));
+  CHECK(exits[a] == "SIGKILL");
+  CHECK(exits[b] == "SIGKILL");
 }

@@ -1,5 +1,7 @@
 #include "ngn/processes.h"
 
+#include <set>
+
 #include <algorithm>
 #include <cctype>
 #include <csignal>
@@ -78,7 +80,24 @@ std::shared_ptr<NativeModule> makeProcessesModule(std::shared_ptr<ProcessLaunche
       emit("ngNativeProcesses", std::move(body));
     }
 
-    Processes(std::shared_ptr<ProcessLauncher> launcher, ProcessesSetup setup) : NativeModule("NgNativeProcesses") {
+    // The programs this module started that have not exited: a reload stops them, since the
+    // JavaScript that held their handles is gone.
+    std::shared_ptr<ProcessLauncher> launcher;
+    std::mutex spawnedMutex;
+    std::set<int> spawned;
+    void exited(int handle) {
+      std::lock_guard lock(spawnedMutex);
+      spawned.erase(handle);
+    }
+    ~Processes() override {
+      std::lock_guard lock(spawnedMutex);
+      for (int handle : spawned) {
+        launcher->kill(handle, SIGTERM);
+      }
+    }
+
+    Processes(std::shared_ptr<ProcessLauncher> launcher, ProcessesSetup setup)
+        : NativeModule("NgNativeProcesses"), launcher(launcher) {
       if (setup.sandboxed) {
         setup.capabilities.spawn.clear();
         setup.capabilities.paths = folly::dynamic::array();
@@ -155,6 +174,10 @@ std::shared_ptr<NativeModule> makeProcessesModule(std::shared_ptr<ProcessLaunche
         }
         auto started = launcher->spawn(*path, argv, cwd, filterEnvironment(given, envNames));
         if (const auto *handle = std::get_if<int>(&started)) {
+          {
+            std::lock_guard lock(spawnedMutex);
+            spawned.insert(*handle);
+          }
           promise.resolve(*handle);
         } else {
           promise.reject(std::get<std::string>(started));
@@ -194,6 +217,7 @@ std::shared_ptr<NativeModule> makeProcessesModule(std::shared_ptr<ProcessLaunche
       .exit =
           [weak, floor](int handle, std::optional<int> code, std::optional<std::string> signal) {
             if (auto self = weak.lock(); self && handle > floor) {
+              self->exited(handle);
               self->emitEvent(folly::dynamic::object("type", "exit")("handle", handle)(
                   "code", code ? folly::dynamic(*code) : folly::dynamic(nullptr))(
                   "signal", signal ? folly::dynamic(*signal) : folly::dynamic(nullptr)));

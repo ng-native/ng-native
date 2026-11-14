@@ -142,6 +142,13 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
     return next_;
   }
 
+  void killAll(int signal) override {
+    std::lock_guard lock(mutex_);
+    for (const auto &[handle, running] : running_) {
+      ::kill(running.pid, signal);
+    }
+  }
+
   void kill(int handle, int signal) override {
     std::lock_guard lock(mutex_);
     if (auto it = running_.find(handle); it != running_.end()) {
