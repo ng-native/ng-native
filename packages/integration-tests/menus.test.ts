@@ -245,9 +245,10 @@ describe('a context menu', () => {
     assert.deepEqual(said, ['delete']);
   });
 
+  // No phone host draws the menu yet, so a long press there is still the element's own.
   for (const [os, fires] of [
-    ['android', false],
-    ['ios', false],
+    ['android', true],
+    ['ios', true],
     ['macos', true],
   ] as const) {
     it(`${fires ? 'still fires' : 'takes'} the long press on ${os}`, async () => {

@@ -64,9 +64,8 @@ focused text input first, so a shortcut on one of them fires only while no text 
 </ng-template>
 ```
 
-A right-click opens it on every OS with a pointer. On iOS a long press opens it with the system's
-preview lift, and on Android a long press opens it at the press point. There, the long press is the
-menu's, so the element's `(longPress)` does not also fire.
+A right-click opens it on macOS. iOS, Android and the web host do not draw it yet, so there it does
+nothing, and a `(longPress)` on the same element fires as it would without one.
 
 ## Reference
 

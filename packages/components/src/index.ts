@@ -68,7 +68,7 @@ export {
   type ModalPresentationStyle,
 } from './modal.ts';
 export { MenuBar, MenuGroup, MenuItem, MenuSeparator, treeOrder } from './menu.ts';
-export { CONTEXT_MENU, ContextMenu } from './context-menu.ts';
+export { ContextMenu } from './context-menu.ts';
 export { Shortcut } from './shortcut.ts';
 export {
   DragItem,
