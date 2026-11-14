@@ -13,6 +13,9 @@
 //   key <key> [cmd] [shift] [option] [ctrl]          to the key window, whichever it is: a
 //                         character, escape or return; a character with no command or control
 //                         modifier is typed into a focused text field
+//   choose <title>        the next menu to open (a pop-up button's, a picker's, a context menu)
+//                         picks its item with this title a second after it opens, as a click on
+//                         the item does: a menu tracks the real pointer, which nothing replayed moves
 #pragma once
 
 #include "ngn/input.h"
@@ -24,7 +27,7 @@
 namespace ngn {
 
 struct InputStep {
-  enum class Kind { Wait, Move, Down, Drag, Up, Scroll, Magnify, Rotate, Key } kind;
+  enum class Kind { Wait, Move, Down, Drag, Up, Scroll, Magnify, Rotate, Key, Choose } kind;
   enum Modifier : unsigned { Command = 1 << 0, Shift = 1 << 1, Option = 1 << 2, Control = 1 << 3 };
   double x{0};
   double y{0};
@@ -32,7 +35,7 @@ struct InputStep {
   double amount{0};
   double dy{0};
   std::optional<GesturePhase> phase;
-  // A key step's key and modifiers.
+  // A key step's key and modifiers, or a choose step's title.
   std::string key;
   unsigned modifiers{0};
 };

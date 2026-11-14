@@ -43,8 +43,16 @@ void sendCGEvent(NSWindow *window, CGEventRef cg, double x, double y) {
   CGEventSetIntegerValueField(cg, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent, window.windowNumber);
   NSEvent *event = [NSEvent eventWithCGEvent:cg];
   CFRelease(cg);
-  if (event != nil) {
+  if (event == nil) {
+    return;
+  }
+  // A made-up scroll or gesture gets a window only where the window server would send it, under
+  // the real pointer: elsewhere NSApp drops it, so the window takes it and sends it to the view
+  // under its point, as it does a real one.
+  if (event.window == window) {
     [NSApp sendEvent:event];
+  } else {
+    [window sendEvent:event];
   }
 }
 
@@ -127,8 +135,61 @@ void sendKey(const InputStep &step) {
   }
 }
 
+// The title a choose step left for the next menu to open, and the observer waiting for it.
+NSString *gChoice;
+id gMenuObserver;
+
+// Picks the item titled `title` in `menu`, or in a submenu of it, as a click on it does, and
+// closes the menu. Whether one was found.
+bool pick(NSMenu *menu, NSString *title) {
+  for (NSInteger i = 0; i < menu.numberOfItems; i++) {
+    NSMenuItem *item = [menu itemAtIndex:i];
+    if ([item.title isEqualToString:title] && item.enabled && !item.hidden) {
+      [menu cancelTrackingWithoutAnimation];
+      [menu performActionForItemAtIndex:i];
+      return true;
+    }
+    if (item.submenu != nil && pick(item.submenu, title)) {
+      [menu cancelTrackingWithoutAnimation];
+      return true;
+    }
+  }
+  return false;
+}
+
+void chooseInNextMenu(NSString *title) {
+  gChoice = title;
+  if (gMenuObserver != nil) {
+    return;
+  }
+  gMenuObserver = [NSNotificationCenter.defaultCenter
+      addObserverForName:NSMenuDidBeginTrackingNotification
+                  object:nil
+                   queue:nil
+              usingBlock:^(NSNotification *note) {
+                NSMenu *menu = note.object;
+                NSString *choice = gChoice;
+                // A submenu opening within the menu being chosen from is not the next menu.
+                if (choice == nil || menu.supermenu != nil) {
+                  return;
+                }
+                gChoice = nil;
+                // A second open first, so the menu can be seen; the menu's tracking runs the
+                // main queue.
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  if (!pick(menu, choice)) {
+                    fprintf(stderr, "[ngn] input script: the menu has no item %s\n", choice.UTF8String);
+                    [menu cancelTracking];
+                  }
+                });
+              }];
+}
+
 void play(NSWindow *window, const InputStep &step) {
   switch (step.kind) {
+    case InputStep::Kind::Choose:
+      chooseInNextMenu([NSString stringWithUTF8String:step.key.c_str()]);
+      break;
     case InputStep::Kind::Key:
       sendKey(step);
       break;
@@ -191,6 +252,12 @@ void playFrom(NSWindow *window, std::shared_ptr<InputScript> script, size_t at) 
 }
 
 } // namespace
+
+void playInputStep(NSWindow *window, const InputStep &step) {
+  if (step.kind != InputStep::Kind::Wait) {
+    play(window, step);
+  }
+}
 
 void replayInputScript(NSWindow *window, InputScript script) {
   // A click in a window that is not key only brings it forward, as a person's first click does.

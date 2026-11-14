@@ -1,6 +1,6 @@
 // The app's undo manager (ngn/undo.h) over one NSUndoManager for every window. A focused text
-// input keeps its own history: while one is first responder its window answers a manager of its
-// own, so Edit > Undo and Cmd-Z reach the app's actions only when no text input has focus.
+// input or web view keeps its own history: while one is first responder its window answers a
+// manager of its own, so Edit > Undo and Cmd-Z reach the app's actions only when neither has focus.
 #pragma once
 
 #import <AppKit/AppKit.h>

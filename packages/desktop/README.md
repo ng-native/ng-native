@@ -63,7 +63,10 @@ gives it no view of its own yet. Not there yet: `hitSlop`, the library's own com
 A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
 (`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
 AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
-goes to the key window, and a character is typed into a focused text field.
+goes to the key window, and a character is typed into a focused text field. A scroll or gesture
+goes to the view under its point, wherever the real pointer is, so a web view scrolls and a map
+pans and zooms. A `choose` step names the item the next menu to open picks a second after it
+opens (a picker's, a pop-up button's or a context menu), since a menu follows the real pointer.
 
 A view's box is painted as React Native iOS paints it (`view-box.h`): one corner radius and one
 solid border are the layer's own, drawn over the children only when the view clips or the border
@@ -272,8 +275,8 @@ event after that. Links to the app's scheme arrive the same way.
 `NgNativeUndo` keeps the app's undo history in one NSUndoManager shared by every window, which
 `UndoStack` in `@ng-native/device` registers actions with. Edit > Undo and Edit > Redo name the
 last action and send `{ type: 'undo', id }` or `{ type: 'redo', id }` on `ngNativeUndo`. A focused
-text input keeps its own history, so typing is undone there and the app's actions where nothing
-is focused. A reload clears the history.
+text input or web view keeps its own history, so typing is undone there and the app's actions
+where neither is focused. A reload clears the history.
 
 ## Notifications
 

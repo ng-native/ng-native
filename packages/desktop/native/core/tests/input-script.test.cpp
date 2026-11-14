@@ -57,3 +57,13 @@ TEST_CASE("a key step names a key and its modifiers, for the key window") {
   CHECK(ngn::parseInputScript("key r hyper").error == "line 1: unknown modifier hyper");
   CHECK(ngn::parseInputScript("key tab").error == "line 1: unknown key tab");
 }
+
+TEST_CASE("a choose step names the item, spaces and all, that the next menu to open picks") {
+  auto script = ngn::parseInputScript("choose  United States # the country\ndown 1 2");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 2);
+  CHECK(script.steps[0].kind == Kind::Choose);
+  CHECK(script.steps[0].key == "United States");
+  CHECK(ngn::parseInputScript("choose").error == "line 1: choose needs an item's title");
+  CHECK(ngn::parseInputScript("choose   ").error == "line 1: choose needs an item's title");
+}

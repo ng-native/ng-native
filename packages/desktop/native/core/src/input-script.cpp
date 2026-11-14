@@ -91,6 +91,16 @@ InputScript parseInputScript(const std::string &text) {
           return fail("unknown modifier " + modifier);
         }
       }
+    } else if (verb == "choose") {
+      step.kind = InputStep::Kind::Choose;
+      std::string rest;
+      std::getline(words, rest);
+      auto first = rest.find_first_not_of(" \t");
+      auto last = rest.find_last_not_of(" \t\r");
+      if (first == std::string::npos) {
+        return fail("choose needs an item's title");
+      }
+      step.key = rest.substr(first, last - first + 1);
     } else {
       return fail("unknown step " + verb);
     }

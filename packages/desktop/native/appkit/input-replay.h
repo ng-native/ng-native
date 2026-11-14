@@ -12,4 +12,7 @@ namespace ngn::appkit {
 
 void replayInputScript(NSWindow *window, InputScript script);
 
+// Plays one step into the window now; a wait does nothing.
+void playInputStep(NSWindow *window, const InputStep &step);
+
 } // namespace ngn::appkit
