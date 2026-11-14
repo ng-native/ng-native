@@ -55,8 +55,9 @@ export type PrintOptions = (
   | { readonly uri: string; readonly html?: never; readonly window?: never }
   | {
       /**
-       * macOS: what this window shows, laid out on the paper the print panel has. Absent on every
-       * other OS, where the call does nothing.
+       * macOS: what this window shows, laid out on the paper the print panel has. Web views print
+       * their page; video, the camera preview and Metal content print blank. Absent on every other
+       * OS, where the call does nothing.
        */
       readonly window: PrintableWindow;
       readonly html?: never;
