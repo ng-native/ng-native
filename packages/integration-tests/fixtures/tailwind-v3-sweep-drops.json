@@ -1819,18 +1819,6 @@
     "cursor-[calc(1rem+2px)]",
     "cursor-[rgb(10,20,30)]"
   ],
-  "dropped 'cursor': cursor: crosshair is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": [
-    "!cursor-crosshair",
-    "cursor-crosshair"
-  ],
-  "dropped 'cursor': cursor: e-resize is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": [
-    "!cursor-e-resize",
-    "cursor-e-resize"
-  ],
-  "dropped 'cursor': cursor: zoom-out is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": [
-    "!cursor-zoom-out",
-    "cursor-zoom-out"
-  ],
   "dropped 'cursor': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "!cursor-[var(--x)]",
     "cursor-[var(--x)]"

@@ -1290,6 +1290,12 @@ function compound(parts, context) {
               `what it styles: ':host ::ng-deep .inner'.`,
           );
         }
+        if (String(part.kind).startsWith('webkit-scrollbar')) {
+          throw new CssUnsupported(
+            `${context}: '::-webkit-scrollbar' is not supported: the scroll bar is the system's. ` +
+              `Use 'scrollbar-width: none' or 'thin', and 'scrollbar-gutter: stable'.`,
+          );
+        }
         throw new CssUnsupported(
           `${context}: pseudo-elements like ::before are never supported. They would mean ` +
             `synthesising nodes no template declares, which puts the style engine in the ` +

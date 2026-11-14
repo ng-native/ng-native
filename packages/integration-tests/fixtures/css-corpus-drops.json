@@ -1,7 +1,7 @@
 {
   "bootstrap": {
     "rules": 2643,
-    "dropped": 513,
+    "dropped": 511,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -43,6 +43,7 @@
       "color",
       "columnGap",
       "cursor",
+      "desktopCursor",
       "display",
       "ellipsizeMode",
       "experimental_backgroundImage",
@@ -199,10 +200,6 @@
       "counter-reset": {
         "'counter-reset' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
-      "cursor": {
-        "cursor: help is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 1,
-        "cursor: wait is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 1
-      },
       "display": {
         "display: list-item does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": 1,
         "display: table does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": 6,
@@ -307,8 +304,8 @@
     }
   },
   "bulma": {
-    "rules": 3436,
-    "dropped": 1568,
+    "rules": 3457,
+    "dropped": 1566,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -354,6 +351,7 @@
       "color",
       "columnGap",
       "cursor",
+      "desktopCursor",
       "display",
       "ellipsizeMode",
       "end",
@@ -518,9 +516,6 @@
       "content": {
         "'content' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
-      "cursor": {
-        "cursor: not-allowed is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 2
-      },
       "float": {
         "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 3
       },
@@ -618,8 +613,8 @@
     }
   },
   "pico": {
-    "rules": 488,
-    "dropped": 273,
+    "rules": 490,
+    "dropped": 270,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -660,6 +655,7 @@
       "color",
       "columnGap",
       "cursor",
+      "desktopCursor",
       "direction",
       "display",
       "ellipsizeMode",
@@ -785,10 +781,6 @@
       },
       "color-scheme": {
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 3
-      },
-      "cursor": {
-        "cursor: help is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 2,
-        "cursor: not-allowed is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 1
       },
       "display": {
         "'display: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1

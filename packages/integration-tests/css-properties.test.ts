@@ -418,10 +418,10 @@ describe('properties React Native supports that we were rejecting', () => {
 describe('keywords React Native does not take', () => {
   // Fabric drops a keyword it has no reading for without a word, so each of these compiled
   // cleanly and did nothing on device.
-  it('takes auto and pointer as a cursor, reads default as auto, and refuses the rest', () => {
+  it('takes auto and pointer as a cursor, reads default as auto, and the rest for a desktop', () => {
     assert.deepEqual(declarationsOf('cursor: pointer'), { cursor: 'pointer' });
     assert.deepEqual(declarationsOf('cursor: default'), { cursor: 'auto' });
-    assert.throws(() => declarationsOf('cursor: alias'), /cursor: alias is not supported/);
+    assert.deepEqual(declarationsOf('cursor: alias'), { cursor: 'auto', desktopCursor: 'alias' });
   });
 
   it('reads overflow auto as scroll, and clip as hidden, the nearest Yoga has', () => {

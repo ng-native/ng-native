@@ -36,6 +36,13 @@ const DELIBERATE: readonly Accounted[] = [
       'see supported-css.md.',
   },
   {
+    where: 'child',
+    property: /^cursor$/,
+    reason:
+      "Native applies a view's cursor to everything inside it, so the text needs no value of " +
+      'its own.',
+  },
+  {
     property: /^overflow-[xy]$/,
     browser: /^(auto|clip)$/,
     reason:

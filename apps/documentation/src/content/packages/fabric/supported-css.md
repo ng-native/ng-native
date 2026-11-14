@@ -465,11 +465,18 @@ so is `overflow-x` or `overflow-y` on its own, outside a
 [sheet read as a browser reads it](#a-sheet-read-as-a-browser-reads-it).
 `overflow: auto` is read as `scroll`, which is how Yoga lays out a scroll container, and `clip` as
 `hidden`. `cursor` takes `auto` and `pointer`, the two a pointer on an iPad draws, with `default`
-read as `auto`; any other cursor is dropped with a warning. So is a `mix-blend-mode` native does not
+read as `auto`, and on macOS every other CSS keyword cursor too, such as `text`, `grab`,
+`not-allowed`, the resize cursors and `zoom-in`: iOS draws `auto` for those. A cursor applies to
+everything inside the element, as on the web, and a text field shows `text` unless it has one. An
+image cursor is dropped with a warning. So is a `mix-blend-mode` native does not
 draw, `plus-darker`, and a `text-decoration-line` of `overline`, which native has no line for. A
 text decoration is drawn under the text inside the element that declares it, in that element's
 `text-decoration-color` or its text colour, as on the web. Android draws every line in the colour
 of the text it underlines, because its text has no decoration colour.
+
+Scroll bars are the system's. `scrollbar-width: none` hides a scroll view's indicators on every
+OS, and on macOS `thin` draws the small scroll bar and `scrollbar-gutter: stable` keeps room for
+one when nothing overflows. `::-webkit-scrollbar` is dropped with a warning.
 
 `pointer-events` is inherited, as on the web, and `none` is about the element alone: it and whatever
 inherits the value take no touches, and a descendant that sets `pointer-events: auto` takes them
