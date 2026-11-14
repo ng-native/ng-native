@@ -26,3 +26,21 @@ export function desktopHost<T = Host>(name: string): DesktopHost<T> | null {
     listen: (event, listener) => native.DeviceEventEmitter.addListener(event, listener),
   };
 }
+
+/**
+ * The uri a source names, for a desktop host's module to open: an asset's (a number from
+ * `require`), resolved as an image's is, which on macOS is a file in the app or the dev server's
+ * url; a string; or an object's `uri`. Null for one that names none.
+ */
+export function assetUri(source: unknown): string | null {
+  if (typeof source === 'string') return source;
+  if (typeof source === 'number') {
+    const { Image } = require('react-native') as typeof import('react-native');
+    return Image.resolveAssetSource(source)?.uri ?? null;
+  }
+  if (source !== null && typeof source === 'object') {
+    const { uri, default: module } = source as { uri?: unknown; default?: unknown };
+    return typeof uri === 'string' ? uri : module !== undefined ? assetUri(module) : null;
+  }
+  return null;
+}

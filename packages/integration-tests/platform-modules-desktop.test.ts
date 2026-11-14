@@ -5,6 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
+import { Injector, runInInjectionContext } from '@angular/core';
 import { injectService } from '@ng-native/testing';
 
 type Listener = (event: unknown) => void;
@@ -301,5 +302,141 @@ describe('Calendar on macOS', () => {
     assert.deepEqual(calls.slice(-1), [['listEventsAsync', ['c1', 'c2'], 1_000, 2_000]]);
     assert.deepEqual(calls[0], ['getCalendarPermissionsAsync', true]);
     await assert.rejects(calendar.createCalendar({ title: 'x' }), /not available on macOS/);
+  });
+});
+
+describe('Audio on macOS', () => {
+  /** A desktop host's NgNativeAudio, recording each call. */
+  function audioHost(statuses: Record<string, unknown> = {}) {
+    const calls: unknown[][] = [];
+    const record =
+      (name: string, answer?: unknown) =>
+      (...args: unknown[]) => (calls.push([name, ...args]), answer);
+    const host = mac({
+      NgNativeAudio: {
+        createPlayer: record('createPlayer', '7'),
+        replace: record('replace'),
+        release: record('release'),
+        play: record('play'),
+        pause: record('pause'),
+        seekTo: async (...args: unknown[]) => void calls.push(['seekTo', ...args]),
+        setPlaybackRate: record('setPlaybackRate'),
+        setVolume: record('setVolume'),
+        setMuted: record('setMuted'),
+        setLoop: record('setLoop'),
+        status: (id: string) => statuses[id] ?? null,
+        createRecorder: record('createRecorder', '8'),
+        prepareToRecordAsync: async () => {
+          throw new Error(
+            'AudioRecorder.prepareToRecordAsync: recording permission has not been granted',
+          );
+        },
+        recorderStatus: (id: string) => statuses[id] ?? null,
+        releaseRecorder: record('releaseRecorder'),
+        getRecordingPermissionsAsync: async () => ({ status: 'denied', granted: false }),
+      },
+    });
+    return { host, calls };
+  }
+
+  it("plays through NgNativeAudio, and follows only its own player's status events", async () => {
+    const { host, calls } = audioHost({ '7': { currentTime: 1.5, duration: 3, playing: true } });
+    const { audioPlayer } = await import('@ng-native/expo/audio');
+    const injector = Injector.create({ providers: [] });
+    const owned = runInInjectionContext(injector, () =>
+      audioPlayer(12 as never, { timeUpdate: 0.25 }),
+    );
+    // An asset resolved as an image is, and the interval in milliseconds.
+    assert.deepEqual(calls[0], ['createPlayer', 'http://localhost:8081/assets/font-12.ttf', 250]);
+    const player = owned.native;
+    assert.equal(player.currentTime, 1.5);
+    assert.equal(player.duration, 3);
+    player.volume = 0.5;
+    player.muted = true;
+    player.loop = true;
+    player.setPlaybackRate(4);
+    player.play();
+    await player.seekTo(2);
+    assert.equal(player.volume, 0.5);
+    assert.equal(player.playbackRate, 2);
+    assert.deepEqual(calls.slice(1), [
+      ['setVolume', '7', 0.5],
+      ['setMuted', '7', true],
+      ['setLoop', '7', true],
+      ['setPlaybackRate', '7', 2],
+      ['play', '7'],
+      ['seekTo', '7', 2],
+    ]);
+
+    const status = {
+      playing: true,
+      mute: false,
+      duration: 3,
+      currentTime: 2,
+      isLoaded: true,
+      didJustFinish: false,
+      error: null,
+    };
+    host.send('ngNativeAudio', {
+      type: 'playbackStatusUpdate',
+      id: '6',
+      status: { ...status, currentTime: 9 },
+    });
+    assert.equal(owned.state().status, 'idle');
+    host.send('ngNativeAudio', { type: 'playbackStatusUpdate', id: '7', status });
+    assert.equal(owned.state().status, 'readyToPlay');
+    assert.equal(owned.state().currentTime, 2);
+    assert.equal(owned.state().volume, 0.5);
+
+    injector.destroy();
+    assert.deepEqual(calls.at(-1), ['release', '7']);
+    assert.equal(host.listening('ngNativeAudio'), 0);
+  });
+
+  it('makes a recorder with the iOS options, and rejects a prepare the host refuses', async () => {
+    const { calls } = audioHost();
+    const { audioRecorder } = await import('@ng-native/expo/audio');
+    const injector = Injector.create({ providers: [] });
+    try {
+      const owned = runInInjectionContext(injector, () =>
+        audioRecorder({
+          extension: '.m4a',
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          ios: { outputFormat: 'aac ', audioQuality: 96 },
+          android: { outputFormat: 'mpeg4', audioEncoder: 'aac' },
+          web: { mimeType: 'audio/webm' },
+        }),
+      );
+      assert.deepEqual(calls[0], [
+        'createRecorder',
+        {
+          extension: '.m4a',
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          isMeteringEnabled: false,
+          directory: undefined,
+          outputFormat: 'aac ',
+          audioQuality: 96,
+        },
+      ]);
+      assert.equal(owned.state().canRecord, false);
+      await assert.rejects(owned.native.prepareToRecordAsync(), /permission has not been granted/);
+    } finally {
+      injector.destroy();
+    }
+    assert.deepEqual(calls.at(-1), ['releaseRecorder', '8']);
+  });
+
+  it('says to rebuild the desktop host when it has no NgNativeAudio', async () => {
+    mac({});
+    const { audioPlayer } = await import('@ng-native/expo/audio');
+    const injector = Injector.create({ providers: [] });
+    assert.throws(
+      () => runInInjectionContext(injector, () => audioPlayer('file:///a.wav')),
+      /expo-audio has no module in this build of the desktop host/,
+    );
   });
 });

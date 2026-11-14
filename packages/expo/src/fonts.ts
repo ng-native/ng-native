@@ -28,6 +28,7 @@ import {
   onFontsRegistered,
   registeredFaces,
 } from '@ng-native/fabric';
+import { assetUri } from './desktop-host.ts';
 import { expoModule, present } from './native.ts';
 import { noteRegisteredNames } from './ui-font-names.ts';
 
@@ -201,23 +202,6 @@ function warnIfASheetIsNull(sheets: readonly (SheetWithFonts | null | undefined)
 }
 
 /**
- * The uri a font's source names: an asset's (a number from `require`), resolved as an image's is,
- * which on macOS is a file in the app or the dev server's url; a string; or an object's `uri`.
- */
-function uriOf(source: unknown): string | null {
-  if (typeof source === 'string') return source;
-  if (typeof source === 'number') {
-    const { Image } = require('react-native') as typeof import('react-native');
-    return Image.resolveAssetSource(source)?.uri ?? null;
-  }
-  if (source !== null && typeof source === 'object') {
-    const { uri, default: module } = source as { uri?: unknown; default?: unknown };
-    return typeof uri === 'string' ? uri : module !== undefined ? uriOf(module) : null;
-  }
-  return null;
-}
-
-/**
  * expo-font's three functions over the desktop host's `NgNativeFont`, which registers one font
  * file under a name at a time. Null where the host has no such module.
  */
@@ -233,7 +217,7 @@ function desktopFonts(): typeof import('expo-font') | null {
     loadAsync: async (map) => {
       await Promise.all(
         Object.entries(map).map(([name, source]) => {
-          const uri = uriOf(source);
+          const uri = assetUri(source);
           if (uri === null) throw new Error(`[angular-native] Fonts: ${name} has no file to load.`);
           return host.loadAsync(name, uri);
         }),

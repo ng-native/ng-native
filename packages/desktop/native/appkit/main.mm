@@ -34,6 +34,7 @@
 #import "web-browser.h"
 #import "text-recognition.h"
 #import "calendar.h"
+#import "audio.h"
 #import "store-review.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
@@ -711,6 +712,10 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeTextRecognition", [] { return ngn::makeTextRecognitionModule(textReader); });
       static auto calendars = ngn::appkit::makeCalendarStore();
       ngn::addModule(*modules, "NgNativeCalendar", [] { return ngn::makeCalendarModule(calendars, noPrompts); });
+      // Players and recorders end with the runtime: a reload stops what the app played.
+      static auto audioOutput = ngn::appkit::makeAudioOutput();
+      static auto audioInput = ngn::appkit::makeAudioInput();
+      ngn::addModule(*modules, "NgNativeAudio", [] { return ngn::makeAudioModule(audioOutput, audioInput, caches + "/Audio", noPrompts); });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
       static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });

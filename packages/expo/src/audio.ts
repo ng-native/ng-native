@@ -10,7 +10,8 @@
  * ```
  */
 import { DestroyRef, inject, signal, type Signal } from '@angular/core';
-import { currentPlatform, expoModuleNow, unavailable } from './native.ts';
+import { desktopAudio } from './desktop-audio.ts';
+import { currentPlatform, expoModuleNow, isApple, unavailable } from './native.ts';
 import { ownPlayer, watchAudioPlayer, type Player } from './player.ts';
 
 type ExpoAudio = typeof import('expo-audio');
@@ -18,13 +19,15 @@ type RecordingOptions = import('expo-audio').RecordingOptions;
 type RecorderState = import('expo-audio').RecorderState;
 type AudioRecorder = import('expo-audio').AudioRecorder;
 
-/** `expo-audio` where the platform has it, or the error that says why not. */
+/**
+ * `expo-audio` where the platform has it, or the error that says why not. On macOS, the desktop
+ * host's `NgNativeAudio` through `desktopAudio`.
+ */
 function expoAudio(): ExpoAudio {
-  const expo = expoModuleNow('expo-audio', () => require('expo-audio') as ExpoAudio, [
-    'ios',
-    'android',
-    'web',
-  ]);
+  const expo = expoModuleNow('expo-audio', () => require('expo-audio') as ExpoAudio, {
+    platforms: ['ios', 'android', 'web'],
+    desktop: desktopAudio,
+  });
   if (!expo) throw unavailable('expo-audio', 'Stand in for the player or recorder in the test.');
   return expo;
 }
@@ -112,7 +115,8 @@ function forPlatform(options: RecordingOptions): Record<string, unknown> {
     isMeteringEnabled: options.isMeteringEnabled ?? false,
   };
   const platform = currentPlatform();
-  if (platform === 'ios') return { ...common, directory: options.directory, ...options.ios };
+  // macOS records as iOS does, with AVAudioRecorder, so it reads the iOS options.
+  if (isApple(platform)) return { ...common, directory: options.directory, ...options.ios };
   if (platform === 'android')
     return { ...common, directory: options.directory, ...options.android };
   return { ...common, ...options.web };
