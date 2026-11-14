@@ -299,6 +299,43 @@ describe('a context menu', () => {
 });
 
 for (const os of ['android', 'ios'] as const) {
+  it(`leaves the long press to (longPress) where the menu on ${os} has no items`, async () => {
+    registerPlatformComponents(os);
+    try {
+      const host = fakeHost(false, true);
+      const said: string[] = [];
+      const { ContextMenu, MenuItem, Pressable } = await import('@ng-native/components');
+      await render(
+        `<pressable testID="row" [contextMenu]="menu" (longPress)="said.push('long')"></pressable>
+        <ng-template #menu>
+          @if (false) {
+            <menu-item label="Pin" />
+          }
+        </ng-template>`,
+        {
+          imports: [ContextMenu, MenuItem, Pressable],
+          providers: [
+            { provide: Menus.SOURCE, useValue: host.native },
+            { provide: OS, useValue: os },
+          ],
+          componentProperties: { said },
+        },
+      );
+      await settle();
+      const row = screen.getByTestId('row');
+      assert.equal(host.contextMenus.get(row.props['nativeID'] as string), null);
+      const { fireEvent } = await import('@ng-native/testing');
+      await fireEvent(row, 'touchStart', { touches: [{}], changedTouches: [{}] });
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await fireEvent(row, 'touchEnd', { touches: [], changedTouches: [{}] });
+      assert.deepEqual(said, ['long']);
+    } finally {
+      registerPlatformComponents('ios');
+    }
+  });
+}
+
+for (const os of ['android', 'ios'] as const) {
   describe(`a context menu on ${os}`, () => {
     after(() => registerPlatformComponents('ios'));
 
