@@ -1,10 +1,34 @@
 #include "ngn/apple-authentication.h"
 
+#include "ngn/desktop-view-props.h"
+
+#include <react/renderer/core/propsConversions.h>
+
 #include <cstdint>
 
 using folly::dynamic;
 
 namespace ngn {
+
+const char AppleButtonComponentName[] = "ViewManagerAdapter_ExpoAppleAuthentication";
+
+namespace {
+
+int enumOf(int value) {
+  return value >= 0 && value <= 2 ? value : 0;
+}
+
+} // namespace
+
+AppleButtonProps::AppleButtonProps(
+    const facebook::react::PropsParserContext &context,
+    const AppleButtonProps &sourceProps,
+    const facebook::react::RawProps &rawProps)
+    : facebook::react::ViewProps(context, sourceProps, rawProps),
+      HasDesktopProps{parseDesktopProps(context, sourceProps.desktop, rawProps)},
+      buttonType(enumOf(facebook::react::convertRawProp(context, rawProps, "buttonType", sourceProps.buttonType, 0))),
+      buttonStyle(enumOf(facebook::react::convertRawProp(context, rawProps, "buttonStyle", sourceProps.buttonStyle, 0))),
+      cornerRadius(facebook::react::convertRawProp(context, rawProps, "cornerRadius", sourceProps.cornerRadius, 0.0)) {}
 
 namespace {
 

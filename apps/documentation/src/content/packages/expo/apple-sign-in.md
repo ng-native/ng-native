@@ -108,6 +108,9 @@ is: its wording, logo and colors are the system's, localized and accessible.
 It needs a width and a height to show. Its color and corners come from `buttonStyle` and
 `cornerRadius`; a CSS background or border radius does not apply to it.
 
+On macOS the desktop host draws the same `ASAuthorizationAppleIDButton`, with the same props and
+`(buttonPress)`.
+
 ## Without the module
 
 On iOS, a missing `expo-apple-authentication` - never installed, or installed without the app being

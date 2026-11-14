@@ -27,6 +27,8 @@ add_executable(ngn-macos
     maps.mm
     map-view.mm
     apple-authentication.mm
+    apple-id-button.mm
+    apple-button-view.mm
     video.mm
     video-view.mm
     battery.mm

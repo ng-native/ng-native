@@ -7,6 +7,7 @@
 #include "ngn/desktop-modal.h"
 #include "ngn/native-controls.h"
 #include "ngn/split-view.h"
+#include "ngn/apple-authentication.h"
 #include "ngn/camera.h"
 #include "ngn/maps.h"
 #include "ngn/video.h"
@@ -63,6 +64,7 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<CameraComponentDescriptor>(),
       concreteComponentDescriptorProvider<MapComponentDescriptor>(),
       concreteComponentDescriptorProvider<VideoViewComponentDescriptor>(),
+      concreteComponentDescriptorProvider<AppleButtonComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : expoUIComponentProviders()) {
