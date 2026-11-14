@@ -56,7 +56,11 @@ it('offers the menu bar on macOS only', async () => {
 - **`hover(node)`** and **`unhover(node)`** - a mouse onto and off a view, entering and leaving it
   and each view it is inside, so `:hover` and `(mouseenter)` follow.
 - **`dblClick(node)`**, **`rightClick(node)`** and **`wheel(node, { deltaY })`** - `(dblclick)`,
-  `(contextmenu)` and `(wheel)`.
+  `(contextmenu)` and `(wheel)`. `rightClick` resolves to the context menu of the view, or of the
+  nearest view it is inside with a `[contextMenu]`, with its `items` and `choose(label)`, or to
+  null where there is none.
+- **`dropFiles(node, ['/Users/me/notes.md'])`** - files dragged from Finder and dropped on a view:
+  `(fileDragEnter)`, then `(fileDrop)` with each file's `file://` url and name.
 - **`keyboard('mod+k')`** - a chord as `[shortcut]` writes one, with `mod` as Cmd on Apple's OSes
   and Ctrl elsewhere. The menus host matches it against the app's shortcuts and menu key
   equivalents, and a focused text input keeps the editing keys. Resolves to whether a shortcut
@@ -64,11 +68,36 @@ it('offers the menu bar on macOS only', async () => {
 - **`tab()`** and **`tab({ shift: true })`** - keyboard focus to the next or previous view that
   takes it, as focus from the keyboard, so `:focus-visible` matches.
 
+## Windows
+
+On macOS a render opens the main window, as an app does, and the component renders in it.
+`screen.windows()` lists the open windows in the order they opened, each with its `surface`, `key`,
+`title`, the app's `window` handle, and the queries bound to its own views; `screen`'s queries
+search every window.
+
+```ts
+const { instance } = await render(Notes, { os: 'macos' });
+await instance.openNote('Groceries');
+const [main, note] = screen.windows();
+expect(note.getByText('Groceries')).toBeTruthy();
+expect(main.queryByText('Groceries')).toBeNull();
+```
+
+`userEvent` plays what the user does to the app as a whole:
+
+- **`closeWindow(window?)`** - the close button or Cmd-W, on the window given or the focused one.
+  Resolves to whether it closed, which a `canClose` guard can refuse.
+- **`quit()`** - Cmd-Q: every window's guards, then the `willQuit` handlers. Resolves to whether
+  the app agreed to quit.
+- **`reopen()`** - a click on the Dock icon with no window open, which opens the main window.
+- **`openUrl(url)`** - the app opened with a url, as a link in another app, Open With or a Dock
+  drop does, which `DeepLinks` delivers.
+
 ## The desktop's services
 
-On macOS a render's menus, Dock, tray and processes are recording fakes: what the app sends is
-there to read, and the test plays what the desktop host would send back. Provide one to keep a
-handle on it, or `provideDesktopFakes()` to give them to a render on any OS.
+On macOS a render's windows, menus, Dock, tray, processes and deep links are recording fakes: what
+the app sends is there to read, and the test plays what the desktop host would send back. Provide
+one to keep a handle on it, or `provideDesktopFakes()` to give them to a render on any OS.
 
 ```ts
 import { Processes } from '@ng-native/device';
@@ -85,6 +114,9 @@ await render(Changes, {
 expect(processes.spawned[0]?.args).toEqual(['status', '--porcelain']);
 ```
 
-`fakeMenus()` records the menu bar and shortcuts (`menuBarGroups`, `shortcuts`) and chooses an item
-with `select(id)`. `fakeDock()` records the Dock menu and bounces, `fakeTray()` the tray icons, with
-`press` and `select`, and `fakeWindows()` the windows `AppWindows` opened.
+`fakeMenus()` records the menu bar and shortcuts (`menuBarGroups`, `shortcuts`), the app's menus
+merged with the defaults. `item({ menuRole: 'about' })` or `item({ label: 'New Note' })` finds an
+item at any depth, and `choose(...)` clicks it, throwing where none matches or it is disabled.
+`fakeDock()` records the Dock menu and bounces, `fakeTray()` the tray icons, with `press` and
+`select`, `fakeWindows()` the windows `AppWindows` opened, and `fakeDeepLinks()` the urls the app
+opened, with `emit(url)` to open the app with one.
