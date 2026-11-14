@@ -41,6 +41,7 @@ import type {
   MediaType as ExpoMediaType,
   Query,
 } from 'expo-media-library';
+import { desktopMediaLibrary } from './desktop-media-library.ts';
 import { expoModule, presence } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
@@ -92,7 +93,10 @@ export class MediaLibrary {
   static readonly SOURCE = new InjectionToken<NativeMediaLibrary | null>(
     'angular-native.mediaLibrarySource',
     {
-      factory: () => expoModule('expo-media-library', () => require('expo-media-library') as Expo),
+      factory: () =>
+        expoModule('expo-media-library', () => require('expo-media-library') as Expo, {
+          desktop: desktopMediaLibrary,
+        }),
     },
   );
 

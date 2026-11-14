@@ -115,6 +115,7 @@ add_library(ngn_core STATIC
     core/src/modules/network-state.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
+    core/src/modules/photo-library.cpp
     core/src/modules/screen-capture.cpp
     core/src/modules/sharing.cpp
     core/src/modules/splash-screen.cpp
@@ -149,9 +150,10 @@ if(NGN_TESTS)
         appkit/calendar.mm appkit/tests/calendar.test.mm
         appkit/audio.mm appkit/tests/audio.test.mm
         appkit/language-model.mm appkit/tests/language-model.test.mm
-        appkit/screen-capture.mm appkit/tests/screen-capture.test.mm)
+        appkit/screen-capture.mm appkit/tests/screen-capture.test.mm
+        appkit/photo-library.mm appkit/tests/photo-library.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

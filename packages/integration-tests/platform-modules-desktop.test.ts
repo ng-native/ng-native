@@ -605,3 +605,110 @@ describe('SplashScreen on macOS', () => {
     assert.deepEqual(calls, ['hold', 'hide']);
   });
 });
+
+describe('MediaLibrary on macOS', () => {
+  function photos(granted: boolean) {
+    const calls: unknown[][] = [];
+    const record =
+      (name: string, answer?: unknown) =>
+      async (...args: unknown[]) => (calls.push([name, ...args]), answer);
+    const permission = { status: granted ? 'granted' : 'denied', granted, canAskAgain: false };
+    const host = mac({
+      NgNativeMediaLibrary: {
+        getPermissionsAsync: async () => permission,
+        requestPermissionsAsync: record('request', permission),
+        query: record('query', granted ? ['a1'] : []),
+        queryMetadata: record('queryMetadata', []),
+        asset: async (id: string) =>
+          granted ? { id, filename: 'IMG_1.HEIC', width: 4, height: 3 } : null,
+        uri: async () => 'file:///Photos/IMG_1.HEIC',
+        albums: async () => (granted ? [{ id: 'al1', title: 'Holiday', type: 'album' }] : []),
+        albumAssets: async () => ['a1'],
+        createAsset: granted
+          ? record('createAsset', 'new-1')
+          : async () => {
+              throw new Error('MediaLibrary: the app has no access to the photo library');
+            },
+        startObserving: () => (calls.push(['startObserving']), granted),
+      },
+    });
+    return { host, calls };
+  }
+
+  it('builds a query as a plain description, and reads each asset when a getter asks', async () => {
+    const { calls } = photos(true);
+    const { MediaLibrary, AssetField, MediaType } = await import('@ng-native/expo/media-library');
+    const library = injectService(MediaLibrary);
+    const [album] = await library.albums();
+    assert.equal(await album!.getTitle(), 'Holiday');
+    const assets = await library.assets((query) =>
+      query
+        .eq(AssetField.MEDIA_TYPE, MediaType.IMAGE)
+        .orderBy({ key: AssetField.CREATION_TIME, ascending: false })
+        .limit(30)
+        .album(album!),
+    );
+    assert.deepEqual(calls[0], [
+      'query',
+      {
+        filters: [{ field: 'mediaType', op: 'eq', value: 'image' }],
+        sort: [{ key: 'creationTime', ascending: false }],
+        limit: 30,
+        album: 'al1',
+      },
+    ]);
+    assert.equal(assets[0]!.id, 'a1');
+    assert.equal(await assets[0]!.getFilename(), 'IMG_1.HEIC');
+    assert.deepEqual(await assets[0]!.getShape(), { width: 4, height: 3 });
+    assert.equal(await assets[0]!.getUri(), 'file:///Photos/IMG_1.HEIC');
+    const saved = await library.save('file:///tmp/a.jpg', album!);
+    assert.equal(saved?.id, 'new-1');
+    assert.deepEqual(calls.at(-1), ['createAsset', 'file:///tmp/a.jpg', 'al1']);
+  });
+
+  it('reads nothing and saves nothing without access, and starts watching only when asked', async () => {
+    const { host, calls } = photos(false);
+    const { MediaLibrary } = await import('@ng-native/expo/media-library');
+    const library = injectService(MediaLibrary);
+    assert.equal(library.available(), true);
+    assert.deepEqual(await library.assets(), []);
+    assert.deepEqual(await library.albums(), []);
+    assert.equal(await library.save('file:///tmp/a.jpg'), null);
+    assert.equal(calls.filter(([name]) => name === 'createAsset').length, 0);
+    assert.equal(host.listening('ngNativeMediaLibrary'), 0);
+    library.watch();
+    assert.deepEqual(calls.at(-1), ['startObserving']);
+    assert.equal(host.listening('ngNativeMediaLibrary'), 1);
+  });
+});
+
+describe('ImagePicker on macOS', () => {
+  it('picks from the library through NgNativeImagePicker, and answers a cancel with nothing', async () => {
+    let canceled = true;
+    mac({
+      NgNativeImagePicker: {
+        launchImageLibraryAsync: async () =>
+          canceled
+            ? { canceled: true, assets: null }
+            : { canceled: false, assets: [{ uri: 'file:///c/p.jpg' }] },
+        launchCameraAsync: async () => ({ canceled: true, assets: null }),
+        getCameraPermissionsAsync: async () => ({
+          status: 'denied',
+          granted: false,
+          canAskAgain: false,
+        }),
+        requestCameraPermissionsAsync: async () => ({
+          status: 'denied',
+          granted: false,
+          canAskAgain: false,
+        }),
+      },
+    });
+    const { ImagePicker } = await import('@ng-native/expo/image-picker');
+    const picker = injectService(ImagePicker);
+    assert.deepEqual(await picker.pick(), []);
+    canceled = false;
+    assert.deepEqual(await picker.pick({ mediaTypes: ['images'] }), [{ uri: 'file:///c/p.jpg' }]);
+    assert.deepEqual(await picker.capture(), []);
+  });
+});

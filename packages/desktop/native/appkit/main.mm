@@ -37,6 +37,7 @@
 #import "audio.h"
 #import "language-model.h"
 #import "screen-capture.h"
+#import "photo-library.h"
 #include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "file-system.h"
@@ -742,6 +743,9 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeLocalLlm", [] { return ngn::makeLocalLlmModule(languageModel); });
       ngn::addModule(*modules, "NgNativeScreenCapture", [] { return ngn::makeScreenCaptureModule(ngn::appkit::captureShield()); });
       ngn::addModule(*modules, "NgNativeSplashScreen", [] { return ngn::makeSplashScreenModule(gSplash); });
+      static auto photos = ngn::appkit::makePhotoLibrary(caches);
+      ngn::addModule(*modules, "NgNativeMediaLibrary", [] { return ngn::makeMediaLibraryModule(photos, noPrompts); });
+      ngn::addModule(*modules, "NgNativeImagePicker", [] { return ngn::makeImagePickerModule(photos, noPrompts); });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
       static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });
