@@ -484,6 +484,12 @@ export const DIRECT_EVENTS: ReadonlySet<string> = new Set([
   // W3C's do not bubble: one bubbling up as well ran a parent's handler twice for one entry.
   'topPointerEnter',
   'topPointerLeave',
+  // ModalHostView's. A modal inside a modal would otherwise hand its close request to the one
+  // around it, so one Escape or back press closed both.
+  'topRequestClose',
+  'topShow',
+  'topDismiss',
+  'topOrientationChange',
 ]);
 
 /**
