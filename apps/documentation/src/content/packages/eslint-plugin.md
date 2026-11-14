@@ -156,9 +156,9 @@ than fixed, since its `$event` becomes the text.
 ### no-html-controls
 
 Reports an HTML element that draws as a plain view or text without the behaviour it has in a
-browser: `<button>` (use `<pressable>`), `<a>`, `<input>`, `<textarea>`, `<select>`, `<option>`,
-`<form>`, `<img>` and `<picture>`. It also reports `<video>`, `<audio>`, `<iframe>`, `<canvas>`,
-`<embed>` and `<object>`, which nothing in Angular Native draws.
+browser: `<button>` (use `<native-button>`, or `<pressable>`), `<a>`, `<input>`, `<textarea>`,
+`<select>`, `<option>`, `<form>`, `<img>` and `<picture>`. It also reports `<video>`, `<audio>`,
+`<iframe>`, `<canvas>`, `<embed>` and `<object>`, which nothing in Angular Native draws.
 
 HTML's text and layout elements, such as `<p>`, `<span>`, `<strong>`, `<div>` and `<section>`,
 are not reported. They draw as text and views, as [Elements](/packages/components) describes.

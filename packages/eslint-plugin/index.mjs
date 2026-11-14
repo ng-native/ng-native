@@ -14,7 +14,7 @@ import tseslint from 'typescript-eslint';
 
 /** HTML elements that draw as a plain view or text, without the behaviour they have in a browser. */
 const HTML_CONTROLS = new Map([
-  ['button', '<pressable>'],
+  ['button', '<native-button>, or <pressable> for a look of your own'],
   [
     'a',
     '<text pressable (press)="...">, opening the link with DeepLinks.open from @ng-native/device',

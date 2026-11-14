@@ -1,5 +1,6 @@
 import { Directive, computed, input } from '@angular/core';
 import { nativePlatform } from '@ng-native/fabric';
+import type { ControlSize } from '@ng-native/device';
 import { optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
 
@@ -16,6 +17,7 @@ import { ViewBase } from './view-base.ts';
   host: {
     '[style]': 'sizeStyle()',
     '[size]': 'nativeSize()',
+    '[controlSize]': 'controlSize()',
     '[animating]': 'animating()',
     '[color]': 'color()',
     '[hidesWhenStopped]': 'hidesWhenStopped()',
@@ -26,6 +28,8 @@ import { ViewBase } from './view-base.ts';
 export class ActivityIndicator extends ViewBase {
   /** `small` and `large` match RN's 20 and 36 points; a number sets both dimensions. */
   readonly size = input<'small' | 'large' | number>('small');
+  /** AppKit's control size on macOS, and UIKit's on iOS 26 and later. Ignored elsewhere. */
+  readonly controlSize = input<ControlSize>();
   /** Whether the spinner turns. Defaults to true. */
   readonly animating = input(undefined, { transform: optionalBoolean });
   /** The spinner's colour. */

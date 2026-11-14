@@ -5242,8 +5242,14 @@ function describeViews(
   elementName: string,
   { viewName, defaultProps, options }: ViewNameRegistration,
 ): void {
-  for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
-    describeView(name, defaultProps, options);
+  const names =
+    typeof viewName === 'string'
+      ? [viewName]
+      : [viewName.ios, viewName.android, ...(viewName.macos ? [viewName.macos] : [])];
+  for (const name of names) {
+    // React Native's plain view, which an element is on an OS that has no view of its own for it,
+    // is every element's: what this registration says of its own view is not said of that one.
+    if (name !== 'View' || typeof viewName === 'string') describeView(name, defaultProps, options);
   }
   // The element's, not the view's: another element may name the same view without it.
   if (options?.spacedText) SPACED_TEXT.add(elementName);

@@ -146,7 +146,7 @@ test('routerLink, written or bound, is reported, and nativeRouterLink is not', a
 test('an HTML control in a template is reported, with what to use', async () => {
   assert.deepEqual(await lint('<view><button>Save</button><img src="a.png" /></view>', 'a.html'), [
     '1:7 @ng-native/no-html-controls: <button> draws as a plain view on a device, with no ' +
-      'behaviour. Use <pressable>.',
+      'behaviour. Use <native-button>, or <pressable> for a look of your own.',
     '1:28 @ng-native/no-html-controls: <img> draws as a plain view on a device, with no ' +
       'behaviour. Use <image>.',
   ]);
