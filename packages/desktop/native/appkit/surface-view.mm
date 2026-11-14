@@ -1,8 +1,21 @@
 #import "surface-view.h"
 
+namespace {
+std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> gInsetsChanged;
+} // namespace
+
 @implementation NGNSurfaceView {
   ngn::InputSink *_input;
   ngn::ContainerId _container;
+  facebook::react::Tag _rootTag;
+  std::optional<ngn::ContainerInsets> _reported;
+}
+
++ (std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)>)insetsChanged {
+  return gInsetsChanged;
+}
++ (void)setInsetsChanged:(std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)>)fn {
+  gInsetsChanged = std::move(fn);
 }
 
 - (instancetype)initWithFrame:(NSRect)frame surfaceId:(facebook::react::SurfaceId)surfaceId input:(ngn::InputSink *)input {
@@ -18,6 +31,7 @@
   if ((self = [super initWithFrame:frame])) {
     _surfaceId = surfaceId;
     _container = container;
+    _rootTag = rootTag;
     _input = input;
     _input->addContainer(container, surfaceId, rootTag);
   }
@@ -26,6 +40,46 @@
 
 - (void)dealloc {
   _input->removeContainer(_container);
+  if (gInsetsChanged && _reported) {
+    gInsetsChanged(_rootTag, std::nullopt);
+  }
+}
+
+// What of the container the window's title bar and toolbar cover (the content runs under them),
+// and how far the window controls reach in from the leading edge.
+- (void)reportInsets {
+  if (!gInsetsChanged || self.window == nil) {
+    return;
+  }
+  NSEdgeInsets safe = self.safeAreaInsets;
+  double leading = 0;
+  if (NSButton *zoom = [self.window standardWindowButton:NSWindowZoomButton]; zoom != nil && safe.top > 0) {
+    NSRect controls = [self convertRect:zoom.bounds fromView:zoom];
+    leading = std::max<double>(0, NSMaxX(controls));
+  }
+  ngn::ContainerInsets insets{
+      .size = {static_cast<facebook::react::Float>(self.bounds.size.width),
+               static_cast<facebook::react::Float>(self.bounds.size.height)},
+      .insets = {.left = static_cast<facebook::react::Float>(safe.left),
+                 .top = static_cast<facebook::react::Float>(safe.top),
+                 .right = static_cast<facebook::react::Float>(safe.right),
+                 .bottom = static_cast<facebook::react::Float>(safe.bottom)},
+      .titlebarLeading = leading,
+  };
+  if (_reported != insets) {
+    _reported = insets;
+    gInsetsChanged(_rootTag, insets);
+  }
+}
+
+- (void)layout {
+  [super layout];
+  [self reportInsets];
+}
+
+- (void)viewDidMoveToWindow {
+  [super viewDidMoveToWindow];
+  [self reportInsets];
 }
 
 - (BOOL)isFlipped {

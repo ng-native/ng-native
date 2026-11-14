@@ -65,11 +65,13 @@ add_library(ngn_core STATIC
     core/src/host-state.cpp
     core/src/input-dispatcher.cpp
     core/src/key-value-store.cpp
+    core/src/library-glue.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
     core/src/native-module.cpp
     core/src/network.cpp
     core/src/text-layout-manager.cpp
+    core/src/safe-areas.cpp
     core/src/screen-stacks.cpp
     core/src/view-tree.cpp
     core/src/modules/alert-manager.cpp

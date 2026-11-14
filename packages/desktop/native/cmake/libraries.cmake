@@ -7,6 +7,9 @@
 set(NGN_LIBRARIES "" CACHE STRING "Library directories made by scripts/codegen-library.sh")
 
 set(_lib_includes "")
+set(_lib_glue_decls "")
+set(_lib_glue_calls "")
+set(_lib_glue "")
 set(_lib_providers "")
 set(_lib_targets "")
 foreach(dir ${NGN_LIBRARIES})
@@ -30,6 +33,12 @@ foreach(dir ${NGN_LIBRARIES})
     endif()
     string(APPEND _lib_providers "      concreteComponentDescriptorProvider<${d}>(),\n")
   endforeach()
+  # The core's reading of the library's own props and state, where the core has any (library-glue.h).
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/core/src/libraries/${_name}.cpp)
+    list(APPEND _lib_glue core/src/libraries/${_name}.cpp)
+    string(APPEND _lib_glue_decls "void installGlue_${_name}();\n")
+    string(APPEND _lib_glue_calls "  installGlue_${_name}();\n")
+  endif()
   add_library(ngn_library_${_name} OBJECT ${_srcs})
   target_include_directories(ngn_library_${_name} SYSTEM PUBLIC ${_include_dirs})
   target_link_libraries(ngn_library_${_name} PUBLIC react_native)
@@ -47,20 +56,18 @@ using namespace facebook::react;
 
 namespace ngn {
 
+@_lib_glue_decls@
 std::vector<ComponentDescriptorProvider> libraryComponents() {
+  static bool installed = false;
+  if (!installed) {
+    installed = true;
+@_lib_glue_calls@  }
   return {
 @_lib_providers@  };
 }
 
 } // namespace ngn
 ]] @ONLY)
-
-# The core's reading of a library's props, where the core draws one of its components itself.
-if(TARGET ngn_library_rnscreens)
-  set(_lib_glue core/src/libraries/rnscreens.cpp)
-else()
-  set(_lib_glue core/src/libraries/no-rnscreens.cpp)
-endif()
 
 add_library(ngn_libraries STATIC ${CMAKE_BINARY_DIR}/generated/library-components.cpp ${_lib_glue})
 target_link_libraries(ngn_libraries PUBLIC ngn_core ${_lib_targets})

@@ -62,8 +62,7 @@ struct HeaderBar {
 std::vector<BarButton> barButtons(const std::vector<folly::dynamic> &items);
 
 // The header a RNSScreenStackHeaderConfig's props describe, or nothing for other props or a host
-// built without react-native-screens. Defined beside the library's components
-// (cmake/libraries.cmake).
+// built without react-native-screens (library-glue.h).
 std::optional<HeaderBar> headerBar(const facebook::react::Props &props);
 
 // Where a RNSScreenStackHeaderSubview sits: "left", "right", "center", "back" or "searchBar".

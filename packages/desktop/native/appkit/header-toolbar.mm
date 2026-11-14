@@ -237,6 +237,8 @@ NSImage *symbol(const std::string &name, NSString *description) {
   } else {
     window.toolbar = nil;
   }
+  // The safe area's top follows the toolbar; containers report it as they lay out.
+  window.contentView.needsLayout = YES;
 }
 
 // Moves a header item's view into a container of its own, which its toolbar item shows.

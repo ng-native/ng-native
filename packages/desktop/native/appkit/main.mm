@@ -160,6 +160,13 @@ int main(int argc, const char *argv[]) {
         gHost.mounting->tree().removeContainerRoot(static_cast<Tag>(tag));
       }
     };
+    NGNSurfaceView.insetsChanged = [](Tag root, std::optional<ngn::ContainerInsets> insets) {
+      if (insets) {
+        gHost.mounting->setContainerInsets(root, *insets);
+      } else {
+        gHost.mounting->removeContainerInsets(root);
+      }
+    };
     NGNHeaderToolbar.input = gHost.input.get();
     NGNHeaderToolbar.containerRootChanged = [](NSInteger tag, BOOL isRoot) {
       if (isRoot) {
@@ -178,7 +185,7 @@ int main(int argc, const char *argv[]) {
     gHost.window = [[NSWindow alloc]
         initWithContentRect:frame
                   styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable |
-                            NSWindowStyleMaskMiniaturizable
+                            NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView
                     backing:NSBackingStoreBuffered
                       defer:NO];
     gHost.window.title = title;

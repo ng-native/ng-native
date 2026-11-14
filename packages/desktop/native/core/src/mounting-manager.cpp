@@ -18,10 +18,12 @@ namespace ngn {
 MountingManager::MountingManager(
     std::shared_ptr<MountingBackend> backend,
     std::shared_ptr<DesktopPropsSink> desktopProps,
-    std::unique_ptr<ScreenStacks> screens)
+    std::unique_ptr<ScreenStacks> screens,
+    std::unique_ptr<SafeAreas> safeAreas)
     : backend_(std::move(backend)),
       desktopProps_(std::move(desktopProps)),
-      screens_(screens ? std::move(screens) : std::make_unique<ScreenStacks>()) {
+      screens_(screens ? std::move(screens) : std::make_unique<ScreenStacks>()),
+      safeAreas_(safeAreas ? std::move(safeAreas) : std::make_unique<SafeAreas>()) {
   components_ = {
       concreteComponentDescriptorProvider<DesktopViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<ParagraphComponentDescriptor>(),
@@ -74,12 +76,14 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
       case ShadowViewMutation::Create: {
         const auto &view = m.newChildShadowView;
         tree_.create(view);
+        safeAreas_->created(view);
         backend_->createView(view);
         reportDesktopProps(view, nullptr);
         break;
       }
       case ShadowViewMutation::Delete:
         screens_->deleted(m.oldChildShadowView.tag);
+        safeAreas_->deleted(m.oldChildShadowView.tag);
         tree_.destroy(m.oldChildShadowView.tag);
         backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
         break;
@@ -122,6 +126,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   for (const auto &change : screens_->settle(tree_)) {
     backend_->setCovered(surfaceId, change.tag, change.covered);
   }
+  safeAreas_->settle(tree_);
   auto header = screens_->frontHeader(tree_, surfaceId);
   auto known = frontHeaders_.find(surfaceId);
   if (known == frontHeaders_.end() ? header.has_value() : known->second != header) {
@@ -132,6 +137,15 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   if (afterMount_) {
     afterMount_(surfaceId);
   }
+}
+
+void MountingManager::setContainerInsets(Tag root, const ContainerInsets &insets) {
+  safeAreas_->setContainer(root, insets);
+  safeAreas_->settle(tree_);
+}
+
+void MountingManager::removeContainerInsets(Tag root) {
+  safeAreas_->removeContainer(root);
 }
 
 void MountingManager::reportDesktopProps(const ShadowView &view, const ShadowView *old) {
