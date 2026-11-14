@@ -441,6 +441,131 @@ describe('Audio on macOS', () => {
   });
 });
 
+describe('Video on macOS', () => {
+  /** A desktop host's NgNativeVideo, recording each call. */
+  function videoHost(state: Record<number, unknown> = {}) {
+    const calls: unknown[][] = [];
+    const record =
+      (name: string, answer?: unknown) =>
+      (...args: unknown[]) => (calls.push([name, ...args]), answer);
+    const host = mac({
+      NgNativeVideo: {
+        createPlayer: record('createPlayer', 5),
+        replace: record('replace'),
+        release: record('release'),
+        play: record('play'),
+        pause: record('pause'),
+        replay: record('replay'),
+        seekBy: record('seekBy'),
+        setCurrentTime: record('setCurrentTime'),
+        setPlaybackRate: record('setPlaybackRate'),
+        setVolume: record('setVolume'),
+        setMuted: record('setMuted'),
+        setLoop: record('setLoop'),
+        setPreservesPitch: record('setPreservesPitch'),
+        setTimeUpdateEventInterval: record('setTimeUpdateEventInterval'),
+        state: (id: number) => state[id] ?? null,
+      },
+    });
+    return { host, calls };
+  }
+
+  it("plays through NgNativeVideo, and follows only its own player's events", async () => {
+    const { host, calls } = videoHost({
+      5: {
+        status: 'readyToPlay',
+        playing: true,
+        currentTime: 1.5,
+        duration: 4,
+        bufferedPosition: 3,
+        playbackRate: 1,
+        volume: 1,
+        muted: false,
+        loop: false,
+        preservesPitch: true,
+        timeUpdateEventInterval: 0.5,
+      },
+    });
+    const { videoPlayer } = await import('@ng-native/expo/video');
+    const injector = Injector.create({ providers: [] });
+    const owned = runInInjectionContext(injector, () =>
+      videoPlayer({ assetId: 12 } as never, { timeUpdate: 0.5 }),
+    );
+    // An asset resolved as an image is, and the interval in seconds.
+    assert.deepEqual(calls.slice(0, 2), [
+      ['createPlayer', 'http://localhost:8081/assets/font-12.ttf'],
+      ['setTimeUpdateEventInterval', 5, 0.5],
+    ]);
+    // What `<expo-video [player]>` binds: the number the view finds the player by.
+    assert.equal(owned.id, 5);
+    const player = owned.native;
+    assert.equal(player.status, 'readyToPlay');
+    assert.equal(player.playing, true);
+    assert.equal(player.currentTime, 1.5);
+    assert.equal(player.duration, 4);
+    assert.equal(player.bufferedPosition, 3);
+    assert.equal(player.isLive, false);
+    assert.deepEqual(player.availableVideoTracks, []);
+
+    calls.length = 0;
+    player.volume = 0.5;
+    player.muted = true;
+    player.loop = true;
+    player.playbackRate = 1.5;
+    player.preservesPitch = false;
+    player.currentTime = 2;
+    player.play();
+    player.pause();
+    player.seekBy(-1);
+    player.replay();
+    player.replace('file:///b.mp4');
+    await player.replaceAsync({ uri: 'file:///c.mp4' });
+    player.replace(null);
+    assert.deepEqual(calls, [
+      ['setVolume', 5, 0.5],
+      ['setMuted', 5, true],
+      ['setLoop', 5, true],
+      ['setPlaybackRate', 5, 1.5],
+      ['setPreservesPitch', 5, false],
+      ['setCurrentTime', 5, 2],
+      ['play', 5],
+      ['pause', 5],
+      ['seekBy', 5, -1],
+      ['replay', 5],
+      ['replace', 5, 'file:///b.mp4'],
+      ['replace', 5, 'file:///c.mp4'],
+      ['replace', 5, null],
+    ]);
+
+    host.send('ngNativeVideo', {
+      type: 'statusChange',
+      id: 4,
+      payload: { status: 'error', error: { message: 'not this one' } },
+    });
+    assert.equal(owned.state().status, 'idle');
+    host.send('ngNativeVideo', { type: 'sourceLoad', id: 5, payload: { duration: 4 } });
+    host.send('ngNativeVideo', { type: 'statusChange', id: 5, payload: { status: 'readyToPlay' } });
+    host.send('ngNativeVideo', { type: 'playingChange', id: 5, payload: { isPlaying: true } });
+    host.send('ngNativeVideo', { type: 'timeUpdate', id: 5, payload: { currentTime: 2.5 } });
+    host.send('ngNativeVideo', { type: 'mutedChange', id: 5, payload: { muted: true } });
+    assert.deepEqual(owned.state(), {
+      playing: true,
+      status: 'readyToPlay',
+      currentTime: 2.5,
+      duration: 4,
+      muted: true,
+      volume: 1,
+      ended: false,
+    });
+    host.send('ngNativeVideo', { type: 'playToEnd', id: 5, payload: {} });
+    assert.equal(owned.state().ended, true);
+
+    injector.destroy();
+    assert.deepEqual(calls.at(-1), ['release', 5]);
+    assert.equal(host.listening('ngNativeVideo'), 0);
+  });
+});
+
 describe('LanguageModel on macOS', () => {
   function llmHost(availability = 'available') {
     const calls: unknown[][] = [];

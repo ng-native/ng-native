@@ -9,6 +9,7 @@
 #include "ngn/split-view.h"
 #include "ngn/camera.h"
 #include "ngn/maps.h"
+#include "ngn/video.h"
 #include "ngn/expo-image.h"
 #include "ngn/expo-ui.h"
 #include "ngn/symbol.h"
@@ -61,6 +62,7 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<ExpoImageComponentDescriptor>(),
       concreteComponentDescriptorProvider<CameraComponentDescriptor>(),
       concreteComponentDescriptorProvider<MapComponentDescriptor>(),
+      concreteComponentDescriptorProvider<VideoViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : expoUIComponentProviders()) {

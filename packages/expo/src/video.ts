@@ -7,7 +7,10 @@
  * // <expo-video [player]="player.id" />
  * // {{ player.state().currentTime }}
  * ```
+ *
+ * On macOS the player is the desktop host's `NgNativeVideo`'s, through `desktopVideo`.
  */
+import { desktopVideo } from './desktop-video.ts';
 import { expoModuleNow, unavailable } from './native.ts';
 import { ownPlayer, watchPlayer, type Player } from './player.ts';
 
@@ -19,7 +22,7 @@ export function videoPlayer(
   const expo = expoModuleNow(
     'expo-video',
     () => require('expo-video') as typeof import('expo-video'),
-    ['ios', 'android', 'web'],
+    { platforms: ['ios', 'android', 'web'], desktop: desktopVideo },
   );
   if (!expo) throw unavailable('expo-video', 'Stand in for the player in the test.');
   const native = expo.createVideoPlayer(source);
