@@ -103,6 +103,7 @@ add_library(ngn_core STATIC
     core/src/modules/image-loader.cpp
     core/src/modules/local-authentication.cpp
     core/src/modules/location.cpp
+    core/src/modules/network-state.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
     core/src/modules/sqlite.cpp
@@ -124,9 +125,10 @@ if(NGN_TESTS)
     target_sources(ngn_core_tests PRIVATE
         appkit/updates.mm appkit/tests/update-crypto.test.mm
         appkit/crypto.mm appkit/tests/crypto.test.mm
-        appkit/app-info.mm appkit/tests/app-info.test.mm)
+        appkit/app-info.mm appkit/tests/app-info.test.mm
+        appkit/network-state.mm appkit/tests/network-state.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

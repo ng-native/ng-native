@@ -8,6 +8,7 @@
  */
 import { InjectionToken, Service, computed, inject, type Signal } from '@angular/core';
 import { observed, observedFrom, type Observed } from './observed.ts';
+import { desktopHost } from './desktop-host.ts';
 import { expoModule, present, presence } from './native.ts';
 
 export type ConnectionType =
@@ -43,6 +44,7 @@ export class Network {
         const expo = expoModule(
           'expo-network',
           () => require('expo-network') as typeof import('expo-network'),
+          { desktop: desktopNetwork },
         );
         if (!expo) return null;
         // Missing from the build: the stand-in, to say so when it is used.
@@ -84,4 +86,25 @@ export class Network {
    * shows an offline banner should treat null as "not yet" rather than as offline.
    */
   readonly reachable: Signal<boolean | null> = computed(() => this.status().reachable);
+}
+
+/**
+ * expo-network's two functions over the desktop host's `NgNativeNetwork`, whose changes arrive as
+ * `ngNativeNetwork` events. Null where the host has no such module.
+ */
+function desktopNetwork(): typeof import('expo-network') | null {
+  const host = desktopHost<{ getNetworkStateAsync(): Promise<unknown> }>('NgNativeNetwork');
+  if (!host) return null;
+  const network: Pick<
+    typeof import('expo-network'),
+    'getNetworkStateAsync' | 'addNetworkStateListener'
+  > = {
+    getNetworkStateAsync: () =>
+      host.module.getNetworkStateAsync() as ReturnType<
+        typeof import('expo-network').getNetworkStateAsync
+      >,
+    addNetworkStateListener: (listener) =>
+      host.listen('ngNativeNetwork', (state) => listener(state as never)) as never,
+  };
+  return network as typeof import('expo-network');
 }

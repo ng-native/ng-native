@@ -197,6 +197,7 @@ the package's name after `expo-`, each with the methods the service calls on the
 | `NgNativeFileSystem`                    | `FileSystem`'s files over uris. See File system.                                                                                                                                                                                        |
 | `NgNativeLocation`                      | The foreground permission, one fix and a watch over CLLocationManager. See Location.                                                                                                                                                    |
 | `NgNativeCrypto`                        | `Crypto` over CommonCrypto and the system's secure random source: UUIDs, random bytes and the SHA-1, SHA-2, MD2, MD4 and MD5 digests. Bytes cross as `{base64}`, and the desktop loader answers them as `Uint8Array` and `ArrayBuffer`. |
+| `NgNativeNetwork`                       | `Network` over Network.framework's path monitor: connected and reachable when a route exists, and the type of the interface it uses (`WIFI`, `ETHERNET`, `CELLULAR`, `OTHER`, or `NONE`). Changes arrive as `ngNativeNetwork` events.   |
 | `NgNativeApplication`, `NgNativeDevice` | `AppInfo`: the bundle's version, build, id and name (a dev run, with no bundle, gives the app's id and name and no versions), and the Mac's model, macOS version and `desktop` device type.                                             |
 
 The clipboard has no change notification, so the host checks the count when the app becomes active

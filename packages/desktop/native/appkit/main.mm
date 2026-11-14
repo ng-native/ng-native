@@ -28,6 +28,7 @@
 #import "location.h"
 #import "crypto.h"
 #import "app-info.h"
+#import "network-state.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
 #import "updates.h"
@@ -686,6 +687,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeApplication", [] { return ngn::makeApplicationModule(bundleFacts, keychainService, appName); });
       static auto machine = ngn::appkit::machineFacts();
       ngn::addModule(*modules, "NgNativeDevice", [] { return ngn::makeDeviceModule(machine); });
+      static auto pathMonitor = ngn::appkit::makePathMonitor();
+      ngn::addModule(*modules, "NgNativeNetwork", [] { return ngn::makeNetworkModule(pathMonitor); });
       static auto crypto = ngn::appkit::makeCryptoSource();
       ngn::addModule(*modules, "NgNativeCrypto", [] { return ngn::makeCryptoModule(crypto); });
       static auto locales = ngn::appkit::makeLocaleSource();

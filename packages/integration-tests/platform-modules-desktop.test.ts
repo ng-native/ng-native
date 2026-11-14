@@ -105,3 +105,25 @@ describe('Crypto on macOS', () => {
     ]);
   });
 });
+
+describe('Network on macOS', () => {
+  it('reads the state from NgNativeNetwork and follows its ngNativeNetwork events', async () => {
+    const host = mac({
+      NgNativeNetwork: {
+        getNetworkStateAsync: async () => ({
+          type: 'WIFI',
+          isConnected: true,
+          isInternetReachable: true,
+        }),
+      },
+    });
+    const { Network } = await import('@ng-native/expo/network');
+    const network = injectService(Network);
+    assert.equal(network.available(), true);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.deepEqual(network.status(), { connected: true, type: 'wifi', reachable: true });
+    assert.equal(host.listening('ngNativeNetwork'), 1);
+    host.send('ngNativeNetwork', { type: 'NONE', isConnected: false, isInternetReachable: false });
+    assert.deepEqual(network.status(), { connected: false, type: 'none', reachable: false });
+  });
+});
