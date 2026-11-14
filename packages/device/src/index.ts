@@ -102,7 +102,47 @@ export {
   type ParsedShortcut,
   type ShortcutOs,
 } from './shortcut.ts';
-export { Processes, type NativeProcesses } from './processes.ts';
+export {
+  Processes,
+  UndeclaredCapabilityError,
+  type ChildProcess,
+  type NativeProcesses,
+  type ProcessEvent,
+  type ProcessExit,
+  type SpawnOptions,
+} from './processes.ts';
+export {
+  SEARCH_PATH,
+  SpawnRuleError,
+  compileCapability,
+  filterEnvironment,
+  matchArguments,
+  matchSpawn,
+  parseArgument,
+  programProblem,
+  resolveProgram,
+  type ArgumentRule,
+  type CompiledCapability,
+  type PlaceholderValues,
+  type ProgramLookup,
+  type SpawnCapability,
+  type SpawnMatch,
+} from './spawn-rules.ts';
+export {
+  desktopOptionProblems,
+  pathAllowed,
+  pathProblem,
+  validateDesktopOptions,
+  type DesktopCapabilities,
+  type DesktopOptions,
+  type DocumentType,
+  type PathCapability,
+} from './desktop-options.ts';
+export {
+  macosPermissions,
+  type ExpoPermissionConfig,
+  type MacosPermissions,
+} from './desktop-permissions.ts';
 export {
   Menus,
   serializeMenu,
@@ -113,6 +153,7 @@ export {
   type SerializedMenu,
 } from './menus.ts';
 export { Dock, type NativeDock } from './dock.ts';
+export { Shell, type NativeShell } from './shell.ts';
 export {
   Tray,
   type NativeTray,

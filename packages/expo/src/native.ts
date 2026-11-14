@@ -47,6 +47,55 @@ export const isApple = (platform: ModulePlatform | null): boolean =>
 const DESKTOP_PLATFORMS: ReadonlySet<ModulePlatform> = new Set(['macos']);
 
 /**
+ * The Expo modules whose services have a desktop source in v1, and the desktop host's TurboModule
+ * implementing each one's slice: `NgNative` and the package's name after `expo-`. A call needs no
+ * `desktop` option of its own for these; one it gives wins. A module not here, such as a sensor or
+ * the screen's brightness, has no meaning on a desktop OS and is absent there.
+ */
+export const DESKTOP_MODULES: Readonly<Record<string, string>> = Object.fromEntries(
+  [
+    'file-system',
+    'secure-store',
+    'clipboard',
+    'notifications',
+    'updates',
+    'application',
+    'device',
+    'localization',
+    'network',
+    'crypto',
+    'font',
+    'asset',
+    'sqlite',
+    'keep-awake',
+    'web-browser',
+    'document-picker',
+    'image-picker',
+    'local-authentication',
+    'haptics',
+    'battery',
+    'screen-capture',
+    'splash-screen',
+    'store-review',
+    'audio',
+    'video',
+    'camera',
+    'media-library',
+    'location',
+    'calendar',
+    'maps',
+    'image-manipulator',
+    'local-llm',
+    'apple-authentication',
+    'tracking-transparency',
+    'print',
+  ].map((name) => [
+    `expo-${name}`,
+    `NgNative${name.replace(/(^|-)(\w)/g, (_, __, letter: string) => letter.toUpperCase())}`,
+  ]),
+);
+
+/**
  * Where a module exists, as `expoModule` takes it: the platforms its Expo module is written for,
  * as a list, or that and the name of the desktop host's TurboModule that implements the same slice
  * on a desktop OS.
@@ -189,8 +238,9 @@ function nativeHalfMissing(module: string, platform: ModulePlatform | null): boo
  * is not called for: see `nativeHalfMissing`.
  *
  * On a desktop OS `load` is never called, because every `expo-*` package is an empty module there.
- * The module is the desktop host's TurboModule `options.desktop` names, which implements the same
- * slice, or what its desktop loader answers, and where it gives neither the service is inert.
+ * The module is the desktop host's TurboModule `options.desktop` or `DESKTOP_MODULES` names, which
+ * implements the same slice, or what its desktop loader answers, and where neither gives one the
+ * service is inert.
  */
 export function expoModule<T>(
   module: string,
@@ -202,7 +252,7 @@ export function expoModule<T>(
     ? { platforms: options as readonly ModulePlatform[] }
     : (options as Exclude<ModuleOptions, readonly ModulePlatform[]>);
   if (platform !== null && DESKTOP_PLATFORMS.has(platform)) {
-    return desktopModule<T>(module, platform, desktop);
+    return desktopModule<T>(module, platform, desktop ?? DESKTOP_MODULES[module]);
   }
   let failure: unknown;
   try {

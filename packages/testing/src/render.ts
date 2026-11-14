@@ -19,8 +19,16 @@ import {
   type Provider,
   type Type,
 } from '@angular/core';
-import type { Engine, EngineOptions } from '@ng-native/fabric';
+import { OS, OS_VERSION } from '@ng-native/device';
+import {
+  nativePlatform,
+  registerPlatformComponents,
+  type Conditions,
+  type Engine,
+  type EngineOptions,
+} from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
+import { provideDesktopFakes } from './desktop-fakes.ts';
 import { destroyServiceApps } from './inject-service.ts';
 import { bindQueries, describeTree, flatten, type BoundQueries } from './queries.ts';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from './test-utils.ts';
@@ -43,6 +51,59 @@ export interface RenderOptions<T> extends EngineOptions {
   imports?: unknown[];
   /** Fields set on the instance: the template form's host, or the component itself. */
   componentProperties?: Partial<T> & Record<string, unknown>;
+  /**
+   * The OS to render as, for this render alone: the `OS`, `OS_VERSION`, `DESKTOP` and `APPLE`
+   * tokens, the view names and the `platform-<os>` class, the `macos:` and `desktop:` variants,
+   * and the hover and pointer media features (a Mac's `hover` and `fine`). On a desktop OS the
+   * desktop host's menus, Dock, tray and processes are recording fakes (`provideDesktopFakes`),
+   * which a provider of the test's own replaces; the component renders on the render's own
+   * surface, as the main window. It does not change which
+   * file a `.macos.ts` or `.ios.ts` import resolved to: that is the Vitest preset's `os`.
+   */
+  os?: TestOs;
+  /** `OS_VERSION` for this render: the macOS major, the iOS major or the Android API level. */
+  osVersion?: number | null;
+}
+
+/** The OSes a test renders as. */
+export type TestOs = 'ios' | 'android' | 'macos' | 'web';
+
+/** What a Mac's pointer answers to `(hover)`, `(pointer)` and their `any-` forms. */
+const DESKTOP_POINTER = {
+  hover: 'hover',
+  pointer: 'fine',
+  anyHover: 'hover',
+  anyPointer: 'fine',
+} as const;
+
+/** The size a desktop render's window is, where the test gives no conditions of its own. */
+const DESKTOP_WINDOW = { width: 1024, height: 768, colorScheme: 'light' } as const;
+
+/** Render as `os` from here on. The platform to go back to, or null where there is no `os`. */
+function renderAs(os: TestOs | undefined): string | null {
+  if (!os) return null;
+  const platform = nativePlatform();
+  registerPlatformComponents(os);
+  return platform;
+}
+
+/** The providers and conditions a render's `os` and `osVersion` stand for. */
+function osOptions(
+  os: TestOs | undefined,
+  osVersion: number | null | undefined,
+  conditions: Conditions | undefined,
+): { providers: Provider[]; conditions: Conditions | undefined } {
+  const providers: Provider[] = [];
+  if (os === 'macos') providers.push(...provideDesktopFakes());
+  if (os) providers.push({ provide: OS, useValue: os });
+  if (os || osVersion !== undefined) {
+    providers.push({ provide: OS_VERSION, useValue: osVersion ?? null });
+  }
+  const desktop = os === 'macos';
+  return {
+    providers,
+    conditions: desktop ? { ...DESKTOP_WINDOW, ...DESKTOP_POINTER, ...conditions } : conditions,
+  };
 }
 
 /**
@@ -77,6 +138,8 @@ interface Mounted {
   engine: Engine;
   applicationRef: ApplicationRef;
   componentRef: ComponentRef<unknown>;
+  /** The platform to go back to as this render goes, where it rendered as another OS. */
+  platform: string | null;
 }
 
 const mounted: Mounted[] = [];
@@ -129,6 +192,11 @@ function latest(): Mounted {
   const current = mounted.at(-1);
   if (!current) throw new Error('Nothing is rendered: call render() first.');
   return current;
+}
+
+/** The render a call with no node acts on: the most recent one. */
+export function lastRender(): Mounted {
+  return latest();
 }
 
 export function ownerOf(node: FakeFabricNode): Mounted {
@@ -237,17 +305,30 @@ export async function render<T>(
   component: Type<T> | string,
   options: RenderOptions<T> = {},
 ): Promise<RenderResult<T>> {
-  const { inputs, on, providers, imports: _, componentProperties, ...engine } = options;
+  const {
+    inputs,
+    on,
+    providers,
+    imports: _,
+    componentProperties,
+    os,
+    osVersion,
+    ...engine
+  } = options;
   const isTemplate = typeof component === 'string';
   const type = isTemplate ? await hostFor(component, options) : component;
   const fabric = createFakeFabric();
   if (!isTemplate) refuseUnknownInputs(type, inputs);
   standInForExpo();
+  const forOs = osOptions(os, osVersion, engine.conditions);
+  const platform = renderAs(os);
   let app: ReturnType<typeof mount>;
   try {
     app = mount(1, type, fabric, {
       ...engine,
-      providers,
+      conditions: forOs.conditions,
+      // The test's own come last, so a fake of its own replaces the one the OS brings.
+      providers: [...forOs.providers, ...(providers ?? [])],
       inputs: isTemplate ? {} : inputs,
       // As a template would bind them, so an output a host directive forwards is heard, by the
       // name it is forwarded under, and a name that is no output is refused by Angular, by name.
@@ -258,6 +339,7 @@ export async function render<T>(
   } catch (error) {
     // Never mounted, so no unmount will take the stand-in away.
     releaseExpo();
+    if (platform !== null) registerPlatformComponents(platform);
     throw error;
   }
   const self: Mounted = {
@@ -265,6 +347,7 @@ export async function render<T>(
     engine: app.engine,
     applicationRef: app.applicationRef,
     componentRef: app.componentRef,
+    platform,
   };
   mounted.push(self);
 
@@ -314,6 +397,7 @@ function unmount(target: Mounted): void {
     target.applicationRef.destroy();
   } finally {
     releaseExpo();
+    if (target.platform !== null) registerPlatformComponents(target.platform);
   }
 }
 

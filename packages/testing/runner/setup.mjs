@@ -10,6 +10,10 @@ createRequire(import.meta.url)('@ng-native/metro/polyfills/animation-globals.js'
 // Metro's prelude defines this in every bundle, and app code reads it bare.
 globalThis.__DEV__ ??= true;
 
+// The OS the project's tests run as (the preset's `os`): its view names, and what `OS` answers.
+const os = process.env['NG_NATIVE_TEST_OS'];
+if (os && os !== 'ios') (await import('@ng-native/fabric')).registerPlatformComponents(os);
+
 // Tells `injectService` which test is running, so the app the calls in a test share is never
 // another test's: how many tests have finished, and how many are running now. On the global, since
 // this file and the package a test imports need not be one module instance.

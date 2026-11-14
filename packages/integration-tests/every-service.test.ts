@@ -83,7 +83,8 @@ type Os = 'ios' | 'android' | 'macos' | 'web';
 /**
  * Each service: its token, the source file and class that declare its methods, and the OSes it is
  * absent on whatever the app installs. An Expo-backed service is absent on the web unless its
- * module is written for it, and on a Mac until it names a desktop module.
+ * module is written for it, and on a Mac unless it has a desktop source (`DESKTOP_MODULES`): with
+ * one, a desktop host without the module is a misconfiguration, which throws on first use.
  */
 interface Entry {
   readonly token: ProviderToken<unknown>;
@@ -111,9 +112,12 @@ const expo = (
   token,
   file: `expo/src/${file}.ts`,
   cls: options.cls ?? (token as { name: string }).name,
-  absentOn: options.absentOn ?? ['macos', 'web'],
+  absentOn: options.absentOn ?? ['web'],
   madeWithModule: options.madeWithModule,
 });
+
+/** A service with no meaning on a desktop OS, so no desktop source: absent on a Mac for good. */
+const MOBILE_ONLY = { absentOn: ['macos', 'web'] as const };
 
 const SERVICES: Readonly<Record<string, Entry>> = {
   Accessibility: device(Accessibility, 'accessibility'),
@@ -136,18 +140,18 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   Vibration: device(Vibration, 'vibration', ['macos']),
   AddressSearch: expo(AddressSearch, 'address-search'),
   AppInfo: expo(AppInfo, 'app-info'),
-  AppleSignIn: expo(AppleSignIn, 'apple-sign-in', { absentOn: ['android', 'macos', 'web'] }),
-  BackgroundTask: expo(BackgroundTask, 'background-task'),
+  AppleSignIn: expo(AppleSignIn, 'apple-sign-in', { absentOn: ['android', 'web'] }),
+  BackgroundTask: expo(BackgroundTask, 'background-task', MOBILE_ONLY),
   Battery: expo(Battery, 'battery'),
   Biometrics: expo(Biometrics, 'biometrics'),
-  Brightness: expo(Brightness, 'brightness'),
+  Brightness: expo(Brightness, 'brightness', MOBILE_ONLY),
   Browser: expo(Browser, 'browser'),
   Calendar: expo(Calendar, 'calendar'),
   Clipboard: expo(Clipboard, 'clipboard'),
   Crypto: expo(Crypto, 'crypto'),
   DocumentPicker: expo(DocumentPicker, 'document-picker'),
   FileSystem: expo(FileSystem, 'file-system'),
-  Foldable: expo(Foldable, 'foldable'),
+  Foldable: expo(Foldable, 'foldable', MOBILE_ONLY),
   Fonts: expo(Fonts, 'fonts', { cls: 'FontRegistry' }),
   Haptics: expo(Haptics, 'haptics'),
   ImageEditor: expo(ImageEditor, 'image-editor'),
@@ -159,12 +163,12 @@ const SERVICES: Readonly<Record<string, Entry>> = {
   MediaLibrary: expo(MediaLibrary, 'media-library'),
   Network: expo(Network, 'network'),
   Notifications: expo(Notifications, 'notifications'),
-  DeviceOrientation: expo(DeviceOrientation, 'orientation'),
+  DeviceOrientation: expo(DeviceOrientation, 'orientation', MOBILE_ONLY),
   Printing: expo(Printing, 'printing'),
   ScreenCapture: expo(ScreenCapture, 'screen-capture'),
   Storage: expo(Storage, 'store', { cls: 'Store', absentOn: ['web'] }),
   SecureStorage: expo(SecureStorage, 'store', { cls: 'Store' }),
-  Accelerometer: expo(Accelerometer, 'sensors', { cls: 'Sensor' }),
+  Accelerometer: expo(Accelerometer, 'sensors', { cls: 'Sensor', ...MOBILE_ONLY }),
   SplashScreen: expo(SplashScreen, 'splash-screen', { cls: 'Splash', madeWithModule: true }),
   StoreReview: expo(StoreReview, 'store-review'),
   // Vision's: a missing module on iOS or macOS is a build without it, which says so.
@@ -326,8 +330,9 @@ describe('every service', () => {
   for (const [name, { token, madeWithModule }] of Object.entries(SERVICES)) {
     it(`${name}: available is a Signal<boolean> on every OS`, () => {
       for (const os of ['ios', 'android', 'macos', 'web'] as const) {
-        // Without its module where it is written for, a test is a misconfiguration.
-        if (madeWithModule && (os === 'ios' || os === 'android')) continue;
+        // Without its module where it is written for, or has a desktop source, a test is a
+        // misconfiguration.
+        if (madeWithModule && os !== 'web') continue;
         on(os);
         try {
           const service = injectService(token, { providers: [{ provide: OS, useValue: os }] });

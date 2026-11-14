@@ -321,7 +321,69 @@ function removeModuleCopies(vitest) {
 const cleaned = new WeakSet();
 
 /**
- * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false, intl?: 'hermes' | 'node' }} [options]
+ * The project's directory, as the config gives it: Vite's `root`, or Vitest's.
+ *
+ * @param {{ root?: string, test?: { root?: string } } | undefined} config
+ */
+function rootOf(config) {
+  return config?.root ?? config?.test?.root ?? process.cwd();
+}
+
+/**
+ * The file extensions each OS resolves ahead of the plain ones, in order, as Metro and Expo SDK 58
+ * do: a Mac takes a `.macos` file, then an `.ios` one, then a `.native` one.
+ *
+ * @type {Readonly<Record<'ios' | 'android' | 'macos' | 'web', readonly string[]>>}
+ */
+export const PLATFORM_EXTENSIONS = {
+  ios: ['ios', 'native'],
+  android: ['android', 'native'],
+  macos: ['macos', 'ios', 'native'],
+  web: ['web'],
+};
+
+/** Vite's own extensions, which follow the platform ones. */
+const EXTENSIONS = ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'];
+
+/**
+ * What an extensionless import tries, in order, for `os`: each platform extension before each
+ * plain one, so `./storage` is `storage.macos.ts`, then `storage.ios.ts`, then `storage.native.ts`,
+ * then `storage.ts` on a Mac.
+ *
+ * @param {'ios' | 'android' | 'macos' | 'web'} os
+ */
+export function extensionsFor(os) {
+  const code = ['.ts', '.tsx', '.mts', '.js', '.mjs', '.jsx'];
+  return [
+    ...PLATFORM_EXTENSIONS[os].flatMap((platform) => code.map((ext) => `.${platform}${ext}`)),
+    ...EXTENSIONS,
+  ];
+}
+
+/**
+ * The OS a project's tests run as when its options name none: what `expo.platforms` in its
+ * `app.json` lists, so a desktop-only app (`['macos']`) tests as macOS and an Android-only one as
+ * Android. iOS for every other project, as before.
+ *
+ * @param {string} root
+ * @returns {'ios' | 'android' | 'macos' | 'web'}
+ */
+export function defaultOs(root) {
+  let platforms;
+  try {
+    platforms = JSON.parse(readFileSync(path.join(root, 'app.json'), 'utf8'))?.expo?.platforms;
+  } catch {
+    return 'ios';
+  }
+  if (!Array.isArray(platforms) || platforms.includes('ios')) return 'ios';
+  for (const os of /** @type {const} */ (['macos', 'android', 'web'])) {
+    if (platforms.includes(os)) return os;
+  }
+  return 'ios';
+}
+
+/**
+ * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false, intl?: 'hermes' | 'node', os?: 'ios' | 'android' | 'macos' | 'web' }} [options]
  * @returns {import('vitest/config').Plugin}
  */
 export function ngNative(options = {}) {
@@ -329,25 +391,34 @@ export function ngNative(options = {}) {
   return {
     name: 'ng-native',
     enforce: 'pre',
-    config: (config) => ({
-      // The conditions the project's tsconfig resolves packages with, ahead of Vite's own, so a
-      // test takes the same entry tsc does: Nx's TypeScript preset exports a library's source
-      // only under one.
-      ...withConditions(tsconfigConditions(config?.root ?? process.cwd())),
-      test: {
-        setupFiles: [SETUP],
-        // Vitest hands every ES module a CommonJS `require` by default, for compatibility with an
-        // older runner. Code here checks for one to tell a device from Node: given one, it
-        // requires `react-native`, whose Flow source nothing in a test can parse. Off, a module
-        // sees what it sees under Node itself.
-        injectCjsGlobals: false,
-        // Added to the app's own list. An app that inlines everything already has these, and a
-        // list merged into its `true` would no longer mean everything.
-        ...(config?.test?.server?.deps?.inline === true
-          ? {}
-          : { server: { deps: { inline: [...INLINE, ...(options.inline ?? [])] } } }),
-      },
-    }),
+    config: (config) => {
+      const projectRoot = rootOf(config);
+      const os = options.os ?? defaultOs(projectRoot);
+      const conditions = withConditions(tsconfigConditions(projectRoot));
+      return {
+        // The conditions the project's tsconfig resolves packages with, ahead of Vite's own, so a
+        // test takes the same entry tsc does: Nx's TypeScript preset exports a library's source
+        // only under one.
+        ...conditions,
+        // An extensionless import resolves a platform file first, as Metro does for the OS.
+        resolve: { ...conditions.resolve, extensions: extensionsFor(os) },
+        test: {
+          setupFiles: [SETUP],
+          // What the setup file renders as, and what `OS` answers unprovided.
+          env: { NG_NATIVE_TEST_OS: os },
+          // Vitest hands every ES module a CommonJS `require` by default, for compatibility with an
+          // older runner. Code here checks for one to tell a device from Node: given one, it
+          // requires `react-native`, whose Flow source nothing in a test can parse. Off, a module
+          // sees what it sees under Node itself.
+          injectCjsGlobals: false,
+          // Added to the app's own list. An app that inlines everything already has these, and a
+          // list merged into its `true` would no longer mean everything.
+          ...(config?.test?.server?.deps?.inline === true
+            ? {}
+            : { server: { deps: { inline: [...INLINE, ...(options.inline ?? [])] } } }),
+        },
+      };
+    },
     configResolved(config) {
       root = config.root;
     },

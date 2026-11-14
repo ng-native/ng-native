@@ -44,8 +44,11 @@ registerViewName(
   },
 })
 export class NativeButton extends ControlBase {
-  /** What the button does in its window. `default` takes Return and `cancel` takes Escape. */
-  readonly kind = input<ButtonKind>('default');
+  /**
+   * What the button does in its window. `default` takes Return and `cancel` takes Escape. Unset,
+   * it is a plain push button that takes neither.
+   */
+  readonly kind = input<ButtonKind>();
   /** AppKit's control size on macOS, and UIKit's on iOS 26 and later. Ignored elsewhere. */
   readonly controlSize = input<ControlSize>();
   /** An SF Symbol beside the label, on iOS and macOS. */
