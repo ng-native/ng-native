@@ -96,6 +96,7 @@ add_library(ngn_core STATIC
     core/src/modules/app-modules.cpp
     core/src/modules/async-storage.cpp
     core/src/modules/core-modules.cpp
+    core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
     core/src/modules/file-system.cpp
     core/src/modules/image-loader.cpp
@@ -119,7 +120,9 @@ if(NGN_TESTS)
   target_link_libraries(ngn_core_tests PRIVATE ngn_core doctest)
   # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks.
   if(APPLE)
-    target_sources(ngn_core_tests PRIVATE appkit/updates.mm appkit/tests/update-crypto.test.mm)
+    target_sources(ngn_core_tests PRIVATE
+        appkit/updates.mm appkit/tests/update-crypto.test.mm
+        appkit/crypto.mm appkit/tests/crypto.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security")
   endif()

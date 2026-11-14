@@ -2,6 +2,7 @@
 # nothing from outside itself but the system's frameworks.
 add_executable(ngn-macos
     app-windows.mm
+    crypto.mm
     desktop-expo.mm
     file-system.mm
     appkit-backend.mm

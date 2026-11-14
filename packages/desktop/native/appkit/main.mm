@@ -26,6 +26,7 @@
 #import "desktop-expo.h"
 #import "local-authentication.h"
 #import "location.h"
+#import "crypto.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
 #import "updates.h"
@@ -679,6 +680,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeLocation", [] { return ngn::makeLocationModule(location, noPrompts); });
       static auto authenticator = ngn::appkit::makeAuthenticator();
       ngn::addModule(*modules, "NgNativeLocalAuthentication", [] { return ngn::makeLocalAuthenticationModule(authenticator); });
+      static auto crypto = ngn::appkit::makeCryptoSource();
+      ngn::addModule(*modules, "NgNativeCrypto", [] { return ngn::makeCryptoModule(crypto); });
       static auto locales = ngn::appkit::makeLocaleSource();
       ngn::addModule(*modules, "NgNativeLocalization", [] {
         return ngn::makeLocalizationModule(locales, ngn::appkit::systemRegionCode());
