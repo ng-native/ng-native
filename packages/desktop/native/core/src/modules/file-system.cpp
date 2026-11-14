@@ -299,8 +299,11 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
             "cacheDirectory", fileUri(access->folders().cache) + "/");
       });
 
-      // A promise over a function that throws its failure.
+      // A function that throws its failure, as a promise under `name` and as a synchronous call
+      // under the name with `Async` (or nothing) swapped for `Sync`, which throws instead.
       auto answer = [this](const std::string &name, std::function<folly::dynamic(const folly::dynamic &)> fn) {
+        auto base = name.ends_with("Async") ? name.substr(0, name.size() - 5) : name;
+        sync(base + "Sync", fn);
         promise(name, [fn = std::move(fn)](const folly::dynamic &args, JsPromise promise) {
           folly::dynamic value;
           try {

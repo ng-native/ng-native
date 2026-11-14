@@ -230,8 +230,11 @@ not `~/Documents`. A call reaches the app's own folders, the files and folders t
 a panel (until the app quits), and the paths the plugin options' `capabilities.paths` declare,
 read-only or read-write, after symbolic links are followed. `watch` reports changes from FSEvents.
 
-The host's calls are asynchronous, so `write()` answers a promise, `textSync()` throws, and a
-file's `exists` and `size` are the last answer until `settled()` resolves.
+Each call is answered synchronously as well as with a promise (`statSync`, `readAsStringSync`,
+`writeAsStringSync`, `deleteSync` and the rest), so a file is synchronous where expo-file-system's
+is on iOS and Android: `exists` and `size` are read when asked, `create()`, `write()` and
+`delete()` are done when they return and throw their failure, `textSync()` reads at once, and
+`text()` and `bytes()` answer a promise.
 
 The other services with a desktop source in `DESKTOP_MODULES` throw `MissingModuleError` on first
 use until the host has their module.

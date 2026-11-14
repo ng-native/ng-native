@@ -14,6 +14,10 @@
 // - readAsStringAsync(uri, {encoding: utf8 | base64}), writeAsStringAsync(uri, text, {encoding,
 //   append}), deleteAsync(uri, {idempotent}), makeDirectoryAsync(uri, {intermediates}),
 //   moveAsync({from, to}), copyAsync({from, to}) and createFile(folderUri, name): {uri}, empty.
+// - Each of those is synchronous too, with `Async` (or nothing) swapped for `Sync`: statSync,
+//   readdirSync, readAsStringSync, writeAsStringSync, deleteSync, makeDirectorySync, moveSync,
+//   copySync and createFileSync answer the same value, or throw the failure the promise rejects
+//   with. The service's files are synchronous through them, as expo-file-system's are.
 //
 // Every call is checked against FileAccess: the app's own folders and what the user picked can be
 // read and written, and anything else only as the plugin options' `capabilities.paths` declare

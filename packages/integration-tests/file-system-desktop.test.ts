@@ -1,8 +1,9 @@
 /**
  * `FileSystem` on macOS. The host's `NgNativeFileSystem` is flat calls over uris, and a TurboModule
  * cannot hand back expo-file-system's `File` and `Directory`, so the desktop loader builds the
- * service's files over them. The host's calls are all asynchronous: a file's writes are queued in
- * order, `text()` and `bytes()` read after them, and `settled()` says when they are done.
+ * service's files over them. The host answers each call synchronously as well as with a promise, so
+ * a file is synchronous where Expo's is: `exists`, `size`, `create`, `write`, `textSync` and
+ * `delete` answer at once, and `text()` and `bytes()` answer a promise.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -31,35 +32,48 @@ function host(files: Record<string, string> = {}) {
       calls.push([name, ...args]);
       return fn(...args);
     };
+  const stat = (uri: string) => {
+    if (uri.includes('unreachable')) throw new Error(`Outside the folders: ${uri}`);
+    return uri in files
+      ? { uri, directory: false, size: files[uri]!.length, modified: 1, created: 1 }
+      : null;
+  };
+  const read = (uri: string, options: { encoding: string }) => {
+    if (!(uri in files)) throw new Error(`The file could not be read: ${uri}`);
+    const text = files[uri]!;
+    return options.encoding === 'base64' ? Buffer.from(text, 'latin1').toString('base64') : text;
+  };
+  const write = (uri: string, text: string, options: { encoding: string }) => {
+    if (uri.includes('locked')) throw new Error(`Not allowed: ${uri}`);
+    files[uri] =
+      options.encoding === 'base64' ? Buffer.from(text, 'base64').toString('latin1') : text;
+    return null;
+  };
+  const remove = (uri: string) => {
+    if (!(uri in files)) throw new Error(`Nothing to delete at ${uri}`);
+    delete files[uri];
+    return null;
+  };
+  const sync =
+    <A extends unknown[], R>(name: string, fn: (...args: A) => R) =>
+    (...args: A): R => {
+      calls.push([name, ...args]);
+      return fn(...args);
+    };
   const module = {
     paths: PATHS,
     documentDirectory: PATHS.document,
     cacheDirectory: PATHS.cache,
-    stat: record('stat', (uri: string) =>
-      uri in files
-        ? { uri, directory: false, size: files[uri]!.length, modified: 1, created: 1 }
-        : null,
-    ),
+    stat: record('stat', stat),
+    statSync: sync('statSync', stat),
     readdir: record('readdir', (uri: string) => [{ name: 'a', uri: `${uri}a`, directory: false }]),
-    readAsStringAsync: record('readAsStringAsync', (uri: string, options: { encoding: string }) => {
-      const text = files[uri] ?? '';
-      return options.encoding === 'base64' ? Buffer.from(text, 'latin1').toString('base64') : text;
-    }),
-    writeAsStringAsync: record(
-      'writeAsStringAsync',
-      (uri: string, text: string, options: { encoding: string }) => {
-        if (uri.includes('locked')) throw new Error(`Not allowed: ${uri}`);
-        files[uri] =
-          options.encoding === 'base64' ? Buffer.from(text, 'base64').toString('latin1') : text;
-        return null;
-      },
-    ),
-    makeDirectoryAsync: record('makeDirectoryAsync', () => null),
-    deleteAsync: record('deleteAsync', (uri: string) => {
-      if (!(uri in files)) throw new Error(`Nothing to delete at ${uri}`);
-      delete files[uri];
-      return null;
-    }),
+    readAsStringAsync: record('readAsStringAsync', read),
+    readAsStringSync: sync('readAsStringSync', read),
+    writeAsStringAsync: record('writeAsStringAsync', write),
+    writeAsStringSync: sync('writeAsStringSync', write),
+    makeDirectorySync: sync('makeDirectorySync', () => null),
+    deleteAsync: record('deleteAsync', remove),
+    deleteSync: sync('deleteSync', remove),
     watch: (...args: unknown[]) => (calls.push(['watch', ...args]), 11),
     unwatch: (...args: unknown[]) => void calls.push(['unwatch', ...args]),
   };
@@ -86,8 +100,6 @@ afterEach(() => {
   delete (globalThis as Record<string, unknown>)['require'];
 });
 
-type Settling = { settled(): Promise<void> };
-
 describe('FileSystem on macOS', () => {
   it('reaches the service with the host paths', () => {
     host();
@@ -104,41 +116,51 @@ describe('FileSystem on macOS', () => {
     assert.equal(fs.file('file:///x/y.txt').uri, 'file:///x/y.txt');
   });
 
-  it('writes in order, then reads the text back', async () => {
+  it('has written by the time write returns, and reads it back at once', async () => {
     const { files } = host();
     const fs = injectService(FileSystem);
     const file = fs.document('notes.txt');
-    fs.write(file, 'one');
+    assert.equal(fs.write(file, 'one'), undefined);
+    assert.equal(files['file:///app/Documents/notes.txt'], 'one');
     fs.write(file, 'two');
+    assert.equal(file.textSync(), 'two');
     assert.equal(await file.text(), 'two');
-    assert.equal(files['file:///app/Documents/notes.txt'], 'two');
   });
 
-  it('makes the folders a first write needs, and leaves a file that is there alone', async () => {
-    const { calls, files } = host({ 'file:///app/Documents/old.txt': 'kept' });
-    const fs = injectService(FileSystem);
-    const fresh = fs.document('deep/new.txt');
-    fs.write(fresh, 'x');
-    await (fresh as unknown as Settling).settled();
-    assert.deepEqual(
-      calls.find((call) => call[0] === 'makeDirectoryAsync'),
-      ['makeDirectoryAsync', 'file:///app/Documents/deep/', { intermediates: true }],
-    );
-    const old = fs.document('old.txt');
-    old.create();
-    await (old as unknown as Settling).settled();
-    assert.equal(files['file:///app/Documents/old.txt'], 'kept');
-  });
-
-  it('says what is there once the queue has settled', async () => {
-    host({ 'file:///app/Documents/a.txt': 'four' });
+  it('says what is there now, each time it is asked', () => {
+    const { files } = host({ 'file:///app/Documents/a.txt': 'four' });
     const fs = injectService(FileSystem);
     const file = fs.document('a.txt');
-    await (file as unknown as Settling).settled();
     assert.deepEqual([file.exists, file.size], [true, 4]);
+    files['file:///app/Documents/a.txt'] = 'longer';
+    assert.equal(file.size, 6);
     file.delete();
-    await (file as unknown as Settling).settled();
     assert.deepEqual([file.exists, file.size], [false, 0]);
+    assert.equal(fs.file('file:///unreachable/x').exists, false);
+  });
+
+  it('makes the folders a first write needs', () => {
+    const { calls, files } = host();
+    const fs = injectService(FileSystem);
+    fs.write(fs.document('deep/new.txt'), 'x');
+    assert.deepEqual(
+      calls.find((call) => call[0] === 'makeDirectorySync'),
+      ['makeDirectorySync', 'file:///app/Documents/deep/', { intermediates: true }],
+    );
+    assert.equal(files['file:///app/Documents/deep/new.txt'], 'x');
+  });
+
+  it('creates an empty file, and throws for one that is there unless told to overwrite', () => {
+    const { files } = host({ 'file:///app/Documents/old.txt': 'kept' });
+    const fs = injectService(FileSystem);
+    const fresh = fs.document('fresh.txt');
+    fresh.create();
+    assert.equal(files['file:///app/Documents/fresh.txt'], '');
+    const old = fs.document('old.txt');
+    assert.throws(() => old.create(), /already exists/);
+    assert.equal(files['file:///app/Documents/old.txt'], 'kept');
+    old.create({ overwrite: true });
+    assert.equal(files['file:///app/Documents/old.txt'], '');
   });
 
   it('writes bytes as base64 and reads them back as bytes', async () => {
@@ -149,31 +171,25 @@ describe('FileSystem on macOS', () => {
     assert.deepEqual([...(await file.bytes())], [104, 105, 255]);
     assert.deepEqual(
       calls
-        .filter((call) => call[0] === 'writeAsStringAsync')
+        .filter((call) => call[0] === 'writeAsStringSync')
         .at(-1)
         ?.slice(2),
       ['aGn/', { encoding: 'base64' }],
     );
   });
 
-  it('settles with the failure of a delete', async () => {
-    host();
-    const file = injectService(FileSystem).document('x.txt');
-    file.delete();
-    await assert.rejects((file as unknown as Settling).settled(), /Nothing to delete/);
-  });
-
-  it('answers write with a promise that rejects when the write fails', async () => {
+  it('throws the failure of a delete or a write where it happens', () => {
     host();
     const fs = injectService(FileSystem);
-    await assert.rejects(Promise.resolve(fs.write(fs.document('locked.txt'), 'x')), /Not allowed/);
-    await fs.write(fs.document('fine.txt'), 'x');
+    assert.throws(() => fs.document('x.txt').delete(), /Nothing to delete/);
+    assert.throws(() => fs.write(fs.document('locked.txt'), 'x'), /Not allowed/);
+    assert.throws(() => fs.document('missing.txt').textSync(), /could not be read/);
   });
 
-  it('says a synchronous read is not available', () => {
+  it('has no settled(), as on iOS and Android', () => {
     host();
     const file = injectService(FileSystem).document('a.txt');
-    assert.throws(() => file.textSync(), /textSync is not available on a desktop OS/);
+    assert.equal('settled' in file, false);
   });
 
   it('lists and describes through the host', async () => {

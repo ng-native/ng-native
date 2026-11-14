@@ -2,17 +2,11 @@
  * The service's files and folders over the desktop host's `NgNativeFileSystem`.
  *
  * A TurboModule cannot hand JavaScript expo-file-system's `File` and `Directory`, so the host
- * answers flat calls over uris and this builds `NativeFiles` on them. Every call of the host's
- * that reads or writes is asynchronous, which a file's synchronous members cannot be:
- *
- * - A file queues what changes it - `create`, `write`, `delete` - and runs each after the one
- *   before. `text()` and `bytes()` read once the queue is empty, so a write is always read back.
- *   `settled()` answers when the queue is empty, and rejects with the first failure since the
- *   last time it was asked, which is where a write that failed is heard.
- * - `exists` and `size` are what the host last said, refreshed when the file is named and after
- *   each change. They read false and 0 until the first answer; await `settled()` for the real one.
- * - `textSync()` throws. `create()` leaves a file that is there alone, since the file's state is
- *   not known when it is called, unless `overwrite` is set.
+ * answers flat calls over uris and this builds `NativeFiles` on them. The host answers each call
+ * synchronously as well as with a promise, so a file behaves as Expo's does on iOS and Android:
+ * `exists` and `size` say what is there when read, `create`, `write` and `delete` have happened by
+ * the time they return and throw their failure, `textSync()` reads at once, and `text()` and
+ * `bytes()` answer a promise.
  */
 import { base64Of, bytesOf } from './base64.ts';
 import type {
@@ -25,113 +19,92 @@ import type {
   NativeFiles,
 } from './file-system.ts';
 
+type Encoding = { encoding: 'utf8' | 'base64' };
+
 type Host = {
   readonly paths?: Partial<Record<FolderName, string>>;
   readonly documentDirectory: string;
   readonly cacheDirectory: string;
   stat(uri: string): Promise<FileStat | null>;
+  statSync(uri: string): FileStat | null;
   readdir(uri: string): Promise<FileEntry[]>;
-  readAsStringAsync(uri: string, options: { encoding: 'utf8' | 'base64' }): Promise<string>;
-  writeAsStringAsync(
-    uri: string,
-    text: string,
-    options: { encoding: 'utf8' | 'base64' },
-  ): Promise<void>;
-  makeDirectoryAsync(uri: string, options: { intermediates: boolean }): Promise<void>;
-  deleteAsync(uri: string, options: { idempotent: boolean }): Promise<void>;
+  readAsStringAsync(uri: string, options: Encoding): Promise<string>;
+  readAsStringSync(uri: string, options: Encoding): string;
+  writeAsStringSync(uri: string, text: string, options: Encoding): void;
+  makeDirectorySync(uri: string, options: { intermediates: boolean }): void;
+  deleteSync(uri: string, options: { idempotent: boolean }): void;
   watch(uri: string): number | null;
   unwatch(id: number): void;
 };
 
-/** A file the desktop host holds, with what its queue adds to `NativeFile`. */
-export interface DesktopFile extends NativeFile {
-  /** Answers when what is queued is done; rejects with the first failure since last asked. */
-  settled(): Promise<void>;
-}
-
-class HostFile implements DesktopFile {
-  exists = false;
-  size = 0;
-  private tail: Promise<void> = Promise.resolve();
-  private failure: { error: unknown } | null = null;
-
+class HostFile implements NativeFile {
   private readonly host: Host;
   readonly uri: string;
 
   constructor(host: Host, uri: string) {
     this.host = host;
     this.uri = uri;
-    this.queue(() => this.refresh().catch(() => {}));
+  }
+
+  get exists(): boolean {
+    const info = this.info();
+    return info !== null && !info.directory;
+  }
+
+  get size(): number {
+    return this.info()?.size ?? 0;
   }
 
   create(options?: { overwrite?: boolean; intermediates?: boolean }): void {
-    this.queue(async () => {
-      if (options?.intermediates) await this.makeParent();
-      if (options?.overwrite || !(await this.host.stat(this.uri))) {
-        await this.host.writeAsStringAsync(this.uri, '', { encoding: 'utf8' });
-      }
-    });
+    if (options?.intermediates) {
+      const parent = this.uri.slice(0, this.uri.lastIndexOf('/') + 1);
+      this.host.makeDirectorySync(parent, { intermediates: true });
+    }
+    if (!options?.overwrite && this.exists) {
+      throw new Error(`[angular-native] A file already exists at ${this.uri}.`);
+    }
+    this.host.writeAsStringSync(this.uri, '', { encoding: 'utf8' });
   }
 
   write(content: string | Uint8Array): void {
-    this.queue(() =>
-      typeof content === 'string'
-        ? this.host.writeAsStringAsync(this.uri, content, { encoding: 'utf8' })
-        : this.host.writeAsStringAsync(this.uri, base64Of(content), { encoding: 'base64' }),
-    );
+    if (typeof content === 'string') {
+      this.host.writeAsStringSync(this.uri, content, { encoding: 'utf8' });
+    } else {
+      this.host.writeAsStringSync(this.uri, base64Of(content), { encoding: 'base64' });
+    }
   }
 
   writeSync(content: string | Uint8Array): void {
     this.write(content);
   }
 
-  async text(): Promise<string> {
-    await this.tail;
+  text(): Promise<string> {
     return this.host.readAsStringAsync(this.uri, { encoding: 'utf8' });
   }
 
   textSync(): string {
-    throw new Error(
-      '[angular-native] textSync is not available on a desktop OS: the host reads asynchronously. Use text().',
-    );
+    return this.host.readAsStringSync(this.uri, { encoding: 'utf8' });
   }
 
   async bytes(): Promise<Uint8Array> {
-    await this.tail;
     return bytesOf(await this.host.readAsStringAsync(this.uri, { encoding: 'base64' }));
   }
 
+  bytesSync(): Uint8Array {
+    return bytesOf(this.host.readAsStringSync(this.uri, { encoding: 'base64' }));
+  }
+
   delete(): void {
-    this.queue(() => this.host.deleteAsync(this.uri, { idempotent: false }));
+    this.host.deleteSync(this.uri, { idempotent: false });
   }
 
-  async settled(): Promise<void> {
-    await this.tail;
-    const failure = this.failure;
-    this.failure = null;
-    if (failure) throw failure.error;
-  }
-
-  /** Run `task` after what is queued, then say what is there. A failure is kept, not thrown. */
-  private queue(task: () => Promise<unknown>): void {
-    this.tail = this.tail
-      .then(task)
-      .then(() => this.refresh())
-      .catch((error) => {
-        this.failure ??= { error };
-        return this.refresh().catch(() => {});
-      });
-  }
-
-  private async refresh(): Promise<void> {
-    const info = await this.host.stat(this.uri);
-    this.exists = info !== null && !info.directory;
-    this.size = info?.size ?? 0;
-  }
-
-  private makeParent(): Promise<void> {
-    const parent = this.uri.slice(0, this.uri.lastIndexOf('/') + 1);
-    return this.host.makeDirectoryAsync(parent, { intermediates: true });
+  /** What is at the uri now, or null where nothing is or the app cannot reach it. */
+  private info(): FileStat | null {
+    try {
+      return this.host.statSync(this.uri);
+    } catch {
+      return null;
+    }
   }
 }
 

@@ -31,11 +31,6 @@ export interface NativeFile {
   /** The contents as bytes: a PDF, an image, anything that is not text. */
   bytes(): Promise<Uint8Array>;
   delete(): void;
-  /**
-   * Only on macOS, where the host's calls are asynchronous and each change to the file is queued:
-   * answers when the queue is empty, and rejects with the first failure since last asked.
-   */
-  settled?(): Promise<void>;
 }
 
 /** A directory, as far as this needs to know: something a file can be named inside. */
@@ -238,15 +233,11 @@ export class FileSystem {
    * `write` alone throws on a file that has never been created, which is the first thing everyone
    * hits. It replaces what was there, and has written by the time it returns: from SDK 58 through
    * `writeSync`, since `write` there answers a promise.
-   *
-   * On macOS the host writes asynchronously, so this answers a promise that settles when the file
-   * has been written, and rejects if it could not be. Elsewhere it answers nothing.
    */
-  write(file: NativeFile, content: string | Uint8Array): void | Promise<void> {
+  write(file: NativeFile, content: string | Uint8Array): void {
     if (!file.exists) file.create({ intermediates: true });
     if (file.writeSync) file.writeSync(content);
     else file.write(content);
-    return file.settled?.();
   }
 }
 

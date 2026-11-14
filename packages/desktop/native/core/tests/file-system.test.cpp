@@ -223,6 +223,54 @@ TEST_CASE("FileSystem makes folders and files, moves, copies and deletes, within
   CHECK(ask(*module, "deleteAsync", dynamic::array(data + "/a", dynamic::object("idempotent", true))).value == dynamic(nullptr));
 }
 
+TEST_CASE("FileSystem answers each call synchronously too, as <name>Sync, throwing its failure") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto module = ngn::makeFileSystemModule(
+      std::make_shared<ngn::FileAccess>(
+          folders, dynamic::array(dynamic::object("path", (dir.path / "outside").string())("access", "read"))),
+      std::make_shared<FakeWatcher>());
+  auto data = ngn::fileUri(folders.appData);
+  auto file = data + "/a/n.txt";
+
+  CHECK(module->call("statSync", dynamic::array(file)) == dynamic(nullptr));
+  CHECK_THROWS_WITH_AS(module->call("writeAsStringSync", dynamic::array(file, "x")), doctest::Contains("could not be written"),
+                       std::exception);
+  CHECK(module->call("makeDirectorySync", dynamic::array(data + "/a", dynamic::object("intermediates", true))) == dynamic(nullptr));
+  CHECK(module->call("writeAsStringSync", dynamic::array(file, "one")) == dynamic(nullptr));
+  module->call("writeAsStringSync", dynamic::array(file, " two", dynamic::object("append", true)));
+  // Written by the time the call returns.
+  CHECK(module->call("readAsStringSync", dynamic::array(file)) == dynamic("one two"));
+  auto info = module->call("statSync", dynamic::array(file));
+  CHECK(info["size"] == dynamic(7));
+  CHECK(info["directory"] == dynamic(false));
+  module->call("writeAsStringSync", dynamic::array(file, "AAEC/w==", dynamic::object("encoding", "base64")));
+  CHECK(module->call("readAsStringSync", dynamic::array(file, dynamic::object("encoding", "base64"))) == dynamic("AAEC/w=="));
+
+  CHECK(module->call("readdirSync", dynamic::array(data + "/a")) ==
+        dynamic::array(dynamic::object("name", "n.txt")("uri", ngn::fileUri(folders.appData + "/a/n.txt"))("directory", false)));
+  CHECK(module->call("createFileSync", dynamic::array(data + "/a", "m.txt")) ==
+        dynamic::object("uri", ngn::fileUri(folders.appData + "/a/m.txt")));
+  CHECK_THROWS_AS(module->call("createFileSync", dynamic::array(data + "/a", "m.txt")), std::exception);
+  module->call("copySync", dynamic::array(dynamic::object("from", file)("to", data + "/c.txt")));
+  module->call("moveSync", dynamic::array(dynamic::object("from", data + "/c.txt")("to", data + "/d.txt")));
+  CHECK(fs::file_size(dir.path / "data/d.txt") == 4);
+  CHECK_FALSE(fs::exists(dir.path / "data/c.txt"));
+
+  CHECK(module->call("deleteSync", dynamic::array(file)) == dynamic(nullptr));
+  CHECK_FALSE(fs::exists(dir.path / "data/a/n.txt"));
+  CHECK_THROWS_WITH_AS(module->call("deleteSync", dynamic::array(file)), doctest::Contains("Nothing to delete"), std::exception);
+  CHECK(module->call("deleteSync", dynamic::array(file, dynamic::object("idempotent", true))) == dynamic(nullptr));
+
+  write(dir.path / "outside/r.txt", "read me");
+  auto readOnly = ngn::fileUri((dir.path / "outside/r.txt").string());
+  CHECK(module->call("readAsStringSync", dynamic::array(readOnly)) == dynamic("read me"));
+  CHECK_THROWS_WITH_AS(module->call("writeAsStringSync", dynamic::array(readOnly, "x")), doctest::Contains("can only be read"),
+                       std::exception);
+  CHECK_THROWS_AS(module->call("statSync", dynamic::array(ngn::fileUri((dir.path / "home").string()))), std::exception);
+  CHECK(fs::file_size(dir.path / "outside/r.txt") == 7);
+}
+
 TEST_CASE("FileChanges names what happened in a folder, pairing a rename's two events and remembering what it saw") {
   TempDir dir;
   write(dir.path / "changed.txt", "");
