@@ -23,4 +23,6 @@ if (process.env.EXPO_PUBLIC_BENCH) {
   ];
 }
 
-module.exports = config;
+const { withDeviceTests } = require('@ng-native/testing/device/metro');
+
+module.exports = withDeviceTests(config);

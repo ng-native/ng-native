@@ -65,6 +65,16 @@ if (bench === 'react') {
       resolveAssetSource: (value) => Image.resolveAssetSource(value as never),
     });
   });
+} else if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
+  const { startDeviceTests } =
+    require('@ng-native/testing/device/host') as typeof import('@ng-native/testing/device/host');
+  startDeviceTests({
+    mount: {
+      processColor,
+      globalStyles: styleSheetOf(GlobalStyles),
+      resolveAssetSource: (value) => Image.resolveAssetSource(value as never),
+    },
+  });
 } else {
   AppRegistry.registerRunnable('main', ({ rootTag }) => {
     const app = mount(Number(rootTag), App, getFabricUIManager(), {
