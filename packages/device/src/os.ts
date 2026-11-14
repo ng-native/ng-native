@@ -38,3 +38,15 @@ export const isPhoneOs = (os: string): boolean => os === 'ios' || os === 'androi
 export const DESKTOP = new InjectionToken<boolean>('angular-native.desktop', {
   factory: () => inject(OS) === 'macos',
 });
+
+/**
+ * Whether the app runs on one of Apple's OSes: iOS (iPadOS included) or macOS. For a check that
+ * Apple's OSes share, written as `inject(APPLE)` rather than `OS === 'ios'`, which a Mac fails.
+ * Worked out from `OS`, as `DESKTOP` is.
+ */
+export const APPLE = new InjectionToken<boolean>('angular-native.apple', {
+  factory: () => {
+    const os = inject(OS);
+    return os === 'ios' || os === 'macos';
+  },
+});

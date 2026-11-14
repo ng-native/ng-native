@@ -33,6 +33,18 @@ const ONE_TO_ONE: Readonly<
   'aria-live': ['accessibilityLiveRegion', (value) => (value === 'off' ? 'none' : value)],
   'aria-hidden': ['accessibilityElementsHidden', flag],
   'aria-modal': ['accessibilityViewIsModal', flag],
+  // What the desktop host reads; iOS and Android leave these props alone.
+  'aria-level': ['accessibilityLevel', number],
+  'aria-describedby': [
+    'accessibilityDescribedBy',
+    (value) => (typeof value === 'string' ? value.split(/\s*,\s*/) : value),
+  ],
+  'aria-required': ['accessibilityRequired', flag],
+  'aria-invalid': ['accessibilityInvalid', flag],
+  'aria-posinset': ['accessibilityPosInSet', number],
+  'aria-setsize': ['accessibilitySetSize', number],
+  'aria-rowcount': ['accessibilityRowCount', number],
+  'aria-colcount': ['accessibilityColumnCount', number],
 };
 
 /** The attributes gathered into `accessibilityState`, by the key each is there. */

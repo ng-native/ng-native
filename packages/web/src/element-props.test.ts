@@ -651,3 +651,32 @@ describe('the aria states ViewBase publishes for a native stylesheet', () => {
     assert.equal(el.getAttribute('aria-expanded'), null);
   });
 });
+
+describe('the desktop accessibility props', () => {
+  it('reach the DOM as the aria attributes they came from, and leave it when cleared', () => {
+    const { el, set } = scene('view');
+    set('accessibilityLevel', 2);
+    set('accessibilityDescribedBy', ['hint', 'error']);
+    set('accessibilityRequired', true);
+    set('accessibilityInvalid', false);
+    set('accessibilityPosInSet', 3);
+    set('accessibilitySetSize', 10);
+    set('accessibilityRowCount', 5);
+    set('accessibilityColumnCount', 4);
+    const read = (names: string[]) => names.map((name) => el.getAttribute(name));
+    const names = [
+      'aria-level',
+      'aria-describedby',
+      'aria-required',
+      'aria-invalid',
+      'aria-posinset',
+      'aria-setsize',
+      'aria-rowcount',
+      'aria-colcount',
+    ];
+    assert.deepEqual(read(names), ['2', 'hint error', 'true', 'false', '3', '10', '5', '4']);
+    set('accessibilityLevel', undefined);
+    set('accessibilityDescribedBy', null);
+    assert.deepEqual(read(['aria-level', 'aria-describedby']), [null, null]);
+  });
+});
