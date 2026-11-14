@@ -130,10 +130,16 @@ export default tseslint.config(
             {
               // A test harness for apps, run by Node and never bundled. The fake Fabric needs the
               // engine's node shapes; `render()` mounts through the platform, the way an app
-              // boots; and the runner hooks compile through Metro's transform, so a test runs
-              // what the bundle would.
+              // boots; the runner hooks compile through Metro's transform, so a test runs what
+              // the bundle would; and the device seams (`OS`, the menu model, the window
+              // navigator) are what a test of an app on another OS provides.
               sourceTag: 'layer:testing',
-              onlyDependOnLibsWithTags: ['layer:runtime', 'layer:angular', 'layer:build'],
+              onlyDependOnLibsWithTags: [
+                'layer:runtime',
+                'layer:device',
+                'layer:angular',
+                'layer:build',
+              ],
             },
             {
               // The integration suite mounts real components through the adapter onto the fake
