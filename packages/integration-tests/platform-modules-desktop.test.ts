@@ -830,3 +830,48 @@ describe('AddressSearch on macOS', () => {
     ]);
   });
 });
+
+describe('assets() on macOS', () => {
+  it("downloads each asset through the desktop host's NgNativeAsset, sized as an image resolves it", async () => {
+    const asked: unknown[][] = [];
+    mac({
+      NgNativeAsset: {
+        downloadAsync: async (...args: unknown[]) => (
+          asked.push(args),
+          `file:///caches/ExponentAsset-${String(args[1] ?? 'x')}.png`
+        ),
+      },
+    });
+    const host = (globalThis as Record<string, unknown>)['require'] as (id: string) => object;
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => ({
+      ...host(id),
+      Image: {
+        resolveAssetSource: (id: number) => ({
+          uri: `http://localhost:8081/assets/hero-${id}.png?platform=macos&hash=h${id}`,
+          width: 40,
+          height: 30,
+        }),
+      },
+    });
+    const { assets } = await import('@ng-native/expo/assets');
+    const injector = injectService(Injector);
+    const loaded = runInInjectionContext(injector, () =>
+      assets(() => [7, 'https://example.com/logo.png']),
+    );
+    while (loaded.isLoading() || loaded.value() === undefined) {
+      if (loaded.error()) throw loaded.error();
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    assert.deepEqual(asked, [
+      ['http://localhost:8081/assets/hero-7.png?platform=macos&hash=h7', 'h7', 'png'],
+      ['https://example.com/logo.png', null, 'png'],
+    ]);
+    const [hero, logo] = loaded.value()!;
+    assert.equal(hero?.uri, 'http://localhost:8081/assets/hero-7.png?platform=macos&hash=h7');
+    assert.equal((hero as { localUri?: string }).localUri, 'file:///caches/ExponentAsset-h7.png');
+    assert.equal(hero?.width, 40);
+    assert.equal(hero?.height, 30);
+    assert.equal(logo?.width, null);
+    assert.equal((logo as { localUri?: string }).localUri, 'file:///caches/ExponentAsset-x.png');
+  });
+});

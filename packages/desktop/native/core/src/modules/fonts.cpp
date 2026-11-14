@@ -1,9 +1,8 @@
 #include "ngn/fonts.h"
 
+#include "ngn/download.h"
 #include "ngn/file-system.h"
 
-#include <filesystem>
-#include <fstream>
 #include <functional>
 #include <sstream>
 #include <stdexcept>
@@ -88,38 +87,14 @@ std::shared_ptr<NativeModule> makeFontModule(
           promise.reject("Fonts.loadAsync: " + name + "'s uri is not a file or an http(s) url: " + uri);
           return;
         }
-        // The body, and the task kept alive until it completes.
-        struct Download {
-          std::string body;
-          uint16_t status{0};
-          std::unique_ptr<HttpTask> task;
-        };
-        auto download = std::make_shared<Download>();
         auto target = downloadPath(downloads, uri);
-        download->task = http->send(
-            {.url = uri},
-            {.onResponse = [download](const HttpResponse &response) { download->status = response.status; },
-             .onData = [download](std::string chunk, int64_t) { download->body += chunk; },
-             .onComplete =
-                 [download, load, name, uri, target, promise](const std::string &error, bool) mutable {
-                   auto keep = std::move(download->task);
-                   if (!error.empty() || download->status < 200 || download->status >= 300) {
-                     promise.reject(
-                         "Fonts: " + name + " could not be downloaded from " + uri + ": " +
-                         (error.empty() ? "HTTP " + std::to_string(download->status) : error));
-                     return;
-                   }
-                   std::error_code ignored;
-                   std::filesystem::create_directories(std::filesystem::path(target).parent_path(), ignored);
-                   std::ofstream out(target, std::ios::binary | std::ios::trunc);
-                   out << download->body;
-                   out.close();
-                   if (!out) {
-                     promise.reject("Fonts: " + name + " could not be saved to " + target);
-                     return;
-                   }
-                   load(name, target, std::move(promise));
-                 }});
+        downloadFile(http, uri, target, [load, name, uri, target, promise](const std::string &error) mutable {
+          if (!error.empty()) {
+            promise.reject("Fonts: " + name + " could not be downloaded from " + uri + ": " + error);
+            return;
+          }
+          load(name, target, std::move(promise));
+        });
       });
       sync("isLoaded", [library](const folly::dynamic &args) {
         return folly::dynamic(!args.empty() && args[0].isString() && library->has(args[0].asString()));

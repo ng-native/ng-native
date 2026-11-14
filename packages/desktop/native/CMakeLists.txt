@@ -94,12 +94,14 @@ add_library(ngn_core STATIC
     core/src/split-view.cpp
     core/src/svg.cpp
     core/src/tabs-host.cpp
+    core/src/download.cpp
     core/src/updates.cpp
     core/src/view-tree.cpp
     core/src/modules/address-search.cpp
     core/src/modules/alert-manager.cpp
     core/src/modules/app-info.cpp
     core/src/modules/app-modules.cpp
+    core/src/modules/asset.cpp
     core/src/modules/async-storage.cpp
     core/src/modules/audio.cpp
     core/src/modules/battery.cpp
