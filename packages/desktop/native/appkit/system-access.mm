@@ -1,6 +1,7 @@
 #import "system-access.h"
 
 #import <AppKit/AppKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <folly/json.h>
 #include <set>
@@ -109,12 +110,48 @@ ProcessesSetup processesSetup(const std::string &capabilitiesJson) {
 
 namespace {
 
+// The types whose opening runs code: programs, apps and their bundles, scripts (a .command opens
+// in Terminal and runs), Terminal settings that run a command, installer packages, Automator
+// workflows, and location files, which open what they point at.
+bool runsCode(UTType *type) {
+  for (NSString *identifier in @[
+         @"public.executable", @"com.apple.application", @"com.apple.application-bundle", @"public.script",
+         @"public.shell-script", @"com.apple.terminal.shell-script", @"com.apple.terminal.session",
+         @"com.apple.installer-package-archive", @"com.apple.automator-workflow", @"com.apple.applescript.script",
+         @"com.apple.applescript.script-bundle", @"com.apple.file-url", @"com.apple.web-internet-location",
+         @"com.apple.internet-location"
+       ]) {
+    UTType *runs = [UTType typeWithIdentifier:identifier];
+    if (runs != nil && [type conformsToType:runs]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 NSURL *fileUrl(const std::string &path) {
   return [NSURL fileURLWithPath:[NSString stringWithUTF8String:path.c_str()]];
 }
 
 class WorkspaceOpener final : public ShellOpener {
  public:
+  PathFacts facts(const std::string &path) override {
+    NSURL *target = fileUrl(path);
+    PathFacts facts;
+    BOOL folder = NO;
+    facts.exists = [NSFileManager.defaultManager fileExistsAtPath:target.path isDirectory:&folder];
+    if (!facts.exists) {
+      return facts;
+    }
+    facts.executable = !folder && [NSFileManager.defaultManager isExecutableFileAtPath:target.path];
+    UTType *type = nil;
+    [target getResourceValue:&type forKey:NSURLContentTypeKey error:nil];
+    NSNumber *application = nil;
+    [target getResourceValue:&application forKey:NSURLIsApplicationKey error:nil];
+    facts.runsCode = application.boolValue || (type != nil && runsCode(type));
+    return facts;
+  }
+
   void openUrl(const std::string &url, std::function<void(bool)> done) override {
     NSURL *target = [NSURL URLWithString:[NSString stringWithUTF8String:url.c_str()]];
     onMain([target, done] { done(target != nil && [NSWorkspace.sharedWorkspace openURL:target]); });

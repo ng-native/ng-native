@@ -255,6 +255,13 @@ std::shared_ptr<NativeModule> makeShellModule(std::shared_ptr<ShellOpener> opene
           promise.resolve(false);
           return;
         }
+        // A document opens in its app; a program, an app or a script would run, past the spawn
+        // rules.
+        auto facts = opener->facts(args[0].asString());
+        if (!facts.exists || facts.executable || facts.runsCode) {
+          promise.resolve(false);
+          return;
+        }
         opener->openPath(args[0].asString(), answer(promise));
       });
       promise("showItemInFolder", [opener, answer](const folly::dynamic &args, JsPromise promise) {

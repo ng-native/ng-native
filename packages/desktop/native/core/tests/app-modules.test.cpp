@@ -123,6 +123,23 @@ TEST_CASE("Linking opens URLs, answers canOpenURL and reports the initial URL") 
   CHECK(out == "resolved true");
 }
 
+TEST_CASE("Linking hands the OS only the URLs Shell.openExternal would: never a file, a script or data") {
+  Fixture f;
+  f.system->openableSchemes.push_back("file:");
+  f.system->openableSchemes.push_back("javascript:");
+  auto module = f.make(ngn::makeLinking(f.services));
+  std::string out;
+  for (const char *url : {"file:///System/Applications/Calculator.app", "FILE:///tmp/run.command", " file:///tmp/x",
+                          "javascript:alert(1)", "data:text/html,x"}) {
+    CAPTURE(url);
+    module->callWithPromise("openURL", dynamic::array(url), recording(out));
+    CHECK(out == std::string("rejected Unable to open URL: ") + url);
+    module->callWithPromise("canOpenURL", dynamic::array(url), recording(out));
+    CHECK(out == "resolved false");
+  }
+  CHECK(f.system->log.empty());
+}
+
 TEST_CASE("a URL opened while running reaches JavaScript, even one that arrived before it listened") {
   Fixture f;
   f.state->openUrl("ngnfixture://early");

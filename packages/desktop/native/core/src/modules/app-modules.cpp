@@ -1,6 +1,7 @@
 // The small modules: what the app and its window are like, and the iOS-only ones that have
 // nothing to do on a desktop.
 #include "ngn/core-modules.h"
+#include "ngn/processes.h"
 
 #include <cstdlib>
 #include <sstream>
@@ -136,8 +137,11 @@ std::shared_ptr<NativeModule> makeLinking(const CoreModuleServices &s) {
         auto url = state->initialUrl();
         p.resolve(url ? folly::dynamic(*url) : folly::dynamic(nullptr));
       });
+      // The one url policy, Shell.openExternal's: a file:, script or data url would hand the OS
+      // something to run.
       promise("canOpenURL", [system](const folly::dynamic &args, JsPromise p) {
-        p.resolve(args.size() > 0 && args[0].isString() && system->canOpenUrl(args[0].asString()));
+        p.resolve(args.size() > 0 && args[0].isString() && externalUrlAllowed(args[0].asString()) &&
+                  system->canOpenUrl(args[0].asString()));
       });
       promise("openURL", [system](const folly::dynamic &args, JsPromise p) {
         if (args.size() == 0 || !args[0].isString()) {
@@ -145,6 +149,10 @@ std::shared_ptr<NativeModule> makeLinking(const CoreModuleServices &s) {
           return;
         }
         std::string url = args[0].asString();
+        if (!externalUrlAllowed(url)) {
+          p.reject("Unable to open URL: " + url);
+          return;
+        }
         system->openUrl(url, [p, url](bool opened) {
           if (opened) {
             p.resolve(true);

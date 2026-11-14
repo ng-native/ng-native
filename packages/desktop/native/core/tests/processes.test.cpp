@@ -1,6 +1,8 @@
 #include "ngn/processes.h"
 
 #include <doctest/doctest.h>
+
+#include <map>
 #include <folly/json.h>
 
 #include <chrono>
@@ -226,6 +228,7 @@ TEST_CASE("Shell hands on urls with a scheme that is not a file's or a script's,
 
   struct Opener final : ngn::ShellOpener {
     Lines calls;
+    ngn::ShellOpener::PathFacts facts(const std::string &) override { return {.exists = true}; }
     void openUrl(const std::string &u, std::function<void(bool)> d) override { calls.push_back("url " + u); d(true); }
     void openPath(const std::string &p, std::function<void(bool)> d) override { calls.push_back("path " + p); d(true); }
     void showItemInFolder(const std::string &p, std::function<void(bool)> d) override { calls.push_back("show " + p); d(false); }
@@ -243,4 +246,40 @@ TEST_CASE("Shell hands on urls with a scheme that is not a file's or a script's,
   ask("showItemInFolder", "/Users/me/a.md");
   CHECK(answers == std::vector<dynamic>{true, false, true, false, false});
   CHECK(opener->calls == Lines{"url https://ng-native.com", "path /Users/me/a.md", "show /Users/me/a.md"});
+}
+
+TEST_CASE("Shell.openPath opens a document or a folder, never something that runs: a program, an app or a script") {
+  struct Opener final : ngn::ShellOpener {
+    Lines calls;
+    std::map<std::string, ngn::ShellOpener::PathFacts> disk;
+    ngn::ShellOpener::PathFacts facts(const std::string &p) override {
+      auto it = disk.find(p);
+      return it == disk.end() ? ngn::ShellOpener::PathFacts{} : it->second;
+    }
+    void openUrl(const std::string &u, std::function<void(bool)> d) override { calls.push_back("url " + u); d(true); }
+    void openPath(const std::string &p, std::function<void(bool)> d) override { calls.push_back("path " + p); d(true); }
+    void showItemInFolder(const std::string &p, std::function<void(bool)> d) override { calls.push_back("show " + p); d(true); }
+  };
+  auto opener = std::make_shared<Opener>();
+  opener->disk = {
+      {"/Users/me/notes.md", {.exists = true}},
+      {"/Users/me/Projects", {.exists = true}},
+      {"/Users/me/tool", {.exists = true, .executable = true}},
+      {"/Applications/Evil.app", {.exists = true, .runsCode = true}},
+      {"/Users/me/run.command", {.exists = true, .runsCode = true}},
+  };
+  auto shell = ngn::makeShellModule(opener);
+  std::vector<dynamic> answers;
+  for (const char *path : {"/Users/me/notes.md", "/Users/me/Projects", "/Users/me/tool", "/Applications/Evil.app",
+                           "/Users/me/run.command", "/Users/me/missing"}) {
+    shell->callWithPromise("openPath", dynamic::array(path), {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
+  }
+  CHECK(answers == std::vector<dynamic>{true, true, false, false, false, false});
+  CHECK(opener->calls == Lines{"path /Users/me/notes.md", "path /Users/me/Projects"});
+
+  // Showing one in Finder runs nothing, so any that exists can be shown.
+  answers.clear();
+  shell->callWithPromise("showItemInFolder", dynamic::array("/Applications/Evil.app"),
+                         {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
+  CHECK(answers == std::vector<dynamic>{true});
 }
