@@ -10,8 +10,18 @@ scroll wheel, loads the app from the dev server with reload and Fast Refresh, ru
 layout animations, and has the default menu bar. React Native's iOS modules answer from the core:
 Linking, Appearance, AppState, DeviceInfo, PlatformConstants, I18nManager, Alert (NSAlert),
 Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob, FileReader,
-ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no sheets, second
-windows or React Native DevTools yet.
+ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no sheets or React
+Native DevTools yet.
+
+The app starts on a surface the host never shows, and every window it opens (`AppWindows`, through
+the `NgNativeWindows` module) is an NSWindow with a surface of its own on the one runtime, shown
+when its first frame mounts. The close button, Cmd-W, Cmd-Q and a logout ask the app, which closes
+the window or answers the quit; the host never closes a window or quits on its own, and closing the
+last window leaves the app running. A Dock click with no window open sends `reopen`. A window's
+frame autosaves under its key (`main`, a route outlet or a `restoreKey`) in the app's preferences
+and comes back there, within its size limits, when a window with that key opens again. A reload
+closes the windows with no key and keeps the rest for five seconds for the reloaded app to open
+again. An app that renders on its own surface instead gets that surface in a window.
 
 The mouse reaches an app as on the web: every move goes to React Native's pointer events, which
 send `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)` and `(mouseout)` to the views
@@ -78,7 +88,7 @@ libraries above recompiles only that library.
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and
-  hover, Tab order, the accessibility mapping, the native controls' props and measuring, text
+  hover, Tab order, the app's windows and their autosaved frames (`app-windows.h`), the accessibility mapping, the native controls' props and measuring, text
   measurement, the module registry and desktop view props, the dev server connection,
   the default menu bar and React Native's iOS-shaped modules in `src/modules`), with tests on an
   in-memory backend that run on Linux and macOS. A backend answers the OS calls through narrow

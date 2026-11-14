@@ -1,5 +1,5 @@
-// ngn-macos: the macOS desktop host. Loads a bundle into one runtime and mounts its surface in a
-// window.
+// ngn-macos: the macOS desktop host. Loads a bundle into one runtime, starts the app on a surface
+// that is never shown, and gives each window the app opens (NgNativeWindows) a surface of its own.
 //
 //   ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>]
 //
@@ -10,6 +10,7 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
+#import "app-windows.h"
 #import "appkit-backend.h"
 #import "header-toolbar.h"
 #import "menu-bar.h"
@@ -35,7 +36,9 @@ using namespace facebook::react;
 
 namespace {
 
-constexpr SurfaceId kMainSurface = 1;
+// The surface the app starts on, which the host never shows: the app renders each window on a
+// surface of its own (app-windows.h).
+constexpr SurfaceId kAppSurface = 1;
 
 struct Host {
   std::shared_ptr<ngn::appkit::AppKitBackend> backend;
@@ -43,8 +46,12 @@ struct Host {
   std::unique_ptr<ngn::InputDispatcher> input;
   std::shared_ptr<ngn::HostState> state;
   std::unique_ptr<ngn::Runtime> runtime;
-  NSWindow *window;
-  NGNSurfaceView *surface;
+  std::shared_ptr<ngn::appkit::AppKitWindows> windows;
+  std::shared_ptr<ngn::WindowHost> windowHost;
+  NGNSurfaceView *appSurface;
+  // The app's own surface in a window, for an app that renders there instead of opening windows.
+  NSWindow *appWindow;
+  NSString *title;
   // Ticks the layout animations while they run, at the display's rate.
   NSTimer *animationTimer;
   bool firstFrameLogged = false;
@@ -62,13 +69,16 @@ ngn::WindowMetrics windowMetrics(NSWindow *window) {
   };
 }
 
-ngn::SurfaceMetrics metricsFor(NSWindow *window) {
-  NSSize size = window.contentView.bounds.size;
+ngn::SurfaceMetrics metricsFor(NSSize size, double scale) {
   return {
       .size = {static_cast<Float>(size.width), static_cast<Float>(size.height)},
-      .pointScale = static_cast<float>(window.backingScaleFactor),
+      .pointScale = static_cast<float>(scale),
       .fontScale = 1,
   };
+}
+
+ngn::SurfaceMetrics metricsFor(NSWindow *window) {
+  return metricsFor(window.contentView.bounds.size, window.backingScaleFactor);
 }
 
 // Milliseconds since the process started, dyld and all, from the kernel's start time.
@@ -85,13 +95,13 @@ double msSinceLaunch() {
   return (now.tv_sec - start.tv_sec) * 1000.0 + (now.tv_usec - start.tv_usec) / 1000.0;
 }
 
-void logFirstFrame(SurfaceId surfaceId) {
-  if (gHost.firstFrameLogged || surfaceId != kMainSurface) {
+void logFirstFrame(NSWindow *window) {
+  if (gHost.firstFrameLogged || window == nil || !window.visible) {
     return;
   }
   gHost.firstFrameLogged = true;
   // Draw now rather than at the end of this run loop pass, so the time covers the first frame.
-  [gHost.window displayIfNeeded];
+  [window displayIfNeeded];
   [CATransaction flush];
   fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", msSinceLaunch());
 }
@@ -144,13 +154,51 @@ bool moveFocus(NSEvent *event) {
   return false;
 }
 
+// An app that renders on its own surface rather than opening windows (one that is not an
+// ng-native app with AppWindows) gets that surface in a window once it has something on it.
+void showAppSurfaceIfUsed() {
+  const auto *root = gHost.mounting->tree().find(kAppSurface);
+  if (gHost.appWindow != nil || root == nullptr || root->children.empty()) {
+    return;
+  }
+  NSRect visible = NSScreen.mainScreen.visibleFrame;
+  gHost.appWindow = [[NSWindow alloc]
+      initWithContentRect:gHost.appSurface.frame
+                styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable |
+                          NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView
+                  backing:NSBackingStoreBuffered
+                    defer:NO];
+  gHost.appWindow.releasedWhenClosed = NO;
+  gHost.appWindow.title = gHost.title;
+  gHost.appWindow.delegate = (id<NSWindowDelegate>)NSApp.delegate;
+  gHost.appWindow.contentView = gHost.appSurface;
+  [gHost.appWindow setFrameTopLeftPoint:NSMakePoint(NSMinX(visible) + 40, NSMaxY(visible) - 40)];
+  [gHost.appWindow makeKeyAndOrderFront:nil];
+}
+
 } // namespace
 
 @interface NGNAppDelegate : NSObject <NSApplicationDelegate, NSWindowDelegate>
 @end
 
 @implementation NGNAppDelegate
+// The app decides (AppWindows and provideAppLifecycle): closing the last window never quits.
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app {
+  return gHost.appWindow != nil;
+}
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
+  switch (gHost.windowHost->quitRequested()) {
+    case ngn::QuitReply::Now:
+      return NSTerminateNow;
+    case ngn::QuitReply::Later:
+      return NSTerminateLater;
+    case ngn::QuitReply::Cancel:
+      return NSTerminateCancel;
+  }
+  return NSTerminateNow;
+}
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)visible {
+  gHost.windowHost->reopen(visible);
   return YES;
 }
 - (void)applicationWillTerminate:(NSNotification *)note {
@@ -159,11 +207,12 @@ bool moveFocus(NSEvent *event) {
     gHost.runtime->shutdown();
   }
 }
+// The app's own surface, when it is in a window.
 - (void)windowDidResize:(NSNotification *)note {
   if (gHost.runtime) {
-    gHost.runtime->updateSurface(kMainSurface, metricsFor(gHost.window));
+    gHost.runtime->updateSurface(kAppSurface, metricsFor(gHost.appWindow));
   }
-  gHost.state->metrics.set(windowMetrics(gHost.window));
+  gHost.state->metrics.set(windowMetrics(gHost.appWindow));
 }
 - (void)windowDidChangeBackingProperties:(NSNotification *)note {
   [self windowDidResize:note];
@@ -206,7 +255,13 @@ int main(int argc, const char *argv[]) {
     gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
     gHost.backend->onMount = [](SurfaceId surfaceId) {
       gHost.input->didMount(surfaceId);
-      logFirstFrame(surfaceId);
+      if (surfaceId == kAppSurface) {
+        showAppSurfaceIfUsed();
+        logFirstFrame(gHost.appWindow);
+      } else {
+        gHost.windows->didMount(surfaceId);
+        logFirstFrame(gHost.windows->window(surfaceId));
+      }
     };
     gHost.input->onCursor = [](ngn::Cursor cursor) { [NGNSurfaceView showCursor:cursor]; };
     NGNModalHostView.input = gHost.input.get();
@@ -240,27 +295,24 @@ int main(int argc, const char *argv[]) {
           static_cast<Tag>(tag), {static_cast<Float>(offset.x), static_cast<Float>(offset.y)});
     };
 
-    NSRect visible = NSScreen.mainScreen.visibleFrame;
-    NSRect frame = NSMakeRect(0, 0, 1040, 720);
-    gHost.window = [[NSWindow alloc]
-        initWithContentRect:frame
-                  styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable |
-                            NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView
-                    backing:NSBackingStoreBuffered
-                      defer:NO];
-    gHost.window.title = title;
-    gHost.window.delegate = delegate;
-    gHost.surface = [[NGNSurfaceView alloc] initWithFrame:frame surfaceId:kMainSurface input:gHost.input.get()];
-    gHost.window.contentView = gHost.surface;
-    gHost.backend->addSurface(gHost.surface);
-    [gHost.window setFrameTopLeftPoint:NSMakePoint(NSMinX(visible) + 40, NSMaxY(visible) - 40)];
+    gHost.title = title;
+    NSRect frame = NSMakeRect(0, 0, ngn::kDefaultWindowWidth, ngn::kDefaultWindowHeight);
+    gHost.appSurface = [[NGNSurfaceView alloc] initWithFrame:frame surfaceId:kAppSurface input:gHost.input.get()];
+    gHost.backend->addSurface(gHost.appSurface);
 
     if (appId.empty()) {
       appId = std::string(title.UTF8String);
     }
     auto system = ngn::appkit::makeSystem(appId);
     gHost.state = std::make_shared<ngn::HostState>();
-    gHost.state->metrics.set(windowMetrics(gHost.window));
+    {
+      NSSize screen = NSScreen.mainScreen.frame.size;
+      double scale = NSScreen.mainScreen.backingScaleFactor;
+      gHost.state->metrics.set({
+          .window = {.width = frame.size.width, .height = frame.size.height, .scale = scale, .fontScale = 1},
+          .screen = {.width = screen.width, .height = screen.height, .scale = scale, .fontScale = 1},
+      });
+    }
     ngn::appkit::watchApp(gHost.state, system);
     ngn::NetworkClients network{ngn::appkit::makeHttp(), ngn::appkit::makeWebSockets()};
     // Kept for the process: ReactHost asks it for modules on every reload.
@@ -272,6 +324,28 @@ int main(int argc, const char *argv[]) {
          .http = network.http,
          .webSockets = network.webSockets,
          .reactNativeVersion = NGN_REACT_NATIVE_VERSION});
+
+    gHost.windows = std::make_shared<ngn::appkit::AppKitWindows>(ngn::appkit::AppKitWindows::Hooks{
+        .makeSurface = [](SurfaceId surface, NSRect bounds) -> NGNSurfaceView * {
+          NGNSurfaceView *view = [[NGNSurfaceView alloc] initWithFrame:bounds surfaceId:surface input:gHost.input.get()];
+          gHost.backend->addSurface(view);
+          return view;
+        },
+        .startSurface = [](SurfaceId surface, NSWindow *window) {
+          gHost.runtime->startSurface(surface, "", metricsFor(window));
+        },
+        .resizeSurface = [](SurfaceId surface, NSWindow *window) {
+          gHost.runtime->updateSurface(surface, metricsFor(window));
+        },
+        .stopSurface = [](SurfaceId surface) {
+          gHost.runtime->stopSurface(surface);
+          gHost.backend->removeSurface(surface);
+        },
+        .keyWindowChanged = [](NSWindow *window) { gHost.state->metrics.set(windowMetrics(window)); },
+    });
+    gHost.windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
+    gHost.windows->setHost(gHost.windowHost);
+    ngn::addModule(*modules, "NgNativeWindows", [] { return ngn::makeWindowsModule(gHost.windowHost); });
 
     gHost.runtime = std::make_unique<ngn::Runtime>(
         gHost.mounting,
@@ -330,7 +404,8 @@ int main(int argc, const char *argv[]) {
       }
       return 1;
     }
-    gHost.runtime->startSurface(kMainSurface, module, metricsFor(gHost.window));
+    gHost.runtime->startSurface(
+        kAppSurface, module, metricsFor(frame.size, NSScreen.mainScreen.backingScaleFactor));
 
     [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
                                           handler:^NSEvent *(NSEvent *event) {
@@ -342,7 +417,6 @@ int main(int argc, const char *argv[]) {
                                             }
                                             return event;
                                           }];
-    [gHost.window makeKeyAndOrderFront:nil];
     [app activateIgnoringOtherApps:YES];
     [app run];
   }

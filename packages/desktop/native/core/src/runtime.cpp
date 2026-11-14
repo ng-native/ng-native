@@ -120,6 +120,13 @@ void Runtime::startSurface(SurfaceId surfaceId, const std::string &moduleName, c
   host_->startSurface(surfaceId, moduleName, folly::dynamic::object(), constraints(metrics), context(metrics));
 }
 
+void Runtime::stopSurface(SurfaceId surfaceId) {
+  std::lock_guard lock(mutex_);
+  if (surfaces_.erase(surfaceId) != 0 && host_) {
+    host_->stopSurface(surfaceId);
+  }
+}
+
 void Runtime::updateSurface(SurfaceId surfaceId, const SurfaceMetrics &metrics) {
   std::unique_lock lock(mutex_, std::try_to_lock);
   if (auto it = surfaces_.find(surfaceId); it != surfaces_.end()) {

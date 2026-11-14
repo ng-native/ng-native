@@ -66,7 +66,10 @@ class Runtime {
   // dropped. `done` gets whether the bundle loaded, on the reload's thread.
   void reload(std::function<void(bool)> done = nullptr);
 
+  // An empty `moduleName` starts a surface that runs nothing: one the app renders into itself, such
+  // as a second window's.
   void startSurface(SurfaceId surfaceId, const std::string &moduleName, const SurfaceMetrics &metrics);
+  void stopSurface(SurfaceId surfaceId);
   void updateSurface(SurfaceId surfaceId, const SurfaceMetrics &metrics);
 
   // The event beat: the backend calls it each time its UI thread's run loop is about to wait.
