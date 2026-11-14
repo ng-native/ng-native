@@ -1,8 +1,12 @@
 #include "ngn/accessibility.h"
+#include "ngn/desktop-props.h"
 
+#include <react/renderer/components/text/ParagraphState.h>
 #include <react/renderer/components/view/accessibilityPropsConversions.h>
+#include <react/renderer/core/ConcreteState.h>
 
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace facebook::react;
 
@@ -51,8 +55,43 @@ const std::unordered_map<std::string, Mapping> &roles() {
       {"row", {AxRole::Row}},
       {"cell", {AxRole::Cell}},
       {"spinbutton", {AxRole::Incrementor}},
-      {"header", {AxRole::Group, AxSubrole::None, "heading"}},
-      {"heading", {AxRole::Group, AxSubrole::None, "heading"}},
+      {"header", {AxRole::Heading, AxSubrole::None, "heading"}},
+      {"heading", {AxRole::Heading, AxSubrole::None, "heading"}},
+      {"meter", {AxRole::LevelIndicator}},
+      {"tree", {AxRole::Outline}},
+      {"treegrid", {AxRole::Outline}},
+      {"treeitem", {AxRole::Row, AxSubrole::OutlineRow}},
+      {"scrollview", {AxRole::ScrollArea}},
+      {"horizontalscrollview", {AxRole::ScrollArea}},
+      {"tabbar", {AxRole::TabGroup}},
+      {"iconmenu", {AxRole::Menu}},
+      {"keyboardkey", {AxRole::Button}},
+      {"directory", {AxRole::List, AxSubrole::None, "directory"}},
+      {"feed", {AxRole::List, AxSubrole::None, "feed"}},
+      {"option", {AxRole::Row, AxSubrole::None, "option"}},
+      {"columnheader", {AxRole::Cell, AxSubrole::None, "column header"}},
+      {"rowheader", {AxRole::Cell, AxSubrole::None, "row header"}},
+      {"term", {AxRole::StaticText, AxSubrole::None, "term"}},
+      {"application", {AxRole::Group, AxSubrole::None, "application"}},
+      {"article", {AxRole::Group, AxSubrole::None, "article"}},
+      {"complementary", {AxRole::Group, AxSubrole::None, "complementary"}},
+      {"contentinfo", {AxRole::Group, AxSubrole::None, "content information"}},
+      {"definition", {AxRole::Group, AxSubrole::None, "definition"}},
+      {"document", {AxRole::Group, AxSubrole::None, "document"}},
+      {"figure", {AxRole::Group, AxSubrole::None, "figure"}},
+      {"form", {AxRole::Group, AxSubrole::None, "form"}},
+      {"log", {AxRole::Group, AxSubrole::None, "log"}},
+      {"marquee", {AxRole::Group, AxSubrole::None, "marquee"}},
+      {"math", {AxRole::Group, AxSubrole::None, "math"}},
+      {"note", {AxRole::Group, AxSubrole::None, "note"}},
+      {"region", {AxRole::Group, AxSubrole::None, "region"}},
+      {"rowgroup", {AxRole::Group, AxSubrole::None, "row group"}},
+      {"separator", {AxRole::Group, AxSubrole::None, "separator"}},
+      {"tabpanel", {AxRole::Group, AxSubrole::None, "tab panel"}},
+      {"pager", {AxRole::Group, AxSubrole::None, "pager"}},
+      {"drawerlayout", {AxRole::Group, AxSubrole::None, "drawer"}},
+      {"slidingdrawer", {AxRole::Group, AxSubrole::None, "drawer"}},
+      {"webview", {AxRole::Group, AxSubrole::None, "web view"}},
       {"alert", {AxRole::Group, AxSubrole::None, "alert"}},
       {"alertdialog", {AxRole::Group, AxSubrole::None, "alert dialog"}},
       {"dialog", {AxRole::Group, AxSubrole::None, "dialog"}},
@@ -66,6 +105,49 @@ const std::unordered_map<std::string, Mapping> &roles() {
       {"tooltip", {AxRole::Group, AxSubrole::None, "tooltip"}},
   };
   return table;
+}
+
+// The roles a press means something on: AppKit's controls, which VoiceOver presses.
+bool pressableRole(const std::string &name) {
+  static const std::unordered_set<std::string> names{"button", "togglebutton", "link", "imagebutton", "checkbox",
+      "switch", "radio", "tab", "menuitem", "combobox", "searchbox", "search"};
+  return names.contains(name);
+}
+
+// The roles that are one thing to read, whatever views draw them.
+bool leafRole(AxRole role) {
+  switch (role) {
+    case AxRole::Button:
+    case AxRole::Link:
+    case AxRole::Image:
+    case AxRole::StaticText:
+    case AxRole::CheckBox:
+    case AxRole::RadioButton:
+    case AxRole::Slider:
+    case AxRole::TextField:
+    case AxRole::MenuItem:
+    case AxRole::ProgressIndicator:
+    case AxRole::ComboBox:
+    case AxRole::Incrementor:
+    case AxRole::Heading:
+    case AxRole::LevelIndicator:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool adjustableRole(const std::string &name) {
+  return name == "adjustable" || name == "slider" || name == "spinbutton";
+}
+
+bool declares(const ViewProps &props, const std::string &action) {
+  for (const auto &declared : props.accessibilityActions) {
+    if (declared.name == action) {
+      return true;
+    }
+  }
+  return false;
 }
 
 } // namespace
@@ -110,11 +192,122 @@ AxInfo accessibilityInfo(const ViewProps &props) {
         break;
     }
   }
+  static const std::unordered_set<std::string> landmarks{
+      "banner", "main", "navigation", "complementary", "contentinfo", "form", "region"};
+  info.landmark = landmarks.contains(name);
+  if (const auto *desktop = dynamic_cast<const HasDesktopProps *>(&props); desktop && info.role == AxRole::Heading) {
+    info.level = desktop->desktop.accessibilityLevel;
+  }
+  if (props.accessibilityState) {
+    info.expanded = props.accessibilityState->expanded;
+  }
+  for (const auto &action : props.accessibilityActions) {
+    const auto &n = action.name;
+    if (n != "activate" && n != "increment" && n != "decrement" && n != "escape") {
+      info.customActions.push_back({n, action.label.value_or(n)});
+    }
+  }
+  info.offersPress = props.onAccessibilityTap || declares(props, "activate") || pressableRole(name);
+  info.offersIncrement = adjustableRole(name) || declares(props, "increment") || declares(props, "decrement");
+  info.offersCancel = props.onAccessibilityEscape || declares(props, "escape");
   bool hidden = props.accessibilityElementsHidden ||
       props.importantForAccessibility == ImportantForAccessibility::NoHideDescendants ||
       props.importantForAccessibility == ImportantForAccessibility::No;
   info.element = !hidden && !presentation && (props.accessible || !info.label.empty() || !name.empty());
+  info.hidesChildren = info.element && (props.accessible || leafRole(info.role));
   return info;
+}
+
+AxInfo paragraphAccessibilityInfo(const ViewProps &props, const std::string &text) {
+  auto info = accessibilityInfo(props);
+  if (roleName(props).empty()) {
+    info.role = AxRole::StaticText;
+  }
+  if (info.value.empty()) {
+    info.value = text;
+  }
+  // A paragraph in another role (a heading, a link) is named by its text, as VoiceOver reads a
+  // title rather than a value for those.
+  if (info.role != AxRole::StaticText && info.label.empty()) {
+    info.label = text;
+  }
+  bool hidden = props.accessibilityElementsHidden ||
+      props.importantForAccessibility == ImportantForAccessibility::NoHideDescendants ||
+      props.importantForAccessibility == ImportantForAccessibility::No;
+  auto name = roleName(props);
+  info.element = !hidden && name != "none" && name != "presentation" && (!text.empty() || !info.label.empty());
+  // Its text is its own; anything under it (an inline view) is part of what it says.
+  info.hidesChildren = info.element;
+  return info;
+}
+
+std::string paragraphText(const ShadowView &view) {
+  if (std::string_view(view.componentName) != "Paragraph" || !view.state) {
+    return "";
+  }
+  return paragraphText(view.state);
+}
+
+std::string paragraphText(const State::Shared &state) {
+  if (!state) {
+    return "";
+  }
+  // A Paragraph's state is always ParagraphState (its component descriptor makes it).
+  return std::static_pointer_cast<const ConcreteState<ParagraphState>>(state)->getData().attributedString.getString();
+}
+
+std::vector<AxRotor> rotorsOf(const AxInfo &info) {
+  if (!info.element) {
+    return {};
+  }
+  if (info.role == AxRole::Heading) {
+    return {AxRotor::Headings};
+  }
+  if (info.role == AxRole::Link) {
+    return {AxRotor::Links};
+  }
+  if (info.landmark) {
+    return {AxRotor::Landmarks};
+  }
+  return {};
+}
+
+std::optional<size_t> rotorStep(size_t count, std::optional<size_t> current, bool forward) {
+  if (count == 0) {
+    return std::nullopt;
+  }
+  if (!current) {
+    return forward ? 0 : count - 1;
+  }
+  if (forward) {
+    return *current + 1 < count ? std::optional<size_t>(*current + 1) : std::nullopt;
+  }
+  return *current > 0 ? std::optional<size_t>(*current - 1) : std::nullopt;
+}
+
+AxDispatch axDispatch(const ViewProps &props, AxVerb verb) {
+  auto action = [&](const char *name) { return AxDispatch{AxDispatch::Kind::Action, name}; };
+  bool actions = props.onAccessibilityAction;
+  switch (verb) {
+    case AxVerb::Press:
+      if (props.onAccessibilityTap) {
+        return {AxDispatch::Kind::Tap, ""};
+      }
+      if (actions && declares(props, "activate")) {
+        return action("activate");
+      }
+      return {AxDispatch::Kind::Click, ""};
+    case AxVerb::Increment:
+      return actions ? action("increment") : AxDispatch{};
+    case AxVerb::Decrement:
+      return actions ? action("decrement") : AxDispatch{};
+    case AxVerb::Cancel:
+      if (props.onAccessibilityEscape) {
+        return {AxDispatch::Kind::Escape, ""};
+      }
+      return actions && declares(props, "escape") ? action("escape") : AxDispatch{};
+  }
+  return {};
 }
 
 } // namespace ngn

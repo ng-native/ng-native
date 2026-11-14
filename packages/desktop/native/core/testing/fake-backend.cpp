@@ -135,6 +135,13 @@ void FakeBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<Source
   calls.push_back(line);
 }
 
+void FakeBackend::announce(SurfaceId surfaceId, const Announcement &announcement) {
+  const char *names[] = {"low", "medium", "high"};
+  calls.push_back(
+      "announce " + std::to_string(surfaceId) + " " + names[static_cast<int>(announcement.priority)] + " " +
+      announcement.text);
+}
+
 void FakeBackend::didMount(SurfaceId surfaceId) {
   calls.push_back("mounted " + std::to_string(surfaceId));
 }

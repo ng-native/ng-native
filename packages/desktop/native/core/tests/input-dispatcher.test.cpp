@@ -150,6 +150,38 @@ TEST_CASE("a press in a popover reports page coordinates in the surface") {
   CHECK(f.input.events.back() == "touch start 6 page 215,15 offset 5,5 touches 1");
 }
 
+TEST_CASE("activating a view is a press at its centre, sent to it even where another view covers it") {
+  Fixture f;
+  // 2's centre (60,60) is under 4, which a click there would hit.
+  CHECK(f.input.activate(1, 2));
+  CHECK(
+      f.input.events ==
+      Events{
+          "touch start 2 page 60,60 offset 50,50 touches 1",
+          "touch end 2 page 60,60 offset 50,50 touches 0",
+      });
+
+  // A view in a popover is pressed through the popover's container, in surface coordinates.
+  f.input.events.clear();
+  f.tree.addContainerRoot(5);
+  f.input.addContainer(7, 1, 5);
+  CHECK(f.input.activate(1, 6));
+  CHECK(f.input.events.front() == "touch start 6 page 220,20 offset 10,10 touches 1");
+}
+
+TEST_CASE("activating does nothing for a view no container holds, or while a press is down") {
+  Fixture f;
+  CHECK_FALSE(f.input.activate(1, 99));
+  CHECK_FALSE(f.input.activate(2, 3));
+  f.input.pointerDown(Fixture::at({35, 35}));
+  f.input.events.clear();
+  CHECK_FALSE(f.input.activate(1, 4));
+  CHECK(f.input.events.empty());
+  // The press under way still ends on its own view.
+  f.input.pointerUp(Fixture::at({35, 35}));
+  CHECK(f.input.events == Events{"touch end 3 page 35,35 offset 5,5 touches 0"});
+}
+
 TEST_CASE("events for a container nobody added are ignored") {
   Fixture f;
   f.input.pointerMove(Fixture::at({35, 35}, 99));

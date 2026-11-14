@@ -1,5 +1,7 @@
 #include "ngn/mounting-manager.h"
 
+#include "ngn/accessibility.h"
+
 #include <chrono>
 
 #include "ngn/desktop-modal.h"
@@ -27,6 +29,7 @@ MountingManager::MountingManager(
     std::unique_ptr<TabsHosts> tabs)
     : backend_(std::move(backend)),
       desktopProps_(std::move(desktopProps)),
+      liveRegions_(tree_, [](const ShadowView &view) { return paragraphText(view); }),
       screens_(screens ? std::move(screens) : std::make_unique<ScreenStacks>()),
       safeAreas_(safeAreas ? std::move(safeAreas) : std::make_unique<SafeAreas>()),
       tabs_(tabs ? std::move(tabs) : std::make_unique<TabsHosts>()) {
@@ -100,6 +103,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
       case ShadowViewMutation::Create: {
         const auto &view = m.newChildShadowView;
         tree_.create(view);
+        liveRegions_.update(view);
         safeAreas_->created(view);
         backend_->createView(view);
         svgs_.changed(tree_, view.tag);
@@ -113,6 +117,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         tabs_->deleted(m.oldChildShadowView.tag);
         safeAreas_->deleted(m.oldChildShadowView.tag);
         svgs_.deleted(m.oldChildShadowView.tag);
+        liveRegions_.remove(m.oldChildShadowView.tag);
         tree_.destroy(m.oldChildShadowView.tag);
         backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
         break;
@@ -145,6 +150,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         if (old.props != view.props) {
           backend_->updateProps(view);
           reportDesktopProps(view, &old);
+          liveRegions_.update(view);
           sidebars_.propsChanged(tree_, view.tag);
           tabs_->propsChanged(tree_, view.tag);
           screens_->propsChanged(tree_, view.tag);
@@ -185,6 +191,9 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   if (known == frontHeaders_.end() ? header.has_value() : known->second != header) {
     frontHeaders_[surfaceId] = header;
     backend_->setFrontHeader(surfaceId, header);
+  }
+  for (const auto &announcement : liveRegions_.didMount(surfaceId)) {
+    backend_->announce(surfaceId, announcement);
   }
   backend_->didMount(surfaceId);
   if (afterMount_) {

@@ -16,6 +16,7 @@
 #include <react/renderer/components/iostextinput/TextInputProps.h>
 #include <react/renderer/components/text/ParagraphState.h>
 #include <react/renderer/components/textinput/TextInputEventEmitter.h>
+#include <react/renderer/components/view/ViewEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/ConcreteState.h>
 
@@ -84,8 +85,30 @@ NSAccessibilityRole nsRole(ngn::AxRole role) {
       return NSAccessibilityCellRole;
     case ngn::AxRole::Incrementor:
       return NSAccessibilityIncrementorRole;
+    case ngn::AxRole::Heading:
+      if (@available(macOS 26, *)) {
+        return NSAccessibilityHeadingRole;
+      }
+      return NSAccessibilityGroupRole;
+    case ngn::AxRole::LevelIndicator:
+      return NSAccessibilityLevelIndicatorRole;
+    case ngn::AxRole::Outline:
+      return NSAccessibilityOutlineRole;
+    case ngn::AxRole::ScrollArea:
+      return NSAccessibilityScrollAreaRole;
   }
   return NSAccessibilityGroupRole;
+}
+
+// Whether AppKit has a role of its own for this one, so its own name for it is spoken.
+bool nativeRole(ngn::AxRole role) {
+  if (role == ngn::AxRole::Heading) {
+    if (@available(macOS 26, *)) {
+      return true;
+    }
+    return false;
+  }
+  return true;
 }
 
 NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
@@ -98,6 +121,8 @@ NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
       return NSAccessibilityTabButtonSubrole;
     case ngn::AxSubrole::SearchField:
       return NSAccessibilitySearchFieldSubrole;
+    case ngn::AxSubrole::OutlineRow:
+      return NSAccessibilityOutlineRowSubrole;
     case ngn::AxSubrole::None:
       return nil;
   }
@@ -107,6 +132,8 @@ NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
 } // namespace
 
 #pragma mark - NGNView
+
+static ngn::InputDispatcher *gViewInput;
 
 @implementation NGNView {
   Props::Shared _props;
@@ -126,6 +153,13 @@ NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
     self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawOnSetNeedsDisplay;
   }
   return self;
+}
+
++ (ngn::InputDispatcher *)activator {
+  return gViewInput;
+}
++ (void)setActivator:(ngn::InputDispatcher *)input {
+  gViewInput = input;
 }
 
 - (BOOL)isFlipped {
@@ -216,7 +250,13 @@ static BOOL focusFromKeyboard() {
 // React Native's accessibility props, mapped in the core (accessibility.h).
 - (ngn::AxInfo)axInfo {
   auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
-  return viewProps ? ngn::accessibilityInfo(*viewProps) : ngn::AxInfo{};
+  if (!viewProps) {
+    return ngn::AxInfo{};
+  }
+  if ([_componentName isEqualToString:@"Paragraph"]) {
+    return ngn::paragraphAccessibilityInfo(*viewProps, ngn::paragraphText(_state));
+  }
+  return ngn::accessibilityInfo(*viewProps);
 }
 
 - (BOOL)isAccessibilityElement {
@@ -233,7 +273,8 @@ static BOOL focusFromKeyboard() {
 
 - (NSString *)accessibilityRoleDescription {
   auto info = [self axInfo];
-  if (!info.roleDescription.empty()) {
+  // A role AppKit has (a heading from macOS 26) is spoken by AppKit's own name for it.
+  if (!info.roleDescription.empty() && !(info.role == ngn::AxRole::Heading && nativeRole(info.role))) {
     return nsString(info.roleDescription);
   }
   return NSAccessibilityRoleDescription(nsRole(info.role), nsSubrole(info.subrole));
@@ -241,7 +282,41 @@ static BOOL focusFromKeyboard() {
 
 - (NSString *)accessibilityLabel {
   auto info = [self axInfo];
+  if (info.label.empty() && info.hidesChildren && ![_componentName isEqualToString:@"Paragraph"]) {
+    // Read as one element with no label of its own: named by the text inside it, as iOS does.
+    NSMutableArray<NSString *> *texts = [NSMutableArray array];
+    [self collectTextInto:texts];
+    return texts.count > 0 ? [texts componentsJoinedByString:@" "] : nil;
+  }
   return info.label.empty() ? nil : nsString(info.label);
+}
+
+- (void)collectTextInto:(NSMutableArray<NSString *> *)texts {
+  for (NSView *child in [self contentContainer].subviews) {
+    if (![child isKindOfClass:NGNView.class] || child.hidden) {
+      continue;
+    }
+    NGNView *view = (NGNView *)child;
+    auto info = [view axInfo];
+    if (!info.label.empty()) {
+      [texts addObject:nsString(info.label)];
+    } else if ([view.componentName isEqualToString:@"Paragraph"]) {
+      auto text = ngn::paragraphText(view.state);
+      if (!text.empty()) {
+        [texts addObject:nsString(text)];
+      }
+    } else {
+      [view collectTextInto:texts];
+    }
+  }
+}
+
+// An element read as one has no elements inside it.
+- (NSArray *)accessibilityChildren {
+  if ([self axInfo].hidesChildren) {
+    return @[];
+  }
+  return [super accessibilityChildren];
 }
 
 - (NSString *)accessibilityHelp {
@@ -257,12 +332,140 @@ static BOOL focusFromKeyboard() {
   return info.value.empty() ? nil : nsString(info.value);
 }
 
+// The heading level, which AppKit names from macOS 26 and has no property for.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+- (NSArray<NSAccessibilityAttributeName> *)accessibilityAttributeNames {
+  NSArray *names = [super accessibilityAttributeNames];
+  auto info = [self axInfo];
+  if (info.level && nativeRole(info.role) && info.role == ngn::AxRole::Heading) {
+    return [names arrayByAddingObject:@"AXHeadingLevel"];
+  }
+  return names;
+}
+
+- (id)accessibilityAttributeValue:(NSAccessibilityAttributeName)attribute {
+  if ([attribute isEqualToString:@"AXHeadingLevel"]) {
+    auto level = [self axInfo].level;
+    return level ? @(*level) : nil;
+  }
+  return [super accessibilityAttributeValue:attribute];
+}
+#pragma clang diagnostic pop
+
 - (BOOL)isAccessibilityEnabled {
   return ![self axInfo].disabled;
 }
 
 - (BOOL)isAccessibilitySelected {
   return [self axInfo].selected;
+}
+
+- (BOOL)isAccessibilityExpanded {
+  return [self axInfo].expanded.value_or(false);
+}
+
+- (NSArray<NSAccessibilityCustomAction *> *)accessibilityCustomActions {
+  auto info = [self axInfo];
+  if (info.customActions.empty()) {
+    return nil;
+  }
+  NSMutableArray<NSAccessibilityCustomAction *> *actions = [NSMutableArray array];
+  __weak NGNView *weakSelf = self;
+  for (const auto &action : info.customActions) {
+    std::string name = action.name;
+    [actions addObject:[[NSAccessibilityCustomAction alloc] initWithName:nsString(action.label)
+                                                                 handler:^BOOL {
+                                                                   return [weakSelf sendAccessibilityAction:name];
+                                                                 }]];
+  }
+  return actions;
+}
+
+// Sends a declared action, as iOS does only to a view that listens for them.
+- (BOOL)sendAccessibilityAction:(const std::string &)name {
+  auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
+  auto emitter = std::dynamic_pointer_cast<const ViewEventEmitter>(_emitter);
+  if (!viewProps || !viewProps->onAccessibilityAction || !emitter) {
+    return NO;
+  }
+  emitter->onAccessibilityAction(name);
+  return YES;
+}
+
+// One of AppKit's standard actions, as the core decides it reaches the app (accessibility.h).
+- (BOOL)performAxVerb:(ngn::AxVerb)verb {
+  auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
+  auto emitter = std::dynamic_pointer_cast<const ViewEventEmitter>(_emitter);
+  if (!viewProps || !emitter) {
+    return NO;
+  }
+  auto dispatch = ngn::axDispatch(*viewProps, verb);
+  switch (dispatch.kind) {
+    case ngn::AxDispatch::Kind::None:
+      return NO;
+    case ngn::AxDispatch::Kind::Tap:
+      emitter->onAccessibilityTap();
+      return YES;
+    case ngn::AxDispatch::Kind::Escape:
+      emitter->onAccessibilityEscape();
+      return YES;
+    case ngn::AxDispatch::Kind::Action:
+      emitter->onAccessibilityAction(dispatch.action);
+      return YES;
+    case ngn::AxDispatch::Kind::Click:
+      return gViewInput != nullptr && gViewInput->activate(static_cast<SurfaceId>(_surfaceId), static_cast<Tag>(_reactTag));
+  }
+  return NO;
+}
+
+- (BOOL)accessibilityPerformPress {
+  return [self performAxVerb:ngn::AxVerb::Press];
+}
+
+- (BOOL)accessibilityPerformIncrement {
+  return [self performAxVerb:ngn::AxVerb::Increment];
+}
+
+- (BOOL)accessibilityPerformDecrement {
+  return [self performAxVerb:ngn::AxVerb::Decrement];
+}
+
+- (BOOL)accessibilityPerformCancel {
+  return [self performAxVerb:ngn::AxVerb::Cancel];
+}
+
+// AppKit lists an action for every one of these the class implements; a view offers only those
+// that mean something for it. A focusable view is pressed as a control is.
+- (BOOL)isAccessibilitySelectorAllowed:(SEL)selector {
+  if (selector == @selector(accessibilityPerformPress)) {
+    return [self axInfo].offersPress || [self acceptsFirstResponder];
+  }
+  if (selector == @selector(accessibilityPerformIncrement) || selector == @selector(accessibilityPerformDecrement)) {
+    return [self axInfo].offersIncrement;
+  }
+  if (selector == @selector(accessibilityPerformCancel)) {
+    return [self axInfo].offersCancel;
+  }
+  // Only a view that expands says whether it is expanded.
+  if (selector == @selector(isAccessibilityExpanded)) {
+    return [self axInfo].expanded.has_value();
+  }
+  return [super isAccessibilitySelectorAllowed:selector];
+}
+
+// Space and Return press a focused view, as they press a focused AppKit control. A default button
+// takes Return first, as AppKit's own key equivalents do.
+- (void)keyDown:(NSEvent *)event {
+  NSEventModifierFlags modifiers = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
+                                                          NSEventModifierFlagOption);
+  NSString *key = event.charactersIgnoringModifiers;
+  BOOL activates = [key isEqualToString:@" "] || [key isEqualToString:@"\r"];
+  if (modifiers == 0 && activates && !event.isARepeat && self.window.firstResponder == self &&
+      [self performAxVerb:ngn::AxVerb::Press]) {
+    return;
+  }
+  [super keyDown:event];
 }
 
 - (void)updateProps:(const Props::Shared &)props {

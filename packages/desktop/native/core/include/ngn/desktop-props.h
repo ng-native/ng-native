@@ -47,6 +47,8 @@ struct DesktopProps {
   // The `contextMenu` prop: the entries of the menu a secondary click shows, as the app sends them
   // (app-menus.h), or null for none.
   folly::dynamic contextMenu{nullptr};
+  // `accessibilityLevel` (`aria-level`): a heading's level, from 1.
+  std::optional<int> accessibilityLevel;
   // ModalHostView only.
   ModalPresentation presentation{ModalPresentation::Sheet};
 

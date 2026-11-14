@@ -32,6 +32,11 @@ void FakeSystem::setColorScheme(std::optional<std::string> scheme) {
   schemeOverride = std::move(scheme);
 }
 
+void FakeSystem::announce(const Announcement &announcement) {
+  const char *names[] = {"low", "medium", "high"};
+  log.push_back(std::string("announce ") + names[static_cast<int>(announcement.priority)] + " " + announcement.text);
+}
+
 void FakeSystem::showAlert(const AlertRequest &request, std::function<void(int, std::string)> done) {
   alerts.push_back(request);
   answerAlert = std::move(done);

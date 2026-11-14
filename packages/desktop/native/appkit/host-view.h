@@ -4,11 +4,16 @@
 
 #import <AppKit/AppKit.h>
 
+#include "ngn/accessibility.h"
 #include "ngn/desktop-view-props.h"
+#include "ngn/input-dispatcher.h"
 
 #include <react/renderer/mounting/ShadowView.h>
 
 @interface NGNView : NSView
+// Set once by the host: where VoiceOver's press, Space and Return on a focused view send the click
+// they stand for when the view has no accessibility handler of its own.
+@property (class, nonatomic) ngn::InputDispatcher *activator;
 @property (nonatomic, readonly) NSInteger reactTag;
 @property (nonatomic, readonly) NSInteger surfaceId;
 @property (nonatomic, readonly, copy) NSString *componentName;
@@ -26,6 +31,8 @@
 - (facebook::react::Props::Shared)props;
 - (facebook::react::State::Shared)state;
 - (const facebook::react::LayoutMetrics &)layoutMetrics;
+// What VoiceOver is told about the view (accessibility.h).
+- (ngn::AxInfo)axInfo;
 // Where Fabric children mount: the view itself, or a scroll view's document view.
 - (NSView *)contentContainer;
 // What takes the keyboard when Tab moves the focus here: the view itself, or the AppKit control

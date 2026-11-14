@@ -3,6 +3,7 @@
 #pragma once
 
 #include "ngn/desktop-view-props.h"
+#include "ngn/live-regions.h"
 #include "ngn/mounting-backend.h"
 #include "ngn/safe-areas.h"
 #include "ngn/screen-stacks.h"
@@ -77,6 +78,7 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::unordered_set<std::string> componentNames_;
   std::function<void(SurfaceId)> afterMount_;
   ViewTree tree_;
+  LiveRegions liveRegions_;
   std::unique_ptr<ScreenStacks> screens_;
   std::unique_ptr<SafeAreas> safeAreas_;
   bool safeAreasSettled_{false};

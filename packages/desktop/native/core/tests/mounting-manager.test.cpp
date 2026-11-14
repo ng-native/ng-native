@@ -273,3 +273,25 @@ TEST_CASE("an svg is drawn when it mounts, when an element in it is made, change
   f.mount({ShadowViewMutation::RemoveMutation(2, same, 0), ShadowViewMutation::DeleteMutation(same)});
   CHECK(svgCalls(f.backend->calls) == std::vector<std::string>{"svg 2 with 0"});
 }
+
+TEST_CASE("a live region's new text is announced after the transaction that changed it") {
+  Fixture f;
+  auto live = [](std::string label) {
+    auto props = std::make_shared<ViewProps>();
+    props->accessibilityLiveRegion = AccessibilityLiveRegion::Assertive;
+    props->accessibilityLabel = std::move(label);
+    return props;
+  };
+  auto region = shadowView(2, "View", {}, live("Idle"));
+  f.mount({ShadowViewMutation::CreateMutation(region), ShadowViewMutation::InsertMutation(1, region, 0)});
+  auto busy = region;
+  busy.props = live("Uploading");
+  f.backend->calls.clear();
+  f.mount({ShadowViewMutation::UpdateMutation(region, busy, 1)});
+  CHECK(f.backend->calls == std::vector<std::string>{"props 2", "announce 1 high Uploading", "mounted 1"});
+
+  // Once it is deleted nothing is said for it.
+  f.backend->calls.clear();
+  f.mount({ShadowViewMutation::RemoveMutation(1, busy, 0), ShadowViewMutation::DeleteMutation(busy)});
+  CHECK(f.backend->calls == std::vector<std::string>{"remove 2 from 1 at 0", "delete 2", "mounted 1"});
+}
