@@ -1,6 +1,7 @@
 #import "system-access.h"
 
 #import <AppKit/AppKit.h>
+#import <Security/Security.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <folly/json.h>
@@ -55,6 +56,21 @@ std::optional<PackagedApp> packagedApp() {
 
 namespace {
 
+// Whether the process runs in the App Sandbox, from its own entitlements.
+bool runningSandboxed() {
+  SecTaskRef task = SecTaskCreateFromSelf(nullptr);
+  if (task == nullptr) {
+    return false;
+  }
+  CFTypeRef value = SecTaskCopyValueForEntitlement(task, CFSTR("com.apple.security.app-sandbox"), nullptr);
+  CFRelease(task);
+  bool sandboxed = value != nullptr && CFGetTypeID(value) == CFBooleanGetTypeID() && CFBooleanGetValue((CFBooleanRef)value);
+  if (value != nullptr) {
+    CFRelease(value);
+  }
+  return sandboxed;
+}
+
 std::map<std::string, std::string> environment() {
   std::map<std::string, std::string> out;
   for (char **entry = environ; entry != nullptr && *entry != nullptr; entry++) {
@@ -96,7 +112,8 @@ ProcessesSetup processesSetup(const std::string &capabilitiesJson) {
   };
   NSDictionary *info = NSBundle.mainBundle.infoDictionary;
   if (auto packaged = packagedApp()) {
-    setup.sandboxed = packaged->distribution == "mas";
+    // The plist's word, or the sandbox itself: a sandboxed build is never treated as unsandboxed.
+    setup.sandboxed = packaged->distribution == "mas" || runningSandboxed();
     setup.capabilities = parseCapabilities(dynamicFrom(info[@"NGNCapabilities"]));
   } else if (!capabilitiesJson.empty()) {
     try {
