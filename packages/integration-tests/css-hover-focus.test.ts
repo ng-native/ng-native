@@ -12,7 +12,12 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
+import {
+  Engine,
+  registerPlatformComponents,
+  type EngineNode,
+  type StyleSheet,
+} from '@ng-native/fabric';
 import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 const sheet = (css: string) => compileCss(css, 'app.css') as StyleSheet;
@@ -104,6 +109,17 @@ describe(':hover', () => {
     assert.equal(s.id('btn').props['onPointerEnter'], true);
     assert.equal(s.id('title').props['onPointerEnter'], undefined);
     assert.equal(s.id('other').props['onPointerEnter'], undefined);
+  });
+
+  it('opts in a view by a class after its first, or by a :hover rule that names no class', () => {
+    const s = scene('.a.b:hover { opacity: 0.5 } :is(.x, .y):hover { opacity: 0.2 }');
+    s.make('view', 'a b');
+    s.make('view', 'b');
+    s.make('view', 'y');
+    s.engine.commit();
+    assert.equal(s.id('a b').props['onPointerEnter'], true);
+    assert.equal(s.id('b').props['onPointerEnter'], undefined, 'one of the two classes');
+    assert.equal(s.id('y').props['onPointerEnter'], true);
   });
 
   it('commits no pointer opt-in at all in an app with no :hover rule', () => {
@@ -286,22 +302,45 @@ describe(':focus-within', () => {
 });
 
 describe(':focus-visible', () => {
-  it('matches focus the host says came from the keyboard, and not a click', () => {
-    const s = scene('.field:focus-visible { opacity: 0.5 } .field:focus { border-width: 1px }');
-    s.make('view', 'field');
-    s.make('view', 'other');
-    s.engine.commit();
-    s.fabric.emit(s.id('field'), 'topFocus', {});
-    s.engine.commit();
-    assert.equal(s.id('field').props['opacity'], undefined, 'a click draws no ring');
-    s.fabric.emit(s.id('other'), 'topFocus', {});
-    s.fabric.emit(s.id('field'), 'topFocus', { focusVisible: true });
-    s.engine.commit();
-    assert.equal(s.id('field').props['opacity'], 0.5, 'Tab does');
-    s.fabric.emit(s.id('field'), 'topBlur', {});
-    s.engine.commit();
-    assert.equal(s.id('field').props['opacity'], null);
+  it('matches focus the macOS host says came from the keyboard, and not a click', () => {
+    registerPlatformComponents('macos');
+    try {
+      const s = scene('.field:focus-visible { opacity: 0.5 } .field:focus { border-width: 1px }');
+      s.make('view', 'field');
+      s.make('view', 'other');
+      s.engine.commit();
+      s.fabric.emit(s.id('field'), 'topFocus', {});
+      s.engine.commit();
+      assert.equal(s.id('field').props['opacity'], undefined, 'a click draws no ring');
+      s.fabric.emit(s.id('other'), 'topFocus', {});
+      s.fabric.emit(s.id('field'), 'topFocus', { focusVisible: true });
+      s.engine.commit();
+      assert.equal(s.id('field').props['opacity'], 0.5, 'Tab does');
+      s.fabric.emit(s.id('field'), 'topBlur', {});
+      s.engine.commit();
+      assert.equal(s.id('field').props['opacity'], null);
+    } finally {
+      registerPlatformComponents('ios');
+    }
   });
+
+  for (const os of ['ios', 'android']) {
+    it(`matches every focus on ${os}, where a tap focuses no view but a text field`, () => {
+      // A phone focuses a button only from a hardware keyboard, a remote or an assistive
+      // technology, which are the cases a ring is for, and its host reports no keyboard flag.
+      registerPlatformComponents(os);
+      try {
+        const s = scene('.field:focus-visible { opacity: 0.5 }');
+        s.make('view', 'field');
+        s.engine.commit();
+        s.fabric.emit(s.id('field'), 'topFocus', {});
+        s.engine.commit();
+        assert.equal(s.id('field').props['opacity'], 0.5);
+      } finally {
+        registerPlatformComponents('ios');
+      }
+    });
+  }
 
   it('matches a focused text field however it was focused, as a browser does', () => {
     // It takes the keyboard whichever way focus arrived, so Chrome draws its ring on a click too.

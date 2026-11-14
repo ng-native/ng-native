@@ -374,14 +374,17 @@ function expectSuccess(result, message) {
 }
 
 /**
- * Submits `file` to Apple's notary service and waits, failing unless Apple accepts it. The status
- * is read from notarytool's JSON, so a rejected submission never reads as done.
+ * Submits `file` to Apple's notary service and waits, failing unless Apple accepts it, then staples
+ * the ticket to `staple`. The status is read from notarytool's JSON, so a rejected submission never
+ * reads as done. stapler takes an app or a dmg and refuses a zip, so an app sent as a zip is
+ * stapled itself.
  *
  * @param {System} sys
  * @param {string} file
  * @param {string[]} notary
+ * @param {string} [staple]
  */
-function notarise(sys, file, notary) {
+function notarise(sys, file, notary, staple = file) {
   const result = sys.run(
     'xcrun',
     ['notarytool', 'submit', file, '--wait', '--output-format', 'json', ...notary],
@@ -401,8 +404,8 @@ function notarise(sys, file, notary) {
     );
   }
   expectSuccess(
-    sys.run('xcrun', ['stapler', 'staple', file]),
-    `stapler could not staple ${path.basename(file)}.`,
+    sys.run('xcrun', ['stapler', 'staple', staple]),
+    `stapler could not staple ${path.basename(staple)}.`,
   );
 }
 
@@ -574,7 +577,7 @@ function shipDmg(sys, { config, app, output, staging, bundleIdentifier, keys, op
 
   const submission = path.join(staging, `${config.name}.zip`);
   zip(sys, app, submission);
-  notarise(sys, submission, keys.notary);
+  notarise(sys, submission, keys.notary, app);
 
   const made = [];
   if (options.feedUrl) {

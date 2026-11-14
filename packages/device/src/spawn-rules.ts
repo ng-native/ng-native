@@ -6,15 +6,15 @@
  *
  * An entry names a program and the arguments it may take:
  *
- *   { program: '/usr/bin/git', args: ['clone', '{url:^https://}', '{dir:[\\w.-]+}'] }
+ *   { program: '/usr/bin/git', args: ['clone', '{url:https://\\S+}', '{dir:[\\w.-]+}'] }
  *
  * Each argument is a literal, matched exactly, or a `{name:regex}` placeholder. A placeholder
  * followed by `...` matches zero or more arguments, each by the same rules.
  *
  * - A placeholder's pattern is anchored: it matches the whole argument, so `{branch:[a-z]+}`
  *   never accepts `--upload-pack=...`.
- * - A placeholder never accepts an argument starting with `-` unless its pattern starts with one,
- *   so an option cannot be injected where a value was declared.
+ * - A placeholder never accepts an argument starting with `-` unless each alternative of its
+ *   pattern starts with one, so an option cannot be injected where a value was declared.
  * - No argument may hold a NUL character, which a C string would cut short.
  * - Shells, `env` and other programs that run their arguments as a command are refused as
  *   programs, and so are Windows `.bat` and `.cmd` files, which `cmd.exe` re-parses (the BatBadBut
@@ -40,7 +40,7 @@ export type ArgumentRule =
       readonly kind: 'placeholder';
       readonly name: string;
       readonly pattern: RegExp;
-      /** Whether the pattern itself starts with `-`, so the value may be an option. */
+      /** Whether each alternative of the pattern starts with `-`, so the value may be an option. */
       readonly option: boolean;
       /** `{name:regex}...`: zero or more arguments. */
       readonly repeated: boolean;
@@ -156,8 +156,33 @@ export function parseArgument(arg: string): ArgumentRule {
   } catch (error) {
     throw new SpawnRuleError(`{${name}} has a pattern that does not compile: ${String(error)}`);
   }
-  const option = source.replace(/^\^/, '').startsWith('-') || source.startsWith('\\-');
+  const option = alternatives(source).every((one) => /^\^?\\?-/.test(one));
   return { kind: 'placeholder', name, pattern, option, repeated: dots !== undefined };
+}
+
+/**
+ * A pattern's top-level alternatives: `-v|.*` is `-v` and `.*`. A `|` in a group, in a class or
+ * escaped is not one. The pattern has compiled, so its groups and classes are balanced.
+ */
+function alternatives(source: string): string[] {
+  const found: string[] = [];
+  let depth = 0;
+  let inClass = false;
+  let start = 0;
+  for (let at = 0; at < source.length; at++) {
+    const char = source[at];
+    if (char === '\\') at++;
+    else if (inClass) inClass = char !== ']';
+    else if (char === '[') inClass = true;
+    else if (char === '(') depth++;
+    else if (char === ')') depth--;
+    else if (char === '|' && depth === 0) {
+      found.push(source.slice(start, at));
+      start = at + 1;
+    }
+  }
+  found.push(source.slice(start));
+  return found;
 }
 
 /** Check and parse one declared capability. Throws `SpawnRuleError` on a bad declaration. */

@@ -433,6 +433,11 @@ describe('packageApp', () => {
       'xcrun notarytool',
       'xcrun stapler',
     ]);
+    // stapler takes an app or a dmg, never the zip the app went to Apple in.
+    assert.deepEqual(
+      calls.filter((call) => call.args[0] === 'stapler').map((call) => call.args.at(-1)),
+      ['/apps/notes/dist/macos/Notes.app', '/apps/notes/dist/macos/Notes.dmg'],
+    );
     const signApp = calls.find((call) => call.command === 'codesign')!;
     assert.deepEqual(signApp.args.slice(0, 4), ['--force', '--options', 'runtime', '--timestamp']);
     assert.ok(signApp.args.includes(DMG_ENV.NGN_SIGN_IDENTITY));

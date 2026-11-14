@@ -70,7 +70,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     ['Shortcut'],
     ['yes', 'yes', 'hardware keyboard', 'hardware keyboard', 'yes'],
   ),
-  row('`[contextMenu]`', ['ContextMenu'], ['yes', 'yes', 'yes', 'yes', 'yes']),
+  row('`[contextMenu]`', ['ContextMenu'], ['yes', 'inert', 'inert', 'inert', 'inert']),
   row('`<tray-icon>`, `Dock`', ['TrayIcon', 'Tray', 'Dock'], MAC_ONLY, {
     Tray: 'NgNativeTray',
     Dock: 'NgNativeDock',

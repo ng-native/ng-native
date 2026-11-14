@@ -7410,10 +7410,15 @@ const inPlay = (use: StateUse): boolean => use.own || use.elsewhere.length > 0;
  *
  * The contract for a host: a `topFocus` event whose payload has `focusVisible: true` was moved
  * there by Tab, Shift-Tab or another key, and draws a focus ring; one without it (a click, a tap,
- * a call to `focus()`) does not. iOS and Android send no such flag, so there it never matches.
+ * a call to `focus()`) does not. iOS and Android send no such flag: see `setFocused`.
  */
 function focusVisible(nativeEvent: unknown): boolean {
   return (nativeEvent as { focusVisible?: unknown } | null)?.focusVisible === true;
+}
+
+/** Whether the host says which focus came from the keyboard: the desktop host does. */
+function hostReportsKeyboardFocus(): boolean {
+  return platformOS === 'macos';
 }
 
 /** Dev-time commit accounting, so a slow frame can be attributed rather than guessed at. */
@@ -7660,7 +7665,11 @@ export class Engine implements HostEngine {
     if (node) {
       node.focused = true;
       // A text field takes the keyboard however focus arrived, so a browser rings it on a click too.
-      if (visible || TEXT_INPUTS.has(viewNameOf(node))) node.focusVisible = true;
+      // A phone focuses anything else only from a keyboard, a remote or an assistive technology,
+      // and its host sends no flag, so every focus there is one a ring is for.
+      if (visible || TEXT_INPUTS.has(viewNameOf(node)) || !hostReportsKeyboardFocus()) {
+        node.focusVisible = true;
+      }
       this.markProps(node);
     }
     this.setFocusWithin(node);
@@ -7773,6 +7782,14 @@ export class Engine implements HostEngine {
     this.activeUse = merge('active');
     this.hoverUse = merge('hover');
     this.focusWithinUse = merge('focusWithin');
+    const byClass = new Map<string, Compound[]>();
+    const any: Compound[] = [];
+    for (const compound of this.hoverUse.asked) {
+      const first = compound.classes[0];
+      if (first === undefined) any.push(compound);
+      else byClass.set(first, [...(byClass.get(first) ?? []), compound]);
+    }
+    this.hoverIndex = { byClass, any };
   }
 
   /**
@@ -7800,9 +7817,25 @@ export class Engine implements HostEngine {
   /** The nodes the pointer is over, to clear whatever happens to the tree meanwhile. */
   private readonly hoveredNodes = new Set<EngineNode>();
 
+  /**
+   * The compounds that ask about `:hover`, by the first class each names, and those that name
+   * none. Asked of every element each time it resolves, so a node is tested only against the
+   * compounds one of its classes could start.
+   */
+  private hoverIndex: { readonly byClass: Map<string, Compound[]>; readonly any: Compound[] } = {
+    byClass: new Map(),
+    any: [],
+  };
+
   /** Whether a `:hover` rule could match `node`, so that native is to tell it of the pointer. */
   private hoverable(node: EngineNode): boolean {
-    return this.hoverUse.asked.some((compound) => couldBe(compound, node));
+    const { byClass, any } = this.hoverIndex;
+    if (any.some((compound) => couldBe(compound, node))) return true;
+    if (!node.classes) return false;
+    for (const name of node.classes) {
+      if (byClass.get(name)?.some((compound) => couldBe(compound, node))) return true;
+    }
+    return false;
   }
 
   /**

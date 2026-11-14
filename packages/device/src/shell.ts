@@ -17,6 +17,9 @@ export interface NativeShell {
 /** Schemes `openExternal` refuses: a file is `openPath`'s, and the rest run or embed content. */
 const REFUSED_SCHEMES = new Set(['file:', 'javascript:', 'data:', 'vbscript:', 'blob:']);
 
+/** A url's scheme, which it must start with: nothing before it, as RFC 3986 writes one. */
+const SCHEME = /^([a-zA-Z][a-zA-Z\d+.-]*):/;
+
 function shellSource(): NativeShell | null {
   const module = reactNative()?.TurboModuleRegistry?.get?.('NgNativeShell') as
     Partial<NativeShell> | null | undefined;
@@ -51,17 +54,14 @@ export class Shell {
 
   /**
    * Open `url` in the app the user chose for its scheme: a web page in their browser, a `mailto:`
-   * in their mail app. Resolves false for a url that does not parse, or one whose scheme runs or
-   * embeds content (`javascript:`, `data:`) or is a file (`file:`, which is `openPath`'s).
+   * in their mail app. Resolves false for a url that does not start with a scheme, or one whose
+   * scheme runs or embeds content (`javascript:`, `data:`) or is a file (`file:`, `openPath`'s).
    */
   async openExternal(url: string): Promise<boolean> {
-    let scheme: string;
-    try {
-      scheme = new URL(url).protocol.toLowerCase();
-    } catch {
-      return false;
-    }
-    if (REFUSED_SCHEMES.has(scheme)) return false;
+    // Read here rather than by `URL`: React Native's keeps a leading space or control character
+    // a browser trims, and then reports no scheme at all, so a refused one would get through.
+    const scheme = typeof url === 'string' ? SCHEME.exec(url)?.[1]?.toLowerCase() : undefined;
+    if (scheme === undefined || REFUSED_SCHEMES.has(`${scheme}:`)) return false;
     return (await this.native?.openExternal(url)) ?? false;
   }
 

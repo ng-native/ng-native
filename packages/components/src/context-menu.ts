@@ -2,10 +2,8 @@ import {
   DestroyRef,
   Directive,
   ElementRef,
-  InjectionToken,
   Injector,
   computed,
-  forwardRef,
   effect,
   inject,
   input,
@@ -17,23 +15,14 @@ import { OS, buildMenuTemplate, serializeMenu, type MenuTemplate } from '@ng-nat
 import { HostEngine, type HostNode } from '@ng-native/fabric';
 
 /**
- * Whether an element has a context menu, for `<pressable>`: on iOS and Android a long press opens
- * the menu, so `(longPress)` does not also fire.
- */
-export const CONTEXT_MENU = new InjectionToken<{ has(): boolean }>('angular-native.contextMenu');
-
-/**
  * A context menu on an element: `[contextMenu]="menu"`, with `<ng-template #menu>` holding
- * `<menu-item>`s. A right-click opens it on every OS with a pointer, and a long press on iOS
- * (UIContextMenuInteraction) and Android (a PopupMenu at the press point).
+ * `<menu-item>`s. A right-click opens it on macOS. No iOS or Android host draws it yet: the prop is
+ * committed and nothing reads it.
  *
  * The host contract: the view takes a `contextMenu` prop, the menu as `serializeMenu` makes it
  * (null to take it away), and sends `topContextMenuSelect` with the chosen item's `id`.
  */
-@Directive({
-  selector: '[contextMenu]',
-  providers: [{ provide: CONTEXT_MENU, useExisting: forwardRef(() => ContextMenu) }],
-})
+@Directive({ selector: '[contextMenu]' })
 export class ContextMenu {
   readonly contextMenu = input<TemplateRef<unknown> | null>();
 
@@ -60,11 +49,6 @@ export class ContextMenu {
       stop();
       this.build(null);
     });
-  }
-
-  /** Whether the element has a menu now. */
-  has(): boolean {
-    return this.menu().entries.length > 0;
   }
 
   /** Make the template's items, which register with the menu this element sends. */
