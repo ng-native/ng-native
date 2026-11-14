@@ -10,7 +10,7 @@
  * a node held across an interaction is a snapshot of the frame it was found in; query again to see
  * what changed.
  */
-import { isTextInputView } from '@ng-native/fabric';
+import { isTextInputView, textContentProp } from '@ng-native/fabric';
 import type { FakeFabricNode } from './test-utils.ts';
 import { waitFor, type WaitForOptions } from './wait-for.ts';
 import { expoUiButtonDisabled, expoUiButtonName, isExpoUiButton } from './expo-ui-button.ts';
@@ -203,7 +203,11 @@ type Query = { describe: string; select: (node: FakeFabricNode) => boolean };
 /** What a screen reader reads out: the label, or failing that the text inside. */
 const nameOf = (node: FakeFabricNode): string => {
   if (typeof node.props['accessibilityLabel'] === 'string') return node.props['accessibilityLabel'];
-  return isExpoUiButton(node) ? expoUiButtonName(node) : textContent(node);
+  if (isExpoUiButton(node)) return expoUiButtonName(node);
+  // A view that takes its text as a prop, a native button's title, has no text inside it.
+  const prop = textContentProp(node.viewName);
+  const text = prop === undefined ? undefined : node.props[prop];
+  return typeof text === 'string' ? text : textContent(node);
 };
 
 const QUERIES: { [K in Name]: (...args: QueryArgs[K]) => Query } = {

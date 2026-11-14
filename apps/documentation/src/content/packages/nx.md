@@ -307,13 +307,40 @@ nothing. A `src/main.ts` it cannot follow, or whose providers are not written as
 left as it is, with a warning saying what to add by hand. The app needs rebuilding afterwards, as
 for any native module.
 
+## macOS
+
+```sh
+nx g @ng-native/nx:desktop mobile
+```
+
+This adds macOS to an app: `@ng-native/desktop` where the app's dependencies go, `macos` in
+`expo.platforms` with `experiments.outOfTreePlatforms: true` (Expo drops `macos` from every bundle
+and export without it, and says nothing), `@ng-native/desktop` among the config plugins in
+`app.json`, `/dist/macos` in the app's `.gitignore`, and two targets:
+
+| Command                 | What runs                                                                 |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `nx run mobile:macos`   | `ng-native-desktop run`: builds the desktop host and opens the app in it. |
+| `nx run mobile:package` | `ng-native-desktop package`: the `.app`, `.dmg` or Mac App Store package. |
+
+`macos` loads the app from the dev server `nx start` runs, on the app's own port. Running the
+generator again changes nothing. See [`@ng-native/desktop`](/packages/desktop) for both commands
+and the plugin options.
+
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),
-`--bundleIdentifier`, `--tags`, `--linter`, `--skipInstall` and `--skipFormat`, which leaves the
-generated files unformatted. `--linter=eslint` adds an `eslint.config.mjs` with
+`--bundleIdentifier`, `--tags`, `--linter`, `--desktopOnly`, `--skipInstall` and `--skipFormat`,
+which leaves the generated files unformatted. `--linter=eslint` adds an `eslint.config.mjs` with
 [`@ng-native/eslint-plugin`](/packages/eslint-plugin)'s recommended rules, its four packages and a
 `lint` target; `--linter=none`, the default, adds none of them.
+
+`--desktopOnly` makes a macOS-only app from the desktop template (`@ng-native/template-desktop`):
+`macos` alone in `expo.platforms`, its sidebar and menu bar starter screen, `@ng-native/desktop`
+and `@ng-native/expo` in place of the phone's status bar and system UI packages, and `macos` and
+`package` targets (see [macOS](#macos)) where a mobile app has its own `run-ios` and
+`run-android`. `nx g @ng-native/nx:init --desktopOnly`, the generator `nx add` runs, makes it the
+default of every app generated in the workspace, in `nx.json`.
 
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`; it defaults to
 `com.<scope>.<name>`, from the workspace's npm scope and the app's name with anything but letters

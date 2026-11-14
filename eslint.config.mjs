@@ -35,6 +35,7 @@ export default tseslint.config(
       // by being used: `scripts/verify-publish.mjs` publishes to a local registry, generates an
       // app from each and bundles it, which is a stronger check than linting them in place.
       'template/**',
+      'template-desktop/**',
       // The generators' copies of the template's files, for the same reason. They are an app's
       // source, and a test in each package fails if they stop matching the template's.
       'packages/schematics/files/**',
@@ -65,7 +66,10 @@ export default tseslint.config(
           // Off: `@ng-native/metro` and `@ng-native/tailwind` ship as the JavaScript they are
           // written in and have nothing to build, so a built package requiring them is correct.
           enforceBuildableLibDependency: false,
-          allow: [],
+          // The desktop host's config plugin and command validate the plugin options with the
+          // schema the app's runtime checks spawns against. That entry point imports nothing (no
+          // Angular, no React Native), so the host may use it and no other part of the package.
+          allow: ['@ng-native/device/desktop-options'],
           depConstraints: [
             {
               // The engine knows nothing about Angular, and nothing about React Native either:

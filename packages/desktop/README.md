@@ -110,6 +110,73 @@ libraries above recompiles only that library.
 | `--port <port>`   | The dev server's port. Default `8081`.                    |
 | `--universal`     | Build for arm64 and x86_64. Default: this Mac's own arch. |
 
+## Config
+
+The macOS build reads what Expo already has a key for from that key, the one the iOS build reads:
+`ios.bundleIdentifier`, `scheme` (and `ios.scheme`), `ios.icon` or `icon`, `version`,
+`ios.buildNumber`, `updates.url`, the usage strings in `ios.infoPlist` and each `expo-*` plugin's
+permission option. The plugin options hold only what has no Expo key:
+
+```json
+{
+  "expo": {
+    "plugins": [
+      [
+        "@ng-native/desktop",
+        {
+          "documentTypes": [{ "name": "Markdown", "extensions": ["md"] }],
+          "capabilities": {
+            "spawn": [{ "program": "git", "args": ["status", "--porcelain"] }],
+            "env": ["HOME"],
+            "paths": [{ "path": "~/Projects", "access": "readwrite" }]
+          },
+          "deny": ["react-native-some-library"]
+        }
+      ]
+    ]
+  }
+}
+```
+
+Expo runs the plugin whenever it reads the config, so an option that is not valid stops
+`expo start`, `expo export` and `ng-native-desktop` with every problem listed. The plugin changes
+nothing in the config.
+
+## Native code
+
+`run` and `package` find the native code the host compiles in, the way Expo's autolinking does: a
+library whose `expo-module.config.json` lists `macos` and names its `macos.cmakeTarget` (and
+`macos.cmakeDir`, `desktop` by default), and the app's own `modules/<name>/macos/` folders. They
+write what they found to `.expo/ng-native-desktop/link.json` in the app, which the host build reads
+from `NGN_DESKTOP_LINK`, and warn about dependencies with native code for iOS or Android and none
+for the desktop. `deny` in the plugin options keeps a package out.
+
+## Package the app
+
+`ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]` builds a
+universal release host, bundles with `expo export:embed --platform macos` (the assets laid out as
+React Native's resolver reads them beside an embedded bundle), and assembles
+`<output>/<name>.app`: the host binary as `Contents/MacOS/<name>`, the bundle and assets in
+`Resources`, the icon compiled by `actool`, and an `Info.plist` from the Expo keys. Then `app` is
+signed ad hoc, `dmg` is signed with the hardened runtime, notarised and stapled (app and disk
+image), and `mas` is signed in the App Sandbox and wrapped by `productbuild`. `codesign`,
+`notarytool`, `stapler`, `hdiutil`, `ditto`, `sips`, `actool` and `productbuild` are Xcode's.
+
+The host reads these `Info.plist` keys when it is opened with no arguments:
+
+| Key                 | What it holds                                                  |
+| ------------------- | -------------------------------------------------------------- |
+| `NGNBundleFile`     | The bundle in `Resources`: `main.jsbundle`                     |
+| `NGNModuleName`     | The registered app to start: `main`                            |
+| `NGNDistribution`   | `app`, `dmg` or `mas`, which says what is absent               |
+| `NGNCapabilities`   | The plugin options' `capabilities`: `spawn`, `env` and `paths` |
+| `NGNUpdatesURL`     | `updates.url`, the bundle server                               |
+| `NGNRuntimeVersion` | `runtimeVersion`, where it is a string                         |
+| `SUFeedURL`         | Sparkle's appcast, in a `dmg` packaged with `--feed-url`       |
+
+`--feed-url` copies `Sparkle.framework` from the host build's `appkit` folder, and stops when the
+build has none.
+
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and

@@ -79,6 +79,15 @@ const DESKTOP_POINTER = {
 /** The size a desktop render's window is, where the test gives no conditions of its own. */
 const DESKTOP_WINDOW = { width: 1024, height: 768, colorScheme: 'light' } as const;
 
+/**
+ * The OS the project's tests run as, the Vitest preset's `os` (from `expo.platforms` when unset),
+ * which a render naming none renders as. Undefined outside the preset and for iOS, the default.
+ */
+function projectOs(): TestOs | undefined {
+  const os = typeof process === 'undefined' ? undefined : process.env['NG_NATIVE_TEST_OS'];
+  return os === 'macos' || os === 'android' || os === 'web' ? os : undefined;
+}
+
 /** Render as `os` from here on. The platform to go back to, or null where there is no `os`. */
 function renderAs(os: TestOs | undefined): string | null {
   if (!os) return null;
@@ -311,7 +320,7 @@ export async function render<T>(
     providers,
     imports: _,
     componentProperties,
-    os,
+    os = projectOs(),
     osVersion,
     ...engine
   } = options;

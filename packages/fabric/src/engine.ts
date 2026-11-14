@@ -5337,6 +5337,14 @@ const YIELDING = new Set<string>();
 /** The prop each view that takes its text content as a prop reads it from. See `ViewNameOptions`. */
 const TEXT_CONTENT_PROPS: Record<string, string> = {};
 
+/**
+ * The prop a view takes its text content as, or undefined for a view that takes text children:
+ * `title` for `NgNativeButton`. What a screen reader reads as its name, with no text inside it.
+ */
+export function textContentProp(viewName: string): string | undefined {
+  return TEXT_CONTENT_PROPS[viewName];
+}
+
 /** Whether `node` takes its text content as a prop rather than as text children. */
 function takesTextAsProp(node: EngineNode): boolean {
   return node.nodeKind === 'element' && TEXT_CONTENT_PROPS[viewNameOf(node)] !== undefined;

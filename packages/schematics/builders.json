@@ -4,7 +4,7 @@
     "expo": {
       "implementation": "./builders/expo.cjs",
       "schema": "./builders/expo.json",
-      "description": "Runs an Expo CLI command in the project: start, export, run:ios, run:android."
+      "description": "Runs an Expo CLI command in the project: start, export, run:ios, run:android. macos and package run ng-native-desktop."
     },
     "vitest": {
       "implementation": "./builders/vitest.cjs",

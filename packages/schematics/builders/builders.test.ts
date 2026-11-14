@@ -17,7 +17,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { expoArgs } = require('./expo.cjs');
+const { expoArgs, desktopArgs, runCommand } = require('./expo.cjs');
 const { vitestArgs } = require('./vitest.cjs');
 const { resolveBin, spawnBin } = require('./spawn-bin.cjs');
 const typecheck = require('./typecheck.cjs') as {
@@ -45,6 +45,41 @@ describe('expo', () => {
       '--platform',
       'ios',
     ]);
+  });
+});
+
+describe('the desktop commands', () => {
+  it('runs ng-native-desktop for macos and package, which the Expo CLI has no command for', () => {
+    assert.deepEqual(desktopArgs({ command: 'macos' }), ['run']);
+    assert.deepEqual(desktopArgs({ command: 'macos', port: 8082 }), ['run', '--port', '8082']);
+    assert.deepEqual(desktopArgs({ command: 'package', args: ['--format', 'dmg'] }), [
+      'package',
+      '--format',
+      'dmg',
+    ]);
+  });
+
+  it("finds ng-native-desktop in @ng-native/desktop, from the project's directory", async () => {
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ng-native-builder-')));
+    const pkg = path.join(root, 'node_modules', '@ng-native', 'desktop');
+    mkdirSync(path.join(pkg, 'bin'), { recursive: true });
+    writeFileSync(
+      path.join(pkg, 'package.json'),
+      JSON.stringify({
+        name: '@ng-native/desktop',
+        bin: { 'ng-native-desktop': './bin/ng-native-desktop.cjs' },
+      }),
+    );
+    writeFileSync(
+      path.join(pkg, 'bin', 'ng-native-desktop.cjs'),
+      "require('node:fs').writeFileSync('ran.json', JSON.stringify(process.argv.slice(2)));",
+    );
+    const ctx = context(root);
+    assert.deepEqual(await runCommand({ command: 'package', args: ['--format', 'app'] }, ctx), {
+      success: true,
+    });
+    assert.deepEqual(require(path.join(root, 'ran.json')), ['package', '--format', 'app']);
+    assert.match(ctx.logged[0]!, /^ng-native-desktop package --format app {2}\(in /);
   });
 });
 
