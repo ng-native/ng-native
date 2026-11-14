@@ -102,7 +102,15 @@ export {
   type ParsedShortcut,
   type ShortcutOs,
 } from './shortcut.ts';
-export { Processes, type NativeProcesses } from './processes.ts';
+export {
+  Processes,
+  UndeclaredCapabilityError,
+  type ChildProcess,
+  type NativeProcesses,
+  type ProcessEvent,
+  type ProcessExit,
+  type SpawnOptions,
+} from './processes.ts';
 export {
   SEARCH_PATH,
   SpawnRuleError,
@@ -140,6 +148,7 @@ export {
   type SerializedMenu,
 } from './menus.ts';
 export { Dock, type NativeDock } from './dock.ts';
+export { Shell, type NativeShell } from './shell.ts';
 export {
   Tray,
   type NativeTray,
