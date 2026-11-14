@@ -48,6 +48,11 @@ export interface GestureResponseDistance {
 
 export interface ScreenPresentation {
   readonly stackPresentation?: StackPresentation;
+  /**
+   * The react tag of the view a popover points at, which `present()` writes from its `anchor`. A
+   * host with popovers (macOS, iPadOS) shows the screen in one at that view.
+   */
+  readonly anchor?: number;
   readonly stackAnimation?: StackAnimation;
   /** Milliseconds. Only read when `stackAnimation` is not `default`. */
   readonly transitionDuration?: number;

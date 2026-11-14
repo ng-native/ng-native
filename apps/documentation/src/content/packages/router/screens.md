@@ -303,6 +303,17 @@ does. So does a reset to a screen still on the stack, `reset('/')` from a screen
 first: that screen is the one kept, not a new one, and the pop back to it animates as the screen
 leaving says.
 
+## A popover at an element
+
+`present()` takes an `anchor`: a template reference to an element, or to a component such as a
+`<pressable>`. With one, the screen shows as a popover pointing at that element on macOS and
+iPadOS, with no header, and a click outside it dismisses it. On iPhone and Android the anchor is
+ignored and the screen presents as it would without one.
+
+```ts
+void this.nav.present('/filters', { anchor: this.filterButton() });
+```
+
 ## A sideways drag on iOS 26
 
 On iOS 26 the swipe back starts anywhere on a pushed screen, not only at its edge. It takes the
