@@ -1,6 +1,7 @@
 #import "maps.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -116,7 +117,10 @@ NSColor *NGNMapColor(std::optional<uint32_t> argb, NSColor *fallback) {
 }
 
 - (void)apply:(const ngn::MapModel &)model {
-  if (!_applied || model.givenMarkers != _model.givenMarkers) {
+  // The new model first: MapKit can ask for a marker's view or a shape's renderer as it is added,
+  // and keeps what it got.
+  ngn::MapModel previous = std::exchange(_model, model);
+  if (!_applied || model.givenMarkers != previous.givenMarkers) {
     NSMutableArray *old = [NSMutableArray array];
     for (id<MKAnnotation> annotation in _mapView.annotations) {
       if ([annotation isKindOfClass:NGNMapMarker.class]) {
@@ -135,7 +139,7 @@ NSColor *NGNMapColor(std::optional<uint32_t> argb, NSColor *fallback) {
     }
     [_mapView addAnnotations:markers];
   }
-  if (!_applied || model.givenShapes != _model.givenShapes) {
+  if (!_applied || model.givenShapes != previous.givenShapes) {
     [_mapView removeOverlays:_mapView.overlays];
     for (NSUInteger i = 0; i < model.polylines.size(); i++) {
       auto coordinates = points(model.polylines[i].coordinates);
@@ -182,7 +186,6 @@ NSColor *NGNMapColor(std::optional<uint32_t> argb, NSColor *fallback) {
   if (_mapView.showsUserLocation != showsUser) {
     _mapView.showsUserLocation = showsUser;
   }
-  _model = model;
   _applied = true;
 }
 

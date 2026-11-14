@@ -139,6 +139,25 @@ TEST_CASE("NGNMap draws polylines, polygons and circles with their colours and w
   CHECK(h.map.mapView.overlays.count == 0);
 }
 
+TEST_CASE("NGNMap's shapes take their colours from the props being applied, when MapKit asks as they are added") {
+  Harness h;
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300)
+                                                 styleMask:NSWindowStyleMaskBorderless
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  [window.contentView addSubview:h.map.mapView];
+  [h.map apply:ngn::mapModel(dynamic::object(
+                   "polylines", dynamic::array(dynamic::object("coordinates", dynamic::array(at(0, 0), at(1, 1)))("width", 6)(
+                                    "color", 0xffff0000u))))];
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+  // The renderer MapKit keeps for the line, made whenever it asked.
+  auto *renderer = (MKPolylineRenderer *)[h.map.mapView rendererForOverlay:h.map.mapView.overlays.firstObject];
+  REQUIRE([renderer isKindOfClass:MKPolylineRenderer.class]);
+  CHECK(renderer.lineWidth == 6);
+  [window close];
+}
+
 TEST_CASE("NGNMap moves the camera when its prop changes and leaves it where the user put it otherwise") {
   Harness h;
   dynamic props = dynamic::object("cameraPosition", dynamic::object("coordinates", at(51.5, -0.1))("zoom", 10));
