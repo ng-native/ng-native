@@ -100,6 +100,7 @@ add_library(ngn_core STATIC
     core/src/download.cpp
     core/src/updates.cpp
     core/src/view-box.cpp
+    core/src/view-transform.cpp
     core/src/expo-image.cpp
     core/src/view-tree.cpp
     core/src/web-view.cpp

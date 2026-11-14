@@ -1,5 +1,7 @@
 #import "host-view.h"
 
+#include "ngn/view-transform.h"
+
 #import <QuartzCore/QuartzCore.h>
 
 #import "cg-canvas.h"
@@ -553,6 +555,15 @@ static BOOL focusFromKeyboard() {
   layer.masksToBounds = viewProps->yogaStyle.overflow() != facebook::yoga::Overflow::Visible;
   layer.mask = box.clip ? shapeLayer(*box.clip, NO, self.bounds) : nil;
   [self applyShadows:box.shadows];
+  // Its transform, about its centre on a layer anchored at its corner (view-transform.h).
+  CATransform3D transform = CATransform3DIdentity;
+  if (auto matrix = ngn::layerTransform(*viewProps, _layout)) {
+    const auto &m = matrix->matrix;
+    transform = CATransform3D{m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15]};
+  }
+  if (!CATransform3DEqualToTransform(layer.transform, transform)) {
+    layer.transform = transform;
+  }
   if (box.drawn || _boxDrawn) {
     [self setNeedsDisplay:YES];
   }
