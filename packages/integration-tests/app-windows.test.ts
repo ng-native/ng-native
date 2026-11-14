@@ -31,6 +31,7 @@ import {
   WINDOW_RESTORE_STORE,
   provideRestorableWindows,
 } from '@ng-native/device';
+import type { Conditions } from '@ng-native/fabric';
 import { mount, type MountResult } from '@ng-native/platform';
 import { provideNativeRouter } from '@ng-native/router';
 import { createFakeFabric, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -91,9 +92,15 @@ afterEach(() => {
   apps = [];
 });
 
-function start(root: string, host: ReturnType<typeof fakeHost>, providers: unknown[] = []) {
+function start(
+  root: string,
+  host: ReturnType<typeof fakeHost>,
+  providers: unknown[] = [],
+  conditions?: Conditions,
+) {
   const fabric = createFakeFabric();
   const app = mount(1, fixtures[root]!, fabric, {
+    ...(conditions && { conditions }),
     providers: [{ provide: AppWindows.SOURCE, useValue: host.native }, ...(providers as never[])],
   });
   apps.push(app);
@@ -288,6 +295,67 @@ function findNote(_windows: AppWindows): { unsaved: { set(value: boolean): void 
   const made = (fixtures['NoteWindow'] as unknown as { made: { unsaved: never }[] }).made;
   return made.at(-1)!;
 }
+
+describe('what each window has of its own', () => {
+  type Made = {
+    screen: { window(): { width: number }; compact(): boolean };
+    safeArea: unknown;
+    engine: {
+      conditions: Conditions | undefined;
+      root: { classList: { contains(name: string): boolean } };
+    };
+  };
+  const made = () => (fixtures['ScreenWindow'] as unknown as { made: Made[] }).made;
+  const light: Conditions = { width: 1200, height: 800, colorScheme: 'light' };
+
+  it('sizes its Screen and its media queries by the window, not the app', async () => {
+    const host = fakeHost();
+    const { fabric, windows } = start('MainWindowApp', host, [], light);
+    const narrow = (await windows.open(fixtures['ScreenWindow']!))!;
+    const wide = (await windows.open(fixtures['ScreenWindow']!))!;
+    await settle();
+    const [first, second] = made().slice(-2);
+    host.send({ type: 'resize', surface: narrow.surface, width: 400, height: 600, scale: 2 });
+    host.send({ type: 'resize', surface: wide.surface, width: 1000, height: 700 });
+    await settle();
+    assert.equal(first!.screen.window().width, 400);
+    assert.equal(first!.screen.compact(), true);
+    assert.equal(second!.screen.window().width, 1000);
+    assert.equal(textOn(fabric, narrow.surface, 'size'), '400');
+    assert.equal(first!.engine.conditions?.width, 400);
+    assert.equal(first!.engine.conditions?.pixelRatio, 2);
+    assert.notEqual(first!.safeArea, second!.safeArea, 'a safe area each');
+  });
+
+  it('follows a change of colour scheme, keeping its own size, and the dark class', async () => {
+    const host = fakeHost();
+    const { windows, app } = start('MainWindowApp', host, [], light);
+    const note = (await windows.open(fixtures['ScreenWindow']!))!;
+    await settle();
+    host.send({ type: 'resize', surface: note.surface, width: 400, height: 600 });
+    const window = made().at(-1)!;
+    app.engine.addClass(app.engine.root, 'dark');
+    app.engine.updateConditions({ ...light, colorScheme: 'dark' });
+    assert.equal(window.engine.conditions?.colorScheme, 'dark');
+    assert.equal(window.engine.conditions?.width, 400, 'its own size');
+    assert.equal(window.engine.root.classList.contains('dark'), true);
+    app.engine.removeClass(app.engine.root, 'dark');
+    app.engine.updateConditions(light);
+    assert.equal(window.engine.conditions?.colorScheme, 'light');
+    assert.equal(window.engine.root.classList.contains('dark'), false);
+  });
+
+  it('has the platform class the app has on its root', async () => {
+    const host = fakeHost();
+    const { windows, app } = start('MainWindowApp', host);
+    await windows.open(fixtures['ScreenWindow']!);
+    const platform = [...(app.engine.root.classes ?? [])].find((name) =>
+      name.startsWith('platform-'),
+    );
+    assert.ok(platform);
+    assert.equal(made().at(-1)!.engine.root.classList.contains(platform), true);
+  });
+});
 
 describe('the app lifecycle', () => {
   it('quits after the last window closes under quitWhenLastWindowCloses', async () => {

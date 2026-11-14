@@ -34,7 +34,14 @@ import {
   ɵsetDocument as setDocument,
   ɵsetLocaleId as setLocaleId,
 } from '@angular/core';
-import { AppWindows, WINDOW_MOUNTER, type WindowMounter } from '@ng-native/device';
+import {
+  AppWindows,
+  SafeArea,
+  Screen,
+  WINDOW_MOUNTER,
+  type ScreenSource,
+  type WindowMounter,
+} from '@ng-native/device';
 import { installDateParse } from './date-parse.ts';
 import { inertImplementation } from './inert-document.ts';
 import { cssValues, MIXED_SHORTHANDS, type ReadShorthand } from './inline-shorthands.ts';
@@ -62,6 +69,7 @@ import {
   reportUnboundFormsInput,
   splitOutside,
   styleSheetOf,
+  type Conditions,
   type EngineNode,
   type EngineOptions,
   type FabricUIManager,
@@ -1405,6 +1413,15 @@ function windowedResult(
   };
 }
 
+/** A window's size as its engine has it, on the display the app's `Screen` reports. */
+function windowScreen(engine: Engine, app: ScreenSource): ScreenSource {
+  const current = () => ({ window: engine.viewport, screen: app.current().screen });
+  return {
+    current,
+    subscribe: (listener) => engine.watchViewport(() => listener(current())),
+  };
+}
+
 /**
  * Mounts each window's root on its own surface, for `AppWindows`. A window has its own engine and
  * renderer factory, given to its root through an element injector rather than the app's
@@ -1422,21 +1439,41 @@ function windowMounter(
   let bootstrapped = false;
   return {
     mount(surface, component, { inputs = {}, providers, main }) {
-      const engine = engineOn(fabric, surface, {
-        ...engineOptions,
-        conditions: appEngine.conditions ?? engineOptions.conditions,
-      });
+      // The window's own size, once the host has told it; the app's until then.
+      let own: Pick<Conditions, 'width' | 'height' | 'pixelRatio'> | null = null;
+      const conditions = (): Conditions | undefined => {
+        const app = appEngine.conditions ?? engineOptions.conditions;
+        if (!own) return app;
+        return { ...(app ?? { colorScheme: 'light' as const }), ...own };
+      };
+      const engine = engineOn(fabric, surface, { ...engineOptions, conditions: conditions() });
       const factory = new NativeRendererFactory(engine);
       engine.setOnDirty(factory.commitSoon);
       if (!engineOptions.onError) {
         engine.setOnError((error) => injector.get(ErrorHandler).handleError(error));
       }
       engine.addClass(engine.root, `platform-${nativePlatform()}`);
+      // What `watchConditions` keeps on the app's engine (the colour scheme, the text size, reduced
+      // motion) and the `dark` class it puts on the app's root reach every window, which keeps its
+      // own size.
+      const followApp = () => {
+        if (appEngine.root.classes?.has('dark')) engine.addClass(engine.root, 'dark');
+        else engine.removeClass(engine.root, 'dark');
+        const next = conditions();
+        if (next) engine.updateConditions(next);
+      };
+      if (appEngine.root.classes?.has('dark')) engine.addClass(engine.root, 'dark');
+      const stopFollowing = appEngine.watchViewport(followApp);
       const elementInjector = Injector.create({
         providers: [
           { provide: RendererFactory2, useValue: factory },
           { provide: Engine, useValue: engine },
           { provide: HostEngine, useExisting: Engine },
+          // A Screen and a safe area of the window's own, so a component sizes itself by the
+          // window it is in. Code outside every window has the app's.
+          { provide: Screen.SOURCE, useValue: windowScreen(engine, injector.get(Screen.SOURCE)) },
+          Screen,
+          SafeArea,
           ...providers,
         ],
       });
@@ -1465,6 +1502,8 @@ function windowMounter(
         }
       }
       componentRef.onDestroy(() => {
+        stopFollowing();
+        (elementInjector as Partial<{ destroy(): void }>).destroy?.();
         engine.leaveEvents();
         const at = applicationRef.components.indexOf(componentRef);
         if (at !== -1) applicationRef.components.splice(at, 1);
@@ -1473,8 +1512,9 @@ function windowMounter(
       });
       return {
         resize({ width, height, scale }) {
-          const now = engine.conditions ?? { width, height, colorScheme: 'light' as const };
-          engine.updateConditions({ ...now, width, height, ...(scale && { pixelRatio: scale }) });
+          const pixelRatio = scale ?? own?.pixelRatio;
+          own = { width, height, ...(pixelRatio && { pixelRatio }) };
+          engine.updateConditions(conditions()!);
         },
         destroy: () => componentRef.destroy(),
       };

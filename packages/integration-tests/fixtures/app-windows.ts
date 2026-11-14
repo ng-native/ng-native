@@ -1,5 +1,6 @@
 import { Component, Injectable, inject, input, signal } from '@angular/core';
-import { CURRENT_WINDOW } from '@ng-native/device';
+import { CURRENT_WINDOW, SafeArea, Screen } from '@ng-native/device';
+import { HostEngine } from '@ng-native/fabric';
 import { NativeStackOutlet } from '../../router/src/native-stack-outlet.ts';
 import { Pressable } from '../../components/src/pressable.ts';
 import { Text } from '../../components/src/text.ts';
@@ -77,3 +78,21 @@ export class GeneralPage {
   template: '<native-stack-outlet />',
 })
 export class AccountsShell {}
+
+/** A window that shows what it was given of its own: its screen, its safe area and its engine. */
+@Component({
+  selector: 'x-screen-window',
+  imports: [Text],
+  template: '<text testID="size">{{ screen.window().width }}</text>',
+})
+export class ScreenWindow {
+  readonly screen = inject(Screen);
+  readonly safeArea = inject(SafeArea);
+  readonly engine = inject(HostEngine);
+
+  constructor() {
+    ScreenWindow.made.push(this);
+  }
+
+  static readonly made: ScreenWindow[] = [];
+}
