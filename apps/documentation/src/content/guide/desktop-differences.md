@@ -54,9 +54,9 @@ false.
 
 `import 'expo'` still installs a runtime: `URL`, `URLSearchParams`, `TextDecoderStream`,
 `structuredClone`, and a `fetch` whose `Response` streams its `body`, over React Native's
-Networking module. That `fetch` reads every body as text, so a binary response read through
-`body`, `arrayBuffer()` or `blob()` is not byte-exact, and a debug build warns when one arrives.
-`XMLHttpRequest`, and `HttpClient` with `provideNativeHttpClient()`, read a binary body whole.
+Networking module. The host streams the body as bytes, so `body`, `bytes()` and `arrayBuffer()`
+are byte-exact for any content, an image included. `blob()` is made from the body as text, so it
+is exact only for a text body; read binary data through `arrayBuffer()`.
 
 ## Events
 

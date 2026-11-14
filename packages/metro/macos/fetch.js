@@ -3,20 +3,40 @@
  * Expo's `fetch` does on iOS and Android, over React Native's Networking module rather than
  * Expo's native fetch module, which a desktop host does not have.
  *
- * Each request asks Networking for a text response with incremental updates, so every
- * `didReceiveNetworkIncrementalData` event is one chunk of the body, as UTF-8 bytes. The body is
- * therefore text: a binary response read through `body`, `arrayBuffer()` or `blob()` is not
- * byte-exact, and a dev build warns once when one arrives. `XMLHttpRequest`, and so
- * `provideNativeHttpClient()`, is untouched and reads binary bodies whole.
+ * Each request asks Networking for a base64 response with incremental updates, which the desktop
+ * host streams: every `didReceiveNetworkIncrementalData` event is one chunk of the body in base64,
+ * decoded here to its bytes, so `body`, `bytes()` and `arrayBuffer()` are byte-exact for any
+ * content. A host that sends the body whole in `didReceiveNetworkData` instead, as React Native
+ * iOS does, still gives the same bytes, all at the end. `blob()` is made from the body as text,
+ * since React Native's `Blob` takes no bytes, so it is exact only for a text body.
  *
  * CommonJS, so Node tests can load it as it ships.
  */
 'use strict';
 
-const TEXT_TYPE =
-  /^\s*(text\/|application\/(json|xml|javascript|ecmascript|x-www-form-urlencoded|x-ndjson|ndjson|graphql)\b|[^;]*\+(json|xml)\b)|;\s*charset=/i;
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const BASE64_VALUE = new Uint8Array(128).fill(255);
+for (let i = 0; i < BASE64.length; i++) BASE64_VALUE[BASE64.charCodeAt(i)] = i;
 
-let warnedBinary = false;
+/** The bytes `text`, base64 with or without padding, encodes. Other characters are skipped. */
+function base64Bytes(text) {
+  const out = new Uint8Array(Math.floor((text.length * 3) / 4));
+  let length = 0;
+  let bits = 0;
+  let count = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    const value = code < 128 ? BASE64_VALUE[code] : 255;
+    if (value === 255) continue;
+    bits = (bits << 6) | value;
+    count += 6;
+    if (count >= 8) {
+      count -= 8;
+      out[length++] = (bits >> count) & 0xff;
+    }
+  }
+  return out.subarray(0, length);
+}
 
 /** The error a rejected or aborted request gives when its signal has no reason of its own. */
 function abortError(signal) {
@@ -265,7 +285,6 @@ function createFetch(networking) {
       const credentials =
         (init && init.credentials) ?? (isRequest(input) ? input.credentials : undefined);
 
-      const encoder = new TextEncoder();
       const chunks = new Chunks();
       let id = null;
       let early = [];
@@ -289,15 +308,6 @@ function createFetch(networking) {
         if (settled) return;
         settled = true;
         const headerList = new Headers(responseHeaders ?? {});
-        const type = headerList.get('content-type');
-        if (type && !TEXT_TYPE.test(type) && !warnedBinary && globalThis.__DEV__) {
-          warnedBinary = true;
-          console.warn(
-            `fetch on macOS reads a body as text, so this ${type} response from ${url} is not ` +
-              'byte-exact through body, arrayBuffer() or blob(). Read binary responses through ' +
-              'XMLHttpRequest, or HttpClient with provideNativeHttpClient().',
-          );
-        }
         const finalUrl = responseUrl || url;
         resolve(
           new StreamingResponse(
@@ -322,8 +332,10 @@ function createFetch(networking) {
           ),
         );
       }
-      function onData(text) {
-        if (typeof text === 'string' && text.length > 0) chunks.push(encoder.encode(text));
+      function onData(base64) {
+        if (typeof base64 !== 'string') return;
+        const bytes = base64Bytes(base64);
+        if (bytes.byteLength > 0) chunks.push(bytes);
       }
       function onComplete(error, timedOut) {
         finished = true;
@@ -347,7 +359,8 @@ function createFetch(networking) {
       }
       function listen(name, event) {
         subscriptions.push(
-          networking.addListener(name, (...args) => {
+          // Each event's arguments arrive as one array, as React Native's XMLHttpRequest reads them.
+          networking.addListener(name, (args) => {
             if (id === null) early.push([event, args]);
             else if (args[0] === id) dispatch(event, args);
           }),
@@ -376,7 +389,7 @@ function createFetch(networking) {
         url,
         headerObject(headers),
         body,
-        'text',
+        'base64',
         true,
         0,
         (requestId) => {

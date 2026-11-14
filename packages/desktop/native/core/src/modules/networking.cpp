@@ -1,6 +1,11 @@
 // Networking: XMLHttpRequest and fetch, in React Native iOS's shapes, over the backend's HTTP
-// client. Text responses can stream (incremental updates, which streaming fetch rides on), uploads
-// report progress, and cookies and redirects are the OS client's.
+// client. Text responses can stream (incremental updates), uploads report progress, and cookies
+// and redirects are the OS client's.
+//
+// A base64 response with incremental updates streams too, where React Native iOS sends only
+// progress and then the whole body: each chunk encodes whole groups of three bytes, so it decodes
+// on its own and the chunks joined are the body's base64, which is what XMLHttpRequest builds from
+// them. Streaming fetch rides on it for a byte-exact body. A blob response stays as iOS has it.
 #include "ngn/core-modules.h"
 
 #include <atomic>
@@ -221,6 +226,8 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
         std::string contentType;
         int64_t received{0};
         Utf8Chunker text;
+        // Bytes of a streamed base64 response not yet sent: fewer than three.
+        std::string base64Carry;
       };
       auto response = std::make_shared<Response>();
       std::weak_ptr<Networking> weak = shared_from_this();
@@ -252,6 +259,18 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
                       folly::dynamic::array(id, response->text.push(std::move(chunk)), response->received, expected));
                   return;
                 }
+                if (responseType == "base64" && incrementalUpdates) {
+                  response->base64Carry += chunk;
+                  size_t whole = response->base64Carry.size() - response->base64Carry.size() % 3;
+                  if (whole > 0) {
+                    auto encoded = base64Encode(response->base64Carry.substr(0, whole));
+                    response->base64Carry.erase(0, whole);
+                    self->emit(
+                        "didReceiveNetworkIncrementalData",
+                        folly::dynamic::array(id, std::move(encoded), response->received, expected));
+                  }
+                  return;
+                }
                 response->body += chunk;
                 if (incrementalUpdates) {
                   self->emit("didReceiveNetworkDataProgress", folly::dynamic::array(id, response->received, expected));
@@ -274,6 +293,13 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
                       self->emit(
                           "didReceiveNetworkIncrementalData",
                           folly::dynamic::array(id, rest, response->received, response->received));
+                    }
+                  } else if (responseType == "base64" && incrementalUpdates) {
+                    if (!response->base64Carry.empty()) {
+                      self->emit(
+                          "didReceiveNetworkIncrementalData",
+                          folly::dynamic::array(
+                              id, base64Encode(response->base64Carry), response->received, response->received));
                     }
                   } else if (responseType == "base64") {
                     self->emit("didReceiveNetworkData", folly::dynamic::array(id, base64Encode(response->body)));

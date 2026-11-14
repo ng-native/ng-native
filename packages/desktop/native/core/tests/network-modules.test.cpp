@@ -114,31 +114,75 @@ TEST_CASE("a text response with incremental updates streams each chunk as it arr
                     });
 }
 
-TEST_CASE("a base64 response reports download progress and arrives encoded; a blob response arrives as a blob") {
+TEST_CASE("a base64 response arrives encoded, whole, and a blob response arrives as a blob, both with progress") {
   Fixture f;
   auto networking = f.make(ngn::makeNetworking(f.services));
-  f.send(*networking, query(dynamic::object("responseType", "base64")("incrementalUpdates", true)));
+  f.send(*networking, query(dynamic::object("responseType", "base64")("incrementalUpdates", false)));
   auto &cb = f.http->sent[0]->callbacks;
   cb.onData("hel", 5);
   cb.onData("lo", 5);
   cb.onComplete("", false);
   CHECK(f.events == std::vector<std::string>{
-                        "didReceiveNetworkDataProgress [1,3,5]",
-                        "didReceiveNetworkDataProgress [1,5,5]",
                         R"(didReceiveNetworkData [1,"aGVsbG8="])",
                         "didCompleteNetworkResponse [1,null,false]",
                     });
 
   f.events.clear();
-  f.send(*networking, query(dynamic::object("responseType", "blob")));
+  f.send(*networking, query(dynamic::object("responseType", "blob")("incrementalUpdates", true)));
   auto &blobCb = f.http->sent[1]->callbacks;
   blobCb.onResponse({.status = 200, .headers = {{"content-type", "image/png"}}});
   blobCb.onData("PNG", 3);
   blobCb.onComplete("", false);
-  auto data = folly::parseJson(f.events[1].substr(f.events[1].find(' ') + 1))[1];
+  CHECK(f.events[1] == "didReceiveNetworkDataProgress [2,3,3]");
+  auto data = folly::parseJson(f.events[2].substr(f.events[2].find(' ') + 1))[1];
   CHECK(data["size"] == 3);
   CHECK(data["type"] == "image/png");
   CHECK(f.blobs->resolve(data) == "PNG");
+}
+
+TEST_CASE("a base64 response with incremental updates streams chunks whose text joins into the body's base64") {
+  Fixture f;
+  auto networking = f.make(ngn::makeNetworking(f.services));
+  f.send(*networking, query(dynamic::object("responseType", "base64")("incrementalUpdates", true)));
+  auto &cb = f.http->sent[0]->callbacks;
+  cb.onResponse({.status = 200, .headers = {{"content-type", "image/png"}}});
+  cb.onData("hel", 5);
+  cb.onData("lo", 5);
+  cb.onComplete("", false);
+  CHECK(f.events == std::vector<std::string>{
+                        R"(didReceiveNetworkResponse [1,200,{"content-type":"image/png"},""])",
+                        R"(didReceiveNetworkIncrementalData [1,"aGVs",3,5])",
+                        R"(didReceiveNetworkIncrementalData [1,"bG8=",5,5])",
+                        "didCompleteNetworkResponse [1,null,false]",
+                    });
+
+  // Every byte value, in chunks of every size from 1 to 7: each chunk decodes on its own, and
+  // the chunks together are the body.
+  std::string bytes;
+  for (int i = 0; i < 256; ++i) {
+    bytes += static_cast<char>(i);
+  }
+  f.events.clear();
+  f.send(*networking, query(dynamic::object("responseType", "base64")("incrementalUpdates", true)));
+  auto &binary = f.http->sent[1]->callbacks;
+  for (size_t at = 0, size = 1; at < bytes.size(); at += size, size = size % 7 + 1) {
+    binary.onData(bytes.substr(at, size), static_cast<int64_t>(bytes.size()));
+  }
+  binary.onComplete("", false);
+  std::string joined;
+  std::string decoded;
+  for (const auto &event : f.events) {
+    if (event.rfind("didReceiveNetworkIncrementalData ", 0) == 0) {
+      auto chunk = folly::parseJson(event.substr(event.find(' ') + 1))[1].asString();
+      auto part = ngn::base64Decode(chunk);
+      REQUIRE(part);
+      decoded += *part;
+      joined += chunk;
+    }
+  }
+  CHECK(decoded == bytes);
+  CHECK(ngn::base64Decode(joined) == bytes);
+  CHECK(f.events.back() == "didCompleteNetworkResponse [2,null,false]");
 }
 
 TEST_CASE("a failed or timed-out request completes with its error") {

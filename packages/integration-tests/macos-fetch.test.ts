@@ -18,7 +18,7 @@ const { createFetch } = require('@ng-native/metro/macos/fetch.js') as {
   createFetch(networking: FakeNetworking): typeof fetch;
 };
 
-type Listener = (...args: unknown[]) => void;
+type Listener = (args: unknown[]) => void;
 
 interface Sent {
   method: string;
@@ -78,16 +78,18 @@ class FakeNetworking {
     this.aborted.push(id);
   }
 
+  /** Each event's arguments arrive as one array, as `RCTDeviceEventEmitter` delivers them. */
   emit(name: string, ...args: unknown[]): void {
-    for (const listener of [...(this.listeners.get(name) ?? [])]) listener(...args);
+    for (const listener of [...(this.listeners.get(name) ?? [])]) listener(args);
   }
 
   respond(id: number, status = 200, headers: Record<string, string> = {}, url = ''): void {
     this.emit('didReceiveNetworkResponse', id, status, headers, url);
   }
 
-  chunk(id: number, text: string): void {
-    this.emit('didReceiveNetworkIncrementalData', id, text, 0, -1);
+  /** One chunk of the body, base64 as the host streams it: text as its UTF-8 bytes. */
+  chunk(id: number, data: string | Uint8Array): void {
+    this.emit('didReceiveNetworkIncrementalData', id, Buffer.from(data).toString('base64'), 0, -1);
   }
 
   complete(id: number, error: string | null = null, timedOut = false): void {
@@ -110,7 +112,7 @@ function setUp(): { net: FakeNetworking; fetch: typeof fetch } {
 const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 describe('fetch on macOS', () => {
-  it('asks Networking for a text body with incremental updates', async () => {
+  it('asks Networking for a base64 body with incremental updates', async () => {
     const { net, fetch } = setUp();
     void fetch('https://api.test/a', {
       method: 'POST',
@@ -124,7 +126,7 @@ describe('fetch on macOS', () => {
     assert.equal(sent.data, '{"a":1}');
     assert.equal(sent.headers['x-token'], 't');
     assert.equal(sent.headers['content-type'], 'text/plain;charset=UTF-8');
-    assert.equal(sent.responseType, 'text');
+    assert.equal(sent.responseType, 'base64');
     assert.equal(sent.incrementalUpdates, true);
     assert.equal(sent.withCredentials, false);
   });
@@ -197,6 +199,47 @@ describe('fetch on macOS', () => {
     const buffer = await c!.arrayBuffer();
     assert.equal(new TextDecoder().decode(buffer), '{"name":"Adé"}');
     assert.equal(buffer.byteLength, 15);
+  });
+
+  it('reads a binary body byte-exact, in chunks of any length, through body and arrayBuffer()', async () => {
+    const { net, fetch } = setUp();
+    const bytes = Uint8Array.from({ length: 256 }, (_, i) => i);
+    const pending = [fetch('https://a/png'), fetch('https://a/png')];
+    for (const id of [1, 2]) {
+      net.respond(id, 200, { 'content-type': 'image/png' });
+      for (let at = 0, size = 1; at < bytes.length; at += size, size = (size % 7) + 1) {
+        net.chunk(id, bytes.subarray(at, at + size));
+      }
+      net.complete(id);
+    }
+    const [a, b] = await Promise.all(pending);
+    assert.deepEqual(new Uint8Array(await a!.arrayBuffer()), bytes);
+    const reader = b!.body!.getReader();
+    const read: number[] = [];
+    for (let next = await reader.read(); !next.done; next = await reader.read()) {
+      read.push(...next.value);
+    }
+    assert.deepEqual(read, [...bytes]);
+  });
+
+  it('decodes text split inside a character', async () => {
+    const { net, fetch } = setUp();
+    const pending = fetch('https://a/t');
+    net.respond(1, 200, { 'content-type': 'text/plain' });
+    const encoded = new TextEncoder().encode('Adé!');
+    net.chunk(1, encoded.subarray(0, 3));
+    net.chunk(1, encoded.subarray(3));
+    net.complete(1);
+    assert.equal(await (await pending).text(), 'Adé!');
+  });
+
+  it('reads a body a host sends whole, as base64, at the end', async () => {
+    const { net, fetch } = setUp();
+    const pending = fetch('https://a/whole');
+    net.respond(1, 200, { 'content-type': 'application/octet-stream' });
+    net.emit('didReceiveNetworkData', 1, Buffer.from([0, 255, 128, 7]).toString('base64'));
+    net.complete(1);
+    assert.deepEqual([...new Uint8Array(await (await pending).arrayBuffer())], [0, 255, 128, 7]);
   });
 
   it('refuses a second read of the same body', async () => {
