@@ -37,9 +37,14 @@ enum class AxRole {
   Row,
   Cell,
   Incrementor,
+  // AppKit's heading role from macOS 26; a group described as a heading before it.
+  Heading,
+  LevelIndicator,
+  Outline,
+  ScrollArea,
 };
 
-enum class AxSubrole { None, Switch, Toggle, Tab, SearchField };
+enum class AxSubrole { None, Switch, Toggle, Tab, SearchField, OutlineRow };
 
 // A custom action an assistive technology lists by its label and sends back by its name.
 struct AxAction {
@@ -58,6 +63,11 @@ struct AxInfo {
   std::string label;
   std::string hint;
   std::string value;
+  // Whether the view is read as one element, its text and images part of it rather than elements
+  // of their own: an `accessible` view, as on iOS, and a control or heading.
+  bool hidesChildren{false};
+  // A heading's level, from 1.
+  std::optional<int> level;
   bool disabled{false};
   bool selected{false};
   // 0 unchecked, 1 checked, 2 mixed; nothing for a view that is not checkable.
@@ -80,8 +90,14 @@ std::string roleName(const facebook::react::ViewProps &props);
 
 AxInfo accessibilityInfo(const facebook::react::ViewProps &props);
 
+// A Paragraph's: static text whose value is the string it shows, unless a role says otherwise, and
+// an element only when it says something.
+AxInfo paragraphAccessibilityInfo(const facebook::react::ViewProps &props, const std::string &text);
+
 // The string a Paragraph shows, from its state; empty for any other view.
 std::string paragraphText(const facebook::react::ShadowView &view);
+// The same from a Paragraph's state.
+std::string paragraphText(const facebook::react::State::Shared &state);
 
 // AppKit's standard actions on a view.
 enum class AxVerb { Press, Increment, Decrement, Cancel };

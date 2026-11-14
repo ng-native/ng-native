@@ -85,8 +85,30 @@ NSAccessibilityRole nsRole(ngn::AxRole role) {
       return NSAccessibilityCellRole;
     case ngn::AxRole::Incrementor:
       return NSAccessibilityIncrementorRole;
+    case ngn::AxRole::Heading:
+      if (@available(macOS 26, *)) {
+        return NSAccessibilityHeadingRole;
+      }
+      return NSAccessibilityGroupRole;
+    case ngn::AxRole::LevelIndicator:
+      return NSAccessibilityLevelIndicatorRole;
+    case ngn::AxRole::Outline:
+      return NSAccessibilityOutlineRole;
+    case ngn::AxRole::ScrollArea:
+      return NSAccessibilityScrollAreaRole;
   }
   return NSAccessibilityGroupRole;
+}
+
+// Whether AppKit has a role of its own for this one, so its own name for it is spoken.
+bool nativeRole(ngn::AxRole role) {
+  if (role == ngn::AxRole::Heading) {
+    if (@available(macOS 26, *)) {
+      return true;
+    }
+    return false;
+  }
+  return true;
 }
 
 NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
@@ -99,6 +121,8 @@ NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
       return NSAccessibilityTabButtonSubrole;
     case ngn::AxSubrole::SearchField:
       return NSAccessibilitySearchFieldSubrole;
+    case ngn::AxSubrole::OutlineRow:
+      return NSAccessibilityOutlineRowSubrole;
     case ngn::AxSubrole::None:
       return nil;
   }
@@ -226,7 +250,13 @@ static BOOL focusFromKeyboard() {
 // React Native's accessibility props, mapped in the core (accessibility.h).
 - (ngn::AxInfo)axInfo {
   auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
-  return viewProps ? ngn::accessibilityInfo(*viewProps) : ngn::AxInfo{};
+  if (!viewProps) {
+    return ngn::AxInfo{};
+  }
+  if ([_componentName isEqualToString:@"Paragraph"]) {
+    return ngn::paragraphAccessibilityInfo(*viewProps, ngn::paragraphText(_state));
+  }
+  return ngn::accessibilityInfo(*viewProps);
 }
 
 - (BOOL)isAccessibilityElement {
@@ -243,7 +273,8 @@ static BOOL focusFromKeyboard() {
 
 - (NSString *)accessibilityRoleDescription {
   auto info = [self axInfo];
-  if (!info.roleDescription.empty()) {
+  // A role AppKit has (a heading from macOS 26) is spoken by AppKit's own name for it.
+  if (!info.roleDescription.empty() && !(info.role == ngn::AxRole::Heading && nativeRole(info.role))) {
     return nsString(info.roleDescription);
   }
   return NSAccessibilityRoleDescription(nsRole(info.role), nsSubrole(info.subrole));
@@ -251,7 +282,41 @@ static BOOL focusFromKeyboard() {
 
 - (NSString *)accessibilityLabel {
   auto info = [self axInfo];
+  if (info.label.empty() && info.hidesChildren && ![_componentName isEqualToString:@"Paragraph"]) {
+    // Read as one element with no label of its own: named by the text inside it, as iOS does.
+    NSMutableArray<NSString *> *texts = [NSMutableArray array];
+    [self collectTextInto:texts];
+    return texts.count > 0 ? [texts componentsJoinedByString:@" "] : nil;
+  }
   return info.label.empty() ? nil : nsString(info.label);
+}
+
+- (void)collectTextInto:(NSMutableArray<NSString *> *)texts {
+  for (NSView *child in [self contentContainer].subviews) {
+    if (![child isKindOfClass:NGNView.class] || child.hidden) {
+      continue;
+    }
+    NGNView *view = (NGNView *)child;
+    auto info = [view axInfo];
+    if (!info.label.empty()) {
+      [texts addObject:nsString(info.label)];
+    } else if ([view.componentName isEqualToString:@"Paragraph"]) {
+      auto text = ngn::paragraphText(view.state);
+      if (!text.empty()) {
+        [texts addObject:nsString(text)];
+      }
+    } else {
+      [view collectTextInto:texts];
+    }
+  }
+}
+
+// An element read as one has no elements inside it.
+- (NSArray *)accessibilityChildren {
+  if ([self axInfo].hidesChildren) {
+    return @[];
+  }
+  return [super accessibilityChildren];
 }
 
 - (NSString *)accessibilityHelp {
@@ -266,6 +331,27 @@ static BOOL focusFromKeyboard() {
   }
   return info.value.empty() ? nil : nsString(info.value);
 }
+
+// The heading level, which AppKit names from macOS 26 and has no property for.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+- (NSArray<NSAccessibilityAttributeName> *)accessibilityAttributeNames {
+  NSArray *names = [super accessibilityAttributeNames];
+  auto info = [self axInfo];
+  if (info.level && nativeRole(info.role) && info.role == ngn::AxRole::Heading) {
+    return [names arrayByAddingObject:@"AXHeadingLevel"];
+  }
+  return names;
+}
+
+- (id)accessibilityAttributeValue:(NSAccessibilityAttributeName)attribute {
+  if ([attribute isEqualToString:@"AXHeadingLevel"]) {
+    auto level = [self axInfo].level;
+    return level ? @(*level) : nil;
+  }
+  return [super accessibilityAttributeValue:attribute];
+}
+#pragma clang diagnostic pop
 
 - (BOOL)isAccessibilityEnabled {
   return ![self axInfo].disabled;

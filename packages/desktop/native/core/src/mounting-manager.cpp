@@ -29,7 +29,7 @@ MountingManager::MountingManager(
     std::unique_ptr<TabsHosts> tabs)
     : backend_(std::move(backend)),
       desktopProps_(std::move(desktopProps)),
-      liveRegions_(tree_, paragraphText),
+      liveRegions_(tree_, [](const ShadowView &view) { return paragraphText(view); }),
       screens_(screens ? std::move(screens) : std::make_unique<ScreenStacks>()),
       safeAreas_(safeAreas ? std::move(safeAreas) : std::make_unique<SafeAreas>()),
       tabs_(tabs ? std::move(tabs) : std::make_unique<TabsHosts>()) {

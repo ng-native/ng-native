@@ -147,6 +147,10 @@ TEST_CASE("a view with desktop props is mounted with its children under it, not 
   for (const auto &raw : asking) {
     CHECK(traitsOf(raw).check(ShadowNodeTraits::Trait::FormsStackingContext));
   }
+  // An accessibility element keeps the text VoiceOver reads as part of it.
+  CHECK(traitsOf(folly::dynamic::object("accessibilityRole", "button")).check(ShadowNodeTraits::Trait::FormsStackingContext));
+  CHECK(traitsOf(folly::dynamic::object("role", "heading")).check(ShadowNodeTraits::Trait::FormsStackingContext));
+  CHECK(traitsOf(folly::dynamic::object("accessibilityLabel", "Logo")).check(ShadowNodeTraits::Trait::FormsStackingContext));
   // A live region keeps the text it announces under it (live-regions.h).
   CHECK(traitsOf(folly::dynamic::object("accessibilityLiveRegion", "polite")).check(ShadowNodeTraits::Trait::FormsStackingContext));
   CHECK(traitsOf(folly::dynamic::object("accessibilityLiveRegion", "assertive")).check(ShadowNodeTraits::Trait::FormsStackingContext));

@@ -68,8 +68,12 @@ key-view loop: positive `tabIndex` first, then focusable views, text inputs and 
 order, inside the container the focus is in. With the Mac's default keyboard navigation Tab
 reaches text inputs only, and Option-Tab reaches everything. A view's accessibility props give it
 its NSAccessibility role, subrole, label, hint, value and state, selected, disabled, checked and
-expanded included (`accessibility.h`); a role AppKit lacks, such as a heading, is a group with that
-role's name spoken. `AccessibilityInfo` reads
+expanded included (`accessibility.h`). Every role the components take is mapped; one AppKit lacks,
+such as `navigation`, is a group with the role's name spoken, and a heading is AppKit's heading role
+with its `accessibilityLevel` from macOS 26 (a group spoken as a heading before). A text is static
+text whose value is its string. A control, a heading or an `accessible` view is read as one element,
+named by the text inside it when it has no label, and a view with a role or a label keeps its
+children under it so that text is there to read. `AccessibilityInfo` reads
 VoiceOver's state, reduce motion, reduce transparency, invert colours and increase contrast from
 NSWorkspace, and sends their change events from its notifications; macOS has no bold-text or
 grayscale setting, so those answer false.

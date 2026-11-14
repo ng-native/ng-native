@@ -45,9 +45,9 @@ TEST_CASE("a switch is a checkbox with the switch subrole, and says whether it i
 }
 
 TEST_CASE("a role AppKit lacks is a group that says what it is") {
-  auto heading = info(folly::dynamic::object("role", "heading")("accessibilityLabel", "Inbox"));
-  CHECK(heading.role == AxRole::Group);
-  CHECK(heading.roleDescription == "heading");
+  auto alert = info(folly::dynamic::object("role", "alert")("accessibilityLabel", "Offline"));
+  CHECK(alert.role == AxRole::Group);
+  CHECK(alert.roleDescription == "alert");
   CHECK(info(folly::dynamic::object("accessibilityRole", "header")).roleDescription == "heading");
   CHECK(info(folly::dynamic::object("role", "tab")).subrole == AxSubrole::Tab);
   CHECK(info(folly::dynamic::object("role", "searchbox")).subrole == AxSubrole::SearchField);
@@ -153,4 +153,73 @@ TEST_CASE("the steppers and cancel reach the view only when it listens") {
   CHECK(escape.kind == Kind::Action);
   CHECK(escape.action == "escape");
   CHECK(dispatch(folly::dynamic::object("accessible", true), ngn::AxVerb::Cancel).kind == Kind::None);
+}
+
+TEST_CASE("a heading is the heading role, with its level, and still says what it is for an older AppKit") {
+  auto heading = info(folly::dynamic::object("role", "heading")("accessibilityLevel", 2));
+  CHECK(heading.role == AxRole::Heading);
+  CHECK(heading.roleDescription == "heading");
+  CHECK(heading.level == 2);
+  CHECK(info(folly::dynamic::object("accessibilityRole", "header")).role == AxRole::Heading);
+  CHECK_FALSE(info(folly::dynamic::object("accessibilityRole", "header")).level.has_value());
+}
+
+TEST_CASE("every role the components take is mapped") {
+  // Each of view-base.ts's Role and AccessibilityRole names: an AppKit role, or a group that says
+  // what it is. Only `none`, `presentation` and a plain `group` or view are a group with no words.
+  const char *named[] = {"alert", "alertdialog", "application", "article", "banner", "button", "cell", "checkbox",
+      "columnheader", "combobox", "complementary", "contentinfo", "definition", "dialog", "directory", "document",
+      "drawerlayout", "feed", "figure", "form", "grid", "header", "heading", "horizontalscrollview", "iconmenu", "image",
+      "imagebutton", "img", "keyboardkey", "link", "list", "listitem", "log", "main", "marquee", "math", "menu",
+      "menubar", "menuitem", "meter", "navigation", "note", "option", "pager", "progressbar", "radio", "radiogroup",
+      "region", "row", "rowgroup", "rowheader", "scrollbar", "scrollview", "search", "searchbox", "separator",
+      "slidingdrawer", "slider", "spinbutton", "status", "summary", "switch", "tab", "tabbar", "table", "tablist",
+      "tabpanel", "term", "text", "timer", "togglebutton", "toolbar", "tooltip", "tree", "treegrid", "treeitem",
+      "adjustable", "webview"};
+  for (const char *name : named) {
+    auto mapped = info(folly::dynamic::object("accessibilityRole", name));
+    CAPTURE(name);
+    CHECK((mapped.role != AxRole::Group || !mapped.roleDescription.empty()));
+  }
+  CHECK(info(folly::dynamic::object("role", "group")).role == AxRole::Group);
+  CHECK(info(folly::dynamic::object("accessibilityRole", "viewgroup")).role == AxRole::Group);
+  CHECK(info(folly::dynamic::object("role", "meter")).role == AxRole::LevelIndicator);
+  CHECK(info(folly::dynamic::object("role", "tree")).role == AxRole::Outline);
+  auto item = info(folly::dynamic::object("role", "treeitem"));
+  CHECK(item.role == AxRole::Row);
+  CHECK(item.subrole == AxSubrole::OutlineRow);
+  CHECK(info(folly::dynamic::object("accessibilityRole", "scrollview")).role == AxRole::ScrollArea);
+}
+
+TEST_CASE("a paragraph is static text whose value is its string, and no element when it says nothing") {
+  auto context = std::make_shared<const ContextContainer>();
+  ngn::DesktopViewComponentDescriptor descriptor{{{}, context, nullptr}};
+  PropsParserContext parserContext{1, *context};
+  auto paragraph = [&](folly::dynamic raw, std::string text) {
+    auto props = descriptor.cloneProps(parserContext, nullptr, RawProps(std::move(raw)));
+    return ngn::paragraphAccessibilityInfo(static_cast<const ViewProps &>(*props), text);
+  };
+  auto text = paragraph(folly::dynamic::object("accessible", true), "Hello");
+  CHECK(text.element);
+  CHECK(text.role == AxRole::StaticText);
+  CHECK(text.value == "Hello");
+  CHECK(text.label.empty());
+  CHECK(text.hidesChildren);
+  // A label speaks for it; a role it names wins; empty or hidden text is no element.
+  CHECK(paragraph(folly::dynamic::object("accessibilityLabel", "Greeting"), "Hi").label == "Greeting");
+  CHECK(paragraph(folly::dynamic::object("role", "heading"), "Inbox").role == AxRole::Heading);
+  CHECK(paragraph(folly::dynamic::object("role", "heading"), "Inbox").value == "Inbox");
+  CHECK(paragraph(folly::dynamic::object("role", "heading"), "Inbox").label == "Inbox");
+  CHECK_FALSE(paragraph(folly::dynamic::object(), "").element);
+  CHECK_FALSE(paragraph(folly::dynamic::object("accessibilityElementsHidden", true), "Hi").element);
+}
+
+TEST_CASE("a control's text is read as the control, while a container's children stay elements") {
+  CHECK(info(folly::dynamic::object("role", "button")("accessibilityLabel", "Mail")).hidesChildren);
+  CHECK(info(folly::dynamic::object("role", "heading")).hidesChildren);
+  CHECK(info(folly::dynamic::object("accessible", true)).hidesChildren);
+  CHECK_FALSE(info(folly::dynamic::object("role", "list")("accessibilityLabel", "Inbox")).hidesChildren);
+  CHECK_FALSE(info(folly::dynamic::object("role", "navigation")("accessibilityLabel", "Primary")).hidesChildren);
+  CHECK_FALSE(info(folly::dynamic::object("accessibilityLabel", "Settings")).hidesChildren);
+  CHECK_FALSE(info(folly::dynamic::object()).hidesChildren);
 }
