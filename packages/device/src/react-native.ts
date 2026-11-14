@@ -112,6 +112,10 @@ export interface ReactNative {
   Platform: { OS: string; Version?: string | number };
   /** Optional: the status bar and keyboard read it, for `DeviceInfo`'s `isEdgeToEdge` on Android. */
   TurboModuleRegistry?: { get(name: string): unknown };
+  /** Where a native module without its own emitter sends events. */
+  DeviceEventEmitter?: {
+    addListener(event: string, handler: (payload: unknown) => void): { remove(): void };
+  };
   Share: {
     share(
       content: { message?: string; url?: string; title?: string },

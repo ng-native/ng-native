@@ -12,6 +12,7 @@ import {
   ApplicationRef,
   DOCUMENT,
   ErrorHandler,
+  Injector,
   LOCALE_ID,
   Renderer2,
   RendererFactory2,
@@ -32,6 +33,7 @@ import {
   ɵsetDocument as setDocument,
   ɵsetLocaleId as setLocaleId,
 } from '@angular/core';
+import { AppWindows, WINDOW_MOUNTER, type WindowMounter } from '@ng-native/device';
 import { installDateParse } from './date-parse.ts';
 import { inertImplementation } from './inert-document.ts';
 import { cssValues, MIXED_SHORTHANDS, type ReadShorthand } from './inline-shorthands.ts';
@@ -1365,6 +1367,120 @@ function runInitializers(injector: EnvironmentInjector): void {
   status.donePromise.catch((error: unknown) => injector.get(ErrorHandler).handleError(error));
 }
 
+/** An engine for the surface `rootTag`, with React Native's native animated module by default. */
+function engineOn(fabric: FabricUIManager, rootTag: number, options: EngineOptions): Engine {
+  return new Engine(fabric, rootTag, {
+    ...options,
+    nativeAnimated:
+      options.nativeAnimated === undefined ? nativeAnimated() : options.nativeAnimated,
+  });
+}
+
+/**
+ * What `mount` answers on an OS with windows, where the root component is in the main window and
+ * is not made until that window opens: a round trip to the host, or never, for an app that starts
+ * with none. `componentRef` says so rather than answering a component that is not there.
+ */
+function windowedResult(
+  windows: AppWindows,
+  applicationRef: ApplicationRef,
+  factory: NativeRendererFactory,
+  engine: Engine,
+): MountResult {
+  return {
+    get componentRef(): ComponentRef<unknown> {
+      const main = applicationRef.components[0];
+      if (main) return main;
+      throw new Error(
+        windows.windows().length
+          ? '[angular-native] The main window is not open: its root component is made as it opens.'
+          : '[angular-native] The app has no window open yet. Its root component is made as ' +
+              'the main window opens; AppWindows.openMain() opens it.',
+      );
+    },
+    applicationRef,
+    factory,
+    engine,
+  };
+}
+
+/**
+ * Mounts each window's root on its own surface, for `AppWindows`. A window has its own engine and
+ * renderer factory, given to its root through an element injector rather than the app's
+ * environment injector, so a page an outlet creates in the window finds them by walking up from
+ * where it is: one provided only in an environment injector is the app's surface's, and a routed
+ * page renders there once and goes stale. The component is attached to the app's one change
+ * detection, so a root service a window changes updates every window.
+ */
+function windowMounter(
+  fabric: FabricUIManager,
+  appEngine: Engine,
+  engineOptions: EngineOptions,
+  injector: EnvironmentInjector,
+): WindowMounter {
+  let bootstrapped = false;
+  return {
+    mount(surface, component, { inputs = {}, providers, main }) {
+      const engine = engineOn(fabric, surface, {
+        ...engineOptions,
+        conditions: appEngine.conditions ?? engineOptions.conditions,
+      });
+      const factory = new NativeRendererFactory(engine);
+      engine.setOnDirty(factory.commitSoon);
+      if (!engineOptions.onError) {
+        engine.setOnError((error) => injector.get(ErrorHandler).handleError(error));
+      }
+      engine.addClass(engine.root, `platform-${nativePlatform()}`);
+      const elementInjector = Injector.create({
+        providers: [
+          { provide: RendererFactory2, useValue: factory },
+          { provide: Engine, useValue: engine },
+          { provide: HostEngine, useExisting: Engine },
+          ...providers,
+        ],
+      });
+      const componentRef = createComponent(component, {
+        environmentInjector: injector,
+        elementInjector,
+      });
+      const host = componentRef.location.nativeElement as EngineNode;
+      engine.appendChild(engine.root, host);
+      engine.setDefaultStyle(host, ROOT_HOST_STYLE);
+      for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
+
+      const applicationRef = injector.get(ApplicationRef);
+      applicationRef.attachView(componentRef.hostView);
+      // As `mount` does: the template runs, and an outlet in it registers, before the router's
+      // bootstrap listener looks for the root component.
+      applicationRef.tick();
+      if (main) {
+        applicationRef.componentTypes.push(component);
+        applicationRef.components.push(componentRef);
+        // Once: the router's initial navigation runs for the app, not each time the main window
+        // opens again. A main window opened again finds the router where it was.
+        if (!bootstrapped) {
+          bootstrapped = true;
+          for (const listener of injector.get(APP_BOOTSTRAP_LISTENER, [])) listener(componentRef);
+        }
+      }
+      componentRef.onDestroy(() => {
+        engine.leaveEvents();
+        const at = applicationRef.components.indexOf(componentRef);
+        if (at !== -1) applicationRef.components.splice(at, 1);
+        const type = applicationRef.componentTypes.indexOf(component);
+        if (main && type !== -1) applicationRef.componentTypes.splice(type, 1);
+      });
+      return {
+        resize({ width, height, scale }) {
+          const now = engine.conditions ?? { width, height, colorScheme: 'light' as const };
+          engine.updateConditions({ ...now, width, height, ...(scale && { pixelRatio: scale }) });
+        },
+        destroy: () => componentRef.destroy(),
+      };
+    },
+  };
+}
+
 export function mount(
   rootTag: number,
   component: Type<unknown>,
@@ -1399,11 +1515,7 @@ export function mount(
   const { providers: extraProviders = [], inputs = {}, bindings, ...engineOptions } = options;
   // The factory needs the engine and the engine needs the factory's dirty hook, so the hook is
   // handed over once both exist rather than through the constructor.
-  const engine = new Engine(fabric, rootTag, {
-    ...engineOptions,
-    nativeAnimated:
-      engineOptions.nativeAnimated === undefined ? nativeAnimated() : engineOptions.nativeAnimated,
-  });
+  const engine = engineOn(fabric, rootTag, engineOptions);
   installDateParse(engine.dev);
   const factory = new NativeRendererFactory(engine);
   engine.setOnDirty(factory.commitSoon);
@@ -1445,6 +1557,11 @@ export function mount(
       // 'native', not Angular's default 'unknown': see `platform-id.ts`.
       { provide: PLATFORM_ID, useValue: PLATFORM_NATIVE_ID },
       { provide: ErrorHandler, useClass: ErrorHandler },
+      // Each window's root, on an OS with several: see `windowMounter`.
+      {
+        provide: WINDOW_MOUNTER,
+        useFactory: () => windowMounter(fabric, engine, engineOptions, injector),
+      },
       ...extraProviders,
     ],
     // The platform injector is an EnvironmentInjector in practice; the factory's return type is
@@ -1470,6 +1587,15 @@ export function mount(
   // they work with nothing to set up; an app that had to add it itself, and did not, got platform
   // variants that silently matched nothing.
   engine.addClass(engine.root, `platform-${nativePlatform()}`);
+
+  // On an OS with windows the app lives on this surface, which the host never shows, and the root
+  // component is the main window's, which `AppWindows` opens. Closing a window then never ends
+  // the app.
+  const windows = injector.get(AppWindows);
+  if (windows.available()) {
+    windows.launch(component, inputs);
+    return windowedResult(windows, injector.get(ApplicationRef), factory, engine);
+  }
 
   // No `hostElement`, so Angular creates the host from the selector as it does any other
   // component's, and it goes under the engine root as a view of its own. The engine root is the

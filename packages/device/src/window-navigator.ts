@@ -1,4 +1,4 @@
-import { InjectionToken } from '@angular/core';
+import { InjectionToken, type Provider, type Type } from '@angular/core';
 
 /**
  * How `AppWindows` shows a route in a route window: each such window renders a named outlet of the
@@ -6,6 +6,11 @@ import { InjectionToken } from '@angular/core';
  * package cannot import the Router.
  */
 export interface WindowNavigator {
+  /**
+   * What a route window for `outlet` renders: a component holding the outlet, and the providers
+   * its window's root needs for the outlet to take that name.
+   */
+  window(outlet: string): { component: Type<unknown>; providers: Provider[] };
   /** Show `path` in the outlet named `outlet`. Resolves whether the navigation happened. */
   navigate(outlet: string, path: string): Promise<boolean>;
   /** Empty the outlet named `outlet`, as its window closes. Resolves whether it was emptied. */

@@ -163,7 +163,11 @@ describe('the menu model a menu provides', () => {
 describe('the seams for packages that cannot import each other', () => {
   it('has no window navigator without a router, and the one the router provides with it', () => {
     assert.equal(injectService(WINDOW_NAVIGATOR), null);
-    const navigator = { navigate: async () => true, clear: async () => true };
+    const navigator = {
+      window: () => ({ component: class {}, providers: [] }),
+      navigate: async () => true,
+      clear: async () => true,
+    };
     const provided = injectService(WINDOW_NAVIGATOR, {
       providers: [{ provide: WINDOW_NAVIGATOR, useValue: navigator }],
     });

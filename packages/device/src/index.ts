@@ -104,6 +104,33 @@ export {
 export { Processes, type NativeProcesses } from './processes.ts';
 export { SIDEBAR_SELECTION } from './sidebar-selection.ts';
 export { WINDOW_NAVIGATOR, type WindowNavigator } from './window-navigator.ts';
+export {
+  AppWindows,
+  CURRENT_WINDOW,
+  MAIN_WINDOW_OPTIONS,
+  WINDOW_MOUNTER,
+  provideMainWindow,
+  type AppWindow,
+  type CloseGuard,
+  type ComponentWindowOptions,
+  type MainWindowOptions,
+  type NativeWindowEvent,
+  type NativeWindowRequest,
+  type NativeWindows,
+  type RouteWindowOptions,
+  type TitleBar,
+  type WindowMount,
+  type WindowMounter,
+  type WindowOptions,
+} from './app-windows.ts';
+export {
+  APP_LIFECYCLE_OPTIONS,
+  AppLifecycle,
+  WILL_QUIT_DEADLINE_MS,
+  provideAppLifecycle,
+  quitsWithLastWindow,
+  type AppLifecycleOptions,
+} from './app-lifecycle.ts';
 export { OS_VERSION } from './os-version.ts';
 export { injectToken, type InjectTokenOptions } from './inject-token.ts';
 export { type ControlSize } from './control-size.ts';

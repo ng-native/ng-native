@@ -37,6 +37,7 @@
     }
   },
   "dependencies": {
+    "@ng-native/device": "workspace:*",
     "@ng-native/fabric": "workspace:*"
   },
   "peerDependencies": {

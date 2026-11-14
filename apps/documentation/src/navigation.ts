@@ -187,6 +187,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/device/deep-links', title: 'Deep links' },
         { path: 'packages/device/android-permissions', title: 'Android permissions' },
         { path: 'packages/device/processes', title: 'Processes' },
+        { path: 'packages/device/app-windows', title: 'Windows' },
         { path: 'packages/device/layout-animation', title: 'Layout animation' },
         { path: 'packages/device/dialogs', title: 'Dialogs', group: 'Feedback' },
         { path: 'packages/device/sharing', title: 'Sharing' },

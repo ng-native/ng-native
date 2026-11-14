@@ -40,6 +40,7 @@ import {
   type Signal,
   type WritableSignal,
 } from '@angular/core';
+import { WINDOW_OUTLET } from './window-outlet.ts';
 import {
   ActivatedRoute,
   ChildrenOutletContexts,
@@ -194,6 +195,8 @@ type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown
   // See `empty`. A class of its own, so the app's own `display` is left alone and applies once the
   // class goes, and `!important`, so that until then it is hidden over a `display` set inline.
   styles: ':host(.ngn-empty-stack) { display: none !important; }',
+  // An outlet in one of this outlet's pages is not a route window's root: see `WINDOW_OUTLET`.
+  providers: [{ provide: WINDOW_OUTLET, useValue: null }],
 })
 export class NativeStackOutlet implements RouterOutletContract, OnInit {
   /**
@@ -201,7 +204,10 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * routes with `outlet: 'list'`. The default is the primary one. Read once, as the router's own
    * outlet reads it, since an outlet cannot change which contexts it is registered under.
    */
-  readonly name = inject(new HostAttributeToken('name'), { optional: true }) ?? PRIMARY_OUTLET;
+  readonly name =
+    inject(new HostAttributeToken('name'), { optional: true }) ??
+    inject(WINDOW_OUTLET, { optional: true, skipSelf: true }) ??
+    PRIMARY_OUTLET;
 
   readonly supportsBindingToComponentInputs = true;
 

@@ -24,6 +24,7 @@ import {
   type RouterFeatures,
   type Routes,
 } from '@angular/router';
+import { routeWindows } from './route-windows.ts';
 import {
   DestroyRef,
   ErrorHandler,
@@ -165,6 +166,7 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
     provideEnvironmentInitializer(refuseScreensUnderFullScreen),
     provideEnvironmentInitializer(copyPresentedPages),
     provideEnvironmentInitializer(keepHistoryAcrossReloads),
+    routeWindows,
   ];
   if (!parentOf) {
     return [
