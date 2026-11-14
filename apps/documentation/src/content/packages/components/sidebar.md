@@ -8,7 +8,8 @@ summary: A sidebar beside the content, a source list on macOS and two columns or
 `<split-view>` holds a `<sidebar>` and the content beside it. On macOS the first one in a window
 is its NSSplitViewController, with the full-height sidebar and the toolbar's sidebar button, and a
 nested or second one is a plain NSSplitView. On iOS, Android and the web host it is drawn from
-views: two columns, and below `Screen.compact`'s width a stack whose root is the sidebar.
+views: two columns, and below `Screen.compact`'s width a stack whose root is the sidebar. On Android
+the columns wait for Material's expanded width, 840dp, as its list-detail layout does.
 
 ```html
 <split-view>
@@ -73,10 +74,10 @@ navigation a guard refuses leaves the selection on the route that is showing.
 
 ## Compact widths
 
-Drawn below `Screen.compact`'s width, the split view is a stack: the sidebar fills the screen, and
-choosing an item shows the content in its place. `showSidebar()` on the `SplitView`, or Android's
-back button, returns to the sidebar. `stacked()` and `showing()` say which layout and pane are in
-front, for a back button of the app's own.
+Drawn below `Screen.compact`'s width (840dp on Android), the split view is a stack: the sidebar
+fills the screen, and choosing an item shows the content in its place. `showSidebar()` on the
+`SplitView`, or Android's back button, returns to the sidebar. `stacked()` and `showing()` say
+which layout and pane are in front, for a back button of the app's own.
 
 ## Tabs on macOS
 

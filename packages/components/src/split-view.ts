@@ -15,6 +15,12 @@ registerViewName('split-view-content', {
   macos: 'NgNativeSplitContent',
 });
 
+/**
+ * Material's expanded window width, in dp: from it Android's list-detail layout shows the list
+ * pane beside the content, and below it one pane at a time.
+ */
+export const ANDROID_EXPANDED_WIDTH = 840;
+
 /** Which pane a split view shows: both side by side, or one of them as a stack's top. */
 export type SplitViewShowing = 'both' | 'sidebar' | 'content';
 
@@ -44,7 +50,8 @@ export class SplitViewContent extends ViewBase {
  * On macOS the first one in a window becomes its NSSplitViewController, with the full-height
  * sidebar and the toolbar's sidebar button; a nested or second one is a plain NSSplitView. On
  * every other OS it is drawn: two columns, and at a compact width (`Screen.compact`) a stack whose
- * root is the sidebar. There, choosing an item shows the content, and `showSidebar()` (or
+ * root is the sidebar. On Android the columns wait for Material's expanded width,
+ * `ANDROID_EXPANDED_WIDTH`, as its list-detail layout does. There, choosing an item shows the content, and `showSidebar()` (or
  * Android's back button) returns to the sidebar.
  */
 @Component({
@@ -60,7 +67,13 @@ export class SplitViewContent extends ViewBase {
 export class SplitView extends ViewBase {
   /** Whether this split view is drawn from views here, rather than by the desktop host. */
   readonly drawn = nativePlatform() !== 'macos';
-  private readonly compact = inject(Screen).compact;
+  private readonly screen = inject(Screen);
+  /** Too narrow for the panes side by side: below Material's expanded width on Android. */
+  private readonly compact = computed(() =>
+    nativePlatform() === 'android'
+      ? this.screen.window().width < ANDROID_EXPANDED_WIDTH
+      : this.screen.compact(),
+  );
   private readonly top = signal<'sidebar' | 'content'>('sidebar');
 
   /** Whether the panes are a stack, one at a time: at a compact width, where it is drawn. */

@@ -17,7 +17,8 @@
  *   puts in a cell of its own. A click that selects the row sends `topSidebarSelect` to the item.
  *
  * On every other OS they are drawn here from views: two columns, or at a compact width a stack
- * whose root is the sidebar.
+ * whose root is the sidebar. On Android the columns wait for Material's expanded width, 840dp, as
+ * its list-detail layout does; below that it is the stack.
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
@@ -233,4 +234,23 @@ describe('drawn, at a compact width', () => {
     assert.equal(queryByTestId('content'), null);
     assert.equal(back(), false, 'and from the sidebar leaves the app');
   });
+});
+
+describe('drawn on Android', () => {
+  after(() => registerPlatformComponents('ios'));
+
+  // Material's window size classes: a list pane beside the content from the expanded class, 840dp.
+  for (const [os, width, columns] of [
+    ['android', 839, false],
+    ['android', 840, true],
+    ['ios', 800, true],
+  ] as const) {
+    it(`is ${columns ? 'two columns' : 'a stack'} at ${width} wide on ${os}`, async () => {
+      registerPlatformComponents(os);
+      const { getByTestId } = await render(Fixture, {
+        providers: [{ provide: Screen.SOURCE, useValue: screenOf(width) }],
+      });
+      assert.equal(getByTestId('split').props['flexDirection'] === 'row', columns);
+    });
+  }
 });

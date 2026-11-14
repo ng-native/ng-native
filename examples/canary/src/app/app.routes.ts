@@ -288,6 +288,10 @@ export const routes: Routes = [
     loadComponent: () => import('./desktop/desktop-page.ts').then((m) => m.DesktopPage),
   },
   {
+    path: 'desktop-split',
+    loadComponent: () => import('./desktop/split-page.ts').then((m) => m.SplitPage),
+  },
+  {
     path: 'native-gestures',
     loadComponent: () => import('./gestures/native-gestures.ts').then((m) => m.NativeGesturesPage),
   },

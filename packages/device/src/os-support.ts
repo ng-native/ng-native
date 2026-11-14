@@ -102,7 +102,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`<split-view>`, `<sidebar>`',
     ['SplitView', 'Sidebar', 'SidebarSection', 'SidebarItem', 'SidebarItemPath'],
-    ['yes', 'yes', 'stack root', 'list pane at expanded widths', 'two columns'],
+    ['yes', 'yes', 'stack root', 'list pane from 840dp, a stack below', 'two columns'],
   ),
   row('`Processes`, `Processes.env`', ['Processes'], MAC_ONLY, {
     Processes: 'NgNativeProcesses',

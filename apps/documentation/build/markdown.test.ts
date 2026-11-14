@@ -38,7 +38,7 @@ describe('the OS support table', () => {
     const html = await render('# Support\n\n<!-- os-support -->\n\nAfter.\n');
     expect(html).toContain('<th>iPadOS</th>');
     expect(html).toContain('<code>UndoStack</code>');
-    expect(html).toContain('list pane at expanded widths');
+    expect(html).toContain('list pane from 840dp, a stack below');
     expect(html).not.toContain('os-support');
     expect(html).toContain('After.');
   });
