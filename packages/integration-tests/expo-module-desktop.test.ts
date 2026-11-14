@@ -325,3 +325,63 @@ describe('the app updater on macOS', () => {
     assert.deepEqual(none.calls, []);
   });
 });
+
+/**
+ * The host contract for `NgNativeDocumentPicker`: `getDocumentAsync` as Expo's, plus
+ * `saveDocumentAsync({ suggestedName, contents, types })`, which writes the file where the user
+ * chose and answers its `file://` url or null when dismissed, with `contents` as text or as
+ * `{ base64 }` for bytes; and `pickDirectoryAsync()`, which answers `{ uri }` or null when
+ * dismissed.
+ */
+describe('the file dialogs on macOS', () => {
+  function host() {
+    const saved: unknown[] = [];
+    let folder: { uri: string } | null = { uri: 'file:///Users/me/Exports' };
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) =>
+            name === 'NgNativeDocumentPicker'
+              ? {
+                  getDocumentAsync: async () => ({ canceled: true, assets: null }),
+                  saveDocumentAsync: async (options: unknown) => {
+                    saved.push(options);
+                    return 'file:///Users/me/export.csv';
+                  },
+                  pickDirectoryAsync: async () => folder,
+                }
+              : null,
+        },
+      };
+    };
+    return { saved, dismiss: () => void (folder = null) };
+  }
+
+  it('saves through the save panel, with bytes as base64', async () => {
+    const panel = host();
+    const { DocumentPicker } = await import('@ng-native/expo/document-picker');
+    const { injectService } = await import('@ng-native/testing');
+    const picker = injectService(DocumentPicker);
+    assert.equal(
+      await picker.save({ suggestedName: 'a.csv', contents: 'a,b', types: ['text/csv'] }),
+      'file:///Users/me/export.csv',
+    );
+    await picker.save({ suggestedName: 'a.bin', contents: new Uint8Array([0, 255, 104, 105]) });
+    assert.deepEqual(panel.saved, [
+      { suggestedName: 'a.csv', contents: 'a,b', types: ['text/csv'] },
+      { suggestedName: 'a.bin', contents: { base64: 'AP9oaQ==' }, types: [] },
+    ]);
+  });
+
+  it('picks a folder as its url, and answers null when dismissed', async () => {
+    const panel = host();
+    const { DocumentPicker } = await import('@ng-native/expo/document-picker');
+    const { injectService } = await import('@ng-native/testing');
+    const picker = injectService(DocumentPicker);
+    assert.equal((await picker.pickDirectory())?.uri, 'file:///Users/me/Exports');
+    panel.dismiss();
+    assert.equal(await picker.pickDirectory(), null);
+  });
+});
