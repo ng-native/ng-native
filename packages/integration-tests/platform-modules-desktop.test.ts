@@ -242,3 +242,64 @@ describe('TextRecognition on macOS', () => {
     await assert.rejects(recognition.recognize('file:///a.png'), /npm run macos/);
   });
 });
+
+describe('Calendar on macOS', () => {
+  function host(granted: boolean) {
+    const calls: unknown[][] = [];
+    const permission = {
+      status: granted ? 'granted' : 'denied',
+      granted,
+      canAskAgain: false,
+      expires: 'never',
+    };
+    const record =
+      (name: string, answer: unknown) =>
+      async (...args: unknown[]) => (calls.push([name, ...args]), answer);
+    mac({
+      NgNativeCalendar: {
+        getCalendarPermissionsAsync: record('getCalendarPermissionsAsync', permission),
+        requestCalendarPermissionsAsync: record('requestCalendarPermissionsAsync', permission),
+        getRemindersPermissionsAsync: record('getRemindersPermissionsAsync', permission),
+        getCalendarsAsync: record('getCalendarsAsync', granted ? [{ id: 'c1' }] : []),
+        getCalendarAsync: record('getCalendarAsync', null),
+        listEventsAsync: record('listEventsAsync', granted ? [{ id: 'e1' }] : []),
+        getEventAsync: record('getEventAsync', null),
+        getDefaultCalendarSync: () => (granted ? { id: 'c1' } : null),
+        getSourcesSync: () => [],
+      },
+    });
+    return calls;
+  }
+
+  it('answers a denied permission, and reads nothing', async () => {
+    const calls = host(false);
+    const { Calendar } = await import('@ng-native/expo/calendar');
+    const calendar = injectService(Calendar);
+    assert.equal(calendar.available(), true);
+    assert.equal(await calendar.permission.request(), false);
+    assert.equal(calendar.permission.status(), 'denied');
+    assert.deepEqual(await calendar.calendars(), []);
+    assert.equal(calendar.defaultCalendar(), null);
+    assert.equal(await calendar.calendar('c1'), null);
+    assert.equal(await calendar.reminder('r1'), null);
+    assert.equal(await calendar.pickCalendar(), null);
+    assert.deepEqual(calls.slice(0, 2), [
+      ['requestCalendarPermissionsAsync', false],
+      ['getCalendarsAsync', 'event'],
+    ]);
+  });
+
+  it('lists events by calendar id, with the dates as milliseconds', async () => {
+    const calls = host(true);
+    const { Calendar } = await import('@ng-native/expo/calendar');
+    const calendar = injectService(Calendar);
+    assert.equal(await calendar.writePermission.check(), true);
+    const start = new Date(1_000);
+    const end = new Date(2_000);
+    const events = await calendar.events(['c1', { id: 'c2' } as never], start, end);
+    assert.deepEqual(events, [{ id: 'e1' }]);
+    assert.deepEqual(calls.slice(-1), [['listEventsAsync', ['c1', 'c2'], 1_000, 2_000]]);
+    assert.deepEqual(calls[0], ['getCalendarPermissionsAsync', true]);
+    await assert.rejects(calendar.createCalendar({ title: 'x' }), /not available on macOS/);
+  });
+});

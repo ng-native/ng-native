@@ -33,6 +33,7 @@
 #import "fonts.h"
 #import "web-browser.h"
 #import "text-recognition.h"
+#import "calendar.h"
 #import "file-system.h"
 #import "tray-and-dock.h"
 #import "updates.h"
@@ -707,6 +708,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeWebBrowser", [] { return ngn::makeWebBrowserModule(expoSystem, authSession, noPrompts); });
       static auto textReader = ngn::appkit::makeTextReader();
       ngn::addModule(*modules, "NgNativeTextRecognition", [] { return ngn::makeTextRecognitionModule(textReader); });
+      static auto calendars = ngn::appkit::makeCalendarStore();
+      ngn::addModule(*modules, "NgNativeCalendar", [] { return ngn::makeCalendarModule(calendars, noPrompts); });
       static auto crypto = ngn::appkit::makeCryptoSource();
       ngn::addModule(*modules, "NgNativeCrypto", [] { return ngn::makeCryptoModule(crypto); });
       static auto locales = ngn::appkit::makeLocaleSource();

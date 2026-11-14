@@ -97,6 +97,7 @@ add_library(ngn_core STATIC
     core/src/modules/app-modules.cpp
     core/src/modules/async-storage.cpp
     core/src/modules/battery.cpp
+    core/src/modules/calendar.cpp
     core/src/modules/core-modules.cpp
     core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
@@ -133,9 +134,10 @@ if(NGN_TESTS)
         appkit/network-state.mm appkit/tests/network-state.test.mm
         appkit/battery.mm appkit/tests/battery.test.mm
         appkit/fonts.mm appkit/text-layout.mm appkit/tests/fonts.test.mm
-        appkit/text-recognition.mm appkit/tests/text-recognition.test.mm)
+        appkit/text-recognition.mm appkit/tests/text-recognition.test.mm
+        appkit/calendar.mm appkit/tests/calendar.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)
