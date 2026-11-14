@@ -60,20 +60,24 @@ add_library(ngn_core STATIC
     core/src/desktop-view-props.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp
+    core/src/host-state.cpp
     core/src/input-dispatcher.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
     core/src/native-module.cpp
     core/src/network.cpp
     core/src/text-layout-manager.cpp
-    core/src/view-tree.cpp)
+    core/src/view-tree.cpp
+    core/src/modules/alert-manager.cpp
+    core/src/modules/app-modules.cpp
+    core/src/modules/core-modules.cpp)
 target_include_directories(ngn_core PUBLIC core/include)
 target_link_libraries(ngn_core PUBLIC react_native)
 target_compile_options(ngn_core PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
 
 if(NGN_TESTS)
   file(GLOB core_test_SRC CONFIGURE_DEPENDS core/tests/*.cpp)
-  add_executable(ngn_core_tests ${core_test_SRC} core/testing/fake-backend.cpp core/testing/fake-network.cpp)
+  add_executable(ngn_core_tests ${core_test_SRC} core/testing/fake-backend.cpp core/testing/fake-network.cpp core/testing/fake-system.cpp)
   target_include_directories(ngn_core_tests PRIVATE core/testing core/tests)
   target_link_libraries(ngn_core_tests PRIVATE ngn_core doctest)
   enable_testing()

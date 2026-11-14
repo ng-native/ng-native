@@ -1,20 +1,23 @@
 // ngn-macos: the macOS desktop host. Loads a bundle into one runtime and mounts its surface in a
 // window.
 //
-//   ngn-macos <bundle> [--module <name>] [--title <title>]
+//   ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>]
 //
 // <bundle> is a JavaScript or Hermes bytecode file on disk, or a Metro bundle URL, which turns on
 // the dev loop: reload and Fast Refresh from the dev server, and the Developer menu. The module
-// defaults to "main", the name an ng-native app registers.
+// defaults to "main", the name an ng-native app registers. The app id names the app's data and
+// preferences until it is packaged with a bundle identifier (default: the title).
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
 #import "appkit-backend.h"
 #import "menu-bar.h"
 #import "network.h"
+#import "system.h"
 #import "surface-view.h"
 #include "text-layout.h"
 
+#include "ngn/core-modules.h"
 #include "ngn/default-menu.h"
 #include "ngn/input-dispatcher.h"
 #include "ngn/runtime.h"
@@ -32,6 +35,7 @@ struct Host {
   std::shared_ptr<ngn::appkit::AppKitBackend> backend;
   std::shared_ptr<ngn::MountingManager> mounting;
   std::unique_ptr<ngn::InputDispatcher> input;
+  std::shared_ptr<ngn::HostState> state;
   std::unique_ptr<ngn::Runtime> runtime;
   NSWindow *window;
   NGNSurfaceView *surface;
@@ -39,6 +43,16 @@ struct Host {
 };
 
 Host gHost;
+
+ngn::WindowMetrics windowMetrics(NSWindow *window) {
+  NSSize size = window.contentView.bounds.size;
+  NSSize screen = (window.screen != nil ? window.screen : NSScreen.mainScreen).frame.size;
+  double scale = window.backingScaleFactor;
+  return {
+      .window = {.width = size.width, .height = size.height, .scale = scale, .fontScale = 1},
+      .screen = {.width = screen.width, .height = screen.height, .scale = scale, .fontScale = 1},
+  };
+}
 
 ngn::SurfaceMetrics metricsFor(NSWindow *window) {
   NSSize size = window.contentView.bounds.size;
@@ -93,6 +107,7 @@ void logFirstFrame(SurfaceId surfaceId) {
   if (gHost.runtime) {
     gHost.runtime->updateSurface(kMainSurface, metricsFor(gHost.window));
   }
+  gHost.state->metrics.set(windowMetrics(gHost.window));
 }
 - (void)windowDidChangeBackingProperties:(NSNotification *)note {
   [self windowDidResize:note];
@@ -104,10 +119,13 @@ int main(int argc, const char *argv[]) {
     std::string bundle;
     std::string module = "main";
     NSString *title = @"ng-native";
+    std::string appId;
     for (int i = 1; i < argc; i++) {
       std::string arg = argv[i];
       if (arg == "--module" && i + 1 < argc) {
         module = argv[++i];
+      } else if (arg == "--app-id" && i + 1 < argc) {
+        appId = argv[++i];
       } else if (arg == "--title" && i + 1 < argc) {
         title = [NSString stringWithUTF8String:argv[++i]];
       } else if (bundle.empty() && arg.rfind("--", 0) != 0) {
@@ -118,7 +136,7 @@ int main(int argc, const char *argv[]) {
       }
     }
     if (bundle.empty()) {
-      fprintf(stderr, "usage: ngn-macos <bundle> [--module <name>] [--title <title>]\n");
+      fprintf(stderr, "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>]\n");
       return 2;
     }
 
@@ -147,12 +165,26 @@ int main(int argc, const char *argv[]) {
     gHost.backend->addSurface(gHost.surface);
     [gHost.window setFrameTopLeftPoint:NSMakePoint(NSMinX(visible) + 40, NSMaxY(visible) - 40)];
 
+    if (appId.empty()) {
+      appId = std::string(title.UTF8String);
+    }
+    auto system = ngn::appkit::makeSystem(appId);
+    gHost.state = std::make_shared<ngn::HostState>();
+    gHost.state->metrics.set(windowMetrics(gHost.window));
+    ngn::appkit::watchApp(gHost.state, system);
+    ngn::NetworkClients network{ngn::appkit::makeHttp(), ngn::appkit::makeWebSockets()};
+    // Kept for the process: ReactHost asks it for modules on every reload.
+    static auto modules = std::make_shared<ngn::ModuleRegistry>();
+    ngn::addCoreModules(
+        *modules,
+        {.system = system,
+         .state = gHost.state,
+         .http = network.http,
+         .webSockets = network.webSockets,
+         .reactNativeVersion = NGN_REACT_NATIVE_VERSION});
+
     gHost.runtime = std::make_unique<ngn::Runtime>(
-        gHost.mounting,
-        std::make_shared<ngn::CoreTextMeasurer>(),
-        std::make_shared<ngn::ModuleRegistry>(),
-        ngn::NetworkClients{ngn::appkit::makeHttp(), ngn::appkit::makeWebSockets()},
-        bundle);
+        gHost.mounting, std::make_shared<ngn::CoreTextMeasurer>(), modules, network, bundle);
 
     bool developer = gHost.runtime->devServer().has_value();
     ngn::appkit::installMenuBar(
