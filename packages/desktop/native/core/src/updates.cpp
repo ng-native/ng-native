@@ -263,6 +263,8 @@ UpdateResponse parseUpdateResponse(const Headers &headers, const std::string &bo
         response.signature = headerOf(part.headers, "expo-signature");
       } else if (name == "directive") {
         response.directive = readDirective(part.body);
+        response.directiveBody = part.body;
+        response.directiveSignature = headerOf(part.headers, "expo-signature");
       }
     }
     return response;
@@ -315,20 +317,21 @@ std::string UpdatesClient::pathOf(const LaunchState::Update &update) const {
   return (config_.directory / update.file).string();
 }
 
-std::optional<std::string> UpdatesClient::signatureProblem(const std::string &body, const std::string &header) const {
+std::optional<std::string> UpdatesClient::signatureProblem(
+    const std::string &body, const std::string &header, const std::string &what) const {
   if (config_.certificatePem.empty()) {
     return std::nullopt;
   }
   auto signature = parseSignatureHeader(header);
   if (header.empty() || !signature || !signature->contains("sig")) {
-    return "the manifest has no expo-signature, and the app requires one";
+    return "the " + what + " has no expo-signature, and the app requires one";
   }
   auto keyId = signature->contains("keyid") ? signature->at("keyid") : std::string("main");
   auto alg = signature->contains("alg") ? signature->at("alg") : config_.algorithm;
   auto bytes = base64Decode(signature->at("sig"));
   if (keyId != config_.keyId || alg != config_.algorithm || !bytes ||
       !crypto_->verifyRsaSha256(config_.certificatePem, body, *bytes)) {
-    return "the manifest's signature does not verify against the app's certificate";
+    return "the " + what + "'s signature does not verify against the app's certificate";
   }
   return std::nullopt;
 }
@@ -494,6 +497,10 @@ void UpdatesClient::check(std::function<void(CheckResult)> done) {
                   found_.reset();
                   foundRollBack_ = false;
                   if (response.directive == "rollBackToEmbedded") {
+                    // A rollback replaces what runs as surely as an update does: signed the same.
+                    if (auto problem = signatureProblem(response.directiveBody, response.directiveSignature, "rollback directive")) {
+                      throw std::runtime_error(*problem);
+                    }
                     foundRollBack_ = running_.has_value() || state.current.has_value();
                     result.isAvailable = foundRollBack_;
                     result.isRollBackToEmbedded = foundRollBack_;

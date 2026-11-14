@@ -91,6 +91,9 @@ struct UpdateResponse {
   std::string signature;
   // `noUpdateAvailable` or `rollBackToEmbedded`, or empty.
   std::string directive;
+  // The directive's bytes as sent, and its part's `expo-signature`, which covers them.
+  std::string directiveBody;
+  std::string directiveSignature;
 };
 
 // Reads a response body as the protocol allows it: a manifest as JSON (`application/json` or
@@ -173,8 +176,10 @@ class UpdatesClient {
   std::string pathOf(const LaunchState::Update &update) const;
   bool usable(const LaunchState::Update &update, const LaunchState &state) const;
   void markLocked();
-  // Why a manifest's signature header does not verify its bytes, when the app requires signing.
-  std::optional<std::string> signatureProblem(const std::string &body, const std::string &header) const;
+  // Why a manifest's (or the `what` named) signature header does not verify its bytes, when the
+  // app requires signing.
+  std::optional<std::string> signatureProblem(
+      const std::string &body, const std::string &header, const std::string &what = "manifest") const;
 
   UpdatesConfig config_;
   std::shared_ptr<Http> http_;

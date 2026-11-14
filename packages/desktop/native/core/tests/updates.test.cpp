@@ -109,7 +109,8 @@ std::string header(const ngn::Headers &headers, const std::string &name) {
 }
 
 // A multipart/mixed body with a manifest part (signed when `signature` is set) and an extensions part.
-std::string multipart(const std::string &manifestJson, const std::string &signature = "", const std::string &directive = "") {
+std::string multipart(const std::string &manifestJson, const std::string &signature = "", const std::string &directive = "",
+                      const std::string &directiveSignature = "") {
   std::string out;
   if (!manifestJson.empty()) {
     out += "--BOUNDARY\r\nContent-Disposition: form-data; name=\"manifest\"\r\nContent-Type: application/json\r\n";
@@ -119,8 +120,11 @@ std::string multipart(const std::string &manifestJson, const std::string &signat
     out += "\r\n" + manifestJson + "\r\n";
   }
   if (!directive.empty()) {
-    out += "--BOUNDARY\r\nContent-Disposition: form-data; name=\"directive\"\r\nContent-Type: application/json\r\n\r\n" +
-        directive + "\r\n";
+    out += "--BOUNDARY\r\nContent-Disposition: form-data; name=\"directive\"\r\nContent-Type: application/json\r\n";
+    if (!directiveSignature.empty()) {
+      out += "expo-signature: " + directiveSignature + "\r\n";
+    }
+    out += "\r\n" + directive + "\r\n";
   }
   out += "--BOUNDARY\r\nContent-Disposition: form-data; name=\"extensions\"\r\nContent-Type: application/json\r\n\r\n"
          "{\"assetRequestHeaders\":{}}\r\n--BOUNDARY--\r\n";
@@ -507,4 +511,41 @@ TEST_CASE("a success mark counts only for the launch it was made for, not one a 
   CHECK(client->state().launching == kIdA);
   client->markLaunchSucceeded(client->launchGeneration());
   CHECK(client->state().launching.empty());
+}
+
+TEST_CASE("with code signing on, a plain JSON manifest is signed by its response's expo-signature header") {
+  Fixture f;
+  auto client = f.client("CERT");
+  client->launch();
+  auto json = folly::toJson(manifest(kIdA));
+  auto headers = kJson;
+  headers.emplace_back("expo-signature", "sig=\"" + ngn::base64Encode("signed " + json) + "\", keyid=\"main\"");
+  CHECK(f.check(*client, headers, json).isAvailable);
+  auto forged = kJson;
+  forged.emplace_back("expo-signature", "sig=\"" + ngn::base64Encode("signed {}") + "\", keyid=\"main\"");
+  CHECK_FALSE(f.check(*client, forged, json).isAvailable);
+  CHECK_FALSE(f.check(*client, kJson, json).isAvailable);
+}
+
+TEST_CASE("with code signing on, a rollback directive counts only when it is signed") {
+  Fixture f;
+  {
+    auto client = f.client("CERT");
+    client->launch();
+    auto json = folly::toJson(manifest(kIdA));
+    REQUIRE(f.check(*client, kMultipart, multipart(json, "sig=\"" + ngn::base64Encode("signed " + json) + "\", keyid=\"main\""))
+                .isAvailable);
+    REQUIRE(f.fetch(*client, "bundle v2").isNew);
+  }
+  auto client = f.client("CERT");
+  client->launch();
+  const std::string directive = R"({"type":"rollBackToEmbedded","parameters":{"commitTime":"2026-11-14T00:00:00.000Z"}})";
+  auto unsignedRollBack = f.check(*client, kMultipart, multipart("", "", directive));
+  CHECK_FALSE(unsignedRollBack.isRollBackToEmbedded);
+  CHECK(unsignedRollBack.error.find("signature") != std::string::npos);
+  auto forged = f.check(*client, kMultipart, multipart("", "", directive, "sig=\"" + ngn::base64Encode("signed {}") + "\""));
+  CHECK_FALSE(forged.isRollBackToEmbedded);
+  auto good = f.check(*client, kMultipart,
+                      multipart("", "", directive, "sig=\"" + ngn::base64Encode("signed " + directive) + "\", keyid=\"main\""));
+  CHECK(good.isRollBackToEmbedded);
 }
