@@ -21,47 +21,31 @@ void NGNApplyTextOptions(NSTextView *text, const TextInputOptions &options) {
 
 namespace {
 
-// Whether the character before `index` ends a word: the start, or white space.
-bool atWordStart(NSString *text, NSUInteger index) {
-  if (index == 0) {
-    return true;
-  }
-  return [NSCharacterSet.whitespaceAndNewlineCharacterSet characterIsMember:[text characterAtIndex:index - 1]];
-}
-
-NSString *capitalizeWords(NSString *before, NSString *inserted) {
-  NSMutableString *out = [NSMutableString string];
-  __block bool wordStart = atWordStart(before, before.length);
-  [inserted enumerateSubstringsInRange:NSMakeRange(0, inserted.length)
-                               options:NSStringEnumerationByComposedCharacterSequences
-                            usingBlock:^(NSString *piece, NSRange, NSRange, BOOL *) {
-                              bool space = [NSCharacterSet.whitespaceAndNewlineCharacterSet
-                                  characterIsMember:[piece characterAtIndex:0]];
-                              [out appendString:wordStart && !space ? piece.localizedUppercaseString : piece];
-                              wordStart = space;
-                            }];
+std::u16string units(NSString *text) {
+  std::u16string out(text.length, u'\0');
+  [text getCharacters:reinterpret_cast<unichar *>(out.data()) range:NSMakeRange(0, text.length)];
   return out;
 }
+
+NSString *nsUnits(const std::u16string &text) {
+  return [NSString stringWithCharacters:reinterpret_cast<const unichar *>(text.data()) length:text.size()];
+}
+
+// Foundation's capitals, in the user's locale, and its composed character sequences.
+struct FoundationCharacters final : ngn::TextCharacters {
+  std::u16string uppercase(const std::u16string &text) const override {
+    return units(nsUnits(text).localizedUppercaseString);
+  }
+  std::pair<std::size_t, std::size_t> characterAt(const std::u16string &text, std::size_t index) const override {
+    NSRange range = [nsUnits(text) rangeOfComposedCharacterSequenceAtIndex:index];
+    return {range.location, range.length};
+  }
+};
 
 } // namespace
 
 NSString *NGNFitReplacement(NSString *current, NSRange range, NSString *replacement, const TextInputOptions &options) {
-  NSString *out = replacement;
-  if (options.capitalize == Capitalize::Characters) {
-    out = out.localizedUppercaseString;
-  } else if (options.capitalize == Capitalize::Words) {
-    out = capitalizeWords([current substringToIndex:range.location], out);
-  }
-  NSUInteger fits = ngn::insertionThatFits(current.length, range.length, out.length, options.maxLength);
-  if (fits < out.length) {
-    // Never half of a surrogate pair or of a character with combining marks.
-    if (fits > 0) {
-      NSRange last = [out rangeOfComposedCharacterSequenceAtIndex:fits];
-      fits = last.location;
-    }
-    out = [out substringToIndex:fits];
-  }
-  return out;
+  return nsUnits(ngn::fitReplacement(units(current), range.location, range.length, units(replacement), options, FoundationCharacters{}));
 }
 
 namespace {

@@ -23,6 +23,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -69,10 +70,12 @@ std::string webViewOrigin(const std::string &url);
 // a page made from `html` is at, always do.
 bool passesOriginWhitelist(const std::vector<std::string> &whitelist, const std::string &url);
 
-// What a navigation to `url` waits for: the app's answer, or nothing, since it is to be handed to
-// the OS instead (a page navigation outside `originWhitelist`).
-enum class NavigationStep { AskApp, OpenExternally };
-NavigationStep navigationStep(const WebViewConfig &config, const std::string &url, bool topFrame);
+// What a navigation to `url` waits for: the app's answer, or nothing. A page navigation outside
+// `originWhitelist` is handed to the OS only when the user made it (`navigationType`, the library's
+// name for it, is "click" or "formsubmit") and Linking would open it (externalUrlAllowed); any
+// other is cancelled, so a page's script cannot open a scheme or a file on its own.
+enum class NavigationStep { AskApp, OpenExternally, Cancel };
+NavigationStep navigationStep(const WebViewConfig &config, const std::string &url, bool topFrame, std::string_view navigationType);
 
 // The script, at document start, that gives the page window.ReactNativeWebView.postMessage, sent
 // to the host's script message handler named "ReactNativeWebView" as a string.

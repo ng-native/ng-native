@@ -9,7 +9,8 @@
 //   base64?}, the edited image written to a new file in `<caches>/ImageManipulator`.
 //
 // `uri` is a `file:` uri, an absolute path, a `data:` uri or an `http(s):` url (an asset on the
-// dev server), all read through the backend's HTTP client. `actions` are expo's: `resize`,
+// dev server), all read through the backend's HTTP client. A file is read only where `files` lets
+// it (FileAccess::readFor), so a copy in `<caches>` never holds what FileSystem could not read. `actions` are expo's: `resize`,
 // `rotate` (degrees, clockwise), `flip` and `crop`, applied in order to the image the right way
 // up, sized and checked as expo's iOS module does. `loadOptions` is `{maxWidth, maxHeight}`, which
 // scales a larger image down to fit first. `saveOptions` is `{format: jpeg | png | webp, compress
@@ -17,6 +18,7 @@
 #pragma once
 
 #include "ngn/native-module.h"
+#include "ngn/file-system.h"
 #include "ngn/network.h"
 
 #include <memory>
@@ -62,6 +64,7 @@ class ImageCodec {
 };
 
 // `folder` is where saved images go: `<caches>/ImageManipulator`.
-std::shared_ptr<NativeModule> makeImageManipulatorModule(std::shared_ptr<ImageCodec> codec, std::shared_ptr<Http> http, std::string folder);
+std::shared_ptr<NativeModule> makeImageManipulatorModule(
+    std::shared_ptr<ImageCodec> codec, std::shared_ptr<Http> http, std::string folder, std::shared_ptr<FileAccess> files);
 
 } // namespace ngn

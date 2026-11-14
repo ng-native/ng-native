@@ -789,7 +789,7 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   [_box applyOptions:ngn::textInputOptions(*p)];
   // The text prop wins only when it is not older than what the field has sent (React Native iOS's
   // rule), and never while an input method is composing.
-  if (p->mostRecentEventCount >= _eventCount && !p->text.empty() && ![self composing]) {
+  if (ngn::controlledTextIsCurrent(p->mostRecentEventCount, _eventCount, [self composing]) && !p->text.empty()) {
     NSString *text = nsString(p->text);
     if (![field.stringValue isEqualToString:text]) {
       field.stringValue = text;
@@ -970,7 +970,7 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   [_text setPlaceholder:nsString(p->placeholder) color:p->placeholderTextColor ? nsColor(p->placeholderTextColor) : nil];
   _text.editable = p->editable && !p->readOnly;
   [_text applyOptions:ngn::textInputOptions(*p)];
-  if (p->mostRecentEventCount >= _eventCount && !p->text.empty() && !_text.hasMarkedText) {
+  if (ngn::controlledTextIsCurrent(p->mostRecentEventCount, _eventCount, _text.hasMarkedText) && !p->text.empty()) {
     NSString *text = nsString(p->text);
     if (![_text.string isEqualToString:text]) {
       _settingText = YES;

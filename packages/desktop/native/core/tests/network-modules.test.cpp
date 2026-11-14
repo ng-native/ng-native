@@ -1,5 +1,6 @@
 #include "fake-network.h"
 #include "fake-system.h"
+#include "helpers.h"
 #include "ngn/core-modules.h"
 
 #include <doctest/doctest.h>
@@ -220,7 +221,8 @@ TEST_CASE("form data goes out as multipart, with the content type and a part per
               dynamic::object("fieldName", "title")("string", "Hello"),
               dynamic::object("fieldName", "photo")("uri", "file://" + (dir / "photo.jpg").string())("type", "image/jpeg"))),
       blobs,
-      "XYZ");
+      "XYZ",
+      ngn::testing::readsEverywhere().get());
   std::filesystem::remove_all(dir);
   CHECK(body.error.empty());
   CHECK(body.contentType == "multipart/form-data; boundary=XYZ");
@@ -232,9 +234,9 @@ TEST_CASE("form data goes out as multipart, with the content type and a part per
 
 TEST_CASE("a base64 or blob body is sent as its bytes, and a released blob fails the request") {
   Fixture f;
-  CHECK(ngn::requestBody(dynamic::object("base64", "aGk="), *f.blobs, "b").bytes == "hi");
+  CHECK(ngn::requestBody(dynamic::object("base64", "aGk="), *f.blobs, "b", nullptr).bytes == "hi");
   auto id = f.blobs->store("blob bytes");
-  auto blob = ngn::requestBody(dynamic::object("blob", dynamic::object("blobId", id)("offset", 5)("size", 5)("type", "text/plain")), *f.blobs, "b");
+  auto blob = ngn::requestBody(dynamic::object("blob", dynamic::object("blobId", id)("offset", 5)("size", 5)("type", "text/plain")), *f.blobs, "b", nullptr);
   CHECK(blob.bytes == "bytes");
   CHECK(blob.contentType == "text/plain");
 
@@ -377,4 +379,41 @@ TEST_CASE("ImageLoader measures an image it fetches, with headers, and rejects w
 
   loader->callWithPromise("queryCache", dynamic::array(dynamic::array("https://img/a.png")), promise);
   CHECK(out == "{}");
+}
+
+TEST_CASE("a request body reads a file only where FileSystem could, and fails the request otherwise") {
+  auto root = std::filesystem::temp_directory_path() / ("ngn-body-" + std::to_string(rand()));
+  std::filesystem::create_directories(root / "cache");
+  std::filesystem::create_directories(root / "home/Desktop");
+  std::ofstream(root / "home/Desktop/secret.txt") << "secret";
+  std::ofstream(root / "cache/upload me.txt") << "upload";
+  ngn::FileAccess::Folders folders{.cache = (root / "cache").string(), .home = (root / "home").string()};
+  auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  ngn::BlobStore blobs;
+  auto outside = (root / "home/Desktop/secret.txt").string();
+
+  auto plain = ngn::requestBody(dynamic::object("uri", ngn::fileUri(outside)), blobs, "b", access.get());
+  CHECK(plain.bytes.empty());
+  CHECK(plain.error.find(outside + " is outside the files this app may read") == 0);
+  auto form = ngn::requestBody(
+      dynamic::object("formData", dynamic::array(dynamic::object("fieldName", "f")("uri", "file://" + outside))), blobs, "b", access.get());
+  CHECK(form.bytes.empty());
+  CHECK(form.error.find(outside + " is outside the files this app may read") == 0);
+  // Without file access, nothing is read.
+  CHECK_FALSE(ngn::requestBody(dynamic::object("uri", folders.cache + "/upload me.txt"), blobs, "b", nullptr).error.empty());
+
+  // The app's own file goes out, its uri percent-decoded.
+  auto own = ngn::requestBody(dynamic::object("uri", ngn::fileUri(folders.cache + "/upload me.txt")), blobs, "b", access.get());
+  CHECK(own.error.empty());
+  CHECK(own.bytes == "upload");
+
+  // Through the module, the refusal fails the request before anything is sent.
+  Fixture f;
+  f.services.files = access;
+  auto networking = f.make(ngn::makeNetworking(f.services));
+  f.send(*networking, query(dynamic::object("method", "POST")("data", dynamic::object("uri", outside))));
+  CHECK(f.http->sent.empty());
+  REQUIRE(f.events.size() == 1);
+  CHECK(f.events[0].find("didCompleteNetworkResponse [1,\"" + outside + " is outside") == 0);
+  std::filesystem::remove_all(root);
 }

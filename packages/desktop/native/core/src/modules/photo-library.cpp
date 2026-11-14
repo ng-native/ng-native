@@ -76,11 +76,6 @@ bool flagArg(const folly::dynamic &args, size_t at) {
   return args.size() > at && args[at].isBool() && args[at].asBool();
 }
 
-// The path a file url names, or the string itself when it is a path.
-std::string pathOf(const std::string &uri) {
-  return uri.rfind("file://", 0) == 0 ? uri.substr(7) : uri;
-}
-
 void settle(JsPromise promise, const std::string &error) {
   if (error.empty()) {
     promise.resolve(nullptr);
@@ -147,13 +142,14 @@ PhotoLibrary::Query photoQueryOf(const folly::dynamic &query) {
   return out;
 }
 
-std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts) {
+std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::shared_ptr<FileAccess> files) {
   struct MediaLibrary : NativeModule {
     std::shared_ptr<PhotoLibrary> library;
     std::mutex mutex;
     std::function<void()> stopWatching;
 
-    MediaLibrary(std::shared_ptr<PhotoLibrary> from, bool noPrompts) : NativeModule("NgNativeMediaLibrary"), library(std::move(from)) {
+    MediaLibrary(std::shared_ptr<PhotoLibrary> from, bool noPrompts, std::shared_ptr<FileAccess> files)
+        : NativeModule("NgNativeMediaLibrary"), library(std::move(from)) {
       listeners();
       auto photos = library;
       Permissions permissions{photos, noPrompts};
@@ -239,17 +235,25 @@ std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrar
       auto refused = [](JsPromise &promise) {
         promise.reject("MediaLibrary: the app has no access to the photo library");
       };
-      promise("createAsset", [photos, writable, refused](const folly::dynamic &args, JsPromise promise) {
+      promise("createAsset", [photos, writable, refused, files](const folly::dynamic &args, JsPromise promise) {
         auto uri = stringArg(args, 0);
         if (!writable(true)) {
           refused(promise);
           return;
         }
-        if (!uri) {
+        auto path = uri ? pathOfUri(*uri) : std::nullopt;
+        if (!path) {
           promise.reject("MediaLibrary: Asset.create takes a file's uri");
           return;
         }
-        photos->create(pathOf(*uri), stringArg(args, 1), [promise](std::optional<std::string> id, const std::string &error) {
+        std::shared_ptr<FileAccess::Use> use;
+        try {
+          use = readableFile(files.get(), *path);
+        } catch (const FileRefused &refusedFile) {
+          promise.reject(std::string("MediaLibrary: ") + refusedFile.what());
+          return;
+        }
+        photos->create(*path, stringArg(args, 1), [promise, use](std::optional<std::string> id, const std::string &error) {
           if (id) {
             promise.resolve(*id);
           } else {
@@ -320,7 +324,7 @@ std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrar
       }
     }
   };
-  return std::make_shared<MediaLibrary>(std::move(library), noPrompts);
+  return std::make_shared<MediaLibrary>(std::move(library), noPrompts, std::move(files));
 }
 
 std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts) {

@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include "ngn/accessibility.h"
 #include "ngn/desktop-view-props.h"
 #include "ngn/focus-order.h"
 #include "ngn/native-controls.h"
@@ -115,4 +116,39 @@ TEST_CASE("Tab and Shift-Tab move round the order and wrap") {
 
   Tree empty;
   CHECK_FALSE(ngn::nextInTabOrder(empty.tree, 1, std::nullopt, false, TabReach::All).has_value());
+}
+
+TEST_CASE("a rotor lists its views in tree order, skipping what is not drawn and what an element hides") {
+  using ngn::AxRotor;
+  auto heading = [](const char *label) {
+    return view(folly::dynamic::object("accessibilityRole", "header")("accessibilityLabel", label));
+  };
+  Tree t;
+  t.add(2, 1, "View", heading("Title"));
+  t.add(3, 1, "View", view(folly::dynamic::object("role", "link")("accessibilityLabel", "More")));
+  t.add(4, 1, "View", view(folly::dynamic::object("role", "main")));
+  t.add(5, 4, "View", heading("Inside main"));
+  // An element that hides its children: listed, and what is under it is not.
+  t.add(6, 1, "View", view(folly::dynamic::object("accessible", true)("role", "link")("accessibilityLabel", "Card")));
+  t.add(7, 6, "View", heading("In the card"));
+  // Not drawn: a covered screen, a view with display none, another container's root.
+  t.add(8, 1, "View", view(folly::dynamic::object()));
+  t.add(9, 8, "View", heading("Covered"));
+  t.add(10, 1, "View", view(folly::dynamic::object()));
+  t.add(11, 10, "View", heading("Display none"));
+  t.add(12, 1, "View", view(folly::dynamic::object()));
+  t.add(13, 12, "View", heading("Popover"));
+  t.add(14, 1, "View", heading("Last"));
+  t.tree.setCovered(8, true);
+  auto hidden = t.tree.find(10)->view;
+  hidden.layoutMetrics.displayType = DisplayType::None;
+  t.tree.update(hidden);
+  t.tree.addContainerRoot(12);
+
+  CHECK(ngn::rotorItems(t.tree, 1, AxRotor::Headings) == Tags{2, 5, 14});
+  CHECK(ngn::rotorItems(t.tree, 1, AxRotor::Links) == Tags{3, 6});
+  CHECK(ngn::rotorItems(t.tree, 1, AxRotor::Landmarks) == Tags{4});
+  // The popover's own rotor holds its own.
+  CHECK(ngn::rotorItems(t.tree, 12, AxRotor::Headings) == Tags{13});
+  CHECK(ngn::rotorItems(t.tree, 99, AxRotor::Headings).empty());
 }

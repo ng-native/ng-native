@@ -94,6 +94,10 @@ const stop = this.files.watch(this.files.paths.document!, (change) => this.reloa
 
 They reach what the app can: its own folders and the folders the user picked.
 
+On macOS the modules that read a file the app names (an image to edit or read text from, a font, a
+file to print or to save to the photo library, a request body's file) reach no further than
+`FileSystem` does, and the app's own assets: anything else is refused with an error naming the path.
+
 ## `paths`
 
 The folders an app writes to, as uris: `cache` and `document`, and the user's `home`, `desktop` and

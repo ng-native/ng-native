@@ -31,6 +31,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -98,6 +99,12 @@ class PickStore {
   std::vector<Pick> picks_;
 };
 
+// A path JavaScript named that is outside what the app may read (FileAccess::readFor).
+class FileRefused : public std::runtime_error {
+ public:
+  explicit FileRefused(const std::string &path);
+};
+
 class FileAccess {
  public:
   enum class Access { None, Read, ReadWrite };
@@ -111,6 +118,9 @@ class FileAccess {
     std::string home;
     std::string desktop;
     std::string downloads;
+    // The app bundle's Resources, where a packaged app's assets are: read by the modules that
+    // load assets (readFor), never reached by FileSystem.
+    std::string bundle;
   };
 
   // `declared` is `capabilities.paths`: [{path, access}], `~/` meaning the home folder.
@@ -149,6 +159,12 @@ class FileAccess {
   };
   // A Use for `path`; one that starts nothing outside picks.
   Use use(const std::string &path) const;
+  // The one check for a module that reads a file JavaScript names (ImageEditor, TextRecognition,
+  // Fonts, Printing, MediaLibrary.createAsset, an XMLHttpRequest body): it may read what accessTo
+  // lets FileSystem read, and the app bundle's assets. The Use keeps a pick of an earlier launch
+  // open; hold it until the read is done. Throws FileRefused for anything else, in the same words
+  // whether or not a file is there.
+  std::shared_ptr<Use> readFor(const std::string &path) const;
 
  private:
   struct Root {
@@ -162,6 +178,9 @@ class FileAccess {
   std::vector<Root> roots_;
   std::shared_ptr<PickStore> picks_;
 };
+
+// FileAccess::readFor through `access`, refusing every path when there is none.
+std::shared_ptr<FileAccess::Use> readableFile(const FileAccess *access, const std::string &path);
 
 // The OS's file events (FSEvents on macOS), for one path at a time.
 class FileWatcher {

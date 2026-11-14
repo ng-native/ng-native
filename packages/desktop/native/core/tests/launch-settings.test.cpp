@@ -83,6 +83,26 @@ TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the e
   }
 }
 
+TEST_CASE("The dev switches (input script, rotor and commit logs) work in a dev run and never in a packaged app") {
+  const Map env{{"NGN_INPUT_SCRIPT", "/tmp/clicks.txt"}, {"NGN_LOG_ROTORS", "1"}, {"NGN_LOG_COMMITS", "1"}};
+  auto dev = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})}));
+  CHECK(dev.inputScript == "/tmp/clicks.txt");
+  CHECK(dev.logRotors);
+  CHECK(dev.logCommits);
+  // Only "1" turns a log on, and nothing set leaves them all off.
+  auto other = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+      {.args = {"/tmp/b.js"}, .env = from({{"NGN_LOG_ROTORS", "yes"}, {"NGN_LOG_COMMITS", "0"}}), .plist = from({})}));
+  CHECK_FALSE(other.logRotors);
+  CHECK_FALSE(other.logCommits);
+  CHECK(other.inputScript.empty());
+
+  auto packaged = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+      {.args = {}, .env = from(env), .plist = from(kPackagedPlist), .resourcePath = "/Applications/Notes.app/Contents/Resources"}));
+  CHECK(packaged.inputScript.empty());
+  CHECK_FALSE(packaged.logRotors);
+  CHECK_FALSE(packaged.logCommits);
+}
+
 TEST_CASE("A packaged app's bundle file cannot name a path outside its Resources") {
   for (const char *file : {"../MacOS/evil.js", "/tmp/evil.js", ""}) {
     CAPTURE(file);

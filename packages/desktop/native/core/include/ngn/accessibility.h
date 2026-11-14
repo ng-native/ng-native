@@ -13,6 +13,8 @@
 
 namespace ngn {
 
+class ViewTree;
+
 enum class AxRole {
   Group,
   Button,
@@ -108,6 +110,11 @@ enum class AxRotor { Headings, Links, Landmarks };
 
 // The rotors a view is listed on: none for one that is no element.
 std::vector<AxRotor> rotorsOf(const AxInfo &info);
+
+// The views on rotor `kind` under `root` (a container's root), in tree order, as VoiceOver lists
+// them: a view not drawn (display: none, or a covered screen) is skipped with what it holds, as is
+// another container's root; one that hides its children is listed but not looked into.
+std::vector<facebook::react::Tag> rotorItems(const ViewTree &tree, facebook::react::Tag root, AxRotor kind);
 
 // The item a rotor moves to, of `count` in tree order, from `current` (the item VoiceOver is on, if
 // it is on one), forwards or back. Nothing past either end.

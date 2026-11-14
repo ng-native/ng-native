@@ -1,10 +1,12 @@
 #include "ngn/accessibility.h"
 #include "ngn/desktop-props.h"
+#include "ngn/view-tree.h"
 
 #include <react/renderer/components/text/ParagraphState.h>
 #include <react/renderer/components/view/accessibilityPropsConversions.h>
 #include <react/renderer/core/ConcreteState.h>
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -270,6 +272,38 @@ std::vector<AxRotor> rotorsOf(const AxInfo &info) {
     return {AxRotor::Landmarks};
   }
   return {};
+}
+
+namespace {
+
+void collectRotor(const ViewTree &tree, Tag tag, Tag root, AxRotor kind, std::vector<Tag> &out) {
+  const auto *node = tree.find(tag);
+  if (node == nullptr || tree.covered(tag) || (tag != root && tree.isContainerRoot(tag)) ||
+      node->view.layoutMetrics.displayType == DisplayType::None) {
+    return;
+  }
+  if (const auto *props = dynamic_cast<const ViewProps *>(node->view.props.get())) {
+    auto info = std::string_view(node->view.componentName) == "Paragraph" ? paragraphAccessibilityInfo(*props, paragraphText(node->view))
+                                                                          : accessibilityInfo(*props);
+    auto rotors = rotorsOf(info);
+    if (std::find(rotors.begin(), rotors.end(), kind) != rotors.end()) {
+      out.push_back(tag);
+    }
+    if (info.hidesChildren) {
+      return;
+    }
+  }
+  for (auto child : node->children) {
+    collectRotor(tree, child, root, kind, out);
+  }
+}
+
+} // namespace
+
+std::vector<Tag> rotorItems(const ViewTree &tree, Tag root, AxRotor kind) {
+  std::vector<Tag> out;
+  collectRotor(tree, root, root, kind, out);
+  return out;
 }
 
 std::optional<size_t> rotorStep(size_t count, std::optional<size_t> current, bool forward) {

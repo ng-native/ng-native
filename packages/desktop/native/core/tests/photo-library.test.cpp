@@ -1,7 +1,9 @@
+#include "helpers.h"
 #include "ngn/photo-library.h"
 
 #include <doctest/doctest.h>
 
+#include <filesystem>
 #include <optional>
 #include <vector>
 
@@ -105,7 +107,7 @@ TEST_CASE("NgNativeMediaLibrary reads nothing, and writes nothing, without acces
   auto library = std::make_shared<FakeLibrary>();
   library->read = Access::Denied;
   library->write = Access::Denied;
-  auto module = ngn::makeMediaLibraryModule(library, false);
+  auto module = ngn::makeMediaLibraryModule(library, false, ngn::testing::readsEverywhere());
   auto permission = ask(*module, "requestPermissionsAsync", dynamic::array(false));
   CHECK(permission.value->at("status") == dynamic("denied"));
   CHECK(permission.value->at("accessPrivileges") == dynamic("none"));
@@ -134,10 +136,10 @@ TEST_CASE("NgNativeMediaLibrary reads nothing, and writes nothing, without acces
 
 TEST_CASE("NgNativeMediaLibrary asks only what is undetermined, and never with no prompts") {
   auto library = std::make_shared<FakeLibrary>();
-  auto quiet = ngn::makeMediaLibraryModule(library, true);
+  auto quiet = ngn::makeMediaLibraryModule(library, true, ngn::testing::readsEverywhere());
   CHECK(ask(*quiet, "requestPermissionsAsync", dynamic::array(true)).value->at("status") == dynamic("undetermined"));
   CHECK(library->asked == 0);
-  auto module = ngn::makeMediaLibraryModule(library, false);
+  auto module = ngn::makeMediaLibraryModule(library, false, ngn::testing::readsEverywhere());
   auto granted = ask(*module, "requestPermissionsAsync", dynamic::array(true));
   CHECK(granted.value->at("granted") == dynamic(true));
   CHECK(library->asked == 1);
@@ -153,7 +155,7 @@ TEST_CASE("NgNativeMediaLibrary asks only what is undetermined, and never with n
 TEST_CASE("NgNativeMediaLibrary reads and writes with full access") {
   auto library = std::make_shared<FakeLibrary>();
   library->read = Access::Granted;
-  auto module = ngn::makeMediaLibraryModule(library, false);
+  auto module = ngn::makeMediaLibraryModule(library, false, ngn::testing::readsEverywhere());
   dynamic query = dynamic::object("filters", dynamic::array(dynamic::object("field", "mediaType")("op", "eq")("value", "image"),
                                                         dynamic::object("field", "mediaSubtypes")("op", "contains")("value", "screenshot")))(
       "sort", dynamic::array(dynamic::object("key", "creationTime")("ascending", false)))("limit", 30)("offset", 10)("album", "al1");
@@ -186,7 +188,7 @@ TEST_CASE("NgNativeMediaLibrary refuses a query on a field or operator the libra
   CHECK_THROWS(ngn::photoQueryOf(dynamic::object("sort", dynamic::array(dynamic::object("key", "mediaSubtypes")))));
   auto library = std::make_shared<FakeLibrary>();
   library->read = Access::Granted;
-  auto module = ngn::makeMediaLibraryModule(library, false);
+  auto module = ngn::makeMediaLibraryModule(library, false, ngn::testing::readsEverywhere());
   auto refused = ask(*module, "query", dynamic::array(dynamic::object("filters", dynamic::array(dynamic::object("field", "title")("op", "eq")))));
   CHECK(refused.failure);
 }
@@ -194,7 +196,7 @@ TEST_CASE("NgNativeMediaLibrary refuses a query on a field or operator the libra
 TEST_CASE("NgNativeMediaLibrary watches the library once it may read it, and stops with the module") {
   auto library = std::make_shared<FakeLibrary>();
   library->read = Access::Granted;
-  auto module = ngn::makeMediaLibraryModule(library, false);
+  auto module = ngn::makeMediaLibraryModule(library, false, ngn::testing::readsEverywhere());
   std::vector<dynamic> events;
   module->setEmitter([&](const std::string &event, dynamic body) {
     CHECK(event == "ngNativeMediaLibrary");
@@ -226,4 +228,25 @@ TEST_CASE("NgNativeImagePicker picks from the library without a permission, and 
   // With no prompts the picker is never shown.
   auto quiet = ngn::makeImagePickerModule(library, true);
   CHECK(ask(*quiet, "launchImageLibraryAsync", dynamic::array(dynamic::object())).value->at("canceled") == dynamic(true));
+}
+
+TEST_CASE("NgNativeMediaLibrary saves only files FileSystem could read into Photos") {
+  auto library = std::make_shared<FakeLibrary>();
+  library->read = Access::Granted;
+  auto root = std::filesystem::temp_directory_path() / ("ngn-photos-" + std::to_string(rand()));
+  std::filesystem::create_directories(root / "cache");
+  std::filesystem::create_directories(root / "home/Desktop");
+  ngn::FileAccess::Folders folders{.cache = (root / "cache").string(), .home = (root / "home").string()};
+  auto module = ngn::makeMediaLibraryModule(library, false, std::make_shared<ngn::FileAccess>(folders, dynamic::array()));
+  auto outside = (root / "home/Desktop/Screenshot.png").string();
+  auto refused = ask(*module, "createAsset", dynamic::array(ngn::fileUri(outside), nullptr));
+  REQUIRE(refused.failure);
+  CHECK(refused.failure->find("MediaLibrary: " + outside + " is outside the files this app may read") == 0);
+  CHECK(library->writes.empty());
+  // A percent-encoded uri of the app's own file is saved as its path.
+  auto own = folders.cache + "/edited photo.jpg";
+  CHECK(ask(*module, "createAsset", dynamic::array(ngn::fileUri(own), nullptr)).value == dynamic("new-1"));
+  CHECK(library->writes.back() == "create " + own);
+  CHECK(ask(*module, "createAsset", dynamic::array("ph://ABC", nullptr)).failure);
+  std::filesystem::remove_all(root);
 }

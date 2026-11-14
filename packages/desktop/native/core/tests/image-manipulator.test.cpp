@@ -1,4 +1,5 @@
 #include "fake-network.h"
+#include "helpers.h"
 #include "ngn/bytes.h"
 #include "ngn/image-manipulator.h"
 
@@ -150,7 +151,7 @@ TEST_CASE("planImageEdits scales an image larger than the load options down firs
 TEST_CASE("NgNativeImageManipulator sizes the edits from the file it reads, without rendering") {
   auto codec = std::make_shared<FakeCodec>();
   auto http = std::make_shared<ngn::testing::FakeHttp>();
-  auto module = ngn::makeImageManipulatorModule(codec, http, "/unused");
+  auto module = ngn::makeImageManipulatorModule(codec, http, "/unused", ngn::testing::readsEverywhere());
   auto answer = call(
       *module, "renderAsync",
       dynamic::array("/photos/cat one.png", dynamic::array(dynamic::object("rotate", 90)), nullptr));
@@ -167,7 +168,7 @@ TEST_CASE("NgNativeImageManipulator saves the edited image as a new file in its 
   Folder folder;
   auto codec = std::make_shared<FakeCodec>();
   auto http = std::make_shared<ngn::testing::FakeHttp>();
-  auto module = ngn::makeImageManipulatorModule(codec, http, (folder.path / "ImageManipulator").string());
+  auto module = ngn::makeImageManipulatorModule(codec, http, (folder.path / "ImageManipulator").string(), ngn::testing::readsEverywhere());
   auto actions = dynamic::array(dynamic::object("flip", "vertical"), dynamic::object("resize", dynamic::object("width", 20)));
   auto jpeg = call(*module, "saveAsync", dynamic::array("http://localhost:8081/assets/cat.png", actions, nullptr, nullptr));
   CHECK(http->sent[0]->request.url == "http://localhost:8081/assets/cat.png");
@@ -200,7 +201,7 @@ TEST_CASE("NgNativeImageManipulator refuses WebP where it cannot write it, befor
   Folder folder;
   auto codec = std::make_shared<FakeCodec>();
   auto http = std::make_shared<ngn::testing::FakeHttp>();
-  auto module = ngn::makeImageManipulatorModule(codec, http, folder.path.string());
+  auto module = ngn::makeImageManipulatorModule(codec, http, folder.path.string(), ngn::testing::readsEverywhere());
   auto webp = call(*module, "saveAsync", dynamic::array("/a.png", dynamic::array(), nullptr, dynamic::object("format", "webp")));
   REQUIRE(webp.error);
   CHECK(*webp.error == "ImageManipulator: this Mac cannot write WebP images; save as jpeg or png");
@@ -217,7 +218,7 @@ TEST_CASE("NgNativeImageManipulator rejects a source it cannot read, an action t
   Folder folder;
   auto codec = std::make_shared<FakeCodec>();
   auto http = std::make_shared<ngn::testing::FakeHttp>();
-  auto module = ngn::makeImageManipulatorModule(codec, http, folder.path.string());
+  auto module = ngn::makeImageManipulatorModule(codec, http, folder.path.string(), ngn::testing::readsEverywhere());
   auto scheme = call(*module, "renderAsync", dynamic::array("ph://ABC", dynamic::array(), nullptr));
   CHECK(*scheme.error == "ImageManipulator: Could not load the image: ph://ABC is not a file, data or http(s) uri");
   CHECK(http->sent.empty());
@@ -252,8 +253,49 @@ TEST_CASE("NgNativeImageManipulator rejects a source it cannot read, an action t
       throw std::runtime_error("Cannot create image data for given image format");
     }
   };
-  auto failing = ngn::makeImageManipulatorModule(std::make_shared<FailingCodec>(), http, folder.path.string());
+  auto failing = ngn::makeImageManipulatorModule(std::make_shared<FailingCodec>(), http, folder.path.string(), ngn::testing::readsEverywhere());
   auto failed = call(*failing, "saveAsync", dynamic::array("/a.png", dynamic::array(), nullptr, nullptr));
   serve(*http, 4, "x");
   CHECK(*failed.error == "ImageManipulator: Cannot create image data for given image format");
+}
+
+TEST_CASE("NgNativeImageManipulator reads only files FileSystem could, so its copies in Caches widen nothing") {
+  Folder folder;
+  ngn::FileAccess::Folders folders{
+      .cache = (folder.path / "cache").string(),
+      .appData = (folder.path / "data").string(),
+      .home = (folder.path / "home").string(),
+      .bundle = (folder.path / "App.app/Contents/Resources").string(),
+  };
+  for (const auto &made : {folder.path / "cache", folder.path / "data", folder.path / "home/Desktop"}) {
+    std::filesystem::create_directories(made);
+  }
+  std::ofstream(folder.path / "home/Desktop/Screenshot.png") << "image:4x4";
+  auto codec = std::make_shared<FakeCodec>();
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  auto output = folder.path / "cache/ImageManipulator";
+  auto module = ngn::makeImageManipulatorModule(
+      codec, http, output.string(), std::make_shared<ngn::FileAccess>(folders, dynamic::array()));
+
+  // A file outside the app's folders: refused before anything is read or written.
+  auto shot = ngn::fileUri((folder.path / "home/Desktop/Screenshot.png").string());
+  auto refused = call(*module, "saveAsync", dynamic::array(shot, dynamic::array(), nullptr, nullptr));
+  REQUIRE(refused.error);
+  CHECK(refused.error->find("ImageManipulator: Could not load the image: ") == 0);
+  CHECK(refused.error->find("is outside the files this app may read") != std::string::npos);
+  CHECK(call(*module, "renderAsync", dynamic::array(shot, dynamic::array(), nullptr)).error);
+  CHECK(http->sent.empty());
+  CHECK(codec->rendered.empty());
+  CHECK_FALSE(std::filesystem::exists(output));
+
+  // The app's own files, its bundle's assets and the dev server's are read.
+  call(*module, "renderAsync", dynamic::array(ngn::fileUri(folders.cache + "/edited.png"), dynamic::array(), nullptr));
+  call(*module, "renderAsync", dynamic::array(folders.bundle + "/assets/logo.png", dynamic::array(), nullptr));
+  call(*module, "renderAsync", dynamic::array("http://localhost:8081/assets/logo.png", dynamic::array(), nullptr));
+  CHECK(http->sent.size() == 3);
+
+  // With no file access at all, every file is refused.
+  auto none = ngn::makeImageManipulatorModule(codec, http, output.string(), nullptr);
+  CHECK(call(*none, "renderAsync", dynamic::array(folders.cache + "/edited.png", dynamic::array(), nullptr)).error);
+  CHECK(http->sent.size() == 3);
 }

@@ -223,8 +223,10 @@ When the app has them installed, the host compiles in the Fabric components of
   `postMessage` dispatched in the page as a `MessageEvent`, `injectJavaScript`, back, forward,
   reload, stop and `loadUrl`. As on iOS each navigation waits for
   `RNCWebViewModule.shouldStartLoadWithLockIdentifier`. The view also takes `originWhitelist`: a
-  page navigation to an origin outside it is not made and the url opens in its own app, as the
-  library's JavaScript does; `about:` and `data:` pages always pass. `incognito` is read when the
+  page navigation to an origin outside it is not made, and the url opens in its own app only when
+  the user clicked a link or submitted a form to it and Linking would open it (not `file:`,
+  `javascript:`, `data:`, `vbscript:` or `blob:`); any other is cancelled, so a page's script
+  cannot open an app or a share on its own. `about:` and `data:` pages always pass. `incognito` is read when the
   view is made, and `clearHistory` and `clearFormData` do nothing, as WebKit has no way to.
 
 ## `@expo/ui`
@@ -456,6 +458,13 @@ not `~/Documents`. A call reaches the app's own folders, the files and folders t
 saved to in a panel, and the paths the plugin options' `capabilities.paths` declare, read-only or
 read-write, after symbolic links are followed. `watch` reports changes from FSEvents.
 
+The same rules bound every module that reads a file JavaScript names: `ImageEditor`,
+`TextRecognition`, `Fonts`, `Printing`, `MediaLibrary`'s `createAsset` and an `XMLHttpRequest` or
+`fetch` body's `{uri}` (a form part's too) read only what `FileSystem` could, and a packaged app's
+own assets in its bundle. Assets from the dev server come over http and are read as before.
+Anything else is refused with an error naming the path, in the same words whether or not a file is
+there, so `ImageEditor`'s copies in the caches never hold an image `FileSystem` could not read.
+
 A pick stays reachable in later launches: the host keeps a security-scoped bookmark for each in the
 app's user defaults (where `FileSystem` cannot write), finds a picked file or folder again where it
 has moved, forgets one that is gone, and opens the sandbox to a pick only for the length of each
@@ -618,7 +627,8 @@ needs `NGN_SIGN_IDENTITY` there, since it loads only into an app signed with a T
 `NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
 ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.
 `NGN_LOG_ROTORS=1` logs each VoiceOver rotor's items in the first window a second after its first
-frame, for checking them without a screen reader.
+frame, for checking them without a screen reader. Both, and `NGN_INPUT_SCRIPT`, work only in a dev
+run: a packaged app ignores them, as it ignores the rest of its environment.
 
 The host reads these `Info.plist` keys when it is opened with no arguments:
 

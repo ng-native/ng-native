@@ -68,6 +68,12 @@ struct LaunchSettings {
   // No system prompt is ever shown (NGN_NO_PROMPTS=1, or a test launch's fake system UI): a
   // permission not decided reads as denied, and a sign-in or Touch ID as cancelled.
   bool noPrompts{false};
+  // A dev run's switches, never a packaged app's: NGN_INPUT_SCRIPT, the input script played into
+  // the first window (input-script.h); NGN_LOG_ROTORS=1, the window's rotor items logged a second
+  // after the first frame; NGN_LOG_COMMITS=1, each commit's time logged.
+  std::string inputScript;
+  bool logRotors{false};
+  bool logCommits{false};
 
   // A setting from the Info.plist key, or in a dev run from the environment variable when the
   // Info.plist has none. Empty when neither has it.

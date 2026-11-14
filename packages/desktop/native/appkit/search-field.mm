@@ -195,7 +195,7 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
   NSString *text = string(p.text);
   NSText *editor = _field.currentEditor;
   BOOL composing = [editor isKindOfClass:NSTextView.class] && [(NSTextView *)editor hasMarkedText];
-  if (p.mostRecentEventCount >= _eventCount && !composing && ![_field.stringValue isEqualToString:text]) {
+  if (ngn::controlledTextIsCurrent(p.mostRecentEventCount, _eventCount, composing) && ![_field.stringValue isEqualToString:text]) {
     _field.stringValue = text;
   }
   [self takeCancelButton];

@@ -1,6 +1,10 @@
 // Builders shared by the core tests.
 #pragma once
 
+#include "ngn/file-system.h"
+
+#include <folly/dynamic.h>
+
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/mounting/ShadowView.h>
 
@@ -33,6 +37,13 @@ inline std::shared_ptr<const facebook::react::ViewProps> viewProps(
     props->events[facebook::react::ViewEvents::Offset::PointerLeave] = true;
   }
   return props;
+}
+
+// File access that lets a module read any path (capabilities.paths declaring `/`), for the tests
+// of what a module does with a file rather than whether it may read it.
+inline std::shared_ptr<ngn::FileAccess> readsEverywhere() {
+  return std::make_shared<ngn::FileAccess>(
+      ngn::FileAccess::Folders{}, folly::dynamic::array(folly::dynamic::object("path", "/")("access", "read")));
 }
 
 } // namespace ngn::testing

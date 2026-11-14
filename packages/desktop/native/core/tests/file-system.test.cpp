@@ -462,6 +462,77 @@ TEST_CASE("picks are kept across launches through their bookmarks, and reachable
   CHECK(bookmarks->opened() == 0);
 }
 
+TEST_CASE("readFor lets a module read a file JavaScript names where FileSystem could, and the app bundle's assets") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  fs::create_directories(dir.path / "App.app/Contents/Resources/assets");
+  folders.bundle = (dir.path / "App.app/Contents/Resources").string();
+  write(dir.path / "home/Desktop/shot.png", "png");
+  write(dir.path / "home/Downloads/kept.png", "png");
+  write(dir.path / "outside/picked.png", "png");
+  ngn::FileAccess access(folders, dynamic::array(dynamic::object("path", "~/Downloads")("access", "read")));
+
+  // The app's own folders, a declared path, a pick and the bundle's assets.
+  CHECK(access.readFor(folders.cache + "/ImageManipulator/a.png") != nullptr);
+  CHECK(access.readFor(folders.temp + "/b.png") != nullptr);
+  CHECK(access.readFor((dir.path / "home/Downloads/kept.png").string()) != nullptr);
+  CHECK(access.readFor(folders.bundle + "/assets/logo.png") != nullptr);
+  CHECK_THROWS_AS(access.readFor((dir.path / "outside/picked.png").string()), ngn::FileRefused);
+  access.allowPicked((dir.path / "outside/picked.png").string());
+  CHECK(access.readFor((dir.path / "outside/picked.png").string()) != nullptr);
+
+  // The bundle is for assets: FileSystem itself still cannot reach it.
+  CHECK(access.accessTo(folders.bundle + "/assets/logo.png") == Access::None);
+
+  // Anything else is refused, with the same words whether or not a file is there.
+  std::string there;
+  std::string missing;
+  try {
+    access.readFor((dir.path / "home/Desktop/shot.png").string());
+  } catch (const ngn::FileRefused &refused) {
+    there = refused.what();
+  }
+  try {
+    access.readFor((dir.path / "home/Desktop/none.png").string());
+  } catch (const ngn::FileRefused &refused) {
+    missing = refused.what();
+  }
+  CHECK(there.find("outside the files this app may read") != std::string::npos);
+  CHECK(there.find("shot.png") != std::string::npos);
+  CHECK(missing.find("outside the files this app may read") != std::string::npos);
+  CHECK(missing.substr(missing.find(" is outside")) == there.substr(there.find(" is outside")));
+  // A link out of the app's folders, a way up and a relative path are refused too.
+  fs::create_directory_symlink(dir.path / "home/Desktop", dir.path / "data/desk");
+  CHECK_THROWS_AS(access.readFor((dir.path / "data/desk/shot.png").string()), ngn::FileRefused);
+  CHECK_THROWS_AS(access.readFor((dir.path / "data/../home/Desktop/shot.png").string()), ngn::FileRefused);
+  CHECK_THROWS_AS(access.readFor((dir.path / "App.app/Contents/Resources/../../../home/Desktop/shot.png").string()), ngn::FileRefused);
+  CHECK_THROWS_AS(access.readFor("relative.png"), ngn::FileRefused);
+}
+
+TEST_CASE("readFor opens a pick of an earlier launch for as long as the module reads it") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto picked = (dir.path / "outside").string();
+  write(dir.path / "outside/photo.png", "png");
+  Saved saved;
+  auto bookmarks = std::make_shared<FakeBookmarks>();
+  {
+    auto first = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+    first->keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+    first->allowPicked(picked);
+  }
+  auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  access->keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+  bookmarks->log.clear();
+  {
+    auto use = access->readFor(picked + "/photo.png");
+    CHECK(use->started());
+    CHECK(bookmarks->log == std::vector<std::string>{"start bm:" + picked});
+  }
+  CHECK(bookmarks->log == std::vector<std::string>{"start bm:" + picked, "stop bm:" + picked});
+  CHECK(bookmarks->opened() == 0);
+}
+
 TEST_CASE("a pick that moved is found where it is now, and one that is gone is forgotten") {
   TempDir dir;
   auto folders = foldersIn(dir.path);

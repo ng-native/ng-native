@@ -83,12 +83,13 @@ PageSetup pageSetupOf(const folly::dynamic &options) {
   return page;
 }
 
-std::shared_ptr<NativeModule> makePrintModule(std::shared_ptr<PrintSystem> system, std::shared_ptr<Http> http, std::string folder, bool noPrompts) {
+std::shared_ptr<NativeModule> makePrintModule(
+    std::shared_ptr<PrintSystem> system, std::shared_ptr<Http> http, std::string folder, std::shared_ptr<FileAccess> files, bool noPrompts) {
   struct Print : NativeModule {
-    Print(std::shared_ptr<PrintSystem> system, std::shared_ptr<Http> http, std::string folder, bool noPrompts)
+    Print(std::shared_ptr<PrintSystem> system, std::shared_ptr<Http> http, std::string folder, std::shared_ptr<FileAccess> files, bool noPrompts)
         : NativeModule("NgNativePrint") {
       auto printing = std::make_shared<std::atomic<bool>>(false);
-      promise("printAsync", [system, http, printing, noPrompts](const folly::dynamic &args, JsPromise promise) {
+      promise("printAsync", [system, http, printing, files, noPrompts](const folly::dynamic &args, JsPromise promise) {
         const folly::dynamic options = args.empty() ? folly::dynamic(nullptr) : args[0];
         auto html = text(options, "html");
         auto uri = text(options, "uri");
@@ -100,6 +101,15 @@ std::shared_ptr<NativeModule> makePrintModule(std::shared_ptr<PrintSystem> syste
         if (html.empty() && !(url = readableUrl(uri))) {
           promise.reject("Print: " + uri + " is not a file, data or http(s) uri");
           return;
+        }
+        std::shared_ptr<FileAccess::Use> use;
+        if (auto path = html.empty() ? pathOfUri(uri) : std::nullopt) {
+          try {
+            use = readableFile(files.get(), *path);
+          } catch (const FileRefused &refused) {
+            promise.reject(std::string("Print: ") + refused.what());
+            return;
+          }
         }
         if (noPrompts) {
           promise.resolve(nullptr);
@@ -125,7 +135,7 @@ std::shared_ptr<NativeModule> makePrintModule(std::shared_ptr<PrintSystem> syste
           return;
         }
         auto label = uri.rfind("data:", 0) == 0 ? std::string("the data uri") : uri;
-        fetchBytes(http, *url, [show, printing, promise, label](std::string body, const std::string &error) {
+        fetchBytes(http, *url, [show, printing, promise, label, use](std::string body, const std::string &error) {
           if (!error.empty()) {
             printing->store(false);
             promise.reject("Print: could not read " + label + ": " + error);
@@ -164,7 +174,7 @@ std::shared_ptr<NativeModule> makePrintModule(std::shared_ptr<PrintSystem> syste
       });
     }
   };
-  return std::make_shared<Print>(std::move(system), std::move(http), std::move(folder), noPrompts);
+  return std::make_shared<Print>(std::move(system), std::move(http), std::move(folder), std::move(files), noPrompts);
 }
 
 } // namespace ngn

@@ -115,6 +115,8 @@ struct Host {
   // Ticks the layout animations while they run, at the display's rate.
   NSTimer *animationTimer;
   bool firstFrameLogged = false;
+  // What the host runs and how (launch-settings.h), set once at launch.
+  const ngn::LaunchSettings *launch = nullptr;
   // The app window is ordered front once, when its safe areas settle (showAppWindowWhenSettled).
   bool appWindowShown = false;
   // The Expo Updates client, for a bundle on disk (updates.h).
@@ -184,16 +186,16 @@ void logFirstFrame(NSWindow *window) {
   [CATransaction flush];
   fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", msSinceLaunch());
   // A dev run's input script (input-script.h), played into the first window once it shows.
-  if (const char *path = getenv("NGN_INPUT_SCRIPT"); path != nullptr && gHost.runtime && gHost.runtime->devServer()) {
-    NSString *text = [NSString stringWithContentsOfFile:@(path) encoding:NSUTF8StringEncoding error:nil];
+  if (const auto &path = gHost.launch->inputScript; !path.empty() && gHost.runtime && gHost.runtime->devServer()) {
+    NSString *text = [NSString stringWithContentsOfFile:@(path.c_str()) encoding:NSUTF8StringEncoding error:nil];
     auto script = ngn::parseInputScript(text ? std::string(text.UTF8String) : std::string());
     if (!text || script.error) {
-      fprintf(stderr, "[ngn] input script %s: %s\n", path, text ? script.error->c_str() : "cannot be read");
+      fprintf(stderr, "[ngn] input script %s: %s\n", path.c_str(), text ? script.error->c_str() : "cannot be read");
     } else {
       ngn::appkit::replayInputScript(window, std::move(script));
     }
   }
-  if (const char *log = getenv("NGN_LOG_ROTORS"); log != nullptr && std::string(log) == "1") {
+  if (gHost.launch->logRotors) {
     // A second after the first frame, when the app has settled.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
       if (auto *surface = (NGNSurfaceView *)window.contentView; [surface isKindOfClass:NGNSurfaceView.class]) {
@@ -593,6 +595,7 @@ int main(int argc, const char *argv[]) {
       return 2;
     }
     static const auto settings = std::get<ngn::LaunchSettings>(launch);
+    gHost.launch = &settings;
     std::string bundle = settings.bundle;
     std::string module = settings.module;
     NSString *title = [NSString stringWithUTF8String:settings.title.c_str()];
@@ -628,14 +631,12 @@ int main(int argc, const char *argv[]) {
     // A worklet gesture's events go to Reanimated's handlers on the UI runtime, and a worklet's
     // state manager comes back to the recognisers, while Reanimated is running.
     gestures->onWorkletEvent = [](const std::string &name, Tag view, const folly::dynamic &body) {
-      if (auto event = ngn::workletHost().reanimatedEvent) {
-        event(name, view, body);
-      }
+      ngn::workletHost().reanimatedEvent.call(name, view, body);
     };
     ngn::workletHost().setGestureState = [](int handlerTag, int state) { gestures->setState(handlerTag, state); };
     // Each commit's time, for the performance budget (pnpm bench:macos), when asked for: every
     // frame of an animation commits, which would flood a dev run's terminal.
-    if (const char *log = getenv("NGN_LOG_COMMITS"); log != nullptr && std::string(log) == "1") {
+    if (settings.logCommits) {
       gHost.mounting->onCommit = [](SurfaceId, double ms) { fprintf(stderr, "[ngn] commit %.1f ms\n", ms); };
     }
     gHost.backend->onMount = [](SurfaceId surfaceId) {
@@ -740,6 +741,28 @@ int main(int argc, const char *argv[]) {
     }
     ngn::appkit::watchApp(gHost.state, system);
     ngn::NetworkClients network{ngn::appkit::makeHttp(), ngn::appkit::makeWebSockets()};
+    // The capabilities the app declares, for the process.
+    static auto processes = ngn::appkit::processesSetup(capabilities);
+    static auto caches = ngn::appkit::cacheDirectory(appId);
+    // The one set of rules for every path JavaScript names (FileSystem, a request body, ImageEditor
+    // and the other modules that read a file): the app's folders, the user's picks, the declared
+    // paths (none in a Mac App Store build, whose sandbox reaches only picks) and, for assets, a
+    // packaged app's bundle.
+    static auto fileAccess = [&] {
+      auto folders = ngn::appkit::fileFolders(system->appDataDirectory(), caches);
+      if (settings.packaged && NSBundle.mainBundle.resourcePath != nil) {
+        folders.bundle = NSBundle.mainBundle.resourcePath.UTF8String;
+      }
+      auto access = std::make_shared<ngn::FileAccess>(
+          folders, processes.sandboxed ? folly::dynamic::array() : processes.capabilities.paths);
+      // Picks persist across launches through bookmarks, one store per app; a test launch starts
+      // with none and keeps none.
+      if (!settings.test) {
+        access->keepPicks(std::make_shared<ngn::PickStore>(
+            ngn::appkit::pickPersistence("NGNPickedPaths." + appId), ngn::appkit::makeBookmarks()));
+      }
+      return access;
+    }();
     // Kept for the process: ReactHost asks it for modules on every reload.
     static auto modules = std::make_shared<ngn::ModuleRegistry>();
     ngn::addCoreModules(
@@ -748,6 +771,7 @@ int main(int argc, const char *argv[]) {
          .state = gHost.state,
          .http = network.http,
          .webSockets = network.webSockets,
+         .files = fileAccess,
          .reactNativeVersion = NGN_REACT_NATIVE_VERSION,
          .bundle = [] {
            std::lock_guard lock(gBundleMutex);
@@ -816,7 +840,6 @@ int main(int argc, const char *argv[]) {
       // One launcher and one declaration for the process: a reload gets a new module over them.
       static auto launcher = ngn::makePosixLauncher();
       gHost.launcher = launcher;
-      static auto processes = ngn::appkit::processesSetup(capabilities);
       static auto opener = ngn::appkit::makeShellOpener();
       ngn::addModule(*modules, "NgNativeProcesses", [] { return ngn::makeProcessesModule(launcher, processes); });
       ngn::addModule(*modules, "NgNativeShell", [] { return ngn::makeShellModule(opener); });
@@ -849,21 +872,6 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
       static auto dialogs = settings.test && settings.test->fakeSystemUI ? ngn::makeDismissedFileDialogs()
                                                                           : ngn::appkit::makeFileDialogs();
-      static auto caches = ngn::appkit::cacheDirectory(appId);
-      // What the app may read and write: its folders, the user's picks, and the declared paths
-      // (none in a Mac App Store build, whose sandbox reaches only picks).
-      static auto fileAccess = [&] {
-        auto access = std::make_shared<ngn::FileAccess>(
-            ngn::appkit::fileFolders(system->appDataDirectory(), caches),
-            processes.sandboxed ? folly::dynamic::array() : processes.capabilities.paths);
-        // Picks persist across launches through bookmarks, one store per app; a test launch starts
-        // with none and keeps none.
-        if (!settings.test) {
-          access->keepPicks(std::make_shared<ngn::PickStore>(
-              ngn::appkit::pickPersistence("NGNPickedPaths." + appId), ngn::appkit::makeBookmarks()));
-        }
-        return access;
-      }();
       static auto fileWatcher = ngn::appkit::makeFileWatcher();
       ngn::addModule(*modules, "NgNativeFileSystem", [] { return ngn::makeFileSystemModule(fileAccess, fileWatcher); });
       ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches, fileAccess); });
@@ -891,12 +899,12 @@ int main(int argc, const char *argv[]) {
       static auto fontHttp = network.http;
       ngn::useFontLibrary(fontLibrary);
       ngn::addModule(*modules, "NgNativeFont", [] {
-        return ngn::makeFontModule(fontRegistrar, fontLibrary, fontHttp, caches + "/fonts");
+        return ngn::makeFontModule(fontRegistrar, fontLibrary, fontHttp, caches + "/fonts", fileAccess);
       });
       static auto authSession = ngn::appkit::makeAuthSession();
       ngn::addModule(*modules, "NgNativeWebBrowser", [] { return ngn::makeWebBrowserModule(expoSystem, authSession, noPrompts); });
       static auto textReader = ngn::appkit::makeTextReader();
-      ngn::addModule(*modules, "NgNativeTextRecognition", [] { return ngn::makeTextRecognitionModule(textReader); });
+      ngn::addModule(*modules, "NgNativeTextRecognition", [] { return ngn::makeTextRecognitionModule(textReader, fileAccess); });
       static auto calendars = ngn::appkit::makeCalendarStore();
       ngn::addModule(*modules, "NgNativeCalendar", [] { return ngn::makeCalendarModule(calendars, noPrompts); });
       // Players and recorders end with the runtime: a reload stops what the app played.
@@ -910,7 +918,7 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeScreenCapture", [] { return ngn::makeScreenCaptureModule(ngn::appkit::captureShield()); });
       ngn::addModule(*modules, "NgNativeSplashScreen", [] { return ngn::makeSplashScreenModule(gSplash); });
       static auto photos = ngn::appkit::makePhotoLibrary(caches);
-      ngn::addModule(*modules, "NgNativeMediaLibrary", [] { return ngn::makeMediaLibraryModule(photos, noPrompts); });
+      ngn::addModule(*modules, "NgNativeMediaLibrary", [] { return ngn::makeMediaLibraryModule(photos, noPrompts, fileAccess); });
       ngn::addModule(*modules, "NgNativeImagePicker", [] { return ngn::makeImagePickerModule(photos, noPrompts); });
       static auto tracking = ngn::appkit::makeTrackingAuthority();
       ngn::addModule(*modules, "NgNativeTrackingTransparency", [] { return ngn::makeTrackingModule(tracking, noPrompts); });
@@ -924,7 +932,7 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeSharing", [] { return ngn::makeSharingModule(sharePicker, noPrompts); });
       static auto imageCodec = ngn::appkit::makeImageCodec();
       ngn::addModule(*modules, "NgNativeImageManipulator", [] {
-        return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator");
+        return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator", fileAccess);
       });
       // <expo-image>'s bytes: 64 MB of them in memory, the rest on disk in the caches.
       [NGNExpoImageView useHttp:imageHttp cache:std::make_shared<ngn::ImageCache>(caches + "/ExpoImage", 64 << 20)];
@@ -939,7 +947,7 @@ int main(int argc, const char *argv[]) {
       static auto appleId = ngn::appkit::makeAppleIdProvider();
       ngn::addModule(*modules, "NgNativeAppleAuthentication", [] { return ngn::makeAppleAuthenticationModule(appleId, noPrompts); });
       static auto printSystem = ngn::appkit::makePrintSystem();
-      ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", noPrompts); });
+      ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", fileAccess, noPrompts); });
       // react-native-webview's navigation answers; harmless in a host built without the library.
       ngn::addModule(*modules, "RNCWebViewModule", [] { return ngn::makeWebViewModule(ngn::sharedNavigationLocks()); });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
@@ -1029,6 +1037,16 @@ int main(int argc, const char *argv[]) {
         }
       };
     }
+    // VoiceOver's rotors list what the core's walk of the tree finds (accessibility.h).
+    NGNSurfaceView.rotorViews = [](Tag root, ngn::AxRotor kind) -> NSArray<NSView *> * {
+      NSMutableArray<NSView *> *views = [NSMutableArray array];
+      for (auto tag : ngn::rotorItems(gHost.mounting->tree(), root, kind)) {
+        if (NSView *view = gHost.backend->view(tag)) {
+          [views addObject:view];
+        }
+      }
+      return views;
+    };
     NGNSurfaceView.contextMenuShower = [](NGNSurfaceView *view, NSEvent *event, const ngn::PointerInput &input) {
       auto target = gHost.input->contextMenuAt(input);
       if (!target) {

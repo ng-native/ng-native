@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ngn/bytes.h"
+#include "ngn/file-system.h"
 #include "ngn/host-state.h"
 #include "ngn/key-value-store.h"
 #include "ngn/module-registry.h"
@@ -26,6 +27,8 @@ struct CoreModuleServices {
   std::shared_ptr<WebSockets> webSockets;
   // Made by addCoreModules when not given: one for every runtime, shared by its modules.
   std::shared_ptr<BlobStore> blobs;
+  // What a request body's `{uri}` may read (FileAccess::readFor); without it, no file is read.
+  std::shared_ptr<FileAccess> files;
   // AsyncStorage's files. Made by addCoreModules when not given, in the app's data directory.
   std::shared_ptr<KeyValueStore> storage;
   // "0.88.0", the React Native the host was built from, which its JavaScript checks.
@@ -81,13 +84,14 @@ std::shared_ptr<NativeModule> makeAsyncStorage(const CoreModuleServices &service
 std::shared_ptr<NativeModule> makeSourceCode(const CoreModuleServices &services);
 
 // The body of a request JavaScript sent (Networking.sendRequest's `data`), and the content type
-// it implies when the request has none.
+// it implies when the request has none. A file (`{uri}`, or a form part's) is read only where
+// `files` lets it, and the request fails otherwise.
 struct RequestBody {
   std::string bytes;
   std::string contentType;
   std::string error;
 };
-RequestBody requestBody(const folly::dynamic &data, const BlobStore &blobs, const std::string &boundary);
+RequestBody requestBody(const folly::dynamic &data, const BlobStore &blobs, const std::string &boundary, const FileAccess *files);
 
 // The alert JavaScript asked for (AlertManager.alertWithArgs) as the backend shows it, and the
 // button keys in the request's order, so a pressed index maps back to the key JavaScript gave.

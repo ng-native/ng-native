@@ -3,13 +3,15 @@
 //
 // - printAsync({html | uri, orientation}): shows the print panel for the HTML, or for the PDF or
 //   image the uri names (a `file:` uri, a path, a `data:` uri or an `http(s):` url, read through
-//   the backend's HTTP client). Resolves once the panel closes, printed or cancelled, as the
+//   the backend's HTTP client; a file only where `files` lets it, FileAccess::readFor). Resolves once the panel closes, printed or cancelled, as the
 //   service promises. macOS has no printer picker, so `printerUrl` is ignored and the panel shows.
 //   With `noPrompts` (NGN_NO_PROMPTS=1) nothing is shown and it resolves. One at a time.
 // - printToFileAsync({html, width, height, margins, orientation, base64}): {uri, numberOfPages,
 //   base64?}, the HTML laid out on pages of that size (US Letter, 612 by 792 points, by default)
 //   and written to a new PDF in `<caches>/Print`, as expo's iOS module sizes them.
 #pragma once
+
+#include "ngn/file-system.h"
 
 #include "ngn/native-module.h"
 #include "ngn/network.h"
@@ -54,6 +56,7 @@ class PrintSystem {
 };
 
 // `folder` is where PDFs go: `<caches>/Print`.
-std::shared_ptr<NativeModule> makePrintModule(std::shared_ptr<PrintSystem> system, std::shared_ptr<Http> http, std::string folder, bool noPrompts = false);
+std::shared_ptr<NativeModule> makePrintModule(
+    std::shared_ptr<PrintSystem> system, std::shared_ptr<Http> http, std::string folder, std::shared_ptr<FileAccess> files, bool noPrompts = false);
 
 } // namespace ngn

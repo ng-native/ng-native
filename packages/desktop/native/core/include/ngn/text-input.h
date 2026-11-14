@@ -90,4 +90,36 @@ std::size_t insertionThatFits(
     std::size_t inserted,
     std::optional<std::size_t> maxLength);
 
+// What a backend's text system knows that the core does not, over UTF-16 as the toolkits keep text:
+// capitals in the user's locale, and where a character (a composed character sequence: a surrogate
+// pair, a letter with its combining marks) starts.
+class TextCharacters {
+ public:
+  virtual ~TextCharacters() = default;
+  virtual std::u16string uppercase(const std::u16string &text) const = 0;
+  // Where the character holding the unit at `index` starts, and how many units it has.
+  virtual std::pair<std::size_t, std::size_t> characterAt(const std::u16string &text, std::size_t index) const = 0;
+};
+
+// Whether a UTF-16 unit is white space or a line break: what ends a word for `words`.
+bool isTextSpace(char16_t unit);
+
+// The text an edit puts in a field: `replacement`, replacing `length` units of `current` at
+// `location`, capitalized as `autoCapitalize` asks (`characters`, all of it; `words`, each word's
+// first character, a word starting at the start or after white space, pasted text too), then cut to
+// what fits in `maxLength`, never inside a character.
+std::u16string fitReplacement(
+    const std::u16string &current,
+    std::size_t location,
+    std::size_t length,
+    const std::u16string &replacement,
+    const TextInputOptions &options,
+    const TextCharacters &characters);
+
+// React Native's controlled-text rule (iOS's mostRecentEventCount): the text JavaScript sends a
+// field replaces what it shows only when it answers the field's latest change
+// (`mostRecentEventCount` at least the field's own count), and never while an input method is
+// composing.
+bool controlledTextIsCurrent(int mostRecentEventCount, int fieldEventCount, bool composing);
+
 } // namespace ngn

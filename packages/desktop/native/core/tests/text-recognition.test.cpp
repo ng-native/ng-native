@@ -1,7 +1,9 @@
+#include "helpers.h"
 #include "ngn/text-recognition.h"
 
 #include <doctest/doctest.h>
 
+#include <filesystem>
 #include <optional>
 
 using folly::dynamic;
@@ -49,7 +51,7 @@ TEST_CASE("NgNativeTextRecognition answers the lines, their boxes in pixels from
       .width = 200,
       .height = 100,
   };
-  auto module = ngn::makeTextRecognitionModule(reader);
+  auto module = ngn::makeTextRecognitionModule(reader, ngn::testing::readsEverywhere());
   auto answer = ask(*module, dynamic::array("file:///tmp/a%20b.png", dynamic::object()));
   REQUIRE(answer.value);
   CHECK((*answer.value)["text"] == dynamic("Hello\nWorld"));
@@ -72,7 +74,7 @@ TEST_CASE("NgNativeTextRecognition reads a language by its primary one, and refu
 
   auto reader = std::make_shared<FakeReader>();
   reader->reading = ngn::TextReader::Reading{};
-  auto module = ngn::makeTextRecognitionModule(reader);
+  auto module = ngn::makeTextRecognitionModule(reader, ngn::testing::readsEverywhere());
   CHECK(ask(*module, dynamic::array("/a.png", dynamic::object("languages", dynamic::array("en-GB", "fr"))("level", "accurate"))).value);
   CHECK(reader->asked.back().languages == std::vector<std::string>{"en-US", "fr-FR"});
   auto refused = ask(*module, dynamic::array("/a.png", dynamic::object("languages", dynamic::array("fr"))("level", "fast")));
@@ -83,10 +85,30 @@ TEST_CASE("NgNativeTextRecognition reads a language by its primary one, and refu
 
 TEST_CASE("NgNativeTextRecognition refuses a uri that is not a file, and passes on a read that fails") {
   auto reader = std::make_shared<FakeReader>();
-  auto module = ngn::makeTextRecognitionModule(reader);
+  auto module = ngn::makeTextRecognitionModule(reader, ngn::testing::readsEverywhere());
   CHECK(ask(*module, dynamic::array("https://example.com/a.png", dynamic::object())).error);
   CHECK(ask(*module, dynamic::array("relative.png")).error);
   CHECK(reader->asked.empty());
   auto failed = ask(*module, dynamic::array("/missing.png"));
   CHECK(failed.error == std::string("No image could be read at /missing.png"));
+}
+
+TEST_CASE("NgNativeTextRecognition reads only images FileSystem could read") {
+  auto root = std::filesystem::temp_directory_path() / ("ngn-text-" + std::to_string(rand()));
+  std::filesystem::create_directories(root / "cache");
+  std::filesystem::create_directories(root / "home/Desktop");
+  ngn::FileAccess::Folders folders{.cache = (root / "cache").string(), .home = (root / "home").string()};
+  auto reader = std::make_shared<FakeReader>();
+  reader->reading = ngn::TextReader::Reading{};
+  auto module = ngn::makeTextRecognitionModule(reader, std::make_shared<ngn::FileAccess>(folders, dynamic::array()));
+  auto outside = (root / "home/Desktop/Screenshot.png").string();
+  auto refused = ask(*module, dynamic::array(ngn::fileUri(outside)));
+  REQUIRE(refused.error);
+  CHECK(refused.error->find(outside + " is outside the files this app may read") == 0);
+  CHECK(reader->asked.empty());
+  CHECK(ask(*module, dynamic::array(folders.cache + "/scan.png")).value);
+  CHECK(reader->asked.size() == 1);
+  CHECK(ask(*ngn::makeTextRecognitionModule(reader, nullptr), dynamic::array(folders.cache + "/scan.png")).error);
+  CHECK(reader->asked.size() == 1);
+  std::filesystem::remove_all(root);
 }

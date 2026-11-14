@@ -28,7 +28,7 @@ TEST_CASE("The media library and the picker over PhotoKit read and write nothing
     MESSAGE("this test binary has photo library access; the denied path is not checked");
     return;
   }
-  auto module = ngn::makeMediaLibraryModule(library, false);
+  auto module = ngn::makeMediaLibraryModule(library, false, nullptr);
   auto run = [&](const std::string &method, folly::dynamic args) {
     std::optional<folly::dynamic> value;
     std::optional<std::string> failure;

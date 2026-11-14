@@ -257,9 +257,10 @@ bool sameScripts(const WebViewConfig &a, const WebViewConfig &b) {
     [self send:"openWindow" extra:folly::dynamic::object("targetUrl", url)];
     return;
   }
-  if (_config && ngn::navigationStep(*_config, url, topFrame) == ngn::NavigationStep::OpenExternally) {
+  auto step = _config ? ngn::navigationStep(*_config, url, topFrame, str(type)) : ngn::NavigationStep::AskApp;
+  if (step != ngn::NavigationStep::AskApp) {
     decisionHandler(WKNavigationActionPolicyCancel);
-    if (_openExternally) {
+    if (step == ngn::NavigationStep::OpenExternally && _openExternally) {
       _openExternally(url);
     }
     return;

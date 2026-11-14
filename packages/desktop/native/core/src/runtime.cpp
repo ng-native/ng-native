@@ -156,7 +156,7 @@ void Runtime::createHost() {
                  : nullptr);
   // Reanimated reaches the UIManager through here as it installs (worklet-host.h).
   auto *host = host_.get();
-  workletHost().runOnScheduler = [host](std::function<void(Scheduler &)> task) { host->runOnScheduler(std::move(task)); };
+  workletHost().runOnScheduler.set([host](std::function<void(Scheduler &)> task) { host->runOnScheduler(std::move(task)); });
 }
 
 Runtime::~Runtime() {
@@ -330,7 +330,7 @@ void Runtime::reload(std::function<void(bool)> done) {
       std::lock_guard lock(mutex_);
       if (host_) {
         host_->stopAllSurfaces();
-        workletHost().runOnScheduler = nullptr;
+        workletHost().runOnScheduler.set(nullptr);
         host_.reset();
         createHost();
         loaded = devServer_ ? host_->loadScript("", bundle_) : host_->loadScript(bundle_, bundle_);
@@ -390,7 +390,7 @@ void Runtime::reload(std::string bundle, std::function<void(bool)> done) {
 void Runtime::shutdown() {
   std::lock_guard lock(mutex_);
   if (host_) {
-    workletHost().runOnScheduler = nullptr;
+    workletHost().runOnScheduler.set(nullptr);
     host_->stopAllSurfaces();
     host_.reset();
   }
