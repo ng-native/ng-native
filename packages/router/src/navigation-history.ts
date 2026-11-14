@@ -11,6 +11,7 @@
  */
 import { DestroyRef, Service, computed, inject, signal, type Signal } from '@angular/core';
 import {
+  ChildrenOutletContexts,
   NavigationEnd,
   PRIMARY_OUTLET,
   Router,
@@ -125,9 +126,15 @@ export class NavigationHistory {
       if (event instanceof NavigationEnd)
         this.recordAll(this.router.parseUrl(event.urlAfterRedirects));
     });
+    const contexts = inject(ChildrenOutletContexts);
     const stop = inject(Menus).onNavigate((direction, surface) => {
-      const history = this.forSurface(surface);
-      void (direction === 'back' ? history?.back() : history?.forward());
+      const outlet = this.outletOf(surface);
+      if (outlet === null) return;
+      // A screen with `gestureEnabled: false` is left only by its own way out.
+      const showing = contexts.getContext(outlet)?.outlet as { refusesGesture?(): boolean } | null;
+      if (showing?.refusesGesture?.()) return;
+      const history = this.for(outlet);
+      void (direction === 'back' ? history.back() : history.forward());
     });
     inject(DestroyRef).onDestroy(() => {
       events.unsubscribe();
@@ -142,16 +149,16 @@ export class NavigationHistory {
     return history;
   }
 
-  /** The history of the window on `surface`; with none given, of the focused window. */
-  private forSurface(surface: number | undefined): OutletHistory | null {
+  /** The outlet of the window on `surface`; with none given, of the focused window. */
+  private outletOf(surface: number | undefined): string | null {
     const window =
       surface === undefined
         ? this.windows.focused()
         : this.windows.windows().find((one) => one.surface === surface);
-    if (!window) return surface === undefined ? this.for() : null;
+    if (!window) return surface === undefined ? PRIMARY_OUTLET : null;
     // A route window's key is its outlet; the main window's is `main`, the primary outlet's.
-    if (window.key === 'main') return this.for();
-    return window.key && this.histories.has(window.key) ? this.for(window.key) : null;
+    if (window.key === 'main') return PRIMARY_OUTLET;
+    return window.key && this.histories.has(window.key) ? window.key : null;
   }
 
   /**

@@ -785,6 +785,21 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     return this.router?.componentInputBindingEnabled ? bindRouteInputs(ref, route) : () => {};
   }
 
+  /**
+   * Whether the screen in front, in this stack or a stack inside it, has `gestureEnabled: false`,
+   * from its presentation or its page's host bindings: the OS's back and forward inputs then
+   * leave it alone, as a swipe does, and only its own way out takes it off.
+   */
+  refusesGesture(): boolean {
+    const top = this.top;
+    if (!top) return false;
+    if ((top.screen as Partial<EngineNode>).props?.['gestureEnabled'] === false) return true;
+    const inner = top.ref.injector
+      .get(ChildrenOutletContexts, null)
+      ?.getContext(PRIMARY_OUTLET)?.outlet;
+    return inner instanceof NativeStackOutlet && inner !== this && inner.refusesGesture();
+  }
+
   private get top(): StackEntry | undefined {
     return this.entries[this.entries.length - 1];
   }

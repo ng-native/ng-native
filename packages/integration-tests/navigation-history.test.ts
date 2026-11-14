@@ -123,6 +123,28 @@ describe('a window history', () => {
     assert.equal(history.for().index(), 1);
   });
 
+  it('leaves a screen with gestureEnabled: false to its own way out, from the OS command', async () => {
+    const { router, navigation, history, menus } = await start();
+    await navigation.push('/notes', { presentation: { gestureEnabled: false } });
+    await navigation.push('/settings');
+    await idle();
+    assert.equal(await history.for().back(), true, 'the app can still go back');
+    await idle();
+    assert.equal(router.url, '/notes');
+    menus.send({ type: 'navigate', direction: 'forward' });
+    await idle();
+    assert.equal(router.url, '/notes', 'the swipe, the key and the mouse button are refused');
+    menus.send({ type: 'navigate', direction: 'back' });
+    await idle();
+    assert.equal(router.url, '/notes');
+    assert.equal(await history.for().back(), true);
+    await idle();
+    assert.equal(router.url, '/');
+    menus.send({ type: 'navigate', direction: 'forward' });
+    await idle();
+    assert.equal(router.url, '/notes', 'forward from a screen that allows it');
+  });
+
   it('keeps a route window history apart, and drops it as the window closes', async () => {
     const { router, history } = await start();
     await router.navigate([{ outlets: { preferences: ['general'] } }]);
