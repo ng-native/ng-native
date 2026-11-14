@@ -513,6 +513,7 @@ int main(int argc, const char *argv[]) {
       }
     };
     NGNModalHostView.input = gHost.input.get();
+    NGNView.activator = gHost.input.get();
     NGNModalHostView.presentationChanged = [](NSInteger tag, BOOL presented) {
       if (presented) {
         gHost.mounting->tree().addContainerRoot(static_cast<Tag>(tag));

@@ -92,6 +92,12 @@ class InputDispatcher : public InputSink {
   // An item of the context menu of `tag` was chosen: `topContextMenuSelect` with its id.
   void contextMenuSelect(Tag tag, const std::string &id);
 
+  // VoiceOver's press, or Space on a focused view, for a view with no handler of its own: a press
+  // and release at the view's centre, sent to the view itself as iOS's synthesized tap is, through
+  // the container of `surfaceId` nearest to it. False when no container holds it or a press is
+  // already down.
+  bool activate(SurfaceId surfaceId, Tag tag);
+
   // After a transaction: the views under a still pointer may have changed what cursor they ask
   // for.
   void didMount(SurfaceId surfaceId);

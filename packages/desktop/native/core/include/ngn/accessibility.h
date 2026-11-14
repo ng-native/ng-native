@@ -8,6 +8,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -39,6 +40,13 @@ enum class AxRole {
 
 enum class AxSubrole { None, Switch, Toggle, Tab, SearchField };
 
+// A custom action an assistive technology lists by its label and sends back by its name.
+struct AxAction {
+  std::string name;
+  std::string label;
+  bool operator==(const AxAction &other) const = default;
+};
+
 struct AxInfo {
   // Whether the view is an element of its own, or its children are read in its place.
   bool element{false};
@@ -53,6 +61,15 @@ struct AxInfo {
   bool selected{false};
   // 0 unchecked, 1 checked, 2 mixed; nothing for a view that is not checkable.
   std::optional<int> checked;
+  // Nothing for a view that neither expands nor collapses.
+  std::optional<bool> expanded;
+  // The declared actions AppKit has no verb of its own for, in their order.
+  std::vector<AxAction> customActions;
+  // Whether the view offers AppKit's press (VoiceOver's VO-Space), increment and decrement, and
+  // cancel (Escape).
+  bool offersPress{false};
+  bool offersIncrement{false};
+  bool offersCancel{false};
 
   bool operator==(const AxInfo &other) const = default;
 };
@@ -61,5 +78,18 @@ struct AxInfo {
 std::string roleName(const facebook::react::ViewProps &props);
 
 AxInfo accessibilityInfo(const facebook::react::ViewProps &props);
+
+// AppKit's standard actions on a view.
+enum class AxVerb { Press, Increment, Decrement, Cancel };
+
+// What one of them sends, as React Native iOS decides: its accessibility tap or escape when the
+// view listens, a declared action (`activate`, `increment`, `decrement`, `escape`) when the view
+// listens for actions, and for a press with neither, a click (iOS's synthesized tap).
+struct AxDispatch {
+  enum class Kind { None, Tap, Escape, Action, Click } kind{Kind::None};
+  std::string action;
+};
+
+AxDispatch axDispatch(const facebook::react::ViewProps &props, AxVerb verb);
 
 } // namespace ngn

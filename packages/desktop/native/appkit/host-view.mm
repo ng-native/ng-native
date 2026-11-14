@@ -16,6 +16,7 @@
 #include <react/renderer/components/iostextinput/TextInputProps.h>
 #include <react/renderer/components/text/ParagraphState.h>
 #include <react/renderer/components/textinput/TextInputEventEmitter.h>
+#include <react/renderer/components/view/ViewEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/ConcreteState.h>
 
@@ -108,6 +109,8 @@ NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
 
 #pragma mark - NGNView
 
+static ngn::InputDispatcher *gViewInput;
+
 @implementation NGNView {
   Props::Shared _props;
   LayoutMetrics _layout;
@@ -126,6 +129,13 @@ NSAccessibilitySubrole nsSubrole(ngn::AxSubrole subrole) {
     self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawOnSetNeedsDisplay;
   }
   return self;
+}
+
++ (ngn::InputDispatcher *)activator {
+  return gViewInput;
+}
++ (void)setActivator:(ngn::InputDispatcher *)input {
+  gViewInput = input;
 }
 
 - (BOOL)isFlipped {
@@ -263,6 +273,113 @@ static BOOL focusFromKeyboard() {
 
 - (BOOL)isAccessibilitySelected {
   return [self axInfo].selected;
+}
+
+- (BOOL)isAccessibilityExpanded {
+  return [self axInfo].expanded.value_or(false);
+}
+
+- (NSArray<NSAccessibilityCustomAction *> *)accessibilityCustomActions {
+  auto info = [self axInfo];
+  if (info.customActions.empty()) {
+    return nil;
+  }
+  NSMutableArray<NSAccessibilityCustomAction *> *actions = [NSMutableArray array];
+  __weak NGNView *weakSelf = self;
+  for (const auto &action : info.customActions) {
+    std::string name = action.name;
+    [actions addObject:[[NSAccessibilityCustomAction alloc] initWithName:nsString(action.label)
+                                                                 handler:^BOOL {
+                                                                   return [weakSelf sendAccessibilityAction:name];
+                                                                 }]];
+  }
+  return actions;
+}
+
+// Sends a declared action, as iOS does only to a view that listens for them.
+- (BOOL)sendAccessibilityAction:(const std::string &)name {
+  auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
+  auto emitter = std::dynamic_pointer_cast<const ViewEventEmitter>(_emitter);
+  if (!viewProps || !viewProps->onAccessibilityAction || !emitter) {
+    return NO;
+  }
+  emitter->onAccessibilityAction(name);
+  return YES;
+}
+
+// One of AppKit's standard actions, as the core decides it reaches the app (accessibility.h).
+- (BOOL)performAxVerb:(ngn::AxVerb)verb {
+  auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
+  auto emitter = std::dynamic_pointer_cast<const ViewEventEmitter>(_emitter);
+  if (!viewProps || !emitter) {
+    return NO;
+  }
+  auto dispatch = ngn::axDispatch(*viewProps, verb);
+  switch (dispatch.kind) {
+    case ngn::AxDispatch::Kind::None:
+      return NO;
+    case ngn::AxDispatch::Kind::Tap:
+      emitter->onAccessibilityTap();
+      return YES;
+    case ngn::AxDispatch::Kind::Escape:
+      emitter->onAccessibilityEscape();
+      return YES;
+    case ngn::AxDispatch::Kind::Action:
+      emitter->onAccessibilityAction(dispatch.action);
+      return YES;
+    case ngn::AxDispatch::Kind::Click:
+      return gViewInput != nullptr && gViewInput->activate(static_cast<SurfaceId>(_surfaceId), static_cast<Tag>(_reactTag));
+  }
+  return NO;
+}
+
+- (BOOL)accessibilityPerformPress {
+  return [self performAxVerb:ngn::AxVerb::Press];
+}
+
+- (BOOL)accessibilityPerformIncrement {
+  return [self performAxVerb:ngn::AxVerb::Increment];
+}
+
+- (BOOL)accessibilityPerformDecrement {
+  return [self performAxVerb:ngn::AxVerb::Decrement];
+}
+
+- (BOOL)accessibilityPerformCancel {
+  return [self performAxVerb:ngn::AxVerb::Cancel];
+}
+
+// AppKit lists an action for every one of these the class implements; a view offers only those
+// that mean something for it. A focusable view is pressed as a control is.
+- (BOOL)isAccessibilitySelectorAllowed:(SEL)selector {
+  if (selector == @selector(accessibilityPerformPress)) {
+    return [self axInfo].offersPress || [self acceptsFirstResponder];
+  }
+  if (selector == @selector(accessibilityPerformIncrement) || selector == @selector(accessibilityPerformDecrement)) {
+    return [self axInfo].offersIncrement;
+  }
+  if (selector == @selector(accessibilityPerformCancel)) {
+    return [self axInfo].offersCancel;
+  }
+  // Only a view that expands says whether it is expanded.
+  if (selector == @selector(isAccessibilityExpanded)) {
+    return [self axInfo].expanded.has_value();
+  }
+  return [super isAccessibilitySelectorAllowed:selector];
+}
+
+// Space and Return press a focused view, as they press a focused AppKit control. A default button
+// takes Return first, as AppKit's own key equivalents do.
+- (void)keyDown:(NSEvent *)event {
+  NSEventModifierFlags modifiers = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
+                                                          NSEventModifierFlagOption);
+  NSString *key = event.charactersIgnoringModifiers;
+  BOOL activates = [key isEqualToString:@" "] || [key isEqualToString:@"\r"];
+  if (modifiers == 0 && activates && !event.isARepeat && self.window.firstResponder == self &&
+      [self performAxVerb:ngn::AxVerb::Press]) {
+    return;
+  }
+  [super keyDown:event];
 }
 
 - (void)updateProps:(const Props::Shared &)props {

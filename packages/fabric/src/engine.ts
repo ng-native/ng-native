@@ -610,6 +610,15 @@ const EVENT_OPT_IN_PROPS: Record<string, string> = {
   topDoubleClick: 'onDoubleClick',
   topContextMenu: 'onContextMenu',
   topWheel: 'onWheel',
+  /*
+   * A screen reader's: iOS and the macOS host send a declared action, an accessibility tap, a
+   * magic tap and an escape only to a view whose props say something listens, and otherwise fall
+   * back to a synthesized tap or nothing.
+   */
+  topAccessibilityAction: 'onAccessibilityAction',
+  topAccessibilityTap: 'onAccessibilityTap',
+  topMagicTap: 'onAccessibilityMagicTap',
+  topAccessibilityEscape: 'onAccessibilityEscape',
 };
 
 /**

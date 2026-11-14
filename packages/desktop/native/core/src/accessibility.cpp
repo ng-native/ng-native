@@ -3,6 +3,7 @@
 #include <react/renderer/components/view/accessibilityPropsConversions.h>
 
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace facebook::react;
 
@@ -68,6 +69,26 @@ const std::unordered_map<std::string, Mapping> &roles() {
   return table;
 }
 
+// The roles a press means something on: AppKit's controls, which VoiceOver presses.
+bool pressableRole(const std::string &name) {
+  static const std::unordered_set<std::string> names{"button", "togglebutton", "link", "imagebutton", "checkbox",
+      "switch", "radio", "tab", "menuitem", "combobox", "searchbox", "search"};
+  return names.contains(name);
+}
+
+bool adjustableRole(const std::string &name) {
+  return name == "adjustable" || name == "slider" || name == "spinbutton";
+}
+
+bool declares(const ViewProps &props, const std::string &action) {
+  for (const auto &declared : props.accessibilityActions) {
+    if (declared.name == action) {
+      return true;
+    }
+  }
+  return false;
+}
+
 } // namespace
 
 std::string roleName(const ViewProps &props) {
@@ -110,11 +131,48 @@ AxInfo accessibilityInfo(const ViewProps &props) {
         break;
     }
   }
+  if (props.accessibilityState) {
+    info.expanded = props.accessibilityState->expanded;
+  }
+  for (const auto &action : props.accessibilityActions) {
+    const auto &n = action.name;
+    if (n != "activate" && n != "increment" && n != "decrement" && n != "escape") {
+      info.customActions.push_back({n, action.label.value_or(n)});
+    }
+  }
+  info.offersPress = props.onAccessibilityTap || declares(props, "activate") || pressableRole(name);
+  info.offersIncrement = adjustableRole(name) || declares(props, "increment") || declares(props, "decrement");
+  info.offersCancel = props.onAccessibilityEscape || declares(props, "escape");
   bool hidden = props.accessibilityElementsHidden ||
       props.importantForAccessibility == ImportantForAccessibility::NoHideDescendants ||
       props.importantForAccessibility == ImportantForAccessibility::No;
   info.element = !hidden && !presentation && (props.accessible || !info.label.empty() || !name.empty());
   return info;
+}
+
+AxDispatch axDispatch(const ViewProps &props, AxVerb verb) {
+  auto action = [&](const char *name) { return AxDispatch{AxDispatch::Kind::Action, name}; };
+  bool actions = props.onAccessibilityAction;
+  switch (verb) {
+    case AxVerb::Press:
+      if (props.onAccessibilityTap) {
+        return {AxDispatch::Kind::Tap, ""};
+      }
+      if (actions && declares(props, "activate")) {
+        return action("activate");
+      }
+      return {AxDispatch::Kind::Click, ""};
+    case AxVerb::Increment:
+      return actions ? action("increment") : AxDispatch{};
+    case AxVerb::Decrement:
+      return actions ? action("decrement") : AxDispatch{};
+    case AxVerb::Cancel:
+      if (props.onAccessibilityEscape) {
+        return {AxDispatch::Kind::Escape, ""};
+      }
+      return actions && declares(props, "escape") ? action("escape") : AxDispatch{};
+  }
+  return {};
 }
 
 } // namespace ngn

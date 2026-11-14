@@ -140,6 +140,40 @@ void InputDispatcher::pointerUp(const PointerInput &input) {
   }
 }
 
+bool InputDispatcher::activate(SurfaceId surfaceId, Tag tag) {
+  const auto *node = tree_.find(tag);
+  if (press_ || node == nullptr) {
+    return false;
+  }
+  // The container whose root is nearest above the view: a popover's, not the window's.
+  std::optional<ContainerId> holder;
+  size_t nearest = 0;
+  for (const auto &[id, container] : containers_) {
+    if (container.surfaceId != surfaceId) {
+      continue;
+    }
+    auto chain = tree_.chain(tag, container.root);
+    if (!chain.empty() && (!holder || chain.size() < nearest)) {
+      holder = id;
+      nearest = chain.size();
+    }
+  }
+  if (!holder) {
+    return false;
+  }
+  auto origin = tree_.originIn(tag, containers_[*holder].root).value_or(Point{0, 0});
+  const auto &size = node->view.layoutMetrics.frame.size;
+  PointerInput input;
+  input.container = *holder;
+  input.point = {origin.x + size.width / 2, origin.y + size.height / 2};
+  input.clickCount = 1;
+  press_ = Press{*holder, tag, 1, input.point};
+  sendTouch(TouchPhase::Start, input);
+  sendTouch(TouchPhase::End, input);
+  press_.reset();
+  return true;
+}
+
 void InputDispatcher::pointerLeave(SurfaceId surfaceId, const PointerInput &input) {
   updateHover({surfaceId, surfaceId}, {}, input);
   if (pointerSurface_ == surfaceId) {

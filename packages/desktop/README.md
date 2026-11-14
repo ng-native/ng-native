@@ -67,11 +67,18 @@ Tab and Shift-Tab move the focus in the order the core walks (`focus-order.h`), 
 key-view loop: positive `tabIndex` first, then focusable views, text inputs and controls in tree
 order, inside the container the focus is in. With the Mac's default keyboard navigation Tab
 reaches text inputs only, and Option-Tab reaches everything. A view's accessibility props give it
-its NSAccessibility role, subrole, label, hint, value and state (`accessibility.h`); a role AppKit
-lacks, such as a heading, is a group with that role's name spoken. `AccessibilityInfo` reads
+its NSAccessibility role, subrole, label, hint, value and state, selected, disabled, checked and
+expanded included (`accessibility.h`); a role AppKit lacks, such as a heading, is a group with that
+role's name spoken. `AccessibilityInfo` reads
 VoiceOver's state, reduce motion, reduce transparency, invert colours and increase contrast from
 NSWorkspace, and sends their change events from its notifications; macOS has no bold-text or
 grayscale setting, so those answer false.
+
+VoiceOver's actions come from `accessibilityActions`: `activate` is its press, `increment` and
+`decrement` step an adjustable view, `escape` is its cancel, and any other is a custom action by its
+label, sent back as `(accessibilityAction)`. VoiceOver's press (VO-Space), and Space or Return on a
+focused view, send `(accessibilityTap)` or `activate` when the view listens for them, and otherwise
+click the view at its centre, as iOS's synthesized tap does, so a `(press)` handler runs.
 
 When the app has them installed, the host compiles in the Fabric components of
 `react-native-screens`, `react-native-safe-area-context` and `react-native-svg`:
@@ -361,8 +368,9 @@ release publishes with its `hermesc` and Sparkle, and unpack it into the per-use
 hash. The archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does
 not match it is deleted and stops the command. The host is built from source instead when the app
 links a library's or its own native desktop code, when a host library it has installed
-(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`) is another version than the prebuilt one
-or denied, when the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
+(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`) is another version
+than the prebuilt one or denied, when the download fails (with a warning), and when
+`NGN_DESKTOP_FROM_SOURCE=1` is set.
 
 `native/scripts/make-prebuilt.mjs <app> <out>` builds and packs one, signed with
 `NGN_SIGN_IDENTITY` or ad hoc, and writes its `prebuilt.json` entry; the release workflow runs it

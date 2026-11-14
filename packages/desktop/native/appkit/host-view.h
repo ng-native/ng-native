@@ -5,10 +5,14 @@
 #import <AppKit/AppKit.h>
 
 #include "ngn/desktop-view-props.h"
+#include "ngn/input-dispatcher.h"
 
 #include <react/renderer/mounting/ShadowView.h>
 
 @interface NGNView : NSView
+// Set once by the host: where VoiceOver's press, Space and Return on a focused view send the click
+// they stand for when the view has no accessibility handler of its own.
+@property (class, nonatomic) ngn::InputDispatcher *activator;
 @property (nonatomic, readonly) NSInteger reactTag;
 @property (nonatomic, readonly) NSInteger surfaceId;
 @property (nonatomic, readonly, copy) NSString *componentName;
