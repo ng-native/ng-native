@@ -58,9 +58,13 @@ include(cmake/react-native.cmake)
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
     core/src/desktop-view-props.cpp
+    core/src/default-menu.cpp
+    core/src/dev-server.cpp
     core/src/input-dispatcher.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
+    core/src/native-module.cpp
+    core/src/network.cpp
     core/src/text-layout-manager.cpp
     core/src/view-tree.cpp)
 target_include_directories(ngn_core PUBLIC core/include)
@@ -69,7 +73,7 @@ target_compile_options(ngn_core PRIVATE -Wall -Wextra -Werror -Wno-unused-parame
 
 if(NGN_TESTS)
   file(GLOB core_test_SRC CONFIGURE_DEPENDS core/tests/*.cpp)
-  add_executable(ngn_core_tests ${core_test_SRC} core/testing/fake-backend.cpp)
+  add_executable(ngn_core_tests ${core_test_SRC} core/testing/fake-backend.cpp core/testing/fake-network.cpp)
   target_include_directories(ngn_core_tests PRIVATE core/testing core/tests)
   target_link_libraries(ngn_core_tests PRIVATE ngn_core doctest)
   enable_testing()
@@ -78,7 +82,10 @@ endif()
 
 # --- the core's runtime half: ReactHost over Hermes ----------------------------------------------
 if(NGN_WITH_RUNTIME)
-  add_library(ngn_core_runtime STATIC core/src/runtime.cpp core/src/host-services.cpp)
+  add_library(ngn_core_runtime STATIC
+      core/src/dev-server-helper.cpp
+      core/src/host-services.cpp
+      core/src/runtime.cpp)
   target_link_libraries(ngn_core_runtime PUBLIC ngn_core hermes-engine::hermesvm)
   target_compile_options(ngn_core_runtime PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
 endif()

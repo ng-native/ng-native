@@ -101,6 +101,11 @@ if(NGN_WITH_RUNTIME)
               renderer/uimanager runtime threading utils)
     add_subdirectory(${REACT_CXX_PLATFORM_DIR}/react/${dir} ReactCxxPlatform/${dir})
   endforeach()
+  # The core's src/dev-server-helper.cpp replaces upstream's, which hard-codes `android` as the
+  # bundle's and the HMR client's platform. Its header stays.
+  get_target_property(_dsh react_cxx_platform_react_devsupport SOURCES)
+  list(FILTER _dsh EXCLUDE REGEX "/devsupport/DevServerHelper.cpp$")
+  set_target_properties(react_cxx_platform_react_devsupport PROPERTIES SOURCES "${_dsh}")
 endif()
 
 # Every React Native object library, as one static archive: a binary takes only the objects it

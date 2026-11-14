@@ -3,15 +3,19 @@
 //
 //   ngn-macos <bundle> [--module <name>] [--title <title>]
 //
-// <bundle> is a JavaScript or Hermes bytecode file on disk. The module defaults to "main", the
-// name an ng-native app registers.
+// <bundle> is a JavaScript or Hermes bytecode file on disk, or a Metro bundle URL, which turns on
+// the dev loop: reload and Fast Refresh from the dev server, and the Developer menu. The module
+// defaults to "main", the name an ng-native app registers.
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
 #import "appkit-backend.h"
+#import "menu-bar.h"
+#import "network.h"
 #import "surface-view.h"
 #include "text-layout.h"
 
+#include "ngn/default-menu.h"
 #include "ngn/input-dispatcher.h"
 #include "ngn/runtime.h"
 
@@ -144,7 +148,24 @@ int main(int argc, const char *argv[]) {
     [gHost.window setFrameTopLeftPoint:NSMakePoint(NSMinX(visible) + 40, NSMaxY(visible) - 40)];
 
     gHost.runtime = std::make_unique<ngn::Runtime>(
-        gHost.mounting, std::make_shared<ngn::CoreTextMeasurer>(), std::make_shared<ngn::ModuleRegistry>());
+        gHost.mounting,
+        std::make_shared<ngn::CoreTextMeasurer>(),
+        std::make_shared<ngn::ModuleRegistry>(),
+        ngn::NetworkClients{ngn::appkit::makeHttp(), ngn::appkit::makeWebSockets()},
+        bundle);
+
+    bool developer = gHost.runtime->devServer().has_value();
+    ngn::appkit::installMenuBar(
+        ngn::defaultMenuBar({.appName = std::string(title.UTF8String), .developer = developer}),
+        [](ngn::MenuCommand command) {
+          if (command == ngn::MenuCommand::Reload && gHost.runtime) {
+            gHost.runtime->reload([](bool loaded) {
+              if (!loaded) {
+                fprintf(stderr, "ngn-macos: the reload could not load the bundle\n");
+              }
+            });
+          }
+        });
 
     // The event beat: React Native's RunLoopObserverManager wants a tick when the UI thread is about
     // to go idle, which is the main run loop about to wait (the approach Basalt takes).
@@ -156,8 +177,14 @@ int main(int argc, const char *argv[]) {
         });
     CFRunLoopAddObserver(CFRunLoopGetMain(), observer, kCFRunLoopCommonModes);
 
-    if (!gHost.runtime->loadBundle(bundle)) {
-      fprintf(stderr, "ngn-macos: could not load %s\n", bundle.c_str());
+    if (!gHost.runtime->loadBundle()) {
+      if (developer) {
+        fprintf(stderr,
+                "ngn-macos: could not load %s. Is the dev server running? Start it with npm start.\n",
+                bundle.c_str());
+      } else {
+        fprintf(stderr, "ngn-macos: could not load %s\n", bundle.c_str());
+      }
       return 1;
     }
     gHost.runtime->startSurface(kMainSurface, module, metricsFor(gHost.window));
