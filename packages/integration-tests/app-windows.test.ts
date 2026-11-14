@@ -26,6 +26,10 @@ import {
   type NativeWindowEvent,
   type NativeWindowRequest,
   type NativeWindows,
+  type RestoredWindow,
+  type WindowRestoreStore,
+  WINDOW_RESTORE_STORE,
+  provideRestorableWindows,
 } from '@ng-native/device';
 import { mount, type MountResult } from '@ng-native/platform';
 import { provideNativeRouter } from '@ng-native/router';
@@ -214,7 +218,7 @@ describe('component windows', () => {
   it('opens as many as are asked for, and autosaves only one with a restoreKey', async () => {
     const host = fakeHost();
     const { windows } = start('MainWindowApp', host);
-    await windows.open(fixtures['NoteWindow']!, { restoreKey: 'note-1' });
+    const first = await windows.open(fixtures['NoteWindow']!, { restoreKey: 'note-1' });
     await windows.open(fixtures['NoteWindow']!, { restoreKey: 'note-2', autosave: false });
     await windows.open(fixtures['NoteWindow']!);
     assert.deepEqual(
@@ -222,6 +226,9 @@ describe('component windows', () => {
       ['main', 'note-1', null, null],
     );
     assert.equal(windows.windows().length, 4);
+    // A restoreKey names one window: asked again, the open one comes to the front.
+    assert.equal(await windows.open(fixtures['NoteWindow']!, { restoreKey: 'note-1' }), first);
+    assert.deepEqual(host.focused, [first!.surface]);
   });
 
   it('keeps a window whose canClose guard says no, and closes it once it agrees', async () => {
@@ -411,5 +418,121 @@ describe('route windows', () => {
     await windows.open({ outlet: 'preferences', path: 'accounts' });
     await settle();
     assert.equal(textOn(fabric, 21, 'general'), 'General 0');
+  });
+});
+
+describe('after a reload or a relaunch', () => {
+  /** What the host keeps in the app's preferences, as one launch leaves it for the next. */
+  function memoryStore() {
+    let saved: readonly RestoredWindow[] = [];
+    const store: WindowRestoreStore = {
+      read: () => saved,
+      write: (windows) => void (saved = structuredClone(windows)),
+    };
+    return { store, saved: () => saved };
+  }
+  const routes = () => [
+    { path: '', component: fixtures['HomePage']! },
+    { path: 'general', outlet: 'preferences', component: fixtures['GeneralPage']! },
+  ];
+  const launch = (root: string, store: WindowRestoreStore, providers: unknown[] = []) => {
+    const host = fakeHost();
+    const started = start(root, host, [
+      { provide: WINDOW_RESTORE_STORE, useValue: store },
+      provideRestorableWindows({ note: fixtures['NoteWindow']! }),
+      ...providers,
+    ]);
+    return { host, ...started };
+  };
+  const reload = (app: MountResult) => {
+    app.applicationRef.destroy();
+    apps = apps.filter((one) => one !== app);
+  };
+
+  it('opens a restoreKey window again, with its inputs and options, and its key claims the kept one', async () => {
+    const { store } = memoryStore();
+    const first = launch('MainWindowApp', store);
+    await settle();
+    await first.windows.open(fixtures['NoteWindow']!, {
+      restoreKey: 'note-1',
+      inputs: { name: 'Groceries' },
+      title: 'Groceries',
+      width: 300,
+    });
+    await first.windows.open(fixtures['NoteWindow']!, { inputs: { name: 'Scratch' } });
+    await settle();
+    reload(first.app);
+
+    const second = launch('MainWindowApp', store);
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await settle();
+    assert.deepEqual(second.host.opened, [
+      { key: 'main', title: '' },
+      { key: 'note-1', title: 'Groceries', width: 300 },
+    ]);
+    assert.equal(textOn(second.fabric, 21, 'note'), 'Groceries 0');
+    assert.equal(second.windows.windows()[1]!.key, 'note-1');
+  });
+
+  it('does not open a window that was closed, or one whose component is not restorable', async () => {
+    const { store, saved } = memoryStore();
+    const first = launch('MainWindowApp', store);
+    await settle();
+    const kept = await first.windows.open(fixtures['NoteWindow']!, { restoreKey: 'a' });
+    const closed = await first.windows.open(fixtures['NoteWindow']!, { restoreKey: 'b' });
+    const warn = console.warn;
+    const warned: unknown[] = [];
+    console.warn = (...args: unknown[]) => void warned.push(args[0]);
+    try {
+      await first.windows.open(fixtures['MainWindowApp']!, { restoreKey: 'c' });
+    } finally {
+      console.warn = warn;
+    }
+    assert.match(String(warned[0]), /provideRestorableWindows/);
+    await closed!.close();
+    // The OS closing one forgets it as well.
+    first.host.send({ type: 'closed', surface: kept!.surface });
+    await kept!.closed;
+    assert.deepEqual(saved(), [{ kind: 'main' }]);
+    reload(first.app);
+
+    const second = launch('MainWindowApp', store);
+    await settle();
+    assert.deepEqual(
+      second.host.opened.map((request) => request.key),
+      ['main'],
+    );
+  });
+
+  it('opens the main window again under autoOpen: false where it was open', async () => {
+    const { store } = memoryStore();
+    const first = launch('MainWindowApp', store, [provideMainWindow({ autoOpen: false })]);
+    await settle();
+    assert.deepEqual(first.host.opened, []);
+    await first.windows.openMain();
+    reload(first.app);
+    const second = launch('MainWindowApp', store, [provideMainWindow({ autoOpen: false })]);
+    await settle();
+    assert.deepEqual(
+      second.host.opened.map((request) => request.key),
+      ['main'],
+    );
+  });
+
+  it('opens a route window again at the path it last opened', async () => {
+    const { store } = memoryStore();
+    const first = launch('RoutedApp', store, [provideNativeRouter(routes())]);
+    await settle();
+    await first.windows.open({ outlet: 'preferences', path: 'general', width: 500 });
+    await settle();
+    reload(first.app);
+
+    const second = launch('RoutedApp', store, [provideNativeRouter(routes())]);
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await settle();
+    assert.deepEqual(second.host.opened[1], { key: 'preferences', title: '', width: 500 });
+    assert.equal(textOn(second.fabric, 21, 'general'), 'General 0');
   });
 });

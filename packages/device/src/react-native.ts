@@ -131,6 +131,11 @@ export interface ReactNative {
     vibrate(pattern?: number | number[], repeat?: boolean): void;
     cancel(): void;
   };
+  /** iOS's and macOS's user defaults, read once as the runtime starts. Absent on Android. */
+  Settings?: {
+    get(key: string): unknown;
+    set(values: Record<string, unknown>): void;
+  };
   DevSettings?: {
     addMenuItem(title: string, handler: () => unknown): void;
     reload(reason?: string): void;

@@ -28,6 +28,7 @@ import {
 import { AppLifecycle } from './app-lifecycle.ts';
 import { reactNative } from './react-native.ts';
 import { WINDOW_NAVIGATOR } from './window-navigator.ts';
+import { RESTORABLE_WINDOWS, WINDOW_RESTORE_STORE, type RestoredWindow } from './window-restore.ts';
 
 export type TitleBar = 'default' | 'transparent' | 'hidden';
 
@@ -57,8 +58,10 @@ export interface ComponentWindowOptions extends WindowOptions {
   /** Set on the component before its first change detection. */
   readonly inputs?: Readonly<Record<string, unknown>>;
   /**
-   * What the window is restored by, after a reload or a relaunch: it opens again with the same
-   * `inputs`, which must then be serialisable. Without one, a reload closes the window.
+   * What the window is restored by, after a reload or a relaunch: on macOS it opens again with
+   * the same `inputs`, which must then survive `JSON.stringify`, where `provideRestorableWindows`
+   * names its component. Without one, a reload closes the window. One key is one window: opening
+   * a key that is open brings that window to the front.
    */
   readonly restoreKey?: string;
 }
@@ -241,6 +244,8 @@ export function provideMainWindow(options: MainWindowOptions): EnvironmentProvid
 /** An open window and what it needs to close. */
 interface Open {
   readonly handle: AppWindow;
+  /** How it opens again after a reload, or null where it does not. */
+  restore: RestoredWindow | null;
   readonly guards: Set<CloseGuard>;
   readonly outlet: string | null;
   readonly closedNow: () => void;
@@ -261,6 +266,12 @@ export class AppWindows {
   private readonly navigator = inject(WINDOW_NAVIGATOR);
   private readonly lifecycle = inject(AppLifecycle);
   private readonly mainOptions = inject(MAIN_WINDOW_OPTIONS);
+  private readonly store = inject(WINDOW_RESTORE_STORE);
+  private readonly restorable = new Map(
+    (inject(RESTORABLE_WINDOWS, { optional: true }) ?? []).flatMap((components) =>
+      Object.entries(components),
+    ),
+  );
 
   /** Whether the OS has windows the app can open: macOS, and iPadOS with the scene plugin. */
   readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
@@ -290,7 +301,70 @@ export class AppWindows {
    */
   launch(component: Type<unknown>, inputs?: Readonly<Record<string, unknown>>): void {
     this.main = { component, ...(inputs && { inputs }) };
-    if (this.mainOptions.autoOpen !== false) void this.openMain();
+    const restoring = this.store?.read() ?? [];
+    const autoOpen = this.mainOptions.autoOpen !== false;
+    if (autoOpen) void this.openMain();
+    // The main window opens anyway where it opens by itself.
+    void this.reopen(restoring.filter((window) => !autoOpen || window.kind !== 'main'));
+  }
+
+  /**
+   * Open again the windows the app had open when it last stopped: the host keeps them through a
+   * reload until their keys are opened again, and closes them otherwise.
+   */
+  private async reopen(windows: readonly RestoredWindow[]): Promise<void> {
+    for (const window of windows) {
+      try {
+        if (window.kind === 'main') {
+          await this.openMain();
+        } else if (window.kind === 'route') {
+          await this.open({ ...window.options, outlet: window.outlet, path: window.path });
+        } else {
+          const component = this.restorable.get(window.component);
+          if (!component) continue;
+          await this.open(component, {
+            ...window.options,
+            restoreKey: window.key,
+            ...(window.inputs && { inputs: window.inputs }),
+          });
+        }
+      } catch (error) {
+        console.error('[angular-native] A window could not open again after a reload:', error);
+      }
+    }
+  }
+
+  /** Write down which windows open again, in the order they opened. */
+  private remember(): void {
+    this.store?.write(this.open$().flatMap((open) => (open.restore ? [open.restore] : [])));
+  }
+
+  /** How a component window opens again, or null where it cannot: no name, or inputs JSON drops. */
+  private restoreFor(
+    component: Type<unknown>,
+    key: string,
+    inputs: Readonly<Record<string, unknown>> | undefined,
+    options: WindowOptions,
+  ): RestoredWindow | null {
+    const name = [...this.restorable].find(([, one]) => one === component)?.[0];
+    if (name === undefined) {
+      console.warn(
+        `[angular-native] The window '${key}' will not open again after a reload: name its ` +
+          'component with provideRestorableWindows({ ... }).',
+      );
+      return null;
+    }
+    let copied: Readonly<Record<string, unknown>> | undefined;
+    try {
+      copied = inputs && (JSON.parse(JSON.stringify(inputs)) as Record<string, unknown>);
+    } catch {
+      console.warn(
+        `[angular-native] The window '${key}' will not open again after a reload: its inputs ` +
+          'cannot be written as JSON.',
+      );
+      return null;
+    }
+    return { kind: 'component', key, component: name, ...(copied && { inputs: copied }), options };
   }
 
   /**
@@ -307,6 +381,7 @@ export class AppWindows {
       key: 'main',
       inputs: this.main.inputs,
       main: true,
+      restore: () => ({ kind: 'main' }),
     });
   }
 
@@ -324,10 +399,15 @@ export class AppWindows {
   ): Promise<AppWindow | null> {
     if (typeof target === 'function') {
       const { inputs, restoreKey, ...rest } = options;
+      if (restoreKey !== undefined && this.byKey(restoreKey)) {
+        return this.front(this.byKey(restoreKey)!);
+      }
       return this.openWindow(target, {
         ...rest,
         key: restoreKey ?? null,
         ...(inputs && { inputs }),
+        restore: () =>
+          restoreKey === undefined ? null : this.restoreFor(target, restoreKey, inputs, rest),
       });
     }
     const { outlet, path, ...rest } = target;
@@ -339,9 +419,13 @@ export class AppWindows {
       );
       return null;
     }
+    const restore: RestoredWindow = { kind: 'route', outlet, path, options: rest };
     const existing = this.byKey(outlet);
     if (existing) {
       await navigator.navigate(outlet, path);
+      const open = this.find(existing.surface);
+      if (open) open.restore = restore;
+      this.remember();
       return this.front(existing);
     }
     const window = navigator.window(outlet);
@@ -350,6 +434,7 @@ export class AppWindows {
       key: outlet,
       outlet,
       providers: window.providers,
+      restore: () => restore,
     });
     if (opened) await navigator.navigate(outlet, path);
     return opened;
@@ -372,12 +457,24 @@ export class AppWindows {
       outlet?: string;
       providers?: Provider[];
       main?: boolean;
+      /** How the window opens again after a reload, worked out once it has opened. */
+      restore?: () => RestoredWindow | null;
     },
   ): Promise<AppWindow | null> {
     const native = this.native;
     const mounter = this.mounter;
     if (!native || !mounter) return null;
-    const { key, inputs, outlet, providers = [], main, autosave, title = '', ...frame } = options;
+    const {
+      key,
+      inputs,
+      outlet,
+      providers = [],
+      main,
+      autosave,
+      title = '',
+      restore,
+      ...frame
+    } = options;
     const surface = await native.open({
       ...frame,
       key: autosave === false ? null : key,
@@ -385,6 +482,8 @@ export class AppWindows {
     });
     if (surface === null) return null;
     const open = this.track(surface, key, outlet ?? null, title);
+    open.restore = restore?.() ?? null;
+    this.remember();
     open.mount = mounter.mount(surface, component, {
       ...(inputs && { inputs }),
       providers: [{ provide: CURRENT_WINDOW, useValue: open.handle }, ...providers],
@@ -419,6 +518,7 @@ export class AppWindows {
     };
     const open: Open = {
       handle,
+      restore: null,
       guards,
       outlet,
       closedNow,
@@ -498,6 +598,7 @@ export class AppWindows {
     const open = this.find(surface);
     if (!open) return;
     this.open$.update((all) => all.filter((one) => one !== open));
+    if (open.restore) this.remember();
     if (this.focusedSurface() === surface) this.focusedSurface.set(null);
     open.mount?.destroy();
     open.mount = null;

@@ -193,3 +193,10 @@ export {
 export { OS_VERSION } from './os-version.ts';
 export { injectToken, type InjectTokenOptions } from './inject-token.ts';
 export { type ControlSize } from './control-size.ts';
+export {
+  RESTORABLE_WINDOWS,
+  WINDOW_RESTORE_STORE,
+  provideRestorableWindows,
+  type RestoredWindow,
+  type WindowRestoreStore,
+} from './window-restore.ts';
