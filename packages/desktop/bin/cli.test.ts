@@ -297,6 +297,43 @@ describe('run', () => {
     assert.deepEqual(calls[1].args.slice(3), ['--title', 'demo', '--app-id', 'demo']);
   });
 
+  it('passes the capabilities in the plugin options to the host, as the packaged Info.plist has them', async () => {
+    const { sys, calls } = fakeSystem({
+      expoConfig: () => ({
+        slug: 'demo',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        plugins: [
+          [
+            '@ng-native/desktop',
+            {
+              capabilities: {
+                spawn: [{ program: 'git', args: ['status'] }],
+                env: ['HOME'],
+                paths: [{ path: '~/Notes' }],
+              },
+            },
+          ],
+        ],
+      }),
+    });
+    await run({ module: 'main', universal: false }, sys);
+    const args = calls[1]!.args;
+    const at = args.indexOf('--capabilities');
+    assert.notEqual(at, -1);
+    assert.deepEqual(JSON.parse(args[at + 1]!), {
+      spawn: [{ program: 'git', args: ['status'] }],
+      env: ['HOME'],
+      paths: [{ path: '~/Notes', access: 'read' }],
+    });
+  });
+
+  it('passes no capabilities where the plugin options give none', async () => {
+    const { sys, calls } = fakeSystem();
+    await run({ module: 'main', universal: false }, sys);
+    assert.equal(calls[1]!.args.includes('--capabilities'), false);
+  });
+
   it('stops with a fix-it line, before building, when the Expo config does not list macos', async () => {
     const { sys, calls } = fakeSystem({
       expoConfig: () => ({ platforms: ['ios', 'android'] }),

@@ -65,6 +65,29 @@ export function pluginOptions(config) {
 }
 
 /**
+ * The capabilities in the plugin options as the host reads them, from a packaged app's
+ * `NGNCapabilities` or the dev command's `--capabilities`: each path's access spelled out. Undefined
+ * where the options give none.
+ *
+ * @param {DesktopOptions} options
+ */
+export function hostCapabilities(options) {
+  const capabilities = options.capabilities;
+  if (!capabilities) return undefined;
+  return {
+    spawn: capabilities.spawn?.map((rule) => ({
+      program: rule.program,
+      args: rule.args ? [...rule.args] : undefined,
+    })),
+    env: capabilities.env ? [...capabilities.env] : undefined,
+    paths: capabilities.paths?.map((entry) => ({
+      path: entry.path,
+      access: entry.access ?? 'read',
+    })),
+  };
+}
+
+/**
  * The desktop build's settings for an app, from its resolved Expo config. Throws, listing every
  * problem, when the plugin options are not valid.
  *

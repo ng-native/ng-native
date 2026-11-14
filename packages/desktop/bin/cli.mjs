@@ -13,6 +13,7 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 
+import { hostCapabilities } from './app-config.mjs';
 import { prepareHost, system, UsageError } from './host.mjs';
 import { PACKAGE_USAGE, packageApp, parsePackage } from './package.mjs';
 
@@ -99,6 +100,8 @@ export function isUrl(bundle) {
 export async function run(options, sys = system) {
   const { cwd, expo, config, buildDir } = prepareHost(sys, options);
   const appId = config.bundleIdentifier ?? expo.slug ?? config.name;
+  // What Processes may run and read, as a packaged app's Info.plist gives it.
+  const capabilities = hostCapabilities(config.options);
   return sys.run(path.join(buildDir, 'appkit', 'ngn-macos'), [
     bundleArgument(options, cwd),
     '--module',
@@ -107,6 +110,7 @@ export async function run(options, sys = system) {
     config.name,
     '--app-id',
     appId,
+    ...(capabilities ? ['--capabilities', JSON.stringify(capabilities)] : []),
   ]).status;
 }
 

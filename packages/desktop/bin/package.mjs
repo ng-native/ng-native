@@ -16,6 +16,7 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 
+import { hostCapabilities } from './app-config.mjs';
 import { plist } from './plist.mjs';
 import { prepareHost, UsageError } from './host.mjs';
 
@@ -238,19 +239,7 @@ export function infoPlist(config, { format, executable, bundleIdentifier, iconNa
     NGNBundleFile: 'main.jsbundle',
     NGNModuleName: 'main',
     NGNDistribution: format,
-    NGNCapabilities: options.capabilities
-      ? {
-          spawn: options.capabilities.spawn?.map((rule) => ({
-            program: rule.program,
-            args: rule.args ? [...rule.args] : undefined,
-          })),
-          env: options.capabilities.env ? [...options.capabilities.env] : undefined,
-          paths: options.capabilities.paths?.map((entry) => ({
-            path: entry.path,
-            access: entry.access ?? 'read',
-          })),
-        }
-      : undefined,
+    NGNCapabilities: hostCapabilities(options),
     NGNUpdatesURL: config.updatesUrl,
     NGNRuntimeVersion: config.runtimeVersion,
     SUFeedURL: feedUrl,
