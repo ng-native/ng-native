@@ -62,6 +62,7 @@ add_executable(ngn-macos
     system.mm
     system-access.mm
     test-launch.mm
+    text-input-field.mm
     text-layout.mm
     text-recognition.mm
     undo.mm

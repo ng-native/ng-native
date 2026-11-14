@@ -100,8 +100,25 @@ unless the view styles `outline`.
 The platform controls are AppKit's own, sized for Yoga at their `controlSize`: `<native-button>`
 is an NSButton (Return presses a `default` one and Escape a `cancel` one), `<switch>` an NSSwitch,
 `<activity-indicator>` an NSProgressIndicator, `<segmented-control>` an NSSegmentedControl and
-`<date-time-picker>` an NSDatePicker. A multiline `<text-input>` is an NSTextView and a
-`secureTextEntry` one an NSSecureTextField. `<search-field>` is not drawn yet.
+`<date-time-picker>` an NSDatePicker. `<search-field>` is not drawn yet.
+
+A `<text-input>` is an NSTextField, or an NSSecureTextField for `secureTextEntry` (swapped in place
+as the prop changes, keeping the text and the keyboard), and a multiline one an NSTextView. Its
+props map onto AppKit's text checking:
+
+| Prop                | On macOS                                                                                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `autoCorrect`       | spelling correction and text replacement                                                                        |
+| `spellCheck`        | misspellings underlined as you type; follows `autoCorrect`, and is on when both are unset                       |
+| `smartQuotes`       | curly quotes and dashes as you type (macOS only); follows `autoCorrect`                                         |
+| `smartInsertDelete` | spaces added and removed around pasted and deleted words                                                        |
+| `autoCapitalize`    | `none` turns sentence capitalization off (macOS 26 and later); `words` and `characters` capitalize what goes in |
+| `maxLength`         | an insertion is cut to fit, never through a character                                                           |
+| `secureTextEntry`   | every substitution and check off                                                                                |
+
+An unset switch follows the user's setting in System Settings. `placeholderTextColor`, the
+`selection` prop and `autoFocus` work as on iOS, and the field sends `(focus)` as it takes the
+keyboard, by a click, Tab or `focus()`.
 
 Tab and Shift-Tab move the focus in the order the core walks (`focus-order.h`), not AppKit's
 key-view loop: positive `tabIndex` first, then focusable views, text inputs and controls in tree

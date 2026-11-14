@@ -18,7 +18,7 @@
 #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
 #include <react/renderer/components/FBReactNativeSpec/ComponentDescriptors.h>
 #include <react/renderer/components/image/ImageComponentDescriptor.h>
-#include <react/renderer/components/iostextinput/TextInputComponentDescriptor.h>
+#include "ngn/text-input.h"
 #include <react/renderer/components/text/ParagraphComponentDescriptor.h>
 #include <react/renderer/components/text/RawTextComponentDescriptor.h>
 #include <react/renderer/components/text/TextComponentDescriptor.h>
@@ -46,7 +46,7 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<TextComponentDescriptor>(),
       concreteComponentDescriptorProvider<RawTextComponentDescriptor>(),
       concreteComponentDescriptorProvider<DesktopScrollViewComponentDescriptor>(),
-      concreteComponentDescriptorProvider<TextInputComponentDescriptor>(),
+      concreteComponentDescriptorProvider<DesktopTextInputComponentDescriptor>(),
       concreteComponentDescriptorProvider<ImageComponentDescriptor>(),
       concreteComponentDescriptorProvider<DesktopModalComponentDescriptor>(),
       concreteComponentDescriptorProvider<NativeButtonComponentDescriptor>(),

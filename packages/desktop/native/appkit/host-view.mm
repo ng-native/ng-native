@@ -21,6 +21,7 @@
 #import "video-view.h"
 #import "apple-button-view.h"
 #import "map-view.h"
+#import "text-input-field.h"
 
 #include "text-layout.h"
 
@@ -28,7 +29,7 @@
 #include "ngn/symbol.h"
 #include "ngn/view-box.h"
 
-#include <react/renderer/components/iostextinput/TextInputProps.h>
+#include "ngn/text-input.h"
 #include <react/renderer/components/text/ParagraphState.h>
 #include <react/renderer/components/textinput/TextInputEventEmitter.h>
 #include <react/renderer/components/view/ViewEventEmitter.h>
@@ -629,27 +630,68 @@ static BOOL focusFromKeyboard() {
 
 #pragma mark - NGNTextInputView
 
+using ngn::DesktopTextInputProps;
+
+namespace {
+
+// The font a TextInput's text attributes resolve to, as its Paragraph would draw them.
+NSFont *inputFont(const DesktopTextInputProps &p) {
+  auto attrs = p.getEffectiveTextAttributes(1);
+  AttributedString probe;
+  probe.appendFragment(AttributedString::Fragment{.string = "x", .textAttributes = attrs, .parentShadowView = {}});
+  CFAttributedStringRef s = ngn::makeAttributedString(probe);
+  NSFont *font = (__bridge NSFont *)CFAttributedStringGetAttribute(s, 0, kCTFontAttributeName, nullptr);
+  CFRelease(s);
+  return font;
+}
+
+// The `selection` prop, when it is new in this update: React Native iOS applies it only then.
+std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextInputProps &p) {
+  if (!p.selection) {
+    return std::nullopt;
+  }
+  auto before = std::dynamic_pointer_cast<const DesktopTextInputProps>(old);
+  if (before && before->selection && before->selection->start == p.selection->start &&
+      before->selection->end == p.selection->end) {
+    return std::nullopt;
+  }
+  int start = std::max(0, std::min(p.selection->start, p.selection->end));
+  int end = std::max(p.selection->start, p.selection->end);
+  return NSMakeRange(start, end - start);
+}
+
+} // namespace
+
 @implementation NGNTextInputView {
-  NSTextField *_field;
+  NGNTextField *_box;
   int _eventCount;
   BOOL _settingText;
 }
 
 - (instancetype)initWithShadowView:(const ShadowView &)view {
   if ((self = [super initWithShadowView:view])) {
-    // Secure entry is a field of its own class in AppKit, chosen as the view is made.
-    auto first = std::dynamic_pointer_cast<const TextInputProps>(view.props);
-    BOOL secure = first && first->traits.secureTextEntry;
-    _field = secure ? [[NSSecureTextField alloc] initWithFrame:NSZeroRect] : [[NSTextField alloc] initWithFrame:NSZeroRect];
-    _field.bezeled = NO;
-    _field.bordered = NO;
-    _field.drawsBackground = NO;
-    _field.focusRingType = NSFocusRingTypeNone;
-    _field.usesSingleLineMode = YES;
-    _field.cell.scrollable = YES;
-    _field.cell.wraps = NO;
-    _field.delegate = self;
-    [self addSubview:_field];
+    _box = [[NGNTextField alloc] initWithFrame:NSZeroRect];
+    NSTextField *field = _box.control;
+    field.bezeled = NO;
+    field.bordered = NO;
+    field.drawsBackground = NO;
+    field.focusRingType = NSFocusRingTypeNone;
+    field.usesSingleLineMode = YES;
+    field.cell.scrollable = YES;
+    field.cell.wraps = NO;
+    field.delegate = self;
+    __weak NGNTextInputView *weakSelf = self;
+    _box.focused = ^{
+      NGNTextInputView *strong = weakSelf;
+      if (auto e = [strong inputEmitter]) {
+        e->onFocus([strong metrics]);
+      }
+    };
+    // Secure entry is a field of its own class in AppKit; the box swaps it as the prop changes.
+    auto first = std::dynamic_pointer_cast<const DesktopTextInputProps>(view.props);
+    _box.secure = first && first->traits.secureTextEntry;
+    _box.autoFocus = first && first->autoFocus;
+    [self addSubview:_box];
   }
   return self;
 }
@@ -659,28 +701,30 @@ static BOOL focusFromKeyboard() {
 }
 
 - (void)updateProps:(const Props::Shared &)props {
+  Props::Shared old = self.props;
   [super updateProps:props];
-  auto p = std::dynamic_pointer_cast<const TextInputProps>(props);
+  auto p = std::dynamic_pointer_cast<const DesktopTextInputProps>(props);
   if (!p) {
     return;
   }
+  _box.secure = p->traits.secureTextEntry;
+  NSTextField *field = _box.control;
   auto attrs = p->getEffectiveTextAttributes(1);
-  AttributedString probe;
-  probe.appendFragment(AttributedString::Fragment{.string = "x", .textAttributes = attrs, .parentShadowView = {}});
-  CFAttributedStringRef s = ngn::makeAttributedString(probe);
-  CTFontRef font = (CTFontRef)CFAttributedStringGetAttribute(s, 0, kCTFontAttributeName, nullptr);
-  _field.font = (__bridge NSFont *)font;
-  CFRelease(s);
-  _field.textColor = attrs.foregroundColor ? nsColor(attrs.foregroundColor) : NSColor.textColor;
-  _field.placeholderString = nsString(p->placeholder);
-  _field.editable = p->editable;
+  field.font = inputFont(*p);
+  field.textColor = attrs.foregroundColor ? nsColor(attrs.foregroundColor) : NSColor.textColor;
+  [_box setPlaceholder:nsString(p->placeholder) color:p->placeholderTextColor ? nsColor(p->placeholderTextColor) : nil];
+  field.editable = p->editable && !p->readOnly;
+  [_box applyOptions:ngn::textInputOptions(*p)];
   // The text prop wins only when it is not older than what the field has sent (React Native iOS's
   // rule), and never while an input method is composing.
   if (p->mostRecentEventCount >= _eventCount && !p->text.empty() && ![self composing]) {
     NSString *text = nsString(p->text);
-    if (![_field.stringValue isEqualToString:text]) {
-      _field.stringValue = text;
+    if (![field.stringValue isEqualToString:text]) {
+      field.stringValue = text;
     }
+  }
+  if (auto range = newSelection(old, *p)) {
+    [_box selectRange:*range];
   }
 }
 
@@ -690,23 +734,24 @@ static BOOL focusFromKeyboard() {
   NSRect content = NSMakeRect(
       i.left, i.top, metrics.frame.size.width - i.left - i.right, metrics.frame.size.height - i.top - i.bottom);
   // The single line, centred vertically in the content box.
-  CGFloat h = std::min<CGFloat>(content.size.height, _field.intrinsicContentSize.height);
-  _field.frame = NSMakeRect(content.origin.x, content.origin.y + (content.size.height - h) / 2, content.size.width, h);
+  CGFloat h = std::min<CGFloat>(content.size.height, _box.control.intrinsicContentSize.height);
+  _box.frame = NSMakeRect(content.origin.x, content.origin.y + (content.size.height - h) / 2, content.size.width, h);
 }
 
 - (NSResponder *)keyboardResponder {
-  return _field;
+  return _box.control;
 }
 
 - (BOOL)composing {
-  NSText *editor = _field.currentEditor;
+  NSText *editor = _box.currentEditor;
   return [editor isKindOfClass:NSTextView.class] && [(NSTextView *)editor hasMarkedText];
 }
 
 - (TextInputEventEmitter::Metrics)metrics {
-  NSRange sel = _field.currentEditor ? _field.currentEditor.selectedRange : NSMakeRange(_field.stringValue.length, 0);
+  NSString *value = _box.stringValue;
+  NSRange sel = _box.currentEditor ? _box.currentEditor.selectedRange : NSMakeRange(value.length, 0);
   return TextInputEventEmitter::Metrics{
-      .text = std::string(_field.stringValue.UTF8String),
+      .text = std::string(value.UTF8String),
       .selectionRange = {.location = (int)sel.location, .length = (int)sel.length},
       .eventCount = _eventCount,
       .target = (Tag)self.reactTag,
@@ -739,6 +784,9 @@ static BOOL focusFromKeyboard() {
 
 - (void)controlTextDidEndEditing:(NSNotification *)note {
   [NSNotificationCenter.defaultCenter removeObserver:self name:NSTextViewDidChangeSelectionNotification object:nil];
+  if (_box.swapping) {
+    return; // secure entry changing hands the keyboard from one control to the other
+  }
   if (auto e = [self inputEmitter]) {
     e->onEndEditing([self metrics]);
     e->onBlur([self metrics]);
@@ -763,10 +811,8 @@ static BOOL focusFromKeyboard() {
 
 - (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args {
   if (name == "focus") {
-    [self.window makeFirstResponder:_field];
-    if (auto e = [self inputEmitter]) {
-      e->onFocus([self metrics]);
-    }
+    // The box reports the focus as the field takes the keyboard.
+    [self.window makeFirstResponder:_box.control];
   } else if (name == "blur") {
     [self.window makeFirstResponder:nil];
   } else if (name == "setTextAndSelection" && args.isArray() && args.size() >= 4) {
@@ -774,18 +820,19 @@ static BOOL focusFromKeyboard() {
     if (count < _eventCount) {
       return; // stale: the field has moved on since JavaScript sent this
     }
+    NSTextField *field = _box.control;
     if (args[1].isString() && ![self composing]) {
       NSString *text = nsString(args[1].asString());
-      if (![_field.stringValue isEqualToString:text]) {
+      if (![field.stringValue isEqualToString:text]) {
         _settingText = YES;
-        _field.stringValue = text;
+        field.stringValue = text;
         _settingText = NO;
       }
     }
-    if (args[2].isNumber() && args[3].isNumber() && _field.currentEditor) {
+    if (args[2].isNumber() && args[3].isNumber() && field.currentEditor) {
       NSInteger start = args[2].asInt(), end = args[3].asInt();
-      if (start >= 0 && end >= start && (NSUInteger)end <= _field.stringValue.length) {
-        _field.currentEditor.selectedRange = NSMakeRange(start, end - start);
+      if (start >= 0 && end >= start && (NSUInteger)end <= field.stringValue.length) {
+        field.currentEditor.selectedRange = NSMakeRange(start, end - start);
       }
     }
   }
@@ -801,7 +848,7 @@ static BOOL focusFromKeyboard() {
 
 @implementation NGNMultilineTextInputView {
   NSScrollView *_scroll;
-  NSTextView *_text;
+  NGNTextView *_text;
   int _eventCount;
   BOOL _settingText;
 }
@@ -812,7 +859,7 @@ static BOOL focusFromKeyboard() {
     _scroll.drawsBackground = NO;
     _scroll.hasVerticalScroller = YES;
     _scroll.autohidesScrollers = YES;
-    _text = [[NSTextView alloc] initWithFrame:NSZeroRect];
+    _text = [[NGNTextView alloc] initWithFrame:NSZeroRect];
     _text.drawsBackground = NO;
     _text.richText = NO;
     _text.allowsUndo = YES;
@@ -823,6 +870,15 @@ static BOOL focusFromKeyboard() {
     _text.textContainerInset = NSZeroSize;
     _text.textContainer.lineFragmentPadding = 0;
     _text.delegate = self;
+    __weak NGNMultilineTextInputView *weakSelf = self;
+    _text.focused = ^{
+      NGNMultilineTextInputView *strong = weakSelf;
+      if (auto e = [strong inputEmitter]) {
+        e->onFocus([strong metrics]);
+      }
+    };
+    auto first = std::dynamic_pointer_cast<const DesktopTextInputProps>(view.props);
+    _text.autoFocus = first && first->autoFocus;
     _scroll.documentView = _text;
     [self addSubview:_scroll];
   }
@@ -830,20 +886,18 @@ static BOOL focusFromKeyboard() {
 }
 
 - (void)updateProps:(const Props::Shared &)props {
+  Props::Shared old = self.props;
   [super updateProps:props];
-  auto p = std::dynamic_pointer_cast<const TextInputProps>(props);
+  auto p = std::dynamic_pointer_cast<const DesktopTextInputProps>(props);
   if (!p) {
     return;
   }
   auto attrs = p->getEffectiveTextAttributes(1);
-  AttributedString probe;
-  probe.appendFragment(AttributedString::Fragment{.string = "x", .textAttributes = attrs, .parentShadowView = {}});
-  CFAttributedStringRef s = ngn::makeAttributedString(probe);
-  CTFontRef font = (CTFontRef)CFAttributedStringGetAttribute(s, 0, kCTFontAttributeName, nullptr);
-  _text.font = (__bridge NSFont *)font;
-  CFRelease(s);
+  _text.font = inputFont(*p);
   _text.textColor = attrs.foregroundColor ? nsColor(attrs.foregroundColor) : NSColor.textColor;
-  _text.editable = p->editable;
+  [_text setPlaceholder:nsString(p->placeholder) color:p->placeholderTextColor ? nsColor(p->placeholderTextColor) : nil];
+  _text.editable = p->editable && !p->readOnly;
+  [_text applyOptions:ngn::textInputOptions(*p)];
   if (p->mostRecentEventCount >= _eventCount && !p->text.empty() && !_text.hasMarkedText) {
     NSString *text = nsString(p->text);
     if (![_text.string isEqualToString:text]) {
@@ -851,6 +905,9 @@ static BOOL focusFromKeyboard() {
       _text.string = text;
       _settingText = NO;
     }
+  }
+  if (auto range = newSelection(old, *p)) {
+    [_text selectRange:*range];
   }
 }
 
@@ -890,12 +947,6 @@ static BOOL focusFromKeyboard() {
   }
 }
 
-- (void)textDidBeginEditing:(NSNotification *)note {
-  if (auto e = [self inputEmitter]) {
-    e->onFocus([self metrics]);
-  }
-}
-
 - (void)textDidEndEditing:(NSNotification *)note {
   if (auto e = [self inputEmitter]) {
     e->onEndEditing([self metrics]);
@@ -907,6 +958,14 @@ static BOOL focusFromKeyboard() {
   if (auto e = [self inputEmitter]) {
     e->onSelectionChange([self metrics]);
   }
+}
+
+- (NSDictionary<NSTextCheckingOptionKey, id> *)textView:(NSTextView *)view
+                                   willCheckTextInRange:(NSRange)range
+                                                options:(NSDictionary<NSTextCheckingOptionKey, id> *)options
+                                                  types:(NSTextCheckingTypes *)checkingTypes {
+  auto p = std::dynamic_pointer_cast<const DesktopTextInputProps>(self.props);
+  return p ? NGNTextCheckingOptions(options, ngn::textInputOptions(*p)) : options;
 }
 
 - (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args {
@@ -958,7 +1017,7 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   std::string_view name = view.componentName;
   if (name == "TextInput") {
-    auto props = std::dynamic_pointer_cast<const TextInputProps>(view.props);
+    auto props = std::dynamic_pointer_cast<const DesktopTextInputProps>(view.props);
     if (props && props->multiline) {
       return [[NGNMultilineTextInputView alloc] initWithShadowView:view];
     }

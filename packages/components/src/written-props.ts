@@ -171,6 +171,7 @@ export const WRITTEN_PROPS: readonly string[] = [
   'showsVerticalScrollIndicator',
   'size',
   'smartInsertDelete',
+  'smartQuotes',
   'snapToAlignment',
   'snapToEnd',
   'snapToInterval',

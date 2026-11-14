@@ -19,6 +19,7 @@ import { TextInput, View } from '../../components/src/index.ts';
         keyboardType="email-address"
         [secureTextEntry]="true"
         autoCapitalize="none"
+        smartQuotes="false"
       />
       <text-input nativeID="notes" [multiline]="true" textAlignVertical="top" />
       <text-input nativeID="said-invalid" invalid touched />
