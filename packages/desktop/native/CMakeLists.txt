@@ -123,6 +123,7 @@ add_library(ngn_core STATIC
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
     core/src/modules/photo-library.cpp
+    core/src/modules/printing.cpp
     core/src/modules/screen-capture.cpp
     core/src/modules/sharing.cpp
     core/src/modules/splash-screen.cpp
@@ -165,9 +166,10 @@ if(NGN_TESTS)
         appkit/geocoder.mm appkit/tests/geocoder.test.mm
         appkit/address-search.mm appkit/tests/address-search.test.mm
         appkit/symbol-drawing.mm appkit/tests/symbol.test.mm
-        appkit/share-picker.mm appkit/tests/share-picker.test.mm)
+        appkit/share-picker.mm appkit/tests/share-picker.test.mm
+        appkit/printing.mm appkit/tests/printing.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

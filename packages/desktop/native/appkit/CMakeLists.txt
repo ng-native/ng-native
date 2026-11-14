@@ -15,6 +15,7 @@ add_executable(ngn-macos
     photo-library.mm
     tracking.mm
     image-manipulator.mm
+    printing.mm
     battery.mm
     header-toolbar.mm
     host-view.mm
@@ -49,7 +50,7 @@ add_executable(ngn-macos
     web-browser.mm
     app-updater.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries ${NGN_LINKED}
-    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices" "-framework SystemConfiguration" "-framework Network" "-framework AuthenticationServices" "-framework Vision" "-framework EventKit" "-framework StoreKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework MapKit")
+    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices" "-framework SystemConfiguration" "-framework Network" "-framework AuthenticationServices" "-framework Vision" "-framework EventKit" "-framework StoreKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework MapKit" "-framework WebKit" "-framework PDFKit")
 ngn_link_swift(ngn-macos)
 target_compile_options(ngn-macos PRIVATE -fobjc-arc -Wall -Wno-unused-parameter)
 # A Release build is what a packaged app ships: the linker drops the code nothing reaches.

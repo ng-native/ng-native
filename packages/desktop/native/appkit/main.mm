@@ -40,6 +40,7 @@
 #import "photo-library.h"
 #import "tracking.h"
 #import "image-manipulator.h"
+#import "printing.h"
 #import "geocoder.h"
 #import "address-search.h"
 #include "ngn/asset.h"
@@ -792,6 +793,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeImageManipulator", [] {
         return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator");
       });
+      static auto printSystem = ngn::appkit::makePrintSystem();
+      ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", noPrompts); });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
       static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });

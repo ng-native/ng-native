@@ -42,16 +42,20 @@ export class Invoice {
   uri, to share or [save where the user chooses](/packages/expo/document-picker). `page` takes the
   `width` and `height` in points.
 - **`selectPrinter()`** - iOS's printer picker. Resolves to the printer chosen, with its `name`
-  and `url`, or `null` when the picker is dismissed and on Android, which has none.
+  and `url`, or `null` when the picker is dismissed and on Android and macOS, which have none.
+
+On macOS the desktop host prints with AppKit: the print dialog opens as a sheet on the key window,
+and a `printer` passed to `print()` is ignored. `printToPdf()` breaks pages where the HTML's CSS
+asks (`break-before: page`, `break-after: page`).
 
 ## Without the module
 
-On iOS and Android, a missing `expo-print` - never installed, or installed without the app being
-rebuilt since - leaves the service made, so injecting it does not throw. A call throws a
+On iOS, Android and macOS, a missing `expo-print` - never installed, or installed without the app
+being rebuilt since - leaves the service made, so injecting it does not throw. A call throws a
 `MissingModuleError`; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, on macOS until the desktop host has its module, and in a test that provides no fake,
+On the web, and in a test that provides no fake,
 `available()` is `false`, `print()` does nothing, and `printToPdf()` and `selectPrinter()` resolve
 to `null`.
 
