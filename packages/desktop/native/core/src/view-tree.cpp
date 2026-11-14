@@ -9,7 +9,7 @@ using namespace facebook::react;
 namespace ngn {
 
 void ViewTree::create(const ShadowView &view) {
-  nodes_[view.tag] = Node{.view = view};
+  nodes_[view.tag] = Node{.view = view, .parent = -1, .children = {}};
 }
 
 void ViewTree::destroy(Tag tag) {

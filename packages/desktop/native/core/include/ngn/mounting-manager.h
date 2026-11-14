@@ -27,7 +27,6 @@ class MountingManager final : public facebook::react::IMountingManager,
 
   facebook::react::ComponentRegistryFactory getComponentRegistryFactory() override;
   bool hasComponent(const std::string &name) override;
-  void setUIManager(std::weak_ptr<facebook::react::UIManager> uiManager) noexcept override;
 
   // UI thread only.
   const ViewTree &tree() const {
@@ -47,7 +46,6 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::vector<facebook::react::ComponentDescriptorProvider> components_;
   std::unordered_set<std::string> componentNames_;
   std::function<void(SurfaceId)> afterMount_;
-  std::weak_ptr<facebook::react::UIManager> uiManager_;
   ViewTree tree_;
 };
 

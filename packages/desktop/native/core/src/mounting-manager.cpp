@@ -154,8 +154,4 @@ bool MountingManager::hasComponent(const std::string &name) {
   return name == "RootView" || componentNames_.contains(name);
 }
 
-void MountingManager::setUIManager(std::weak_ptr<UIManager> uiManager) noexcept {
-  uiManager_ = std::move(uiManager);
-}
-
 } // namespace ngn

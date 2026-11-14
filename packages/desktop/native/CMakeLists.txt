@@ -31,6 +31,11 @@ endforeach()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0)
+# React Native's libraries reference each other in both directions. Apple's linker and lld
+# resolve archives in any order; GNU ld does not, so Linux links with lld.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_link_options(-fuse-ld=lld)
+endif()
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()

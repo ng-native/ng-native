@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
 
-      - run: sudo apt-get install -y --no-install-recommends ninja-build
+      - run: sudo apt-get install -y --no-install-recommends ninja-build lld
 
       # The fetched sources only, keyed by the pins: a build directory is cheap to remake and
       # large to keep.
