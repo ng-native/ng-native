@@ -44,6 +44,7 @@
 #import "expo-image-view.h"
 #import "camera-view.h"
 #import "camera.h"
+#import "map-view.h"
 #include "ngn/web-view.h"
 #import "geocoder.h"
 #import "address-search.h"
@@ -841,6 +842,9 @@ int main(int argc, const char *argv[]) {
       static auto cameraViews = std::make_shared<ngn::CameraViews>();
       [NGNCameraView useHardware:cameraHardware views:cameraViews noPrompts:noPrompts];
       ngn::addModule(*modules, "NgNativeCamera", [] { return ngn::makeCameraModule(cameraHardware, cameraViews, caches + "/Camera", noPrompts); });
+      static auto mapViews = std::make_shared<ngn::MapViews>();
+      [NGNMapView useViews:mapViews location:location];
+      ngn::addModule(*modules, "NgNativeMaps", [] { return ngn::makeMapsModule(mapViews); });
       static auto printSystem = ngn::appkit::makePrintSystem();
       ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", noPrompts); });
       // react-native-webview's navigation answers; harmless in a host built without the library.

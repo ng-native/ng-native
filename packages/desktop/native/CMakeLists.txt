@@ -124,6 +124,7 @@ add_library(ngn_core STATIC
     core/src/modules/language-model.cpp
     core/src/modules/local-authentication.cpp
     core/src/modules/location.cpp
+    core/src/modules/maps.cpp
     core/src/modules/network-state.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
@@ -177,6 +178,7 @@ if(NGN_TESTS)
         appkit/expo-image-drawing.mm appkit/tests/expo-image.test.mm
         appkit/expo-ui-renderer.mm appkit/tests/expo-ui.test.mm
         appkit/camera.mm appkit/tests/camera.test.mm
+        appkit/maps.mm appkit/tests/maps.test.mm
         appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage")

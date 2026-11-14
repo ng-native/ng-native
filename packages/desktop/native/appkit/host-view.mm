@@ -16,6 +16,7 @@
 #import "expo-image-view.h"
 #import "expo-ui-view.h"
 #import "camera-view.h"
+#import "map-view.h"
 
 #include "text-layout.h"
 
@@ -995,6 +996,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name.starts_with("RNSVG")) {
     return [[NGNSvgElementView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::MapComponentName) {
+    return [[NGNMapView alloc] initWithShadowView:view];
   }
   if (name == ngn::CameraComponentName) {
     return [[NGNCameraView alloc] initWithShadowView:view];

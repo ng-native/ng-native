@@ -24,6 +24,8 @@ add_executable(ngn-macos
     expo-ui-view.mm
     camera.mm
     camera-view.mm
+    maps.mm
+    map-view.mm
     battery.mm
     header-toolbar.mm
     host-view.mm

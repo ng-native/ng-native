@@ -903,3 +903,30 @@ describe('Camera on macOS', () => {
     ]);
   });
 });
+
+describe('MapView on macOS', () => {
+  it("calls the map's functions on the desktop host's NgNativeMaps with the view's tag", async () => {
+    const calls: unknown[][] = [];
+    mac({
+      NgNativeMaps: {
+        setCameraPosition: async (...args: unknown[]) => void calls.push(['camera', ...args]),
+        selectMarker: async (...args: unknown[]) => void calls.push(['select', ...args]),
+      },
+    });
+    const { MapView } = await import('@ng-native/expo/map-view');
+    const functions = injectService(MapView.SOURCE);
+    assert.ok(functions);
+    const london = { coordinates: { latitude: 51.5, longitude: -0.1 }, zoom: 12 };
+    await functions.setCameraPosition.call({ nativeTag: 9 }, london);
+    await functions.setCameraPosition.call({ nativeTag: 9 });
+    await functions.selectMarker.call({ nativeTag: 9 }, 'kx', { zoom: 15 });
+    await functions.selectMarker.call({ nativeTag: 9 });
+    // A TurboModule drops an undefined argument, so a missing one crosses as null.
+    assert.deepEqual(calls, [
+      ['camera', 9, london],
+      ['camera', 9, null],
+      ['select', 9, 'kx', { zoom: 15 }],
+      ['select', 9, null, null],
+    ]);
+  });
+});
