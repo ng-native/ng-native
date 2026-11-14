@@ -34,7 +34,13 @@ import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
 import { describe } from 'node:test';
 import { signal, type Type, type WritableSignal } from '@angular/core';
-import { DragAndDrop, OS, type NativeDragAndDrop, type NativeDropEvent } from '@ng-native/device';
+import {
+  DragAndDrop,
+  OS,
+  dragAndDropSource,
+  type NativeDragAndDrop,
+  type NativeDropEvent,
+} from '@ng-native/device';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -280,5 +286,37 @@ describe("on iOS, through the host's module", () => {
     assert.deepEqual(host.calls, []);
     assert.equal(screen.getByTestId('target').props['nativeID'], undefined);
     assert.equal(screen.getByTestId('target').props['fileDrop'], true);
+  });
+});
+
+describe("the drag and drop module's platform source", () => {
+  /** A device for one call: React Native on `Platform`, with the module linked. */
+  function onDevice<T>(platform: { OS: string; isPad?: boolean }, run: () => T): T {
+    const host = globalThis as Record<string, unknown>;
+    const module = { setFileDrop: () => {}, setDragItem: () => {} };
+    host['require'] = (id: string) =>
+      id === 'react-native'
+        ? {
+            Platform: platform,
+            TurboModuleRegistry: {
+              get: (name: string) => name === 'NgNativeDragAndDrop' && module,
+            },
+          }
+        : undefined;
+    host['nativeFabricUIManager'] = {};
+    try {
+      return run();
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+    }
+  }
+
+  it('reaches the module on an iPad', () => {
+    assert.notEqual(onDevice({ OS: 'ios', isPad: true }, dragAndDropSource), null);
+  });
+
+  it('is absent on an iPhone, whose module ignores every view, so none is named', () => {
+    assert.equal(onDevice({ OS: 'ios', isPad: false }, dragAndDropSource), null);
   });
 });

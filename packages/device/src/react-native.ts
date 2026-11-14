@@ -109,7 +109,12 @@ export interface ReactNative {
     getFontScale(): number;
   };
   /** `Version` is a string on iOS, `'26.5'`, and the API level, a number, on Android. */
-  Platform: { OS: string; Version?: string | number };
+  Platform: {
+    OS: string;
+    Version?: string | number;
+    /** iOS: whether the device is an iPad. */
+    isPad?: boolean;
+  };
   /** Optional: the status bar and keyboard read it, for `DeviceInfo`'s `isEdgeToEdge` on Android. */
   TurboModuleRegistry?: { get(name: string): unknown };
   /** Where a native module without its own emitter sends events. */

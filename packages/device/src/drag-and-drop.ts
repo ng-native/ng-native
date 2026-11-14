@@ -45,9 +45,13 @@ interface DragAndDropModule {
   setDragItem?(nativeID: string, item: unknown): void;
 }
 
-/** iOS's `NgNativeDragAndDrop` TurboModule, or null where it is not linked, as in Expo Go. */
+/**
+ * iOS's `NgNativeDragAndDrop` TurboModule, or null where it is not linked, as in Expo Go, and on an
+ * iPhone, where it ignores every view: no view is named for it there.
+ */
 export function dragAndDropSource(): NativeDragAndDrop | null {
   const native = reactNative();
+  if (native?.Platform.OS === 'ios' && native.Platform.isPad !== true) return null;
   const module = native?.TurboModuleRegistry?.get?.('NgNativeDragAndDrop') as
     DragAndDropModule | null | undefined;
   if (!module) return null;
