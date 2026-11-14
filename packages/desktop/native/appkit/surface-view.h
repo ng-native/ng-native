@@ -4,6 +4,7 @@
 
 #import <AppKit/AppKit.h>
 
+#include "ngn/accessibility.h"
 #include "ngn/input.h"
 #include "ngn/safe-areas.h"
 
@@ -24,6 +25,9 @@
 // Set once by the host: shows the context menu of the view under a secondary click, if one has a
 // `contextMenu` prop. True when it showed one.
 @property (class, nonatomic) std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)> contextMenuShower;
+// Set once by the host: the views on a rotor over the container whose root is `root`, in the
+// order the core's walk of the tree lists them (accessibility.h's rotorItems).
+@property (class, nonatomic) std::function<NSArray<NSView *> *(facebook::react::Tag root, ngn::AxRotor kind)> rotorViews;
 // Shows the cursor the core asked for (input-dispatcher.h), and keeps showing it over the views
 // AppKit would reset it on.
 + (void)showCursor:(facebook::react::Cursor)cursor;

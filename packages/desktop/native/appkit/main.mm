@@ -997,6 +997,16 @@ int main(int argc, const char *argv[]) {
         modules, network, bundle);
 
     bool developer = gHost.runtime->devServer().has_value();
+    // VoiceOver's rotors list what the core's walk of the tree finds (accessibility.h).
+    NGNSurfaceView.rotorViews = [](Tag root, ngn::AxRotor kind) -> NSArray<NSView *> * {
+      NSMutableArray<NSView *> *views = [NSMutableArray array];
+      for (auto tag : ngn::rotorItems(gHost.mounting->tree(), root, kind)) {
+        if (NSView *view = gHost.backend->view(tag)) {
+          [views addObject:view];
+        }
+      }
+      return views;
+    };
     NGNSurfaceView.contextMenuShower = [](NGNSurfaceView *view, NSEvent *event, const ngn::PointerInput &input) {
       auto target = gHost.input->contextMenuAt(input);
       if (!target) {

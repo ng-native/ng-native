@@ -8,6 +8,7 @@ namespace {
 std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> gInsetsChanged;
 NSCursor *gCursor = nil;
 std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)> gContextMenuShower;
+std::function<NSArray<NSView *> *(facebook::react::Tag, ngn::AxRotor)> gRotorViews;
 
 // A cursor of nothing, for `cursor: none`.
 NSCursor *noCursor() {
@@ -85,43 +86,24 @@ NSCursor *nsCursor(Cursor cursor) {
 } // namespace
 
 // One of VoiceOver's rotors over a container's views (accessibility.h): its items are the views
-// listed on it, in tree order, read again on each search so they follow the app.
+// the core lists on it, in tree order, read again on each search so they follow the app.
 @interface NGNRotorSearch : NSObject <NSAccessibilityCustomRotorItemSearchDelegate>
-@property (nonatomic, weak) NSView *container;
+@property (nonatomic, weak) NGNSurfaceView *container;
 @property (nonatomic) ngn::AxRotor kind;
 @end
 
 @implementation NGNRotorSearch
 
-- (void)collect:(NSView *)view into:(NSMutableArray<NGNView *> *)items {
-  for (NSView *child in view.subviews) {
-    if (child.hidden) {
-      continue;
-    }
-    if ([child isKindOfClass:NGNView.class]) {
-      NGNView *drawn = (NGNView *)child;
-      auto info = [drawn axInfo];
-      auto rotors = ngn::rotorsOf(info);
-      if (std::find(rotors.begin(), rotors.end(), self.kind) != rotors.end()) {
-        [items addObject:drawn];
-      }
-      if (info.hidesChildren) {
-        continue;
-      }
-    }
-    [self collect:child into:items];
-  }
-}
-
 - (NSAccessibilityCustomRotorItemResult *)rotor:(NSAccessibilityCustomRotor *)rotor
                       resultForSearchParameters:(NSAccessibilityCustomRotorSearchParameters *)parameters {
-  NSMutableArray<NGNView *> *items = [NSMutableArray array];
-  if (self.container) {
-    [self collect:self.container into:items];
+  NGNSurfaceView *container = self.container;
+  NSMutableArray<NSView *> *items = [NSMutableArray array];
+  if (container != nil && gRotorViews) {
+    [items addObjectsFromArray:gRotorViews(container.rootTag, self.kind)];
   }
   NSString *filter = parameters.filterString;
   if (filter.length > 0) {
-    [items filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NGNView *item, NSDictionary *) {
+    [items filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSView *item, NSDictionary *) {
              return [item.accessibilityLabel localizedCaseInsensitiveContainsString:filter];
            }]];
   }
@@ -136,7 +118,7 @@ NSCursor *nsCursor(Cursor cursor) {
   if (!next) {
     return nil;
   }
-  NGNView *item = items[*next];
+  NSView *item = items[*next];
   NSAccessibilityCustomRotorItemResult *result = [[NSAccessibilityCustomRotorItemResult alloc] initWithTargetElement:item];
   result.customLabel = item.accessibilityLabel;
   return result;
@@ -182,6 +164,13 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
 }
 + (void)setContextMenuShower:(std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)>)fn {
   gContextMenuShower = std::move(fn);
+}
+
++ (std::function<NSArray<NSView *> *(facebook::react::Tag, ngn::AxRotor)>)rotorViews {
+  return gRotorViews;
+}
++ (void)setRotorViews:(std::function<NSArray<NSView *> *(facebook::react::Tag, ngn::AxRotor)>)fn {
+  gRotorViews = std::move(fn);
 }
 
 + (std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)>)insetsChanged {
