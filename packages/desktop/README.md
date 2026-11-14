@@ -269,8 +269,8 @@ event after that. Links to the app's scheme arrive the same way.
 `NgNativeUndo` keeps the app's undo history in one NSUndoManager shared by every window, which
 `UndoStack` in `@ng-native/device` registers actions with. Edit > Undo and Edit > Redo name the
 last action and send `{ type: 'undo', id }` or `{ type: 'redo', id }` on `ngNativeUndo`. A focused
-text input keeps its own history, so typing is undone there and the app's actions where nothing
-is focused. A reload clears the history.
+text input or web view keeps its own history, so typing is undone there and the app's actions
+where neither is focused. A reload clears the history.
 
 ## Notifications
 

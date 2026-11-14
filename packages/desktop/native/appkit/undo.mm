@@ -1,5 +1,6 @@
 #import "undo.h"
 
+#import <WebKit/WebKit.h>
 #import <objc/runtime.h>
 
 namespace ngn::appkit {
@@ -77,11 +78,30 @@ std::shared_ptr<UndoManager> makeUndoManager() {
   return std::make_shared<AppKitUndoManager>();
 }
 
-NSUndoManager *undoManagerFor(NSWindow *window) {
-  // The field editor (an NSTextView), or a text field about to hand over to it: the field
-  // editor asks once as editing starts and keeps what it got.
-  NSResponder *focus = window.firstResponder;
+namespace {
+
+// The field editor (an NSTextView), a text field about to hand over to it, or a web view (or a
+// view in one): editors that register their edits with no group begun, as AppKit's do, so their
+// manager must group by event. The field editor asks once as editing starts and keeps what it got.
+bool editsWithItsOwnHistory(NSResponder *focus) {
   if ([focus isKindOfClass:NSText.class] || [focus isKindOfClass:NSTextField.class]) {
+    return true;
+  }
+  if ([focus isKindOfClass:NSView.class]) {
+    for (NSView *view = (NSView *)focus; view != nil; view = view.superview) {
+      if ([view isKindOfClass:WKWebView.class]) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+} // namespace
+
+NSUndoManager *undoManagerFor(NSWindow *window) {
+  NSResponder *focus = window.firstResponder;
+  if (editsWithItsOwnHistory(focus)) {
     NSUndoManager *text = objc_getAssociatedObject(window, kTextUndoKey);
     if (text == nil) {
       text = [NSUndoManager new];
