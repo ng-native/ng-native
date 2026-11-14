@@ -14,8 +14,9 @@
  *   Native version.
  *
  * The host is the universal Release build (`build.sh --universal --release`), with no app's
- * linked code. `ngn-macos` and `hermesc` have their local symbols stripped and are signed with the hardened runtime by
- * `NGN_SIGN_IDENTITY`, and ad hoc when it is not set, as in a dry run. Nothing is uploaded.
+ * linked code. `ngn-macos` and `hermesc` have their local symbols stripped and are signed with the
+ * hardened runtime, ad hoc (`codesign --sign -`) unless `NGN_SIGN_IDENTITY` names an identity: an
+ * app re-signs the host when it packages, so the release needs no Developer ID. Nothing is uploaded.
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -27,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { HOST_LIBRARIES, packageDir } from '../../bin/host.mjs';
-import { prebuiltName, readManifest, withHost } from '../../bin/prebuilt.mjs';
+import { prebuiltName, readManifest, signPrebuiltFiles, withHost } from '../../bin/prebuilt.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -102,20 +103,11 @@ try {
       verbatimSymlinks: true,
     });
   }
-  const identity = process.env['NGN_SIGN_IDENTITY'] || '-';
-  for (const name of ['ngn-macos', 'hermesc']) {
-    // Local symbols only, as package strips them; before signing, which stripping would break.
-    run('strip', ['-x', path.join(appkit, name)]);
-    run('codesign', [
-      '--force',
-      '--options',
-      'runtime',
-      identity === '-' ? '--timestamp=none' : '--timestamp',
-      '--sign',
-      identity,
-      path.join(appkit, name),
-    ]);
-  }
+  signPrebuiltFiles(
+    run,
+    ['ngn-macos', 'hermesc'].map((name) => path.join(appkit, name)),
+    process.env,
+  );
   const archs = run('lipo', ['-archs', path.join(appkit, 'ngn-macos')], {
     stdio: ['inherit', 'pipe', 'inherit'],
   }).stdout.trim();

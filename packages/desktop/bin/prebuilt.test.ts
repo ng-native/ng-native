@@ -7,6 +7,7 @@ import {
   fetchPrebuilt,
   prebuiltName,
   readManifest,
+  signPrebuiltFiles,
   withHost,
   type PrebuiltHost,
 } from './prebuilt.mjs';
@@ -180,5 +181,65 @@ describe('fetchPrebuilt', () => {
       () => fetchPrebuilt(fakeFetch().sys, { ...HOST, sha256: '' }, '/c'),
       /no SHA-256 to check/,
     );
+  });
+});
+
+describe('signing the prebuilt host', () => {
+  function fakeRun(status = 0) {
+    const calls: { command: string; args: string[] }[] = [];
+    const run = (command: string, args: string[]) => {
+      calls.push({ command, args });
+      return { status };
+    };
+    return { run, calls };
+  }
+
+  it('strips, then signs ad hoc with the hardened runtime when no identity is given', () => {
+    const { run, calls } = fakeRun();
+    signPrebuiltFiles(run, ['/a/ngn-macos', '/a/hermesc'], {});
+    assert.deepEqual(calls, [
+      { command: 'strip', args: ['-x', '/a/ngn-macos'] },
+      {
+        command: 'codesign',
+        args: [
+          '--force',
+          '--options',
+          'runtime',
+          '--timestamp=none',
+          '--sign',
+          '-',
+          '/a/ngn-macos',
+        ],
+      },
+      { command: 'strip', args: ['-x', '/a/hermesc'] },
+      {
+        command: 'codesign',
+        args: ['--force', '--options', 'runtime', '--timestamp=none', '--sign', '-', '/a/hermesc'],
+      },
+    ]);
+  });
+
+  it('treats an empty NGN_SIGN_IDENTITY as none', () => {
+    const { run, calls } = fakeRun();
+    signPrebuiltFiles(run, ['/a/ngn-macos'], { NGN_SIGN_IDENTITY: '' });
+    assert.equal(calls[1]!.args[calls[1]!.args.indexOf('--sign') + 1], '-');
+  });
+
+  it('signs with an identity, and a timestamp, when one is given', () => {
+    const { run, calls } = fakeRun();
+    signPrebuiltFiles(run, ['/a/ngn-macos'], { NGN_SIGN_IDENTITY: 'Developer ID Application: X' });
+    assert.deepEqual(calls[1]!.args, [
+      '--force',
+      '--options',
+      'runtime',
+      '--timestamp',
+      '--sign',
+      'Developer ID Application: X',
+      '/a/ngn-macos',
+    ]);
+  });
+
+  it('fails when codesign fails', () => {
+    assert.throws(() => signPrebuiltFiles(fakeRun(1).run, ['/a/ngn-macos'], {}), /failed/);
   });
 });

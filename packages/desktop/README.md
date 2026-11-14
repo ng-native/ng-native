@@ -703,9 +703,12 @@ links a library's or its own native desktop code, when a host library it has ins
 than the prebuilt one or denied, when the download fails (with a warning), and when
 `NGN_DESKTOP_FROM_SOURCE=1` is set.
 
-`native/scripts/make-prebuilt.mjs <app> <out>` builds and packs one, signed with
-`NGN_SIGN_IDENTITY` or ad hoc, and writes its `prebuilt.json` entry; the release workflow runs it
-and uploads the archive with the GitHub release.
+`native/scripts/make-prebuilt.mjs <app> <out>` builds and packs one, and writes its
+`prebuilt.json` entry; the release workflow runs it and uploads the archive with the GitHub
+release. The host's `ngn-macos` and `hermesc` are signed ad hoc with the hardened runtime, with no
+Developer ID: `package` signs the app, host included, with the app's own identity, and the download
+is checked by the SHA-256 in `prebuilt.json`. Set `NGN_SIGN_IDENTITY` to sign them with an identity
+instead.
 
 ## Package the app
 

@@ -77,11 +77,12 @@ jobs:
       - run: pnpm coverage
 
   # The prebuilt desktop host for the React Native version the packages support: the universal
-  # Release build, signed, packed with its hermesc and Sparkle, so an app with no native desktop
-  # code of its own compiles nothing (packages/desktop/bin/prebuilt.mjs). Built against the canary,
-  # which has every host library. Signed with the Developer ID when the secrets are set and this is
-  # not a dry run, ad hoc otherwise. The archive goes up with the GitHub release; its SHA-256 goes
-  # into packages/desktop/prebuilt.json, inside the npm package, before it is packed.
+  # Release build, packed with its hermesc and Sparkle, so an app with no native desktop code of
+  # its own compiles nothing (packages/desktop/bin/prebuilt.mjs). Built against the canary, which
+  # has every host library. Signed ad hoc, so the job needs no secrets: an app re-signs the host
+  # when it packages, and the download is checked by its SHA-256. The archive goes up with the
+  # GitHub release; its SHA-256 goes into packages/desktop/prebuilt.json, inside the npm package,
+  # before it is packed.
   desktop-host:
     needs: validate
     if: github.ref == 'refs/heads/main' || inputs.dry_run
@@ -101,35 +102,9 @@ jobs:
           path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
           key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
 
-      # The Developer ID certificate into a keychain of the job's own, which goes with the runner.
-      - name: Signing identity
-        id: identity
-        if: ${{ !inputs.dry_run }}
-        env:
-          CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_P12 }}
-          PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD }}
-          IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_IDENTITY }}
-        run: |
-          if [ -z "$CERTIFICATE" ] || [ -z "$IDENTITY" ]; then
-            echo "No Developer ID secrets: the host is signed ad hoc." >&2
-            exit 0
-          fi
-          keychain="$RUNNER_TEMP/signing.keychain-db"
-          security create-keychain -p "$GITHUB_RUN_ID" "$keychain"
-          security set-keychain-settings -lut 3600 "$keychain"
-          security unlock-keychain -p "$GITHUB_RUN_ID" "$keychain"
-          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/id.p12"
-          security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$PASSWORD" -T /usr/bin/codesign
-          rm "$RUNNER_TEMP/id.p12"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$GITHUB_RUN_ID" "$keychain"
-          read -r -a existing <<< "$(security list-keychains -d user | tr -d '"' | xargs)"
-          security list-keychains -d user -s "$keychain" "${existing[@]}"
-          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
-
-      - name: Build, sign and pack the host
+      - name: Build, sign ad hoc and pack the host
         env:
           VERSION: ${{ needs.validate.outputs.version }}
-          NGN_SIGN_IDENTITY: ${{ steps.identity.outputs.identity }}
         run: |
           start=$(date +%s)
           node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary .prebuilt \

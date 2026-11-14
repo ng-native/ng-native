@@ -8,7 +8,9 @@
  * `appkit/Sparkle.framework`, the files a host build's `appkit` folder has, and unpacks into the
  * per-user cache under its own hash, so a new archive never reuses an old one's files.
  *
- * `native/scripts/make-prebuilt.mjs` builds and packs one.
+ * `native/scripts/make-prebuilt.mjs` builds and packs one. The host is signed ad hoc unless
+ * `NGN_SIGN_IDENTITY` names an identity: an app re-signs it when it packages, and the download is
+ * checked by SHA-256, so no Developer ID is needed.
  */
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -163,4 +165,40 @@ export function fetchPrebuilt(sys, host, cache) {
   }
   sys.remove(unpacked);
   return dir;
+}
+
+/**
+ * Strips each file's local symbols, then signs it with the hardened runtime: with
+ * `NGN_SIGN_IDENTITY` when that is set and not empty, ad hoc (`--sign -`, no timestamp) otherwise.
+ * Throws when a command fails.
+ *
+ * @param {(command: string, args: string[]) => { status: number | null }} run
+ * @param {string[]} files
+ * @param {Record<string, string | undefined>} env
+ */
+export function signPrebuiltFiles(run, files, env) {
+  const identity = env['NGN_SIGN_IDENTITY'] || '-';
+  for (const file of files) {
+    // Before signing, which stripping would break.
+    for (const [command, args] of /** @type {[string, string[]][]} */ ([
+      ['strip', ['-x', file]],
+      [
+        'codesign',
+        [
+          '--force',
+          '--options',
+          'runtime',
+          identity === '-' ? '--timestamp=none' : '--timestamp',
+          '--sign',
+          identity,
+          file,
+        ],
+      ],
+    ])) {
+      const result = run(command, args);
+      if (result.status !== 0) {
+        throw new Error(`${command} ${args.join(' ')} failed (${result.status}).`);
+      }
+    }
+  }
 }
