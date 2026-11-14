@@ -275,6 +275,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/testing/testing-http', title: 'Testing HttpClient' },
         { path: 'packages/testing/testing-navigation', title: 'Testing the router' },
         { path: 'packages/testing/testing-styling', title: 'Testing styles' },
+        { path: 'packages/testing/testing-other-os', title: 'Testing on another OS' },
         { path: 'packages/testing/api', title: 'API reference' },
         { path: 'packages/testing/end-to-end', title: 'End-to-end tests' },
       ],

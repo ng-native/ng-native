@@ -13,6 +13,7 @@
  * Both are async where RNTL's `fireEvent` is not. Change detection is zoneless and commits on a
  * later task, so an event has to be awaited before the tree it changed can be read.
  */
+import { desktopUserEvent, type DesktopUserEvent } from './desktop-events.ts';
 import { currentOf, ownerOf, settle } from './render.ts';
 import { expoUiButtonDisabled, expoUiButtonPress, isExpoUiButton } from './expo-ui-button.ts';
 import { flatten, isSearchBar, isTextInput, withParents } from './queries.ts';
@@ -190,7 +191,7 @@ export interface TypeOptions {
  * Interactions as a person performs them: several events, a task apart, in the order the platform
  * sends them. Slower than `fireEvent`, and closer to what a device does.
  */
-export interface UserEvent {
+export interface UserEvent extends DesktopUserEvent {
   /** A finger down and up, a task apart, through the responder. */
   press(node: FakeFabricNode): Promise<void>;
   /** A finger held for `duration` ms (500, the long-press delay, by default). */
@@ -273,6 +274,7 @@ async function endEditing(field: FakeFabricNode, text: string): Promise<void> {
 }
 
 const user: UserEvent = {
+  ...desktopUserEvent,
   press: (node) => hold(node, 0),
   longPress: (node, { duration = 500 } = {}) => hold(node, duration),
   async type(node, text, options = {}) {
