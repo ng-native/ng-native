@@ -122,6 +122,7 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     resolveReactNative: () => '/apps/demo/node_modules/react-native',
     resolvePackage: () => null,
     env: {},
+    readFile: () => '',
     expo: () => ({ status: 0 }),
     exists: () => false,
     remove: () => {},

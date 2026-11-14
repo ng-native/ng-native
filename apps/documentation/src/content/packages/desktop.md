@@ -50,7 +50,7 @@ The Expo CLI has no `run:macos`: its `run` commands are a fixed list, so `npm ru
 ```sh
 npm run package                                   # dist/macos/<name>.app, ad-hoc signed
 npm run package -- --format dmg                   # signed, notarised and stapled .dmg
-npm run package -- --format dmg --feed-url https://example.com/appcast.xml
+npm run package -- --format dmg --feed-url https://example.com/appcast.xml --sparkle-key <key>
 npm run package -- --format mas                   # a sandboxed Mac App Store .pkg
 ```
 
@@ -63,7 +63,10 @@ puts the packages somewhere other than `dist/macos`.
   one made from the slug.
 - **`dmg`** is signed with your Developer ID and the hardened runtime, notarised, and stapled, app
   and disk image both. `--feed-url` embeds Sparkle with that appcast and makes the `.zip` Sparkle
-  updates from beside the `.dmg`; only a `dmg` has Sparkle.
+  updates from beside the `.dmg`; only a `dmg` has Sparkle. It needs Sparkle's public EdDSA key,
+  which Sparkle checks each update against: `--sparkle-key`, or `NGN_SPARKLE_PUBLIC_KEY`, set to
+  what Sparkle's `generate_keys` prints. Sparkle then checks for updates on its own schedule,
+  without first asking the user.
 - **`mas`** is signed inside the App Sandbox with your provisioning profile, as an installer
   package for App Store Connect. The command names any capability the sandbox forbids, such as
   `spawn` and `paths`, which a sandboxed app cannot use.
@@ -78,6 +81,7 @@ A `dmg` or `mas` needs `ios.bundleIdentifier`. Credentials come from the environ
 | `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`               | Or an App Store Connect API key, for CI                        |
 | `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`            | Or an Apple ID                                                 |
 | `NGN_INSTALLER_IDENTITY`, `NGN_PROVISIONING_PROFILE`, `APPLE_TEAM_ID` | `mas`: the installer identity, the profile's path and the team |
+| `NGN_SPARKLE_PUBLIC_KEY`                                              | `dmg` with `--feed-url`: Sparkle's public EdDSA key            |
 
 A rejected notarisation stops the command with the submission's id, for
 `xcrun notarytool log <id>`.

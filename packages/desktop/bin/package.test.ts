@@ -55,6 +55,7 @@ function fakeMac(
     remove: (file) => void removed.push(file),
     copy: (from, to) => void copied.push([from, to]),
     writeFile: (file, text) => void (written[file] = text),
+    readFile: () => '',
     warn: () => {},
     run(command, args) {
       calls.push({ command, args });
@@ -108,6 +109,7 @@ describe('parsePackage', () => {
       format: 'app',
       output: 'dist/macos',
       feedUrl: undefined,
+      sparkleKey: undefined,
     });
     assert.deepEqual(
       parsePackage(['--format', 'dmg', '--feed-url', 'https://example.com/appcast.xml']),
@@ -116,7 +118,13 @@ describe('parsePackage', () => {
         format: 'dmg',
         output: 'dist/macos',
         feedUrl: 'https://example.com/appcast.xml',
+        sparkleKey: undefined,
       },
+    );
+    assert.equal(
+      parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml', '--sparkle-key', 'K='])
+        .sparkleKey,
+      'K=',
     );
   });
 
@@ -133,6 +141,10 @@ describe('parsePackage', () => {
     assert.throws(
       () => parsePackage(['--format', 'dmg', '--feed-url', 'http://e.com/a.xml']),
       /https URL of a Sparkle appcast/,
+    );
+    assert.throws(
+      () => parsePackage(['--format', 'dmg', '--sparkle-key', 'K=']),
+      /--sparkle-key goes with --feed-url/,
     );
   });
 });
@@ -217,6 +229,8 @@ describe('infoPlist', () => {
       bundleIdentifier: 'com.example.notes',
       iconName: 'AppIcon',
       feedUrl: 'https://example.com/appcast.xml',
+      sparkleKey: 'pfIShU4dEXqPd5ObYNfDBiQWcXozk7estwzTnF9BamQ=',
+      updatesCertificate: '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n',
     });
     const expected = [
       ['CFBundleIdentifier', '<string>com.example.notes</string>'],
@@ -230,6 +244,11 @@ describe('infoPlist', () => {
       ['NGNUpdatesURL', '<string>https://updates.example.com</string>'],
       ['NGNRuntimeVersion', '<string>2</string>'],
       ['SUFeedURL', '<string>https://example.com/appcast.xml</string>'],
+      ['SUPublicEDKey', '<string>pfIShU4dEXqPd5ObYNfDBiQWcXozk7estwzTnF9BamQ=</string>'],
+      ['SUEnableAutomaticChecks', '<true/>'],
+      ['NGNUpdatesCodeSigningCertificate', '<string>-----BEGIN CERTIFICATE-----\nMIIB'],
+      ['NGNUpdatesCodeSigningKeyId', '<string>main</string>'],
+      ['NGNUpdatesCodeSigningAlg', '<string>rsa-v1_5-sha256</string>'],
     ];
     for (const [key, value] of expected) {
       assert.match(text, new RegExp(`<key>${key}</key>\\n\\t*${value}`), key);
@@ -246,7 +265,15 @@ describe('infoPlist', () => {
       bundleIdentifier: 'dev.ngnative.notes',
       iconName: null,
     });
-    for (const key of ['SUFeedURL', 'NGNUpdatesURL', 'CFBundleIconName', 'CFBundleURLTypes']) {
+    for (const key of [
+      'SUFeedURL',
+      'SUPublicEDKey',
+      'SUEnableAutomaticChecks',
+      'NGNUpdatesURL',
+      'NGNUpdatesCodeSigningCertificate',
+      'CFBundleIconName',
+      'CFBundleURLTypes',
+    ]) {
       assert.doesNotMatch(text, new RegExp(`<key>${key}</key>`), key);
     }
   });
@@ -447,7 +474,10 @@ describe('packageApp', () => {
   });
 
   it('embeds Sparkle with a feed, signs it first and zips the stapled app beside the dmg', async () => {
-    const { sys, calls, copied, written } = fakeMac({ env: DMG_ENV, exists: () => true });
+    const { sys, calls, copied, written } = fakeMac({
+      env: { ...DMG_ENV, NGN_SPARKLE_PUBLIC_KEY: 'EDKEY=' },
+      exists: () => true,
+    });
     await quiet(() =>
       packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/appcast.xml']), sys),
     );
@@ -475,10 +505,46 @@ describe('packageApp', () => {
     );
     assert.ok(stapled < updateZip, 'the zip Sparkle updates from holds the stapled app');
     assert.match(written[`${app}/Contents/Info.plist`]!, /<key>SUFeedURL<\/key>/);
+    assert.match(
+      written[`${app}/Contents/Info.plist`]!,
+      /<key>SUPublicEDKey<\/key>\n\t*<string>EDKEY=<\/string>/,
+    );
+  });
+
+  it('stops before it builds when a feed has no Sparkle public key to check updates with', async () => {
+    const { sys, calls } = fakeMac({ env: DMG_ENV, exists: () => true });
+    await assert.rejects(
+      packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml']), sys),
+      /needs Sparkle's public EdDSA key/,
+    );
+    assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
+  });
+
+  it("writes the updates server's code signing certificate into Info.plist", async () => {
+    const read: string[] = [];
+    const { sys, written } = fakeMac({
+      expoConfig: () => ({
+        name: 'Notes',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        ios: { bundleIdentifier: 'com.example.notes' },
+        updates: {
+          url: 'https://u.example.com',
+          codeSigningCertificate: './certs/certificate.pem',
+          codeSigningMetadata: { keyid: 'release', alg: 'rsa-v1_5-sha256' },
+        },
+      }),
+      readFile: (file: string) => (read.push(file), '-----BEGIN CERTIFICATE-----\nX\n'),
+    });
+    await quiet(() => packageApp(parsePackage([]), sys));
+    assert.deepEqual(read, ['/apps/notes/certs/certificate.pem']);
+    const info = written['/apps/notes/dist/macos/Notes.app/Contents/Info.plist']!;
+    assert.match(info, /<key>NGNUpdatesCodeSigningKeyId<\/key>\n\t*<string>release<\/string>/);
+    assert.match(info, /<key>NGNUpdatesCodeSigningCertificate<\/key>\n\t*<string>-----BEGIN/);
   });
 
   it('stops when the host was built without Sparkle, rather than shipping no updater', async () => {
-    const { sys } = fakeMac({ env: DMG_ENV });
+    const { sys } = fakeMac({ env: { ...DMG_ENV, NGN_SPARKLE_PUBLIC_KEY: 'EDKEY=' } });
     await assert.rejects(
       packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml']), sys),
       /built without Sparkle/,

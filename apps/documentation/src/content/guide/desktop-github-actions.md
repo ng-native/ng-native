@@ -86,6 +86,7 @@ keep between runs.
 
 ## Updates
 
-To have the app update itself, pass `--feed-url` with your Sparkle appcast's url: the app embeds
-Sparkle, and the `.zip` it updates from is written beside the `.dmg`, for you to upload with the
-appcast. See [Package the app](/packages/desktop#package-the-app).
+To have the app update itself, pass `--feed-url` with your Sparkle appcast's url, and set
+`NGN_SPARKLE_PUBLIC_KEY` to Sparkle's public EdDSA key from a secret: the app embeds Sparkle, and
+the `.zip` it updates from is written beside the `.dmg`, for you to upload with the appcast. See
+[Package the app](/packages/desktop#package-the-app).
