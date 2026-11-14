@@ -36,6 +36,20 @@ void onMain(dispatch_block_t block) {
 
 namespace ngn::appkit {
 
+void postAnnouncement(const Announcement &announcement) {
+  NSString *text = ns(announcement.text);
+  NSAccessibilityPriorityLevel priority = announcement.priority == AnnouncementPriority::Low ? NSAccessibilityPriorityLow
+      : announcement.priority == AnnouncementPriority::Medium                              ? NSAccessibilityPriorityMedium
+                                                                                           : NSAccessibilityPriorityHigh;
+  onMain(^{
+    // Posted on the application element, as VoiceOver reads it whichever window is in front.
+    NSAccessibilityPostNotificationWithUserInfo(
+        NSApp,
+        NSAccessibilityAnnouncementRequestedNotification,
+        @{NSAccessibilityAnnouncementKey : text, NSAccessibilityPriorityKey : @(priority)});
+  });
+}
+
 class AppKitSystem final : public System {
  public:
   explicit AppKitSystem(std::string appId) : appId_(std::move(appId)) {
@@ -182,6 +196,10 @@ class AppKitSystem final : public System {
     } else {
       [defaults removeObjectForKey:ns(prefixed(key))];
     }
+  }
+
+  void announce(const Announcement &announcement) override {
+    postAnnouncement(announcement);
   }
 
   std::optional<std::pair<double, double>> imageSize(const std::string &bytes) override {

@@ -601,6 +601,21 @@ int main(int argc, const char *argv[]) {
          .bundle = [] {
            std::lock_guard lock(gBundleMutex);
            return gBundle;
+         },
+         // VoiceOver goes where the layout-changed notification points it; a view that takes the
+         // keyboard takes it too, as setAccessibilityFocus moves both on iOS's keyboard.
+         .focusAccessibility = [](int tag) {
+           dispatch_async(dispatch_get_main_queue(), ^{
+             NGNView *view = gHost.backend ? gHost.backend->view(tag) : nil;
+             if (view == nil || view.window == nil) {
+               return;
+             }
+             if (view.acceptsFirstResponder) {
+               [view.window makeFirstResponder:view];
+             }
+             NSAccessibilityPostNotificationWithUserInfo(
+                 view.window, NSAccessibilityLayoutChangedNotification, @{NSAccessibilityUIElementsKey : @[ view ]});
+           });
          }});
 
     gHost.windows = std::make_shared<ngn::appkit::AppKitWindows>(ngn::appkit::AppKitWindows::Hooks{

@@ -31,6 +31,7 @@ class FakeBackend final : public MountingBackend, public DesktopPropsSink {
   void setSplitView(SurfaceId surfaceId, Tag split, bool window) override;
   void setSourceLists(SurfaceId surfaceId, Tag parent, const std::vector<SourceList> &lists) override;
   void setSvgDrawing(SurfaceId surfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) override;
+  void announce(SurfaceId surfaceId, const Announcement &announcement) override;
   void didMount(SurfaceId surfaceId) override;
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
 

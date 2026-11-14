@@ -9,6 +9,9 @@
 
 namespace ngn::appkit {
 
+// Has VoiceOver say `announcement`, from any thread (on the main one).
+void postAnnouncement(const Announcement &announcement);
+
 // `appId` names the app's data directory until the app has a bundle identifier of its own.
 std::shared_ptr<System> makeSystem(std::string appId);
 

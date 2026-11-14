@@ -43,6 +43,16 @@ struct AlertRequest {
   std::string defaultValue;
 };
 
+// How an announcement takes its turn with what a screen reader is saying: low and medium wait for
+// it, high interrupts.
+enum class AnnouncementPriority { Low, Medium, High };
+
+struct Announcement {
+  std::string text;
+  AnnouncementPriority priority{AnnouncementPriority::High};
+  bool operator==(const Announcement &) const = default;
+};
+
 class System {
  public:
   virtual ~System() = default;
@@ -74,6 +84,10 @@ class System {
   // The pixel size of an encoded image (PNG, JPEG, GIF, HEIC and what else the OS decodes), or
   // nothing when it is not one.
   virtual std::optional<std::pair<double, double>> imageSize(const std::string &bytes) = 0;
+
+  // Has the screen reader say `announcement` (NSAccessibilityAnnouncementRequestedNotification on
+  // macOS). Nothing is said when none is running.
+  virtual void announce(const Announcement &announcement) = 0;
 
   // Where the app keeps its own files, created if missing.
   virtual std::string appDataDirectory() = 0;

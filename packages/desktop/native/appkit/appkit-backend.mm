@@ -1,4 +1,5 @@
 #import "appkit-backend.h"
+#import "system.h"
 
 #import "header-toolbar.h"
 #import "host-view.h"
@@ -218,6 +219,10 @@ void AppKitBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<Sour
             views:^NGNView *(NSInteger tag) {
               return views[@(tag)];
             }];
+}
+
+void AppKitBackend::announce(SurfaceId, const Announcement &announcement) {
+  postAnnouncement(announcement);
 }
 
 void AppKitBackend::didMount(SurfaceId surfaceId) {

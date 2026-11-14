@@ -5,6 +5,7 @@
 #pragma once
 
 #include <react/renderer/components/view/ViewProps.h>
+#include <react/renderer/mounting/ShadowView.h>
 
 #include <optional>
 #include <string>
@@ -78,6 +79,9 @@ struct AxInfo {
 std::string roleName(const facebook::react::ViewProps &props);
 
 AxInfo accessibilityInfo(const facebook::react::ViewProps &props);
+
+// The string a Paragraph shows, from its state; empty for any other view.
+std::string paragraphText(const facebook::react::ShadowView &view);
 
 // AppKit's standard actions on a view.
 enum class AxVerb { Press, Increment, Decrement, Cancel };

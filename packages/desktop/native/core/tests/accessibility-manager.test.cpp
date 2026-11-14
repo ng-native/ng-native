@@ -87,3 +87,28 @@ TEST_CASE("AccessibilityManager takes the iOS-only calls without doing anything"
   CHECK_NOTHROW(module->call("setAccessibilityContentSizeMultipliers", dynamic::array(dynamic::object("large", 1.2))));
   CHECK(f.system->log.empty());
 }
+
+TEST_CASE("an announcement goes to the system, interrupting unless it asks to queue or for low priority") {
+  Fixture f;
+  auto module = f.make();
+  module->call("announceForAccessibility", dynamic::array("Saved"));
+  module->call("announceForAccessibilityWithOptions", dynamic::array("Queued", dynamic::object("queue", true)));
+  module->call("announceForAccessibilityWithOptions", dynamic::array("Quiet", dynamic::object("priority", "low")));
+  module->call("announceForAccessibilityWithOptions", dynamic::array("Loud", dynamic::object("priority", "high")("queue", true)));
+  module->call("announceForAccessibility", dynamic::array(""));
+  CHECK(f.system->log == std::vector<std::string>{
+                             "announce high Saved", "announce medium Queued", "announce low Quiet", "announce high Loud"});
+}
+
+TEST_CASE("setAccessibilityFocus asks the host to move VoiceOver to the view") {
+  Fixture f;
+  std::vector<int> focused;
+  f.services.focusAccessibility = [&](int tag) { focused.push_back(tag); };
+  auto module = f.make();
+  module->call("setAccessibilityFocus", dynamic::array(42));
+  CHECK(focused == std::vector<int>{42});
+
+  // A host with nothing to focus takes the call too.
+  f.services.focusAccessibility = nullptr;
+  CHECK_NOTHROW(f.make()->call("setAccessibilityFocus", dynamic::array(42)));
+}

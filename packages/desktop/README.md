@@ -80,6 +80,14 @@ label, sent back as `(accessibilityAction)`. VoiceOver's press (VO-Space), and S
 focused view, send `(accessibilityTap)` or `activate` when the view listens for them, and otherwise
 click the view at its centre, as iOS's synthesized tap does, so a `(press)` handler runs.
 
+`announceForAccessibility` posts an announcement VoiceOver says, interrupting unless it asks to
+queue or for low priority, and `setAccessibilityFocus` points VoiceOver at the view (and gives a
+focusable view the keyboard). A live region (`accessibilityLiveRegion`, `aria-live`) says nothing
+as it appears; after that each change to its text is announced, politely or, for `assertive`,
+interrupting. Its text is its label, or else the text of the views under it, which the region keeps
+under it rather than letting Fabric flatten them beside it (`live-regions.h`). macOS reports no end
+to an announcement, so `announcementFinished` never fires.
+
 When the app has them installed, the host compiles in the Fabric components of
 `react-native-screens`, `react-native-safe-area-context` and `react-native-svg`:
 

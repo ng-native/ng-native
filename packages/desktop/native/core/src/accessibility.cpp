@@ -1,6 +1,8 @@
 #include "ngn/accessibility.h"
 
+#include <react/renderer/components/text/ParagraphState.h>
 #include <react/renderer/components/view/accessibilityPropsConversions.h>
+#include <react/renderer/core/ConcreteState.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -148,6 +150,15 @@ AxInfo accessibilityInfo(const ViewProps &props) {
       props.importantForAccessibility == ImportantForAccessibility::No;
   info.element = !hidden && !presentation && (props.accessible || !info.label.empty() || !name.empty());
   return info;
+}
+
+std::string paragraphText(const ShadowView &view) {
+  if (std::string_view(view.componentName) != "Paragraph" || !view.state) {
+    return "";
+  }
+  // A Paragraph's state is always ParagraphState (its component descriptor makes it).
+  auto state = std::static_pointer_cast<const ConcreteState<ParagraphState>>(view.state);
+  return state->getData().attributedString.getString();
 }
 
 AxDispatch axDispatch(const ViewProps &props, AxVerb verb) {

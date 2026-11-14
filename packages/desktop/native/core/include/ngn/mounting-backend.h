@@ -8,6 +8,7 @@
 #include "ngn/screen-stacks.h"
 #include "ngn/split-view.h"
 #include "ngn/svg.h"
+#include "ngn/system.h"
 
 #include <react/renderer/core/ComponentDescriptor.h>
 #include <react/renderer/componentregistry/ComponentDescriptorProvider.h>
@@ -67,6 +68,9 @@ class MountingBackend {
 
   // An svg's elements changed (svg.h): its view draws `document` from now on.
   virtual void setSvgDrawing(SurfaceId /*surfaceId*/, Tag /*svg*/, std::shared_ptr<const SvgDocument> /*document*/) {}
+
+  // A live region on the surface changed its text (live-regions.h): the screen reader says it.
+  virtual void announce(SurfaceId /*surfaceId*/, const Announcement & /*announcement*/) {}
 
   // Called once a transaction's mutations have all been applied.
   virtual void didMount(SurfaceId /*surfaceId*/) {}

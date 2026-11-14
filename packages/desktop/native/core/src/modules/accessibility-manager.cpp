@@ -45,6 +45,37 @@ std::shared_ptr<NativeModule> makeAccessibilityManager(const CoreModuleServices 
       });
       // Dynamic Type's multipliers: nothing resizes a desktop app's text.
       async("setAccessibilityContentSizeMultipliers", [](const folly::dynamic &, std::vector<JsCallback>) {});
+      auto system = s.system;
+      // iOS's announcement interrupts what VoiceOver is saying unless it asks to queue; a priority
+      // the call names wins.
+      auto announce = [system](const folly::dynamic &args) {
+        std::string text = args.size() > 0 && args[0].isString() ? args[0].asString() : "";
+        if (text.empty()) {
+          return;
+        }
+        auto priority = AnnouncementPriority::High;
+        if (args.size() > 1 && args[1].isObject()) {
+          const auto &options = args[1];
+          if (auto queue = options.get_ptr("queue"); queue && queue->isBool() && queue->asBool()) {
+            priority = AnnouncementPriority::Medium;
+          }
+          if (auto named = options.get_ptr("priority"); named && named->isString()) {
+            priority = named->asString() == "low"  ? AnnouncementPriority::Low
+                : named->asString() == "high"      ? AnnouncementPriority::High
+                                                   : priority;
+          }
+        }
+        system->announce({text, priority});
+      };
+      async("announceForAccessibility", [announce](const folly::dynamic &args, std::vector<JsCallback>) { announce(args); });
+      async("announceForAccessibilityWithOptions",
+          [announce](const folly::dynamic &args, std::vector<JsCallback>) { announce(args); });
+      auto focus = s.focusAccessibility;
+      async("setAccessibilityFocus", [focus](const folly::dynamic &args, std::vector<JsCallback>) {
+        if (focus && args.size() > 0 && args[0].isNumber()) {
+          focus(static_cast<int>(args[0].asDouble()));
+        }
+      });
       listeners();
       last_ = state->accessibility.get();
       subscription_ = state->accessibility.listen([this](const AccessibilitySettings &now) {
