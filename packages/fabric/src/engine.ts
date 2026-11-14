@@ -1224,8 +1224,17 @@ export function nativePlatform(): string {
 }
 
 /**
+ * Whether the host is one of Apple's: iOS or macOS. The desktop host implements React Native's
+ * iOS-named modules and views, so behaviour Apple's platforms share takes this rather than a check
+ * for `'ios'`, which a Mac fails.
+ */
+export function isApplePlatform(): boolean {
+  return platformOS === 'ios' || platformOS === 'macos';
+}
+
+/**
  * Call once at startup with `Platform.OS`. The view names above are the iOS/canonical ones, so
- * only the mapping half is a no-op elsewhere.
+ * only the mapping half is a no-op elsewhere. macOS takes iOS's: the desktop host implements them.
  */
 export function registerPlatformComponents(platform: string): void {
   platformOS = platform;
@@ -5417,13 +5426,16 @@ function textContent(node: EngineNode): string {
 export interface PlatformViewName {
   readonly ios: string;
   readonly android: string;
+  /** The view on macOS, where it is not iOS's: an iOS-only view the desktop host has none of. */
+  readonly macos?: string;
 }
 
 /** An element's registered view name, for the platform the host reported. */
 export function registeredViewName(elementName: string): string | undefined {
   const name = VIEW_NAMES[elementName];
   if (name === undefined || typeof name === 'string') return name;
-  return platformOS === 'android' ? name.android : name.ios;
+  if (platformOS === 'android') return name.android;
+  return platformOS === 'macos' ? (name.macos ?? name.ios) : name.ios;
 }
 
 /**

@@ -68,6 +68,7 @@ export {
   markPage,
   scrollsOverflow,
   nativePlatform,
+  isApplePlatform,
   onFontsRegistered,
   onFontsSettled,
   registerHoist,

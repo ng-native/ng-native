@@ -137,8 +137,13 @@ export function registerScreenComponents(): void {
   }
   // By platform, chosen when the view is looked up: this runs as the app's config is imported,
   // before its `main.ts` has reported the platform.
-  // A window of its own on iOS; see `full-window-overlay.ts`. Its fill is the component's.
-  registerViewName('full-window-overlay', { ios: 'RNSFullWindowOverlay', android: 'RCTView' });
+  // A window of its own on iOS; see `full-window-overlay.ts`. Its fill is the component's. macOS
+  // has no such window, so it is a plain view there, as on Android.
+  registerViewName('full-window-overlay', {
+    ios: 'RNSFullWindowOverlay',
+    android: 'RCTView',
+    macos: 'RCTView',
+  });
   for (const [element, [ios, android, defaults]] of Object.entries(TAB_VIEW_NAMES)) {
     registerViewName(element, { ios, android }, defaults as Record<string, unknown>);
   }
