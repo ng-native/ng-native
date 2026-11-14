@@ -5,7 +5,7 @@
  * through `system`, which the tests replace.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -51,6 +51,7 @@ export const HOST_LIBRARIES = ['react-native-screens', 'react-native-safe-area-c
  */
 export const system = {
   platform: process.platform,
+  env: /** @type {Record<string, string | undefined>} */ (process.env),
   cwd: () => process.cwd(),
   /** @param {string} from */
   resolveReactNative(from) {
@@ -104,7 +105,38 @@ export const system = {
     if (result.status !== 0) throw new Error('The Expo CLI could not read the app config.');
     return JSON.parse(result.stdout);
   },
+  /**
+   * Runs the app's own Expo CLI in its directory, with the terminal attached.
+   *
+   * @param {string} from
+   * @param {string[]} args
+   */
+  expo(from, args) {
+    const require = createRequire(path.join(from, 'package.json'));
+    const result = spawnSync(process.execPath, [require.resolve('expo/bin/cli'), ...args], {
+      cwd: from,
+      stdio: 'inherit',
+    });
+    if (result.error) throw result.error;
+    return { status: result.status ?? 1 };
+  },
   links: desktopLinks,
+  /** @param {string} file */
+  exists: (file) => existsSync(file),
+  /** @param {string} file */
+  remove(file) {
+    rmSync(file, { recursive: true, force: true });
+  },
+  /**
+   * Copies a file or a folder, links and all, making the folders it goes in.
+   *
+   * @param {string} from
+   * @param {string} to
+   */
+  copy(from, to) {
+    mkdirSync(path.dirname(to), { recursive: true });
+    cpSync(from, to, { recursive: true, verbatimSymlinks: true });
+  },
   /**
    * @param {string} file
    * @param {string} text

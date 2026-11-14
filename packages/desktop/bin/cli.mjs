@@ -1,7 +1,9 @@
 /**
- * The `ng-native-desktop` command: builds the desktop host when it needs building and launches it.
+ * The `ng-native-desktop` command: builds the desktop host when it needs building and launches it,
+ * or packages the app (`package.mjs`).
  *
  *     ng-native-desktop run [bundle path or URL] [--module <name>] [--port <port>] [--universal]
+ *     ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
  *
  * The host is built in the per-user cache (see `cacheDir`) from the pinned sources
  * `native/scripts/fetch.sh` fetches, against the app's own `react-native`. With no bundle it loads
@@ -12,6 +14,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { prepareHost, system, UsageError } from './host.mjs';
+import { PACKAGE_USAGE, packageApp, parsePackage } from './package.mjs';
 
 export {
   cacheDir,
@@ -29,7 +32,9 @@ Builds the macOS desktop host if it needs building, then opens the app in it: fr
 
   --module <name>   the registered app to start (default: main)
   --port <port>     the dev server's port (default: 8081)
-  --universal       build for arm64 and x86_64 (default: this Mac's architecture)`;
+  --universal       build for arm64 and x86_64 (default: this Mac's architecture)
+
+${PACKAGE_USAGE}`;
 
 /**
  * The dev server URL of an app's bundle for macOS. The entry is the one Expo's own clients load,
@@ -43,13 +48,14 @@ export function devServerBundleUrl(port) {
 
 /**
  * @param {string[]} argv the arguments after the command name
- * @returns {{ command: 'help' } | { command: 'run', bundle: string | undefined, module: string, port: number, universal: boolean }}
+ * @returns {{ command: 'help' } | { command: 'run', bundle: string | undefined, module: string, port: number, universal: boolean } | import('./package.mjs').PackageCommand}
  */
 export function parseCommand(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === 'help' || command === '--help' || command === '-h') {
     return { command: 'help' };
   }
+  if (command === 'package') return parsePackage(rest);
   if (command !== 'run') {
     throw new UsageError(`Unknown command "${command}".`);
   }
@@ -127,6 +133,7 @@ export async function main(argv, sys = system) {
       console.log(USAGE);
       return 0;
     }
+    if (command.command === 'package') return await packageApp(command, sys);
     return await run(command, sys);
   } catch (error) {
     if (

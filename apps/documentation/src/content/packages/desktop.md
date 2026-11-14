@@ -45,6 +45,43 @@ The Expo CLI has no `run:macos`: its `run` commands are a fixed list, so `npm ru
 `ng-native-desktop run`. It takes a bundle path or URL in place of the dev server, `--module`,
 `--port` and `--universal`.
 
+## Package the app
+
+```sh
+npm run package                                   # dist/macos/<name>.app, ad-hoc signed
+npm run package -- --format dmg                   # signed, notarised and stapled .dmg
+npm run package -- --format dmg --feed-url https://example.com/appcast.xml
+npm run package -- --format mas                   # a sandboxed Mac App Store .pkg
+```
+
+A package is a release build, universal for Apple silicon and Intel Macs, for macOS 14 and later.
+Packaging needs full Xcode, which compiles the app icon (an image, or an Icon Composer `.icon`);
+the Command Line Tools cannot, and the command says so before it builds anything. `--output`
+puts the packages somewhere other than `dist/macos`.
+
+- **`app`** is signed ad hoc, for this Mac and for testing. With no `ios.bundleIdentifier` it gets
+  one made from the slug.
+- **`dmg`** is signed with your Developer ID and the hardened runtime, notarised, and stapled, app
+  and disk image both. `--feed-url` embeds Sparkle with that appcast and makes the `.zip` Sparkle
+  updates from beside the `.dmg`; only a `dmg` has Sparkle.
+- **`mas`** is signed inside the App Sandbox with your provisioning profile, as an installer
+  package for App Store Connect. The command names any capability the sandbox forbids, such as
+  `spawn` and `paths`, which a sandboxed app cannot use.
+
+A `dmg` or `mas` needs `ios.bundleIdentifier`. Credentials come from the environment, never from
+`app.json`:
+
+| Variable                                                              | For                                                            |
+| --------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `NGN_SIGN_IDENTITY`                                                   | The signing identity, for `dmg` and `mas`                      |
+| `NGN_NOTARY_PROFILE`                                                  | A `notarytool` keychain profile                                |
+| `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`               | Or an App Store Connect API key, for CI                        |
+| `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`            | Or an Apple ID                                                 |
+| `NGN_INSTALLER_IDENTITY`, `NGN_PROVISIONING_PROFILE`, `APPLE_TEAM_ID` | `mas`: the installer identity, the profile's path and the team |
+
+A rejected notarisation stops the command with the submission's id, for
+`xcrun notarytool log <id>`.
+
 ## Config
 
 The macOS build reads what Expo already has a key for from that key, the one the iOS build reads:

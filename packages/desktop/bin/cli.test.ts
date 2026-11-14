@@ -104,7 +104,7 @@ describe('parseCommand', () => {
   });
 
   it('refuses an unknown command, a run with two bundles and a port that is not one', () => {
-    assert.throws(() => parseCommand(['package']), UsageError);
+    assert.throws(() => parseCommand(['bundle']), UsageError);
     assert.throws(() => parseCommand(['run', 'a.js', 'b.js']), UsageError);
     assert.throws(() => parseCommand(['run', '--port', 'eighty']), /--port takes a port number/);
     assert.throws(() => parseCommand(['run', '--port', '70000']), UsageError);
@@ -121,6 +121,11 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     cwd: () => '/apps/demo',
     resolveReactNative: () => '/apps/demo/node_modules/react-native',
     resolvePackage: () => null,
+    env: {},
+    expo: () => ({ status: 0 }),
+    exists: () => false,
+    remove: () => {},
+    copy: () => {},
     links: () => ({ libraries: [], appModules: [], withoutDesktop: [], problems: [] }),
     writeFile: (file, text) => void (written[file] = text),
     warn: (line) => void warnings.push(line),
