@@ -56,7 +56,9 @@ CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 SRC="$CACHE/src"
 mkdir -p "$SRC"
 
-sha256() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1 || sha256sum "$1" | cut -d' ' -f1; }
+sha256() {
+  if command -v sha256sum > /dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
+}
 fresh() { [ -f "$SRC/$1.stamp" ] && [ "$(cat "$SRC/$1.stamp")" = "$2" ]; }
 stamp() { echo "$2" > "$SRC/$1.stamp"; }
 
