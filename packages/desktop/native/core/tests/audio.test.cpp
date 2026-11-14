@@ -215,6 +215,22 @@ TEST_CASE("NgNativeAudio plays at the rate set, pauses, and reports a failure") 
   CHECK(s.lastStatus()["isLoaded"] == dynamic(false));
 }
 
+TEST_CASE("NgNativeAudio reports a player whose source failed as not playing") {
+  Setup s;
+  auto id = s.call("createPlayer", dynamic::array("http://127.0.0.1:1/a.mp3", 500));
+  s.call("play", dynamic::array(id));
+  CHECK(s.lastStatus()["playing"] == dynamic(true));
+  // An output that has failed the source can still say it was asked to play: it is not playing.
+  s.output->last->now.load = ngn::TrackState::Load::Failed;
+  s.output->last->now.error = "The server could not be reached";
+  s.output->changed(ngn::AudioOutput::Change::State);
+  CHECK(s.lastStatus()["playbackState"] == dynamic("failed"));
+  CHECK(s.lastStatus()["error"] == dynamic("The server could not be reached"));
+  CHECK(s.lastStatus()["playing"] == dynamic(false));
+  CHECK(s.lastStatus()["timeControlStatus"] == dynamic("paused"));
+  CHECK(s.call("status", dynamic::array(id))["playing"] == dynamic(false));
+}
+
 TEST_CASE("NgNativeAudio sets the volume a mute leaves, and the mute in the status") {
   Setup s;
   auto id = s.call("createPlayer", dynamic::array("file:///a.wav", 500));

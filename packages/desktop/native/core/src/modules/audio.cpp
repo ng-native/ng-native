@@ -81,10 +81,12 @@ folly::dynamic statusOf(const std::string &id, Player &player) {
   bool loaded = player.track && state.load == TrackState::Load::Ready;
   bool failed = player.track && state.load == TrackState::Load::Failed;
   const char *playbackState = !player.track ? "idle" : failed ? "failed" : loaded ? "readyToPlay" : "loading";
-  const char *timeControl = state.playing ? (state.buffering ? "waitingToPlayAtSpecifiedRate" : "playing") : "paused";
+  // A source that failed is not playing, whatever the output last said about being asked to.
+  bool playing = state.playing && !failed;
+  const char *timeControl = playing ? (state.buffering ? "waitingToPlayAtSpecifiedRate" : "playing") : "paused";
   return folly::dynamic::object("id", id)("currentTime", state.currentTime)("playbackState", playbackState)(
       "timeControlStatus", timeControl)("reasonForWaitingToPlay", "")("mute", player.muted)("duration", state.duration)(
-      "playing", state.playing)("loop", player.loop)("didJustFinish", player.justFinished)("isBuffering", state.buffering)(
+      "playing", playing)("loop", player.loop)("didJustFinish", player.justFinished)("isBuffering", state.buffering)(
       "isLoaded", loaded)("playbackRate", player.rate)("shouldCorrectPitch", true)("mediaServicesDidReset", false)(
       "isLive", false)("currentOffsetFromLive", nullptr)("error", failed ? folly::dynamic(state.error) : folly::dynamic(nullptr));
 }
