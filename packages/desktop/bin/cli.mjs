@@ -186,14 +186,43 @@ export async function run(options, sys = system) {
     throw new UsageError('The desktop host runs on macOS only for now.');
   }
   const cwd = sys.cwd();
-  let reactNative;
+  const reactNative = resolveReactNative(sys, cwd);
+  const config = readExpoConfig(sys, cwd);
+  const buildDir = buildHost(sys, reactNative, options.universal);
+  const title = config.name ?? config.slug ?? 'ng-native';
+  const appId = config.ios?.bundleIdentifier ?? config.slug ?? title;
+  return sys.run(path.join(buildDir, 'appkit', 'ngn-macos'), [
+    bundleArgument(options, cwd),
+    '--module',
+    options.module,
+    '--title',
+    title,
+    '--app-id',
+    appId,
+  ]).status;
+}
+
+/**
+ * @param {typeof system} sys
+ * @param {string} cwd
+ */
+function resolveReactNative(sys, cwd) {
   try {
-    reactNative = sys.resolveReactNative(cwd);
+    return sys.resolveReactNative(cwd);
   } catch {
     throw new UsageError(
       `react-native is not installed in ${cwd}. Run this from the app's directory.`,
     );
   }
+}
+
+/**
+ * The app's Expo config, checked for macos.
+ *
+ * @param {typeof system} sys
+ * @param {string} cwd
+ */
+function readExpoConfig(sys, cwd) {
   /** @type {ExpoConfig} */
   let config;
   try {
@@ -204,8 +233,19 @@ export async function run(options, sys = system) {
     );
   }
   checkExpoConfig(config);
+  return config;
+}
+
+/**
+ * Builds the host (a no-op when nothing changed) and returns its build directory.
+ *
+ * @param {typeof system} sys
+ * @param {string} reactNative
+ * @param {boolean} universal
+ */
+function buildHost(sys, reactNative, universal) {
   const buildArgs = [reactNative];
-  if (options.universal) buildArgs.push('--universal');
+  if (universal) buildArgs.push('--universal');
   const build = sys.run(path.join(packageDir, 'native', 'scripts', 'build.sh'), buildArgs, {
     capture: true,
   });
@@ -213,24 +253,19 @@ export async function run(options, sys = system) {
   if (build.status !== 0 || !buildDir) {
     throw new Error('The desktop host did not build; the output above says why.');
   }
-  // A URL goes to the host as it is: it loads it from the dev server and stays connected for
-  // reload and Fast Refresh.
-  const bundle = !options.bundle
-    ? devServerBundleUrl(options.port ?? 8081)
-    : isUrl(options.bundle)
-      ? options.bundle
-      : path.resolve(cwd, options.bundle);
-  const title = config.name ?? config.slug ?? 'ng-native';
-  const appId = config.ios?.bundleIdentifier ?? config.slug ?? title;
-  return sys.run(path.join(buildDir, 'appkit', 'ngn-macos'), [
-    bundle,
-    '--module',
-    options.module,
-    '--title',
-    title,
-    '--app-id',
-    appId,
-  ]).status;
+  return buildDir;
+}
+
+/**
+ * What the host loads. A URL goes to the host as it is: it loads it from the dev server and stays
+ * connected for reload and Fast Refresh.
+ *
+ * @param {{ bundle?: string, port?: number }} options
+ * @param {string} cwd
+ */
+function bundleArgument(options, cwd) {
+  if (!options.bundle) return devServerBundleUrl(options.port ?? 8081);
+  return isUrl(options.bundle) ? options.bundle : path.resolve(cwd, options.bundle);
 }
 
 /**

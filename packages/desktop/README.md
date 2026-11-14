@@ -4,9 +4,13 @@ The macOS desktop host for Angular Native: React Native's C++ core and Hermes, m
 views into AppKit, and the `ng-native-desktop` command that builds and launches it. You install the
 package and never import it.
 
-Alpha, and early: the host draws views, text and text fields, takes clicks and hover, loads the app
-from the dev server with reload and Fast Refresh, and has the default menu bar. It has no scrolling
-or images yet.
+Alpha, and early: the host draws views, text, text fields, images, scroll views and modals (as an
+in-window cover), takes clicks, hover and the scroll wheel, loads the app from the dev server with
+reload and Fast Refresh, and has the default menu bar. React Native's iOS modules answer from the
+core: Linking, Appearance, AppState, DeviceInfo, PlatformConstants, I18nManager, Alert (NSAlert),
+Clipboard, Networking (streaming, progress, cookies, redirects), WebSocket, Blob, FileReader,
+ImageLoader and `@react-native-async-storage` (2.x and 3.x, file-backed). It has no safe-area
+insets, sheets, popovers, second windows or React Native DevTools yet.
 
 ## Run the app
 
@@ -37,8 +41,11 @@ command line tools, CMake and Ninja. Later runs reuse it.
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and
-  hover, text measurement, the module registry and desktop view props), with tests on an in-memory
-  backend that run on Linux and macOS.
+  hover, text measurement, the module registry and desktop view props, the dev server connection,
+  the default menu bar and React Native's iOS-shaped modules in `src/modules`), with tests on an
+  in-memory backend that run on Linux and macOS. A backend answers the OS calls through narrow
+  interfaces: `network.h` (HTTP and WebSocket) and `system.h` (URLs, alerts, appearance,
+  clipboard, preferences, image sizes and the app's data directory).
 - `native/appkit`: the AppKit backend and the `ngn-macos` binary.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles.
