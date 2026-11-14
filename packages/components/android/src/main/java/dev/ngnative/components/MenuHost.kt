@@ -19,4 +19,27 @@ internal object MenuHost {
 
   /** Sends an `ngNativeMenus` event to JavaScript, while a module is there to send it. */
   var send: ((Map<String, Any?>) -> Unit)? = null
+    private set
+
+  /** A new module's sender: it starts with nothing an earlier module was sent. */
+  fun attach(sender: (Map<String, Any?>) -> Unit) {
+    send = sender
+    forget()
+  }
+
+  /**
+   * Let go of the module that set `sender`. A reload's new module can attach before the old one's
+   * `OnDestroy` runs, and then keeps what it has.
+   */
+  fun detach(sender: (Map<String, Any?>) -> Unit) {
+    if (send !== sender) return
+    send = null
+    forget()
+  }
+
+  private fun forget() {
+    shortcuts = emptyList()
+    contextMenus.clear()
+    longPressTakers.clear()
+  }
 }
