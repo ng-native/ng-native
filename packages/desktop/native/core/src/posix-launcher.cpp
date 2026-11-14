@@ -1,10 +1,14 @@
 // ProcessLauncher over posix_spawn: no shell, the environment given and nothing else, a pipe for
 // each standard stream read on threads of their own, and the exit reported once both pipes close.
+// Stdin is non-blocking and never raises SIGPIPE: a write queues what the pipe cannot take yet, and
+// a thread of the program's own drains it, so the JavaScript thread never waits on a program.
 #include "ngn/processes.h"
 
 #include <cerrno>
 #include <csignal>
 #include <cstring>
+#include <deque>
+#include <poll.h>
 #include <fcntl.h>
 #include <mutex>
 #include <spawn.h>
@@ -35,6 +39,11 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
     for (int fd : {in[1], out[0], err[0]}) {
       fcntl(fd, F_SETFD, FD_CLOEXEC);
     }
+    fcntl(in[1], F_SETFL, fcntl(in[1], F_GETFL) | O_NONBLOCK);
+#ifdef F_SETNOSIGPIPE
+    // A write to a program that closed its stdin fails with EPIPE rather than ending the host.
+    fcntl(in[1], F_SETNOSIGPIPE, 1);
+#endif
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
     posix_spawn_file_actions_adddup2(&actions, in[0], 0);
@@ -93,7 +102,7 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
     {
       std::lock_guard lock(mutex_);
       handle = ++next_;
-      running_[handle] = {pid, in[1]};
+      running_[handle] = {pid, std::make_shared<Stdin>(in[1])};
       events = events_;
     }
     auto self = shared_from_this();
@@ -117,30 +126,14 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
   }
 
   void write(int handle, const std::string &data) override {
-    std::lock_guard lock(mutex_);
-    auto it = running_.find(handle);
-    if (it == running_.end() || it->second.stdinFd < 0) {
-      return;
-    }
-    size_t written = 0;
-    while (written < data.size()) {
-      auto n = ::write(it->second.stdinFd, data.data() + written, data.size() - written);
-      if (n < 0 && errno == EINTR) {
-        continue;
-      }
-      if (n <= 0) {
-        break;
-      }
-      written += static_cast<size_t>(n);
+    if (auto in = stdinOf(handle)) {
+      in->write(data);
     }
   }
 
   void closeStdin(int handle) override {
-    std::lock_guard lock(mutex_);
-    auto it = running_.find(handle);
-    if (it != running_.end() && it->second.stdinFd >= 0) {
-      close(it->second.stdinFd);
-      it->second.stdinFd = -1;
+    if (auto in = stdinOf(handle)) {
+      in->close();
     }
   }
 
@@ -157,10 +150,105 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
   }
 
  private:
+  // A program's stdin: what the pipe has not taken yet, written by a thread of its own that runs
+  // only while there is some. Closing waits for that to drain; a broken pipe drops the rest.
+  class Stdin : public std::enable_shared_from_this<Stdin> {
+   public:
+    explicit Stdin(int fd) : fd_(fd) {}
+    ~Stdin() {
+      if (fd_ >= 0) {
+        ::close(fd_);
+      }
+    }
+
+    void write(const std::string &data) {
+      std::lock_guard lock(mutex_);
+      if (fd_ < 0 || closing_ || data.empty()) {
+        return;
+      }
+      pending_.push_back(data);
+      flushLocked();
+      if (!pending_.empty() && !draining_) {
+        draining_ = true;
+        std::thread([self = shared_from_this()] { self->drain(); }).detach();
+      }
+    }
+
+    void close() {
+      std::lock_guard lock(mutex_);
+      closing_ = true;
+      if (pending_.empty() && fd_ >= 0) {
+        ::close(fd_);
+        fd_ = -1;
+      }
+    }
+
+   private:
+    // Writes what the pipe takes now, without blocking.
+    void flushLocked() {
+      while (!pending_.empty() && fd_ >= 0) {
+        auto &front = pending_.front();
+        auto n = ::write(fd_, front.data() + offset_, front.size() - offset_);
+        if (n < 0 && errno == EINTR) {
+          continue;
+        }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+          return;
+        }
+        if (n <= 0) {
+          // EPIPE: the program stopped reading. What is left can never be read.
+          pending_.clear();
+          offset_ = 0;
+          return;
+        }
+        offset_ += static_cast<size_t>(n);
+        if (offset_ == front.size()) {
+          pending_.pop_front();
+          offset_ = 0;
+        }
+      }
+    }
+
+    void drain() {
+      while (true) {
+        int fd;
+        {
+          std::lock_guard lock(mutex_);
+          flushLocked();
+          if (pending_.empty() || fd_ < 0) {
+            draining_ = false;
+            if (closing_ && fd_ >= 0) {
+              ::close(fd_);
+              fd_ = -1;
+            }
+            return;
+          }
+          fd = fd_;
+        }
+        // Waits for room in the pipe, or for the program to go, outside the lock.
+        pollfd ready{.fd = fd, .events = POLLOUT, .revents = 0};
+        poll(&ready, 1, 1000);
+      }
+    }
+
+    std::mutex mutex_;
+    int fd_;
+    std::deque<std::string> pending_;
+    size_t offset_{0};
+    bool closing_{false};
+    bool draining_{false};
+  };
+
   struct Running {
     pid_t pid;
-    int stdinFd;
+    std::shared_ptr<Stdin> in;
   };
+
+  std::shared_ptr<Stdin> stdinOf(int handle) {
+    std::lock_guard lock(mutex_);
+    auto it = running_.find(handle);
+    return it == running_.end() ? nullptr : it->second.in;
+  }
 
   static void read(int fd, int handle, bool isStderr, const std::shared_ptr<Events> &events) {
     char buffer[8192];
@@ -195,9 +283,7 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
   void finished(int handle) {
     std::lock_guard lock(mutex_);
     if (auto it = running_.find(handle); it != running_.end()) {
-      if (it->second.stdinFd >= 0) {
-        close(it->second.stdinFd);
-      }
+      it->second.in->close();
       running_.erase(it);
     }
   }

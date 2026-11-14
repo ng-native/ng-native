@@ -1,6 +1,7 @@
 #include "ngn/processes.h"
 
 #include <doctest/doctest.h>
+#include <set>
 
 #include <map>
 #include <folly/json.h>
@@ -282,4 +283,53 @@ TEST_CASE("Shell.openPath opens a document or a folder, never something that run
   shell->callWithPromise("showItemInFolder", dynamic::array("/Applications/Evil.app"),
                          {.resolve = [&](dynamic v) { answers.push_back(v); }, .reject = {}});
   CHECK(answers == std::vector<dynamic>{true});
+}
+
+TEST_CASE("the POSIX launcher's stdin writes never block the caller, and a closed reader never raises SIGPIPE") {
+  auto launcher = ngn::makePosixLauncher();
+  std::mutex mutex;
+  std::condition_variable done;
+  std::map<int, size_t> received;
+  std::set<int> exited;
+  launcher->setEvents({
+      .output = [&](int h, bool, std::string data) { std::lock_guard lock(mutex); received[h] += data.size(); },
+      .exit =
+          [&](int h, std::optional<int>, std::optional<std::string>) {
+            std::lock_guard lock(mutex);
+            exited.insert(h);
+            done.notify_all();
+          },
+  });
+  auto wait = [&](int h) {
+    std::unique_lock lock(mutex);
+    return done.wait_for(lock, std::chrono::seconds(10), [&] { return exited.contains(h); });
+  };
+  const std::string big(4 * 1024 * 1024, 'x');
+
+  // A program that never reads: the write is queued, not waited on.
+  auto idle = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
+  auto started = std::chrono::steady_clock::now();
+  launcher->write(idle, big);
+  CHECK(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(500));
+  // Nor does a write hold up calls for other programs.
+  CHECK(launcher->lastHandle() == idle);
+  launcher->kill(idle, SIGKILL);
+  REQUIRE(wait(idle));
+
+  // A reader that takes it all, in its own time.
+  auto cat = std::get<int>(launcher->spawn("/bin/cat", {}, std::nullopt, {}));
+  launcher->write(cat, big);
+  launcher->write(cat, "end");
+  launcher->closeStdin(cat);
+  REQUIRE(wait(cat));
+  CHECK(received[cat] == big.size() + 3);
+
+  // A program that closed its stdin: writing to it would raise SIGPIPE, which ends the host.
+  auto closed = std::get<int>(launcher->spawn("/bin/sh", {"-c", "exec 0<&-; sleep 2"}, std::nullopt, {}));
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  launcher->write(closed, "anyone there?");
+  launcher->write(closed, big);
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  launcher->kill(closed, SIGKILL);
+  REQUIRE(wait(closed));
 }
