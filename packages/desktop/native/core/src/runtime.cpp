@@ -128,6 +128,12 @@ void Runtime::updateSurface(SurfaceId surfaceId, const SurfaceMetrics &metrics) 
   }
 }
 
+void Runtime::animationTick() {
+  if (host_ && !reloading_) {
+    host_->runOnScheduler([](Scheduler &scheduler) { scheduler.animationTick(); });
+  }
+}
+
 void Runtime::beat() {
   if (!reloading_) {
     runLoop_->onRender();

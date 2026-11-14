@@ -69,6 +69,8 @@ class Runtime {
 
   // The event beat: the backend calls it each time its UI thread's run loop is about to wait.
   void beat();
+  // A frame of the running layout animations (layout-animations.h). UI thread.
+  void animationTick();
 
   // Stops every surface and tears the runtime down, before the process exits.
   void shutdown();

@@ -100,6 +100,7 @@ if(NGN_WITH_RUNTIME)
   add_library(ngn_core_runtime STATIC
       core/src/dev-server-helper.cpp
       core/src/host-services.cpp
+      core/src/layout-animations.cpp
       core/src/runtime.cpp)
   target_link_libraries(ngn_core_runtime PUBLIC ngn_core hermes-engine::hermesvm)
   target_compile_options(ngn_core_runtime PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)

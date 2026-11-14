@@ -23,6 +23,7 @@
 #include "ngn/core-modules.h"
 #include "ngn/default-menu.h"
 #include "ngn/input-dispatcher.h"
+#include "ngn/layout-animations.h"
 #include "ngn/runtime.h"
 
 #include <sys/sysctl.h>
@@ -42,6 +43,8 @@ struct Host {
   std::unique_ptr<ngn::Runtime> runtime;
   NSWindow *window;
   NGNSurfaceView *surface;
+  // Ticks the layout animations while they run, at the display's rate.
+  NSTimer *animationTimer;
   bool firstFrameLogged = false;
 };
 
@@ -231,6 +234,24 @@ int main(int argc, const char *argv[]) {
             });
           }
         });
+
+    ngn::onLayoutAnimationsRunning([](bool running) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (running && gHost.animationTimer == nil) {
+          gHost.animationTimer = [NSTimer timerWithTimeInterval:1.0 / 120
+                                                        repeats:YES
+                                                          block:^(NSTimer *) {
+                                                            if (gHost.runtime) {
+                                                              gHost.runtime->animationTick();
+                                                            }
+                                                          }];
+          [NSRunLoop.mainRunLoop addTimer:gHost.animationTimer forMode:NSRunLoopCommonModes];
+        } else if (!running) {
+          [gHost.animationTimer invalidate];
+          gHost.animationTimer = nil;
+        }
+      });
+    });
 
     // The event beat: React Native's RunLoopObserverManager wants a tick when the UI thread is about
     // to go idle, which is the main run loop about to wait (the approach Basalt takes).
