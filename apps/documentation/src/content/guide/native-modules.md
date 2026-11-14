@@ -384,6 +384,20 @@ adb shell cmd thermalservice override-status 3   # 3 is SEVERE: the screen shows
 adb shell cmd thermalservice reset
 ```
 
+## On macOS
+
+A Mac app runs in the [desktop host](/packages/desktop), which compiles in native code with CMake
+rather than with Xcode or Gradle, and has no Expo modules runtime, so the Swift and Kotlin above do
+not reach it. A module's macOS code lives in `modules/<name>/macos/`, beside `ios/` and `android/`,
+and its `expo-module.config.json` can name the CMake target it builds. A library opts in the same
+way, with `macos` among its `platforms` and a `macos` entry naming its CMake target. A library with
+a `codegenConfig` gets its specs' codegen, so its C++ TurboModule and its Fabric components build
+for the Mac as they do for Android. See [Native code](/packages/desktop#native-code).
+
+`npm run macos` and `npm run package` list the dependencies with native code for iOS or Android
+and none for the Mac. Their modules are absent on macOS, so a service built on one reports itself
+unavailable.
+
 ## Going further
 
 - **Views.** A module can also render a native view. Add `View` to `--features`, then register

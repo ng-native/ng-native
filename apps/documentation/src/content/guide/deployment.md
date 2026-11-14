@@ -138,6 +138,25 @@ For screenshots, review information and first submissions, see Expo's guides:
 [Submit to the Apple App Store](https://docs.expo.dev/submit/ios/) and
 [Submit to the Google Play Store](https://docs.expo.dev/submit/android/).
 
+## macOS
+
+EAS Build does not build macOS apps. A Mac app is a release build packaged on a Mac by the
+[desktop host](/packages/desktop)'s command, universal for Apple silicon and Intel Macs, for
+macOS 14 and later:
+
+```sh
+npm run package                     # dist/macos/<name>.app, signed ad hoc, for this Mac
+npm run package -- --format dmg     # Developer ID signed, notarised and stapled, to download
+npm run package -- --format mas     # a sandboxed installer package for App Store Connect
+```
+
+Packaging needs full Xcode, which compiles the app icon. A `dmg` or `mas` needs
+`ios.bundleIdentifier`, and takes its signing identity, notary credentials and provisioning profile
+from environment variables, never from `app.json`.
+[Package the app](/packages/desktop#package-the-app) lists them, and
+[Package in GitHub Actions](/guide/desktop-github-actions) builds, signs and notarises on every
+push. `eas submit` has no macOS target: upload a `mas` package with Apple's Transporter app.
+
 ## What a release build strips
 
 The Metro preset replaces `ngDevMode` with `false` in minified bundles, including release and

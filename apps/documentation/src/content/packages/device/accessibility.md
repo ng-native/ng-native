@@ -59,6 +59,20 @@ Every value here starts at its neutral setting (nothing on, a font scale of one)
 once the platform answers, because React Native reports all three asynchronously - a first paint
 never assumes a setting is on that has not actually been confirmed.
 
+## On macOS
+
+VoiceOver reads a view's role, label, hint and value, and its checked, selected and disabled
+state, from the same accessibility inputs as on iOS. A role AppKit has no counterpart for, such as
+a heading, is a group that speaks the role's name.
+
+Tab and Shift-Tab move the keyboard focus in the order views appear in the tree, positive
+`tabIndex` first. With the Mac's default keyboard navigation Tab reaches text inputs only, and
+Option-Tab reaches every focusable view, as in other Mac apps. A focus moved by a key draws
+AppKit's focus ring, unless the view styles `outline`.
+
+The desktop host has no accessibility settings module, so on macOS every value here stays at its
+neutral setting and `announce()` does nothing. `fontScale` is one, since nothing resizes a Mac app.
+
 ## Off a device and on the web
 
 Off a device every setting stays at its neutral default forever and `announce()` does nothing,
