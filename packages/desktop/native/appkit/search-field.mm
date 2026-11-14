@@ -259,10 +259,16 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
   [self changedTo:_field.stringValue];
 }
 
+// A turn later, and only when the field no longer edits: a click into the field ends its editing
+// and starts it again at the click's point, which is no blur.
 - (void)controlTextDidEndEditing:(NSNotification *)note {
-  if (self.ended) {
-    self.ended();
-  }
+  __weak NGNSearchField *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NGNSearchField *strongSelf = weakSelf;
+    if (strongSelf != nil && strongSelf.field.currentEditor == nil && strongSelf.ended) {
+      strongSelf.ended();
+    }
+  });
 }
 
 - (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)selector {
