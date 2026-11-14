@@ -24,6 +24,11 @@ export interface NativeSharing {
 export function sharingSource(): NativeSharing | null {
   const native = reactNative();
   if (!native) return null;
+  // React Native's Share has no macOS implementation: the desktop host's NgNativeSharing is the
+  // share picker there, and without it sharing is absent.
+  if (native.Platform.OS === 'macos') {
+    return (native.TurboModuleRegistry?.get('NgNativeSharing') as NativeSharing | null) ?? null;
+  }
   const android = native.Platform.OS === 'android';
   return { share: (request) => native.Share.share(android ? forAndroid(request) : request) };
 }

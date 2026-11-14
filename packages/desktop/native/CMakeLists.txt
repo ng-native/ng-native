@@ -94,18 +94,28 @@ add_library(ngn_core STATIC
     core/src/updates.cpp
     core/src/view-tree.cpp
     core/src/modules/alert-manager.cpp
+    core/src/modules/app-info.cpp
     core/src/modules/app-modules.cpp
     core/src/modules/async-storage.cpp
+    core/src/modules/battery.cpp
+    core/src/modules/calendar.cpp
     core/src/modules/core-modules.cpp
+    core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
     core/src/modules/file-system.cpp
+    core/src/modules/fonts.cpp
     core/src/modules/image-loader.cpp
     core/src/modules/local-authentication.cpp
     core/src/modules/location.cpp
+    core/src/modules/network-state.cpp
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
+    core/src/modules/sharing.cpp
     core/src/modules/sqlite.cpp
+    core/src/modules/store-review.cpp
+    core/src/modules/text-recognition.cpp
     core/src/modules/undo.cpp
+    core/src/modules/web-browser.cpp
     core/src/modules/web-socket.cpp)
 target_include_directories(ngn_core PUBLIC core/include)
 # The system's sqlite3, behind NgNativeSqlite (libsqlite3-dev on Linux).
@@ -120,9 +130,17 @@ if(NGN_TESTS)
   target_link_libraries(ngn_core_tests PRIVATE ngn_core doctest)
   # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks.
   if(APPLE)
-    target_sources(ngn_core_tests PRIVATE appkit/updates.mm appkit/tests/update-crypto.test.mm)
+    target_sources(ngn_core_tests PRIVATE
+        appkit/updates.mm appkit/tests/update-crypto.test.mm
+        appkit/crypto.mm appkit/tests/crypto.test.mm
+        appkit/app-info.mm appkit/tests/app-info.test.mm
+        appkit/network-state.mm appkit/tests/network-state.test.mm
+        appkit/battery.mm appkit/tests/battery.test.mm
+        appkit/fonts.mm appkit/text-layout.mm appkit/tests/fonts.test.mm
+        appkit/text-recognition.mm appkit/tests/text-recognition.test.mm
+        appkit/calendar.mm appkit/tests/calendar.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security")
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit")
   endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)

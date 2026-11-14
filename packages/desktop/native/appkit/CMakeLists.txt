@@ -1,10 +1,15 @@
 # The AppKit backend and the ngn-macos binary. Everything links statically: the binary loads
 # nothing from outside itself but the system's frameworks.
 add_executable(ngn-macos
+    app-info.mm
     app-windows.mm
+    crypto.mm
     desktop-expo.mm
     file-system.mm
+    fonts.mm
     appkit-backend.mm
+    calendar.mm
+    battery.mm
     header-toolbar.mm
     host-view.mm
     image-view.mm
@@ -16,20 +21,24 @@ add_executable(ngn-macos
     native-controls.mm
     presented-screen.mm
     network.mm
+    network-state.mm
     notifications.mm
     scroll-view.mm
     split-view.mm
     surface-view.mm
     svg-view.mm
     tray-and-dock.mm
+    store-review.mm
     system.mm
     system-access.mm
     text-layout.mm
+    text-recognition.mm
     undo.mm
     updates.mm
+    web-browser.mm
     app-updater.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries ${NGN_LINKED}
-    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices")
+    "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices" "-framework SystemConfiguration" "-framework Network" "-framework AuthenticationServices" "-framework Vision" "-framework EventKit" "-framework StoreKit")
 target_compile_options(ngn-macos PRIVATE -fobjc-arc -Wall -Wno-unused-parameter)
 # A Release build is what a packaged app ships: the linker drops the code nothing reaches.
 target_link_options(ngn-macos PRIVATE $<$<CONFIG:Release>:-Wl,-dead_strip>)

@@ -3,6 +3,7 @@
  */
 import { InjectionToken, Service, computed, inject, type Signal } from '@angular/core';
 import { observed, observedFrom, type Observed } from './observed.ts';
+import { desktopHost } from './desktop-host.ts';
 import { expoModule, presence, present } from './native.ts';
 
 /** What the battery is doing. `unknown` is a real answer on a simulator. */
@@ -24,6 +25,7 @@ export class Battery {
       const expo = expoModule(
         'expo-battery',
         () => require('expo-battery') as typeof import('expo-battery'),
+        { desktop: desktopBattery },
       );
       if (!expo) return NOTHING;
       // Missing from the build: stand-ins, to say so when they are read.
@@ -104,4 +106,44 @@ export class Battery {
   readonly low: Signal<boolean> = computed(
     () => this.known() && this.level() <= 0.2 && !this.charging(),
   );
+}
+
+type ExpoBattery = typeof import('expo-battery');
+
+/**
+ * expo-battery over the desktop host's `NgNativeBattery`, whose changes arrive as `ngNativeBattery`
+ * events: `{type: 'level', batteryLevel}`, `{type: 'state', batteryState}` or
+ * `{type: 'lowPowerMode', lowPowerMode}`. Null where the host has no such module.
+ */
+function desktopBattery(): ExpoBattery | null {
+  const host = desktopHost<Record<string, () => Promise<never>>>('NgNativeBattery');
+  if (!host) return null;
+  const on =
+    (type: string) =>
+    (listener: (event: never) => void): { remove(): void } =>
+      host.listen('ngNativeBattery', (event) => {
+        if ((event as { type?: string } | null)?.type === type) listener(event as never);
+      });
+  const battery: Pick<
+    ExpoBattery,
+    | 'BatteryState'
+    | 'getBatteryLevelAsync'
+    | 'getBatteryStateAsync'
+    | 'isLowPowerModeEnabledAsync'
+    | 'isAvailableAsync'
+    | 'addBatteryLevelListener'
+    | 'addBatteryStateListener'
+    | 'addLowPowerModeListener'
+  > = {
+    // expo-battery's enum, whose values the host answers.
+    BatteryState: { UNKNOWN: 0, UNPLUGGED: 1, CHARGING: 2, FULL: 3, NOT_CHARGING: 4 } as never,
+    getBatteryLevelAsync: () => host.module['getBatteryLevelAsync']!(),
+    getBatteryStateAsync: () => host.module['getBatteryStateAsync']!(),
+    isLowPowerModeEnabledAsync: () => host.module['isLowPowerModeEnabledAsync']!(),
+    isAvailableAsync: () => host.module['isAvailableAsync']!(),
+    addBatteryLevelListener: on('level') as never,
+    addBatteryStateListener: on('state') as never,
+    addLowPowerModeListener: on('lowPowerMode') as never,
+  };
+  return battery as ExpoBattery;
 }

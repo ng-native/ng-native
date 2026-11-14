@@ -72,7 +72,9 @@ export function registrationsFor(faces: readonly FontFace[]): Record<string, unk
 }
 
 export function expoFonts(): NativeFonts | null {
-  const expo = expoModule('expo-font', () => require('expo-font') as typeof import('expo-font'));
+  const expo = expoModule('expo-font', () => require('expo-font') as typeof import('expo-font'), {
+    desktop: desktopFonts,
+  });
   if (!expo) return null;
   // Missing, the stand-in itself: `available` reads false, and a load says what to install.
   if (!present(expo)) return expo as unknown as NativeFonts;
@@ -196,4 +198,49 @@ function warnIfASheetIsNull(sheets: readonly (SheetWithFonts | null | undefined)
     '[angular-native] a null sheet was given to loadFonts() or loadSheet(), so no @font-face from it is loaded. ' +
       'A null there is what styleSheetOf() returns for a class with no compiled sheet.',
   );
+}
+
+/**
+ * The uri a font's source names: an asset's (a number from `require`), resolved as an image's is,
+ * which on macOS is a file in the app or the dev server's url; a string; or an object's `uri`.
+ */
+function uriOf(source: unknown): string | null {
+  if (typeof source === 'string') return source;
+  if (typeof source === 'number') {
+    const { Image } = require('react-native') as typeof import('react-native');
+    return Image.resolveAssetSource(source)?.uri ?? null;
+  }
+  if (source !== null && typeof source === 'object') {
+    const { uri, default: module } = source as { uri?: unknown; default?: unknown };
+    return typeof uri === 'string' ? uri : module !== undefined ? uriOf(module) : null;
+  }
+  return null;
+}
+
+/**
+ * expo-font's three functions over the desktop host's `NgNativeFont`, which registers one font
+ * file under a name at a time. Null where the host has no such module.
+ */
+function desktopFonts(): typeof import('expo-font') | null {
+  const { TurboModuleRegistry } = require('react-native') as typeof import('react-native');
+  const host = TurboModuleRegistry.get('NgNativeFont') as {
+    loadAsync(name: string, uri: string): Promise<void>;
+    isLoaded(name: string): boolean;
+    getLoadedFonts(): string[];
+  } | null;
+  if (!host) return null;
+  const fonts: NativeFonts = {
+    loadAsync: async (map) => {
+      await Promise.all(
+        Object.entries(map).map(([name, source]) => {
+          const uri = uriOf(source);
+          if (uri === null) throw new Error(`[angular-native] Fonts: ${name} has no file to load.`);
+          return host.loadAsync(name, uri);
+        }),
+      );
+    },
+    isLoaded: (name) => host.isLoaded(name),
+    getLoadedFonts: () => host.getLoadedFonts(),
+  };
+  return fonts as unknown as typeof import('expo-font');
 }

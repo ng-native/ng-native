@@ -43,6 +43,7 @@ import type {
 } from 'expo-calendar';
 import { currentPlatform, expoModule, isApple, type ModulePlatform, presence } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
+import { desktopHost } from './desktop-host.ts';
 
 type Expo = typeof import('expo-calendar');
 
@@ -99,7 +100,12 @@ export class Calendar {
   /** Overridden in a test to read calendars that are not there. */
   static readonly SOURCE = new InjectionToken<NativeCalendar | null>(
     'angular-native.calendarSource',
-    { factory: () => expoModule('expo-calendar', () => require('expo-calendar') as Expo) },
+    {
+      factory: () =>
+        expoModule('expo-calendar', () => require('expo-calendar') as Expo, {
+          desktop: desktopCalendar,
+        }),
+    },
   );
 
   /** Overridden in a test to be on iOS or macOS, where the calls only Apple's OSes have can be made. */
@@ -201,4 +207,44 @@ export class Calendar {
   private apple(): boolean {
     return this.native !== null && isApple(this.platform);
   }
+}
+
+/**
+ * expo-calendar over the desktop host's `NgNativeCalendar`, which answers plain records: a
+ * calendar or an event read on macOS has expo-calendar's fields and none of its methods. Creating
+ * a calendar is not available there, and nor is reading a reminder. Null where the host has no
+ * such module.
+ */
+function desktopCalendar(): NativeCalendar | null {
+  const host = desktopHost<Record<string, (...args: unknown[]) => never>>('NgNativeCalendar');
+  if (!host) return null;
+  const call =
+    (name: string) =>
+    (...args: unknown[]) =>
+      host.module[name]!(...args);
+  const calendar: NativeCalendar = {
+    getCalendarPermissions: (writeOnly?: boolean) =>
+      call('getCalendarPermissionsAsync')(writeOnly ?? false),
+    requestCalendarPermissions: (writeOnly?: boolean) =>
+      call('requestCalendarPermissionsAsync')(writeOnly ?? false),
+    getRemindersPermissions: call('getRemindersPermissionsAsync'),
+    requestRemindersPermissions: call('requestRemindersPermissionsAsync'),
+    getCalendars: (entityType?: string) => call('getCalendarsAsync')(entityType ?? 'event'),
+    getDefaultCalendarSync: call('getDefaultCalendarSync'),
+    getSourcesSync: call('getSourcesSync'),
+    listEvents: (calendars: readonly (string | { id: string })[], start: Date, end: Date) =>
+      call('listEventsAsync')(
+        calendars.map((each) => (typeof each === 'string' ? each : each.id)),
+        start.getTime(),
+        end.getTime(),
+      ),
+    createCalendar: async () => {
+      throw new Error('[angular-native] Calendar.createCalendar is not available on macOS yet.');
+    },
+    presentPicker: async () => null,
+    ExpoCalendar: { get: call('getCalendarAsync') },
+    ExpoCalendarEvent: { get: call('getEventAsync') },
+    ExpoCalendarReminder: { get: async () => null },
+  } as unknown as NativeCalendar;
+  return calendar;
 }
