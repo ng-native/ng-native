@@ -1,5 +1,7 @@
 #include "ngn/mounting-manager.h"
 
+#include <chrono>
+
 #include "ngn/desktop-modal.h"
 #include "ngn/native-controls.h"
 #include "ngn/split-view.h"
@@ -61,6 +63,14 @@ void MountingManager::executeMount(SurfaceId surfaceId, MountingTransaction &&tr
   // The JS thread. A toolkit's views belong to its UI thread, whose queue runs tasks in the order
   // they were posted, which keeps transactions in commit order.
   auto mutations = std::make_shared<const ShadowViewMutationList>(transaction.getMutations());
+  if (onCommit) {
+    const auto &telemetry = transaction.getTelemetry();
+    auto start = telemetry.getCommitStartTime();
+    auto end = telemetry.getCommitEndTime();
+    if (start != kTelemetryUndefinedTimePoint && end != kTelemetryUndefinedTimePoint && end >= start) {
+      onCommit(surfaceId, std::chrono::duration<double, std::milli>(end - start).count());
+    }
+  }
   std::weak_ptr<MountingManager> weak = weak_from_this();
   backend_->runOnUiThread([weak, surfaceId, mutations] {
     if (auto self = weak.lock()) {

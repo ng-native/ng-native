@@ -11,6 +11,7 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
+#import "undo.h"
 #import "app-windows.h"
 #import "appkit-backend.h"
 #import "header-toolbar.h"
@@ -356,6 +357,9 @@ void showAppWindow() {
 @implementation NGNAppDelegate {
   BOOL _launched;
 }
+- (NSUndoManager *)windowWillReturnUndoManager:(NSWindow *)window {
+  return ngn::appkit::undoManagerFor(window);
+}
 - (void)applicationDidFinishLaunching:(NSNotification *)note {
   _launched = YES;
 }
@@ -465,6 +469,11 @@ int main(int argc, const char *argv[]) {
     gHost.backend = std::make_shared<ngn::appkit::AppKitBackend>();
     gHost.mounting = std::make_shared<ngn::MountingManager>(gHost.backend, gHost.backend);
     gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
+    // Each commit's time, for the performance budget (pnpm bench:macos), when asked for: every
+    // frame of an animation commits, which would flood a dev run's terminal.
+    if (const char *log = getenv("NGN_LOG_COMMITS"); log != nullptr && std::string(log) == "1") {
+      gHost.mounting->onCommit = [](SurfaceId, double ms) { fprintf(stderr, "[ngn] commit %.1f ms\n", ms); };
+    }
     gHost.backend->onMount = [](SurfaceId surfaceId) {
       gHost.input->didMount(surfaceId);
       if (surfaceId == kAppSurface) {
@@ -622,6 +631,8 @@ int main(int argc, const char *argv[]) {
       static auto haptics = ngn::appkit::makeHapticPlayer();
       ngn::addModule(*modules, "NgNativeSecureStore", [] { return ngn::makeSecureStoreModule(keychain, keychainService); });
       ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem, gHost.state); });
+      static auto undo = ngn::appkit::makeUndoManager();
+      ngn::addModule(*modules, "NgNativeUndo", [] { return ngn::makeUndoModule(undo); });
       ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
       ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
       static auto dialogs = ngn::appkit::makeFileDialogs();

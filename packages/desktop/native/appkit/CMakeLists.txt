@@ -20,6 +20,7 @@ add_executable(ngn-macos
     system.mm
     system-access.mm
     text-layout.mm
+    undo.mm
     updates.mm
     app-updater.mm)
 target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries ${NGN_LINKED}
