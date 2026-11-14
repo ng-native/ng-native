@@ -107,6 +107,15 @@ Expo runs the plugin whenever it reads the config, so an option that is not vali
 `expo start`, `expo export` and `ng-native-desktop` with every problem listed. The plugin changes
 nothing in the config.
 
+## Native code
+
+`run` and `package` find the native code the host compiles in, the way Expo's autolinking does: a
+library whose `expo-module.config.json` lists `macos` and names its `macos.cmakeTarget` (and
+`macos.cmakeDir`, `desktop` by default), and the app's own `modules/<name>/macos/` folders. They
+write what they found to `.expo/ng-native-desktop/link.json` in the app, which the host build reads
+from `NGN_DESKTOP_LINK`, and warn about dependencies with native code for iOS or Android and none
+for the desktop. `deny` in the plugin options keeps a package out.
+
 ## Layout
 
 - `native/core`: the toolkit-free C++ core (mounting, the view tree and hit testing, input and

@@ -82,3 +82,29 @@ The plugin options hold only what has no Expo key:
 
 Expo runs the plugin whenever it reads the config, so an option that is not valid stops
 `expo start`, `expo export` and `ng-native-desktop` with every problem listed.
+
+## Native code
+
+The desktop build finds native code the way Expo's autolinking finds a library's iOS and Android
+code, walking the app's dependencies and theirs:
+
+- **A library** opts in through its `expo-module.config.json`: `macos` among its `platforms`, and a
+  `macos` entry naming the CMake target its desktop code builds and the folder holding its CMake
+  fragment, `desktop` unless it says otherwise.
+
+  ```json
+  {
+    "platforms": ["apple", "android", "macos"],
+    "macos": { "cmakeTarget": "haptics_desktop", "cmakeDir": "desktop" }
+  }
+  ```
+
+- **The app's own modules** are each `modules/<name>/macos/`, beside `ios/` and `android/`. The
+  module's `expo-module.config.json` can name its CMake target the same way.
+- **`deny`** in the plugin options keeps a package out, whatever it ships.
+
+`npm run macos` and `npm run package` list the dependencies that have native code for iOS or
+Android and none for the desktop: their native modules are absent on macOS, so a service built on
+one reports itself unavailable. `expo`, the `expo-*` packages and `@ng-native/*` are not listed,
+since the desktop host answers their services itself. `react-native-screens` and
+`react-native-safe-area-context` are compiled into the host when the app has them.
