@@ -41,6 +41,7 @@ import {
   type FakeFabric,
   type FakeFabricNode,
 } from '@ng-native/testing';
+import { FontRegistry } from '@ng-native/expo/fonts';
 import { compileFixture } from './compile.ts';
 
 let fixtures: Record<string, Type<unknown>>;
@@ -677,5 +678,54 @@ describe('after a reload or a relaunch', () => {
     await settle();
     assert.deepEqual(second.host.opened[1], { key: 'preferences', title: '', width: 500 });
     assert.equal(textOn(second.fabric, 21, 'general'), 'General 0');
+  });
+});
+
+describe('fonts in a window', () => {
+  it("lays a window's text out again when a face it names registers", async () => {
+    const host = fakeHost();
+    const { fabric } = start('FontWindowApp', host, [
+      provideMainWindow({ width: 400, height: 300 }),
+    ]);
+    await settle();
+    const before = byTestId(fabric, 11, 'late-face');
+    assert.ok(before, "the window's text is committed");
+    assert.equal(before.props['maxFontSizeMultiplier'], undefined);
+
+    const registered = new Set<string>();
+    await new FontRegistry({
+      loadAsync: async (map) => void Object.keys(map).forEach((family) => registered.add(family)),
+      isLoaded: (family) => registered.has(family),
+      getLoadedFonts: () => [...registered],
+    }).load({ LateFace: 1 });
+    await settle();
+
+    // Native caches a text's layout by what it asks for: only a new cap lays it out again.
+    const cap = byTestId(fabric, 11, 'late-face')?.props['maxFontSizeMultiplier'];
+    assert.ok(
+      typeof cap === 'number' && cap >= 1000,
+      `laid out again in the window (cap ${String(cap)})`,
+    );
+  });
+
+  it('commits nothing for a window closed before the face registered', async () => {
+    const host = fakeHost();
+    const { fabric, windows } = start('FontWindowApp', host, [
+      provideMainWindow({ width: 400, height: 300 }),
+    ]);
+    await settle();
+    await windows.windows()[0]!.close();
+    await settle();
+    const commits = fabric.calls.completeRoot;
+
+    const registered = new Set<string>();
+    await new FontRegistry({
+      loadAsync: async (map) => void Object.keys(map).forEach((family) => registered.add(family)),
+      isLoaded: (family) => registered.has(family),
+      getLoadedFonts: () => [...registered],
+    }).load({ LateFace: 1 });
+    await settle();
+
+    assert.equal(fabric.calls.completeRoot, commits);
   });
 });

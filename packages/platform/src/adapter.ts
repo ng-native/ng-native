@@ -1479,6 +1479,10 @@ function windowMounter(
       };
       if (appEngine.root.classes?.has('dark')) engine.addClass(engine.root, 'dark');
       const stopFollowing = appEngine.watchViewport(followApp);
+      // A window's text naming a face that registers late is laid out again, as `mount` does for
+      // the app's own surface.
+      const stopFonts = onFontsRegistered((families) => engine.fontsRegistered(families));
+      const stopSettled = onFontsSettled((families) => engine.fontsSettled(families));
       const elementInjector = Injector.create({
         providers: [
           { provide: RendererFactory2, useValue: factory },
@@ -1519,6 +1523,8 @@ function windowMounter(
       componentRef.onDestroy(() => {
         stopFollowing();
         stopSharing();
+        stopFonts();
+        stopSettled();
         (elementInjector as Partial<{ destroy(): void }>).destroy?.();
         engine.leaveEvents();
         const at = applicationRef.components.indexOf(componentRef);
