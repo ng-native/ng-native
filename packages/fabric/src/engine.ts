@@ -490,6 +490,12 @@ export const DIRECT_EVENTS: ReadonlySet<string> = new Set([
   'topShow',
   'topDismiss',
   'topOrientationChange',
+  // macOS's host sends these to the view they happened on. A menu or a drop zone inside another
+  // would otherwise run the handlers of the one around it too.
+  'topContextMenuSelect',
+  'topDropEnter',
+  'topDropLeave',
+  'topDropPerform',
 ]);
 
 /**
