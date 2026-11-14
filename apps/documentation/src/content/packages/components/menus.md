@@ -73,8 +73,14 @@ press point, and there the long press is the menu's, so the element's `(longPres
 fire. A destructive item's label is red, `icon` names a drawable resource shown beside the label
 (Android 10 and later), and `subtitle` is the item's tooltip. Android finds the view by its
 `nativeID`, so an element without one is given one. Menus inside a `<modal>` do not open on
-Android yet. iOS and the web host do not draw it yet, so there it does nothing, and a
-`(longPress)` on the same element fires as it would without one.
+Android yet.
+
+On iOS and iPadOS a long press opens it, as does a secondary click from an iPad pointer, and the
+long press is the menu's there too. iOS adds the menu to the element's own view, found by its
+`nativeID` as on Android, so a `nativeID` the app gives should be unique on screen. Both need the
+native side of `@ng-native/components`, which a development build has and Expo Go does not: in
+Expo Go the menu does not open, and `(longPress)` fires as it would without one. The web host does
+not draw it.
 
 ## Reference
 

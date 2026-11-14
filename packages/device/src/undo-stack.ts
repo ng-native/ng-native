@@ -1,6 +1,6 @@
 /**
- * The app's own undo history, kept by the OS's undo manager: NSUndoManager on macOS, UIUndoManager
- * on iOS and iPadOS. Edit > Undo and Edit > Redo, mod+z and mod+shift+z, and iPhone's shake to
+ * The app's own undo history, kept by the OS's undo manager, an NSUndoManager on macOS, iOS and
+ * iPadOS. Edit > Undo and Edit > Redo, mod+z and mod+shift+z, and iPhone's shake to
  * undo reach the app's actions while no text input has focus; a focused text input keeps its own
  * history. Absent on Android and in the web host, where each call does nothing.
  *

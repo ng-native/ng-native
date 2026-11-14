@@ -5,11 +5,14 @@ summary: The app's own actions on Edit > Undo and Redo, kept by the OS's undo ma
 
 # Undo
 
-`UndoStack` puts what the app does on the OS's undo manager: NSUndoManager on macOS and
-UIUndoManager on iOS and iPadOS. Edit > Undo and Edit > Redo in the menu bar, mod+z and
+`UndoStack` puts what the app does on the OS's undo manager, NSUndoManager on macOS, iOS and
+iPadOS, one that every window shares. Edit > Undo and Edit > Redo in the menu bar, mod+z and
 mod+shift+z, and shake to undo on an iPhone then take the app's actions back and do them again.
 A focused text input keeps its own undo history, so these reach the app's actions only while no
 text input has focus.
+
+On iOS and iPadOS the undo manager comes from the native side of `@ng-native/components`, which a
+development build has and Expo Go does not: in Expo Go `available()` is `false`.
 
 <!-- platforms: UndoStack -->
 

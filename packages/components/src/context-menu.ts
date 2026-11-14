@@ -13,15 +13,9 @@ import {
   untracked,
   type TemplateRef,
 } from '@angular/core';
-import {
-  Menus,
-  OS,
-  buildMenuTemplate,
-  serializeMenu,
-  type MenuTemplate,
-  type NativeMenuEntry,
-} from '@ng-native/device';
+import { Menus, OS, buildMenuTemplate, serializeMenu, type MenuTemplate } from '@ng-native/device';
 import { HostEngine, type HostNode } from '@ng-native/fabric';
+import { byNativeId } from './native-id.ts';
 
 /**
  * The `[contextMenu]` on an element, for `<pressable>`: where a long press opens the menu,
@@ -31,19 +25,19 @@ export const CONTEXT_MENU = new InjectionToken<{ takesLongPress(): boolean }>(
   'angular-native.contextMenu',
 );
 
-/** How many elements have been given a `nativeID` for their menu, for the next one's name. */
-let named = 0;
-
 /**
  * A context menu on an element: `[contextMenu]="menu"`, with `<ng-template #menu>` holding
  * `<menu-item>`s. A right-click opens it on macOS. On Android a long press or a right-click opens
- * it as a PopupMenu at the press point, where the app has the `NgNativeMenus` module, and there
- * `(longPress)` does not also fire. No iOS host draws it yet.
+ * it as a PopupMenu at the press point, and on iOS and iPadOS a long press, or a secondary click
+ * from an iPad pointer, opens it through UIContextMenuInteraction. On Android and iOS that takes
+ * the `NgNativeMenus` module, which Expo Go lacks, and where it is there `(longPress)` does not
+ * also fire.
  *
  * The host contract: the view takes a `contextMenu` prop, the menu as `serializeMenu` makes it
- * (null to take it away), and sends `topContextMenuSelect` with the chosen item's `id`. Android's
- * view drops a prop it does not know, so there the menu goes through `Menus.setContextMenu` by the
- * view's `nativeID`, and an element without one is given one.
+ * (null to take it away), and sends `topContextMenuSelect` with the chosen item's `id`. React
+ * Native's Android and iOS views drop a prop they do not know, so there the menu goes through
+ * `Menus.setContextMenu` by the view's `nativeID`, and an element without one is given one. iOS's
+ * module sends the choice, which reaches the element as `topContextMenuSelect`.
  */
 @Directive({
   selector: '[contextMenu]',
@@ -57,11 +51,17 @@ export class ContextMenu {
   private readonly injector = inject(Injector);
   private readonly os = inject(OS);
   private readonly menus = inject(Menus);
-  /** Android's host, which takes the menu by `nativeID` and draws it on a long press. */
-  private readonly byNativeId = this.os === 'android' && this.menus.contextMenuByNativeId;
-  /** The `nativeID` the menu was last sent under, on Android. */
-  private sentAs: string | null = null;
-  private destroyed = false;
+  /** Android's and iOS's hosts, which take the menu by `nativeID` and draw it on a long press. */
+  private readonly byNativeId =
+    (this.os === 'android' || this.os === 'ios') && this.menus.contextMenuByNativeId;
+  private readonly sender = this.byNativeId
+    ? byNativeId(
+        this.engine,
+        this.node,
+        (nativeID) => this.sendByNativeId(nativeID),
+        (nativeID) => this.menus.setContextMenu(nativeID, null),
+      )
+    : null;
   private readonly built = signal<MenuTemplate | null>(null);
   private readonly menu = computed(() =>
     serializeMenu(this.built()?.model.entries() ?? [], this.os),
@@ -73,18 +73,15 @@ export class ContextMenu {
       const { entries } = this.menu();
       const sent = entries.length ? entries : null;
       this.engine.setProp(this.node, 'contextMenu', sent);
-      // After the element's own props are written, so a `nativeID` the app gave it is there.
-      if (this.byNativeId) this.engine.settle({ settleProps: () => this.sendByNativeId(sent) });
+      this.sender?.();
     });
     const stop = this.engine.setEventListener(this.node, 'topContextMenuSelect', (event) => {
       const id = (event as { nativeEvent?: { id?: string } }).nativeEvent?.id;
-      if (id !== undefined) this.menu().actions.get(id)?.();
+      if (id !== undefined) this.choose(id);
     });
     inject(DestroyRef).onDestroy(() => {
       stop();
       this.build(null);
-      this.destroyed = true;
-      if (this.sentAs !== null) this.menus.setContextMenu(this.sentAs, null);
     });
   }
 
@@ -94,20 +91,16 @@ export class ContextMenu {
   }
 
   /**
-   * Send `entries` to Android's host under the view's `nativeID`, naming the view first where the
-   * app did not. A `nativeID` the app changed since is followed, and the old one cleared.
+   * Send the menu to the host under the view's `nativeID`. On iOS the choice comes back by that
+   * name, and runs as the view's own `topContextMenuSelect` would.
    */
-  private sendByNativeId(entries: NativeMenuEntry[] | null): void {
-    if (this.destroyed) return;
-    const own = this.node.props['nativeID'];
-    let id = typeof own === 'string' && own ? own : null;
-    if (id === null) {
-      id = this.sentAs ?? `ngn-context-menu-${++named}`;
-      this.engine.setProp(this.node, 'nativeID', id);
-    }
-    if (this.sentAs !== null && this.sentAs !== id) this.menus.setContextMenu(this.sentAs, null);
-    this.sentAs = id;
-    this.menus.setContextMenu(id, entries);
+  private sendByNativeId(nativeID: string): void {
+    const { entries } = untracked(this.menu);
+    this.menus.setContextMenu(nativeID, entries.length ? entries : null, (id) => this.choose(id));
+  }
+
+  private choose(id: string): void {
+    this.menu().actions.get(id)?.();
   }
 
   /** Make the template's items, which register with the menu this element sends. */
