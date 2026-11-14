@@ -1,7 +1,7 @@
 /**
  * Back and forward history for each window, as a desktop browser or Finder keeps it: one list per
  * window, spanning every change of the window's outlet, sidebar items included. A new navigation
- * clears the entries ahead. A page left behind is destroyed, so forward builds it again from its
+ * clears the entries ahead, and a window keeps its last 100, dropping the oldest. A page left behind is destroyed, so forward builds it again from its
  * URL, as a browser does without a back-forward cache: its scroll position and form state are not
  * kept. History is not restored on relaunch.
  *
@@ -50,6 +50,9 @@ function outletPath(tree: UrlTree, outlet: string, serializer: UrlSerializer): s
     new UrlTree(new UrlSegmentGroup([], { [PRIMARY_OUTLET]: group }), tree.queryParams),
   );
 }
+
+/** The entries a window keeps, as a browser's back list does: the oldest are dropped past it. */
+const MAX_ENTRIES = 100;
 
 class History implements OutletHistory {
   readonly entries = signal<readonly string[]>([]);
@@ -100,8 +103,9 @@ class History implements OutletHistory {
       return;
     }
     if (this.entries()[this.index()] === path) return;
-    this.entries.update((all) => [...all.slice(0, this.index() + 1), path]);
-    this.index.update((at) => at + 1);
+    const kept = [...this.entries().slice(0, this.index() + 1), path].slice(-MAX_ENTRIES);
+    this.entries.set(kept);
+    this.index.set(kept.length - 1);
   }
 
   private menu(step: -1 | 1): MenuItemModel[] {

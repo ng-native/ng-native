@@ -107,6 +107,23 @@ describe('a window history', () => {
     );
   });
 
+  it('keeps the last 100 entries of a window, dropping the oldest, so a long session does not grow it', async () => {
+    const { navigation, history } = await start();
+    const main = history.for();
+    for (let id = 1; id <= 120; id++) await navigation.push(`/notes/${id}`);
+    await idle();
+    const entries = main.entries();
+    assert.equal(entries.length, 100);
+    assert.equal(entries[0], '/notes/21');
+    assert.equal(entries.at(-1), '/notes/120');
+    assert.equal(main.index(), 99);
+    assert.equal(main.canGoBack(), true);
+    assert.equal(await main.back(), true);
+    await idle();
+    assert.equal(main.index(), 98);
+    assert.equal(main.entries()[98], '/notes/119');
+  });
+
   it('goes back from the OS command, and does nothing at the start', async () => {
     const { router, navigation, history, menus } = await start();
     menus.send({ type: 'navigate', direction: 'back' });
