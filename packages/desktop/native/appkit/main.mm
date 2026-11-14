@@ -44,6 +44,7 @@
 #import "address-search.h"
 #include "ngn/asset.h"
 #import "symbol-drawing.h"
+#import "share-picker.h"
 #include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "file-system.h"
@@ -761,6 +762,8 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeAsset", [] { return ngn::makeAssetModule(imageHttp, caches); });
       static auto symbolMeasurer = ngn::appkit::makeSymbolMeasurer();
       ngn::addModule(*modules, "NgNativeSymbol", [] { return ngn::makeSymbolModule(symbolMeasurer); });
+      static auto sharePicker = ngn::appkit::makeSharePicker();
+      ngn::addModule(*modules, "NgNativeSharing", [] { return ngn::makeSharingModule(sharePicker, noPrompts); });
       static auto imageCodec = ngn::appkit::makeImageCodec();
       ngn::addModule(*modules, "NgNativeImageManipulator", [] {
         return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator");

@@ -224,8 +224,11 @@ the package's name after `expo-`, each with the methods the service calls on the
 | `NgNativeApplication`, `NgNativeDevice` | `AppInfo`: the bundle's version, build, id and name (a dev run, with no bundle, gives the app's id and name and no versions), and the Mac's model, macOS version and `desktop` device type.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 `@ng-native/device`'s `Sharing` uses `NgNativeSharing` on macOS, where React Native's `Share` has
-no implementation. Only its contract is in the core (`sharing.h`): the AppKit share picker is not
-built, so the host does not register the module and `Sharing` is absent on macOS.
+no implementation. It shows AppKit's share picker below the top of the key window's content, with
+the message as text and the url as a link, or as the file itself for a `file:` uri or a path, and
+gives the picked service the title as its subject. A share answers as shared once the service has
+shared, and as dismissed when the picker closes, the service fails, no window is showing, or
+`NGN_NO_PROMPTS=1` is set.
 
 The clipboard has no change notification, so the host checks the count when the app becomes active
 and after each key press, click and menu command, and never polls.

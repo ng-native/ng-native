@@ -60,3 +60,11 @@ TEST_CASE("NgNativeSharing refuses a request with nothing to share") {
   CHECK(share(*module, nullptr).error);
   CHECK(picker->shown.empty());
 }
+
+TEST_CASE("NgNativeSharing shows nothing with no prompts, answering as dismissed") {
+  auto picker = std::make_shared<FakePicker>();
+  auto module = ngn::makeSharingModule(picker, true);
+  auto answer = share(*module, dynamic::object("message", "Hi"));
+  CHECK(picker->shown.empty());
+  CHECK(answer.value == dynamic(dynamic::object("action", "dismissedAction")("activityType", nullptr)));
+}

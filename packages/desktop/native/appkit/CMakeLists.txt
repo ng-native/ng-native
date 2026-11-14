@@ -25,6 +25,7 @@ add_executable(ngn-macos
     address-search.mm
     symbol-drawing.mm
     symbol-view.mm
+    share-picker.mm
     main.mm
     menu-bar.mm
     modal-host-view.mm
