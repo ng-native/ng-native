@@ -1,5 +1,7 @@
 #import "scroll-view.h"
 
+#import "scrollers.h"
+
 #include <react/renderer/components/scrollview/ScrollViewEventEmitter.h>
 #include <react/renderer/components/scrollview/ScrollViewProps.h>
 #include <react/renderer/components/scrollview/ScrollViewState.h>
@@ -27,6 +29,7 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   BOOL _applyingState;
   BOOL _showsVertical;
   BOOL _showsHorizontal;
+  NGNScrollerStyleObserver *_styleObserver;
 }
 
 + (std::function<void(NSInteger, CGPoint)>)offsetChanged {
@@ -43,9 +46,9 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
     _scrollView.drawsBackground = NO;
     _scrollView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     _scrollView.autohidesScrollers = YES;
-    // Overlay scrollers whatever the system setting: React Native lays the content out at the
-    // scroll view's full width, which a legacy scroller would take a strip of.
-    _scrollView.scrollerStyle = NSScrollerStyleOverlay;
+    // The user's "Show scroll bars" setting. A legacy scroller's strip is a gutter the content is
+    // laid out without (scrollers.h).
+    _scrollView.scrollerStyle = NSScroller.preferredScrollerStyle;
     _showsVertical = YES;
     _showsHorizontal = YES;
     _document = [[NGNScrollDocumentView alloc] initWithFrame:NSZeroRect];
@@ -56,12 +59,17 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
                                                name:NSViewBoundsDidChangeNotification
                                              object:_scrollView.contentView];
     [self addSubview:_scrollView];
+    __weak NGNScrollView *weakSelf = self;
+    _styleObserver = [[NGNScrollerStyleObserver alloc] initWithChanged:^{
+      [weakSelf updateScrollers];
+    }];
   }
   return self;
 }
 
 - (void)dealloc {
   [NSNotificationCenter.defaultCenter removeObserver:self];
+  ngn::ScrollerGutters::shared().remove(self.reactTag);
 }
 
 - (NSView *)contentContainer {
@@ -92,20 +100,39 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   [self updateScrollers];
 }
 
-// A scroller only along an axis the content overflows, or always for `scrollbar-gutter: stable`
-// (which only a legacy scroller shows). `scrollbar-width: none` hides them, and `thin` draws
-// AppKit's small ones.
+// The scrollers the core says show (scrollers.h), in the user's style; `thin` draws AppKit's small
+// ones. When a legacy scroller's gutter changes, the content is laid out again without it.
 - (void)updateScrollers {
   const auto &desktop = self.desktopProps;
-  BOOL none = desktop.scrollbarWidth == ngn::ScrollbarWidth::None;
-  BOOL stable = desktop.scrollbarGutter == ngn::ScrollbarGutter::Stable;
   NSSize content = _document.frame.size, view = self.bounds.size;
-  _scrollView.hasVerticalScroller = !none && _showsVertical && (stable || content.height > view.height + 0.5);
-  _scrollView.hasHorizontalScroller = !none && _showsHorizontal && content.width > view.width + 0.5;
-  _scrollView.autohidesScrollers = !stable;
-  NSControlSize size = desktop.scrollbarWidth == ngn::ScrollbarWidth::Thin ? NSControlSizeSmall : NSControlSizeRegular;
+  auto visibility = ngn::scrollerVisibility(
+      desktop,
+      _showsVertical,
+      _showsHorizontal,
+      {static_cast<Float>(content.width), static_cast<Float>(content.height)},
+      {static_cast<Float>(view.width), static_cast<Float>(view.height)});
+  _scrollView.scrollerStyle = NSScroller.preferredScrollerStyle;
+  _scrollView.hasVerticalScroller = visibility.vertical;
+  _scrollView.hasHorizontalScroller = visibility.horizontal;
+  _scrollView.autohidesScrollers = visibility.autohides;
+  BOOL thin = desktop.scrollbarWidth == ngn::ScrollbarWidth::Thin;
+  NSControlSize size = thin ? NSControlSizeSmall : NSControlSizeRegular;
   _scrollView.verticalScroller.controlSize = size;
   _scrollView.horizontalScroller.controlSize = size;
+  auto gutter = ngn::scrollerGutter(NGNPreferredScrollerStyle(), NGNLegacyScrollerWidth(thin), visibility);
+  // Recorded only once there is a state to update, so a gutter is never recorded that no layout
+  // has asked for.
+  if (_scrollState && ngn::ScrollerGutters::shared().set(self.reactTag, gutter)) {
+    [self layOutAgain];
+  }
+}
+
+// A state update clones the scroll view's node, which reads its gutter (scrollers.h).
+- (void)layOutAgain {
+  auto concrete = std::dynamic_pointer_cast<const ConcreteState<ScrollViewState>>(_scrollState);
+  if (concrete) {
+    concrete->updateState(ScrollViewState(concrete->getData()));
+  }
 }
 
 - (void)updateState:(const State::Shared &)state {

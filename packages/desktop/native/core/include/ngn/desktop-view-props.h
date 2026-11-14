@@ -10,6 +10,7 @@
 #pragma once
 
 #include "ngn/desktop-props.h"
+#include "ngn/scrollers.h"
 
 #include <react/renderer/components/scrollview/ScrollViewProps.h>
 #include <react/renderer/components/scrollview/ScrollViewShadowNode.h>
@@ -95,8 +96,9 @@ class DesktopPropsComponentDescriptor final : public facebook::react::ConcreteCo
 
 using DesktopViewComponentDescriptor =
     DesktopPropsComponentDescriptor<facebook::react::ViewShadowNode, DesktopViewProps>;
+// The scroll view pads its content by its scrollers' gutter (scrollers.h).
 using DesktopScrollViewComponentDescriptor =
-    DesktopPropsComponentDescriptor<facebook::react::ScrollViewShadowNode, DesktopScrollViewProps>;
+    DesktopPropsComponentDescriptor<DesktopScrollViewShadowNode, DesktopScrollViewProps>;
 
 // Implemented by a backend that maps desktop props onto its toolkit (key-view loop, Tab order).
 class DesktopPropsSink {

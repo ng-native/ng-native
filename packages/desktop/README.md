@@ -93,7 +93,11 @@ send `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)` and `(mouseout
 that listen, and `(dblclick)`, `(contextmenu)` (a secondary click or Control-click) and `(wheel)`
 reach the view under the pointer. The cursor is the nearest CSS `cursor` under the pointer, shown
 as AppKit's cursor for it (the arrow for one AppKit has none of), and the I-beam over a text
-input. `scrollbar-width: thin` draws small scrollers and `none` hides them. A click focuses a
+input. Scroll views follow the "Show scroll bars" setting in System Settings, changing as it does:
+overlay scrollers float over the content, and legacy ones (always shown) take their strip from it,
+so the content is laid out that much narrower or shorter. `scrollbar-width: thin` draws small
+scrollers, `none` hides them, and `scrollbar-gutter: stable` keeps a legacy vertical scroller and
+its strip while the content fits. A click focuses a
 focusable view, and a focus a key moved reports `focusVisible` and draws AppKit's focus ring
 unless the view styles `outline`.
 
