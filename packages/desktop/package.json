@@ -1,0 +1,66 @@
+{
+  "name": "@ng-native/desktop",
+  "version": "0.22.2",
+  "description": "The macOS desktop host for Angular Native: React Native's C++ core and Hermes, mounting into AppKit views, and the ng-native-desktop command that builds and launches it.",
+  "keywords": [
+    "angular",
+    "react-native",
+    "angular-native",
+    "macos",
+    "desktop",
+    "appkit",
+    "fabric"
+  ],
+  "type": "module",
+  "bin": {
+    "ng-native-desktop": "./bin/ng-native-desktop.mjs"
+  },
+  "peerDependencies": {
+    "react-native": "~0.88.0"
+  },
+  "peerDependenciesMeta": {
+    "react-native": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "typescript": "~6.0.3"
+  },
+  "nx": {
+    "projectType": "library",
+    "tags": [
+      "scope:desktop",
+      "layer:host"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"bin/*.test.ts\"",
+    "test:native": "native/scripts/build.sh --backend none --test",
+    "build:host": "native/scripts/build.sh"
+  },
+  "license": "MIT",
+  "homepage": "https://ng-native.com/packages/desktop",
+  "bugs": {
+    "url": "https://github.com/ng-native/ng-native/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ng-native/ng-native.git",
+    "directory": "packages/desktop"
+  },
+  "files": [
+    "bin/*.mjs",
+    "native/CMakeLists.txt",
+    "native/cmake",
+    "native/scripts",
+    "native/shim",
+    "native/core/include",
+    "native/core/src",
+    "native/appkit"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

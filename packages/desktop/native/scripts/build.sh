@@ -2,7 +2,9 @@
 # Builds the desktop host (or only the core and its tests) in the per-user cache, fetching the
 # pinned sources and building Hermes first when they are missing. Prints the build directory.
 #
-#   build.sh <node_modules/react-native> [--backend appkit|none] [--universal] [--debug] [--test]
+#   build.sh [node_modules/react-native] [--backend appkit|none] [--universal] [--debug] [--test]
+#
+# Without a path, react-native is resolved from the current directory.
 #
 #   --backend none  the toolkit-free core and its tests only: any OS, no Hermes
 #   --universal     arm64 and x86_64 in one binary (default: this machine's architecture)
@@ -12,8 +14,12 @@
 # NGN_JOBS caps parallel compiles (default 8).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-RN_PKG="$(cd "${1:?usage: build.sh <node_modules/react-native> [options]}" && pwd)"
-shift
+if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then
+  RN_PKG="$(cd "$1" && pwd)"
+  shift
+else
+  RN_PKG="$(node -p "require('path').dirname(require.resolve('react-native/package.json', { paths: [process.cwd()] }))")"
+fi
 backend=none
 [ "$(uname -s)" = "Darwin" ] && backend=appkit
 archs="$(uname -m)"

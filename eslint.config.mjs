@@ -128,12 +128,26 @@ export default tseslint.config(
               bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
             },
             {
+              // The desktop host (`@ng-native/desktop`): native code and the Node command that
+              // builds and launches it. It depends on no workspace package and never on Angular,
+              // which `layer:build` alone would not stop.
+              sourceTag: 'layer:host',
+              onlyDependOnLibsWithTags: [],
+              bannedExternalImports: ['@angular/*'],
+            },
+            {
               // A test harness for apps, run by Node and never bundled. The fake Fabric needs the
               // engine's node shapes; `render()` mounts through the platform, the way an app
               // boots; and the runner hooks compile through Metro's transform, so a test runs
               // what the bundle would.
               sourceTag: 'layer:testing',
-              onlyDependOnLibsWithTags: ['layer:runtime', 'layer:angular', 'layer:build'],
+              // It may launch the desktop host, so in-app tests can run on macOS.
+              onlyDependOnLibsWithTags: [
+                'layer:runtime',
+                'layer:angular',
+                'layer:build',
+                'layer:host',
+              ],
             },
             {
               // The integration suite mounts real components through the adapter onto the fake
