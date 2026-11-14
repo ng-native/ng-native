@@ -167,6 +167,13 @@ describe('the generated app', () => {
     // the root. `nx export mobile` then stopped to ask for react-native-web.
     assert.deepEqual(JSON.parse(native.appJson('mobile')).expo.platforms, ['ios', 'android']);
   });
+
+  it("turns on Expo's out-of-tree platforms for macos, without which Expo drops it unsaid", () => {
+    const { expo } = JSON.parse(native.appJson('mobile', undefined, ['ios', 'android', 'macos']));
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos']);
+    assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
+    assert.equal(JSON.parse(native.appJson('mobile')).expo.experiments, undefined);
+  });
 });
 
 describe('conflicts', () => {

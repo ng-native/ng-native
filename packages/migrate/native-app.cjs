@@ -161,8 +161,11 @@ function bundleIdentifier(name, scope) {
  *
  * @param {string} name the project name, which is also the Expo slug once any scope is removed
  * @param {string} [id] the iOS bundle identifier and Android package, by default one from `name`
+ * @param {readonly string[]} [platforms] the OSes the app runs on, iOS and Android by default. With
+ *   `macos`, Expo's `experiments.outOfTreePlatforms` is set too: without it Expo drops `macos` from
+ *   every bundle and export without a word.
  */
-function appJson(name, id) {
+function appJson(name, id, platforms = ['ios', 'android']) {
   const slug = name.replace(/^@[^/]+\//, '');
   const bundle = id ?? bundleIdentifier(slug, name.match(/^@[^/]+/)?.[0]);
   const expo = {
@@ -170,7 +173,8 @@ function appJson(name, id) {
     slug,
     version: '1.0.0',
     // Not left to Expo, which adds `web` whenever `react-dom` resolves, and @nx/react puts one there.
-    platforms: ['ios', 'android'],
+    platforms: [...platforms],
+    ...(platforms.includes('macos') ? { experiments: { outOfTreePlatforms: true } } : {}),
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
     ios: { supportsTablet: true, bundleIdentifier: bundle },
