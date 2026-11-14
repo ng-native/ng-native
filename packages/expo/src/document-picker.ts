@@ -20,6 +20,7 @@
  */
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import type { NativeFile, PickedDirectory } from './file-system.ts';
+import { base64Of } from './base64.ts';
 import { expoModule, optional, presence, present } from './native.ts';
 
 type Expo = typeof import('expo-document-picker');
@@ -186,21 +187,6 @@ async function desktopFolder(picked: Promise<{ uri: string } | null>): Promise<P
       );
     },
   };
-}
-
-const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-/** Bytes as base64, written here: Hermes has had no `btoa` in every version, and it takes text. */
-function base64Of(bytes: Uint8Array): string {
-  let out = '';
-  for (let at = 0; at < bytes.length; at += 3) {
-    const [a = 0, b = 0, c = 0] = [bytes[at], bytes[at + 1], bytes[at + 2]];
-    const chunk = (a << 16) | (b << 8) | c;
-    out += BASE64[(chunk >> 18) & 63]! + BASE64[(chunk >> 12) & 63]!;
-    out += at + 1 < bytes.length ? BASE64[(chunk >> 6) & 63]! : '=';
-    out += at + 2 < bytes.length ? BASE64[chunk & 63]! : '=';
-  }
-  return out;
 }
 
 /** Android codes a dismissed picker ERR_PICKER_CANCELLED, iOS ERR_FILE_PICKING_CANCELLED. */
