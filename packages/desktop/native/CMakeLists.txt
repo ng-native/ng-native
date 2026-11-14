@@ -110,6 +110,7 @@ add_library(ngn_core STATIC
     core/src/modules/networking.cpp
     core/src/modules/notifications.cpp
     core/src/modules/sqlite.cpp
+    core/src/modules/store-review.cpp
     core/src/modules/text-recognition.cpp
     core/src/modules/undo.cpp
     core/src/modules/web-browser.cpp
