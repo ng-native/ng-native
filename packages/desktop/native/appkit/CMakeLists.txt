@@ -14,6 +14,7 @@ add_executable(ngn-macos
     screen-capture.mm
     photo-library.mm
     tracking.mm
+    image-manipulator.mm
     battery.mm
     header-toolbar.mm
     host-view.mm

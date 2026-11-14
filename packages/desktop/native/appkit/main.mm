@@ -39,6 +39,7 @@
 #import "screen-capture.h"
 #import "photo-library.h"
 #import "tracking.h"
+#import "image-manipulator.h"
 #include "ngn/splash-screen.h"
 #import "store-review.h"
 #import "file-system.h"
@@ -749,6 +750,11 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeImagePicker", [] { return ngn::makeImagePickerModule(photos, noPrompts); });
       static auto tracking = ngn::appkit::makeTrackingAuthority();
       ngn::addModule(*modules, "NgNativeTrackingTransparency", [] { return ngn::makeTrackingModule(tracking, noPrompts); });
+      static auto imageCodec = ngn::appkit::makeImageCodec();
+      static auto imageHttp = network.http;
+      ngn::addModule(*modules, "NgNativeImageManipulator", [] {
+        return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator");
+      });
       // A rating prompt only in a Mac App Store build, the one sandboxed.
       static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });

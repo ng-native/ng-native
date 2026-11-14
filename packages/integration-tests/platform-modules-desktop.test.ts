@@ -738,3 +738,56 @@ describe('Tracking on macOS', () => {
     assert.equal(tracking.advertisingId(), null);
   });
 });
+
+describe('ImageEditor on macOS', () => {
+  it("edits through NgNativeImageManipulator, sending a context's actions whole", async () => {
+    const calls: unknown[][] = [];
+    mac({
+      NgNativeImageManipulator: {
+        renderAsync: async (...args: unknown[]) => (
+          calls.push(['render', ...args]),
+          { width: 50, height: 25 }
+        ),
+        saveAsync: async (...args: unknown[]) => (
+          calls.push(['save', ...args]),
+          { uri: 'file:///caches/ImageManipulator/A.webp', width: 50, height: 25 }
+        ),
+      },
+    });
+    const { ImageEditor, SaveFormat, FlipType } = await import('@ng-native/expo/image-editor');
+    const editor = injectService(ImageEditor);
+    assert.equal(editor.available(), true);
+    const result = await editor.edit(
+      'file:///photo.png',
+      [{ resize: { width: 50 } }, { flip: FlipType.Vertical }, { rotate: 90 }],
+      { format: SaveFormat.PNG, compress: 0.5 },
+    );
+    assert.deepEqual(result, {
+      uri: 'file:///caches/ImageManipulator/A.webp',
+      width: 50,
+      height: 25,
+    });
+    const actions = [{ resize: { width: 50 } }, { flip: 'vertical' }, { rotate: 90 }];
+    assert.deepEqual(calls, [
+      ['render', 'file:///photo.png', actions, null],
+      ['save', 'file:///photo.png', actions, null, { format: 'png', compress: 0.5 }],
+    ]);
+
+    // A context by hand: reset drops what came before, and the image keeps the actions it rendered.
+    calls.length = 0;
+    const context = editor.manipulate('data:image/png;base64,AAAA');
+    assert.ok(context);
+    context.crop({ originX: 1, originY: 2, width: 3, height: 4 }).reset().rotate(-90);
+    const image = await context.renderAsync();
+    context.flip(FlipType.Horizontal);
+    assert.equal(image.width, 50);
+    assert.equal(image.height, 25);
+    await image.saveAsync();
+    assert.deepEqual(calls, [
+      ['render', 'data:image/png;base64,AAAA', [{ rotate: -90 }], null],
+      ['save', 'data:image/png;base64,AAAA', [{ rotate: -90 }], null, {}],
+    ]);
+    context.release();
+    image.release();
+  });
+});
