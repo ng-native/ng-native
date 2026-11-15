@@ -91,7 +91,9 @@ Runtime::Runtime(
       bundle_(std::move(bundle)),
       identity_(std::move(identity)),
       devServer_(DevServer::fromBundleUrl(bundle_)),
-      runLoop_(std::make_shared<RunLoopObserverManager>()) {
+      runLoop_(std::make_shared<RunLoopObserverManager>()),
+      // The mounting manager, not this runtime: the reload thread's tasks may run after it is gone.
+      reloader_([mounting = mounting_](std::function<void()> task) { mounting->runOnUiThread(std::move(task)); }) {
   // As React Native iOS's surface presenter does after each mount: the UIManager's mount hooks
   // (Reanimated's, which holds its own commits while React's are unmounted, and the observers')
   // learn the views are there. UI thread; skipped while a reload holds the host.
@@ -323,14 +325,12 @@ void Runtime::reload(std::function<void(bool)> done) {
     }
     reloading_ = true;
   }
-  // The last reload has left the book; it may still be reporting.
-  joinReload();
   // Tearing down waits for the JS thread and the download blocks, so neither runs on the UI
-  // thread, whose queue the mounting of the stopped surfaces still needs. Once shutdown has begun
-  // (a `done` reloading as the runtime goes), no run starts: the bundle never loads.
-  auto finish = std::make_shared<std::function<void(bool)>>(std::move(done));
-  bool running = reloader_.start([this, finish] {
-    bool loaded = false;
+  // thread, whose queue the mounting of the stopped surfaces still needs. A reload asked for while
+  // the last one's thread is still ending waits its turn and starts from the UI queue. Once
+  // shutdown has begun, no run starts: the bundle never loads, and `done` gets false.
+  auto loaded = std::make_shared<bool>(false);
+  reloader_.start([this, loaded] {
     bool restarted = false;
     {
       std::lock_guard lock(mutex_);
@@ -339,7 +339,7 @@ void Runtime::reload(std::function<void(bool)> done) {
         workletHost().runOnScheduler.set(nullptr);
         host_.reset();
         createHost();
-        loaded = devServer_ ? host_->loadScript("", bundle_) : host_->loadScript(bundle_, bundle_);
+        *loaded = devServer_ ? host_->loadScript("", bundle_) : host_->loadScript(bundle_, bundle_);
         restarted = true;
       }
     }
@@ -377,18 +377,13 @@ void Runtime::reload(std::function<void(bool)> done) {
         started.erase(surfaceId);
       }
     }
-    // Last: `done` may reload again or destroy this runtime, and the run touches neither after it.
-    if (*finish) {
-      (*finish)(loaded);
+  }, [done = std::move(done), loaded](bool ran) {
+    // On the UI queue once the run's thread has been joined (reload-thread.h), so `done` may reload
+    // again or destroy this runtime; it touches neither itself.
+    if (done) {
+      done(ran && *loaded);
     }
   });
-  if (!running && *finish) {
-    (*finish)(false);
-  }
-}
-
-void Runtime::joinReload() {
-  reloader_.join([this] { mounting_->serviceUiThread(); });
 }
 
 void Runtime::reload(std::string bundle, std::function<void(bool)> done) {
@@ -406,8 +401,8 @@ void Runtime::reload(std::string bundle, std::function<void(bool)> done) {
 }
 
 void Runtime::shutdown() {
-  // A reload still running holds this runtime, as does one its `done` starts: none starts from
-  // now, and every one running ends first.
+  // A reload still running holds this runtime: none starts from now (one waiting its turn is
+  // dropped), and the one running is joined, its `done` run, before the teardown.
   reloader_.close([this] { mounting_->serviceUiThread(); });
   std::lock_guard lock(mutex_);
   if (host_) {

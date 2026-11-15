@@ -1,83 +1,181 @@
-// The thread a runtime reloads on, apart from the runtime so the run never touches it once its
-// work is done. Each run has its own completion state: a run's `done` may start the next run or
-// destroy the owner, and neither leaves a later join waiting on the wrong run or a write to freed
-// memory. Once closed, it starts no run, so nothing outlives the owner's close. Toolkit-free.
+// The thread a runtime reloads on, apart from the runtime so nothing a run leaves behind touches it.
+// One run at a time, on a worker that is always joined and never detached. A run's `then` runs on
+// the UI queue once its worker has been joined, never on the worker, so a `then` that starts the
+// next run or destroys the owner never has to join the thread it is on. A run asked for while one
+// is live waits its turn and starts from the UI queue after that run's `then`. Once closed, it
+// starts no run, and close returns only once the live run has been joined and its `then` has run:
+// nothing reaches the owner after its close. Toolkit-free.
 #pragma once
 
 #include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 namespace ngn {
 
 class ReloadThread {
  public:
-  ReloadThread() = default;
+  // Posts a task to the UI queue: the thread the owner lives on, which the run can need.
+  using Post = std::function<void(std::function<void()>)>;
+  // A run's last step, with whether its work ran: false when the run was refused or dropped.
+  using Then = std::function<void(bool ran)>;
+
+  explicit ReloadThread(Post post) : state_(std::make_shared<State>(std::move(post))) {}
   ReloadThread(const ReloadThread &) = delete;
   ReloadThread &operator=(const ReloadThread &) = delete;
   ~ReloadThread() {
     close([] {});
   }
 
-  // Runs `work` on a thread of its own, unless closed: false then, and `work` never runs. The run
-  // before must have been joined.
-  bool start(std::function<void()> work) {
-    auto finished = std::make_shared<std::atomic<bool>>(false);
-    std::lock_guard lock(mutex_);
-    if (closed_) {
-      return false;
-    }
-    finished_ = finished;
-    thread_ = std::thread([work = std::move(work), finished] {
-      work();
-      // Only the run's own state: the owner may be gone by now.
-      *finished = true;
-    });
-    return true;
-  }
-
-  // Starts no run from now on, then joins as `join` does. A `done` that reloads while the close
-  // waits starts nothing, so the run joined is the last. From a run's own thread, returns at once.
-  void close(const std::function<void()> &service) {
+  // Runs `work` on a worker thread, then `then(true)` on the UI queue once the worker has been
+  // joined. With a run live (or its `then` still to come), the run waits its turn: it starts from
+  // the UI queue after that one. Refused once closed, or with a run already waiting: `then(false)`
+  // on the calling thread, and false. Any thread, the worker's own included.
+  bool start(std::function<void()> work, Then then) {
     {
-      std::lock_guard lock(mutex_);
-      closed_ = true;
+      std::lock_guard lock(state_->mutex);
+      if (!state_->closed) {
+        if (!state_->busy) {
+          spawn(state_, {std::move(work), std::move(then)});
+          return true;
+        }
+        if (!state_->waiting) {
+          state_->waiting = Run{std::move(work), std::move(then)};
+          return true;
+        }
+      }
     }
-    join(service);
+    if (then) {
+      then(false);
+    }
+    return false;
   }
 
-  // Waits for the run started last, calling `service` until it ends (the UI thread's queue, which
-  // the run can need). From that run's own thread (its `done` reloading or destroying the owner),
-  // returns at once and leaves the run to end on its own.
-  void join(const std::function<void()> &service) {
+  // Starts no run from now on, and drops a waiting one (its `then(false)`). Waits for the live run,
+  // calling `service` until it ends (the UI thread's queue, which the run can need), joins it and
+  // runs its `then(true)` here if the UI queue has not yet. A `then` running on another thread is
+  // waited for too. From the live run's own work, it cannot join: the run's `then` joins it.
+  void close(const std::function<void()> &service) {
     std::thread thread;
     std::shared_ptr<std::atomic<bool>> finished;
+    Then then;
+    std::optional<Run> dropped;
     {
-      std::lock_guard lock(mutex_);
-      if (!thread_.joinable()) {
-        return;
+      std::lock_guard lock(state_->mutex);
+      state_->closed = true;
+      dropped = std::move(state_->waiting);
+      state_->waiting.reset();
+      if (state_->thread.joinable() && state_->thread.get_id() != std::this_thread::get_id()) {
+        thread = std::move(state_->thread);
+        finished = state_->finished;
+        then = std::move(state_->then);
+        state_->then = nullptr;
       }
-      if (thread_.get_id() == std::this_thread::get_id()) {
-        thread_.detach();
-        return;
-      }
-      thread = std::move(thread_);
-      finished = finished_;
     }
-    while (!*finished) {
+    if (thread.joinable()) {
+      while (!*finished) {
+        service();
+        std::this_thread::yield();
+      }
+      thread.join();
+      if (then) {
+        then(true);
+      }
+    }
+    if (dropped && dropped->then) {
+      dropped->then(false);
+    }
+    // A `then` the UI queue is running on another thread (this close not called from it).
+    while (true) {
+      {
+        std::lock_guard lock(state_->mutex);
+        if (state_->thenThread == std::thread::id() || state_->thenThread == std::this_thread::get_id()) {
+          break;
+        }
+      }
       service();
       std::this_thread::yield();
     }
-    thread.join();
   }
 
  private:
-  std::mutex mutex_;
-  std::thread thread_;
-  std::shared_ptr<std::atomic<bool>> finished_;
-  bool closed_{false};
+  struct Run {
+    std::function<void()> work;
+    Then then;
+  };
+  // Shared with the worker and the tasks it posts, so neither touches the owner.
+  struct State {
+    explicit State(Post post) : post(std::move(post)) {}
+    std::mutex mutex;
+    Post post;
+    std::thread thread;
+    std::shared_ptr<std::atomic<bool>> finished;
+    Then then;
+    // A run is live, or its `then` is still to run: a new run waits its turn.
+    bool busy{false};
+    std::optional<Run> waiting;
+    bool closed{false};
+    // The thread running a `then` from the UI queue, if one is.
+    std::thread::id thenThread;
+  };
+
+  // Under the state's lock.
+  static void spawn(const std::shared_ptr<State> &state, Run run) {
+    auto finished = std::make_shared<std::atomic<bool>>(false);
+    state->busy = true;
+    state->finished = finished;
+    state->then = std::move(run.then);
+    state->thread = std::thread([state, work = std::move(run.work), finished] {
+      work();
+      *finished = true;
+      // The worker's last step: everything after it (the join, `then`, the next run) is the UI
+      // queue's.
+      state->post([state] { finish(state); });
+    });
+  }
+
+  // On the UI queue, once a run's work is done.
+  static void finish(const std::shared_ptr<State> &state) {
+    std::thread thread;
+    Then then;
+    {
+      std::lock_guard lock(state->mutex);
+      // A close may have joined the run and taken its `then` already.
+      thread = std::move(state->thread);
+      then = std::move(state->then);
+      state->then = nullptr;
+      state->thenThread = std::this_thread::get_id();
+    }
+    if (thread.joinable()) {
+      thread.join();
+    }
+    if (then) {
+      then(true);
+    }
+    std::optional<Run> dropped;
+    {
+      std::lock_guard lock(state->mutex);
+      state->thenThread = std::thread::id();
+      state->busy = false;
+      if (state->waiting) {
+        Run next = std::move(*state->waiting);
+        state->waiting.reset();
+        if (state->closed) {
+          dropped = std::move(next);
+        } else {
+          spawn(state, std::move(next));
+        }
+      }
+    }
+    if (dropped && dropped->then) {
+      dropped->then(false);
+    }
+  }
+
+  std::shared_ptr<State> state_;
 };
 
 } // namespace ngn

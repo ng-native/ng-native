@@ -94,8 +94,9 @@ class Runtime {
   }
   // Tears the runtime down and starts it again on a fresh download of the bundle, with every
   // running surface restarted. Runs off the calling thread; a second call while one runs is
-  // dropped. `done` gets whether the bundle loaded, on the reload's thread, or false on the calling
-  // thread when shutdown has begun.
+  // dropped. `done` gets whether the bundle loaded, on the UI thread once the reload's thread has
+  // ended (or on shutdown's thread, when shutdown joins it), so it may reload again or destroy the
+  // runtime. It gets false, on the calling thread, once shutdown has begun.
   void reload(std::function<void(bool)> done = nullptr);
   // The same, on another bundle on disk: an update's (updates.h). Ignored for a dev server's bundle.
   void reload(std::string bundle, std::function<void(bool)> done);
@@ -125,9 +126,6 @@ class Runtime {
  private:
   void createHost();
   void installErrorListener(facebook::jsi::Runtime &runtime);
-  // Waits for the last reload's thread to end, serving the UI thread's queue meanwhile when called
-  // there, since the teardown and mounting it does can need it.
-  void joinReload();
 
   std::shared_ptr<MountingManager> mounting_;
   std::shared_ptr<const TextMeasurer> textMeasurer_;
@@ -142,8 +140,8 @@ class Runtime {
   // UI thread never waits on it during a reload: it writes to the book instead.
   std::recursive_mutex mutex_;
   std::atomic<bool> reloading_{false};
-  // The last reload's thread, which uses this runtime until it ends: joined before the next reload,
-  // and closed by shutdown before it tears the runtime down (reload-thread.h).
+  // The reload's thread, which uses this runtime until it ends: one at a time, each joined before
+  // the next starts, and closed by shutdown before it tears the runtime down (reload-thread.h).
   ReloadThread reloader_;
   std::unique_ptr<facebook::react::ReactHost> host_;
   struct Surface {
