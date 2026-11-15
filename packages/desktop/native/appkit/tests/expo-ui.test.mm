@@ -265,6 +265,21 @@ TEST_CASE("a toggle, a slider and a stepper send their changes as expo/ui does")
   CHECK(h.events[1].payload["eventCount"] == 1);
   CHECK(h.renderer.perform(3, dynamic::object("value", 4)));
   CHECK(h.events.back().payload["eventCount"] == 2);
+  auto moved = draw(h.renderer, 200, 30);
+  // The app's echo of the first move comes late: the second move stays.
+  h.renderer.setTree(slider(10));
+  CHECK(draw(h.renderer, 200, 30).differs(moved) < 20);
+  // The echo of the last move, then a value of the app's own, which shows.
+  h.renderer.setTree(slider(4));
+  CHECK(draw(h.renderer, 200, 30).differs(moved) < 20);
+  h.renderer.setTree(slider(9));
+  CHECK(draw(h.renderer, 200, 30).differs(moved) > 20);
+
+  // A numeric 1 is a number, not true: the slider's minimum holds.
+  h.events.clear();
+  h.renderer.setTree(host({ui(5, "SliderView", dynamic::object("value", 5)("min", 1)("max", 10))}));
+  CHECK(h.renderer.perform(5, dynamic::object("value", 0)));
+  CHECK(h.events.back().payload["value"] == 1.0);
 
   h.events.clear();
   h.renderer.setTree(host({ui(4, "StepperView", dynamic::object("label", "Guests")("value", 2)("min", 1)("max", 8))}));
@@ -287,6 +302,9 @@ TEST_CASE("a button presses, a text field types, and a colour picker reports hex
   CHECK(h.events.back().name == "buttonPress");
   CHECK(h.renderer.perform(3, dynamic::object("text", "Ada")));
   CHECK(h.events.back().name == "textChange");
+  CHECK(h.events.back().payload == dynamic::object("value", "Ada"));
+  // Cut to maxLength, as typing is.
+  CHECK(h.renderer.perform(3, dynamic::object("text", "Adams")));
   CHECK(h.events.back().payload == dynamic::object("value", "Ada"));
   CHECK(h.renderer.perform(4, dynamic::object("value", "#00ff00")));
   CHECK(h.events.back().name == "selectionChange");

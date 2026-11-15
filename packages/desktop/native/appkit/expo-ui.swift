@@ -34,7 +34,7 @@ final class UINode {
   }
 
   func string(_ key: String) -> String? { props[key] as? String }
-  func number(_ key: String) -> Double? { (props[key] as? NSNumber).flatMap { $0 is Bool ? nil : $0.doubleValue } }
+  func number(_ key: String) -> Double? { (props[key] as? NSNumber).flatMap { uiIsBool($0) ? nil : $0.doubleValue } }
   func bool(_ key: String) -> Bool? { (props[key] as? NSNumber).map(\.boolValue) }
 
   var modifiers: [[String: Any]] { props["modifiers"] as? [[String: Any]] ?? [] }
@@ -76,7 +76,15 @@ final class UIStore: ObservableObject {
         continue
       }
       for key in values.keys where !same(was.props[key], now.props[key]) {
+        // A slider's value that echoes one of the user's earlier moves is an older update: the
+        // later move stays.
+        if key == "value", let sent = values["sent"] as? [Double], let echoed = (now.props[key] as? NSNumber)?.doubleValue,
+           let at = sent.lastIndex(of: echoed), at < sent.count - 1 {
+          local[tag]?["sent"] = Array(sent[(at + 1)...])
+          continue
+        }
         local[tag]?[key] = nil
+        if key == "value" { local[tag]?["sent"] = nil }
       }
     }
     self.root = root
@@ -92,6 +100,9 @@ final class UIStore: ObservableObject {
 
   func value(_ node: UINode, _ key: String) -> Any? { local[node.tag]?[key] ?? node.props[key] }
 
+  // Kept for the view without being drawn or sent: what reconciling needs.
+  func remember(_ node: UINode, _ key: String, _ value: Any) { local[node.tag, default: [:]][key] = value }
+
   // The user set `key`: kept, drawn and sent as `event` with `payload`.
   func user(_ node: UINode, _ key: String, _ value: Any, event: String, payload: [String: Any]) {
     local[node.tag, default: [:]][key] = value
@@ -102,8 +113,11 @@ final class UIStore: ObservableObject {
 
 // MARK: - Values
 
+// Whether a JSON value is a boolean: Swift's `is Bool` also takes any NSNumber that is 0 or 1.
+func uiIsBool(_ number: NSNumber) -> Bool { CFGetTypeID(number) == CFBooleanGetTypeID() }
+
 func uiColor(_ value: Any?) -> Color? {
-  if let number = value as? NSNumber, !(number is Bool) {
+  if let number = value as? NSNumber, !uiIsBool(number) {
     // React Native's processed colour: 0xAARRGGBB.
     let argb = number.uint32Value
     return Color(.sRGB, red: Double((argb >> 16) & 0xff) / 255, green: Double((argb >> 8) & 0xff) / 255,
@@ -134,7 +148,7 @@ func uiHex(_ color: Color) -> String {
 }
 
 func uiDate(_ value: Any?) -> Date? {
-  if let number = value as? NSNumber, !(number is Bool) { return Date(timeIntervalSince1970: number.doubleValue / 1000) }
+  if let number = value as? NSNumber, !uiIsBool(number) { return Date(timeIntervalSince1970: number.doubleValue / 1000) }
   guard let text = value as? String else { return nil }
   let full = ISO8601DateFormatter()
   full.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -174,7 +188,7 @@ func uiVertical(_ value: Any?) -> VerticalAlignment {
 }
 
 func uiCGFloat(_ value: Any?) -> CGFloat? {
-  guard let number = value as? NSNumber, !(number is Bool) else { return nil }
+  guard let number = value as? NSNumber, !uiIsBool(number) else { return nil }
   return CGFloat(number.doubleValue)
 }
 
@@ -187,7 +201,7 @@ func uiLength(_ value: Any?) -> CGFloat? {
 // A Picker's selection and its options' tags as one type: a string, or a number.
 func uiTag(_ value: Any?) -> String? {
   if let text = value as? String { return "s:" + text }
-  if let number = value as? NSNumber, !(number is Bool) { return "n:\(number.doubleValue)" }
+  if let number = value as? NSNumber, !uiIsBool(number) { return "n:\(number.doubleValue)" }
   return nil
 }
 
@@ -500,6 +514,7 @@ func uiSlide(_ node: UINode, _ store: UIStore, _ raw: Double) {
   let range = uiSliderRange(node)
   let value = min(range.upperBound, max(range.lowerBound, raw))
   let count = ((store.value(node, "eventCount") as? Int) ?? 0) + 1
+  store.remember(node, "sent", ((store.value(node, "sent") as? [Double]) ?? []) + [value])
   store.user(node, "eventCount", count, event: "editingChanged", payload: ["isEditing": true])
   store.user(node, "value", value, event: "valueChanged", payload: ["value": value, "eventCount": count])
 }
@@ -566,16 +581,19 @@ func uiColorPicker(_ node: UINode, _ store: UIStore) -> some View {
   return ColorPicker(node.string("label") ?? "", selection: selection, supportsOpacity: node.bool("supportsOpacity") ?? true)
 }
 
+// What is typed into a text field, by the user or a replay: cut to its maxLength, kept and sent.
+func uiType(_ node: UINode, _ store: UIStore, _ value: String) {
+  var typed = value
+  if let limit = node.number("maxLength"), limit >= 0 { typed = String(typed.prefix(Int(limit))) }
+  store.user(node, "text", typed, event: "textChange", payload: ["value": typed])
+}
+
 // A text field keeps what is typed: expo/ui's `text` is an ObservableState, which macOS has no
 // module for, so a `text` given as a string is taken instead.
 func uiTextField(_ node: UINode, _ store: UIStore) -> some View {
   let text = Binding<String>(
     get: { (store.value(node, "text") as? String) ?? "" },
-    set: { value in
-      var typed = value
-      if let limit = node.number("maxLength"), limit >= 0 { typed = String(typed.prefix(Int(limit))) }
-      store.user(node, "text", typed, event: "textChange", payload: ["value": typed])
-    })
+    set: { uiType(node, store, $0) })
   let placeholder = node.string("placeholder") ?? ""
   if node.name == "SecureFieldView" {
     return AnyView(SecureField(placeholder, text: text))
@@ -1236,7 +1254,7 @@ public func ngnUIHostPerform(_ pointer: UnsafeMutableRawPointer, _ tag: Int32, _
     store.user(node, "selection", hex, event: "selectionChange", payload: ["value": hex])
   case "TextFieldView", "SecureFieldView":
     guard let text = value["text"] as? String else { return false }
-    store.user(node, "text", text, event: "textChange", payload: ["value": text])
+    uiType(node, store, text)
   case "DisclosureGroupView", "SectionView":
     guard let expanded = value["isExpanded"] as? Bool else { return false }
     store.user(node, "isExpanded", expanded, event: "isExpandedChange", payload: ["isExpanded": expanded])
