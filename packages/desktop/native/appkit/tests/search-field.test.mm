@@ -186,6 +186,18 @@ TEST_CASE("a click into a search field that ends its editing and starts it again
   [search blur];
   settle();
   CHECK(events.log == std::vector<std::string>{"focus", "blur"});
+
+  // Ended and started again, then blurred before the turn after: one blur, not one for each end.
+  [search focus];
+  [window endEditingFor:search.field];
+  [search.field.cell editWithFrame:search.field.bounds
+                            inView:search.field
+                            editor:[window fieldEditor:YES forObject:search.field]
+                          delegate:search.field
+                             event:nil];
+  [search blur];
+  settle();
+  CHECK(events.log == std::vector<std::string>{"focus", "blur", "focus", "blur"});
   [window close];
 }
 

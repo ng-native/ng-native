@@ -13,8 +13,9 @@
 // keeps the system face.
 NSFont *NGNSearchFieldFont(const ngn::NativeControlProps &props);
 
-// How big AppKit draws the field at its control size, font and placeholder. Safe off the main
-// thread: it measures a cell.
+// How big AppKit draws the field at its control size, font and placeholder, measured with a private
+// NSSearchFieldCell that no view holds. The control measurer calls it on the layout thread, as it
+// measures its other controls' cells; AppKit's threading guide names NSCell main-thread-only.
 NSSize NGNSearchFieldSize(const ngn::NativeControlProps &props);
 
 @interface NGNSearchField : NSView
