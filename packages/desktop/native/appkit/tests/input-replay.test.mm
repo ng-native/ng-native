@@ -130,9 +130,14 @@ TEST_CASE("a key step with Shift types the shifted character into the focused fi
 @property(nonatomic) int stuck;
 // Each click as "press x>release x", in the order the clicks end.
 @property(nonatomic, strong) NSMutableArray<NSString *> *ended;
+// Focused when a press is released, as a control whose action focuses a field.
+@property(nonatomic, weak) NSView *focusOnRelease;
 @end
 @implementation NGNTrackingTestView
 - (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  return YES;
+}
+- (BOOL)acceptsFirstResponder {
   return YES;
 }
 - (void)mouseDown:(NSEvent *)event {
@@ -153,6 +158,9 @@ TEST_CASE("a key step with Shift types the shifted character into the focused fi
     } else {
       self.clicks++;
       [self.ended addObject:[NSString stringWithFormat:@"%g>%g", event.locationInWindow.x, next.locationInWindow.x]];
+      if (self.focusOnRelease != nil) {
+        [self.window makeFirstResponder:self.focusOnRelease];
+      }
       return;
     }
   }
@@ -181,5 +189,34 @@ TEST_CASE("a press a view tracks in its own loop gets its drags and release, and
   CHECK(view.drags == 1);
   // Each press gets its own release.
   CHECK([view.ended isEqualToArray:@[ @"50>60", @"100>100" ]]);
+  [window close];
+}
+
+TEST_CASE("the steps after a tracked press's release wait for the press to end") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NGNTrackingTestView *view = [[NGNTrackingTestView alloc] initWithFrame:NSMakeRect(0, 0, 300, 200)];
+  window.contentView = view;
+  NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(150, 150, 140, 24)];
+  [view addSubview:field];
+  view.focusOnRelease = field;
+  [window orderFront:nil];
+  // The press's view has the keyboard until the release moves it to the field.
+  REQUIRE([window makeFirstResponder:view]);
+  auto script = ngn::parseInputScript("down 50 50\nup 50 50\ntype hi\n");
+  REQUIRE_FALSE(script.error);
+  ngn::appkit::replayInputScript(window, std::move(script));
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:8];
+  while (![field.currentEditor.string isEqualToString:@"hi"] && view.stuck == 0 && until.timeIntervalSinceNow > 0) {
+    [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  }
+  CHECK(view.stuck == 0);
+  CHECK(view.clicks == 1);
+  // The release focused the field before the text was typed.
+  CHECK([field.currentEditor.string isEqualToString:@"hi"]);
   [window close];
 }
