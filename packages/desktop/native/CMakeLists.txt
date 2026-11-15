@@ -184,7 +184,7 @@ if(NGN_TESTS)
         appkit/app-info.mm appkit/tests/app-info.test.mm
         appkit/network-state.mm appkit/tests/network-state.test.mm
         appkit/battery.mm appkit/tests/battery.test.mm
-        appkit/fonts.mm appkit/text-layout.mm appkit/tests/fonts.test.mm
+        appkit/fonts.mm appkit/text-layout.mm appkit/tests/fonts.test.mm appkit/tests/text-layout.test.mm
         appkit/text-recognition.mm appkit/tests/text-recognition.test.mm
         appkit/calendar.mm appkit/tests/calendar.test.mm
         appkit/audio.mm appkit/tests/audio.test.mm
