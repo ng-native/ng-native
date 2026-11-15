@@ -115,4 +115,29 @@ TEST_CASE("Natural alignment follows the paragraph's direction") {
   auto right = ngn::layoutText(stringOf({forced}), {}, 300);
   CHECK(right.lines[0].rightToLeft);
   CHECK(leftmostInk(right, 300, 40) > 150);
+
+  // Hebrew inside an isolate does not count: the Latin after it sets the direction (rule P2).
+  auto isolated = ngn::layoutText(stringOf({fragment("\u2067שלום\u2069 Hello")}), {}, 300);
+  CHECK_FALSE(isolated.lines[0].rightToLeft);
+  CHECK(leftmostInk(isolated, 300, 40) < 10);
+
+  // A right-to-left mark is a strong right-to-left character.
+  auto marked = ngn::layoutText(stringOf({fragment("\u200FHello")}), {}, 300);
+  CHECK(marked.lines[0].rightToLeft);
+  CHECK(leftmostInk(marked, 300, 40) > 150);
+}
+
+TEST_CASE("Each paragraph's wrapped lines take that paragraph's direction") {
+  auto layout = ngn::layoutText(
+      stringOf({fragment("Hello there\nשלום עולם שלום עולם שלום עולם שלום עולם\nGood morning to you all")}), {}, 80);
+  REQUIRE(layout.lines.size() >= 5);
+  CFStringRef text = CFAttributedStringGetString(layout.string);
+  for (size_t i = 0; i < layout.lines.size(); i++) {
+    CFIndex at = CTLineGetStringRange(layout.lines[i].line).location;
+    UniChar c = CFStringGetCharacterAtIndex(text, at);
+    INFO("line ", i);
+    CHECK(layout.lines[i].rightToLeft == (c >= 0x0590 && c <= 0x05FF));
+  }
+  CHECK_FALSE(layout.lines.front().rightToLeft);
+  CHECK_FALSE(layout.lines.back().rightToLeft);
 }
