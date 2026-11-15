@@ -62,10 +62,13 @@ struct Answer {
   std::optional<std::string> error;
 };
 
-Answer call(const ngn::NativeModule &module, const std::string &method, dynamic args) {
-  Answer answer;
+std::shared_ptr<Answer> call(const ngn::NativeModule &module, const std::string &method, dynamic args) {
+  // Shared with the callbacks, which a call left pending keeps.
+  auto answer = std::make_shared<Answer>();
   module.callWithPromise(
-      method, args, {.resolve = [&](dynamic v) { answer.value = v; }, .reject = [&](const std::string &e) { answer.error = e; }});
+      method, args,
+      {.resolve = [answer](dynamic v) { answer->value = v; },
+       .reject = [answer](const std::string &e) { answer->error = e; }});
   return answer;
 }
 
@@ -159,8 +162,8 @@ TEST_CASE("NgNativeImageManipulator sizes the edits from the file it reads, with
   REQUIRE(http->sent.size() == 1);
   CHECK(http->sent[0]->request.url == "file:///photos/cat%20one.png");
   serve(*http, 0, "image:200x100");
-  REQUIRE(answer.value);
-  CHECK(*answer.value == dynamic::object("width", 100)("height", 200));
+  REQUIRE(answer->value);
+  CHECK(*answer->value == dynamic::object("width", 100)("height", 200));
   CHECK(codec->rendered.empty());
 }
 
@@ -173,15 +176,15 @@ TEST_CASE("NgNativeImageManipulator saves the edited image as a new file in its 
   auto jpeg = call(*module, "saveAsync", dynamic::array("http://localhost:8081/assets/cat.png", actions, nullptr, nullptr));
   CHECK(http->sent[0]->request.url == "http://localhost:8081/assets/cat.png");
   serve(*http, 0, "image:40x10");
-  REQUIRE(jpeg.value);
-  auto uri = (*jpeg.value)["uri"].asString();
+  REQUIRE(jpeg->value);
+  auto uri = (*jpeg->value)["uri"].asString();
   CHECK(uri.rfind("file://" + (folder.path / "ImageManipulator").string() + "/", 0) == 0);
   CHECK(uri.substr(uri.size() - 4) == ".jpg");
   // JPEG at full quality unless the options say otherwise, with no base64.
   CHECK(contents(uri.substr(7)) == "jpeg@1.0:2");
-  CHECK((*jpeg.value)["width"] == dynamic(20));
-  CHECK((*jpeg.value)["height"] == dynamic(5));
-  CHECK((*jpeg.value).count("base64") == 0);
+  CHECK((*jpeg->value)["width"] == dynamic(20));
+  CHECK((*jpeg->value)["height"] == dynamic(5));
+  CHECK((*jpeg->value).count("base64") == 0);
   REQUIRE(codec->rendered.size() == 1);
   CHECK(codec->rendered[0][0].kind == Kind::FlipVertical);
 
@@ -190,11 +193,11 @@ TEST_CASE("NgNativeImageManipulator saves the edited image as a new file in its 
       dynamic::array("data:image/png;base64,AAAA", dynamic::array(), nullptr, dynamic::object("format", "png")("compress", 0.5)("base64", true)));
   CHECK(http->sent[1]->request.url == "data:image/png;base64,AAAA");
   serve(*http, 1, "image:3x4");
-  REQUIRE(png.value);
-  auto pngUri = (*png.value)["uri"].asString();
+  REQUIRE(png->value);
+  auto pngUri = (*png->value)["uri"].asString();
   CHECK(pngUri.substr(pngUri.size() - 4) == ".png");
   CHECK(pngUri != uri);
-  CHECK((*png.value)["base64"] == dynamic(ngn::base64Encode("png@0.5:0")));
+  CHECK((*png->value)["base64"] == dynamic(ngn::base64Encode("png@0.5:0")));
 }
 
 TEST_CASE("NgNativeImageManipulator refuses WebP where it cannot write it, before reading anything") {
@@ -203,11 +206,11 @@ TEST_CASE("NgNativeImageManipulator refuses WebP where it cannot write it, befor
   auto http = std::make_shared<ngn::testing::FakeHttp>();
   auto module = ngn::makeImageManipulatorModule(codec, http, folder.path.string(), ngn::testing::readsEverywhere());
   auto webp = call(*module, "saveAsync", dynamic::array("/a.png", dynamic::array(), nullptr, dynamic::object("format", "webp")));
-  REQUIRE(webp.error);
-  CHECK(*webp.error == "ImageManipulator: this Mac cannot write WebP images; save as jpeg or png");
+  REQUIRE(webp->error);
+  CHECK(*webp->error == "ImageManipulator: this Mac cannot write WebP images; save as jpeg or png");
   CHECK(http->sent.empty());
   auto other = call(*module, "saveAsync", dynamic::array("/a.png", dynamic::array(), nullptr, dynamic::object("format", "gif")));
-  CHECK(*other.error == "ImageManipulator: the format is jpeg, png or webp, not gif");
+  CHECK(*other->error == "ImageManipulator: the format is jpeg, png or webp, not gif");
   codec->webp = true;
   call(*module, "saveAsync", dynamic::array("/a.png", dynamic::array(), nullptr, dynamic::object("format", "webp")));
   serve(*http, 0, "image:1x1");
@@ -220,26 +223,26 @@ TEST_CASE("NgNativeImageManipulator rejects a source it cannot read, an action t
   auto http = std::make_shared<ngn::testing::FakeHttp>();
   auto module = ngn::makeImageManipulatorModule(codec, http, folder.path.string(), ngn::testing::readsEverywhere());
   auto scheme = call(*module, "renderAsync", dynamic::array("ph://ABC", dynamic::array(), nullptr));
-  CHECK(*scheme.error == "ImageManipulator: Could not load the image: ph://ABC is not a file, data or http(s) uri");
+  CHECK(*scheme->error == "ImageManipulator: Could not load the image: ph://ABC is not a file, data or http(s) uri");
   CHECK(http->sent.empty());
 
   auto missing = call(*module, "renderAsync", dynamic::array("https://example.com/a.png", dynamic::array(), nullptr));
   serve(*http, 0, "", 404);
-  CHECK(*missing.error == "ImageManipulator: Could not load the image: HTTP 404 for https://example.com/a.png");
+  CHECK(*missing->error == "ImageManipulator: Could not load the image: HTTP 404 for https://example.com/a.png");
 
   auto offline = call(*module, "renderAsync", dynamic::array("https://example.com/b.png", dynamic::array(), nullptr));
   http->sent[1]->callbacks.onComplete("The Internet connection appears to be offline.", false);
-  CHECK(*offline.error == "ImageManipulator: Could not load the image: The Internet connection appears to be offline.");
+  CHECK(*offline->error == "ImageManipulator: Could not load the image: The Internet connection appears to be offline.");
 
   auto notImage = call(*module, "renderAsync", dynamic::array("/a.txt", dynamic::array(), nullptr));
   serve(*http, 2, "hello");
-  CHECK(*notImage.error == "ImageManipulator: Could not load the image: /a.txt is not an image");
+  CHECK(*notImage->error == "ImageManipulator: Could not load the image: /a.txt is not an image");
 
   auto badCrop = call(
       *module, "saveAsync",
       dynamic::array("/a.png", dynamic::array(dynamic::object("crop", dynamic::object("originX", 0)("originY", 0)("width", 9)("height", 1))), nullptr, nullptr));
   serve(*http, 3, "image:5x5");
-  CHECK(badCrop.error->find("ImageManipulator: Invalid crop options") == 0);
+  CHECK(badCrop->error->find("ImageManipulator: Invalid crop options") == 0);
   CHECK(codec->rendered.empty());
 
   struct FailingCodec final : ngn::ImageCodec {
@@ -256,7 +259,7 @@ TEST_CASE("NgNativeImageManipulator rejects a source it cannot read, an action t
   auto failing = ngn::makeImageManipulatorModule(std::make_shared<FailingCodec>(), http, folder.path.string(), ngn::testing::readsEverywhere());
   auto failed = call(*failing, "saveAsync", dynamic::array("/a.png", dynamic::array(), nullptr, nullptr));
   serve(*http, 4, "x");
-  CHECK(*failed.error == "ImageManipulator: Cannot create image data for given image format");
+  CHECK(*failed->error == "ImageManipulator: Cannot create image data for given image format");
 }
 
 TEST_CASE("NgNativeImageManipulator reads only files FileSystem could, so its copies in Caches widen nothing") {
@@ -280,10 +283,10 @@ TEST_CASE("NgNativeImageManipulator reads only files FileSystem could, so its co
   // A file outside the app's folders: refused before anything is read or written.
   auto shot = ngn::fileUri((folder.path / "home/Desktop/Screenshot.png").string());
   auto refused = call(*module, "saveAsync", dynamic::array(shot, dynamic::array(), nullptr, nullptr));
-  REQUIRE(refused.error);
-  CHECK(refused.error->find("ImageManipulator: Could not load the image: ") == 0);
-  CHECK(refused.error->find("is outside the files this app may read") != std::string::npos);
-  CHECK(call(*module, "renderAsync", dynamic::array(shot, dynamic::array(), nullptr)).error);
+  REQUIRE(refused->error);
+  CHECK(refused->error->find("ImageManipulator: Could not load the image: ") == 0);
+  CHECK(refused->error->find("is outside the files this app may read") != std::string::npos);
+  CHECK(call(*module, "renderAsync", dynamic::array(shot, dynamic::array(), nullptr))->error);
   CHECK(http->sent.empty());
   CHECK(codec->rendered.empty());
   CHECK_FALSE(std::filesystem::exists(output));
@@ -296,6 +299,6 @@ TEST_CASE("NgNativeImageManipulator reads only files FileSystem could, so its co
 
   // With no file access at all, every file is refused.
   auto none = ngn::makeImageManipulatorModule(codec, http, output.string(), nullptr);
-  CHECK(call(*none, "renderAsync", dynamic::array(folders.cache + "/edited.png", dynamic::array(), nullptr)).error);
+  CHECK(call(*none, "renderAsync", dynamic::array(folders.cache + "/edited.png", dynamic::array(), nullptr))->error);
   CHECK(http->sent.size() == 3);
 }

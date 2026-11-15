@@ -180,9 +180,12 @@ TEST_CASE("NgNativeLocalLlm sends a tool call with the turn's request, and passe
 TEST_CASE("NgNativeLocalLlm releases a session, and every session when a reload ends the module") {
   Setup s;
   auto a = s.module->call("createSession", dynamic::array(dynamic::object()));
+  auto *sessionA = s.engine->last;
   s.module->call("createSession", dynamic::array(dynamic::object()));
   auto pending = s.start("respond", dynamic::array(a, "Hello", nullptr));
-  auto done = s.engine->last->done;
+  // Session a's completion, kept past its release as a model finishing late would keep it.
+  auto done = sessionA->done;
+  REQUIRE(done);
   s.module->call("release", dynamic::array(a));
   CHECK(s.engine->log->released == 1);
   // A turn on a released session is refused.
@@ -197,4 +200,8 @@ TEST_CASE("NgNativeLocalLlm releases a session, and every session when a reload 
   s.events.clear();
   calls({.id = "c1", .tool = "weather", .arguments = "{}"});
   CHECK(s.events.empty());
+  // Session a finishing late touches nothing the module owned, and still settles its promise.
+  CHECK_FALSE(pending->value);
+  done({.text = "Late"});
+  CHECK(pending->value == dynamic("Late"));
 }

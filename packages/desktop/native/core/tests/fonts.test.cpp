@@ -17,15 +17,16 @@ struct Answer {
   std::optional<std::string> error;
 };
 
-Answer load(const ngn::NativeModule &module, const std::string &name, const std::string &uri) {
-  Answer answer;
+std::shared_ptr<Answer> load(const ngn::NativeModule &module, const std::string &name, const std::string &uri) {
+  // Shared with the callbacks, which a load left pending keeps.
+  auto answer = std::make_shared<Answer>();
   module.callWithPromise(
       "loadAsync", dynamic::array(name, uri),
-      {.resolve = [&](dynamic) { answer.done = true; },
+      {.resolve = [answer](dynamic) { answer->done = true; },
        .reject =
-           [&](const std::string &e) {
-             answer.done = true;
-             answer.error = e;
+           [answer](const std::string &e) {
+             answer->done = true;
+             answer->error = e;
            }});
   return answer;
 }
@@ -69,14 +70,14 @@ TEST_CASE("NgNativeFont registers a file and makes its name stand for the font's
   auto file = folder.write("inter.ttf", "font:Inter");
   CHECK(module->call("isLoaded", dynamic::array("Inter-700")) == dynamic(false));
   auto answer = load(*module, "Inter-700", "file://" + file);
-  CHECK(answer.done);
-  CHECK_FALSE(answer.error);
+  CHECK(answer->done);
+  CHECK_FALSE(answer->error);
   CHECK(registrar->registered == std::vector<std::string>{file});
   CHECK(module->call("isLoaded", dynamic::array("Inter-700")) == dynamic(true));
   CHECK(library->fontOf("Inter-700")->family == "Inter");
   CHECK(library->fontOf("Inter-700")->postScriptName == "Inter-Regular");
   // A plain path, as well as a file: uri.
-  CHECK_FALSE(load(*module, "Inter", file).error);
+  CHECK_FALSE(load(*module, "Inter", file)->error);
   CHECK(module->call("getLoadedFonts") == dynamic::array("Inter-700", "Inter"));
   CHECK_FALSE(library->fontOf("Roboto"));
 }
@@ -86,11 +87,11 @@ TEST_CASE("NgNativeFont refuses what it cannot register, and loads nothing under
   auto library = std::make_shared<ngn::FontLibrary>();
   auto module = ngn::makeFontModule(std::make_shared<FakeRegistrar>(), library, nullptr, folder.path.string(), ngn::testing::readsEverywhere());
   auto answer = load(*module, "Broken", "file://" + folder.write("broken.ttf", "png"));
-  REQUIRE(answer.error);
-  CHECK(answer.error->find("not a font") != std::string::npos);
-  CHECK(load(*module, "Gone", "file:///nowhere/at/all.ttf").error);
-  CHECK(load(*module, "Data", "data:font/ttf;base64,AAAA").error);
-  CHECK(load(*module, "", "file:///a.ttf").error);
+  REQUIRE(answer->error);
+  CHECK(answer->error->find("not a font") != std::string::npos);
+  CHECK(load(*module, "Gone", "file:///nowhere/at/all.ttf")->error);
+  CHECK(load(*module, "Data", "data:font/ttf;base64,AAAA")->error);
+  CHECK(load(*module, "", "file:///a.ttf")->error);
   CHECK(library->names().empty());
 }
 
@@ -102,14 +103,14 @@ TEST_CASE("NgNativeFont downloads a font the dev server serves, then registers i
   auto answer = load(*module, "Inter", "http://localhost:8081/assets/Inter.ttf?platform=macos&hash=1");
   REQUIRE(http->sent.size() == 1);
   CHECK(http->sent[0]->request.url == "http://localhost:8081/assets/Inter.ttf?platform=macos&hash=1");
-  CHECK_FALSE(answer.done);
+  CHECK_FALSE(answer->done);
   auto &callbacks = http->sent[0]->callbacks;
   callbacks.onResponse({.status = 200});
   callbacks.onData("font:", -1);
   callbacks.onData("Inter", -1);
   callbacks.onComplete("", false);
-  CHECK(answer.done);
-  CHECK_FALSE(answer.error);
+  CHECK(answer->done);
+  CHECK_FALSE(answer->error);
   REQUIRE(registrar->registered.size() == 1);
   CHECK(registrar->registered[0].rfind(folder.path.string() + "/fonts/", 0) == 0);
   CHECK(std::filesystem::path(registrar->registered[0]).extension() == ".ttf");
@@ -124,11 +125,11 @@ TEST_CASE("NgNativeFont refuses a download that fails") {
   auto missing = load(*module, "Missing", "https://example.com/missing.otf");
   http->sent[0]->callbacks.onResponse({.status = 404});
   http->sent[0]->callbacks.onComplete("", false);
-  REQUIRE(missing.error);
-  CHECK(missing.error->find("404") != std::string::npos);
+  REQUIRE(missing->error);
+  CHECK(missing->error->find("404") != std::string::npos);
   auto offline = load(*module, "Offline", "https://example.com/offline.otf");
   http->sent[1]->callbacks.onComplete("The Internet connection appears to be offline.", false);
-  CHECK(offline.error);
+  CHECK(offline->error);
   CHECK(registrar->registered.empty());
   CHECK(module->call("getLoadedFonts") == dynamic::array());
 }
@@ -145,19 +146,19 @@ TEST_CASE("NgNativeFont registers only files FileSystem could read, and says not
   auto present = load(*module, "Secret", ngn::fileUri(there));
   auto absent = load(*module, "Secret", ngn::fileUri((folder.path / "home/Library/Fonts/None.ttf").string()));
   auto notFont = load(*module, "Secret", ngn::fileUri(folder.write("home/Library/Fonts/note.txt", "png")));
-  REQUIRE(present.error);
-  REQUIRE(absent.error);
-  REQUIRE(notFont.error);
-  CHECK(present.error->find("is outside the files this app may read") != std::string::npos);
+  REQUIRE(present->error);
+  REQUIRE(absent->error);
+  REQUIRE(notFont->error);
+  CHECK(present->error->find("is outside the files this app may read") != std::string::npos);
   // One answer whether the file is there, missing or not a font: no way to tell them apart.
   auto tail = [](const std::string &error) { return error.substr(error.find(" is outside")); };
-  CHECK(tail(*present.error) == tail(*absent.error));
-  CHECK(tail(*present.error) == tail(*notFont.error));
+  CHECK(tail(*present->error) == tail(*absent->error));
+  CHECK(tail(*present->error) == tail(*notFont->error));
   CHECK(registrar->registered.empty());
 
   // The app's own files are registered.
   auto own = folder.write("cache/Own.ttf", "font:Own");
-  CHECK_FALSE(load(*module, "Own", own).error);
+  CHECK_FALSE(load(*module, "Own", own)->error);
   CHECK(registrar->registered == std::vector<std::string>{own});
 }
 
@@ -176,10 +177,10 @@ TEST_CASE("NgNativeFont downloads a url once while it is downloading, however ma
   callbacks.onResponse({.status = 200});
   callbacks.onData("font:Inter", -1);
   callbacks.onComplete("", false);
-  CHECK(family.done);
-  CHECK(alias.done);
-  CHECK_FALSE(family.error);
-  CHECK_FALSE(alias.error);
+  CHECK(family->done);
+  CHECK(alias->done);
+  CHECK_FALSE(family->error);
+  CHECK_FALSE(alias->error);
   CHECK(library->names() == std::vector<std::string>{"Inter", "Inter-Regular"});
 
   // A failed download fails every load waiting on it, and the next load tries again.
@@ -188,8 +189,8 @@ TEST_CASE("NgNativeFont downloads a url once while it is downloading, however ma
   REQUIRE(http->sent.size() == 2);
   http->sent[1]->callbacks.onResponse({.status = 404});
   http->sent[1]->callbacks.onComplete("", false);
-  CHECK(first.error);
-  CHECK(second.error);
+  CHECK(first->error);
+  CHECK(second->error);
   load(*module, "Gone", "https://example.com/gone.ttf");
   CHECK(http->sent.size() == 3);
 }
