@@ -160,11 +160,13 @@ enum NGNToolError: LocalizedError {
 enum NGNSchemaError: LocalizedError {
   case unsupportedType(String)
   case malformed(String)
+  case badOption(String)
 
   var errorDescription: String? {
     switch self {
     case .unsupportedType(let type): return "Unsupported schema type: \(type)"
     case .malformed(let message): return "Malformed schema: \(message)"
+    case .badOption(let message): return message
     }
   }
 }
@@ -373,6 +375,10 @@ final class NGNLanguageModel: @unchecked Sendable {
       schema = nil
     }
     let timeout = config["toolTimeout"] as? Double ?? 30
+    // Checked here: a tool call turns it into nanoseconds, which traps outside UInt64.
+    guard timeout.isFinite, timeout > 0, timeout <= 86_400 else {
+      throw NGNSchemaError.badOption("toolTimeout must be a number of seconds above 0 and at most 86400")
+    }
     let store = NGNToolCalls()
     self.store = store
     let tools: [any Tool] = try (config["tools"] as? [[String: Any]] ?? []).map { tool in

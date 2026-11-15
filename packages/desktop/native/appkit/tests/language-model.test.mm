@@ -4,6 +4,9 @@
 
 #include <doctest/doctest.h>
 
+#include <memory>
+#include <mutex>
+
 #import <Foundation/Foundation.h>
 
 #include <atomic>
@@ -61,28 +64,69 @@ TEST_CASE("SwiftEngine streams an answer from the on-device model where it is av
     MESSAGE("the on-device model is not available here; only the refusal is checked: " << *refused);
     return;
   }
-  std::atomic<int> tokens{0};
-  module->setEmitter([&](const std::string &, folly::dynamic body) {
+  // What the callbacks write lives as long as they do, past a timeout and the module's teardown.
+  struct Seen {
+    std::atomic<int> tokens{0};
+    std::atomic<bool> done{false};
+    std::atomic<bool> stopped{false};
+    std::mutex mutex;
+    std::string text;
+    std::string failure;
+  };
+  auto seen = std::make_shared<Seen>();
+  module->setEmitter([seen](const std::string &, folly::dynamic body) {
     if (body["type"] == "token") {
-      tokens++;
+      seen->tokens++;
     }
   });
   auto id = module->call("createSession", folly::dynamic::array(folly::dynamic::object("instructions", "Answer in one short sentence.")));
-  std::atomic<bool> done{false};
-  std::string text;
-  std::string failure;
+  auto cancel = [&] { module->callWithPromise("cancelStream", folly::dynamic::array(id), {.resolve = [](folly::dynamic) {}, .reject = {}}); };
   module->callWithPromise("streamResponse", folly::dynamic::array(id, "What colour is the sky on a clear day?", "r1"),
-                          {.resolve = [&](folly::dynamic v) { text = v.asString(); done = true; },
-                           .reject = [&](const std::string &m) { failure = m; done = true; }});
-  REQUIRE(waitFor([&] { return done.load(); }, 60));
-  CHECK(failure.empty());
-  CHECK_FALSE(text.empty());
-  CHECK(tokens > 0);
+                          {.resolve =
+                               [seen](folly::dynamic v) {
+                                 std::lock_guard lock(seen->mutex);
+                                 seen->text = v.asString();
+                                 seen->done = true;
+                               },
+                           .reject =
+                               [seen](const std::string &m) {
+                                 std::lock_guard lock(seen->mutex);
+                                 seen->failure = m;
+                                 seen->done = true;
+                               }});
+  bool answered = waitFor([&] { return seen->done.load(); }, 60);
+  if (!answered) {
+    cancel();
+  }
+  REQUIRE(answered);
+  {
+    std::lock_guard lock(seen->mutex);
+    CHECK(seen->failure.empty());
+    CHECK_FALSE(seen->text.empty());
+  }
+  CHECK(seen->tokens > 0);
 
-  std::atomic<bool> stopped{false};
   module->callWithPromise("streamResponse", folly::dynamic::array(id, "Write a long story about the sea.", "r2"),
-                          {.resolve = [&](folly::dynamic) { stopped = true; }, .reject = [&](const std::string &m) { failure = m; stopped = true; }});
-  module->callWithPromise("cancelStream", folly::dynamic::array(id), {.resolve = [](folly::dynamic) {}, .reject = {}});
-  REQUIRE(waitFor([&] { return stopped.load(); }, 30));
-  CHECK(failure.empty());
+                          {.resolve = [seen](folly::dynamic) { seen->stopped = true; },
+                           .reject =
+                               [seen](const std::string &m) {
+                                 std::lock_guard lock(seen->mutex);
+                                 seen->failure = m;
+                                 seen->stopped = true;
+                               }});
+  cancel();
+  REQUIRE(waitFor([&] { return seen->stopped.load(); }, 30));
+  std::lock_guard lock(seen->mutex);
+  CHECK(seen->failure.empty());
+}
+
+TEST_CASE("SwiftEngine refuses a tool timeout that is not a number of seconds it can wait") {
+  auto module = ngn::makeLocalLlmModule(ngn::appkit::makeLanguageModelEngine());
+  for (double timeout : {-1.0, 0.0, 1e20}) {
+    CHECK_THROWS_WITH(module->call("createSession", folly::dynamic::array(folly::dynamic::object("toolTimeout", timeout))),
+                      doctest::Contains(hasFoundationModels() ? "toolTimeout" : "needs macOS 26"));
+  }
+  if (hasFoundationModels()) {
+    CHECK_NOTHROW(module->call("createSession", folly::dynamic::array(folly::dynamic::object("toolTimeout", 5))));
+  }
 }
