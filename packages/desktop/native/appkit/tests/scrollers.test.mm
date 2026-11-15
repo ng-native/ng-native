@@ -56,3 +56,36 @@ TEST_CASE("the observer hears the preferred style change, until it is released")
   drain();
   CHECK(changes == 1);
 }
+
+@interface NGNWheelRecorder : NSResponder
+@property (nonatomic) int wheels;
+@end
+
+@implementation NGNWheelRecorder
+- (void)scrollWheel:(NSEvent *)event {
+  self.wheels++;
+}
+@end
+
+TEST_CASE("a scroll view with scrolling disabled lets a wheel turn go past it, and scrolls with it enabled") {
+  NGNWheelScrollView *scroll = [[NGNWheelScrollView alloc] initWithFrame:NSMakeRect(0, 0, 200, 300)];
+  scroll.hasVerticalScroller = YES;
+  NSView *document = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 200, 900)];
+  scroll.documentView = document;
+  [scroll tile];
+  NGNWheelRecorder *above = [NGNWheelRecorder new];
+  scroll.nextResponder = above;
+  CGEventRef cg = CGEventCreateScrollWheelEvent(nullptr, kCGScrollEventUnitPixel, 1, -60);
+  NSEvent *wheel = [NSEvent eventWithCGEvent:cg];
+  CFRelease(cg);
+  REQUIRE((wheel != nil));
+
+  scroll.scrollingDisabled = YES;
+  [document scrollWheel:wheel];
+  CHECK(above.wheels == 1);
+  CHECK(scroll.contentView.bounds.origin.y == 0);
+
+  scroll.scrollingDisabled = NO;
+  [document scrollWheel:wheel];
+  CHECK(above.wheels == 1);
+}

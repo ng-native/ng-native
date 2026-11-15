@@ -17,3 +17,9 @@ float NGNLegacyScrollerWidth(BOOL thin);
 @interface NGNScrollerStyleObserver : NSObject
 - (instancetype)initWithChanged:(void (^)(void))changed;
 @end
+
+// A scroll view's NSScrollView, which takes a wheel turn before the view holding it: with
+// `scrollingDisabled` (`scrollEnabled={false}`) the turn goes past it, up the responder chain.
+@interface NGNWheelScrollView : NSScrollView
+@property (nonatomic) BOOL scrollingDisabled;
+@end
