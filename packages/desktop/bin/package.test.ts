@@ -1,0 +1,1072 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import { main, system } from './cli.mjs';
+import { desktopAppConfig } from './app-config.mjs';
+import {
+  appleSignIn,
+  checkXcode,
+  entitlements,
+  infoPlist,
+  notaryArguments,
+  packageApp,
+  parsePackage,
+  remotePush,
+  sandboxProblems,
+} from './package.mjs';
+import { plist } from './plist.mjs';
+
+const BUILD = '/cache/rn-0.88.0/host/appkit-arm64-x86_64-Release';
+/** The hermesc the host build puts beside its binary. */
+const HERMESC = `${BUILD}/appkit/hermesc`;
+
+type Call = { command: string; args: string[] };
+
+/** What the toolchain check (toolchain.mjs) asks, answered by a Mac that has every tool. */
+const TOOLCHAIN: Record<string, string> = {
+  'xcode-select --print-path': '/Applications/Xcode.app/Contents/Developer\n',
+  'xcrun swiftc --version': 'Apple Swift version 6.2 (swiftlang-6.2.0.19.9 clang-1700.3.19.1)\n',
+  'cmake --version': 'cmake version 3.31.6\n',
+  'ninja --version': '1.12.1\n',
+};
+
+/**
+ * A Mac with full Xcode whose tools succeed, recording each one run and each file written. A tool
+ * answers from `answers` by its name and first argument (`xcrun notarytool`), where it is given.
+ */
+function fakeMac(
+  overrides: Partial<typeof system> = {},
+  answers: Record<string, { status: number; stdout?: string }> = {},
+) {
+  const calls: Call[] = [];
+  const written: Record<string, string> = {};
+  const copied: [string, string][] = [];
+  const removed: string[] = [];
+  const sys: typeof system = {
+    platform: 'darwin',
+    env: {},
+    cwd: () => '/apps/notes',
+    resolveReactNative: () => '/apps/notes/node_modules/react-native',
+    resolvePackage: () => null,
+    host: () => Promise.reject(new Error('package never runs the host')),
+    expoConfig: () => ({
+      name: 'Notes',
+      slug: 'notes',
+      version: '2.0.0',
+      icon: './assets/icon.png',
+      scheme: 'notes',
+      platforms: ['macos'],
+      experiments: { outOfTreePlatforms: true },
+      ios: { bundleIdentifier: 'com.example.notes', buildNumber: '7' },
+    }),
+    expo(from, args) {
+      calls.push({ command: 'expo', args: [from, ...args] });
+      return { status: 0 };
+    },
+    links: () => ({ libraries: [], appModules: [], withoutDesktop: [], problems: [] }),
+    exists: (file) => file === HERMESC,
+    remove: (file) => void removed.push(file),
+    copy: (from, to) => void copied.push([from, to]),
+    writeFile: (file, text) => void (written[file] = text),
+    readFile: () => '',
+    warn: () => {},
+    sha256: () => '',
+    rename: () => {},
+    run(command, args) {
+      const probe = TOOLCHAIN[[command, ...args].join(' ')];
+      if (probe !== undefined) return { status: 0, stdout: probe };
+      calls.push({ command, args });
+      const key = `${command} ${args[0]}`;
+      if (answers[key]) return { stdout: '', ...answers[key] };
+      if (command.endsWith('build.sh')) return { status: 0, stdout: `${BUILD}\n` };
+      if (command === 'xcode-select') {
+        return { status: 0, stdout: '/Applications/Xcode.app/Contents/Developer\n' };
+      }
+      if (key === 'xcrun notarytool') {
+        return { status: 0, stdout: JSON.stringify({ id: 'abc-123', status: 'Accepted' }) };
+      }
+      return { status: 0, stdout: '' };
+    },
+    ...overrides,
+  };
+  return { sys, calls, written, copied, removed };
+}
+
+/** The tools run after the host is built, by name and first argument. */
+const tools = (calls: Call[]) =>
+  calls
+    .filter((call) => !call.command.endsWith('build.sh'))
+    .map((call) => `${call.command} ${call.args[0]}`);
+
+const quiet = async <T>(work: () => Promise<T>): Promise<T> => {
+  const log = console.log;
+  console.log = () => {};
+  try {
+    return await work();
+  } finally {
+    console.log = log;
+  }
+};
+
+const DMG_ENV = {
+  NGN_SIGN_IDENTITY: 'Developer ID Application: Example (TEAM123)',
+  NGN_NOTARY_PROFILE: 'notes',
+};
+const MAS_ENV = {
+  NGN_SIGN_IDENTITY: 'Apple Distribution: Example (TEAM123)',
+  NGN_INSTALLER_IDENTITY: '3rd Party Mac Developer Installer: Example (TEAM123)',
+  NGN_PROVISIONING_PROFILE: '/secrets/notes.provisionprofile',
+  APPLE_TEAM_ID: 'TEAM123',
+};
+
+describe('parsePackage', () => {
+  it('takes a format, an output folder and a feed URL, app and dist/macos by default', () => {
+    assert.deepEqual(parsePackage([]), {
+      command: 'package',
+      format: 'app',
+      output: 'dist/macos',
+      feedUrl: undefined,
+      sparkleKey: undefined,
+      skipNotarize: false,
+    });
+    assert.deepEqual(
+      parsePackage(['--format', 'dmg', '--feed-url', 'https://example.com/appcast.xml']),
+      {
+        command: 'package',
+        format: 'dmg',
+        output: 'dist/macos',
+        feedUrl: 'https://example.com/appcast.xml',
+        sparkleKey: undefined,
+        skipNotarize: false,
+      },
+    );
+    assert.equal(parsePackage(['--format', 'dmg', '--skip-notarize']).skipNotarize, true);
+    assert.equal(
+      parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml', '--sparkle-key', 'K='])
+        .sparkleKey,
+      'K=',
+    );
+  });
+
+  it('refuses another format, a feed URL off dmg, and a feed that is not https', () => {
+    assert.throws(() => parsePackage(['--format', 'zip']), /--format takes app, dmg or mas/);
+    assert.throws(
+      () => parsePackage(['--format', 'mas', '--feed-url', 'https://e.com/a.xml']),
+      /--feed-url is for --format dmg only: the Mac App Store updates/,
+    );
+    assert.throws(
+      () => parsePackage(['--feed-url', 'https://e.com/a.xml']),
+      /--feed-url is for --format dmg only/,
+    );
+    assert.throws(
+      () => parsePackage(['--format', 'dmg', '--feed-url', 'http://e.com/a.xml']),
+      /https URL of a Sparkle appcast/,
+    );
+    assert.throws(
+      () => parsePackage(['--format', 'dmg', '--sparkle-key', 'K=']),
+      /--sparkle-key goes with --feed-url/,
+    );
+    for (const format of ['app', 'mas']) {
+      assert.throws(
+        () => parsePackage(['--format', format, '--skip-notarize']),
+        /--skip-notarize is for --format dmg only/,
+      );
+    }
+  });
+});
+
+describe('checkXcode', () => {
+  it('stops on the Command Line Tools, which cannot compile the icon, before anything builds', () => {
+    const { sys } = fakeMac(
+      {},
+      {
+        'xcode-select -p': { status: 0, stdout: '/Library/Developer/CommandLineTools\n' },
+      },
+    );
+    assert.throws(() => checkXcode(sys), /needs full Xcode for the app icon[\s\S]*xcode-select -s/);
+  });
+
+  it('stops when actool is not there', () => {
+    const { sys } = fakeMac({}, { 'xcrun --find': { status: 1 } });
+    assert.throws(() => checkXcode(sys), /needs full Xcode/);
+  });
+
+  it('passes with Xcode selected', () => {
+    assert.doesNotThrow(() => checkXcode(fakeMac().sys));
+  });
+});
+
+describe('notaryArguments', () => {
+  it('never puts an app-specific password in the arguments, which any process can read', () => {
+    const env = {
+      APPLE_ID: 'me@example.com',
+      APPLE_APP_SPECIFIC_PASSWORD: 'pw',
+      APPLE_TEAM_ID: 'T',
+    };
+    assert.throws(
+      () => notaryArguments(env),
+      /store-credentials[\s\S]*NGN_NOTARY_PROFILE|NGN_NOTARY_PROFILE[\s\S]*store-credentials/,
+    );
+    assert.ok(!notaryArguments({ ...env, NGN_NOTARY_PROFILE: 'p' }).includes('pw'));
+  });
+
+  it('takes a keychain profile or an API key, in that order', () => {
+    assert.deepEqual(notaryArguments({ NGN_NOTARY_PROFILE: 'p', APPLE_ID: 'x' }), [
+      '--keychain-profile',
+      'p',
+    ]);
+    assert.deepEqual(
+      notaryArguments({ APPLE_API_KEY: '/k.p8', APPLE_API_KEY_ID: 'K', APPLE_API_ISSUER: 'I' }),
+      ['--key', '/k.p8', '--key-id', 'K', '--issuer', 'I'],
+    );
+  });
+
+  it('names what a half-set group is missing, and says how to set any when there are none', () => {
+    assert.throws(
+      () => notaryArguments({ APPLE_API_KEY: '/k.p8' }),
+      /APPLE_API_KEY needs APPLE_API_KEY_ID and APPLE_API_ISSUER too/,
+    );
+    assert.throws(() => notaryArguments({}), /found no credentials. Set NGN_NOTARY_PROFILE/);
+    assert.throws(() => notaryArguments({ APPLE_TEAM_ID: 'T' }), /found no credentials/);
+  });
+});
+
+describe('infoPlist', () => {
+  it("writes the Expo keys' settings, the schemes, documents and what the host reads first", () => {
+    const config = desktopAppConfig({
+      name: 'Notes',
+      version: '2.0.0',
+      scheme: 'notes',
+      updates: { url: 'https://updates.example.com' },
+      runtimeVersion: '2',
+      ios: { buildNumber: '7', infoPlist: { NSMicrophoneUsageDescription: 'Dictation' } },
+      plugins: [
+        [
+          '@ng-native/desktop',
+          {
+            documentTypes: [{ name: 'Markdown', extensions: ['md'], role: 'viewer' }],
+            capabilities: { env: ['HOME'], paths: [{ path: '~/Notes' }] },
+          },
+        ],
+      ],
+    });
+    const text = infoPlist(config, {
+      format: 'dmg',
+      executable: 'Notes',
+      bundleIdentifier: 'com.example.notes',
+      iconName: 'AppIcon',
+      feedUrl: 'https://example.com/appcast.xml',
+      sparkleKey: 'pfIShU4dEXqPd5ObYNfDBiQWcXozk7estwzTnF9BamQ=',
+      updatesCertificate: '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n',
+    });
+    const expected = [
+      ['CFBundleIdentifier', '<string>com.example.notes</string>'],
+      ['CFBundleShortVersionString', '<string>2.0.0</string>'],
+      ['CFBundleVersion', '<string>7</string>'],
+      ['CFBundleIconName', '<string>AppIcon</string>'],
+      ['LSMinimumSystemVersion', '<string>14.0</string>'],
+      ['NSMicrophoneUsageDescription', '<string>Dictation</string>'],
+      ['NGNBundleFile', '<string>main.jsbundle</string>'],
+      ['NGNDistribution', '<string>dmg</string>'],
+      ['NGNUpdatesURL', '<string>https://updates.example.com</string>'],
+      ['NGNRuntimeVersion', '<string>2</string>'],
+      ['SUFeedURL', '<string>https://example.com/appcast.xml</string>'],
+      ['SUPublicEDKey', '<string>pfIShU4dEXqPd5ObYNfDBiQWcXozk7estwzTnF9BamQ=</string>'],
+      ['SUEnableAutomaticChecks', '<true/>'],
+      ['NGNUpdatesCodeSigningCertificate', '<string>-----BEGIN CERTIFICATE-----\nMIIB'],
+      ['NGNUpdatesCodeSigningKeyId', '<string>main</string>'],
+      ['NGNUpdatesCodeSigningAlg', '<string>rsa-v1_5-sha256</string>'],
+    ];
+    for (const [key, value] of expected) {
+      assert.match(text, new RegExp(`<key>${key}</key>\\n\\t*${value}`), key);
+    }
+    assert.match(text, /<key>CFBundleURLSchemes<\/key>\n\t*<array>\n\t*<string>notes<\/string>/);
+    assert.match(text, /<key>CFBundleTypeRole<\/key>\n\t*<string>Viewer<\/string>/);
+    assert.match(text, /<key>access<\/key>\n\t*<string>read<\/string>/);
+  });
+
+  it('leaves out Sparkle, the updates server and the icon where there are none', () => {
+    const text = infoPlist(desktopAppConfig({ name: 'Notes' }), {
+      format: 'app',
+      executable: 'Notes',
+      bundleIdentifier: 'dev.ngnative.notes',
+      iconName: null,
+    });
+    for (const key of [
+      'SUFeedURL',
+      'SUPublicEDKey',
+      'SUEnableAutomaticChecks',
+      'NGNUpdatesURL',
+      'NGNUpdatesCodeSigningCertificate',
+      'CFBundleIconName',
+      'CFBundleURLTypes',
+    ]) {
+      assert.doesNotMatch(text, new RegExp(`<key>${key}</key>`), key);
+    }
+  });
+});
+
+describe('entitlements', () => {
+  const config = desktopAppConfig({
+    ios: { infoPlist: { NSCameraUsageDescription: 'Scan' } },
+  });
+
+  it('signs an app build with none, and a dmg with the devices its usage strings declare', () => {
+    assert.equal(entitlements(config, 'app', { bundleIdentifier: 'a.b' }), null);
+    assert.equal(
+      entitlements(config, 'dmg', { bundleIdentifier: 'a.b' }),
+      plist({ 'com.apple.security.device.camera': true }),
+    );
+  });
+
+  it("sandboxes a mas build, with the network, the user's picks kept across launches and the team's identity", () => {
+    const text = entitlements(config, 'mas', {
+      bundleIdentifier: 'com.example.notes',
+      team: 'T1',
+    })!;
+    for (const key of [
+      'com.apple.security.app-sandbox',
+      'com.apple.security.network.client',
+      'com.apple.security.files.user-selected.read-write',
+      'com.apple.security.files.bookmarks.app-scope',
+      'com.apple.security.device.camera',
+    ]) {
+      assert.match(text, new RegExp(`<key>${key.replace(/\./g, '\\.')}</key>\\n\\t<true/>`), key);
+    }
+    assert.match(
+      text,
+      /<key>com\.apple\.application-identifier<\/key>\n\t<string>T1\.com\.example\.notes<\/string>/,
+    );
+  });
+});
+
+describe('appleSignIn', () => {
+  it('signs a mas build for Sign in with Apple when the app uses expo-apple-authentication, as iOS does', () => {
+    assert.deepEqual(appleSignIn({}, false), { mas: false, dmg: false });
+    assert.deepEqual(appleSignIn({ plugins: ['expo-apple-authentication'] }, false), {
+      mas: true,
+      dmg: false,
+    });
+    assert.deepEqual(appleSignIn({ plugins: [['expo-apple-authentication', {}]] }, false), {
+      mas: true,
+      dmg: false,
+    });
+    // Installed is enough: Expo applies the package's plugin itself.
+    assert.deepEqual(appleSignIn({}, true), { mas: true, dmg: false });
+  });
+
+  it('signs a dmg for it only when the config asks, with ios.usesAppleSignIn', () => {
+    assert.deepEqual(appleSignIn({ ios: { usesAppleSignIn: true } }, true), {
+      mas: true,
+      dmg: true,
+    });
+    assert.deepEqual(appleSignIn({ ios: { usesAppleSignIn: false } }, true), {
+      mas: true,
+      dmg: false,
+    });
+  });
+});
+
+describe('entitlements with Sign in with Apple', () => {
+  const config = desktopAppConfig({});
+  const signIn =
+    /<key>com\.apple\.developer\.applesignin<\/key>\n\t<array>\n\t\t<string>Default<\/string>\n\t<\/array>/;
+
+  it('adds the entitlement to a mas build that signs in, and to no other', () => {
+    const identity = { bundleIdentifier: 'com.example.notes', team: 'T1' };
+    assert.match(entitlements(config, 'mas', { ...identity, appleSignIn: true })!, signIn);
+    assert.doesNotMatch(entitlements(config, 'mas', identity)!, /applesignin/);
+    assert.equal(entitlements(config, 'app', { ...identity, appleSignIn: true }), null);
+  });
+
+  it("adds it to a dmg with the app's identity on the team, which its profile names", () => {
+    const text = entitlements(config, 'dmg', {
+      bundleIdentifier: 'com.example.notes',
+      team: 'T1',
+      appleSignIn: true,
+    })!;
+    assert.match(text, signIn);
+    assert.match(
+      text,
+      /<key>com\.apple\.application-identifier<\/key>\n\t<string>T1\.com\.example\.notes<\/string>/,
+    );
+    assert.match(
+      text,
+      /<key>com\.apple\.developer\.team-identifier<\/key>\n\t<string>T1<\/string>/,
+    );
+    assert.doesNotMatch(entitlements(config, 'dmg', { bundleIdentifier: 'a.b' })!, /applesignin/);
+  });
+});
+
+describe('remotePush', () => {
+  it('signs a mas build for APNs when the app uses expo-notifications, as iOS does', () => {
+    assert.deepEqual(remotePush({}, false), { mas: false, dmg: false });
+    assert.deepEqual(remotePush({ plugins: ['expo-notifications'] }, false), {
+      mas: true,
+      dmg: false,
+    });
+    assert.deepEqual(
+      remotePush({ plugins: [['expo-notifications', { mode: 'production' }]] }, false),
+      {
+        mas: true,
+        dmg: false,
+      },
+    );
+    assert.deepEqual(remotePush({}, true), { mas: true, dmg: false });
+  });
+
+  it("signs a dmg for it only when the config sets ios.entitlements['aps-environment']", () => {
+    assert.deepEqual(
+      remotePush({ ios: { entitlements: { 'aps-environment': 'production' } } }, false),
+      {
+        mas: true,
+        dmg: true,
+      },
+    );
+  });
+
+  it('adds production APNs to a mas build that receives pushes, and to a dmg with its identity', () => {
+    const config = desktopAppConfig({});
+    const identity = { bundleIdentifier: 'com.example.notes', team: 'T1' };
+    const aps =
+      /<key>com\.apple\.developer\.aps-environment<\/key>\n\t<string>production<\/string>/;
+    assert.match(entitlements(config, 'mas', { ...identity, push: true })!, aps);
+    assert.doesNotMatch(entitlements(config, 'mas', identity)!, /aps-environment/);
+    const dmg = entitlements(config, 'dmg', { ...identity, push: true })!;
+    assert.match(dmg, aps);
+    assert.match(dmg, /<string>T1\.com\.example\.notes<\/string>/);
+    assert.equal(entitlements(config, 'app', { ...identity, push: true }), null);
+  });
+});
+
+describe('sandboxProblems', () => {
+  it('names the capabilities a mas build cannot have', () => {
+    const config = desktopAppConfig({
+      plugins: [
+        [
+          '@ng-native/desktop',
+          {
+            capabilities: {
+              spawn: [{ program: 'git' }],
+              paths: [{ path: '~/Projects' }],
+              env: ['HOME'],
+            },
+          },
+        ],
+      ],
+    });
+    const problems = sandboxProblems(config);
+    assert.equal(problems.length, 2);
+    assert.match(problems[0]!, /^capabilities\.spawn: .*Processes\.spawn is absent in a mas build/);
+    assert.match(problems[1]!, /^capabilities\.paths: /);
+    assert.deepEqual(sandboxProblems(desktopAppConfig({})), []);
+  });
+});
+
+describe('packageApp', () => {
+  it('bundles with expo export:embed, builds the universal release host and ad-hoc signs an app', async () => {
+    const { sys, calls, written, copied } = fakeMac();
+    assert.equal(await quiet(() => packageApp(parsePackage([]), sys)), 0);
+    const build = calls.find((call) => call.command.endsWith('build.sh'))!;
+    assert.ok(build.args.includes('--universal'), 'a release build is universal');
+    assert.ok(build.args.includes('--release'), 'and built as Release');
+    const app = '/apps/notes/dist/macos/Notes.app';
+    const staging = '/apps/notes/.expo/ng-native-desktop/package';
+    assert.deepEqual(calls.find((call) => call.command === 'expo')!.args, [
+      '/apps/notes',
+      'export:embed',
+      '--platform',
+      'macos',
+      '--dev',
+      'false',
+      '--bundle-output',
+      `${staging}/main.js`,
+      '--assets-dest',
+      `${app}/Contents/Resources`,
+    ]);
+    assert.deepEqual(copied, [[`${BUILD}/appkit/ngn-macos`, `${app}/Contents/MacOS/Notes`]]);
+    assert.deepEqual(
+      calls.find((call) => call.command === 'strip'),
+      { command: 'strip', args: ['-x', `${app}/Contents/MacOS/Notes`] },
+      'local symbols stripped',
+    );
+    assert.match(written[`${app}/Contents/Info.plist`]!, /<string>com\.example\.notes<\/string>/);
+    assert.equal(written[`${app}/Contents/PkgInfo`], 'APPL????');
+    assert.deepEqual(calls.at(-1), { command: 'codesign', args: ['--force', '--sign', '-', app] });
+  });
+
+  it('compiles the bundle to Hermes bytecode with the hermesc the host was built against', async () => {
+    const { sys, calls } = fakeMac();
+    await quiet(() => packageApp(parsePackage([]), sys));
+    const app = '/apps/notes/dist/macos/Notes.app';
+    const hermesc = calls.find((call) => call.command === HERMESC);
+    assert.deepEqual(hermesc?.args, [
+      '-emit-binary',
+      '-O',
+      '-w',
+      '-max-diagnostic-width=80',
+      '-out',
+      `${app}/Contents/Resources/main.jsbundle`,
+      '/apps/notes/.expo/ng-native-desktop/package/main.js',
+    ]);
+    const order = calls.map((call) => call.command);
+    assert.ok(order.indexOf('expo') < order.indexOf(HERMESC));
+  });
+
+  it('stops when hermesc fails or the host build has none', async () => {
+    const failing = fakeMac({}, { [`${HERMESC} -emit-binary`]: { status: 1 } });
+    await assert.rejects(
+      quiet(() => packageApp(parsePackage([]), failing.sys)),
+      /hermesc could not compile the bundle/,
+    );
+    assert.ok(!failing.calls.some((call) => call.command === 'codesign'), 'nothing signed');
+    const without = fakeMac({ exists: () => false });
+    await assert.rejects(
+      quiet(() => packageApp(parsePackage([]), without.sys)),
+      /has no hermesc beside it/,
+    );
+    assert.ok(!without.calls.some((call) => call.command === 'expo'), 'checked before bundling');
+  });
+
+  it('checks for Xcode before it builds anything', async () => {
+    const { sys, calls } = fakeMac(
+      {},
+      {
+        'xcode-select -p': { status: 0, stdout: '/Library/Developer/CommandLineTools\n' },
+      },
+    );
+    await assert.rejects(packageApp(parsePackage([]), sys), /needs full Xcode/);
+    assert.deepEqual(
+      calls.map((call) => call.command),
+      ['xcode-select'],
+    );
+  });
+
+  it('scales an image icon into an icon set and compiles it with actool', async () => {
+    const { sys, calls, written } = fakeMac();
+    await quiet(() => packageApp(parsePackage([]), sys));
+    const sips = calls.filter((call) => call.command === 'sips');
+    assert.equal(sips.length, 10, 'five sizes at 1x and 2x');
+    assert.ok(sips.every((call) => call.args.includes('/apps/notes/assets/icon.png')));
+    const actool = calls.find((call) => call.args[0] === 'actool')!;
+    assert.equal(actool.args[1], '/apps/notes/.expo/ng-native-desktop/package/Assets.xcassets');
+    assert.deepEqual(actool.args.slice(actool.args.indexOf('--app-icon'), -2), [
+      '--app-icon',
+      'AppIcon',
+    ]);
+    const set = JSON.parse(
+      written[
+        '/apps/notes/.expo/ng-native-desktop/package/Assets.xcassets/AppIcon.appiconset/Contents.json'
+      ]!,
+    );
+    assert.deepEqual(set.images[1], {
+      size: '16x16',
+      scale: '2x',
+      idiom: 'mac',
+      filename: 'icon_16x16@2x.png',
+    });
+  });
+
+  it("makes the icon set's folder before sips writes into it, which sips does not make", async () => {
+    const set =
+      '/apps/notes/.expo/ng-native-desktop/package/Assets.xcassets/AppIcon.appiconset/Contents.json';
+    let made = 0;
+    let before = 0;
+    const fake = fakeMac({
+      writeFile: (file) => void (file === set && made++),
+    });
+    const run = fake.sys.run;
+    fake.sys.run = (command, args, options) => {
+      if (command === 'sips' && made > 0) before++;
+      return run(command, args, options);
+    };
+    await quiet(() => packageApp(parsePackage([]), fake.sys));
+    assert.equal(before, 10, 'every sips ran after the folder was made');
+  });
+
+  it('copies a document type icon into the bundle and names it by its file in the plist', async () => {
+    const { sys, copied, written } = fakeMac({
+      expoConfig: () => ({
+        name: 'Notes',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        ios: { bundleIdentifier: 'com.example.notes' },
+        plugins: [
+          [
+            '@ng-native/desktop',
+            { documentTypes: [{ name: 'Note', extensions: ['note'], icon: './assets/note.icns' }] },
+          ],
+        ],
+      }),
+    });
+    await quiet(() => packageApp(parsePackage([]), sys));
+    assert.deepEqual(
+      copied.filter(([from]) => from.endsWith('note.icns')),
+      [
+        [
+          '/apps/notes/assets/note.icns',
+          '/apps/notes/dist/macos/Notes.app/Contents/Resources/note.icns',
+        ],
+      ],
+    );
+    assert.match(
+      written['/apps/notes/dist/macos/Notes.app/Contents/Info.plist']!,
+      /<key>CFBundleTypeIconFile<\/key>\n\t\t\t<string>note.icns<\/string>/,
+    );
+  });
+
+  it('refuses an app name that would leave the output folder, before anything builds', async () => {
+    for (const name of ['../evil', 'a/b', '..', 'a\\b']) {
+      const { sys, calls, removed } = fakeMac({
+        expoConfig: () => ({
+          name,
+          platforms: ['macos'],
+          experiments: { outOfTreePlatforms: true },
+          ios: { bundleIdentifier: 'com.example.notes' },
+        }),
+      });
+      await assert.rejects(
+        () => quiet(() => packageApp(parsePackage([]), sys)),
+        /app name .* cannot contain a path separator or be \. or \.\./,
+      );
+      assert.equal(removed.length, 0);
+      assert.ok(!calls.some((call) => call.args[0] === 'export:embed'));
+    }
+  });
+
+  it('compiles an Icon Composer .icon as it is, named for the file', async () => {
+    const { sys, calls, written } = fakeMac({
+      expoConfig: () => ({
+        name: 'Notes',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        ios: { bundleIdentifier: 'com.example.notes', icon: './assets/Notes.icon' },
+      }),
+    });
+    await quiet(() => packageApp(parsePackage([]), sys));
+    assert.equal(calls.filter((call) => call.command === 'sips').length, 0);
+    const actool = calls.find((call) => call.args[0] === 'actool')!;
+    assert.equal(actool.args[1], '/apps/notes/assets/Notes.icon');
+    assert.ok(actool.args.includes('Notes'));
+    assert.match(
+      written['/apps/notes/dist/macos/Notes.app/Contents/Info.plist']!,
+      /<key>CFBundleIconName<\/key>\n\t<string>Notes<\/string>/,
+    );
+  });
+
+  it('signs with the hardened runtime, notarises and staples the app and the dmg', async () => {
+    const { sys, calls } = fakeMac({ env: DMG_ENV });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), sys));
+    assert.deepEqual(tools(calls).slice(tools(calls).indexOf('codesign --force')), [
+      'codesign --force',
+      'ditto -c',
+      'xcrun notarytool',
+      'xcrun stapler',
+      'hdiutil create',
+      'codesign --force',
+      'xcrun notarytool',
+      'xcrun stapler',
+    ]);
+    // stapler takes an app or a dmg, never the zip the app went to Apple in.
+    assert.deepEqual(
+      calls.filter((call) => call.args[0] === 'stapler').map((call) => call.args.at(-1)),
+      ['/apps/notes/dist/macos/Notes.app', '/apps/notes/dist/macos/Notes.dmg'],
+    );
+    const signApp = calls.find((call) => call.command === 'codesign')!;
+    assert.deepEqual(signApp.args.slice(0, 4), ['--force', '--options', 'runtime', '--timestamp']);
+    assert.ok(signApp.args.includes(DMG_ENV.NGN_SIGN_IDENTITY));
+    const notary = calls.filter((call) => call.args[0] === 'notarytool');
+    assert.deepEqual(notary.at(-1)!.args, [
+      'notarytool',
+      'submit',
+      '/apps/notes/dist/macos/Notes.dmg',
+      '--wait',
+      '--output-format',
+      'json',
+      '--keychain-profile',
+      'notes',
+    ]);
+    assert.equal(
+      calls.filter((call) => call.command === 'ditto').length,
+      1,
+      'no Sparkle zip without a feed',
+    );
+  });
+
+  it('fails when Apple rejects the submission, naming the log to read, and staples nothing', async () => {
+    const { sys, calls } = fakeMac(
+      { env: DMG_ENV },
+      {
+        'xcrun notarytool': { status: 0, stdout: JSON.stringify({ id: 'r-1', status: 'Invalid' }) },
+      },
+    );
+    await assert.rejects(
+      packageApp(parsePackage(['--format', 'dmg']), sys),
+      /Apple did not notarise Notes\.zip: Invalid\. Run xcrun notarytool log r-1/,
+    );
+    assert.equal(calls.filter((call) => call.args[0] === 'stapler').length, 0);
+  });
+
+  it('fails on a notarytool that answers nothing it can read', async () => {
+    const { sys } = fakeMac({ env: DMG_ENV }, { 'xcrun notarytool': { status: 1, stdout: '' } });
+    await assert.rejects(packageApp(parsePackage(['--format', 'dmg']), sys), /no answer/);
+  });
+
+  it('embeds Sparkle with a feed, signs it first and zips the stapled app beside the dmg', async () => {
+    const { sys, calls, copied, written } = fakeMac({
+      env: { ...DMG_ENV, NGN_SPARKLE_PUBLIC_KEY: 'EDKEY=' },
+      exists: () => true,
+    });
+    await quiet(() =>
+      packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/appcast.xml']), sys),
+    );
+    const app = '/apps/notes/dist/macos/Notes.app';
+    assert.deepEqual(copied.at(-1), [
+      `${BUILD}/appkit/Sparkle.framework`,
+      `${app}/Contents/Frameworks/Sparkle.framework`,
+    ]);
+    const signed = calls
+      .filter((call) => call.command === 'codesign')
+      .map((call) => call.args.at(-1));
+    assert.deepEqual(signed, [
+      `${app}/Contents/Frameworks/Sparkle.framework`,
+      app,
+      '/apps/notes/dist/macos/Notes.dmg',
+    ]);
+    const zips = calls.filter((call) => call.command === 'ditto').map((call) => call.args.at(-1));
+    assert.deepEqual(zips, [
+      '/apps/notes/.expo/ng-native-desktop/package/Notes.zip',
+      '/apps/notes/dist/macos/Notes.zip',
+    ]);
+    const stapled = calls.findIndex((call) => call.args[0] === 'stapler');
+    const updateZip = calls.findIndex(
+      (call) => call.args.at(-1) === '/apps/notes/dist/macos/Notes.zip',
+    );
+    assert.ok(stapled < updateZip, 'the zip Sparkle updates from holds the stapled app');
+    assert.match(written[`${app}/Contents/Info.plist`]!, /<key>SUFeedURL<\/key>/);
+    assert.match(
+      written[`${app}/Contents/Info.plist`]!,
+      /<key>SUPublicEDKey<\/key>\n\t*<string>EDKEY=<\/string>/,
+    );
+  });
+
+  it('stops before it builds when a feed has no Sparkle public key to check updates with', async () => {
+    const { sys, calls } = fakeMac({ env: DMG_ENV, exists: () => true });
+    await assert.rejects(
+      packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml']), sys),
+      /needs Sparkle's public EdDSA key/,
+    );
+    assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
+  });
+
+  it("writes the updates server's code signing certificate into Info.plist", async () => {
+    const read: string[] = [];
+    const { sys, written } = fakeMac({
+      expoConfig: () => ({
+        name: 'Notes',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        ios: { bundleIdentifier: 'com.example.notes' },
+        updates: {
+          url: 'https://u.example.com',
+          codeSigningCertificate: './certs/certificate.pem',
+          codeSigningMetadata: { keyid: 'release', alg: 'rsa-v1_5-sha256' },
+        },
+      }),
+      readFile: (file: string) => (read.push(file), '-----BEGIN CERTIFICATE-----\nX\n'),
+    });
+    await quiet(() => packageApp(parsePackage([]), sys));
+    assert.deepEqual(
+      read.filter((file) => file.startsWith('/apps/notes/certs')),
+      ['/apps/notes/certs/certificate.pem'],
+    );
+    const info = written['/apps/notes/dist/macos/Notes.app/Contents/Info.plist']!;
+    assert.match(info, /<key>NGNUpdatesCodeSigningKeyId<\/key>\n\t*<string>release<\/string>/);
+    assert.match(info, /<key>NGNUpdatesCodeSigningCertificate<\/key>\n\t*<string>-----BEGIN/);
+  });
+
+  it('stops when the host was built without Sparkle, rather than shipping no updater', async () => {
+    const { sys } = fakeMac({ env: { ...DMG_ENV, NGN_SPARKLE_PUBLIC_KEY: 'EDKEY=' } });
+    await assert.rejects(
+      packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml']), sys),
+      /built without Sparkle/,
+    );
+  });
+
+  it('needs its credentials before it builds: a dmg its identity and notary, a mas its four', async () => {
+    for (const [args, env, message] of [
+      [
+        ['--format', 'dmg'],
+        {},
+        /--format dmg needs NGN_SIGN_IDENTITY set in the environment[\s\S]*--skip-notarize/,
+      ],
+      [
+        ['--format', 'dmg'],
+        { NGN_SIGN_IDENTITY: 'x' },
+        /found no credentials[\s\S]*--skip-notarize/,
+      ],
+      [
+        ['--format', 'mas'],
+        { NGN_SIGN_IDENTITY: 'x' },
+        /--format mas needs NGN_INSTALLER_IDENTITY, NGN_PROVISIONING_PROFILE, APPLE_TEAM_ID/,
+      ],
+    ] as const) {
+      const { sys, calls } = fakeMac({ env });
+      await assert.rejects(packageApp(parsePackage([...args]), sys), message);
+      assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
+    }
+  });
+
+  it('makes a dmg with --skip-notarize and no credentials, ad-hoc signed, and says it is for this Mac', async () => {
+    const warnings: string[] = [];
+    const { sys, calls } = fakeMac({ warn: (line) => void warnings.push(line) });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys));
+    assert.deepEqual(tools(calls).slice(tools(calls).indexOf('codesign --force')), [
+      'codesign --force',
+      'hdiutil create',
+      'codesign --force',
+    ]);
+    const [signApp, signDmg] = calls.filter((call) => call.command === 'codesign');
+    assert.deepEqual(signApp!.args.slice(0, 4), [
+      '--force',
+      '--options',
+      'runtime',
+      '--timestamp=none',
+    ]);
+    assert.deepEqual(signApp!.args.slice(-2), ['-', '/apps/notes/dist/macos/Notes.app']);
+    assert.deepEqual(signDmg!.args, [
+      '--force',
+      '--timestamp=none',
+      '--sign',
+      '-',
+      '/apps/notes/dist/macos/Notes.dmg',
+    ]);
+    assert.ok(warnings.some((line) => /not notarised.*for testing on this Mac only/.test(line)));
+  });
+
+  it('signs with the identity it is given under --skip-notarize, and still notarises nothing', async () => {
+    const { sys, calls } = fakeMac({ env: { NGN_SIGN_IDENTITY: DMG_ENV.NGN_SIGN_IDENTITY } });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys));
+    assert.ok(!calls.some((call) => call.args[0] === 'notarytool' || call.args[0] === 'stapler'));
+    const signApp = calls.find((call) => call.command === 'codesign')!;
+    assert.deepEqual(signApp.args.slice(0, 4), ['--force', '--options', 'runtime', '--timestamp']);
+    assert.ok(signApp.args.includes(DMG_ENV.NGN_SIGN_IDENTITY));
+  });
+
+  it('refuses Sparkle under an ad-hoc --skip-notarize signature, which cannot load it', async () => {
+    const { sys, calls } = fakeMac({ env: { NGN_SPARKLE_PUBLIC_KEY: 'K=' } });
+    await assert.rejects(
+      packageApp(
+        parsePackage(['--format', 'dmg', '--skip-notarize', '--feed-url', 'https://e.com/a.xml']),
+        sys,
+      ),
+      /--feed-url needs NGN_SIGN_IDENTITY/,
+    );
+    assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
+  });
+
+  it('needs the bundle identifier for dmg and mas, and makes one up for an app', async () => {
+    const config = () => ({
+      slug: 'my-notes',
+      platforms: ['macos'],
+      experiments: { outOfTreePlatforms: true },
+    });
+    const { sys, written } = fakeMac({ expoConfig: config });
+    await quiet(() => packageApp(parsePackage([]), sys));
+    assert.match(
+      written['/apps/notes/dist/macos/my-notes.app/Contents/Info.plist']!,
+      /<string>dev\.ngnative\.mynotes<\/string>/,
+    );
+    const signed = fakeMac({ expoConfig: config, env: DMG_ENV }).sys;
+    await assert.rejects(
+      packageApp(parsePackage(['--format', 'dmg']), signed),
+      /Set expo\.ios\.bundleIdentifier/,
+    );
+  });
+
+  it('sandboxes a mas build with its profile and makes the installer package', async () => {
+    const warnings: string[] = [];
+    const { sys, calls, copied, written } = fakeMac({
+      env: MAS_ENV,
+      warn: (line) => void warnings.push(line),
+      expoConfig: () => ({
+        name: 'Notes',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        ios: { bundleIdentifier: 'com.example.notes' },
+        plugins: [['@ng-native/desktop', { capabilities: { spawn: [{ program: 'git' }] } }]],
+      }),
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), sys));
+    const app = '/apps/notes/dist/macos/Notes.app';
+    assert.deepEqual(copied.at(-1), [
+      '/secrets/notes.provisionprofile',
+      `${app}/Contents/embedded.provisionprofile`,
+    ]);
+    assert.match(
+      written['/apps/notes/.expo/ng-native-desktop/package/entitlements.plist']!,
+      /com\.apple\.security\.app-sandbox/,
+    );
+    assert.deepEqual(calls.at(-1), {
+      command: 'productbuild',
+      args: [
+        '--component',
+        app,
+        '/Applications',
+        '--sign',
+        MAS_ENV.NGN_INSTALLER_IDENTITY,
+        '/apps/notes/dist/macos/Notes.pkg',
+      ],
+    });
+    assert.ok(!calls.some((call) => call.args[0] === 'notarytool'), 'the App Store reviews it');
+    assert.match(warnings.join('\n'), /Processes\.spawn is absent in a mas build/);
+  });
+
+  it('signs a mas build for Sign in with Apple when expo-apple-authentication is listed or installed', async () => {
+    const entitlementsFile = '/apps/notes/.expo/ng-native-desktop/package/entitlements.plist';
+    const app = (extra: object) => () => ({
+      name: 'Notes',
+      platforms: ['macos'],
+      experiments: { outOfTreePlatforms: true },
+      ios: { bundleIdentifier: 'com.example.notes' },
+      ...extra,
+    });
+    const listed = fakeMac({
+      env: MAS_ENV,
+      expoConfig: app({ plugins: ['expo-apple-authentication'] }),
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), listed.sys));
+    assert.match(listed.written[entitlementsFile]!, /com\.apple\.developer\.applesignin/);
+
+    const installed = fakeMac({
+      env: MAS_ENV,
+      expoConfig: app({}),
+      resolvePackage: (_, name) =>
+        name === 'expo-apple-authentication'
+          ? '/apps/notes/node_modules/expo-apple-authentication'
+          : null,
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), installed.sys));
+    assert.match(installed.written[entitlementsFile]!, /com\.apple\.developer\.applesignin/);
+
+    const without = fakeMac({ env: MAS_ENV, expoConfig: app({}) });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), without.sys));
+    assert.doesNotMatch(without.written[entitlementsFile]!, /applesignin/);
+
+    // A dmg of an app that only lists the plugin is signed as before, with no profile.
+    const dmg = fakeMac({
+      env: DMG_ENV,
+      expoConfig: app({ plugins: ['expo-apple-authentication'] }),
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), dmg.sys));
+    assert.doesNotMatch(dmg.written[entitlementsFile]!, /applesignin/);
+    assert.ok(!dmg.copied.some(([, to]) => to.endsWith('embedded.provisionprofile')));
+  });
+
+  it('signs a dmg for Sign in with Apple when ios.usesAppleSignIn asks, embedding its Developer ID profile', async () => {
+    const config = () => ({
+      name: 'Notes',
+      platforms: ['macos'],
+      experiments: { outOfTreePlatforms: true },
+      ios: { bundleIdentifier: 'com.example.notes', usesAppleSignIn: true },
+    });
+    for (const [args, env] of [
+      [['--format', 'dmg'], DMG_ENV],
+      [['--format', 'dmg', '--skip-notarize'], {}],
+      [['--format', 'dmg', '--skip-notarize'], { NGN_SIGN_IDENTITY: DMG_ENV.NGN_SIGN_IDENTITY }],
+    ] as const) {
+      const { sys, calls } = fakeMac({ env, expoConfig: config });
+      await assert.rejects(
+        packageApp(parsePackage([...args]), sys),
+        /Sign in with Apple \(ios\.usesAppleSignIn\) in a dmg needs [\s\S]*NGN_PROVISIONING_PROFILE[\s\S]*APPLE_TEAM_ID/,
+      );
+      assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
+    }
+
+    const { sys, calls, copied, written } = fakeMac({
+      env: {
+        ...DMG_ENV,
+        NGN_PROVISIONING_PROFILE: '/secrets/notes-developer-id.provisionprofile',
+        APPLE_TEAM_ID: 'TEAM123',
+      },
+      expoConfig: config,
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), sys));
+    const app = '/apps/notes/dist/macos/Notes.app';
+    assert.ok(
+      copied.some(
+        ([from, to]) =>
+          from === '/secrets/notes-developer-id.provisionprofile' &&
+          to === `${app}/Contents/embedded.provisionprofile`,
+      ),
+    );
+    const text = written['/apps/notes/.expo/ng-native-desktop/package/entitlements.plist']!;
+    assert.match(text, /com\.apple\.developer\.applesignin/);
+    assert.match(text, /<string>TEAM123\.com\.example\.notes<\/string>/);
+    assert.ok(calls.some((call) => call.command === 'codesign' && call.args.at(-1) === app));
+  });
+
+  it('signs for APNs when the app uses expo-notifications, and a dmg only with its profile', async () => {
+    const entitlementsFile = '/apps/notes/.expo/ng-native-desktop/package/entitlements.plist';
+    const app = (extra: object) => () => ({
+      name: 'Notes',
+      platforms: ['macos'],
+      experiments: { outOfTreePlatforms: true },
+      ...extra,
+      ios: { bundleIdentifier: 'com.example.notes', ...(extra as { ios?: object }).ios },
+    });
+    const installed = fakeMac({
+      env: MAS_ENV,
+      expoConfig: app({}),
+      resolvePackage: (_, name) =>
+        name === 'expo-notifications' ? '/apps/notes/node_modules/expo-notifications' : null,
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), installed.sys));
+    assert.match(installed.written[entitlementsFile]!, /com\.apple\.developer\.aps-environment/);
+
+    // A dmg of an app that only has the package is signed as before.
+    const plain = fakeMac({ env: DMG_ENV, expoConfig: app({ plugins: ['expo-notifications'] }) });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), plain.sys));
+    assert.doesNotMatch(plain.written[entitlementsFile]!, /aps-environment/);
+
+    const asking = app({ ios: { entitlements: { 'aps-environment': 'production' } } });
+    const { sys } = fakeMac({
+      env: { NGN_SIGN_IDENTITY: DMG_ENV.NGN_SIGN_IDENTITY },
+      expoConfig: asking,
+    });
+    await assert.rejects(
+      packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys),
+      /Remote notifications \(ios\.entitlements\['aps-environment'\]\) in a dmg needs [\s\S]*NGN_PROVISIONING_PROFILE/,
+    );
+    const signed = fakeMac({
+      env: {
+        ...DMG_ENV,
+        NGN_PROVISIONING_PROFILE: '/secrets/dev-id.provisionprofile',
+        APPLE_TEAM_ID: 'TEAM123',
+      },
+      expoConfig: asking,
+    });
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), signed.sys));
+    assert.match(signed.written[entitlementsFile]!, /com\.apple\.developer\.aps-environment/);
+    assert.ok(signed.copied.some(([, to]) => to.endsWith('embedded.provisionprofile')));
+  });
+
+  it('writes into --output, relative to the app', async () => {
+    const { sys, calls } = fakeMac();
+    await quiet(() => packageApp(parsePackage(['--output', 'out']), sys));
+    assert.deepEqual(calls.at(-1)!.args.at(-1), '/apps/notes/out/Notes.app');
+  });
+
+  it('is what ng-native-desktop package runs, failing with the usage on a bad format', async () => {
+    const errors: string[] = [];
+    const original = console.error;
+    console.error = (message: string) => errors.push(message);
+    try {
+      assert.equal(await main(['package', '--format', 'exe'], fakeMac().sys), 2);
+    } finally {
+      console.error = original;
+    }
+    assert.match(errors[0]!, /--format takes app, dmg or mas[\s\S]*ng-native-desktop package/);
+    assert.equal(await quiet(() => main(['package'], fakeMac().sys)), 0);
+  });
+});
