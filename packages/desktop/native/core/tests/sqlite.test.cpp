@@ -270,6 +270,29 @@ TEST_CASE("Sqlite refuses SQL that opens a file outside the files the app may wr
   CHECK(fs::exists(mine));
 }
 
+TEST_CASE("Sqlite refuses to delete a database another one has attached") {
+  TempDir dir;
+  auto module = ngn::makeSqliteModule(dir.path.string(), writesIn(dir.path));
+  auto main = open(*module, "main.db");
+  auto other = (dir.path / "other.db").string();
+  module->call("execSync", dynamic::array(main, "ATTACH DATABASE '" + other + "' AS other; CREATE TABLE other.t (x)"));
+  auto refused = ask(*module, "deleteDatabaseAsync", dynamic::array("other.db"));
+  REQUIRE(refused.error);
+  CHECK(refused.error->find("currently open") != std::string::npos);
+  CHECK(fs::exists(other));
+  // An in-memory database attaches files too.
+  auto memory = open(*module, ":memory:");
+  auto third = (dir.path / "third.db").string();
+  module->call("execSync", dynamic::array(memory, "ATTACH DATABASE '" + third + "' AS third; CREATE TABLE third.t (x)"));
+  CHECK(ask(*module, "deleteDatabaseAsync", dynamic::array("third.db")).error);
+
+  module->call("execSync", dynamic::array(main, "DETACH DATABASE other"));
+  CHECK(ask(*module, "deleteDatabaseAsync", dynamic::array("other.db")).value == dynamic(nullptr));
+  CHECK_FALSE(fs::exists(other));
+  module->call("closeSync", dynamic::array(memory));
+  CHECK(ask(*module, "deleteDatabaseAsync", dynamic::array("third.db")).value == dynamic(nullptr));
+}
+
 TEST_CASE("Sqlite refuses to delete an open database however its folder is spelled") {
   TempDir dir;
   fs::create_directories(dir.path / "real");
