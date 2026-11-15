@@ -6,8 +6,49 @@
 
 #include <cstdlib>
 #import <Foundation/Foundation.h>
+#import <MapKit/MapKit.h>
+
+// A placemark built offline, with a location and fields of the test's choosing.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+@interface NGNTestPlacemark : MKPlacemark
+@property(nonatomic, strong) CLLocation *fixedLocation;
+@end
+#pragma clang diagnostic pop
+
+@implementation NGNTestPlacemark
+- (CLLocation *)location {
+  return _fixedLocation;
+}
+- (NSString *)subThoroughfare {
+  return @"221B";
+}
+- (NSString *)thoroughfare {
+  return @"Baker Street";
+}
+- (NSString *)locality {
+  return @"London";
+}
+- (NSString *)ISOcountryCode {
+  return @"GB";
+}
+- (NSString *)postalCode {
+  return @"";
+}
+@end
 
 namespace {
+
+NGNTestPlacemark *placemarkAt(double altitude, double horizontal, double vertical) {
+  CLLocationCoordinate2D point = CLLocationCoordinate2DMake(51.5238, -0.1586);
+  NGNTestPlacemark *placemark = [[NGNTestPlacemark alloc] initWithCoordinate:point];
+  placemark.fixedLocation = [[CLLocation alloc] initWithCoordinate:point
+                                                          altitude:altitude
+                                                horizontalAccuracy:horizontal
+                                                  verticalAccuracy:vertical
+                                                         timestamp:[NSDate date]];
+  return placemark;
+}
 
 // CLGeocoder answers on the main thread, which this test runs on: it turns the run loop until then.
 ngn::Geocoder::Answer wait(std::function<void(std::function<void(ngn::Geocoder::Answer)>)> ask) {
@@ -83,4 +124,28 @@ TEST_CASE("geocoderAnswer reads no result as no places, the network as Network, 
   CHECK(failed.failure == ngn::Geocoder::Failure::Failed);
   CHECK(failed.reason == "why");
   CHECK(ngn::appkit::geocoderAnswer(@[], nil).failure == ngn::Geocoder::Failure::None);
+}
+
+TEST_CASE("geocoderAnswer maps a placemark to expo's fields, with altitude and accuracy only where valid") {
+  auto known = ngn::appkit::geocoderAnswer(@[ placemarkAt(35, 12, 4) ], nil);
+  REQUIRE(known.places.size() == 1);
+  const auto &place = known.places[0];
+  CHECK(place.latitude == doctest::Approx(51.5238));
+  CHECK(place.longitude == doctest::Approx(-0.1586));
+  CHECK(place.altitude.has_value());
+  CHECK(place.accuracy == doctest::Approx(12));
+  CHECK(place.address.at("streetNumber") == "221B");
+  CHECK(place.address.at("street") == "Baker Street");
+  CHECK(place.address.at("city") == "London");
+  CHECK(place.address.at("isoCountryCode") == "GB");
+  // An empty field is left out.
+  CHECK(place.address.count("postalCode") == 0);
+
+  // A vertical accuracy of 0 or less, or a negative horizontal one, means the value is not known.
+  for (double vertical : {0.0, -1.0}) {
+    auto unknown = ngn::appkit::geocoderAnswer(@[ placemarkAt(0, -1, vertical) ], nil);
+    REQUIRE(unknown.places.size() == 1);
+    CHECK_FALSE(unknown.places[0].altitude.has_value());
+    CHECK_FALSE(unknown.places[0].accuracy.has_value());
+  }
 }

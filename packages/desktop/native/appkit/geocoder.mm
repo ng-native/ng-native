@@ -20,7 +20,10 @@ Geocoder::Place placeOf(CLPlacemark *placemark) {
   if (CLLocation *location = placemark.location) {
     place.latitude = location.coordinate.latitude;
     place.longitude = location.coordinate.longitude;
-    place.altitude = location.ellipsoidalAltitude;
+    // Core Location's altitude is 0 when its vertical accuracy is 0 or less: not known.
+    if (location.verticalAccuracy > 0) {
+      place.altitude = location.ellipsoidalAltitude;
+    }
     if (location.horizontalAccuracy >= 0) {
       place.accuracy = location.horizontalAccuracy;
     }
