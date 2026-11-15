@@ -246,6 +246,8 @@ void setCompleterRegion(MKLocalSearchCompleter *completer, const std::string &co
     then();
     return;
   }
+  // A block keeps a reference parameter as a reference: the caller's string is gone by the answer.
+  std::string key = code;
   [[CLGeocoder new] geocodeAddressString:name
                        completionHandler:^(NSArray<CLPlacemark *> *placemarks, NSError *) {
                          CLRegion *area = placemarks.firstObject.region;
@@ -253,7 +255,7 @@ void setCompleterRegion(MKLocalSearchCompleter *completer, const std::string &co
                          if ([area isKindOfClass:CLCircularRegion.class]) {
                            CLCircularRegion *circle = (CLCircularRegion *)area;
                            region = MKCoordinateRegionMakeWithDistance(circle.center, circle.radius * 2, circle.radius * 2);
-                           regions()[code] = *region;
+                           regions()[key] = *region;
                          }
                          // A newer query, or a session ended, keeps the completer's region.
                          if (!current()) {
