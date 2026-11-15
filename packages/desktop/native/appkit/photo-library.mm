@@ -213,6 +213,10 @@ class PhotoKitLibrary final : public ngn::PhotoLibrary {
       [sort addObject:[NSSortDescriptor sortDescriptorWithKey:kKeys.at(key) ascending:ascending]];
     }
     options.sortDescriptors = sort.count > 0 ? sort : nil;
+    // PhotoKit reads a fetchLimit of 0 as no limit, so a limit of 0 or less fetches nothing.
+    if (query.limit && *query.limit <= 0) {
+      return {};
+    }
     if (query.limit) {
       options.fetchLimit = static_cast<NSUInteger>(std::max(0, *query.limit + query.offset));
     }
@@ -457,7 +461,10 @@ class PhotoKitLibrary final : public ngn::PhotoLibrary {
 @implementation NGNPickerDelegate
 
 - (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results {
-  [self.sheet.sheetParent endSheet:self.sheet];
+  // The sheet holds the picker, which holds this delegate: letting the sheet go ends the cycle.
+  NSWindow *sheet = self.sheet;
+  self.sheet = nil;
+  [sheet.sheetParent endSheet:sheet];
   if (results.count == 0) {
     self.finished(nil);
     return;
