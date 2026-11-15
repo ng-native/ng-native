@@ -112,6 +112,11 @@ class AppKitSystem final : public System {
       NSApp.appearance = !scheme ? nil
           : *scheme == "dark"    ? [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]
                                  : [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+      // The system's scheme is not followed while an override holds: read it again as it goes,
+      // since the app's appearance may not change and so tell nothing.
+      if (!scheme) {
+        systemSchemeChanged(schemeOf(NSApp.effectiveAppearance));
+      }
     });
   }
 

@@ -14,7 +14,7 @@ TEST_CASE("A notification's content carries its badge, 0 included, so the OS set
   request.badge = 0;
   CHECK([ngn::appkit::notificationContent(request).badge isEqual:@0]);
   request.badge.reset();
-  CHECK(ngn::appkit::notificationContent(request).badge == nil);
+  CHECK((ngn::appkit::notificationContent(request).badge == nil));
 }
 
 TEST_CASE("The badge reads back the last count set, whatever an earlier count's Dock drawing does") {
