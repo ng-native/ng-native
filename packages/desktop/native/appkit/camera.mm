@@ -264,9 +264,13 @@ class AVSessionCapture final : public SessionCapture {
       NSURL *url = [NSURL fileURLWithPath:@(request.path.c_str())];
       [NSFileManager.defaultManager removeItemAtURL:url error:nil];
       *movieHolder = movie;
+      // The answer follows the take-down, so a recording asked for at once finds none running.
       NGNMovieRecording *delegate = [[NGNMovieRecording alloc] initWithDone:[answer, takeDown, queue](const std::string &error) {
-        dispatch_async(queue, takeDown);
-        (*answer)(error);
+        std::string message = error;
+        dispatch_async(queue, ^{
+          takeDown();
+          (*answer)(message);
+        });
       }];
       [movie startRecordingToOutputFileURL:url recordingDelegate:delegate];
     });
