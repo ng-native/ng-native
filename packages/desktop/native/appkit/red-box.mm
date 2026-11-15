@@ -2,6 +2,8 @@
 
 #import <AppKit/AppKit.h>
 
+#include <atomic>
+
 namespace {
 
 NSString *string(const std::string &s) {
@@ -294,6 +296,9 @@ std::shared_ptr<RedBoxBackend> makeRedBoxWindow(RedBoxActions actions) {
 // The overlay, and the call that resumes the JavaScript. Main thread.
 NSPanel *gPausedPanel;
 std::function<void()> gResume;
+// Moved on by each show and hide, from any thread: a show queued before a later hide finds it moved
+// on and does nothing.
+std::atomic<uint64_t> gPausedTurn{0};
 
 } // namespace ngn::appkit
 
@@ -314,7 +319,11 @@ namespace ngn::appkit {
 
 void showDebuggerPaused(std::function<void()> resume) {
   auto shared = std::make_shared<std::function<void()>>(std::move(resume));
+  uint64_t turn = ++gPausedTurn;
   dispatch_async(dispatch_get_main_queue(), ^{
+    if (gPausedTurn != turn) {
+      return;
+    }
     gResume = *shared;
     NSWindow *app = NSApp.mainWindow != nil ? NSApp.mainWindow : NSApp.windows.firstObject;
     if (gPausedPanel == nil) {
@@ -358,6 +367,7 @@ void showDebuggerPaused(std::function<void()> resume) {
 }
 
 void hideDebuggerPaused() {
+  gPausedTurn++;
   auto hide = ^{
     gResume = nullptr;
     [gPausedPanel.parentWindow removeChildWindow:gPausedPanel];
