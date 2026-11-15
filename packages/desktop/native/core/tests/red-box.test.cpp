@@ -255,3 +255,24 @@ TEST_CASE("the same message again is one error, made fatal or given a stack by t
   CHECK(f.backend->shown.back().error.fatal);
   CHECK(f.backend->shown.back().error.stack.size() == 1);
 }
+
+TEST_CASE("a symbolication answers the error it was asked for after older errors make way") {
+  Fixture f;
+  // The box keeps 50: the 51st pushes the first out, and every later one moves down a place.
+  for (int i = 0; i <= 50; i++) {
+    f.box.report(error("error " + std::to_string(i)));
+  }
+  REQUIRE(f.http->sent.size() == 51);
+  answer(*f.http->sent[1], R"({"stack": [{"methodName": "forError1", "file": "/a.ts", "lineNumber": 1, "column": 1}]})");
+  // Error 1 is the first kept now; stepping to it shows its own stack, and error 2 keeps its own.
+  f.box.step(-100);
+  CHECK(f.backend->shown.back().error.message == "error 1");
+  CHECK(f.backend->shown.back().error.stack.at(0).methodName == "forError1");
+  f.box.step(1);
+  CHECK(f.backend->shown.back().error.message == "error 2");
+  CHECK(f.backend->shown.back().error.stack.at(0).methodName == "save");
+  // The first error's answer has nothing left to apply to.
+  answer(*f.http->sent[0], R"({"stack": [{"methodName": "forError0", "file": "/a.ts", "lineNumber": 1, "column": 1}]})");
+  f.box.step(-1);
+  CHECK(f.backend->shown.back().error.stack.at(0).methodName == "forError1");
+}
