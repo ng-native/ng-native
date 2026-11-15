@@ -1,5 +1,7 @@
 #include "ngn/host-state.h"
 
+#include <thread>
+
 namespace ngn {
 
 void HostState::setInitialUrl(std::string url) {
@@ -24,14 +26,21 @@ void HostState::receiveUrl(std::string url, bool launched) {
 }
 
 void HostState::openUrl(const std::string &url) {
-  {
-    std::lock_guard lock(mutex_);
-    if (urlListeners_.empty()) {
-      pendingUrls_.push_back(url);
+  for (;;) {
+    {
+      std::lock_guard lock(mutex_);
+      if (urlListeners_.empty()) {
+        pendingUrls_.push_back(url);
+        return;
+      }
+    }
+    // None called: the last listener went after the check. Checked again, so the URL waits for
+    // the next one, or goes to one added since.
+    if (urlListeners_.notify(url) > 0) {
       return;
     }
+    std::this_thread::yield();
   }
-  urlListeners_.notify(url);
 }
 
 std::shared_ptr<void> HostState::listenForUrls(std::function<void(const std::string &)> listener) {
