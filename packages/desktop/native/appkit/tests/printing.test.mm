@@ -299,3 +299,30 @@ TEST_CASE("a layout that changes while a web view's snapshot is taken prints as 
   CHECK(colorAt(pdf, 0.75, 0.25).blueComponent < 0.5);
   [window close];
 }
+
+TEST_CASE("a web view hidden while its snapshot is taken prints as hidden") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NSView *content = window.contentView;
+  content.wantsLayer = YES;
+  // A red box under a web view that fills the window.
+  NSView *box = [[NSView alloc] initWithFrame:content.bounds];
+  box.wantsLayer = YES;
+  box.layer.backgroundColor = NSColor.redColor.CGColor;
+  [content addSubview:box];
+  WKWebView *web = [[WKWebView alloc] initWithFrame:content.bounds configuration:[WKWebViewConfiguration new]];
+  [content addSubview:web];
+  [web loadHTMLString:@"<html><body style='margin:0;background:rgb(0,0,255)'></body></html>" baseURL:nil];
+  REQUIRE(runUntil([&] { return !web.isLoading && web.estimatedProgress >= 1; }, 20));
+  PDFDocument *pdf = captured(content, [&] { web.hidden = YES; });
+  REQUIRE((pdf != nil));
+  NSColor *seen = colorAt(pdf, 0.5, 0.5);
+  CHECK(seen.redComponent > 0.9);
+  CHECK(seen.blueComponent < 0.4);
+  CHECK(content.subviews.count == 2);
+  [window close];
+}

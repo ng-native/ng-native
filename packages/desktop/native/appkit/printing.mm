@@ -285,6 +285,17 @@ void collectWebViews(NSView *view, NSMutableArray<WKWebView *> *found) {
   }
 }
 
+// Whether `view` still shows within `content`: neither it nor a view between them is hidden or
+// transparent, as when the web views were collected.
+bool showing(NSView *view, NSView *content) {
+  for (NSView *at = view; at != nil && at != content; at = at.superview) {
+    if (at.isHidden || at.alphaValue <= 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // One page of `drawn`'s size, holding it.
 PDFDocument *pageOf(NSBitmapImageRep *drawn, NSSize size) {
   NSImage *image = [[NSImage alloc] initWithSize:size];
@@ -309,7 +320,8 @@ PDFDocument *drawnDocument(NSView *content, NSArray<WKWebView *> *webViews, NSAr
   NSMutableArray<NSView *> *stand = [NSMutableArray array];
   for (NSUInteger i = 0; i < webViews.count; i++) {
     WKWebView *web = webViews[i];
-    if (![snapshots[i] isKindOfClass:NSImage.class] || web.superview == nil || ![web isDescendantOf:content]) {
+    if (![snapshots[i] isKindOfClass:NSImage.class] || web.superview == nil || ![web isDescendantOf:content] ||
+        !showing(web, content)) {
       continue;
     }
     NSImageView *image = [NSImageView imageViewWithImage:snapshots[i]];
