@@ -55,3 +55,39 @@ TEST_CASE("NetworkPathMonitor stops from inside its own change without waiting f
   CHECK(state->first == 1);
   *stop = nullptr;
 }
+
+TEST_CASE("NetworkPathMonitor stopped from another monitor's change waits for its own change to finish") {
+  auto monitor = ngn::appkit::makePathMonitor();
+  struct State {
+    dispatch_semaphore_t bRunning = dispatch_semaphore_create(0);
+    dispatch_semaphore_t aFinished = dispatch_semaphore_create(0);
+    std::atomic<bool> bDone{false};
+    std::atomic<bool> doneAtStop{false};
+    std::atomic<int> aReports{0};
+    std::atomic<int> bReports{0};
+    std::function<void()> stopB;
+  };
+  auto state = std::make_shared<State>();
+  state->stopB = monitor->watch([state](const ngn::NetworkPath &) {
+    if (state->bReports++ == 0) {
+      dispatch_semaphore_signal(state->bRunning);
+      usleep(300 * 1000);
+      state->bDone = true;
+    }
+  });
+  auto stopA = monitor->watch([state](const ngn::NetworkPath &) {
+    if (state->aReports++ == 0) {
+      if (dispatch_semaphore_wait(state->bRunning, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0) {
+        state->stopB();
+        state->doneAtStop = state->bDone.load();
+      }
+      dispatch_semaphore_signal(state->aFinished);
+    }
+  });
+  bool finished = dispatch_semaphore_wait(state->aFinished, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) == 0;
+  stopA();
+  state->stopB();
+  REQUIRE(finished);
+  // B's stop returned only once B's change had finished.
+  CHECK(state->doneAtStop);
+}
