@@ -127,8 +127,14 @@ std::shared_ptr<NativeModule> makeAsyncStorage(const CoreModuleServices &s) {
           for (const auto &e : arg(args, 1)) {
             if (e.isObject() && e.count("key") && e["key"].isString()) {
               auto v = e.getDefault("value", nullptr);
+              // Only null removes a key: any other value that is not a string fails the batch
+              // before anything is written.
+              if (!v.isString() && !v.isNull()) {
+                p.reject("The value for key " + e["key"].asString() + " must be a string or null.");
+                return;
+              }
               values.emplace_back(e["key"].asString(), v.isString() ? std::optional(v.asString()) : std::nullopt);
-              echo.push_back(folly::dynamic::object("key", e["key"])("value", v.isString() ? v : nullptr));
+              echo.push_back(folly::dynamic::object("key", e["key"])("value", v));
             }
           }
         }
