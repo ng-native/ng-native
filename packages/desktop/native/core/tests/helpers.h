@@ -55,11 +55,14 @@ bool dropWaitsForRunningCall(Listen listen, Send send, std::chrono::milliseconds
   // The time allowed starts once the dropper is dropping, so one slow to start cannot pass for a
   // drop that waits. A drop that does not wait finishes at once; one that waits is still held when
   // this gives up.
-  waitFor(dropping, deadline);
-  bool droppedWhileRunning = waitFor(dropped, std::chrono::milliseconds(200));
+  bool started = waitFor(dropping, deadline);
+  bool droppedWhileRunning = started && waitFor(dropped, std::chrono::milliseconds(200));
   release = true;
   dropper.join();
   sender.join();
+  if (!started) {
+    throw std::runtime_error("dropWaitsForRunningCall: the drop never started");
+  }
   // A held call that gave up before the drop was measured lets even a drop that waits finish, so
   // the answer would say nothing about the handle.
   if (gaveUp) {
