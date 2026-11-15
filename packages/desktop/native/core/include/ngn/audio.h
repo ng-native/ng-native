@@ -46,7 +46,10 @@ struct TrackState {
   double duration{0};
 };
 
-// One source, playing or not. Destroying it stops it, and calls nothing after.
+// One source, playing or not. Destroying it stops it and starts no call after; a call already
+// running on another thread may still finish, so `changed` guards what it reaches (the core's does,
+// by a weak pointer and the player's generation). The backend never waits for such a call, since the
+// core destroys tracks under the lock `changed` takes.
 class AudioTrack {
  public:
   virtual ~AudioTrack() = default;
