@@ -5,9 +5,23 @@
  * press rectangle, delays and a long-press timer around them. This is that machine, on the same
  * responder negotiation, so a button and an enclosing scroll view agree on who owns a drag.
  */
-import { Directive, computed, forwardRef, input, output, signal, type Signal } from '@angular/core';
+import {
+  Directive,
+  Injector,
+  computed,
+  forwardRef,
+  inject,
+  input,
+  output,
+  runInInjectionContext,
+  signal,
+  type Signal,
+} from '@angular/core';
+import { Menus } from '@ng-native/device';
 import { isTouchPointer, nativePlatform, type NativeSyntheticEvent } from '@ng-native/fabric';
+import { CONTEXT_MENU } from './context-menu.ts';
 import type { Insets, TouchEvent } from './events.ts';
+import { byNativeId } from './native-id.ts';
 import { booleanOr, numberOr, optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
 
@@ -188,6 +202,10 @@ export abstract class TouchableBase extends ViewBase {
   private longPressed = false;
   /** How many `(longPress)` listeners there are; the long-press clock only runs with one. */
   private longPressListeners = 0;
+  /** A `[contextMenu]` on the same element, whose menu a long press may open instead. */
+  private readonly contextMenu = inject(CONTEXT_MENU, { self: true, optional: true });
+  /** For `Menus`, read only where there is a `(longPress)`: see `takeLongPressFromMenus`. */
+  private readonly injector = inject(Injector);
   private pressedAt = 0;
   private pressInTimer: ReturnType<typeof setTimeout> | null = null;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -293,6 +311,26 @@ export abstract class TouchableBase extends ViewBase {
     this.measureIfNeeded();
     this.hoverIfNeeded();
     this.clickIfNeeded();
+    if (this.longPressListeners) this.takeLongPressFromMenus();
+  }
+
+  /**
+   * Tell a host that opens a `[contextMenu]` on a long press (Android, iOS) that this view takes
+   * its own, so one on it opens no menu around it: the innermost handler wins, as in a native
+   * app. Every such view, not only one inside a menu, since a menu can be around it from another
+   * template. A view with its own menu still opens that.
+   */
+  private takeLongPressFromMenus(): void {
+    const menus = this.injector.get(Menus);
+    if (!menus.longPressByNativeId) return;
+    runInInjectionContext(this.injector, () =>
+      byNativeId(
+        this.engine,
+        this.node,
+        (nativeID) => menus.setTakesLongPress(nativeID, true),
+        (nativeID) => menus.setTakesLongPress(nativeID, false),
+      ),
+    )();
   }
 
   override ngOnChanges(): void {
@@ -420,7 +458,7 @@ export abstract class TouchableBase extends ViewBase {
     this.pressed.set(true);
     this.pressedChanged(true);
     this.pressIn.emit(event);
-    if (!this.longPressListeners) return;
+    if (!this.longPressListeners || this.contextMenu?.takesLongPress()) return;
     this.longPressTimer = setTimeout(() => {
       this.longPressTimer = null;
       this.longPressed = true;

@@ -50,6 +50,30 @@ On macOS the desktop host prints with AppKit: the print dialog opens as a sheet 
 and a `printer` passed to `print()` is ignored. `printToPdf()` breaks pages where the HTML's CSS
 asks (`break-before: page`, `break-after: page`).
 
+## Printing a window on macOS
+
+`print({ window })` prints what a window shows, drawn as it is on screen and scaled down to the
+paper, with the print dialog as a sheet on that window. A web view prints its page as WebKit's
+snapshot of it. A video, the camera preview and anything drawn with Metal print blank, since they
+draw outside the window's own drawing and capturing them would need the Screen Recording
+permission. It takes an `AppWindow`, from `AppWindows.open()` or `CURRENT_WINDOW`:
+
+```ts
+import { inject } from '@angular/core';
+import { CURRENT_WINDOW } from '@ng-native/device';
+import { Printing } from '@ng-native/expo/printing';
+
+const window = inject(CURRENT_WINDOW);
+if (window) await inject(Printing).print({ window });
+```
+
+On iOS, Android and the web a window prints nothing and the call resolves.
+
+The default menu bar has File > Print... (Command-P), which prints the key window this way. An app
+that prints something else, such as a document, gives its own item the `print` role and a handler
+in its `<menu-bar>`; that item takes Print...'s place and Command-P, and the host leaves printing
+to it.
+
 ## Without the module
 
 On iOS, Android and macOS, a missing `expo-print` - never installed, or installed without the app

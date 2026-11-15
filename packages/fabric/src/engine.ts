@@ -112,6 +112,7 @@ import {
   type FlowPlan,
   type FlowTree,
 } from './flow.ts';
+import { joinEvents } from './event-dispatcher.ts';
 import { FontFaces } from './font-faces.ts';
 import { premultipliedStops } from './premultiplied-stops.ts';
 
@@ -945,6 +946,8 @@ export interface EngineNode extends HostNode {
    * it out. The native stack outlet tells a page's own binding from a value it carried this way.
    */
   writes?: Set<string>;
+  /** Who hears a prop change, by key. See `watchProp`. */
+  propWatches?: Map<string, Set<(value: unknown) => void>>;
   /** The child this node's background is painted on instead of itself. See `paintOn`. */
   paintsOn?: EngineNode;
   /** What this node's background colour is handed to instead of painted. See `takePaint`. */
@@ -6684,6 +6687,7 @@ const ENGINE_NODE_FIELDS = {
   attributeOnly: true,
   keptAttributes: true,
   writes: true,
+  propWatches: true,
   paintsOn: true,
   paintTaker: true,
   paintTaken: true,
@@ -6793,6 +6797,11 @@ function removeMember(name: string, descriptor: PropertyDescriptor): void {
 /**
  * RN-specific helpers, injected rather than imported so the engine stays runnable under Node.
  */
+/** What `Engine.watchShared` reports. A `sheet` change with no `sheet` removes `replacing`. */
+export type SharedChange =
+  | { kind: 'sheet'; sheet: StyleSheet | null; replacing?: StyleSheet }
+  | { kind: 'tokens'; tokens: Readonly<Record<string, TokenValue>> };
+
 export interface EngineOptions {
   /**
    * React Native's `NativeAnimatedHelper`, which lets native move a view by a scroll with no
@@ -7953,6 +7962,7 @@ export class Engine implements HostEngine {
     this.watchGenerated(sheet);
     this.markPath(this.root);
     this.sheetsAdded.push(sheet);
+    this.sharedChanged({ kind: 'sheet', sheet, replacing });
     return true;
   }
 
@@ -7992,7 +8002,34 @@ export class Engine implements HostEngine {
     if (!this.styles.removeGlobalSheet(sheet)) return false;
     this.sheetReplaced(sheet, null);
     this.markPath(this.root);
+    this.sharedChanged({ kind: 'sheet', sheet: null, replacing: sheet });
     return true;
+  }
+
+  /** The global sheets added since the engine was made and not removed, in order. */
+  get globalSheetsAdded(): readonly StyleSheet[] {
+    return this.styles.sheetsAdded;
+  }
+
+  /** The custom properties the host has supplied, which `updateTokens` adds to. */
+  get tokens(): Readonly<Record<string, TokenValue>> {
+    return this.styles.rootTokens;
+  }
+
+  private readonly sharedWatchers = new Set<(change: SharedChange) => void>();
+
+  /**
+   * Calls `listener` after each change to what a platform with several surfaces keeps the same
+   * on all of them: a global sheet added, replaced or removed, and tokens updated. The engine of
+   * a surface that follows this one applies the change to itself.
+   */
+  watchShared(listener: (change: SharedChange) => void): () => void {
+    this.sharedWatchers.add(listener);
+    return () => this.sharedWatchers.delete(listener);
+  }
+
+  private sharedChanged(change: SharedChange): void {
+    for (const watcher of this.sharedWatchers) watcher(change);
   }
 
   updateTokens(next: Readonly<Record<string, TokenValue>>): void {
@@ -8001,6 +8038,7 @@ export class Engine implements HostEngine {
     this.root.subtreeDirty = true;
     this.layoutStale = true;
     this.commit();
+    this.sharedChanged({ kind: 'tokens', tokens: next });
   }
 
   /**
@@ -9068,6 +9106,38 @@ export class Engine implements HostEngine {
     // another, `[data-on] ~ .x`: a point of a chart set as a finger moves leaves those after it.
     this.markProps(node, read || heirs, this.styles.readsBeside(key));
     if (SIZES_A_RUN.has(key)) this.markParagraph(node);
+    if (node.propWatches !== undefined) this.reportProp(node, key);
+  }
+
+  /**
+   * Call `listener` with the prop's new value each time `setProp` changes it on `node`, taking it
+   * away included: what follows an app's own `nativeID`, which a directive on the element names
+   * the view by. The function returned stops it.
+   */
+  watchProp(node: EngineNode, key: string, listener: (value: unknown) => void): () => void {
+    const watches = (node.propWatches ??= new Map());
+    let heard = watches.get(key);
+    if (!heard) watches.set(key, (heard = new Set()));
+    heard.add(listener);
+    return () => {
+      heard.delete(listener);
+      if (heard.size === 0) watches.delete(key);
+      if (watches.size === 0) delete node.propWatches;
+    };
+  }
+
+  private reportProp(node: EngineNode, key: string): void {
+    const heard = node.propWatches?.get(key);
+    if (!heard) return;
+    const value = node.props[key];
+    // One listener that throws stops neither the rest nor the write.
+    for (const listener of [...heard]) {
+      try {
+        listener(value);
+      } catch (error) {
+        this.reportEventError(error, 'prop');
+      }
+    }
   }
 
   /**
@@ -16905,12 +16975,26 @@ export class Engine implements HostEngine {
 
   // --- events -----------------------------------------------------------
 
+  /**
+   * Through the runtime's one dispatcher, which every surface shares: Fabric keeps a single
+   * handler, and a second engine's would take the first one's events. See `event-dispatcher.ts`.
+   */
   private registerEventHandler(): void {
-    if (this.eventsRegistered || !this.fabric.registerEventHandler) return;
+    if (this.eventsRegistered) return;
     this.eventsRegistered = true;
-    this.fabric.registerEventHandler((instanceHandle, topLevelType, nativeEvent) =>
-      this.dispatchEvent(instanceHandle, topLevelType, nativeEvent),
-    );
+    this.leave = joinEvents(this.fabric, this);
+  }
+
+  private leave: (() => void) | null = null;
+
+  /**
+   * Stop taking events, as the surface goes: a closed window's engine is told nothing more, and
+   * the dispatcher lets go of it. It takes them again if a listener is added after.
+   */
+  leaveEvents(): void {
+    this.leave?.();
+    this.leave = null;
+    this.eventsRegistered = false;
   }
 
   /**

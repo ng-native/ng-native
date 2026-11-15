@@ -1,19 +1,34 @@
 import {
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
+  afterNextRender,
   booleanAttribute,
   computed,
   effect,
   inject,
   input,
+  signal,
 } from '@angular/core';
 import { Direction } from '@ng-native/device';
-import { HostEngine } from '@ng-native/fabric';
+import { Engine, HostEngine, type EngineNode } from '@ng-native/fabric';
 import { optionalBoolean } from './transforms.ts';
 import { View } from './view.ts';
 import { ViewBase } from './view-base.ts';
 
 export type ModalPresentationStyle = 'fullScreen' | 'pageSheet' | 'formSheet' | 'overFullScreen';
+/** What `anchor` takes: an element, its `ElementRef`, or a component or directive with a `node`. */
+export type ModalAnchor = ElementRef | EngineNode | { readonly node: unknown } | null | undefined;
+
+/** The engine node an anchor stands for. */
+function anchorNode(anchor: ModalAnchor): EngineNode | null {
+  if (!anchor) return null;
+  if (anchor instanceof ElementRef) return anchor.nativeElement as EngineNode;
+  if ('nodeKind' in anchor) return anchor as EngineNode;
+  return ((anchor as { node?: unknown }).node as EngineNode | undefined) ?? null;
+}
+
 export type ModalOrientation =
   'portrait' | 'portrait-upside-down' | 'landscape' | 'landscape-left' | 'landscape-right';
 
@@ -45,6 +60,7 @@ export type ModalOrientation =
     '[statusBarTranslucent]': 'statusBarTranslucent()',
     '[navigationBarTranslucent]': 'navigationBarTranslucent()',
     '[hardwareAccelerated]': 'hardwareAccelerated()',
+    '[anchor]': 'anchorTag()',
   },
 })
 export class Modal extends ViewBase {
@@ -80,7 +96,20 @@ export class Modal extends ViewBase {
   /** Android: give the modal's window a hardware-accelerated surface. */
   readonly hardwareAccelerated = input(undefined, { transform: optionalBoolean });
 
+  /**
+   * The element the modal points at. With one, it shows as a popover at the element on macOS and
+   * iPadOS; iPhone and Android present it as they would without one. Committed as the react tag
+   * of the element's view.
+   */
+  readonly anchor = input<ModalAnchor>();
+
   private readonly direction = inject(Direction);
+  /** For the anchor view tag, which only the engine itself hands out. */
+  private readonly views = inject(Engine, { optional: true });
+  private readonly injector = inject(Injector);
+
+  /** The anchor's view tag, committed as `anchor`, or undefined with none. */
+  protected readonly anchorTag = signal<number | undefined>(undefined);
 
   protected readonly resolvedPresentationStyle = computed(
     () => this.presentationStyle() ?? (this.transparent() ? 'overFullScreen' : undefined),
@@ -102,6 +131,8 @@ export class Modal extends ViewBase {
     });
     inject(DestroyRef).onDestroy(stop);
 
+    effect(() => this.followAnchor(anchorNode(this.anchor())));
+
     effect(() => {
       const style = this.presentationStyle();
       if (this.transparent() && style && style !== 'overFullScreen') {
@@ -110,5 +141,30 @@ export class Modal extends ViewBase {
         );
       }
     });
+  }
+
+  /**
+   * Commit the anchor's tag. A view not yet committed has none, so it is read again once the
+   * commit that makes it has happened.
+   */
+  private followAnchor(node: EngineNode | null): void {
+    if (!node) {
+      // The engine commits a prop that goes as null, which takes it off the native view.
+      this.anchorTag.set(undefined);
+      return;
+    }
+    const tag = this.views?.tagOf(node);
+    if (tag != null) {
+      this.anchorTag.set(tag);
+      return;
+    }
+    afterNextRender(
+      () => {
+        if (anchorNode(this.anchor()) === node) {
+          this.anchorTag.set(this.views?.tagOf(node) ?? undefined);
+        }
+      },
+      { injector: this.injector },
+    );
   }
 }

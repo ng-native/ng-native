@@ -40,6 +40,7 @@ Tailwind's `border`, which is one full CSS pixel and reads as a visibly fat divi
 <view class="border-t-hairline border-gray-200"></view>
 ```
 
-The width comes from `deviceTokens()` on native and a `min-resolution` media query on the web -
-reach for `border-hairline` any time a design calls for "the thinnest line the platform can draw"
-rather than a fixed point size.
+The width comes from `deviceTokens()` on native, and `watchConditions()` updates it when a window
+moves to a screen of another pixel ratio, such as a Mac window dragged to a second display. On the
+web it comes from a `min-resolution` media query. Reach for `border-hairline` any time a design
+calls for "the thinnest line the platform can draw" rather than a fixed point size.

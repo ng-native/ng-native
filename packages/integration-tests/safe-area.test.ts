@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { SafeArea, Screen } from '@ng-native/device';
+import { Engine } from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, type RenderResult } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -99,6 +100,24 @@ describe('the safe area', () => {
     // The floating button in the fixture clears the home indicator through the stylesheet alone.
     assert.equal(screen.getByTestId('floating').props['marginBottom'], 34);
     assert.equal(screen.getByTestId('floating').props['paddingTop'], 59);
+  });
+
+  it('publishes the window controls width a desktop host reports, and drops it when it goes', async () => {
+    // A Mac window with no sidebar: content runs beside the close, minimise and zoom buttons.
+    const engine = app.componentRef.injector.get(Engine);
+    const token = () => engine.token('--safe-area-inset-titlebar-leading');
+    await fireEvent(screen.getByTestId('provider'), 'insetsChange', {
+      insets: { top: 52, right: 0, bottom: 0, left: 0 },
+      frame: { x: 0, y: 0, width: 800, height: 600 },
+      titlebarLeading: 78,
+    });
+    assert.equal(token(), '78px');
+    // A sidebar shown: the controls sit over it, and the content is clear of them.
+    await fireEvent(screen.getByTestId('provider'), 'insetsChange', {
+      insets: { top: 52, right: 0, bottom: 0, left: 0 },
+      frame: { x: 0, y: 0, width: 800, height: 600 },
+    });
+    assert.equal(token(), '0px');
   });
 
   it('leaves the app safe area alone for a provider that only serves its own subtree', async () => {

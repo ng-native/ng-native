@@ -40,6 +40,7 @@ import {
   type Signal,
   type WritableSignal,
 } from '@angular/core';
+import { WINDOW_OUTLET } from './window-outlet.ts';
 import {
   ActivatedRoute,
   ChildrenOutletContexts,
@@ -194,6 +195,8 @@ type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown
   // See `empty`. A class of its own, so the app's own `display` is left alone and applies once the
   // class goes, and `!important`, so that until then it is hidden over a `display` set inline.
   styles: ':host(.ngn-empty-stack) { display: none !important; }',
+  // An outlet in one of this outlet's pages is not a route window's root: see `WINDOW_OUTLET`.
+  providers: [{ provide: WINDOW_OUTLET, useValue: null }],
 })
 export class NativeStackOutlet implements RouterOutletContract, OnInit {
   /**
@@ -201,7 +204,10 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * routes with `outlet: 'list'`. The default is the primary one. Read once, as the router's own
    * outlet reads it, since an outlet cannot change which contexts it is registered under.
    */
-  readonly name = inject(new HostAttributeToken('name'), { optional: true }) ?? PRIMARY_OUTLET;
+  readonly name =
+    inject(new HostAttributeToken('name'), { optional: true }) ??
+    inject(WINDOW_OUTLET, { optional: true, skipSelf: true }) ??
+    PRIMARY_OUTLET;
 
   readonly supportsBindingToComponentInputs = true;
 
@@ -777,6 +783,21 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    */
   private bindInputs(ref: ComponentRef<unknown>, route: ActivatedRoute): () => void {
     return this.router?.componentInputBindingEnabled ? bindRouteInputs(ref, route) : () => {};
+  }
+
+  /**
+   * Whether the screen in front, in this stack or a stack inside it, has `gestureEnabled: false`,
+   * from its presentation or its page's host bindings: the OS's back and forward inputs then
+   * leave it alone, as a swipe does, and only its own way out takes it off.
+   */
+  refusesGesture(): boolean {
+    const top = this.top;
+    if (!top) return false;
+    if ((top.screen as Partial<EngineNode>).props?.['gestureEnabled'] === false) return true;
+    const inner = top.ref.injector
+      .get(ChildrenOutletContexts, null)
+      ?.getContext(PRIMARY_OUTLET)?.outlet;
+    return inner instanceof NativeStackOutlet && inner !== this && inner.refusesGesture();
   }
 
   private get top(): StackEntry | undefined {

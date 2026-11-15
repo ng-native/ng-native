@@ -4,6 +4,7 @@
  * RN's own `FabricUIManager.js` does with its CACHED_PROPERTIES list).
  */
 import { nativePlatform, type FabricUIManager } from './engine.ts';
+import { FABRIC_RUNTIME } from './event-dispatcher.ts';
 
 /**
  * Every method of `FabricUIManager`, and nothing else.
@@ -65,6 +66,8 @@ export function getFabricUIManager(): FabricUIManager {
     const value = raw[name];
     if (typeof value === 'function') facade[name] = value.bind(raw);
   }
+  // Every facade over one native manager shares one event dispatcher: see `event-dispatcher.ts`.
+  Object.defineProperty(facade, FABRIC_RUNTIME, { value: raw });
   // Asked for, a layout animation that is off moves nothing, and the views jump to where it ends.
   if (!layoutAnimationsOn()) delete facade['configureNextLayoutAnimation'];
   return facade as unknown as FabricUIManager;

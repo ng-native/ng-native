@@ -61,7 +61,23 @@ export {
   provideKeyboardController,
 } from './keyboard-dock.ts';
 export { KeyboardAvoidingView, type KeyboardAvoidingBehavior } from './keyboard-avoiding-view.ts';
-export { Modal, type ModalOrientation, type ModalPresentationStyle } from './modal.ts';
+export {
+  Modal,
+  type ModalAnchor,
+  type ModalOrientation,
+  type ModalPresentationStyle,
+} from './modal.ts';
+export { MenuBar, MenuGroup, MenuItem, MenuSeparator, treeOrder } from './menu.ts';
+export { CONTEXT_MENU, ContextMenu } from './context-menu.ts';
+export { Shortcut } from './shortcut.ts';
+export {
+  DragItem,
+  FileDrop,
+  type DragItemValue,
+  type DroppedFile,
+  type FileDropEvent,
+} from './drag-and-drop.ts';
+export { TrayIcon } from './tray-icon.ts';
 export { NativeButton, type ButtonIcon, type ButtonKind } from './native-button.ts';
 export { NativeRef } from './native-ref.ts';
 export {

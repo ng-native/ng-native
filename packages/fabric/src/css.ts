@@ -4041,6 +4041,11 @@ export class StyleResolver {
     return true;
   }
 
+  /** The sheets `addGlobalSheet` added and `removeGlobalSheet` has not taken away, in order. */
+  get sheetsAdded(): readonly StyleSheet[] {
+    return this.addedSheets;
+  }
+
   /** Stop matching a sheet `addGlobalSheet` added; false when it is not one. */
   removeGlobalSheet(sheet: StyleSheet): boolean {
     const at = this.addedSheets.indexOf(sheet);

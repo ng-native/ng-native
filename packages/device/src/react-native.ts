@@ -27,6 +27,10 @@ export interface ReactNative {
       handler: (value: boolean) => void,
     ): { remove(): void };
   };
+  /** Optional: a host without it (the web host's stand-in) has no surfaces it starts itself. */
+  AppRegistry?: {
+    registerRunnable(name: string, run: (parameters: { rootTag: number }) => void): void;
+  };
   AppState: {
     currentState: string | null;
     addEventListener(event: 'change', handler: (state: string) => void): { remove(): void };
@@ -109,9 +113,18 @@ export interface ReactNative {
     getFontScale(): number;
   };
   /** `Version` is a string on iOS, `'26.5'`, and the API level, a number, on Android. */
-  Platform: { OS: string; Version?: string | number };
+  Platform: {
+    OS: string;
+    Version?: string | number;
+    /** iOS: whether the device is an iPad. */
+    isPad?: boolean;
+  };
   /** Optional: the status bar and keyboard read it, for `DeviceInfo`'s `isEdgeToEdge` on Android. */
   TurboModuleRegistry?: { get(name: string): unknown };
+  /** Where a native module without its own emitter sends events. */
+  DeviceEventEmitter?: {
+    addListener(event: string, handler: (payload: unknown) => void): { remove(): void };
+  };
   Share: {
     share(
       content: { message?: string; url?: string; title?: string },
@@ -126,6 +139,11 @@ export interface ReactNative {
   Vibration: {
     vibrate(pattern?: number | number[], repeat?: boolean): void;
     cancel(): void;
+  };
+  /** iOS's and macOS's user defaults, read once as the runtime starts. Absent on Android. */
+  Settings?: {
+    get(key: string): unknown;
+    set(values: Record<string, unknown>): void;
   };
   DevSettings?: {
     addMenuItem(title: string, handler: () => unknown): void;

@@ -1,4 +1,5 @@
 import { Component, input, signal } from '@angular/core';
+import { MenuGroup, MenuItem, MenuSeparator } from '../../components/src/menu.ts';
 import { NativeHeader } from '../../router/src/native-header.ts';
 import {
   NativeHeaderItem,
@@ -214,4 +215,37 @@ export class HeaderMenuHost {
   readonly otherChosen: string[] = [];
   pressed = 0;
   saved = 0;
+}
+
+/** A bar button whose menu is a template of `<menu-item>`s, as every other menu is written. */
+@Component({
+  selector: 'x-header-template-menu-host',
+  imports: [NativeHeader, NativeHeaderItem, MenuItem, MenuGroup, MenuSeparator],
+  template: `
+    <native-header title="Menus">
+      <native-header-item type="right" systemImageName="ellipsis" [menu]="more" />
+    </native-header>
+    <ng-template #more>
+      <menu-item label="Rename" sfSymbol="pencil" (select)="chosen.push('rename')" />
+      <menu-item label="Pinned" [(checked)]="pinned" />
+      @if (sharing()) {
+        <menu-separator />
+        <menu-group label="Share" sfSymbol="square.and.arrow.up">
+          <menu-item label="Copy Link" (select)="chosen.push('copy')" />
+        </menu-group>
+      }
+      <menu-item
+        label="Delete"
+        destructive
+        [disabled]="locked()"
+        (select)="chosen.push('delete')"
+      />
+    </ng-template>
+  `,
+})
+export class HeaderTemplateMenuHost {
+  readonly pinned = signal(false);
+  readonly sharing = signal(true);
+  readonly locked = signal(false);
+  readonly chosen: string[] = [];
 }

@@ -261,3 +261,70 @@ describe('native header bar menus and spacers', () => {
     }
   });
 });
+
+describe('a native header bar menu written as a template of menu items', () => {
+  interface TemplateHost {
+    readonly pinned: WritableSignal<boolean>;
+    readonly sharing: WritableSignal<boolean>;
+    readonly locked: WritableSignal<boolean>;
+    readonly chosen: string[];
+  }
+  let HostType: Type<TemplateHost>;
+
+  before(async () => {
+    registerScreenComponents();
+    const mod = await compileFixture('fixtures/header-item.ts');
+    HostType = mod['HeaderTemplateMenuHost'] as Type<TemplateHost>;
+  });
+
+  afterEach(() => cleanup());
+
+  async function boot() {
+    const app = await render(HostType);
+    const config = () => app.fabric.find('RNSScreenStackHeaderConfig')!;
+    const menu = () => (config().props['headerRightBarButtonItems'] as Entry[])[0]!['menu'] as Menu;
+    const choose = (menuId: unknown) =>
+      fireEvent(config(), 'pressHeaderBarButtonMenuItem', { menuId });
+    return { ...app, instance: app.instance as TemplateHost, config, menu, choose };
+  }
+
+  /** Each entry as its title, a section or submenu as its entries. */
+  const outline = (items: Menu['items']): unknown[] =>
+    items.map((item) =>
+      'menuId' in item ? item['title'] : { [String(item['title'] ?? '')]: outline(item.items) },
+    );
+
+  it('commits the items as the menu, a separator as a section, and opens on a tap', async () => {
+    const { config, menu } = await boot();
+    const entry = (config().props['headerRightBarButtonItems'] as Entry[])[0]!;
+    assert.equal('buttonId' in entry, false);
+    assert.deepEqual(outline(menu().items), [
+      { '': ['Rename', 'Pinned'] },
+      { '': [{ Share: ['Copy Link'] }, 'Delete'] },
+    ]);
+    const [first, second] = menu().items;
+    assert.equal(first!['displayInline'], true);
+    assert.equal(first!.items[0]!['sfSymbolName'], 'pencil');
+    assert.equal(first!.items[1]!['state'], 'off');
+    assert.equal(second!.items[0]!['sfSymbolName'], 'square.and.arrow.up');
+    assert.equal(second!.items[1]!['destructive'], true);
+  });
+
+  it('runs the chosen item, and follows what the items say', async () => {
+    const { menu, choose, instance, detectChanges } = await boot();
+    await choose(menu().items[0]!.items[0]!['menuId']);
+    await choose(menu().items[1]!.items[0]!.items[0]!['menuId']);
+    assert.deepEqual(instance.chosen, ['rename', 'copy']);
+    await choose(menu().items[0]!.items[1]!['menuId']);
+    await detectChanges();
+    assert.equal(instance.pinned(), true);
+    assert.equal(menu().items[0]!.items[1]!['state'], 'on');
+    instance.sharing.set(false);
+    instance.locked.set(true);
+    await detectChanges();
+    assert.deepEqual(outline(menu().items), ['Rename', 'Pinned', 'Delete']);
+    assert.equal(menu().items[2]!['disabled'], true);
+    await choose(menu().items[2]!['menuId']);
+    assert.deepEqual(instance.chosen, ['rename', 'copy'], 'a disabled item does nothing');
+  });
+});

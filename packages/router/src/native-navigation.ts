@@ -13,7 +13,7 @@
  * No decorators, so tests can import it at runtime and so it can be provided with `useClass`,
  * exactly as `NativePlatformLocation` and `NativeStackReuseStrategy` are.
  */
-import { DestroyRef, inject } from '@angular/core';
+import { DestroyRef, ElementRef, inject } from '@angular/core';
 import {
   NavigationCancel,
   NavigationCancellationCode,
@@ -55,6 +55,25 @@ export interface NativeNavigationOptions extends NavigationExtras {
 export interface PresentOptions extends NativeNavigationOptions {
   /** Shorthand for `presentation.stackPresentation`. Defaults to `modal`. */
   as?: StackPresentation;
+  /**
+   * The element the screen points at: an element, its `ElementRef`, or a component with a `node`.
+   * With one, the screen shows as a popover at it on macOS and iPadOS; iPhone and Android present
+   * it as they would without one.
+   */
+  anchor?: ElementRef | object | null;
+}
+
+/** The react tag of an anchor's committed view, or undefined for none, or one not committed. */
+function anchorTag(anchor: PresentOptions['anchor']): number | undefined {
+  if (!anchor) return undefined;
+  const node = (
+    anchor instanceof ElementRef
+      ? anchor.nativeElement
+      : 'nodeKind' in anchor
+        ? anchor
+        : (anchor as { node?: unknown }).node
+  ) as { committed?: { tag?: number } } | undefined;
+  return node?.committed?.tag;
 }
 
 /** Whether commands ask for a query or a fragment, written into a url string or as extras. */
@@ -216,10 +235,15 @@ export class NativeNavigation {
     if (this.firstNavigationRunning()) {
       return this.firstNavigation().then(() => this.present(commands, options));
     }
-    const { as = 'modal', presentation, ...extras } = options;
+    const { as = 'modal', presentation, anchor, ...extras } = options;
+    const tag = anchorTag(anchor);
     const intent: NativeIntent = {
       stack: 'push',
-      presentation: { stackPresentation: as, ...presentation },
+      presentation: {
+        stackPresentation: as,
+        ...(tag !== undefined && { anchor: tag }),
+        ...presentation,
+      },
     };
     // Asked at once, and only waited for when the page is another tab's: finding its route may
     // load a lazy one.
