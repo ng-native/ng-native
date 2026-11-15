@@ -491,7 +491,13 @@ std::string UpdatesClient::launch() {
     running_ = state.current;
     state.launching = state.current->id;
   }
-  save(state);
+  try {
+    save(state);
+  } catch (const std::exception &) {
+    // Without its launch mark a crash in the update would never roll it back: the embedded
+    // bundle runs instead.
+    running_.reset();
+  }
   return running_ ? pathOf(*running_) : config_.embeddedBundle;
 }
 
@@ -737,9 +743,10 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
     task_ = std::move(task);
   };
 
-  auto finish = [this, fetching, foundBody, foundSignature, done] {
+  // Given `fetching` rather than holding it: `fetching->step` holds this.
+  auto finish = [this, foundBody, foundSignature, done](const Fetching &fetching) {
     FetchResult result;
-    const auto &found = fetching->manifest;
+    const auto &found = fetching.manifest;
     try {
       std::lock_guard lock(mutex_);
       LaunchState::Update update{
@@ -748,11 +755,11 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
           .runtimeVersion = found.runtimeVersion,
           .file = found.id + "/launch-asset",
       };
-      for (const auto &[file, bytes] : fetching->files) {
+      for (const auto &[file, bytes] : fetching.files) {
         writeFile(config_.directory / update.id / file, bytes);
       }
       folly::dynamic paths = folly::dynamic::object();
-      for (const auto &[key, path] : fetching->paths) {
+      for (const auto &[key, path] : fetching.paths) {
         paths[key] = path;
       }
       writeFile(config_.directory / update.id / "assets.json", folly::toJson(paths));
@@ -791,7 +798,7 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
       return;
     }
     if (fetching->next == fetching->manifest.assets.size()) {
-      finish();
+      finish(*fetching);
       return;
     }
     const auto asset = fetching->manifest.assets[fetching->next++];

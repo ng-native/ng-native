@@ -744,3 +744,44 @@ TEST_CASE("a manifest whose asset key or extension is not part of a file name is
   ok["assets"] = dynamic::array(dynamic::object("key", "ok")("hash", hashOf("x"))("url", "https://u.example/x"));
   CHECK(ngn::parseUpdateResponse(kJson, folly::toJson(ok)).manifest->assets.size() == 1);
 }
+
+TEST_CASE("a finished fetch holds on to nothing it was given") {
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a"))).isAvailable);
+  auto owned = std::make_shared<int>(1);
+  std::weak_ptr<int> watched = owned;
+  std::optional<ngn::UpdatesClient::FetchResult> result;
+  client->fetch([owned = std::move(owned), &result](auto r) { result = std::move(r); });
+  f.answer(200, {{"content-type", "application/javascript"}}, "bundle v2");
+  REQUIRE(result);
+  CHECK(result->isNew);
+  // The requests are answered and gone (the client keeps only its latest, a new check's): what
+  // the fetch kept for its steps goes with them.
+  client->check([](auto) {});
+  f.http->sent.clear();
+  CHECK(watched.expired());
+}
+
+TEST_CASE("a launch that cannot save its launch mark runs the embedded bundle") {
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  REQUIRE(f.check(*client, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a"))).isAvailable);
+  REQUIRE(f.fetch(*client, "bundle v2").isNew);
+  // Without the mark, a crash in the update would never roll it back: it is not run.
+  fs::permissions(f.dir, fs::perms::owner_read | fs::perms::owner_exec);
+  std::string launched;
+  std::optional<ngn::LaunchState::Update> running;
+  try {
+    auto next = f.client();
+    launched = next->launch();
+    running = next->running();
+  } catch (...) {
+    launched = "threw";
+  }
+  fs::permissions(f.dir, fs::perms::owner_all);
+  CHECK(launched == "/app/Contents/Resources/main.jsbundle");
+  CHECK_FALSE(running);
+}
