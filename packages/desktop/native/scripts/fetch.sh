@@ -59,19 +59,12 @@ CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 SRC="$CACHE/src"
 mkdir -p "$SRC"
 
-# One fetch at a time into the shared sources: another build waits until this one is done. A lock
-# whose holder is gone is taken over.
-lock="$SRC/.fetch.lock"
-until mkdir "$lock" 2> /dev/null; do
-  holder="$(cat "$lock/pid" 2> /dev/null || true)"
-  if [ -n "$holder" ] && ! kill -0 "$holder" 2> /dev/null; then
-    rm -rf "$lock"
-    continue
-  fi
-  sleep 1
-done
-echo $$ > "$lock/pid"
-trap 'rm -rf "$lock"' EXIT
+# One fetch at a time into the shared sources: another build waits until this one is done. The
+# lock is the kernel's flock on a file that is never removed, held through this shell's descriptor
+# 9 (Perl takes it, since macOS has no flock command), so it goes when the holder exits, however it
+# exits, and no process ever has a lock of another's to clear away.
+exec 9>> "$SRC/.fetch-lock"
+perl -MFcntl=:flock -e 'open(my $fd, ">&=", 9) or die "fetch.sh: $!\n"; flock($fd, LOCK_EX) or die "fetch.sh: $!\n"'
 
 sha256() {
   if command -v sha256sum > /dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
