@@ -157,3 +157,14 @@ TEST_CASE("a region under a covered screen says nothing, then its change once th
   CHECK(f.regions.didMount(1) == Said{{"5 new messages", AnnouncementPriority::Medium}});
   CHECK(f.regions.didMount(1).empty());
 }
+
+TEST_CASE("a shown region leaves out the text of a covered screen inside it") {
+  Fixture f;
+  // The region shows, and one of its paragraphs is covered, as an unselected tab's screen is.
+  f.tree.setCovered(4, true);
+  f.regions.didMount(1);
+  f.texts[4] = "hidden tab";
+  CHECK(f.regions.didMount(1).empty());
+  f.texts[3] = "4 new";
+  CHECK(f.regions.didMount(1) == Said{{"4 new", AnnouncementPriority::Medium}});
+}
