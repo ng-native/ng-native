@@ -5,6 +5,11 @@
   "description": "Registers @nx/expo's plugin, which infers the Expo targets. nx add runs this.",
   "type": "object",
   "properties": {
+    "desktopOnly": {
+      "type": "boolean",
+      "description": "Make desktop-only the default for apps generated here: macOS alone, from the desktop template.",
+      "default": false
+    },
     "skipInstall": {
       "type": "boolean",
       "description": "Update package.json without installing.",

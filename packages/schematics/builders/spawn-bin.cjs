@@ -53,11 +53,12 @@ const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
  * @param {string} name
  * @param {string[]} args
  * @param {import('@angular-devkit/architect').BuilderContext} context
+ * @param {string} [command] the entry of its `bin` to run, when not named for the package
  * @returns {Promise<{ success: boolean, error?: string }>}
  */
-async function spawnBin(name, args, context) {
+async function spawnBin(name, args, context, command = name) {
   const cwd = await projectRoot(context);
-  return spawnFile(resolveBin(name, cwd), args, cwd, name, context);
+  return spawnFile(resolveBin(name, cwd, command), args, cwd, command, context);
 }
 
 /**

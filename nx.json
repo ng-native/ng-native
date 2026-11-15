@@ -53,6 +53,7 @@
     "projects": [
       "@ng-native/analog",
       "@ng-native/components",
+      "@ng-native/desktop",
       "@ng-native/device",
       "@ng-native/eslint-plugin",
       "@ng-native/expo",
@@ -70,7 +71,8 @@
       "@ng-native/testing",
       "@ng-native/web",
       "@ng-native/web-compat",
-      "@ng-native/template"
+      "@ng-native/template",
+      "@ng-native/template-desktop"
     ],
     "projectsRelationship": "fixed",
     "releaseTag": {

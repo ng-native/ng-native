@@ -24,6 +24,11 @@
       "enum": ["eslint", "none"],
       "default": "none"
     },
+    "desktopOnly": {
+      "type": "boolean",
+      "description": "A macOS-only app from the desktop template: macos alone in expo.platforms, a sidebar and menu bar starter, and macos and package targets in place of run-ios and run-android.",
+      "default": false
+    },
     "skipInstall": {
       "type": "boolean",
       "description": "Write the files and package.json without installing.",

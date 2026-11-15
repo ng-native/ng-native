@@ -160,3 +160,28 @@ describe('the project package.json', () => {
     );
   });
 });
+
+describe('the generated desktop-only app', () => {
+  const desktop = path.resolve(import.meta.dirname, '../../template-desktop');
+  const desktopFile = (file: string) => readFileSync(path.join(desktop, file), 'utf8');
+
+  for (const file of [...native.DESKTOP_SOURCE_FILES, 'AGENTS.md']) {
+    it(`copies the desktop template's ${file} as it is`, () => {
+      assert.equal(native.sourceFile(file, true), desktopFile(file));
+    });
+  }
+
+  it('takes every other file from the template, which the two share', () => {
+    for (const file of native.SOURCE_FILES.filter(
+      (name: string) => !native.DESKTOP_SOURCE_FILES.includes(name),
+    )) {
+      assert.equal(native.sourceFile(file, true), desktopFile(file), file);
+    }
+  });
+
+  it("names the desktop template's dependencies in the project's package.json", () => {
+    const { dependencies } = native.projectManifest('desk', {}, true);
+    const theirs = JSON.parse(desktopFile('package.json')).dependencies;
+    assert.deepEqual(Object.keys(dependencies).sort(), Object.keys(theirs).sort());
+  });
+});

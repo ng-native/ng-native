@@ -27,6 +27,7 @@
     "packageGroup": [
       "@ng-native/analog",
       "@ng-native/components",
+      "@ng-native/desktop",
       "@ng-native/device",
       "@ng-native/eslint-plugin",
       "@ng-native/expo",
@@ -62,12 +63,13 @@
       "layer:build"
     ],
     "implicitDependencies": [
-      "@ng-native/template"
+      "@ng-native/template",
+      "@ng-native/template-desktop"
     ]
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test \"*.test.ts\" \"{application,component,builders,migrations}/*.test.ts\""
+    "test": "node --test \"*.test.ts\" \"{application,component,builders,migrations,desktop}/*.test.ts\""
   },
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/schematics",

@@ -17,6 +17,11 @@
       "description": "A component for an Angular Native app, with native elements and a test that runs in Node.",
       "factory": "./component/index.cjs#component",
       "schema": "./component/schema.json"
+    },
+    "desktop": {
+      "description": "Adds macOS to an Angular Native app: @ng-native/desktop, macos in expo.platforms with Expo's out-of-tree platforms flag, the config plugin, and macos and package targets.",
+      "factory": "./desktop/index.cjs#desktop",
+      "schema": "./desktop/schema.json"
     }
   }
 }

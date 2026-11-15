@@ -351,3 +351,28 @@ describe('ng generate application', () => {
     }
   });
 });
+
+describe('ng add --desktop-only', () => {
+  it("writes the desktop template's app, with macos and package targets", async () => {
+    const runner = new SchematicTestRunner('@ng-native/schematics', collection);
+    const tree = await runner.runSchematic(
+      'ng-add',
+      { desktopOnly: true, skipInstall: true },
+      await webWorkspace(),
+    );
+    assert.deepEqual(json(tree, 'projects/native/app.json').expo.platforms, ['macos']);
+    assert.match(tree.readContent('projects/native/src/app/app.ts'), /<split-view>/);
+    const { architect } = json(tree, 'angular.json').projects.native;
+    assert.deepEqual(architect.macos.options, { command: 'macos' });
+    assert.deepEqual(architect.package.options, { command: 'package' });
+    assert.equal(architect['run-ios'], undefined);
+    const { dependencies } = json(tree, 'package.json');
+    assert.ok(dependencies['@ng-native/desktop']);
+    assert.ok(dependencies['@ng-native/expo']);
+    assert.equal(dependencies['expo-status-bar'], undefined);
+    const agents = tree.readContent('projects/native/AGENTS.md');
+    assert.match(agents, /^ng run native:macos +# /m);
+    assert.doesNotMatch(agents, /run-ios|Expo Go/);
+    assert.match(tree.readContent('projects/native/.gitignore'), /^\/dist\/macos$/m);
+  });
+});

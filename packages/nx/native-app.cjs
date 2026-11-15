@@ -2,7 +2,8 @@
  * What an Angular Native app is made of, in an Nx workspace.
  *
  * The source of truth is `template/`, the starter `create-expo-app` uses and the setup this project
- * verifies before every release. `files/` holds verbatim copies of the template's source files,
+ * verifies before every release, and `template-desktop/` for a desktop-only app. `files/` holds
+ * verbatim copies of the template's source files and `files/desktop/` of the desktop template's,
  * the versions are the template's own, and `native-app.test.ts` fails the moment either drifts
  * from it.
  *
@@ -50,9 +51,24 @@ const TYPECHECK = 'node metro.config.js && ngc -p tsconfig.json --noEmit';
 /** The template's files, copied verbatim into the new app. */
 const SOURCE_FILES = ['src/app/app.ts', 'src/main.ts', 'src/app/app.test.ts'];
 
-/** @param {string} name */
-function sourceFile(name) {
-  return readFileSync(path.join(__dirname, 'files', name), 'utf8');
+/**
+ * The desktop template's files that differ from the template's, which a desktop-only app takes in
+ * their place, from `files/desktop/`: its starter screen, the screen's test and its `AGENTS.md`.
+ */
+const DESKTOP_SOURCE_FILES = [
+  'src/app/app.ts',
+  'src/app/app.test.ts',
+  'src/main.ts',
+  'vitest.config.mts',
+];
+
+/**
+ * @param {string} name
+ * @param {boolean} [desktopOnly] the desktop template's copy, where it has one of its own
+ */
+function sourceFile(name, desktopOnly = false) {
+  const own = desktopOnly && (DESKTOP_SOURCE_FILES.includes(name) || name === 'AGENTS.md');
+  return readFileSync(path.join(__dirname, 'files', own ? 'desktop' : '', name), 'utf8');
 }
 
 /**
@@ -60,9 +76,10 @@ function sourceFile(name) {
  * describes the framework, which is the same wherever the app lives.
  *
  * @param {string} commands the markdown that goes under the Commands heading
+ * @param {boolean} [desktopOnly] the desktop template's, for a desktop-only app
  */
-function agentsFile(commands) {
-  return sourceFile('AGENTS.md').replace(
+function agentsFile(commands, desktopOnly = false) {
+  return sourceFile('AGENTS.md', desktopOnly).replace(
     /## Commands\n[\s\S]*?(?=\n## )/,
     `## Commands\n\n${commands}\n`,
   );
@@ -155,9 +172,15 @@ function typecheckTsconfig() {
   return { extends: './tsconfig.json', compilerOptions: { paths } };
 }
 
-/** @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases */
-function vitestConfig(withPaths) {
-  const template = readFileSync(path.join(__dirname, 'files', 'vitest.config.mts'), 'utf8');
+/**
+ * @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases
+ * @param {boolean} [desktopOnly] the desktop template's config, with its Node and in-app projects
+ */
+function vitestConfig(withPaths, desktopOnly = false) {
+  const template = readFileSync(
+    path.join(__dirname, 'files', ...(desktopOnly ? ['desktop'] : []), 'vitest.config.mts'),
+    'utf8',
+  );
   if (!withPaths) return template;
   return template
     .replace(
@@ -165,7 +188,11 @@ function vitestConfig(withPaths) {
       "import tsconfigPaths from 'vite-tsconfig-paths';\n" +
         "import { defineConfig } from 'vitest/config';",
     )
-    .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],');
+    .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],')
+    .replace(
+      "plugins: [ngNative({ os: 'macos' })]",
+      "plugins: [tsconfigPaths(), ngNative({ os: 'macos' })]",
+    );
 }
 
 /**
@@ -205,6 +232,7 @@ function reuseRootRanges(wanted, root) {
 module.exports = {
   ...shared,
   SOURCE_FILES,
+  DESKTOP_SOURCE_FILES,
   sourceFile,
   agentsFile,
   METRO_CONFIG,

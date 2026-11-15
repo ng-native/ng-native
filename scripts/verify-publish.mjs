@@ -68,7 +68,7 @@ if (unread.length) {
 }
 
 /**
- * Every package that would go to npm, plus the template: each under `packages/` its manifest does
+ * Every package that would go to npm, plus the two templates: each under `packages/` its manifest does
  * not mark private, so a new package is checked from the day it is added.
  */
 const PUBLISHED = [
@@ -80,6 +80,7 @@ const PUBLISHED = [
       return existsSync(manifest) && JSON.parse(readFileSync(manifest, 'utf8')).private !== true;
     }),
   'template',
+  'template-desktop',
 ];
 
 /**

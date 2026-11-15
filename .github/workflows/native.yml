@@ -28,6 +28,7 @@ on:
       - 'packages/nx/**'
       - 'packages/schematics/**'
       - 'template/**'
+      - 'template-desktop/**'
       - 'scripts/**'
       - '**/*.test.ts'
       - '.github/workflows/ci.yml'

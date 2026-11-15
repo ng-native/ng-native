@@ -40,6 +40,11 @@
       "factory": "./nativescript/index.cjs#nativescript",
       "schema": "./nativescript/schema.json",
       "description": "Sets up @ng-native/nativescript in an Angular Native app: the packages, the config plugin, the iOS types and provideNativeScript()."
+    },
+    "desktop": {
+      "factory": "./desktop/index.cjs#desktop",
+      "schema": "./desktop/schema.json",
+      "description": "Adds macOS to an Angular Native app: @ng-native/desktop, macos in expo.platforms with Expo's out-of-tree platforms flag, the config plugin, and macos and package targets."
     }
   }
 }
