@@ -1,4 +1,6 @@
+#include "helpers.h"
 #include "ngn/accessibility.h"
+#include "ngn/view-tree.h"
 #include "ngn/desktop-view-props.h"
 
 #include <doctest/doctest.h>
@@ -236,6 +238,36 @@ TEST_CASE("the rotors list headings, links and landmarks") {
   CHECK(ngn::rotorsOf(info(folly::dynamic::object("role", "button"))).empty());
   // Hidden from VoiceOver, it is on no rotor.
   CHECK(ngn::rotorsOf(info(folly::dynamic::object("role", "heading")("accessibilityElementsHidden", true))).empty());
+}
+
+TEST_CASE("a rotor lists nothing under a view that hides its subtree, and still lists under one that hides only itself") {
+  auto heading = [](auto setUp) {
+    auto p = std::make_shared<ViewProps>();
+    p->accessibilityRole = "header";
+    setUp(*p);
+    return p;
+  };
+  auto container = [](auto setUp) {
+    auto p = std::make_shared<ViewProps>();
+    setUp(*p);
+    return std::static_pointer_cast<const ViewProps>(p);
+  };
+  // Under the root (1), three containers (2, 4, 6), each holding a heading (3, 5, 7).
+  ngn::ViewTree tree;
+  auto add = [&](Tag tag, Tag parent, Props::Shared p) {
+    tree.create(ngn::testing::shadowView(tag, "View", {{0, 0}, {10, 10}}, std::move(p)));
+    if (parent != -1) {
+      tree.insert(parent, tag, static_cast<int>(tree.find(parent)->children.size()));
+    }
+  };
+  add(1, -1, std::make_shared<const ViewProps>());
+  add(2, 1, container([](ViewProps &p) { p.accessibilityElementsHidden = true; }));
+  add(3, 2, heading([](ViewProps &) {}));
+  add(4, 1, container([](ViewProps &p) { p.importantForAccessibility = ImportantForAccessibility::NoHideDescendants; }));
+  add(5, 4, heading([](ViewProps &) {}));
+  add(6, 1, container([](ViewProps &p) { p.importantForAccessibility = ImportantForAccessibility::No; }));
+  add(7, 6, heading([](ViewProps &) {}));
+  CHECK(ngn::rotorItems(tree, 1, ngn::AxRotor::Headings) == std::vector<Tag>{7});
 }
 
 TEST_CASE("a rotor steps from the item VoiceOver is on, and from either end when it is on none") {

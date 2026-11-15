@@ -9,6 +9,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace ngn {
 
@@ -60,19 +61,70 @@ void SvgPath::append(const SvgPath &other, const SvgMatrix &t) {
 std::optional<SvgRect> SvgPath::bounds() const {
   bool any = false;
   double minX = 0, minY = 0, maxX = 0, maxY = 0;
-  for (const auto &s : segments) {
-    int points = s.op == Op::Cubic ? 3 : s.op == Op::Close ? 0 : 1;
-    for (int i = 0; i < points; ++i) {
-      double x = s.points[i * 2], y = s.points[i * 2 + 1];
-      if (!any) {
-        minX = maxX = x;
-        minY = maxY = y;
-        any = true;
+  auto add = [&](double x, double y) {
+    if (!any) {
+      minX = maxX = x;
+      minY = maxY = y;
+      any = true;
+    }
+    minX = std::min(minX, x);
+    maxX = std::max(maxX, x);
+    minY = std::min(minY, y);
+    maxY = std::max(maxY, y);
+  };
+  // A cubic's extremes along one axis inside the curve, where its derivative is zero: the control
+  // points themselves are off the curve and outside the bounds.
+  auto extremes = [](double p0, double p1, double p2, double p3) {
+    std::vector<double> ts;
+    double a = -p0 + 3 * p1 - 3 * p2 + p3, b = 2 * (p0 - 2 * p1 + p2), c = p1 - p0;
+    auto inside = [&](double t) {
+      if (t > 0 && t < 1) {
+        ts.push_back(t);
       }
-      minX = std::min(minX, x);
-      maxX = std::max(maxX, x);
-      minY = std::min(minY, y);
-      maxY = std::max(maxY, y);
+    };
+    if (std::fabs(a) < 1e-12) {
+      if (std::fabs(b) > 1e-12) {
+        inside(-c / b);
+      }
+    } else if (double d = b * b - 4 * a * c; d >= 0) {
+      inside((-b + std::sqrt(d)) / (2 * a));
+      inside((-b - std::sqrt(d)) / (2 * a));
+    }
+    return ts;
+  };
+  auto at = [](double t, double p0, double p1, double p2, double p3) {
+    double u = 1 - t;
+    return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+  };
+  double x = 0, y = 0, startX = 0, startY = 0;
+  for (const auto &s : segments) {
+    const auto &p = s.points;
+    switch (s.op) {
+      case Op::Move:
+        startX = x = p[0];
+        startY = y = p[1];
+        add(x, y);
+        break;
+      case Op::Line:
+        x = p[0];
+        y = p[1];
+        add(x, y);
+        break;
+      case Op::Cubic:
+        for (double t : extremes(x, p[0], p[2], p[4])) {
+          add(at(t, x, p[0], p[2], p[4]), at(t, y, p[1], p[3], p[5]));
+        }
+        for (double t : extremes(y, p[1], p[3], p[5])) {
+          add(at(t, x, p[0], p[2], p[4]), at(t, y, p[1], p[3], p[5]));
+        }
+        x = p[4];
+        y = p[5];
+        add(x, y);
+        break;
+      case Op::Close:
+        x = startX;
+        y = startY;
+        break;
     }
   }
   if (!any) {
@@ -275,6 +327,8 @@ SvgPath parseSvgPath(const std::string &d) {
       y = startY;
       closed = true;
       lastCommand = 'Z';
+      // Z takes no numbers, so a number after it is an error that ends the path.
+      command.reset();
       continue;
     }
     // A drawing command right after a close starts a new subpath where the closed one started.
@@ -863,13 +917,16 @@ class Renderer {
 
   SvgPath clipPathOf(const SvgNode &clip) const {
     SvgPath out;
+    std::unordered_set<const SvgNode *> within;
     for (const auto &child : clip.children) {
-      collectClip(child, clip.element.matrix.value_or(SvgMatrix{}), out);
+      collectClip(child, clip.element.matrix.value_or(SvgMatrix{}), out, within);
     }
     return out;
   }
 
-  void collectClip(const SvgNode &node, const SvgMatrix &outer, SvgPath &out) const {
+  // `within` holds the uses being expanded, so a use that leads back to itself, directly or
+  // through others, is an invalid reference that adds nothing, as SVG has it.
+  void collectClip(const SvgNode &node, const SvgMatrix &outer, SvgPath &out, std::unordered_set<const SvgNode *> &within) const {
     if (node.element.hidden) {
       return;
     }
@@ -879,14 +936,15 @@ class Renderer {
       return;
     }
     if (node.element.kind == SvgKind::Use) {
-      if (const auto *target = named(node.element.href); target != nullptr && target != &node) {
+      if (const auto *target = named(node.element.href); target != nullptr && within.insert(&node).second) {
         double x = length(node.element, "x", Axis::X), y = length(node.element, "y", Axis::Y);
-        collectClip(*target, m * SvgMatrix::translate(x, y), out);
+        collectClip(*target, m * SvgMatrix::translate(x, y), out, within);
+        within.erase(&node);
       }
       return;
     }
     for (const auto &child : node.children) {
-      collectClip(child, m, out);
+      collectClip(child, m, out, within);
     }
   }
 
@@ -945,13 +1003,15 @@ class Renderer {
     if (layer) {
       canvas_->beginLayer(std::max(0.0, e.opacity));
     }
+    // Active before its mask is drawn: a mask that holds the node, or one masked by that mask
+    // again, is a circular reference that draws it no further.
+    active_.insert(&node);
     if (mask != nullptr) {
       beginMask(*mask, bounds(node));
     }
     if (filter) {
       canvas_->beginFilter(*filter);
     }
-    active_.insert(&node);
     drawContent(node, style);
     active_.erase(&node);
     if (filter) {
@@ -1567,9 +1627,10 @@ void boxBlur(FloatImage &image, int left, int right, bool horizontal) {
   for (int l = 0; l < lines; ++l) {
     auto pixel = [&](int i) { return horizontal ? image.at(i, l) : image.at(l, i); };
     for (int c = 0; c < 4; ++c) {
+      // The window around the first pixel: only the pixels inside the image add anything.
       double sum = 0;
-      for (int i = -left; i <= right; ++i) {
-        sum += i >= 0 && i < length ? pixel(i)[c] : 0;
+      for (int i = 0; i <= std::min(right, length - 1); ++i) {
+        sum += pixel(i)[c];
       }
       for (int i = 0; i < length; ++i) {
         line[static_cast<size_t>(i * 4 + c)] = static_cast<float>(sum / size);
@@ -1591,7 +1652,9 @@ void gaussianBlur(FloatImage &image, double deviation, bool horizontal) {
   if (deviation <= 0) {
     return;
   }
-  int d = static_cast<int>(std::floor(deviation * 3 * std::sqrt(2 * M_PI) / 4 + 0.5));
+  // Past a box far wider than any image, every pixel averages to the same nothing: capped, so the
+  // size stays an int.
+  int d = static_cast<int>(std::min(std::floor(deviation * 3 * std::sqrt(2 * M_PI) / 4 + 0.5), double{1 << 24}));
   if (d < 1) {
     return;
   }

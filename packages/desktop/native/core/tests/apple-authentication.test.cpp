@@ -119,6 +119,8 @@ TEST_CASE("A request passes its scopes, operation, user, state and nonce, and an
   CHECK(provider->requests[1].scopes.empty());
   CHECK((*out.value)["fullName"]["givenName"] == nullptr);
   CHECK((*out.value)["email"] == nullptr);
+  // No detection: expo's UNSUPPORTED.
+  CHECK((*out.value)["realUserStatus"] == 0);
 }
 
 TEST_CASE("A request with an unknown scope or operation is refused with expo's codes, and a failure with iOS's") {

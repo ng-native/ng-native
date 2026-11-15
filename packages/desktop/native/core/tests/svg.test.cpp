@@ -4,6 +4,8 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <sstream>
 
@@ -121,6 +123,26 @@ TEST_CASE("path data: an arc becomes cubics through its end, with radii scaled u
 TEST_CASE("path data: drawing stops at the first error, keeping what came before") {
   CHECK(Recorder::path(ngn::parseSvgPath("M1 1L2 2X3 3L4 4")) == "M1,1L2,2");
   CHECK(Recorder::path(ngn::parseSvgPath("L2 2")).empty());
+}
+
+TEST_CASE("path data: a number after a close ends the path, rather than closing it again for ever") {
+  CHECK(Recorder::path(ngn::parseSvgPath("M0 0L1 0Z 1")) == "M0,0L1,0Z");
+  CHECK(Recorder::path(ngn::parseSvgPath("M0 0L1 0Z1 1L2 2")) == "M0,0L1,0Z");
+  // A close then a command goes on as before.
+  CHECK(Recorder::path(ngn::parseSvgPath("M0 0L1 0ZL2 2")) == "M0,0L1,0ZM0,0L2,2");
+}
+
+TEST_CASE("a path's bounds reach the curve's own extremes, not its control points") {
+  auto bounds = ngn::parseSvgPath("M0 0C0 100 100 100 100 0").bounds();
+  REQUIRE(bounds);
+  CHECK(bounds->x == doctest::Approx(0));
+  CHECK(bounds->width == doctest::Approx(100));
+  CHECK(bounds->y == doctest::Approx(0));
+  CHECK(bounds->height == doctest::Approx(75));
+  // After a close, the next curve starts where the closed subpath did.
+  auto closed = ngn::parseSvgPath("M10 10L20 10ZC10 -10 20 -10 20 10").bounds();
+  REQUIRE(closed);
+  CHECK(closed->y == doctest::Approx(-5));
 }
 
 TEST_CASE("a length is a number, a numeric string, a percentage or ems") {
@@ -355,6 +377,44 @@ TEST_CASE("a use that refers to itself or its ancestor draws nothing rather than
   use.href = "loop";
   CHECK(drawn(node(svg(), {node(group, {node(use), node(rect(0, 0, 1, 1))})})) ==
         std::vector<std::string>{"fill M0,0L1,0L1,1L0,1Z #ff000000"});
+}
+
+TEST_CASE("clip and mask references that lead back to themselves draw nothing rather than recursing") {
+  // Two uses in a clip path that refer to each other.
+  SvgElement clip{.kind = SvgKind::ClipPath, .name = "c"};
+  SvgElement a{.kind = SvgKind::Use, .name = "a"};
+  a.href = "b";
+  SvgElement b{.kind = SvgKind::Use, .name = "b"};
+  b.href = "a";
+  auto clipped = rect(0, 0, 10, 10);
+  clipped.clipPath = "c";
+  CHECK(drawn(node(svg(), {node(clip, {node(a), node(b)}), node(clipped)})).size() == 2);
+
+  // A mask holding a shape masked by that mask again.
+  SvgElement mask{.kind = SvgKind::Mask, .name = "m"};
+  auto inner = rect(0, 0, 4, 4);
+  inner.mask = "m";
+  auto masked = rect(0, 0, 10, 10);
+  masked.mask = "m";
+  auto calls = draw(node(svg(), {node(mask, {node(inner)}), node(masked)}));
+  CHECK(std::count(calls.begin(), calls.end(), "mask") == 2);
+}
+
+TEST_CASE("a blur far wider than its image takes no longer than a narrow one") {
+  ngn::SvgFilter filter{.region = {0, 0, 1, 1}};
+  ngn::SvgFilterStep blur{.type = ngn::SvgFilterStep::Type::GaussianBlur, .in1 = "SourceGraphic", .result = "#0"};
+  blur.subregion = {0, 0, 1, 1};
+  blur.stdDeviationX = blur.stdDeviationY = 1e8;
+  filter.steps.push_back(blur);
+  ngn::SvgPixels source{.width = 1, .height = 1, .rgba = {255, 255, 255, 255}};
+  auto started = std::chrono::steady_clock::now();
+  auto out = ngn::runSvgFilter(filter, source, {});
+  CHECK(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(200));
+  REQUIRE(out.rgba.size() == 4);
+  CHECK(out.rgba[3] == 0);
+  // Past an int's reach, it is capped, not undefined.
+  filter.steps[0].stdDeviationX = filter.steps[0].stdDeviationY = 1e12;
+  CHECK(ngn::runSvgFilter(filter, source, {}).rgba.size() == 4);
 }
 
 TEST_CASE("text draws each span after the last, at the text's position, in its font size and fill") {

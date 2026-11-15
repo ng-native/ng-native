@@ -64,8 +64,8 @@ class AppleIdProvider {
     std::optional<std::string> user;
     std::optional<std::string> email;
     std::optional<Name> fullName;
-    // expo's: 1 unknown, 2 likely real, 3 unsupported.
-    int realUserStatus{3};
+    // expo's UserDetectionStatus: 0 unsupported, 1 unknown, 2 likely real.
+    int realUserStatus{0};
     std::optional<std::string> state;
     std::optional<std::string> authorizationCode;
     std::optional<std::string> identityToken;

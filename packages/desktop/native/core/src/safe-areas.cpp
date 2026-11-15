@@ -71,7 +71,7 @@ bool SafeAreas::settle(const ViewTree &tree) {
     }
     auto insets = insetsWithin(*container, unmoved);
     bool changed = !tracked.known || insets != tracked.insets ||
-        (tracked.kind == Kind::Provider && frame != tracked.frame);
+        (tracked.kind == Kind::Provider && (frame != tracked.frame || container->titlebarLeading != tracked.titlebarLeading));
     if (!changed) {
       continue;
     }
@@ -79,6 +79,7 @@ bool SafeAreas::settle(const ViewTree &tree) {
     tracked.known = true;
     tracked.insets = insets;
     tracked.frame = frame;
+    tracked.titlebarLeading = container->titlebarLeading;
     if (tracked.kind == Kind::Provider) {
       emitInsetsChange(*node, insets, frame, container->titlebarLeading);
     } else {

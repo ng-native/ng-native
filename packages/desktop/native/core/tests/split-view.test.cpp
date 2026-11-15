@@ -131,23 +131,26 @@ ShadowViewMutationList operator+(ShadowViewMutationList a, const ShadowViewMutat
 
 
 TEST_CASE("the sidebar's props are read under their pane names") {
-  const auto &sidebar = static_cast<const ngn::SplitPaneProps &>(*props<ngn::SidebarComponentDescriptor>(
-      dynamic::object("collapsed", true)("paneMinWidth", 180)("paneMaxWidth", 400)("autosaveName", "main")));
+  // Each Props::Shared held while its reference is read.
+  auto sidebarProps = props<ngn::SidebarComponentDescriptor>(
+      dynamic::object("collapsed", true)("paneMinWidth", 180)("paneMaxWidth", 400)("autosaveName", "main"));
+  const auto &sidebar = static_cast<const ngn::SplitPaneProps &>(*sidebarProps);
   CHECK(sidebar.collapsed);
   CHECK(sidebar.paneMinWidth == 180);
   CHECK(sidebar.paneMaxWidth == 400);
   CHECK(sidebar.autosaveName == "main");
 
-  const auto &row = static_cast<const ngn::SidebarItemProps &>(*props<ngn::SidebarItemComponentDescriptor>(
-      dynamic::object("label", "Inbox")("badge", "3")("sfSymbol", "tray")("drawable", "ic_inbox")("selected", true)));
+  auto rowProps = props<ngn::SidebarItemComponentDescriptor>(
+      dynamic::object("label", "Inbox")("badge", "3")("sfSymbol", "tray")("drawable", "ic_inbox")("selected", true));
+  const auto &row = static_cast<const ngn::SidebarItemProps &>(*rowProps);
   CHECK(row.label == "Inbox");
   CHECK(row.badge == "3");
   CHECK(row.sfSymbol == "tray");
   CHECK(row.drawable == "ic_inbox");
   CHECK(row.selected);
 
-  const auto &group = static_cast<const ngn::SidebarSectionProps &>(
-      *props<ngn::SidebarSectionComponentDescriptor>(dynamic::object("title", "Mailboxes")("collapsible", true)));
+  auto groupProps = props<ngn::SidebarSectionComponentDescriptor>(dynamic::object("title", "Mailboxes")("collapsible", true));
+  const auto &group = static_cast<const ngn::SidebarSectionProps &>(*groupProps);
   CHECK(group.title == "Mailboxes");
   CHECK(group.collapsible);
 }

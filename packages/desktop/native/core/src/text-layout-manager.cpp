@@ -22,7 +22,13 @@ TextMeasurement TextLayoutManager::measure(
   // React Native iOS does, so an empty text input is a line of its font high.
   const auto &original = attributedStringBox.getValue();
   auto attributedString = ensurePlaceholderIfEmpty_DO_NOT_USE(original);
+  auto measurer = contextContainer_
+      ? contextContainer_->find<std::shared_ptr<const ngn::TextMeasurer>>(ngn::kTextMeasurerKey)
+      : std::nullopt;
+  bool measures = measurer && *measurer;
   auto compute = [&]() {
+    // The measurer lays out no inline views or images: each one is reported clipped, which hides
+    // it, rather than drawn over the text at the paragraph's corner.
     TextMeasurement::Attachments attachments;
     for (const auto &fragment : attributedString.getFragments()) {
       if (fragment.isAttachment()) {
@@ -30,10 +36,7 @@ TextMeasurement TextLayoutManager::measure(
       }
     }
     Size size{};
-    auto measurer = contextContainer_
-        ? contextContainer_->find<std::shared_ptr<const ngn::TextMeasurer>>(ngn::kTextMeasurerKey)
-        : std::nullopt;
-    if (measurer && *measurer) {
+    if (measures) {
       size = (*measurer)->measure(attributedString, paragraphAttributes, layoutConstraints.maximumSize.width);
       if (original.isEmpty()) {
         size.width = 0;
@@ -44,8 +47,13 @@ TextMeasurement TextLayoutManager::measure(
     }
     return TextMeasurement{.size = layoutConstraints.clamp(size), .attachments = attachments};
   };
+  // Before a measurer is installed every text is nothing wide: that is never kept for later.
+  if (!measures) {
+    return compute();
+  }
+  // Keyed by the text as given, so an empty one and a visible "I" never share a size.
   return textMeasureCache_.get(
-      {.attributedString = attributedString,
+      {.attributedString = original,
        .paragraphAttributes = paragraphAttributes,
        .layoutConstraints = layoutConstraints,
        .pointScaleFactor = layoutContext.pointScaleFactor},

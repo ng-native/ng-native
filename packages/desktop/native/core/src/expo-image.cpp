@@ -463,13 +463,8 @@ void ImageCache::store(const std::string &key, const std::string &bytes, const s
   if (policy == "disk" || policy == "memory-disk") {
     std::error_code ignored;
     std::filesystem::create_directories(folder_, ignored);
-    auto path = diskPath(key);
-    auto partial = path + ".part";
-    {
-      std::ofstream out(partial, std::ios::binary | std::ios::trunc);
-      out << bytes;
-    }
-    std::filesystem::rename(partial, path, ignored);
+    // A write that fails publishes nothing, and leaves an entry already there as it was.
+    replaceFile(diskPath(key), bytes);
   }
 }
 

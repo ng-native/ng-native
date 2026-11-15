@@ -1,7 +1,8 @@
 #include "ngn/download.h"
 
+#include "ngn/file-system.h"
+
 #include <filesystem>
-#include <fstream>
 
 namespace ngn {
 
@@ -40,12 +41,8 @@ void downloadFile(const std::shared_ptr<Http> &http, const std::string &url, con
     }
     std::error_code ignored;
     std::filesystem::create_directories(std::filesystem::path(target).parent_path(), ignored);
-    std::ofstream out(target, std::ios::binary | std::ios::trunc);
-    out << body;
-    out.close();
-    if (!out) {
-      // A file cut short is no file: nothing reads it as the download.
-      std::filesystem::remove(target, ignored);
+    // A file cut short is no file, and a failed save leaves what was there before.
+    if (!replaceFile(target, body)) {
       done("could not be saved to " + target);
       return;
     }

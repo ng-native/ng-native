@@ -285,6 +285,12 @@ std::vector<AxRotor> rotorsOf(const AxInfo &info) {
 
 namespace {
 
+// Hidden with everything under it, as React Native reads these two; importantForAccessibility "no"
+// hides only the view itself.
+bool hidesSubtree(const ViewProps &props) {
+  return props.accessibilityElementsHidden || props.importantForAccessibility == ImportantForAccessibility::NoHideDescendants;
+}
+
 void collectRotor(const ViewTree &tree, Tag tag, Tag root, AxRotor kind, std::vector<Tag> &out) {
   const auto *node = tree.find(tag);
   if (node == nullptr || tree.covered(tag) || (tag != root && tree.isContainerRoot(tag)) ||
@@ -292,6 +298,9 @@ void collectRotor(const ViewTree &tree, Tag tag, Tag root, AxRotor kind, std::ve
     return;
   }
   if (const auto *props = dynamic_cast<const ViewProps *>(node->view.props.get())) {
+    if (hidesSubtree(*props)) {
+      return;
+    }
     auto info = std::string_view(node->view.componentName) == "Paragraph" ? paragraphAccessibilityInfo(*props, paragraphText(node->view))
                                                                           : accessibilityInfo(*props);
     auto rotors = rotorsOf(info);

@@ -186,6 +186,24 @@ TEST_CASE("the first tab shows until the app asks for one, and the rest are cove
   CHECK(f.events == Lines{"willAppear 3", "didAppear 3"});
 }
 
+TEST_CASE("without a request, the first tab shown starts the count, so the first click is the user's") {
+  Fixture f;
+  f.mount(tabsApp());
+  // A prevented click names the tab shown.
+  f.choose(5);
+  CHECK(f.events == Lines{R"(tabSelectionPrevented 2 {"preventedScreenKey":"locked","provenance":0,"selectedScreenKey":"library"})"});
+  f.choose(4);
+  REQUIRE_FALSE(f.events.empty());
+  CHECK(f.events[0] ==
+        R"(tabSelected 2 {"actionOrigin":"user","hasTriggeredSpecialEffect":false,"isRepeated":false,"provenance":1,"selectedScreenKey":"search"})");
+  // A request sent before the app heard of the click is stale.
+  auto request = host({.screenKey = "library", .baseProvenance = 0, .rejectStale = true});
+  f.mount({ShadowViewMutation::UpdateMutation(host(), request, 1)});
+  REQUIRE(f.events.size() == 1);
+  CHECK(f.events[0].find(R"("rejectionReason":"stale")") != std::string::npos);
+  CHECK(f.calls().empty());
+}
+
 TEST_CASE("the app's request selects its tab, which the app hears as its own") {
   Fixture f;
   f.mount(tabsApp({.screenKey = "search", .baseProvenance = 0, .rejectStale = true}));

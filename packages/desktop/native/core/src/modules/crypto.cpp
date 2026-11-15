@@ -2,6 +2,7 @@
 
 #include "ngn/bytes.h"
 
+#include <cmath>
 #include <stdexcept>
 
 namespace ngn {
@@ -62,8 +63,9 @@ std::shared_ptr<NativeModule> makeCryptoModule(std::shared_ptr<CryptoSource> sou
       sync("randomUUID", [source](const folly::dynamic &) { return folly::dynamic(uuidV4(source->randomBytes(16))); });
       sync("getRandomBytes", [source](const folly::dynamic &args) {
         const auto &count = arg(args, 0);
-        if (!count.isNumber() || count.asDouble() < 0 || count.asDouble() > kMaxRandomBytes ||
-            count.asDouble() != static_cast<double>(static_cast<size_t>(count.asDouble()))) {
+        // Finite and in range before it is ever converted: NaN passes every comparison.
+        if (!count.isNumber() || !std::isfinite(count.asDouble()) || count.asDouble() < 0 ||
+            count.asDouble() > kMaxRandomBytes || count.asDouble() != std::floor(count.asDouble())) {
           throw std::invalid_argument("Crypto.getRandomBytes: the byte count must be a whole number from 0 to 1024");
         }
         auto n = static_cast<size_t>(count.asDouble());

@@ -134,9 +134,15 @@ bool ViewTree::hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) 
   // Fabric may never give a surface's root a frame of its own.
   const auto &size = layout.frame.size;
   bool inside = tag == root || (point.x >= 0 && point.y >= 0 && point.x < size.width && point.y < size.height);
+  // hitSlop widens where the view itself is hit, as React Native's pointInside does; its children
+  // are still found only inside it.
+  auto slop = props ? props->hitSlop : EdgeInsets{};
+  bool reached = inside ||
+      (point.x >= -slop.left && point.y >= -slop.top && point.x < size.width + slop.right &&
+       point.y < size.height + slop.bottom);
   bool clips = (props && props->yogaStyle.overflow() != facebook::yoga::Overflow::Visible) ||
       layout.overflowInset == EdgeInsets{};
-  if (clips && !inside) {
+  if (clips && !reached) {
     return false;
   }
   if (pointerEvents != PointerEventsMode::BoxOnly) {
@@ -153,7 +159,7 @@ bool ViewTree::hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) 
       }
     }
   }
-  if (inside && pointerEvents != PointerEventsMode::BoxNone) {
+  if (reached && pointerEvents != PointerEventsMode::BoxNone) {
     chain.push_back(tag);
     return true;
   }

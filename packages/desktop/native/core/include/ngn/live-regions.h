@@ -41,6 +41,8 @@ class LiveRegions {
     // Not yet read: its first text is what it holds, not news.
     bool fresh{true};
   };
+  // The view or one of its ancestors hides itself and what is under it.
+  bool hiddenAt(Tag tag) const;
   std::string textOf(Tag tag) const;
   void collect(Tag tag, std::string &out) const;
 

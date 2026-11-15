@@ -42,6 +42,12 @@ TabsNavigation::Outcome TabsNavigation::request(const std::string &screenKey, in
   return Selected{.screenKey = screenKey, .provenance = provenance_, .actionOrigin = "programmatic-js"};
 }
 
+void TabsNavigation::show(const std::string &screenKey) {
+  if (!started_) {
+    progress(screenKey, true);
+  }
+}
+
 TabsNavigation::Outcome TabsNavigation::userSelect(const std::string &screenKey, bool preventNativeSelection) {
   if (preventNativeSelection) {
     return Prevented{.selectedScreenKey = selected_, .provenance = provenance_, .preventedScreenKey = screenKey};
@@ -163,6 +169,9 @@ TabsHosts::Changes TabsHosts::settle(ViewTree &tree) {
     auto selected = withKey(host.navigation.selected());
     if (selected == screens.end()) {
       selected = screens.begin();
+    }
+    if (selected != screens.end()) {
+      host.navigation.show(selected->second.screenKey);
     }
     Tag shown = selected == screens.end() ? -1 : selected->first;
     for (const auto &[screen, tab] : screens) {

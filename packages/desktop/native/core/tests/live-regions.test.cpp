@@ -122,3 +122,18 @@ TEST_CASE("a region on another surface is announced after that surface's transac
   CHECK(f.regions.didMount(1).empty());
   CHECK(f.regions.didMount(11) == Said{{"two", AnnouncementPriority::Medium}});
 }
+
+TEST_CASE("a hidden region, or one under a hidden view, says nothing when its text changes") {
+  Fixture f;
+  f.regions.didMount(1);
+  f.setProps(2, props(AccessibilityLiveRegion::Polite, "old", true));
+  CHECK(f.regions.didMount(1).empty());
+  f.setProps(2, props(AccessibilityLiveRegion::Polite, "new", true));
+  CHECK(f.regions.didMount(1).empty());
+
+  // A region inside a hidden view.
+  f.setProps(2, props(AccessibilityLiveRegion::Polite));
+  f.setProps(1, props(AccessibilityLiveRegion::None, "", true));
+  f.texts[3] = "4 new";
+  CHECK(f.regions.didMount(1).empty());
+}
