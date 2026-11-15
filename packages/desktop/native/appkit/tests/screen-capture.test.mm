@@ -105,3 +105,28 @@ TEST_CASE("WindowShield applies each request's own state before answering it, th
   CHECK(seen->atAllow == NSWindowSharingReadOnly);
   CHECK(window.sharingType == NSWindowSharingReadOnly);
 }
+
+TEST_CASE("WindowShield keeps a main-thread request's state over an earlier one still queued") {
+  NSWindow *window = offscreenWindow();
+  auto shield = ngn::appkit::captureShield();
+  auto answered = std::make_shared<std::atomic<bool>>(false);
+  // Protect asked off the main thread and queued, then allow asked on the main thread before the
+  // queued request applies.
+  dispatch_semaphore_t asked = dispatch_semaphore_create(0);
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    shield->setProtected(true, [answered] { *answered = true; });
+    dispatch_semaphore_signal(asked);
+  });
+  REQUIRE(dispatch_semaphore_wait(asked, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0);
+  shield->setProtected(false, nullptr);
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:5];
+  while (!*answered && [until timeIntervalSinceNow] > 0) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, false);
+  }
+  REQUIRE(*answered);
+  CHECK(window.sharingType == NSWindowSharingReadOnly);
+  // Nor is a new window protected.
+  NSWindow *after = offscreenWindow();
+  ngn::appkit::shieldNewWindow(after);
+  CHECK(after.sharingType == NSWindowSharingReadOnly);
+}

@@ -25,7 +25,8 @@ class CaptureShield {
   // Marks every window of the app, and every one it opens after, as one whose content another
   // process may not read, as far as the OS offers that (on macOS, NSWindowSharingNone; which
   // capture tools honour it is the OS's to decide); or lets them be read again. `done` once every
-  // window has the new state, on any thread; it may be empty. Any thread.
+  // window has the new state, or a later request's, on any thread; it may be empty. Any thread: the
+  // windows keep the state of the request asked last.
   virtual void setProtected(bool on, std::function<void()> done) = 0;
 };
 
