@@ -1,7 +1,9 @@
 #include "text-layout.h"
 
 #import <AppKit/AppKit.h>
+#include <cctype>
 #include <cmath>
+#include <unordered_map>
 
 using namespace facebook::react;
 
@@ -107,28 +109,67 @@ bool paragraphEnd(UniChar c) {
   return c == '\n' || c == '\r' || c == 0x2029;
 }
 
-// The strong direction a character gives a paragraph under Unicode's rule P2: 1 right to left,
-// -1 left to right, 0 none. macOS has no public API for a character's bidi class, so letters
-// count by script, the right-to-left scripts' letters (bidi R and AL) against any other letter
-// (bidi L), and the marks LRM, RLM and ALM by their class.
+// Whether the run Core Text lays the character at `at` of `text` in runs right to left, in a
+// paragraph whose base direction is `base`.
+bool laidRightToLeft(NSString *text, NSUInteger at, CTWritingDirection base) {
+  CTParagraphStyleSetting setting = {kCTParagraphStyleSpecifierBaseWritingDirection, sizeof(base), &base};
+  CTParagraphStyleRef style = CTParagraphStyleCreate(&setting, 1);
+  NSAttributedString *string =
+      [[NSAttributedString alloc] initWithString:text attributes:@{(__bridge id)kCTParagraphStyleAttributeName : (__bridge id)style}];
+  CFRelease(style);
+  CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)string);
+  bool rightToLeft = false;
+  for (id run in (__bridge NSArray *)CTLineGetGlyphRuns(line)) {
+    CFRange range = CTRunGetStringRange((__bridge CTRunRef)run);
+    if (static_cast<NSUInteger>(range.location) <= at && at < static_cast<NSUInteger>(range.location + range.length)) {
+      rightToLeft = (CTRunGetStatus((__bridge CTRunRef)run) & kCTRunStatusRightToLeft) != 0;
+      break;
+    }
+  }
+  CFRelease(line);
+  return rightToLeft;
+}
+
+// The strong direction a character gives a paragraph under Unicode's rule P2: 1 right to left
+// (bidi class R or AL), -1 left to right (L), 0 none. macOS has no public API for a character's bidi
+// class, so Core Text's own bidi resolution answers it. Alone in a left-to-right paragraph, only R
+// and AL lay out right to left. In a right-to-left paragraph, a space between the character and a
+// Latin letter lays out left to right only when the character is L: rule N1 takes the numbers (EN,
+// AN) as right to left, and a neutral or a mark takes the paragraph's direction.
+int probedDirection(UTF32Char code) {
+  UTF32Char little = NSSwapHostIntToLittle(code);
+  NSString *character = [[NSString alloc] initWithBytes:&little length:4 encoding:NSUTF32LittleEndianStringEncoding];
+  if (character == nil) {
+    return 0;
+  }
+  if (laidRightToLeft(character, 0, kCTWritingDirectionLeftToRight)) {
+    return 1;
+  }
+  NSString *probe = [character stringByAppendingString:@" a"];
+  return laidRightToLeft(probe, character.length, kCTWritingDirectionRightToLeft) ? 0 : -1;
+}
+
 int strongDirection(UTF32Char code) {
+  // ASCII's only strong characters are its letters, all L.
+  if (code < 0x80) {
+    return isalpha(static_cast<int>(code)) ? -1 : 0;
+  }
+  // The marks have no glyph for a run to hold: RLM and ALM are R and AL, LRM is L.
   if (code == 0x200F || code == 0x061C) {
     return 1;
   }
   if (code == 0x200E) {
     return -1;
   }
-  NSCharacterSet *letters = NSCharacterSet.letterCharacterSet;
-  if (![letters longCharacterIsMember:code]) {
-    return 0;
+  // Each code point probed once a thread: layout runs on more than one.
+  thread_local std::unordered_map<UTF32Char, int> known;
+  auto found = known.find(code);
+  if (found != known.end()) {
+    return found->second;
   }
-  bool digit = (code >= 0x0660 && code <= 0x0669) || (code >= 0x06F0 && code <= 0x06F9);
-  bool rtl = (code >= 0x0590 && code <= 0x08FF) || (code >= 0xFB1D && code <= 0xFDFF) || (code >= 0xFE70 && code <= 0xFEFF) ||
-      (code >= 0x10800 && code <= 0x10FFF) || (code >= 0x1E800 && code <= 0x1EFFF);
-  if (rtl) {
-    return digit ? 0 : 1;
-  }
-  return -1;
+  int direction = probedDirection(code);
+  known.emplace(code, direction);
+  return direction;
 }
 
 // The paragraph whose direction was resolved last, so the lines it wraps into find it without
