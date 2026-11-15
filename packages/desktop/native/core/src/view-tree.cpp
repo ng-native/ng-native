@@ -1,0 +1,228 @@
+#include "ngn/view-tree.h"
+
+#include "ngn/view-transform.h"
+
+#include <react/renderer/components/view/ViewProps.h>
+
+#include <algorithm>
+
+using namespace facebook::react;
+
+namespace ngn {
+
+void ViewTree::create(const ShadowView &view) {
+  nodes_[view.tag] = Node{.view = view, .parent = -1, .children = {}};
+}
+
+void ViewTree::destroy(Tag tag) {
+  auto it = nodes_.find(tag);
+  if (it == nodes_.end()) {
+    return;
+  }
+  if (it->second.parent != -1) {
+    remove(it->second.parent, tag);
+  }
+  scrollOffsets_.erase(tag);
+  // Fabric deletes children before their parent, so any left here were already removed.
+  for (auto child : it->second.children) {
+    if (auto c = nodes_.find(child); c != nodes_.end()) {
+      c->second.parent = -1;
+    }
+  }
+  containerRoots_.erase(tag);
+  covered_.erase(tag);
+  nodes_.erase(it);
+}
+
+void ViewTree::insert(Tag parent, Tag child, int index) {
+  auto p = nodes_.find(parent);
+  auto c = nodes_.find(child);
+  if (p == nodes_.end() || c == nodes_.end()) {
+    return;
+  }
+  auto &children = p->second.children;
+  auto at = std::min<size_t>(static_cast<size_t>(std::max(index, 0)), children.size());
+  children.insert(children.begin() + static_cast<std::ptrdiff_t>(at), child);
+  c->second.parent = parent;
+}
+
+void ViewTree::remove(Tag parent, Tag child) {
+  if (auto p = nodes_.find(parent); p != nodes_.end()) {
+    auto &children = p->second.children;
+    children.erase(std::remove(children.begin(), children.end(), child), children.end());
+  }
+  if (auto c = nodes_.find(child); c != nodes_.end() && c->second.parent == parent) {
+    c->second.parent = -1;
+  }
+}
+
+void ViewTree::update(const ShadowView &view) {
+  if (auto it = nodes_.find(view.tag); it != nodes_.end()) {
+    it->second.view = view;
+  }
+}
+
+const ViewTree::Node *ViewTree::find(Tag tag) const {
+  auto it = nodes_.find(tag);
+  return it == nodes_.end() ? nullptr : &it->second;
+}
+
+bool ViewTree::contains(Tag tag) const {
+  return nodes_.contains(tag);
+}
+
+void ViewTree::addContainerRoot(Tag root) {
+  containerRoots_.insert(root);
+}
+
+void ViewTree::removeContainerRoot(Tag root) {
+  containerRoots_.erase(root);
+}
+
+bool ViewTree::isContainerRoot(Tag tag) const {
+  return containerRoots_.contains(tag);
+}
+
+void ViewTree::setCovered(Tag tag, bool covered) {
+  if (covered) {
+    covered_.insert(tag);
+  } else {
+    covered_.erase(tag);
+  }
+}
+
+bool ViewTree::covered(Tag tag) const {
+  return covered_.contains(tag);
+}
+
+void ViewTree::setScrollOffset(Tag tag, Point offset) {
+  if (offset == Point{0, 0}) {
+    scrollOffsets_.erase(tag);
+  } else {
+    scrollOffsets_[tag] = offset;
+  }
+}
+
+Point ViewTree::scrollOffset(Tag tag) const {
+  auto it = scrollOffsets_.find(tag);
+  return it == scrollOffsets_.end() ? Point{0, 0} : it->second;
+}
+
+std::vector<Tag> ViewTree::hitTest(Tag root, Point point) const {
+  std::vector<Tag> chain;
+  hitTest(root, root, point, chain);
+  std::reverse(chain.begin(), chain.end());
+  return chain;
+}
+
+// `point` is in `tag`'s own coordinates. Appends the deepest hit first, then each ancestor.
+bool ViewTree::hitTest(Tag tag, Tag root, Point point, std::vector<Tag> &chain) const {
+  const Node *node = find(tag);
+  if (node == nullptr || (tag != root && containerRoots_.contains(tag)) || covered_.contains(tag)) {
+    return false;
+  }
+  const auto &layout = node->view.layoutMetrics;
+  if (layout.displayType == DisplayType::None) {
+    return false;
+  }
+  auto props = std::dynamic_pointer_cast<const ViewProps>(node->view.props);
+  auto pointerEvents = props ? props->pointerEvents : PointerEventsMode::Auto;
+  if (pointerEvents == PointerEventsMode::None) {
+    return false;
+  }
+  // The root covers its whole container: the container reports only points inside itself, and
+  // Fabric may never give a surface's root a frame of its own.
+  const auto &size = layout.frame.size;
+  bool inside = tag == root || (point.x >= 0 && point.y >= 0 && point.x < size.width && point.y < size.height);
+  bool clips = (props && props->yogaStyle.overflow() != facebook::yoga::Overflow::Visible) ||
+      layout.overflowInset == EdgeInsets{};
+  if (clips && !inside) {
+    return false;
+  }
+  if (pointerEvents != PointerEventsMode::BoxOnly) {
+    Point scrolled = scrollOffset(tag);
+    for (auto it = node->children.rbegin(); it != node->children.rend(); ++it) {
+      const Node *child = find(*it);
+      if (child == nullptr) {
+        continue;
+      }
+      auto local = toChild(*child, {point.x + scrolled.x, point.y + scrolled.y});
+      if (local && hitTest(*it, root, *local, chain)) {
+        chain.push_back(tag);
+        return true;
+      }
+    }
+  }
+  if (inside && pointerEvents != PointerEventsMode::BoxNone) {
+    chain.push_back(tag);
+    return true;
+  }
+  return false;
+}
+
+std::optional<Point> ViewTree::toChild(const Node &child, Point point) {
+  const auto &layout = child.view.layoutMetrics;
+  Point local{point.x - layout.frame.origin.x, point.y - layout.frame.origin.y};
+  auto props = std::dynamic_pointer_cast<const ViewProps>(child.view.props);
+  auto transform = props ? layerTransform(*props, layout) : std::nullopt;
+  if (!transform) {
+    return local;
+  }
+  return layerPointAt(*transform, local);
+}
+
+std::optional<Point> ViewTree::pointIn(Tag tag, Tag root, Point point) const {
+  auto path = chain(tag, root);
+  if (path.empty()) {
+    return std::nullopt;
+  }
+  for (size_t index = 1; index < path.size(); ++index) {
+    Point scrolled = scrollOffset(path[index - 1]);
+    auto local = toChild(*find(path[index]), {point.x + scrolled.x, point.y + scrolled.y});
+    if (!local) {
+      return std::nullopt;
+    }
+    point = *local;
+  }
+  return point;
+}
+
+std::optional<Point> ViewTree::originIn(Tag tag, Tag root) const {
+  Point origin{0, 0};
+  for (Tag current = tag; current != root;) {
+    const Node *node = find(current);
+    if (node == nullptr || node->parent == -1) {
+      return std::nullopt;
+    }
+    Point scrolled = scrollOffset(node->parent);
+    origin.x += node->view.layoutMetrics.frame.origin.x - scrolled.x;
+    origin.y += node->view.layoutMetrics.frame.origin.y - scrolled.y;
+    current = node->parent;
+  }
+  if (!contains(root)) {
+    return std::nullopt;
+  }
+  return origin;
+}
+
+} // namespace ngn
+
+namespace ngn {
+
+std::vector<Tag> ViewTree::chain(Tag tag, Tag root) const {
+  std::vector<Tag> chain;
+  for (Tag current = tag;;) {
+    const Node *node = find(current);
+    if (node == nullptr) {
+      return {};
+    }
+    chain.push_back(current);
+    if (current == root) {
+      break;
+    }
+    current = node->parent;
+  }
+  return {chain.rbegin(), chain.rend()};
+}
+
+} // namespace ngn

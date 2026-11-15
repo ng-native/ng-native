@@ -1,0 +1,107 @@
+name: Desktop host
+
+# The desktop host in @ng-native/desktop. On ubuntu, the toolkit-free core and its tests build with
+# no backend and no Hermes, which proves no toolkit leaks into the core.
+# A pull request runs it only when the host or the workflow changed, or the lockfile moved the
+# version of a package the host builds from (see `changes`); a push to main and a manual run build
+# it whatever changed. Compiles go through ccache, kept per job.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The per-user build cache, moved where actions/cache can keep it.
+  NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
+  NGN_JOBS: '4'
+  # Read by the build scripts: every compile of the host and of Hermes goes through ccache.
+  NGN_COMPILER_LAUNCHER: ccache
+  # Where ccache keeps what it compiled, which is the directory ccache-action restores and saves.
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  # Absolute paths under the workspace are made relative and the working directory is not hashed,
+  # so a compile's key does not depend on where the runner put the checkout.
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_NOHASHDIR: '1'
+  # A fresh checkout gives every header a new mtime and ctime, and `__DATE__` and `__TIME__` are
+  # not used on purpose: without these, direct mode would miss every run.
+  CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
+
+jobs:
+  # Which parts of the tree a pull request touched. A push and a manual run skip it and build.
+  changes:
+    if: github.event.pull_request.draft != true && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      desktop: ${{ steps.filter.outputs.desktop }}
+      pins: ${{ steps.pins.outputs.pins }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            desktop:
+              - 'packages/desktop/**'
+              - '.github/workflows/desktop.yml'
+              - 'scripts/desktop-host-pins.mjs'
+
+      # A lockfile edit reaches the host only through the version of a package it builds from.
+      - id: pins
+        if: steps.filter.outputs.desktop != 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          node scripts/desktop-host-pins.mjs "$BASE_SHA"
+
+  core-linux:
+    needs: changes
+    if: >-
+      always() && github.event.pull_request.draft != true &&
+      (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true' ||
+      needs.changes.outputs.pins == 'true')
+    runs-on: ubuntu-latest
+    # React Native's renderer and the core, cold, are a few minutes on four cores.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - run: sudo apt-get install -y --no-install-recommends ninja-build lld
+
+      # Keyed by the pins the compiles read, so a bump of any starts a fresh set; a near miss
+      # restores the latest, which still holds every file the change did not reach.
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: desktop-core-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+          restore-keys: desktop-core-${{ runner.os }}-${{ runner.arch }}-
+          max-size: 500M
+
+      # The fetched sources only, keyed by the pins: a build directory is cheap to remake and
+      # large to keep.
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
+          key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+
+      - name: Build the core and run its tests on the fake backend
+        env:
+          CC: clang
+          CXX: clang++
+        run: pnpm --filter @ng-native/desktop test:native
+
+      - if: always()
+        run: ccache --show-stats
