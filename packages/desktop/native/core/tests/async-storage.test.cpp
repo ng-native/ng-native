@@ -41,6 +41,40 @@ TEST_CASE("the key-value store persists to its file, and a new store reads it ba
   CHECK_FALSE(std::filesystem::exists(dir.path.parent_path() / "escape.json"));
 }
 
+TEST_CASE("the key-value store keeps databases whose names differ only in what a file name cannot hold apart") {
+  TempDir dir;
+  const std::vector<std::string> names{"a/b", "a_b", "a:b", "A_B", "", ".", "_", "%"};
+  {
+    ngn::KeyValueStore store(dir.path.string());
+    for (const auto &name : names) {
+      CHECK(store.set(name, {{"k", name}}));
+    }
+  }
+  ngn::KeyValueStore again(dir.path.string());
+  for (const auto &name : names) {
+    CAPTURE(name);
+    CHECK(again.get(name, {"k"}) == std::vector<std::optional<std::string>>{name});
+  }
+}
+
+TEST_CASE("the key-value store keeps what it had when a change cannot be written") {
+  TempDir dir;
+  ngn::KeyValueStore store(dir.path.string());
+  REQUIRE(store.set("db", {{"a", "1"}}));
+  std::filesystem::permissions(dir.path, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec);
+  try {
+    CHECK_FALSE(store.set("db", {{"a", "2"}, {"b", "3"}}));
+    CHECK_FALSE(store.merge("db", {{"a", "4"}}));
+    CHECK_FALSE(store.remove("db", {"a"}));
+    CHECK_FALSE(store.clear("db"));
+    CHECK(store.get("db", {"a", "b"}) == std::vector<std::optional<std::string>>{"1", std::nullopt});
+  } catch (...) {
+    std::filesystem::permissions(dir.path, std::filesystem::perms::owner_all);
+    throw;
+  }
+  std::filesystem::permissions(dir.path, std::filesystem::perms::owner_all);
+}
+
 TEST_CASE("merge combines JSON objects recursively and replaces anything else") {
   TempDir dir;
   ngn::KeyValueStore store(dir.path.string());
