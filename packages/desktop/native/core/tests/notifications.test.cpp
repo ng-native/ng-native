@@ -73,11 +73,13 @@ struct Answer {
   std::optional<std::string> error;
 };
 
-Answer ask(const ngn::NativeModule &module, const std::string &method, dynamic args = dynamic::array()) {
-  Answer answer;
+std::shared_ptr<Answer> ask(const ngn::NativeModule &module, const std::string &method, dynamic args = dynamic::array()) {
+  // Shared with the callbacks, which a call left pending keeps.
+  auto answer = std::make_shared<Answer>();
   module.callWithPromise(
       method, args,
-      {.resolve = [&](dynamic v) { answer.value = v; }, .reject = [&](const std::string &e) { answer.error = e; }});
+      {.resolve = [answer](dynamic v) { answer->value = v; },
+       .reject = [answer](const std::string &e) { answer->error = e; }});
   return answer;
 }
 
@@ -152,28 +154,28 @@ TEST_CASE("permission is asked for only by requestPermissionsAsync, and only whi
   auto center = std::make_shared<FakeCenter>();
   auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>());
   CHECK(
-      json(*ask(*module, "getPermissionsAsync").value) ==
+      json(*ask(*module, "getPermissionsAsync")->value) ==
       R"({"canAskAgain":true,"expires":"never","granted":false,"status":"undetermined"})");
   CHECK(center->asked == 0);
   // The user says no: denied, and never asked again.
-  CHECK((*ask(*module, "requestPermissionsAsync").value)["status"] == "denied");
-  CHECK((*ask(*module, "requestPermissionsAsync").value)["canAskAgain"] == false);
+  CHECK((*ask(*module, "requestPermissionsAsync")->value)["status"] == "denied");
+  CHECK((*ask(*module, "requestPermissionsAsync")->value)["canAskAgain"] == false);
   CHECK(center->asked == 1);
 
   // Granted another time.
   center->status = ngn::NotificationAuthorization::NotDetermined;
   center->answer = ngn::NotificationAuthorization::Authorized;
-  CHECK((*ask(*module, "requestPermissionsAsync").value)["granted"] == true);
+  CHECK((*ask(*module, "requestPermissionsAsync")->value)["granted"] == true);
 
   // A host that cannot post at all answers denied without asking.
   center->posts = false;
   center->status = ngn::NotificationAuthorization::NotDetermined;
-  auto answer = *ask(*module, "requestPermissionsAsync").value;
+  auto answer = *ask(*module, "requestPermissionsAsync")->value;
   CHECK(answer["status"] == "denied");
   CHECK(answer["canAskAgain"] == false);
   CHECK(center->asked == 2);
-  CHECK(*ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object()))).value == nullptr);
-  CHECK(*ask(*module, "getAllScheduledNotificationsAsync").value == dynamic::array());
+  CHECK(*ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object())))->value == nullptr);
+  CHECK(*ask(*module, "getAllScheduledNotificationsAsync")->value == dynamic::array());
   CHECK(center->added.empty());
 }
 
@@ -183,7 +185,7 @@ TEST_CASE("without permission scheduling resolves null and schedules nothing") {
   for (auto status : {ngn::NotificationAuthorization::NotDetermined, ngn::NotificationAuthorization::Denied}) {
     center->status = status;
     auto answer = ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object())));
-    CHECK(*answer.value == nullptr);
+    CHECK(*answer->value == nullptr);
   }
   CHECK(center->added.empty());
   // Asking is the app's to do: scheduling never asks.
@@ -196,31 +198,31 @@ TEST_CASE("scheduling gives a request an identifier when it has none, and cancel
   auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>());
   auto first = ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object("title", "A"))));
   auto second = ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object("title", "B"))));
-  REQUIRE(first.value);
-  REQUIRE(second.value);
-  CHECK(first.value->asString() != second.value->asString());
-  CHECK(center->added.at(0).identifier == first.value->asString());
+  REQUIRE(first->value);
+  REQUIRE(second->value);
+  CHECK(first->value->asString() != second->value->asString());
+  CHECK(center->added.at(0).identifier == first->value->asString());
   auto named = ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("identifier", "tea")("content", dynamic::object())));
-  CHECK(*named.value == "tea");
+  CHECK(*named->value == "tea");
   CHECK(ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object())("trigger", dynamic::object("type", "daily"))))
-            .error);
-  CHECK(ask(*module, "getAllScheduledNotificationsAsync").value->size() == 3);
+            ->error);
+  CHECK(ask(*module, "getAllScheduledNotificationsAsync")->value->size() == 3);
 
   ask(*module, "cancelScheduledNotificationAsync", dynamic::array("tea"));
   ask(*module, "cancelAllScheduledNotificationsAsync");
   ask(*module, "dismissNotificationAsync", dynamic::array("old"));
   ask(*module, "dismissAllNotificationsAsync");
   CHECK(center->removed == Lines{"pending tea", "all pending", "delivered old", "all delivered"});
-  CHECK(*ask(*module, "getNextTriggerDateAsync", dynamic::array(dynamic::object("type", "date")("date", 5000))).value == 5000);
+  CHECK(*ask(*module, "getNextTriggerDateAsync", dynamic::array(dynamic::object("type", "date")("date", 5000)))->value == 5000);
 }
 
 TEST_CASE("the badge count is the Dock badge, a whole number from 0") {
   auto center = std::make_shared<FakeCenter>();
   auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>());
-  CHECK(*ask(*module, "setBadgeCountAsync", dynamic::array(4)).value == true);
-  CHECK(*ask(*module, "getBadgeCountAsync").value == 4);
-  CHECK(*ask(*module, "setBadgeCountAsync", dynamic::array(-1)).value == false);
-  CHECK(*ask(*module, "setBadgeCountAsync", dynamic::array(1.5)).value == false);
+  CHECK(*ask(*module, "setBadgeCountAsync", dynamic::array(4))->value == true);
+  CHECK(*ask(*module, "getBadgeCountAsync")->value == 4);
+  CHECK(*ask(*module, "setBadgeCountAsync", dynamic::array(-1))->value == false);
+  CHECK(*ask(*module, "setBadgeCountAsync", dynamic::array(1.5))->value == false);
   CHECK(center->badgeCount == 4);
   CHECK(ngn::badgeLabel(4) == "4");
   CHECK(ngn::badgeLabel(0).empty());
@@ -237,7 +239,7 @@ TEST_CASE("a delivered notification and a click reach the app, and the click tha
   auto module = ngn::makeNotificationsModule(center, events);
   Lines heard;
   module->setEmitter([&](const std::string &name, dynamic body) { heard.push_back(name + " " + body["type"].asString()); });
-  auto last = ask(*module, "getLastNotificationResponseAsync").value;
+  auto last = ask(*module, "getLastNotificationResponseAsync")->value;
   REQUIRE(last);
   CHECK((*last)["actionIdentifier"] == "expo.modules.notifications.actions.DEFAULT");
   CHECK((*last)["notification"]["request"]["identifier"] == "tea");
@@ -314,7 +316,7 @@ TEST_CASE("the device token is asked for once however many wait, in hex, and its
   CHECK(*first.value == dynamic::object("type", "macos")("data", "0aff0012"));
   CHECK(*second.value == *first.value);
   // Known now: answered without asking the OS again.
-  CHECK(ask(*module, "getDevicePushTokenAsync").value == *first.value);
+  CHECK(ask(*module, "getDevicePushTokenAsync")->value == *first.value);
   CHECK(registrar->registers == 1);
   CHECK(heard.empty());
 
@@ -352,6 +354,6 @@ TEST_CASE("a host without the entitlement rejects the token with what to do, and
   push->failed("The Internet connection appears to be offline.");
 
   auto without = ngn::makeNotificationsModule(std::make_shared<FakeCenter>(), events);
-  CHECK(ask(*without, "getDevicePushTokenAsync").error.value_or("").find("not available") != std::string::npos);
-  CHECK(ask(*without, "unregisterForNotificationsAsync").value == dynamic(nullptr));
+  CHECK(ask(*without, "getDevicePushTokenAsync")->error.value_or("").find("not available") != std::string::npos);
+  CHECK(ask(*without, "unregisterForNotificationsAsync")->value == dynamic(nullptr));
 }

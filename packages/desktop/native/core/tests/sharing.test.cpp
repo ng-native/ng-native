@@ -22,11 +22,13 @@ struct Answer {
   std::optional<std::string> error;
 };
 
-Answer share(const ngn::NativeModule &module, dynamic request) {
-  Answer answer;
+std::shared_ptr<Answer> share(const ngn::NativeModule &module, dynamic request) {
+  // Shared with the callbacks, which a share left pending keeps.
+  auto answer = std::make_shared<Answer>();
   module.callWithPromise(
       "share", dynamic::array(request),
-      {.resolve = [&](dynamic v) { answer.value = v; }, .reject = [&](const std::string &e) { answer.error = e; }});
+      {.resolve = [answer](dynamic v) { answer->value = v; },
+       .reject = [answer](const std::string &e) { answer->error = e; }});
   return answer;
 }
 
@@ -43,7 +45,7 @@ TEST_CASE("NgNativeSharing answers the service picked, or that the picker was di
   CHECK(picker->shown[0].url == "https://example.com");
   CHECK(picker->shown[0].title == "A");
   CHECK_FALSE(picker->shown[0].message);
-  CHECK(share(*module, dynamic::object("message", "again")).error);
+  CHECK(share(*module, dynamic::object("message", "again"))->error);
   picker->pending("Messages");
   CHECK(shared.value == dynamic(dynamic::object("action", "sharedAction")("activityType", "Messages")));
 
@@ -56,8 +58,8 @@ TEST_CASE("NgNativeSharing answers the service picked, or that the picker was di
 TEST_CASE("NgNativeSharing refuses a request with nothing to share") {
   auto picker = std::make_shared<FakePicker>();
   auto module = ngn::makeSharingModule(picker);
-  CHECK(share(*module, dynamic::object("title", "A")).error);
-  CHECK(share(*module, nullptr).error);
+  CHECK(share(*module, dynamic::object("title", "A"))->error);
+  CHECK(share(*module, nullptr)->error);
   CHECK(picker->shown.empty());
 }
 
@@ -66,7 +68,7 @@ TEST_CASE("NgNativeSharing shows nothing with no prompts, answering as dismissed
   auto module = ngn::makeSharingModule(picker, true);
   auto answer = share(*module, dynamic::object("message", "Hi"));
   CHECK(picker->shown.empty());
-  CHECK(answer.value == dynamic(dynamic::object("action", "dismissedAction")("activityType", nullptr)));
+  CHECK(answer->value == dynamic(dynamic::object("action", "dismissedAction")("activityType", nullptr)));
 }
 
 TEST_CASE("NgNativeSharing shares a file only inside the file boundary, refusing one outside before showing anything") {
@@ -77,8 +79,8 @@ TEST_CASE("NgNativeSharing shares a file only inside the file boundary, refusing
                           "file://localhost/app/caches/a.pdf"}) {
     CAPTURE(url);
     auto refused = share(*module, dynamic::object("url", url));
-    REQUIRE(refused.error);
-    CHECK(refused.error->find("outside the files this app may read") != std::string::npos);
+    REQUIRE(refused->error);
+    CHECK(refused->error->find("outside the files this app may read") != std::string::npos);
   }
   CHECK(picker->shown.empty());
   // The app's own file goes to the picker as the file uri checked; a web url as it is.
@@ -90,5 +92,5 @@ TEST_CASE("NgNativeSharing shares a file only inside the file boundary, refusing
   CHECK(picker->shown[1].url == "https://example.com");
   // Without file access, no file at all.
   auto closed = ngn::makeSharingModule(picker, false);
-  CHECK(share(*closed, dynamic::object("url", "file:///app/caches/a.pdf")).error);
+  CHECK(share(*closed, dynamic::object("url", "file:///app/caches/a.pdf"))->error);
 }

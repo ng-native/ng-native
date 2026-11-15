@@ -56,13 +56,18 @@ struct Answer {
   std::optional<std::string> error;
 };
 
-Answer call(const ngn::NativeModule &module, const std::string &method, dynamic options, Answer *into = nullptr) {
-  Answer answer;
-  Answer *target = into != nullptr ? into : &answer;
+// The answer to a call that settles at once. One left pending answers into `into`, which the
+// callbacks share, so it outlives this helper and the test's own locals.
+std::shared_ptr<Answer> call(
+    const ngn::NativeModule &module,
+    const std::string &method,
+    dynamic options,
+    std::shared_ptr<Answer> into = nullptr) {
+  auto target = into != nullptr ? into : std::make_shared<Answer>();
   module.callWithPromise(
       method, dynamic::array(options),
       {.resolve = [target](dynamic v) { target->resolved = true; target->value = v; }, .reject = [target](const std::string &e) { target->error = e; }});
-  return answer;
+  return target;
 }
 
 ngn::PageSetup page(dynamic options) {
@@ -87,45 +92,45 @@ TEST_CASE("NgNativePrint writes a PDF into the print folder and answers its uri,
   auto system = std::make_shared<FakePrintSystem>();
   auto module = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), folder.path.string(), ngn::testing::readsEverywhere());
   auto answer = call(*module, "printToFileAsync", dynamic::object("html", "<h1>Invoice</h1>")("width", 400)("base64", true));
-  REQUIRE(answer.value);
-  auto uri = (*answer.value)["uri"].asString();
+  REQUIRE(answer->value);
+  auto uri = (*answer->value)["uri"].asString();
   CHECK(uri.rfind("file://" + folder.path.string() + "/", 0) == 0);
   CHECK(uri.size() > 4);
   CHECK(uri.substr(uri.size() - 4) == ".pdf");
-  CHECK((*answer.value)["numberOfPages"] == 3);
-  CHECK((*answer.value)["base64"] == ngn::base64Encode("%PDF-<h1>Invoice</h1>"));
+  CHECK((*answer->value)["numberOfPages"] == 3);
+  CHECK((*answer->value)["base64"] == ngn::base64Encode("%PDF-<h1>Invoice</h1>"));
   REQUIRE(system->pages.size() == 1);
   CHECK(system->pages[0] == ngn::PageSetup{.width = 400, .height = 792});
 
   auto plain = call(*module, "printToFileAsync", dynamic::object("html", "x"));
-  REQUIRE(plain.value);
-  CHECK(plain.value->get_ptr("base64") == nullptr);
-  CHECK((*plain.value)["uri"] != (*answer.value)["uri"]);
+  REQUIRE(plain->value);
+  CHECK(plain->value->get_ptr("base64") == nullptr);
+  CHECK((*plain->value)["uri"] != (*answer->value)["uri"]);
 
   system->error = "WebKit failed";
-  CHECK(call(*module, "printToFileAsync", dynamic::object("html", "x")).error == "Print: Error while rendering the PDF: WebKit failed");
-  CHECK(call(*module, "printToFileAsync", dynamic::object("height", 10)("margins", dynamic::object("top", 10))).error);
+  CHECK(call(*module, "printToFileAsync", dynamic::object("html", "x"))->error == "Print: Error while rendering the PDF: WebKit failed");
+  CHECK(call(*module, "printToFileAsync", dynamic::object("height", 10)("margins", dynamic::object("top", 10)))->error);
 }
 
 TEST_CASE("NgNativePrint shows the panel for HTML, and resolves once it closes") {
   auto system = std::make_shared<FakePrintSystem>();
   auto module = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), "/tmp/unused", ngn::testing::readsEverywhere());
-  Answer answer;
-  call(*module, "printAsync", dynamic::object("html", "<p>Hi</p>")("orientation", "landscape")("printerUrl", "ipp://x"), &answer);
+  auto answer = std::make_shared<Answer>();
+  call(*module, "printAsync", dynamic::object("html", "<p>Hi</p>")("orientation", "landscape")("printerUrl", "ipp://x"), answer);
   REQUIRE(system->shown.size() == 1);
   CHECK(system->shown[0].document.kind == Kind::Html);
   CHECK(system->shown[0].document.content == "<p>Hi</p>");
   CHECK(system->shown[0].landscape);
-  CHECK(call(*module, "printAsync", dynamic::object("html", "again")).error == "Print: the print panel is already showing");
-  CHECK_FALSE(answer.resolved);
+  CHECK(call(*module, "printAsync", dynamic::object("html", "again"))->error == "Print: the print panel is already showing");
+  CHECK_FALSE(answer->resolved);
   system->pendingPrint("");
-  CHECK(answer.resolved);
+  CHECK(answer->resolved);
 
-  Answer failed;
-  call(*module, "printAsync", dynamic::object("html", "<p>Hi</p>"), &failed);
+  auto failed = std::make_shared<Answer>();
+  call(*module, "printAsync", dynamic::object("html", "<p>Hi</p>"), failed);
   CHECK_FALSE(system->shown[1].landscape);
   system->pendingPrint("no printer");
-  CHECK(failed.error == "Print: no printer");
+  CHECK(failed->error == "Print: no printer");
 }
 
 TEST_CASE("NgNativePrint reads a uri's file through the HTTP client and prints it as a PDF or an image") {
@@ -139,15 +144,15 @@ TEST_CASE("NgNativePrint reads a uri's file through the HTTP client and prints i
     callbacks.onData(body, -1);
     callbacks.onComplete("", false);
   };
-  Answer pdf;
-  call(*module, "printAsync", dynamic::object("uri", "/Users/me/a doc.pdf"), &pdf);
+  auto pdf = std::make_shared<Answer>();
+  call(*module, "printAsync", dynamic::object("uri", "/Users/me/a doc.pdf"), pdf);
   REQUIRE(http->sent.size() == 1);
   CHECK(http->sent[0]->request.url == "file:///Users/me/a%20doc.pdf");
   serve(0, "%PDF-1.7 ...");
   REQUIRE(system->shown.size() == 1);
   CHECK(system->shown[0].document.kind == Kind::Pdf);
   system->pendingPrint("");
-  CHECK(pdf.resolved);
+  CHECK(pdf->resolved);
 
   call(*module, "printAsync", dynamic::object("uri", "https://example.com/photo.png"));
   CHECK(http->sent[1]->request.url == "https://example.com/photo.png");
@@ -157,10 +162,10 @@ TEST_CASE("NgNativePrint reads a uri's file through the HTTP client and prints i
   CHECK(system->shown[1].document.content == "\x89PNG...");
   system->pendingPrint("");
 
-  Answer missing;
-  call(*module, "printAsync", dynamic::object("uri", "https://example.com/gone.pdf"), &missing);
+  auto missing = std::make_shared<Answer>();
+  call(*module, "printAsync", dynamic::object("uri", "https://example.com/gone.pdf"), missing);
   serve(2, "", 404);
-  CHECK(missing.error == "Print: could not read https://example.com/gone.pdf: HTTP 404");
+  CHECK(missing->error == "Print: could not read https://example.com/gone.pdf: HTTP 404");
   // A failed read frees the panel for the next print.
   call(*module, "printAsync", dynamic::object("html", "next"));
   CHECK(system->shown.size() == 3);
@@ -170,13 +175,13 @@ TEST_CASE("NgNativePrint refuses a print with nothing to print, and shows nothin
   auto system = std::make_shared<FakePrintSystem>();
   auto http = std::make_shared<ngn::testing::FakeHttp>();
   auto module = ngn::makePrintModule(system, http, "/tmp/unused", ngn::testing::readsEverywhere());
-  CHECK(call(*module, "printAsync", dynamic::object()).error == "Print: No data to print. You must specify `uri` or `html` option");
-  CHECK(call(*module, "printAsync", dynamic::object("uri", "content://x")).error == "Print: content://x is not a file, data or http(s) uri");
+  CHECK(call(*module, "printAsync", dynamic::object())->error == "Print: No data to print. You must specify `uri` or `html` option");
+  CHECK(call(*module, "printAsync", dynamic::object("uri", "content://x"))->error == "Print: content://x is not a file, data or http(s) uri");
   CHECK(http->sent.empty());
 
   auto quiet = ngn::makePrintModule(system, http, "/tmp/unused", ngn::testing::readsEverywhere(), true);
-  CHECK(call(*quiet, "printAsync", dynamic::object("html", "<p>Hi</p>")).resolved);
-  CHECK(call(*quiet, "printAsync", dynamic::object("uri", "/tmp/a.pdf")).resolved);
+  CHECK(call(*quiet, "printAsync", dynamic::object("html", "<p>Hi</p>"))->resolved);
+  CHECK(call(*quiet, "printAsync", dynamic::object("uri", "/tmp/a.pdf"))->resolved);
   CHECK(system->shown.empty());
   CHECK(http->sent.empty());
 }
@@ -193,9 +198,9 @@ TEST_CASE("NgNativePrint prints only files FileSystem could read, with or withou
   for (bool quiet : {false, true}) {
     auto module = ngn::makePrintModule(system, http, folders.cache + "/Print", access, quiet);
     auto refused = call(*module, "printAsync", dynamic::object("uri", ngn::fileUri(outside)));
-    REQUIRE(refused.error);
-    CHECK(refused.error->find("Print: " + outside + " is outside the files this app may read") == 0);
-    CHECK_FALSE(refused.resolved);
+    REQUIRE(refused->error);
+    CHECK(refused->error->find("Print: " + outside + " is outside the files this app may read") == 0);
+    CHECK_FALSE(refused->resolved);
   }
   CHECK(http->sent.empty());
   CHECK(system->shown.empty());
@@ -209,21 +214,21 @@ TEST_CASE("NgNativePrint prints only files FileSystem could read, with or withou
 TEST_CASE("NgNativePrint prints the window on a surface, one panel at a time, and nothing with no prompts") {
   auto system = std::make_shared<FakePrintSystem>();
   auto module = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), "/tmp/unused", ngn::testing::readsEverywhere());
-  Answer answer;
-  call(*module, "printAsync", dynamic::object("window", 3)("orientation", "landscape"), &answer);
+  auto answer = std::make_shared<Answer>();
+  call(*module, "printAsync", dynamic::object("window", 3)("orientation", "landscape"), answer);
   REQUIRE(system->windows.size() == 1);
   CHECK(system->windows[0] == std::pair<facebook::react::SurfaceId, bool>{3, true});
   CHECK(system->shown.empty());
-  CHECK(call(*module, "printAsync", dynamic::object("window", 3)).error == "Print: the print panel is already showing");
-  CHECK_FALSE(answer.resolved);
+  CHECK(call(*module, "printAsync", dynamic::object("window", 3))->error == "Print: the print panel is already showing");
+  CHECK_FALSE(answer->resolved);
   system->pendingPrint("");
-  CHECK(answer.resolved);
+  CHECK(answer->resolved);
 
-  Answer gone;
-  call(*module, "printAsync", dynamic::object("window", 9), &gone);
+  auto gone = std::make_shared<Answer>();
+  call(*module, "printAsync", dynamic::object("window", 9), gone);
   CHECK_FALSE(system->windows[1].second);
   system->pendingPrint("no window shows surface 9");
-  CHECK(gone.error == "Print: no window shows surface 9");
+  CHECK(gone->error == "Print: no window shows surface 9");
   // HTML given beside a window is what prints.
   call(*module, "printAsync", dynamic::object("html", "<p>Hi</p>")("window", 3));
   CHECK(system->windows.size() == 2);
@@ -231,6 +236,6 @@ TEST_CASE("NgNativePrint prints the window on a surface, one panel at a time, an
   system->pendingPrint("");
 
   auto quiet = ngn::makePrintModule(system, std::make_shared<ngn::testing::FakeHttp>(), "/tmp/unused", ngn::testing::readsEverywhere(), true);
-  CHECK(call(*quiet, "printAsync", dynamic::object("window", 3)).resolved);
+  CHECK(call(*quiet, "printAsync", dynamic::object("window", 3))->resolved);
   CHECK(system->windows.size() == 2);
 }
