@@ -666,12 +666,15 @@ void showAppWindow() {
 } // namespace
 
 // The source of a `[dragItem]` view's drag out: a file url per file, and the text and url on one
-// more item. Finder takes the files, a text field the text, a browser the url.
+// more item. Finder takes the files, a text field the text, a browser the url. The picks the files
+// read stay open until the session ends.
 @interface NGNDragOutSource : NSObject <NSDraggingSource>
 + (void)begin:(const ngn::DragOutItem &)item from:(NSView *)view event:(NSEvent *)event;
 @end
 
-@implementation NGNDragOutSource
+@implementation NGNDragOutSource {
+  std::vector<std::shared_ptr<ngn::FileAccess::Use>> _uses;
+}
 + (void)begin:(const ngn::DragOutItem &)item from:(NSView *)view event:(NSEvent *)event {
   static NGNDragOutSource *source = [NGNDragOutSource new];
   // The view as it is drawn, under the pointer where the press started.
@@ -703,12 +706,18 @@ void showAppWindow() {
     add(extra);
   }
   if (items.count > 0) {
+    source->_uses = item.uses;
     [view beginDraggingSessionWithItems:items event:event source:source];
   }
 }
 - (NSDragOperation)draggingSession:(NSDraggingSession *)session
     sourceOperationMaskForDraggingContext:(NSDraggingContext)context {
   return NSDragOperationCopy | NSDragOperationGeneric;
+}
+- (void)draggingSession:(NSDraggingSession *)session
+           endedAtPoint:(NSPoint)screenPoint
+              operation:(NSDragOperation)operation {
+  _uses.clear();
 }
 @end
 
