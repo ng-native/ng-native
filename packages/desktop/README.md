@@ -705,9 +705,14 @@ than the prebuilt one or denied, when the download fails (with a warning), and w
 
 Publishing one is a manual step; the release workflow does none of it:
 
-1. Build and pack the host for each React Native version with
-   `native/scripts/make-prebuilt.mjs <app> <out> --version <release> --base-url <url> --manifest prebuilt.json`,
-   where `<url>` is the absolute URL of the GitHub release's downloads
+1. Build and pack the host for each React Native version with:
+
+   ```sh
+   native/scripts/make-prebuilt.mjs <app> <out> --version <release> --base-url <url> \
+     --manifest prebuilt.json
+   ```
+
+   `<url>` is the absolute URL of the GitHub release's downloads
    (`https://github.com/ng-native/ng-native/releases/download/<tag>`). It writes the archive to
    `<out>` and its entry into `prebuilt.json`.
 2. Commit the updated `prebuilt.json`, so the npm package carries the entries.
