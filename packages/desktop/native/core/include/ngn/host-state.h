@@ -5,6 +5,7 @@
 
 #include <folly/dynamic.h>
 
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <map>
@@ -90,6 +91,7 @@ class Listeners {
 // A value with listeners. Setting it to what it already is notifies nobody. Listeners hear the
 // values in the order they were set, a value set by a listener after the one it is hearing, and
 // a set made while another thread is notifying returns at once, that thread notifying for it.
+// A listener given the current value hears only the values set after it.
 template <typename T>
 class Watched {
  public:
@@ -109,7 +111,7 @@ class Watched {
         return;
       }
       value_ = value;
-      queued_.push_back(std::move(value));
+      queued_.push_back({++serial_, std::move(value)});
       if (notifying_) {
         return;
       }
@@ -120,21 +122,31 @@ class Watched {
 
   // Listens until the returned handle is destroyed.
   std::shared_ptr<void> listen(Listener listener) {
-    return listeners_.add(std::move(listener));
+    return listeners_.add([listener = std::move(listener)](const Set &set) { listener(set.value); });
   }
 
   // Listens, with `current` set to the value the listener's first call follows: a change made
-  // between reading the value and listening is heard.
+  // between reading the value and listening is heard, and one set before it and still queued is
+  // not.
   std::shared_ptr<void> listen(Listener listener, T &current) {
     std::lock_guard lock(mutex_);
     current = value_;
-    return listeners_.add(std::move(listener));
+    return listeners_.add([listener = std::move(listener), after = serial_](const Set &set) {
+      if (set.serial > after) {
+        listener(set.value);
+      }
+    });
   }
 
  private:
+  struct Set {
+    uint64_t serial;
+    T value;
+  };
+
   void notifyQueued() {
     for (;;) {
-      std::optional<T> next;
+      std::optional<Set> next;
       {
         std::lock_guard lock(mutex_);
         if (queued_.empty()) {
@@ -158,9 +170,11 @@ class Watched {
   mutable std::mutex mutex_;
   T value_;
   // Set, and not yet sent to the listeners.
-  std::deque<T> queued_;
+  std::deque<Set> queued_;
+  // The number of the last set.
+  uint64_t serial_{0};
   bool notifying_{false};
-  Listeners<T> listeners_;
+  Listeners<Set> listeners_;
 };
 
 enum class Activity { Active, Inactive, Background };
