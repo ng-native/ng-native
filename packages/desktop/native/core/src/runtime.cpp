@@ -405,7 +405,8 @@ void Runtime::shutdown() {
   // A reload still running holds this runtime: none starts from now (one waiting its turn is
   // dropped), and the one running is joined, its `done` run, before the teardown.
   auto alive = alive_;
-  reloader_.close([this] { mounting_->serviceUiThread(); });
+  // The mounting manager, not this runtime: a `done` that close runs may destroy this runtime.
+  reloader_.close([mounting = mounting_] { mounting->serviceUiThread(); });
   // A reload's `done` that close ran may have destroyed this runtime.
   if (!*alive) {
     return;
