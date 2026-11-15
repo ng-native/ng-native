@@ -239,3 +239,46 @@ TEST_CASE("Sqlite closes every database it opened when the module goes, as on a 
   }
   CHECK(canWriteAlone(dir.path / "kept.db"));
 }
+
+TEST_CASE("Sqlite refuses SQL that opens a file outside the files the app may write") {
+  TempDir dir;
+  TempDir outside;
+  fs::create_directories(outside.path);
+  auto module = ngn::makeSqliteModule((dir.path / "SQLite").string(), writesIn(dir.path));
+  auto db = open(*module, "main.db");
+  auto there = (outside.path / "there.db").string();
+  CHECK_THROWS_WITH(module->call("execSync", dynamic::array(db, "ATTACH DATABASE '" + there + "' AS there")),
+                    doctest::Contains("not authorized"));
+  auto copy = (outside.path / "copy.db").string();
+  CHECK_THROWS(module->call("execSync", dynamic::array(db, "VACUUM INTO '" + copy + "'")));
+  CHECK_FALSE(fs::exists(there));
+  CHECK_FALSE(fs::exists(copy));
+  // An in-memory database opens files the same way.
+  auto memory = open(*module, ":memory:");
+  CHECK_THROWS(module->call("execSync", dynamic::array(memory, "ATTACH DATABASE '" + there + "' AS there")));
+  CHECK_FALSE(fs::exists(there));
+
+  // The app's own folders, and memory, attach as before.
+  auto mine = (dir.path / "SQLite" / "other.db").string();
+  module->call("execSync", dynamic::array(db, "ATTACH DATABASE '" + mine + "' AS other; CREATE TABLE other.t (x)"));
+  module->call("execSync", dynamic::array(db, "ATTACH DATABASE ':memory:' AS scratch"));
+  CHECK(fs::exists(mine));
+}
+
+TEST_CASE("Sqlite refuses to delete an open database however its folder is spelled") {
+  TempDir dir;
+  fs::create_directories(dir.path / "real");
+  fs::create_symlink(dir.path / "real", dir.path / "link");
+  auto module = ngn::makeSqliteModule((dir.path / "real").string(), writesIn(dir.path));
+  auto db = open(*module, "x.db");
+  for (const auto &folder : {(dir.path / "real" / ".").string(), (dir.path / "link").string(), (dir.path / "real/").string()}) {
+    CAPTURE(folder);
+    auto refused = ask(*module, "deleteDatabaseAsync", dynamic::array("x.db", folder));
+    REQUIRE(refused.error);
+    CHECK(refused.error->find("currently open") != std::string::npos);
+  }
+  CHECK(fs::exists(dir.path / "real" / "x.db"));
+  module->call("closeSync", dynamic::array(db));
+  CHECK(ask(*module, "deleteDatabaseAsync", dynamic::array("x.db", (dir.path / "link").string())).value == dynamic(nullptr));
+  CHECK_FALSE(fs::exists(dir.path / "real" / "x.db"));
+}
