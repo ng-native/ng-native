@@ -3,15 +3,23 @@
 #import <AppKit/AppKit.h>
 
 #include <atomic>
+#include <cstdint>
+#include <mutex>
 
 namespace ngn::appkit {
 
 namespace {
 
 std::atomic<bool> gProtected{false};
+// Requests numbered in the order they set `gProtected`, under `gAsking`, and the latest one applied
+// to the windows (main thread only).
+std::mutex gAsking;
+uint64_t gAsked = 0;
+uint64_t gApplied = 0;
 
-// `gProtected` is the state the latest request asked for; each request applies its own, in order
-// on the main thread, so the last one asked is the one the windows keep.
+// `gProtected` is the state the latest request asked for; each request applies its own on the main
+// thread unless a later one has applied already, so the last one asked is the one the windows keep,
+// though one asked on the main thread applies ahead of an earlier one still queued.
 void apply(NSWindow *window, bool on) {
   NSWindowSharingType wanted = on ? NSWindowSharingNone : NSWindowSharingReadOnly;
   if (window.sharingType != wanted) {
@@ -43,10 +51,18 @@ class WindowShield final : public CaptureShield {
   }
 
   void setProtected(bool on, std::function<void()> done) override {
-    gProtected = on;
+    uint64_t request;
+    {
+      std::lock_guard<std::mutex> lock(gAsking);
+      request = ++gAsked;
+      gProtected = on;
+    }
     auto finish = std::make_shared<std::function<void()>>(std::move(done));
     auto apply = ^{
-      applyToAll(on);
+      if (request > gApplied) {
+        gApplied = request;
+        applyToAll(on);
+      }
       if (*finish) {
         (*finish)();
       }
