@@ -37,6 +37,7 @@
 #include <folly/dynamic.h>
 
 #include <functional>
+#include <memory>
 #include <map>
 #include <optional>
 #include <string>
@@ -56,12 +57,17 @@ using facebook::react::Cursor;
 // the deepest. `Cursor::Auto` when none does: the toolkit's default.
 Cursor cursorFor(const ViewTree &tree, const std::vector<Tag> &chain);
 
-// What a `[dragItem]` view offers when dragged out: `file://` urls, text and a url.
+// What a `[dragItem]` view offers when dragged out: `file://` urls, text and a url. `uses` holds
+// open the picks its files read (FileAccess::Use) until whatever takes the item lets it go, once
+// the drag has handed the files on.
 struct DragOutItem {
   std::vector<std::string> files;
   std::optional<std::string> text;
   std::optional<std::string> url;
-  bool operator==(const DragOutItem &) const = default;
+  std::vector<std::shared_ptr<FileAccess::Use>> uses;
+  bool operator==(const DragOutItem &other) const {
+    return files == other.files && text == other.text && url == other.url;
+  }
 };
 
 // The item of a `dragItem` prop, or nothing when it is null or offers nothing. A file (in `files`,

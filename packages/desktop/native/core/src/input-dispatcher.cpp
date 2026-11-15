@@ -342,14 +342,19 @@ std::optional<DragOutItem> dragItemOf(const folly::dynamic &prop, const FileAcce
     return std::nullopt;
   }
   // A file only inside the file boundary, as the file uri checked: dropped in Finder, it is copied.
-  auto readable = [files](const std::string &uri) -> std::optional<std::string> {
+  // The item keeps the pick it reads open for the drag.
+  DragOutItem item;
+  auto readable = [files, &item](const std::string &uri) -> std::optional<std::string> {
     try {
-      return readableSource(files, uri).uri;
+      auto source = readableSource(files, uri);
+      if (source.use != nullptr && source.use->started()) {
+        item.uses.push_back(std::move(source.use));
+      }
+      return std::move(source.uri);
     } catch (const FileRefused &) {
       return std::nullopt;
     }
   };
-  DragOutItem item;
   if (auto list = prop.get_ptr("files"); list != nullptr && list->isArray()) {
     for (const auto &file : *list) {
       if (file.isString() && isFileScheme(file.asString())) {
