@@ -262,6 +262,21 @@ TEST_CASE("a second click sends a double click to the deepest view when it or an
   CHECK(only(f.input.events, "doubleClick").empty());
 }
 
+TEST_CASE("a double click released over a popover reports where it was released in the surface") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("onDoubleClick", true)));
+  f.tree.addContainerRoot(5);
+  f.input.addContainer(7, 1, 5);
+  f.input.pointerDown(click({35, 36}, 2));
+  auto release = Fixture::at({11, 10}, 7);
+  release.clickCount = 2;
+  f.input.pointerUp(release);
+  // The popover's 11,10 is the surface's 211,10, and 181,-20 from 3, which is at 30,30.
+  CHECK(
+      only(f.input.events, "doubleClick") ==
+      Events{R"(doubleClick 3 {"locationX":181,"locationY":-20,"pageX":211,"pageY":10})"});
+}
+
 TEST_CASE("a context menu goes to a view that opts in, and says whether one did") {
   Fixture f;
   setProps(f.tree, 2, desktopView(folly::dynamic::object("onContextMenu", true)));
