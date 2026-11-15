@@ -119,6 +119,10 @@ std::vector<facebook::react::Tag> rotorItems(const ViewTree &tree, facebook::rea
 // The item a rotor moves to, of `count` in tree order, from `current` (the item VoiceOver is on, if
 // it is on one), forwards or back. Nothing past either end.
 std::optional<size_t> rotorStep(size_t count, std::optional<size_t> current, bool forward);
+// The same through a search's filter: `matches` says, for every item in tree order, whether its
+// label has the text typed. The search starts from `current`, which need not match itself, and
+// moves to the next item in the direction that does.
+std::optional<size_t> rotorStep(const std::vector<bool> &matches, std::optional<size_t> current, bool forward);
 
 // AppKit's standard actions on a view.
 enum class AxVerb { Press, Increment, Decrement, Cancel };
