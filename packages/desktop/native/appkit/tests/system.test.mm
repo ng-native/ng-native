@@ -24,12 +24,17 @@ TEST_CASE("Clearing the colour scheme override reads the system's scheme again, 
   // system has now: as if the user switched it meanwhile.
   NSApp.appearance = [NSAppearance appearanceNamed:other == "dark" ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
   auto host = ngn::appkit::makeSystem("dev.ngnative.system-test");
+  std::vector<std::string> told;
+  ngn::appkit::onSchemeRead(host, [&](std::string scheme) { told.push_back(std::move(scheme)); });
   try {
     host->setColorScheme(other);
     CHECK(host->colorScheme() == other);
+    CHECK(told.empty());
     host->setColorScheme(std::nullopt);
     CHECK((NSApp.appearance == nil));
     CHECK(host->colorScheme() == system);
+    // JavaScript may have read the stale scheme first: the one read on the main thread is told.
+    CHECK(told == std::vector<std::string>{system});
   } catch (...) {
     NSApp.appearance = before;
     throw;
