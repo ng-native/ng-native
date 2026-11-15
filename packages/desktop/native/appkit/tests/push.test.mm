@@ -4,13 +4,18 @@
 #include <doctest/doctest.h>
 
 TEST_CASE("a notification's userInfo becomes the JSON payload, numbers and booleans kept apart") {
+  const unichar key[] = {'a', 0, 'b'};
+  const unichar value[] = {'c', 0, 'd'};
   NSDictionary *userInfo = @{
     @"aps" : @{@"alert" : @{@"title" : @"Order", @"body" : @"Table 4"}, @"badge" : @3, @"content-available" : @1},
     @"orderId" : @42,
     @"price" : @4.5,
     @"paid" : @YES,
-    @"items" : @[ @"tea", NSNull.null ],
+    @"items" : @[ @"tea", NSNull.null, [NSDate date] ],
     @"when" : [NSDate date],
+    @"nested" : @{@"alert" : [NSDate date]},
+    [NSString stringWithCharacters:key length:3] : [NSString stringWithCharacters:value length:3],
+    @"a" : @"plain",
   };
   auto payload = ngn::appkit::pushPayload(userInfo);
   CHECK(payload["aps"]["alert"]["title"] == "Order");
@@ -20,9 +25,13 @@ TEST_CASE("a notification's userInfo becomes the JSON payload, numbers and boole
   CHECK(payload["price"] == 4.5);
   CHECK(payload["paid"].isBool());
   CHECK(payload["paid"] == true);
+  // What JSON cannot say is left out, key and all; a null stays.
   CHECK(payload["items"] == folly::dynamic::array("tea", nullptr));
-  // What JSON cannot say is left out as null.
-  CHECK(payload["when"].isNull());
+  CHECK(payload.count("when") == 0);
+  CHECK(payload["nested"] == folly::dynamic::object());
+  // A U+0000 inside a key or a value keeps what follows it, and two keys stay apart.
+  CHECK(payload.at(std::string("a\0b", 3)) == std::string("c\0d", 3));
+  CHECK(payload.at("a") == "plain");
 
   auto request = ngn::remoteNotificationRequest("apns-1", payload);
   CHECK(request.title == "Order");

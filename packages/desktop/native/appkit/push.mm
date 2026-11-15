@@ -2,6 +2,8 @@
 
 #import <AppKit/AppKit.h>
 
+#include <optional>
+
 namespace ngn::appkit {
 
 namespace {
@@ -20,27 +22,35 @@ class AppKitPushRegistrar final : public PushRegistrar {
   }
 };
 
-folly::dynamic jsonOf(id value) {
+// The whole string, U+0000 included: UTF8String alone stops at the first one.
+std::string utf8Of(NSString *string) {
+  return std::string(string.UTF8String, [string lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
+}
+
+// No value for what JSON cannot say, so its key or item is left out.
+std::optional<folly::dynamic> jsonOf(id value) {
   if (value == nil || value == NSNull.null) {
-    return nullptr;
+    return folly::dynamic(nullptr);
   }
   if ([value isKindOfClass:NSString.class]) {
-    return std::string([value UTF8String]);
+    return folly::dynamic(utf8Of(value));
   }
   if ([value isKindOfClass:NSNumber.class]) {
     NSNumber *number = value;
     if (CFGetTypeID((__bridge CFTypeRef)number) == CFBooleanGetTypeID()) {
-      return static_cast<bool>(number.boolValue);
+      return folly::dynamic(static_cast<bool>(number.boolValue));
     }
     if (CFNumberIsFloatType((__bridge CFNumberRef)number)) {
-      return number.doubleValue;
+      return folly::dynamic(number.doubleValue);
     }
-    return static_cast<int64_t>(number.longLongValue);
+    return folly::dynamic(static_cast<int64_t>(number.longLongValue));
   }
   if ([value isKindOfClass:NSArray.class]) {
     folly::dynamic out = folly::dynamic::array();
     for (id item in (NSArray *)value) {
-      out.push_back(jsonOf(item));
+      if (auto json = jsonOf(item)) {
+        out.push_back(std::move(*json));
+      }
     }
     return out;
   }
@@ -48,12 +58,14 @@ folly::dynamic jsonOf(id value) {
     folly::dynamic out = folly::dynamic::object();
     for (id key in (NSDictionary *)value) {
       if ([key isKindOfClass:NSString.class]) {
-        out[std::string([key UTF8String])] = jsonOf(((NSDictionary *)value)[key]);
+        if (auto json = jsonOf(((NSDictionary *)value)[key])) {
+          out[utf8Of(key)] = std::move(*json);
+        }
       }
     }
     return out;
   }
-  return nullptr;
+  return std::nullopt;
 }
 
 } // namespace
@@ -63,7 +75,7 @@ std::shared_ptr<PushRegistrar> makePushRegistrar() {
 }
 
 folly::dynamic pushPayload(NSDictionary *userInfo) {
-  return [userInfo isKindOfClass:NSDictionary.class] ? jsonOf(userInfo) : folly::dynamic::object();
+  return [userInfo isKindOfClass:NSDictionary.class] ? *jsonOf(userInfo) : folly::dynamic::object();
 }
 
 } // namespace ngn::appkit
