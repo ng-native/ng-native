@@ -246,7 +246,7 @@ class RefusedTrack final : public AudioTrack {
 // A track, and the pick holding its file open for as long as it plays.
 class HeldTrack final : public AudioTrack {
  public:
-  HeldTrack(std::unique_ptr<AudioTrack> track, std::shared_ptr<FileAccess::Use> use) : track_(std::move(track)), use_(std::move(use)) {}
+  HeldTrack(std::unique_ptr<AudioTrack> track, std::shared_ptr<FileAccess::Use> use) : use_(std::move(use)), track_(std::move(track)) {}
   TrackState state() override {
     return track_->state();
   }
@@ -267,8 +267,9 @@ class HeldTrack final : public AudioTrack {
   }
 
  private:
-  std::unique_ptr<AudioTrack> track_;
+  // Declared first, so it goes last: the track closes its file before the pick lets it go.
   std::shared_ptr<FileAccess::Use> use_;
+  std::unique_ptr<AudioTrack> track_;
 };
 
 // The output, opening a file source only inside the file boundary, exactly the file checked.

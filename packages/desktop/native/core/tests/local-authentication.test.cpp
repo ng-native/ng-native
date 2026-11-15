@@ -146,6 +146,10 @@ TEST_CASE("LocalAuthentication answers at once, with no prompt, when Touch ID al
   // Locked out, or the lid closed, which LAContext reports as a system cancel.
   mac->mac = touchId(Failure::BiometryLockout);
   CHECK(ask(*module, "authenticateAsync", args).value == dynamic(dynamic::object("success", false)("error", "lockout")));
+  // Locked out is still enrolled, as expo's iOS module answers; only the level waits for the
+  // lockout to end, as there.
+  CHECK(ask(*module, "isEnrolledAsync").value == dynamic(true));
+  CHECK(ask(*module, "getEnrolledLevelAsync").value == dynamic(1));
   mac->mac = touchId(Failure::SystemCancel);
   CHECK(ask(*module, "isEnrolledAsync").value == dynamic(false));
   CHECK(ask(*module, "authenticateAsync", args).value == dynamic(dynamic::object("success", false)("error", "system_cancel")));
