@@ -2,7 +2,8 @@
 // reload's, owes that frame once its bundle has loaded, and a frame counts for it only when its own
 // JavaScript instance mounted the content (MountingManager::mountedBy) and no reload has begun
 // since. The last launch's content still on screen, or a mount it queued before the reload, never
-// counts for the new one, and a reload whose bundle did not load owes nothing. Main thread only.
+// counts for the new one, and a reload whose bundle did not load owes nothing, a reload of the same
+// launch included. Main thread only.
 // Toolkit-free.
 #pragma once
 
@@ -17,6 +18,11 @@ class LaunchFrame {
   // instance `instance` (MountingManager::instance).
   void loaded(uint64_t generation, uint64_t instance) {
     owed_ = Owed{generation, instance};
+  }
+
+  // A reload began, of this launch or a new one: the instance it replaces owes nothing now.
+  void reloadBegan() {
+    owed_.reset();
   }
 
   // A window shows content the instance `instance` mounted while `current` is the launch running:
