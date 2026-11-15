@@ -34,6 +34,7 @@ class AppKitBackend final : public MountingBackend, public DesktopPropsSink {
   std::function<void(SurfaceId)> onMount;
 
   void runOnUiThread(std::function<void()> task) override;
+  bool onUiThread() const override;
   void createView(const ShadowView &view) override;
   void deleteView(SurfaceId surfaceId, Tag tag) override;
   void insertChild(SurfaceId surfaceId, Tag parent, Tag child, int index) override;

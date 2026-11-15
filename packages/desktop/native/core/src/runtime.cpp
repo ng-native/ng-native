@@ -117,7 +117,7 @@ void Runtime::createHost() {
       WebSocketClientFactoryKey,
       clients_.webSockets ? webSocketClientFactory(clients_.webSockets) : getWebSocketClientFactory());
   installTextMeasurer(*contextContainer, textMeasurer_);
-  installControlMeasurer(*contextContainer, controlMeasurer_);
+  installControlSizes(*contextContainer, mounting_->startControlSizes(controlMeasurer_));
   // react-native-screens' header and tabs descriptors read React Native iOS's image loader from
   // here as they adopt a node, and throw when it is missing. They only keep it, for iOS's own
   // views, so nothing stands in for it.

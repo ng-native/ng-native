@@ -35,7 +35,9 @@ int FakeBackend::drain() {
   while (!tasks_.empty()) {
     auto task = std::move(tasks_.front());
     tasks_.pop_front();
+    draining_++;
     task();
+    draining_--;
     ran++;
   }
   return ran;

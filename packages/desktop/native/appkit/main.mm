@@ -612,9 +612,9 @@ void showAppSurfaceIfUsed() {
   gHost.appWindow.delegate = (id<NSWindowDelegate>)NSApp.delegate;
   gHost.appWindow.contentView = gHost.appSurface;
   [gHost.appWindow setFrameTopLeftPoint:NSMakePoint(NSMinX(visible) + 40, NSMaxY(visible) - 40)];
-  // Shown once the content has the insets of the title bar and toolbar it runs under, a commit or
-  // two later, or after kSettleWait at the latest: shown at once, its first frames would draw under
-  // the toolbar and then jump down.
+  // Shown once the content has the insets of the title bar and toolbar it runs under and its native
+  // controls their measured sizes, a commit or two later, or after kSettleWait at the latest: shown
+  // at once, its first frames would draw under the toolbar and then jump down.
   constexpr int64_t kSettleWait = 300 * NSEC_PER_MSEC;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kSettleWait), dispatch_get_main_queue(), ^{
     showAppWindow();
@@ -889,7 +889,7 @@ int main(int argc, const char *argv[]) {
       swipeMounted();
       if (surfaceId == kAppSurface) {
         showAppSurfaceIfUsed();
-        if (gHost.mounting->safeAreasSettled()) {
+        if (gHost.mounting->safeAreasSettled() && gHost.mounting->controlSizesSettled()) {
           showAppWindow();
         }
       } else {

@@ -2,6 +2,7 @@
 // MountingBackend on its UI thread, keeps the core's ViewTree in step, and reports desktop props.
 #pragma once
 
+#include "ngn/control-sizes.h"
 #include "ngn/desktop-view-props.h"
 #include "ngn/expo-ui.h"
 #include "ngn/live-regions.h"
@@ -17,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -63,6 +65,16 @@ class MountingManager final : public facebook::react::IMountingManager,
     return safeAreasSettled_;
   }
 
+  // The native controls' sizes for a runtime's layout (control-sizes.h), measured with `measurer`
+  // on the backend's UI thread. A new one for each JavaScript instance, which drops the last's.
+  // Any thread. `relayout` replaces the state update that lays a measured control out again.
+  std::shared_ptr<ControlSizes> startControlSizes(
+      std::shared_ptr<const ControlMeasurer> measurer,
+      ControlSizes::Relayout relayout = nullptr);
+  // UI thread only. Whether every control layout measured has been mounted at its size: a window
+  // is shown then, as for its safe areas, so its first frame does not draw them unsized.
+  bool controlSizesSettled() const;
+
   // UI thread only. What a back swipe in the window of `surfaceId` moves (back-swipe.h), and the top
   // screen of a stack now.
   std::optional<BackSwipeTarget> backSwipeTarget(SurfaceId surfaceId) const {
@@ -85,8 +97,12 @@ class MountingManager final : public facebook::react::IMountingManager,
   void ensureRoot(SurfaceId surfaceId, Tag tag);
   void reportDesktopProps(const ShadowView &view, const ShadowView *old);
 
+  std::shared_ptr<ControlSizes> controlSizes() const;
+
   std::shared_ptr<MountingBackend> backend_;
   std::shared_ptr<DesktopPropsSink> desktopProps_;
+  mutable std::mutex controlSizesMutex_;
+  std::shared_ptr<ControlSizes> controlSizes_;
   std::vector<facebook::react::ComponentDescriptorProvider> components_;
   // The descriptors a synchronous update clones props with, made the first time a name needs one.
   std::shared_ptr<const facebook::react::ContextContainer> propsContext_;

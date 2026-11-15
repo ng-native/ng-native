@@ -12,17 +12,11 @@ NGNView *NGNMakeControlView(const facebook::react::ShadowView &view);
 
 namespace ngn::appkit {
 
-// Sizes the controls with AppKit's cells, which are safe to make off the main thread, and with
-// sizes read once on the main thread for the controls that have no cell.
+// Sizes the controls with AppKit's cells and views, on the main thread only (ControlSizes calls it
+// there, and layout reads what it measured).
 class AppKitControlMeasurer final : public ControlMeasurer {
  public:
-  // On the main thread.
-  AppKitControlMeasurer();
   facebook::react::Size measure(ControlKind kind, const NativeControlProps &props) const override;
-
- private:
-  facebook::react::Size switches_[4];
-  facebook::react::Size spinners_[4];
 };
 
 } // namespace ngn::appkit

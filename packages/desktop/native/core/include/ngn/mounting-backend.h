@@ -32,6 +32,8 @@ class MountingBackend {
 
   // Runs `task` on the toolkit's UI thread, after every task posted before it.
   virtual void runOnUiThread(std::function<void()> task) = 0;
+  // Whether the caller is on the toolkit's UI thread.
+  virtual bool onUiThread() const = 0;
 
   // A view for `view.tag`, with its first props, state, layout and event emitter already set on
   // `view`. The update calls below then report only what changed.

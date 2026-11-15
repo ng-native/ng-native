@@ -4,6 +4,8 @@
 
 #include <react/renderer/components/view/ViewEventEmitter.h>
 
+#include <cassert>
+
 using namespace facebook::react;
 using RNSize = facebook::react::Size;
 using ngn::ControlKind;
@@ -93,21 +95,8 @@ RNSize fitting(NSView *view) {
 
 namespace ngn::appkit {
 
-AppKitControlMeasurer::AppKitControlMeasurer() {
-  for (int i = 0; i < 4; i++) {
-    auto size = static_cast<ControlSize>(i);
-    NSSwitch *toggle = [NSSwitch new];
-    toggle.controlSize = nsControlSize(size);
-    switches_[i] = fitting(toggle);
-    NSProgressIndicator *spinner = [NSProgressIndicator new];
-    spinner.style = NSProgressIndicatorStyleSpinning;
-    spinner.controlSize = nsControlSize(size);
-    [spinner sizeToFit];
-    spinners_[i] = {static_cast<Float>(spinner.frame.size.width), static_cast<Float>(spinner.frame.size.height)};
-  }
-}
-
 RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps &p) const {
+  assert(NSThread.isMainThread && "AppKit's controls are measured on the main thread");
   @autoreleasepool {
     switch (kind) {
       case ControlKind::Button: {
@@ -123,14 +112,21 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
         }
         return cellSize(cell);
       }
-      case ControlKind::Switch:
-        return switches_[static_cast<int>(p.controlSize)];
+      case ControlKind::Switch: {
+        NSSwitch *toggle = [NSSwitch new];
+        toggle.controlSize = nsControlSize(p.controlSize);
+        return fitting(toggle);
+      }
       case ControlKind::ActivityIndicator: {
         // `size` picks AppKit's small or regular spinner unless the element names a control size.
         auto size = p.controlSize != ControlSize::Regular ? p.controlSize
             : p.size == "large"                          ? ControlSize::Regular
                                                          : ControlSize::Small;
-        return spinners_[static_cast<int>(size)];
+        NSProgressIndicator *spinner = [NSProgressIndicator new];
+        spinner.style = NSProgressIndicatorStyleSpinning;
+        spinner.controlSize = nsControlSize(size);
+        [spinner sizeToFit];
+        return {static_cast<Float>(spinner.frame.size.width), static_cast<Float>(spinner.frame.size.height)};
       }
       case ControlKind::SegmentedControl: {
         NSSegmentedCell *cell = [NSSegmentedCell new];
