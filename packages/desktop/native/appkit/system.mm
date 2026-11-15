@@ -118,10 +118,15 @@ class AppKitSystem final : public System {
       if (!scheme) {
         systemSchemeChanged(schemeOf(NSApp.effectiveAppearance));
       }
-      // Read here, after the system's scheme, and in order with every other change: the app's
-      // appearance may not change, and so tell nothing.
+      // The scheme this change applied, not the latest override: a later change queued behind
+      // this one has set override_ already, and tells its own scheme when it applies.
       if (*told) {
-        (*told)(colorScheme());
+        std::string applied;
+        {
+          std::lock_guard lock(mutex_);
+          applied = scheme.value_or(systemScheme_);
+        }
+        (*told)(applied);
       }
     });
   }
