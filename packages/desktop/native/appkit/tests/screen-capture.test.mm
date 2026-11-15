@@ -110,27 +110,38 @@ TEST_CASE("WindowShield applies each request's own state before answering it, th
   CHECK(window.sharingType == NSWindowSharingReadOnly);
 }
 
-TEST_CASE("WindowShield keeps a main-thread request's state over an earlier one still queued") {
+// One request asked off the main thread and queued, then the other asked on the main thread
+// before the queued one applies: the windows keep the main thread's, the one asked last.
+void askQueuedThenMain(bool queued) {
   NSWindow *window = offscreenWindow();
   auto shield = ngn::appkit::captureShield();
   auto answered = std::make_shared<std::atomic<bool>>(false);
-  // Protect asked off the main thread and queued, then allow asked on the main thread before the
-  // queued request applies.
   dispatch_semaphore_t asked = dispatch_semaphore_create(0);
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-    shield->setProtected(true, [answered] { *answered = true; });
+    shield->setProtected(queued, [answered] { *answered = true; });
     dispatch_semaphore_signal(asked);
   });
+  // The main queue does not run while this waits, so the queued request is still pending.
   REQUIRE(dispatch_semaphore_wait(asked, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0);
-  shield->setProtected(false, nullptr);
+  shield->setProtected(!queued, nullptr);
   NSDate *until = [NSDate dateWithTimeIntervalSinceNow:5];
   while (!*answered && [until timeIntervalSinceNow] > 0) {
     CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, false);
   }
   REQUIRE(*answered);
-  CHECK(window.sharingType == NSWindowSharingReadOnly);
-  // Nor is a new window protected.
+  NSWindowSharingType wanted = queued ? NSWindowSharingReadOnly : NSWindowSharingNone;
+  CHECK(window.sharingType == wanted);
+  // A new window follows the same state.
   NSWindow *after = offscreenWindow();
   ngn::appkit::shieldNewWindow(after);
-  CHECK(after.sharingType == NSWindowSharingReadOnly);
+  CHECK(after.sharingType == wanted);
+  shield->setProtected(false, nullptr);
+}
+
+TEST_CASE("WindowShield keeps a main-thread allow over a protect still queued") {
+  askQueuedThenMain(true);
+}
+
+TEST_CASE("WindowShield keeps a main-thread protect over an allow still queued") {
+  askQueuedThenMain(false);
 }
