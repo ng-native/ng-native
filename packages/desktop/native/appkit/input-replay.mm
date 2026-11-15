@@ -76,6 +76,9 @@ bool gInPress = false;
 // Whether that press's release is posted and not yet read: what the release does (a field it
 // focuses) has not happened yet.
 bool gReleasePosted = false;
+// The modal window running when the press began, if any: one running after it is one the press's
+// release opened (an alert a button's action runs), inside the press's handling.
+NSWindow *__weak gModalAtPress;
 
 void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
   NSEvent *event = [NSEvent mouseEventWithType:type
@@ -119,6 +122,9 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
     }
     bool press = type == NSEventTypeLeftMouseDown;
     gInPress = gInPress || press;
+    if (press) {
+      gModalAtPress = NSApp.modalWindow;
+    }
     [NSApp sendEvent:event];
     if (press) {
       gInPress = false;
@@ -152,9 +158,12 @@ NSString *typedWith(NSString *base, NSEventModifierFlags flags) {
   return base;
 }
 
-// A key press and its release, to the key window (a red box or a sheet, not only the app's).
+// A key press and its release, to the modal window while one runs, else the key window (a red box
+// or a sheet, not only the app's).
 void sendKey(NSWindow *scriptWindow, const InputStep &step) {
-  NSWindow *window = NSApp.keyWindow != nil ? NSApp.keyWindow : scriptWindow;
+  NSWindow *window = NSApp.modalWindow != nil ? NSApp.modalWindow
+      : NSApp.keyWindow != nil                ? NSApp.keyWindow
+                                              : scriptWindow;
   NSString *characters = step.key == "escape" ? @"\x1b"
       : step.key == "return"                  ? @"\r"
       : step.key == "space"                   ? @" "
@@ -337,13 +346,25 @@ void playLater(NSWindow *window, std::shared_ptr<InputScript> script, size_t at,
   [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
 }
 
+// Whether a modal session the press's release opened is running: the release has been read, and
+// the press's handling returns only once the session ends.
+bool modalInPress() {
+  NSWindow *modal = NSApp.modalWindow;
+  return gInPress && gReleasePosted && modal != nil && modal != gModalAtPress;
+}
+
 void playFrom(NSWindow *window, std::shared_ptr<InputScript> script, size_t at) {
   while (at < script->steps.size()) {
     const auto &step = script->steps[at++];
+    // In a modal session the release opened, the keyboard's steps (and waits and menu choices) go
+    // on, so a key can end the session and with it the press; a pointer step still waits.
+    bool modal = modalInPress();
+    bool keyboard = step.kind == InputStep::Kind::Key || step.kind == InputStep::Kind::Type ||
+        step.kind == InputStep::Kind::Wait || step.kind == InputStep::Kind::Choose;
     // A press still tracking in its loop has not read the release posted for it: the next press
     // waits for it, so that loop does not take this one's release, and once the release is
     // posted every step waits, so it follows what the release does.
-    if (gInPress && (step.kind == InputStep::Kind::Down || gReleasePosted)) {
+    if (gInPress && (step.kind == InputStep::Kind::Down || gReleasePosted) && !(modal && keyboard)) {
       playLater(window, script, at - 1, 10);
       return;
     }
@@ -359,6 +380,12 @@ void playFrom(NSWindow *window, std::shared_ptr<InputScript> script, size_t at) 
       return;
     }
     play(window, step);
+    // A step played into the session can end it, which happens once this returns: the next step
+    // looks again.
+    if (modal) {
+      playLater(window, script, at, 10);
+      return;
+    }
   }
   fprintf(stderr, "[ngn] input script done\n");
 }

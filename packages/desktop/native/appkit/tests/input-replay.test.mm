@@ -132,6 +132,8 @@ TEST_CASE("a key step with Shift types the shifted character into the focused fi
 @property(nonatomic, strong) NSMutableArray<NSString *> *ended;
 // Focused when a press is released, as a control whose action focuses a field.
 @property(nonatomic, weak) NSView *focusOnRelease;
+// Run when a press is released, before the press's handling returns, as a control's action.
+@property(nonatomic, copy) void (^onRelease)(void);
 @end
 @implementation NGNTrackingTestView
 - (BOOL)acceptsFirstMouse:(NSEvent *)event {
@@ -160,6 +162,9 @@ TEST_CASE("a key step with Shift types the shifted character into the focused fi
       [self.ended addObject:[NSString stringWithFormat:@"%g>%g", event.locationInWindow.x, next.locationInWindow.x]];
       if (self.focusOnRelease != nil) {
         [self.window makeFirstResponder:self.focusOnRelease];
+      }
+      if (self.onRelease != nil) {
+        self.onRelease();
       }
       return;
     }
@@ -217,6 +222,68 @@ TEST_CASE("the steps after a tracked press's release wait for the press to end")
   CHECK(view.stuck == 0);
   CHECK(view.clicks == 1);
   // The release focused the field before the text was typed.
+  CHECK([field.currentEditor.string isEqualToString:@"hi"]);
+  [window close];
+}
+
+TEST_CASE("a key step reaches an alert a tracked press's release runs, so the press can end") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NGNTrackingTestView *view = [[NGNTrackingTestView alloc] initWithFrame:NSMakeRect(0, 0, 300, 200)];
+  window.contentView = view;
+  NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(150, 150, 140, 24)];
+  [view addSubview:field];
+  [window orderFront:nil];
+  __block NSModalResponse response = 0;
+  __block bool timedOut = false;
+  // The release's action runs an alert inside the press's handling, as a button's action can.
+  view.onRelease = ^{
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Replayed";
+    [alert addButtonWithTitle:@"OK"];
+    NSTimer *guard = [NSTimer timerWithTimeInterval:5
+                                            repeats:NO
+                                              block:^(NSTimer *) {
+                                                timedOut = true;
+                                                [NSApp abortModal];
+                                              }];
+    [NSRunLoop.mainRunLoop addTimer:guard forMode:NSModalPanelRunLoopMode];
+    response = [alert runModal];
+    [guard invalidate];
+    [window makeFirstResponder:field];
+  };
+  // The alert's default button takes a return sent to the key window. This process is never active,
+  // so no window is key: a monitor of the keys NSApp is sent stands in for the button, for a return
+  // sent to the alert while it runs.
+  __block bool returnToAlert = false;
+  id monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                                     handler:^NSEvent *(NSEvent *event) {
+                                                       NSWindow *modal = NSApp.modalWindow;
+                                                       if (modal != nil && event.keyCode == 36 &&
+                                                           event.windowNumber == modal.windowNumber) {
+                                                         returnToAlert = true;
+                                                         [NSApp stopModalWithCode:NSAlertFirstButtonReturn];
+                                                         return nil;
+                                                       }
+                                                       return event;
+                                                     }];
+  // The return dismisses the alert; the typing waits for the press to end, after the alert.
+  auto script = ngn::parseInputScript("down 50 50\nup 50 50\nkey return\ntype hi\n");
+  REQUIRE_FALSE(script.error);
+  ngn::appkit::replayInputScript(window, std::move(script));
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:10];
+  while (![field.currentEditor.string isEqualToString:@"hi"] && !timedOut && view.stuck == 0 &&
+         until.timeIntervalSinceNow > 0) {
+    [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  }
+  [NSEvent removeMonitor:monitor];
+  CHECK_FALSE(timedOut);
+  CHECK(returnToAlert);
+  CHECK(response == NSAlertFirstButtonReturn);
   CHECK([field.currentEditor.string isEqualToString:@"hi"]);
   [window close];
 }
