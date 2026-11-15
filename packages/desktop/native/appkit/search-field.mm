@@ -147,6 +147,8 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
   NSColor *_tint;
   int _eventCount;
   CGFloat _height;
+  // Counts the editing ends: only the latest one's turn-later check may report a blur.
+  NSUInteger _endings;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -263,9 +265,10 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
 // and starts it again at the click's point, which is no blur.
 - (void)controlTextDidEndEditing:(NSNotification *)note {
   __weak NGNSearchField *weakSelf = self;
+  NSUInteger ending = ++_endings;
   dispatch_async(dispatch_get_main_queue(), ^{
     NGNSearchField *strongSelf = weakSelf;
-    if (strongSelf != nil && strongSelf.field.currentEditor == nil && strongSelf.ended) {
+    if (strongSelf != nil && strongSelf->_endings == ending && strongSelf.field.currentEditor == nil && strongSelf.ended) {
       strongSelf.ended();
     }
   });
