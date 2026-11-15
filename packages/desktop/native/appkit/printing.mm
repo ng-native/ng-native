@@ -157,8 +157,9 @@ class AppKitPrintSystem final : public PrintSystem {
   explicit AppKitPrintSystem(std::function<NSWindow *(facebook::react::SurfaceId)> windowOf) : windowOf_(std::move(windowOf)) {}
 
   void printWindow(facebook::react::SurfaceId surface, bool landscape, std::function<void(const std::string &)> done) override {
-    onMain([this, surface, landscape, done = std::move(done)] {
-      NSWindow *window = windowOf_ ? windowOf_(surface) : nil;
+    // The lookup is copied in: the system may be gone before the main thread runs this.
+    onMain([windowOf = windowOf_, surface, landscape, done = std::move(done)] {
+      NSWindow *window = windowOf ? windowOf(surface) : nil;
       if (window == nil) {
         done("no window shows surface " + std::to_string(surface));
         return;
@@ -284,40 +285,9 @@ void collectWebViews(NSView *view, NSMutableArray<WKWebView *> *found) {
   }
 }
 
-// One page of `content`'s size: the window's own drawing, with each web view's snapshot drawn
-// over its blank, clipped to what of the web view shows.
-PDFDocument *composedDocument(NSView *content, NSBitmapImageRep *drawn, NSArray<WKWebView *> *webViews, NSArray *snapshots) {
-  NSRect bounds = content.bounds;
-  NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:drawn];
-  if (context != nil && snapshots.count > 0) {
-    [NSGraphicsContext saveGraphicsState];
-    NSGraphicsContext.currentContext = context;
-    // The bitmap's units are the view's points, from its bottom left; a flipped view's rects are
-    // turned over to match.
-    auto place = [&](NSRect rect) {
-      rect = NSOffsetRect(rect, -NSMinX(bounds), -NSMinY(bounds));
-      if (content.isFlipped) {
-        rect.origin.y = NSHeight(bounds) - NSMaxY(rect);
-      }
-      return rect;
-    };
-    for (NSUInteger i = 0; i < webViews.count; i++) {
-      if (![snapshots[i] isKindOfClass:NSImage.class]) {
-        continue;
-      }
-      WKWebView *web = webViews[i];
-      [NSGraphicsContext saveGraphicsState];
-      NSRectClip(place([web convertRect:web.visibleRect toView:content]));
-      [(NSImage *)snapshots[i] drawInRect:place([web convertRect:web.bounds toView:content])
-                                 fromRect:NSZeroRect
-                                operation:NSCompositingOperationCopy
-                                 fraction:1];
-      [NSGraphicsContext restoreGraphicsState];
-    }
-    [context flushGraphics];
-    [NSGraphicsContext restoreGraphicsState];
-  }
-  NSImage *image = [[NSImage alloc] initWithSize:bounds.size];
+// One page of `drawn`'s size, holding it.
+PDFDocument *pageOf(NSBitmapImageRep *drawn, NSSize size) {
+  NSImage *image = [[NSImage alloc] initWithSize:size];
   [image addRepresentation:drawn];
   PDFPage *page = [[PDFPage alloc] initWithImage:image];
   if (page == nil) {
@@ -328,29 +298,53 @@ PDFDocument *composedDocument(NSView *content, NSBitmapImageRep *drawn, NSArray<
   return pdf;
 }
 
+// The content drawn as the screen draws it, layers and all, at the window's scale, with each web
+// view's snapshot shown in its place for the drawing: an image view just above the web view, so
+// the views that cover the web view cover its snapshot too, and everything is drawn in one layout.
+PDFDocument *drawnDocument(NSView *content, NSArray<WKWebView *> *webViews, NSArray *snapshots) {
+  NSRect bounds = content.bounds;
+  if (NSWidth(bounds) < 1 || NSHeight(bounds) < 1) {
+    return nil;
+  }
+  NSMutableArray<NSView *> *stand = [NSMutableArray array];
+  for (NSUInteger i = 0; i < webViews.count; i++) {
+    WKWebView *web = webViews[i];
+    if (![snapshots[i] isKindOfClass:NSImage.class] || web.superview == nil || ![web isDescendantOf:content]) {
+      continue;
+    }
+    NSImageView *image = [NSImageView imageViewWithImage:snapshots[i]];
+    image.imageScaling = NSImageScaleAxesIndependently;
+    image.frame = web.frame;
+    [web.superview addSubview:image positioned:NSWindowAbove relativeTo:web];
+    [stand addObject:image];
+  }
+  NSBitmapImageRep *drawn = [content bitmapImageRepForCachingDisplayInRect:bounds];
+  if (drawn != nil) {
+    [content cacheDisplayInRect:bounds toBitmapImageRep:drawn];
+  }
+  for (NSView *image in stand) {
+    [image removeFromSuperview];
+  }
+  return drawn != nil ? pageOf(drawn, bounds.size) : nil;
+}
+
 } // namespace
 
 void windowDocument(NSView *content, std::function<void(PDFDocument *)> done) {
-  NSRect bounds = content.bounds;
-  if (content == nil || NSWidth(bounds) < 1 || NSHeight(bounds) < 1) {
+  if (content == nil || NSWidth(content.bounds) < 1 || NSHeight(content.bounds) < 1) {
     done(nil);
     return;
   }
-  // Drawn as the screen draws it, layers and all, at the window's scale. Web views, video and
-  // Metal draw out of process or on the GPU, so they are blank here; web views get their snapshot.
-  NSBitmapImageRep *drawn = [content bitmapImageRepForCachingDisplayInRect:bounds];
-  if (drawn == nil) {
-    done(nil);
-    return;
-  }
-  [content cacheDisplayInRect:bounds toBitmapImageRep:drawn];
+  // Web views, video and Metal draw out of process or on the GPU, so a drawing of the views has
+  // them blank; web views get their snapshot.
   NSMutableArray<WKWebView *> *webViews = [NSMutableArray array];
   collectWebViews(content, webViews);
   if (webViews.count == 0) {
-    done(composedDocument(content, drawn, webViews, @[]));
+    done(drawnDocument(content, webViews, @[]));
     return;
   }
-  // Each snapshot answers on the main thread; a web view that cannot take one stays blank.
+  // Each snapshot answers on the main thread; a web view that cannot take one stays blank. The
+  // views are drawn once the last answers, in the layout they have then.
   NSMutableArray *snapshots = [NSMutableArray array];
   for (NSUInteger i = 0; i < webViews.count; i++) {
     [snapshots addObject:NSNull.null];
@@ -363,7 +357,7 @@ void windowDocument(NSView *content, std::function<void(PDFDocument *)> done) {
         snapshots[i] = snapshot;
       }
       if (--*left == 0) {
-        (*finish)(composedDocument(content, drawn, webViews, snapshots));
+        (*finish)(drawnDocument(content, webViews, snapshots));
       }
     }];
   }

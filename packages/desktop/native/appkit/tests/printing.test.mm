@@ -224,3 +224,68 @@ TEST_CASE("a web view prints where it is in a flipped content view, as the host'
   CHECK(colorAt(pdf, 0.75, 0.25).blueComponent < 0.5);
   [window close];
 }
+
+TEST_CASE("a view over a web view covers its page in print, as it does on screen") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NSView *content = window.contentView;
+  content.wantsLayer = YES;
+  // The web view fills the window; a red box over its left half.
+  WKWebView *web = [[WKWebView alloc] initWithFrame:content.bounds configuration:[WKWebViewConfiguration new]];
+  [content addSubview:web];
+  NSView *cover = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 150, 200)];
+  cover.wantsLayer = YES;
+  cover.layer.backgroundColor = NSColor.redColor.CGColor;
+  [content addSubview:cover positioned:NSWindowAbove relativeTo:web];
+  [web loadHTMLString:@"<html><body style='margin:0;background:rgb(0,0,255)'></body></html>" baseURL:nil];
+  REQUIRE(runUntil([&] { return !web.isLoading && web.estimatedProgress >= 1; }, 20));
+  PDFDocument *pdf = captured(content);
+  REQUIRE((pdf != nil));
+  NSColor *covered = colorAt(pdf, 0.25, 0.5);
+  CHECK(covered.redComponent > 0.9);
+  CHECK(covered.blueComponent < 0.4);
+  CHECK(colorAt(pdf, 0.75, 0.5).blueComponent > 0.9);
+  // The stand-in for the page is gone again.
+  CHECK(content.subviews.count == 2);
+  [window close];
+}
+
+TEST_CASE("a layout that changes while a web view's snapshot is taken prints as it is once taken") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NSView *content = window.contentView;
+  content.wantsLayer = YES;
+  // A red box top left, a web view bottom right.
+  NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 100, 150, 100)];
+  box.wantsLayer = YES;
+  box.layer.backgroundColor = NSColor.redColor.CGColor;
+  [content addSubview:box];
+  WKWebView *web = [[WKWebView alloc] initWithFrame:NSMakeRect(150, 0, 150, 100) configuration:[WKWebViewConfiguration new]];
+  [content addSubview:web];
+  [web loadHTMLString:@"<html><body style='margin:0;background:rgb(0,0,255)'></body></html>" baseURL:nil];
+  REQUIRE(runUntil([&] { return !web.isLoading && web.estimatedProgress >= 1; }, 20));
+  PDFDocument *pdf = nil;
+  bool answered = false;
+  ngn::appkit::windowDocument(content, [&](PDFDocument *document) {
+    answered = true;
+    pdf = document;
+  });
+  // Before the snapshot answers: the box moves top right and the web view bottom left.
+  box.frame = NSMakeRect(150, 100, 150, 100);
+  web.frame = NSMakeRect(0, 0, 150, 100);
+  REQUIRE(runUntil([&] { return answered; }, 10));
+  REQUIRE((pdf != nil));
+  CHECK(colorAt(pdf, 0.75, 0.75).redComponent > 0.9);
+  CHECK(colorAt(pdf, 0.25, 0.75).redComponent < 0.5);
+  CHECK(colorAt(pdf, 0.25, 0.25).blueComponent > 0.9);
+  CHECK(colorAt(pdf, 0.75, 0.25).blueComponent < 0.5);
+  [window close];
+}
