@@ -416,13 +416,46 @@ bool FileChanges::concerns(const std::string &path) const {
   return path == watched_ || (folder_ && fs::path(path).parent_path() == fs::path(watched_));
 }
 
+namespace {
+folly::dynamic change(const char *type, const std::string &path) {
+  return folly::dynamic::object("type", type)("uri", fileUri(path));
+}
+} // namespace
+
+void FileChanges::rescan(folly::dynamic &out, const Exists &exists) {
+  std::set<std::string> now;
+  if (exists(watched_)) {
+    now.insert(watched_);
+  }
+  if (folder_) {
+    std::error_code error;
+    for (const auto &entry : fs::directory_iterator(watched_, error)) {
+      now.insert(entry.path().string());
+    }
+  }
+  for (auto it = seen_.begin(); it != seen_.end();) {
+    if (concerns(*it) && !now.contains(*it)) {
+      out.push_back(change("deleted", *it));
+      it = seen_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  for (const auto &path : now) {
+    if (seen_.insert(path).second) {
+      out.push_back(change("created", path));
+    }
+  }
+}
+
 folly::dynamic FileChanges::changes(const std::vector<FileWatcher::Event> &events, const Exists &exists) {
-  auto change = [](const char *type, const std::string &path) -> folly::dynamic {
-    return folly::dynamic::object("type", type)("uri", fileUri(path));
-  };
   folly::dynamic out = folly::dynamic::array();
   for (size_t i = 0; i < events.size(); i++) {
     const auto &event = events[i];
+    if (event.rescan) {
+      rescan(out, exists);
+      continue;
+    }
     bool here = exists(event.path);
     // FSEvents reports a rename as two events in a row: the old path, then the new one.
     if (event.renamed && !here && i + 1 < events.size() && events[i + 1].renamed && exists(events[i + 1].path)) {
@@ -802,6 +835,10 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
           }
           send(std::move(changes), id->value);
         });
+        // A watch the OS would not start would never report: there is none.
+        if (handle == 0) {
+          return nullptr;
+        }
         {
           std::lock_guard lock(id->mutex);
           id->value = handle;

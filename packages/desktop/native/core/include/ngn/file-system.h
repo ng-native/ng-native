@@ -227,9 +227,13 @@ class FileWatcher {
     bool removed{false};
     bool renamed{false};
     bool modified{false};
+    // The OS lost track of what changed under the path (FSEvents' must-scan-subdirs, after events
+    // were dropped): the changes are found by listing it again.
+    bool rescan{false};
   };
   virtual ~FileWatcher() = default;
-  // Starts reporting batches of events under `path`, on any thread, until stop. A handle.
+  // Starts reporting batches of events under `path`, on any thread, until stop. A handle, or 0
+  // when the OS would not start watching.
   virtual int start(const std::string &path, std::function<void(std::vector<Event>)> events) = 0;
   virtual void stop(int handle) = 0;
 };
@@ -246,6 +250,8 @@ class FileChanges {
 
  private:
   bool concerns(const std::string &path) const;
+  // A rescan's changes: what is there now against what was seen.
+  void rescan(folly::dynamic &out, const Exists &exists);
   std::string watched_;
   bool folder_{false};
   std::set<std::string> seen_;
