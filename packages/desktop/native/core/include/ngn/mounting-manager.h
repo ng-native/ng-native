@@ -58,6 +58,13 @@ class MountingManager final : public facebook::react::IMountingManager,
   // UI thread only. The user chose the tab `screen` of the tabs host `host` (tabs-host.h).
   void chooseTab(SurfaceId surfaceId, Tag host, Tag screen);
   void removeContainerInsets(Tag root);
+  // Runs the backend's pending UI-thread tasks for a moment when called on its UI thread, and does
+  // nothing elsewhere: for the UI thread while it waits on another thread's work.
+  void serviceUiThread() {
+    if (backend_->onUiThread()) {
+      backend_->serviceUiThread();
+    }
+  }
   // UI thread only. Whether the last mount told no safe-area view anything new and no container's
   // insets changed since: the views have the insets they will draw with. A window is shown then,
   // so its first frame is not drawn under its toolbar.

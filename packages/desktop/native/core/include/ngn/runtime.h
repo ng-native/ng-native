@@ -22,6 +22,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 
 namespace facebook::react {
 class ReactHost;
@@ -122,6 +123,9 @@ class Runtime {
  private:
   void createHost();
   void installErrorListener(facebook::jsi::Runtime &runtime);
+  // Waits for the last reload's thread to end, serving the UI thread's queue meanwhile when called
+  // there, since the teardown and mounting it does can need it.
+  void joinReload();
 
   std::shared_ptr<MountingManager> mounting_;
   std::shared_ptr<const TextMeasurer> textMeasurer_;
@@ -136,6 +140,10 @@ class Runtime {
   // UI thread never waits on it during a reload: it writes to the book instead.
   std::recursive_mutex mutex_;
   std::atomic<bool> reloading_{false};
+  // The last reload's thread, which uses this runtime until it ends: joined before the next reload
+  // and before shutdown tears the runtime down.
+  std::thread reloader_;
+  std::atomic<bool> reloaderDone_{true};
   std::unique_ptr<facebook::react::ReactHost> host_;
   struct Surface {
     std::string moduleName;

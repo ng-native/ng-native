@@ -321,9 +321,12 @@ void Runtime::reload(std::function<void(bool)> done) {
     }
     reloading_ = true;
   }
+  // The last reload has left the book; it may still be reporting.
+  joinReload();
+  reloaderDone_ = false;
   // Tearing down waits for the JS thread and the download blocks, so neither runs on the UI
   // thread, whose queue the mounting of the stopped surfaces still needs.
-  std::thread([this, done = std::move(done)] {
+  reloader_ = std::thread([this, done = std::move(done)] {
     bool loaded = false;
     bool restarted = false;
     {
@@ -374,7 +377,24 @@ void Runtime::reload(std::function<void(bool)> done) {
     if (done) {
       done(loaded);
     }
-  }).detach();
+    reloaderDone_ = true;
+  });
+}
+
+void Runtime::joinReload() {
+  if (!reloader_.joinable()) {
+    return;
+  }
+  // From the reload's own thread (its `done` reloading or shutting down) there is nothing to wait for.
+  if (reloader_.get_id() == std::this_thread::get_id()) {
+    reloader_.detach();
+    return;
+  }
+  while (!reloaderDone_) {
+    mounting_->serviceUiThread();
+    std::this_thread::yield();
+  }
+  reloader_.join();
 }
 
 void Runtime::reload(std::string bundle, std::function<void(bool)> done) {
@@ -392,6 +412,8 @@ void Runtime::reload(std::string bundle, std::function<void(bool)> done) {
 }
 
 void Runtime::shutdown() {
+  // A reload still running holds this runtime: it ends first.
+  joinReload();
   std::lock_guard lock(mutex_);
   if (host_) {
     workletHost().runOnScheduler.set(nullptr);
