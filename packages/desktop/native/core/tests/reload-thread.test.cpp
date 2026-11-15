@@ -93,3 +93,30 @@ TEST_CASE("a run whose done destroys the owner ends without touching it") {
   // The detached run's tail writes only its own state.
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
+
+TEST_CASE("a close refuses a run started from a done after it began, and waits for every run") {
+  UiQueue ui;
+  ngn::ReloadThread reload;
+  std::atomic<bool> closing{false};
+  std::atomic<bool> nextStarted{false};
+  std::atomic<bool> nextRan{false};
+  std::atomic<bool> firstEnded{false};
+  reload.start([&] {
+    // `done` reloads once the owner has begun to shut down.
+    waitFor(closing);
+    reload.join([] {});
+    nextStarted = reload.start([&] { nextRan = true; });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    firstEnded = true;
+  });
+  reload.close([&] {
+    closing = true;
+    ui.serve();
+  });
+  CHECK(firstEnded);
+  CHECK_FALSE(nextStarted);
+  CHECK_FALSE(nextRan);
+  // Closed for good: a later start is refused too.
+  CHECK_FALSE(reload.start([&] { nextRan = true; }));
+  CHECK_FALSE(nextRan);
+}
