@@ -6,6 +6,8 @@
 
 #include <mutex>
 
+#include <memory>
+
 namespace ngn::appkit {
 
 namespace {
@@ -44,9 +46,13 @@ class MacPowerSource final : public PowerSource {
 
   // A power source notification on the main run loop, and Low Power Mode's notification.
   std::function<void()> watch(std::function<void()> changed) override {
-    auto listener = new std::function<void()>(std::move(changed));
+    // The run-loop source and the notification block each own the callable, so a block already
+    // running on another thread when the watch stops still finds it.
+    using Listener = std::shared_ptr<std::function<void()>>;
+    auto listener = std::make_shared<std::function<void()>>(std::move(changed));
+    auto *context = new Listener(listener);
     CFRunLoopSourceRef source = IOPSNotificationCreateRunLoopSource(
-        [](void *context) { (*static_cast<std::function<void()> *>(context))(); }, listener);
+        [](void *context) { (**static_cast<Listener *>(context))(); }, context);
     if (source != nullptr) {
       CFRunLoopAddSource(CFRunLoopGetMain(), source, kCFRunLoopDefaultMode);
     }
@@ -56,14 +62,14 @@ class MacPowerSource final : public PowerSource {
                                                               usingBlock:^(NSNotification *) {
                                                                 (*listener)();
                                                               }];
-    return [source, observer, listener] {
+    return [source, observer, context] {
       [NSNotificationCenter.defaultCenter removeObserver:observer];
       if (source != nullptr) {
-        // Removed on the main run loop's thread, where the callback runs, so none runs after.
+        // Removed on the main run loop's thread, where the source's callback runs, so none runs after.
         auto remove = ^{
           CFRunLoopRemoveSource(CFRunLoopGetMain(), source, kCFRunLoopDefaultMode);
           CFRelease(source);
-          delete listener;
+          delete context;
         };
         if (NSThread.isMainThread) {
           remove();
@@ -71,7 +77,7 @@ class MacPowerSource final : public PowerSource {
           dispatch_sync(dispatch_get_main_queue(), remove);
         }
       } else {
-        delete listener;
+        delete context;
       }
     };
   }
