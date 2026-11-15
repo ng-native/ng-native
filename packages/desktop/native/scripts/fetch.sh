@@ -18,7 +18,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 RN_PKG="$(cd "${1:?usage: fetch.sh <node_modules/react-native>}" && pwd)"
-RN_VERSION="$(node -p "require('$RN_PKG/package.json').version")"
+RN_VERSION="$(node -p 'require(process.argv[1] + "/package.json").version' "$RN_PKG")"
 
 # --- Pins, per supported React Native version ----------------------------------------------------
 # One React Native minor per release (the template's Expo SDK). Add a block to support another.
@@ -58,6 +58,20 @@ fi
 CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 SRC="$CACHE/src"
 mkdir -p "$SRC"
+
+# One fetch at a time into the shared sources: another build waits until this one is done. A lock
+# whose holder is gone is taken over.
+lock="$SRC/.fetch.lock"
+until mkdir "$lock" 2> /dev/null; do
+  holder="$(cat "$lock/pid" 2> /dev/null || true)"
+  if [ -n "$holder" ] && ! kill -0 "$holder" 2> /dev/null; then
+    rm -rf "$lock"
+    continue
+  fi
+  sleep 1
+done
+echo $$ > "$lock/pid"
+trap 'rm -rf "$lock"' EXIT
 
 sha256() {
   if command -v sha256sum > /dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1

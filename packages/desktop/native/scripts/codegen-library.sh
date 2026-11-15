@@ -15,7 +15,7 @@
 #   library.cmake                               what the build compiles and registers
 #
 # What a library declares for Android's C++ build is what the host uses: its codegen name
-# (react-native.config.js's android.libraryName, or package.json's codegenConfig.name), its shared
+# (package.json's codegenConfig.name, which names the folder the codegen writes), its shared
 # C++ in common/cpp/react/renderer/components/<name> (or the one other folder holding
 # react/renderer/components/<name>, as react-native-gesture-handler's shared/shadowNodes, which
 # declares the descriptor its codegen leaves out), and the component descriptors it lists in
@@ -25,7 +25,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 RN_PKG="$(cd "${1:?usage: codegen-library.sh <react-native> <library>}" && pwd -P)"
 LIB="$(cd "${2:?usage: codegen-library.sh <react-native> <library>}" && pwd -P)"
-RN_VERSION="$(node -p "require('$RN_PKG/package.json').version")"
+RN_VERSION="$(node -p 'require(process.argv[1] + "/package.json").version' "$RN_PKG")"
 CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 modules=0
 [ "${3:-}" = "--modules" ] && modules=1
@@ -89,7 +89,9 @@ info="$(node -e '
   try {
     android = require(path.join(lib, "react-native.config.js")).dependency?.platforms?.android ?? {};
   } catch {}
-  console.log(android.libraryName ?? pkg.codegenConfig.name);
+  // The codegen writes into a folder named by codegenConfig.name, which the C++ of the library
+  // includes too; android.libraryName names only its Android build target.
+  console.log(pkg.codegenConfig.name);
   console.log(`${pkg.name}@${pkg.version}`);
   console.log((android.componentDescriptors ?? []).join(";"));
 ' "$LIB")"
