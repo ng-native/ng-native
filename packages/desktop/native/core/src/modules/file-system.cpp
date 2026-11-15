@@ -323,9 +323,9 @@ std::vector<std::string> PickStore::restore() {
       continue;
     }
     if (resolved->stale) {
-      // Made again where it points now; one that cannot be made keeps the stale bookmark, which
-      // still resolves.
-      if (auto fresh = bookmarks_->make(resolved->path)) {
+      // Made again where it points now; one that cannot be made as it was keeps the stale bookmark,
+      // which still resolves.
+      if (auto fresh = bookmarks_->renew(pick.bookmark, resolved->path)) {
         pick.bookmark = std::move(*fresh);
       }
       changed = true;

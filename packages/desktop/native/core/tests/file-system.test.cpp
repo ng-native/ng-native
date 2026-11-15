@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -537,6 +538,15 @@ struct FakeBookmarks final : ngn::Bookmarks {
   std::optional<std::string> make(const std::string &path) override {
     return "bm:" + path;
   }
+  // A renewal is told apart from a new bookmark; refused, it makes none.
+  bool refuseRenew{false};
+  std::optional<std::string> renew(const std::string &bookmark, const std::string &path) override {
+    log.push_back("renew " + bookmark);
+    if (refuseRenew) {
+      return std::nullopt;
+    }
+    return "bm:" + path;
+  }
   std::optional<Resolved> resolve(const std::string &bookmark) override {
     auto path = bookmark.substr(3);
     if (gone.count(path)) {
@@ -824,6 +834,19 @@ TEST_CASE("a pick that moved is found where it is now, and one that is gone is f
   }
   CHECK(folly::parseJson(*saved.text)["picks"].size() == 3);
 
+  // A stale pick whose bookmark cannot be renewed as it was keeps its bookmark.
+  bookmarks->stale.insert(third);
+  bookmarks->refuseRenew = true;
+  {
+    ngn::PickStore keeping(saved.persistence(), bookmarks);
+    keeping.restore();
+    CHECK(folly::parseJson(*saved.text)["picks"][2]["bookmark"] == ngn::base64Encode("bm:" + third));
+    CHECK(std::count(bookmarks->log.begin(), bookmarks->log.end(), "renew bm:" + third) == 1);
+  }
+  bookmarks->stale.clear();
+  bookmarks->refuseRenew = false;
+  bookmarks->log.clear();
+
   bookmarks->moved[first] = (dir.path / "outside/a-renamed").string();
   bookmarks->gone.insert(second);
   int before = saved.saves;
@@ -834,8 +857,9 @@ TEST_CASE("a pick that moved is found where it is now, and one that is gone is f
   auto json = folly::parseJson(*saved.text);
   REQUIRE(json["picks"].size() == 2);
   CHECK(json["picks"][0]["path"] == (dir.path / "outside/a-renamed").string());
-  // Made again where it is now.
+  // Renewed where it is now.
   CHECK(json["picks"][0]["bookmark"] == ngn::base64Encode("bm:" + (dir.path / "outside/a-renamed").string()));
+  CHECK(bookmarks->log == std::vector<std::string>{"renew bm:" + first});
 
   // A pick gone with nothing else changed is forgotten too.
   bookmarks->moved.clear();

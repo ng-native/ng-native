@@ -60,6 +60,12 @@ class Bookmarks {
   virtual ~Bookmarks() = default;
   // A bookmark for `path`, or nothing where the toolkit cannot make one.
   virtual std::optional<std::string> make(const std::string &path) = 0;
+  // A stale `bookmark` made again for `path`, where it points now, granting what it grants: nothing
+  // where the toolkit cannot make one that does, so the stale one, which still resolves, is kept.
+  virtual std::optional<std::string> renew(const std::string &bookmark, const std::string &path) {
+    (void)bookmark;
+    return make(path);
+  }
   // Where a bookmark points now, or nothing for one that no longer resolves.
   virtual std::optional<Resolved> resolve(const std::string &bookmark) = 0;
   // Starts and stops using what a bookmark points at. Each start the toolkit agreed to (true) is
