@@ -10,6 +10,8 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
+#include <memory>
 #include <optional>
 
 // A content view as the host's surface view is: flipped, y down.
@@ -45,14 +47,19 @@ Rendered render(const std::string &html, ngn::PageSetup page) {
   auto folder = std::filesystem::temp_directory_path() / ("ngn-print-test-" + std::to_string(rand()));
   std::filesystem::create_directories(folder);
   auto path = (folder / "out.pdf").string();
-  Rendered rendered;
-  bool answered = false;
-  ngn::appkit::renderHtmlPdf(html, page, path, [&](int pages, const std::string &error) {
-    answered = true;
-    rendered.pages = pages;
-    rendered.error = error;
+  // Shared with the callback, which can still answer after a timed-out wait leaves.
+  struct Answer {
+    bool answered = false;
+    Rendered rendered;
+  };
+  auto answer = std::make_shared<Answer>();
+  ngn::appkit::renderHtmlPdf(html, page, path, [answer](int pages, const std::string &error) {
+    answer->answered = true;
+    answer->rendered.pages = pages;
+    answer->rendered.error = error;
   });
-  REQUIRE(runUntil([&] { return answered; }, 20));
+  REQUIRE(runUntil([answer] { return answer->answered; }, 20));
+  Rendered rendered = answer->rendered;
   rendered.pdf = [[PDFDocument alloc] initWithURL:[NSURL fileURLWithPath:@(path.c_str())]];
   std::filesystem::remove_all(folder);
   return rendered;
@@ -64,15 +71,23 @@ std::string pngBytes() {
   return std::string(static_cast<const char *>(png.bytes), png.length);
 }
 
-PDFDocument *captured(NSView *content) {
-  PDFDocument *pdf = nil;
-  bool answered = false;
-  ngn::appkit::windowDocument(content, [&](PDFDocument *document) {
-    answered = true;
-    pdf = document;
+// What `content` prints as, with `meanwhile` run before the web views' snapshots answer.
+PDFDocument *captured(NSView *content, const std::function<void()> &meanwhile = {}) {
+  // Shared with the callback, which can still answer after a timed-out wait leaves.
+  struct Answer {
+    bool answered = false;
+    PDFDocument *pdf = nil;
+  };
+  auto answer = std::make_shared<Answer>();
+  ngn::appkit::windowDocument(content, [answer](PDFDocument *document) {
+    answer->answered = true;
+    answer->pdf = document;
   });
-  REQUIRE(runUntil([&] { return answered; }, 10));
-  return pdf;
+  if (meanwhile) {
+    meanwhile();
+  }
+  REQUIRE(runUntil([answer] { return answer->answered; }, 10));
+  return answer->pdf;
 }
 
 // The colour at a fraction of the way across and up a one-page document's page, in sRGB.
@@ -272,16 +287,11 @@ TEST_CASE("a layout that changes while a web view's snapshot is taken prints as 
   [content addSubview:web];
   [web loadHTMLString:@"<html><body style='margin:0;background:rgb(0,0,255)'></body></html>" baseURL:nil];
   REQUIRE(runUntil([&] { return !web.isLoading && web.estimatedProgress >= 1; }, 20));
-  PDFDocument *pdf = nil;
-  bool answered = false;
-  ngn::appkit::windowDocument(content, [&](PDFDocument *document) {
-    answered = true;
-    pdf = document;
-  });
   // Before the snapshot answers: the box moves top right and the web view bottom left.
-  box.frame = NSMakeRect(150, 100, 150, 100);
-  web.frame = NSMakeRect(0, 0, 150, 100);
-  REQUIRE(runUntil([&] { return answered; }, 10));
+  PDFDocument *pdf = captured(content, [&] {
+    box.frame = NSMakeRect(150, 100, 150, 100);
+    web.frame = NSMakeRect(0, 0, 150, 100);
+  });
   REQUIRE((pdf != nil));
   CHECK(colorAt(pdf, 0.75, 0.75).redComponent > 0.9);
   CHECK(colorAt(pdf, 0.25, 0.75).redComponent < 0.5);
