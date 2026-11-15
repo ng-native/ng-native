@@ -64,3 +64,17 @@ TEST_CASE("the focus goes back to its holder while the holder is still in the wi
   [other close];
   [window close];
 }
+
+TEST_CASE("a holder that no longer takes the focus is not reported as given it back") {
+  NSWindow *window = offscreenWindow();
+  NSTextField *name = field(window, 10);
+  NSTextField *email = field(window, 50);
+  REQUIRE([window makeFirstResponder:name]);
+  NSView *holder = ngn::appkit::focusHolder(window);
+  REQUIRE([window makeFirstResponder:email]);
+  name.editable = NO;
+  name.selectable = NO;
+  CHECK_FALSE(ngn::appkit::returnFocus(window, holder));
+  CHECK((ngn::appkit::focusHolder(window) != name));
+  [window close];
+}

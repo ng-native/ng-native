@@ -15,7 +15,12 @@ bool returnFocus(NSWindow *window, NSView *holder) {
   if (window == nil || holder == nil || holder.window != window) {
     return false;
   }
-  return [window makeFirstResponder:holder];
+  // A view that refuses the focus leaves the window holding it, and makeFirstResponder: still
+  // answers YES: only the holder having it again counts.
+  if (!holder.acceptsFirstResponder) {
+    return false;
+  }
+  return [window makeFirstResponder:holder] && focusHolder(window) == holder;
 }
 
 } // namespace ngn::appkit
