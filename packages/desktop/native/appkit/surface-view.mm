@@ -397,6 +397,12 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
   _input->pointerUp([self inputFor:event]);
 }
 
+// A secondary click dispatches no pointer up, but the button is no longer held.
+- (void)rightMouseUp:(NSEvent *)event {
+  _buttons = NGNButtonsAfter(_buttons, event);
+  [super rightMouseUp:event];
+}
+
 // Whether this container is the innermost one under the pointer. A container presented over
 // this one (a modal's cover) reports its own moves, so this one stays out of them: hover never
 // lands on what is under a cover.
