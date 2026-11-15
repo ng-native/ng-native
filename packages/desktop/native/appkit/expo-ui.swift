@@ -77,9 +77,10 @@ final class UIStore: ObservableObject {
       }
       for key in values.keys where !same(was.props[key], now.props[key]) {
         // A slider's value that echoes one of the user's earlier moves is an older update: the
-        // later move stays.
+        // later moves stay. Echoes come in the order of the moves, so the oldest move with the
+        // value is the one echoed, even when the user came back to it later.
         if key == "value", let sent = values["sent"] as? [Double], let echoed = (now.props[key] as? NSNumber)?.doubleValue,
-           let at = sent.lastIndex(of: echoed), at < sent.count - 1 {
+           let at = sent.firstIndex(of: echoed), at < sent.count - 1 {
           local[tag]?["sent"] = Array(sent[(at + 1)...])
           continue
         }

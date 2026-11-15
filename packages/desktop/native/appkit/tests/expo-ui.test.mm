@@ -275,6 +275,21 @@ TEST_CASE("a toggle, a slider and a stepper send their changes as expo/ui does")
   h.renderer.setTree(slider(9));
   CHECK(draw(h.renderer, 200, 30).differs(moved) > 20);
 
+  // Moves that come back to a value: the first echo of 2 is the oldest move, so 8 and 2 stay pending.
+  h.renderer.setTree(slider(5));
+  CHECK(h.renderer.perform(3, dynamic::object("value", 2)));
+  CHECK(h.renderer.perform(3, dynamic::object("value", 8)));
+  CHECK(h.renderer.perform(3, dynamic::object("value", 2)));
+  auto back = draw(h.renderer, 200, 30);
+  h.renderer.setTree(slider(2));
+  CHECK(draw(h.renderer, 200, 30).differs(back) < 20);
+  h.renderer.setTree(slider(8));
+  CHECK(draw(h.renderer, 200, 30).differs(back) < 20);
+  h.renderer.setTree(slider(2));
+  CHECK(draw(h.renderer, 200, 30).differs(back) < 20);
+  h.renderer.setTree(slider(9));
+  CHECK(draw(h.renderer, 200, 30).differs(back) > 20);
+
   // A numeric 1 is a number, not true: the slider's minimum holds.
   h.events.clear();
   h.renderer.setTree(host({ui(5, "SliderView", dynamic::object("value", 5)("min", 1)("max", 10))}));
