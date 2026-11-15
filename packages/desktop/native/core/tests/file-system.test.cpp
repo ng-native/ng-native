@@ -951,6 +951,32 @@ TEST_CASE("FileChanges lists the folder again when the OS dropped events, and re
         dynamic::array(dynamic::object("type", "modified")("uri", ngn::fileUri(at("missed.txt")))));
 }
 
+TEST_CASE("FileChanges keeps what it saw when the folder cannot be listed, and lists it again at the next event") {
+  TempDir dir;
+  write(dir.path / "kept.txt", "");
+  auto exists = [](const std::string &p) { return fs::exists(p); };
+  auto at = [&](const char *name) { return (dir.path / name).string(); };
+  using E = ngn::FileWatcher::Event;
+  ngn::FileChanges tracker(dir.path.string(), exists);
+  write(dir.path / "missed.txt", "");
+  // Still there, but unreadable: an empty listing would report kept.txt deleted.
+  fs::permissions(dir.path, fs::perms::owner_all, fs::perm_options::remove);
+  folly::dynamic unreadable;
+  try {
+    unreadable = tracker.changes({E{.path = dir.path.string(), .rescan = true}}, exists);
+  } catch (...) {
+    fs::permissions(dir.path, fs::perms::owner_all, fs::perm_options::add);
+    throw;
+  }
+  fs::permissions(dir.path, fs::perms::owner_all, fs::perm_options::add);
+  CHECK(unreadable.empty());
+  // Readable again: the next event, of any kind, brings the listing that was owed.
+  CHECK(tracker.changes({E{.path = at("kept.txt"), .modified = true}}, exists) ==
+        dynamic::array(dynamic::object("type", "created")("uri", ngn::fileUri(at("missed.txt"))),
+                       dynamic::object("type", "modified")("uri", ngn::fileUri(at("kept.txt")))));
+  CHECK(tracker.changes({E{.path = dir.path.string(), .rescan = true}}, exists).empty());
+}
+
 TEST_CASE("a watch the OS would not start is no watch, and holds nothing open") {
   TempDir dir;
   auto folders = foldersIn(dir.path);
