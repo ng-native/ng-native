@@ -107,10 +107,41 @@ bool paragraphEnd(UniChar c) {
   return c == '\n' || c == '\r' || c == 0x2029;
 }
 
+// The strong direction a character gives a paragraph under Unicode's rule P2: 1 right to left,
+// -1 left to right, 0 none. macOS has no public API for a character's bidi class, so letters
+// count by script, the right-to-left scripts' letters (bidi R and AL) against any other letter
+// (bidi L), and the marks LRM, RLM and ALM by their class.
+int strongDirection(UTF32Char code) {
+  if (code == 0x200F || code == 0x061C) {
+    return 1;
+  }
+  if (code == 0x200E) {
+    return -1;
+  }
+  NSCharacterSet *letters = NSCharacterSet.letterCharacterSet;
+  if (![letters longCharacterIsMember:code]) {
+    return 0;
+  }
+  bool digit = (code >= 0x0660 && code <= 0x0669) || (code >= 0x06F0 && code <= 0x06F9);
+  bool rtl = (code >= 0x0590 && code <= 0x08FF) || (code >= 0xFB1D && code <= 0xFDFF) || (code >= 0xFE70 && code <= 0xFEFF) ||
+      (code >= 0x10800 && code <= 0x10FFF) || (code >= 0x1E800 && code <= 0x1EFFF);
+  if (rtl) {
+    return digit ? 0 : 1;
+  }
+  return -1;
+}
+
+// The paragraph whose direction was resolved last, so the lines it wraps into find it without
+// another scan: each paragraph is scanned once however many lines it takes.
+struct ParagraphDirection {
+  CFIndex start = 0;
+  CFIndex end = -1;
+  bool rightToLeft = false;
+};
+
 // Whether the paragraph holding `at` runs right to left: by its base writing direction where one
-// is set, otherwise by its first strong character (Unicode's rules P2 and P3), letters of the
-// right-to-left scripts against any other letter.
-bool rightToLeftAt(CFAttributedStringRef string, CFIndex at) {
+// is set, otherwise by its first strong character outside an isolate (Unicode's rules P2 and P3).
+bool rightToLeftAt(CFAttributedStringRef string, CFIndex at, ParagraphDirection &last) {
   auto style = (CTParagraphStyleRef)CFAttributedStringGetAttribute(string, at, kCTParagraphStyleAttributeName, nullptr);
   CTWritingDirection direction = kCTWritingDirectionNatural;
   if (style != nullptr) {
@@ -119,33 +150,41 @@ bool rightToLeftAt(CFAttributedStringRef string, CFIndex at) {
   if (direction != kCTWritingDirectionNatural) {
     return direction == kCTWritingDirectionRightToLeft;
   }
+  if (at >= last.start && at < last.end) {
+    return last.rightToLeft;
+  }
   CFStringRef text = CFAttributedStringGetString(string);
   CFIndex length = CFStringGetLength(text);
   CFIndex start = at;
   while (start > 0 && !paragraphEnd(CFStringGetCharacterAtIndex(text, start - 1))) {
     start--;
   }
-  NSCharacterSet *letters = NSCharacterSet.letterCharacterSet;
-  for (CFIndex i = start; i < length; i++) {
+  int found = 0;
+  // How deep in isolates (LRI, RLI or FSI to the matching PDI) the scan is: their content is skipped.
+  int isolates = 0;
+  CFIndex i = start;
+  for (; i < length; i++) {
     UniChar c = CFStringGetCharacterAtIndex(text, i);
     if (paragraphEnd(c)) {
       break;
+    }
+    if (found != 0) {
+      continue;
     }
     UTF32Char code = c;
     if (CFStringIsSurrogateHighCharacter(c) && i + 1 < length) {
       code = CFStringGetLongCharacterForSurrogatePair(c, CFStringGetCharacterAtIndex(text, ++i));
     }
-    bool digit = (code >= 0x0660 && code <= 0x0669) || (code >= 0x06F0 && code <= 0x06F9);
-    bool rtl = (code >= 0x0590 && code <= 0x08FF) || (code >= 0xFB1D && code <= 0xFDFF) || (code >= 0xFE70 && code <= 0xFEFF) ||
-        (code >= 0x10800 && code <= 0x10FFF) || (code >= 0x1E800 && code <= 0x1EFFF);
-    if (rtl && !digit && [letters longCharacterIsMember:code]) {
-      return true;
-    }
-    if (!rtl && [letters longCharacterIsMember:code]) {
-      return false;
+    if (code >= 0x2066 && code <= 0x2068) {
+      isolates++;
+    } else if (code == 0x2069) {
+      isolates = std::max(0, isolates - 1);
+    } else if (isolates == 0) {
+      found = strongDirection(code);
     }
   }
-  return false;
+  last = {.start = start, .end = i + 1, .rightToLeft = found == 1};
+  return last.rightToLeft;
 }
 
 std::string transformed(const std::string &text, std::optional<TextTransform> transform) {
@@ -274,6 +313,7 @@ TextLayout layoutText(
   CFIndex at = 0;
   CGFloat y = 0;
   CGFloat widest = 0;
+  ParagraphDirection paragraph;
   while (at < length) {
     CFIndex count = CTTypesetterSuggestLineBreak(typesetter, at, maxWidth);
     if (count <= 0) {
@@ -335,7 +375,7 @@ TextLayout layoutText(
     if (fixed <= 0) {
       baseline = y + ascent;
     }
-    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location)});
+    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location, paragraph)});
     widest = std::max(widest, width);
     y += height;
     at += count;
