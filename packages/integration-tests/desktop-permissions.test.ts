@@ -110,6 +110,13 @@ describe('macOS permissions from the Expo keys', () => {
     assert.equal(usageStrings['NSLocationWhenInUseUsageDescription'], 'To show nearby places.');
   });
 
+  it('gives Bluetooth its sandbox entitlement', () => {
+    const { sandboxEntitlements } = macosPermissions({
+      ios: { infoPlist: { NSBluetoothAlwaysUsageDescription: 'To pair with your watch.' } },
+    });
+    assert.deepEqual(sandboxEntitlements, ['com.apple.security.device.bluetooth']);
+  });
+
   it('declares nothing for an app that asks for nothing', () => {
     assert.deepEqual(macosPermissions({}), { usageStrings: {}, sandboxEntitlements: [] });
   });

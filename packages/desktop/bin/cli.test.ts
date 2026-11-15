@@ -140,7 +140,13 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     exists: () => false,
     remove: () => {},
     copy: () => {},
-    links: () => ({ libraries: [], appModules: [], withoutDesktop: [], problems: [] }),
+    links: () => ({
+      libraries: [],
+      appModules: [],
+      hostLibraries: [],
+      withoutDesktop: [],
+      problems: [],
+    }),
     writeFile: (file, text) => void (written[file] = text),
     warn: (line) => void warnings.push(line),
     host(command, args) {
@@ -218,6 +224,38 @@ describe('run', () => {
       [host],
     );
 
+    // A host library nested under a dependency, another version than the prebuilt's, builds too.
+    const nested = '/apps/demo/node_modules/kit/node_modules/react-native-svg';
+    const mismatched = fakeSystem({
+      env: cache,
+      readFile: (file) =>
+        file === path.join(packageDir, 'prebuilt.json')
+          ? JSON.stringify({
+              version: 1,
+              hosts: [
+                {
+                  reactNative: '0.88.0',
+                  url: 'https://e.com/h.tar.gz',
+                  sha256: sha,
+                  libraries: { 'react-native-svg': '15.16.0' },
+                },
+              ],
+            })
+          : file === `${nested}/package.json`
+            ? '{"version":"15.0.0"}'
+            : (files[file] ?? ''),
+      exists: (file) => file === host,
+      links: () => ({
+        libraries: [],
+        appModules: [],
+        hostLibraries: [{ name: 'react-native-svg', dir: nested }],
+        withoutDesktop: [],
+        problems: [],
+      }),
+    });
+    await run({ bundle: 'dist/main.hbc', module: 'main', universal: false }, mismatched.sys);
+    assert.ok(mismatched.calls[0]!.command.endsWith('build.sh'), 'built from source');
+
     // With native code of its own linked, the app builds its host.
     const linked = fakeSystem({
       env: cache,
@@ -226,6 +264,7 @@ describe('run', () => {
       links: () => ({
         libraries: [],
         appModules: [{ name: 'Mine', dir: '/apps/demo/desktop' }] as never,
+        hostLibraries: [],
         withoutDesktop: [],
         problems: [],
       }),
@@ -261,6 +300,29 @@ describe('run', () => {
     ]);
   });
 
+  it('compiles in a host library autolinking found under a dependency, which the app root misses', async () => {
+    const nested = '/apps/demo/node_modules/kit/node_modules/react-native-svg';
+    const { sys, calls } = fakeSystem({
+      resolvePackage: (_, name) =>
+        name === 'react-native-screens' ? `/apps/demo/node_modules/${name}` : null,
+      links: () => ({
+        libraries: [],
+        appModules: [],
+        hostLibraries: [{ name: 'react-native-svg', dir: nested }],
+        withoutDesktop: [],
+        problems: [],
+      }),
+    });
+    await run({ module: 'main', universal: false }, sys);
+    assert.deepEqual(calls[0]!.args, [
+      '/apps/demo/node_modules/react-native',
+      '--library',
+      '/apps/demo/node_modules/react-native-screens',
+      '--library',
+      nested,
+    ]);
+  });
+
   it('writes the native code autolinking found for the build, and names the file to it', async () => {
     const library = {
       name: 'rn-haptics',
@@ -273,7 +335,13 @@ describe('run', () => {
     const { sys, calls, written } = fakeSystem({
       links: (appDir, options) => (
         asked.push({ appDir, options }),
-        { libraries: [library], appModules: [appModule], withoutDesktop: [], problems: [] }
+        {
+          libraries: [library],
+          appModules: [appModule],
+          hostLibraries: [],
+          withoutDesktop: [],
+          problems: [],
+        }
       ),
     });
     await run({ module: 'main', universal: false }, sys);
@@ -304,6 +372,7 @@ describe('run', () => {
       links: () => ({
         libraries: [],
         appModules: [],
+        hostLibraries: [],
         withoutDesktop: ['react-native-mmkv'],
         problems: [],
       }),
@@ -318,7 +387,7 @@ describe('run', () => {
       resolvePackage: (_, name) => `/apps/demo/node_modules/${name}`,
       links: (_, options) => (
         (deny = options?.deny),
-        { libraries: [], appModules: [], withoutDesktop: [], problems: [] }
+        { libraries: [], appModules: [], hostLibraries: [], withoutDesktop: [], problems: [] }
       ),
       expoConfig: () => ({
         platforms: ['macos'],
@@ -460,7 +529,9 @@ describe('run', () => {
       run(command, args) {
         const line = [command, ...args].join(' ');
         asked.push(line);
-        if (line === 'ninja --version') throw new Error('spawnSync ninja ENOENT');
+        if (line === 'ninja --version') {
+          throw Object.assign(new Error('spawnSync ninja ENOENT'), { code: 'ENOENT' });
+        }
         const probe = TOOLCHAIN[line];
         if (probe !== undefined) return { status: 0, stdout: probe };
         calls.push({ command, args });

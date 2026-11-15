@@ -46,6 +46,7 @@ function suppliedOtherwise(name) {
  * @typedef {{
  *   libraries: DesktopLibrary[],
  *   appModules: AppModule[],
+ *   hostLibraries: { name: string, dir: string }[],
  *   withoutDesktop: string[],
  *   problems: string[],
  * }} DesktopLinks
@@ -57,12 +58,19 @@ function suppliedOtherwise(name) {
  *
  * @param {string} appDir
  * @param {{ deny?: readonly string[], builtIn?: readonly string[] }} [options] `builtIn` are the
- *   libraries the host compiles in itself, which are neither linked nor reported
+ *   libraries the host compiles in itself, which are neither linked nor reported: `hostLibraries`
+ *   says where each one the walk finds is installed, under a dependency's node_modules too
  * @returns {DesktopLinks}
  */
 export function desktopLinks(appDir, { deny = [], builtIn = [] } = {}) {
   /** @type {DesktopLinks} */
-  const links = { libraries: [], appModules: appModules(appDir), withoutDesktop: [], problems: [] };
+  const links = {
+    libraries: [],
+    appModules: appModules(appDir),
+    hostLibraries: [],
+    withoutDesktop: [],
+    problems: [],
+  };
   const seen = new Set();
   // Breadth first, so a package nearer the app wins: the app's own version of a library is the
   // one taken, not an older copy nested under a dependency listed before it.
@@ -74,11 +82,15 @@ export function desktopLinks(appDir, { deny = [], builtIn = [] } = {}) {
       const dir = packageDir(from, name);
       if (dir === null) continue;
       // A denied package stays out of the build and the warning, but what it depends on does not.
-      if (!deny.includes(name) && !builtIn.includes(name)) classify(links, name, dir);
+      if (deny.includes(name)) {
+        // Neither linked nor reported.
+      } else if (builtIn.includes(name)) links.hostLibraries.push({ name, dir });
+      else classify(links, name, dir);
       queue.push(dir);
     }
   }
   links.libraries.sort((a, b) => a.name.localeCompare(b.name));
+  links.hostLibraries.sort((a, b) => builtIn.indexOf(a.name) - builtIn.indexOf(b.name));
   links.withoutDesktop.sort();
   return links;
 }

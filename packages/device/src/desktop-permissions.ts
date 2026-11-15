@@ -93,6 +93,7 @@ const PLUGIN_USAGE: Readonly<
 const SANDBOX_ENTITLEMENTS: Readonly<Record<string, string>> = {
   NSCameraUsageDescription: 'com.apple.security.device.camera',
   NSMicrophoneUsageDescription: 'com.apple.security.device.audio-input',
+  NSBluetoothAlwaysUsageDescription: 'com.apple.security.device.bluetooth',
   NSPhotoLibraryUsageDescription: 'com.apple.security.personal-information.photos-library',
   NSPhotoLibraryAddUsageDescription: 'com.apple.security.personal-information.photos-library',
   NSLocationWhenInUseUsageDescription: 'com.apple.security.personal-information.location',
