@@ -117,7 +117,11 @@ function presetPlugin(
   addVariant('ios', beneath(platform, 'platform-ios'));
   addVariant('android', beneath(platform, 'platform-android'));
   addVariant('web', beneath(platform, 'platform-web'));
-  addVariant('native', [beneath(platform, 'platform-ios'), beneath(platform, 'platform-android')]);
+  addVariant('native', [
+    beneath(platform, 'platform-ios'),
+    beneath(platform, 'platform-android'),
+    beneath(platform, 'platform-macos'),
+  ]);
   if (platform === 'web') addBase(WEB_BASE);
   else if (config('prefix')) {
     // Read by `flattenTailwind`, which takes the prefix back off the root classes.

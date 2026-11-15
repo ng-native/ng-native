@@ -18,6 +18,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
+import { platformOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 
 export interface AccessibilitySettings {
@@ -38,6 +39,15 @@ export interface AccessibilitySource {
   current(): Promise<AccessibilitySettings>;
   subscribe(listener: (settings: Partial<AccessibilitySettings>) => void): () => void;
   announce(message: string): void;
+}
+
+/**
+ * The system text size, as a multiplier: `PixelRatio.getFontScale()`. One off a device, and on a
+ * Mac, where nothing resizes an app: it reaches Mac sizes with `macos:` variants instead.
+ */
+export function systemFontScale(native = reactNative()): number {
+  if (platformOs() === 'macos') return 1;
+  return native?.PixelRatio.getFontScale() ?? 1;
 }
 
 export function accessibilitySource(): AccessibilitySource {
@@ -72,7 +82,7 @@ export function accessibilitySource(): AccessibilitySource {
         read(() => info.isReduceMotionEnabled()),
         read(() => info.isBoldTextEnabled()),
       ]);
-      return { screenReader, reduceMotion, boldText, fontScale: native.PixelRatio.getFontScale() };
+      return { screenReader, reduceMotion, boldText, fontScale: systemFontScale(native) };
     },
     subscribe: (listener) => {
       const subscriptions = [
@@ -82,7 +92,7 @@ export function accessibilitySource(): AccessibilitySource {
         // `fontScale` has no change event of its own - changing it means leaving for Settings -
         // so the app coming back to the foreground is what stands in for one.
         native.AppState.addEventListener('change', (state) => {
-          if (state === 'active') listener({ fontScale: native.PixelRatio.getFontScale() });
+          if (state === 'active') listener({ fontScale: systemFontScale(native) });
         }),
       ];
       return () => subscriptions.forEach((subscription) => subscription.remove());

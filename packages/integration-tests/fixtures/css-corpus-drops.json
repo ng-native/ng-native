@@ -1150,7 +1150,7 @@
     }
   },
   "tailwind-v3": {
-    "rules": 1045,
+    "rules": 1046,
     "dropped": 79,
     "emitted": [
       "$animation",

@@ -1202,11 +1202,23 @@ export const ANDROID_VIEW_NAMES: Record<string, string> = {
 };
 
 /**
- * iOS's names for the elements Android names differently, so reporting iOS after Android puts
- * them back.
+ * The views only an iPhone or iPad has, as a Mac draws them: a plain view, as on Android. Pull to
+ * refresh has no meaning with a mouse, and an input accessory rides a software keyboard.
+ */
+const MACOS_VIEW_NAMES: Record<string, string> = {
+  'refresh-control': 'View',
+  'input-accessory-view': 'View',
+};
+
+/**
+ * iOS's names for the elements Android and macOS name differently, so reporting iOS after either
+ * puts them back.
  */
 const IOS_VIEW_NAMES: Record<string, string> = Object.fromEntries(
-  Object.keys(ANDROID_VIEW_NAMES).map((element) => [element, VIEW_NAMES[element] as string]),
+  [...Object.keys(ANDROID_VIEW_NAMES), ...Object.keys(MACOS_VIEW_NAMES)].map((element) => [
+    element,
+    VIEW_NAMES[element] as string,
+  ]),
 );
 
 /**
@@ -1224,12 +1236,26 @@ export function nativePlatform(): string {
 }
 
 /**
+ * Whether the host is one of Apple's: iOS or macOS. The desktop host implements React Native's
+ * iOS-named modules and views, so behaviour Apple's platforms share takes this rather than a check
+ * for `'ios'`, which a Mac fails.
+ */
+export function isApplePlatform(): boolean {
+  return platformOS === 'ios' || platformOS === 'macos';
+}
+
+/**
  * Call once at startup with `Platform.OS`. The view names above are the iOS/canonical ones, so
- * only the mapping half is a no-op elsewhere.
+ * only the mapping half is a no-op elsewhere. macOS takes iOS's: the desktop host implements them.
  */
 export function registerPlatformComponents(platform: string): void {
   platformOS = platform;
-  const names = platform === 'android' ? ANDROID_VIEW_NAMES : IOS_VIEW_NAMES;
+  const names =
+    platform === 'android'
+      ? ANDROID_VIEW_NAMES
+      : platform === 'macos'
+        ? { ...IOS_VIEW_NAMES, ...MACOS_VIEW_NAMES }
+        : IOS_VIEW_NAMES;
   for (const [element, viewName] of Object.entries(names)) registerViewName(element, viewName);
 }
 
@@ -5198,8 +5224,14 @@ function describeViews(
   elementName: string,
   { viewName, defaultProps, options }: ViewNameRegistration,
 ): void {
-  for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
-    describeView(name, defaultProps, options);
+  const names =
+    typeof viewName === 'string'
+      ? [viewName]
+      : [viewName.ios, viewName.android, ...(viewName.macos ? [viewName.macos] : [])];
+  for (const name of names) {
+    // React Native's plain view, which an element is on an OS that has no view of its own for it,
+    // is every element's: what this registration says of its own view is not said of that one.
+    if (name !== 'View' || typeof viewName === 'string') describeView(name, defaultProps, options);
   }
   // The element's, not the view's: another element may name the same view without it.
   if (options?.spacedText) SPACED_TEXT.add(elementName);
@@ -5417,13 +5449,16 @@ function textContent(node: EngineNode): string {
 export interface PlatformViewName {
   readonly ios: string;
   readonly android: string;
+  /** The view on macOS, where it is not iOS's: an iOS-only view the desktop host has none of. */
+  readonly macos?: string;
 }
 
 /** An element's registered view name, for the platform the host reported. */
 export function registeredViewName(elementName: string): string | undefined {
   const name = VIEW_NAMES[elementName];
   if (name === undefined || typeof name === 'string') return name;
-  return platformOS === 'android' ? name.android : name.ios;
+  if (platformOS === 'android') return name.android;
+  return platformOS === 'macos' ? (name.macos ?? name.ios) : name.ios;
 }
 
 /**

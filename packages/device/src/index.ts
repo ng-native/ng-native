@@ -77,7 +77,7 @@ export {
 export { SCREEN_IN_FRONT } from './screen-in-front.ts';
 export { SCREEN_SHOWN } from './screen-shown.ts';
 export { NATIVE_HISTORY } from './native-history.ts';
-export { OS } from './os.ts';
+export { APPLE, DESKTOP, OS } from './os.ts';
 export {
   SEARCH_PATH,
   SpawnRuleError,
