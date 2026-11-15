@@ -146,8 +146,10 @@ void addItems(NSMenu *menu, const std::vector<MenuItem> &items, const MenuChosen
 } // namespace
 
 NSString *keyEquivalent(const std::string &key) {
-  if (key.size() <= 1) {
-    return string(key);
+  // One character, counted as the user sees it: "é" is two bytes of UTF-8.
+  NSString *character = string(key);
+  if (character.length == 0 || [character rangeOfComposedCharacterSequenceAtIndex:0].length == character.length) {
+    return character;
   }
   static NSDictionary<NSString *, NSString *> *named = @{
     @"ArrowLeft" : [NSString stringWithFormat:@"%C", (unichar)NSLeftArrowFunctionKey],
