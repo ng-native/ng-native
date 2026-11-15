@@ -48,5 +48,14 @@ TEST_CASE("with nothing focused that edits, the window's undo reaches the app's 
   NSWindow *window = windowWith(plain);
   [window makeFirstResponder:nil];
   CHECK_FALSE(window.undoManager.groupsByEvent);
+  // The window's undo is the app's: an action the app registers is undone through it.
+  auto app = ngn::appkit::makeUndoManager();
+  int undone = 0;
+  app->registerAction("Rename", [&] { undone++; });
+  REQUIRE(window.undoManager.canUndo);
+  CHECK([window.undoManager.undoActionName isEqualToString:@"Rename"]);
+  [window.undoManager undo];
+  CHECK(undone == 1);
+  app->clear();
   [window close];
 }
