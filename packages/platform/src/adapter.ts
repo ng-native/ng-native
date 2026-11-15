@@ -499,6 +499,25 @@ class NativeRenderer implements Renderer2 {
   }
 
   setStyle(el: EngineNode, style: string, value: unknown, _flags?: RendererStyleFlags2): void {
+    // Angular sets an empty value rather than removing it, where a browser's `style.setProperty`
+    // takes the declaration out, so the one a class rule makes applies again.
+    if (value === '') return this.removeStyle(el, style);
+    // And it takes `!important` off the end of a bound value and leaves the space before it, so
+    // `'10px !important'` arrives as `'10px '`, which no reading of a length takes.
+    const text = typeof value === 'string' ? cssTrim(value) : value;
+    // Blank is no value but a token's: a browser drops it and keeps the declaration it had.
+    if (text === '' && !style.startsWith('--')) {
+      return this.engine.reportDroppedDeclaration(
+        styleKey(style),
+        String(value),
+        el.tag,
+        'it is blank',
+      );
+    }
+    this.setStyleValue(el, style, text);
+  }
+
+  private setStyleValue(el: EngineNode, style: string, value: unknown): void {
     if (style.startsWith('--')) {
       this.engine.setCustomProperty(el, customPropertyName(style), closedAtEnd(value));
       return;
