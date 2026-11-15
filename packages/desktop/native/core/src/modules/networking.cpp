@@ -58,10 +58,14 @@ folly::dynamic headersObject(const Headers &headers) {
   return out;
 }
 
+bool sameName(const std::string &a, const std::string &b) {
+  return a.size() == b.size() &&
+      std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return std::tolower(x) == std::tolower(y); });
+}
+
 std::string headerValue(const Headers &headers, const std::string &name) {
   for (const auto &[k, v] : headers) {
-    if (k.size() == name.size() &&
-        std::equal(k.begin(), k.end(), name.begin(), [](char a, char b) { return std::tolower(a) == std::tolower(b); })) {
+    if (sameName(k, name)) {
       return v;
     }
   }
@@ -220,6 +224,12 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
         for (const auto &[k, v] : headers.items()) {
           request.headers.emplace_back(k.asString(), v.asString());
         }
+      }
+      // A form's parts are split by the boundary made here, so its Content-Type is always this
+      // one, as React Native's own networking sends it; any other body keeps the app's.
+      bool form = body.contentType == "multipart/form-data; boundary=" + boundary;
+      if (form) {
+        std::erase_if(request.headers, [](const auto &header) { return sameName(header.first, "content-type"); });
       }
       if (!body.contentType.empty() && headerValue(request.headers, "content-type").empty()) {
         request.headers.emplace_back("Content-Type", body.contentType);

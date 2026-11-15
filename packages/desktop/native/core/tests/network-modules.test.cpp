@@ -471,3 +471,24 @@ TEST_CASE("a request's file url and Image.getSize's file source are read only in
   REQUIRE(f.http->sent.size() == 3);
   CHECK(f.http->sent[2]->request.url == own);
 }
+
+TEST_CASE("a form body goes out with its own boundary, over a multipart Content-Type the app set") {
+  Fixture f;
+  auto networking = f.make(ngn::makeNetworking(f.services));
+  dynamic form = dynamic::object("formData", dynamic::array(dynamic::object("fieldName", "title")("string", "Hello")));
+  // As apps often write it, without a boundary, and in another case.
+  f.send(*networking, query(dynamic::object("method", "POST")("data", form)("headers", dynamic::object("content-type", "multipart/form-data"))));
+  REQUIRE(f.http->sent.size() == 1);
+  const auto &sent = f.http->sent[0]->request;
+  REQUIRE(sent.headers.size() == 1);
+  CHECK(sent.headers[0].first == "Content-Type");
+  auto boundary = sent.headers[0].second.substr(sent.headers[0].second.find("boundary=") + 9);
+  CHECK(sent.headers[0].second == "multipart/form-data; boundary=" + boundary);
+  CHECK(sent.body.rfind("--" + boundary + "\r\n", 0) == 0);
+
+  // Another body keeps the app's Content-Type.
+  f.send(*networking, query(dynamic::object("method", "POST")("data", dynamic::object("string", "{}"))(
+                          "headers", dynamic::object("Content-Type", "application/json"))));
+  REQUIRE(f.http->sent.size() == 2);
+  CHECK(f.http->sent[1]->request.headers == ngn::Headers{{"Content-Type", "application/json"}});
+}
