@@ -3,6 +3,9 @@
 
 #include <doctest/doctest.h>
 
+#include <memory>
+#include <mutex>
+
 #import <AppKit/AppKit.h>
 #import <CoreText/CoreText.h>
 #import <ImageIO/ImageIO.h>
@@ -46,16 +49,27 @@ struct Result {
   std::string error;
 };
 
+// The callback owns what it writes, so one that comes after the timeout writes nothing freed.
 Result readNow(ngn::TextReader &reader, const std::string &path, bool fast = false) {
-  Result result;
-  dispatch_semaphore_t done = dispatch_semaphore_create(0);
-  reader.read(path, {}, fast, [&](std::optional<ngn::TextReader::Reading> reading, std::string error) {
-    result.reading = std::move(reading);
-    result.error = std::move(error);
-    dispatch_semaphore_signal(done);
+  struct Shared {
+    std::mutex lock;
+    Result result;
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+  };
+  auto shared = std::make_shared<Shared>();
+  reader.read(path, {}, fast, [shared](std::optional<ngn::TextReader::Reading> reading, std::string error) {
+    {
+      std::lock_guard<std::mutex> hold(shared->lock);
+      shared->result.reading = std::move(reading);
+      shared->result.error = std::move(error);
+    }
+    dispatch_semaphore_signal(shared->done);
   });
-  dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC));
-  return result;
+  if (dispatch_semaphore_wait(shared->done, dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC)) != 0) {
+    return {std::nullopt, "no answer in 30 s"};
+  }
+  std::lock_guard<std::mutex> hold(shared->lock);
+  return shared->result;
 }
 
 } // namespace
