@@ -109,7 +109,15 @@ class ReloadThread {
       }
       thread.join();
     }
-    runEnding(state);
+    // Only the close ending the run runs its callbacks; another waits below until they have run.
+    bool ending;
+    {
+      std::lock_guard lock(state->mutex);
+      ending = state->joiner == self;
+    }
+    if (ending) {
+      runEnding(state);
+    }
     {
       std::lock_guard lock(state->mutex);
       if (state->joiner == self) {
