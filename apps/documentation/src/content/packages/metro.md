@@ -39,7 +39,12 @@ writes, which an app built with the iOS 27 SDK needs to launch at all. It also h
 to view controllers: that SDK ignores the app-wide setters React Native's status bar module calls,
 so without it [`StatusBar`](/packages/device/status-bar) changes nothing on iOS 27.
 
-It takes one option, off by default. `android.layoutAnimations` turns on React Native's
+It takes two options, each off by default. `ios.multipleWindows` says in `Info.plist` that the app
+supports several scenes, which [`AppWindows`](/packages/device/app-windows) needs to open windows
+on an iPad, and declares the activity it asks for each one with. iPadOS then also offers New Window
+for the app.
+
+`android.layoutAnimations` turns on React Native's
 `enableLayoutAnimationsOnAndroid` feature flag in the `MainApplication.kt` that `expo prebuild`
 writes, keeping every other flag as the app's React Native release level sets it:
 

@@ -261,13 +261,39 @@ function adoptScenes(contents) {
   );
 }
 
-function adoptInfoPlist(plist) {
+// The activity `AppWindows` asks iPadOS for a window's scene with (NgNativeWindows in
+// @ng-native/components).
+const WINDOW_ACTIVITY = 'dev.ngnative.window';
+
+/** Whether the app asked for several windows on an iPad: `{ ios: { multipleWindows } }`. */
+function wantsMultipleWindows(options) {
+  const asked = options?.ios?.multipleWindows;
+  if (asked !== undefined && typeof asked !== 'boolean') {
+    throw new Error(
+      `[angular-native] ios.multipleWindows must be true or false, and is ${JSON.stringify(asked)}.`,
+    );
+  }
+  return asked === true;
+}
+
+function adoptInfoPlist(plist, options) {
+  // Expo's own from SDK 58, which names the configuration its scene delegate is made for.
+  const manifest = plist.UIApplicationSceneManifest ?? SCENE_MANIFEST;
+  const multiple = wantsMultipleWindows(options);
+  const activities = plist.NSUserActivityTypes ?? [];
   return {
     ...plist,
-    // Expo's own from SDK 58, which names the configuration its scene delegate is made for.
-    UIApplicationSceneManifest: plist.UIApplicationSceneManifest ?? SCENE_MANIFEST,
+    UIApplicationSceneManifest: multiple
+      ? { ...manifest, UIApplicationSupportsMultipleScenes: true }
+      : manifest,
     // What iOS and react-native-screens need to ask view controllers about the bar.
     UIViewControllerBasedStatusBarAppearance: true,
+    // Several scenes, for `AppWindows` on an iPad, each asked for with the window activity.
+    ...(multiple && {
+      NSUserActivityTypes: activities.includes(WINDOW_ACTIVITY)
+        ? activities
+        : [...activities, WINDOW_ACTIVITY],
+    }),
   };
 }
 
@@ -343,8 +369,10 @@ function withAngularNative(config, options) {
     }
     return mod;
   });
+  // Read now, so a wrong value fails the prebuild before any file is written.
+  wantsMultipleWindows(options);
   return withInfoPlist(config, (mod) => {
-    mod.modResults = adoptInfoPlist(mod.modResults);
+    mod.modResults = adoptInfoPlist(mod.modResults, options);
     return mod;
   });
 }
