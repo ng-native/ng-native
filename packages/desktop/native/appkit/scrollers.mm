@@ -31,3 +31,13 @@ float NGNLegacyScrollerWidth(BOOL thin) {
 }
 
 @end
+
+@implementation NGNWheelScrollView
+- (void)scrollWheel:(NSEvent *)event {
+  if (self.scrollingDisabled) {
+    [self.nextResponder scrollWheel:event];
+    return;
+  }
+  [super scrollWheel:event];
+}
+@end

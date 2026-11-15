@@ -23,13 +23,17 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
 @end
 
 @implementation NGNScrollView {
-  NSScrollView *_scrollView;
+  NGNWheelScrollView *_scrollView;
   NGNScrollDocumentView *_document;
   State::Shared _scrollState;
   BOOL _applyingState;
   BOOL _showsVertical;
   BOOL _showsHorizontal;
   NGNScrollerStyleObserver *_styleObserver;
+  // The `contentOffset` prop last read, and one not yet applied: it waits for the content's size
+  // and the view's, and is applied once, as the prop arrives or changes.
+  std::optional<facebook::react::Point> _offsetProp;
+  std::optional<facebook::react::Point> _pendingOffset;
 }
 
 + (std::function<void(NSInteger, CGPoint)>)offsetChanged {
@@ -42,7 +46,7 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
 
 - (instancetype)initWithShadowView:(const ShadowView &)view {
   if ((self = [super initWithShadowView:view])) {
-    _scrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    _scrollView = [[NGNWheelScrollView alloc] initWithFrame:NSZeroRect];
     _scrollView.drawsBackground = NO;
     _scrollView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     _scrollView.autohidesScrollers = YES;
@@ -87,12 +91,37 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   [self updateScrollers];
   _scrollView.verticalScrollElasticity = p->bounces ? NSScrollElasticityAutomatic : NSScrollElasticityNone;
   _scrollView.horizontalScrollElasticity = _scrollView.verticalScrollElasticity;
+  // The inner scroll view takes the wheel before this view does.
+  _scrollView.scrollingDisabled = !p->scrollEnabled;
+  if (_offsetProp != p->contentOffset) {
+    bool first = !_offsetProp;
+    _offsetProp = p->contentOffset;
+    if (!first || p->contentOffset != facebook::react::Point{}) {
+      _pendingOffset = p->contentOffset;
+    }
+    [self applyPendingOffset];
+  }
+}
+
+// The starting offset the props ask for, within the content, once there is content to scroll.
+- (void)applyPendingOffset {
+  NSSize doc = _document.frame.size, view = self.bounds.size;
+  if (!_pendingOffset || doc.width <= 0 || doc.height <= 0 || view.width <= 0 || view.height <= 0) {
+    return;
+  }
+  NSPoint target = NSMakePoint(std::clamp<CGFloat>(_pendingOffset->x, 0, std::max<CGFloat>(0, doc.width - view.width)),
+                               std::clamp<CGFloat>(_pendingOffset->y, 0, std::max<CGFloat>(0, doc.height - view.height)));
+  _pendingOffset.reset();
+  NSClipView *clip = _scrollView.contentView;
+  [clip scrollToPoint:target];
+  [_scrollView reflectScrolledClipView:clip];
 }
 
 - (void)updateLayout:(const LayoutMetrics &)metrics {
   [super updateLayout:metrics];
   _scrollView.frame = self.bounds;
   [self updateScrollers];
+  [self applyPendingOffset];
 }
 
 - (void)updateDesktopProps:(const ngn::DesktopProps &)props {
@@ -147,6 +176,7 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   [_document setFrameSize:NSMakeSize(size.width, size.height)];
   _applyingState = NO;
   [self updateScrollers];
+  [self applyPendingOffset];
 }
 
 - (void)scrollWheel:(NSEvent *)event {
