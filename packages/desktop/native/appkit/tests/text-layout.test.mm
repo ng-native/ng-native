@@ -127,6 +127,31 @@ TEST_CASE("Natural alignment follows the paragraph's direction") {
   CHECK(leftmostInk(marked, 300, 40) > 150);
 }
 
+TEST_CASE("A paragraph's first strong character sets its direction by bidi class, letter or not") {
+  // Strong right to left though not letters: Hebrew's maqaf (R) and Arabic's semicolon (AL); and an
+  // Arabic letter after a zero-width space, which has no glyph and no direction.
+  for (const char *text : {"\u05BEHello", "\u061BHello", "\u200B\u0645 Hello"}) {
+    INFO(text);
+    auto layout = ngn::layoutText(stringOf({fragment(text)}), {}, 300);
+    CHECK(layout.lines[0].rightToLeft);
+    CHECK(leftmostInk(layout, 300, 40) > 150);
+  }
+  // Not strong though in the right-to-left blocks: a Hebrew point (NSM), Arabic-Indic and extended
+  // Arabic-Indic digits (AN and EN). The Latin after them sets the direction.
+  for (const char *text : {"\u05B0Hello", "\u0661 Hello", "\u06F1 Hello"}) {
+    INFO(text);
+    auto layout = ngn::layoutText(stringOf({fragment(text)}), {}, 300);
+    CHECK_FALSE(layout.lines[0].rightToLeft);
+    CHECK(leftmostInk(layout, 300, 40) < 10);
+  }
+  // A strong left-to-right character that is not a letter: the circled Latin letters are So but L.
+  // So is a Han character.
+  for (const char *text : {"\u24B6 שלום", "\u4E2D שלום"}) {
+    INFO(text);
+    CHECK_FALSE(ngn::layoutText(stringOf({fragment(text)}), {}, 300).lines[0].rightToLeft);
+  }
+}
+
 TEST_CASE("Each paragraph's wrapped lines take that paragraph's direction") {
   auto layout = ngn::layoutText(
       stringOf({fragment("Hello there\nשלום עולם שלום עולם שלום עולם שלום עולם\nGood morning to you all")}), {}, 80);
