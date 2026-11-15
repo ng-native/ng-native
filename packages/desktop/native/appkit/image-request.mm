@@ -23,11 +23,26 @@ std::optional<ImageSource> pickImageSource(const std::vector<ImageSource> &sourc
 }
 
 bool sameImageRequest(const ImageSource &a, const ImageSource &b) {
-  return a.uri == b.uri && a.method == b.method && a.headers == b.headers && a.body == b.body;
+  return a.uri == b.uri && a.cache == b.cache && a.method == b.method && a.headers == b.headers && a.body == b.body;
 }
 
 NSURLRequest *imageRequest(NSURL *url, const ImageSource &source) {
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+  // As React Native iOS maps a source's `cache` (RCTImagePrimitivesConversions.h).
+  switch (source.cache) {
+    case ImageSource::CacheStategy::Default:
+      request.cachePolicy = NSURLRequestUseProtocolCachePolicy;
+      break;
+    case ImageSource::CacheStategy::Reload:
+      request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+      break;
+    case ImageSource::CacheStategy::ForceCache:
+      request.cachePolicy = NSURLRequestReturnCacheDataElseLoad;
+      break;
+    case ImageSource::CacheStategy::OnlyIfCached:
+      request.cachePolicy = NSURLRequestReturnCacheDataDontLoad;
+      break;
+  }
   if (!source.method.empty()) {
     request.HTTPMethod = [NSString stringWithUTF8String:source.method.c_str()];
   }

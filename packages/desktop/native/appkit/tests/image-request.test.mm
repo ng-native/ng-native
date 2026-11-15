@@ -34,3 +34,18 @@ TEST_CASE("An Image picks the source nearest the screen's scale, and loads again
   other.headers = {{"Authorization", "Bearer b"}};
   CHECK_FALSE(ngn::appkit::sameImageRequest(signedIn, other));
 }
+
+TEST_CASE("An Image's request keeps its source's cache policy, and a new policy is a new request") {
+  using Cache = ImageSource::CacheStategy;
+  auto policy = [](Cache cache) {
+    ImageSource source{.uri = "https://example.com/a.png", .cache = cache};
+    return ngn::appkit::imageRequest([NSURL URLWithString:@"https://example.com/a.png"], source).cachePolicy;
+  };
+  CHECK(policy(Cache::Default) == NSURLRequestUseProtocolCachePolicy);
+  CHECK(policy(Cache::Reload) == NSURLRequestReloadIgnoringLocalCacheData);
+  CHECK(policy(Cache::ForceCache) == NSURLRequestReturnCacheDataElseLoad);
+  CHECK(policy(Cache::OnlyIfCached) == NSURLRequestReturnCacheDataDontLoad);
+
+  ImageSource cached{.uri = "a.png", .cache = Cache::OnlyIfCached}, plain{.uri = "a.png"};
+  CHECK_FALSE(ngn::appkit::sameImageRequest(plain, cached));
+}
