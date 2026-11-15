@@ -17,6 +17,10 @@ void SplashGate::release() {
     std::lock_guard lock(mutex_);
     held_ = false;
     waiting.swap(waiting_);
+    // The held windows show now, so a later hold comes too late.
+    if (!waiting.empty()) {
+      shown_ = true;
+    }
   }
   for (auto &show : waiting) {
     show();
