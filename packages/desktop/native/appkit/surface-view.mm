@@ -1,0 +1,546 @@
+#import "surface-view.h"
+
+#import "host-view.h"
+
+using facebook::react::Cursor;
+
+namespace {
+std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)> gInsetsChanged;
+NSCursor *gCursor = nil;
+std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)> gContextMenuShower;
+std::function<NSArray<NSView *> *(facebook::react::Tag, ngn::AxRotor)> gRotorViews;
+
+// A cursor of nothing, for `cursor: none`.
+NSCursor *noCursor() {
+  static NSCursor *none = [[NSCursor alloc] initWithImage:[[NSImage alloc] initWithSize:NSMakeSize(1, 1)]
+                                                  hotSpot:NSZeroPoint];
+  return none;
+}
+
+// CSS's cursors, as AppKit draws them. One AppKit has no picture for is the arrow.
+NSCursor *nsCursor(Cursor cursor) {
+  switch (cursor) {
+    case Cursor::Pointer:
+      return NSCursor.pointingHandCursor;
+    case Cursor::Text:
+      return NSCursor.IBeamCursor;
+    case Cursor::NotAllowed:
+    case Cursor::NoDrop:
+      return NSCursor.operationNotAllowedCursor;
+    case Cursor::Grab:
+      return NSCursor.openHandCursor;
+    case Cursor::Grabbing:
+      return NSCursor.closedHandCursor;
+    case Cursor::Crosshair:
+    case Cursor::Cell:
+      return NSCursor.crosshairCursor;
+    case Cursor::Copy:
+      return NSCursor.dragCopyCursor;
+    case Cursor::Alias:
+      return NSCursor.dragLinkCursor;
+    case Cursor::ContextMenu:
+      return NSCursor.contextualMenuCursor;
+    case Cursor::ColResize:
+    case Cursor::EWResize:
+    case Cursor::EResize:
+    case Cursor::WResize:
+      return NSCursor.resizeLeftRightCursor;
+    case Cursor::RowResize:
+    case Cursor::NSResize:
+    case Cursor::NResize:
+    case Cursor::SResize:
+      return NSCursor.resizeUpDownCursor;
+    case Cursor::NWSEResize:
+    case Cursor::NWResize:
+    case Cursor::SEResize:
+      if (@available(macOS 15.0, *)) {
+        return [NSCursor frameResizeCursorFromPosition:NSCursorFrameResizePositionTopLeft
+                                          inDirections:NSCursorFrameResizeDirectionsAll];
+      }
+      return NSCursor.arrowCursor;
+    case Cursor::NESWResize:
+    case Cursor::NEResize:
+    case Cursor::SWResize:
+      if (@available(macOS 15.0, *)) {
+        return [NSCursor frameResizeCursorFromPosition:NSCursorFrameResizePositionTopRight
+                                          inDirections:NSCursorFrameResizeDirectionsAll];
+      }
+      return NSCursor.arrowCursor;
+    case Cursor::ZoomIn:
+      if (@available(macOS 15.0, *)) {
+        return NSCursor.zoomInCursor;
+      }
+      return NSCursor.arrowCursor;
+    case Cursor::ZoomOut:
+      if (@available(macOS 15.0, *)) {
+        return NSCursor.zoomOutCursor;
+      }
+      return NSCursor.arrowCursor;
+    case Cursor::None:
+      return noCursor();
+    default:
+      return NSCursor.arrowCursor;
+  }
+}
+
+} // namespace
+
+// One of VoiceOver's rotors over a container's views (accessibility.h): its items are the views
+// the core lists on it, in tree order, read again on each search so they follow the app.
+@interface NGNRotorSearch : NSObject <NSAccessibilityCustomRotorItemSearchDelegate>
+@property (nonatomic, weak) NGNSurfaceView *container;
+@property (nonatomic) ngn::AxRotor kind;
+@end
+
+@implementation NGNRotorSearch
+
+- (NSAccessibilityCustomRotorItemResult *)rotor:(NSAccessibilityCustomRotor *)rotor
+                      resultForSearchParameters:(NSAccessibilityCustomRotorSearchParameters *)parameters {
+  NGNSurfaceView *container = self.container;
+  NSMutableArray<NSView *> *items = [NSMutableArray array];
+  if (container != nil && gRotorViews) {
+    [items addObjectsFromArray:gRotorViews(container.rootTag, self.kind)];
+  }
+  NSString *filter = parameters.filterString;
+  if (filter.length > 0) {
+    [items filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSView *item, NSDictionary *) {
+             return [item.accessibilityLabel localizedCaseInsensitiveContainsString:filter];
+           }]];
+  }
+  std::optional<size_t> current;
+  id target = parameters.currentItem.targetElement;
+  NSUInteger at = target ? [items indexOfObjectIdenticalTo:target] : NSNotFound;
+  if (at != NSNotFound) {
+    current = at;
+  }
+  auto next = ngn::rotorStep(
+      items.count, current, parameters.searchDirection == NSAccessibilityCustomRotorSearchDirectionNext);
+  if (!next) {
+    return nil;
+  }
+  NSView *item = items[*next];
+  NSAccessibilityCustomRotorItemResult *result = [[NSAccessibilityCustomRotorItemResult alloc] initWithTargetElement:item];
+  result.customLabel = item.accessibilityLabel;
+  return result;
+}
+
+@end
+
+// AppKit's phase of a trackpad gesture or scroll; nothing for a wheel's click, a momentum scroll
+// or a step with no phase of its own (mayBegin, stationary).
+static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
+  if (phase & NSEventPhaseBegan) {
+    return ngn::GesturePhase::Began;
+  }
+  if (phase & NSEventPhaseChanged) {
+    return ngn::GesturePhase::Changed;
+  }
+  if (phase & NSEventPhaseEnded) {
+    return ngn::GesturePhase::Ended;
+  }
+  if (phase & NSEventPhaseCancelled) {
+    return ngn::GesturePhase::Cancelled;
+  }
+  return std::nullopt;
+}
+
+@implementation NGNSurfaceView {
+  // Made once: a rotor holds its search delegate weakly, so the view keeps them.
+  NSArray<NSAccessibilityCustomRotor *> *_rotors;
+  NSArray<NGNRotorSearch *> *_rotorSearches;
+  ngn::InputSink *_input;
+  ngn::ContainerId _container;
+  std::optional<ngn::ContainerInsets> _reported;
+  id _wheelMonitor;
+}
+
++ (void)showCursor:(Cursor)cursor {
+  gCursor = nsCursor(cursor);
+  [gCursor set];
+}
+
++ (std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)>)contextMenuShower {
+  return gContextMenuShower;
+}
++ (void)setContextMenuShower:(std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)>)fn {
+  gContextMenuShower = std::move(fn);
+}
+
++ (std::function<NSArray<NSView *> *(facebook::react::Tag, ngn::AxRotor)>)rotorViews {
+  return gRotorViews;
+}
++ (void)setRotorViews:(std::function<NSArray<NSView *> *(facebook::react::Tag, ngn::AxRotor)>)fn {
+  gRotorViews = std::move(fn);
+}
+
++ (std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)>)insetsChanged {
+  return gInsetsChanged;
+}
++ (void)setInsetsChanged:(std::function<void(facebook::react::Tag, std::optional<ngn::ContainerInsets>)>)fn {
+  gInsetsChanged = std::move(fn);
+}
+
+- (instancetype)initWithFrame:(NSRect)frame surfaceId:(facebook::react::SurfaceId)surfaceId input:(ngn::InputSink *)input {
+  // The surface's main container hit-tests from the surface's root view.
+  return [self initWithFrame:frame surfaceId:surfaceId container:surfaceId rootTag:surfaceId input:input];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame
+                    surfaceId:(facebook::react::SurfaceId)surfaceId
+                    container:(ngn::ContainerId)container
+                      rootTag:(facebook::react::Tag)rootTag
+                        input:(ngn::InputSink *)input {
+  if ((self = [super initWithFrame:frame])) {
+    _surfaceId = surfaceId;
+    _container = container;
+    _rootTag = rootTag;
+    _input = input;
+    _input->addContainer(container, surfaceId, rootTag);
+    // The wheel reaches the core before the scroll view under the pointer takes it, and still
+    // scrolls it: a `(wheel)` listener hears the turn without stopping the scroll, as on the web.
+    __weak NGNSurfaceView *weakSelf = self;
+    _wheelMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
+                                                          handler:^NSEvent *(NSEvent *event) {
+                                                            [weakSelf wheelEvent:event];
+                                                            return event;
+                                                          }];
+    // Files, urls and text dragged in from Finder and other apps go to the view under the drag
+    // that takes drops (input-dispatcher.h); a text field under it takes text itself.
+    [self registerForDraggedTypes:@[ NSPasteboardTypeFileURL, NSPasteboardTypeURL, NSPasteboardTypeString ]];
+  }
+  return self;
+}
+
+- (void)dealloc {
+  [NSEvent removeMonitor:_wheelMonitor];
+  _input->removeContainer(_container);
+  if (gInsetsChanged && _reported) {
+    gInsetsChanged(_rootTag, std::nullopt);
+  }
+}
+
+// What of the container the window's title bar and toolbar cover (the content runs under them),
+// and how far the window controls reach in from the leading edge.
+- (void)reportInsets {
+  if (!gInsetsChanged || self.window == nil) {
+    return;
+  }
+  NSEdgeInsets safe = self.safeAreaInsets;
+  double leading = 0;
+  if (NSButton *zoom = [self.window standardWindowButton:NSWindowZoomButton]; zoom != nil && safe.top > 0) {
+    NSRect controls = [self convertRect:zoom.bounds fromView:zoom];
+    leading = std::max<double>(0, NSMaxX(controls));
+  }
+  ngn::ContainerInsets insets{
+      .size = {static_cast<facebook::react::Float>(self.bounds.size.width),
+               static_cast<facebook::react::Float>(self.bounds.size.height)},
+      .insets = {.left = static_cast<facebook::react::Float>(safe.left),
+                 .top = static_cast<facebook::react::Float>(safe.top),
+                 .right = static_cast<facebook::react::Float>(safe.right),
+                 .bottom = static_cast<facebook::react::Float>(safe.bottom)},
+      .titlebarLeading = leading,
+  };
+  if (_reported != insets) {
+    _reported = insets;
+    gInsetsChanged(_rootTag, insets);
+  }
+}
+
+- (void)layout {
+  [super layout];
+  [self reportInsets];
+}
+
+- (void)viewDidMoveToWindow {
+  [super viewDidMoveToWindow];
+  [self reportInsets];
+}
+
+- (BOOL)isFlipped {
+  return YES;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  return YES;
+}
+
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  for (NSTrackingArea *area in self.trackingAreas) {
+    [self removeTrackingArea:area];
+  }
+  [self addTrackingArea:[[NSTrackingArea alloc]
+                            initWithRect:NSZeroRect
+                                 options:NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited |
+                                         NSTrackingActiveAlways | NSTrackingInVisibleRect
+                                   owner:self
+                                userInfo:nil]];
+}
+
+// A point in the window as the core takes it: in the root's coordinates and the screen's.
+- (ngn::PointerInput)inputAt:(NSPoint)locationInWindow {
+  NSView *root = self.rootView != nil && [self.rootView isDescendantOf:self] ? self.rootView : self;
+  NSPoint inView = [root convertPoint:locationInWindow fromView:nil];
+  NSPoint onScreen = [self.window convertPointToScreen:locationInWindow];
+  // AppKit's screen coordinates start at the bottom left of the primary display.
+  CGFloat top = NSMaxY(NSScreen.screens.firstObject.frame);
+  ngn::PointerInput input;
+  input.container = _container;
+  input.point = {static_cast<float>(inView.x), static_cast<float>(inView.y)};
+  input.screenPoint = {static_cast<float>(onScreen.x), static_cast<float>(top - onScreen.y)};
+  return input;
+}
+
+- (ngn::PointerInput)inputFor:(NSEvent *)event {
+  ngn::PointerInput input = [self inputAt:event.locationInWindow];
+  input.buttons = static_cast<int>(NSEvent.pressedMouseButtons);
+  // Only a button's events have a pressure: asking a wheel's or a move's throws.
+  switch (event.type) {
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeLeftMouseDragged:
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeRightMouseUp:
+    case NSEventTypeOtherMouseDown:
+    case NSEventTypeOtherMouseUp:
+      input.pressure = event.pressure;
+      break;
+    default:
+      input.pressure = 0;
+  }
+  input.timestamp = event.timestamp;
+  if (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseUp) {
+    input.clickCount = static_cast<int>(event.clickCount);
+  }
+  return input;
+}
+
+// A secondary click: the `(contextmenu)` event, then the menu of the view's `contextMenu` prop. True
+// when either was there.
+- (BOOL)secondaryClick:(NSEvent *)event {
+  auto input = [self inputFor:event];
+  bool heard = _input->contextMenu(input);
+  bool shown = gContextMenuShower && gContextMenuShower(self, event, input);
+  return heard || shown;
+}
+
+- (void)mouseDown:(NSEvent *)event {
+  // Control-click is the Mac's secondary click.
+  if ((event.modifierFlags & NSEventModifierFlagControl) != 0 && [self secondaryClick:event]) {
+    return;
+  }
+  // A click focuses the focusable view it lands in, as on the web, without a focus ring.
+  NSView *hit = [self hitTest:[self.superview convertPoint:event.locationInWindow fromView:nil]];
+  NSResponder *focus = self;
+  for (NSView *v = hit; v != nil && v != self; v = v.superview) {
+    if ([v isKindOfClass:NGNView.class] && v.acceptsFirstResponder) {
+      focus = v;
+      break;
+    }
+  }
+  if (self.window.firstResponder != focus) {
+    [self.window makeFirstResponder:focus];
+  }
+  _input->pointerDown([self inputFor:event]);
+}
+
+- (void)rightMouseDown:(NSEvent *)event {
+  if (![self secondaryClick:event]) {
+    [super rightMouseDown:event];
+  }
+}
+
+- (void)wheelEvent:(NSEvent *)event {
+  if (event.window != self.window || ![self ownsPointer:event]) {
+    return;
+  }
+  // The DOM's deltas are how far the content would move, down and right positive: AppKit's are
+  // the other way round. A wheel without precise deltas counts lines.
+  ngn::WheelDelta delta{
+      .x = -event.scrollingDeltaX,
+      .y = -event.scrollingDeltaY,
+      .z = 0,
+      .mode = event.hasPreciseScrollingDeltas ? 0 : 1,
+      .phase = phaseOf(event.phase),
+      .naturalScrolling = event.isDirectionInvertedFromDevice == YES,
+  };
+  // A trackpad scroll's beginning and end carry no movement, and a gesture needs both.
+  if (delta.x != 0 || delta.y != 0 || delta.phase) {
+    _input->wheel([self inputFor:event], delta);
+  }
+}
+
+// A trackpad's pinch and rotation, for the gesture handler's pinch and rotation.
+- (void)magnifyWithEvent:(NSEvent *)event {
+  if (auto phase = phaseOf(event.phase)) {
+    _input->magnify([self inputFor:event], event.magnification, *phase);
+  }
+}
+
+- (void)rotateWithEvent:(NSEvent *)event {
+  if (auto phase = phaseOf(event.phase)) {
+    _input->rotate([self inputFor:event], event.rotation, *phase);
+  }
+}
+
+- (void)mouseDragged:(NSEvent *)event {
+  _input->pointerMove([self inputFor:event]);
+}
+
+- (void)mouseUp:(NSEvent *)event {
+  _input->pointerUp([self inputFor:event]);
+}
+
+// Whether this container is the innermost one under the pointer. A container presented over
+// this one (a modal's cover) reports its own moves, so this one stays out of them: hover never
+// lands on what is under a cover.
+- (BOOL)ownsPointer:(NSEvent *)event {
+  // A window over this one (a popover's) takes the pointer where it covers this window.
+  NSPoint onScreen = [self.window convertPointToScreen:event.locationInWindow];
+  if ([NSWindow windowNumberAtPoint:onScreen belowWindowWithWindowNumber:0] != self.window.windowNumber) {
+    return NO;
+  }
+  NSView *content = self.window.contentView;
+  NSView *hit = [content hitTest:[content.superview convertPoint:event.locationInWindow fromView:nil]];
+  for (NSView *v = hit; v != nil; v = v.superview) {
+    if ([v isKindOfClass:NGNSurfaceView.class]) {
+      return v == self;
+    }
+  }
+  return NO;
+}
+
+- (void)mouseMoved:(NSEvent *)event {
+  if ([self ownsPointer:event]) {
+    _input->pointerMove([self inputFor:event]);
+    // A text field's cursor rect sets the I-beam behind the core's back as the pointer crosses it.
+    [gCursor set];
+  }
+}
+
+- (void)mouseEntered:(NSEvent *)event {
+  if ([self ownsPointer:event]) {
+    _input->pointerMove([self inputFor:event]);
+    [gCursor set];
+  }
+}
+
+- (void)mouseExited:(NSEvent *)event {
+  // Into another container of the same surface (across a split view's divider, into a custom
+  // sidebar row or out of one): that one reports the move, and the pointer has not left.
+  NSView *content = self.window.contentView;
+  NSView *hit = [content hitTest:[content.superview convertPoint:event.locationInWindow fromView:nil]];
+  for (NSView *v = hit; v != nil; v = v.superview) {
+    if ([v isKindOfClass:NGNSurfaceView.class]) {
+      if (v != self && ((NGNSurfaceView *)v).surfaceId == _surfaceId) {
+        return;
+      }
+      break;
+    }
+  }
+  _input->pointerLeave(_surfaceId, [self inputFor:event]);
+}
+
+#pragma mark - Drops
+
+// What the drag carries: its urls (files among them) and its plain text.
+- (ngn::DragItems)dragItemsOf:(id<NSDraggingInfo>)info {
+  NSPasteboard *pasteboard = info.draggingPasteboard;
+  std::vector<std::string> urls;
+  for (NSURL *url in [pasteboard readObjectsForClasses:@[ NSURL.class ] options:nil]) {
+    // Finder can hand over a file reference url (file:///.file/id=...): the app wants the path.
+    NSURL *plain = url.isFileReferenceURL ? url.filePathURL : url;
+    if (plain.absoluteString != nil) {
+      urls.emplace_back(plain.absoluteString.UTF8String);
+    }
+  }
+  std::optional<std::string> text;
+  if (NSString *string = [pasteboard stringForType:NSPasteboardTypeString]; string != nil) {
+    text = string.UTF8String;
+  }
+  return ngn::dragItems(urls, std::move(text));
+}
+
+- (NSDragOperation)dragOver:(id<NSDraggingInfo>)info {
+  return _input->dragOver([self inputAt:info.draggingLocation], [self dragItemsOf:info]) ? NSDragOperationCopy
+                                                                                          : NSDragOperationNone;
+}
+
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)info {
+  return [self dragOver:info];
+}
+
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)info {
+  return [self dragOver:info];
+}
+
+// A drag held still asks nothing more: the target only changes as it moves.
+- (BOOL)wantsPeriodicDraggingUpdates {
+  return NO;
+}
+
+- (void)draggingExited:(id<NSDraggingInfo>)info {
+  _input->dragExit(_container);
+}
+
+- (void)draggingEnded:(id<NSDraggingInfo>)info {
+  // A cancelled drag (Escape, or dropped where nothing takes it) ends without a drop.
+  _input->dragExit(_container);
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)info {
+  return _input->drop([self inputAt:info.draggingLocation], [self dragItemsOf:info]);
+}
+
+// VoiceOver's Headings, Links and Landmarks rotors over the container's views. AppKit fills none of
+// them for drawn views; its heading role arrives only in macOS 26, and it has no landmark role.
+// The app's content as one group in the window, which is where VoiceOver finds the rotors: an
+// element AppKit ignores has none it can see.
+- (BOOL)isAccessibilityElement {
+  return YES;
+}
+
+- (NSAccessibilityRole)accessibilityRole {
+  return NSAccessibilityGroupRole;
+}
+
+- (NSArray<NSAccessibilityCustomRotor *> *)accessibilityCustomRotors {
+  if (_rotors) {
+    return _rotors;
+  }
+  NSMutableArray<NSAccessibilityCustomRotor *> *rotors = [NSMutableArray array];
+  NSMutableArray<NGNRotorSearch *> *searches = [NSMutableArray array];
+  const std::pair<NSAccessibilityCustomRotorType, ngn::AxRotor> kinds[] = {
+      {NSAccessibilityCustomRotorTypeHeading, ngn::AxRotor::Headings},
+      {NSAccessibilityCustomRotorTypeLink, ngn::AxRotor::Links},
+      {NSAccessibilityCustomRotorTypeLandmark, ngn::AxRotor::Landmarks},
+  };
+  for (const auto &[type, kind] : kinds) {
+    NGNRotorSearch *search = [NGNRotorSearch new];
+    search.container = self;
+    search.kind = kind;
+    [searches addObject:search];
+    [rotors addObject:[[NSAccessibilityCustomRotor alloc] initWithRotorType:type itemSearchDelegate:search]];
+  }
+  _rotorSearches = searches;
+  _rotors = rotors;
+  return _rotors;
+}
+
+- (NSString *)rotorItemsDescription {
+  NSMutableArray<NSString *> *lines = [NSMutableArray array];
+  for (NSAccessibilityCustomRotor *rotor in [self accessibilityCustomRotors]) {
+    NSMutableArray<NSString *> *items = [NSMutableArray array];
+    NSAccessibilityCustomRotorSearchParameters *parameters = [NSAccessibilityCustomRotorSearchParameters new];
+    parameters.searchDirection = NSAccessibilityCustomRotorSearchDirectionNext;
+    while (NSAccessibilityCustomRotorItemResult *result = [rotor.itemSearchDelegate rotor:rotor
+                                                                    resultForSearchParameters:parameters]) {
+      [items addObject:result.customLabel != nil ? result.customLabel : @"?"];
+      parameters.currentItem = result;
+    }
+    [lines addObject:[NSString stringWithFormat:@"%@: %@", rotor.label, [items componentsJoinedByString:@" | "]]];
+  }
+  return [lines componentsJoinedByString:@"\n"];
+}
+
+@end

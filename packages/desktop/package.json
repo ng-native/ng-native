@@ -37,7 +37,8 @@
     ]
   },
   "scripts": {
-    "test:native": "native/scripts/build.sh --backend none --test"
+    "test:native": "native/scripts/build.sh --backend none --test",
+    "build:host": "native/scripts/build.sh"
   },
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/desktop",

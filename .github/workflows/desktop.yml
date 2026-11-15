@@ -1,11 +1,11 @@
 name: Desktop host
 
 # The desktop host in @ng-native/desktop. On ubuntu, the toolkit-free core and its tests build with
-# no backend and no Hermes, which proves AppKit never leaks into the core. On macOS, the core tests
-# build and run with the AppKit backend's window-free parts and their tests.
-# A pull request runs it only when the host or the workflow changed, or the lockfile moved the
-# version of a package the host builds from (see `changes`); a push to main and a manual run build
-# it whatever changed. Compiles go through ccache, kept per job.
+# no backend and no Hermes, which proves AppKit never leaks into the core. On macOS, the AppKit host
+# builds as an app would build it, and the core tests run there too. A pull request runs it only when
+# the host or the workflow changed, or the lockfile moved the version of a package the host builds
+# from (see `changes`); a push to main and a manual run build it whatever changed. Compiles go
+# through ccache, kept per job.
 on:
   push:
     branches: [main]
@@ -107,33 +107,55 @@ jobs:
       - if: always()
         run: ccache --show-stats
 
-  core-macos:
+  host-macos:
     needs: changes
     if: >-
       always() && github.event.pull_request.draft != true &&
       (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true' ||
       needs.changes.outputs.pins == 'true')
     runs-on: macos-latest
+    # Budget: a cold dev build within 10 minutes on this runner (spec, performance budget).
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
 
+      # Build tools only; every library the host links comes from the pinned sources. ccache is
+      # installed by its action below.
       - run: brew install ninja
 
+      # Hermes and React Native's renderer are most of a cold build. A build restored from here
+      # recompiles only the files whose inputs changed; the key names the pins, and a near miss
+      # restores the latest set.
       - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
-          key: desktop-core-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
-          restore-keys: desktop-core-${{ runner.os }}-${{ runner.arch }}-
-          max-size: 500M
+          key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'pnpm-lock.yaml') }}
+          restore-keys: desktop-host-${{ runner.os }}-${{ runner.arch }}-
+          max-size: 1G
 
       - uses: actions/cache@v6
         with:
-          path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
-          key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+          path: |
+            ${{ env.NGN_DESKTOP_CACHE }}/*/src
+            ${{ env.NGN_DESKTOP_CACHE }}/*/hermes-*
+          key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'pnpm-lock.yaml') }}
 
-      - name: Build the core and the AppKit backend's window-free parts, and run their tests
-        run: pnpm --filter @ng-native/desktop test:native
+      - name: Build the AppKit host
+        shell: bash
+        run: |
+          start=$(date +%s)
+          build=$(pnpm --silent --filter @ng-native/desktop build:host | tail -n 1)
+          echo "Host built in $(( $(date +%s) - start ))s"
+          test -x "$build/appkit/ngn-macos"
+          # Linked statically: nothing but the system's own libraries and frameworks.
+          if otool -L "$build/appkit/ngn-macos" | tail -n +2 | grep -vE '^\s+(/usr/lib/|/System/Library/)'; then
+            echo "ngn-macos links a library from outside the system" >&2
+            exit 1
+          fi
+          echo "BUILD_DIR=$build" >> "$GITHUB_ENV"
+
+      - name: Run the core tests
+        run: '"$BUILD_DIR/ngn_core_tests"'
 
       - if: always()
         run: ccache --show-stats
