@@ -30,7 +30,9 @@ struct NetworkPath {
 class PathMonitor {
  public:
   virtual ~PathMonitor() = default;
-  // Reports the path now and on each change, on any thread, until the answer is called.
+  // Reports the path now and on each change, on any thread but one call at a time, in the order
+  // the paths changed, until the answer is called. The module relies on that order for its
+  // events. The answer may use the monitor: the module keeps it until the answer returns.
   virtual std::function<void()> watch(std::function<void(const NetworkPath &)> changed) = 0;
 };
 

@@ -74,3 +74,24 @@ TEST_CASE("NgNativeNetwork stops watching when it goes with its runtime") {
   ngn::makeNetworkModule(monitor).reset();
   CHECK(monitor->stops == 1);
 }
+
+TEST_CASE("NgNativeNetwork keeps its monitor until it has stopped watching") {
+  // A monitor whose stop needs the monitor, as one sharing a system watch between modules would.
+  struct Monitor final : ngn::PathMonitor {
+    std::shared_ptr<bool> gone = std::make_shared<bool>(false);
+    ~Monitor() override {
+      *gone = true;
+    }
+    std::function<void()> watch(std::function<void(const ngn::NetworkPath &)>) override {
+      return [gone = gone, stoppedAlive = stoppedAlive] { *stoppedAlive = !*gone; };
+    }
+    std::shared_ptr<bool> stoppedAlive = std::make_shared<bool>(false);
+  };
+  auto monitor = std::make_shared<Monitor>();
+  auto stoppedAlive = monitor->stoppedAlive;
+  auto module = ngn::makeNetworkModule(monitor);
+  // The host's last reference goes first.
+  monitor.reset();
+  module.reset();
+  CHECK(*stoppedAlive);
+}
