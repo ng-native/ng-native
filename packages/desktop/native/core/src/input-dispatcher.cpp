@@ -47,10 +47,18 @@ void InputDispatcher::addContainer(ContainerId container, SurfaceId surfaceId, T
 }
 
 void InputDispatcher::removeContainer(ContainerId container) {
-  containers_.erase(container);
+  // Cancelled while the container is still there to say where the press was.
   if (press_ && press_->container == container) {
+    PointerInput at;
+    at.container = container;
+    at.point = press_->start;
+    sendTouch(TouchPhase::Cancel, lastInput_ && containers_.contains(lastInput_->container) ? *lastInput_ : at);
     press_.reset();
   }
+  if (gesturePress_ == container) {
+    cancelGesturePress();
+  }
+  containers_.erase(container);
 }
 
 const std::vector<Tag> &InputDispatcher::hovered(SurfaceId surfaceId) const {
@@ -74,7 +82,9 @@ void InputDispatcher::pointerDown(const PointerInput &input) {
   lastInput_ = input;
   sendTouch(TouchPhase::Start, input);
   if (gestures_) {
-    gesturePressed_ = true;
+    gesturePress_ = input.container;
+    // The DOM's `buttons` bits (1 primary, 2 secondary, 4 middle) as the button pressed.
+    gestureButton_ = input.buttons & 1 ? 0 : input.buttons & 2 ? 2 : input.buttons & 4 ? 1 : 0;
     gestures_->pointerDown(container->second.surfaceId, chain, gesturePointer(container->second, input));
   }
 }
@@ -89,14 +99,18 @@ void InputDispatcher::pointerMove(const PointerInput &input) {
   }
   auto chain = tree_.hitTest(container->second.root, input.point);
   updateHover(container->second, chain, input);
-  if (press_ && !startDragOut(input)) {
+  if (press_) {
+    // A drag out has the move, and the rest of the press.
+    if (startDragOut(input)) {
+      return;
+    }
     lastInput_ = input;
     sendTouch(TouchPhase::Move, input);
   }
   if (gestures_) {
     // A press's moves go to the handlers it began on wherever it goes; the pointer's others hover.
     auto pointer = gesturePointer(container->second, input);
-    if (gesturePressed_) {
+    if (gesturePress_) {
       gestures_->pointerMove(pointer);
     } else {
       gestures_->hover(container->second.surfaceId, chain, pointer);
@@ -129,6 +143,7 @@ bool InputDispatcher::startDragOut(const PointerInput &input) {
     }
     sendTouch(TouchPhase::Cancel, input);
     press_.reset();
+    cancelGesturePress();
     draggingOut_ = true;
     if (onDragOut) {
       onDragOut(*it, input, *item);
@@ -140,12 +155,13 @@ bool InputDispatcher::startDragOut(const PointerInput &input) {
 
 void InputDispatcher::pointerUp(const PointerInput &input) {
   draggingOut_ = false;
-  if (gestures_ && gesturePressed_) {
-    gesturePressed_ = false;
+  if (gestures_ && gesturePress_) {
+    gesturePress_.reset();
     auto container = containers_.find(input.container);
     if (container != containers_.end()) {
       gestures_->pointerUp(gesturePointer(container->second, input));
     }
+    gestureButton_ = 0;
   }
   if (!press_) {
     return;
@@ -253,17 +269,18 @@ void InputDispatcher::contextMenuSelect(Tag tag, const std::string &id) {
   }
 }
 
-bool InputDispatcher::wheel(const PointerInput &input, const WheelDelta &delta) {
+WheelResult InputDispatcher::wheel(const PointerInput &input, const WheelDelta &delta) {
+  WheelResult result;
   auto container = containers_.find(input.container);
   if (container == containers_.end()) {
-    return false;
+    return result;
   }
   auto chain = tree_.hitTest(container->second.root, input.point);
   if (gestures_) {
     // The fingers' movement: the DOM's deltas are the content's, which natural scrolling moves
     // with the fingers.
     float sign = delta.naturalScrolling ? -1 : 1;
-    gestures_->scroll(
+    result.taken = gestures_->scroll(
         container->second.surfaceId,
         chain,
         gesturePointer(container->second, input),
@@ -272,14 +289,15 @@ bool InputDispatcher::wheel(const PointerInput &input, const WheelDelta &delta) 
   }
   // A trackpad scroll's beginning and end, which only the gestures needed, move nothing.
   if (delta.x == 0 && delta.y == 0 && delta.z == 0) {
-    return false;
+    return result;
   }
-  return sendElementEvent(
+  result.heard = sendElementEvent(
       container->second,
       chain,
       &DesktopProps::onWheel,
       "wheel",
       folly::dynamic::object("deltaX", delta.x)("deltaY", delta.y)("deltaZ", delta.z)("deltaMode", delta.mode));
+  return result;
 }
 
 namespace {
@@ -494,8 +512,19 @@ GesturePointer InputDispatcher::gesturePointer(const Container &container, const
       .id = 1,
       .page = {input.point.x + origin.x, input.point.y + origin.y},
       .time = input.timestamp * 1000,
-      .button = 0,
+      .button = gestureButton_,
   };
+}
+
+void InputDispatcher::cancelGesturePress() {
+  if (!gesturePress_) {
+    return;
+  }
+  gesturePress_.reset();
+  gestureButton_ = 0;
+  if (gestures_) {
+    gestures_->pointerCancel();
+  }
 }
 
 void InputDispatcher::claimPress() {
@@ -581,11 +610,14 @@ void InputDispatcher::sendTouch(TouchPhase phase, const PointerInput &input) {
   }
   auto root = container->second.root;
   // Touches are reported in the surface's coordinates (page) and the target's (offset), whichever
-  // container the press is in.
+  // container the press is in. The pointer may be over another container now (a popover).
   auto rootOrigin = pageOrigin(container->second);
+  auto over = containers_.find(input.container);
+  auto inputOrigin = over != containers_.end() ? pageOrigin(over->second) : rootOrigin;
+  Point page{input.point.x + inputOrigin.x, input.point.y + inputOrigin.y};
   Touch touch;
-  touch.pagePoint = {input.point.x + rootOrigin.x, input.point.y + rootOrigin.y};
-  touch.offsetPoint = localPoint(press_->target, root, input.point);
+  touch.pagePoint = page;
+  touch.offsetPoint = localPoint(press_->target, root, {page.x - rootOrigin.x, page.y - rootOrigin.y});
   touch.screenPoint = input.screenPoint;
   touch.identifier = 0;
   touch.target = press_->target;
