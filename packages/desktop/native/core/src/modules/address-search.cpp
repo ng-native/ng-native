@@ -23,6 +23,9 @@ struct Session {
 struct State {
   std::mutex mutex;
   std::map<int, Session> sessions;
+  // Every answer's generation, across sessions: a session started again under an ended one's
+  // number never gives an id the ended one gave.
+  int generations{0};
   std::function<void(folly::dynamic)> send;
 };
 
@@ -56,7 +59,7 @@ std::function<void()> answer(State &state, int id, Session &session, const std::
   if (session.pendingQuery != query) {
     return nullptr;
   }
-  session.generation++;
+  session.generation = ++state.generations;
   folly::dynamic suggestions = folly::dynamic::array();
   for (size_t i = 0; i < completions.size(); i++) {
     suggestions.push_back(folly::dynamic::object(
