@@ -360,6 +360,12 @@ TEST_CASE("calendarDetails reads each field by its type, and names one of the wr
   CHECK_THROWS_WITH_AS(ngn::calendarDetails(dynamic::object("allDay", "yes"), dynamic::array()), doctest::Contains("allDay"), std::invalid_argument);
   CHECK_THROWS_AS(ngn::calendarDetails(dynamic::object("recurrenceRule", dynamic::object("frequency", "hourly")), dynamic::array()),
                   std::invalid_argument);
+  // EventKit cannot end a rule after 0 occurrences, so 0 or fewer is refused here.
+  for (double count : {0.0, -2.0, 0.5}) {
+    CHECK_THROWS_WITH_AS(
+        ngn::calendarDetails(dynamic::object("recurrenceRule", dynamic::object("frequency", "daily")("occurrence", count)), dynamic::array()),
+        doctest::Contains("occurrence"), std::invalid_argument);
+  }
   // A recurrence rule given as null stops the repeating.
   CHECK(ngn::calendarDetails(dynamic::object("recurrenceRule", nullptr), dynamic::array()).cleared ==
         std::set<std::string>{"recurrenceRule"});

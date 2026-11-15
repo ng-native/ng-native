@@ -5,6 +5,8 @@
 
 #include <mutex>
 
+#include <stdexcept>
+
 namespace ngn::appkit {
 
 namespace {
@@ -139,6 +141,10 @@ std::optional<CalendarStore::Recurrence> recurrenceOf(NSArray<EKRecurrenceRule *
 }
 
 EKRecurrenceRule *ekRule(const CalendarStore::Recurrence &rule) {
+  // EventKit throws an Objective-C exception for a count of 0.
+  if (rule.occurrence && *rule.occurrence < 1) {
+    throw std::invalid_argument("Calendar: a recurrenceRule's occurrence must be 1 or more");
+  }
   EKRecurrenceFrequency frequency = rule.frequency == "weekly"    ? EKRecurrenceFrequencyWeekly
                                     : rule.frequency == "monthly" ? EKRecurrenceFrequencyMonthly
                                     : rule.frequency == "yearly"  ? EKRecurrenceFrequencyYearly
@@ -189,12 +195,15 @@ void applyItem(EKCalendarItem *item, const CalendarStore::Details &d) {
   }
 }
 
-NSDateComponents *componentsOf(double ms, NSTimeZone *zone) {
+// A whole day's components have no time of day, which is how a reminder reads as all day.
+NSDateComponents *componentsOf(double ms, NSTimeZone *zone, bool wholeDay = false) {
   NSCalendar *calendar = [NSCalendar calendarWithIdentifier:NSCalendarIdentifierGregorian];
   calendar.timeZone = zone != nil ? zone : NSTimeZone.defaultTimeZone;
-  NSDateComponents *out = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour |
-                                               NSCalendarUnitMinute | NSCalendarUnitSecond | NSCalendarUnitTimeZone
-                                      fromDate:dateOf(ms)];
+  NSCalendarUnit units = NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitTimeZone;
+  if (!wholeDay) {
+    units |= NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond;
+  }
+  NSDateComponents *out = [calendar components:units fromDate:dateOf(ms)];
   out.calendar = calendar;
   return out;
 }
@@ -285,8 +294,13 @@ void applyReminder(EKReminder *reminder, const CalendarStore::Details &d) {
   } else if (d.cleared.contains("startDate")) {
     reminder.startDateComponents = nil;
   }
+  // allDay applies to the due date given, or to the one there; left out, the reminder's stays.
+  NSDateComponents *current = reminder.dueDateComponents;
+  bool wholeDay = d.allDay ? *d.allDay : current != nil && current.hour == NSDateComponentUndefined;
   if (d.due) {
-    reminder.dueDateComponents = componentsOf(*d.due, reminder.timeZone);
+    reminder.dueDateComponents = componentsOf(*d.due, reminder.timeZone, wholeDay);
+  } else if (d.allDay && current != nil && !d.cleared.contains("dueDate")) {
+    reminder.dueDateComponents = componentsOf(*msOf(current), reminder.timeZone, wholeDay);
   } else if (d.cleared.contains("dueDate")) {
     reminder.dueDateComponents = nil;
   }
@@ -304,10 +318,15 @@ NSString *idOf(const std::string &id) {
   return nsString(id);
 }
 
+// The class's own answer, so a completion that outlives the store reads no freed store.
+CalendarStore::Access accessNow(CalendarStore::Entity entity) {
+  return accessOf([EKEventStore authorizationStatusForEntityType:entityTypeOf(entity)]);
+}
+
 class EventKitStore final : public CalendarStore {
  public:
   Access access(Entity entity) override {
-    return accessOf([EKEventStore authorizationStatusForEntityType:entityTypeOf(entity)]);
+    return accessNow(entity);
   }
 
   void requestAccess(Entity entity, bool writeOnly, std::function<void(Access)> done) override {
@@ -317,7 +336,7 @@ class EventKitStore final : public CalendarStore {
     }
     auto answer = std::make_shared<std::function<void(Access)>>(std::move(done));
     auto finish = ^(BOOL, NSError *) {
-      (*answer)(access(entity));
+      (*answer)(accessNow(entity));
     };
     EKEventStore *events = store();
     if (entity == Entity::Reminder) {
