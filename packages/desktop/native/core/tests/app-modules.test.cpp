@@ -114,6 +114,18 @@ TEST_CASE("Appearance publishes the scheme as the backend applies it, never one 
   CHECK(f.events == std::vector<std::string>{R"(appearanceChanged {"colorScheme":"dark"})"});
 }
 
+TEST_CASE("the fake system's held scheme changes each report the scheme they applied") {
+  Fixture f;
+  f.system->holdSchemes = true;
+  std::vector<std::string> applied;
+  f.system->setColorScheme("dark", [&](std::string scheme) { applied.push_back(scheme); });
+  f.system->setColorScheme("light", [&](std::string scheme) { applied.push_back(scheme); });
+  REQUIRE(f.system->heldSchemes.size() == 2);
+  f.system->heldSchemes[0]();
+  f.system->heldSchemes[1]();
+  CHECK(applied == std::vector<std::string>{"dark", "light"});
+}
+
 TEST_CASE("Linking opens URLs, answers canOpenURL and reports the initial URL") {
   Fixture f;
   auto module = f.make(ngn::makeLinking(f.services));
