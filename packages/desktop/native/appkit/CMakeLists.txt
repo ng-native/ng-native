@@ -38,6 +38,7 @@ add_executable(ngn-macos
     host-view.mm
     input-replay.mm
     image-view.mm
+    image-request.mm
     local-authentication.mm
     location.mm
     geocoder.mm
