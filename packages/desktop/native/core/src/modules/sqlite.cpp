@@ -10,6 +10,8 @@
 #include <map>
 #include <mutex>
 #include <stdexcept>
+#include <string_view>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -196,6 +198,8 @@ class Databases {
       sqlite3_close_v2(db);
       throw SqlError("Could not open database '" + name + "': " + message);
     }
+    // SQL opens files too (ATTACH, and VACUUM INTO through it): only where the app may write.
+    sqlite3_set_authorizer(db, &Databases::authorize, this);
     if (path != ":memory:") {
       sqlite3_exec(db, "PRAGMA journal_mode = WAL", nullptr, nullptr, nullptr);
     }
@@ -220,9 +224,11 @@ class Databases {
     auto file = fileFor(name, directoryArg(args, 1));
     auto use = writable(file);
     {
+      // The same file however its folder is spelled: through a symlink, a `.` or a trailing slash.
       std::lock_guard lock(mutex_);
       for (const auto &[id, open] : open_) {
-        if (open.path == file.string()) {
+        std::error_code error;
+        if (open.path == file.string() || (open.path != ":memory:" && fs::equivalent(open.path, file, error))) {
           throw SqlError("Unable to delete database '" + name + "' that is currently open. Close it before deleting it.");
         }
       }
@@ -253,6 +259,23 @@ class Databases {
     std::shared_ptr<FileAccess::Use> use;
   };
 
+  // Refuses an ATTACH of a file outside the files the app may write. A temporary or in-memory
+  // database is no file.
+  static int authorize(void *self, int action, const char *file, const char *, const char *, const char *) {
+    if (action != SQLITE_ATTACH || file == nullptr || *file == '\0' || std::string_view(file) == ":memory:") {
+      return SQLITE_OK;
+    }
+    auto *databases = static_cast<Databases *>(self);
+    try {
+      auto use = databases->writable(fs::path(file));
+      std::lock_guard lock(databases->mutex_);
+      databases->attached_.push_back(std::move(use));
+      return SQLITE_OK;
+    } catch (const std::exception &) {
+      return SQLITE_DENY;
+    }
+  }
+
   // The database file, and its -wal and -shm beside it, only where the app may write: its own
   // folders, picks and readwrite declarations (FileAccess::writeFor).
   std::shared_ptr<FileAccess::Use> writable(const fs::path &file) const {
@@ -275,6 +298,8 @@ class Databases {
   std::shared_ptr<FileAccess> files_;
   std::mutex mutex_;
   std::map<int, Open> open_;
+  // The picks attached files are in, held while the module is.
+  std::vector<std::shared_ptr<FileAccess::Use>> attached_;
   int next_{0};
 };
 
