@@ -49,6 +49,23 @@ TEST_CASE("postalAddressOf puts the street number and street on the first line, 
   CHECK_FALSE(street.region);
 }
 
+TEST_CASE("A completer given no region after a country's looks anywhere again") {
+  MKLocalSearchCompleter *completer = [MKLocalSearchCompleter new];
+  completer.region = MKCoordinateRegionMakeWithDistance(CLLocationCoordinate2DMake(38, -97), 1000000, 1000000);
+  if (@available(macOS 15.0, *)) {
+    completer.regionPriority = MKLocalSearchRegionPriorityRequired;
+  }
+  __block bool called = false;
+  ngn::appkit::setCompleterRegion(completer, "", ^{ return true; }, ^{ called = true; });
+  CHECK(called);
+  MKCoordinateRegion world = MKCoordinateRegionForMapRect(MKMapRectWorld);
+  CHECK(completer.region.span.longitudeDelta == doctest::Approx(world.span.longitudeDelta));
+  CHECK(completer.region.span.latitudeDelta == doctest::Approx(world.span.latitudeDelta));
+  if (@available(macOS 15.0, *)) {
+    CHECK(completer.regionPriority == MKLocalSearchRegionPriorityDefault);
+  }
+}
+
 TEST_CASE("MapKitLookup completes a query in a country and looks the first completion up, live") {
   // Live: the answer depends on Apple's servers and where the machine is, so it is run on a Mac
   // here and skipped in CI, where a runner's network and location make it flaky.
