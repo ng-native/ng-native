@@ -20,7 +20,7 @@ class FakeSystem final : public System {
   void openSettings(std::function<void(bool)> done) override;
   std::string colorScheme() override;
   void setColorScheme(std::optional<std::string> scheme) override;
-  void showAlert(const AlertRequest &request, std::function<void(int, std::string)> done) override;
+  void showAlert(const AlertRequest &request, std::function<void(int, std::string, std::string)> done) override;
   std::optional<std::string> clipboardText() override {
     return clipboard;
   }
@@ -47,7 +47,7 @@ class FakeSystem final : public System {
   std::string systemScheme{"light"};
   std::optional<std::string> schemeOverride;
   std::vector<AlertRequest> alerts;
-  std::function<void(int, std::string)> answerAlert;
+  std::function<void(int, std::string, std::string)> answerAlert;
   std::optional<std::string> clipboard;
   int64_t clipboardChanges{40};
   std::map<std::string, folly::dynamic> preferences;

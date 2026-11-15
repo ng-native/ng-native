@@ -48,10 +48,14 @@ PreparedAlert prepareAlert(const folly::dynamic &args) {
     }
   }
   if (given.empty()) {
-    // React Native iOS's default: one OK, which is also what Escape presses.
+    // React Native iOS's defaults: one OK, which is also what Escape presses, or for a prompt OK
+    // and Cancel.
     given.emplace_back("0", "OK");
     if (request.input == AlertInput::None) {
       cancelKey = "0";
+    } else {
+      given.emplace_back("1", "Cancel");
+      cancelKey = "1";
     }
   }
 
@@ -109,16 +113,22 @@ std::shared_ptr<NativeModule> makeAlertManager(const CoreModuleServices &s) {
         auto prepared = prepareAlert(args.size() > 0 && args[0].isObject() ? args[0] : folly::dynamic::object());
         JsCallback callback = callbacks.empty() ? nullptr : callbacks[0];
         auto keys = prepared.keys;
+        // What was typed, as React Native iOS answers it: the text, or a login-password prompt's
+        // {login, password}.
+        auto typed = [login = prepared.request.input == AlertInput::LoginPassword](std::string text, std::string password) {
+          return login ? folly::dynamic::object("login", std::move(text))("password", std::move(password))
+                       : folly::dynamic(std::move(text));
+        };
         if (fake) {
           int cancel = prepared.request.cancelIndex;
           if (callback && cancel >= 0 && static_cast<size_t>(cancel) < keys.size()) {
-            callback(folly::dynamic::array(keys[cancel], prepared.request.defaultValue));
+            callback(folly::dynamic::array(keys[cancel], typed(prepared.request.defaultValue, "")));
           }
           return;
         }
-        system->showAlert(prepared.request, [callback, keys](int button, std::string text) {
+        system->showAlert(prepared.request, [callback, keys, typed](int button, std::string text, std::string password) {
           if (callback && button >= 0 && static_cast<size_t>(button) < keys.size()) {
-            callback(folly::dynamic::array(keys[button], text));
+            callback(folly::dynamic::array(keys[button], typed(std::move(text), std::move(password))));
           }
         });
       });

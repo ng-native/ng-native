@@ -37,7 +37,7 @@ void FakeSystem::announce(const Announcement &announcement) {
   log.push_back(std::string("announce ") + names[static_cast<int>(announcement.priority)] + " " + announcement.text);
 }
 
-void FakeSystem::showAlert(const AlertRequest &request, std::function<void(int, std::string)> done) {
+void FakeSystem::showAlert(const AlertRequest &request, std::function<void(int, std::string, std::string)> done) {
   alerts.push_back(request);
   answerAlert = std::move(done);
 }

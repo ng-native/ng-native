@@ -333,8 +333,28 @@ TEST_CASE("a prompt has a text field and sends what was typed with the key") {
   REQUIRE(f.system->alerts.size() == 1);
   CHECK(f.system->alerts[0].input == ngn::AlertInput::PlainText);
   CHECK(f.system->alerts[0].defaultValue == "Ada");
-  f.system->answerAlert(0, "Grace");
+  f.system->answerAlert(0, "Grace", "");
   CHECK(answer == dynamic::array("1", "Grace"));
+}
+
+TEST_CASE("a prompt with no buttons gets OK and Cancel, and a login-password one answers both fields") {
+  auto prompt = ngn::prepareAlert(dynamic::object("title", "Name")("type", "secure-text"));
+  REQUIRE(prompt.request.buttons.size() == 2);
+  CHECK(prompt.request.buttons[0].label == "OK");
+  CHECK(prompt.request.buttons[1].label == "Cancel");
+  CHECK(prompt.request.buttons[1].role == ngn::AlertButtonRole::Cancel);
+  CHECK(prompt.request.cancelIndex == 1);
+  CHECK(prompt.keys == std::vector<std::string>{"0", "1"});
+
+  Fixture f;
+  auto module = ngn::makeAlertManager(f.services);
+  dynamic answer;
+  module->callWithCallbacks(
+      "alertWithArgs", dynamic::array(dynamic::object("title", "Sign in")("type", "login-password"), nullptr),
+      {[&](dynamic a) { answer = a; }});
+  REQUIRE(f.system->alerts.size() == 1);
+  f.system->answerAlert(0, "ada", "secret");
+  CHECK(answer == dynamic::array("0", dynamic::object("login", "ada")("password", "secret")));
 }
 
 TEST_CASE("with fake system UI an alert is never shown and answers with its cancel button at once") {

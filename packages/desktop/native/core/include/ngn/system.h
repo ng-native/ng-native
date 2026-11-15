@@ -69,8 +69,11 @@ class System {
   // Draws the app in `scheme` ("light" or "dark"), or follows the system again for nothing.
   virtual void setColorScheme(std::optional<std::string> scheme) = 0;
 
-  // `done` gets the index of the button pressed and the text typed; any thread.
-  virtual void showAlert(const AlertRequest &request, std::function<void(int button, std::string text)> done) = 0;
+  // `done` gets the index of the button pressed and the text typed: for a login-password prompt,
+  // the login as `text` and the password beside it. Any thread.
+  virtual void showAlert(
+      const AlertRequest &request,
+      std::function<void(int button, std::string text, std::string password)> done) = 0;
 
   virtual std::optional<std::string> clipboardText() = 0;
   virtual void setClipboardText(const std::string &text) = 0;
