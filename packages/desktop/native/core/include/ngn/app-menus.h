@@ -9,6 +9,7 @@
 #pragma once
 
 #include "ngn/default-menu.h"
+#include "ngn/host-state.h"
 #include "ngn/native-module.h"
 
 #include <react/renderer/core/ReactPrimitives.h>
@@ -134,9 +135,10 @@ class MenuHost {
   DefaultMenuOptions options_;
   mutable std::mutex mutex_;
   std::vector<std::pair<std::string, KeyChord>> shortcuts_;
-  std::map<int, Listener> listeners_;
   std::map<SurfaceId, WindowHistory> histories_;
-  int next_{0};
+  // A dropped handle waits for its listener's call in progress, so a module going with a reload
+  // is never called after.
+  Listeners<folly::dynamic> listeners_;
 };
 
 std::shared_ptr<NativeModule> makeMenusModule(std::shared_ptr<MenuHost> host);

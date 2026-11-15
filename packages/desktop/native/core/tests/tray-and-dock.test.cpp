@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "ngn/tray-and-dock.h"
 
 #include <doctest/doctest.h>
@@ -134,4 +135,14 @@ TEST_CASE("a reloaded app's Dock menu starts empty") {
   auto second = ngn::makeDockModule(host);
   REQUIRE(backend->menus.size() == 2);
   CHECK_FALSE(backend->menus[1]);
+}
+
+TEST_CASE("dropping a tray or Dock listener waits for a call to it already running on another thread") {
+  ngn::EventSource source;
+  CHECK(ngn::testing::dropWaitsForRunningCall(
+      [&](auto listener) {
+        bool reloaded = false;
+        return source.listen(listener, reloaded);
+      },
+      [&] { source.send(dynamic::object("type", "press")); }));
 }

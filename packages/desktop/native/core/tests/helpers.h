@@ -8,9 +8,34 @@
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/mounting/ShadowView.h>
 
+#include <atomic>
+#include <chrono>
 #include <memory>
+#include <thread>
 
 namespace ngn::testing {
+
+// Whether dropping a listener's handle waits for a call to it already running on another thread,
+// so a module a reload destroys is never called after. `listen` adds the listener and answers its
+// handle; `send` makes the host call it.
+template <typename Listen, typename Send>
+bool dropWaitsForRunningCall(Listen listen, Send send) {
+  std::atomic<bool> running{false};
+  std::atomic<bool> finished{false};
+  std::shared_ptr<void> handle = listen([&](const folly::dynamic &) {
+    running = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    finished = true;
+  });
+  std::thread sender(send);
+  while (!running) {
+    std::this_thread::yield();
+  }
+  handle.reset();
+  bool waited = finished;
+  sender.join();
+  return waited;
+}
 
 inline facebook::react::ShadowView shadowView(
     facebook::react::Tag tag,

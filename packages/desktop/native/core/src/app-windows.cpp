@@ -369,33 +369,23 @@ std::optional<SurfaceId> WindowHost::focusedSurface() const {
 
 std::shared_ptr<void> WindowHost::attach(Listener listener) {
   bool reloaded;
-  int id;
+  std::shared_ptr<void> handle;
   {
+    // Added under the lock the requests check for listeners with.
     std::lock_guard lock(mutex_);
     reloaded = attached_;
     attached_ = true;
-    id = nextListener_++;
-    listeners_[id] = std::move(listener);
+    handle = listeners_.add(std::move(listener));
   }
   if (reloaded) {
     reloading();
     backend_->after(kClaimSeconds, [this] { dropUnclaimed(); });
   }
-  return std::shared_ptr<void>(nullptr, [this, id](void *) {
-    std::lock_guard lock(mutex_);
-    listeners_.erase(id);
-  });
+  return handle;
 }
 
 void WindowHost::send(const folly::dynamic &event) {
-  std::map<int, Listener> listeners;
-  {
-    std::lock_guard lock(mutex_);
-    listeners = listeners_;
-  }
-  for (auto &[_, listener] : listeners) {
-    listener(event);
-  }
+  listeners_.notify(event);
 }
 
 std::shared_ptr<NativeModule> makeWindowsModule(std::shared_ptr<WindowHost> host) {

@@ -42,25 +42,16 @@ std::vector<TrayIcon> parseTrayIcons(const folly::dynamic &icons) {
 }
 
 std::shared_ptr<void> EventSource::listen(Listener listener, bool &reloaded) {
-  std::lock_guard lock(mutex_);
-  reloaded = next_ > 0;
-  int id = next_++;
-  listeners_[id] = std::move(listener);
-  return std::shared_ptr<void>(nullptr, [this, id](void *) {
+  {
     std::lock_guard lock(mutex_);
-    listeners_.erase(id);
-  });
+    reloaded = listened_;
+    listened_ = true;
+  }
+  return listeners_.add(std::move(listener));
 }
 
 void EventSource::send(const folly::dynamic &event) {
-  std::map<int, Listener> listeners;
-  {
-    std::lock_guard lock(mutex_);
-    listeners = listeners_;
-  }
-  for (auto &[_, listener] : listeners) {
-    listener(event);
-  }
+  listeners_.notify(event);
 }
 
 TrayHost::TrayHost(std::shared_ptr<TrayBackend> backend) : backend_(std::move(backend)) {}

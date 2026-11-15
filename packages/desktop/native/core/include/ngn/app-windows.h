@@ -12,6 +12,7 @@
 // keeps the windows with a key for the reloaded app to claim, and closes the rest.
 #pragma once
 
+#include "ngn/host-state.h"
 #include "ngn/native-module.h"
 #include "ngn/system.h"
 
@@ -165,9 +166,10 @@ class WindowHost {
   bool quitAsked_{false};
   bool quitAgreed_{false};
   std::optional<std::function<void()>> terminating_;
-  std::map<int, Listener> listeners_;
-  int nextListener_{0};
   bool attached_{false};
+  // A dropped handle waits for its listener's call in progress, so a module going with a reload
+  // is never called after.
+  Listeners<folly::dynamic> listeners_;
 };
 
 // The `NgNativeWindows` module over `host`, one per runtime.

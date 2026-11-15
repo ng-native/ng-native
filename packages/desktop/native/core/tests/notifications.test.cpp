@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "ngn/notifications.h"
 
 #include <doctest/doctest.h>
@@ -356,4 +357,10 @@ TEST_CASE("a host without the entitlement rejects the token with what to do, and
   auto without = ngn::makeNotificationsModule(std::make_shared<FakeCenter>(), events);
   CHECK(ask(*without, "getDevicePushTokenAsync")->error.value_or("").find("not available") != std::string::npos);
   CHECK(ask(*without, "unregisterForNotificationsAsync")->value == dynamic(nullptr));
+}
+
+TEST_CASE("dropping a notification listener waits for a call to it already running on another thread") {
+  ngn::NotificationEvents events;
+  CHECK(ngn::testing::dropWaitsForRunningCall(
+      [&](auto listener) { return events.listen(listener); }, [&] { events.tokenChanged("0102"); }));
 }
