@@ -51,6 +51,27 @@ class SecurityScopedBookmarks final : public Bookmarks {
     }
   }
 
+  // Only a security-scoped bookmark: a plain one keeps no access across launches, so it would
+  // replace a stale scoped bookmark that still works. Made while the stale one's access is held.
+  std::optional<std::string> renew(const std::string &bookmark, const std::string &path) override {
+    bool started = startAccess(bookmark);
+    std::optional<std::string> out;
+    @autoreleasepool {
+      NSURL *url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:path.c_str()]];
+      NSData *data = [url bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+                   includingResourceValuesForKeys:nil
+                                    relativeToURL:nil
+                                            error:nil];
+      if (data != nil) {
+        out = bytesOf(data);
+      }
+    }
+    if (started) {
+      stopAccess(bookmark);
+    }
+    return out;
+  }
+
   std::optional<Resolved> resolve(const std::string &bookmark) override {
     @autoreleasepool {
       BOOL stale = NO;

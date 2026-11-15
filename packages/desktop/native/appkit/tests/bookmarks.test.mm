@@ -46,6 +46,11 @@ TEST_CASE("a bookmark finds a picked file again after it moves, and none once it
   REQUIRE(there.has_value());
   CHECK(there->path == moved.string());
 
+  // Renewed where it is now, as a bookmark that resolves there, with its access balanced.
+  auto renewed = bookmarks->renew(*bookmark, moved.string());
+  REQUIRE(renewed.has_value());
+  CHECK(bookmarks->resolve(*renewed)->path == moved.string());
+
   fs::remove(moved);
   CHECK_FALSE(bookmarks->resolve(*bookmark).has_value());
   CHECK_FALSE(bookmarks->resolve("not a bookmark").has_value());
