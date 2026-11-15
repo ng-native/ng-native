@@ -8,7 +8,16 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 
+#import <PhotosUI/PhotosUI.h>
+
 using Access = ngn::PhotoLibrary::Access;
+
+// photo-library.mm's picker delegate, as declared there.
+@interface NGNPickerDelegate : NSObject <PHPickerViewControllerDelegate>
+@property(nonatomic, copy) NSString *folder;
+@property(nonatomic, copy) void (^finished)(NSArray<NSDictionary *> *picked);
+@property(nonatomic, strong) NSWindow *sheet;
+@end
 
 TEST_CASE("PhotoKitLibrary asks for nothing without a usage string, and answers the access as it is") {
   auto library = ngn::appkit::makePhotoLibrary(NSTemporaryDirectory().UTF8String);
@@ -65,4 +74,19 @@ TEST_CASE("The picker's sheet has a picker's size, not its content's fitting siz
   NSSize fitted = ngn::appkit::pickerSheet(other, small).contentLayoutRect.size;
   CHECK(fitted.width == 460);
   CHECK(fitted.height == 340);
+}
+
+TEST_CASE("The picker's delegate lets its sheet go when the pick ends, so the session is freed") {
+  NGNPickerDelegate *delegate = [NGNPickerDelegate new];
+  __block int finished = 0;
+  delegate.finished = ^(NSArray<NSDictionary *> *picked) {
+    CHECK(bool(picked == nil));
+    finished++;
+  };
+  delegate.sheet = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 100, 100) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:YES];
+  // Cancelled: no results.
+  PHPickerViewController *picker = nil;
+  [delegate picker:picker didFinishPicking:@[]];
+  CHECK(finished == 1);
+  CHECK(bool(delegate.sheet == nil));
 }
