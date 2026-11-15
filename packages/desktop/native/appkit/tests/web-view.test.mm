@@ -236,3 +236,41 @@ TEST_CASE("NGNWebViewController loads no file outside the file boundary, reporti
   [harness.controller apply:config];
   REQUIRE(runUntil([&] { return harness.count("loadingFinish") > 0 && harness.last("loadingFinish")["url"] == config.source.uri; }, 10));
 }
+
+TEST_CASE("NGNWebViewController refuses an allowed navigation whose view was invalidated before the answer ran") {
+  Harness harness;
+  harness.allow = std::nullopt;
+  [harness.controller apply:page("<p>Old</p>")];
+  REQUIRE(harness.waitFor("shouldStartLoadWithRequest"));
+  auto asked = harness.last("shouldStartLoadWithRequest");
+  // Allowed, then the view goes and another comes, before the main thread runs the answer.
+  harness.module->call("shouldStartLoadWithLockIdentifier", folly::dynamic::array(true, asked["lockIdentifier"]));
+  [harness.controller invalidate];
+  [harness.controller apply:page("<p>New</p>")];
+  REQUIRE(harness.waitFor("shouldStartLoadWithRequest", 2));
+  runUntil([] { return false; }, 0.3);
+  CHECK(harness.count("loadingStart") == 0);
+}
+
+TEST_CASE("NGNWebViewController's clearCache clears caches, and leaves cookies") {
+  Harness harness;
+  auto config = page("<p>Hi</p>");
+  config.incognito = true;
+  [harness.controller apply:config];
+  WKWebsiteDataStore *store = harness.controller.webView.configuration.websiteDataStore;
+  NSHTTPCookie *cookie = [NSHTTPCookie cookieWithProperties:@{
+    NSHTTPCookieDomain : @"example.com",
+    NSHTTPCookiePath : @"/",
+    NSHTTPCookieName : @"session",
+    NSHTTPCookieValue : @"kept",
+  }];
+  auto set = std::make_shared<bool>(false);
+  [store.httpCookieStore setCookie:cookie completionHandler:^{ *set = true; }];
+  REQUIRE(runUntil([&] { return *set; }, 5));
+  [harness.controller command:"clearCache" args:folly::dynamic::array(true)];
+  runUntil([] { return false; }, 0.5);
+  auto cookies = std::make_shared<NSInteger>(-1);
+  [store.httpCookieStore getAllCookies:^(NSArray<NSHTTPCookie *> *all) { *cookies = static_cast<NSInteger>(all.count); }];
+  REQUIRE(runUntil([&] { return *cookies >= 0; }, 5));
+  CHECK(*cookies == 1);
+}

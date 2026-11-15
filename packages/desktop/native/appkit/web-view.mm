@@ -241,8 +241,12 @@ bool sameScripts(const WebViewConfig &a, const WebViewConfig &b) {
   } else if (name == "requestFocus") {
     [_webView.window makeFirstResponder:_webView];
   } else if (name == "clearCache") {
+    // Caches only, as react-native-webview clears them on iOS: never cookies or the page's storage.
     bool disk = !args.empty() && args[0].isBool() && args[0].asBool();
-    NSSet *types = disk ? WKWebsiteDataStore.allWebsiteDataTypes : [NSSet setWithObject:WKWebsiteDataTypeMemoryCache];
+    NSMutableSet *types = [NSMutableSet setWithObjects:WKWebsiteDataTypeMemoryCache, WKWebsiteDataTypeOfflineWebApplicationCache, nil];
+    if (disk) {
+      [types addObjectsFromArray:@[ WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeFetchCache ]];
+    }
     [_webView.configuration.websiteDataStore removeDataOfTypes:types modifiedSince:NSDate.distantPast completionHandler:^{}];
   }
   // clearHistory and clearFormData: WKWebView has no way to, as on iOS.
@@ -293,12 +297,19 @@ bool sameScripts(const WebViewConfig &a, const WebViewConfig &b) {
     return;
   }
   __weak NGNWebViewController *weakSelf = self;
+  __weak WKWebView *asking = webView;
   auto lockBox = std::make_shared<int>(0);
-  int lock = _locks->hold([weakSelf, decisionHandler, topFrame, url, type, lockBox](bool shouldStart) {
+  int lock = _locks->hold([weakSelf, asking, decisionHandler, topFrame, url, type, lockBox](bool shouldStart) {
     dispatch_async(dispatch_get_main_queue(), ^{
       NGNWebViewController *strong = weakSelf;
       if (strong != nil) {
         strong->_held.erase(*lockBox);
+      }
+      // An answer that comes once its view is invalidated or replaced is a refusal, and says nothing.
+      WKWebView *current = strong != nil ? strong->_webView : nil;
+      if (current == nil || current != asking) {
+        decisionHandler(WKNavigationActionPolicyCancel);
+        return;
       }
       if (!shouldStart) {
         decisionHandler(WKNavigationActionPolicyCancel);
