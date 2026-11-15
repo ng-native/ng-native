@@ -1,5 +1,6 @@
 #include "helpers.h"
 #include "ngn/file-system.h"
+#include "ngn/input-dispatcher.h"
 #include "ngn/web-view.h"
 
 #include <doctest/doctest.h>
@@ -769,6 +770,40 @@ TEST_CASE("readFor opens a pick of an earlier launch for as long as the module r
   }
   CHECK(bookmarks->log == std::vector<std::string>{"start bm:" + picked, "stop bm:" + picked});
   CHECK(bookmarks->opened() == 0);
+}
+
+TEST_CASE("a drag item holds a pick of an earlier launch open until whatever takes it lets it go") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto picked = (dir.path / "outside").string();
+  write(dir.path / "outside/a.md", "a");
+  write(dir.path / "outside/b.md", "b");
+  Saved saved;
+  auto bookmarks = std::make_shared<FakeBookmarks>();
+  {
+    auto first = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+    first->keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+    first->allowPicked(picked);
+  }
+  auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  access->keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+  bookmarks->log.clear();
+  {
+    auto item = ngn::dragItemOf(
+        dynamic::object("files", dynamic::array(ngn::fileUri(picked + "/a.md")))("url", ngn::fileUri(picked + "/b.md")),
+        access.get());
+    REQUIRE(item);
+    // The drag reads the files after dragItemOf answers, so the picks stay open with the item.
+    CHECK(bookmarks->opened() == 2);
+    auto taken = std::move(*item);
+    item.reset();
+    CHECK(bookmarks->opened() == 2);
+  }
+  CHECK(bookmarks->opened() == 0);
+  // A file in the app's own folders starts nothing.
+  bookmarks->log.clear();
+  CHECK(ngn::dragItemOf(dynamic::object("url", ngn::fileUri(folders.cache + "/c.md")), access.get()));
+  CHECK(bookmarks->log.empty());
 }
 
 TEST_CASE("a pick that moved is found where it is now, and one that is gone is forgotten") {
