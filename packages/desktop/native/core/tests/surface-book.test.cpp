@@ -40,3 +40,25 @@ TEST_CASE("SurfaceBook applies changes at once, and only writes them down during
   CHECK(book.stop(4));
   CHECK_FALSE(book.stop(4));
 }
+
+TEST_CASE("SurfaceBook brings a surface the reload restarted up to a change made after it restarted") {
+  ngn::SurfaceBook<std::string> book;
+  book.start(1, "main at 400x300");
+  REQUIRE(book.beginReload());
+  std::set<facebook::react::SurfaceId> started;
+  auto step = book.settle(started);
+  REQUIRE(step);
+  CHECK(step->start == std::vector<std::pair<facebook::react::SurfaceId, std::string>>{{1, "main at 400x300"}});
+  started = {1};
+
+  // The window resizes once its surface has restarted, and before the reload has ended.
+  CHECK_FALSE(book.update(1, [](std::string &s) { s = "main at 800x600"; }));
+  step = book.settle(started);
+  REQUIRE(step);
+  CHECK(step->start.empty());
+  CHECK(step->stop.empty());
+  CHECK(step->update == std::vector<std::pair<facebook::react::SurfaceId, std::string>>{{1, "main at 800x600"}});
+
+  CHECK_FALSE(book.settle(started));
+  CHECK_FALSE(book.reloading());
+}
