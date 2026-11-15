@@ -318,6 +318,7 @@ std::optional<SurfaceId> surfaceOf(NSWindow *window) {
 }
 
 void reloadLaunched(uint64_t generation, uint64_t instance);
+void reloadSameLaunch();
 
 // The menu bar the core asks for, drawn on the main thread.
 struct AppKitMenus final : ngn::MenuBackend {
@@ -326,18 +327,7 @@ struct AppKitMenus final : ngn::MenuBackend {
     dispatch_async(dispatch_get_main_queue(), ^{
       ngn::appkit::installMenuBar(*shared, [](const ngn::MenuItem &item) {
         if (item.command == ngn::MenuCommand::Reload && gHost.runtime) {
-          // The same launch, in a new instance: its first frame, if still owed, comes from that.
-          uint64_t generation = gHost.updates ? gHost.updates->launchGeneration() : 0;
-          gHost.runtime->reload([generation](bool loaded) {
-            if (!loaded) {
-              fprintf(stderr, "ngn-macos: the reload could not load the bundle\n");
-              return;
-            }
-            uint64_t instance = gHost.mounting->instance();
-            dispatch_async(dispatch_get_main_queue(), ^{
-              reloadLaunched(generation, instance);
-            });
-          });
+          reloadSameLaunch();
         } else if (item.command == ngn::MenuCommand::OpenDevTools && gHost.runtime) {
           gHost.runtime->openDebugger();
         } else if (gHost.menus) {
@@ -619,6 +609,24 @@ void reloadLaunched(uint64_t generation, uint64_t instance) {
       launchFrameShown(surface, window);
     }
   }
+}
+
+// The menu's or the red box's reload: the same launch, in a new instance. Its first frame, if still
+// owed, comes from that instance once the bundle loads; the instance it replaces owes nothing from
+// now, and nothing does if the bundle does not load. Main thread.
+void reloadSameLaunch() {
+  uint64_t generation = gHost.updates ? gHost.updates->launchGeneration() : 0;
+  gHost.launchFrame.reloadBegan();
+  gHost.runtime->reload([generation](bool loaded) {
+    if (!loaded) {
+      fprintf(stderr, "ngn-macos: the reload could not load the bundle\n");
+      return;
+    }
+    uint64_t instance = gHost.mounting->instance();
+    dispatch_async(dispatch_get_main_queue(), ^{
+      reloadLaunched(generation, instance);
+    });
+  });
 }
 
 // The splash screen: the first windows wait for the app to hide it (NgNativeSplashScreen).
@@ -1352,7 +1360,7 @@ int main(int argc, const char *argv[]) {
               .reload =
                   [] {
                     gHost.redBox->reloaded();
-                    gHost.runtime->reload();
+                    reloadSameLaunch();
                   },
               .step = [](int delta) { gHost.redBox->step(delta); },
           }),

@@ -77,3 +77,15 @@ TEST_CASE("a launch loaded after another reload began owes nothing for the newer
   frame.loaded(2, 2);
   CHECK_FALSE(frame.shown(2, 3));
 }
+
+TEST_CASE("a reload of the same launch drops the frame owed by the instance it replaces") {
+  ngn::LaunchFrame frame;
+  frame.loaded(1, 1);
+  // The menu or the red box reloads launch 1 before its first frame showed. The old instance's
+  // content, still on screen when the splash lets the window go, starts nothing.
+  frame.reloadBegan();
+  CHECK_FALSE(frame.shown(1, 1));
+  // The reload loaded into instance 2: that instance's frame is owed again.
+  frame.loaded(1, 2);
+  CHECK(frame.shown(2, 1) == 1u);
+}
