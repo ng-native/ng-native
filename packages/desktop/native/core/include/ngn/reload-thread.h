@@ -59,20 +59,22 @@ class ReloadThread {
   // runs its `then(true)` here if the UI queue has not yet. A `then` running on another thread is
   // waited for too. From the live run's own work, it cannot join: the run's `then` joins it.
   void close(const std::function<void()> &service) {
+    // A then run below can destroy this owner, so only this local reference to the state is used.
+    auto state = state_;
     std::thread thread;
     std::shared_ptr<std::atomic<bool>> finished;
     Then then;
     std::optional<Run> dropped;
     {
-      std::lock_guard lock(state_->mutex);
-      state_->closed = true;
-      dropped = std::move(state_->waiting);
-      state_->waiting.reset();
-      if (state_->thread.joinable() && state_->thread.get_id() != std::this_thread::get_id()) {
-        thread = std::move(state_->thread);
-        finished = state_->finished;
-        then = std::move(state_->then);
-        state_->then = nullptr;
+      std::lock_guard lock(state->mutex);
+      state->closed = true;
+      dropped = std::move(state->waiting);
+      state->waiting.reset();
+      if (state->thread.joinable() && state->thread.get_id() != std::this_thread::get_id()) {
+        thread = std::move(state->thread);
+        finished = state->finished;
+        then = std::move(state->then);
+        state->then = nullptr;
       }
     }
     if (thread.joinable()) {
@@ -91,8 +93,8 @@ class ReloadThread {
     // A `then` the UI queue is running on another thread (this close not called from it).
     while (true) {
       {
-        std::lock_guard lock(state_->mutex);
-        if (state_->thenThread == std::thread::id() || state_->thenThread == std::this_thread::get_id()) {
+        std::lock_guard lock(state->mutex);
+        if (state->thenThread == std::thread::id() || state->thenThread == std::this_thread::get_id()) {
           break;
         }
       }

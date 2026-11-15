@@ -251,3 +251,27 @@ TEST_CASE("a close while a second run waits its turn drops it, and joins the fir
   ui.serve();
   CHECK_FALSE(secondRan);
 }
+
+TEST_CASE("a then that close runs can destroy the owner, and close touches nothing of it after") {
+  UiQueue ui;
+  auto reload = std::make_unique<ngn::ReloadThread>(ui.poster());
+  std::atomic<bool> closing{false};
+  bool ran = false;
+  bool dropped = false;
+  reload->start([&] { waitFor(closing); },
+                [&](bool value) {
+                  ran = value;
+                  reload.reset();
+                });
+  // A second run waits its turn, so close drops it after the first run's then destroyed the owner.
+  reload->start([] {}, [&](bool value) { dropped = !value; });
+  auto *owner = reload.get();
+  owner->close([&] {
+    closing = true;
+    ui.serve();
+  });
+  CHECK(ran);
+  CHECK(dropped);
+  CHECK(reload == nullptr);
+  ui.serve();
+}
