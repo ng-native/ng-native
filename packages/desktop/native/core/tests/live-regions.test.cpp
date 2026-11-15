@@ -137,3 +137,23 @@ TEST_CASE("a hidden region, or one under a hidden view, says nothing when its te
   f.texts[3] = "4 new";
   CHECK(f.regions.didMount(1).empty());
 }
+
+TEST_CASE("a region under a covered screen says nothing, then its change once the screen shows") {
+  Fixture f;
+  f.regions.didMount(1);
+  // A covered view, as an unselected tab's screen or a screen under a pushed one is.
+  f.tree.setCovered(2, true);
+  f.texts[3] = "4 new";
+  CHECK(f.regions.didMount(1).empty());
+
+  // A region under a covered ancestor.
+  f.tree.setCovered(2, false);
+  f.tree.setCovered(1, true);
+  f.texts[3] = "5 new";
+  CHECK(f.regions.didMount(1).empty());
+
+  // Shown again, its text is compared with what it said before it was covered.
+  f.tree.setCovered(1, false);
+  CHECK(f.regions.didMount(1) == Said{{"5 new messages", AnnouncementPriority::Medium}});
+  CHECK(f.regions.didMount(1).empty());
+}

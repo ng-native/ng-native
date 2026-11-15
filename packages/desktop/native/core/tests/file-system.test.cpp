@@ -11,6 +11,8 @@
 #include <set>
 #include <utility>
 
+#include <unistd.h>
+
 #include <folly/json.h>
 
 #include "ngn/bytes.h"
@@ -128,6 +130,37 @@ TEST_CASE("FileAccess follows a symbolic link before it decides, and reaches wha
 
   access.allowPicked((dir.path / "outside").string());
   CHECK(access.accessTo((dir.path / "data/link/secret").string()) == Access::ReadWrite);
+}
+
+TEST_CASE("replaceFile writes through no entry already at its temporary file's name") {
+  TempDir dir;
+  write(dir.path / "victim.txt", "kept");
+  // The temporary name is the target's with the process id and a count: an entry put at each of
+  // the next names, here a link to another file, is never opened, written or removed.
+  auto target = dir.path / "note.txt";
+  auto prefix = target.string() + ".part-" + std::to_string(::getpid()) + "-";
+  constexpr int planted = 4096;
+  for (int n = 1; n <= planted; n++) {
+    fs::create_symlink(dir.path / "victim.txt", prefix + std::to_string(n));
+  }
+  CHECK_FALSE(ngn::replaceFile(target.string(), "overwrite"));
+  std::ifstream victim(dir.path / "victim.txt");
+  std::string text((std::istreambuf_iterator<char>(victim)), std::istreambuf_iterator<char>());
+  CHECK(text == "kept");
+  CHECK_FALSE(fs::exists(fs::symlink_status(target)));
+  int links = 0;
+  for (int n = 1; n <= planted; n++) {
+    links += fs::is_symlink(fs::symlink_status(prefix + std::to_string(n))) ? 1 : 0;
+  }
+  CHECK(links == planted);
+
+  // With the names free it writes as before.
+  for (int n = 1; n <= planted; n++) {
+    fs::remove(prefix + std::to_string(n));
+  }
+  CHECK(ngn::replaceFile(target.string(), "written"));
+  std::ifstream written(target);
+  CHECK(std::string((std::istreambuf_iterator<char>(written)), std::istreambuf_iterator<char>()) == "written");
 }
 
 TEST_CASE("FileSystem lists the folders it can reach, as uris ending in a slash") {
@@ -252,6 +285,23 @@ TEST_CASE("FileSystem checks the path a call uses, not one a symbolic link and .
   CHECK_FALSE(read.value);
   CHECK(ask(*module, "deleteAsync", dynamic::array(through)).error);
   CHECK(fs::exists(dir.path / "outside/secret.txt"));
+
+  // Within reach too: data/link/.. is data/sub to the OS, and data without the link. A call never
+  // acts on a file the path does not name.
+  fs::create_directories(dir.path / "data/sub/nested");
+  write(dir.path / "data/sub/secret.txt", "sub");
+  fs::create_directory_symlink(dir.path / "data/sub/nested", dir.path / "data/link");
+  auto data = ngn::fileUri(folders.appData);
+  CHECK(ask(*module, "deleteAsync", dynamic::array(data + "/link/../secret.txt")).error);
+  CHECK(fs::exists(dir.path / "data/secret.txt"));
+  CHECK(fs::exists(dir.path / "data/sub/secret.txt"));
+  CHECK(ask(*module, "writeAsStringAsync", dynamic::array(data + "/link/../new.txt", "x")).error);
+  CHECK_FALSE(fs::exists(dir.path / "data/new.txt"));
+  // A .. that means the same either way, and a link as the last part, still work.
+  CHECK(ask(*module, "readAsStringAsync", dynamic::array(data + "/sub/nested/../secret.txt")).value == dynamic("sub"));
+  CHECK(ask(*module, "deleteAsync", dynamic::array(data + "/link")).value == dynamic(nullptr));
+  CHECK_FALSE(fs::exists(fs::symlink_status(dir.path / "data/link")));
+  CHECK(fs::is_directory(dir.path / "data/sub/nested"));
 }
 
 TEST_CASE("FileSystem copies a folder's symbolic links as links, and never writes through one out of reach") {
@@ -284,6 +334,19 @@ TEST_CASE("FileSystem copies a folder's symbolic links as links, and never write
   CHECK(ask(*module, "copyAsync", dynamic::array(dynamic::object("from", data + "/src/a.txt")("to", data + "/folder")))
             .value == dynamic(nullptr));
   CHECK(fs::is_regular_file(dir.path / "data/folder/a.txt"));
+
+  // A folder is never copied into itself or a folder inside it, however the path names it, and
+  // into a folder beside it whose name it begins.
+  write(dir.path / "data/tree/a.txt", "a");
+  for (const char *into : {"/tree", "/tree/inner", "/tree/./inner/", "/other/../tree/deep/er"}) {
+    CAPTURE(into);
+    CHECK(ask(*module, "copyAsync", dynamic::array(dynamic::object("from", data + "/tree")("to", data + into))).error);
+  }
+  CHECK_FALSE(fs::exists(dir.path / "data/tree/inner"));
+  CHECK_FALSE(fs::exists(dir.path / "data/tree/deep"));
+  CHECK(ask(*module, "copyAsync", dynamic::array(dynamic::object("from", data + "/tree")("to", data + "/tree2"))).value ==
+        dynamic(nullptr));
+  CHECK(fs::is_regular_file(dir.path / "data/tree2/a.txt"));
 }
 
 TEST_CASE("FileSystem answers each call synchronously too, as <name>Sync, throwing its failure") {

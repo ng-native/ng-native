@@ -82,8 +82,8 @@ struct Recorded {
   }
 };
 
-// A real launcher whose events go to a Recorded, and whose programs are all stopped when the test
-// ends, however it ends.
+// A real launcher whose events go to a Recorded, and whose programs are all stopped, and their exits
+// heard, when the test ends, however it ends.
 struct RealLauncher {
   std::shared_ptr<ngn::ProcessLauncher> launcher = ngn::makePosixLauncher();
   std::shared_ptr<Recorded> recorded = std::make_shared<Recorded>();
@@ -106,8 +106,20 @@ struct RealLauncher {
   }
   RealLauncher(const RealLauncher &) = delete;
   RealLauncher &operator=(const RealLauncher &) = delete;
+  // Stops every program and waits, up to ten seconds, for each one's exit to be reported, so no
+  // program or reader thread of this test is still running when the next one starts.
   ~RealLauncher() {
     launcher->killAll(SIGKILL);
+    int last = launcher->lastHandle();
+    std::unique_lock lock(recorded->mutex);
+    recorded->done.wait_for(lock, std::chrono::seconds(10), [&] {
+      for (int handle = 1; handle <= last; handle++) {
+        if (!recorded->exits.contains(handle)) {
+          return false;
+        }
+      }
+      return true;
+    });
   }
   ngn::ProcessLauncher *operator->() const {
     return launcher.get();
@@ -456,6 +468,21 @@ TEST_CASE("the POSIX launcher stops every program it started, for the host quitt
   REQUIRE(launcher.wait(b));
   CHECK(launcher.exit(a) == "SIGKILL");
   CHECK(launcher.exit(b) == "SIGKILL");
+}
+
+TEST_CASE("a test's real launcher has every program it started exited before the next test begins") {
+  std::shared_ptr<Recorded> recorded;
+  int a = 0;
+  int b = 0;
+  {
+    RealLauncher launcher;
+    recorded = launcher.recorded;
+    a = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
+    b = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
+  }
+  std::lock_guard lock(recorded->mutex);
+  CHECK(recorded->exits[a] == "SIGKILL");
+  CHECK(recorded->exits[b] == "SIGKILL");
 }
 
 TEST_CASE("the POSIX launcher forgets a program while its pid is still held, so a kill never reaches a reused pid") {

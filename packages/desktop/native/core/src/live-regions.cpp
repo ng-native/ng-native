@@ -53,8 +53,8 @@ std::vector<Announcement> LiveRegions::didMount(SurfaceId surfaceId) {
     if (region.surfaceId != surfaceId || !tree_.contains(tag)) {
       continue;
     }
-    // A hidden region, or one under a hidden view, says nothing, and what it held stays the text
-    // its next change is compared with.
+    // A hidden region, or one under a hidden view or a covered screen, says nothing, and what it
+    // held stays the text its next change is compared with.
     if (hiddenAt(tag)) {
       continue;
     }
@@ -71,6 +71,11 @@ std::vector<Announcement> LiveRegions::didMount(SurfaceId surfaceId) {
 
 bool LiveRegions::hiddenAt(Tag tag) const {
   for (const auto *node = tree_.find(tag); node != nullptr; node = tree_.find(node->parent)) {
+    // A covered screen (an unselected tab, a screen under a pushed one) is out of the
+    // accessibility tree, as a hidden view is.
+    if (tree_.covered(node->view.tag)) {
+      return true;
+    }
     if (const auto *props = viewProps(node->view); props && hidden(*props)) {
       return true;
     }

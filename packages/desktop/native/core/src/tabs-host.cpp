@@ -48,6 +48,11 @@ void TabsNavigation::show(const std::string &screenKey) {
   }
 }
 
+TabsNavigation::Outcome TabsNavigation::reconcile(const std::string &screenKey) {
+  progress(screenKey, false);
+  return Selected{.screenKey = screenKey, .provenance = provenance_, .actionOrigin = "implicit"};
+}
+
 TabsNavigation::Outcome TabsNavigation::userSelect(const std::string &screenKey, bool preventNativeSelection) {
   if (preventNativeSelection) {
     return Prevented{.selectedScreenKey = selected_, .provenance = provenance_, .preventedScreenKey = screenKey};
@@ -169,6 +174,10 @@ TabsHosts::Changes TabsHosts::settle(ViewTree &tree) {
     auto selected = withKey(host.navigation.selected());
     if (selected == screens.end()) {
       selected = screens.begin();
+      // The selected tab was taken away: the one shown instead is the selection from now on.
+      if (selected != screens.end() && host.navigation.started()) {
+        send(tree, tag, host.navigation.reconcile(selected->second.screenKey));
+      }
     }
     if (selected != screens.end()) {
       host.navigation.show(selected->second.screenKey);
