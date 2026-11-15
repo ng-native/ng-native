@@ -30,7 +30,9 @@ CGColorRef cgColor(const SharedColor &color) {
   return CGColorCreateSRGB(c.red, c.green, c.blue, c.alpha);
 }
 
-CTFontRef makeFont(const TextAttributes &a) {
+// The font size multiplier text scales by, capped by maxFontSizeMultiplier: the font size and a
+// fixed line height both scale by it.
+CGFloat scaleOf(const TextAttributes &a) {
   CGFloat multiplier = 1;
   if (a.allowFontScaling.value_or(true) && !std::isnan(a.fontSizeMultiplier)) {
     multiplier = a.fontSizeMultiplier;
@@ -38,7 +40,11 @@ CTFontRef makeFont(const TextAttributes &a) {
       multiplier = std::min<CGFloat>(multiplier, a.maxFontSizeMultiplier);
     }
   }
-  CGFloat size = (std::isnan(a.fontSize) ? 14 : a.fontSize) * multiplier;
+  return multiplier;
+}
+
+CTFontRef makeFont(const TextAttributes &a) {
+  CGFloat size = (std::isnan(a.fontSize) ? 14 : a.fontSize) * scaleOf(a);
   CGFloat weight = appKitWeight(a.fontWeight.value_or(FontWeight::Regular));
   bool italic = a.fontStyle.has_value() && *a.fontStyle != FontStyle::Normal;
   NSFont *font = nil;
@@ -87,6 +93,59 @@ CTTextAlignment ctAlignment(std::optional<TextAlignment> alignment) {
     case TextAlignment::End: return kCTTextAlignmentRight;
     default: return kCTTextAlignmentNatural;
   }
+}
+
+CTWritingDirection ctWritingDirection(std::optional<WritingDirection> direction) {
+  switch (direction.value_or(WritingDirection::Natural)) {
+    case WritingDirection::LeftToRight: return kCTWritingDirectionLeftToRight;
+    case WritingDirection::RightToLeft: return kCTWritingDirectionRightToLeft;
+    default: return kCTWritingDirectionNatural;
+  }
+}
+
+bool paragraphEnd(UniChar c) {
+  return c == '\n' || c == '\r' || c == 0x2029;
+}
+
+// Whether the paragraph holding `at` runs right to left: by its base writing direction where one
+// is set, otherwise by its first strong character (Unicode's rules P2 and P3), letters of the
+// right-to-left scripts against any other letter.
+bool rightToLeftAt(CFAttributedStringRef string, CFIndex at) {
+  auto style = (CTParagraphStyleRef)CFAttributedStringGetAttribute(string, at, kCTParagraphStyleAttributeName, nullptr);
+  CTWritingDirection direction = kCTWritingDirectionNatural;
+  if (style != nullptr) {
+    CTParagraphStyleGetValueForSpecifier(style, kCTParagraphStyleSpecifierBaseWritingDirection, sizeof(direction), &direction);
+  }
+  if (direction != kCTWritingDirectionNatural) {
+    return direction == kCTWritingDirectionRightToLeft;
+  }
+  CFStringRef text = CFAttributedStringGetString(string);
+  CFIndex length = CFStringGetLength(text);
+  CFIndex start = at;
+  while (start > 0 && !paragraphEnd(CFStringGetCharacterAtIndex(text, start - 1))) {
+    start--;
+  }
+  NSCharacterSet *letters = NSCharacterSet.letterCharacterSet;
+  for (CFIndex i = start; i < length; i++) {
+    UniChar c = CFStringGetCharacterAtIndex(text, i);
+    if (paragraphEnd(c)) {
+      break;
+    }
+    UTF32Char code = c;
+    if (CFStringIsSurrogateHighCharacter(c) && i + 1 < length) {
+      code = CFStringGetLongCharacterForSurrogatePair(c, CFStringGetCharacterAtIndex(text, ++i));
+    }
+    bool digit = (code >= 0x0660 && code <= 0x0669) || (code >= 0x06F0 && code <= 0x06F9);
+    bool rtl = (code >= 0x0590 && code <= 0x08FF) || (code >= 0xFB1D && code <= 0xFDFF) || (code >= 0xFE70 && code <= 0xFEFF) ||
+        (code >= 0x10800 && code <= 0x10FFF) || (code >= 0x1E800 && code <= 0x1EFFF);
+    if (rtl && !digit && [letters longCharacterIsMember:code]) {
+      return true;
+    }
+    if (!rtl && [letters longCharacterIsMember:code]) {
+      return false;
+    }
+  }
+  return false;
 }
 
 std::string transformed(const std::string &text, std::optional<TextTransform> transform) {
@@ -141,6 +200,11 @@ CFAttributedStringRef makeAttributedString(const AttributedString &attributedStr
     CFAttributedStringReplaceString(out, CFRangeMake(start, 0), cf);
     CFRange range = CFRangeMake(start, CFStringGetLength(cf));
     CFRelease(cf);
+    // Text appended takes the attributes before it; each fragment starts from none.
+    CFDictionaryRef none = CFDictionaryCreate(kCFAllocatorDefault, nullptr, nullptr, 0, &kCFTypeDictionaryKeyCallBacks,
+                                              &kCFTypeDictionaryValueCallBacks);
+    CFAttributedStringSetAttributes(out, range, none, true);
+    CFRelease(none);
 
     CTFontRef font = makeFont(a);
     CFAttributedStringSetAttribute(out, range, kCTFontAttributeName, font);
@@ -164,18 +228,18 @@ CFAttributedStringRef makeAttributedString(const AttributedString &attributedStr
     // Paragraph style: alignment, and lineHeight as a fixed line box (as React Native iOS does),
     // with the glyphs centred in it through a baseline offset applied at draw time.
     CTTextAlignment alignment = ctAlignment(a.alignment);
+    CTWritingDirection direction = ctWritingDirection(a.baseWritingDirection);
     CGFloat lineHeight = 0;
     if (!std::isnan(a.lineHeight) && a.lineHeight > 0) {
-      CGFloat multiplier =
-          a.allowFontScaling.value_or(true) && !std::isnan(a.fontSizeMultiplier) ? a.fontSizeMultiplier : 1;
-      lineHeight = a.lineHeight * multiplier;
+      lineHeight = a.lineHeight * scaleOf(a);
     }
     CTParagraphStyleSetting settings[] = {
         {kCTParagraphStyleSpecifierAlignment, sizeof(alignment), &alignment},
+        {kCTParagraphStyleSpecifierBaseWritingDirection, sizeof(direction), &direction},
         {kCTParagraphStyleSpecifierMinimumLineHeight, sizeof(lineHeight), &lineHeight},
         {kCTParagraphStyleSpecifierMaximumLineHeight, sizeof(lineHeight), &lineHeight},
     };
-    CTParagraphStyleRef style = CTParagraphStyleCreate(settings, lineHeight > 0 ? 3 : 1);
+    CTParagraphStyleRef style = CTParagraphStyleCreate(settings, lineHeight > 0 ? 4 : 2);
     CFAttributedStringSetAttribute(out, range, kCTParagraphStyleAttributeName, style);
     CFRelease(style);
 
@@ -202,9 +266,9 @@ TextLayout layoutText(
   if (length == 0) {
     return layout;
   }
-  if (!std::isfinite(maxWidth) || maxWidth <= 0) {
-    maxWidth = CGFLOAT_MAX / 4;
-  }
+  // Only an infinite width is unbounded: 0 is a width too, which breaks at every character.
+  bool bounded = std::isfinite(maxWidth);
+  maxWidth = bounded ? std::max<CGFloat>(0, maxWidth) : CGFLOAT_MAX / 4;
   CTTypesetterRef typesetter = CTTypesetterCreateWithAttributedString(layout.string);
   int maxLines = paragraphAttributes.maximumNumberOfLines;
   CFIndex at = 0;
@@ -235,6 +299,24 @@ TextLayout layoutText(
         line = truncated;
       }
     }
+    // A justified paragraph's lines fill the width, all but its last; Core Text justifies only
+    // through a framesetter, and these lines are made one by one.
+    CFRange made = CTLineGetStringRange(line);
+    CFStringRef text = CFAttributedStringGetString(layout.string);
+    CFIndex end = made.location + made.length;
+    bool paragraphLast = end >= length || paragraphEnd(CFStringGetCharacterAtIndex(text, end - 1));
+    CTParagraphStyleRef lineStyle = (CTParagraphStyleRef)CFAttributedStringGetAttribute(
+        layout.string, made.location, kCTParagraphStyleAttributeName, nullptr);
+    CTTextAlignment lineAlignment = kCTTextAlignmentNatural;
+    if (lineStyle != nullptr) {
+      CTParagraphStyleGetValueForSpecifier(lineStyle, kCTParagraphStyleSpecifierAlignment, sizeof(lineAlignment), &lineAlignment);
+    }
+    if (lineAlignment == kCTTextAlignmentJustified && bounded && !last && !paragraphLast) {
+      if (CTLineRef justified = CTLineCreateJustifiedLine(line, 1.0, maxWidth)) {
+        CFRelease(line);
+        line = justified;
+      }
+    }
     CGFloat ascent = 0, descent = 0, leading = 0;
     CGFloat width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
     width -= CTLineGetTrailingWhitespaceWidth(line);
@@ -253,7 +335,7 @@ TextLayout layoutText(
     if (fixed <= 0) {
       baseline = y + ascent;
     }
-    layout.lines.push_back({line, CGPointMake(0, baseline), width});
+    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location)});
     widest = std::max(widest, width);
     y += height;
     at += count;
@@ -262,7 +344,7 @@ TextLayout layoutText(
     }
   }
   CFRelease(typesetter);
-  layout.size = CGSizeMake(widest, y);
+  layout.size = CGSizeMake(std::min(widest, maxWidth), y);
   return layout;
 }
 
@@ -285,6 +367,9 @@ void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CG
     if (alignment == kCTTextAlignmentCenter) {
       x = (boxWidth - l.width) / 2;
     } else if (alignment == kCTTextAlignmentRight) {
+      x = boxWidth - l.width;
+    } else if ((alignment == kCTTextAlignmentNatural || alignment == kCTTextAlignmentJustified) && l.rightToLeft) {
+      // Natural follows the paragraph's direction, as does a justified paragraph's last line.
       x = boxWidth - l.width;
     }
     CGContextSetTextPosition(context, origin.x + x, origin.y + l.origin.y);
