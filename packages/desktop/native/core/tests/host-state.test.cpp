@@ -1,12 +1,10 @@
 #include "ngn/host-state.h"
 
+#include "helpers.h"
+
 #include <doctest/doctest.h>
 
-#include <atomic>
-#include <chrono>
-#include <thread>
-
-using namespace std::chrono_literals;
+#include <vector>
 
 TEST_CASE("Watched calls each listener with a change, and stops when its handle goes") {
   ngn::Watched<int> value{1};
@@ -21,22 +19,9 @@ TEST_CASE("Watched calls each listener with a change, and stops when its handle 
 
 TEST_CASE("Dropping a Watched listener waits for a call to it already running on another thread") {
   ngn::Watched<int> value{0};
-  std::atomic<bool> running{false};
-  std::atomic<bool> finished{false};
-  auto handle = value.listen([&](const int &) {
-    running = true;
-    std::this_thread::sleep_for(200ms);
-    finished = true;
-  });
-  std::thread setter([&] { value.set(1); });
-  while (!running) {
-    std::this_thread::yield();
-  }
-  // The module this listener belongs to is being destroyed: once the handle is gone, nothing may
-  // call into it.
-  handle.reset();
-  CHECK(finished);
-  setter.join();
+  // The module a listener belongs to is being destroyed: once the handle is gone, nothing may call
+  // into it.
+  CHECK(ngn::testing::dropWaitsForRunningCall([&](auto listener) { return value.listen(listener); }, [&] { value.set(1); }));
 }
 
 TEST_CASE("A listener can drop its own handle while it is being called") {
@@ -54,20 +39,8 @@ TEST_CASE("A listener can drop its own handle while it is being called") {
 
 TEST_CASE("Dropping a URL listener waits for a call to it already running on another thread") {
   ngn::HostState state;
-  std::atomic<bool> running{false};
-  std::atomic<bool> finished{false};
-  auto handle = state.listenForUrls([&](const std::string &) {
-    running = true;
-    std::this_thread::sleep_for(200ms);
-    finished = true;
-  });
-  std::thread opener([&] { state.openUrl("ngn://x"); });
-  while (!running) {
-    std::this_thread::yield();
-  }
-  handle.reset();
-  CHECK(finished);
-  opener.join();
+  CHECK(ngn::testing::dropWaitsForRunningCall(
+      [&](auto listener) { return state.listenForUrls(listener); }, [&] { state.openUrl("ngn://x"); }));
 }
 
 TEST_CASE("Listeners answer how many listeners a notify called, leaving out one dropped during it") {
