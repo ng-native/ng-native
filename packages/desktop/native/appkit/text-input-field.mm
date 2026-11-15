@@ -32,15 +32,27 @@ NSString *nsUnits(const std::u16string &text) {
   return [NSString stringWithCharacters:reinterpret_cast<const unichar *>(text.data()) length:text.size()];
 }
 
-// Foundation's capitals, in the user's locale, and its composed character sequences.
+// Foundation's capitals, in the user's locale, and its composed character sequences. Made for one
+// fit, in which the strings it is asked about do not change: each is made a Foundation string
+// once, not once for every character asked about.
 struct FoundationCharacters final : ngn::TextCharacters {
   std::u16string uppercase(const std::u16string &text) const override {
     return units(nsUnits(text).localizedUppercaseString);
   }
   std::pair<std::size_t, std::size_t> characterAt(const std::u16string &text, std::size_t index) const override {
-    NSRange range = [nsUnits(text) rangeOfComposedCharacterSequenceAtIndex:index];
+    if (text.data() != convertedFrom_ || text.size() != convertedSize_) {
+      converted_ = nsUnits(text);
+      convertedFrom_ = text.data();
+      convertedSize_ = text.size();
+    }
+    NSRange range = [converted_ rangeOfComposedCharacterSequenceAtIndex:index];
     return {range.location, range.length};
   }
+
+ private:
+  mutable NSString *converted_;
+  mutable const char16_t *convertedFrom_{nullptr};
+  mutable std::size_t convertedSize_{0};
 };
 
 } // namespace

@@ -3,6 +3,8 @@
 
 #include <doctest/doctest.h>
 
+#include <chrono>
+
 using ngn::Capitalize;
 using ngn::TextInputOptions;
 
@@ -97,6 +99,17 @@ TEST_CASE("NGNFitReplacement cuts to maxLength between characters and capitalize
 
   TextInputOptions sentences{};
   CHECK([NGNFitReplacement(@"", NSMakeRange(0, 0), @"abc", sentences) isEqualToString:@"abc"]);
+}
+
+TEST_CASE("NGNFitReplacement fits a large paste with words capitalized in linear time") {
+  // 200,000 units: converted for every character, this takes minutes; once, a moment.
+  NSString *paste = [@"" stringByPaddingToLength:200000 withString:@"ab cd " startingAtIndex:0];
+  TextInputOptions words{.capitalize = Capitalize::Words, .maxLength = 9};
+  auto start = std::chrono::steady_clock::now();
+  NSString *fitted = NGNFitReplacement(@"", NSMakeRange(0, 0), paste, words);
+  auto seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+  CHECK([fitted isEqualToString:@"Ab Cd Ab "]);
+  CHECK(seconds < 5);
 }
 
 TEST_CASE("NGNTextCheckingOptions turns the user's capitalization off for autoCapitalize none") {
