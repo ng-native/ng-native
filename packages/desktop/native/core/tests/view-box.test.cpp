@@ -232,6 +232,14 @@ TEST_CASE("a dashed border is a dashed stroke along the middle of the border, in
   CHECK(drawn[0] == "stroke M1,1L99,1L99,49L1,49L1,1Z w2 cap0 join0 dash 6 6 #ffff0000");
 }
 
+TEST_CASE("a border with a transparent side draws only the coloured sides") {
+  Box b(dynamic::object("borderWidth", 4)("borderColor", kRed)("borderLeftColor", 0), 100, 50);
+  auto drawn = fills(b.drawn());
+  REQUIRE(drawn.size() == 1);
+  // The right, bottom and top sides, and nothing of the left: not the whole ring in red.
+  CHECK(drawn[0] == "fill M100,0L96,4L96,46L100,50ZM0,50L4,46L96,46L100,50ZM0,0L4,4L96,4L100,0Z #ffff0000");
+}
+
 TEST_CASE("a transparent or zero border is not drawn") {
   Box clear(dynamic::object("borderWidth", 2)("borderColor", 0)("borderTopLeftRadius", 4), 100, 50);
   CHECK(fills(clear.drawn()).empty());
@@ -409,6 +417,29 @@ TEST_CASE("background tiles repeat over the border box from where the padding bo
   tiles = ngn::backgroundTiles({0, 0, 100, 50}, {0, 0, 100, 50}, half, right, once);
   REQUIRE(tiles.size() == 1);
   CHECK(tiles[0].x == doctest::Approx(50));
+}
+
+TEST_CASE("a round background tile is never wider than its area, and fits a whole number of times") {
+  BackgroundSizeLengthPercentage size;
+  size.x = ValueUnit(250, UnitType::Point);
+  size.y = ValueUnit(30, UnitType::Point);
+  BackgroundRepeat round;
+  round.x = round.y = BackgroundRepeatStyle::Round;
+  // 250 over 100 rounds to no tiles, so one fills the width; 30 over 50 rounds to 2 of 25.
+  auto tiles = ngn::backgroundTiles({0, 0, 100, 50}, {0, 0, 100, 50}, size, BackgroundPosition{}, round);
+  REQUIRE_FALSE(tiles.empty());
+  CHECK(tiles[0].width == doctest::Approx(100));
+  CHECK(tiles[0].height == doctest::Approx(25));
+  CHECK(tiles.size() == 2);
+}
+
+TEST_CASE("tiny background tiles over a large box stop at a bounded count") {
+  BackgroundSizeLengthPercentage size;
+  size.x = ValueUnit(1, UnitType::Point);
+  size.y = ValueUnit(1, UnitType::Point);
+  auto tiles = ngn::backgroundTiles({0, 0, 3000, 3000}, {0, 0, 3000, 3000}, size, BackgroundPosition{}, BackgroundRepeat{});
+  CHECK(tiles.size() <= 65536);
+  CHECK(tiles.size() >= 60000);
 }
 
 TEST_CASE("background images draw last-listed first, in tiles, clipped to the border box") {

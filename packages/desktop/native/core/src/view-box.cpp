@@ -156,9 +156,13 @@ void drawBorder(const SvgRect &box, const BorderMetrics &metrics, const CornerRa
   std::optional<uint32_t> colors[4] = {argbOf(c.top), argbOf(c.right), argbOf(c.bottom), argbOf(c.left)};
   double widths[4] = {w.top, w.right, w.bottom, w.left};
   std::optional<uint32_t> only;
-  bool oneColor = true, any = false;
+  bool oneColor = true, any = false, hidden = false;
   for (int i = 0; i < 4; i++) {
-    if (widths[i] <= 0 || !visible(colors[i])) {
+    if (widths[i] <= 0) {
+      continue;
+    }
+    if (!visible(colors[i])) {
+      hidden = true;
       continue;
     }
     any = true;
@@ -196,7 +200,8 @@ void drawBorder(const SvgRect &box, const BorderMetrics &metrics, const CornerRa
 
   auto ring = roundedRect(box, radii);
   append(ring, roundedRect(inset(box, w), innerRadii(radii, w)));
-  if (oneColor) {
+  // The whole ring in one fill only when every side with a width shows that colour.
+  if (oneColor && !hidden) {
     canvas.fill(ring, true, SvgPaint{.argb = *only});
     return;
   }
@@ -620,12 +625,10 @@ std::vector<SvgRect> backgroundTiles(
       h = resolve(*y, area.height);
     }
   }
+  // CSS's round: the area over a whole number of tiles, at least one.
   auto round = [](double item, double of) {
     if (item > 0 && std::fmod(of, item) != 0) {
-      double divisor = std::round(of / item);
-      if (divisor > 0) {
-        return of / divisor;
-      }
+      return of / std::max(std::round(of / item), 1.0);
     }
     return item;
   };
@@ -651,6 +654,12 @@ std::vector<SvgRect> backgroundTiles(
   }
   auto xs = tileStarts(area.x, area.width, w, x, repeat.x, painting.width);
   auto ys = tileStarts(area.y, area.height, h, y, repeat.y, painting.height);
+  // Each tile is drawn on its own, so the whole count is bounded too: rows past it are left out,
+  // as tiles past an axis's bound are.
+  constexpr size_t kMaxTiles = 65536;
+  if (!xs.empty() && xs.size() * ys.size() > kMaxTiles) {
+    ys.resize(kMaxTiles / xs.size());
+  }
   std::vector<SvgRect> tiles;
   for (double ty : ys) {
     for (double tx : xs) {
