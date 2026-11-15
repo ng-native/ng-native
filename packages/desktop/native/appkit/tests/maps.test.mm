@@ -182,6 +182,14 @@ TEST_CASE("NGNMap moves the camera when its prop changes and leaves it where the
   CHECK(h.map.mapView.region.center.latitude == doctest::Approx(35.68).epsilon(0.001));
   [h.map moveCamera:std::nullopt];
   CHECK(h.map.mapView.region.center.latitude == doctest::Approx(35.68).epsilon(0.001));
+
+  // The prop goes away, the user pans, and the same camera comes back: the map moves to it.
+  props.erase("cameraPosition");
+  [h.map apply:ngn::mapModel(props)];
+  [h.map.mapView setCenterCoordinate:CLLocationCoordinate2DMake(48.85, 2.35) animated:NO];
+  props["cameraPosition"] = dynamic::object("coordinates", at(40.7, -74))("zoom", 10);
+  [h.map apply:ngn::mapModel(props)];
+  CHECK(h.map.mapView.region.center.latitude == doctest::Approx(40.7).epsilon(0.001));
 }
 
 TEST_CASE("NGNMap sends cameraMove once as it appears, and as the region changes, in the iOS view's shape") {
@@ -284,12 +292,15 @@ TEST_CASE("NGNMap takes the map type, traffic, points of interest, controls and 
   CHECK_FALSE(mapView.showsCompass);
   CHECK(mapView.showsScale);
   CHECK_FALSE(mapView.showsPitchControl);
+  CHECK(mapView.showsUserTrackingButton);
   CHECK([mapView.appearance.name isEqualToString:NSAppearanceNameDarkAqua]);
 
   [h.map apply:ngn::mapModel(dynamic::object("properties", dynamic::object("mapType", "HYBRID")))];
   CHECK([mapView.preferredConfiguration isKindOfClass:MKHybridMapConfiguration.class]);
   CHECK(mapView.showsCompass);
   CHECK(bool(mapView.appearance == nil));
+  [h.map apply:ngn::mapModel(dynamic::object("uiSettings", dynamic::object("myLocationButtonEnabled", false)))];
+  CHECK_FALSE(mapView.showsUserTrackingButton);
   [h.map apply:ngn::mapModel(dynamic::object("properties", dynamic::object("mapType", "IMAGERY")("elevation", "REALISTIC")))];
   auto *imagery = (MKImageryMapConfiguration *)mapView.preferredConfiguration;
   REQUIRE([imagery isKindOfClass:MKImageryMapConfiguration.class]);
