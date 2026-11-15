@@ -3,6 +3,7 @@
 #include <doctest/doctest.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -27,9 +28,7 @@ TEST_CASE("A worklet host callback set, read and cleared from three threads at o
       host.runOnScheduler.call([](facebook::react::Scheduler &) {});
     }
   });
-  // At least 20000 swaps, and on until both threads have called a closure set here, so the test
-  // never passes with a thread that did not get to run.
-  for (long i = 0; i < 20000 || ((calls == 0 || scheduled == 0) && i < 20000000); ++i) {
+  auto install = [&] {
     // A closure owning state, as the glue's do: a torn read or a freed closure would touch freed
     // memory, or count into the wrong place.
     auto counter = std::make_shared<std::vector<int>>(64, 1);
@@ -44,15 +43,28 @@ TEST_CASE("A worklet host callback set, read and cleared from three threads at o
       scheduled++;
       wrong += (*counter)[1] != 1;
     });
+  };
+  // Set until both threads have called a closure set here, so the test never passes with a thread
+  // that did not get to run, and then swapped 20000 times.
+  install();
+  auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  while ((calls == 0 || scheduled == 0) && std::chrono::steady_clock::now() < until) {
+    std::this_thread::yield();
+  }
+  bool bothRan = calls > 0 && scheduled > 0;
+  for (int i = 0; bothRan && i < 20000; ++i) {
     host.wakeUiFrames.set(nullptr);
     host.reanimatedEvent.set(nullptr);
     host.runOnScheduler.set(nullptr);
+    install();
   }
+  host.wakeUiFrames.set(nullptr);
+  host.reanimatedEvent.set(nullptr);
+  host.runOnScheduler.set(nullptr);
   stop = true;
   reader.join();
   runner.join();
-  CHECK(calls.load() > 0);
-  CHECK(scheduled.load() > 0);
+  CHECK(bothRan);
   CHECK(wrong.load() == 0);
   // Cleared, nothing is called and the caller is told so.
   CHECK_FALSE(host.wakeUiFrames.call());
