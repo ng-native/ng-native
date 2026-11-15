@@ -50,6 +50,11 @@ bool AppKitBackend::onUiThread() const {
   return NSThread.isMainThread;
 }
 
+void AppKitBackend::serviceUiThread() {
+  // The main run loop serves the main queue.
+  [NSRunLoop.mainRunLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
+}
+
 void AppKitBackend::createView(const ShadowView &view) {
   NGNView *created = NGNMakeView(view);
   views_[@(view.tag)] = created;
