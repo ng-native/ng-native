@@ -59,6 +59,7 @@
 #import "symbol-drawing.h"
 #import "share-picker.h"
 #include "ngn/splash-screen.h"
+#include "ngn/launch-frame.h"
 #import "store-review.h"
 #import "bookmarks.h"
 #import "push.h"
@@ -121,9 +122,9 @@ struct Host {
   const ngn::LaunchSettings *launch = nullptr;
   // The app window is ordered front once, when its safe areas settle (showAppWindowWhenSettled).
   bool appWindowShown = false;
-  // The launch running, the first or a reload's, has yet to put its content in a window on screen,
-  // which starts its success timer (markLaunchSucceededLater).
-  bool launchFrameOwed = true;
+  // The launch running, the first or a reload's, has yet to put content its own JavaScript
+  // instance mounted in a window on screen, which starts its success timer (launch-frame.h).
+  ngn::LaunchFrame launchFrame;
   // The Expo Updates client, for a bundle on disk (updates.h).
   std::shared_ptr<ngn::UpdatesClient> updates;
   // Remote notifications: the device token's registration, and where a silent one is heard.
@@ -316,6 +317,8 @@ std::optional<SurfaceId> surfaceOf(NSWindow *window) {
   return std::nullopt;
 }
 
+void reloadLaunched(uint64_t generation, uint64_t instance);
+
 // The menu bar the core asks for, drawn on the main thread.
 struct AppKitMenus final : ngn::MenuBackend {
   void setMenuBar(std::vector<ngn::MenuItem> bar) override {
@@ -323,10 +326,17 @@ struct AppKitMenus final : ngn::MenuBackend {
     dispatch_async(dispatch_get_main_queue(), ^{
       ngn::appkit::installMenuBar(*shared, [](const ngn::MenuItem &item) {
         if (item.command == ngn::MenuCommand::Reload && gHost.runtime) {
-          gHost.runtime->reload([](bool loaded) {
+          // The same launch, in a new instance: its first frame, if still owed, comes from that.
+          uint64_t generation = gHost.updates ? gHost.updates->launchGeneration() : 0;
+          gHost.runtime->reload([generation](bool loaded) {
             if (!loaded) {
               fprintf(stderr, "ngn-macos: the reload could not load the bundle\n");
+              return;
             }
+            uint64_t instance = gHost.mounting->instance();
+            dispatch_async(dispatch_get_main_queue(), ^{
+              reloadLaunched(generation, instance);
+            });
           });
         } else if (item.command == ngn::MenuCommand::OpenDevTools && gHost.runtime) {
           gHost.runtime->openDebugger();
@@ -571,12 +581,11 @@ void showAppWindow();
 // rolled back at the next launch (updates.h).
 constexpr int64_t kLaunchSuccessDelay = 10 * NSEC_PER_SEC;
 
-void markLaunchSucceededLater() {
+void markLaunchSucceededLater(uint64_t generation) {
   if (!gHost.updates || !gHost.updates->running()) {
     return;
   }
   // For this launch only: a reload since begins another, with a timer of its own.
-  uint64_t generation = gHost.updates->launchGeneration();
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kLaunchSuccessDelay), dispatch_get_main_queue(), ^{
     gHost.updates->markLaunchSucceeded(generation);
   });
@@ -588,20 +597,22 @@ bool showsContent(SurfaceId surface, NSWindow *window) {
   return window != nil && window.visible && root != nullptr && !root->children.empty();
 }
 
-// A window shows the surface's content: the launch's first, when it still owes one, starts the
-// launch's success timer. Main thread.
+// A window shows the surface's content: the launch's first, mounted by its own JavaScript instance
+// while it is still the launch running, starts the launch's success timer. Main thread.
 void launchFrameShown(SurfaceId surface, NSWindow *window) {
-  if (!gHost.launchFrameOwed || !showsContent(surface, window)) {
+  if (!gHost.updates || !showsContent(surface, window)) {
     return;
   }
-  gHost.launchFrameOwed = false;
-  markLaunchSucceededLater();
+  if (auto generation = gHost.launchFrame.shown(gHost.mounting->mountedBy(surface), gHost.updates->launchGeneration())) {
+    markLaunchSucceededLater(*generation);
+  }
 }
 
-// A reload's bundle loaded: its launch counts from its first frame on screen, which may already be
-// there or come with a later mount. Main thread.
-void reloadLaunched() {
-  gHost.launchFrameOwed = true;
+// A reload's bundle (the launch `generation`) loaded into the JavaScript instance `instance`: its
+// launch counts from its first frame on screen, which may already be there or come with a later
+// mount. Main thread.
+void reloadLaunched(uint64_t generation, uint64_t instance) {
+  gHost.launchFrame.loaded(generation, instance);
   launchFrameShown(kAppSurface, gHost.appWindow);
   for (NSWindow *window in NSApp.windows) {
     if (SurfaceId surface = gHost.windows ? gHost.windows->surfaceOf(window) : 0) {
@@ -1300,15 +1311,18 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeUpdates", [fromDevServer] {
         return ngn::makeUpdatesModule(gHost.updates, fromDevServer, [](const std::string &next, std::function<void(bool)> done) {
           setRunningBundle(next);
-          gHost.runtime->reload(next, [next, done](bool loaded) {
+          // The launch the module's beginReload just began.
+          uint64_t generation = gHost.updates->launchGeneration();
+          gHost.runtime->reload(next, [next, done, generation](bool loaded) {
             if (!loaded) {
               fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
             }
             // A bundle that did not load never counts as a launch that succeeded; one that did counts
-            // from its first frame on screen.
+            // from the first frame its own instance mounts on screen.
             if (loaded) {
+              uint64_t instance = gHost.mounting->instance();
               dispatch_async(dispatch_get_main_queue(), ^{
-                reloadLaunched();
+                reloadLaunched(generation, instance);
               });
             }
             done(loaded);
@@ -1326,6 +1340,8 @@ int main(int argc, const char *argv[]) {
         ngn::DebuggerIdentity{
             .appId = appId,
             .deviceName = NSHost.currentHost.localizedName ? NSHost.currentHost.localizedName.UTF8String : "Mac"});
+    // The first launch owes its first frame from the instance the runtime just began.
+    gHost.launchFrame.loaded(gHost.updates->launchGeneration(), gHost.mounting->instance());
 
     bool developer = gHost.runtime->devServer().has_value();
     if (developer) {
