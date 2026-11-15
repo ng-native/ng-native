@@ -76,6 +76,7 @@ export {
   registerPlatformComponents,
   registerViewName,
   registeredViewName,
+  textContentProp,
   type PlatformViewName,
   type ViewNameOptions,
   type PostScriptNames,

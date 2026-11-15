@@ -9,6 +9,8 @@ summary: Pick a photo from the library, or take one with the system camera.
 your app draws. Use it for an avatar, an attachment, anything the person picks or shoots once and
 hands over.
 
+<!-- platforms: ImagePicker -->
+
 ## Install
 
 ```sh

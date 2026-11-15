@@ -10,6 +10,8 @@ part is not checking or downloading - both are plain promises - it is that apply
 the app**, so the shape that matters is: know one is ready, and let the app choose a moment the
 user will not lose anything at.
 
+<!-- platforms: Updates -->
+
 ## Install
 
 ```sh

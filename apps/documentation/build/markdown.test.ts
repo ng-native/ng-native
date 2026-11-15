@@ -32,3 +32,31 @@ describe("TypeScript and HTML, highlighted with Angular's grammars", () => {
     expect(await render(`\`\`\`html\n${template}\n\`\`\`\n`)).toContain('>@if</span>');
   });
 });
+
+describe('the OS support table', () => {
+  test('draws a row for each entry of OS_SUPPORT where a page has the marker', async () => {
+    const html = await render('# Support\n\n<!-- os-support -->\n\nAfter.\n');
+    expect(html).toContain('<th>iPadOS</th>');
+    expect(html).toContain('<code>UndoStack</code>');
+    expect(html).toContain('list pane from 840dp, a stack below');
+    expect(html).not.toContain('os-support');
+    expect(html).toContain('After.');
+  });
+});
+
+describe('the platforms line', () => {
+  test('is drawn from the service row where a page has the marker', async () => {
+    const html = await render('# Dock\n\n<!-- platforms: Dock -->\n\nAfter.\n');
+    expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
+    expect(html).toContain('Absent on iPadOS, iPhone, Android and Web host');
+    expect(html).not.toContain('platforms:');
+    expect(html).toContain('After.');
+  });
+
+  test('says where a service is on more than one OS, and fails for a service with no row', async () => {
+    expect(await render('# Keyboard\n\n<!-- platforms: Keyboard -->\n')).toContain(
+      'Available on iPadOS, iPhone and Android.',
+    );
+    await expect(render('# X\n\n<!-- platforms: Nothing -->\n')).rejects.toThrow(/Nothing/);
+  });
+});

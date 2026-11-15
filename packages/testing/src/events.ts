@@ -13,6 +13,7 @@
  * Both are async where RNTL's `fireEvent` is not. Change detection is zoneless and commits on a
  * later task, so an event has to be awaited before the tree it changed can be read.
  */
+import { desktopUserEvent, type DesktopUserEvent } from './desktop-events.ts';
 import { currentOf, ownerOf, settle } from './render.ts';
 import { expoUiButtonDisabled, expoUiButtonPress, isExpoUiButton } from './expo-ui-button.ts';
 import { flatten, isSearchBar, isTextInput, withParents } from './queries.ts';
@@ -59,7 +60,7 @@ function touch(node: FakeFabricNode, phase: 'start' | 'end'): Record<string, unk
  * SwiftUI's sheet, for the toolbar items it presents with that content.
  */
 function touchable(node: FakeFabricNode): boolean {
-  withParents(ownerOf(node).fabric.committed);
+  withParents(ownerOf(node).roots());
   let blocking = 'box-none';
   for (let at: FakeFabricNode | null = currentOf(node) ?? node; at; at = at.parent ?? null) {
     if (at.props['layoutRoot'] === true || /ExpoUI_BottomSheetView$/.test(at.viewName)) return true;
@@ -102,12 +103,17 @@ function changeText(field: FakeFabricNode, text: string): void {
 
 /**
  * The finger lifting: the touch's end, and on `@expo/ui`'s button the press SwiftUI or Compose
- * fires for it, which a disabled one does not.
+ * fires for it, and on a native button the press AppKit or UIKit fires, which a disabled one does
+ * not.
  */
 function release(node: FakeFabricNode): void {
   emit(node, 'topTouchEnd', touch(node, 'end'));
   const current = currentOf(node) ?? node;
   if (isExpoUiButton(current) && !expoUiButtonDisabled(current)) emit(node, expoUiButtonPress());
+  // NSButton and UIButton send their own press, which a disabled one does not.
+  if (current.viewName === 'NgNativeButton' && current.props['enabled'] !== false) {
+    emit(node, 'topButtonPress', {});
+  }
 }
 
 async function press(node: FakeFabricNode): Promise<void> {
@@ -190,7 +196,7 @@ export interface TypeOptions {
  * Interactions as a person performs them: several events, a task apart, in the order the platform
  * sends them. Slower than `fireEvent`, and closer to what a device does.
  */
-export interface UserEvent {
+export interface UserEvent extends DesktopUserEvent {
   /** A finger down and up, a task apart, through the responder. */
   press(node: FakeFabricNode): Promise<void>;
   /** A finger held for `duration` ms (500, the long-press delay, by default). */
@@ -273,6 +279,7 @@ async function endEditing(field: FakeFabricNode, text: string): Promise<void> {
 }
 
 const user: UserEvent = {
+  ...desktopUserEvent,
   press: (node) => hold(node, 0),
   longPress: (node, { duration = 500 } = {}) => hold(node, duration),
   async type(node, text, options = {}) {

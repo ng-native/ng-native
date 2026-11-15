@@ -6,9 +6,10 @@ summary: NativeTabsOutlet renders a real tab bar, with each tab declared as cont
 # Tabs
 
 `<native-tabs-outlet>` renders a real `UITabBarController` on iOS and a bottom navigation bar on
-Android. Tabs are declared as content, the same way a header is declared in a page's own template,
-because a badge is a signal that changes, a title may be translated, and a tab might not exist
-until a feature flag says so - none of which a static route config can express:
+Android. On macOS the tabs are the window's [sidebar](/packages/components/sidebar), each tab an
+item in it. Tabs are declared as content, the same way a header is declared in a page's own
+template, because a badge is a signal that changes, a title may be translated, and a tab might
+not exist until a feature flag says so - none of which a static route config can express:
 
 <!-- api: NativeTabsOutlet -->
 <!-- api: NativeTab -->

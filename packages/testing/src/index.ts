@@ -16,7 +16,32 @@ export {
   within,
   type RenderOptions,
   type RenderResult,
+  type TestOs,
+  type TestWindow,
 } from './render.ts';
+export {
+  fakeDeepLinks,
+  fakeDock,
+  fakeUndo,
+  fakeMenus,
+  fakeProcesses,
+  fakeTray,
+  fakeWindows,
+  provideDesktopFakes,
+  type DesktopFakes,
+  type FakeDeepLinks,
+  type FakeDock,
+  type FakeUndo,
+  type FakeMenus,
+  type MenuItemQuery,
+  type FakeProcesses,
+  type FakeProcessesOptions,
+  type FakeProgram,
+  type FakeSpawn,
+  type FakeTray,
+  type FakeWindow,
+  type FakeWindows,
+} from './desktop-fakes.ts';
 export { injectService, type InjectServiceOptions } from './inject-service.ts';
 export { memoryDatabase, type MemoryDatabase } from './memory-database.ts';
 export { compileCss, type CompileCssOptions } from './compile-css.ts';

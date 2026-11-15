@@ -18,7 +18,26 @@ export interface NgNativeOptions {
    * as it does on a device. `'node'` keeps all of Node's, for an app whose tests rely on them.
    */
   intl?: 'hermes' | 'node';
+  /**
+   * The OS this project's tests run as: which platform files an extensionless import resolves
+   * (`.macos`, then `.ios`, then `.native` on a Mac), the view names, and what `OS` answers. What
+   * `expo.platforms` in `app.json` lists when unset (`['macos']` alone is macOS), else iOS. iOS,
+   * Android and macOS projects can sit in one Vitest config. `render(X, { os })` changes the OS for
+   * one render, but not which files were resolved.
+   */
+  os?: 'ios' | 'android' | 'macos' | 'web';
 }
+
+/** The extensions each OS resolves ahead of the plain ones, in order. */
+export declare const PLATFORM_EXTENSIONS: Readonly<
+  Record<'ios' | 'android' | 'macos' | 'web', readonly string[]>
+>;
+
+/** What an extensionless import tries, in order, for `os`. */
+export declare function extensionsFor(os: 'ios' | 'android' | 'macos' | 'web'): string[];
+
+/** The OS a project's tests run as when its options name none, from `expo.platforms`. */
+export declare function defaultOs(root: string): 'ios' | 'android' | 'macos' | 'web';
 
 /** Compile Angular for Vitest: AOT for decorated sources, the linker for partial-compiled packages. */
 export declare function ngNative(options?: NgNativeOptions): Plugin;

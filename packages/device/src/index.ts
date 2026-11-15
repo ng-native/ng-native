@@ -106,6 +106,15 @@ export {
   type ShortcutOs,
 } from './shortcut.ts';
 export {
+  Processes,
+  UndeclaredCapabilityError,
+  type ChildProcess,
+  type NativeProcesses,
+  type ProcessEvent,
+  type ProcessExit,
+  type SpawnOptions,
+} from './processes.ts';
+export {
   SEARCH_PATH,
   SpawnRuleError,
   compileCapability,
@@ -150,6 +159,7 @@ export {
   type SerializedMenu,
 } from './menus.ts';
 export { Dock, type NativeDock } from './dock.ts';
+export { nativeSplitViews } from './split-views.ts';
 export {
   DragAndDrop,
   dragAndDropSource,
@@ -158,6 +168,15 @@ export {
   type NativeDropEvent,
 } from './drag-and-drop.ts';
 export { UndoStack, type NativeUndo, type NativeUndoEvent, type UndoAction } from './undo-stack.ts';
+export {
+  OS_SUPPORT,
+  SUPPORT_OSES,
+  platformsLine,
+  supportRowOf,
+  type OsSupportRow,
+  type SupportOs,
+} from './os-support.ts';
+export { Shell, type NativeShell } from './shell.ts';
 export {
   Tray,
   type NativeTray,

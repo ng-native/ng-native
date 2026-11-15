@@ -78,6 +78,10 @@ export {
   type FileDropEvent,
 } from './drag-and-drop.ts';
 export { TrayIcon } from './tray-icon.ts';
+export { SplitView, SplitViewContent, type SplitViewShowing } from './split-view.ts';
+export { Sidebar, type SidebarRow } from './sidebar.ts';
+export { SidebarSection } from './sidebar-section.ts';
+export { SidebarItem, type SidebarItemIcon } from './sidebar-item.ts';
 export { NativeButton, type ButtonIcon, type ButtonKind } from './native-button.ts';
 export { NativeRef } from './native-ref.ts';
 export {

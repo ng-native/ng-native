@@ -22,6 +22,8 @@ export interface FakeFabricNode {
 export interface FakeFabric extends FabricUIManager {
   /** Root child set from the most recent `completeRoot`. */
   readonly committed: FakeFabricNode[];
+  /** Root child set from the most recent `completeRoot` of one surface, for several windows. */
+  committedOn(rootTag: number): FakeFabricNode[];
   readonly calls: {
     createNode: number;
     cloneWithChildren: number;
@@ -88,6 +90,7 @@ const defined = (props: object): Record<string, unknown> =>
 export function createFakeFabric(): FakeFabric {
   let handle = 0;
   let committed: FakeFabricNode[] = [];
+  const roots = new Map<number, FakeFabricNode[]>();
   let handler: ((h: unknown, t: string, e: unknown) => void) | null = null;
   const responderCalls: { viewName: string; isResponder: boolean; block: boolean }[] = [];
   const commands: { viewName: string; name: string; args: readonly unknown[] }[] = [];
@@ -277,10 +280,12 @@ export function createFakeFabric(): FakeFabric {
       adopt(ROOT, child as unknown as FakeFabricNode);
       (set as FakeFabricNode[]).push(child as unknown as FakeFabricNode);
     },
-    completeRoot(_rootTag, set) {
+    completeRoot(rootTag, set) {
       calls.completeRoot++;
-      diff(committed, set as FakeFabricNode[]);
+      // Each surface against its own last commit: a window's views are not unmounted by another's.
+      diff(roots.get(rootTag) ?? [], set as FakeFabricNode[]);
       committed = set as FakeFabricNode[];
+      roots.set(rootTag, committed);
       dismissAfterCommit();
     },
     registerEventHandler(fn) {
@@ -312,6 +317,9 @@ export function createFakeFabric(): FakeFabric {
     frames,
     get committed() {
       return committed;
+    },
+    committedOn(rootTag) {
+      return roots.get(rootTag) ?? [];
     },
     calls,
     render(options) {

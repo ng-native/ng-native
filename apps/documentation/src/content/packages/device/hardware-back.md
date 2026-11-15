@@ -11,6 +11,8 @@ bottom of a navigation stack means backgrounding the app rather than the press s
 nothing - so a user who backs out of the first screen finds the app where they left it rather than
 watching it close.
 
+<!-- platforms: HardwareBack -->
+
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
 import { View } from '@ng-native/components';

@@ -9,6 +9,8 @@ summary: The cache and document directories, a folder the user picks, and writin
 hands back Expo's own `File`. It is a locator, not a file API: everything else - moving, listing,
 downloading, streaming - is on the object it returns, documented by `expo-file-system` itself.
 
+<!-- platforms: FileSystem -->
+
 ## Install
 
 ```sh

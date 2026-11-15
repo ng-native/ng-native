@@ -8,6 +8,8 @@ summary: The phone's motor - for an alarm, a timer or an incoming call, not for 
 `Vibration` is the phone's motor, not the Taptic Engine - use this for an alarm, a timer or an
 incoming call, not for button feedback (that is haptics, in `@ng-native/expo`).
 
+<!-- platforms: Vibration -->
+
 ```ts
 import { Component, inject } from '@angular/core';
 import { View } from '@ng-native/components';
