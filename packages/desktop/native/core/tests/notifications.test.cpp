@@ -115,6 +115,14 @@ TEST_CASE("Expo's triggers are read into the OS's: now, an interval, a date and 
   CHECK(daily.kind == Kind::Calendar);
   CHECK(daily.repeats);
   CHECK(daily.components == std::map<std::string, int>{{"hour", 9}, {"minute", 30}});
+  // A component the type does not name is left out: a daily trigger never pins a weekday.
+  CHECK(trigger(dynamic::object("type", "daily")("weekday", 2)("day", 3)("hour", 9)("minute", 30)).components ==
+        std::map<std::string, int>{{"hour", 9}, {"minute", 30}});
+  CHECK(trigger(dynamic::object("type", "weekly")("weekday", 2)("day", 3)("hour", 9)("minute", 0)).components ==
+        std::map<std::string, int>{{"weekday", 2}, {"hour", 9}, {"minute", 0}});
+  // A calendar trigger takes every component it is given.
+  CHECK(trigger(dynamic::object("type", "calendar")("weekday", 2)("hour", 9)).components ==
+        std::map<std::string, int>{{"weekday", 2}, {"hour", 9}});
   CHECK(trigger(dynamic::object("type", "weekly")("weekday", 2)("hour", 9)("minute", 0)).components.at("weekday") == 2);
   // Expo's yearly month counts from 0; the OS's from 1.
   CHECK(trigger(dynamic::object("type", "yearly")("month", 0)("day", 1)("hour", 0)("minute", 0)).components.at("month") == 1);
@@ -283,8 +291,14 @@ TEST_CASE("a remote notification reads as Expo's iOS one, with its payload as th
   CHECK(json["identifier"] == "push-1");
   CHECK(json["trigger"]["type"] == "push");
   CHECK(json["trigger"]["payload"]["orderId"] == 42);
-  // The data is left to the app's side, which takes it from the payload.
+  // A plain APNs payload has no data where expo-notifications reads it: the app's side takes it
+  // from the payload.
   CHECK(json["content"]["data"].isNull());
+  // Expo's push service puts the data under `body`, which expo-notifications reads on iOS.
+  auto expo = ngn::remoteNotificationRequest(
+      "push-4", folly::parseJson(R"({"aps": {"alert": "Hi"}, "body": {"orderId": 42}, "scopeKey": "@me/app"})"));
+  CHECK(ngn::notificationRequestJson(expo)["content"]["data"] == dynamic::object("orderId", 42));
+  CHECK(ngn::remoteNotificationRequest("push-5", folly::parseJson(R"({"aps": {"alert": "Hi"}, "body": "text"})")).data.isNull());
 
   auto plain = ngn::remoteNotificationRequest("push-2", folly::parseJson(R"({"aps": {"alert": "Hello"}})"));
   CHECK(plain.body == "Hello");
