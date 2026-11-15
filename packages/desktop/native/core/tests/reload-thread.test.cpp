@@ -432,11 +432,21 @@ TEST_CASE("a second close on another thread runs no then while the first is join
   });
   waitFor(firstJoining);
   std::atomic<bool> secondReturned{false};
+  std::atomic<bool> secondWaiting{false};
   std::thread second([&] {
-    reload.close([&] { ui.serve(); });
+    reload.close([&] {
+      secondWaiting = true;
+      ui.serve();
+    });
     secondReturned = true;
   });
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  // The second close is waiting on the first (or, wrongly, has already returned), bounded so a
+  // wrong close fails rather than hangs.
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!secondWaiting && !secondReturned && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::yield();
+  }
+  CHECK(secondWaiting);
   CHECK_FALSE(thenRanEarly);
   CHECK_FALSE(secondReturned);
   release = true;
