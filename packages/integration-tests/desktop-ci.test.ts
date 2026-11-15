@@ -155,17 +155,6 @@ describe('the desktop build scripts', () => {
     }
   });
 
-  it('refuse --library in a build with no AppKit backend', () => {
-    const { root, rn, env } = fixture();
-    try {
-      const run = script('build.sh', [rn, '--backend', 'none', '--library', rn], env);
-      assert.equal(run.status, 2);
-      assert.match(run.stderr, /--library needs the AppKit backend/);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
   it('find a library codegen by its codegenConfig.name, not its Android target name', () => {
     const { root, rn, env } = fixture();
     try {

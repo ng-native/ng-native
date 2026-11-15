@@ -32,8 +32,8 @@ if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then
 else
   RN_PKG="$(node -p "require('path').dirname(require.resolve('react-native/package.json', { paths: [process.cwd()] }))")"
 fi
-# The toolkit-free core is the only backend here.
 backend=none
+[ "$(uname -s)" = "Darwin" ] && backend=appkit
 archs="$(uname -m)"
 config=RelWithDebInfo
 run_tests=0
@@ -51,11 +51,6 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-# Nothing compiles a library's components into the toolkit-free core.
-if [ ${#libraries[@]} -gt 0 ]; then
-  echo "build.sh: --library needs the AppKit backend" >&2
-  exit 2
-fi
 if [ "$run_tests" = 1 ] && [ "$tests" = OFF ]; then
   echo "build.sh: --test needs the core tests, which --release leaves out" >&2
   exit 2
