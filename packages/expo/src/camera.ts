@@ -17,6 +17,10 @@
  * A video is `record()`, which resolves once it stops - `stopRecording()`, or a `maxDuration` or
  * `maxFileSize` reached - on a view with `mode="video"`.
  *
+ * The view shows nothing without the camera permission, and records without sound without the
+ * microphone's: `cameraPermission()` and `microphonePermission()` are each a `Permission`, over
+ * `expo-camera`'s own functions on iOS and Android, and the desktop host's on macOS.
+ *
  * Importing it is all it takes: it applies to every `<expo-camera>` in the template. The view is
  * what takes the picture, so this is a directive on the view rather than a service.
  *
@@ -31,6 +35,7 @@ import { Directive, ElementRef, InjectionToken, inject } from '@angular/core';
 import { Engine, type EngineNode } from '@ng-native/fabric';
 import { desktopHost } from './desktop-host.ts';
 import { expoModule, optional, present } from './native.ts';
+import { Permission, UNAVAILABLE, type PermissionResponse } from './permissions.ts';
 
 export type PictureOptions = Omit<
   import('expo-camera').CameraPictureOptions,
@@ -141,4 +146,73 @@ function desktopCamera(): { ViewPrototypes: Record<string, CameraViewFunctions> 
       },
     },
   };
+}
+
+/** The permission functions on `expo-camera`'s native module, as its `Camera` calls them. */
+interface CameraPermissions {
+  getCameraPermissionsAsync(): Promise<PermissionResponse>;
+  requestCameraPermissionsAsync(): Promise<PermissionResponse>;
+  getMicrophonePermissionsAsync(): Promise<PermissionResponse>;
+  requestMicrophonePermissionsAsync(): Promise<PermissionResponse>;
+}
+
+/**
+ * The permission to use the camera, which `<expo-camera>` needs before it shows anything. Made in
+ * an injection context, a field of a component or a service, a refusal is checked again each time
+ * the app comes back to the front. Denied, and never to be asked again, without the module.
+ */
+export function cameraPermission(): Permission {
+  const native = cameraPermissions();
+  return Permission.of(
+    () => native?.getCameraPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+    () => native?.requestCameraPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+  );
+}
+
+/**
+ * The permission to use the microphone, which `record()` needs for a video with sound, unless the
+ * view has `mute`: without it Android rejects, and iOS and macOS record without sound. On macOS it
+ * is the same permission as `recordingPermission()` from `@ng-native/expo/audio`.
+ */
+export function microphonePermission(): Permission {
+  const native = cameraPermissions();
+  return Permission.of(
+    () => native?.getMicrophonePermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+    () => native?.requestMicrophonePermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+  );
+}
+
+/**
+ * `expo-camera`'s native module, whose permission functions its `Camera` object forwards to, or
+ * on macOS the desktop host's `NgNativeCamera` for the camera and `NgNativeAudio` for the
+ * microphone, which AVFoundation asks about once for both.
+ */
+function cameraPermissions(): CameraPermissions | null {
+  const core = optional(() => require('expo-modules-core') as typeof import('expo-modules-core'));
+  return expoModule(
+    'expo-camera',
+    () => core?.requireOptionalNativeModule<CameraPermissions>('ExpoCamera'),
+    { desktop: desktopCameraPermissions },
+  );
+}
+
+/** What the desktop host's `NgNativeCamera` and `NgNativeAudio` answer for the two permissions. */
+function desktopCameraPermissions(): CameraPermissions | null {
+  const camera = desktopHost<Partial<CameraPermissions>>('NgNativeCamera')?.module;
+  if (!camera) return null;
+  const audio = desktopHost<Partial<RecordingPermissions>>('NgNativeAudio')?.module;
+  const absent = () => Promise.resolve(UNAVAILABLE);
+  return {
+    getCameraPermissionsAsync: () => camera.getCameraPermissionsAsync?.() ?? absent(),
+    requestCameraPermissionsAsync: () => camera.requestCameraPermissionsAsync?.() ?? absent(),
+    getMicrophonePermissionsAsync: () => audio?.getRecordingPermissionsAsync?.() ?? absent(),
+    requestMicrophonePermissionsAsync: () =>
+      audio?.requestRecordingPermissionsAsync?.() ?? absent(),
+  };
+}
+
+/** The desktop host's `NgNativeAudio`, as far as the microphone's permission goes. */
+interface RecordingPermissions {
+  getRecordingPermissionsAsync(): Promise<PermissionResponse>;
+  requestRecordingPermissionsAsync(): Promise<PermissionResponse>;
 }

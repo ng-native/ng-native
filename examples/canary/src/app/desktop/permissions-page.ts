@@ -10,10 +10,10 @@ import {
 } from '@angular/core';
 import { TurboModuleRegistry } from 'react-native';
 import { ScrollView, Text, View } from '@ng-native/components';
-import { audioPlayer, audioRecorder } from '@ng-native/expo/audio';
+import { audioPlayer, audioRecorder, recordingPermission } from '@ng-native/expo/audio';
 import { Calendar, EntityTypes } from '@ng-native/expo/calendar';
 import { registerExpoViews } from '@ng-native/expo';
-import { Camera } from '@ng-native/expo/camera';
+import { Camera, cameraPermission, microphonePermission } from '@ng-native/expo/camera';
 import { ImagePicker } from '@ng-native/expo/image-picker';
 import { Location } from '@ng-native/expo/location';
 import { MapView } from '@ng-native/expo/map-view';
@@ -27,7 +27,7 @@ import { page } from '../screen-styles.ts';
 
 type Module = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
-/** A host module by name, for the permissions no service exposes on macOS. */
+/** A host module by name, for what no service reads on macOS, and the raw permission reads. */
 function host(name: string): Module | null {
   return TurboModuleRegistry.get(name) as Module | null;
 }
@@ -97,6 +97,9 @@ export class PermissionsPage {
   private readonly picker = inject(ImagePicker);
   private readonly tracking = inject(Tracking);
   private readonly notifications = inject(Notifications);
+  private readonly cameraAccess = cameraPermission();
+  private readonly microphone = microphonePermission();
+  private readonly recording = recordingPermission();
   private readonly recorder = audioRecorder({
     extension: '.m4a',
     sampleRate: 44100,
@@ -195,14 +198,12 @@ export class PermissionsPage {
 
   private async checkCamera(): Promise<void> {
     const module = host('NgNativeCamera')!;
-    this.note(`camera permission ${this.json(await module['getCameraPermissionsAsync']!())}`);
+    await this.cameraAccess.check();
+    this.note(`camera permission ${this.cameraAccess.status()}`);
     this.note(`camera available ${this.json(await module['isAvailableAsync']!())}`);
+    this.note(`camera permission ask ${await this.cameraAccess.ensure()}`);
+    this.note(`camera permission ${this.cameraAccess.status()}`);
     this.cameraShown.set('picture');
-    await this.until('the camera permission', async () => {
-      const answer = (await module['getCameraPermissionsAsync']!()) as { status: string };
-      return answer.status !== 'undetermined';
-    });
-    this.note(`camera permission ${this.json(await module['getCameraPermissionsAsync']!())}`);
     await wait(2500);
     const picture = await this.camera()?.takePicture({ quality: 0.7 });
     this.note(`picture ${picture?.uri} ${picture?.width}x${picture?.height}`);
@@ -212,9 +213,9 @@ export class PermissionsPage {
     const muted = this.camera()?.record({ maxDuration: 3 });
     const mutedMovie = await muted;
     this.note(`movie muted ${mutedMovie?.uri}`);
-    const audio = host('NgNativeAudio')!;
-    this.note(`microphone ${this.json(await audio['getRecordingPermissionsAsync']!())}`);
-    this.note(`microphone ask ${this.json(await audio['requestRecordingPermissionsAsync']!())}`);
+    await this.microphone.check();
+    this.note(`microphone ${this.microphone.status()}`);
+    this.note(`microphone ask ${await this.microphone.ensure()} (${this.microphone.status()})`);
     this.cameraShown.set('sound');
     await wait(1500);
     const sound = await this.camera()?.record({ maxDuration: 3 });
@@ -225,9 +226,9 @@ export class PermissionsPage {
   }
 
   private async checkMicrophone(): Promise<void> {
-    const audio = host('NgNativeAudio')!;
-    this.note(`microphone ${this.json(await audio['getRecordingPermissionsAsync']!())}`);
-    this.note(`microphone ask ${this.json(await audio['requestRecordingPermissionsAsync']!())}`);
+    await this.recording.check();
+    this.note(`microphone ${this.recording.status()}`);
+    this.note(`microphone ask ${await this.recording.ensure()} (${this.recording.status()})`);
     const recorder = this.recorder.native;
     await recorder.prepareToRecordAsync();
     recorder.record();

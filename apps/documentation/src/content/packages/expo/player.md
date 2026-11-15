@@ -118,8 +118,8 @@ it in an injection context, as the players:
 
 ```ts
 import { Component, DestroyRef, ErrorHandler, inject } from '@angular/core';
-import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
-import { audioRecorder } from '@ng-native/expo/audio';
+import { RecordingPresets, setAudioModeAsync } from 'expo-audio';
+import { audioRecorder, recordingPermission } from '@ng-native/expo/audio';
 
 @Component({
   selector: 'app-voice-note',
@@ -127,6 +127,7 @@ import { audioRecorder } from '@ng-native/expo/audio';
 })
 export class VoiceNote {
   protected readonly recorder = audioRecorder(RecordingPresets.HIGH_QUALITY);
+  protected readonly permission = recordingPermission();
   private readonly errorHandler = inject(ErrorHandler);
   private recordingMode = false;
 
@@ -139,7 +140,7 @@ export class VoiceNote {
   }
 
   async start(): Promise<void> {
-    if (!(await requestRecordingPermissionsAsync()).granted) return;
+    if (!(await this.permission.ensure())) return;
     this.recordingMode = true;
     try {
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
@@ -184,10 +185,17 @@ The recorder is made with `options` merged for the platform, as `useAudioRecorde
 `prepareToRecordAsync()` takes none. That matters on Android, where the recorder reads
 `isMeteringEnabled` only from the options it was made with: one prepared with it but made without
 it reports no `metering`. Android also measures the peak level where iOS measures the average, so
-the same voice reads louder there. Permissions and the audio mode are `expo-audio`'s own plain
-functions, as above. Releasing a recorder stops its recording but leaves the audio mode as it
-was, so a component that sets recording mode sets it back when it is destroyed, as `VoiceNote`
-does.
+the same voice reads louder there. The audio mode is `expo-audio`'s own plain function, as above.
+Releasing a recorder stops its recording but leaves the audio mode as it was, so a component that
+sets recording mode sets it back when it is destroyed, as `VoiceNote` does.
+
+The microphone permission is **`recordingPermission()`**, a
+[`Permission`](/packages/expo/permissions): `status()`, `granted()` and `blocked()` as signals, and
+`check()`, `request()` and `ensure()`. Made in an injection context, as `VoiceNote` makes it, it
+checks a refusal again each time the app comes back to the front. On iOS, Android and the web it
+calls `expo-audio`'s own permission functions, and on macOS the desktop host's, so the same code
+runs on each. Where there is no such module, as in a test in Node, it answers denied, and
+`blocked()` is true.
 
 ## The `<expo-video>` view
 

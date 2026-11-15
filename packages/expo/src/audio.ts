@@ -8,10 +8,14 @@
  *
  * // {{ player.state().currentTime }} {{ recorder.state().durationMillis }}
  * ```
+ *
+ * A recorder needs the microphone: `recordingPermission()` is a `Permission` over `expo-audio`'s
+ * own functions, and the desktop host's on macOS.
  */
 import { DestroyRef, inject, signal, type Signal } from '@angular/core';
 import { desktopAudio } from './desktop-audio.ts';
-import { currentPlatform, expoModuleNow, isApple, unavailable } from './native.ts';
+import { currentPlatform, expoModule, expoModuleNow, isApple, unavailable } from './native.ts';
+import { Permission, UNAVAILABLE } from './permissions.ts';
 import { ownPlayer, watchAudioPlayer, type Player } from './player.ts';
 
 type ExpoAudio = typeof import('expo-audio');
@@ -19,17 +23,30 @@ type RecordingOptions = import('expo-audio').RecordingOptions;
 type RecorderState = import('expo-audio').RecorderState;
 type AudioRecorder = import('expo-audio').AudioRecorder;
 
+/** Where `expo-audio` is: its platforms, and the desktop host's `NgNativeAudio` on macOS. */
+const WHERE = { platforms: ['ios', 'android', 'web'], desktop: desktopAudio } as const;
+
 /**
  * `expo-audio` where the platform has it, or the error that says why not. On macOS, the desktop
  * host's `NgNativeAudio` through `desktopAudio`.
  */
 function expoAudio(): ExpoAudio {
-  const expo = expoModuleNow('expo-audio', () => require('expo-audio') as ExpoAudio, {
-    platforms: ['ios', 'android', 'web'],
-    desktop: desktopAudio,
-  });
+  const expo = expoModuleNow('expo-audio', () => require('expo-audio') as ExpoAudio, WHERE);
   if (!expo) throw unavailable('expo-audio', 'Stand in for the player or recorder in the test.');
   return expo;
+}
+
+/**
+ * The permission to record from the microphone, which `prepareToRecordAsync()` needs. Made in an
+ * injection context, a field of a component or a service, a refusal is checked again each time the
+ * app comes back to the front. Denied, and never to be asked again, without the module.
+ */
+export function recordingPermission(): Permission {
+  const expo = expoModule('expo-audio', () => require('expo-audio') as ExpoAudio, WHERE);
+  return Permission.of(
+    () => expo?.getRecordingPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+    () => expo?.requestRecordingPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+  );
 }
 
 /**

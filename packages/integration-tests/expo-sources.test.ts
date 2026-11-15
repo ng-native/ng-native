@@ -41,6 +41,8 @@ import { SecureStorage } from '@ng-native/expo/secure-store';
 import { Storage } from '@ng-native/expo/async-storage';
 import { Updates } from '@ng-native/expo/updates';
 import { Brightness, type NativeBrightness } from '@ng-native/expo/brightness';
+import { cameraPermission, microphonePermission } from '@ng-native/expo/camera';
+import { recordingPermission } from '@ng-native/expo/audio';
 import { nativePlatform, registerPlatformComponents } from '@ng-native/fabric';
 import type { InjectionToken } from '@angular/core';
 import { inAppWith } from './injected.ts';
@@ -673,6 +675,55 @@ describe('the calendar source', () => {
       withModules({}, () => defaultSource(Calendar.SOURCE)),
       null,
     );
+  });
+});
+
+describe('the camera and recording permissions', () => {
+  const ios = { Platform: { OS: 'ios' } };
+  const answer = (status: string) => async () => ({
+    status,
+    granted: status === 'granted',
+    canAskAgain: true,
+  });
+
+  it("are expo-camera's own functions on its native module, and expo-audio's", async () => {
+    const expoCamera = {
+      getCameraPermissionsAsync: answer('granted'),
+      requestCameraPermissionsAsync: answer('granted'),
+      getMicrophonePermissionsAsync: answer('undetermined'),
+      requestMicrophonePermissionsAsync: answer('denied'),
+    };
+    const core = {
+      requireOptionalNativeModule: (name: string) => (name === 'ExpoCamera' ? expoCamera : {}),
+    };
+    const expoAudio = {
+      getRecordingPermissionsAsync: answer('denied'),
+      requestRecordingPermissionsAsync: answer('granted'),
+    };
+    const [camera, microphone, recording] = withModules(
+      { 'react-native': ios, 'expo-modules-core': core, 'expo-audio': expoAudio },
+      () => [cameraPermission(), microphonePermission(), recordingPermission()],
+    );
+    assert.equal(await camera.check(), true);
+    assert.equal(await microphone.check(), false);
+    assert.equal(microphone.status(), 'undetermined');
+    assert.equal(await microphone.request(), false);
+    assert.equal(microphone.status(), 'denied');
+    assert.equal(await recording.check(), false);
+    assert.equal(await recording.request(), true);
+  });
+
+  it('answer denied, never to be asked again, with neither module and no platform', async () => {
+    const [camera, microphone, recording] = withModules({}, () => [
+      cameraPermission(),
+      microphonePermission(),
+      recordingPermission(),
+    ]);
+    for (const permission of [camera, microphone, recording]) {
+      assert.equal(await permission.ensure(), false);
+      assert.equal(permission.status(), 'denied');
+      assert.equal(permission.blocked(), true);
+    }
   });
 });
 

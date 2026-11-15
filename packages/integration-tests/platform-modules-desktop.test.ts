@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
+import { Permission } from '@ng-native/expo';
 import { injectService } from '@ng-native/testing';
 
 type Listener = (event: unknown) => void;
@@ -606,6 +607,28 @@ describe('Audio on macOS', () => {
     assert.deepEqual(calls.at(-1), ['releaseRecorder', '8']);
   });
 
+  it('reads and asks for the recording permission through NgNativeAudio', async () => {
+    const calls: string[] = [];
+    mac({
+      NgNativeAudio: {
+        getRecordingPermissionsAsync: async () => (
+          calls.push('get'),
+          { status: 'undetermined', granted: false, canAskAgain: true }
+        ),
+        requestRecordingPermissionsAsync: async () => (
+          calls.push('request'),
+          { status: 'granted', granted: true, canAskAgain: false }
+        ),
+      },
+    });
+    const { recordingPermission } = await import('@ng-native/expo/audio');
+    const permission = recordingPermission();
+    assert.equal(permission.status(), 'unknown');
+    assert.equal(await permission.ensure(), true);
+    assert.equal(permission.status(), 'granted');
+    assert.deepEqual(calls, ['get', 'request']);
+  });
+
   it('says to rebuild the desktop host when it has no NgNativeAudio', async () => {
     mac({});
     const { audioPlayer } = await import('@ng-native/expo/audio');
@@ -1202,6 +1225,66 @@ describe('Camera on macOS', () => {
       ['record', 12, { maxDuration: 3 }],
       ['stopRecording', 12],
     ]);
+  });
+  it('reads and asks for the camera through NgNativeCamera, and the microphone through NgNativeAudio', async () => {
+    const calls: string[] = [];
+    let camera = { status: 'undetermined', granted: false, canAskAgain: true };
+    const denied = { status: 'denied', granted: false, canAskAgain: false };
+    mac({
+      NgNativeCamera: {
+        getCameraPermissionsAsync: async () => (calls.push('get camera'), camera),
+        requestCameraPermissionsAsync: async () => (calls.push('request camera'), denied),
+      },
+      NgNativeAudio: {
+        getRecordingPermissionsAsync: async () => (calls.push('get microphone'), denied),
+        requestRecordingPermissionsAsync: async () => (calls.push('request microphone'), denied),
+      },
+    });
+    const { cameraPermission, microphonePermission } = await import('@ng-native/expo/camera');
+    const listeners = new Set<() => void>();
+    const injector = Injector.create({
+      providers: [
+        {
+          provide: Permission.FOREGROUND,
+          useValue: (listener: () => void) => (
+            listeners.add(listener),
+            () => listeners.delete(listener)
+          ),
+        },
+      ],
+    });
+    try {
+      const [cameraAccess, microphone] = runInInjectionContext(injector, () => [
+        cameraPermission(),
+        microphonePermission(),
+      ]);
+      assert.equal(await cameraAccess.ensure(), false);
+      assert.equal(cameraAccess.status(), 'denied');
+      assert.equal(await microphone.request(), false);
+      assert.equal(microphone.blocked(), true);
+      assert.deepEqual(calls, ['get camera', 'request camera', 'request microphone']);
+
+      // Allowed in System Settings, and read again as the app comes back to the front.
+      camera = { status: 'granted', granted: true, canAskAgain: false };
+      listeners.forEach((listener) => listener());
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(cameraAccess.status(), 'granted');
+      assert.equal(cameraAccess.granted(), true);
+    } finally {
+      injector.destroy();
+    }
+    assert.equal(listeners.size, 0);
+  });
+
+  it('says to rebuild the desktop host when it has no NgNativeCamera', async () => {
+    mac({});
+    const { cameraPermission } = await import('@ng-native/expo/camera');
+    const injector = Injector.create({ providers: [] });
+    const permission = runInInjectionContext(injector, () => cameraPermission());
+    await assert.rejects(
+      permission.check(),
+      /expo-camera has no module in this build of the desktop host/,
+    );
   });
 });
 
