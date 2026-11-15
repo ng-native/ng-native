@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <map>
+#include <optional>
 
 using ngn::AddressCompleter;
 using ngn::AddressCompletion;
@@ -87,6 +88,22 @@ std::map<std::string, MKCoordinateRegion> &regions() {
   return found;
 }
 
+// Looks only in the country's region from macOS 15, and first in it before.
+void limit(MKLocalSearchCompleter *completer, MKCoordinateRegion region) {
+  completer.region = region;
+  if (@available(macOS 15.0, *)) {
+    completer.regionPriority = MKLocalSearchRegionPriorityRequired;
+  }
+}
+
+// Looks anywhere: the whole world, at the default priority.
+void unlimit(MKLocalSearchCompleter *completer) {
+  completer.region = MKCoordinateRegionForMapRect(MKMapRectWorld);
+  if (@available(macOS 15.0, *)) {
+    completer.regionPriority = MKLocalSearchRegionPriorityDefault;
+  }
+}
+
 class MapKitCompleter final : public AddressCompleter {
  public:
   // The completer itself is made on the main thread, by the first query: never waited for here,
@@ -116,7 +133,10 @@ class MapKitCompleter final : public AddressCompleter {
       completer.resultTypes = pointsOfInterest
           ? MKLocalSearchCompleterResultTypeAddress | MKLocalSearchCompleterResultTypePointOfInterest
           : MKLocalSearchCompleterResultTypeAddress;
-      withRegion(completer, code, ^{
+      auto current = ^bool {
+        return delegate.callbacks.results != nullptr && ask == *asked;
+      };
+      setCompleterRegion(completer, code, current, ^{
         // A region found late applies only to the latest query, of a session not ended.
         if (delegate.callbacks.results == nullptr || ask != *asked) {
           return;
@@ -144,45 +164,6 @@ class MapKitCompleter final : public AddressCompleter {
       c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     }
     return text;
-  }
-
-  // Looks only in the country's region from macOS 15, and first in it before.
-  static void limit(MKLocalSearchCompleter *completer, MKCoordinateRegion region) {
-    completer.region = region;
-    if (@available(macOS 15.0, *)) {
-      completer.regionPriority = MKLocalSearchRegionPriorityRequired;
-    }
-  }
-
-  // Sets the completer's region to the country `code` names, then calls `then`. Main thread.
-  static void withRegion(MKLocalSearchCompleter *completer, const std::string &code, void (^then)(void)) {
-    if (code.empty()) {
-      then();
-      return;
-    }
-    auto known = regions().find(code);
-    if (known != regions().end()) {
-      limit(completer, known->second);
-      then();
-      return;
-    }
-    NSString *name = [[NSLocale localeWithLocaleIdentifier:@"en_US"]
-        localizedStringForCountryCode:[NSString stringWithUTF8String:code.c_str()]];
-    if (name == nil) {
-      then();
-      return;
-    }
-    [[CLGeocoder new] geocodeAddressString:name
-                         completionHandler:^(NSArray<CLPlacemark *> *placemarks, NSError *) {
-                           CLRegion *area = placemarks.firstObject.region;
-                           if ([area isKindOfClass:CLCircularRegion.class]) {
-                             CLCircularRegion *circle = (CLCircularRegion *)area;
-                             auto region = MKCoordinateRegionMakeWithDistance(circle.center, circle.radius * 2, circle.radius * 2);
-                             regions()[code] = region;
-                             limit(completer, region);
-                           }
-                           then();
-                         }];
   }
 
   NGNAddressCompleterDelegate *delegate_;
@@ -244,6 +225,47 @@ PostalAddressParts postalAddressOf(MKPlacemark *placemark) {
   parts.latitude = placemark.coordinate.latitude;
   parts.longitude = placemark.coordinate.longitude;
   return parts;
+}
+
+void setCompleterRegion(MKLocalSearchCompleter *completer, const std::string &code, bool (^current)(void), void (^then)(void)) {
+  if (code.empty()) {
+    unlimit(completer);
+    then();
+    return;
+  }
+  auto known = regions().find(code);
+  if (known != regions().end()) {
+    limit(completer, known->second);
+    then();
+    return;
+  }
+  NSString *name = [[NSLocale localeWithLocaleIdentifier:@"en_US"]
+      localizedStringForCountryCode:[NSString stringWithUTF8String:code.c_str()]];
+  if (name == nil) {
+    unlimit(completer);
+    then();
+    return;
+  }
+  [[CLGeocoder new] geocodeAddressString:name
+                       completionHandler:^(NSArray<CLPlacemark *> *placemarks, NSError *) {
+                         CLRegion *area = placemarks.firstObject.region;
+                         std::optional<MKCoordinateRegion> region;
+                         if ([area isKindOfClass:CLCircularRegion.class]) {
+                           CLCircularRegion *circle = (CLCircularRegion *)area;
+                           region = MKCoordinateRegionMakeWithDistance(circle.center, circle.radius * 2, circle.radius * 2);
+                           regions()[code] = *region;
+                         }
+                         // A newer query, or a session ended, keeps the completer's region.
+                         if (!current()) {
+                           return;
+                         }
+                         if (region) {
+                           limit(completer, *region);
+                         } else {
+                           unlimit(completer);
+                         }
+                         then();
+                       }];
 }
 
 std::shared_ptr<AddressLookup> makeAddressLookup() {
