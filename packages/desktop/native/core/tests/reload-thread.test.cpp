@@ -380,3 +380,29 @@ TEST_CASE("a second close waits while the first runs a dropped run's then") {
   second.join();
   CHECK(droppedDoneWhenSecondReturned);
 }
+
+TEST_CASE("a close reentered from the UI queue runs the owed thens before it returns") {
+  UiQueue ui;
+  ngn::ReloadThread reload(ui.poster());
+  std::atomic<bool> release{false};
+  bool thenRan = false;
+  bool droppedRan = false;
+  reload.start([&] { waitFor(release); }, [&](bool) { thenRan = true; });
+  reload.start([] {}, [&](bool) { droppedRan = true; });
+  bool reentered = false;
+  bool thenRanWhenInnerReturned = false;
+  bool droppedRanWhenInnerReturned = false;
+  reload.close([&] {
+    if (!reentered) {
+      reentered = true;
+      release = true;
+      // As a nested shutdown would before tearing down what the callbacks use.
+      reload.close([&] { ui.serve(); });
+      thenRanWhenInnerReturned = thenRan;
+      droppedRanWhenInnerReturned = droppedRan;
+    }
+    ui.serve();
+  });
+  CHECK(thenRanWhenInnerReturned);
+  CHECK(droppedRanWhenInnerReturned);
+}

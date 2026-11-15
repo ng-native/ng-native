@@ -64,35 +64,42 @@ class ReloadThread {
     auto self = std::this_thread::get_id();
     std::thread thread;
     std::shared_ptr<std::atomic<bool>> finished;
-    Then then;
-    std::optional<Run> dropped;
     {
       std::unique_lock lock(state->mutex);
-      // Reentered on the thread a close is already ending the run on: from a callback that close
-      // runs, there is nothing it may wait for; from the UI queue it serves while it waits, it waits
-      // for the run to end too, serving the queue, and leaves the join to that close.
       if (state->joiner == self) {
-        auto ending = state->joinerInCallback ? nullptr : state->joining;
+        // Reentered on the thread a close is already ending the run on. From a callback that close
+        // runs there is nothing to wait for. From the UI queue it serves while it waits, this
+        // close waits for the run too, and runs the callbacks still owed before it returns, so
+        // they come before anything its caller tears down.
+        if (state->joinerInCallback) {
+          return;
+        }
+        auto ending = state->joining;
         lock.unlock();
         while (ending && !*ending) {
           service();
           std::this_thread::yield();
         }
+        runEnding(state);
         return;
       }
       state->closed = true;
-      dropped = std::move(state->waiting);
-      state->waiting.reset();
-      if (state->thread.joinable() && state->thread.get_id() != self) {
-        thread = std::move(state->thread);
-        finished = state->finished;
-        then = std::move(state->then);
-        state->then = nullptr;
-      }
-      // Until its callbacks have run, this close is the one ending the run: another close waits.
-      if (thread.joinable() || dropped) {
-        state->joiner = self;
-        state->joining = finished;
+      if (state->joiner == std::thread::id()) {
+        if (state->waiting) {
+          state->endingDropped = std::move(state->waiting);
+          state->waiting.reset();
+        }
+        if (state->thread.joinable() && state->thread.get_id() != self) {
+          thread = std::move(state->thread);
+          finished = state->finished;
+          state->endingThen = std::move(state->then);
+          state->then = nullptr;
+        }
+        // Until its callbacks have run, this close is the one ending the run: another close waits.
+        if (thread.joinable() || state->endingDropped) {
+          state->joiner = self;
+          state->joining = finished;
+        }
       }
     }
     if (thread.joinable()) {
@@ -101,27 +108,13 @@ class ReloadThread {
         std::this_thread::yield();
       }
       thread.join();
-      if (then) {
-        {
-          std::lock_guard lock(state->mutex);
-          state->joinerInCallback = true;
-        }
-        then(true);
-      }
     }
-    if (dropped && dropped->then) {
-      {
-        std::lock_guard lock(state->mutex);
-        state->joinerInCallback = true;
-      }
-      dropped->then(false);
-    }
+    runEnding(state);
     {
       std::lock_guard lock(state->mutex);
       if (state->joiner == self) {
         state->joiner = std::thread::id();
         state->joining = nullptr;
-        state->joinerInCallback = false;
       }
     }
     // A `then` the UI queue is running on another thread, or a run another close is still ending
@@ -164,7 +157,39 @@ class ReloadThread {
     std::thread::id joiner;
     std::shared_ptr<std::atomic<bool>> joining;
     bool joinerInCallback{false};
+    // The callbacks the closing run still owes: the joined run's `then` and a dropped run's. Kept
+    // here so a close reentered from the UI queue can run them as well as the close that took them.
+    Then endingThen;
+    std::optional<Run> endingDropped;
   };
+
+  // Runs the callbacks a close owes, the joined run's first, each once, whichever close gets to it.
+  static void runEnding(const std::shared_ptr<State> &state) {
+    while (true) {
+      Then then;
+      std::optional<Run> dropped;
+      {
+        std::lock_guard lock(state->mutex);
+        if (state->endingThen) {
+          then = std::move(state->endingThen);
+          state->endingThen = nullptr;
+        } else if (state->endingDropped) {
+          dropped = std::move(state->endingDropped);
+          state->endingDropped.reset();
+        } else {
+          return;
+        }
+        state->joinerInCallback = true;
+      }
+      if (then) {
+        then(true);
+      } else if (dropped->then) {
+        dropped->then(false);
+      }
+      std::lock_guard lock(state->mutex);
+      state->joinerInCallback = false;
+    }
+  }
 
   // Under the state's lock.
   static void spawn(const std::shared_ptr<State> &state, Run run) {
