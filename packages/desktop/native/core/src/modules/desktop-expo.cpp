@@ -104,7 +104,20 @@ void MovingSecretStore::set(const std::string &service, const std::string &key, 
 
 void MovingSecretStore::remove(const std::string &service, const std::string &key) {
   now_->remove(service, key);
-  removeOld(service, key);
+  try {
+    old_->remove(service, key);
+  } catch (const std::exception &) {
+    // A get would move an old copy that can still be read back, so the removal fails. One that
+    // cannot be read is never moved.
+    bool readable = false;
+    try {
+      readable = old_->get(service, key).has_value();
+    } catch (const std::exception &) {
+    }
+    if (readable) {
+      throw;
+    }
+  }
 }
 
 void MovingSecretStore::removeOld(const std::string &service, const std::string &key) {
@@ -488,6 +501,8 @@ std::shared_ptr<NativeModule> makeDocumentPickerModule(
           }
           std::ofstream out(*path, std::ios::binary | std::ios::trunc);
           out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+          // Closed first, so a write that fails as it is flushed is caught too.
+          out.close();
           if (!out) {
             p.reject("The file could not be written: " + *path);
             return;
