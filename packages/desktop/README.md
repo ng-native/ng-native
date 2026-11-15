@@ -660,7 +660,8 @@ library whose `expo-module.config.json` lists `macos` and names its `macos.cmake
 `macos.cmakeDir`, `desktop` by default), and the app's own `modules/<name>/macos/` folders. They
 write what they found to `.expo/ng-native-desktop/link.json` in the app, which the host build reads
 from `NGN_DESKTOP_LINK`, and warn about dependencies with native code for iOS or Android and none
-for the desktop. `deny` in the plugin options keeps a package out.
+for the desktop. `deny` in the plugin options keeps a package out; the packages it depends on are
+still found.
 
 A library with a `codegenConfig` gets its specs' codegen, as on Android: the `<Name>JSI.h` its C++
 TurboModule implements, and for its Fabric components their props, events and shadow nodes, which
@@ -692,16 +693,15 @@ with no view registered mounts as a plain view, and the host's own components ke
 
 ## Prebuilt hosts
 
-An app with no native desktop code of its own compiles nothing: `run` and `package` download the
-prebuilt host its React Native version has in `prebuilt.json`, the universal Release build with its
-`hermesc` and Sparkle, and unpack it into the per-user cache under its
-hash. The archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does
-not match it is deleted and stops the command. The host is built from source instead when the app
-links a library's or its own native desktop code, when a host library it has installed
-(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`,
-`react-native-webview`) is another version
-than the prebuilt one or denied, when the download fails (with a warning), and when
-`NGN_DESKTOP_FROM_SOURCE=1` is set.
+An app with no native desktop code of its own compiles nothing when `prebuilt.json` has a host for
+its React Native version: `run` and `package` download that host, the universal Release build with
+its `hermesc` and Sparkle, and unpack it into the per-user cache under its hash. The archive's
+SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does not match it is
+deleted and stops the command. The host is built from source instead when the app links a library's
+or its own native desktop code, when a host library it has installed (`react-native-screens`,
+`react-native-safe-area-context`, `react-native-svg`, `react-native-webview`) is another version
+than the prebuilt one or denied, when `prebuilt.json` has no host for its React Native version,
+when the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
 
 Publishing one is a manual step; the release workflow does none of it:
 

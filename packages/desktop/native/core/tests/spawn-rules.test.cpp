@@ -42,7 +42,8 @@ TEST_CASE("a declared program is an absolute normalized path or a bare name, nev
   CHECK(ngn::programProblem("/usr//bin/git"));
   CHECK(ngn::programProblem("/usr/bin/"));
   for (const char *shell : {"sh", "/bin/bash", "/bin/zsh", "env", "/usr/bin/env", "xargs", "sudo", "osascript", "BASH",
-                            "pwsh.exe", "/usr/local/bin/fish"}) {
+                            "pwsh.exe", "/usr/local/bin/fish", "nice", "/usr/bin/nice", "nohup",
+                            "/usr/bin/nohup"}) {
     CAPTURE(shell);
     CHECK(ngn::programProblem(shell));
   }
@@ -52,6 +53,9 @@ TEST_CASE("a declared program is an absolute normalized path or a bare name, nev
   CHECK(ngn::programProblem(" git"));
   CHECK(ngn::programProblem(""));
   CHECK_THROWS_AS(ngn::compileCapability({"/bin/sh", {"-c", "{cmd:.*}"}}), ngn::SpawnRuleError);
+  // nice and nohup run the utility they are given, which needs no option to name it.
+  CHECK_THROWS_AS(ngn::compileCapability({"/usr/bin/nice", {"{args:\\S+}..."}}), ngn::SpawnRuleError);
+  CHECK_THROWS_AS(ngn::compileCapability({"nohup", {"{args:\\S+}..."}}), ngn::SpawnRuleError);
 }
 
 TEST_CASE("a declaration with a bad pattern, an escaping one or two placeholders alike is refused") {
@@ -60,6 +64,12 @@ TEST_CASE("a declaration with a bad pattern, an escaping one or two placeholders
   CHECK_THROWS_AS(ngn::compileCapability({"git", {"{a:x}", "{a:y}"}}), ngn::SpawnRuleError);
   CHECK_THROWS_AS(ngn::compileCapability({"git", {"{a:x}...", "{b:y}..."}}), ngn::SpawnRuleError);
   CHECK_FALSE(ngn::parseArgument("{not a placeholder}").placeholder);
+  // Named groups and lookbehinds, which the TypeScript rules refuse too.
+  CHECK_THROWS_AS(ngn::compileCapability({"git", {"{x:(?<stem>[a-z]+)}"}}), ngn::SpawnRuleError);
+  CHECK_THROWS_AS(ngn::compileCapability({"git", {"{x:(?<=a)b}"}}), ngn::SpawnRuleError);
+  CHECK_NOTHROW(ngn::compileCapability({"git", {"{x:\\(?<a}"}}));
+  CHECK_NOTHROW(ngn::compileCapability({"git", {"{x:[(?<]+}"}}));
+  CHECK_NOTHROW(ngn::compileCapability({"git", {"{x:[\\](?<]+}"}}));
 }
 
 TEST_CASE("literals match exactly, and a placeholder only by its whole pattern") {

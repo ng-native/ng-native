@@ -88,6 +88,28 @@ describe('macOS permissions from the Expo keys', () => {
     assert.equal(usageStrings['NSPhotoLibraryUsageDescription'], 'Photos.');
   });
 
+  it("gives macOS its NSLocationUsageDescription from the app's location string", () => {
+    // macOS reads NSLocationUsageDescription, which no iOS key or expo-location option sets.
+    const fromPlugin = macosPermissions({
+      plugins: [['expo-location', { locationWhenInUsePermission: 'To show nearby places.' }]],
+    }).usageStrings;
+    assert.equal(fromPlugin['NSLocationUsageDescription'], 'To show nearby places.');
+    const fromInfoPlist = macosPermissions({
+      ios: { infoPlist: { NSLocationAlwaysAndWhenInUseUsageDescription: 'To log your runs.' } },
+    }).usageStrings;
+    assert.equal(fromInfoPlist['NSLocationUsageDescription'], 'To log your runs.');
+    assert.equal(macosPermissions({}).usageStrings['NSLocationUsageDescription'], undefined);
+  });
+
+  it('keeps an NSLocationUsageDescription the app sets itself', () => {
+    const { usageStrings } = macosPermissions({
+      ios: { infoPlist: { NSLocationUsageDescription: 'On the Mac, to find your office.' } },
+      plugins: [['expo-location', { locationWhenInUsePermission: 'To show nearby places.' }]],
+    });
+    assert.equal(usageStrings['NSLocationUsageDescription'], 'On the Mac, to find your office.');
+    assert.equal(usageStrings['NSLocationWhenInUseUsageDescription'], 'To show nearby places.');
+  });
+
   it('declares nothing for an app that asks for nothing', () => {
     assert.deepEqual(macosPermissions({}), { usageStrings: {}, sandboxEntitlements: [] });
   });

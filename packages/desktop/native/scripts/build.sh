@@ -17,8 +17,8 @@
 #   --build-dir     build here instead of the cache's shared build directory, for a build that
 #                   no other may touch before its output is copied (make-prebuilt.mjs)
 #
-# An app that links nothing builds in a directory keyed by the libraries it compiles in
-# (scripts/host-dir.sh), shared only with apps that compile in the same ones.
+# An app that links nothing builds in a directory keyed by this install's native sources and the
+# libraries it compiles in (scripts/host-dir.sh), shared only with apps that build the same.
 #
 # NGN_DESKTOP_LINK names the app's link.json (bin/autolink.mjs): the libraries and app modules
 # compiled in (cmake/linked-modules.cmake). An app that links any builds in a directory of its own,
@@ -77,10 +77,12 @@ for lib in ${libraries[@]+"${libraries[@]}"}; do
 done
 
 link_args=()
-# Keyed by the libraries compiled in, so an app with others never rebuilds this one's executable.
+# Keyed by this install's native sources and the libraries compiled in, so another install or an
+# app with other libraries never rebuilds this one's executable.
+native_dir="$(cd "$here/.." && pwd -P)"
 library_list=()
 [ -n "$library_dirs" ] && IFS=';' read -ra library_list <<< "$library_dirs"
-host_dir="$("$here/host-dir.sh" "$CACHE" ${library_list[@]+"${library_list[@]}"})"
+host_dir="$("$here/host-dir.sh" "$CACHE" "$native_dir" ${library_list[@]+"${library_list[@]}"})"
 if [ -n "${NGN_DESKTOP_LINK:-}" ] && [ "$backend" != "none" ]; then
   link="$(cd "$(dirname "$NGN_DESKTOP_LINK")" && pwd -P)/$(basename "$NGN_DESKTOP_LINK")"
   # The libraries' package names and directories, one per line, when the app links anything.
@@ -126,7 +128,7 @@ if [ "$backend" != "none" ]; then
 fi
 
 BUILD="${build_dir:-$host_dir/$backend-${arch_key:-native}-$config}"
-cmake --log-level=WARNING -G Ninja -S "$here/.." -B "$BUILD" \
+cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE="$config" \
   -DCMAKE_OSX_ARCHITECTURES="$archs" \
   -DNGN_BACKEND="$backend" \

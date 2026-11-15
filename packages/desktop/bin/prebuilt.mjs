@@ -2,8 +2,8 @@
  * Prebuilt desktop hosts: the signed, universal Release host each release publishes per React
  * Native version, so an app with no native desktop code of its own compiles nothing.
  *
- * `prebuilt.json` beside this package lists them. The release workflow writes it before the
- * package is packed, so the SHA-256 of each archive travels inside the npm package, not beside the
+ * `prebuilt.json` beside this package lists them. It is filled in by hand before the package is
+ * packed (the package's README has the steps), so the SHA-256 of each archive travels inside the npm package, not beside the
  * archive it vouches for. An archive holds `appkit/ngn-macos`, `appkit/hermesc` and
  * `appkit/Sparkle.framework`, the files a host build's `appkit` folder has, and unpacks into the
  * per-user cache under its own hash, so a new archive never reuses an old one's files.
@@ -13,6 +13,7 @@
  * checked by SHA-256, so no Developer ID is needed.
  */
 import { randomBytes } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** The manifest's format, which `prebuilt.json` names. */
@@ -60,6 +61,52 @@ export function readManifest(text) {
 export function withHost(manifest, host) {
   const hosts = manifest.hosts.filter((each) => each.reactNative !== host.reactNative);
   return { version: MANIFEST_VERSION, hosts: [...hosts, host] };
+}
+
+/**
+ * Puts a packed archive in `out` under its name, with its `prebuilt-host.json` entry, and writes
+ * the entry into `manifest` when one is given. Runs into the same folder take turns, holding
+ * `<out>/.make-prebuilt.lock`, so the archive, its entry and the manifest always describe the same
+ * build; each file is replaced by a rename, so none is seen half written.
+ *
+ * @param {{ out: string, archive: string, name: string, host: PrebuiltHost, manifest?: string }} files
+ *   `archive` is the packed archive at a temporary name in `out`
+ * @param {{ wait?: number }} [options] how long to wait for another run, in milliseconds
+ */
+export function publishPrebuilt({ out, archive, name, host, manifest }, { wait = 600_000 } = {}) {
+  const lock = path.join(out, '.make-prebuilt.lock');
+  const give = Date.now() + wait;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      break;
+    } catch (error) {
+      if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EEXIST') throw error;
+      if (Date.now() >= give) {
+        throw new Error(
+          `Another make-prebuilt.mjs run holds ${lock}. Wait for it, or remove the folder if ` +
+            'no run is left.',
+        );
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
+  }
+  /** @param {string} file @param {string} text */
+  const replace = (file, text) => {
+    const temp = `${file}.${process.pid}-${randomBytes(4).toString('hex')}`;
+    writeFileSync(temp, text);
+    renameSync(temp, file);
+  };
+  try {
+    renameSync(archive, path.join(out, name));
+    replace(path.join(out, 'prebuilt-host.json'), `${JSON.stringify(host, null, 2)}\n`);
+    if (manifest) {
+      const updated = withHost(readManifest(readFileSync(manifest, 'utf8')), host);
+      replace(manifest, `${JSON.stringify(updated, null, 2)}\n`);
+    }
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
 }
 
 /**

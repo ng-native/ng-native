@@ -6,11 +6,13 @@
  *
  * - <app>: the app whose react-native and host libraries (react-native-screens,
  *   react-native-safe-area-context) the host is built against: the desktop template.
- * - <out>: where the archive and `prebuilt-host.json`, its manifest entry, go.
+ * - <out>: where the archive and `prebuilt-host.json`, its manifest entry, go. Runs into the same
+ *   folder take turns there (publishPrebuilt), so the two always come from the same build.
  * - --version: the release the archive is named for (default: this package's version), for a
  *   release whose version is not yet in package.json.
- * - --base-url: where the release serves the archive, an absolute http or https URL; the archive's
- *   URL is this and its name. Needed with --manifest, since the CLI downloads from the URL as it is.
+ * - --base-url: where the release serves the archive, an absolute http or https URL with no query
+ *   or fragment; the archive's URL is this and its name. Needed with --manifest, since the CLI
+ *   downloads from the URL as it is.
  * - --manifest: a `prebuilt.json` to write the entry into, in place of the one for the same React
  *   Native version.
  *
@@ -22,7 +24,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -30,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { HOST_LIBRARIES, packageDir } from '../../bin/host.mjs';
-import { prebuiltName, readManifest, signPrebuiltFiles, withHost } from '../../bin/prebuilt.mjs';
+import { prebuiltName, publishPrebuilt, signPrebuiltFiles } from '../../bin/prebuilt.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,11 +67,12 @@ if (values.manifest !== undefined || baseUrl !== undefined) {
   try {
     parsed = new URL(baseUrl ?? '');
   } catch {}
-  if (!parsed || !['http:', 'https:'].includes(parsed.protocol)) {
+  // A query or a fragment would end up holding the archive's name.
+  if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || /[?#]/.test(baseUrl ?? '')) {
     console.error(
       baseUrl === undefined
         ? '--manifest needs --base-url, the absolute URL the release serves the archive from.'
-        : `--base-url takes the absolute http or https URL the release serves the archive from, not "${baseUrl}".`,
+        : `--base-url takes the absolute http or https URL the release serves the archive from, with no query or fragment, not "${baseUrl}".`,
     );
     process.exit(2);
   }
@@ -138,10 +141,11 @@ try {
   const desktopVersion = values.version ?? versionOf(packageDir);
   const name = prebuiltName(desktopVersion, reactNative);
   mkdirSync(out, { recursive: true });
-  const archive = path.join(out, name);
+  // Packed at a name of its own in <out>, and moved into place with its entry by publishPrebuilt.
+  const packed = path.join(out, `.${name}.${process.pid}.partial`);
   // Owner and group dropped, so the archive does not carry the build machine's.
-  run('tar', ['-czf', archive, '--uid', '0', '--gid', '0', '-C', staging, 'appkit']);
-  const sha256 = createHash('sha256').update(readFileSync(archive)).digest('hex');
+  run('tar', ['-czf', packed, '--uid', '0', '--gid', '0', '-C', staging, 'appkit']);
+  const sha256 = createHash('sha256').update(readFileSync(packed)).digest('hex');
   const host = {
     reactNative,
     url: `${(baseUrl ?? '').replace(/\/$/, '')}/${name}`,
@@ -150,13 +154,18 @@ try {
       Object.entries(libraries).map(([lib, dir]) => [lib, versionOf(dir)]),
     ),
   };
-  writeFileSync(path.join(out, 'prebuilt-host.json'), `${JSON.stringify(host, null, 2)}\n`);
-  if (values.manifest) {
-    const file = path.resolve(values.manifest);
-    const manifest = withHost(readManifest(readFileSync(file, 'utf8')), host);
-    writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+  try {
+    publishPrebuilt({
+      out,
+      archive: packed,
+      name,
+      host,
+      manifest: values.manifest && path.resolve(values.manifest),
+    });
+  } finally {
+    rmSync(packed, { force: true });
   }
-  console.log(`${archive}\n${JSON.stringify(host, null, 2)}`);
+  console.log(`${path.join(out, name)}\n${JSON.stringify(host, null, 2)}`);
 } finally {
   rmSync(staging, { recursive: true, force: true });
 }

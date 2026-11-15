@@ -883,6 +883,24 @@ describe('packageApp', () => {
     assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
   });
 
+  it("refuses Sparkle under codesign's ad hoc identity, - given as NGN_SIGN_IDENTITY", async () => {
+    for (const [args, env] of [
+      [['--skip-notarize'], { NGN_SIGN_IDENTITY: '-' }],
+      [[], { ...DMG_ENV, NGN_SIGN_IDENTITY: '-' }],
+    ] as const) {
+      const { sys, calls } = fakeMac({ env: { ...env, NGN_SPARKLE_PUBLIC_KEY: 'K=' } });
+      await assert.rejects(
+        packageApp(
+          parsePackage(['--format', 'dmg', ...args, '--feed-url', 'https://e.com/a.xml']),
+          sys,
+        ),
+        /--feed-url needs a NGN_SIGN_IDENTITY other than -, codesign's ad hoc identity/,
+        args.join(' '),
+      );
+      assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
+    }
+  });
+
   it('needs the bundle identifier for dmg and mas, and makes one up for an app', async () => {
     const config = () => ({
       slug: 'my-notes',

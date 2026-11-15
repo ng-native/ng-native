@@ -19,14 +19,14 @@ after(() => rmSync(root, { recursive: true, force: true }));
  * declares (as react-native-gesture-handler's RNGestureHandlerDetector), with a
  * react/renderer/components/fakelib folder at each of `folders`.
  */
-function library(name: string, folders: string[]) {
+function library(name: string, folders: string[], version = '1.0.0') {
   const dir = path.join(root, name);
   mkdirSync(path.join(dir, 'src'), { recursive: true });
   writeFileSync(
     path.join(dir, 'package.json'),
     JSON.stringify({
       name,
-      version: '1.0.0',
+      version,
       codegenConfig: { name: 'fakelib', type: 'components', jsSrcsDir: './src' },
     }),
   );
@@ -50,6 +50,16 @@ function library(name: string, folders: string[]) {
     writeFileSync(path.join(components, 'FakeDetectorComponentDescriptor.h'), '');
   }
   return dir;
+}
+
+/** Runs the script for a library in this cache, and returns the directory it prints. */
+function codegen(cache: string, lib: string, ...args: string[]) {
+  const run = spawnSync('bash', [script, reactNative, lib, ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, NGN_DESKTOP_CACHE: cache },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  return run.stdout.trim();
 }
 
 /** The library's own C++ folder, as the library.cmake the script writes names it. */
@@ -79,5 +89,40 @@ describe('codegen-library.sh', () => {
       'windows/cpp',
     ]);
     assert.equal(commonDir(elsewhere), '');
+  });
+
+  it('writes each version to a directory of its own and never replaces one a build may read', () => {
+    const cache = path.join(root, 'cache-versions');
+    for (const args of [[], ['--modules']]) {
+      const first = codegen(cache, library('versioned-lib', ['common/cpp'], '1.0.0'), ...args);
+      const firstStamp = readFileSync(path.join(first, 'stamp'), 'utf8');
+      const second = codegen(cache, library('versioned-lib', ['common/cpp'], '1.1.0'), ...args);
+      assert.notEqual(second, first, args.join(' '));
+      assert.equal(readFileSync(path.join(first, 'stamp'), 'utf8'), firstStamp);
+      assert.match(readFileSync(path.join(second, 'stamp'), 'utf8'), /versioned-lib@1\.1\.0/);
+      // The same version again is the same directory.
+      assert.equal(
+        codegen(cache, library('versioned-lib', ['common/cpp'], '1.1.0'), ...args),
+        second,
+      );
+    }
+  });
+
+  it('does the same for a library built by a recipe of its own', () => {
+    const cache = path.join(root, 'cache-recipe');
+    const recipe = (version: string) => {
+      const dir = path.join(root, 'react-native-worklets');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ name: 'react-native-worklets', version }),
+      );
+      return dir;
+    };
+    const first = codegen(cache, recipe('0.13.0'));
+    const cmake = readFileSync(path.join(first, 'library.cmake'), 'utf8');
+    const second = codegen(cache, recipe('0.14.0'));
+    assert.notEqual(second, first);
+    assert.equal(readFileSync(path.join(first, 'library.cmake'), 'utf8'), cmake);
   });
 });
