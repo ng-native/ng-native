@@ -163,8 +163,12 @@ TEST_CASE("the close button asks the app, which closes the window itself") {
 TEST_CASE("with no app listening, the close button and quitting do what the OS would") {
   Fixture f;
   f.host->open(WindowRequest{.key = "main"}, [](SurfaceId) {});
+  f.host->focused(11);
+  CHECK(f.host->focusedSurface() == 11);
   CHECK(f.host->closeRequested(11));
   CHECK(f.host->surfaces().empty());
+  // The closed window is no longer the key window.
+  CHECK_FALSE(f.host->focusedSurface());
   CHECK(f.host->quitRequested() == ngn::QuitReply::Now);
 }
 
@@ -358,6 +362,23 @@ TEST_CASE("the first module is no reload; a later one closes the windows with no
   f.windows->timers[0].second();
   CHECK(f.windows->closed == std::vector<SurfaceId>{keyless, prefs});
   CHECK(f.host->surfaces() == std::vector<SurfaceId>{main, 41});
+}
+
+TEST_CASE("a second reload's windows wait the whole claim time, whatever the first reload's timer does") {
+  Fixture f;
+  auto prefs = f.open(request("prefs", "Settings"));
+  f.module.reset();
+  f.app();
+  REQUIRE(f.windows->timers.size() == 1);
+  // Reloaded again before the first reload's claim time is up, and the timers run in turn.
+  f.module.reset();
+  f.app();
+  REQUIRE(f.windows->timers.size() == 2);
+  f.windows->timers[0].second();
+  CHECK(f.windows->closed.empty());
+  CHECK(f.open(request("prefs")) == prefs);
+  f.windows->timers[1].second();
+  CHECK(f.windows->closed.empty());
 }
 
 TEST_CASE("dropping a window listener waits for a call to it already running on another thread") {

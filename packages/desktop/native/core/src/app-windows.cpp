@@ -238,6 +238,9 @@ bool WindowHost::closeRequested(SurfaceId surface) {
     std::lock_guard lock(mutex_);
     if (listeners_.empty()) {
       windows_.erase(surface);
+      if (focused_ == surface) {
+        focused_.reset();
+      }
       return true;
     }
     if (!windows_.contains(surface)) {
@@ -335,10 +338,14 @@ void WindowHost::reloading() {
   }
 }
 
-void WindowHost::dropUnclaimed() {
+void WindowHost::dropUnclaimed(uint64_t reload) {
   std::vector<SurfaceId> closing;
   {
     std::lock_guard lock(mutex_);
+    // A later reload's windows have the whole claim time from that reload.
+    if (reload != reloads_) {
+      return;
+    }
     for (auto it = windows_.begin(); it != windows_.end();) {
       if (it->second.kept) {
         closing.push_back(it->first);
@@ -369,17 +376,21 @@ std::optional<SurfaceId> WindowHost::focusedSurface() const {
 
 std::shared_ptr<void> WindowHost::attach(Listener listener) {
   bool reloaded;
+  uint64_t reload = 0;
   std::shared_ptr<void> handle;
   {
     // Added under the lock the requests check for listeners with.
     std::lock_guard lock(mutex_);
     reloaded = attached_;
     attached_ = true;
+    if (reloaded) {
+      reload = ++reloads_;
+    }
     handle = listeners_.add(std::move(listener));
   }
   if (reloaded) {
     reloading();
-    backend_->after(kClaimSeconds, [this] { dropUnclaimed(); });
+    backend_->after(kClaimSeconds, [this, reload] { dropUnclaimed(reload); });
   }
   return handle;
 }
