@@ -447,10 +447,15 @@ void FileChanges::rescan(folly::dynamic &out, const Exists &exists) {
   rescanOwed_ = false;
   if (folder_ && here && !list(now)) {
     std::error_code error;
-    auto status = fs::status(watched_, error);
-    if (status.type() == fs::file_type::not_found) {
+    // The entry itself decides whether it went; a link left in its place (even one leading
+    // nowhere) keeps it, with its old entries gone.
+    auto entry = fs::symlink_status(watched_, error);
+    std::error_code targetError;
+    auto target = fs::status(watched_, targetError);
+    if (entry.type() == fs::file_type::not_found) {
       now.clear();
-    } else if (!error && !fs::is_directory(status)) {
+    } else if (!error && (target.type() == fs::file_type::not_found ||
+                          (!targetError && !fs::is_directory(target)))) {
       now = {watched_};
     } else {
       rescanOwed_ = true;

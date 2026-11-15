@@ -994,6 +994,25 @@ TEST_CASE("FileChanges reports a watched folder's entries deleted once a file ta
         dynamic::array(dynamic::object("type", "modified")("uri", ngn::fileUri(watched))));
 }
 
+TEST_CASE("FileChanges keeps a watched folder that a dangling link replaced, and reports its entries deleted") {
+  TempDir dir;
+  fs::create_directories(dir.path / "watched");
+  write(dir.path / "watched/kept.txt", "");
+  auto watched = (dir.path / "watched").string();
+  // As the module checks: the entry itself, not where a link leads.
+  auto exists = [](const std::string &p) {
+    std::error_code error;
+    return fs::symlink_status(p, error).type() != fs::file_type::not_found;
+  };
+  ngn::FileChanges tracker(watched, exists);
+  fs::remove_all(watched);
+  fs::create_directory_symlink(dir.path / "nowhere", watched);
+  using E = ngn::FileWatcher::Event;
+  // The link is still there, so the watched entry stays; what was in the folder is gone.
+  CHECK(tracker.changes({E{.path = watched, .rescan = true}}, exists) ==
+        dynamic::array(dynamic::object("type", "deleted")("uri", ngn::fileUri(watched + "/kept.txt"))));
+}
+
 TEST_CASE("FileChanges keeps what it saw when a folder it cannot list has a type it cannot read either") {
   TempDir dir;
   fs::create_directories(dir.path / "parent/watched");
