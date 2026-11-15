@@ -406,3 +406,41 @@ TEST_CASE("a close reentered from the UI queue runs the owed thens before it ret
   CHECK(thenRanWhenInnerReturned);
   CHECK(droppedRanWhenInnerReturned);
 }
+
+TEST_CASE("a second close on another thread runs no then while the first is joining the run") {
+  UiQueue ui;
+  ngn::ReloadThread reload(ui.poster());
+  std::atomic<bool> release{false};
+  std::atomic<bool> workerDone{false};
+  std::atomic<bool> thenRanEarly{false};
+  std::atomic<bool> firstJoining{false};
+  reload.start(
+      [&] {
+        waitFor(release);
+        workerDone = true;
+      },
+      [&](bool) {
+        if (!workerDone) {
+          thenRanEarly = true;
+        }
+      });
+  std::thread first([&] {
+    reload.close([&] {
+      firstJoining = true;
+      ui.serve();
+    });
+  });
+  waitFor(firstJoining);
+  std::atomic<bool> secondReturned{false};
+  std::thread second([&] {
+    reload.close([&] { ui.serve(); });
+    secondReturned = true;
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  CHECK_FALSE(thenRanEarly);
+  CHECK_FALSE(secondReturned);
+  release = true;
+  first.join();
+  second.join();
+  CHECK_FALSE(thenRanEarly);
+}
