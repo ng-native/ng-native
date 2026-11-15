@@ -172,13 +172,17 @@ void InputDispatcher::pointerUp(const PointerInput &input) {
   // The DOM's dblclick comes as the second click of a run ends, on the view it pressed.
   auto container = containers_.find(press.container);
   if (press.clickCount == 2 && container != containers_.end() && tree_.find(press.target) != nullptr) {
+    // The release may be over another container (a popover): its point, in the pressed one's.
+    auto point = input.point;
+    auto over = containers_.find(input.container);
+    if (over != containers_.end() && over != container) {
+      auto from = pageOrigin(over->second);
+      auto to = pageOrigin(container->second);
+      point = {point.x + from.x - to.x, point.y + from.y - to.y};
+    }
     auto chain = tree_.chain(press.target, container->second.root);
     sendElementEvent(
-        container->second,
-        chain,
-        &DesktopProps::onDoubleClick,
-        "doubleClick",
-        locationPayload(container->second, press.target, input.point));
+        container->second, chain, &DesktopProps::onDoubleClick, "doubleClick", locationPayload(container->second, press.target, point));
   }
 }
 
