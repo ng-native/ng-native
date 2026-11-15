@@ -252,8 +252,12 @@ class FileChanges {
   bool concerns(const std::string &path) const;
   // A rescan's changes: what is there now against what was seen.
   void rescan(folly::dynamic &out, const Exists &exists);
+  // Adds the folder's entries to `into`; false when it could not be listed in full.
+  bool list(std::set<std::string> &into) const;
   std::string watched_;
   bool folder_{false};
+  // The last listing failed: the next events start with another.
+  bool rescanOwed_{false};
   std::set<std::string> seen_;
 };
 

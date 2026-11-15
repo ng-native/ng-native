@@ -406,10 +406,18 @@ FileChanges::FileChanges(std::string watched, const Exists &exists) : watched_(s
     seen_.insert(watched_);
   }
   if (folder_) {
-    for (const auto &entry : fs::directory_iterator(watched_, error)) {
-      seen_.insert(entry.path().string());
-    }
+    list(seen_);
   }
+}
+
+bool FileChanges::list(std::set<std::string> &into) const {
+  // Advanced with an error code: a range-for's ++ throws on an I/O error mid-listing.
+  std::error_code error;
+  fs::directory_iterator it(watched_, error);
+  for (; !error && it != fs::directory_iterator(); it.increment(error)) {
+    into.insert(it->path().string());
+  }
+  return !error;
 }
 
 bool FileChanges::concerns(const std::string &path) const {
@@ -424,14 +432,15 @@ folly::dynamic change(const char *type, const std::string &path) {
 
 void FileChanges::rescan(folly::dynamic &out, const Exists &exists) {
   std::set<std::string> now;
-  if (exists(watched_)) {
+  bool here = exists(watched_);
+  if (here) {
     now.insert(watched_);
   }
-  if (folder_) {
-    std::error_code error;
-    for (const auto &entry : fs::directory_iterator(watched_, error)) {
-      now.insert(entry.path().string());
-    }
+  // A folder still there but not listed (unreadable for now) keeps what was seen, and is listed
+  // again at the next event. One gone took its entries with it.
+  rescanOwed_ = folder_ && here && !list(now);
+  if (rescanOwed_) {
+    return;
   }
   for (auto it = seen_.begin(); it != seen_.end();) {
     if (concerns(*it) && !now.contains(*it)) {
@@ -450,6 +459,9 @@ void FileChanges::rescan(folly::dynamic &out, const Exists &exists) {
 
 folly::dynamic FileChanges::changes(const std::vector<FileWatcher::Event> &events, const Exists &exists) {
   folly::dynamic out = folly::dynamic::array();
+  if (rescanOwed_) {
+    rescan(out, exists);
+  }
   for (size_t i = 0; i < events.size(); i++) {
     const auto &event = events[i];
     if (event.rescan) {
