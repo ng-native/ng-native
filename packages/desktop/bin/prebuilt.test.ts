@@ -1,0 +1,245 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import type { system } from './host.mjs';
+import {
+  choosePrebuilt,
+  fetchPrebuilt,
+  prebuiltName,
+  readManifest,
+  signPrebuiltFiles,
+  withHost,
+  type PrebuiltHost,
+} from './prebuilt.mjs';
+
+const SHA = 'a'.repeat(64);
+const HOST: PrebuiltHost = {
+  reactNative: '0.88.0',
+  url: 'https://example.com/host.tar.gz',
+  sha256: SHA,
+  libraries: { 'react-native-screens': '4.20.0', 'react-native-safe-area-context': '5.10.1' },
+};
+const MANIFEST = { version: 1, hosts: [HOST] };
+const APP = {
+  reactNative: '0.88.0',
+  linked: 0,
+  libraries: { 'react-native-screens': null, 'react-native-safe-area-context': '5.10.1' },
+  deny: [],
+  env: {},
+};
+
+describe('the prebuilt manifest', () => {
+  it('names an archive by the release and the React Native version', () => {
+    assert.equal(
+      prebuiltName('0.23.0', '0.88.0'),
+      'ng-native-desktop-host-0.23.0-rn-0.88.0-macos-universal.tar.gz',
+    );
+  });
+
+  it('reads a manifest, and anything else as none', () => {
+    assert.deepEqual(readManifest(JSON.stringify(MANIFEST)), MANIFEST);
+    for (const text of ['', '{', '{"version":2,"hosts":[]}', '{"version":1}']) {
+      assert.deepEqual(readManifest(text), { version: 1, hosts: [] });
+    }
+  });
+
+  it('keeps one host per React Native version', () => {
+    const newer = { ...HOST, sha256: 'b'.repeat(64) };
+    const other = { ...HOST, reactNative: '0.89.0' };
+    assert.deepEqual(withHost(withHost(MANIFEST, other), newer).hosts, [other, newer]);
+  });
+});
+
+describe('choosePrebuilt', () => {
+  it("takes the app's React Native version when its host libraries match or are absent", () => {
+    assert.deepEqual(choosePrebuilt(MANIFEST, APP), { host: HOST });
+  });
+
+  it('builds from source for linked native code, another version, a library or a deny', () => {
+    const reasons = [
+      { linked: 1 },
+      { reactNative: '0.88.1' },
+      { libraries: { ...APP.libraries, 'react-native-screens': '4.21.0' } },
+      { libraries: { ...APP.libraries, 'react-native-other': '1.0.0' } },
+      { deny: ['react-native-screens'] },
+      { env: { NGN_DESKTOP_FROM_SOURCE: '1' } },
+    ].map((change) => choosePrebuilt(MANIFEST, { ...APP, ...change }));
+    for (const choice of reasons) assert.ok('reason' in choice, JSON.stringify(choice));
+    assert.match(
+      (reasons[2] as { reason: string }).reason,
+      /has react-native-screens 4\.20\.0, the app 4\.21\.0/,
+    );
+    assert.equal(choosePrebuilt({ version: 1, hosts: [] }, APP).hasOwnProperty('host'), false);
+  });
+});
+
+/** A system for fetchPrebuilt: `curl` and `tar` answer as told, and files exist once made. */
+function fakeFetch({
+  curl = 0,
+  tar = 0,
+  sha = SHA,
+  cached = false,
+  finishedMeanwhile = false,
+} = {}) {
+  const calls: string[][] = [];
+  const files = new Set<string>(cached ? ['/c/prebuilt/aaaaaaaaaaaaaaaa/appkit/ngn-macos'] : []);
+  const warnings: string[] = [];
+  const removed: string[] = [];
+  const renamed: [string, string][] = [];
+  const sys = {
+    exists: (file: string) => files.has(file),
+    remove: (file: string) => void removed.push(file),
+    writeFile: () => {},
+    warn: (line: string) => void warnings.push(line),
+    sha256: () => sha,
+    rename: (from: string, to: string) => void renamed.push([from, to]),
+    run(command: string, args: string[]) {
+      calls.push([command, ...args]);
+      if (command === 'curl') {
+        // Another run unpacks the same host while this one downloads.
+        if (finishedMeanwhile) files.add('/c/prebuilt/aaaaaaaaaaaaaaaa/appkit/ngn-macos');
+        return { status: curl, stdout: '' };
+      }
+      if (command === 'tar' && tar === 0) {
+        files.add(`${args[3]}/appkit/ngn-macos`);
+      }
+      return { status: tar, stdout: '' };
+    },
+  } as unknown as typeof system;
+  return { sys, calls, warnings, removed, renamed };
+}
+
+describe('fetchPrebuilt', () => {
+  const dir = '/c/prebuilt/aaaaaaaaaaaaaaaa';
+
+  it('downloads, checks the SHA-256, unpacks and moves the host into the cache under its hash', () => {
+    const { sys, calls, renamed } = fakeFetch();
+    assert.equal(fetchPrebuilt(sys, HOST, '/c'), dir);
+    assert.deepEqual(
+      calls.map((call) => call[0]),
+      ['curl', 'tar'],
+    );
+    assert.equal(calls[0]!.at(-1), HOST.url);
+    const archive = calls[0]![calls[0]!.indexOf('-o') + 1]!;
+    const unpacked = calls[1]![4]!;
+    assert.match(archive, new RegExp(`^${dir}\\.${process.pid}-[0-9a-f]+\\.tar\\.gz$`));
+    assert.match(unpacked, new RegExp(`^${dir}\\.${process.pid}-[0-9a-f]+\\.partial$`));
+    assert.deepEqual(calls[1], ['tar', '-xzf', archive, '-C', unpacked]);
+    assert.deepEqual(renamed, [[unpacked, dir]]);
+  });
+
+  it("gives each run temp files of its own, so a second run never deletes the first's download", () => {
+    const first = fakeFetch();
+    const second = fakeFetch();
+    fetchPrebuilt(first.sys, HOST, '/c');
+    fetchPrebuilt(second.sys, HOST, '/c');
+    const archiveOf = (calls: string[][]) => calls[0]![calls[0]!.indexOf('-o') + 1]!;
+    assert.notEqual(archiveOf(first.calls), archiveOf(second.calls));
+    assert.notEqual(first.calls[1]![4], second.calls[1]![4]);
+    // Nothing but its own files is removed (and the host's folder, only while it holds no host):
+    // no fixed name another run could be writing.
+    for (const { calls, removed } of [first, second]) {
+      const own = [archiveOf(calls), calls[1]![4]!, dir];
+      assert.deepEqual(
+        removed.filter((file) => !own.includes(file)),
+        [],
+      );
+    }
+  });
+
+  it('uses the host another run unpacked meanwhile, and drops its own copy', () => {
+    const { sys, calls, removed, renamed } = fakeFetch({ finishedMeanwhile: true });
+    assert.equal(fetchPrebuilt(sys, HOST, '/c'), dir);
+    assert.deepEqual(renamed, []);
+    assert.ok(removed.includes(calls[1]![4]!));
+    assert.ok(!removed.includes(dir), "the other run's host is kept");
+  });
+
+  it('uses a host already in the cache without downloading it', () => {
+    const { sys, calls } = fakeFetch({ cached: true });
+    assert.equal(fetchPrebuilt(sys, HOST, '/c'), dir);
+    assert.deepEqual(calls, []);
+  });
+
+  it('refuses and deletes a download whose SHA-256 is not the manifest', () => {
+    const { sys, calls, removed, renamed } = fakeFetch({ sha: 'f'.repeat(64) });
+    assert.throws(() => fetchPrebuilt(sys, HOST, '/c'), /has SHA-256 f+, not the a+/);
+    assert.ok(removed.includes(calls[0]![calls[0]!.indexOf('-o') + 1]!));
+    assert.ok(!calls.some((call) => call[0] === 'tar'), 'never unpacked');
+    assert.deepEqual(renamed, []);
+  });
+
+  it('builds from source, with a warning, when the download fails', () => {
+    const { sys, warnings } = fakeFetch({ curl: 22 });
+    assert.equal(fetchPrebuilt(sys, HOST, '/c'), null);
+    assert.match(warnings[0]!, /Could not download the prebuilt desktop host/);
+  });
+
+  it('fails on an archive that does not unpack to a host, and on a manifest with no hash', () => {
+    assert.throws(() => fetchPrebuilt(fakeFetch({ tar: 1 }).sys, HOST, '/c'), /did not unpack/);
+    assert.throws(
+      () => fetchPrebuilt(fakeFetch().sys, { ...HOST, sha256: '' }, '/c'),
+      /no SHA-256 to check/,
+    );
+  });
+});
+
+describe('signing the prebuilt host', () => {
+  function fakeRun(status = 0) {
+    const calls: { command: string; args: string[] }[] = [];
+    const run = (command: string, args: string[]) => {
+      calls.push({ command, args });
+      return { status };
+    };
+    return { run, calls };
+  }
+
+  it('strips, then signs ad hoc with the hardened runtime when no identity is given', () => {
+    const { run, calls } = fakeRun();
+    signPrebuiltFiles(run, ['/a/ngn-macos', '/a/hermesc'], {});
+    assert.deepEqual(calls, [
+      { command: 'strip', args: ['-x', '/a/ngn-macos'] },
+      {
+        command: 'codesign',
+        args: [
+          '--force',
+          '--options',
+          'runtime',
+          '--timestamp=none',
+          '--sign',
+          '-',
+          '/a/ngn-macos',
+        ],
+      },
+      { command: 'strip', args: ['-x', '/a/hermesc'] },
+      {
+        command: 'codesign',
+        args: ['--force', '--options', 'runtime', '--timestamp=none', '--sign', '-', '/a/hermesc'],
+      },
+    ]);
+  });
+
+  it('treats an empty NGN_SIGN_IDENTITY as none', () => {
+    const { run, calls } = fakeRun();
+    signPrebuiltFiles(run, ['/a/ngn-macos'], { NGN_SIGN_IDENTITY: '' });
+    assert.equal(calls[1]!.args[calls[1]!.args.indexOf('--sign') + 1], '-');
+  });
+
+  it('signs with an identity, and a timestamp, when one is given', () => {
+    const { run, calls } = fakeRun();
+    signPrebuiltFiles(run, ['/a/ngn-macos'], { NGN_SIGN_IDENTITY: 'Developer ID Application: X' });
+    assert.deepEqual(calls[1]!.args, [
+      '--force',
+      '--options',
+      'runtime',
+      '--timestamp',
+      '--sign',
+      'Developer ID Application: X',
+      '/a/ngn-macos',
+    ]);
+  });
+
+  it('fails when codesign fails', () => {
+    assert.throws(() => signPrebuiltFiles(fakeRun(1).run, ['/a/ngn-macos'], {}), /failed/);
+  });
+});

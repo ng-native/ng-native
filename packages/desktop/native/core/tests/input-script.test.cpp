@@ -1,0 +1,100 @@
+#include "ngn/input-script.h"
+
+#include <doctest/doctest.h>
+
+using Kind = ngn::InputStep::Kind;
+
+TEST_CASE("an input script reads each step, skipping comments and blank lines") {
+  auto script = ngn::parseInputScript(R"(
+    # a swipe, then a pinch
+    wait 500
+    move 10 20
+    down 10 20   # pressed
+    drag 40.5 20
+    up 40.5 20
+
+    scroll 100 200 -3 0 began
+    scroll 100 200 -3 1
+    magnify 50 60 0.25 changed
+    rotate 50 60 15 ended
+  )");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 9);
+  CHECK(script.steps[0].kind == Kind::Wait);
+  CHECK(script.steps[0].amount == 500);
+  CHECK(script.steps[2].kind == Kind::Down);
+  CHECK(script.steps[3].x == doctest::Approx(40.5));
+  CHECK(script.steps[5].kind == Kind::Scroll);
+  CHECK(script.steps[5].amount == -3);
+  CHECK(script.steps[5].phase == ngn::GesturePhase::Began);
+  CHECK_FALSE(script.steps[6].phase);
+  CHECK(script.steps[6].dy == 1);
+  CHECK(script.steps[7].kind == Kind::Magnify);
+  CHECK(script.steps[7].amount == doctest::Approx(0.25));
+  CHECK(script.steps[8].phase == ngn::GesturePhase::Ended);
+}
+
+TEST_CASE("an input script with a bad line plays nothing and names the line") {
+  CHECK(ngn::parseInputScript("wait 10\nclick 1 2").error == "line 2: unknown step click");
+  CHECK(ngn::parseInputScript("down 1").error == "line 1: down needs x and y");
+  CHECK(ngn::parseInputScript("magnify 1 2 0.5").error == "line 1: magnify needs x, y, an amount and a phase");
+  CHECK(ngn::parseInputScript("scroll 1 2 3 4 sideways").error == "line 1: unknown phase sideways");
+  CHECK(ngn::parseInputScript("up 1 2 3").error == "line 1: unexpected 3");
+  CHECK(ngn::parseInputScript("wait -1").steps.empty());
+}
+
+TEST_CASE("a key step names a key and its modifiers, for the key window") {
+  auto script = ngn::parseInputScript("key escape\nkey r cmd\nkey i cmd option\nkey return");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 4);
+  CHECK(script.steps[0].kind == Kind::Key);
+  CHECK(script.steps[0].key == "escape");
+  CHECK(script.steps[0].modifiers == 0);
+  CHECK(script.steps[1].key == "r");
+  CHECK(script.steps[1].modifiers == ngn::InputStep::Command);
+  CHECK(script.steps[2].modifiers == (ngn::InputStep::Command | ngn::InputStep::Option));
+  CHECK(ngn::parseInputScript("key").error == "line 1: key needs a key");
+  CHECK(ngn::parseInputScript("key r hyper").error == "line 1: unknown modifier hyper");
+  CHECK(ngn::parseInputScript("key home").error == "line 1: unknown key home");
+}
+
+TEST_CASE("a key step names space, tab and delete by name") {
+  auto script = ngn::parseInputScript("key space\nkey tab shift\nkey delete");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 3);
+  CHECK(script.steps[0].key == "space");
+  CHECK(script.steps[1].key == "tab");
+  CHECK(script.steps[1].modifiers == ngn::InputStep::Shift);
+  CHECK(script.steps[2].key == "delete");
+}
+
+TEST_CASE("a type step types the rest of its line, inner spaces and all, into the focused field") {
+  auto script = ngn::parseInputScript("type  \"teh\" wrold -- ok # a comment\ntype a");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 2);
+  CHECK(script.steps[0].kind == Kind::Type);
+  CHECK(script.steps[0].key == "\"teh\" wrold -- ok");
+  CHECK(script.steps[1].key == "a");
+  CHECK(ngn::parseInputScript("type").error == "line 1: type needs some text");
+  CHECK(ngn::parseInputScript("type   ").error == "line 1: type needs some text");
+}
+
+TEST_CASE("a choose step names the item, spaces and all, that the next menu to open picks") {
+  auto script = ngn::parseInputScript("choose  United States # the country\ndown 1 2");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 2);
+  CHECK(script.steps[0].kind == Kind::Choose);
+  CHECK(script.steps[0].key == "United States");
+  CHECK(ngn::parseInputScript("choose").error == "line 1: choose needs an item's title");
+  CHECK(ngn::parseInputScript("choose   ").error == "line 1: choose needs an item's title");
+}
+
+TEST_CASE("a secondary step is a secondary click at its point") {
+  auto script = ngn::parseInputScript("secondary 150 26");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 1);
+  CHECK(script.steps[0].kind == Kind::Secondary);
+  CHECK(script.steps[0].x == 150);
+  CHECK(script.steps[0].y == 26);
+  CHECK(ngn::parseInputScript("secondary 1").error == "line 1: secondary needs x and y");
+}

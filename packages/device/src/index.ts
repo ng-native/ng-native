@@ -78,5 +78,37 @@ export { SCREEN_IN_FRONT } from './screen-in-front.ts';
 export { SCREEN_SHOWN } from './screen-shown.ts';
 export { NATIVE_HISTORY } from './native-history.ts';
 export { OS } from './os.ts';
+export {
+  SEARCH_PATH,
+  SpawnRuleError,
+  compileCapability,
+  filterEnvironment,
+  matchArguments,
+  matchSpawn,
+  parseArgument,
+  programProblem,
+  resolveProgram,
+  type ArgumentRule,
+  type CompiledCapability,
+  type PlaceholderValues,
+  type ProgramLookup,
+  type SpawnCapability,
+  type SpawnMatch,
+} from './spawn-rules.ts';
+export {
+  desktopOptionProblems,
+  pathAllowed,
+  pathProblem,
+  validateDesktopOptions,
+  type DesktopCapabilities,
+  type DesktopOptions,
+  type DocumentType,
+  type PathCapability,
+} from './desktop-options.ts';
+export {
+  macosPermissions,
+  type ExpoPermissionConfig,
+  type MacosPermissions,
+} from './desktop-permissions.ts';
 export { OS_VERSION } from './os-version.ts';
 export { injectToken, type InjectTokenOptions } from './inject-token.ts';
