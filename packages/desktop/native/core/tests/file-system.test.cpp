@@ -304,6 +304,29 @@ TEST_CASE("FileSystem checks the path a call uses, not one a symbolic link and .
   CHECK(fs::is_directory(dir.path / "data/sub/nested"));
 }
 
+TEST_CASE("FileSystem tells apart two final links to one file after a .. through a link") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  // data/secret and data/sub/secret are both links to target.txt, and data/link is data/sub/nested:
+  // data/link/../secret is data/sub/secret to the OS, and data/secret once .. is taken away. Both
+  // resolve to target.txt, so only the entries themselves tell them apart.
+  fs::create_directories(dir.path / "data/sub/nested");
+  write(dir.path / "data/target.txt", "target");
+  fs::create_symlink(dir.path / "data/target.txt", dir.path / "data/secret");
+  fs::create_symlink(dir.path / "data/target.txt", dir.path / "data/sub/secret");
+  fs::create_directory_symlink(dir.path / "data/sub/nested", dir.path / "data/link");
+  auto module = ngn::makeFileSystemModule(std::make_shared<ngn::FileAccess>(folders, dynamic::array()),
+                                          std::make_shared<FakeWatcher>());
+  auto data = ngn::fileUri(folders.appData);
+  CHECK(ask(*module, "deleteAsync", dynamic::array(data + "/link/../secret")).error);
+  CHECK(fs::is_symlink(fs::symlink_status(dir.path / "data/secret")));
+  CHECK(fs::is_symlink(fs::symlink_status(dir.path / "data/sub/secret")));
+  CHECK(ask(*module, "moveAsync",
+            dynamic::array(dynamic::object("from", data + "/link/../secret")("to", data + "/moved")))
+            .error);
+  CHECK(fs::is_symlink(fs::symlink_status(dir.path / "data/sub/secret")));
+}
+
 TEST_CASE("FileSystem copies a folder's symbolic links as links, and never writes through one out of reach") {
   TempDir dir;
   auto folders = foldersIn(dir.path);
