@@ -87,3 +87,30 @@ TEST_CASE("Watched gives a new listener the value its first call follows") {
   value.set(2);
   CHECK(changes == std::vector<std::pair<int, int>>{{1, 2}});
 }
+
+TEST_CASE("Watched leaves out of a new listener's calls the values set before it listened") {
+  ngn::Watched<int> value{0};
+  int current = -1;
+  std::vector<std::pair<int, int>> changes;
+  std::shared_ptr<void> late;
+  // While 1 is being sent, 2 and 3 are set and queued, and then a listener joins: its first call
+  // follows 3, so it hears neither 2 nor 3 (3, 2, 3 without the boundary).
+  auto first = value.listen([&](const int &v) {
+    if (v != 1) {
+      return;
+    }
+    value.set(2);
+    value.set(3);
+    late = value.listen(
+        [&](const int &now) {
+          changes.emplace_back(current, now);
+          current = now;
+        },
+        current);
+  });
+  value.set(1);
+  CHECK(current == 3);
+  CHECK(changes.empty());
+  value.set(4);
+  CHECK(changes == std::vector<std::pair<int, int>>{{3, 4}});
+}
