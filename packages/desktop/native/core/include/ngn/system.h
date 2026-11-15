@@ -67,8 +67,9 @@ class System {
   // "light" or "dark", as the system draws the app now (an override included).
   virtual std::string colorScheme() = 0;
   // Draws the app in `scheme` ("light" or "dark"), or follows the system again for nothing. Once the
-  // change applies, `applied` gets the scheme the app draws in then, read on the thread that applies
-  // the changes in order, so a later change's answer always comes after an earlier one's.
+  // change applies, `applied` gets the scheme that change applied (for nothing, the system's scheme
+  // read as it applies), on the thread that applies the changes in order: a later change's answer
+  // always comes after an earlier one's, and an earlier one's is never the later one's scheme.
   virtual void setColorScheme(std::optional<std::string> scheme, std::function<void(std::string)> applied) = 0;
 
   // `done` gets the index of the button pressed and the text typed: for a login-password prompt,
