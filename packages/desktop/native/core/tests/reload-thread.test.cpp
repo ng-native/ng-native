@@ -311,3 +311,72 @@ TEST_CASE("a second close while the first is joining waits for the run to end") 
   second.join();
   CHECK(doneWhenSecondReturned);
 }
+
+TEST_CASE("a close reentered from the UI queue a close serves waits for the run, and one from its then does not") {
+  UiQueue ui;
+  ngn::ReloadThread reload(ui.poster());
+  std::atomic<bool> release{false};
+  std::atomic<bool> workerDone{false};
+  bool doneWhenInnerReturned = false;
+  bool innerFromThenReturned = false;
+  reload.start(
+      [&] {
+        waitFor(release);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        workerDone = true;
+      },
+      [&](bool) {
+        // From the then close runs: returns at once rather than wait on itself.
+        reload.close([] {});
+        innerFromThenReturned = true;
+      });
+  bool reentered = false;
+  reload.close([&] {
+    if (!reentered) {
+      reentered = true;
+      release = true;
+      // A task on the UI queue the outer close serves, closing again on the same thread.
+      reload.close([&] { ui.serve(); });
+      doneWhenInnerReturned = workerDone;
+    }
+    ui.serve();
+  });
+  CHECK(doneWhenInnerReturned);
+  CHECK(innerFromThenReturned);
+}
+
+TEST_CASE("a second close waits while the first runs a dropped run's then") {
+  UiQueue ui;
+  ngn::ReloadThread reload(ui.poster());
+  std::atomic<bool> release{false};
+  std::atomic<bool> inDropped{false};
+  std::atomic<bool> leaveDropped{false};
+  std::atomic<bool> droppedDone{false};
+  reload.start([&] { waitFor(release); }, [](bool) {});
+  reload.start([] {},
+               [&](bool) {
+                 inDropped = true;
+                 waitFor(leaveDropped);
+                 droppedDone = true;
+               });
+  std::thread first([&] {
+    reload.close([&] {
+      release = true;
+      ui.serve();
+    });
+  });
+  waitFor(inDropped);
+  std::atomic<bool> secondReturned{false};
+  bool droppedDoneWhenSecondReturned = false;
+  std::thread second([&] {
+    reload.close([&] { ui.serve(); });
+    droppedDoneWhenSecondReturned = droppedDone;
+    secondReturned = true;
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  CHECK_FALSE(secondReturned);
+  leaveDropped = true;
+  first.join();
+  second.join();
+  CHECK(droppedDoneWhenSecondReturned);
+}

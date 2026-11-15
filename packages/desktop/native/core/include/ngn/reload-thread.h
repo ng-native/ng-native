@@ -61,21 +61,38 @@ class ReloadThread {
   void close(const std::function<void()> &service) {
     // A then run below can destroy this owner, so only this local reference to the state is used.
     auto state = state_;
+    auto self = std::this_thread::get_id();
     std::thread thread;
     std::shared_ptr<std::atomic<bool>> finished;
     Then then;
     std::optional<Run> dropped;
     {
-      std::lock_guard lock(state->mutex);
+      std::unique_lock lock(state->mutex);
+      // Reentered on the thread a close is already ending the run on: from a callback that close
+      // runs, there is nothing it may wait for; from the UI queue it serves while it waits, it waits
+      // for the run to end too, serving the queue, and leaves the join to that close.
+      if (state->joiner == self) {
+        auto ending = state->joinerInCallback ? nullptr : state->joining;
+        lock.unlock();
+        while (ending && !*ending) {
+          service();
+          std::this_thread::yield();
+        }
+        return;
+      }
       state->closed = true;
       dropped = std::move(state->waiting);
       state->waiting.reset();
-      if (state->thread.joinable() && state->thread.get_id() != std::this_thread::get_id()) {
+      if (state->thread.joinable() && state->thread.get_id() != self) {
         thread = std::move(state->thread);
         finished = state->finished;
         then = std::move(state->then);
         state->then = nullptr;
-        state->joiner = std::this_thread::get_id();
+      }
+      // Until its callbacks have run, this close is the one ending the run: another close waits.
+      if (thread.joinable() || dropped) {
+        state->joiner = self;
+        state->joining = finished;
       }
     }
     if (thread.joinable()) {
@@ -85,20 +102,33 @@ class ReloadThread {
       }
       thread.join();
       if (then) {
+        {
+          std::lock_guard lock(state->mutex);
+          state->joinerInCallback = true;
+        }
         then(true);
       }
-      std::lock_guard lock(state->mutex);
-      state->joiner = std::thread::id();
     }
     if (dropped && dropped->then) {
+      {
+        std::lock_guard lock(state->mutex);
+        state->joinerInCallback = true;
+      }
       dropped->then(false);
     }
-    // A `then` the UI queue is running on another thread, or a run another close is still joining
+    {
+      std::lock_guard lock(state->mutex);
+      if (state->joiner == self) {
+        state->joiner = std::thread::id();
+        state->joining = nullptr;
+        state->joinerInCallback = false;
+      }
+    }
+    // A `then` the UI queue is running on another thread, or a run another close is still ending
     // (this close not called from either).
     while (true) {
       {
         std::lock_guard lock(state->mutex);
-        auto self = std::this_thread::get_id();
         bool thenDone = state->thenThread == std::thread::id() || state->thenThread == self;
         bool joinDone = state->joiner == std::thread::id() || state->joiner == self;
         if (thenDone && joinDone) {
@@ -129,8 +159,11 @@ class ReloadThread {
     bool closed{false};
     // The thread running a `then` from the UI queue, if one is.
     std::thread::id thenThread;
-    // The thread whose close is joining the run and running its `then`, if one is.
+    // The thread whose close is ending the run (joining it, then running its and a dropped run's
+    // callbacks), if one is; the run it waits on; and whether it is inside one of those callbacks.
     std::thread::id joiner;
+    std::shared_ptr<std::atomic<bool>> joining;
+    bool joinerInCallback{false};
   };
 
   // Under the state's lock.
