@@ -133,10 +133,7 @@ ngn::NotificationAuthorization authorizationOf(UNAuthorizationStatus status) {
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
   auto request = fromRecord(notification.request);
   if (request.badge && self.badge) {
-    int count = *request.badge;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      self.badge(count);
-    });
+    self.badge(*request.badge);
   }
   self.events->received(notification.date.timeIntervalSince1970 * 1000, request);
   completionHandler(UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList |
@@ -163,7 +160,7 @@ class AppKitNotificationCenter final : public NotificationCenter {
       delegate_ = [NGNNotificationDelegate new];
       delegate_.events = std::move(events);
       delegate_.badge = ^(int count) {
-        setBadgeNow(count);
+        setBadge(count);
       };
       UNUserNotificationCenter.currentNotificationCenter.delegate = delegate_;
     }
@@ -190,16 +187,7 @@ class AppKitNotificationCenter final : public NotificationCenter {
   }
 
   void add(const NotificationRequest &request, std::function<void(std::optional<std::string>)> done) override {
-    UNMutableNotificationContent *content = [UNMutableNotificationContent new];
-    content.title = ns(request.title);
-    content.subtitle = ns(request.subtitle);
-    content.body = ns(request.body);
-    if (request.sound == "default") {
-      content.sound = UNNotificationSound.defaultSound;
-    } else if (!request.sound.empty()) {
-      content.sound = [UNNotificationSound soundNamed:ns(request.sound)];
-    }
-    content.userInfo = @{kRequestKey : ns(folly::toJson(requestRecord(request)))};
+    UNMutableNotificationContent *content = notificationContent(request);
     UNNotificationRequest *un = [UNNotificationRequest requestWithIdentifier:ns(request.identifier)
                                                                       content:content
                                                                       trigger:triggerOf(request.trigger)];
@@ -266,14 +254,17 @@ class AppKitNotificationCenter final : public NotificationCenter {
   }
 
   int badge() override {
-    return badge_.load();
+    return badge_->load();
   }
 
   void setBadge(int count) override {
-    // Read back at once; the Dock draws it on the main thread.
-    badge_ = count;
+    // Read back at once; the Dock draws it on the main thread, whatever the count is by then, so
+    // an earlier call's drawing never stands for a later one.
+    *badge_ = count;
+    auto badge = badge_;
     dispatch_async(dispatch_get_main_queue(), ^{
-      setBadgeNow(count);
+      std::string label = badgeLabel(badge->load());
+      NSApp.dockTile.badgeLabel = label.empty() ? nil : ns(label);
     });
   }
 
@@ -286,18 +277,30 @@ class AppKitNotificationCenter final : public NotificationCenter {
     return out;
   }
 
-  void setBadgeNow(int count) {
-    badge_ = count;
-    std::string label = badgeLabel(count);
-    NSApp.dockTile.badgeLabel = label.empty() ? nil : ns(label);
-  }
-
   bool canPost_{false};
-  std::atomic<int> badge_{0};
+  std::shared_ptr<std::atomic<int>> badge_ = std::make_shared<std::atomic<int>>(0);
   NGNNotificationDelegate *delegate_ = nil;
 };
 
 } // namespace
+
+UNMutableNotificationContent *notificationContent(const NotificationRequest &request) {
+  UNMutableNotificationContent *content = [UNMutableNotificationContent new];
+  content.title = ns(request.title);
+  content.subtitle = ns(request.subtitle);
+  content.body = ns(request.body);
+  if (request.sound == "default") {
+    content.sound = UNNotificationSound.defaultSound;
+  } else if (!request.sound.empty()) {
+    content.sound = [UNNotificationSound soundNamed:ns(request.sound)];
+  }
+  // Set by the OS as it delivers, so it applies with the app not running too; 0 clears it.
+  if (request.badge) {
+    content.badge = @(*request.badge);
+  }
+  content.userInfo = @{kRequestKey : ns(folly::toJson(requestRecord(request)))};
+  return content;
+}
 
 std::shared_ptr<NotificationCenter> makeNotificationCenter(std::shared_ptr<NotificationEvents> events) {
   return std::make_shared<AppKitNotificationCenter>(std::move(events));
