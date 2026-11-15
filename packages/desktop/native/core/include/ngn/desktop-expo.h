@@ -45,7 +45,8 @@ class SecretStore {
 
 // Items in `now`, with what `old` still has moved over as it is read: the Data Protection keychain
 // over the file keychain an app used before it was signed with a Team ID. A write or a removal
-// takes the old copy away too, so it never comes back.
+// takes the old copy away too, so it never comes back; a removal that cannot tell the old store
+// has none fails.
 class MovingSecretStore final : public SecretStore {
  public:
   MovingSecretStore(std::shared_ptr<SecretStore> now, std::shared_ptr<SecretStore> old)
