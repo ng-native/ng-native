@@ -2,6 +2,7 @@
 #include "../scrollers.h"
 
 #include <doctest/doctest.h>
+#include <objc/runtime.h>
 
 namespace {
 
@@ -85,7 +86,23 @@ TEST_CASE("a scroll view with scrolling disabled lets a wheel turn go past it, a
   CHECK(above.wheels == 1);
   CHECK(scroll.contentView.bounds.origin.y == 0);
 
+  // Enabled, the wheel is NSScrollView's own to scroll with. A synthesized wheel moves no
+  // offscreen scroll view, so its hand-off to AppKit is counted instead.
   scroll.scrollingDisabled = NO;
-  [document scrollWheel:wheel];
+  Method method = class_getInstanceMethod(NSScrollView.class, @selector(scrollWheel:));
+  IMP original = method_getImplementation(method);
+  __block int handled = 0;
+  IMP counting = imp_implementationWithBlock(^(NSScrollView *view, NSEvent *event) {
+    handled++;
+    ((void (*)(id, SEL, NSEvent *))original)(view, @selector(scrollWheel:), event);
+  });
+  method_setImplementation(method, counting);
+  @try {
+    [document scrollWheel:wheel];
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(counting);
+  }
   CHECK(above.wheels == 1);
+  CHECK(handled == 1);
 }
