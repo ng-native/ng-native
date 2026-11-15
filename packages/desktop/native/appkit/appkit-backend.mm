@@ -46,6 +46,10 @@ void AppKitBackend::runOnUiThread(std::function<void()> task) {
   });
 }
 
+bool AppKitBackend::onUiThread() const {
+  return NSThread.isMainThread;
+}
+
 void AppKitBackend::createView(const ShadowView &view) {
   NGNView *created = NGNMakeView(view);
   views_[@(view.tag)] = created;

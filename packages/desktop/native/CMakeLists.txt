@@ -81,6 +81,7 @@ add_library(ngn_core STATIC
     core/src/app-windows.cpp
     core/src/back-swipe.cpp
     core/src/bytes.cpp
+    core/src/control-sizes.cpp
     core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp
     core/src/default-menu.cpp

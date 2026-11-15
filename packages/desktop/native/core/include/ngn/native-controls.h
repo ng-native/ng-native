@@ -4,8 +4,9 @@
 // `<search-field>` (`@ng-native/expo`'s NgNativeSearchField view).
 //
 // Every control has the same props class, the union of what the elements commit, and measures its
-// intrinsic size for Yoga through the ControlMeasurer in the ContextContainer, as a toolkit draws
-// it at its `controlSize`. A size the app sets in its style wins, as it does for any leaf.
+// intrinsic size for Yoga as a toolkit draws it at its `controlSize`. A toolkit measures on its UI
+// thread only, so layout reads the sizes the ControlSizes in the ContextContainer holds
+// (control-sizes.h). A size the app sets in its style wins, as it does for any leaf.
 #pragma once
 
 #include "ngn/desktop-props.h"
@@ -86,20 +87,24 @@ class NativeControlProps final : public facebook::react::ViewProps, public HasDe
   bool italic{false};
 };
 
-// How big a toolkit draws a control. Called on the JS thread, while the UI thread draws.
+// How big a toolkit draws a control. Called on the UI thread only, by ControlSizes.
 class ControlMeasurer {
  public:
   virtual ~ControlMeasurer() = default;
   virtual facebook::react::Size measure(ControlKind kind, const NativeControlProps &props) const = 0;
 };
 
-inline constexpr const char *kControlMeasurerKey = "ngn.ControlMeasurer";
+// A control's state: how many times a measurement made after its layout has asked for another.
+// Each one is a state update, which lays the control out again with the size (control-sizes.h).
+struct NativeControlState {
+  int measured{0};
+};
 
-inline void installControlMeasurer(
-    facebook::react::ContextContainer &context,
-    std::shared_ptr<const ControlMeasurer> measurer) {
-  context.insert(kControlMeasurerKey, std::move(measurer));
-}
+// The size layout gives a control: the one ControlSizes holds for its inputs (control-sizes.cpp).
+facebook::react::Size measureControl(
+    const facebook::react::ShadowNode &node,
+    ControlKind kind,
+    const facebook::react::ContextContainer *context);
 
 // The control a Fabric component name is, if it is one.
 std::optional<ControlKind> controlKind(std::string_view componentName);
@@ -112,10 +117,13 @@ extern const char DatePickerComponentName[];
 extern const char SearchFieldComponentName[];
 
 template <const char *Name, ControlKind Kind>
-class NativeControlShadowNode final
-    : public facebook::react::
-          ConcreteViewShadowNode<Name, NativeControlProps, facebook::react::ViewEventEmitter> {
-  using Base = facebook::react::ConcreteViewShadowNode<Name, NativeControlProps, facebook::react::ViewEventEmitter>;
+class NativeControlShadowNode final : public facebook::react::ConcreteViewShadowNode<
+                                          Name,
+                                          NativeControlProps,
+                                          facebook::react::ViewEventEmitter,
+                                          NativeControlState> {
+  using Base = facebook::react::
+      ConcreteViewShadowNode<Name, NativeControlProps, facebook::react::ViewEventEmitter, NativeControlState>;
 
  public:
   using Base::Base;
@@ -131,12 +139,7 @@ class NativeControlShadowNode final
       const facebook::react::LayoutContext &layoutContext,
       const facebook::react::LayoutConstraints &layoutConstraints) const override {
     const auto &context = this->getContextContainer();
-    auto measurer =
-        context ? context->template find<std::shared_ptr<const ControlMeasurer>>(kControlMeasurerKey) : std::nullopt;
-    if (!measurer || !*measurer) {
-      return layoutConstraints.clamp({0, 0});
-    }
-    return layoutConstraints.clamp((*measurer)->measure(Kind, this->getConcreteProps()));
+    return layoutConstraints.clamp(measureControl(*this, Kind, context.get()));
   }
 };
 

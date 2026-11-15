@@ -18,6 +18,10 @@ namespace ngn::testing {
 class FakeBackend final : public MountingBackend, public DesktopPropsSink {
  public:
   void runOnUiThread(std::function<void()> task) override;
+  // True inside a task drain runs.
+  bool onUiThread() const override {
+    return draining_ > 0;
+  }
   void createView(const ShadowView &view) override;
   void deleteView(SurfaceId surfaceId, Tag tag) override;
   void insertChild(SurfaceId surfaceId, Tag parent, Tag child, int index) override;
@@ -57,6 +61,7 @@ class FakeBackend final : public MountingBackend, public DesktopPropsSink {
 
  private:
   std::deque<std::function<void()>> tasks_;
+  int draining_{0};
 };
 
 // Measures text as `charWidth` per UTF-8 byte on one line of `lineHeight`, and counts its calls.
