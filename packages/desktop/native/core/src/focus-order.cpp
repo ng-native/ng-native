@@ -132,9 +132,30 @@ void collect(
     std::optional<Tag> focused,
     std::vector<Candidate> &out);
 
+// Whether `tag`, or a view between it and the composite `composite` (an item wrapping the view
+// that takes the focus), is selected or checked.
+bool selectedIn(const ViewTree &tree, Tag tag, Tag composite) {
+  for (auto on : tree.chain(tag, composite)) {
+    if (on != composite && selectedOrChecked(*tree.find(on))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Whether `tag`, under the composite `composite`, is drawn as collect walks: each view down to it
+// shown, not covered and in this container.
+bool drawnIn(const ViewTree &tree, Tag tag, Tag composite, Tag root) {
+  auto path = tree.chain(tag, composite);
+  return !path.empty() && std::all_of(path.begin(), path.end(), [&](Tag on) {
+    return on == composite || walked(tree, on, root, tree.find(on));
+  });
+}
+
 // A composite's Tab candidates become one stop: the focused view when it is in the composite, else
-// its first selected or checked candidate, else its first. Text inputs keep their own.
-void collectComposite(
+// its first selected or checked candidate, else its first. Text inputs keep their own. False when
+// the composite has no stop.
+bool collectComposite(
     const ViewTree &tree,
     Tag tag,
     Tag root,
@@ -147,7 +168,7 @@ void collectComposite(
   }
   std::optional<Candidate> stop;
   bool focusedInside = false;
-  if (focused && *focused != tag && !tree.chain(*focused, tag).empty()) {
+  if (focused && *focused != tag && drawnIn(tree, *focused, tag, root)) {
     const auto *node = tree.find(*focused);
     focusedInside = node != nullptr && reach == TabReach::All && canFocus(*node) && !isTextInput(*node);
     if (focusedInside) {
@@ -155,7 +176,7 @@ void collectComposite(
     }
   }
   for (const auto &c : inside) {
-    if (!stop && selectedOrChecked(*tree.find(c.tag)) && !isTextInput(*tree.find(c.tag))) {
+    if (!stop && selectedIn(tree, c.tag, tag) && !isTextInput(*tree.find(c.tag))) {
       stop = c;
     }
   }
@@ -177,6 +198,7 @@ void collectComposite(
   if (!placed && stop) {
     out.push_back(*stop);
   }
+  return stop.has_value();
 }
 
 void collect(
@@ -190,12 +212,16 @@ void collect(
   if (!walked(tree, tag, root, node)) {
     return;
   }
+  if (compositeOf(*node)) {
+    // One stop: an item's, or, with none, the composite's own when it takes the Tab.
+    auto at = out.size();
+    if (!collectComposite(tree, tag, root, reach, focused, out) && takesTab(*node, reach)) {
+      out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), {tag, tabIndexOf(*node)});
+    }
+    return;
+  }
   if (takesTab(*node, reach)) {
     out.push_back({tag, tabIndexOf(*node)});
-  }
-  if (compositeOf(*node)) {
-    collectComposite(tree, tag, root, reach, focused, out);
-    return;
   }
   for (auto child : node->children) {
     collect(tree, child, root, reach, focused, out);

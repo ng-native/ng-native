@@ -355,3 +355,47 @@ TEST_CASE("a composite is one Tab stop: the focused item, else the selected or c
   // Only text inputs: the composites are passed over.
   CHECK(t.order(TabReach::TextInputs) == Tags{2, 13});
 }
+
+TEST_CASE("a focused composite item that is no longer drawn is not the composite's stop") {
+  Tree t;
+  t.add(2, 1, "View", view(withRole("tablist")));
+  t.add(3, 2, "View", item("tab", 0));
+  t.add(4, 2, "View", view(folly::dynamic::object()));
+  t.add(5, 4, "View", item("tab", -1));
+  t.add(6, 1, "TextInput", std::make_shared<const ViewProps>());
+  CHECK(ngn::tabOrder(t.tree, 1, TabReach::All, 5) == Tags{5, 6});
+  // The focused tab's wrapper is hidden: the stop is the first drawn tab.
+  auto hidden = t.tree.find(4)->view;
+  hidden.layoutMetrics.displayType = DisplayType::None;
+  t.tree.update(hidden);
+  CHECK(ngn::tabOrder(t.tree, 1, TabReach::All, 5) == Tags{3, 6});
+  // Covered, or another container's content, the same.
+  hidden.layoutMetrics.displayType = DisplayType::Flex;
+  t.tree.update(hidden);
+  t.tree.setCovered(4, true);
+  CHECK(ngn::tabOrder(t.tree, 1, TabReach::All, 5) == Tags{3, 6});
+  t.tree.setCovered(4, false);
+  t.tree.addContainerRoot(4);
+  CHECK(ngn::tabOrder(t.tree, 1, TabReach::All, 5) == Tags{3, 6});
+}
+
+TEST_CASE("a focusable composite is one Tab stop with its items, and its own when it has none") {
+  Tree t;
+  t.add(2, 1, "View", view(folly::dynamic::object("role", "tablist")("focusable", true)));
+  t.add(3, 2, "View", item("tab", 0));
+  t.add(4, 2, "View", item("tab", -1));
+  t.add(5, 1, "View", view(folly::dynamic::object("role", "radiogroup")("focusable", true)));
+  t.add(6, 1, "TextInput", std::make_shared<const ViewProps>());
+  CHECK(t.order() == Tags{3, 5, 6});
+}
+
+TEST_CASE("a composite's stop is the item that is checked, though the view taking the focus is inside it") {
+  Tree t;
+  t.add(2, 1, "View", view(withRole("radiogroup")));
+  // Radio wrappers holding the state, each with a focusable view inside.
+  t.add(3, 2, "View", view(withRole("radio")));
+  t.add(4, 3, "View", view(folly::dynamic::object("focusable", true)));
+  t.add(5, 2, "View", view(folly::dynamic::object("role", "radio")("accessibilityState", folly::dynamic::object("checked", true))));
+  t.add(6, 5, "View", view(folly::dynamic::object("focusable", true)));
+  CHECK(t.order() == Tags{6});
+}
