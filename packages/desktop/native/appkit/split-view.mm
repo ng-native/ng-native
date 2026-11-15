@@ -222,19 +222,60 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   }
   auto *pane = (NGNSplitPaneView *)child;
   pane.split = self;
-  if ([pane.componentName isEqualToString:@"NgNativeSidebar"]) {
+  BOOL sidebar = [pane.componentName isEqualToString:@"NgNativeSidebar"];
+  NSView *old = sidebar ? _sidebarContainer : _contentContainer;
+  NSView *container = [self containerFor:pane];
+  if (sidebar) {
     _sidebar = pane;
-    _sidebarContainer = [self containerFor:pane];
+    _sidebarContainer = container;
   } else {
     _content = pane;
-    _contentContainer = [self containerFor:pane];
+    _contentContainer = container;
   }
-  if (_decided) {
+  // A pane mounted in place of one the split already shows takes its place there.
+  if (old != nil && (_controller != nil || _plain != nil)) {
+    [self replaceContainer:old with:container sidebar:sidebar];
+  } else if (_decided) {
     [self build];
   }
 }
 
+- (void)replaceContainer:(NSView *)old with:(NSView *)container sidebar:(BOOL)sidebar {
+  if (_plain != nil) {
+    NSUInteger at = [_plain.arrangedSubviews indexOfObjectIdenticalTo:old];
+    [old removeFromSuperview];
+    [_plain insertArrangedSubview:container atIndex:at == NSNotFound ? (sidebar ? 0 : _plain.arrangedSubviews.count) : at];
+    [_plain adjustSubviews];
+    [self paneChanged:_sidebar];
+    return;
+  }
+  if (sidebar) {
+    NSView *sideView = _sidebarItem.viewController.view;
+    [old removeFromSuperview];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+    [sideView addSubview:container];
+    [NSLayoutConstraint activateConstraints:@[
+      [container.topAnchor constraintEqualToAnchor:sideView.safeAreaLayoutGuide.topAnchor],
+      [container.bottomAnchor constraintEqualToAnchor:sideView.bottomAnchor],
+      [container.leadingAnchor constraintEqualToAnchor:sideView.leadingAnchor],
+      [container.trailingAnchor constraintEqualToAnchor:sideView.trailingAnchor],
+    ]];
+    [self paneChanged:_sidebar];
+  } else {
+    // A split view item keeps the view its controller had as it was added: the item is replaced.
+    NSViewController *main = [NSViewController new];
+    main.view = container;
+    [_controller removeSplitViewItem:_controller.splitViewItems.lastObject];
+    [_controller addSplitViewItem:[NSSplitViewItem splitViewItemWithViewController:main]];
+  }
+}
+
 - (void)unmountChild:(NGNView *)child {
+  if (child == _sidebar) {
+    _sidebar = nil;
+  } else if (child == _content) {
+    _content = nil;
+  }
   [child removeFromSuperview];
   if (gContainerRootChanged) {
     gContainerRootChanged(child.reactTag, NO);
