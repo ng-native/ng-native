@@ -158,12 +158,17 @@ NSString *typedWith(NSString *base, NSEventModifierFlags flags) {
   return base;
 }
 
-// A key press and its release, to the modal window while one runs, else the key window (a red box
-// or a sheet, not only the app's).
+// The window the keyboard's steps go to: the modal window while one runs, else the key window (a
+// red box or a sheet, not only the app's), else the script's window.
+NSWindow *keyboardWindow(NSWindow *scriptWindow) {
+  return NSApp.modalWindow != nil ? NSApp.modalWindow
+      : NSApp.keyWindow != nil    ? NSApp.keyWindow
+                                  : scriptWindow;
+}
+
+// A key press and its release, to the keyboard's window.
 void sendKey(NSWindow *scriptWindow, const InputStep &step) {
-  NSWindow *window = NSApp.modalWindow != nil ? NSApp.modalWindow
-      : NSApp.keyWindow != nil                ? NSApp.keyWindow
-                                              : scriptWindow;
+  NSWindow *window = keyboardWindow(scriptWindow);
   NSString *characters = step.key == "escape" ? @"\x1b"
       : step.key == "return"                  ? @"\r"
       : step.key == "space"                   ? @" "
@@ -208,11 +213,12 @@ void sendKey(NSWindow *scriptWindow, const InputStep &step) {
   }
 }
 
-// Types `text` into the key window's focused field (the script's window's when none is key) a character at a time, each as the input
-// method puts a keystroke's character, so the text system's substitutions and capitals follow
-// each one as they follow typing.
+// Types `text` into the focused field of the keyboard's window (the modal window, else the key
+// window, else the script's window) a character at a time, each as the input method puts a
+// keystroke's character, so the text system's substitutions and capitals follow each one as they
+// follow typing.
 void typeText(NSWindow *window, NSString *text) {
-  id responder = (NSApp.keyWindow != nil ? NSApp.keyWindow : window).firstResponder;
+  id responder = keyboardWindow(window).firstResponder;
   if (![responder conformsToProtocol:@protocol(NSTextInputClient)]) {
     return;
   }
