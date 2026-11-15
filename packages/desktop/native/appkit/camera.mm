@@ -317,7 +317,7 @@ AVCaptureDevice *cameraFor(const std::string &facing) {
   // is suspended and gives no frames, so another camera is taken, or none.
   std::vector<CameraCandidate> candidates;
   for (AVCaptureDevice *device in all) {
-    candidates.push_back({.builtIn = [device.deviceType isEqualToString:AVCaptureDeviceTypeBuiltInWideAngleCamera],
+    candidates.push_back({.builtIn = static_cast<bool>([device.deviceType isEqualToString:AVCaptureDeviceTypeBuiltInWideAngleCamera]),
                           .suspended = static_cast<bool>(device.suspended)});
   }
   int chosen = chooseCamera(candidates);
