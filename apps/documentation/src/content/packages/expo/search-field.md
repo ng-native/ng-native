@@ -5,14 +5,16 @@ summary: The platform's own search field anywhere a view can go, such as a filte
 
 # Search field
 
-`<search-field>` is the system search field as a view of its own: UIKit's `UISearchBar` on iOS and
-AndroidX's `SearchView` on Android. [`<native-search-bar>`](/packages/router/header#search) is the
-one in a navigation bar; this one goes anywhere else, such as a bottom sheet, which has no
-navigation bar, a page, or the top of a list.
+`<search-field>` is the system search field as a view of its own: UIKit's `UISearchBar` on iOS,
+AndroidX's `SearchView` on Android and AppKit's `NSSearchField` on macOS.
+[`<native-search-bar>`](/packages/router/header#search) is the one in a navigation bar; this one
+goes anywhere else, such as a bottom sheet, which has no navigation bar, a page, or the top of a
+list.
 
 It comes with `@ng-native/expo`, whose native half draws it, so it needs an app built since
 `@ng-native/expo` was installed: `npx expo run:ios`, `npx expo run:android`, or a new EAS build.
-Expo Go cannot load it, so there it draws nothing and logs a warning in development.
+Expo Go cannot load it, so there it draws nothing and logs a warning in development. On macOS the
+desktop host draws it.
 
 ```ts
 import { Component, computed, signal } from '@angular/core';
@@ -52,12 +54,19 @@ The events are `<native-search-bar>`'s. The text is a two-way `value` rather tha
   nothing, as with a text input.
 - **`disabled`** - refuse input and show the field dimmed.
 - **`placeholder`** - shown while the field is empty.
+- **`controlSize`** - macOS: `'mini'`, `'small'`, `'regular'` or `'large'`, the size AppKit draws
+  the field at. iOS 26 and later too.
 - **`showsCancelButton`** - iOS: whether the Cancel button shows. Unset, it shows while the field
-  has the keyboard. Android's search field has no Cancel button.
-- **`autoCapitalize`** - `'none'`, `'words'`, `'sentences'` or `'characters'`. iOS.
-- **`tintColor`** - the colour of the cursor and the Cancel button. iOS.
-- **`search`** - the keyboard's search key, with the text. The field gives up the keyboard.
-- **`cancel`** - iOS: the Cancel button. The field is emptied and gives up the keyboard.
+  has the keyboard. Android's search field has no Cancel button, and macOS's clear button shows
+  while the field has text.
+- **`autoCapitalize`** - `'none'`, `'words'`, `'sentences'` or `'characters'`. iOS and macOS;
+  `'sentences'` follows the user's setting on macOS.
+- **`tintColor`** - the colour of the cursor and the Cancel button on iOS, and of the cursor on
+  macOS.
+- **`search`** - the keyboard's search key, or Return on macOS, with the text. On iOS and Android
+  the field gives up the keyboard.
+- **`cancel`** - the field was emptied: by the Cancel button on iOS, which also takes the keyboard
+  away, or by the clear button or Escape on macOS, which leave it.
 - **`searchFocus`** and **`searchBlur`** - the field taking the keyboard and giving it up.
 - **`touch`** - the field gave up the keyboard, which is when a form marks it touched.
 
@@ -65,7 +74,8 @@ The events are `<native-search-bar>`'s. The text is a two-way `value` rather tha
 and the value. Reach them with `viewChild(SearchField)`.
 
 The element is 56 points tall by default, the height of the system's own field. A height in a style
-or a class replaces it.
+or a class replaces it. On macOS the field is drawn at its control size's own height, centred in the
+element; a desktop layout usually gives the element a height near the field's own.
 
 The field's text and placeholder take the `font-family`, `font-size`, `font-weight` and `font-style`
 its CSS resolves to, from a class on the field, its own style, or what it inherits, as a `<text>`

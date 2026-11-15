@@ -255,6 +255,16 @@ export class Home {
       title: 'Device',
       blurb: 'keyboard, screen, theme, app state, a11y settings',
     },
+    {
+      path: '/desktop',
+      title: 'Desktop',
+      blurb: 'a menu bar of its own, shortcuts, context menus, windows, drag and drop, undo',
+    },
+    {
+      path: '/desktop-split',
+      title: 'Split view',
+      blurb: 'a sidebar beside the content, a stack on a phone',
+    },
     { path: '/worklets', title: 'Worklets', blurb: 'reanimated, on the UI thread' },
     {
       path: '/native-gestures',

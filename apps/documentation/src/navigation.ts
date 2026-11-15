@@ -98,6 +98,18 @@ export const GUIDE: NavSection = {
         { path: 'guide/localization-transloco', title: 'Using Transloco' },
       ],
     },
+    {
+      path: 'guide/desktop',
+      title: 'Build for the Mac',
+      children: [
+        { path: 'guide/desktop-differences', title: 'What differs' },
+        { path: 'guide/desktop-sizing', title: 'Sizing for the Mac' },
+        { path: 'guide/desktop-imports', title: 'Where APIs come from' },
+        { path: 'guide/desktop-support', title: 'What each OS has' },
+        { path: 'guide/desktop-electron', title: 'Coming from Electron' },
+        { path: 'guide/desktop-github-actions', title: 'Package in GitHub Actions' },
+      ],
+    },
     { path: 'guide/deployment', title: 'Deployment' },
     { path: 'guide/ota-updates', title: 'OTA updates' },
     { path: 'guide/updating', title: 'Updating an app' },
@@ -292,6 +304,11 @@ export const PACKAGES: NavSection = {
         { path: 'packages/nativescript/calling-apis', title: 'Calling native APIs' },
         { path: 'packages/nativescript/views', title: 'Native views' },
       ],
+    },
+    {
+      path: 'packages/desktop',
+      title: 'Desktop',
+      summary: 'The macOS host, and the command that builds, runs and packages the app',
     },
     {
       path: 'packages/eslint-plugin',

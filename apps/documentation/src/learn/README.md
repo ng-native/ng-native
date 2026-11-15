@@ -38,7 +38,7 @@ an empty module, so it fails on its own rather than stopping every check.
 starter, where the first step's must not. Each step's snapshot must pass the checks of that step
 and those before it, and fail at least one of the next step's, so solving a step never gives away
 the one after. `lessons.android.test.ts` runs them again on the
-Android engine: the preview checks on whichever platform the phone shows, so a check has to pass on
+Android engine, and `lessons.macos.test.ts` on the macOS one, so every lesson's app runs on a Mac: the preview checks on whichever platform the phone shows, so a check has to pass on
 both. The suite itself is `lesson-suite.ts`. It also checks that a starter's CSS gives a device
 build nothing to say, since the preview holds those notes back until a stylesheet changes.
 

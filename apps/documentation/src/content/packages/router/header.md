@@ -278,6 +278,12 @@ its CSS resolves to. There is no scope bar and there are no search tokens either
 react-native-screens has neither: a scope is a segmented control under the header, and a token is
 text.
 
+On macOS the field is the window toolbar's search item (an `NSSearchToolbarItem`) at the
+trailing end, which shrinks to a button in a narrow window. Return is the search key, Escape is the
+Cancel button, and the field's clear button empties the query. It takes `placeholder`,
+`autoCapitalize`, `textColor` and `tintColor` (the cursor); `placement`, `hideWhenScrolling`,
+`obscureBackground`, `hideNavigationBar` and `cancelButtonText` change nothing there.
+
 In a test, the field is found by its view name, `fabric.find('RNSSearchBar')`, and takes typing
 from `fireEvent.changeText` or `userEvent.type` like a text field. The commands it sends, such as
 `setText` for a query set from code, are on `fabric.commands`.

@@ -4,6 +4,10 @@
     "slug": "notes-example",
     "scheme": "notes",
     "newArchEnabled": true,
+    "platforms": ["ios", "android", "macos"],
+    "experiments": {
+      "outOfTreePlatforms": true
+    },
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "dev.angularnative.notes"
@@ -11,7 +15,7 @@
     "android": {
       "package": "dev.angularnative.notes"
     },
-    "plugins": ["@ng-native/metro"],
+    "plugins": ["@ng-native/metro", "@ng-native/desktop"],
     "extra": {
       "router": {
         "root": "src/app"

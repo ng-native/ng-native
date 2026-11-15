@@ -21,6 +21,11 @@ an occasional failure, so a flaky connection is something the app actually has t
 than something to imagine. The sync toggle in Settings stands in for the "offline" a demo cannot
 otherwise switch on: turn it off, write a note, turn it back on, and watch the queue drain.
 
+On macOS the tabs are the window's sidebar, File > New Note (mod+n) makes a note, a right-click on
+a row opens a menu to open or pin it, a row drags out to another app as its text, and type, rows
+and padding take a Mac's sizes through the `macos:` variant. `src/app/desktop.test.ts` renders the
+app as on macOS.
+
 ## Run it
 
 From the repository root, after `pnpm install`:
@@ -28,6 +33,7 @@ From the repository root, after `pnpm install`:
 ```sh
 cd examples/notes
 pnpm start     # press i or a, or scan the QR code with Expo Go
+pnpm macos     # the same app on macOS, through the desktop host
 pnpm test      # Vitest in Node, no simulator
 ```
 

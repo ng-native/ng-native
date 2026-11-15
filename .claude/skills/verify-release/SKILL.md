@@ -1,6 +1,6 @@
 ---
 name: verify-release
-description: Check a release of the packages the way a new user meets it - wait for it on npm, then follow every setup route's documentation literally in fresh projects (the Expo template, the manual setup guide, the Angular CLI, Nx in both presets), run the generators and schematics, upgrade projects made on the previous release, run the results on an iOS simulator and an Android emulator, and file what breaks or what the docs get wrong. Also runs before a release against a local registry. Use when a release has just been published, when asked to check a release or the setup guides, or before cutting one.
+description: Check a release of the packages the way a new user meets it - wait for it on npm, then follow every setup route's documentation literally in fresh projects (the Expo template, the desktop template, the manual setup guide, the Angular CLI, Nx in both presets, and macOS setup in each), run the generators and schematics, upgrade projects made on the previous release, run the results on an iOS simulator and an Android emulator, and file what breaks or what the docs get wrong. Also runs before a release against a local registry. Use when a release has just been published, when asked to check a release or the setup guides, or before cutting one.
 ---
 
 # Verify a release
@@ -25,7 +25,8 @@ versions it resolved, every command, its result, and each deviation from the doc
   change, add or skip to make a route work is a finding, even if the fix is obvious.
 - **A warning is a finding until explained.** Metro warnings, `ERESOLVE`, peer warnings, a second copy
   of a package and a deprecation notice from our code have each been real bugs before.
-- **Scratch work lives outside the repo**, in `~/ngn-verify-<version>/`. It reaches several GB.
+- **Scratch work lives outside the repo**, in `~/ngn-verify-<version>/`. It reaches several GB, and
+  the desktop host's builds add to `~/Library/Caches/ng-native/desktop`.
 - **Limits:** one native build at a time, at most one simulator and one emulator. Metro on side ports
   (8130 and up) so another session's 8081 is untouched.
 - **Report, don't fix,** unless asked. Fixes go through the `fix-issue` skill afterwards.
@@ -96,6 +97,36 @@ unless their pages changed this release. Nothing automated follows `packages/ana
 or `@ng-native/analog` changed this release, follow its Setup section in the template app and open
 a page on the simulator.
 
+### The desktop routes
+
+On a Mac, the macOS setup from the published packages, each route following its page literally.
+Each runs the common checks with `expo export --platform macos` in place of `--platform all` (and
+`--platform all` too where the app also has iOS and Android), then:
+
+| Route            | Page                                          | How                                                                                                                                                               |
+| ---------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop template | `template-desktop/README.md`, `guide/desktop` | `npx create-expo-app@latest my-mac-app --template @ng-native/template-desktop`, then every command in the README in order.                                        |
+| Added to an app  | `packages/desktop.md`, Setup                  | In the Expo template app from above: `npx expo install @ng-native/desktop`, then the `app.json` and `package.json` edits the page lists, by hand from its blocks. |
+| Nx               | `packages/nx.md`, macOS                       | In the `nx-ng` workspace: `nx g @ng-native/nx:desktop <app>`, then every target the page lists for it.                                                            |
+| Angular CLI      | `packages/schematics.md`, macOS               | In the `ng-ws` workspace: `ng generate @ng-native/schematics:desktop <app>`, then every target the page lists for it.                                             |
+
+For each:
+
+- **The dev loop.** `npm start`, then `npm run macos` on a side port. The first run builds the
+  desktop host, a native build, so one at a time. The app opens with no error in the Metro log, and
+  an edit to a template and to a stylesheet reaches the window with its state kept.
+- **Packaging.** `npm run package` writes `dist/macos/<name>.app`. Launch it from Finder (`open`),
+  with Metro stopped, and screenshot its first window (`screencapture -l <window id>`).
+- **Signing.** `codesign --verify --deep --strict dist/macos/<name>.app` passes. An ad-hoc
+  signature is expected for `app`; `dmg` and `mas` need credentials and are checked only when the
+  release changed packaging.
+
+Then, from this repository on the release tag, `pnpm bench:macos` against the template's host build:
+every metric passes or carries a waiver in `scripts/bench-macos-budget.json`. A breach without one
+blocks the release; a metric it could not measure fails it as a breach does.
+
+Upgrades of a desktop app (step 4) start from the second release that has `@ng-native/desktop`.
+
 ## 4. Upgrades
 
 On each baseline from step 1, run the command `guide/updating.md` gives for it
@@ -107,7 +138,7 @@ mention, is a finding.
 
 ## 5. Devices
 
-Every route that passed step 3 runs on the **iOS simulator** in Expo Go of the SDK it is on (download
+The desktop routes ran on this Mac in step 3. Every other route that passed step 3 runs on the **iOS simulator** in Expo Go of the SDK it is on (download
 it from `https://api.expo.dev/v2/versions/latest`, `data.sdkVersions['<sdk>.0.0'].iosClientUrl`, if
 the installed one differs), opened with `xcrun simctl openurl <udid> exp://127.0.0.1:<port>`. Use a
 private simulator and idb, as `devices.md` describes. On each:

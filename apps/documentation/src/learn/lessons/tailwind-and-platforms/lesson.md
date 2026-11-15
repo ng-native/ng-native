@@ -68,6 +68,10 @@ These are design choices, not platform rules:
 Then add `android:rounded-md` to the pressable in `habit-row.ts`, for squarer corners on Android.
 Switch the preview between iOS and Android to compare.
 
+The same app runs on macOS through the desktop host, where `macos:` matches `platform-macos`. A Mac
+reads smaller type and tighter rows than a phone, so `macos:text-[13px]` or `macos:py-2` is how an
+app reaches Mac sizes. The preview shows a phone, so these change nothing in it.
+
 ## Follow the phone into dark mode
 
 `dark:` applies beneath an element with the `dark` class. In an app generated from the template,

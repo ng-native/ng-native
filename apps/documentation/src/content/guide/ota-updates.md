@@ -23,6 +23,19 @@ server you host. The [Updates](/packages/expo/updates) service wraps it: `check(
 update and `apply()` restarts the app into it. That page covers the install and the service's
 state.
 
+## On macOS
+
+EAS Update does not update macOS apps. A packaged Mac app takes Expo Updates (protocol 1) from a
+server you host, at the `updates.url` in `app.json`: the desktop host downloads the launch asset
+and the update's other assets, checks each against the manifest's hash, and, with
+`updates.codeSigningCertificate` set, checks the manifest's signature. An update whose launch
+crashes is not run again. The [Updates](/packages/expo/updates) service is the same on a Mac:
+`check()` and `apply()`, with `enabled` false in development and without an `updates.url`.
+
+A `dmg` packaged with `--feed-url` also embeds Sparkle, which replaces the whole app, native code
+included, rather than its bundle: see
+[A new version of the whole app](/packages/expo/updates#a-new-version-of-the-whole-app).
+
 ## HotCodePush
 
 HotCodePush, the over-the-air (OTA) update service for React Native, Expo, Capacitor and Cordova,

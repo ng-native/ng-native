@@ -5,9 +5,10 @@
  * place, passes the checks up to that step and not the next step's, so it solves its own step and
  * gives away nothing after it.
  *
- * Run twice, by `lessons.test.ts` and `lessons.android.test.ts`, because the preview runs the
- * checks on whichever platform the phone is showing, and a check that only passes on iOS would
- * mark a finished step unfinished the moment the learner switched to Android. Each is a file of
+ * Run three times, by `lessons.test.ts`, `lessons.android.test.ts` and `lessons.macos.test.ts`,
+ * because the preview runs the checks on whichever platform the phone is showing, and a check that
+ * only passes on iOS would mark a finished step unfinished the moment the learner switched to
+ * Android. The macOS run holds every lesson's app to running on a Mac too. Each is a file of
  * its own because `registerPlatformComponents` changes a table for the life of the module graph,
  * as it does in the preview, where switching platform reloads the frame.
  *
@@ -91,7 +92,7 @@ const failures = (outcomes: readonly { name: string; ok: boolean; error?: string
 
 const written = LESSONS.filter((lesson) => !lesson.planned);
 
-export function describeLessons(platform: 'ios' | 'android'): void {
+export function describeLessons(platform: 'ios' | 'android' | 'macos'): void {
   describe.each(written)(`lesson $number, $title, on ${platform}`, ({ slug }) => {
     let lesson: Lesson;
     let solution: Lesson['starter'];
