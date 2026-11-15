@@ -7,18 +7,6 @@
 #include <string>
 #include <vector>
 
-// The event log in a failed check, rather than {?}.
-template <>
-struct doctest::StringMaker<std::vector<std::string>> {
-  static doctest::String convert(const std::vector<std::string> &values) {
-    std::string out = "{";
-    for (const auto &value : values) {
-      out += (out.size() > 1 ? ", " : "") + value;
-    }
-    return (out + "}").c_str();
-  }
-};
-
 using ngn::ControlSize;
 using ngn::NativeControlProps;
 
@@ -64,9 +52,28 @@ NGNSearchField *makeField(NSWindow *window, const std::shared_ptr<Events> &event
   return search;
 }
 
-// Runs the main queue's blocks: a blur is reported a turn after the editing ends.
+// Runs the main queue up to a block queued now, so every block queued before it has run: a blur is
+// reported a turn after the editing ends. A fixed spell of the run loop is not enough, as its first
+// turn in the process can spend tens of milliseconds elsewhere before the main queue's turn.
 void settle() {
-  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  __block bool drained = false;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    drained = true;
+  });
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+  while (!drained && deadline.timeIntervalSinceNow > 0) {
+    [NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:deadline];
+  }
+  REQUIRE(drained);
+}
+
+// The events as one string, which a failed check prints: a vector prints as {?}.
+std::string logOf(const std::shared_ptr<Events> &events) {
+  std::string out;
+  for (const auto &entry : events->log) {
+    out += (out.empty() ? "" : ", ") + entry;
+  }
+  return out;
 }
 
 NSTextView *editor(NGNSearchField *search) {
@@ -109,10 +116,10 @@ TEST_CASE("typing reports the text with its count, and a text older than the typ
   [search apply:p];
   [search focus];
   REQUIRE((editor(search) != nil));
-  CHECK(events->log == std::vector<std::string>{"focus"});
+  CHECK(logOf(events) == "focus");
   [editor(search) insertText:@"a" replacementRange:NSMakeRange(NSNotFound, 0)];
   [editor(search) insertText:@"b" replacementRange:NSMakeRange(NSNotFound, 0)];
-  CHECK(events->log == std::vector<std::string>{"focus", "change:a", "change:ab"});
+  CHECK(logOf(events) == "focus, change:a, change:ab");
   CHECK(events->counts == std::vector<int>{1, 2});
 
   // JavaScript's echo of the first keystroke arrives after the second: it is stale.
@@ -137,10 +144,10 @@ TEST_CASE("Return submits, and Escape and the clear button empty the field and c
   [search apply:p];
   [search focus];
   [editor(search) doCommandBySelector:@selector(insertNewline:)];
-  CHECK(events->log == std::vector<std::string>{"focus", "search:ink"});
+  CHECK(logOf(events) == "focus, search:ink");
 
   [editor(search) doCommandBySelector:@selector(cancelOperation:)];
-  CHECK(events->log == std::vector<std::string>{"focus", "search:ink", "change:", "cancel"});
+  CHECK(logOf(events) == "focus, search:ink, change:, cancel");
   CHECK(search.field.stringValue.length == 0);
 
   // The clear button, whose action the field took over.
@@ -163,10 +170,13 @@ TEST_CASE("a search field reports the keyboard going, and blur and disabling tak
   NGNSearchField *search = makeField(window, events);
   NativeControlProps p;
   [search apply:p];
+  // As on a CI runner: the app is not active and the window is not key.
+  [NSApp deactivate];
+  CHECK_FALSE(window.isKeyWindow);
   [search focus];
   [search blur];
   settle();
-  CHECK(events->log == std::vector<std::string>{"focus", "blur"});
+  CHECK(logOf(events) == "focus, blur");
   CHECK((search.field.currentEditor == nil));
 
   [search focus];
@@ -196,11 +206,11 @@ TEST_CASE("a click into a search field that ends its editing and starts it again
                              event:nil];
   settle();
   REQUIRE((search.field.currentEditor != nil));
-  CHECK(events->log == std::vector<std::string>{"focus"});
+  CHECK(logOf(events) == "focus");
 
   [search blur];
   settle();
-  CHECK(events->log == std::vector<std::string>{"focus", "blur"});
+  CHECK(logOf(events) == "focus, blur");
 
   // Ended and started again, then blurred before the turn after: one blur, not one for each end.
   [search focus];
@@ -212,7 +222,7 @@ TEST_CASE("a click into a search field that ends its editing and starts it again
                              event:nil];
   [search blur];
   settle();
-  CHECK(events->log == std::vector<std::string>{"focus", "blur", "focus", "blur"});
+  CHECK(logOf(events) == "focus, blur, focus, blur");
   [window close];
 }
 
