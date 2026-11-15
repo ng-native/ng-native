@@ -165,6 +165,7 @@ void Runtime::createHost() {
 
 Runtime::~Runtime() {
   shutdown();
+  *alive_ = false;
 }
 
 // Before the bundle runs, so the listener is the pipeline's first: LogBox, which an Angular app
@@ -403,7 +404,12 @@ void Runtime::reload(std::string bundle, std::function<void(bool)> done) {
 void Runtime::shutdown() {
   // A reload still running holds this runtime: none starts from now (one waiting its turn is
   // dropped), and the one running is joined, its `done` run, before the teardown.
+  auto alive = alive_;
   reloader_.close([this] { mounting_->serviceUiThread(); });
+  // A reload's `done` that close ran may have destroyed this runtime.
+  if (!*alive) {
+    return;
+  }
   std::lock_guard lock(mutex_);
   if (host_) {
     workletHost().runOnScheduler.set(nullptr);

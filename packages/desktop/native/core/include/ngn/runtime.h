@@ -96,7 +96,9 @@ class Runtime {
   // running surface restarted. Runs off the calling thread; a second call while one runs is
   // dropped. `done` gets whether the bundle loaded, on the UI thread once the reload's thread has
   // ended (or on shutdown's thread, when shutdown joins it), so it may reload again or destroy the
-  // runtime. It gets false, on the calling thread, once shutdown has begun.
+  // runtime: an explicit shutdown() touches nothing of it after such a `done`. One the destructor's
+  // shutdown runs must not destroy it again. It gets false, on the calling thread, once shutdown
+  // has begun.
   void reload(std::function<void(bool)> done = nullptr);
   // The same, on another bundle on disk: an update's (updates.h). Ignored for a dev server's bundle.
   void reload(std::string bundle, std::function<void(bool)> done);
@@ -143,6 +145,9 @@ class Runtime {
   // The reload's thread, which uses this runtime until it ends: one at a time, each joined before
   // the next starts, and closed by shutdown before it tears the runtime down (reload-thread.h).
   ReloadThread reloader_;
+  // False once the destructor has run, so a shutdown whose reload `done` destroyed the runtime
+  // stops before it touches it again.
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
   std::unique_ptr<facebook::react::ReactHost> host_;
   struct Surface {
     std::string moduleName;
