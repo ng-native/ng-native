@@ -90,6 +90,16 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
     gPressedView = [content hitTest:[content.superview convertPoint:event.locationInWindow fromView:nil]];
   }
   NSView *pressed = gPressedView;
+  // A view tracking the press in a loop of its own reads its drags and its release from the event
+  // queue: they are posted there, dragged or not.
+  if (gInPress && (type == NSEventTypeLeftMouseDragged || type == NSEventTypeLeftMouseUp)) {
+    if (type == NSEventTypeLeftMouseUp) {
+      gPressedView = nil;
+      gDragged = false;
+    }
+    [NSApp postEvent:event atStart:NO];
+    return;
+  }
   if (type == NSEventTypeLeftMouseDragged && pressed != nil) {
     gDragged = true;
     [pressed mouseDragged:event];
@@ -102,10 +112,6 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
     // press through the window (SwiftUI's controls, AppKit's own) sees it end.
     if (type == NSEventTypeLeftMouseUp) {
       gPressedView = nil;
-      if (gInPress) {
-        [NSApp postEvent:event atStart:NO];
-        return;
-      }
     }
     bool press = type == NSEventTypeLeftMouseDown;
     gInPress = gInPress || press;
@@ -114,6 +120,31 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
       gInPress = false;
     }
   }
+}
+
+// The text a key types with `flags` held, by the keyboard layout: the key that types `base` alone,
+// with the modifiers applied. `base` itself when no key types it.
+NSString *typedWith(NSString *base, NSEventModifierFlags flags) {
+  if (flags == 0) {
+    return base;
+  }
+  for (unsigned short code = 0; code < 128; code++) {
+    NSEvent *key = [NSEvent keyEventWithType:NSEventTypeKeyDown
+                                    location:NSZeroPoint
+                               modifierFlags:0
+                                   timestamp:0
+                                windowNumber:0
+                                     context:nil
+                                  characters:base
+                 charactersIgnoringModifiers:base
+                                   isARepeat:NO
+                                     keyCode:code];
+    if ([[key charactersByApplyingModifiers:0] isEqualToString:base]) {
+      NSString *typed = [key charactersByApplyingModifiers:flags];
+      return typed.length > 0 ? typed : base;
+    }
+  }
+  return base;
 }
 
 // A key press and its release, to the key window (a red box or a sheet, not only the app's).
@@ -136,16 +167,18 @@ void sendKey(NSWindow *scriptWindow, const InputStep &step) {
   // one no keyboard sent.
   bool typed = (step.key.size() == 1 || step.key == "space") &&
       (step.modifiers & (InputStep::Command | InputStep::Control)) == 0;
-  id responder = window.firstResponder;
-  if (typed && [responder conformsToProtocol:@protocol(NSTextInputClient)]) {
-    [(id<NSTextInputClient>)responder insertText:characters replacementRange:NSMakeRange(NSNotFound, 0)];
-    return;
-  }
   NSEventModifierFlags flags = 0;
   if (step.modifiers & InputStep::Command) flags |= NSEventModifierFlagCommand;
   if (step.modifiers & InputStep::Shift) flags |= NSEventModifierFlagShift;
   if (step.modifiers & InputStep::Option) flags |= NSEventModifierFlagOption;
   if (step.modifiers & InputStep::Control) flags |= NSEventModifierFlagControl;
+  // Shift and Option change the character typed, as the keyboard layout has them.
+  id responder = window.firstResponder;
+  if (typed && [responder conformsToProtocol:@protocol(NSTextInputClient)]) {
+    NSString *text = typedWith(characters, flags & (NSEventModifierFlagShift | NSEventModifierFlagOption));
+    [(id<NSTextInputClient>)responder insertText:text replacementRange:NSMakeRange(NSNotFound, 0)];
+    return;
+  }
   for (NSEventType type : {NSEventTypeKeyDown, NSEventTypeKeyUp}) {
     NSEvent *event = [NSEvent keyEventWithType:type
                                       location:NSZeroPoint
@@ -302,6 +335,12 @@ void playLater(NSWindow *window, std::shared_ptr<InputScript> script, size_t at,
 void playFrom(NSWindow *window, std::shared_ptr<InputScript> script, size_t at) {
   while (at < script->steps.size()) {
     const auto &step = script->steps[at++];
+    // A press still tracking in its loop has not read the release posted for it: the next press
+    // waits for it, so that loop does not take this one's release.
+    if (gInPress && step.kind == InputStep::Kind::Down) {
+      playLater(window, script, at - 1, 10);
+      return;
+    }
     if (step.kind == InputStep::Kind::Wait) {
       playLater(window, script, at, step.amount);
       return;
