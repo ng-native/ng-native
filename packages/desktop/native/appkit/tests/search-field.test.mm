@@ -3,8 +3,21 @@
 
 #include <doctest/doctest.h>
 
+#include <memory>
 #include <string>
 #include <vector>
+
+// The event log in a failed check, rather than {?}.
+template <>
+struct doctest::StringMaker<std::vector<std::string>> {
+  static doctest::String convert(const std::vector<std::string> &values) {
+    std::string out = "{";
+    for (const auto &value : values) {
+      out += (out.size() > 1 ? ", " : "") + value;
+    }
+    return (out + "}").c_str();
+  }
+};
 
 using ngn::ControlSize;
 using ngn::NativeControlProps;
@@ -26,9 +39,11 @@ struct Events {
   std::vector<int> counts;
 };
 
-NGNSearchField *makeField(NSWindow *window, Events &events) {
+// The blocks share the events, so a field a test leaves editing can still report its blur a turn
+// later, when its window goes, without writing into a later test's events.
+NGNSearchField *makeField(NSWindow *window, const std::shared_ptr<Events> &events) {
   NGNSearchField *search = [[NGNSearchField alloc] initWithFrame:NSMakeRect(10, 10, 240, 56)];
-  Events *e = &events;
+  std::shared_ptr<Events> e = events;
   search.changed = ^(NSString *text, int count) {
     e->log.push_back("change:" + std::string(text.UTF8String));
     e->counts.push_back(count);
@@ -62,7 +77,7 @@ NSTextView *editor(NGNSearchField *search) {
 
 TEST_CASE("a search field takes its text, placeholder, control size and enabled state from the props") {
   NSWindow *window = offscreenWindow();
-  Events events;
+  auto events = std::make_shared<Events>();
   NGNSearchField *search = makeField(window, events);
   NativeControlProps p;
   p.text = "teal";
@@ -82,23 +97,23 @@ TEST_CASE("a search field takes its text, placeholder, control size and enabled 
   p.enabled = false;
   [search apply:p];
   CHECK_FALSE(search.field.enabled);
-  CHECK(events.log.empty());
+  CHECK(events->log.empty());
   [window close];
 }
 
 TEST_CASE("typing reports the text with its count, and a text older than the typing is skipped") {
   NSWindow *window = offscreenWindow();
-  Events events;
+  auto events = std::make_shared<Events>();
   NGNSearchField *search = makeField(window, events);
   NativeControlProps p;
   [search apply:p];
   [search focus];
   REQUIRE((editor(search) != nil));
-  CHECK(events.log == std::vector<std::string>{"focus"});
+  CHECK(events->log == std::vector<std::string>{"focus"});
   [editor(search) insertText:@"a" replacementRange:NSMakeRange(NSNotFound, 0)];
   [editor(search) insertText:@"b" replacementRange:NSMakeRange(NSNotFound, 0)];
-  CHECK(events.log == std::vector<std::string>{"focus", "change:a", "change:ab"});
-  CHECK(events.counts == std::vector<int>{1, 2});
+  CHECK(events->log == std::vector<std::string>{"focus", "change:a", "change:ab"});
+  CHECK(events->counts == std::vector<int>{1, 2});
 
   // JavaScript's echo of the first keystroke arrives after the second: it is stale.
   p.text = "a";
@@ -115,17 +130,17 @@ TEST_CASE("typing reports the text with its count, and a text older than the typ
 
 TEST_CASE("Return submits, and Escape and the clear button empty the field and cancel") {
   NSWindow *window = offscreenWindow();
-  Events events;
+  auto events = std::make_shared<Events>();
   NGNSearchField *search = makeField(window, events);
   NativeControlProps p;
   p.text = "ink";
   [search apply:p];
   [search focus];
   [editor(search) doCommandBySelector:@selector(insertNewline:)];
-  CHECK(events.log == std::vector<std::string>{"focus", "search:ink"});
+  CHECK(events->log == std::vector<std::string>{"focus", "search:ink"});
 
   [editor(search) doCommandBySelector:@selector(cancelOperation:)];
-  CHECK(events.log == std::vector<std::string>{"focus", "search:ink", "change:", "cancel"});
+  CHECK(events->log == std::vector<std::string>{"focus", "search:ink", "change:", "cancel"});
   CHECK(search.field.stringValue.length == 0);
 
   // The clear button, whose action the field took over.
@@ -134,24 +149,24 @@ TEST_CASE("Return submits, and Escape and the clear button empty the field and c
   REQUIRE((clear != nil));
   [NSApp sendAction:clear.action to:clear.target from:clear];
   CHECK(search.field.stringValue.length == 0);
-  CHECK(events.log.back() == "cancel");
-  CHECK(events.counts.back() == 2);
+  CHECK(events->log.back() == "cancel");
+  CHECK(events->counts.back() == 2);
   // An empty field cancels without a change.
   [NSApp sendAction:clear.action to:clear.target from:clear];
-  CHECK(events.counts.size() == 2);
+  CHECK(events->counts.size() == 2);
   [window close];
 }
 
 TEST_CASE("a search field reports the keyboard going, and blur and disabling take it away") {
   NSWindow *window = offscreenWindow();
-  Events events;
+  auto events = std::make_shared<Events>();
   NGNSearchField *search = makeField(window, events);
   NativeControlProps p;
   [search apply:p];
   [search focus];
   [search blur];
   settle();
-  CHECK(events.log == std::vector<std::string>{"focus", "blur"});
+  CHECK(events->log == std::vector<std::string>{"focus", "blur"});
   CHECK((search.field.currentEditor == nil));
 
   [search focus];
@@ -159,13 +174,13 @@ TEST_CASE("a search field reports the keyboard going, and blur and disabling tak
   [search apply:p];
   settle();
   CHECK((search.field.currentEditor == nil));
-  CHECK(events.log.back() == "blur");
+  CHECK(events->log.back() == "blur");
   [window close];
 }
 
 TEST_CASE("a click into a search field that ends its editing and starts it again is no blur") {
   NSWindow *window = offscreenWindow();
-  Events events;
+  auto events = std::make_shared<Events>();
   NGNSearchField *search = makeField(window, events);
   NativeControlProps p;
   [search apply:p];
@@ -181,11 +196,11 @@ TEST_CASE("a click into a search field that ends its editing and starts it again
                              event:nil];
   settle();
   REQUIRE((search.field.currentEditor != nil));
-  CHECK(events.log == std::vector<std::string>{"focus"});
+  CHECK(events->log == std::vector<std::string>{"focus"});
 
   [search blur];
   settle();
-  CHECK(events.log == std::vector<std::string>{"focus", "blur"});
+  CHECK(events->log == std::vector<std::string>{"focus", "blur"});
 
   // Ended and started again, then blurred before the turn after: one blur, not one for each end.
   [search focus];
@@ -197,13 +212,13 @@ TEST_CASE("a click into a search field that ends its editing and starts it again
                              event:nil];
   [search blur];
   settle();
-  CHECK(events.log == std::vector<std::string>{"focus", "blur", "focus", "blur"});
+  CHECK(events->log == std::vector<std::string>{"focus", "blur", "focus", "blur"});
   [window close];
 }
 
 TEST_CASE("a search field capitalizes what is typed as autoCapitalize says, and none by default") {
   NSWindow *window = offscreenWindow();
-  Events events;
+  auto events = std::make_shared<Events>();
   NGNSearchField *search = makeField(window, events);
   NativeControlProps p;
   [search apply:p];
@@ -221,7 +236,7 @@ TEST_CASE("a search field capitalizes what is typed as autoCapitalize says, and 
 
 TEST_CASE("the tint colours the caret while the field edits") {
   NSWindow *window = offscreenWindow();
-  Events events;
+  auto events = std::make_shared<Events>();
   NGNSearchField *search = makeField(window, events);
   NativeControlProps p;
   p.tintColor = facebook::react::colorFromComponents({1, 0, 0, 1});
