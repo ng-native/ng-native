@@ -68,8 +68,10 @@ struct Shown {
   if (ngn::recyclingKeyClears(_recyclingKey, props->recyclingKey)) {
     _image.set(nullptr);
     [self setNeedsDisplay:YES];
-    // The image is gone: the same source loads again below.
+    // The image is gone: the same source loads again below, and a load still running for the last
+    // item shows nothing, even when this item has no source to load.
     _source.reset();
+    ++_generation;
   }
   _recyclingKey = props->recyclingKey;
   double scale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
