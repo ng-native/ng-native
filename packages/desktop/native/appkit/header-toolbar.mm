@@ -151,6 +151,8 @@ NSImage *symbol(const std::string &name, NSString *description) {
   // Header item views now in the toolbar, by identifier, and the config each came from.
   NSMutableDictionary<NSToolbarItemIdentifier, NGNHeaderSubviewView *> *_hosted;
   NSMapTable<NGNHeaderSubviewView *, NSView *> *_homes;
+  // The type (left, right, center...) each hosted item had as it was hosted.
+  NSMapTable<NGNHeaderSubviewView *, NSString *> *_hostedTypes;
   // The search items now in the toolbar, by identifier.
   NSMutableDictionary<NSToolbarItemIdentifier, NGNSearchToolbarItem *> *_searchItems;
 }
@@ -210,6 +212,7 @@ NSImage *symbol(const std::string &name, NSString *description) {
     _identifiers = @[];
     _hosted = [NSMutableDictionary dictionary];
     _homes = [NSMapTable weakToWeakObjectsMapTable];
+    _hostedTypes = [NSMapTable weakToStrongObjectsMapTable];
     _searchItems = [NSMutableDictionary dictionary];
     _toolbar = [[NSToolbar alloc] initWithIdentifier:@"ngn.header"];
     _toolbar.delegate = self;
@@ -239,6 +242,17 @@ NSImage *symbol(const std::string &name, NSString *description) {
   }
   for (NSView *v = view; v != nil; v = v.superview) {
     if (v == _config) {
+      [self rebuild];
+      return;
+    }
+  }
+  // An item hosted in the toolbar is no longer under the config, but still one of its items: a
+  // change of its type (the side it is on) rebuilds the toolbar.
+  if ([view isKindOfClass:NGNHeaderSubviewView.class]) {
+    auto *item = (NGNHeaderSubviewView *)view;
+    NSString *hostedAs = [_hostedTypes objectForKey:item];
+    if ([_homes objectForKey:item] == _config && hostedAs != nil && item.props &&
+        ![hostedAs isEqualToString:@(ngn::headerItemType(*item.props).value_or("").c_str())]) {
       [self rebuild];
       return;
     }
@@ -385,6 +399,7 @@ NSImage *symbol(const std::string &name, NSString *description) {
 - (NSToolbarItemIdentifier)host:(NGNHeaderSubviewView *)view {
   NSToolbarItemIdentifier identifier = [NSString stringWithFormat:@"ngn.view.%ld", (long)view.reactTag];
   [_homes setObject:view.superview != nil ? view.superview : _config forKey:view];
+  [_hostedTypes setObject:view.props ? @(ngn::headerItemType(*view.props).value_or("").c_str()) : @"" forKey:view];
   _hosted[identifier] = view;
   return identifier;
 }
