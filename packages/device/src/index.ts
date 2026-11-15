@@ -15,6 +15,7 @@ export { ColorScheme, type ColorSchemeSource, type Scheme } from './color-scheme
 export {
   currentConditions,
   deviceTokens,
+  hairlineTokens,
   watchConditions,
   type WatchOptions,
 } from './conditions.ts';
@@ -130,3 +131,4 @@ export { SIDEBAR_SELECTION } from './sidebar-selection.ts';
 export { WINDOW_NAVIGATOR, type WindowNavigator } from './window-navigator.ts';
 export { OS_VERSION } from './os-version.ts';
 export { injectToken, type InjectTokenOptions } from './inject-token.ts';
+export { type ControlSize } from './control-size.ts';

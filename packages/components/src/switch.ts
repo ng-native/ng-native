@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { type NativeSyntheticEvent, nativePlatform } from '@ng-native/fabric';
 import { ControlledModel } from './controlled-model.ts';
+import type { ControlSize } from '@ng-native/device';
 import { optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
 
@@ -41,6 +42,7 @@ import { ViewBase } from './view-base.ts';
     // the one binding that keeps the announced state in step with it.
     '[accessibilityState]': 'accessibilityStateProp()',
     '[value]': 'checked()',
+    '[controlSize]': 'controlSize()',
     '[disabled]': 'disabled()',
     '[attr.data-disabled]': "disabled() ? '' : null",
     '[attr.data-invalid]': "invalid() ? '' : null",
@@ -58,6 +60,8 @@ import { ViewBase } from './view-base.ts';
 })
 export class Switch extends ViewBase {
   readonly checked = model<boolean>(false);
+  /** AppKit's control size on macOS, and UIKit's on iOS 26 and later. Ignored elsewhere. */
+  readonly controlSize = input<ControlSize>();
   /** Ignore touches and grey out. */
   readonly disabled = input(undefined, { transform: optionalBoolean });
   /** Published as `data-invalid`; nothing native reads it. */

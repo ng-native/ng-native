@@ -9,10 +9,11 @@
  * re-render. The engine re-resolves and commits on its own when the conditions change.
  */
 import type { Conditions, TokenValue } from '@ng-native/fabric';
-import { accessibilitySource } from './accessibility.ts';
+import { accessibilitySource, systemFontScale } from './accessibility.ts';
 import { colorSchemeSource } from './color-scheme.ts';
 import { directionSource } from './direction.ts';
 import { recordKeyboard } from './keyboard.ts';
+import { isPhoneOs, platformOs } from './os.ts';
 import { screenSource } from './screen.ts';
 import { reactNative } from './react-native.ts';
 
@@ -24,11 +25,28 @@ interface Resolves<Node = unknown> {
   removeClass(node: Node, name: string): void;
   /** Measure every text again, after the system text size changed. */
   remeasureText?(): void;
+  /** Merge custom properties into the root's, as `--hairline` after the pixel ratio changed. */
+  updateTokens?(tokens: Readonly<Record<string, TokenValue>>): void;
 }
 
-/** The system text size, as a multiplier. One off a device. */
-function fontScale(): number {
-  return reactNative()?.PixelRatio.getFontScale() ?? 1;
+/**
+ * The pointer media features: a desktop hovers with a fine pointer, and a phone or tablet has a
+ * finger, coarse and unable to hover. An iPad with a trackpad still answers as a phone.
+ */
+function pointerConditions(): Pick<Conditions, 'hover' | 'anyHover' | 'pointer' | 'anyPointer'> {
+  const desktop = !isPhoneOs(platformOs());
+  const hover = desktop ? 'hover' : 'none';
+  const pointer = desktop ? 'fine' : 'coarse';
+  return { hover, anyHover: hover, pointer, anyPointer: pointer };
+}
+
+/**
+ * The thinnest line a screen of `ratio` pixels to the point draws, worked out as React Native
+ * works out `StyleSheet.hairlineWidth`: 0.4 points rounded to a whole pixel, or one pixel where
+ * that rounds to none.
+ */
+function hairlineAt(ratio: number): number {
+  return Math.round(0.4 * ratio) / ratio || 1 / ratio;
 }
 
 /** The screen's pixels in a point. One off a device. */
@@ -55,11 +73,12 @@ export function currentConditions(): Conditions {
     // corrects it. Reduced motion is a preference about what happens next, not about the frame
     // already on screen, so nothing is lost by learning it a tick late.
     reducedMotion: false,
-    fontScale: fontScale(),
+    fontScale: systemFontScale(),
     // Read again when the window is resized, which it is when it moves to a screen of another density.
     pixelRatio: pixelRatio(),
     // Settled while the native side starts up, and fixed until the app restarts.
     direction: directionSource().current(),
+    ...pointerConditions(),
   };
 }
 
@@ -72,13 +91,22 @@ export function currentConditions(): Conditions {
  * out from the pixel ratio; off a device there is no answer, and inventing one would be a line of
  * the wrong weight in every test that draws one.
  *
- * Not watched, unlike the conditions: React Native works the hairline out once and keeps it, so
- * a window moved to a screen of another density keeps the first screen's, as a React Native app's
- * `StyleSheet.hairlineWidth` does. The safe-area insets arrive through `updateTokens`.
+ * React Native works `StyleSheet.hairlineWidth` out once and keeps it. `watchConditions` hands
+ * the engine a new `--hairline` when a window resize reports another pixel ratio, as when a
+ * window moves to a screen of another density. The safe-area insets arrive through
+ * `updateTokens` too.
  */
 export function deviceTokens(): Record<string, TokenValue> {
   const native = reactNative();
   return native ? { '--hairline': { length: native.StyleSheet.hairlineWidth } } : {};
+}
+
+/**
+ * The `--hairline` for a screen of `pixelRatio` pixels to the point: what a window on that screen
+ * draws its thinnest line with, as `watchConditions` gives the app's engine for the app's ratio.
+ */
+export function hairlineTokens(pixelRatio: number): Record<string, TokenValue> {
+  return { '--hairline': { length: hairlineAt(pixelRatio) } };
 }
 
 /**
@@ -120,9 +148,15 @@ export function watchConditions<Node>(
     if (rescaled) engine.remeasureText?.();
   };
 
-  const sizes = screen.subscribe(({ window }) =>
-    resize({ width: window.width, height: window.height, pixelRatio: pixelRatio() }, fontScale()),
-  );
+  // The hairline for the pixel ratio now in effect, handed over only when that changes.
+  let ratio = conditions.pixelRatio ?? 1;
+  const sizes = screen.subscribe(({ window }) => {
+    const next = pixelRatio();
+    resize({ width: window.width, height: window.height, pixelRatio: next }, systemFontScale());
+    if (next === ratio) return;
+    ratio = next;
+    engine.updateTokens?.(hairlineTokens(next));
+  });
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
   let heardReduceMotion = false;
   let stopped = false;

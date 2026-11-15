@@ -59,6 +59,19 @@ describe('text-input, over a real <input>', () => {
   });
 });
 
+describe('native-button, over a real <button>', () => {
+  it('commits as a button with its label inside', async () => {
+    const { document, componentRef } = await bootstrapControls();
+    const button = document.querySelector('[data-rn="native-button"]') as HTMLButtonElement;
+
+    assert.equal(button.tagName, 'BUTTON');
+    assert.equal(button.type, 'button');
+    assert.equal(button.textContent?.trim(), 'Cancel');
+
+    componentRef.destroy();
+  });
+});
+
 describe('switch, over a real checkbox', () => {
   it('commits as a checkbox with the switch role', async () => {
     const { document, componentRef } = await bootstrapControls();

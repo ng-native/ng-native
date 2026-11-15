@@ -11,6 +11,7 @@
  * commits as nothing.
  */
 import { Component, input, output } from '@angular/core';
+import type { ControlSize } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 
@@ -31,6 +32,7 @@ function milliseconds(value: Date | number | null | undefined): number | undefin
   template: '',
   host: {
     '[date]': 'date()',
+    '[controlSize]': 'controlSize()',
     '[mode]': 'mode()',
     '[displayIOS]': 'displayIOS()',
     '[minimumDate]': 'minimumDate()',
@@ -48,6 +50,8 @@ function milliseconds(value: Date | number | null | undefined): number | undefin
 export class DateTimePicker {
   /** The moment shown, as a `Date` or in milliseconds. */
   readonly date = input(undefined, { transform: milliseconds });
+  /** AppKit's control size on macOS, and UIKit's on iOS 26 and later. Ignored elsewhere. */
+  readonly controlSize = input<ControlSize>();
   readonly mode = input<'date' | 'time' | 'datetime' | 'countdown'>();
   /** How the picker is drawn: wheels, a compact field that opens a popover, or a calendar. */
   readonly displayIOS = input<'default' | 'spinner' | 'compact' | 'inline'>();

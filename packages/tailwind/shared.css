@@ -31,6 +31,9 @@
 @custom-variant ios (.platform-ios &);
 @custom-variant android (.platform-android &);
 @custom-variant web (.platform-web &);
+@custom-variant macos (.platform-macos &);
+/** A desktop OS: macOS today. */
+@custom-variant desktop (.platform-macos &);
 /** Any native OS, for a rule that is about not being a browser: a desktop counts. */
 @custom-variant native (.platform-ios &, .platform-android &, .platform-macos &);
 

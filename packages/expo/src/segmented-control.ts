@@ -7,6 +7,7 @@
  * `@expo/ui` components in `expo-ui-components.ts`.
  */
 import { Component, input, output } from '@angular/core';
+import type { ControlSize } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 
@@ -29,6 +30,7 @@ export type SegmentedControlChangeEvent = NativeSyntheticEvent<{
   template: '',
   host: {
     '[values]': 'values()',
+    '[controlSize]': 'controlSize()',
     '[selectedIndex]': 'selectedIndex()',
     '[enabled]': 'enabled()',
     '[momentary]': 'momentary()',
@@ -42,6 +44,8 @@ export type SegmentedControlChangeEvent = NativeSyntheticEvent<{
 })
 export class SegmentedControl {
   readonly values = input<readonly string[]>();
+  /** AppKit's control size on macOS, and UIKit's on iOS 26 and later. Ignored elsewhere. */
+  readonly controlSize = input<ControlSize>();
   readonly selectedIndex = input<number>(undefined, { transform: optionalNumber });
   readonly enabled = input<boolean>(undefined, { transform: optionalBoolean });
   /** Segments do not stay selected: each is a button. */

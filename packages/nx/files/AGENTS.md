@@ -58,12 +58,13 @@ change; both are fast.
 - `[style]` takes a React Native style object: camelCase keys, numbers in points
   (`{ padding: 16, backgroundColor: '#fff' }`).
 - A component's `styles` is real CSS, compiled at build time: type, class, id and attribute
-  selectors, combinators, `:host`, `@media`, custom properties, transitions and `@keyframes`.
-  Float, `::before`/`::after`, `:hover` and `:focus-visible` are dropped with a build warning
-  naming the file, line and reason - lay out with flexbox, grid or a block, and drive a hover or
-  focus look from a bound attribute. Everything is `display: flex` with `flex-direction: column`
-  by default, as in React Native.
-- Tailwind v4 works through `@ng-native/tailwind`, with `ios:`, `android:` and `dark:` variants.
+  selectors, combinators, `:host`, `@media`, custom properties, transitions and `@keyframes`, and
+  `:active`, `:focus`, `:hover`, `:focus-visible` and `:focus-within`. Float and
+  `::before`/`::after` are dropped with a build warning naming the file, line and reason - lay out
+  with flexbox, grid or a block. Everything is `display: flex` with `flex-direction: column` by
+  default, as in React Native.
+- Tailwind v4 works through `@ng-native/tailwind`, with `ios:`, `android:`, `macos:`, `desktop:`
+  and `dark:` variants.
 
 ## Lists, navigation, forms
 

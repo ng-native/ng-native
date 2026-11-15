@@ -355,13 +355,14 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     await pass();
     assert.equal(instance.open(), true);
     assert.ok(byId('first'), 'the sheet was not dismissed');
-    assert.equal(instance.heard(), 2, 'and the event went on its way');
+    // `topDismiss` is a modal's own, delivered to it alone, so only the other one travels on.
+    assert.equal(instance.heard(), 1, 'and the event went on its way');
 
     fabric.emit(named(/ExpoUI_BottomSheetView$/)!, 'topIsPresentedChange', { isPresented: false });
     fabric.emit(named(/ExpoUI_BottomSheetView$/)!, 'topDismiss', {});
     await pass();
     assert.equal(instance.open(), false);
-    assert.equal(instance.heard(), 2, 'the sheet s own events are not the app s to hear');
+    assert.equal(instance.heard(), 1, 'the sheet s own events are not the app s to hear');
   });
 
   const detentsOf = (group: FakeFabricNode) =>

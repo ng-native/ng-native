@@ -152,6 +152,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/components/input', title: 'Text input', group: 'Input' },
         { path: 'packages/components/switch', title: 'Switch' },
         { path: 'packages/components/pressable', title: 'Pressable' },
+        { path: 'packages/components/native-button', title: 'Native button' },
         { path: 'packages/components/gestures', title: 'Gestures' },
         { path: 'packages/components/modal', title: 'Modal', group: 'Presentation' },
         { path: 'packages/components/animation', title: 'Animation' },

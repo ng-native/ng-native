@@ -16,6 +16,9 @@
     ".": "./index.mjs",
     "./package.json": "./package.json"
   },
+  "dependencies": {
+    "@ng-native/metro": "workspace:*"
+  },
   "peerDependencies": {
     "angular-eslint": "^22.0.0",
     "eslint": "^9.0.0 || ^10.0.0",

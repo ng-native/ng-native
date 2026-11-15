@@ -62,6 +62,7 @@ export {
 } from './keyboard-dock.ts';
 export { KeyboardAvoidingView, type KeyboardAvoidingBehavior } from './keyboard-avoiding-view.ts';
 export { Modal, type ModalOrientation, type ModalPresentationStyle } from './modal.ts';
+export { NativeButton, type ButtonIcon, type ButtonKind } from './native-button.ts';
 export { NativeRef } from './native-ref.ts';
 export {
   ControlBase,

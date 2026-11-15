@@ -361,7 +361,7 @@ describe("a library's component CSS, opted in", () => {
     const file = '/app/node_modules/x-ui/ui.mjs';
     const hover = partial(
       `import {Component} from '@angular/core';
-       @Component({selector: 'x-b', template: '<text>b</text>', styles: ['.b { color: red; -webkit-font-smoothing: antialiased }\\n.b:hover { color: blue }']})
+       @Component({selector: 'x-b', template: '<text>b</text>', styles: ['.b { color: red; -webkit-font-smoothing: antialiased }\\n.b:target { color: blue }']})
        export class B {}`,
       file,
     );
@@ -379,7 +379,7 @@ describe("a library's component CSS, opted in", () => {
     assert.match(
       warnings[1]!,
       new RegExp(
-        `${file}:${line} \\(B, line 2 of its styles\\): dropped a rule: ':hover' is not supported`,
+        `${file}:${line} \\(B, line 2 of its styles\\): dropped a rule: ':target' is not supported`,
       ),
     );
     assert.deepEqual(

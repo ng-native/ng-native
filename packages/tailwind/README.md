@@ -85,7 +85,7 @@ On the web, a Tailwind 3 build uses `web-preset.cjs` in place of `preset.cjs`. S
 ## What's in the package
 
 - `./native.css` - the preset: platform variants, safe-area and hairline utilities, and
-  touch-appropriate `hover:`/`focus-visible:` meanings.
+  `hover:` and `focus-visible:` variants that also answer a touch.
 - `./web.css` - the same preset's web entry point, for `@ng-native/web`.
 - `./preset.cjs` - the native preset for Tailwind 3, used from `tailwind.config.js`.
 - `./web-preset.cjs` - the web preset for Tailwind 3, for `@ng-native/web`.

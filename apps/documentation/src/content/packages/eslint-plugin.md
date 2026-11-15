@@ -135,6 +135,19 @@ navigates. Use `nativeRouterLink` from `@ng-native/router` on a `<pressable>`.
 `(change)`, `(load)`, `(error)`, `(focus)` and `(blur)` are not reported, since an element here
 sends them too.
 
+`(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)`, `(mouseout)`, `(dblclick)`,
+`(contextmenu)` and `(wheel)` fire on macOS, and on no other OS. The rule reads `expo.platforms`
+from the nearest `app.json`: where it lists no desktop OS, as by default, they are reported here,
+since they never fire. Where it lists `macos`, they are left to `desktop-only-events`.
+
+### desktop-only-events
+
+In a project whose `app.json` lists `macos` in `expo.platforms`, warns of a binding to an event
+only macOS sends: `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)`, `(mouseout)`,
+`(dblclick)`, `(contextmenu)` and `(wheel)`. The handler runs on a Mac and never on iOS or Android,
+so where it has to work there too, it needs the event the `no-dom-events` table names beside it.
+`recommended` turns it on as a warning.
+
 `eslint --fix` renames `(click)` to `(press)` on a `<pressable>`, a `<touchable-opacity>` and a
 `<text pressable>`, unless the handler reads `$event`: that is a mouse event in a browser and a
 native one here. On a `<text-input>`, `(input)` is offered as `(changeText)` in the editor rather
@@ -143,9 +156,9 @@ than fixed, since its `$event` becomes the text.
 ### no-html-controls
 
 Reports an HTML element that draws as a plain view or text without the behaviour it has in a
-browser: `<button>` (use `<pressable>`), `<a>`, `<input>`, `<textarea>`, `<select>`, `<option>`,
-`<form>`, `<img>` and `<picture>`. It also reports `<video>`, `<audio>`, `<iframe>`, `<canvas>`,
-`<embed>` and `<object>`, which nothing in Angular Native draws.
+browser: `<button>` (use `<native-button>`, or `<pressable>`), `<a>`, `<input>`, `<textarea>`,
+`<select>`, `<option>`, `<form>`, `<img>` and `<picture>`. It also reports `<video>`, `<audio>`,
+`<iframe>`, `<canvas>`, `<embed>` and `<object>`, which nothing in Angular Native draws.
 
 HTML's text and layout elements, such as `<p>`, `<span>`, `<strong>`, `<div>` and `<section>`,
 are not reported. They draw as text and views, as [Elements](/packages/components) describes.
