@@ -59,6 +59,10 @@ class MountingManager final : public facebook::react::IMountingManager,
   // UI thread only. The user chose the tab `screen` of the tabs host `host` (tabs-host.h).
   void chooseTab(SurfaceId surfaceId, Tag host, Tag screen);
   void removeContainerInsets(Tag root);
+  // Runs `task` on the backend's UI thread, after what is queued there already. Any thread.
+  void runOnUiThread(std::function<void()> task) {
+    backend_->runOnUiThread(std::move(task));
+  }
   // Runs the backend's pending UI-thread tasks for a moment when called on its UI thread, and does
   // nothing elsewhere: for the UI thread while it waits on another thread's work.
   void serviceUiThread() {
