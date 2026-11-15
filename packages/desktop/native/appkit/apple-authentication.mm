@@ -55,7 +55,8 @@ int realUserStatusOf(ASUserDetectionStatus status) {
     case ASUserDetectionStatusLikelyReal:
       return 2;
     default:
-      return 3;
+      // expo's UNSUPPORTED.
+      return 0;
   }
 }
 
@@ -117,7 +118,7 @@ NSMutableSet<NGNAppleSignInRequest *> *pending() {
         .nickname = text(name.nickname),
     };
   }
-  credential.realUserStatus = apple != nil ? realUserStatusOf(apple.realUserStatus) : 3;
+  credential.realUserStatus = apple != nil ? realUserStatusOf(apple.realUserStatus) : 0;
   credential.state = text(apple.state);
   credential.authorizationCode = utf8(apple.authorizationCode);
   credential.identityToken = utf8(apple.identityToken);
