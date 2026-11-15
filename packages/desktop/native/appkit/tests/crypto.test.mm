@@ -22,6 +22,18 @@ TEST_CASE("AppleCrypto digests match the published test vectors") {
   CHECK_FALSE(crypto->digest("SHA-3", "abc"));
 }
 
+TEST_CASE("AppleCrypto digests in chunks, so a length past 32 bits is hashed whole") {
+  // FIPS 180's two-block message, fed 1, 7 and 64 bytes at a time.
+  std::string message = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+  for (size_t chunk : {size_t{1}, size_t{7}, size_t{64}}) {
+    CHECK(ngn::hexOf(*ngn::appkit::digestInChunks("SHA-256", message, chunk)) ==
+          "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+    CHECK(*ngn::appkit::digestInChunks("MD5", message, chunk) == *ngn::appkit::digestInChunks("MD5", message, 1 << 20));
+  }
+  CHECK(ngn::hexOf(*ngn::appkit::digestInChunks("SHA-1", "", 1)) == "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+  CHECK_FALSE(ngn::appkit::digestInChunks("SHA-3", "abc", 1));
+}
+
 TEST_CASE("AppleCrypto's random bytes are the length asked for, and differ") {
   auto crypto = ngn::appkit::makeCryptoSource();
   CHECK(crypto->randomBytes(0).empty());
