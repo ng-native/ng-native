@@ -977,6 +977,70 @@ TEST_CASE("FileChanges keeps what it saw when the folder cannot be listed, and l
   CHECK(tracker.changes({E{.path = dir.path.string(), .rescan = true}}, exists).empty());
 }
 
+TEST_CASE("FileChanges reports a watched folder's entries deleted once a file takes its place") {
+  TempDir dir;
+  fs::create_directories(dir.path / "watched");
+  write(dir.path / "watched/kept.txt", "");
+  auto watched = (dir.path / "watched").string();
+  auto exists = [](const std::string &p) { return fs::exists(p); };
+  using E = ngn::FileWatcher::Event;
+  ngn::FileChanges tracker(watched, exists);
+  fs::remove_all(watched);
+  write(watched, "a file now");
+  // Not a folder that cannot be listed for now: what was in it is gone, and nothing is owed.
+  CHECK(tracker.changes({E{.path = watched, .rescan = true}}, exists) ==
+        dynamic::array(dynamic::object("type", "deleted")("uri", ngn::fileUri(watched + "/kept.txt"))));
+  CHECK(tracker.changes({E{.path = watched, .modified = true}}, exists) ==
+        dynamic::array(dynamic::object("type", "modified")("uri", ngn::fileUri(watched))));
+}
+
+TEST_CASE("a folder that cannot be listed when the watch begins is no watch, and holds nothing open") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  write(fs::path(folders.cache) / "there.txt", "");
+  auto watcher = std::make_shared<FakeWatcher>();
+  auto module = ngn::makeFileSystemModule(std::make_shared<ngn::FileAccess>(folders, dynamic::array()), watcher);
+  // Its listing would start without there.txt, which a later write would report as created.
+  fs::permissions(folders.cache, fs::perms::owner_all, fs::perm_options::remove);
+  dynamic id;
+  try {
+    id = module->call("watch", dynamic::array(ngn::fileUri(folders.cache)));
+  } catch (...) {
+    fs::permissions(folders.cache, fs::perms::owner_all, fs::perm_options::add);
+    throw;
+  }
+  fs::permissions(folders.cache, fs::perms::owner_all, fs::perm_options::add);
+  CHECK(id == dynamic(nullptr));
+  CHECK(watcher->watches.empty());
+}
+
+TEST_CASE("a watched folder's child event with search permission gone is unknown, not deleted, and listed again later") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto kept = folders.cache + "/kept.txt";
+  write(kept, "");
+  auto watcher = std::make_shared<FakeWatcher>();
+  auto module = ngn::makeFileSystemModule(std::make_shared<ngn::FileAccess>(folders, dynamic::array()), watcher);
+  std::vector<dynamic> events;
+  module->setEmitter([&](const std::string &, dynamic body) { events.push_back(body); });
+  auto id = module->call("watch", dynamic::array(ngn::fileUri(folders.cache)));
+  REQUIRE(id.isInt());
+  auto send = watcher->watches.begin()->second.second;
+  // Listable, but nothing in it can be looked up: whether kept.txt is there is unknown.
+  fs::permissions(folders.cache, fs::perms::owner_exec, fs::perm_options::remove);
+  try {
+    CHECK_NOTHROW(send({{.path = kept, .modified = true}}));
+  } catch (...) {
+    fs::permissions(folders.cache, fs::perms::owner_exec, fs::perm_options::add);
+    throw;
+  }
+  fs::permissions(folders.cache, fs::perms::owner_exec, fs::perm_options::add);
+  CHECK(events.empty());
+  // Searchable again: the next event lists the folder again (nothing came or went) and is told.
+  send({{.path = kept, .modified = true}});
+  CHECK(events == std::vector<dynamic>{dynamic::object("watch", id)("type", "modified")("uri", ngn::fileUri(kept))});
+}
+
 TEST_CASE("a watch the OS would not start is no watch, and holds nothing open") {
   TempDir dir;
   auto folders = foldersIn(dir.path);

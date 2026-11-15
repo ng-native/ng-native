@@ -402,12 +402,11 @@ FileAccess::Access FileAccess::accessTo(const std::string &path) const {
 FileChanges::FileChanges(std::string watched, const Exists &exists) : watched_(std::move(watched)) {
   std::error_code error;
   folder_ = fs::is_directory(watched_, error);
-  if (exists(watched_)) {
+  auto here = exists(watched_);
+  if (here.value_or(false)) {
     seen_.insert(watched_);
   }
-  if (folder_) {
-    list(seen_);
-  }
+  listed_ = here.has_value() && (!folder_ || list(seen_));
 }
 
 bool FileChanges::list(std::set<std::string> &into) const {
@@ -432,15 +431,26 @@ folly::dynamic change(const char *type, const std::string &path) {
 
 void FileChanges::rescan(folly::dynamic &out, const Exists &exists) {
   std::set<std::string> now;
-  bool here = exists(watched_);
+  auto known = exists(watched_);
+  if (!known) {
+    rescanOwed_ = true;
+    return;
+  }
+  bool here = *known;
   if (here) {
     now.insert(watched_);
   }
   // A folder still there but not listed (unreadable for now) keeps what was seen, and is listed
-  // again at the next event. One gone took its entries with it.
-  rescanOwed_ = folder_ && here && !list(now);
-  if (rescanOwed_) {
-    return;
+  // again at the next event. One gone, or no longer a folder (a file took its place), took its
+  // entries with it.
+  rescanOwed_ = false;
+  if (folder_ && here && !list(now)) {
+    std::error_code error;
+    if (fs::is_directory(watched_, error)) {
+      rescanOwed_ = true;
+      return;
+    }
+    now = {watched_};
   }
   for (auto it = seen_.begin(); it != seen_.end();) {
     if (concerns(*it) && !now.contains(*it)) {
@@ -468,9 +478,18 @@ folly::dynamic FileChanges::changes(const std::vector<FileWatcher::Event> &event
       rescan(out, exists);
       continue;
     }
-    bool here = exists(event.path);
+    auto found = exists(event.path);
     // FSEvents reports a rename as two events in a row: the old path, then the new one.
-    if (event.renamed && !here && i + 1 < events.size() && events[i + 1].renamed && exists(events[i + 1].path)) {
+    auto foundTo = found == false && event.renamed && i + 1 < events.size() && events[i + 1].renamed
+        ? exists(events[i + 1].path)
+        : std::optional<bool>(false);
+    if (!found || !foundTo) {
+      // Unknown, not gone: the listing owed next settles what came and went.
+      rescanOwed_ = true;
+      continue;
+    }
+    bool here = *found;
+    if (*foundTo) {
       const auto &to = events[i + 1].path;
       i++;
       seen_.erase(event.path);
@@ -835,9 +854,21 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
             sink->emit(std::move(change));
           }
         };
-        auto exists = [](const std::string &p) { return fs::exists(fs::symlink_status(p)); };
+        auto exists = [](const std::string &p) -> std::optional<bool> {
+          std::error_code error;
+          auto status = fs::symlink_status(p, error);
+          if (error && status.type() != fs::file_type::not_found) {
+            return std::nullopt;
+          }
+          return fs::exists(status);
+        };
         // Called on the watcher's own serial queue, one batch at a time.
         auto tracker = std::make_shared<FileChanges>(path, exists);
+        // Without a full listing to start from, an entry already there would later be reported
+        // created: a folder that cannot be listed cannot be watched.
+        if (!tracker->listed()) {
+          return nullptr;
+        }
         int handle = watcher->start(path, [send, tracker, exists, id](std::vector<FileWatcher::Event> events) {
           auto changes = tracker->changes(events, exists);
           std::lock_guard lock(id->mutex);
