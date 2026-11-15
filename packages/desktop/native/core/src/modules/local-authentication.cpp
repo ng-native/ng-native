@@ -69,7 +69,10 @@ std::shared_ptr<NativeModule> makeLocalAuthenticationModule(std::shared_ptr<Auth
       });
       promise("isEnrolledAsync", [mac](const folly::dynamic &, JsPromise promise) {
         auto facts = mac->facts();
-        promise.resolve(facts.biometry != Biometry::None && !facts.biometryUnusable);
+        // Enrolled though locked out, as expo's iOS module answers: the lockout ends.
+        promise.resolve(
+            facts.biometry != Biometry::None &&
+            (!facts.biometryUnusable || *facts.biometryUnusable == Authenticator::Failure::BiometryLockout));
       });
       promise("supportedAuthenticationTypesAsync", [mac](const folly::dynamic &, JsPromise promise) {
         folly::dynamic types = folly::dynamic::array();
