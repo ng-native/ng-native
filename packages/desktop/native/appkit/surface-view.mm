@@ -1,6 +1,7 @@
 #import "surface-view.h"
 
 #import "host-view.h"
+#import "pointer-buttons.h"
 
 using facebook::react::Cursor;
 
@@ -152,6 +153,8 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
   ngn::ContainerId _container;
   std::optional<ngn::ContainerInsets> _reported;
   id _wheelMonitor;
+  // The mouse buttons held as of the last event delivered here (pointer-buttons.h).
+  int _buttons;
 }
 
 + (void)showCursor:(Cursor)cursor {
@@ -293,7 +296,8 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
 
 - (ngn::PointerInput)inputFor:(NSEvent *)event {
   ngn::PointerInput input = [self inputAt:event.locationInWindow];
-  input.buttons = static_cast<int>(NSEvent.pressedMouseButtons);
+  _buttons = NGNButtonsAfter(_buttons, event);
+  input.buttons = _buttons;
   // Only a button's events have a pressure: asking a wheel's or a move's throws.
   switch (event.type) {
     case NSEventTypeLeftMouseDown:
