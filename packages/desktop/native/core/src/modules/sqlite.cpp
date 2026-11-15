@@ -260,9 +260,16 @@ class Databases {
   };
 
   // Refuses an ATTACH of a file outside the files the app may write. A temporary or in-memory
-  // database is no file.
+  // database is no file. A name the statement computes (a bound parameter, an expression) comes
+  // here unread, as null, so it is refused: only a literal name can be checked.
   static int authorize(void *self, int action, const char *file, const char *, const char *, const char *) {
-    if (action != SQLITE_ATTACH || file == nullptr || *file == '\0' || std::string_view(file) == ":memory:") {
+    if (action != SQLITE_ATTACH) {
+      return SQLITE_OK;
+    }
+    if (file == nullptr) {
+      return SQLITE_DENY;
+    }
+    if (*file == '\0' || std::string_view(file) == ":memory:") {
       return SQLITE_OK;
     }
     auto *databases = static_cast<Databases *>(self);
