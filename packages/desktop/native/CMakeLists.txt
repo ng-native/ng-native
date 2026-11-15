@@ -217,7 +217,7 @@ if(NGN_TESTS)
         appkit/input-replay.mm appkit/tests/input-replay.test.mm
         appkit/modal-focus.mm appkit/tests/modal-focus.test.mm
         appkit/glass-effect.mm appkit/tests/glass.test.mm
-        appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm)
+        appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm appkit/tests/locales.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AuthenticationServices" "-framework AVKit")
   endif()

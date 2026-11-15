@@ -187,15 +187,17 @@ std::string str(NSString *s) {
   return s != nil ? std::string(s.UTF8String) : std::string();
 }
 
-// NSCalendar's identifiers as expo-localization names them.
+} // namespace
+
+// NSCalendar's identifiers as expo-localization names them, which are CLDR's.
 std::string calendarName(NSCalendarIdentifier identifier) {
   static NSDictionary<NSCalendarIdentifier, NSString *> *names = @{
     NSCalendarIdentifierGregorian : @"gregorian",
     NSCalendarIdentifierBuddhist : @"buddhist",
     NSCalendarIdentifierChinese : @"chinese",
     NSCalendarIdentifierCoptic : @"coptic",
-    NSCalendarIdentifierEthiopicAmeteMihret : @"ethioaa",
-    NSCalendarIdentifierEthiopicAmeteAlem : @"ethiopic",
+    NSCalendarIdentifierEthiopicAmeteMihret : @"ethiopic",
+    NSCalendarIdentifierEthiopicAmeteAlem : @"ethioaa",
     NSCalendarIdentifierHebrew : @"hebrew",
     NSCalendarIdentifierISO8601 : @"iso8601",
     NSCalendarIdentifierIndian : @"indian",
@@ -210,6 +212,8 @@ std::string calendarName(NSCalendarIdentifier identifier) {
   NSString *name = names[identifier];
   return str(name != nil ? name : identifier);
 }
+
+namespace {
 
 class SystemLocales final : public LocaleSource {
  public:
