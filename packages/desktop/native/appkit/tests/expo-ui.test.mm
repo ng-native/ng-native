@@ -324,6 +324,10 @@ TEST_CASE("a button presses, a text field types, and a colour picker reports hex
   CHECK(h.renderer.perform(4, dynamic::object("value", "#00ff00")));
   CHECK(h.events.back().name == "selectionChange");
   CHECK(h.events.back().payload == dynamic::object("value", "#00FF00FF"));
+  // A limit past what an Int holds keeps all of the text.
+  h.renderer.setTree(host({ui(3, "TextFieldView", dynamic::object("maxLength", 1e20))}));
+  CHECK(h.renderer.perform(3, dynamic::object("text", "Adams")));
+  CHECK(h.events.back().payload == dynamic::object("value", "Adams"));
 }
 
 TEST_CASE("forms, sections, gauges, progress and the rest of the views draw") {

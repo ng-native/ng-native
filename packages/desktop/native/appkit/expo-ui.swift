@@ -585,7 +585,10 @@ func uiColorPicker(_ node: UINode, _ store: UIStore) -> some View {
 // What is typed into a text field, by the user or a replay: cut to its maxLength, kept and sent.
 func uiType(_ node: UINode, _ store: UIStore, _ value: String) {
   var typed = value
-  if let limit = node.number("maxLength"), limit >= 0 { typed = String(typed.prefix(Int(limit))) }
+  // Converted only when it cuts the text, so a limit past what an Int holds keeps all of it.
+  if let limit = node.number("maxLength"), limit >= 0, limit < Double(typed.count) {
+    typed = String(typed.prefix(Int(limit)))
+  }
   store.user(node, "text", typed, event: "textChange", payload: ["value": typed])
 }
 
