@@ -135,7 +135,6 @@ constexpr CGFloat kMargin = 20;
     ]];
   }
   NSView *previous = nil;
-  bool escapeTaken = false;
   // Laid out from the trailing edge: the last button is the rightmost.
   for (auto it = _chrome.buttons.rbegin(); it != _chrome.buttons.rend(); ++it) {
     NSButton *button = [NSButton buttonWithTitle:nsString(it->title) target:self action:@selector(press:)];
@@ -144,6 +143,9 @@ constexpr CGFloat kMargin = 20;
     button.translatesAutoresizingMaskIntoConstraints = NO;
     if (it->isDefault) {
       button.keyEquivalent = @"\r";
+    } else if (it->cancel) {
+      // The first left one (Cancel): the core marks only it.
+      button.keyEquivalent = @"\033";
     }
     [chromeView addSubview:button];
     [NSLayoutConstraint activateConstraints:@[
@@ -152,18 +154,6 @@ constexpr CGFloat kMargin = 20;
                       : [button.trailingAnchor constraintEqualToAnchor:previous.leadingAnchor constant:-12],
     ]];
     previous = button;
-  }
-  // Escape presses the first left one (Cancel).
-  for (NSView *v in chromeView.subviews) {
-    if (![v isKindOfClass:NSButton.class]) {
-      continue;
-    }
-    for (const auto &b : _chrome.buttons) {
-      if (b.cancel && !escapeTaken && [((NSButton *)v).identifier isEqualToString:nsString(b.id)]) {
-        ((NSButton *)v).keyEquivalent = @"\033";
-        escapeTaken = true;
-      }
-    }
   }
   [container addSubview:chromeView positioned:NSWindowBelow relativeTo:nil];
   return chromeView;

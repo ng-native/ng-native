@@ -174,6 +174,17 @@ TEST_CASE("a sheet's header is a heading and a row of buttons, Cancel first and 
   auto only = ngn::sheetChrome(cancelOnly, ModalPresentation::Sheet);
   REQUIRE(only.buttons.size() == 1);
   CHECK_FALSE(only.buttons[0].isDefault);
+  // Escape presses the first left button only, and two left ones make no default.
+  ngn::HeaderBar twoLeft{.title = "Hi", .left = {button("cancel", "Cancel"), button("other", "Other")}, .right = {button("save", "Save")}};
+  CHECK(ngn::sheetChrome(twoLeft, ModalPresentation::Sheet).buttons == std::vector<ngn::SheetButton>{
+                                                                         {.id = "cancel", .title = "Cancel", .cancel = true},
+                                                                         {.id = "other", .title = "Other"},
+                                                                         {.id = "save", .title = "Save", .isDefault = true},
+                                                                     });
+  twoLeft.right.clear();
+  auto leftOnly = ngn::sheetChrome(twoLeft, ModalPresentation::Sheet);
+  REQUIRE(leftOnly.buttons.size() == 2);
+  CHECK_FALSE(leftOnly.buttons[1].isDefault);
   header.hidden = true;
   CHECK(ngn::sheetChrome(header, ModalPresentation::Sheet).top() == 0);
 }

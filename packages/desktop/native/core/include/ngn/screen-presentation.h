@@ -53,7 +53,7 @@ constexpr facebook::react::Float kSheetButtonRowHeight = 52;
 struct SheetButton {
   std::string id;
   std::string title;
-  // A left item: Escape presses the first of them.
+  // The first left item: Escape presses it. Only one button has it.
   bool cancel{false};
   // The last right item: Return presses it.
   bool isDefault{false};
