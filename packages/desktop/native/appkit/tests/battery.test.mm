@@ -33,7 +33,8 @@ TEST_CASE("MacPowerSource agrees with pmset on the battery and the adapter") {
   CHECK(facts.externalPower == (pmset.find("'AC Power'") != std::string::npos));
   CHECK(facts.lowPowerMode == static_cast<bool>(NSProcessInfo.processInfo.isLowPowerModeEnabled));
   if (facts.hasBattery) {
-    CHECK(facts.level > 0);
+    // An empty battery reads 0.
+    CHECK(facts.level >= 0);
     CHECK(facts.level <= 1);
   } else {
     CHECK(ngn::batteryLevelOf(facts) == -1);
