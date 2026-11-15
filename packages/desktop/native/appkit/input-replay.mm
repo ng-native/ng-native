@@ -73,6 +73,9 @@ bool gDragged = false;
 // Whether a replayed press is still being handled: a view tracking it in a loop of its own reads
 // the release from the event queue, where it is posted.
 bool gInPress = false;
+// Whether that press's release is posted and not yet read: what the release does (a field it
+// focuses) has not happened yet.
+bool gReleasePosted = false;
 
 void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
   NSEvent *event = [NSEvent mouseEventWithType:type
@@ -96,6 +99,7 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
     if (type == NSEventTypeLeftMouseUp) {
       gPressedView = nil;
       gDragged = false;
+      gReleasePosted = true;
     }
     [NSApp postEvent:event atStart:NO];
     return;
@@ -118,6 +122,7 @@ void sendMouse(NSWindow *window, NSEventType type, double x, double y) {
     [NSApp sendEvent:event];
     if (press) {
       gInPress = false;
+      gReleasePosted = false;
     }
   }
 }
@@ -336,8 +341,9 @@ void playFrom(NSWindow *window, std::shared_ptr<InputScript> script, size_t at) 
   while (at < script->steps.size()) {
     const auto &step = script->steps[at++];
     // A press still tracking in its loop has not read the release posted for it: the next press
-    // waits for it, so that loop does not take this one's release.
-    if (gInPress && step.kind == InputStep::Kind::Down) {
+    // waits for it, so that loop does not take this one's release, and once the release is
+    // posted every step waits, so it follows what the release does.
+    if (gInPress && (step.kind == InputStep::Kind::Down || gReleasePosted)) {
       playLater(window, script, at - 1, 10);
       return;
     }
