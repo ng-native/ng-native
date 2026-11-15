@@ -101,7 +101,8 @@ std::string LiveRegions::textOf(Tag tag) const {
 
 void LiveRegions::collect(Tag tag, std::string &out) const {
   const auto *node = tree_.find(tag);
-  if (node == nullptr) {
+  // A covered screen inside a shown region (an unselected tab's) is not read out with it.
+  if (node == nullptr || tree_.covered(tag)) {
     return;
   }
   const auto *props = viewProps(node->view);
