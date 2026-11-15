@@ -96,7 +96,8 @@ class RedBox {
   size_t count() const;
 
  private:
-  void symbolicate(size_t index, const JsError &error);
+  // Asks for `error`'s stack for the kept error numbered `serial`. Called with the lock held.
+  void symbolicate(uint64_t serial, const JsError &error);
   void showLocked(std::unique_lock<std::mutex> &lock);
 
   std::shared_ptr<RedBoxBackend> backend_;
@@ -104,6 +105,10 @@ class RedBox {
   std::string devServer_;
   mutable std::mutex mutex_;
   std::vector<JsError> errors_;
+  // Each kept error's number, beside it: a symbolication finds its error by number, whatever was
+  // pushed out or reported since it was asked for.
+  std::vector<uint64_t> serials_;
+  uint64_t nextSerial_{0};
   // Bumped by each clear, so a symbolication that answers after one is dropped.
   uint64_t generation_{0};
   size_t selected_{0};

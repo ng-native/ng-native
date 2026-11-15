@@ -170,22 +170,25 @@ void RedBox::report(JsError error) {
       kept.componentStack = std::move(error.componentStack);
     }
     selected_ = errors_.size() - 1;
-    size_t index = selected_;
+    // Taken before the show lets the lock go.
+    uint64_t serial = serials_.back();
     JsError copy = kept;
     showLocked(lock);
     if (stack) {
-      symbolicate(index, copy);
+      symbolicate(serial, copy);
     }
     return;
   }
   if (errors_.size() == kKept) {
     errors_.erase(errors_.begin());
+    serials_.erase(serials_.begin());
   }
   errors_.push_back(error);
+  uint64_t serial = nextSerial_++;
+  serials_.push_back(serial);
   selected_ = errors_.size() - 1;
-  size_t index = selected_;
   showLocked(lock);
-  symbolicate(index, error);
+  symbolicate(serial, error);
 }
 
 void RedBox::step(int delta) {
@@ -212,6 +215,7 @@ RedBox::~RedBox() {
 void RedBox::dismiss() {
   std::unique_lock lock(mutex_);
   errors_.clear();
+  serials_.clear();
   ++generation_;
   std::vector<std::unique_ptr<HttpTask>> tasks;
   tasks.swap(tasks_);
@@ -249,8 +253,7 @@ void RedBox::showLocked(std::unique_lock<std::mutex> &lock) {
   lock.lock();
 }
 
-void RedBox::symbolicate(size_t index, const JsError &error) {
-  // Called with the lock held.
+void RedBox::symbolicate(uint64_t serial, const JsError &error) {
   if (!http_ || devServer_.empty() || error.stack.empty()) {
     return;
   }
@@ -272,7 +275,7 @@ void RedBox::symbolicate(size_t index, const JsError &error) {
   HttpCallbacks callbacks;
   callbacks.onResponse = [ok](const HttpResponse &response) { *ok = response.status == 200; };
   callbacks.onData = [body](std::string chunk, int64_t) { body->append(chunk); };
-  callbacks.onComplete = [this, body, ok, generation, index](const std::string &failure, bool) {
+  callbacks.onComplete = [this, body, ok, generation, serial](const std::string &failure, bool) {
     if (!failure.empty() || !*ok) {
       return;
     }
@@ -287,9 +290,11 @@ void RedBox::symbolicate(size_t index, const JsError &error) {
       return;
     }
     std::unique_lock lock(mutex_);
-    if (generation != generation_ || index >= errors_.size()) {
+    auto found = std::find(serials_.begin(), serials_.end(), serial);
+    if (generation != generation_ || found == serials_.end()) {
       return;
     }
+    size_t index = static_cast<size_t>(found - serials_.begin());
     errors_[index].stack = std::move(frames);
     if (showing_ && selected_ == index) {
       showLocked(lock);
