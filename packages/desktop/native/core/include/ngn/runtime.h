@@ -8,6 +8,7 @@
 #include "ngn/module-registry.h"
 #include "ngn/mounting-manager.h"
 #include "ngn/network.h"
+#include "ngn/reload-thread.h"
 #include "ngn/surface-book.h"
 #include "ngn/native-controls.h"
 #include "ngn/text-measurer.h"
@@ -141,9 +142,8 @@ class Runtime {
   std::recursive_mutex mutex_;
   std::atomic<bool> reloading_{false};
   // The last reload's thread, which uses this runtime until it ends: joined before the next reload
-  // and before shutdown tears the runtime down.
-  std::thread reloader_;
-  std::atomic<bool> reloaderDone_{true};
+  // and before shutdown tears the runtime down (reload-thread.h).
+  ReloadThread reloader_;
   std::unique_ptr<facebook::react::ReactHost> host_;
   struct Surface {
     std::string moduleName;
