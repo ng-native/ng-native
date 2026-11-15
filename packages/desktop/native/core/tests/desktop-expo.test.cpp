@@ -32,6 +32,8 @@ Answer ask(const ngn::NativeModule &module, const std::string &method, dynamic a
 struct MemorySecrets final : ngn::SecretStore {
   std::map<std::pair<std::string, std::string>, std::string> items;
   bool failing{false};
+  // Reads, but cannot remove (an item another app's access list guards).
+  bool stuck{false};
   std::optional<std::string> get(const std::string &s, const std::string &k) override {
     if (failing) {
       throw std::runtime_error("the keychain is locked");
@@ -43,7 +45,7 @@ struct MemorySecrets final : ngn::SecretStore {
     items[{s, k}] = v;
   }
   void remove(const std::string &s, const std::string &k) override {
-    if (failing) {
+    if (failing || stuck) {
       throw std::runtime_error("the keychain is locked");
     }
     items.erase({s, k});
@@ -395,6 +397,14 @@ TEST_CASE("a moving store reads through to the old one and moves what it finds t
   CHECK(now->items.at({"app", "locked"}) == "v");
   store.remove("app", "locked");
   CHECK_FALSE(now->items.contains({"app", "locked"}));
+
+  // An old copy that stays readable fails the removal, rather than coming back on the next get.
+  old->failing = false;
+  old->stuck = true;
+  old->items[{"app", "kept"}] = "old";
+  now->items[{"app", "kept"}] = "new";
+  CHECK_THROWS(store.remove("app", "kept"));
+  CHECK(store.get("app", "kept") == "old");
 }
 
 TEST_CASE("the Data Protection keychain is used when the app's signature has a Team ID and an app identity") {
