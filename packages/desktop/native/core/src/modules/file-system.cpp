@@ -108,6 +108,17 @@ std::string resolved(const std::string &path) {
   return error ? fs::path(path).lexically_normal().string() : out.string();
 }
 
+// The directory entry a path names: its folder with every link followed, and its last part as it
+// is, so a final symbolic link is the link itself. Two links to one file are two entries.
+std::string entryOf(const std::string &path) {
+  auto p = fs::path(path);
+  auto last = p.filename();
+  if (last.empty() || last == "." || last == "..") {
+    return resolved(path);
+  }
+  return (fs::path(resolved(p.parent_path().string())) / last).string();
+}
+
 bool inside(const std::string &path, const std::string &root) {
   return path == root || (path.starts_with(root) && (root.ends_with('/') || path[root.size()] == '/'));
 }
@@ -590,7 +601,7 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         // out of where the link leads, not out of the link, so a path where the two differ is
         // refused rather than acted on as another file.
         auto parts = fs::path(*path);
-        if (std::find(parts.begin(), parts.end(), "..") != parts.end() && resolved(*path) != resolved(normal)) {
+        if (std::find(parts.begin(), parts.end(), "..") != parts.end() && entryOf(*path) != entryOf(normal)) {
           throw FileError(*path +
                           " climbs out of a symbolic link with .., which names another file: use the path it leads to.");
         }
