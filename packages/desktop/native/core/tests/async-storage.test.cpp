@@ -113,6 +113,19 @@ TEST_CASE("RNCAsyncStorage (2.x) and RNAsyncStorage's legacy calls (3.x) share o
   CHECK(resolved == dynamic::array(dynamic::object("key", "a")("value", "1"), dynamic::object("key", "k")("value", nullptr)));
   v3->callWithPromise("getKeys", dynamic::array("notes"), promise);
   CHECK(resolved == dynamic::array("a"));
+  // A value that is neither a string nor null fails the whole batch, and nothing is written.
+  std::string refused;
+  v3->callWithPromise(
+      "setValues",
+      dynamic::array("notes", dynamic::array(dynamic::object("key", "b")("value", "2"), dynamic::object("key", "a")("value", 5))),
+      {[&](dynamic) {}, [&](const std::string &message) { refused = message; }});
+  CHECK(refused.find("key a") != std::string::npos);
+  v3->callWithPromise("getValues", dynamic::array("notes", dynamic::array("a", "b")), promise);
+  CHECK(resolved == dynamic::array(dynamic::object("key", "a")("value", "1"), dynamic::object("key", "b")("value", nullptr)));
+  // Null, or no value, removes the key.
+  v3->callWithPromise("setValues", dynamic::array("notes", dynamic::array(dynamic::object("key", "a")("value", nullptr))), promise);
+  v3->callWithPromise("getKeys", dynamic::array("notes"), promise);
+  CHECK(resolved == dynamic::array());
   v3->callWithPromise("clearStorage", dynamic::array("notes"), promise);
   v3->callWithPromise("getKeys", dynamic::array("notes"), promise);
   CHECK(resolved == dynamic::array());
