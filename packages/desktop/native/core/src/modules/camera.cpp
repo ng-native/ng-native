@@ -41,9 +41,9 @@ std::shared_ptr<CameraCapture> CameraViews::find(int tag) const {
   return found == captures_.end() ? nullptr : found->second;
 }
 
-CameraMount cameraMount(CameraHardware::Access access, bool hasCamera, bool noPrompts) {
+CameraMount cameraMount(CameraHardware::Access access, bool hasCamera, bool noPrompts, bool asked) {
   using Access = CameraHardware::Access;
-  if (access == Access::NotDetermined && !noPrompts) {
+  if (access == Access::NotDetermined && !noPrompts && !asked) {
     return CameraMount::Ask;
   }
   if (access != Access::Granted) {

@@ -115,8 +115,10 @@ struct CameraCandidate {
 int chooseCamera(const std::vector<CameraCandidate> &cameras);
 
 // What a view does as it mounts: ask for the permission, start the camera, or report why not.
+// `asked` is a view that has asked once already: a request that left the permission undetermined
+// (an app with no camera usage string, which the OS never prompts for) is not asked again.
 enum class CameraMount { Ask, Start, NotPermitted, NoCamera };
-CameraMount cameraMount(CameraHardware::Access access, bool hasCamera, bool noPrompts);
+CameraMount cameraMount(CameraHardware::Access access, bool hasCamera, bool noPrompts, bool asked = false);
 // expo-camera's mountError message for a mount that cannot start, or empty.
 std::string cameraMountError(CameraMount mount);
 
