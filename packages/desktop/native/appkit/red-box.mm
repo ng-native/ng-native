@@ -367,8 +367,12 @@ void showDebuggerPaused(std::function<void()> resume) {
 }
 
 void hideDebuggerPaused() {
-  gPausedTurn++;
+  uint64_t turn = ++gPausedTurn;
   auto hide = ^{
+    // A show since has the panel now.
+    if (gPausedTurn != turn) {
+      return;
+    }
     gResume = nullptr;
     [gPausedPanel.parentWindow removeChildWindow:gPausedPanel];
     [gPausedPanel orderOut:nil];
