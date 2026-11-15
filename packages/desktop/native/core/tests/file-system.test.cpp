@@ -994,6 +994,51 @@ TEST_CASE("FileChanges reports a watched folder's entries deleted once a file ta
         dynamic::array(dynamic::object("type", "modified")("uri", ngn::fileUri(watched))));
 }
 
+TEST_CASE("FileChanges keeps what it saw when a folder it cannot list has a type it cannot read either") {
+  TempDir dir;
+  fs::create_directories(dir.path / "parent/watched");
+  write(dir.path / "parent/watched/kept.txt", "");
+  auto parent = dir.path / "parent";
+  auto watched = (parent / "watched").string();
+  // The first check found the folder there; the parent stops being searchable before the rest.
+  auto there = [](const std::string &) { return std::optional<bool>(true); };
+  auto exists = [](const std::string &p) { return fs::exists(p); };
+  using E = ngn::FileWatcher::Event;
+  ngn::FileChanges tracker(watched, exists);
+  write(dir.path / "parent/watched/missed.txt", "");
+  fs::permissions(parent, fs::perms::owner_exec, fs::perm_options::remove);
+  folly::dynamic unknown;
+  try {
+    unknown = tracker.changes({E{.path = watched, .rescan = true}}, there);
+  } catch (...) {
+    fs::permissions(parent, fs::perms::owner_exec, fs::perm_options::add);
+    throw;
+  }
+  fs::permissions(parent, fs::perms::owner_exec, fs::perm_options::add);
+  // Not a confirmed removal: kept.txt is not reported deleted, and the listing is owed.
+  CHECK(unknown.empty());
+  CHECK(tracker.changes({E{.path = watched + "/kept.txt", .modified = true}}, exists) ==
+        dynamic::array(dynamic::object("type", "created")("uri", ngn::fileUri(watched + "/missed.txt")),
+                       dynamic::object("type", "modified")("uri", ngn::fileUri(watched + "/kept.txt"))));
+}
+
+TEST_CASE("FileChanges reports a watched folder and its entries deleted when it goes after the check that found it") {
+  TempDir dir;
+  fs::create_directories(dir.path / "watched");
+  write(dir.path / "watched/kept.txt", "");
+  auto watched = (dir.path / "watched").string();
+  auto exists = [](const std::string &p) { return fs::exists(p); };
+  auto there = [](const std::string &) { return std::optional<bool>(true); };
+  using E = ngn::FileWatcher::Event;
+  ngn::FileChanges tracker(watched, exists);
+  fs::remove_all(watched);
+  CHECK(tracker.changes({E{.path = watched, .rescan = true}}, there) ==
+        dynamic::array(dynamic::object("type", "deleted")("uri", ngn::fileUri(watched)),
+                       dynamic::object("type", "deleted")("uri", ngn::fileUri(watched + "/kept.txt"))));
+  // Confirmed: nothing is owed.
+  CHECK(tracker.changes({E{.path = watched, .rescan = true}}, exists).empty());
+}
+
 TEST_CASE("a folder that cannot be listed when the watch begins is no watch, and holds nothing open") {
   TempDir dir;
   auto folders = foldersIn(dir.path);
