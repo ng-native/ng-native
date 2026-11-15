@@ -5,11 +5,15 @@
 
 #include "ngn/notifications.h"
 
+#import <UserNotifications/UserNotifications.h>
+
 #include <memory>
 
 namespace ngn::appkit {
 
 // One for the process; its delegate is set at once, so a click that launched the app is kept.
 std::shared_ptr<NotificationCenter> makeNotificationCenter(std::shared_ptr<NotificationEvents> events);
+// What a request shows when it is delivered, its badge included.
+UNMutableNotificationContent *notificationContent(const NotificationRequest &request);
 
 } // namespace ngn::appkit
