@@ -34,6 +34,7 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   // and the view's, and is applied once, as the prop arrives or changes.
   std::optional<facebook::react::Point> _offsetProp;
   std::optional<facebook::react::Point> _pendingOffset;
+  BOOL _offsetQueued;
 }
 
 + (std::function<void(NSInteger, CGPoint)>)offsetChanged {
@@ -99,13 +100,31 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
     if (!first || p->contentOffset != facebook::react::Point{}) {
       _pendingOffset = p->contentOffset;
     }
-    [self applyPendingOffset];
+    [self applyPendingOffsetAfterMount];
   }
 }
 
-// The starting offset the props ask for, within the content, once there is content to scroll.
+// After the rest of this mount: its state and its layout, which come after the props in that
+// order, give the content's size and the view's. Once, however many of them change.
+- (void)applyPendingOffsetAfterMount {
+  if (!_pendingOffset || _offsetQueued) {
+    return;
+  }
+  _offsetQueued = YES;
+  __weak NGNScrollView *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NGNScrollView *strong = weakSelf;
+    if (strong != nil) {
+      strong->_offsetQueued = NO;
+      [strong applyPendingOffset];
+    }
+  });
+}
+
+// The starting offset the props ask for, within the content, once there is content to scroll. The
+// viewport is the clip view's, which a legacy scroller's gutter makes smaller than this view.
 - (void)applyPendingOffset {
-  NSSize doc = _document.frame.size, view = self.bounds.size;
+  NSSize doc = _document.frame.size, view = _scrollView.contentView.bounds.size;
   if (!_pendingOffset || doc.width <= 0 || doc.height <= 0 || view.width <= 0 || view.height <= 0) {
     return;
   }
@@ -121,7 +140,7 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   [super updateLayout:metrics];
   _scrollView.frame = self.bounds;
   [self updateScrollers];
-  [self applyPendingOffset];
+  [self applyPendingOffsetAfterMount];
 }
 
 - (void)updateDesktopProps:(const ngn::DesktopProps &)props {
@@ -176,7 +195,7 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   [_document setFrameSize:NSMakeSize(size.width, size.height)];
   _applyingState = NO;
   [self updateScrollers];
-  [self applyPendingOffset];
+  [self applyPendingOffsetAfterMount];
 }
 
 - (void)scrollWheel:(NSEvent *)event {
