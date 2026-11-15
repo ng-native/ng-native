@@ -25,6 +25,7 @@ import {
   type Route,
   type ActivatedRouteSnapshot,
 } from '@angular/router';
+import { ROUTE_INPUT_OPTIONS, type RouteInputOptions } from '../router/src/bind-route-inputs.ts';
 import { NativeStackReuseStrategy } from '../router/src/native-stack-reuse-strategy.ts';
 import { registerScreenComponents } from '../router/src/screens.ts';
 import { registerPlatformComponents } from '@ng-native/fabric';
@@ -81,6 +82,8 @@ describe('native tabs outlet', () => {
   let reported: unknown[];
   /** Whether the app asked for `withComponentInputBinding()`, as `Router` reports it. */
   let inputBinding: boolean;
+  /** The `withComponentInputBinding()` options, as `provideNativeRouter` hands them on. */
+  let inputOptions: RouteInputOptions;
   /** Just enough of `Router.events` for the outlet to follow navigations. */
   let routerEvents: {
     next(event: unknown): void;
@@ -112,11 +115,19 @@ describe('native tabs outlet', () => {
   };
 
   /** Enough of the three observables the input binding reads, each emitting once. */
-  const withParams = (route: ActivatedRoute, params: Record<string, unknown>): ActivatedRoute => {
+  const withParams = (
+    route: ActivatedRoute,
+    params: Record<string, unknown>,
+    queryParams: Record<string, unknown> = {},
+  ): ActivatedRoute => {
     const emits = (value: unknown) => ({
       subscribe: (next: (value: unknown) => void) => (next(value), { unsubscribe: () => {} }),
     });
-    return Object.assign(route, { params: emits(params), queryParams: emits({}), data: emits({}) });
+    return Object.assign(route, {
+      params: emits(params),
+      queryParams: emits(queryParams),
+      data: emits({}),
+    });
   };
 
   before(async () => {
@@ -130,6 +141,7 @@ describe('native tabs outlet', () => {
     navigationError = undefined;
     reported = [];
     inputBinding = true;
+    inputOptions = { queryParams: true, unmatchedInputBehavior: 'alwaysUndefined' };
     const listeners = new Set<(event: unknown) => void>();
     routerEvents = {
       next: (event) => listeners.forEach((listener) => listener(event)),
@@ -179,6 +191,18 @@ describe('native tabs outlet', () => {
         },
         // The template form these assert; router-tab-template-icon.test.ts covers 4.29 and later.
         { provide: SCREENS_VERSION, useValue: '4.26.2' },
+        {
+          provide: ROUTE_INPUT_OPTIONS,
+          // Read when a tab binds rather than when the outlet is built, so a test can set it.
+          useValue: {
+            get queryParams() {
+              return inputOptions.queryParams;
+            },
+            get unmatchedInputBehavior() {
+              return inputOptions.unmatchedInputBehavior;
+            },
+          },
+        },
       ],
     });
     fabric = app.fabric;
@@ -287,6 +311,13 @@ describe('native tabs outlet', () => {
     outlet.activateWith(withParams(routeFor(titled()), { title: 'from the route' }), env);
     await settle();
     assert.deepEqual(labels(fabric), ['from the route']);
+  });
+
+  it("binds a tab's inputs by the options given to withComponentInputBinding()", async () => {
+    inputOptions = { queryParams: false, unmatchedInputBehavior: 'undefinedIfStale' };
+    outlet.activateWith(withParams(routeFor(titled()), {}, { title: 'from the query' }), env);
+    await settle();
+    assert.deepEqual(labels(fabric), ['untitled'], 'no query param, and the default kept');
   });
 
   it('leaves a tab component input alone when the app did not ask for binding', async () => {
