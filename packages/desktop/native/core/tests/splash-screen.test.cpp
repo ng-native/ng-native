@@ -28,6 +28,8 @@ TEST_CASE("The splash holds the first windows until it is hidden, then shows the
   CHECK(shown.empty());
   CHECK(ask(*module, "hideAsync") == dynamic(nullptr));
   CHECK(shown == std::vector<int>{1, 2});
+  // The held windows have shown: holding again is too late.
+  CHECK(ask(*module, "preventAutoHideAsync") == dynamic(false));
   // After it is hidden a window shows at once, and hiding again does nothing.
   gate->show([&] { shown.push_back(3); });
   CHECK(shown == std::vector<int>{1, 2, 3});

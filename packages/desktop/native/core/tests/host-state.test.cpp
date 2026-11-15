@@ -99,3 +99,18 @@ TEST_CASE("Watched sends values in the order they were set, one a listener sets 
   // Without the queue, b heard 2 inside a's call and then 1, ending on a value that is not set.
   CHECK(second == std::vector<int>{1, 2});
 }
+
+TEST_CASE("Watched gives a new listener the value its first call follows") {
+  ngn::Watched<int> value{1};
+  int current = 0;
+  std::vector<std::pair<int, int>> changes;
+  auto handle = value.listen(
+      [&](const int &now) {
+        changes.emplace_back(current, now);
+        current = now;
+      },
+      current);
+  CHECK(current == 1);
+  value.set(2);
+  CHECK(changes == std::vector<std::pair<int, int>>{{1, 2}});
+}

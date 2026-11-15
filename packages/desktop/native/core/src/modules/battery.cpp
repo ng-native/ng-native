@@ -65,14 +65,12 @@ std::shared_ptr<NativeModule> makeBatteryModule(std::shared_ptr<PowerSource> sou
       }
     }
 
+    // One change at a time, read and sent in order: the source may call from any thread.
     void changed() {
+      std::lock_guard lock(mutex);
       auto now = source->facts();
-      PowerFacts before;
-      {
-        std::lock_guard lock(mutex);
-        before = last;
-        last = now;
-      }
+      PowerFacts before = last;
+      last = now;
       if (batteryLevelOf(now) != batteryLevelOf(before)) {
         emit("ngNativeBattery", folly::dynamic::object("type", "level")("batteryLevel", batteryLevelOf(now)));
       }

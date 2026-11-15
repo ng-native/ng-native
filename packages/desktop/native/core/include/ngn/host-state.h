@@ -123,6 +123,14 @@ class Watched {
     return listeners_.add(std::move(listener));
   }
 
+  // Listens, with `current` set to the value the listener's first call follows: a change made
+  // between reading the value and listening is heard.
+  std::shared_ptr<void> listen(Listener listener, T &current) {
+    std::lock_guard lock(mutex_);
+    current = value_;
+    return listeners_.add(std::move(listener));
+  }
+
  private:
   void notifyQueued() {
     for (;;) {

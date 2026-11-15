@@ -77,7 +77,6 @@ std::shared_ptr<NativeModule> makeAccessibilityManager(const CoreModuleServices 
         }
       });
       listeners();
-      last_ = state->accessibility.get();
       subscription_ = state->accessibility.listen([this](const AccessibilitySettings &now) {
         auto before = last_;
         last_ = now;
@@ -86,7 +85,7 @@ std::shared_ptr<NativeModule> makeAccessibilityManager(const CoreModuleServices 
             emit(setting.event, now.*setting.field);
           }
         }
-      });
+      }, last_);
     }
 
     // Only the listener reads and writes it, and the state calls its listeners one at a time.
