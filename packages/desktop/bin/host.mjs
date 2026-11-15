@@ -308,12 +308,27 @@ export function prepareHost(sys, options) {
   const file = linkFile(cwd);
   const { libraries, appModules } = links;
   sys.writeFile(file, `${JSON.stringify({ version: 1, libraries, appModules }, null, 2)}\n`);
-  const hostLibraries = HOST_LIBRARIES.filter((name) => !deny.includes(name))
-    .map((name) => sys.resolvePackage(cwd, name))
-    .filter((dir) => dir !== null);
+  // Where autolinking found each host library, under a dependency's node_modules too, else where
+  // it resolves from the app (a peer dependency the package manager installed, which the walk
+  // does not follow).
+  const found = new Map(links.hostLibraries.map(({ name, dir }) => [name, dir]));
+  const hostLibraries = HOST_LIBRARIES.filter((name) => !deny.includes(name)).flatMap((name) => {
+    const dir = found.get(name) ?? sys.resolvePackage(cwd, name);
+    return dir === null ? [] : [{ name, dir }];
+  });
   const buildDir =
-    prebuiltHost(sys, reactNative, { deny, linked: libraries.length + appModules.length }) ??
-    buildHost(sys, reactNative, hostLibraries, options, file);
+    prebuiltHost(sys, reactNative, {
+      deny,
+      linked: libraries.length + appModules.length,
+      hostLibraries,
+    }) ??
+    buildHost(
+      sys,
+      reactNative,
+      hostLibraries.map(({ dir }) => dir),
+      options,
+      file,
+    );
   return { cwd, expo, config, buildDir, reactNative };
 }
 
@@ -338,9 +353,10 @@ function versionIn(sys, dir) {
  *
  * @param {typeof system} sys
  * @param {string} reactNative
- * @param {{ deny: readonly string[], linked: number }} app
+ * @param {{ deny: readonly string[], linked: number, hostLibraries: { name: string, dir: string }[] }} app
+ *   `hostLibraries`: where each host library the app has is installed
  */
-function prebuiltHost(sys, reactNative, { deny, linked }) {
+function prebuiltHost(sys, reactNative, { deny, linked, hostLibraries }) {
   let text = '';
   try {
     text = sys.readFile(path.join(packageDir, 'prebuilt.json'));
@@ -349,9 +365,8 @@ function prebuiltHost(sys, reactNative, { deny, linked }) {
   }
   const version = versionIn(sys, reactNative);
   if (!version) return null;
-  const cwd = sys.cwd();
   const libraries = Object.fromEntries(
-    HOST_LIBRARIES.map((name) => [name, versionIn(sys, sys.resolvePackage(cwd, name))]),
+    hostLibraries.map(({ name, dir }) => [name, versionIn(sys, dir)]),
   );
   const choice = choosePrebuilt(readManifest(text), {
     reactNative: version,

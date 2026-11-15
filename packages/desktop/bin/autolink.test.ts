@@ -60,6 +60,7 @@ describe('desktopLinks', () => {
         },
       ],
       appModules: [],
+      hostLibraries: [],
       withoutDesktop: [],
       problems: [],
     });
@@ -228,6 +229,30 @@ describe('desktopLinks', () => {
     assert.deepEqual(links.withoutDesktop, []);
   });
 
+  it('says where each host library it walks past is installed, nested ones too, but not denied ones', () => {
+    const root = app({
+      'package.json': { dependencies: { kit: '1.0.0', 'react-native-webview': '14.0.0' } },
+      ...pkg('kit', {}, { 'react-native-svg': '15.0.0', 'react-native-screens': '4.0.0' }),
+      'node_modules/kit/node_modules/react-native-svg/package.json': {
+        name: 'react-native-svg',
+        version: '15.0.0',
+      },
+      ...pkg('react-native-screens', { 'ios/RNS.mm': '' }),
+      ...pkg('react-native-webview', { 'ios/W.m': '' }),
+    });
+    const links = desktopLinks(root, {
+      deny: ['react-native-webview'],
+      builtIn: ['react-native-screens', 'react-native-svg', 'react-native-webview'],
+    });
+    assert.deepEqual(links.hostLibraries, [
+      { name: 'react-native-screens', dir: path.join(root, 'node_modules/react-native-screens') },
+      {
+        name: 'react-native-svg',
+        dir: path.join(root, 'node_modules/kit/node_modules/react-native-svg'),
+      },
+    ]);
+  });
+
   it('leaves the libraries the host compiles in itself unreported', () => {
     const root = app({
       'package.json': { dependencies: { 'react-native-screens': '4.0.0' } },
@@ -265,6 +290,7 @@ describe('linkWarnings', () => {
     const lines = linkWarnings({
       libraries: [],
       appModules: [],
+      hostLibraries: [],
       withoutDesktop: ['a', 'b'],
       problems: ['p'],
     });
@@ -272,7 +298,13 @@ describe('linkWarnings', () => {
     assert.match(lines[1]!, /^No desktop code in a, b: their native modules are absent on macOS\./);
     assert.match(lines[1]!, /deny option of the @ng-native\/desktop plugin/);
     assert.deepEqual(
-      linkWarnings({ libraries: [], appModules: [], withoutDesktop: [], problems: [] }),
+      linkWarnings({
+        libraries: [],
+        appModules: [],
+        hostLibraries: [],
+        withoutDesktop: [],
+        problems: [],
+      }),
       [],
     );
   });

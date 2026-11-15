@@ -63,7 +63,13 @@ function fakeMac(
       calls.push({ command: 'expo', args: [from, ...args] });
       return { status: 0 };
     },
-    links: () => ({ libraries: [], appModules: [], withoutDesktop: [], problems: [] }),
+    links: () => ({
+      libraries: [],
+      appModules: [],
+      hostLibraries: [],
+      withoutDesktop: [],
+      problems: [],
+    }),
     exists: (file) => file === HERMESC,
     remove: (file) => void removed.push(file),
     copy: (from, to) => void copied.push([from, to]),

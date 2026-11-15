@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { UsageError } from './host.mjs';
 import { atLeast, checkToolchain, TOOLCHAIN_MINIMUMS, toolchainProblems } from './toolchain.mjs';
 
-type Answer = { status: number; stdout: string } | 'missing';
+type Answer = { status: number; stdout: string } | 'missing' | 'denied';
 
 /** A Mac whose tools answer from `answers` by command line; a missing one fails to spawn. */
 function mac(answers: Record<string, Answer>) {
@@ -17,6 +17,8 @@ function mac(answers: Record<string, Answer>) {
       const answer = answers[line] ?? 'missing';
       if (answer === 'missing')
         throw Object.assign(new Error(`spawnSync ${command} ENOENT`), { code: 'ENOENT' });
+      if (answer === 'denied')
+        throw Object.assign(new Error(`spawnSync ${command} EACCES`), { code: 'EACCES' });
       return answer;
     },
   };
@@ -65,6 +67,22 @@ describe('toolchainProblems', () => {
     assert.match(problems[0]!, /Swift 5\.10 is older than 6\.0.*xcode-select --install/);
     assert.match(problems[1]!, /CMake 3\.24\.4 is older than 3\.25.*brew upgrade cmake/);
     assert.match(problems[2]!, /Ninja 1\.9\.0 is older than 1\.10.*brew upgrade ninja/);
+  });
+
+  it('says a tool that is there but cannot run failed to run, not that it is missing', () => {
+    const problems = toolchainProblems(
+      mac({
+        ...EVERYTHING,
+        'xcode-select --print-path': 'denied',
+        'cmake --version': 'denied',
+        'ninja --version': { status: 1, stdout: '' },
+      }),
+    );
+    assert.equal(problems.length, 3);
+    assert.match(problems[0]!, /^xcode-select --print-path could not run \(EACCES\)/);
+    assert.match(problems[1]!, /^CMake is installed but cmake --version could not run \(EACCES\)/);
+    assert.match(problems[2]!, /^Ninja is installed but ninja --version failed \(status 1\)/);
+    assert.doesNotMatch(problems.join('\n'), /not installed/);
   });
 
   it('says how to get swiftc back when the selected tools have none', () => {
