@@ -362,6 +362,10 @@ void Runtime::reload(std::function<void(bool)> done) {
             surfaceId, surface.moduleName, folly::dynamic::object(), constraints(surface.metrics), context(surface.metrics));
         started.insert(surfaceId);
       }
+      // A surface resized after the reload started it takes its size now.
+      for (const auto &[surfaceId, surface] : step->update) {
+        host_->setSurfaceConstraints(surfaceId, constraints(surface.metrics), context(surface.metrics));
+      }
       for (auto surfaceId : step->stop) {
         host_->stopSurface(surfaceId);
         started.erase(surfaceId);

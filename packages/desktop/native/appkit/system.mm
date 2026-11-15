@@ -121,8 +121,8 @@ class AppKitSystem final : public System {
     systemScheme_ = std::move(scheme);
   }
 
-  void showAlert(const AlertRequest &request, std::function<void(int, std::string)> done) override {
-    auto shared = std::make_shared<std::function<void(int, std::string)>>(std::move(done));
+  void showAlert(const AlertRequest &request, std::function<void(int, std::string, std::string)> done) override {
+    auto shared = std::make_shared<std::function<void(int, std::string, std::string)>>(std::move(done));
     AlertRequest r = request;
     onMain(^{
       NSAlert *alert = [NSAlert new];
@@ -138,6 +138,7 @@ class AppKitSystem final : public System {
         }
       }
       NSTextField *field = nil;
+      NSSecureTextField *password = nil;
       if (r.input != AlertInput::None) {
         field = r.input == AlertInput::SecureText ? [NSSecureTextField new] : [NSTextField new];
         field.stringValue = ns(r.defaultValue);
@@ -145,9 +146,22 @@ class AppKitSystem final : public System {
         alert.accessoryView = field;
         alert.window.initialFirstResponder = field;
       }
+      // A login-password prompt: the login above, the password below it, as iOS shows them.
+      if (r.input == AlertInput::LoginPassword) {
+        field.placeholderString = @"Login";
+        password = [NSSecureTextField new];
+        password.placeholderString = @"Password";
+        password.frame = NSMakeRect(0, 0, 240, 24);
+        field.frame = NSMakeRect(0, 32, 240, 24);
+        NSView *fields = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 240, 56)];
+        [fields addSubview:field];
+        [fields addSubview:password];
+        field.nextKeyView = password;
+        alert.accessoryView = fields;
+      }
       void (^finish)(NSModalResponse) = ^(NSModalResponse response) {
         int index = (int)(response - NSAlertFirstButtonReturn);
-        (*shared)(index, field ? str(field.stringValue) : "");
+        (*shared)(index, field ? str(field.stringValue) : "", password ? str(password.stringValue) : "");
       };
       // A sheet on the key window; with none (a menu-bar app, or every window closed) the alert
       // runs app-modally, so the answer always arrives.
