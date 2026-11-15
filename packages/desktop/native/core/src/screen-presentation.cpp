@@ -36,7 +36,7 @@ SheetChrome sheetChrome(const HeaderBar &header, ModalPresentation presentation)
     return chrome;
   }
   chrome.heading = header.title;
-  auto add = [&](const std::vector<BarButton> &items, bool cancel) {
+  auto add = [&](const std::vector<BarButton> &items, bool left) {
     for (const auto &item : items) {
       // A fixed space has nothing to press.
       if (item.spacing || (item.title.empty() && item.accessibilityLabel.empty())) {
@@ -45,13 +45,14 @@ SheetChrome sheetChrome(const HeaderBar &header, ModalPresentation presentation)
       chrome.buttons.push_back(SheetButton{
           .id = item.id,
           .title = item.title.empty() ? item.accessibilityLabel : item.title,
-          .cancel = cancel,
+          .cancel = left && chrome.buttons.empty(),
           .disabled = item.disabled});
     }
   };
   add(header.left, true);
+  size_t left = chrome.buttons.size();
   add(header.right, false);
-  if (!chrome.buttons.empty() && !chrome.buttons.back().cancel) {
+  if (chrome.buttons.size() > left) {
     chrome.buttons.back().isDefault = true;
   }
   return chrome;
