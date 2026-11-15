@@ -40,14 +40,27 @@ std::optional<DevServer> DevServer::fromBundleUrl(const std::string &url) {
   if (authority.empty()) {
     return std::nullopt;
   }
-  size_t colon = authority.rfind(':');
-  if (colon != std::string::npos && authority.find(']') == std::string::npos) {
-    std::string port = authority.substr(colon + 1);
+  // The host ends at its closing bracket for an IPv6 address ([::1]:8081), else at the colon.
+  size_t hostEnd;
+  if (authority.front() == '[') {
+    size_t bracket = authority.find(']');
+    if (bracket == std::string::npos) {
+      return std::nullopt;
+    }
+    hostEnd = bracket + 1;
+    if (hostEnd < authority.size() && authority[hostEnd] != ':') {
+      return std::nullopt;
+    }
+  } else {
+    hostEnd = authority.rfind(':');
+  }
+  if (hostEnd != std::string::npos && hostEnd < authority.size()) {
+    std::string port = authority.substr(hostEnd + 1);
     auto [end, error] = std::from_chars(port.data(), port.data() + port.size(), server.port);
     if (error != std::errc() || end != port.data() + port.size() || port.empty()) {
       return std::nullopt;
     }
-    server.host = authority.substr(0, colon);
+    server.host = authority.substr(0, hostEnd);
   } else {
     server.host = authority;
     server.port = server.scheme == "https" ? 443 : 80;

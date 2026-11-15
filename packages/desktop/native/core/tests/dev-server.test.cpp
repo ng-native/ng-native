@@ -50,3 +50,19 @@ TEST_CASE("the HMR client is set up with the OS and entry of the bundle URL") {
   CHECK(args[4] == true);
   CHECK(args[5] == "http");
 }
+
+TEST_CASE("an IPv6 dev server keeps its brackets and its port") {
+  auto server = ngn::DevServer::fromBundleUrl("http://[::1]:8082/index.bundle?platform=macos");
+  REQUIRE(server);
+  CHECK(server->host == "[::1]");
+  CHECK(server->port == 8082);
+  CHECK(server->packagerConnectionUrl() == "ws://[::1]:8082/message");
+  CHECK(server->hmrSetupArgs()[2] == "[::1]");
+  CHECK(server->hmrSetupArgs()[3] == 8082);
+  auto unported = ngn::DevServer::fromBundleUrl("https://[fe80::1]/index.bundle");
+  REQUIRE(unported);
+  CHECK(unported->host == "[fe80::1]");
+  CHECK(unported->port == 443);
+  CHECK_FALSE(ngn::DevServer::fromBundleUrl("http://[::1]x/index.bundle"));
+  CHECK_FALSE(ngn::DevServer::fromBundleUrl("http://[::1/index.bundle"));
+}
