@@ -112,13 +112,19 @@ std::shared_ptr<NativeModule> makeAppearance(const CoreModuleServices &s) {
       sync("getColorScheme", [state](const folly::dynamic &) { return state->colorScheme.get(); });
       async("setColorScheme", [system, state](const folly::dynamic &args, std::vector<JsCallback>) {
         std::string scheme = args.size() > 0 && args[0].isString() ? args[0].asString() : "unspecified";
+        // Published as the backend applies it, never read here: a read on this thread can come
+        // before the backend reads the system's scheme again, and be published after it.
+        std::weak_ptr<HostState> weak = state;
+        auto applied = [weak](std::string now) {
+          if (auto state = weak.lock()) {
+            state->colorScheme.set(std::move(now));
+          }
+        };
         if (scheme == "light" || scheme == "dark") {
-          system->setColorScheme(scheme);
+          system->setColorScheme(scheme, applied);
         } else {
-          system->setColorScheme(std::nullopt);
+          system->setColorScheme(std::nullopt, applied);
         }
-        // The backend reports the scheme it now draws in through the host state.
-        state->colorScheme.set(system->colorScheme());
       });
       listeners();
       subscriptions.push_back(state->colorScheme.listen([this](const std::string &scheme) {

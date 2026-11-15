@@ -19,7 +19,9 @@ class FakeSystem final : public System {
   bool canOpenUrl(const std::string &url) override;
   void openSettings(std::function<void(bool)> done) override;
   std::string colorScheme() override;
-  void setColorScheme(std::optional<std::string> scheme) override;
+  // Applies at once, unless `holdSchemes`: then each waits in `heldSchemes` until a test runs it,
+  // as the main thread would. Applying reads `systemScheme`, as the backend reads the system's.
+  void setColorScheme(std::optional<std::string> scheme, std::function<void(std::string)> applied) override;
   void showAlert(const AlertRequest &request, std::function<void(int, std::string, std::string)> done) override;
   std::optional<std::string> clipboardText() override {
     return clipboard;
@@ -44,8 +46,12 @@ class FakeSystem final : public System {
   DeviceFacts deviceFacts{.osVersion = "26.1", .systemName = "macOS", .locale = "en-GB", .rightToLeft = false};
   // URLs that open: their scheme followed by a colon, such as "https:".
   std::vector<std::string> openableSchemes{"https:", "mailto:"};
+  // The system's scheme now, and as the backend last read it (applying a change reads it again).
   std::string systemScheme{"light"};
+  std::string readSystemScheme{"light"};
   std::optional<std::string> schemeOverride;
+  bool holdSchemes{false};
+  std::vector<std::function<void()>> heldSchemes;
   std::vector<AlertRequest> alerts;
   std::function<void(int, std::string, std::string)> answerAlert;
   std::optional<std::string> clipboard;
