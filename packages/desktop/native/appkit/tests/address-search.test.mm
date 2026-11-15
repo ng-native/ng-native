@@ -77,21 +77,25 @@ TEST_CASE("MapKitLookup completes a query in a country and looks the first compl
     return;
   }
   CHECK((*found)[0].title.find("Downing") != std::string::npos);
-  std::optional<ngn::PostalAddressParts> address;
-  std::string error;
-  bool answered = false;
-  lookup->lookup((*found)[0].handle, [&](std::optional<ngn::PostalAddressParts> parts, std::string why) {
-    address = std::move(parts);
-    error = std::move(why);
-    answered = true;
+  // The lookup keeps its callback past a timeout, so what it writes is shared, not on this stack.
+  struct Looked {
+    std::optional<ngn::PostalAddressParts> address;
+    std::string error;
+    bool answered = false;
+  };
+  auto looked = std::make_shared<Looked>();
+  lookup->lookup((*found)[0].handle, [looked](std::optional<ngn::PostalAddressParts> parts, std::string why) {
+    looked->address = std::move(parts);
+    looked->error = std::move(why);
+    looked->answered = true;
   });
-  turnUntil([&] { return answered; });
-  REQUIRE(answered);
-  if (!address) {
-    MESSAGE("MapKit found no place for the completion: ", error);
+  turnUntil([&] { return looked->answered; });
+  REQUIRE(looked->answered);
+  if (!looked->address) {
+    MESSAGE("MapKit found no place for the completion: ", looked->error);
   } else {
-    CHECK(address->countryCode == "GB");
-    CHECK(address->latitude == doctest::Approx(51.5).epsilon(0.01));
+    CHECK(looked->address->countryCode == "GB");
+    CHECK(looked->address->latitude == doctest::Approx(51.5).epsilon(0.01));
   }
   completer->cancel();
   completer.reset();
