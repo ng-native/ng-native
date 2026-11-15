@@ -21,9 +21,11 @@ std::shared_ptr<NativeModule> makeNetworkModule(std::shared_ptr<PathMonitor> mon
     std::mutex mutex;
     std::optional<NetworkPath> path;
     std::vector<JsPromise> waiting;
+    // Kept for `stop`, which may need it.
+    std::shared_ptr<PathMonitor> monitor;
     std::function<void()> stop;
 
-    explicit Network(const std::shared_ptr<PathMonitor> &monitor) : NativeModule("NgNativeNetwork") {
+    explicit Network(std::shared_ptr<PathMonitor> watched) : NativeModule("NgNativeNetwork"), monitor(std::move(watched)) {
       listeners();
       promise("getNetworkStateAsync", [this](const folly::dynamic &, JsPromise promise) {
         std::unique_lock lock(mutex);
@@ -64,7 +66,7 @@ std::shared_ptr<NativeModule> makeNetworkModule(std::shared_ptr<PathMonitor> mon
       }
     }
   };
-  return std::make_shared<Network>(monitor);
+  return std::make_shared<Network>(std::move(monitor));
 }
 
 } // namespace ngn
