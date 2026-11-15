@@ -17,24 +17,42 @@ namespace ngn::testing {
 
 // Whether dropping a listener's handle waits for a call to it already running on another thread,
 // so a module a reload destroys is never called after. `listen` adds the listener and answers its
-// handle; `send` makes the host call it.
+// handle; `send` makes the host call it. The call is held until the drop has had time to finish,
+// and the answer is whether the drop finished only once the call was let go. A call that never
+// comes answers false rather than hanging.
 template <typename Listen, typename Send>
 bool dropWaitsForRunningCall(Listen listen, Send send) {
+  using Clock = std::chrono::steady_clock;
+  constexpr auto kDeadline = std::chrono::seconds(10);
+  auto waitFor = [](const std::atomic<bool> &flag, Clock::duration limit) {
+    auto until = Clock::now() + limit;
+    while (!flag && Clock::now() < until) {
+      std::this_thread::yield();
+    }
+    return flag.load();
+  };
   std::atomic<bool> running{false};
-  std::atomic<bool> finished{false};
-  std::shared_ptr<void> handle = listen([&](const folly::dynamic &) {
+  std::atomic<bool> release{false};
+  std::atomic<bool> dropped{false};
+  std::shared_ptr<void> handle = listen([&](const auto &) {
     running = true;
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    finished = true;
+    waitFor(release, kDeadline);
   });
   std::thread sender(send);
-  while (!running) {
-    std::this_thread::yield();
+  if (!waitFor(running, kDeadline)) {
+    sender.join();
+    return false;
   }
-  handle.reset();
-  bool waited = finished;
+  std::thread dropper([&] {
+    handle.reset();
+    dropped = true;
+  });
+  // A drop that does not wait finishes at once; one that waits is still held when this gives up.
+  bool droppedWhileRunning = waitFor(dropped, std::chrono::milliseconds(200));
+  release = true;
+  dropper.join();
   sender.join();
-  return waited;
+  return !droppedWhileRunning;
 }
 
 inline facebook::react::ShadowView shadowView(
