@@ -78,7 +78,8 @@ CGImageRef blurred(CGImageRef image, double radius) {
   [blur setValue:input forKey:kCIInputImageKey];
   [blur setValue:@(radius) forKey:kCIInputRadiusKey];
   CGRect extent = CGRectMake(0, 0, CGImageGetWidth(image), CGImageGetHeight(image));
-  CIContext *context = [CIContext contextWithOptions:nil];
+  // One context for every blur: making one sets up its GPU resources, and CIContext is thread-safe.
+  static CIContext *context = [CIContext contextWithOptions:nil];
   return [context createCGImage:blur.outputImage fromRect:extent];
 }
 
