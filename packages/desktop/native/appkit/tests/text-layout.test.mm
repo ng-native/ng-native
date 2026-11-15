@@ -152,6 +152,19 @@ TEST_CASE("A paragraph's first strong character sets its direction by bidi class
   }
 }
 
+TEST_CASE("The embedding and override controls are not a paragraph's first strong character") {
+  // LRE, RLE, PDF, LRO and RLO: rule P2 skips them, and the letter after them sets the direction.
+  for (const char *control : {"\u202A", "\u202B", "\u202C", "\u202D", "\u202E"}) {
+    INFO(control);
+    auto hebrew = ngn::layoutText(stringOf({fragment(std::string(control) + "שלום Hello")}), {}, 300);
+    CHECK(hebrew.lines[0].rightToLeft);
+    CHECK(leftmostInk(hebrew, 300, 40) > 150);
+    auto latin = ngn::layoutText(stringOf({fragment(std::string(control) + "Hello שלום")}), {}, 300);
+    CHECK_FALSE(latin.lines[0].rightToLeft);
+    CHECK(leftmostInk(latin, 300, 40) < 10);
+  }
+}
+
 TEST_CASE("Each paragraph's wrapped lines take that paragraph's direction") {
   auto layout = ngn::layoutText(
       stringOf({fragment("Hello there\nשלום עולם שלום עולם שלום עולם שלום עולם\nGood morning to you all")}), {}, 80);

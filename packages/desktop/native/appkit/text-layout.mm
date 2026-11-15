@@ -161,6 +161,11 @@ int strongDirection(UTF32Char code) {
   if (code == 0x200E) {
     return -1;
   }
+  // The embedding and override controls (LRE, RLE, PDF, LRO, RLO) are not strong (rule P2), though
+  // the probe reads some of them as left to right.
+  if (code >= 0x202A && code <= 0x202E) {
+    return 0;
+  }
   // Each code point probed once a thread: layout runs on more than one.
   thread_local std::unordered_map<UTF32Char, int> known;
   auto found = known.find(code);
