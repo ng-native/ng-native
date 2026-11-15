@@ -818,23 +818,39 @@ function shipDmg(
   });
   sys.writeFile(file, /** @type {string} */ (granted));
   const timestamp = keys.identity === '-' ? '--timestamp=none' : '--timestamp';
-  /** @param {string} target @param {boolean} withEntitlements */
-  const sign = (target, withEntitlements) =>
+  /** @param {string} target @param {string[]} [extra] */
+  const sign = (target, extra = []) =>
     expectSuccess(
       sys.run('codesign', [
         '--force',
         '--options',
         'runtime',
         timestamp,
-        ...(withEntitlements ? ['--entitlements', file] : []),
+        ...extra,
         '--sign',
         keys.identity,
         target,
       ]),
       `codesign could not sign ${path.basename(target)}.`,
     );
-  if (options.feedUrl) sign(path.join(app, 'Contents', 'Frameworks', 'Sparkle.framework'), false);
-  sign(app, true);
+  if (options.feedUrl) signSparkle(path.join(app, 'Contents', 'Frameworks', 'Sparkle.framework'));
+  sign(app, ['--entitlements', file]);
+
+  /**
+   * Sparkle's nested code before the framework, inside out, as Sparkle documents for signing
+   * outside Xcode (sparkle-project.org/documentation/sandboxing): no `--deep`, since the Downloader
+   * service keeps the entitlements it ships with and the rest take none.
+   *
+   * @param {string} framework
+   */
+  function signSparkle(framework) {
+    const version = path.join(framework, 'Versions', 'B');
+    sign(path.join(version, 'XPCServices', 'Installer.xpc'));
+    sign(path.join(version, 'XPCServices', 'Downloader.xpc'), ['--preserve-metadata=entitlements']);
+    sign(path.join(version, 'Autoupdate'));
+    sign(path.join(version, 'Updater.app'));
+    sign(framework);
+  }
 
   if (keys.notary) {
     const submission = path.join(staging, `${config.name}.zip`);

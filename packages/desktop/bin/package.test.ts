@@ -712,7 +712,7 @@ describe('packageApp', () => {
     await assert.rejects(packageApp(parsePackage(['--format', 'dmg']), sys), /no answer/);
   });
 
-  it('embeds Sparkle with a feed, signs it first and zips the stapled app beside the dmg', async () => {
+  it('embeds Sparkle with a feed, signs its parts first and zips the stapled app beside the dmg', async () => {
     const { sys, calls, copied, written } = fakeMac({
       env: { ...DMG_ENV, NGN_SPARKLE_PUBLIC_KEY: 'EDKEY=' },
       exists: () => true,
@@ -725,14 +725,32 @@ describe('packageApp', () => {
       `${BUILD}/appkit/Sparkle.framework`,
       `${app}/Contents/Frameworks/Sparkle.framework`,
     ]);
-    const signed = calls
-      .filter((call) => call.command === 'codesign')
-      .map((call) => call.args.at(-1));
-    assert.deepEqual(signed, [
-      `${app}/Contents/Frameworks/Sparkle.framework`,
-      app,
-      '/apps/notes/dist/macos/Notes.dmg',
-    ]);
+    const codesign = calls.filter((call) => call.command === 'codesign');
+    const sparkle = `${app}/Contents/Frameworks/Sparkle.framework`;
+    // Sparkle's documented order: its XPC services, Autoupdate and Updater.app, then the
+    // framework, each with the app's identity and the hardened runtime, and the Downloader
+    // keeping the entitlements it ships with.
+    assert.deepEqual(
+      codesign.map((call) => call.args.at(-1)),
+      [
+        `${sparkle}/Versions/B/XPCServices/Installer.xpc`,
+        `${sparkle}/Versions/B/XPCServices/Downloader.xpc`,
+        `${sparkle}/Versions/B/Autoupdate`,
+        `${sparkle}/Versions/B/Updater.app`,
+        sparkle,
+        app,
+        '/apps/notes/dist/macos/Notes.dmg',
+      ],
+    );
+    for (const call of codesign.slice(0, 5)) {
+      assert.ok(call.args.includes('runtime'), call.args.join(' '));
+      assert.equal(call.args[call.args.indexOf('--sign') + 1], DMG_ENV.NGN_SIGN_IDENTITY);
+      assert.ok(!call.args.includes('--entitlements'), call.args.join(' '));
+    }
+    assert.deepEqual(
+      codesign.slice(0, 5).map((call) => call.args.includes('--preserve-metadata=entitlements')),
+      [false, true, false, false, false],
+    );
     const zips = calls.filter((call) => call.command === 'ditto').map((call) => call.args.at(-1));
     assert.deepEqual(zips, [
       '/apps/notes/.expo/ng-native-desktop/package/Notes.zip',

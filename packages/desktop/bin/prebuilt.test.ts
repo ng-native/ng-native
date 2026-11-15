@@ -80,6 +80,7 @@ function fakeFetch({
   sha = SHA,
   cached = false,
   finishedMeanwhile = false,
+  rename = (_from: string, _to: string, _files: Set<string>): void => {},
 } = {}) {
   const calls: string[][] = [];
   const files = new Set<string>(cached ? ['/c/prebuilt/aaaaaaaaaaaaaaaa/appkit/ngn-macos'] : []);
@@ -92,7 +93,10 @@ function fakeFetch({
     writeFile: () => {},
     warn: (line: string) => void warnings.push(line),
     sha256: () => sha,
-    rename: (from: string, to: string) => void renamed.push([from, to]),
+    rename: (from: string, to: string) => {
+      renamed.push([from, to]);
+      rename(from, to, files);
+    },
     run(command: string, args: string[]) {
       calls.push([command, ...args]);
       if (command === 'curl') {
@@ -136,10 +140,10 @@ describe('fetchPrebuilt', () => {
     const archiveOf = (calls: string[][]) => calls[0]![calls[0]!.indexOf('-o') + 1]!;
     assert.notEqual(archiveOf(first.calls), archiveOf(second.calls));
     assert.notEqual(first.calls[1]![4], second.calls[1]![4]);
-    // Nothing but its own files is removed (and the host's folder, only while it holds no host):
-    // no fixed name another run could be writing.
+    // Nothing but its own files is removed, never the host's folder: no fixed name another run
+    // could be writing.
     for (const { calls, removed } of [first, second]) {
-      const own = [archiveOf(calls), calls[1]![4]!, dir];
+      const own = [archiveOf(calls), calls[1]![4]!];
       assert.deepEqual(
         removed.filter((file) => !own.includes(file)),
         [],
@@ -153,6 +157,30 @@ describe('fetchPrebuilt', () => {
     assert.deepEqual(renamed, []);
     assert.ok(removed.includes(calls[1]![4]!));
     assert.ok(!removed.includes(dir), "the other run's host is kept");
+  });
+
+  it('uses the host a run that moved its copy in first published, and never deletes it', () => {
+    const { sys, calls, removed } = fakeFetch({
+      rename: (_from, to, files) => {
+        // The other run's rename lands between this run's check and its own rename.
+        files.add(`${to}/appkit/ngn-macos`);
+        throw Object.assign(new Error('ENOTEMPTY'), { code: 'ENOTEMPTY' });
+      },
+    });
+    assert.equal(fetchPrebuilt(sys, HOST, '/c'), dir);
+    assert.ok(!removed.includes(dir), "the other run's host is kept");
+    assert.ok(removed.includes(calls[1]![4]!), 'its own copy is dropped');
+  });
+
+  it('fails on any other rename error, and drops its own copy', () => {
+    const { sys, calls, removed } = fakeFetch({
+      rename: () => {
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      },
+    });
+    assert.throws(() => fetchPrebuilt(sys, HOST, '/c'), /EACCES/);
+    assert.ok(!removed.includes(dir));
+    assert.ok(removed.includes(calls[1]![4]!));
   });
 
   it('uses a host already in the cache without downloading it', () => {

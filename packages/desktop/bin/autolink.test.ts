@@ -94,6 +94,61 @@ describe('desktopLinks', () => {
     );
   });
 
+  it("prefers the app's own version of a library to a nested one, whatever the order", () => {
+    const direct = {
+      ...pkg('rn-haptics', {
+        'expo-module.config.json': desktopConfig(),
+        'desktop/CMakeLists.txt': '',
+      }),
+      'node_modules/kit/node_modules/rn-haptics/package.json': {
+        name: 'rn-haptics',
+        version: '0.1.0',
+      },
+    };
+    for (const dependencies of [
+      { kit: '1.0.0', 'rn-haptics': '1.0.0' },
+      { 'rn-haptics': '1.0.0', kit: '1.0.0' },
+    ]) {
+      const root = app({
+        'package.json': { dependencies },
+        ...pkg('kit', {}, { 'rn-haptics': '0.1.0' }),
+        ...direct,
+      });
+      assert.deepEqual(
+        desktopLinks(root).libraries.map((library) => library.dir),
+        [path.join(root, 'node_modules/rn-haptics')],
+      );
+    }
+  });
+
+  it('finds a library whose exports leave out package.json, and its dependencies', () => {
+    const root = app({
+      'package.json': { dependencies: { 'rn-haptics': '1.0.0' } },
+      'node_modules/rn-haptics/package.json': {
+        name: 'rn-haptics',
+        version: '1.0.0',
+        exports: { '.': './index.js' },
+        dependencies: { 'rn-taptic': '1.0.0' },
+      },
+      'node_modules/rn-haptics/index.js': '',
+      'node_modules/rn-haptics/expo-module.config.json': desktopConfig(),
+      'node_modules/rn-haptics/desktop/CMakeLists.txt': '',
+      'node_modules/rn-taptic/package.json': {
+        name: 'rn-taptic',
+        version: '1.0.0',
+        exports: { '.': './index.js' },
+      },
+      'node_modules/rn-taptic/index.js': '',
+      'node_modules/rn-taptic/ios/Taptic.m': '',
+    });
+    const links = desktopLinks(root);
+    assert.deepEqual(
+      links.libraries.map((library) => library.name),
+      ['rn-haptics'],
+    );
+    assert.deepEqual(links.withoutDesktop, ['rn-taptic']);
+  });
+
   it("compiles in the app's own modules/<name>/macos folders, with a target where one is named", () => {
     const root = app({
       'package.json': {},
