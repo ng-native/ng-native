@@ -287,3 +287,68 @@ TEST_CASE("a key step reaches an alert a tracked press's release runs, so the pr
   CHECK([field.currentEditor.string isEqualToString:@"hi"]);
   [window close];
 }
+
+TEST_CASE("a type step reaches the field of an alert a tracked press's release runs, with no window key") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 200)
+                                                 styleMask:NSWindowStyleMaskTitled
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NGNTrackingTestView *view = [[NGNTrackingTestView alloc] initWithFrame:NSMakeRect(0, 0, 300, 200)];
+  window.contentView = view;
+  [window orderFront:nil];
+  [NSApp deactivate];
+  __block NSString *typed = nil;
+  __block bool timedOut = false;
+  __block bool noKeyWindow = false;
+  view.onRelease = ^{
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Name";
+    [alert addButtonWithTitle:@"OK"];
+    NSTextField *name = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 200, 24)];
+    alert.accessoryView = name;
+    [alert layout];
+    alert.window.initialFirstResponder = name;
+    NSTimer *guard = [NSTimer timerWithTimeInterval:5
+                                            repeats:NO
+                                              block:^(NSTimer *) {
+                                                timedOut = true;
+                                                [NSApp abortModal];
+                                              }];
+    [NSRunLoop.mainRunLoop addTimer:guard forMode:NSModalPanelRunLoopMode];
+    // In the session: the alert's field takes the keyboard, though its window is not key.
+    NSTimer *focus = [NSTimer timerWithTimeInterval:0
+                                            repeats:NO
+                                              block:^(NSTimer *) {
+                                                noKeyWindow = NSApp.keyWindow == nil;
+                                                [alert.window makeFirstResponder:name];
+                                              }];
+    [NSRunLoop.mainRunLoop addTimer:focus forMode:NSModalPanelRunLoopMode];
+    [alert runModal];
+    [guard invalidate];
+    typed = name.stringValue;
+  };
+  // The return ends the session once the typing is in, as the alert's default button would.
+  id monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                                     handler:^NSEvent *(NSEvent *event) {
+                                                       NSWindow *modal = NSApp.modalWindow;
+                                                       if (modal != nil && event.keyCode == 36) {
+                                                         [NSApp stopModalWithCode:NSAlertFirstButtonReturn];
+                                                         return nil;
+                                                       }
+                                                       return event;
+                                                     }];
+  auto script = ngn::parseInputScript("down 50 50\nup 50 50\nwait 50\ntype ok\nkey return\n");
+  REQUIRE_FALSE(script.error);
+  ngn::appkit::replayInputScript(window, std::move(script));
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:10];
+  while (typed == nil && !timedOut && view.stuck == 0 && until.timeIntervalSinceNow > 0) {
+    [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  }
+  [NSEvent removeMonitor:monitor];
+  CHECK_FALSE(timedOut);
+  CHECK(noKeyWindow);
+  CHECK([typed isEqualToString:@"ok"]);
+  [window close];
+}
