@@ -715,6 +715,7 @@ Publishing one is a manual step; the release workflow does none of it:
    `<url>` is the absolute URL of the GitHub release's downloads
    (`https://github.com/ng-native/ng-native/releases/download/<tag>`). It writes the archive to
    `<out>` and its entry into `prebuilt.json`.
+
 2. Commit the updated `prebuilt.json`, so the npm package carries the entries.
 3. Attach each archive to the GitHub release at that URL.
 
