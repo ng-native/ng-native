@@ -16,6 +16,7 @@
 
 #include <react/renderer/uimanager/IMountingManager.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -78,6 +79,20 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::shared_ptr<ControlSizes> startControlSizes(
       std::shared_ptr<const ControlMeasurer> measurer,
       ControlSizes::Relayout relayout = nullptr);
+  // Any thread: a new JavaScript instance (a runtime's first, or a reload's) begins committing.
+  // Answers its number, which every mount applied after the last instance's transactions is
+  // recorded under (mountedBy): the UI thread's queue keeps the two apart.
+  uint64_t beginInstance();
+  // Any thread: the instance begun last.
+  uint64_t instance() const {
+    return instances_;
+  }
+  // UI thread only. The instance whose transaction last mounted on `surfaceId`, 0 for none.
+  uint64_t mountedBy(SurfaceId surfaceId) const {
+    auto it = mountedBy_.find(surfaceId);
+    return it == mountedBy_.end() ? 0 : it->second;
+  }
+
   // UI thread only. Whether every control layout measured has been mounted at its size: a window
   // is shown then, as for its safe areas, so its first frame does not draw them unsized.
   bool controlSizesSettled() const;
@@ -116,6 +131,10 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::unordered_map<std::string, std::shared_ptr<const facebook::react::ComponentDescriptor>> descriptors_;
   std::unordered_set<std::string> componentNames_;
   std::function<void(SurfaceId)> afterMount_;
+  std::atomic<uint64_t> instances_{0};
+  // UI thread: the instance whose transactions are being applied, and each surface's last.
+  uint64_t applying_{0};
+  std::unordered_map<SurfaceId, uint64_t> mountedBy_;
   ViewTree tree_;
   LiveRegions liveRegions_;
   std::unique_ptr<ScreenStacks> screens_;

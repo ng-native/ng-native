@@ -150,6 +150,7 @@ void MountingManager::ensureRoot(SurfaceId surfaceId, Tag tag) {
 }
 
 void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &mutations) {
+  mountedBy_[surfaceId] = applying_;
   for (const auto &m : mutations) {
     switch (m.type) {
       case ShadowViewMutation::Create: {
@@ -266,6 +267,18 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   if (afterMount_) {
     afterMount_(surfaceId);
   }
+}
+
+uint64_t MountingManager::beginInstance() {
+  uint64_t instance = ++instances_;
+  // Queued behind every transaction the last instance posted.
+  std::weak_ptr<MountingManager> weak = weak_from_this();
+  backend_->runOnUiThread([weak, instance] {
+    if (auto self = weak.lock()) {
+      self->applying_ = instance;
+    }
+  });
+  return instance;
 }
 
 std::shared_ptr<ControlSizes> MountingManager::startControlSizes(

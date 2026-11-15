@@ -1,0 +1,41 @@
+// Which launch's first frame starts its success timer (updates.h). A launch, the first or a
+// reload's, owes that frame once its bundle has loaded, and a frame counts for it only when its own
+// JavaScript instance mounted the content (MountingManager::mountedBy) and no reload has begun
+// since. The last launch's content still on screen, or a mount it queued before the reload, never
+// counts for the new one, and a reload whose bundle did not load owes nothing. Main thread only.
+// Toolkit-free.
+#pragma once
+
+#include <cstdint>
+#include <optional>
+
+namespace ngn {
+
+class LaunchFrame {
+ public:
+  // The launch `generation` (UpdatesClient::launchGeneration) loaded its bundle into the mounting
+  // instance `instance` (MountingManager::instance).
+  void loaded(uint64_t generation, uint64_t instance) {
+    owed_ = Owed{generation, instance};
+  }
+
+  // A window shows content the instance `instance` mounted while `current` is the launch running:
+  // the launch whose success timer starts now, once.
+  std::optional<uint64_t> shown(uint64_t instance, uint64_t current) {
+    if (!owed_ || owed_->generation != current || owed_->instance != instance) {
+      return std::nullopt;
+    }
+    auto generation = owed_->generation;
+    owed_.reset();
+    return generation;
+  }
+
+ private:
+  struct Owed {
+    uint64_t generation;
+    uint64_t instance;
+  };
+  std::optional<Owed> owed_;
+};
+
+} // namespace ngn
