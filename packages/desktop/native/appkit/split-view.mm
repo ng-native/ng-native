@@ -243,6 +243,10 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 - (void)replaceContainer:(NSView *)old with:(NSView *)container sidebar:(BOOL)sidebar {
   if (_plain != nil) {
     NSUInteger at = [_plain.arrangedSubviews indexOfObjectIdenticalTo:old];
+    // The width the user gave the pane stays: adjustSubviews keeps a sidebar's size as it is.
+    if (at != NSNotFound) {
+      container.frame = old.frame;
+    }
     [old removeFromSuperview];
     [_plain insertArrangedSubview:container atIndex:at == NSNotFound ? (sidebar ? 0 : _plain.arrangedSubviews.count) : at];
     [_plain adjustSubviews];
