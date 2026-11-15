@@ -440,17 +440,22 @@ void FileChanges::rescan(folly::dynamic &out, const Exists &exists) {
   if (here) {
     now.insert(watched_);
   }
-  // A folder still there but not listed (unreadable for now) keeps what was seen, and is listed
-  // again at the next event. One gone, or no longer a folder (a file took its place), took its
-  // entries with it.
+  // A folder not listed keeps what was seen, and is listed again at the next event, unless it is
+  // confirmed gone (it went after the check above) or no longer a folder (a file took its place):
+  // either took its entries with it. A type that cannot be read (an ancestor no longer searchable)
+  // confirms nothing.
   rescanOwed_ = false;
   if (folder_ && here && !list(now)) {
     std::error_code error;
-    if (fs::is_directory(watched_, error)) {
+    auto status = fs::status(watched_, error);
+    if (status.type() == fs::file_type::not_found) {
+      now.clear();
+    } else if (!error && !fs::is_directory(status)) {
+      now = {watched_};
+    } else {
       rescanOwed_ = true;
       return;
     }
-    now = {watched_};
   }
   for (auto it = seen_.begin(); it != seen_.end();) {
     if (concerns(*it) && !now.contains(*it)) {
