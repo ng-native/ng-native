@@ -4,6 +4,8 @@
 
 #include <doctest/doctest.h>
 
+#include <stdexcept>
+
 #include <algorithm>
 
 #import <EventKit/EventKit.h>
@@ -123,6 +125,11 @@ TEST_CASE("an event's details write onto an EKEvent and read back in expo-calend
   CHECK(record.alarms.empty());
   CHECK_FALSE(record.recurrence);
   CHECK(record.title == "Padel");
+
+  // A count of 0 is refused as a bad argument, not raised by EventKit.
+  ngn::CalendarStore::Details never;
+  never.recurrence = ngn::CalendarStore::Recurrence{.frequency = "daily", .occurrence = 0};
+  CHECK_THROWS_AS(NGNApplyEventDetails(event, never), std::invalid_argument);
 }
 
 TEST_CASE("a reminder's details write onto an EKReminder: start, due and completion") {
@@ -152,4 +159,36 @@ TEST_CASE("a reminder's details write onto an EKReminder: start, due and complet
   CHECK_FALSE(record.due);
   CHECK_FALSE(record.start);
   CHECK_FALSE(record.completed);
+}
+
+TEST_CASE("a reminder's allDay writes its due date as a whole day, given with the date or on its own") {
+  EKEventStore *events = [[EKEventStore alloc] init];
+  EKReminder *reminder = [EKReminder reminderWithEventStore:events];
+  ngn::CalendarStore::Details d;
+  d.timeZone = "UTC";
+  d.due = 1763199000000.0; // 2025-11-15 09:30 UTC
+  d.allDay = true;
+  NGNApplyReminderDetails(reminder, d);
+  auto record = NGNReminderRecord(reminder);
+  CHECK(record.allDay);
+  CHECK(record.due == 1763164800000.0); // that day's midnight
+
+  // allDay on its own turns the due date there to a time of day and back.
+  ngn::CalendarStore::Details timed;
+  timed.allDay = false;
+  NGNApplyReminderDetails(reminder, timed);
+  CHECK_FALSE(NGNReminderRecord(reminder).allDay);
+
+  ngn::CalendarStore::Details whole;
+  whole.allDay = true;
+  NGNApplyReminderDetails(reminder, whole);
+  CHECK(NGNReminderRecord(reminder).allDay);
+
+  // A new due date with allDay left out keeps the reminder's whole-day state.
+  ngn::CalendarStore::Details moved;
+  moved.due = 1763285400000.0;
+  NGNApplyReminderDetails(reminder, moved);
+  record = NGNReminderRecord(reminder);
+  CHECK(record.allDay);
+  CHECK(record.due == 1763251200000.0);
 }

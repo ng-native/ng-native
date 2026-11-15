@@ -215,6 +215,9 @@ CalendarStore::Details calendarDetails(const folly::dynamic &details, const foll
         rule.endDate = end->asDouble();
       }
       if (auto *count = value.get_ptr("occurrence"); count != nullptr && count->isNumber()) {
+        if (count->asDouble() < 1) {
+          throw wrong(name, "a rule whose occurrence is 1 or more");
+        }
         rule.occurrence = static_cast<int>(count->asDouble());
       }
       out.recurrence = rule;
