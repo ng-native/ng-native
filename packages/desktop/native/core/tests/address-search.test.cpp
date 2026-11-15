@@ -192,3 +192,21 @@ TEST_CASE("NgNativeAddressSearch drops every session when it goes with its runti
   callbacks.results("a", completions({"A Street", "A Road"}));
   CHECK(events.empty());
 }
+
+TEST_CASE("NgNativeAddressSearch never resolves an id from a session that ended to one started again") {
+  auto lookup = std::make_shared<FakeLookup>();
+  auto module = ngn::makeAddressSearchModule(lookup);
+  auto first = complete(*module, 1, "Hyde");
+  lookup->completers[1]->callbacks.results("Hyde", completions({"Hyde Park"}));
+  REQUIRE(first->value);
+  auto oldId = (*first->value)[0]["id"].asString();
+  module->call("end", dynamic::array(1));
+
+  // The same session number again, answered with as many suggestions.
+  auto second = complete(*module, 1, "Kew");
+  lookup->completers[2]->callbacks.results("Kew", completions({"Kew Gardens"}));
+  REQUIRE(second->value);
+  CHECK((*second->value)[0]["id"].asString() != oldId);
+  CHECK(ask(*module, "resolve", dynamic::array(oldId))->value == dynamic(nullptr));
+  CHECK(lookup->looked.empty());
+}
