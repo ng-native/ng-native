@@ -389,14 +389,22 @@ TEST_CASE("a moving store reads through to the old one and moves what it finds t
   CHECK(old->items.empty());
 
   // The old store failing (a locked file keychain) does not hide what the new one has, or stop a
-  // write or a removal.
+  // write.
   old->failing = true;
   CHECK(store.get("app", "token") == "from before");
   CHECK_FALSE(store.get("app", "missing"));
   store.set("app", "locked", "v");
   CHECK(now->items.at({"app", "locked"}) == "v");
-  store.remove("app", "locked");
+
+  // A removal it cannot confirm fails: the old copy it may still hold would come back once the
+  // old store can be read again.
+  old->items[{"app", "locked"}] = "old";
+  CHECK_THROWS(store.remove("app", "locked"));
   CHECK_FALSE(now->items.contains({"app", "locked"}));
+  old->failing = false;
+  CHECK(store.get("app", "locked") == "old");
+  store.remove("app", "locked");
+  CHECK_FALSE(store.get("app", "locked"));
 
   // An old copy that stays readable fails the removal, rather than coming back on the next get.
   old->failing = false;

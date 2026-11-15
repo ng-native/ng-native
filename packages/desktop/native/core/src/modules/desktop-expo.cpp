@@ -107,14 +107,14 @@ void MovingSecretStore::remove(const std::string &service, const std::string &ke
   try {
     old_->remove(service, key);
   } catch (const std::exception &) {
-    // A get would move an old copy that can still be read back, so the removal fails. One that
-    // cannot be read is never moved.
-    bool readable = false;
+    // A get would move an old copy back, so the removal fails unless the old store answers that
+    // it has none. One it cannot read now may be read once it recovers (a keychain unlocked).
+    bool absent = false;
     try {
-      readable = old_->get(service, key).has_value();
+      absent = !old_->get(service, key).has_value();
     } catch (const std::exception &) {
     }
-    if (readable) {
+    if (!absent) {
       throw;
     }
   }
