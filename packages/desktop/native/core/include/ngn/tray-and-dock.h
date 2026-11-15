@@ -6,6 +6,7 @@
 #pragma once
 
 #include "ngn/app-menus.h"
+#include "ngn/host-state.h"
 #include "ngn/native-module.h"
 
 #include <map>
@@ -49,8 +50,10 @@ class EventSource {
 
  private:
   std::mutex mutex_;
-  std::map<int, Listener> listeners_;
-  int next_{0};
+  bool listened_{false};
+  // A dropped handle waits for its listener's call in progress, so a module going with a reload
+  // is never called after.
+  Listeners<folly::dynamic> listeners_;
 };
 
 class TrayHost {

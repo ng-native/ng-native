@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "ngn/app-menus.h"
 
 #include <doctest/doctest.h>
@@ -336,4 +337,11 @@ TEST_CASE("a chevron's menu lists that way's entries nearest first, and a pick n
                         "ngNativeMenus {\"direction\":\"back\",\"steps\":2,\"surface\":11,\"type\":\"navigate\"}",
                         "ngNativeMenus {\"direction\":\"forward\",\"surface\":11,\"type\":\"navigate\"}",
                     });
+}
+
+TEST_CASE("dropping a menu listener waits for a call to it already running on another thread") {
+  Fixture f;
+  CHECK(ngn::testing::dropWaitsForRunningCall(
+      [&](auto listener) { return f.host->listen(listener); },
+      [&] { f.host->navigate(ngn::NavigationDirection::Back, 11); }));
 }

@@ -369,24 +369,11 @@ std::optional<folly::dynamic> NotificationEvents::lastResponse() const {
 }
 
 std::shared_ptr<void> NotificationEvents::listen(std::function<void(const folly::dynamic &)> listener) {
-  std::lock_guard lock(mutex_);
-  int id = next_++;
-  listeners_[id] = std::move(listener);
-  return std::shared_ptr<void>(nullptr, [this, id](void *) {
-    std::lock_guard lock(mutex_);
-    listeners_.erase(id);
-  });
+  return listeners_.add(std::move(listener));
 }
 
 void NotificationEvents::send(const folly::dynamic &event) {
-  std::map<int, std::function<void(const folly::dynamic &)>> listeners;
-  {
-    std::lock_guard lock(mutex_);
-    listeners = listeners_;
-  }
-  for (auto &[_, listener] : listeners) {
-    listener(event);
-  }
+  listeners_.notify(event);
 }
 
 namespace {

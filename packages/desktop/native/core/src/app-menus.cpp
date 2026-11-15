@@ -305,24 +305,11 @@ std::vector<HistoryMenuItem> historyMenu(const WindowHistory &history, Navigatio
 }
 
 std::shared_ptr<void> MenuHost::listen(Listener listener) {
-  std::lock_guard lock(mutex_);
-  int id = next_++;
-  listeners_[id] = std::move(listener);
-  return std::shared_ptr<void>(nullptr, [this, id](void *) {
-    std::lock_guard lock(mutex_);
-    listeners_.erase(id);
-  });
+  return listeners_.add(std::move(listener));
 }
 
 void MenuHost::send(const folly::dynamic &event) {
-  std::map<int, Listener> listeners;
-  {
-    std::lock_guard lock(mutex_);
-    listeners = listeners_;
-  }
-  for (auto &[_, listener] : listeners) {
-    listener(event);
-  }
+  listeners_.notify(event);
 }
 
 std::shared_ptr<NativeModule> makeMenusModule(std::shared_ptr<MenuHost> host) {

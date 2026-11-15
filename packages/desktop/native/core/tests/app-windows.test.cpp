@@ -1,4 +1,5 @@
 #include "fake-system.h"
+#include "helpers.h"
 #include "ngn/app-windows.h"
 
 #include <doctest/doctest.h>
@@ -357,4 +358,10 @@ TEST_CASE("the first module is no reload; a later one closes the windows with no
   f.windows->timers[0].second();
   CHECK(f.windows->closed == std::vector<SurfaceId>{keyless, prefs});
   CHECK(f.host->surfaces() == std::vector<SurfaceId>{main, 41});
+}
+
+TEST_CASE("dropping a window listener waits for a call to it already running on another thread") {
+  Fixture f;
+  CHECK(ngn::testing::dropWaitsForRunningCall(
+      [&](auto listener) { return f.host->attach(listener); }, [&] { f.host->reopen(false); }));
 }

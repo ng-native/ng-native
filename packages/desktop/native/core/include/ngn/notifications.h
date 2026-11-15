@@ -35,6 +35,7 @@
 //   `aps-environment` entitlement, or no network). unregisterForNotificationsAsync() unregisters.
 #pragma once
 
+#include "ngn/host-state.h"
 #include "ngn/native-module.h"
 
 #include <folly/dynamic.h>
@@ -170,8 +171,9 @@ class NotificationEvents {
   void send(const folly::dynamic &event);
   mutable std::mutex mutex_;
   std::optional<folly::dynamic> lastResponse_;
-  std::map<int, std::function<void(const folly::dynamic &)>> listeners_;
-  int next_{0};
+  // A dropped handle waits for its listener's call in progress, so a module going with a reload
+  // is never called after.
+  Listeners<folly::dynamic> listeners_;
 };
 
 // `push` absent (a host that cannot register) rejects getDevicePushTokenAsync.
