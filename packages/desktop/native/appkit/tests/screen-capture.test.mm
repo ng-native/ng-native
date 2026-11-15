@@ -5,6 +5,9 @@
 
 #import <AppKit/AppKit.h>
 
+#include <atomic>
+#include <memory>
+
 namespace {
 
 NSWindow *offscreenWindow() {
@@ -47,4 +50,28 @@ TEST_CASE("WindowShield keeps the app's windows out of capture while it protects
   ngn::appkit::shieldNewWindow(after);
   [NSNotificationCenter.defaultCenter postNotificationName:NSWindowDidUpdateNotification object:after];
   CHECK(after.sharingType == NSWindowSharingReadOnly);
+}
+
+TEST_CASE("WindowShield, asked off the main thread, answers once the windows have the state") {
+  NSWindow *window = offscreenWindow();
+  auto shield = ngn::appkit::captureShield();
+  struct Seen {
+    std::atomic<bool> answered{false};
+    std::atomic<NSWindowSharingType> sharing{NSWindowSharingReadOnly};
+  };
+  auto seen = std::make_shared<Seen>();
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    shield->setProtected(true, [window, seen] {
+      seen->sharing = window.sharingType;
+      seen->answered = true;
+    });
+  });
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:5];
+  while (!seen->answered && [until timeIntervalSinceNow] > 0) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, false);
+  }
+  CHECK(seen->answered);
+  CHECK(seen->sharing == NSWindowSharingNone);
+  shield->setProtected(false, nullptr);
+  CHECK(window.sharingType == NSWindowSharingReadOnly);
 }

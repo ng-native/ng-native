@@ -2,17 +2,32 @@
 
 #include <doctest/doctest.h>
 
+#include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 
 using folly::dynamic;
 
 namespace {
 
+// Records each change of state, and answers at once or, deferred, when the test lets it.
 struct FakeShield final : ngn::CaptureShield {
   std::vector<bool> changes;
-  void setProtected(bool on) override {
-    changes.push_back(on);
+  bool deferred{false};
+  std::vector<std::function<void()>> pending;
+  void setProtected(bool on, std::function<void()> done) override {
+    if (changes.empty() || changes.back() != on) {
+      changes.push_back(on);
+    }
+    if (!done) {
+      return;
+    }
+    if (deferred) {
+      pending.push_back(std::move(done));
+    } else {
+      done();
+    }
   }
 };
 
@@ -41,6 +56,33 @@ TEST_CASE("NgNativeScreenCapture keeps capture prevented while any key is held")
   CHECK(shield->changes == std::vector<bool>{true, false});
   // A key not held changes nothing.
   ask(*module, "allowScreenCaptureAsync", dynamic::array("other"));
+  CHECK(shield->changes == std::vector<bool>{true, false});
+}
+
+TEST_CASE("NgNativeScreenCapture resolves only once the shield has applied the state") {
+  auto shield = std::make_shared<FakeShield>();
+  shield->deferred = true;
+  auto module = ngn::makeScreenCaptureModule(shield);
+  std::vector<std::string> resolved;
+  auto call = [&](const char *method, const char *key) {
+    module->callWithPromise(method, dynamic::array(key), {.resolve = [&, key](dynamic) { resolved.push_back(key); }, .reject = {}});
+  };
+  call("preventScreenCaptureAsync", "card");
+  // A second key, while the first is still being applied, waits for it too.
+  call("preventScreenCaptureAsync", "pin");
+  CHECK(resolved.empty());
+  REQUIRE(shield->pending.size() == 2);
+  shield->pending[0]();
+  shield->pending[1]();
+  CHECK(resolved == std::vector<std::string>{"card", "pin"});
+  // Releasing a key while another is held changes nothing, and answers at once.
+  call("allowScreenCaptureAsync", "card");
+  CHECK(resolved.size() == 3);
+  call("allowScreenCaptureAsync", "pin");
+  CHECK(resolved.size() == 3);
+  REQUIRE(shield->pending.size() == 3);
+  shield->pending[2]();
+  CHECK(resolved.size() == 4);
   CHECK(shield->changes == std::vector<bool>{true, false});
 }
 

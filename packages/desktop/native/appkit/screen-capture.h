@@ -1,5 +1,6 @@
 // The OS half of NgNativeScreenCapture (the core's screen-capture.h): NSWindow.sharingType on every
-// window of the app. A window opened while capture is prevented is kept out from its first update,
+// window of the app, NSWindowSharingNone while capture is prevented. That is the only control
+// AppKit has; which capture tools honour it is the OS's to decide. A window opened while capture is prevented is kept out from its first update,
 // and the host's own windows (AppWindows and modal sheets) from the moment they are made.
 #pragma once
 
