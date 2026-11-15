@@ -1,0 +1,381 @@
+// The OS half of the desktop Expo modules (the core's desktop-expo.h): the Keychain, IOKit's power
+// assertions and the trackpad's haptic feedback.
+#import "desktop-expo.h"
+#import "test-launch.h"
+
+#import <AppKit/AppKit.h>
+#import <IOKit/pwr_mgt/IOPMLib.h>
+#import <Security/Security.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+
+#include <set>
+#include <stdexcept>
+#include <utility>
+
+namespace ngn::appkit {
+
+namespace {
+
+NSString *ns(const std::string &s) {
+  NSString *out = [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSUTF8StringEncoding];
+  return out != nil ? out : @"";
+}
+
+NSMutableDictionary *itemQuery(const std::string &service, const std::string &key, bool dataProtection) {
+  NSMutableDictionary *query = [@{
+    (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+    (__bridge id)kSecAttrService : ns(service),
+    (__bridge id)kSecAttrAccount : ns(key),
+  } mutableCopy];
+  if (dataProtection) {
+    query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  }
+  return query;
+}
+
+// The Team ID and the entitlements the running binary is signed with: none for an unsigned or ad
+// hoc build.
+std::pair<std::string, std::set<std::string>> ownSigning() {
+  SecCodeRef code = nullptr;
+  SecStaticCodeRef staticCode = nullptr;
+  CFDictionaryRef info = nullptr;
+  std::pair<std::string, std::set<std::string>> out;
+  if (SecCodeCopySelf(kSecCSDefaultFlags, &code) == errSecSuccess &&
+      SecCodeCopyStaticCode(code, kSecCSDefaultFlags, &staticCode) == errSecSuccess &&
+      SecCodeCopySigningInformation(staticCode, kSecCSSigningInformation | kSecCSRequirementInformation, &info) == errSecSuccess) {
+    NSDictionary *signing = (__bridge NSDictionary *)info;
+    if (NSString *team = signing[(__bridge id)kSecCodeInfoTeamIdentifier]) {
+      out.first = team.UTF8String;
+    }
+    NSDictionary *entitlements = signing[(__bridge id)kSecCodeInfoEntitlementsDict];
+    for (NSString *name in entitlements) {
+      out.second.insert(name.UTF8String);
+    }
+  }
+  if (info) CFRelease(info);
+  if (staticCode) CFRelease(staticCode);
+  if (code) CFRelease(code);
+  return out;
+}
+
+std::runtime_error keychainError(OSStatus status) {
+  NSString *message = CFBridgingRelease(SecCopyErrorMessageString(status, nullptr));
+  return std::runtime_error(message ? message.UTF8String : ("keychain error " + std::to_string(status)));
+}
+
+class Keychain final : public SecretStore {
+ public:
+  explicit Keychain(bool dataProtection) : dataProtection_(dataProtection) {}
+
+  std::optional<std::string> get(const std::string &service, const std::string &key) override {
+    NSMutableDictionary *query = itemQuery(service, key, dataProtection_);
+    query[(__bridge id)kSecReturnData] = @YES;
+    query[(__bridge id)kSecMatchLimit] = (__bridge id)kSecMatchLimitOne;
+    CFTypeRef result = nullptr;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status == errSecItemNotFound) {
+      return std::nullopt;
+    }
+    if (status != errSecSuccess) {
+      throw keychainError(status);
+    }
+    NSData *data = CFBridgingRelease(result);
+    return std::string(static_cast<const char *>(data.bytes), data.length);
+  }
+
+  void set(const std::string &service, const std::string &key, const std::string &value) override {
+    NSData *data = [NSData dataWithBytes:value.data() length:value.size()];
+    NSMutableDictionary *query = itemQuery(service, key, dataProtection_);
+    OSStatus status = SecItemUpdate(
+        (__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef) @{(__bridge id)kSecValueData : data});
+    if (status == errSecItemNotFound) {
+      query[(__bridge id)kSecValueData] = data;
+      // Readable only while the Mac is unlocked, as expo-secure-store's default is on iOS.
+      query[(__bridge id)kSecAttrAccessible] = (__bridge id)kSecAttrAccessibleWhenUnlocked;
+      status = SecItemAdd((__bridge CFDictionaryRef)query, nullptr);
+    }
+    if (status != errSecSuccess) {
+      throw keychainError(status);
+    }
+  }
+
+  void remove(const std::string &service, const std::string &key) override {
+    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)itemQuery(service, key, dataProtection_));
+    if (status != errSecSuccess && status != errSecItemNotFound) {
+      throw keychainError(status);
+    }
+  }
+
+ private:
+  bool dataProtection_;
+};
+
+class PowerAssertion final : public SleepPreventer {
+ public:
+  void hold(bool awake) override {
+    if (awake && assertion_ == kIOPMNullAssertionID) {
+      IOPMAssertionCreateWithName(
+          kIOPMAssertPreventUserIdleDisplaySleep, kIOPMAssertionLevelOn, CFSTR("Kept awake by the app"), &assertion_);
+    } else if (!awake && assertion_ != kIOPMNullAssertionID) {
+      IOPMAssertionRelease(assertion_);
+      assertion_ = kIOPMNullAssertionID;
+    }
+  }
+  ~PowerAssertion() override {
+    hold(false);
+  }
+
+ private:
+  IOPMAssertionID assertion_{kIOPMNullAssertionID};
+};
+
+class Trackpad final : public HapticPlayer {
+ public:
+  void play(Pattern pattern) override {
+    NSHapticFeedbackPattern p = pattern == Pattern::Alignment ? NSHapticFeedbackPatternAlignment
+        : pattern == Pattern::LevelChange                   ? NSHapticFeedbackPatternLevelChange
+                                                            : NSHapticFeedbackPatternGeneric;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [NSHapticFeedbackManager.defaultPerformer performFeedbackPattern:p
+                                                       performanceTime:NSHapticFeedbackPerformanceTimeNow];
+    });
+  }
+};
+
+} // namespace
+
+std::shared_ptr<SecretStore> makeKeychain() {
+  auto [team, entitlements] = ownSigning();
+  if (!usesDataProtectionKeychain(team, entitlements)) {
+    return std::make_shared<Keychain>(false);
+  }
+  // Items an earlier build kept in the file keychain move over as they are read.
+  return std::make_shared<MovingSecretStore>(std::make_shared<Keychain>(true), std::make_shared<Keychain>(false));
+}
+void removeStaleTestItems(const TestLaunch &own) {
+  NSDictionary *query = @{
+    (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+    (__bridge id)kSecMatchLimit : (__bridge id)kSecMatchLimitAll,
+    (__bridge id)kSecReturnAttributes : @YES,
+  };
+  CFTypeRef found = nullptr;
+  if (SecItemCopyMatching((__bridge CFDictionaryRef)query, &found) != errSecSuccess || found == nullptr) {
+    return;
+  }
+  NSArray<NSDictionary *> *items = (__bridge_transfer NSArray *)found;
+  for (NSDictionary *item in items) {
+    NSString *service = item[(__bridge id)kSecAttrService];
+    NSString *account = item[(__bridge id)kSecAttrAccount];
+    if (![service isKindOfClass:NSString.class] || ![account isKindOfClass:NSString.class] ||
+        !isStaleTestService(service.UTF8String, own)) {
+      continue;
+    }
+    SecItemDelete((__bridge CFDictionaryRef)itemQuery(service.UTF8String, account.UTF8String, false));
+  }
+}
+
+std::shared_ptr<SleepPreventer> makeSleepPreventer() {
+  return std::make_shared<PowerAssertion>();
+}
+std::shared_ptr<HapticPlayer> makeHapticPlayer() {
+  return std::make_shared<Trackpad>();
+}
+
+namespace {
+
+std::string str(NSString *s) {
+  return s != nil ? std::string(s.UTF8String) : std::string();
+}
+
+// NSCalendar's identifiers as expo-localization names them.
+std::string calendarName(NSCalendarIdentifier identifier) {
+  static NSDictionary<NSCalendarIdentifier, NSString *> *names = @{
+    NSCalendarIdentifierGregorian : @"gregorian",
+    NSCalendarIdentifierBuddhist : @"buddhist",
+    NSCalendarIdentifierChinese : @"chinese",
+    NSCalendarIdentifierCoptic : @"coptic",
+    NSCalendarIdentifierEthiopicAmeteMihret : @"ethioaa",
+    NSCalendarIdentifierEthiopicAmeteAlem : @"ethiopic",
+    NSCalendarIdentifierHebrew : @"hebrew",
+    NSCalendarIdentifierISO8601 : @"iso8601",
+    NSCalendarIdentifierIndian : @"indian",
+    NSCalendarIdentifierIslamic : @"islamic",
+    NSCalendarIdentifierIslamicCivil : @"islamic-civil",
+    NSCalendarIdentifierJapanese : @"japanese",
+    NSCalendarIdentifierPersian : @"persian",
+    NSCalendarIdentifierRepublicOfChina : @"roc",
+    NSCalendarIdentifierIslamicTabular : @"islamic-tbla",
+    NSCalendarIdentifierIslamicUmmAlQura : @"islamic-umalqura",
+  };
+  NSString *name = names[identifier];
+  return str(name != nil ? name : identifier);
+}
+
+class SystemLocales final : public LocaleSource {
+ public:
+  std::vector<LocaleFacts> locales() override {
+    // The formats are the region's, the same for every language, as Language & Region sets them.
+    NSLocale *current = NSLocale.autoupdatingCurrentLocale;
+    LocaleFacts formats{
+        .decimalSeparator = str(current.decimalSeparator),
+        .groupingSeparator = str(current.groupingSeparator),
+        .measurementSystem = str([current objectForKey:NSLocaleMeasurementSystem]),
+        .currencyCode = str(current.currencyCode),
+        .currencySymbol = str(current.currencySymbol),
+        .temperatureUnit = temperatureUnit(),
+    };
+    std::vector<LocaleFacts> out;
+    for (NSString *tag in NSLocale.preferredLanguages) {
+      auto facts = formats;
+      facts.languageTag = str(tag);
+      facts.rightToLeft = [NSLocale characterDirectionForLanguage:tag] == NSLocaleLanguageDirectionRightToLeft;
+      out.push_back(std::move(facts));
+    }
+    return out;
+  }
+
+  CalendarFacts calendars() override {
+    NSCalendar *calendar = NSCalendar.autoupdatingCurrentCalendar;
+    NSString *hours = [NSDateFormatter dateFormatFromTemplate:@"j" options:0 locale:NSLocale.autoupdatingCurrentLocale];
+    return {
+        .calendar = calendarName(calendar.calendarIdentifier),
+        .timeZone = str(NSTimeZone.localTimeZone.name),
+        .uses24hourClock = [hours rangeOfString:@"a"].location == NSNotFound,
+        .firstWeekday = static_cast<int>(calendar.firstWeekday),
+    };
+  }
+
+ private:
+  static std::string temperatureUnit() {
+    // The unit the region formats temperatures in: what a formatter with the region's own units
+    // writes for a celsius value.
+    NSMeasurementFormatter *formatter = [NSMeasurementFormatter new];
+    formatter.locale = NSLocale.autoupdatingCurrentLocale;
+    formatter.unitStyle = NSFormattingUnitStyleShort;
+    NSMeasurement *zero = [[NSMeasurement alloc] initWithDoubleValue:0 unit:NSUnitTemperature.celsius];
+    NSString *text = [formatter stringFromMeasurement:zero];
+    return [text containsString:@"F"] ? "fahrenheit" : "celsius";
+  }
+};
+
+} // namespace
+
+std::shared_ptr<LocaleSource> makeLocaleSource() {
+  return std::make_shared<SystemLocales>();
+}
+
+std::string systemRegionCode() {
+  NSString *region = NSLocale.autoupdatingCurrentLocale.countryCode;
+  return region.length > 0 ? str(region) : "US";
+}
+
+namespace {
+
+// The content types a list of MIME types allows: a wildcard is its family.
+NSArray<UTType *> *contentTypes(const std::vector<std::string> &mimeTypes) {
+  NSMutableArray<UTType *> *out = [NSMutableArray array];
+  for (const auto &mime : mimeTypes) {
+    UTType *type = nil;
+    if (mime == "image/*") {
+      type = UTTypeImage;
+    } else if (mime == "video/*") {
+      type = UTTypeMovie;
+    } else if (mime == "audio/*") {
+      type = UTTypeAudio;
+    } else if (mime == "text/*") {
+      type = UTTypeText;
+    } else {
+      type = [UTType typeWithMIMEType:ns(mime)];
+    }
+    if (type != nil) {
+      [out addObject:type];
+    }
+  }
+  return out;
+}
+
+// Runs a panel as a sheet on the key window, or on its own when there is none.
+void runPanel(NSSavePanel *panel, void (^done)(NSModalResponse)) {
+  NSWindow *window = NSApp.keyWindow;
+  if (window != nil && window.attachedSheet == nil) {
+    [panel beginSheetModalForWindow:window completionHandler:done];
+  } else {
+    [panel beginWithCompletionHandler:done];
+  }
+}
+
+class PanelDialogs final : public FileDialogs {
+ public:
+  void openFiles(const OpenRequest &request, std::function<void(std::optional<std::vector<std::string>>)> done) override {
+    auto types = request.types;
+    bool multiple = request.multiple;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSOpenPanel *panel = [NSOpenPanel openPanel];
+      panel.canChooseFiles = YES;
+      panel.canChooseDirectories = NO;
+      panel.allowsMultipleSelection = multiple;
+      if (NSArray<UTType *> *allowed = contentTypes(types); allowed.count > 0) {
+        panel.allowedContentTypes = allowed;
+      }
+      runPanel(panel, ^(NSModalResponse response) {
+        if (response != NSModalResponseOK) {
+          done(std::nullopt);
+          return;
+        }
+        std::vector<std::string> files;
+        for (NSURL *url in panel.URLs) {
+          files.push_back(url.path.UTF8String);
+        }
+        done(files);
+      });
+    });
+  }
+
+  void saveFile(const SaveRequest &request, std::function<void(std::optional<std::string>)> done) override {
+    auto name = request.suggestedName;
+    auto types = request.types;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSSavePanel *panel = [NSSavePanel savePanel];
+      panel.canCreateDirectories = YES;
+      panel.nameFieldStringValue = ns(name);
+      if (NSArray<UTType *> *allowed = contentTypes(types); allowed.count > 0) {
+        panel.allowedContentTypes = allowed;
+      }
+      runPanel(panel, ^(NSModalResponse response) {
+        done(response == NSModalResponseOK && panel.URL != nil ? std::optional<std::string>(panel.URL.path.UTF8String)
+                                                                 : std::nullopt);
+      });
+    });
+  }
+
+  void chooseFolder(std::function<void(std::optional<std::string>)> done) override {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSOpenPanel *panel = [NSOpenPanel openPanel];
+      panel.canChooseFiles = NO;
+      panel.canChooseDirectories = YES;
+      panel.canCreateDirectories = YES;
+      panel.allowsMultipleSelection = NO;
+      runPanel(panel, ^(NSModalResponse response) {
+        done(response == NSModalResponseOK && panel.URL != nil ? std::optional<std::string>(panel.URL.path.UTF8String)
+                                                                 : std::nullopt);
+      });
+    });
+  }
+};
+
+} // namespace
+
+std::shared_ptr<FileDialogs> makeFileDialogs() {
+  return std::make_shared<PanelDialogs>();
+}
+
+std::string cacheDirectory(const std::string &appId) {
+  NSURL *caches = testLaunch() ? [NSURL fileURLWithPath:ns(testLaunch()->caches()) isDirectory:YES]
+                               : [NSFileManager.defaultManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject;
+  NSString *bundleId = NSBundle.mainBundle.bundleIdentifier;
+  NSURL *dir = [caches URLByAppendingPathComponent:bundleId != nil ? bundleId : ns(appId) isDirectory:YES];
+  [NSFileManager.defaultManager createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];
+  return dir.path.UTF8String;
+}
+
+} // namespace ngn::appkit

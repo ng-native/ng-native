@@ -56,6 +56,9 @@ endif()
 
 include(cmake/third-party.cmake)
 include(cmake/react-native.cmake)
+if(APPLE)
+  include(cmake/swift.cmake)
+endif()
 
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
@@ -160,6 +163,52 @@ if(NGN_TESTS)
   add_executable(ngn_core_tests ${core_test_SRC} core/testing/fake-backend.cpp core/testing/fake-network.cpp core/testing/fake-system.cpp)
   target_include_directories(ngn_core_tests PRIVATE core/testing core/tests)
   target_link_libraries(ngn_core_tests PRIVATE ngn_core doctest)
+  # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks.
+  if(APPLE)
+    ngn_link_swift(ngn_core_tests)
+    target_sources(ngn_core_tests PRIVATE
+        appkit/updates.mm appkit/tests/update-crypto.test.mm
+        appkit/crypto.mm appkit/tests/crypto.test.mm
+        appkit/app-info.mm appkit/tests/app-info.test.mm
+        appkit/network-state.mm appkit/tests/network-state.test.mm
+        appkit/battery.mm appkit/tests/battery.test.mm
+        appkit/fonts.mm appkit/text-layout.mm appkit/tests/fonts.test.mm
+        appkit/text-recognition.mm appkit/tests/text-recognition.test.mm
+        appkit/calendar.mm appkit/tests/calendar.test.mm
+        appkit/audio.mm appkit/tests/audio.test.mm
+        appkit/language-model.mm appkit/tests/language-model.test.mm
+        appkit/screen-capture.mm appkit/tests/screen-capture.test.mm
+        appkit/photo-library.mm appkit/tests/photo-library.test.mm
+        appkit/tracking.mm appkit/tests/tracking.test.mm
+        appkit/image-manipulator.mm appkit/tests/image-manipulator.test.mm
+        appkit/geocoder.mm appkit/tests/geocoder.test.mm
+        appkit/address-search.mm appkit/tests/address-search.test.mm
+        appkit/symbol-drawing.mm appkit/tests/symbol.test.mm
+        appkit/share-picker.mm appkit/tests/share-picker.test.mm
+        appkit/printing.mm appkit/tests/printing.test.mm
+        appkit/web-view.mm appkit/tests/web-view.test.mm
+        appkit/expo-image-drawing.mm appkit/tests/expo-image.test.mm
+        appkit/expo-ui-renderer.mm appkit/tests/expo-ui.test.mm
+        appkit/camera.mm appkit/tests/camera.test.mm
+        appkit/maps.mm appkit/tests/maps.test.mm
+        appkit/apple-authentication.mm appkit/tests/apple-authentication.test.mm
+        appkit/video.mm appkit/tests/video.test.mm
+        appkit/apple-id-button.mm appkit/tests/apple-id-button.test.mm
+        appkit/text-input-field.mm appkit/tests/text-input-field.test.mm
+        appkit/search-field.mm appkit/tests/search-field.test.mm
+        appkit/search-toolbar-item.mm appkit/tests/search-toolbar-item.test.mm
+        appkit/cg-canvas.mm appkit/tests/svg-effects.test.mm
+        appkit/scrollers.mm appkit/tests/scrollers.test.mm
+        appkit/bookmarks.mm appkit/tests/bookmarks.test.mm
+        appkit/push.mm appkit/tests/push.test.mm
+        appkit/undo.mm appkit/tests/undo.test.mm
+        appkit/input-replay.mm appkit/tests/input-replay.test.mm
+        appkit/modal-focus.mm appkit/tests/modal-focus.test.mm
+        appkit/glass-effect.mm appkit/tests/glass.test.mm
+        appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm)
+    target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
+    target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AuthenticationServices" "-framework AVKit")
+  endif()
   enable_testing()
   add_test(NAME core COMMAND ngn_core_tests)
 endif()

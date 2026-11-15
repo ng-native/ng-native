@@ -1,7 +1,8 @@
 name: Desktop host
 
 # The desktop host in @ng-native/desktop. On ubuntu, the toolkit-free core and its tests build with
-# no backend and no Hermes, which proves no toolkit leaks into the core.
+# no backend and no Hermes, which proves AppKit never leaks into the core. On macOS, the core tests
+# build and run with the AppKit backend's window-free parts and their tests.
 # A pull request runs it only when the host or the workflow changed, or the lockfile moved the
 # version of a package the host builds from (see `changes`); a push to main and a manual run build
 # it whatever changed. Compiles go through ccache, kept per job.
@@ -101,6 +102,37 @@ jobs:
         env:
           CC: clang
           CXX: clang++
+        run: pnpm --filter @ng-native/desktop test:native
+
+      - if: always()
+        run: ccache --show-stats
+
+  core-macos:
+    needs: changes
+    if: >-
+      always() && github.event.pull_request.draft != true &&
+      (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true' ||
+      needs.changes.outputs.pins == 'true')
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - run: brew install ninja
+
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: desktop-core-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+          restore-keys: desktop-core-${{ runner.os }}-${{ runner.arch }}-
+          max-size: 500M
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
+          key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+
+      - name: Build the core and the AppKit backend's window-free parts, and run their tests
         run: pnpm --filter @ng-native/desktop test:native
 
       - if: always()
