@@ -5,8 +5,11 @@
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const pinsScript = new URL('../../scripts/desktop-host-pins.mjs', import.meta.url);
 const { HOST_PACKAGES, hostPins, pinsChanged } = (await import(pinsScript.href)) as {
@@ -17,7 +20,7 @@ const { HOST_PACKAGES, hostPins, pinsChanged } = (await import(pinsScript.href))
 
 const scripts = new URL('../desktop/native/scripts/', import.meta.url);
 const launcher = (...args: string[]) =>
-  spawnSync('bash', [new URL('compiler-launcher.sh', scripts).pathname, ...args], {
+  spawnSync('bash', [fileURLToPath(new URL('compiler-launcher.sh', scripts)), ...args], {
     encoding: 'utf8',
   });
 
@@ -80,7 +83,7 @@ describe('the host pins in the lockfile', () => {
   });
 
   it('fails closed: a base ref it cannot read means the host builds', () => {
-    const run = spawnSync('node', [pinsScript.pathname, 'no-such-ref-for-desktop-pins'], {
+    const run = spawnSync('node', [fileURLToPath(pinsScript), 'no-such-ref-for-desktop-pins'], {
       encoding: 'utf8',
     });
     assert.equal(run.stdout.trim(), 'true');
@@ -101,9 +104,17 @@ describe('the compiler launcher of the desktop build', () => {
     ]);
   });
 
-  it('names nothing when none is set, so a local build is unchanged', () => {
-    assert.equal(launcher('').stdout, '');
-    assert.equal(launcher().stdout, '');
+  it('clears each launcher when none is set, so a build directory never keeps an earlier one', () => {
+    assert.deepEqual(launcher('', 'Linux').stdout.trim().split('\n'), [
+      '-DCMAKE_C_COMPILER_LAUNCHER=',
+      '-DCMAKE_CXX_COMPILER_LAUNCHER=',
+    ]);
+    assert.deepEqual(launcher('', 'Darwin').stdout.trim().split('\n'), [
+      '-DCMAKE_C_COMPILER_LAUNCHER=',
+      '-DCMAKE_CXX_COMPILER_LAUNCHER=',
+      '-DCMAKE_OBJC_COMPILER_LAUNCHER=',
+      '-DCMAKE_OBJCXX_COMPILER_LAUNCHER=',
+    ]);
   });
 
   it('is what build.sh and build-hermes.sh read from NGN_COMPILER_LAUNCHER', () => {
@@ -111,6 +122,60 @@ describe('the compiler launcher of the desktop build', () => {
       const script = readFileSync(new URL(name, scripts), 'utf8');
       assert.match(script, /compiler-launcher\.sh" "\$\{NGN_COMPILER_LAUNCHER:-\}"/, name);
       assert.match(script, /\$\{launcher_args\[@\]\+"\$\{launcher_args\[@\]\}"\}/, name);
+    }
+  });
+});
+
+describe('the desktop build scripts', () => {
+  // A react-native package at a path with an apostrophe, at a version no pin names, and a cache of
+  // its own: each script reads the version, then stops where that version or the cache stops it.
+  const fixture = () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'ngn-scripts-')));
+    const rn = join(root, "O'Brien", 'react-native');
+    mkdirSync(rn, { recursive: true });
+    writeFileSync(
+      join(rn, 'package.json'),
+      JSON.stringify({ name: 'react-native', version: '0.0.1' }),
+    );
+    return { root, rn, env: { ...process.env, NGN_DESKTOP_CACHE: join(root, 'cache') } };
+  };
+  const script = (name: string, args: string[], env: NodeJS.ProcessEnv) =>
+    spawnSync('bash', [fileURLToPath(new URL(name, scripts)), ...args], { encoding: 'utf8', env });
+
+  it('read the react-native version from a path with an apostrophe in it', () => {
+    const { root, rn, env } = fixture();
+    try {
+      for (const name of ['fetch.sh', 'build.sh']) {
+        const run = script(name, [rn, ...(name === 'build.sh' ? ['--backend', 'none'] : [])], env);
+        assert.match(run.stderr, /react-native 0\.0\.1 is not supported/, name);
+      }
+      assert.match(script('build-hermes.sh', [rn], env).stderr, /run fetch\.sh first/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('find a library codegen by its codegenConfig.name, not its Android target name', () => {
+    const { root, rn, env } = fixture();
+    try {
+      const lib = join(root, 'node_modules', 'foo');
+      mkdirSync(lib, { recursive: true });
+      writeFileSync(
+        join(lib, 'package.json'),
+        JSON.stringify({ name: 'foo', version: '1.0.0', codegenConfig: { name: 'NativeFooSpec' } }),
+      );
+      writeFileSync(
+        join(lib, 'react-native.config.js'),
+        "module.exports = { dependency: { platforms: { android: { libraryName: 'foo' } } } };",
+      );
+      // Generated already, so the script answers the directory without running the codegen.
+      const out = join(root, 'cache', 'rn-0.0.1', 'libraries', 'NativeFooSpec');
+      mkdirSync(out, { recursive: true });
+      writeFileSync(join(out, 'stamp'), `foo@1.0.0 ${lib} 3\n`);
+      const run = script('codegen-library.sh', [rn, lib], env);
+      assert.equal(run.stdout.trim(), out, run.stderr);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

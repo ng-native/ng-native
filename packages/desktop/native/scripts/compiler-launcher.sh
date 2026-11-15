@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The CMake arguments that run every compile through a launcher such as ccache, one per line.
-# Prints nothing for an empty launcher, so a build that sets none is unchanged.
+# An empty launcher clears each one, since CMake keeps a launcher an earlier build in the same
+# directory set.
 #
 #   compiler-launcher.sh <launcher> [Darwin|Linux]
 #
@@ -9,7 +10,6 @@
 set -euo pipefail
 launcher="${1:-}"
 os="${2:-$(uname -s)}"
-[ -n "$launcher" ] || exit 0
 langs=(C CXX)
 [ "$os" = "Darwin" ] && langs+=(OBJC OBJCXX)
 for lang in "${langs[@]}"; do

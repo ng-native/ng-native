@@ -11,7 +11,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 RN_PKG="$(cd "${1:?usage: build-hermes.sh <node_modules/react-native> [architectures]}" && pwd)"
 ARCHS="${2:-$(uname -m)}"
-RN_VERSION="$(node -p "require('$RN_PKG/package.json').version")"
+RN_VERSION="$(node -p 'require(process.argv[1] + "/package.json").version' "$RN_PKG")"
 CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 JOBS="${NGN_JOBS:-8}"
 OUT="$CACHE/hermes-${ARCHS//;/-}"

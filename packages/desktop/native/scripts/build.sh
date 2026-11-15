@@ -59,7 +59,7 @@ fi
 [ "$(uname -s)" = "Darwin" ] || archs=""
 
 JOBS="${NGN_JOBS:-8}"
-RN_VERSION="$(node -p "require('$RN_PKG/package.json').version")"
+RN_VERSION="$(node -p 'require(process.argv[1] + "/package.json").version' "$RN_PKG")"
 CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 
 "$here/fetch.sh" "$RN_PKG" >&2
