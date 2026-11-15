@@ -17,7 +17,7 @@ import {
   AppleSignIn,
   type NativeAppleAuthentication,
 } from '@ng-native/expo/apple-sign-in';
-import { serviceWith } from './injected.ts';
+import { answered, serviceWith } from './injected.ts';
 
 const credential = { user: 'u1', identityToken: 'jwt', email: 'a@b.c' };
 
@@ -77,7 +77,7 @@ describe('Sign in with Apple', () => {
   it('reaches the rest of the module under its own names', async () => {
     const native = platform();
     const apple = serviceOn(native);
-    assert.equal(await apple.available(), true);
+    assert.equal(await answered(apple), true);
     assert.deepEqual(await apple.refresh({ user: 'u1' }), credential);
     assert.deepEqual(await apple.signOut({ user: 'u1' }), credential);
     assert.equal(await apple.credentialState('u1'), AppleAuthenticationCredentialState.AUTHORIZED);
@@ -111,7 +111,7 @@ describe('Sign in with Apple', () => {
 
   it('is inert rather than broken with no module installed', async () => {
     const apple = serviceOn(null);
-    assert.equal(await apple.available(), false);
+    assert.equal(await answered(apple), false);
     assert.equal(await apple.signIn(), null);
     assert.equal(await apple.refresh({ user: 'u1' }), null);
     assert.equal(await apple.signOut({ user: 'u1' }), null);

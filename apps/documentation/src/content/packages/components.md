@@ -140,6 +140,14 @@ component of your own included: `<app-card role="button" aria-label="Open">` is 
 `<view>` it is. An `accessibilityLabel` or `accessibilityState` the element has is its own answer,
 and the `aria-*` attribute beside it is not read.
 
+A few take both spellings for what the desktop host reads: a heading's level
+(`accessibilityLevel`/`aria-level`), the views that describe this one
+(`accessibilityDescribedBy`/`aria-describedby`), whether a field is required or invalid
+(`accessibilityRequired`/`aria-required`, `accessibilityInvalid`/`aria-invalid`), an item's place
+in its set (`accessibilityPosInSet`/`aria-posinset`, `accessibilitySetSize`/`aria-setsize`) and a
+grid's counts (`accessibilityRowCount`/`aria-rowcount`, `accessibilityColumnCount`/`aria-colcount`).
+They reach the web host as their `aria-*` attributes. iOS and Android do not read them.
+
 On a component of your own, a shared prop is an attribute, not an input: the component declares no
 `testID`, so `<app-row [testID]="id">` is the template error `NG8002`. Write it static, or bind it
 with `attr.`, which commits the prop to the host view:

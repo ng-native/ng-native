@@ -171,12 +171,12 @@ describe('haptics', () => {
     haptics.notify('success');
     haptics.select();
     assert.deepEqual(calls, ['impact:medium', 'impact:heavy', 'notify:success', 'select']);
-    assert.equal(haptics.available, true);
+    assert.equal(haptics.available(), true);
   });
 
   it('does nothing at all when the module is not installed', () => {
     const haptics = serviceWith(Haptics.SOURCE, null, () => new Haptics());
-    assert.equal(haptics.available, false);
+    assert.equal(haptics.available(), false);
     haptics.impact();
     assert.deepEqual(calls, [], 'and no throw, because nobody awaits a vibration');
   });
@@ -395,12 +395,86 @@ describe('the file system', () => {
     await assert.rejects(system.pickDirectory(), /no pickDirectoryAsync\(\)/);
   });
 
-  it('says there is no module to load rather than failing on a directory it does not have', () => {
+  it('lists a folder, describes a path, and says how a path changes, through its source', async () => {
+    const entries = [
+      { name: 'notes', uri: 'file:///docs/notes/', directory: true },
+      { name: 'a.txt', uri: 'file:///docs/a.txt', directory: false },
+    ];
+    const stat = { uri: 'file:///docs/a.txt', directory: false, size: 3, modified: 1, created: 0 };
+    const listeners: ((change: { type: 'modified'; uri: string }) => void)[] = [];
+    let stopped = 0;
+    const source = {
+      ...files(fakeFile(true).file),
+      readdir: async (uri: string) => (uri === 'file:///docs/' ? entries : []),
+      stat: (uri: string) => (uri === stat.uri ? stat : null),
+      watch: (uri: string, listener: (typeof listeners)[number]) => {
+        assert.equal(uri, 'file:///docs/');
+        listeners.push(listener);
+        return () => stopped++;
+      },
+    };
+    const system = serviceWith(FileSystem.SOURCE, source, () => new FileSystem());
+    assert.deepEqual(await system.readdir('file:///docs/'), entries);
+    assert.deepEqual(await system.readdir({ uri: 'file:///docs/' }), entries, 'a folder too');
+    assert.deepEqual(await system.stat('file:///docs/a.txt'), stat);
+    assert.equal(await system.stat('file:///docs/gone.txt'), null);
+    const changes: unknown[] = [];
+    const stop = system.watch('file:///docs/', (change) => changes.push(change));
+    listeners[0]!({ type: 'modified', uri: 'file:///docs/a.txt' });
+    stop();
+    assert.deepEqual(changes, [{ type: 'modified', uri: 'file:///docs/a.txt' }]);
+    assert.equal(stopped, 1);
+  });
+
+  it("names the app's folders, and the OS's own where its source has them", () => {
+    const system = serviceWith(
+      FileSystem.SOURCE,
+      files(fakeFile(true).file),
+      () => new FileSystem(),
+    );
+    assert.deepEqual(system.paths, {
+      cache: 'file:///cache/',
+      document: 'file:///documents/',
+      home: null,
+      desktop: null,
+      downloads: null,
+      temp: null,
+      appData: null,
+    });
+    const desktop = {
+      ...files(fakeFile(true).file),
+      paths: { home: 'file:///Users/me/', downloads: 'file:///Users/me/Downloads/' },
+    };
+    const mac = serviceWith(FileSystem.SOURCE, desktop, () => new FileSystem());
+    assert.equal(mac.paths.home, 'file:///Users/me/');
+    assert.equal(mac.paths.downloads, 'file:///Users/me/Downloads/');
+    assert.equal(mac.paths.desktop, null);
+  });
+
+  it('answers nothing for a listing, a description or a watch where its source has none', async () => {
+    for (const source of [files(fakeFile(true).file), null]) {
+      const system = serviceWith(FileSystem.SOURCE, source, () => new FileSystem());
+      assert.deepEqual(await system.readdir('file:///docs/'), []);
+      assert.equal(await system.stat('file:///docs/a.txt'), null);
+      system.watch('file:///docs/', () => assert.fail('nothing to watch'))();
+    }
+    const absent = serviceWith(FileSystem.SOURCE, null, () => new FileSystem());
+    assert.deepEqual(Object.values(absent.paths), [null, null, null, null, null, null, null]);
+  });
+
+  it('is inert without a module: files that are not there, and no folder picked', async () => {
     const system = serviceWith(FileSystem.SOURCE, null, () => new FileSystem());
-    const notInstalled = { message: /expo-file-system has no native module to load in Node/ };
-    assert.throws(() => system.cache('canary.txt'), notInstalled);
-    assert.throws(() => system.document('canary.txt'), notInstalled);
-    return assert.rejects(system.pickDirectory(), notInstalled);
+    assert.equal(system.available(), false);
+    for (const file of [
+      system.cache('a.txt'),
+      system.document('a.txt'),
+      system.file('file:///a'),
+    ]) {
+      system.write(file, 'nothing');
+      assert.deepEqual([file.exists, await file.text()], [false, '']);
+    }
+    assert.equal(system.file('file:///a').uri, 'file:///a');
+    assert.equal(await system.pickDirectory(), null);
   });
 });
 

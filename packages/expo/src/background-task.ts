@@ -27,13 +27,13 @@
  * module's expiration listener is not here: it is for the task's own body, which runs outside
  * Angular.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import type {
   BackgroundTaskOptions,
   BackgroundTaskResult as ExpoResult,
   BackgroundTaskStatus as ExpoStatus,
 } from 'expo-background-task';
-import { expoModule } from './native.ts';
+import { expoModule, presence } from './native.ts';
 
 type Expo = typeof import('expo-background-task');
 
@@ -74,6 +74,9 @@ export class BackgroundTask {
   );
 
   private readonly native = inject(BackgroundTask.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
 
   /** Whether the platform will run background work: available on a device, restricted on the web. */
   async status(): Promise<ExpoStatus> {

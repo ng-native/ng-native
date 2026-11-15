@@ -10,7 +10,7 @@
  * things at startup for no reason.
  */
 
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
 import { reactNative } from './react-native.ts';
 
 export interface NativeDevMenu {
@@ -73,9 +73,9 @@ export class DevMenu {
   private readonly source = inject(DevMenu.SOURCE);
 
   /** Whether anything registered here will appear. False in a release build. */
-  get available(): boolean {
-    return this.source.development && this.source.menu !== null;
-  }
+  readonly available: Signal<boolean> = signal(
+    this.source.development && this.source.menu !== null,
+  ).asReadonly();
 
   /**
    * Add an item to the shake menu.
@@ -87,7 +87,7 @@ export class DevMenu {
    * than being silently dropped.
    */
   add(title: string, handler: () => unknown): void {
-    if (!this.available) return;
+    if (!this.available()) return;
     this.source.menu!.addMenuItem(title, handler);
   }
 

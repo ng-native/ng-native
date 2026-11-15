@@ -25,7 +25,7 @@
  *
  * Without the module installed, `edit()` resolves to null and `manipulate()` is null.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import type {
   Action,
   FlipType as ExpoFlipType,
@@ -34,7 +34,7 @@ import type {
   SaveFormat as ExpoSaveFormat,
   SaveOptions,
 } from 'expo-image-manipulator';
-import { expoModule } from './native.ts';
+import { expoModule, presence } from './native.ts';
 
 type Expo = typeof import('expo-image-manipulator');
 
@@ -70,6 +70,9 @@ export class ImageEditor {
   );
 
   private readonly native = inject(ImageEditor.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
 
   /**
    * Applies each action in order and saves the result as a new file: a JPEG unless `format` says

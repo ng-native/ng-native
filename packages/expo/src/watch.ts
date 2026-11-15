@@ -7,7 +7,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
-import { expoModule, present } from './native.ts';
+import { expoModule, present, presence } from './native.ts';
 
 export type WatchPayload = Record<string, unknown>;
 
@@ -133,7 +133,7 @@ export class Watch {
   private readonly transfersState = signal<ReadonlyMap<string, WatchFileEvent>>(new Map());
   private readonly errorState = signal<WatchError | null>(null);
 
-  readonly available = present(this.native) !== null;
+  readonly available: Signal<boolean> = presence(this.native);
   readonly paired: Signal<boolean> = this.pairedState.asReadonly();
   readonly installed: Signal<boolean> = this.installedState.asReadonly();
   readonly reachable: Signal<boolean> = this.reachableState.asReadonly();

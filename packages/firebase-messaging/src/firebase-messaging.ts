@@ -72,6 +72,9 @@ export class FirebaseMessaging {
   );
 
   private readonly native = inject(FirebaseMessaging.SOURCE);
+
+  /** Whether the package's native half is in the build. Where it is not, every call is inert. */
+  readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
   private readonly notifications = inject(Notifications);
   private readonly errors = inject(ErrorHandler);
   private readonly os = inject(OS);

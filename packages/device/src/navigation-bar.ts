@@ -10,6 +10,7 @@
  * `expo-navigation-bar`. Without it, and on iOS, which has no navigation bar, every claim is kept
  * but changes nothing.
  */
+import { injectOs } from './os.ts';
 import {
   DestroyRef,
   InjectionToken,
@@ -18,6 +19,7 @@ import {
   inject,
   untracked,
   type Signal,
+  signal,
 } from '@angular/core';
 import { ColorScheme, type Scheme } from './color-scheme.ts';
 import { mergeClaims } from './merge-claims.ts';
@@ -89,6 +91,9 @@ export class NavigationBar {
   );
 
   private readonly source = inject(NavigationBar.SOURCE);
+
+  /** Whether there is a navigation bar to style: on Android alone. */
+  readonly available: Signal<boolean> = signal(injectOs() === 'android').asReadonly();
   /** This app, among the apps claiming the bar: its scheme is what an `auto` style it claims follows. */
   private readonly owner: Owner = { scheme: inject(ColorScheme) };
   /** Every app's claims on this bar: the window is the runtime's, not an app's. */

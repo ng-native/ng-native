@@ -68,7 +68,7 @@ and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On the web, and in a test that provides no fake, the permission is refused and cannot be asked for,
-`available` is `false`, and `advertisingId()` is `null`.
+`available()` is `false`, and `advertisingId()` is `null`.
 
 ## Reference
 

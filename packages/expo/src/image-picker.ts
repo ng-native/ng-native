@@ -10,8 +10,8 @@
  * call site otherwise writes: a cancelled picker answers with no assets rather than a result to
  * unwrap, and `capture()` asks for the camera before opening it, where Expo's would reject.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule } from './native.ts';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
+import { expoModule, presence } from './native.ts';
 import { Permission, UNAVAILABLE, type PermissionResponse } from './permissions.ts';
 
 export type PickerOptions = import('expo-image-picker').ImagePickerOptions;
@@ -45,6 +45,9 @@ export class ImagePicker {
   );
 
   private readonly native = inject(ImagePicker.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
 
   /**
    * The photo library. The system picker needs no permission to pick from, so `pick()` never

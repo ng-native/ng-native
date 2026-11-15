@@ -37,7 +37,7 @@ registerExpoViews('apple-sign-in-button');
 ## The smallest thing that works
 
 ```ts
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import {
   AppleAuthenticationScope,
   AppleSignIn,
@@ -60,11 +60,7 @@ import {
 })
 export class SignIn {
   private readonly apple = inject(AppleSignIn);
-  protected readonly offered = signal(false);
-
-  constructor() {
-    void this.apple.available().then((available) => this.offered.set(available));
-  }
+  protected readonly offered = this.apple.available;
 
   protected async signIn(): Promise<void> {
     const credential = await this.apple.signIn({

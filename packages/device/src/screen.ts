@@ -91,6 +91,9 @@ export class Screen {
   });
 
   private readonly source = inject(Screen.SOURCE);
+
+  /** Whether the service is here: on every OS, where it answers what the OS reports. */
+  readonly available: Signal<boolean> = signal(true).asReadonly();
   private readonly safeArea = inject(SafeArea);
   private readonly sizes = signal<Sizes>(this.source.current());
 

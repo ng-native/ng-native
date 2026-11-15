@@ -73,8 +73,8 @@ Each is read the same way regardless of the shape:
 
 - **`reading`** - a signal, the most recent value, or the stated zero until the sensor has said
   anything.
-- **`available`** - `boolean | null`. Null until the platform has answered, which is always one
-  turn away even though the underlying question is really a constant - `isAvailableAsync` is
+- **`available`** - a `Signal<boolean>`. False until the platform has answered, which is always
+  one turn away even though the underlying question is really a constant - `isAvailableAsync` is
   asynchronous regardless. A signal rather than the promise the module itself offers, because the
   question is normally asked in a template (`@if (barometer.available())`), and a promise there is
   truthy on the first frame and every frame after: exactly the failure this project keeps guarding

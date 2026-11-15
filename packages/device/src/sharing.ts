@@ -6,7 +6,7 @@
  * means they changed their mind, and only the first is worth a confirmation or an analytics event.
  */
 
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
 import { reactNative } from './react-native.ts';
 
 export interface ShareRequest {
@@ -51,6 +51,9 @@ export class Sharing {
   );
 
   private readonly native = inject(Sharing.SOURCE);
+
+  /** Whether React Native's module is here. Where it is not, every call is inert. */
+  readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
 
   /**
    * Open the share sheet. Resolves to whether anything took the content.

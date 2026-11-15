@@ -12,7 +12,8 @@
  * make it.
  */
 
-import { InjectionToken, Service, inject } from '@angular/core';
+import { injectOs } from './os.ts';
+import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
 import { reactNative } from './react-native.ts';
 
 export interface NativeVibration {
@@ -29,6 +30,11 @@ export class Vibration {
   );
 
   private readonly native = inject(Vibration.SOURCE);
+
+  /** Whether the device can vibrate: absent on a Mac, which has no motor to drive. */
+  readonly available: Signal<boolean> = signal(
+    this.native !== null && injectOs() !== 'macos',
+  ).asReadonly();
 
   /** A single buzz. The duration is Android's; iOS vibrates for its own fixed length. */
   buzz(durationMs = 400): void {

@@ -14,7 +14,14 @@
  * over, and not at all when the change commits nothing.
  */
 
-import { ApplicationRef, InjectionToken, Service, inject } from '@angular/core';
+import {
+  ApplicationRef,
+  InjectionToken,
+  Service,
+  inject,
+  signal,
+  type Signal,
+} from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { reactNative } from './react-native.ts';
 
@@ -67,6 +74,9 @@ export class LayoutAnimation {
   );
 
   private readonly native = inject(LayoutAnimation.SOURCE);
+
+  /** Whether React Native's module is here. Where it is not, every call is inert. */
+  readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
   private readonly engine = inject(Engine, { optional: true });
   private readonly application = inject(ApplicationRef, { optional: true });
 

@@ -28,7 +28,7 @@
  * function underneath is already a plain promise with no React in it. The class takes its
  * platform rather than injecting it, because the first call happens before there is an injector.
  */
-import { InjectionToken } from '@angular/core';
+import { InjectionToken, computed, type Signal } from '@angular/core';
 import { nextFrame as defaultNextFrame } from '@ng-native/fabric';
 import { expoModuleNow } from './native.ts';
 
@@ -71,9 +71,7 @@ export class Splash {
   }
 
   /** Whether the module is installed. Without it the screen hides itself on the first frame. */
-  get available(): boolean {
-    return this.native !== null;
-  }
+  readonly available: Signal<boolean> = computed(() => this.native !== null);
 
   /**
    * Keep the splash up. Called at module scope, before anything is mounted.

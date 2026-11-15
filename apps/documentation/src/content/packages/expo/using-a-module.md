@@ -87,11 +87,11 @@ A database has no token: `openDatabasesWith()` points `database()` at a stand-in
 
 ## A module with no service
 
-An Expo module this package has no service for, `expo-print` or `expo-contacts`, has no React in
-it and works as it is. What does not work is its documented import in a file a test loads:
-`import * as Print from 'expo-print'` evaluates the package, the package imports `react-native`,
-and a test in Node fails while the module graph loads, with `Flow is not supported`, whether or
-not the test prints anything.
+An Expo module this package has no service for, `expo-contacts` or `expo-mail-composer`, has no
+React in it and works as it is. What does not work is its documented import in a file a test loads:
+`import * as Contacts from 'expo-contacts'` evaluates the package, the package imports
+`react-native`, and a test in Node fails while the module graph loads, with `Flow is not
+supported`, whether or not the test reads a contact.
 
 Load it where it is used instead, as this package's own services do: a token whose factory calls
 `expoModule()`, and a service that injects it.
@@ -100,20 +100,20 @@ Load it where it is used instead, as this package's own services do: a token who
 import { InjectionToken, Service, inject } from '@angular/core';
 import { expoModule } from '@ng-native/expo';
 
-interface NativePrint {
-  printToFileAsync(options: { html: string }): Promise<{ uri: string }>;
+interface NativeContacts {
+  getContactsAsync(): Promise<{ data: { name: string }[] }>;
 }
 
-export const PRINT = new InjectionToken<NativePrint | null>('app.print', {
-  factory: () => expoModule('expo-print', () => require('expo-print') as NativePrint),
+export const CONTACTS = new InjectionToken<NativeContacts | null>('app.contacts', {
+  factory: () => expoModule('expo-contacts', () => require('expo-contacts') as NativeContacts),
 });
 
 @Service()
-export class Printer {
-  private readonly native = inject(PRINT);
+export class People {
+  private readonly native = inject(CONTACTS);
 
-  async toFile(html: string): Promise<string | null> {
-    return (await this.native?.printToFileAsync({ html }))?.uri ?? null;
+  async names(): Promise<string[]> {
+    return (await this.native?.getContactsAsync())?.data.map((contact) => contact.name) ?? [];
   }
 }
 ```
@@ -124,7 +124,7 @@ one under the token.
 
 ```ts
 providers: [
-  { provide: PRINT, useValue: { printToFileAsync: async () => ({ uri: 'file:///out.pdf' }) } },
+  { provide: CONTACTS, useValue: { getContactsAsync: async () => ({ data: [{ name: 'Ada' }] }) } },
 ];
 ```
 
@@ -133,18 +133,26 @@ package's own types with `import type`, which a test does not evaluate.
 
 ## Whether a feature is available
 
-A service that can say whether its feature is there says it as `available`, in one of three shapes,
-by what the answer is like:
+Every service says whether its feature is there as `available`, a `Signal<boolean>` read as
+`available()`, in code and in templates alike: `@if (haptics.available())`. Where the answer is
+known at once, such as whether the module is in the build, it never changes. Where it is a native
+check, such as whether a face or fingerprint is enrolled for
+[Biometrics](/packages/expo/biometrics), Sign in with Apple, screen capture, the store review
+prompt or a sensor, it is `false` until the
+platform answers, which is a turn after it is first read. [Biometrics](/packages/expo/biometrics)
+asks again each time the app comes back to the front. The hinge of a
+[foldable](/packages/expo/foldable) and the on-device language model follow the feature as it comes
+and goes.
 
-- **A getter**, `available`, when the answer is known at once and does not change: whether the
-  module is in the build, as for [Haptics](/packages/expo/haptics),
-  [Fonts](/packages/expo/fonts) and [Tracking](/packages/expo/tracking).
-- **A method that resolves**, `await available()`, when the answer is a fresh native check that can
-  change while the app runs: whether a face or fingerprint is enrolled for
-  [Biometrics](/packages/expo/biometrics), and likewise for Sign in with Apple, screen capture and
-  the store review prompt. Ask it just before offering the feature.
-- **A signal**, `available()`, when the feature comes and goes and a template follows it: the hinge
-  of a [foldable](/packages/expo/foldable), the on-device language model, a sensor.
+A signal is a function, so `if (haptics.available)` is always true. Call it.
+
+Where a service is absent, `available()` is `false` and every call is inert: it answers its return
+type's empty value (`[]`, `null`, `false`, an empty string, or nothing) and never throws or hangs.
+A permission the user denied is not absence: the call answers empty and the permission says why. A
+call throws only on a misconfiguration, such as a module the app installed but the build does not
+have. `Crypto` throws where it has no module, since random bytes have no safe empty value;
+`LanguageModel`'s generating calls reject with the model's state, and sending to a watch rejects, as
+they do on a device where the model or the watch is not ready.
 
 ## What is on the bare import
 

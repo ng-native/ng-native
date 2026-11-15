@@ -19,12 +19,12 @@
  * is a key every record shares, and an empty hash matches every input; neither looks wrong until
  * the data is. So every call without the module throws, naming the package to install.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import type {
   CryptoDigestAlgorithm as ExpoDigestAlgorithm,
   CryptoEncoding as ExpoEncoding,
 } from 'expo-crypto';
-import { expoModule, unavailable } from './native.ts';
+import { expoModule, presence, unavailable } from './native.ts';
 
 type Expo = typeof import('expo-crypto');
 
@@ -69,6 +69,12 @@ export class Crypto {
   });
 
   private readonly native = inject(Crypto.SOURCE);
+
+  /**
+   * Whether the module is here. Where it is not, every call throws rather than answer an empty
+   * value: an empty UUID or hash would look right until the data is wrong.
+   */
+  readonly available: Signal<boolean> = presence(this.native);
 
   /** A version 4 UUID, from the platform's secure random source. */
   randomUUID(): string {

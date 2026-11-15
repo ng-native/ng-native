@@ -14,10 +14,12 @@ export {
   type PermissionResponse,
 } from './permissions.ts';
 export {
+  DESKTOP_MODULES,
   MissingModuleError,
   expoModule,
   optional,
   unavailable,
+  type ModuleOptions,
   type ModulePlatform,
 } from './native.ts';
 export { NATIVE_VIEWS, registerNativeViews } from './community-views.ts';

@@ -12,7 +12,7 @@
  * platform - and the one thing neither can do is fail silently on the platform it is not for.
  */
 
-import { InjectionToken, Service, inject } from '@angular/core';
+import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
 import { reactNative, type ReactNative } from './react-native.ts';
 
 /** One choice in a dialog or an action sheet. */
@@ -62,6 +62,9 @@ export class Dialogs {
   });
 
   private readonly native = inject(Dialogs.SOURCE);
+
+  /** Whether React Native's module is here. Where it is not, every call is inert. */
+  readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
 
   /** Say something, and wait until it has been read. Resolves when the dialog is dismissed. */
   tell(title: string, message?: string, dismiss = 'OK'): Promise<void> {

@@ -9,7 +9,7 @@
 import { DestroyRef, InjectionToken, Service, computed, inject, type Signal } from '@angular/core';
 import { TopClaim, onWindowFront, sharedBySource } from '@ng-native/device';
 import { observed, observedFrom, type Observed } from './observed.ts';
-import { expoModule, present } from './native.ts';
+import { expoModule, presence, present } from './native.ts';
 
 export type Orientation =
   'unknown' | 'portrait' | 'portrait-upside-down' | 'landscape-left' | 'landscape-right';
@@ -79,6 +79,9 @@ export class DeviceOrientation {
   );
 
   private readonly source = inject(DeviceOrientation.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.source.reported);
 
   readonly orientation: Signal<Orientation> = observed(this.source.reported, 'unknown');
 

@@ -33,6 +33,9 @@ const NOTHING: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
 
 @Service()
 export class SafeArea {
+  /** Whether the service is here: on every OS, where it answers what the OS reports. */
+  readonly available: Signal<boolean> = signal(true).asReadonly();
+
   private readonly current = signal<Insets>(NOTHING);
   private readonly measured = signal<Frame | null>(null);
   /** What each provider still up last reported, the latest last. */

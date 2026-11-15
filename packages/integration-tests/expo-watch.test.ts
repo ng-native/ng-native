@@ -74,7 +74,7 @@ function watchWith(native: NativeWatch | null) {
 describe('Watch, without a watch', () => {
   it('is inert where the package is missing or the platform is not iOS', async () => {
     const { watch } = watchWith(null);
-    assert.equal(watch.available, false);
+    assert.equal(watch.available(), false);
     assert.deepEqual(await watch.status(), { paired: false, installed: false, reachable: false });
     await assert.rejects(watch.send({ a: 1 }), /react-native-watch-connectivity/);
     await assert.rejects(watch.sendData('x'));
@@ -91,7 +91,7 @@ describe('Watch, with a paired watch', () => {
     const fake = fakeWatch();
     const { watch } = watchWith(fake.native);
     await settle();
-    assert.equal(watch.available, true);
+    assert.equal(watch.available(), true);
     assert.equal(watch.paired(), true);
     assert.equal(watch.installed(), true);
     assert.equal(watch.reachable(), true);

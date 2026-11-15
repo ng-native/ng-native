@@ -1,0 +1,369 @@
+/**
+ * Menus as data, shared by every OS: the menu bar every desktop app gets, how an app's
+ * `<menu-bar>` merges into it, and the token a `<menu-item>` registers itself through.
+ *
+ * `@ng-native/components` builds this from `<menu-group>` and `<menu-item>`, a
+ * `<native-header-item [menu]>` reads it, and each OS draws it: the desktop host as the menu bar,
+ * iPadOS through UIMenuBuilder. The rules live here, in TypeScript, so every OS follows the same
+ * ones; only what AppKit adds itself (Services' contents, Spelling, Substitutions, Dictation and
+ * Emoji) is left to the desktop host.
+ */
+import { InjectionToken, computed, signal, type Signal } from '@angular/core';
+
+/** A standard menu a `<menu-group menuRole>` adds its items to. */
+export type MenuGroupRole = 'app' | 'file' | 'edit' | 'view' | 'window' | 'help';
+
+/**
+ * What an item is for, where the OS has a standard one: an item with a `menuRole` replaces that
+ * role's default item, and without a handler does what the OS does for it.
+ */
+export type MenuRole =
+  | 'about'
+  | 'settings'
+  | 'services'
+  | 'hide'
+  | 'hideOthers'
+  | 'showAll'
+  | 'quit'
+  | 'undo'
+  | 'redo'
+  | 'cut'
+  | 'copy'
+  | 'paste'
+  | 'selectAll'
+  | 'find'
+  | 'toggleSidebar'
+  | 'toggleFullScreen'
+  | 'back'
+  | 'forward'
+  | 'minimize'
+  | 'zoom'
+  | 'bringAllToFront'
+  | 'close'
+  | 'print';
+
+/** One item in a menu. */
+export interface MenuItemModel {
+  readonly label: string;
+  readonly menuRole?: MenuRole;
+  /** `mod+s`, as `parseShortcut` reads it. */
+  readonly shortcut?: string;
+  readonly disabled?: boolean;
+  /** A check mark, where the item is a toggle. */
+  readonly checked?: boolean;
+  readonly destructive?: boolean;
+  readonly subtitle?: string;
+  /** An SF Symbol, shown on Apple's OSes. */
+  readonly sfSymbol?: string;
+  /** A drawable resource's name, shown on Android. */
+  readonly icon?: string;
+  /**
+   * The standard menu a top-level `<menu-group menuRole>` adds its items to, for a group written
+   * in a `<menu-bar>`: what becomes `MenuGroupModel.menuRole`.
+   */
+  readonly group?: MenuGroupRole;
+  /** A submenu, or with `inline` a section of the menu the item is in. */
+  readonly items?: readonly MenuEntry[];
+  readonly inline?: boolean;
+  /** What choosing it does. Left out on an item with a `menuRole`, the OS does it. */
+  readonly select?: () => void;
+}
+
+/** A line between items. */
+export interface MenuSeparator {
+  readonly separator: true;
+}
+
+export type MenuEntry = MenuItemModel | MenuSeparator;
+
+/** One menu in the menu bar. */
+export interface MenuGroupModel {
+  readonly label: string;
+  readonly menuRole?: MenuGroupRole;
+  readonly items: readonly MenuEntry[];
+}
+
+const SEPARATOR: MenuSeparator = { separator: true };
+
+export const isSeparator = (entry: MenuEntry): entry is MenuSeparator => 'separator' in entry;
+
+/**
+ * The menu bar every desktop app gets: App, File, Edit, View, Window and Help, each item with its
+ * role and standard shortcut. `Settings...` is in it until the merge, which keeps it only when the
+ * app gives it a handler. File holds Print... (`mod+p`), which prints the key window unless the app
+ * gives a `print` item a handler.
+ */
+export function defaultMenuBar(appName: string): MenuGroupModel[] {
+  const item = (label: string, menuRole: MenuRole, shortcut?: string): MenuItemModel =>
+    shortcut ? { label, menuRole, shortcut } : { label, menuRole };
+  return [
+    {
+      label: appName,
+      menuRole: 'app',
+      items: [
+        item(`About ${appName}`, 'about'),
+        SEPARATOR,
+        item('Settings...', 'settings', 'mod+,'),
+        SEPARATOR,
+        item('Services', 'services'),
+        SEPARATOR,
+        item(`Hide ${appName}`, 'hide', 'mod+h'),
+        item('Hide Others', 'hideOthers', 'mod+alt+h'),
+        item('Show All', 'showAll'),
+        SEPARATOR,
+        item(`Quit ${appName}`, 'quit', 'mod+q'),
+      ],
+    },
+    { label: 'File', menuRole: 'file', items: [item('Print...', 'print', 'mod+p')] },
+    {
+      label: 'Edit',
+      menuRole: 'edit',
+      items: [
+        item('Undo', 'undo', 'mod+z'),
+        item('Redo', 'redo', 'mod+shift+z'),
+        SEPARATOR,
+        item('Cut', 'cut', 'mod+x'),
+        item('Copy', 'copy', 'mod+c'),
+        item('Paste', 'paste', 'mod+v'),
+        item('Select All', 'selectAll', 'mod+a'),
+        SEPARATOR,
+        item('Find', 'find', 'mod+f'),
+      ],
+    },
+    {
+      label: 'View',
+      menuRole: 'view',
+      items: [
+        // Their keys are each OS's own, which `navigationShortcut` gives: not a `mod` chord.
+        item('Back', 'back'),
+        item('Forward', 'forward'),
+        SEPARATOR,
+        item('Show Sidebar', 'toggleSidebar', 'ctrl+mod+s'),
+        item('Enter Full Screen', 'toggleFullScreen', 'ctrl+mod+f'),
+      ],
+    },
+    {
+      label: 'Window',
+      menuRole: 'window',
+      items: [
+        // An app with a File menu has it at the end of that menu instead, as a Mac app does.
+        item('Close Window', 'close', 'mod+w'),
+        item('Minimize', 'minimize', 'mod+m'),
+        item('Zoom', 'zoom'),
+        SEPARATOR,
+        item('Bring All to Front', 'bringAllToFront'),
+      ],
+    },
+    { label: 'Help', menuRole: 'help', items: [] },
+  ];
+}
+
+/** Every item with a `menuRole`, by role, read through submenus and sections. */
+function byRole(groups: readonly MenuGroupModel[]): Map<MenuRole, MenuItemModel> {
+  const found = new Map<MenuRole, MenuItemModel>();
+  const walk = (entries: readonly MenuEntry[]) => {
+    for (const entry of entries) {
+      if (isSeparator(entry)) continue;
+      if (entry.menuRole && !found.has(entry.menuRole)) found.set(entry.menuRole, entry);
+      if (entry.items) walk(entry.items);
+    }
+  };
+  for (const group of groups) walk(group.items);
+  return found;
+}
+
+/** `entries` without the items `drop` names, and with no separator leading, trailing or doubled. */
+function tidy(entries: readonly MenuEntry[], drop: (item: MenuItemModel) => boolean): MenuEntry[] {
+  const kept: MenuEntry[] = [];
+  for (const entry of entries) {
+    if (isSeparator(entry)) {
+      if (kept.length && !isSeparator(kept[kept.length - 1]!)) kept.push(entry);
+      continue;
+    }
+    if (drop(entry)) continue;
+    kept.push(entry.items ? { ...entry, items: tidy(entry.items, drop) } : entry);
+  }
+  while (kept.length && isSeparator(kept[kept.length - 1]!)) kept.pop();
+  return kept;
+}
+
+type MergedGroup = { label: string; menuRole?: MenuGroupRole; items: MenuEntry[] };
+
+/**
+ * The app's groups, each added to the default menu it names or set aside to go after App (a
+ * `file` group with no default File menu) or after View. The items for the default File menu are
+ * kept apart, to go before its own.
+ */
+function placeAppGroups(
+  merged: MergedGroup[],
+  app: readonly MenuGroupModel[],
+  defaultFile: MergedGroup | undefined,
+  moved: (item: MenuItemModel) => boolean,
+): { afterApp: MergedGroup[]; afterView: MergedGroup[]; fileItems: MenuEntry[] } {
+  const afterApp: MergedGroup[] = [];
+  const afterView: MergedGroup[] = [];
+  let fileItems: MenuEntry[] = [];
+  for (const group of app) {
+    const items = tidy(group.items, moved);
+    const standard = merged.find((one) => group.menuRole && one.menuRole === group.menuRole);
+    if (standard && standard === defaultFile) fileItems = joined(fileItems, items);
+    else if (standard) standard.items = joined(standard.items, items);
+    // A group whose items all replaced defaults: an empty menu is not worth a place in the bar.
+    else if (items.length)
+      (group.menuRole === 'file' ? afterApp : afterView).push({ ...group, items });
+  }
+  return { afterApp, afterView, fileItems };
+}
+
+/** `items` after `entries`, with a separator between when both have any. */
+function joined(entries: readonly MenuEntry[], items: readonly MenuEntry[]): MenuEntry[] {
+  return entries.length && items.length
+    ? [...entries, SEPARATOR, ...items]
+    : [...entries, ...items];
+}
+
+/**
+ * The File menu: the app's items, then Close Window when it moved there, then the defaults
+ * (Print...), each part apart.
+ */
+function fileMenu(
+  own: readonly MenuEntry[],
+  close: MenuItemModel | undefined,
+  defaults: readonly MenuEntry[],
+): MenuEntry[] {
+  return tidy([...own, SEPARATOR, ...(close ? [close, SEPARATOR] : []), ...defaults], () => false);
+}
+
+/** The Window menu's Close Window (or the app's `close` item), taken out of it. */
+function takeClose(
+  groups: { menuRole?: MenuGroupRole; items: MenuEntry[] }[],
+): MenuItemModel | undefined {
+  const window = groups.find((group) => group.menuRole === 'window');
+  const close = window?.items.find((entry) => !isSeparator(entry) && entry.menuRole === 'close');
+  if (!window || !close || isSeparator(close)) return undefined;
+  window.items = tidy(window.items, (item) => item === close);
+  return close;
+}
+
+/**
+ * The menu bar an app ends up with, from the defaults and its `<menu-bar>`:
+ *
+ * - An app item with a `menuRole` replaces the default item with that role, where the default is,
+ *   and leaves the group it was written in.
+ * - `Settings...` shows only when the app gives a `settings` item a handler.
+ * - A group whose `menuRole` names a default menu adds its items to the end of that menu; a `file`
+ *   group's go before Print..., which stays last, as on a Mac.
+ * - A `file` group with no default File menu goes after the App menu, and any other group after
+ *   View, in the order the app wrote them. A group left with no items is left out.
+ * - With a `file` group, the Window menu's Close Window (or the app's own `close` item) moves to
+ *   the File menu, after the app's items and before the defaults.
+ */
+export function mergeMenuBar(
+  defaults: readonly MenuGroupModel[],
+  app: readonly MenuGroupModel[],
+): MenuGroupModel[] {
+  const replacing = byRole(app);
+  const defaultRoles = byRole(defaults);
+  const settings = replacing.get('settings');
+  const replace = (entries: readonly MenuEntry[]): MenuEntry[] =>
+    entries.map((entry) => {
+      if (isSeparator(entry)) return entry;
+      const own = entry.menuRole && replacing.get(entry.menuRole);
+      if (own) return own;
+      return entry.items ? { ...entry, items: replace(entry.items) } : entry;
+    });
+  const merged: MergedGroup[] = defaults.map((group) => ({
+    ...group,
+    items: tidy(replace(group.items), (item) => item.menuRole === 'settings' && !settings?.select),
+  }));
+  const moved = (item: MenuItemModel) => Boolean(item.menuRole && defaultRoles.has(item.menuRole));
+  const defaultFile = merged.find((group) => group.menuRole === 'file');
+  const { afterApp, afterView, fileItems } = placeAppGroups(merged, app, defaultFile, moved);
+  const file = defaultFile ?? afterApp[0];
+  if (file) {
+    const close = app.some((group) => group.menuRole === 'file') ? takeClose(merged) : undefined;
+    file.items = fileMenu(defaultFile ? fileItems : file.items, close, defaultFile?.items ?? []);
+  }
+  const at = (role: MenuGroupRole) => merged.findIndex((group) => group.menuRole === role) + 1;
+  merged.splice(at('view'), 0, ...afterView);
+  merged.splice(at('app'), 0, ...afterApp);
+  return merged;
+}
+
+/**
+ * The entries a menu's `<menu-item>`s registered, in the order they registered. Each item
+ * registers a signal of itself, so a changed label or a toggled check reaches the menu, and the
+ * function `register` answers takes it out again as the item goes.
+ */
+export interface MenuModel {
+  readonly entries: Signal<readonly MenuEntry[]>;
+  /**
+   * Add `entry`, at `place` where the container can order places: an item an `@if` shows later
+   * takes its place in the template, not the end.
+   */
+  register(entry: Signal<MenuEntry>, place?: unknown): () => void;
+}
+
+/**
+ * A menu model for a container to provide as `MENU_MODEL`. `order` compares two places, negative
+ * for the first one earlier; places it cannot compare keep the order they registered in.
+ */
+export function createMenuModel(order?: (a: unknown, b: unknown) => number): MenuModel {
+  type Registered = { entry: Signal<MenuEntry>; place: unknown };
+  const registered = signal<readonly Registered[]>([]);
+  return {
+    entries: computed(() => {
+      const all = registered();
+      const sorted = order ? [...all].sort((a, b) => order(a.place, b.place)) : all;
+      return sorted.map((one) => one.entry());
+    }),
+    register(entry, place) {
+      const one: Registered = { entry, place };
+      registered.update((all) => [...all, one]);
+      return () => registered.update((all) => all.filter((each) => each !== one));
+    },
+  };
+}
+
+/** Just enough of a node to find its place: its parent, and the parent's children in order. */
+interface TreeNode {
+  readonly parent: TreeNode | null;
+  readonly childList: readonly TreeNode[];
+}
+
+/** Where a node is in its tree: each ancestor's index in its parent, from the root down. */
+function placeOf(node: TreeNode): { root: TreeNode; path: number[] } {
+  const path: number[] = [];
+  let at = node;
+  while (at.parent) {
+    path.unshift(at.parent.childList.indexOf(at));
+    at = at.parent;
+  }
+  return { root: at, path };
+}
+
+/**
+ * Which of two elements comes first in the tree: negative for `a`. Elements in different trees, or
+ * not in one yet, compare equal, and keep the order they registered in.
+ */
+export function treeOrder(a: unknown, b: unknown): number {
+  if (!a || !b) return 0;
+  const first = placeOf(a as TreeNode);
+  const second = placeOf(b as TreeNode);
+  if (first.root !== second.root) return 0;
+  for (let i = 0; i < Math.min(first.path.length, second.path.length); i++) {
+    const step = first.path[i]! - second.path[i]!;
+    if (step) return step;
+  }
+  return first.path.length - second.path.length;
+}
+
+/** A menu model whose entries keep their places in the template. */
+export const menuModelInTreeOrder = (): MenuModel => createMenuModel(treeOrder);
+
+/**
+ * Where a `<menu-item>` registers itself: the menu it is written in, which a `<menu-group>`, a
+ * submenu or a `<native-header-item [menu]>` template provides. There is none at the root, so an
+ * item outside a menu is told so by its own injection.
+ */
+export const MENU_MODEL = new InjectionToken<MenuModel>('angular-native.menuModel');

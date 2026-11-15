@@ -162,7 +162,7 @@ describe('the developer menu', () => {
     );
     menu.add('Clear cache', () => {});
 
-    assert.equal(menu.available, false);
+    assert.equal(menu.available(), false);
     assert.deepEqual(native.items, []);
   });
 

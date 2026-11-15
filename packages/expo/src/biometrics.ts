@@ -9,8 +9,9 @@
  * Face ID needs `NSFaceIDUsageDescription` in the app config, or iOS ends the app the first time
  * it is asked for; `expo-local-authentication`'s config plugin writes it.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule, present } from './native.ts';
+import { AppState } from '@ng-native/device';
+import { InjectionToken, Service, inject, DestroyRef, type Signal } from '@angular/core';
+import { expoModule, present, asked } from './native.ts';
 
 export type BiometricKind = 'fingerprint' | 'face' | 'iris';
 
@@ -50,9 +51,7 @@ export class Biometrics {
   );
 
   private readonly native = inject(Biometrics.SOURCE);
-
-  /** Whether there is a sensor and something enrolled on it: whether asking can succeed. */
-  async available(): Promise<boolean> {
+  private readonly enrolment = asked(async () => {
     const native = present(this.native);
     if (!native) return false;
     const [hardware, enrolled] = await Promise.all([
@@ -60,6 +59,20 @@ export class Biometrics {
       native.isEnrolledAsync(),
     ]);
     return hardware && enrolled;
+  });
+
+  /**
+   * Whether there is a sensor and something enrolled on it: whether asking can succeed. False until
+   * the platform answers, and asked again each time the app comes back to the front, where the
+   * user may have enrolled a finger or a face in Settings.
+   */
+  readonly available: Signal<boolean> = this.enrolment.answer;
+
+  constructor() {
+    const stop = inject(AppState.SOURCE, { optional: true })?.subscribe((state) => {
+      if (state === 'active') this.enrolment.ask();
+    });
+    if (stop) inject(DestroyRef).onDestroy(stop);
   }
 
   /** The kinds the device has, for a button that says "Use Face ID" rather than "Use biometrics". */

@@ -6,6 +6,7 @@
  * going, as it starts to move, with no duration, so a layout jumps there while the keyboard slides;
  * `@ng-native/expo`'s `provideNativeKeyboard()` adds the duration and curve. See `keyboardSource`.
  */
+import { injectOs, isPhoneOs } from './os.ts';
 import {
   ApplicationRef,
   DestroyRef,
@@ -220,6 +221,9 @@ export class Keyboard {
   });
 
   private readonly source = inject(Keyboard.SOURCE);
+
+  /** Whether there is a software keyboard: on iOS and Android, and not on a Mac or the web. */
+  readonly available: Signal<boolean> = signal(isPhoneOs(injectOs())).asReadonly();
   private readonly engine = inject(HostEngine, { optional: true });
   private readonly app = inject(ApplicationRef, { optional: true });
   private readonly current = signal<KeyboardMetrics>({ height: 0 });

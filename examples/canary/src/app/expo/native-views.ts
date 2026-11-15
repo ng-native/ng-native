@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, linkedSignal } from '@angular/core';
 import { ScrollView, Text, View } from '@ng-native/components';
 import { ExpoGlass, ExpoGlassContainer, ExpoSymbol, liquidGlassAvailable } from '@ng-native/expo';
 import {
@@ -105,15 +105,9 @@ export class NativeViewsPage {
   protected readonly glassNote = liquidGlassAvailable()
     ? 'Rendered with Liquid Glass. Glass views within 16 points of each other merge.'
     : 'Liquid Glass is not available here, so the glass views render as plain views.';
-  protected readonly status = signal('Checking whether Sign in with Apple is available.');
-
-  constructor() {
-    void this.apple
-      .available()
-      .then((available) =>
-        this.status.set(available ? 'Available.' : 'Not available on this device.'),
-      );
-  }
+  protected readonly status = linkedSignal<string>(() =>
+    this.apple.available() ? 'Available.' : 'Not available on this device.',
+  );
 
   protected async signIn(): Promise<void> {
     this.status.set('Signing in.');

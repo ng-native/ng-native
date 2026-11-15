@@ -7,7 +7,8 @@
  * bottom of a navigation stack that means backgrounding the app rather than closing it, so a user
  * who backs out of the first screen finds the app where they left it.
  */
-import { InjectionToken, Service, inject, type Signal } from '@angular/core';
+import { injectOs } from './os.ts';
+import { InjectionToken, Service, inject, type Signal, signal } from '@angular/core';
 import { reactNative } from './react-native.ts';
 import { SCREEN_IN_FRONT } from './screen-in-front.ts';
 
@@ -39,6 +40,9 @@ export class HardwareBack {
   );
 
   private readonly source = inject(HardwareBack.SOURCE);
+
+  /** Whether there is a hardware back button: on Android alone. */
+  readonly available: Signal<boolean> = signal(injectOs() === 'android').asReadonly();
 
   /**
    * Handle the back press. React Native runs the most recently added handler first, so a screen

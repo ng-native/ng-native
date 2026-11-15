@@ -385,7 +385,7 @@ export class App {
   });
 
   protected readonly watchStatus = computed(() => {
-    if (!this.watch.available || !this.watch.paired()) return 'No watch';
+    if (!this.watch.available() || !this.watch.paired()) return 'No watch';
     if (!this.watch.installed()) return 'Watch app not installed';
     return this.watch.reachable() ? 'Watch open' : 'Watch asleep';
   });

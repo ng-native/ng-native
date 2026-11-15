@@ -7,36 +7,36 @@ import { test } from 'node:test';
 import { InjectionToken, Injector, inject, runInInjectionContext } from '@angular/core';
 import { expoModule } from '@ng-native/expo';
 
-interface NativePrint {
-  printToFileAsync(options: { html: string }): Promise<{ uri: string }>;
+interface NativeContacts {
+  getContactsAsync(): Promise<{ data: { name: string }[] }>;
 }
 
 declare const require: (id: string) => unknown;
 
-const load = () => expoModule('expo-print', () => require('expo-print') as NativePrint);
-const PRINT = new InjectionToken<NativePrint | null>('app.print', { factory: load });
+const load = () => expoModule('expo-contacts', () => require('expo-contacts') as NativeContacts);
+const CONTACTS = new InjectionToken<NativeContacts | null>('app.contacts', { factory: load });
 
-class Printer {
-  private readonly native = inject(PRINT);
+class People {
+  private readonly native = inject(CONTACTS);
 
-  async toFile(html: string): Promise<string | null> {
-    return (await this.native?.printToFileAsync({ html }))?.uri ?? null;
+  async names(): Promise<string[]> {
+    return (await this.native?.getContactsAsync())?.data.map((contact) => contact.name) ?? [];
   }
 }
 
-const printerWith = (providers: object[]) => {
+const peopleWith = (providers: object[]) => {
   const injector = Injector.create({ providers: providers as never });
-  return runInInjectionContext(injector, () => new Printer());
+  return runInInjectionContext(injector, () => new People());
 };
 
 test('loads in a test, where the module is not there, and does nothing', async () => {
   // The token's own factory, which an injector made here has no root scope to run.
-  const printer = printerWith([{ provide: PRINT, useFactory: load }]);
-  assert.equal(await printer.toFile('<p>hi</p>'), null);
+  const people = peopleWith([{ provide: CONTACTS, useFactory: load }]);
+  assert.deepEqual(await people.names(), []);
 });
 
 test('takes the fake a test provides under the token', async () => {
-  const fake: NativePrint = { printToFileAsync: async () => ({ uri: 'file:///out.pdf' }) };
-  const printer = printerWith([{ provide: PRINT, useValue: fake }]);
-  assert.equal(await printer.toFile('<p>hi</p>'), 'file:///out.pdf');
+  const fake: NativeContacts = { getContactsAsync: async () => ({ data: [{ name: 'Ada' }] }) };
+  const people = peopleWith([{ provide: CONTACTS, useValue: fake }]);
+  assert.deepEqual(await people.names(), ['Ada']);
 });

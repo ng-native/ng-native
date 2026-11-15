@@ -429,6 +429,61 @@ export abstract class ViewBase {
   });
   /** `aria-valuetext`. */
   readonly ariaValueText = input<string>(undefined, { alias: 'aria-valuetext' });
+  /**
+   * A heading's level, 1 to 6. The desktop host reads it, and VoiceOver on macOS 26 and later
+   * speaks it; iOS and Android do not read it.
+   */
+  readonly accessibilityLevel = input<number>(undefined, { transform: optionalNumber });
+  /** `aria-level`. */
+  readonly ariaLevel = input<number>(undefined, { alias: 'aria-level', transform: optionalNumber });
+  /** The `nativeID`s of the views that describe this one, read after its label. */
+  readonly accessibilityDescribedBy = input<string | readonly string[]>();
+  /** `aria-describedby`: a list separated by commas, or an array. */
+  readonly ariaDescribedBy = input<string | readonly string[]>(undefined, {
+    alias: 'aria-describedby',
+  });
+  /** Whether a field must be filled in before what it belongs to can be sent. */
+  readonly accessibilityRequired = input<boolean>(undefined, { transform: optionalBoolean });
+  /** `aria-required`. */
+  readonly ariaRequired = input<boolean>(undefined, {
+    alias: 'aria-required',
+    transform: optionalBoolean,
+  });
+  /** Whether a field's value is not one it accepts. */
+  readonly accessibilityInvalid = input<boolean>(undefined, { transform: optionalBoolean });
+  /** `aria-invalid`. */
+  readonly ariaInvalid = input<boolean>(undefined, {
+    alias: 'aria-invalid',
+    transform: optionalBoolean,
+  });
+  /** An item's place in its set, from 1, where not every item of the set is in the tree. */
+  readonly accessibilityPosInSet = input<number>(undefined, { transform: optionalNumber });
+  /** `aria-posinset`. */
+  readonly ariaPosInSet = input<number>(undefined, {
+    alias: 'aria-posinset',
+    transform: optionalNumber,
+  });
+  /** How many items the set has, with `accessibilityPosInSet`. */
+  readonly accessibilitySetSize = input<number>(undefined, { transform: optionalNumber });
+  /** `aria-setsize`. */
+  readonly ariaSetSize = input<number>(undefined, {
+    alias: 'aria-setsize',
+    transform: optionalNumber,
+  });
+  /** How many rows a grid or table has, where not every row is in the tree. */
+  readonly accessibilityRowCount = input<number>(undefined, { transform: optionalNumber });
+  /** `aria-rowcount`. */
+  readonly ariaRowCount = input<number>(undefined, {
+    alias: 'aria-rowcount',
+    transform: optionalNumber,
+  });
+  /** How many columns a grid or table has, where not every column is in the tree. */
+  readonly accessibilityColumnCount = input<number>(undefined, { transform: optionalNumber });
+  /** `aria-colcount`. */
+  readonly ariaColumnCount = input<number>(undefined, {
+    alias: 'aria-colcount',
+    transform: optionalNumber,
+  });
   /** Custom actions a screen reader can invoke; each arrives as `(accessibilityAction)`. */
   readonly accessibilityActions = input<readonly AccessibilityAction[]>();
   /**
@@ -606,8 +661,29 @@ export abstract class ViewBase {
     write('accessibilityState', this.mergedAccessibilityState());
     write('accessibilityValue', this.mergedAccessibilityValue());
     write('accessibilityActions', this.accessibilityActions());
+    this.writeDesktopAccessibility(write);
     this.writeVisibility();
     this.publishAriaState(write);
+  }
+
+  /**
+   * The inputs the desktop host reads, each from its native spelling, or else the web one: a
+   * heading's level, what describes the view, a field's required and invalid states, an item's
+   * place in its set, and a grid's counts.
+   */
+  private writeDesktopAccessibility(write: (key: string, value: unknown) => void): void {
+    const describedBy = this.accessibilityDescribedBy() ?? this.ariaDescribedBy();
+    write('accessibilityLevel', this.accessibilityLevel() ?? this.ariaLevel());
+    write(
+      'accessibilityDescribedBy',
+      typeof describedBy === 'string' ? describedBy.split(/\s*,\s*/) : describedBy,
+    );
+    write('accessibilityRequired', this.accessibilityRequired() ?? this.ariaRequired());
+    write('accessibilityInvalid', this.accessibilityInvalid() ?? this.ariaInvalid());
+    write('accessibilityPosInSet', this.accessibilityPosInSet() ?? this.ariaPosInSet());
+    write('accessibilitySetSize', this.accessibilitySetSize() ?? this.ariaSetSize());
+    write('accessibilityRowCount', this.accessibilityRowCount() ?? this.ariaRowCount());
+    write('accessibilityColumnCount', this.accessibilityColumnCount() ?? this.ariaColumnCount());
   }
 
   /**

@@ -474,6 +474,63 @@ const noDomNodeAccess = {
   },
 };
 
+/**
+ * Whether `node` is read for its truth: the test of an `if`, a loop or a `?:`, the operand of `!`,
+ * or an operand of `&&` or `||`, which a condition reads for its truth.
+ */
+function readAsCondition(node) {
+  let at = node;
+  while (at.parent?.type === 'ChainExpression') at = at.parent;
+  const { parent } = at;
+  if (!parent) return false;
+  switch (parent.type) {
+    case 'IfStatement':
+    case 'WhileStatement':
+    case 'DoWhileStatement':
+    case 'ForStatement':
+    case 'ConditionalExpression':
+      return parent.test === at;
+    case 'UnaryExpression':
+      return parent.operator === '!';
+    case 'LogicalExpression':
+      return parent.operator === '&&' || parent.operator === '||';
+    default:
+      return false;
+  }
+}
+
+/** @type {import('eslint').Rule.RuleModule} */
+const noUncalledAvailable = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description: "Disallow a service's available signal read as a condition without calling it",
+      url: `${DOCS}#no-uncalled-available`,
+    },
+    messages: {
+      uncalled: 'available is a signal, so it is always truthy. Call it: available().',
+    },
+    fixable: 'code',
+    schema: [],
+  },
+  create(context) {
+    return {
+      // Every service's `available` is a `Signal<boolean>`: a function, and so always truthy.
+      // ponytail: read by name, not by type, so a signal kept under another name is not followed;
+      // that would need the type checker, which the recommended config does not set up.
+      'MemberExpression[computed=false][property.name="available"]'(node) {
+        if (node.parent?.type === 'CallExpression' && node.parent.callee === node) return;
+        if (!readAsCondition(node)) return;
+        context.report({
+          node: node.property,
+          messageId: 'uncalled',
+          fix: (fixer) => fixer.insertTextAfter(node, '()'),
+        });
+      },
+    };
+  },
+};
+
 /** Report `window.document`, `globalThis.localStorage`, `window.addEventListener` and the like. */
 function checkWindowMember(context, identifier) {
   const member = identifier.parent;
@@ -529,6 +586,7 @@ const plugin = {
     'no-browser-apis': noBrowserApis,
     'no-dom-node-access': noDomNodeAccess,
     'lowercase-elements': lowercaseElements,
+    'no-uncalled-available': noUncalledAvailable,
   },
 };
 
@@ -549,6 +607,7 @@ const recommended = [
       '@ng-native/no-browser-apis': 'error',
       '@ng-native/no-dom-events': 'error',
       '@ng-native/no-dom-node-access': 'error',
+      '@ng-native/no-uncalled-available': 'error',
     },
   },
   {

@@ -8,7 +8,7 @@
  */
 import { InjectionToken, Service, computed, inject, type Signal } from '@angular/core';
 import { observed, observedFrom, type Observed } from './observed.ts';
-import { expoModule, present } from './native.ts';
+import { expoModule, present, presence } from './native.ts';
 
 export type ConnectionType =
   'wifi' | 'cellular' | 'ethernet' | 'bluetooth' | 'vpn' | 'other' | 'none' | 'unknown';
@@ -66,7 +66,12 @@ export class Network {
     },
   );
 
-  readonly status: Signal<NetworkStatus> = observed(inject(Network.SOURCE), OFFLINE);
+  private readonly native = inject(Network.SOURCE);
+
+  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  readonly available: Signal<boolean> = presence(this.native);
+
+  readonly status: Signal<NetworkStatus> = observed(this.native, OFFLINE);
 
   /** Whether there is a connection of any kind. Say what you mean: this is not reachability. */
   readonly connected: Signal<boolean> = computed(() => this.status().connected);

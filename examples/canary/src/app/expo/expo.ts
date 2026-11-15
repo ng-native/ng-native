@@ -65,7 +65,7 @@ import { page } from '../screen-styles.ts';
 
       <text class="heading">Haptics</text>
       <pressable class="button" (press)="tap()">
-        <text class="button-label">{{ haptics.available ? 'Impact' : 'Not installed' }}</text>
+        <text class="button-label">{{ haptics.available() ? 'Impact' : 'Not installed' }}</text>
       </pressable>
       <text class="hint">
         Fire and forget, and silent on a simulator, which has no Taptic Engine.
