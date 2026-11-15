@@ -121,6 +121,9 @@ struct Host {
   const ngn::LaunchSettings *launch = nullptr;
   // The app window is ordered front once, when its safe areas settle (showAppWindowWhenSettled).
   bool appWindowShown = false;
+  // The launch running, the first or a reload's, has yet to put its content in a window on screen,
+  // which starts its success timer (markLaunchSucceededLater).
+  bool launchFrameOwed = true;
   // The Expo Updates client, for a bundle on disk (updates.h).
   std::shared_ptr<ngn::UpdatesClient> updates;
   // Remote notifications: the device token's registration, and where a silent one is heard.
@@ -579,6 +582,34 @@ void markLaunchSucceededLater() {
   });
 }
 
+// Whether the surface has content on screen in `window`.
+bool showsContent(SurfaceId surface, NSWindow *window) {
+  const auto *root = gHost.mounting->tree().find(surface);
+  return window != nil && window.visible && root != nullptr && !root->children.empty();
+}
+
+// A window shows the surface's content: the launch's first, when it still owes one, starts the
+// launch's success timer. Main thread.
+void launchFrameShown(SurfaceId surface, NSWindow *window) {
+  if (!gHost.launchFrameOwed || !showsContent(surface, window)) {
+    return;
+  }
+  gHost.launchFrameOwed = false;
+  markLaunchSucceededLater();
+}
+
+// A reload's bundle loaded: its launch counts from its first frame on screen, which may already be
+// there or come with a later mount. Main thread.
+void reloadLaunched() {
+  gHost.launchFrameOwed = true;
+  launchFrameShown(kAppSurface, gHost.appWindow);
+  for (NSWindow *window in NSApp.windows) {
+    if (SurfaceId surface = gHost.windows ? gHost.windows->surfaceOf(window) : 0) {
+      launchFrameShown(surface, window);
+    }
+  }
+}
+
 // The splash screen: the first windows wait for the app to hide it (NgNativeSplashScreen).
 std::shared_ptr<ngn::SplashGate> gSplash = std::make_shared<ngn::SplashGate>();
 
@@ -659,7 +690,7 @@ void showAppWindow() {
   showPastSplash([] {
     ngn::appkit::showWindow(gHost.appWindow);
     logFirstFrame(gHost.appWindow);
-    markLaunchSucceededLater();
+    launchFrameShown(kAppSurface, gHost.appWindow);
   });
 }
 
@@ -892,9 +923,11 @@ int main(int argc, const char *argv[]) {
         if (gHost.mounting->safeAreasSettled() && gHost.mounting->controlSizesSettled()) {
           showAppWindow();
         }
+        launchFrameShown(surfaceId, gHost.appWindow);
       } else {
+        // Its first show logs the first frame and may start the success timer (the shown hook).
         gHost.windows->didMount(surfaceId);
-        logFirstFrame(gHost.windows->window(surfaceId));
+        launchFrameShown(surfaceId, gHost.windows->window(surfaceId));
       }
     };
     gHost.input->onCursor = [](ngn::Cursor cursor) { [NGNSurfaceView showCursor:cursor]; };
@@ -1080,6 +1113,13 @@ int main(int argc, const char *argv[]) {
         },
         .keyWindowChanged = [](NSWindow *window) { gHost.state->metrics.set(windowMetrics(window)); },
         .whenShown = [](std::function<void()> show) { showPastSplash(std::move(show)); },
+        // Shown once the splash lets it go, which may be after its last commit: the first frame's
+        // actions and the launch's success timer start from here.
+        .shown =
+            [](NSWindow *window) {
+              logFirstFrame(window);
+              launchFrameShown(gHost.windows->surfaceOf(window), window);
+            },
     });
     gHost.windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
     gHost.windows->setHost(gHost.windowHost);
@@ -1264,10 +1304,11 @@ int main(int argc, const char *argv[]) {
             if (!loaded) {
               fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
             }
-            // A bundle that did not load never counts as a launch that succeeded.
+            // A bundle that did not load never counts as a launch that succeeded; one that did counts
+            // from its first frame on screen.
             if (loaded) {
               dispatch_async(dispatch_get_main_queue(), ^{
-                markLaunchSucceededLater();
+                reloadLaunched();
               });
             }
             done(loaded);

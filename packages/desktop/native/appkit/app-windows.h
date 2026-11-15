@@ -29,6 +29,8 @@ class AppKitWindows final : public WindowBackend {
     std::function<void(NSWindow *)> keyWindowChanged;
     // Runs a first show now, or once the splash screen lets the windows go, on the main thread.
     std::function<void(std::function<void()>)> whenShown;
+    // A window is on screen for the first time.
+    std::function<void(NSWindow *)> shown;
   };
 
   explicit AppKitWindows(Hooks hooks);

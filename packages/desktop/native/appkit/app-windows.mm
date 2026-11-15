@@ -219,6 +219,9 @@ void AppKitWindows::show(SurfaceId surface) {
   if (fullScreen.boolValue) {
     [window toggleFullScreen:nil];
   }
+  if (hooks_.shown) {
+    hooks_.shown(window);
+  }
 }
 
 void AppKitWindows::closeWindow(SurfaceId surface) {
