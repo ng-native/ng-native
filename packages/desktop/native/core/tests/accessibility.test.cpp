@@ -279,3 +279,14 @@ TEST_CASE("a rotor steps from the item VoiceOver is on, and from either end when
   CHECK(ngn::rotorStep(3, 2, false) == 1);
   CHECK(ngn::rotorStep(0, std::nullopt, true) == std::nullopt);
 }
+
+TEST_CASE("a filtered rotor search starts from the item VoiceOver is on, even one the filter drops") {
+  // Apple, Pear, Apricot, filtered by "Ap", from Pear.
+  std::vector<bool> ap{true, false, true};
+  CHECK(ngn::rotorStep(ap, 1, true) == 2);
+  CHECK(ngn::rotorStep(ap, 1, false) == 0);
+  CHECK(ngn::rotorStep(ap, 2, true) == std::nullopt);
+  CHECK(ngn::rotorStep(ap, std::nullopt, false) == 2);
+  CHECK(ngn::rotorStep(std::vector<bool>{false, true}, std::nullopt, true) == 1);
+  CHECK(ngn::rotorStep(std::vector<bool>{false, false}, std::nullopt, true) == std::nullopt);
+}

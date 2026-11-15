@@ -337,6 +337,15 @@ std::optional<size_t> rotorStep(size_t count, std::optional<size_t> current, boo
   return *current > 0 ? std::optional<size_t>(*current - 1) : std::nullopt;
 }
 
+std::optional<size_t> rotorStep(const std::vector<bool> &matches, std::optional<size_t> current, bool forward) {
+  for (auto at = rotorStep(matches.size(), current, forward); at; at = rotorStep(matches.size(), at, forward)) {
+    if (matches[*at]) {
+      return at;
+    }
+  }
+  return std::nullopt;
+}
+
 AxDispatch axDispatch(const ViewProps &props, AxVerb verb) {
   auto action = [&](const char *name) { return AxDispatch{AxDispatch::Kind::Action, name}; };
   bool actions = props.onAccessibilityAction;

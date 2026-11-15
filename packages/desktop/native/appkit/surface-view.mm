@@ -101,11 +101,12 @@ NSCursor *nsCursor(Cursor cursor) {
   if (container != nil && gRotorViews) {
     [items addObjectsFromArray:gRotorViews(container.rootTag, self.kind)];
   }
+  // The search starts where VoiceOver is, found among all the items, and moves to the next one the
+  // filter keeps: filtering first would lose the start when it does not match.
   NSString *filter = parameters.filterString;
-  if (filter.length > 0) {
-    [items filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSView *item, NSDictionary *) {
-             return [item.accessibilityLabel localizedCaseInsensitiveContainsString:filter];
-           }]];
+  std::vector<bool> matches;
+  for (NSView *item in items) {
+    matches.push_back(filter.length == 0 || [item.accessibilityLabel localizedCaseInsensitiveContainsString:filter]);
   }
   std::optional<size_t> current;
   id target = parameters.currentItem.targetElement;
@@ -113,8 +114,7 @@ NSCursor *nsCursor(Cursor cursor) {
   if (at != NSNotFound) {
     current = at;
   }
-  auto next = ngn::rotorStep(
-      items.count, current, parameters.searchDirection == NSAccessibilityCustomRotorSearchDirectionNext);
+  auto next = ngn::rotorStep(matches, current, parameters.searchDirection == NSAccessibilityCustomRotorSearchDirectionNext);
   if (!next) {
     return nil;
   }
