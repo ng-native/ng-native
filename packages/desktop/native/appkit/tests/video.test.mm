@@ -9,6 +9,9 @@
 #import <CoreImage/CoreImage.h>
 
 #include <atomic>
+#include <memory>
+#include <mutex>
+#include <thread>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -143,6 +146,45 @@ TEST_CASE("AVPlayback loads a clip, plays it with time updates to its end, and s
   playback->seek(0.5, [&] { sought = true; });
   REQUIRE(runUntil([&] { return sought.load(); }, 3));
   CHECK(playback->state().currentTime == doctest::Approx(0.5).epsilon(0.02));
+
+  // A rate of 0 while it plays pauses it.
+  playback->play(1);
+  REQUIRE(runUntil([&] { return playback->state().playing; }, 3));
+  playback->setRate(0);
+  CHECK(NGNVideoPlayerFor(41).rate == 0);
+  CHECK(runUntil([&] { return !playback->state().playing; }, 1));
+}
+
+TEST_CASE("AVPlayback stops its time updates without waiting for one that waits on the caller") {
+  auto uri = writeClip(2.0, 1, 0, 0);
+  auto output = ngn::appkit::makeVideoOutput();
+  auto playback = output->make(43);
+  // The core's lock: an update takes it, and the core holds it as it stops the updates.
+  auto lock = std::make_shared<std::mutex>();
+  auto entered = std::make_shared<std::atomic<bool>>(false);
+  playback->load(uri, [lock, entered](ngn::VideoPlayback::Change change) {
+    if (change == ngn::VideoPlayback::Change::Time) {
+      entered->store(true);
+      std::lock_guard hold(*lock);
+    }
+  });
+  playback->setMuted(true);
+  REQUIRE(runUntil([&] { return playback->state().load == ngn::VideoState::Load::Ready; }, 5));
+  lock->lock();
+  playback->setTimeUpdates(0.05);
+  playback->play(1);
+  bool inUpdate = runUntil([&] { return entered->load(); }, 3);
+  auto stopped = std::make_shared<std::atomic<bool>>(false);
+  std::thread stopper([&playback, stopped] {
+    playback->setTimeUpdates(0);
+    stopped->store(true);
+  });
+  bool returned = runUntil([&] { return stopped->load(); }, 1);
+  lock->unlock();
+  stopper.join();
+  REQUIRE(inUpdate);
+  CHECK(returned);
+  playback.reset();
 }
 
 TEST_CASE("AVPlayback's player draws the clip's frames, read through AVPlayerItemVideoOutput") {

@@ -107,9 +107,9 @@ class AVPlayback final : public VideoPlayback {
       }
     };
     {
-      std::lock_guard lock(mutex_);
+      std::lock_guard lock(calls_->mutex);
       alive_ = alive;
-      call_ = call;
+      calls_->call = call;
     }
     if (!uri) {
       [player_ replaceCurrentItemWithPlayerItem:nil];
@@ -180,7 +180,9 @@ class AVPlayback final : public VideoPlayback {
   }
 
   void setRate(double rate) override {
+    // A rate of 0 is a paused player, as AVPlayer has it.
     if (rate <= 0) {
+      [player_ pause];
       return;
     }
     player_.defaultRate = static_cast<float>(rate);
@@ -208,40 +210,52 @@ class AVPlayback final : public VideoPlayback {
     if (interval <= 0) {
       return;
     }
-    auto *self = this;
+    // The block owns what it reads, so it neither needs this playback nor is waited for: a block
+    // already running when the updates stop may still send one, which the core's guard drops.
+    auto on = std::make_shared<std::atomic<bool>>(true);
+    timeOn_ = on;
+    auto calls = calls_;
+    __weak AVPlayer *player = player_;
     time_ = [player_ addPeriodicTimeObserverForInterval:CMTimeMakeWithSeconds(interval, 600)
                                                   queue:queue_
-                                             usingBlock:^(CMTime) { self->sendTime(); }];
+                                             usingBlock:^(CMTime) {
+                                               if (!on->load()) {
+                                                 return;
+                                               }
+                                               std::function<void(Change)> call;
+                                               {
+                                                 std::lock_guard lock(calls->mutex);
+                                                 call = calls->call;
+                                               }
+                                               if (call && player.timeControlStatus == AVPlayerTimeControlStatusPlaying) {
+                                                 call(Change::Time);
+                                               }
+                                             }];
   }
 
  private:
-  void sendTime() {
+  // The current source's changed, shared with the time updates' block.
+  struct Calls {
+    std::mutex mutex;
     std::function<void(Change)> call;
-    {
-      std::lock_guard lock(mutex_);
-      call = call_;
-    }
-    if (call && player_.timeControlStatus == AVPlayerTimeControlStatusPlaying) {
-      call(Change::Time);
-    }
-  }
+  };
 
   void stopTimeUpdates() {
     if (time_ != nil) {
+      // Not waited for: the core calls this under the lock a running update needs.
+      timeOn_->store(false);
       [player_ removeTimeObserver:time_];
       time_ = nil;
-      // A block already queued finishes before the observer is gone for good.
-      dispatch_sync(queue_, ^{});
     }
   }
 
   void unload() {
     {
-      std::lock_guard lock(mutex_);
+      std::lock_guard lock(calls_->mutex);
       if (alive_) {
         alive_->store(false);
       }
-      call_ = nullptr;
+      calls_->call = nullptr;
     }
     [observer_ stop];
     observer_ = nil;
@@ -253,9 +267,9 @@ class AVPlayback final : public VideoPlayback {
   }
 
   int id_;
-  std::mutex mutex_;
+  std::shared_ptr<Calls> calls_ = std::make_shared<Calls>();
   std::shared_ptr<std::atomic<bool>> alive_;
-  std::function<void(Change)> call_;
+  std::shared_ptr<std::atomic<bool>> timeOn_;
   dispatch_queue_t queue_;
   AVPlayer *player_;
   AVPlayerItem *item_;

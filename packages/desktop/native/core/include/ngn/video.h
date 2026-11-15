@@ -50,7 +50,10 @@ struct VideoState {
   double bufferedPosition{0};
 };
 
-// One player and the source it holds, if any. Destroying it stops it, and calls nothing after.
+// One player and the source it holds, if any. Destroying it stops it and starts no call after;
+// a call already running on another thread may still finish, so `changed` guards what it reaches
+// (the core's does, by a weak pointer and the source's generation). The backend never waits for
+// such a call, since the core destroys and reconfigures players under the lock `changed` takes.
 class VideoPlayback {
  public:
   enum class Change { State, Time, Ended };
