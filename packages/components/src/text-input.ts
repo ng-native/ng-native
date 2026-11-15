@@ -125,6 +125,7 @@ export type SubmitBehavior = 'submit' | 'blurAndSubmit' | 'newline';
     '[passwordRules]': 'passwordRules()',
     '[spellCheck]': 'spellCheck()',
     '[smartInsertDelete]': 'smartInsertDelete()',
+    '[smartQuotes]': 'smartQuotes()',
     '[dataDetectorTypes]': 'dataDetectorTypes()',
     '[textContentType]': 'textContentType()',
     '[autoComplete]': 'autoComplete()',
@@ -216,10 +217,15 @@ export class TextInput extends ViewBase {
   readonly keyboardAppearance = input<'default' | 'light' | 'dark'>();
   /** iOS: rules for a generated password, in Apple's Password Rules syntax. */
   readonly passwordRules = input<string>();
-  /** iOS: underline misspellings. Follows `autoCorrect` by default. */
+  /** iOS and macOS: underline misspellings. Follows `autoCorrect` by default. */
   readonly spellCheck = input(undefined, { transform: optionalBoolean });
-  /** iOS: add and remove spaces around pasted and deleted words. */
+  /** iOS and macOS: add and remove spaces around pasted and deleted words. */
   readonly smartInsertDelete = input(undefined, { transform: optionalBoolean });
+  /**
+   * macOS: turn straight quotes into curly ones and double hyphens into dashes as the user types.
+   * Follows `autoCorrect` by default. Ignored on iOS, Android and the web.
+   */
+  readonly smartQuotes = input(undefined, { transform: optionalBoolean });
   /** iOS, multiline: turn phone numbers, links and addresses into taps. */
   readonly dataDetectorTypes = input<string | readonly string[]>();
   /** iOS: what the field holds, so the system can autofill it. */

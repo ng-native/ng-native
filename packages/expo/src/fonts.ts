@@ -28,6 +28,7 @@ import {
   onFontsRegistered,
   registeredFaces,
 } from '@ng-native/fabric';
+import { assetUri } from './desktop-host.ts';
 import { expoModule, present } from './native.ts';
 import { noteRegisteredNames } from './ui-font-names.ts';
 
@@ -72,7 +73,9 @@ export function registrationsFor(faces: readonly FontFace[]): Record<string, unk
 }
 
 export function expoFonts(): NativeFonts | null {
-  const expo = expoModule('expo-font', () => require('expo-font') as typeof import('expo-font'));
+  const expo = expoModule('expo-font', () => require('expo-font') as typeof import('expo-font'), {
+    desktop: desktopFonts,
+  });
   if (!expo) return null;
   // Missing, the stand-in itself: `available` reads false, and a load says what to install.
   if (!present(expo)) return expo as unknown as NativeFonts;
@@ -196,4 +199,32 @@ function warnIfASheetIsNull(sheets: readonly (SheetWithFonts | null | undefined)
     '[angular-native] a null sheet was given to loadFonts() or loadSheet(), so no @font-face from it is loaded. ' +
       'A null there is what styleSheetOf() returns for a class with no compiled sheet.',
   );
+}
+
+/**
+ * expo-font's three functions over the desktop host's `NgNativeFont`, which registers one font
+ * file under a name at a time. Null where the host has no such module.
+ */
+function desktopFonts(): typeof import('expo-font') | null {
+  const { TurboModuleRegistry } = require('react-native') as typeof import('react-native');
+  const host = TurboModuleRegistry.get('NgNativeFont') as {
+    loadAsync(name: string, uri: string): Promise<void>;
+    isLoaded(name: string): boolean;
+    getLoadedFonts(): string[];
+  } | null;
+  if (!host) return null;
+  const fonts: NativeFonts = {
+    loadAsync: async (map) => {
+      await Promise.all(
+        Object.entries(map).map(([name, source]) => {
+          const uri = assetUri(source);
+          if (uri === null) throw new Error(`[angular-native] Fonts: ${name} has no file to load.`);
+          return host.loadAsync(name, uri);
+        }),
+      );
+    },
+    isLoaded: (name) => host.isLoaded(name),
+    getLoadedFonts: () => host.getLoadedFonts(),
+  };
+  return fonts as unknown as typeof import('expo-font');
 }

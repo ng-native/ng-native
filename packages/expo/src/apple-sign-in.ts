@@ -1,7 +1,9 @@
 /**
  * `AppleSignIn`, bound to `expo-apple-authentication`: Sign in with Apple, which the App Store
- * requires of an app that offers another social sign-in. iOS only; everywhere else, and without
- * the module installed, `available()` answers false and every call answers null.
+ * requires of an app that offers another social sign-in. iOS, and macOS through the desktop host's
+ * `NgNativeAppleAuthentication`, where `available()` is true only for an app signed with the Sign
+ * in with Apple entitlement. Everywhere else, and without the module installed, `available()`
+ * answers false and every call answers null.
  *
  * ```ts
  * import { AppleAuthenticationScope, AppleSignIn } from '@ng-native/expo/apple-sign-in';
@@ -31,6 +33,7 @@ import type {
   AppleAuthenticationCredentialState as ExpoCredentialState,
   AppleAuthenticationScope as ExpoScope,
 } from 'expo-apple-authentication';
+import { coded, desktopHost } from './desktop-host.ts';
 import { expoModule, present, asked } from './native.ts';
 
 type Expo = typeof import('expo-apple-authentication');
@@ -93,7 +96,7 @@ export class AppleSignIn {
         expoModule(
           'expo-apple-authentication',
           () => require('expo-apple-authentication') as Expo,
-          ['ios'],
+          { platforms: ['ios'], desktop: desktopAppleAuthentication },
         ),
     },
   );
@@ -156,6 +159,58 @@ export class AppleSignIn {
   formatName(...name: Args<'formatFullName'>): string {
     return this.native?.formatFullName(...name) ?? '';
   }
+}
+
+/** What the desktop host's `NgNativeAppleAuthentication` answers: expo's native module. */
+interface AppleAuthenticationHost {
+  isAvailableAsync(): Promise<boolean>;
+  requestAsync(options: object): Promise<AppleAuthenticationCredential>;
+  getCredentialStateAsync(user: string): Promise<ExpoCredentialState>;
+  formatFullName(name: object, style: string | null): string;
+}
+
+/** expo-apple-authentication's `requestedOperation`s. */
+const LOGIN = 1;
+const REFRESH = 2;
+const LOGOUT = 3;
+
+/**
+ * expo-apple-authentication's functions over the desktop host's module, for macOS: what the
+ * package's JavaScript adds to its native module (the operation each function asks for, and the
+ * check that a sign-in's credential carries its tokens), with the host's `CODE: message`
+ * rejections as errors with that `code`, and revocations from its events.
+ */
+function desktopAppleAuthentication(): NativeAppleAuthentication | null {
+  const host = desktopHost<AppleAuthenticationHost>('NgNativeAppleAuthentication');
+  if (!host) return null;
+  const native = host.module;
+  const request = async (options: object | undefined, operation: number, name: string) => {
+    const credential = await coded(
+      native.requestAsync({ ...options, requestedOperation: operation }),
+    );
+    if (
+      operation !== LOGOUT &&
+      (!credential.authorizationCode || !credential.identityToken || !credential.user)
+    ) {
+      throw Object.assign(
+        new Error(`The credential returned by \`${name}\` is missing one or more required fields.`),
+        { code: 'ERR_REQUEST_FAILED' },
+      );
+    }
+    return credential;
+  };
+  return {
+    isAvailableAsync: () => native.isAvailableAsync(),
+    signInAsync: (options) => request(options, LOGIN, 'signInAsync'),
+    refreshAsync: (options) => request(options, REFRESH, 'refreshAsync'),
+    signOutAsync: (options) => request(options, LOGOUT, 'signOutAsync'),
+    getCredentialStateAsync: (user) => coded(native.getCredentialStateAsync(user)),
+    formatFullName: (name, style) => native.formatFullName(name, style ?? null),
+    addRevokeListener: (listener) =>
+      host.listen('ngNativeAppleAuthentication', (event) => {
+        if ((event as { type?: unknown } | null)?.type === 'revoked') listener();
+      }) as ReturnType<NativeAppleAuthentication['addRevokeListener']>,
+  };
 }
 
 export {

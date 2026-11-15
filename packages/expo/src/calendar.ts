@@ -43,6 +43,7 @@ import type {
 } from 'expo-calendar';
 import { currentPlatform, expoModule, isApple, type ModulePlatform, presence } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
+import { desktopHost } from './desktop-host.ts';
 
 type Expo = typeof import('expo-calendar');
 
@@ -99,7 +100,12 @@ export class Calendar {
   /** Overridden in a test to read calendars that are not there. */
   static readonly SOURCE = new InjectionToken<NativeCalendar | null>(
     'angular-native.calendarSource',
-    { factory: () => expoModule('expo-calendar', () => require('expo-calendar') as Expo) },
+    {
+      factory: () =>
+        expoModule('expo-calendar', () => require('expo-calendar') as Expo, {
+          desktop: desktopCalendar,
+        }),
+    },
   );
 
   /** Overridden in a test to be on iOS or macOS, where the calls only Apple's OSes have can be made. */
@@ -205,4 +211,155 @@ export class Calendar {
   private apple(): boolean {
     return this.native !== null && isApple(this.platform);
   }
+}
+
+/**
+ * expo-calendar over the desktop host's `NgNativeCalendar`, which answers plain records: a
+ * calendar, an event and a reminder read on macOS carry expo-calendar's fields, and the methods its
+ * handles have are added to each (not enumerable, so a record still compares as its fields). A
+ * calendar lists its events and reminders and creates them; an event and a reminder update and
+ * delete themselves. Dates go to the host as milliseconds. Creating, changing or deleting a
+ * calendar is not available there. Null where the host has no such module.
+ */
+function desktopCalendar(): NativeCalendar | null {
+  const host =
+    desktopHost<Record<string, ((...args: unknown[]) => unknown) | undefined>>('NgNativeCalendar');
+  if (!host) return null;
+  type Row = Record<string, unknown> & { id: string };
+  // A host built before a method was added has none: a read answers nothing, and a write rejects.
+  const call =
+    (name: string) =>
+    (...args: unknown[]) =>
+      host.module[name]?.(...args);
+  const write =
+    (name: string) =>
+    async (...args: unknown[]): Promise<Row> => {
+      const method = host.module[name];
+      if (!method) {
+        throw new Error(
+          `[angular-native] Calendar: this macOS host has no ${name}. Build it again with the current @ng-native/desktop.`,
+        );
+      }
+      return method(...args) as Promise<Row>;
+    };
+  const methods = <T extends Row | null>(record: T, added: Record<string, unknown>): T => {
+    if (record && typeof record === 'object') {
+      for (const [name, value] of Object.entries(added)) {
+        Object.defineProperty(record, name, { value, enumerable: false, configurable: true });
+      }
+    }
+    return record;
+  };
+  const changes = (update: string, remove: string) => (record: Row) => ({
+    update: async (details: Record<string, unknown>, nullableFields: readonly string[] = []) => {
+      Object.assign(record, await write(update)(record.id, wire(details), [...nullableFields]));
+    },
+    delete: async () => {
+      await write(remove)(record.id);
+    },
+  });
+  const eventChanges = changes('updateEventAsync', 'deleteEventAsync');
+  const reminderChanges = changes('updateReminderAsync', 'deleteReminderAsync');
+  const event = (record: Row | null) => methods(record, record ? eventChanges(record) : {});
+  const reminder = (record: Row | null) => methods(record, record ? reminderChanges(record) : {});
+  const unavailable = (what: string) => async () => {
+    throw new Error(`[angular-native] Calendar.${what} is not available on macOS yet.`);
+  };
+  const calendar = (record: Row | null) =>
+    methods(record, {
+      listEvents: async (start: Date | string, end: Date | string) =>
+        (((await call('listEventsAsync')([record!.id], ms(start), ms(end))) ?? []) as Row[]).map(
+          event,
+        ),
+      listReminders: async (
+        start?: Date | string | null,
+        end?: Date | string | null,
+        status?: string | null,
+      ) =>
+        (
+          ((await call('listRemindersAsync')(
+            [record!.id],
+            start == null ? null : ms(start),
+            end == null ? null : ms(end),
+            status ?? null,
+          )) ?? []) as Row[]
+        ).map(reminder),
+      createEvent: async (details: Record<string, unknown>) =>
+        event(await write('createEventAsync')(record!.id, wire(details))),
+      createReminder: async (details: Record<string, unknown>) =>
+        reminder(await write('createReminderAsync')(record!.id, wire(details))),
+      update: unavailable('update on a calendar'),
+      delete: async () => {
+        await write('deleteCalendarAsync')(record!.id);
+      },
+    });
+  const native: NativeCalendar = {
+    getCalendarPermissions: (writeOnly?: boolean) =>
+      call('getCalendarPermissionsAsync')(writeOnly ?? false),
+    requestCalendarPermissions: (writeOnly?: boolean) =>
+      call('requestCalendarPermissionsAsync')(writeOnly ?? false),
+    getRemindersPermissions: call('getRemindersPermissionsAsync'),
+    requestRemindersPermissions: call('requestRemindersPermissionsAsync'),
+    getCalendars: async (entityType?: string) =>
+      ((await call('getCalendarsAsync')(entityType ?? 'event')) as Row[]).map(calendar),
+    getDefaultCalendarSync: () =>
+      calendar((call('getDefaultCalendarSync')() as Row | null) ?? null),
+    getSourcesSync: call('getSourcesSync'),
+    listEvents: async (calendars: readonly (string | { id: string })[], start: Date, end: Date) =>
+      (
+        (await call('listEventsAsync')(
+          calendars.map((each) => (typeof each === 'string' ? each : each.id)),
+          start.getTime(),
+          end.getTime(),
+        )) as Row[]
+      ).map(event),
+    createCalendar: async (details: Record<string, unknown> = {}) =>
+      calendar(await write('createCalendarAsync')(wire(details))),
+    presentPicker: async () => null,
+    ExpoCalendar: {
+      get: async (id: string) =>
+        calendar(((await call('getCalendarAsync')(id)) as Row | null) ?? null),
+    },
+    ExpoCalendarEvent: {
+      get: async (id: string) => event(((await call('getEventAsync')(id)) as Row | null) ?? null),
+    },
+    ExpoCalendarReminder: {
+      get: async (id: string) =>
+        reminder(((await call('getReminderAsync')(id)) as Row | null) ?? null),
+    },
+  } as unknown as NativeCalendar;
+  return native;
+}
+
+/** A date as the host takes it: milliseconds since 1970. */
+function ms(value: unknown): unknown {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string') return Date.parse(value);
+  return value;
+}
+
+const DATE_FIELDS = new Set(['startDate', 'endDate', 'dueDate', 'completionDate', 'absoluteDate']);
+
+/**
+ * expo-calendar's details as the host takes them: dates as milliseconds, in an alarm and a
+ * recurrence rule too, and no field left undefined.
+ */
+function wire(details: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(details ?? {})) {
+    if (value !== undefined) out[name] = wireValue(name, value);
+  }
+  return out;
+}
+
+function wireValue(name: string, value: unknown): unknown {
+  if (value === null) return null;
+  if (DATE_FIELDS.has(name)) return ms(value);
+  if (name === 'alarms' && Array.isArray(value)) {
+    return value.map((alarm: Record<string, unknown>) => wire(alarm));
+  }
+  if (name === 'recurrenceRule' && typeof value === 'object') {
+    return wire(value as Record<string, unknown>);
+  }
+  return value;
 }

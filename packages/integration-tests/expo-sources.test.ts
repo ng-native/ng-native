@@ -41,6 +41,8 @@ import { SecureStorage } from '@ng-native/expo/secure-store';
 import { Storage } from '@ng-native/expo/async-storage';
 import { Updates } from '@ng-native/expo/updates';
 import { Brightness, type NativeBrightness } from '@ng-native/expo/brightness';
+import { cameraPermission, microphonePermission } from '@ng-native/expo/camera';
+import { recordingPermission } from '@ng-native/expo/audio';
 import { nativePlatform, registerPlatformComponents } from '@ng-native/fabric';
 import type { InjectionToken } from '@angular/core';
 import { inAppWith } from './injected.ts';
@@ -674,6 +676,55 @@ describe('the calendar source', () => {
   });
 });
 
+describe('the camera and recording permissions', () => {
+  const ios = { Platform: { OS: 'ios' } };
+  const answer = (status: string) => async () => ({
+    status,
+    granted: status === 'granted',
+    canAskAgain: true,
+  });
+
+  it("are expo-camera's own functions on its native module, and expo-audio's", async () => {
+    const expoCamera = {
+      getCameraPermissionsAsync: answer('granted'),
+      requestCameraPermissionsAsync: answer('granted'),
+      getMicrophonePermissionsAsync: answer('undetermined'),
+      requestMicrophonePermissionsAsync: answer('denied'),
+    };
+    const core = {
+      requireOptionalNativeModule: (name: string) => (name === 'ExpoCamera' ? expoCamera : {}),
+    };
+    const expoAudio = {
+      getRecordingPermissionsAsync: answer('denied'),
+      requestRecordingPermissionsAsync: answer('granted'),
+    };
+    const [camera, microphone, recording] = withModules(
+      { 'react-native': ios, 'expo-modules-core': core, 'expo-audio': expoAudio },
+      () => [cameraPermission(), microphonePermission(), recordingPermission()],
+    );
+    assert.equal(await camera.check(), true);
+    assert.equal(await microphone.check(), false);
+    assert.equal(microphone.status(), 'undetermined');
+    assert.equal(await microphone.request(), false);
+    assert.equal(microphone.status(), 'denied');
+    assert.equal(await recording.check(), false);
+    assert.equal(await recording.request(), true);
+  });
+
+  it('answer denied, never to be asked again, with neither module and no platform', async () => {
+    const [camera, microphone, recording] = withModules({}, () => [
+      cameraPermission(),
+      microphonePermission(),
+      recordingPermission(),
+    ]);
+    for (const permission of [camera, microphone, recording]) {
+      assert.equal(await permission.ensure(), false);
+      assert.equal(permission.status(), 'denied');
+      assert.equal(permission.blocked(), true);
+    }
+  });
+});
+
 describe('the media library source', () => {
   it('is expo-media-library itself, whose functions the service calls by their own names', () => {
     const expoMediaLibrary = { getPermissionsAsync: async () => ({ granted: true }) };
@@ -910,6 +961,57 @@ describe('the updates source', () => {
     assert.deepEqual(await native.fetch(), { isNew: true });
     await native.reload();
     assert.deepEqual(reloads, [1]);
+  });
+
+  describe('the store page, as the whole-app updater on iOS and Android', () => {
+    function onPhone(os: string, storeUrl: string | null, withStoreReview = true) {
+      const opened: string[] = [];
+      const modules: Record<string, unknown> = {
+        'react-native': {
+          Platform: { OS: os },
+          Linking: { openURL: async (url: string) => void opened.push(url) },
+        },
+        'expo-updates': {
+          isEnabled: true,
+          checkForUpdateAsync: async () => ({ isAvailable: false }),
+          fetchUpdateAsync: async () => ({ isNew: false }),
+          reloadAsync: async () => {},
+        },
+      };
+      if (withStoreReview) modules['expo-store-review'] = { storeUrl: () => storeUrl };
+      // Left installed for the check, which runs after the source is made; afterEach removes it.
+      (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+        if (id in modules) return modules[id];
+        throw new Error(`Cannot find module '${id}'`);
+      };
+      const native = defaultSource(Updates.SOURCE)!;
+      return { native, opened };
+    }
+
+    for (const os of ['ios', 'android']) {
+      it(`opens the app's store page on ${os} and resolves true`, async () => {
+        const { native, opened } = onPhone(os, 'https://store.example/app');
+        assert.equal(await native.appUpdater?.check(), true);
+        assert.deepEqual(opened, ['https://store.example/app']);
+      });
+    }
+
+    it('resolves false and opens nothing with no store URL in the app config', async () => {
+      const { native, opened } = onPhone('ios', null);
+      assert.equal(await native.appUpdater?.check(), false);
+      assert.deepEqual(opened, []);
+    });
+
+    it('resolves false with no expo-store-review installed', async () => {
+      const { native, opened } = onPhone('android', null, false);
+      assert.equal(await native.appUpdater?.check(), false);
+      assert.deepEqual(opened, []);
+    });
+
+    it('never claims a newer version it cannot know of', () => {
+      const { native } = onPhone('ios', 'https://store.example/app');
+      assert.equal(native.appUpdater?.available(), false);
+    });
   });
 
   it('is inert with no expo-updates installed', () => {

@@ -47,6 +47,9 @@ describe('a text input as a Signal Forms control', () => {
     assert.equal(typed.props['keyboardType'], 'email-address');
     assert.equal(typed.props['secureTextEntry'], true);
     assert.equal(typed.props['autoCapitalize'], 'none');
+    // macOS's, written as an attribute.
+    assert.equal(typed.props['smartQuotes'], false);
+    assert.equal(field('notes').props['smartQuotes'], undefined, 'unset follows autoCorrect');
   });
 
   it('passes multiline and its alignment through, and leaves a one-line field alone', () => {

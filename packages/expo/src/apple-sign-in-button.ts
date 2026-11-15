@@ -5,7 +5,8 @@
  *
  * Registered with `registerExpoViews('apple-sign-in-button')`, like the other Expo views. It needs
  * a width and a height to show, and its colour and corners come from `buttonStyle` and
- * `cornerRadius`, not from CSS. Show it only where `AppleSignIn.available()` is true: iOS only.
+ * `cornerRadius`, not from CSS. Show it only where `AppleSignIn.available()` is true: on iOS,
+ * and on macOS in an app signed with the Sign in with Apple entitlement.
  *
  * ```html
  * <apple-sign-in-button

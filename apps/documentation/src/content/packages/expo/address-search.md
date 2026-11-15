@@ -8,7 +8,8 @@ summary: Postal addresses that match a partial query, and the parts of the one p
 `AddressSearch` fills an address form from part of an address: someone types a postcode or the
 start of a street, picks the full address from the suggestions, and the form gets its line one,
 town, postcode and country. It needs no permission and no API key. It is `@ng-native/expo`'s own
-native code: MapKit on iOS, and the platform's geocoder on Android.
+native code: MapKit on iOS, the platform's geocoder on Android, and MapKit on macOS through the
+desktop host.
 
 ## Install
 
@@ -106,6 +107,8 @@ After the query changes, resolve one of the new suggestions.
   suggests the postcode itself rather than the houses in it, and resolves with an empty `line1`.
   A street suggestion can resolve with only the first part of its postcode (`LS6`), so a form
   should let the person finish it.
+- **macOS:** the desktop host's `NgNativeAddressSearch`, over the same MapKit classes as iOS. The
+  `region` option looks only in that country from macOS 15, and there first before.
 - **Android:** the platform's `Geocoder`, asked once the query has not changed for 300 ms. It
   answers whole addresses that match the query rather than completions, so a partial street name
   finds less than on iOS. It goes to the network for each lookup. On a device with no geocoder,

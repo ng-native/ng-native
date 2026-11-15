@@ -8,9 +8,15 @@
  *
  * // {{ player.state().currentTime }} {{ recorder.state().durationMillis }}
  * ```
+ *
+ * A recorder needs the microphone: `recordingPermission()` is a `Permission` over `expo-audio`'s
+ * own functions, and the desktop host's on macOS. `setAudioMode()` sets the app's audio mode, on
+ * every OS.
  */
 import { DestroyRef, inject, signal, type Signal } from '@angular/core';
-import { currentPlatform, expoModuleNow, unavailable } from './native.ts';
+import { desktopAudio } from './desktop-audio.ts';
+import { currentPlatform, expoModule, expoModuleNow, isApple, unavailable } from './native.ts';
+import { Permission, UNAVAILABLE } from './permissions.ts';
 import { ownPlayer, watchAudioPlayer, type Player } from './player.ts';
 
 type ExpoAudio = typeof import('expo-audio');
@@ -18,15 +24,42 @@ type RecordingOptions = import('expo-audio').RecordingOptions;
 type RecorderState = import('expo-audio').RecorderState;
 type AudioRecorder = import('expo-audio').AudioRecorder;
 
-/** `expo-audio` where the platform has it, or the error that says why not. */
+/** Where `expo-audio` is: its platforms, and the desktop host's `NgNativeAudio` on macOS. */
+const WHERE = { platforms: ['ios', 'android', 'web'], desktop: desktopAudio } as const;
+
+/**
+ * `expo-audio` where the platform has it, or the error that says why not. On macOS, the desktop
+ * host's `NgNativeAudio` through `desktopAudio`.
+ */
 function expoAudio(): ExpoAudio {
-  const expo = expoModuleNow('expo-audio', () => require('expo-audio') as ExpoAudio, [
-    'ios',
-    'android',
-    'web',
-  ]);
+  const expo = expoModuleNow('expo-audio', () => require('expo-audio') as ExpoAudio, WHERE);
   if (!expo) throw unavailable('expo-audio', 'Stand in for the player or recorder in the test.');
   return expo;
+}
+
+/**
+ * The permission to record from the microphone, which `prepareToRecordAsync()` needs. Made in an
+ * injection context, a field of a component or a service, a refusal is checked again each time the
+ * app comes back to the front. Denied, and never to be asked again, without the module.
+ */
+export function recordingPermission(): Permission {
+  const expo = expoModule('expo-audio', () => require('expo-audio') as ExpoAudio, WHERE);
+  return Permission.of(
+    () => expo?.getRecordingPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+    () => expo?.requestRecordingPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+  );
+}
+
+/**
+ * How the app's audio behaves, `expo-audio`'s `setAudioModeAsync`: on iOS whether it plays with the
+ * silent switch on and whether it may record, on Android how it takes audio focus. The mode belongs
+ * to the app, not to a player, and stays until it is set again. On macOS, which has no silent switch
+ * or audio session, the desktop host's `NgNativeAudio` takes it and changes nothing. Inert where
+ * there is no such module.
+ */
+export async function setAudioMode(mode: Partial<import('expo-audio').AudioMode>): Promise<void> {
+  const expo = expoModule('expo-audio', () => require('expo-audio') as ExpoAudio, WHERE);
+  await expo?.setAudioModeAsync?.(mode);
 }
 
 /**
@@ -112,7 +145,8 @@ function forPlatform(options: RecordingOptions): Record<string, unknown> {
     isMeteringEnabled: options.isMeteringEnabled ?? false,
   };
   const platform = currentPlatform();
-  if (platform === 'ios') return { ...common, directory: options.directory, ...options.ios };
+  // macOS records as iOS does, with AVAudioRecorder, so it reads the iOS options.
+  if (isApple(platform)) return { ...common, directory: options.directory, ...options.ios };
   if (platform === 'android')
     return { ...common, directory: options.directory, ...options.android };
   return { ...common, ...options.web };

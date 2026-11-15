@@ -17,7 +17,7 @@ npx expo install expo-camera
 ```
 
 ```ts
-import { Camera } from '@ng-native/expo/camera';
+import { Camera, cameraPermission, microphonePermission } from '@ng-native/expo/camera';
 ```
 
 ## The smallest thing that works
@@ -25,9 +25,8 @@ import { Camera } from '@ng-native/expo/camera';
 ```ts
 import { Component, viewChild } from '@angular/core';
 import { Pressable, Text } from '@ng-native/components';
-import { Permission, registerExpoViews } from '@ng-native/expo';
-import { Camera } from '@ng-native/expo/camera';
-import * as ExpoCamera from 'expo-camera';
+import { registerExpoViews } from '@ng-native/expo';
+import { Camera, cameraPermission } from '@ng-native/expo/camera';
 
 registerExpoViews('expo-camera'); // once, before the app mounts
 
@@ -47,10 +46,7 @@ registerExpoViews('expo-camera'); // once, before the app mounts
 })
 export class Shutter {
   private readonly camera = viewChild(Camera);
-  protected readonly permission = Permission.of(
-    ExpoCamera.Camera.getCameraPermissionsAsync,
-    ExpoCamera.Camera.requestCameraPermissionsAsync,
-  );
+  protected readonly permission = cameraPermission();
 
   protected async shoot(): Promise<void> {
     const picture = await this.camera()?.takePicture({ quality: 0.8 });
@@ -75,15 +71,19 @@ is the only view the module renders.
 ## The camera permission
 
 The view needs the camera permission before it shows anything. Nothing in `Camera` asks for it -
-the directive only takes pictures - so ask yourself, with `Permission.of()` against
-`expo-camera`'s own permission functions (see [Permissions](/packages/expo/permissions)):
+the directive only takes pictures - so ask yourself, with **`cameraPermission()`**. It returns a
+[`Permission`](/packages/expo/permissions): `status()`, `granted()` and `blocked()` as signals, and
+`check()`, `request()` and `ensure()` to read or ask.
 
 ```ts
-protected readonly permission = Permission.of(
-  ExpoCamera.Camera.getCameraPermissionsAsync,
-  ExpoCamera.Camera.requestCameraPermissionsAsync,
-);
+protected readonly permission = cameraPermission();
 ```
+
+Made in an injection context, as a field of a component or a service, it checks a refusal again
+each time the app comes back to the front, so turning the camera on in Settings shows the camera
+without a restart. On iOS and Android it calls `expo-camera`'s own permission functions, and on
+macOS the desktop host's, so the same code runs on each. Where there is no such module, as on the
+web or in a test in Node, it answers denied, and `blocked()` is true.
 
 Add to `Info.plist`:
 
@@ -142,9 +142,27 @@ protected async toggle(): Promise<void> {
 ```
 
 The view records with `mode="video"`. Without `mute` on the view, `record()` needs the microphone
-permission (`ExpoCamera.Camera.requestMicrophonePermissionsAsync`, through `Permission.of()` like
-the camera's): without it, Android rejects and iOS records without sound. With `mute`, it records
-without sound and needs no microphone permission.
+permission, **`microphonePermission()`**, a `Permission` like the camera's: without it, Android
+rejects, and iOS and macOS record without sound. With `mute`, it records without sound and needs no
+microphone permission.
+
+```ts
+protected readonly microphone = microphonePermission();
+
+protected async start(): Promise<void> {
+  await this.microphone.ensure(); // a refusal still records, without sound, on iOS and macOS
+  const video = await this.camera()?.record({ maxDuration: 60 });
+  if (video) console.log(video.uri);
+}
+```
+
+On macOS the microphone permission is the one `audioRecorder` needs too, so
+`microphonePermission()` and `recordingPermission()` from `@ng-native/expo/audio` answer the same.
+
+On macOS the movie is a QuickTime file (`.mov`) from the Mac's camera, with any `mode`. It has sound
+only with the microphone already allowed, and `record()` never asks for it, so it records without
+sound otherwise, as iOS does: ask with `microphonePermission()` first. One recording runs at a time
+for a view; a second `record()` rejects until the first stops.
 
 ## Reference
 

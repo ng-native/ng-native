@@ -1,8 +1,8 @@
 /**
  * `LanguageModel`, bound to `expo-local-llm`.
  *
- * The model the operating system already has: Apple's Foundation Models on iOS 26 with Apple
- * Intelligence, Gemini Nano on the Android phones that ship it. Nothing is bundled and nothing is
+ * The model the operating system already has: Apple's Foundation Models on iOS 26 and macOS 26
+ * with Apple Intelligence, Gemini Nano on the Android phones that ship it. Nothing is bundled and nothing is
  * sent anywhere; the prompt and the answer stay on the device.
  *
  * ```ts
@@ -33,6 +33,7 @@ import {
   type LanguageModelSessionOptions,
   type LanguageModelToolCall,
 } from './language-model-session.ts';
+import { desktopLocalLlm } from './desktop-local-llm.ts';
 import { expoModule, present } from './native.ts';
 
 export {
@@ -168,10 +169,15 @@ export class LanguageModel {
     {
       factory: () => {
         // The package loads without its native half, so that half is what decides.
-        const llm = expoModule('expo-local-llm', () => {
-          const loaded = require('expo-local-llm') as typeof import('expo-local-llm');
-          return loaded.ExpoLocalLlmModule ? loaded : null;
-        });
+        // On macOS, the desktop host's NgNativeLocalLlm over Foundation Models.
+        const llm = expoModule(
+          'expo-local-llm',
+          () => {
+            const loaded = require('expo-local-llm') as typeof import('expo-local-llm');
+            return loaded.ExpoLocalLlmModule ? loaded : null;
+          },
+          { desktop: desktopLocalLlm },
+        );
         // Missing from the build: the stand-in, to say so when it is used.
         if (llm && !present(llm)) return llm as never;
         const module = llm?.ExpoLocalLlmModule;

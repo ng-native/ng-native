@@ -146,7 +146,9 @@ export class Notifications {
           console.warn(REFUSED_BY_EXPO_GO);
           return null;
         }
-        return expoModule('expo-notifications', () => require('expo-notifications') as Expo);
+        return expoModule('expo-notifications', () => require('expo-notifications') as Expo, {
+          desktop: desktopNotifications,
+        });
       },
     },
   );
@@ -407,7 +409,7 @@ export class Notifications {
   }
 
   /**
-   * The raw APNs (iOS) or FCM (Android) token, for a backend that talks to those services
+   * The raw APNs (iOS and macOS) or FCM (Android) token, for a backend that talks to those services
    * directly rather than through Expo's push service. Same permission and module rules as
    * {@link getExpoPushToken}.
    */
@@ -514,6 +516,110 @@ const REFUSED_BY_EXPO_GO =
   '[angular-native] Notifications does nothing here: expo-notifications cannot be loaded in Expo ' +
   'Go on Android, which has had no push since SDK 53, so nothing is scheduled or received and ' +
   'the permission is never granted. Use a development build.';
+
+/** What the desktop host's `NgNativeNotifications` answers; the rest has no desktop counterpart. */
+const HOST_METHODS = [
+  'getPermissionsAsync',
+  'requestPermissionsAsync',
+  'scheduleNotificationAsync',
+  'cancelScheduledNotificationAsync',
+  'cancelAllScheduledNotificationsAsync',
+  'getAllScheduledNotificationsAsync',
+  'getNextTriggerDateAsync',
+  'getPresentedNotificationsAsync',
+  'dismissNotificationAsync',
+  'dismissAllNotificationsAsync',
+  'getLastNotificationResponseAsync',
+  'getBadgeCountAsync',
+  'setBadgeCountAsync',
+  'getDevicePushTokenAsync',
+  'unregisterForNotificationsAsync',
+] as const;
+
+/** A trigger as the host reads it: a date as milliseconds, since a Date does not cross. */
+function hostTrigger(trigger: unknown): unknown {
+  if (trigger === null || typeof trigger !== 'object') return trigger;
+  const { date, value, ...rest } = trigger as { type?: string; date?: unknown; value?: unknown };
+  if (rest.type !== 'date') return trigger;
+  const at = date ?? value;
+  return { ...rest, date: at instanceof Date ? at.getTime() : at };
+}
+
+/**
+ * The desktop host's `NgNativeNotifications`, with the listeners on its `ngNativeNotifications`
+ * event: a TurboModule cannot hand back the subscription `add*Listener` answers. A date in a
+ * trigger crosses as milliseconds. The device push token is APNs', `{ type: 'macos', data }`,
+ * and a new one while the app runs arrives as a `token` event. What the host has no counterpart for
+ * (Android's channels, categories, Expo's push tokens, the foreground handler) answers empty or does
+ * nothing. Null where the host has no such module.
+ */
+function desktopNotifications(): NativeNotifications | null {
+  const native = require('react-native') as {
+    TurboModuleRegistry: { get(name: string): unknown };
+    DeviceEventEmitter: {
+      addListener(event: string, listener: (event: unknown) => void): { remove(): void };
+    };
+  };
+  const host = native.TurboModuleRegistry.get('NgNativeNotifications') as Record<
+    string,
+    (...args: unknown[]) => unknown
+  > | null;
+  if (!host) return null;
+  const listen = (type: string, key: string) => (listener: (payload: never) => void) =>
+    native.DeviceEventEmitter.addListener('ngNativeNotifications', (event) => {
+      const sent = event as { type?: string } | null;
+      if (sent?.type === type) listener((sent as Record<string, never>)[key] as never);
+    });
+  const none = { remove() {} };
+  const empty = async () => [];
+  const nothing = async () => undefined;
+  const standIns = {
+    addNotificationReceivedListener: listen('received', 'notification'),
+    addNotificationResponseReceivedListener: listen('response', 'response'),
+    addNotificationsDroppedListener: () => none,
+    addPushTokenListener: listen('token', 'token'),
+    clearLastNotificationResponseAsync: nothing,
+    getNotificationChannelsAsync: empty,
+    getNotificationChannelAsync: async () => null,
+    setNotificationChannelAsync: async () => null,
+    deleteNotificationChannelAsync: nothing,
+    getNotificationChannelGroupsAsync: empty,
+    getNotificationChannelGroupAsync: async () => null,
+    setNotificationChannelGroupAsync: async () => null,
+    deleteNotificationChannelGroupAsync: nothing,
+    getNotificationCategoriesAsync: empty,
+    setNotificationCategoryAsync: async () => null,
+    deleteNotificationCategoryAsync: async () => false,
+    setNotificationHandler: () => {},
+    getExpoPushTokenAsync: async () => {
+      throw new Error(
+        "Expo's push service does not deliver to macOS: send through APNs with getDevicePushToken().",
+      );
+    },
+    setAutoServerRegistrationEnabledAsync: nothing,
+    subscribeToTopicAsync: nothing,
+    unsubscribeFromTopicAsync: nothing,
+    registerTaskAsync: nothing,
+    unregisterTaskAsync: nothing,
+  };
+  const passed = Object.fromEntries(
+    HOST_METHODS.map((name) => [
+      name,
+      async (...args: unknown[]) =>
+        host[name]?.(
+          ...(name === 'scheduleNotificationAsync'
+            ? args.map((request) => {
+                const { trigger, ...rest } = (request ?? {}) as { trigger?: unknown };
+                return { ...rest, trigger: hostTrigger(trigger) };
+              })
+            : name === 'getNextTriggerDateAsync'
+              ? args.map(hostTrigger)
+              : args),
+        ),
+    ]),
+  );
+  return { ...standIns, ...passed } as unknown as NativeNotifications;
+}
 
 /**
  * When a scheduled request fires, if it fires once at a moment its trigger names. Android reports

@@ -24,6 +24,7 @@ export {
 } from './native.ts';
 export { NATIVE_VIEWS, registerNativeViews } from './community-views.ts';
 export { registerExpoUiViews } from './expo-ui.ts';
+export { EXPO_UI_MACOS, type ExpoUiAbsentOnMac, type ExpoUiOnMac } from './expo-ui-macos.ts';
 export { nativeState, type NativeState } from './native-state.ts';
 export {
   EXPO_VIEWS,

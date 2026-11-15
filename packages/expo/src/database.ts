@@ -18,6 +18,7 @@
  * and an app usually has exactly one. Opening is deferred until something asks: a database opened
  * at startup is a file handle and a WAL journal for an app that may never read from it.
  */
+import { desktopSqlite } from './desktop-sqlite.ts';
 import { expoModuleNow, unavailable } from './native.ts';
 
 /** Enough of `SQLiteDatabase` to own it. Queries go through the database itself. */
@@ -158,7 +159,7 @@ export function database(
       const expo = expoModuleNow(
         'expo-sqlite',
         () => require('expo-sqlite') as typeof import('expo-sqlite'),
-        ['ios', 'android', 'web'],
+        { platforms: ['ios', 'android', 'web'], desktop: desktopSqlite },
       );
       if (!expo) {
         throw unavailable(

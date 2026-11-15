@@ -11,7 +11,9 @@
  * ```
  *
  * It is `@ng-native/expo`'s own native view: UIKit's `UISearchBar` on iOS, with its Cancel button,
- * dictation and clear button, and AndroidX's `SearchView` on Android, which has no Cancel button.
+ * dictation and clear button, AndroidX's `SearchView` on Android, which has no Cancel button, and
+ * AppKit's `NSSearchField` on macOS, drawn by the desktop host at its `controlSize`, whose clear
+ * button and Escape send `(cancel)`.
  * The events are `<native-search-bar>`'s: `(search)` for the keyboard's search key with the text,
  * `(cancel)`, `(searchFocus)` and `(searchBlur)`, and `focus()`, `blur()` and `clear()` from code.
  * The text is a two-way `value` rather than the bar's `query`, because it is a Signal Forms control
@@ -44,7 +46,7 @@ import {
   type PostScriptNames,
   registerViewName,
 } from '@ng-native/fabric';
-import { optional } from './native.ts';
+import { currentPlatform, optional } from './native.ts';
 import { expoViewName } from './register-expo-view.ts';
 import { optionalBoolean } from './transforms.ts';
 
@@ -104,14 +106,17 @@ export class SearchField {
   static readonly SOURCE = new InjectionToken<SearchFieldFunctions | null>(
     'angular-native.searchFieldSource',
     {
+      // The desktop host draws the field itself, and `focus()` and `blur()` are its view commands.
       factory: () =>
-        optional(() => {
-          const core = require('expo-modules-core') as typeof import('expo-modules-core');
-          const module = core.requireOptionalNativeModule<{
-            ViewPrototypes?: Record<string, SearchFieldFunctions>;
-          }>(MODULE);
-          return module ? (module.ViewPrototypes?.[MODULE] ?? {}) : null;
-        }),
+        currentPlatform() === 'macos'
+          ? {}
+          : optional(() => {
+              const core = require('expo-modules-core') as typeof import('expo-modules-core');
+              const module = core.requireOptionalNativeModule<{
+                ViewPrototypes?: Record<string, SearchFieldFunctions>;
+              }>(MODULE);
+              return module ? (module.ViewPrototypes?.[MODULE] ?? {}) : null;
+            }),
     },
   );
 
@@ -136,7 +141,10 @@ export class SearchField {
 
   /** The keyboard's search key was pressed, with the text in the field. */
   readonly search = output<string>();
-  /** iOS: the Cancel button was pressed. The field is emptied and gives up the keyboard. */
+  /**
+   * The field was emptied by its Cancel button on iOS, which also takes the keyboard away, or by
+   * its clear button or Escape on macOS, which leave it.
+   */
   readonly cancel = output<void>();
   readonly searchFocus = output<void>();
   readonly searchBlur = output<void>();
@@ -198,6 +206,10 @@ export class SearchField {
   }
 
   private async call(name: 'focus' | 'blur'): Promise<void> {
+    if (currentPlatform() === 'macos') {
+      if (!this.missing) this.engine?.dispatchCommand(this.node, name);
+      return;
+    }
     const nativeTag = this.engine?.tagOf(this.node);
     if (nativeTag == null) return;
     await this.functions?.[name]?.call({ nativeTag });

@@ -22,6 +22,7 @@ import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from
 import { onWindowFront, sharedBySource } from '@ng-native/device';
 import { currentPlatform, expoModule, present, asked } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
+import { desktopHost } from './desktop-host.ts';
 
 type Expo = typeof import('expo-screen-capture');
 
@@ -59,6 +60,7 @@ export class ScreenCapture {
         const expo = expoModule(
           'expo-screen-capture',
           () => require('expo-screen-capture') as Expo,
+          { desktop: desktopScreenCapture },
         );
         const loaded = present(expo);
         if (!loaded) return expo;
@@ -192,4 +194,26 @@ class CaptureWindow {
   leave(owner: object): void {
     for (const name of [...this.holders.keys()]) void this.allow(owner, name).catch(() => {});
   }
+}
+
+/**
+ * expo-screen-capture over the desktop host's `NgNativeScreenCapture`, which keeps every window of
+ * the app out of capture while a key is held. macOS tells an app of no screenshot, so the listener
+ * never fires and `screenshots` stays at zero. Null where the host has no such module.
+ */
+function desktopScreenCapture(): NativeScreenCapture | null {
+  const host =
+    desktopHost<Record<string, (...args: unknown[]) => Promise<never>>>('NgNativeScreenCapture');
+  if (!host) return null;
+  const native = host.module;
+  return {
+    isAvailableAsync: () => native['isAvailableAsync']!(),
+    preventScreenCaptureAsync: (key) => native['preventScreenCaptureAsync']!(key ?? null),
+    allowScreenCaptureAsync: (key) => native['allowScreenCaptureAsync']!(key ?? null),
+    enableAppSwitcherProtectionAsync: () => native['enableAppSwitcherProtectionAsync']!(),
+    disableAppSwitcherProtectionAsync: () => native['disableAppSwitcherProtectionAsync']!(),
+    addScreenshotListener: () => ({ remove() {} }) as never,
+    getPermissionsAsync: () => native['getPermissionsAsync']!(),
+    requestPermissionsAsync: () => native['requestPermissionsAsync']!(),
+  };
 }

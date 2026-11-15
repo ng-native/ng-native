@@ -219,6 +219,9 @@ if (place) this.markers.set([{ id: 'home', coordinates: place, title: 'Home' }])
   `clickCoordinates` also says where the tap landed.
 - Apple markers take `systemImage`, `monogram` and a `tintColor` color string; Google markers take
   a `snippet` and can be dragged.
+- On macOS the desktop host draws the Apple map with MapKit and takes iOS's values. It shows the
+  user's location only once `Location` has the permission, and has no location button,
+  `selectionEnabled` or Look Around.
 
 ## Limits
 

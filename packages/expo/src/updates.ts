@@ -13,15 +13,89 @@
  * The awkward part is not checking or downloading - both are plain promises - it is that applying
  * one *restarts the app*. So the shape that matters is: know one is ready, and let the app choose
  * a moment the user will not lose anything at. Nothing here does it on its own.
+ *
+ * Beside the bundle updates, a whole-app updater: Sparkle in a macOS `dmg` build, where
+ * `checkForAppUpdate()` shows Sparkle's check and `appUpdateAvailable` follows what it has found.
+ * On iOS and Android `checkForAppUpdate()` opens the app's store page, the `ios.appStoreUrl` or
+ * `android.playStoreUrl` of the app config, and `appUpdateAvailable` stays false, as the stores
+ * offer no way to ask. Elsewhere both are inert: in development, in `app` and `mas` builds, and on
+ * the web.
  */
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { expoModule, presence, present } from './native.ts';
+import { currentPlatform, expoModule, presence, present } from './native.ts';
 
 export interface NativeUpdates {
   readonly enabled: boolean;
   check(): Promise<{ isAvailable: boolean }>;
   fetch(): Promise<{ isNew: boolean }>;
   reload(): Promise<void>;
+  /** The whole-app updater, where the build has one: Sparkle in a macOS `dmg` build. */
+  readonly appUpdater?: NativeAppUpdater | null;
+}
+
+export interface NativeAppUpdater {
+  /** Whether it has found a newer version of the app, now. */
+  available(): boolean;
+  /** Show its check, as Check for Updates... does. Resolves whether there was an updater to ask. */
+  check(): Promise<boolean>;
+  subscribe(listener: (available: boolean) => void): () => void;
+}
+
+/** The desktop host's `NgNativeUpdates`, as far as the whole-app updater goes. */
+interface DesktopAppUpdater {
+  readonly isAppUpdaterAvailable?: boolean;
+  isAppUpdateAvailable?(): boolean;
+  checkForAppUpdateAsync?(): Promise<boolean>;
+}
+
+/**
+ * The host's updater, from the module's `isAppUpdaterAvailable` property, with its
+ * `appUpdateAvailable` event on `DeviceEventEmitter`.
+ */
+function appUpdaterOf(module: DesktopAppUpdater): NativeAppUpdater | null {
+  if (module.isAppUpdaterAvailable !== true) return null;
+  const emitter = (
+    require('react-native') as {
+      DeviceEventEmitter?: {
+        addListener(event: string, listener: (event: unknown) => void): { remove(): void };
+      };
+    }
+  ).DeviceEventEmitter;
+  return {
+    available: () => module.isAppUpdateAvailable?.() === true,
+    check: async () => (await module.checkForAppUpdateAsync?.()) === true,
+    subscribe: (listener) => {
+      const subscription = emitter?.addListener('appUpdateAvailable', (event) =>
+        listener((event as { available?: boolean } | null)?.available === true),
+      );
+      return () => subscription?.remove();
+    },
+  };
+}
+
+/**
+ * The store page as the whole-app updater on iOS and Android: `check()` opens the app's store page
+ * from `expo-store-review`, and there is no telling whether a newer version is in it. Null on any
+ * other platform, and a `check()` that resolves false where the app config names no page.
+ */
+function storePageUpdaterOf(): NativeAppUpdater | null {
+  const platform = currentPlatform();
+  if (platform !== 'ios' && platform !== 'android') return null;
+  return {
+    available: () => false,
+    check: async () => {
+      const review = expoModule(
+        'expo-store-review',
+        () => require('expo-store-review') as typeof import('expo-store-review'),
+      );
+      const url = present(review)?.storeUrl() ?? null;
+      if (!url) return false;
+      const { Linking } = require('react-native') as typeof import('react-native');
+      await Linking.openURL(url);
+      return true;
+    },
+    subscribe: () => () => {},
+  };
 }
 
 export type UpdateState = 'idle' | 'checking' | 'downloading' | 'ready' | 'error';
@@ -47,6 +121,7 @@ export class Updates {
           check: async () => ({ isAvailable: (await expo.checkForUpdateAsync()).isAvailable }),
           fetch: async () => ({ isNew: (await expo.fetchUpdateAsync()).isNew }),
           reload: () => expo.reloadAsync(),
+          appUpdater: appUpdaterOf(expo as DesktopAppUpdater) ?? storePageUpdaterOf(),
         };
       },
     },
@@ -72,6 +147,18 @@ export class Updates {
    * `apply()` does anything.
    */
   readonly ready: Signal<boolean> = this.downloaded.asReadonly();
+
+  // Read only from a module that is there: the stand-in for a missing one throws on any read.
+  private readonly appUpdater = present(this.native)?.appUpdater ?? null;
+  private readonly appUpdate = signal(this.appUpdater?.available() ?? false);
+  private readonly stopAppUpdates =
+    this.appUpdater?.subscribe((available) => this.appUpdate.set(available)) ?? null;
+
+  /**
+   * Whether the whole-app updater has found a newer version of the app: Sparkle in a macOS `dmg`
+   * build. False wherever there is none, and on iOS and Android, where the store page cannot say.
+   */
+  readonly appUpdateAvailable: Signal<boolean> = this.appUpdate.asReadonly();
 
   /**
    * Disabled in development and in Expo Go, where the bundle comes from Metro. An app that shows
@@ -115,5 +202,19 @@ export class Updates {
    */
   async apply(): Promise<void> {
     if (this.downloaded()) await this.native?.reload();
+  }
+
+  /**
+   * Check for a newer version of the whole app, showing the updater's own window as Check for
+   * Updates... does: Sparkle in a macOS `dmg` build. On iOS and Android it opens the app's store
+   * page and resolves true, or false when the app config names none. Resolves whether there was
+   * an updater to ask; false, and nothing shown, wherever there is none.
+   */
+  async checkForAppUpdate(): Promise<boolean> {
+    return (await this.appUpdater?.check()) ?? false;
+  }
+
+  ngOnDestroy(): void {
+    this.stopAppUpdates?.();
   }
 }

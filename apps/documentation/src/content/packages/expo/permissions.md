@@ -12,6 +12,11 @@ per module, so the module stays your app's own dependency, and it is what
 [`ImagePicker`](/packages/expo/image-picker), [`Location`](/packages/expo/location) and
 [`Camera`](/packages/expo/camera) are built on.
 
+For the camera, the microphone and recording, `cameraPermission()` and `microphonePermission()`
+from `@ng-native/expo/camera`, and `recordingPermission()` from `@ng-native/expo/audio`, each make
+this `Permission` for you, and answer on macOS too, where every `expo-*` package is an empty module
+and its own functions cannot be called.
+
 `Permission` lives on the bare `@ng-native/expo` import, not behind an entry point - it is not
 bound to one optional module.
 

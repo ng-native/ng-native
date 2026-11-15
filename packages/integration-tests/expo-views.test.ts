@@ -153,6 +153,40 @@ describe('a symbol s size', () => {
     assert.equal(byId('sized').props['height'], 20);
   });
 
+  it("asks the desktop host's NgNativeSymbol on macOS", async () => {
+    const asked: unknown[][] = [];
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) =>
+            name === 'NgNativeSymbol'
+              ? {
+                  imageSize: (...args: unknown[]) => (
+                    asked.push(args),
+                    [(args[1] as number) * 1.25, (args[1] as number) * 0.75]
+                  ),
+                }
+              : null,
+        },
+      };
+    };
+    try {
+      const { app, byId } = await render();
+      unmount = () => app.applicationRef.destroy();
+      assert.equal(byId('heart').props['width'], 40);
+      assert.equal(byId('heart').props['height'], 24);
+      assert.deepEqual(
+        asked.find(([name]) => name === 'heart.fill'),
+        ['heart.fill', 32, 'bold', undefined],
+      );
+    } finally {
+      delete host['require'];
+    }
+  });
+
   it('is the square without the native lookup, as in Expo Go', async () => {
     for (const expo of [undefined, { modules: {} }, { modules: { NgNativeSymbol: {} } }]) {
       global.expo = expo;

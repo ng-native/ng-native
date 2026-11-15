@@ -8,7 +8,8 @@ summary: Apple's sign-in sheet and its approved button, with a canceled sheet an
 `AppleSignIn` wraps `expo-apple-authentication`: whether Sign in with Apple can be offered, the
 sheet that signs the user in, and the checks an app makes afterwards. `<apple-sign-in-button>` is
 Apple's own button for it. The App Store requires Sign in with Apple of an app that offers another
-social sign-in. It is iOS only; elsewhere `available()` answers false.
+social sign-in. It works on iOS, and on macOS in an app signed with the Sign in with Apple
+entitlement; elsewhere `available()` answers false.
 
 ## Install
 
@@ -106,6 +107,9 @@ is: its wording, logo and colors are the system's, localized and accessible.
 
 It needs a width and a height to show. Its color and corners come from `buttonStyle` and
 `cornerRadius`; a CSS background or border radius does not apply to it.
+
+On macOS the desktop host draws the same `ASAuthorizationAppleIDButton`, with the same props and
+`(buttonPress)`.
 
 ## Without the module
 

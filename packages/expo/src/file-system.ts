@@ -11,6 +11,7 @@
  * Moving and listing stay on Expo's `File` and `Directory`.
  */
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
+import { desktopFiles } from './desktop-file-system.ts';
 import { currentPlatform, expoModule, presence, present } from './native.ts';
 
 /**
@@ -117,6 +118,7 @@ export class FileSystem {
         const expo = expoModule(
           'expo-file-system',
           () => require('expo-file-system') as typeof import('expo-file-system'),
+          { desktop: desktopFiles },
         );
         if (!expo) return null;
         // Missing from the build: the stand-in, to say so when it is used.

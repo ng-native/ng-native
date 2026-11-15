@@ -33,7 +33,8 @@
  *
  * `setCameraPosition` and `selectMarker` are the functions `expo-maps` defines on the view. In
  * React they are methods on a ref; underneath, native finds the view by the `nativeTag` it is
- * called with, so they are called here with the tag the engine committed the view under.
+ * called with, so they are called here with the tag the engine committed the view under. On macOS
+ * they are the desktop host's `NgNativeMaps`'s, which take the tag as their first argument.
  *
  * A committed view has a tag before native has mounted anything under it, and a function called
  * in between finds no view to run on. So calls are held until the map says it is there, which both
@@ -52,6 +53,7 @@ import {
 } from '@angular/core';
 import { Engine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
 import type { AppleMaps, CameraMoveEvent, Coordinates, GoogleMaps } from 'expo-maps';
+import { desktopHost } from './desktop-host.ts';
 import { expoModule, optional } from './native.ts';
 import { registerExpoView } from './register-expo-view.ts';
 
@@ -153,11 +155,12 @@ export interface MapViewFunctions {
 }
 
 /**
- * Make `<expo-map>` commit as the platform's map: `ExpoAppleMaps` on iOS, `ExpoGoogleMaps` on
- * Android. Each is its module's only view, so its default. Call once, before the first map.
+ * Make `<expo-map>` commit as the platform's map: `ExpoAppleMaps` on iOS and macOS, where MapKit
+ * draws it, `ExpoGoogleMaps` on Android. Each is its module's only view, so its default. Call once,
+ * before the first map.
  */
-export function registerExpoMap(platform: 'ios' | 'android'): void {
-  registerExpoView('expo-map', platform === 'ios' ? 'ExpoAppleMaps' : 'ExpoGoogleMaps');
+export function registerExpoMap(platform: 'ios' | 'android' | 'macos'): void {
+  registerExpoView('expo-map', platform === 'android' ? 'ExpoGoogleMaps' : 'ExpoAppleMaps');
 }
 
 @Component({
@@ -193,6 +196,7 @@ export class MapView {
         return expoModule(
           'expo-maps',
           () => functions('ExpoAppleMaps') ?? functions('ExpoGoogleMaps'),
+          { desktop: desktopMaps },
         );
       },
     },
@@ -303,4 +307,28 @@ export class MapView {
     this.held = [];
     for (const resolve of held) resolve(ready);
   }
+}
+
+/** What the desktop host's `NgNativeMaps` takes: the map's functions, by the view's tag. */
+interface MapsHost {
+  setCameraPosition(tag: number, position: MapCameraMove | null): Promise<void>;
+  selectMarker(tag: number, id: string | null, options: MapSelectOptions | null): Promise<void>;
+}
+
+/**
+ * The map's functions over the desktop host's `NgNativeMaps`, for macOS, where the map is the
+ * host's own view and a TurboModule has no view prototypes: each passes its view's tag, and null
+ * for an argument left out, which a TurboModule would drop.
+ */
+function desktopMaps(): MapViewFunctions | null {
+  const host = desktopHost<MapsHost>('NgNativeMaps')?.module;
+  if (!host) return null;
+  return {
+    setCameraPosition(position) {
+      return host.setCameraPosition(this.nativeTag, position ?? null);
+    },
+    selectMarker(id, options) {
+      return host.selectMarker(this.nativeTag, id ?? null, options ?? null);
+    },
+  };
 }
