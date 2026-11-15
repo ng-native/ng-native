@@ -249,7 +249,8 @@ TEST_CASE("a long press activates after its duration and reports how long it was
   CHECK(f.events == std::vector<std::string>{"state 3 0->2"});
   f.clock.advance(1);
   CHECK(f.has("state 3 2->4"));
-  CHECK(f.bodies.back()["duration"].asDouble() >= 0);
+  // As long as it has been held when its timer runs, on the clock the pointer's events keep.
+  CHECK(f.bodies.back()["duration"].asDouble() == doctest::Approx(400));
   f.up(50, 60, 100);
   CHECK(f.events.back() == "state 3 4->5");
 }
@@ -486,4 +487,55 @@ TEST_CASE("a handler on a transformed view reports its own coordinates and its d
   // Inside the layout's frame but outside where it is drawn: the handler leaves its bounds.
   f.move(58, 30);
   CHECK(f.events.back() == "state 1 2->1");
+}
+
+TEST_CASE("a handler a timer fails is reset at once, so the next press begins it again") {
+  Fixture f;
+  f.add("TapGestureHandler", kTap, 2, dynamic::object("numberOfTaps", 2)("maxDelayMs", 300));
+  f.down(50, 60);
+  f.up(50, 60);
+  // No second tap in time: the timer fails it.
+  f.clock.advance(400);
+  CHECK(f.events.back() == "state 2 2->1");
+  f.down(50, 60);
+  CHECK(std::count(f.events.begin(), f.events.end(), "state 2 0->2") == 2);
+}
+
+TEST_CASE("a handler that cancels outside its view fails or cancels as the pointer leaves, before it moves") {
+  Fixture f;
+  f.add("PanGestureHandler", kPan, 2, dynamic::object("shouldCancelWhenOutside", true));
+  f.down(50, 60);
+  f.move(80, 60);
+  CHECK(f.has("state 1 2->4"));
+  // Over the other card, outside the pan's: cancelled, with no update from the move outside.
+  auto updates = std::count(f.events.begin(), f.events.end(), "update 1");
+  f.move(300, 60);
+  CHECK(f.events.back() == "state 1 4->3");
+  CHECK(std::count(f.events.begin(), f.events.end(), "update 1") == updates);
+  f.up(300, 60);
+
+  // A tap released outside, with no move between, fails rather than recognising.
+  Fixture g;
+  g.add("TapGestureHandler", kTap, 2, dynamic::object("shouldCancelWhenOutside", true));
+  g.down(50, 60);
+  g.up(300, 60);
+  CHECK(g.events == std::vector<std::string>{"state 2 0->2", "state 2 2->1"});
+}
+
+TEST_CASE("a wheel's turns go to the handlers under the pointer at each, once one has gone idle") {
+  Fixture f;
+  // Two scroll views side by side below the first.
+  f.tree.create(shadowView(6, "ScrollView", {{0, 420}, {200, 100}}));
+  f.tree.create(shadowView(7, "ScrollView", {{220, 420}, {200, 100}}));
+  f.tree.insert(1, 6, 1);
+  f.tree.insert(1, 7, 2);
+  f.add("NativeViewGestureHandler", kNative, 6);
+  f.add("NativeViewGestureHandler", kOther, 7);
+  f.gestures.scroll(1, f.tree.hitTest(1, {50, 450}), f.at(50, 450), {0, -5}, std::nullopt);
+  CHECK(f.has("state 4 2->4"));
+  f.clock.advance(200);
+  CHECK(f.has("state 4 4->5"));
+  f.gestures.scroll(1, f.tree.hitTest(1, {300, 450}), f.at(300, 450), {0, -5}, std::nullopt);
+  CHECK(f.has("state 5 2->4"));
+  CHECK(std::count(f.events.begin(), f.events.end(), "state 4 2->4") == 1);
 }

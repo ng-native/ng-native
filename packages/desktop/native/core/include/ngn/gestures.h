@@ -121,6 +121,10 @@ class GestureHandler {
     return false;
   }
 
+  // The pointer is outside the view: a handler that cancels outside it fails, or is cancelled
+  // once active, as the library's handlers do. True when it does, and the input stops there.
+  bool leaveBounds();
+
   void begin();
   void fail();
   void cancel();
@@ -250,6 +254,9 @@ class Gestures {
   const Schedule &schedule() const {
     return schedule_;
   }
+  // Runs a handler's timer `fn`, due at `due` on the pointer's clock: the clock moves on to it
+  // first, and the handlers are settled after it, as after any input.
+  void runScheduled(double due, const std::function<void()> &fn);
   GestureHandler *find(int handlerTag) const;
 
   // From the handlers.
