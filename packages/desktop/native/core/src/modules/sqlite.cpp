@@ -225,11 +225,14 @@ class Databases {
     auto use = writable(file);
     {
       // The same file however its folder is spelled: through a symlink, a `.` or a trailing slash.
+      // Open as a connection's own database, or attached to one.
       std::lock_guard lock(mutex_);
       for (const auto &[id, open] : open_) {
-        std::error_code error;
-        if (open.path == file.string() || (open.path != ":memory:" && fs::equivalent(open.path, file, error))) {
-          throw SqlError("Unable to delete database '" + name + "' that is currently open. Close it before deleting it.");
+        for (const auto &path : filesOf(open.db)) {
+          std::error_code error;
+          if (path == file.string() || fs::equivalent(path, file, error)) {
+            throw SqlError("Unable to delete database '" + name + "' that is currently open. Close it before deleting it.");
+          }
         }
       }
     }
@@ -259,6 +262,25 @@ class Databases {
     std::shared_ptr<FileAccess::Use> use;
   };
 
+  // The files a connection has open: its own database and those attached to it. A temporary or
+  // in-memory database has none.
+  static std::vector<std::string> filesOf(sqlite3 *db) {
+    std::vector<std::string> files;
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db, "PRAGMA database_list", -1, &stmt, nullptr) != SQLITE_OK) {
+      sqlite3_finalize(stmt);
+      throw SqlError("Could not list the open databases: " + Statement::failure(db));
+    }
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+      auto file = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+      if (file != nullptr && *file != '\0') {
+        files.emplace_back(file);
+      }
+    }
+    sqlite3_finalize(stmt);
+    return files;
+  }
+
   // Refuses an ATTACH of a file outside the files the app may write. A temporary or in-memory
   // database is no file. A name the statement computes (a bound parameter, an expression) comes
   // here unread, as null, so it is refused: only a literal name can be checked.
@@ -275,7 +297,8 @@ class Databases {
     auto *databases = static_cast<Databases *>(self);
     try {
       auto use = databases->writable(fs::path(file));
-      std::lock_guard lock(databases->mutex_);
+      // Not mutex_: a delete holds it while it asks each connection for its files.
+      std::lock_guard lock(databases->attachedMutex_);
       databases->attached_.push_back(std::move(use));
       return SQLITE_OK;
     } catch (const std::exception &) {
@@ -306,6 +329,7 @@ class Databases {
   std::mutex mutex_;
   std::map<int, Open> open_;
   // The picks attached files are in, held while the module is.
+  std::mutex attachedMutex_;
   std::vector<std::shared_ptr<FileAccess::Use>> attached_;
   int next_{0};
 };
