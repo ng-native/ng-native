@@ -22,16 +22,17 @@
   }
 
   function send(args, isFatal) {
-    var stack = '';
-    for (var i = 0; i < args.length; i++) {
-      var arg = args[i];
-      if (arg != null && typeof arg === 'object' && typeof arg.stack === 'string') {
-        stack = arg.stack;
-        break;
-      }
-    }
-    var message = args.map(text).join(' ');
+    // A value whose stack or text cannot be read is as much a reporting failure as report's own.
     try {
+      var stack = '';
+      for (var i = 0; i < args.length; i++) {
+        var arg = args[i];
+        if (arg != null && typeof arg === 'object' && typeof arg.stack === 'string') {
+          stack = arg.stack;
+          break;
+        }
+      }
+      var message = args.map(text).join(' ');
       report({ message: message, stack: stack, isFatal: isFatal });
     } catch (e) {
       // The red box never breaks the app's own error handling.
