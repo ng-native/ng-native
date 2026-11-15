@@ -581,8 +581,8 @@ describe('system.host', () => {
       writeFileSync(
         host,
         `const fs = require('node:fs');
-fs.writeFileSync(${JSON.stringify(log)}, 'env ' + process.env.NGN_RUN_ID + '\\n');
 process.on('SIGTERM', () => { fs.appendFileSync(${JSON.stringify(log)}, 'TERM\\n'); process.exit(7); });
+fs.writeFileSync(${JSON.stringify(log)}, 'env ' + process.env.NGN_RUN_ID + '\\n');
 setInterval(() => {}, 1000);`,
       );
       const cli = path.join(dir, 'cli.mjs');

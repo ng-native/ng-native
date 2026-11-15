@@ -153,17 +153,17 @@ export function fetchPrebuilt(sys, host, cache) {
       `The prebuilt desktop host from ${host.url} did not unpack to appkit/ngn-macos.`,
     );
   }
+  // Published by one atomic rename, which fails rather than replace a folder that holds a host,
+  // so a host another run has published is never deleted under it.
   const binary = path.join(dir, 'appkit', 'ngn-macos');
-  if (!sys.exists(binary)) {
-    sys.remove(dir);
-    try {
-      sys.rename(unpacked, dir);
-    } catch (error) {
-      // Another run moved its copy in first.
-      if (!sys.exists(binary)) throw error;
-    }
+  try {
+    if (!sys.exists(binary)) sys.rename(unpacked, dir);
+  } catch (error) {
+    // Another run moved its copy in first.
+    if (!sys.exists(binary)) throw error;
+  } finally {
+    sys.remove(unpacked);
   }
-  sys.remove(unpacked);
   return dir;
 }
 

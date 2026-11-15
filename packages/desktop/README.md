@@ -693,8 +693,8 @@ with no view registered mounts as a plain view, and the host's own components ke
 ## Prebuilt hosts
 
 An app with no native desktop code of its own compiles nothing: `run` and `package` download the
-prebuilt host its React Native version has in `prebuilt.json`, the universal Release build each
-release publishes with its `hermesc` and Sparkle, and unpack it into the per-user cache under its
+prebuilt host its React Native version has in `prebuilt.json`, the universal Release build with its
+`hermesc` and Sparkle, and unpack it into the per-user cache under its
 hash. The archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does
 not match it is deleted and stops the command. The host is built from source instead when the app
 links a library's or its own native desktop code, when a host library it has installed
@@ -703,9 +703,17 @@ links a library's or its own native desktop code, when a host library it has ins
 than the prebuilt one or denied, when the download fails (with a warning), and when
 `NGN_DESKTOP_FROM_SOURCE=1` is set.
 
-`native/scripts/make-prebuilt.mjs <app> <out>` builds and packs one, and writes its
-`prebuilt.json` entry; the release workflow runs it and uploads the archive with the GitHub
-release. The host's `ngn-macos` and `hermesc` are signed ad hoc with the hardened runtime, with no
+Publishing one is a manual step; the release workflow does none of it:
+
+1. Build and pack the host for each React Native version with
+   `native/scripts/make-prebuilt.mjs <app> <out> --version <release> --base-url <url> --manifest prebuilt.json`,
+   where `<url>` is the absolute URL of the GitHub release's downloads
+   (`https://github.com/ng-native/ng-native/releases/download/<tag>`). It writes the archive to
+   `<out>` and its entry into `prebuilt.json`.
+2. Commit the updated `prebuilt.json`, so the npm package carries the entries.
+3. Attach each archive to the GitHub release at that URL.
+
+The host's `ngn-macos` and `hermesc` are signed ad hoc with the hardened runtime, with no
 Developer ID: `package` signs the app, host included, with the app's own identity, and the download
 is checked by the SHA-256 in `prebuilt.json`. Set `NGN_SIGN_IDENTITY` to sign them with an identity
 instead.

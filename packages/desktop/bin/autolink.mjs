@@ -17,8 +17,7 @@
  *
  * Plain Node with no dependencies, so it runs before anything is built.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -64,18 +63,19 @@ export function desktopLinks(appDir, { deny = [], builtIn = [] } = {}) {
   /** @type {DesktopLinks} */
   const links = { libraries: [], appModules: appModules(appDir), withoutDesktop: [], problems: [] };
   const seen = new Set();
-  /** @param {string} from @param {string[]} names */
-  const walk = (from, names) => {
-    for (const name of names) {
+  // Breadth first, so a package nearer the app wins: the app's own version of a library is the
+  // one taken, not an older copy nested under a dependency listed before it.
+  const queue = [appDir];
+  for (let from = queue.shift(); from !== undefined; from = queue.shift()) {
+    for (const name of dependencyNames(from)) {
       if (seen.has(name) || deny.includes(name) || suppliedOtherwise(name)) continue;
       seen.add(name);
       const dir = packageDir(from, name);
       if (dir === null) continue;
       if (!builtIn.includes(name)) classify(links, name, dir);
-      walk(dir, dependencyNames(dir));
+      queue.push(dir);
     }
-  };
-  walk(appDir, dependencyNames(appDir));
+  }
   links.libraries.sort((a, b) => a.name.localeCompare(b.name));
   links.withoutDesktop.sort();
   return links;
@@ -154,17 +154,21 @@ function dependencyNames(dir) {
 }
 
 /**
- * A package's directory as Node resolves it from `from`, or null when it is not installed.
+ * A package's directory as Node finds it from `from`, or null when it is not installed: the first
+ * `node_modules/<name>` up the tree, with symlinks resolved. Looked up directly rather than through
+ * `require.resolve('<name>/package.json')`, which throws for a package whose `exports` leave
+ * package.json out.
  *
  * @param {string} from
  * @param {string} name
  */
 function packageDir(from, name) {
-  try {
-    const require = createRequire(path.join(from, 'package.json'));
-    return path.dirname(require.resolve(`${name}/package.json`));
-  } catch {
-    return null;
+  for (let dir = from; ; dir = path.dirname(dir)) {
+    if (path.basename(dir) !== 'node_modules') {
+      const candidate = path.join(dir, 'node_modules', name);
+      if (existsSync(path.join(candidate, 'package.json'))) return realpathSync(candidate);
+    }
+    if (path.dirname(dir) === dir) return null;
   }
 }
 

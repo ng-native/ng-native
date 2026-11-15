@@ -7,14 +7,16 @@
  * - <app>: the app whose react-native and host libraries (react-native-screens,
  *   react-native-safe-area-context) the host is built against: the desktop template.
  * - <out>: where the archive and `prebuilt-host.json`, its manifest entry, go.
- * - --version: the release the archive is named for (default: this package's version), which the
- *   release workflow knows before it writes the version into package.json.
- * - --base-url: where the release serves the archive; its URL is this and the archive's name.
+ * - --version: the release the archive is named for (default: this package's version), for a
+ *   release whose version is not yet in package.json.
+ * - --base-url: where the release serves the archive, an absolute http or https URL; the archive's
+ *   URL is this and its name. Needed with --manifest, since the CLI downloads from the URL as it is.
  * - --manifest: a `prebuilt.json` to write the entry into, in place of the one for the same React
  *   Native version.
  *
  * The host is the universal Release build (`build.sh --universal --release`), with no app's
- * linked code. `ngn-macos` and `hermesc` have their local symbols stripped and are signed with the
+ * linked code, built from scratch in a directory of its own so no other build can replace it before
+ * it is archived. `ngn-macos` and `hermesc` have their local symbols stripped and are signed with the
  * hardened runtime, ad hoc (`codesign --sign -`) unless `NGN_SIGN_IDENTITY` names an identity: an
  * app re-signs the host when it packages, so the release needs no Developer ID. Nothing is uploaded.
  */
@@ -52,9 +54,25 @@ const { values, positionals } = parseArgs({
 const [appArg, outArg] = positionals;
 if (!appArg || !outArg) {
   console.error(
-    'Usage: make-prebuilt.mjs <app> <out> [--base-url <url>] [--manifest <prebuilt.json>]',
+    'Usage: make-prebuilt.mjs <app> <out> [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>]',
   );
   process.exit(2);
+}
+const baseUrl = values['base-url'];
+if (values.manifest !== undefined || baseUrl !== undefined) {
+  /** @type {URL | null} */
+  let parsed = null;
+  try {
+    parsed = new URL(baseUrl ?? '');
+  } catch {}
+  if (!parsed || !['http:', 'https:'].includes(parsed.protocol)) {
+    console.error(
+      baseUrl === undefined
+        ? '--manifest needs --base-url, the absolute URL the release serves the archive from.'
+        : `--base-url takes the absolute http or https URL the release serves the archive from, not "${baseUrl}".`,
+    );
+    process.exit(2);
+  }
 }
 const app = path.resolve(appArg);
 const out = path.resolve(outArg);
@@ -81,20 +99,22 @@ const libraries = Object.fromEntries(
   }),
 );
 
-const build = run(
-  path.join(here, 'build.sh'),
-  [
-    reactNativeDir,
-    '--universal',
-    '--release',
-    ...Object.values(libraries).flatMap((dir) => ['--library', dir]),
-  ],
-  { stdio: ['inherit', 'pipe', 'inherit'], env: { ...process.env, NGN_DESKTOP_LINK: '' } },
-);
-const buildDir = build.stdout.trim().split('\n').pop() ?? '';
-
 const staging = mkdtempSync(path.join(tmpdir(), 'ngn-prebuilt-'));
 try {
+  const buildRoot = path.join(staging, 'build');
+  const build = run(
+    path.join(here, 'build.sh'),
+    [
+      reactNativeDir,
+      '--universal',
+      '--release',
+      ...Object.values(libraries).flatMap((dir) => ['--library', dir]),
+      '--build-dir',
+      buildRoot,
+    ],
+    { stdio: ['inherit', 'pipe', 'inherit'], env: { ...process.env, NGN_DESKTOP_LINK: '' } },
+  );
+  const buildDir = build.stdout.trim().split('\n').pop() ?? '';
   const appkit = path.join(staging, 'appkit');
   mkdirSync(appkit, { recursive: true });
   for (const name of ['ngn-macos', 'hermesc', 'Sparkle.framework']) {
@@ -124,7 +144,7 @@ try {
   const sha256 = createHash('sha256').update(readFileSync(archive)).digest('hex');
   const host = {
     reactNative,
-    url: `${(values['base-url'] ?? '').replace(/\/$/, '')}/${name}`,
+    url: `${(baseUrl ?? '').replace(/\/$/, '')}/${name}`,
     sha256,
     libraries: Object.fromEntries(
       Object.entries(libraries).map(([lib, dir]) => [lib, versionOf(dir)]),
