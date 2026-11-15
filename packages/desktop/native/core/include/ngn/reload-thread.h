@@ -75,6 +75,7 @@ class ReloadThread {
         finished = state->finished;
         then = std::move(state->then);
         state->then = nullptr;
+        state->joiner = std::this_thread::get_id();
       }
     }
     if (thread.joinable()) {
@@ -86,15 +87,21 @@ class ReloadThread {
       if (then) {
         then(true);
       }
+      std::lock_guard lock(state->mutex);
+      state->joiner = std::thread::id();
     }
     if (dropped && dropped->then) {
       dropped->then(false);
     }
-    // A `then` the UI queue is running on another thread (this close not called from it).
+    // A `then` the UI queue is running on another thread, or a run another close is still joining
+    // (this close not called from either).
     while (true) {
       {
         std::lock_guard lock(state->mutex);
-        if (state->thenThread == std::thread::id() || state->thenThread == std::this_thread::get_id()) {
+        auto self = std::this_thread::get_id();
+        bool thenDone = state->thenThread == std::thread::id() || state->thenThread == self;
+        bool joinDone = state->joiner == std::thread::id() || state->joiner == self;
+        if (thenDone && joinDone) {
           break;
         }
       }
@@ -122,6 +129,8 @@ class ReloadThread {
     bool closed{false};
     // The thread running a `then` from the UI queue, if one is.
     std::thread::id thenThread;
+    // The thread whose close is joining the run and running its `then`, if one is.
+    std::thread::id joiner;
   };
 
   // Under the state's lock.

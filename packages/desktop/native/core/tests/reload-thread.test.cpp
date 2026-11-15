@@ -275,3 +275,39 @@ TEST_CASE("a then that close runs can destroy the owner, and close touches nothi
   CHECK(reload == nullptr);
   ui.serve();
 }
+
+TEST_CASE("a second close while the first is joining waits for the run to end") {
+  UiQueue ui;
+  ngn::ReloadThread reload(ui.poster());
+  std::atomic<bool> release{false};
+  std::atomic<bool> workerDone{false};
+  std::atomic<bool> firstJoining{false};
+  reload.start(
+      [&] {
+        waitFor(release);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        workerDone = true;
+      },
+      [](bool) {});
+  std::thread first([&] {
+    reload.close([&] {
+      firstJoining = true;
+      ui.serve();
+    });
+  });
+  waitFor(firstJoining);
+  std::atomic<bool> secondReturned{false};
+  bool doneWhenSecondReturned = false;
+  std::thread second([&] {
+    reload.close([&] { ui.serve(); });
+    doneWhenSecondReturned = workerDone;
+    secondReturned = true;
+  });
+  // The second close must still be waiting: the run has not been let go.
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  CHECK_FALSE(secondReturned);
+  release = true;
+  first.join();
+  second.join();
+  CHECK(doneWhenSecondReturned);
+}
