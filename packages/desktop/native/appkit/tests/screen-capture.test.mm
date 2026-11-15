@@ -75,3 +75,33 @@ TEST_CASE("WindowShield, asked off the main thread, answers once the windows hav
   shield->setProtected(false, nullptr);
   CHECK(window.sharingType == NSWindowSharingReadOnly);
 }
+
+TEST_CASE("WindowShield applies each request's own state before answering it, the last one staying") {
+  NSWindow *window = offscreenWindow();
+  auto shield = ngn::appkit::captureShield();
+  struct Seen {
+    std::atomic<int> answered{0};
+    std::atomic<NSWindowSharingType> atProtect{NSWindowSharingReadOnly};
+    std::atomic<NSWindowSharingType> atAllow{NSWindowSharingNone};
+  };
+  auto seen = std::make_shared<Seen>();
+  // Both asked before the main thread applies either.
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    shield->setProtected(true, [window, seen] {
+      seen->atProtect = window.sharingType;
+      seen->answered++;
+    });
+    shield->setProtected(false, [window, seen] {
+      seen->atAllow = window.sharingType;
+      seen->answered++;
+    });
+  });
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:5];
+  while (seen->answered < 2 && [until timeIntervalSinceNow] > 0) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, false);
+  }
+  REQUIRE(seen->answered == 2);
+  CHECK(seen->atProtect == NSWindowSharingNone);
+  CHECK(seen->atAllow == NSWindowSharingReadOnly);
+  CHECK(window.sharingType == NSWindowSharingReadOnly);
+}

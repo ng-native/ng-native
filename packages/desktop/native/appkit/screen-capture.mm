@@ -10,16 +10,18 @@ namespace {
 
 std::atomic<bool> gProtected{false};
 
-void apply(NSWindow *window) {
-  NSWindowSharingType wanted = gProtected ? NSWindowSharingNone : NSWindowSharingReadOnly;
+// `gProtected` is the state the latest request asked for; each request applies its own, in order
+// on the main thread, so the last one asked is the one the windows keep.
+void apply(NSWindow *window, bool on) {
+  NSWindowSharingType wanted = on ? NSWindowSharingNone : NSWindowSharingReadOnly;
   if (window.sharingType != wanted) {
     window.sharingType = wanted;
   }
 }
 
-void applyToAll() {
+void applyToAll(bool on) {
   for (NSWindow *window in NSApp.windows) {
-    apply(window);
+    apply(window, on);
   }
 }
 
@@ -34,7 +36,7 @@ class WindowShield final : public CaptureShield {
                                                        queue:nil
                                                   usingBlock:^(NSNotification *note) {
                                                     if (gProtected) {
-                                                      apply(note.object);
+                                                      apply(note.object, true);
                                                     }
                                                   }];
     }
@@ -44,7 +46,7 @@ class WindowShield final : public CaptureShield {
     gProtected = on;
     auto finish = std::make_shared<std::function<void()>>(std::move(done));
     auto apply = ^{
-      applyToAll();
+      applyToAll(on);
       if (*finish) {
         (*finish)();
       }
@@ -67,7 +69,7 @@ std::shared_ptr<CaptureShield> captureShield() {
 
 void shieldNewWindow(NSWindow *window) {
   if (gProtected) {
-    apply(window);
+    apply(window, true);
   }
 }
 
