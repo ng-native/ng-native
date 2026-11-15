@@ -92,7 +92,7 @@ class LAAuthenticator final : public Authenticator {
     }
     {
       std::lock_guard lock(mutex_);
-      current_ = context;
+      [pending_ addObject:context];
     }
     auto policy = request.biometricsOnly ? LAPolicyDeviceOwnerAuthenticationWithBiometrics : LAPolicyDeviceOwnerAuthentication;
     [context evaluatePolicy:policy
@@ -100,27 +100,28 @@ class LAAuthenticator final : public Authenticator {
                       reply:^(BOOL success, NSError *error) {
                         {
                           std::lock_guard lock(mutex_);
-                          if (current_ == context) {
-                            current_ = nil;
-                          }
+                          [pending_ removeObject:context];
                         }
                         done(success ? std::nullopt : std::optional(failureOf(error)));
                       }];
   }
 
+  // Every evaluation still running, an earlier one a second authenticateAsync overlapped too.
   void cancel() override {
-    LAContext *context;
+    NSArray<LAContext *> *contexts;
     {
       std::lock_guard lock(mutex_);
-      context = current_;
+      contexts = pending_.allObjects;
     }
-    [context invalidate];
+    for (LAContext *context in contexts) {
+      [context invalidate];
+    }
   }
 
  private:
   bool noPrompts_;
   std::mutex mutex_;
-  LAContext *current_{nil};
+  NSMutableSet<LAContext *> *pending_ = [NSMutableSet set];
 };
 
 } // namespace
