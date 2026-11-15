@@ -47,6 +47,8 @@ void callback(ConstFSEventStreamRef, void *info, size_t count, void *paths, cons
         .removed = (flags[i] & kFSEventStreamEventFlagItemRemoved) != 0,
         .renamed = (flags[i] & kFSEventStreamEventFlagItemRenamed) != 0,
         .modified = (flags[i] & (kFSEventStreamEventFlagItemModified | kFSEventStreamEventFlagItemInodeMetaMod)) != 0,
+        // Set too when FSEvents or the kernel dropped events.
+        .rescan = (flags[i] & kFSEventStreamEventFlagMustScanSubDirs) != 0,
     });
   }
   stream->events(std::move(batch));
@@ -69,8 +71,15 @@ class FSEventsWatcher final : public FileWatcher {
     stream->stream = FSEventStreamCreate(
         nullptr, callback, &context, paths, kFSEventStreamEventIdSinceNow, 0.1,
         kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot);
+    if (stream->stream == nullptr) {
+      return 0;
+    }
     FSEventStreamSetDispatchQueue(stream->stream, stream->queue);
-    FSEventStreamStart(stream->stream);
+    if (!FSEventStreamStart(stream->stream)) {
+      FSEventStreamInvalidate(stream->stream);
+      FSEventStreamRelease(stream->stream);
+      return 0;
+    }
     std::lock_guard lock(mutex_);
     int handle = ++next_;
     streams_[handle] = std::move(stream);

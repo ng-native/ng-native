@@ -79,7 +79,12 @@ struct FakeWatcher final : ngn::FileWatcher {
   int next{0};
   // A batch sent from inside start, before the watch's id is answered.
   std::vector<Event> early;
+  // The OS would not start the watch.
+  bool refuse{false};
   int start(const std::string &path, std::function<void(std::vector<Event>)> events) override {
+    if (refuse) {
+      return 0;
+    }
     if (!early.empty()) {
       events(std::exchange(early, {}));
     }
@@ -925,6 +930,41 @@ TEST_CASE("a watch keeps its pick open until it stops, and a refused start opens
   bookmarks->refuse = true;
   auto use = access->use(picked + "/x");
   CHECK_FALSE(use.started());
+}
+
+TEST_CASE("FileChanges lists the folder again when the OS dropped events, and reports what came and went") {
+  TempDir dir;
+  write(dir.path / "kept.txt", "");
+  write(dir.path / "gone.txt", "");
+  auto exists = [](const std::string &p) { return fs::exists(p); };
+  auto at = [&](const char *name) { return (dir.path / name).string(); };
+  using E = ngn::FileWatcher::Event;
+  ngn::FileChanges tracker(dir.path.string(), exists);
+  fs::remove(dir.path / "gone.txt");
+  write(dir.path / "missed.txt", "");
+  auto rescanned = tracker.changes({E{.path = dir.path.string(), .rescan = true}}, exists);
+  CHECK(rescanned == dynamic::array(dynamic::object("type", "deleted")("uri", ngn::fileUri(at("gone.txt"))),
+                                    dynamic::object("type", "created")("uri", ngn::fileUri(at("missed.txt")))));
+  // Seen now: another rescan finds nothing new, and a later write is a modification.
+  CHECK(tracker.changes({E{.path = dir.path.string(), .rescan = true}}, exists).empty());
+  CHECK(tracker.changes({E{.path = at("missed.txt"), .modified = true}}, exists) ==
+        dynamic::array(dynamic::object("type", "modified")("uri", ngn::fileUri(at("missed.txt")))));
+}
+
+TEST_CASE("a watch the OS would not start is no watch, and holds nothing open") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto picked = (dir.path / "outside").string();
+  Saved saved;
+  auto bookmarks = std::make_shared<FakeBookmarks>();
+  auto access = std::make_shared<ngn::FileAccess>(folders, dynamic::array());
+  access->keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+  access->allowPicked(picked);
+  auto watcher = std::make_shared<FakeWatcher>();
+  watcher->refuse = true;
+  auto module = ngn::makeFileSystemModule(access, watcher);
+  CHECK(module->call("watch", dynamic::array(ngn::fileUri(picked))) == dynamic(nullptr));
+  CHECK(bookmarks->opened() == 0);
 }
 
 TEST_CASE("a web view page read with its folder holds the folder's pick open, not only its own") {
