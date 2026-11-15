@@ -253,6 +253,11 @@ TEST_CASE("Sqlite refuses SQL that opens a file outside the files the app may wr
   CHECK_THROWS(module->call("execSync", dynamic::array(db, "VACUUM INTO '" + copy + "'")));
   CHECK_FALSE(fs::exists(there));
   CHECK_FALSE(fs::exists(copy));
+  // A file name the authorizer cannot read before it runs, bound or built: refused too.
+  CHECK_THROWS(module->call("runSync", dynamic::array(db, "ATTACH DATABASE $file AS bound", dynamic::object("$file", there))));
+  CHECK_THROWS(module->call("runSync", dynamic::array(db, "ATTACH DATABASE ? AS numbered", dynamic::array(there))));
+  CHECK_THROWS(module->call("execSync", dynamic::array(db, "ATTACH DATABASE '" + there + "' || '' AS built")));
+  CHECK_FALSE(fs::exists(there));
   // An in-memory database opens files the same way.
   auto memory = open(*module, ":memory:");
   CHECK_THROWS(module->call("execSync", dynamic::array(memory, "ATTACH DATABASE '" + there + "' AS there")));
