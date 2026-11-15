@@ -40,14 +40,20 @@ class WindowShield final : public CaptureShield {
     }
   }
 
-  void setProtected(bool on) override {
+  void setProtected(bool on, std::function<void()> done) override {
     gProtected = on;
-    if (NSThread.isMainThread) {
+    auto finish = std::make_shared<std::function<void()>>(std::move(done));
+    auto apply = ^{
       applyToAll();
+      if (*finish) {
+        (*finish)();
+      }
+    };
+    // Off the main thread, applied there without blocking this thread on it.
+    if (NSThread.isMainThread) {
+      apply();
     } else {
-      dispatch_async(dispatch_get_main_queue(), ^{
-        applyToAll();
-      });
+      dispatch_async(dispatch_get_main_queue(), apply);
     }
   }
 };

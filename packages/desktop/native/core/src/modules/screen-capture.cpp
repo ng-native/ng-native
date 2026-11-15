@@ -22,16 +22,18 @@ std::shared_ptr<NativeModule> makeScreenCaptureModule(std::shared_ptr<CaptureShi
       };
       promise("isAvailableAsync", [guard](const folly::dynamic &, JsPromise promise) { promise.resolve(guard != nullptr); });
       promise("preventScreenCaptureAsync", [state, guard, keyOf](const folly::dynamic &args, JsPromise promise) {
-        bool first = false;
         {
           std::lock_guard lock(state->mutex);
-          first = state->held.empty();
           state->held.insert(keyOf(args));
         }
-        if (first && guard) {
-          guard->setProtected(true);
+        if (!guard) {
+          promise.resolve(nullptr);
+          return;
         }
-        promise.resolve(nullptr);
+        // Asked again for every key, so a key taken while the first is still being applied
+        // resolves no sooner than it; the shield changes nothing for a state it already has.
+        auto answer = std::make_shared<JsPromise>(std::move(promise));
+        guard->setProtected(true, [answer] { answer->resolve(nullptr); });
       });
       promise("allowScreenCaptureAsync", [state, guard, keyOf](const folly::dynamic &args, JsPromise promise) {
         bool last = false;
@@ -39,10 +41,12 @@ std::shared_ptr<NativeModule> makeScreenCaptureModule(std::shared_ptr<CaptureShi
           std::lock_guard lock(state->mutex);
           last = state->held.erase(keyOf(args)) > 0 && state->held.empty();
         }
-        if (last && guard) {
-          guard->setProtected(false);
+        if (!last || !guard) {
+          promise.resolve(nullptr);
+          return;
         }
-        promise.resolve(nullptr);
+        auto answer = std::make_shared<JsPromise>(std::move(promise));
+        guard->setProtected(false, [answer] { answer->resolve(nullptr); });
       });
       auto none = [](const folly::dynamic &, JsPromise promise) { promise.resolve(nullptr); };
       promise("enableAppSwitcherProtectionAsync", none);
@@ -57,7 +61,7 @@ std::shared_ptr<NativeModule> makeScreenCaptureModule(std::shared_ptr<CaptureShi
     ~ScreenCapture() override {
       std::lock_guard lock(keys->mutex);
       if (!keys->held.empty() && shield) {
-        shield->setProtected(false);
+        shield->setProtected(false, nullptr);
       }
     }
   };
