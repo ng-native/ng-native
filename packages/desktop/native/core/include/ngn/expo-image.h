@@ -104,6 +104,33 @@ ImageTransition imageTransition(const folly::dynamic &transition);
 // never shows the last item's image while its own loads: a key changed from one that was set.
 bool recyclingKeyClears(const std::string &before, const std::string &after);
 
+// Which of an image view's loads is current. A new source, no source, or a recycled view
+// supersedes the load running, whose late answer then shows nothing. Main thread.
+class ImageLoads {
+ public:
+  // The source that fits the view now: the turn of the load it needs when it changed, the turn
+  // that shows nothing when it went away.
+  std::optional<uint64_t> fit(const std::optional<ImageSourceRef> &source) {
+    if (source == source_) {
+      return std::nullopt;
+    }
+    source_ = source;
+    return ++turn_;
+  }
+  // The view was recycled: the same source loads again, and the load running shows nothing.
+  void recycle() {
+    source_.reset();
+    ++turn_;
+  }
+  bool current(uint64_t turn) const {
+    return turn == turn_;
+  }
+
+ private:
+  std::optional<ImageSourceRef> source_;
+  uint64_t turn_{0};
+};
+
 struct DecodedPixels {
   int width{0};
   int height{0};
