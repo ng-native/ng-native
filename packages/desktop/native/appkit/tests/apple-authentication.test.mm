@@ -7,6 +7,8 @@
 
 #import <AuthenticationServices/AuthenticationServices.h>
 
+#include <memory>
+#include <mutex>
 #include <optional>
 
 using Provider = ngn::AppleIdProvider;
@@ -47,9 +49,22 @@ TEST_CASE("A request with no window to show the sheet on fails as iOS's does, an
 
 TEST_CASE("An unknown user's credential is not found") {
   auto provider = ngn::appkit::makeAppleIdProvider();
-  std::optional<Provider::CredentialState> state;
-  provider->credentialState("000000.ngn-test-unknown-user.0000", [&](Provider::CredentialState answer) { state = answer; });
-  turnUntil([&] { return state.has_value(); });
+  // The answer can come on any thread, and after a timeout: it lands in shared, locked storage.
+  struct Answer {
+    std::mutex lock;
+    std::optional<Provider::CredentialState> state;
+  };
+  auto answer = std::make_shared<Answer>();
+  auto read = [answer] {
+    std::lock_guard<std::mutex> hold(answer->lock);
+    return answer->state;
+  };
+  provider->credentialState("000000.ngn-test-unknown-user.0000", [answer](Provider::CredentialState state) {
+    std::lock_guard<std::mutex> hold(answer->lock);
+    answer->state = state;
+  });
+  turnUntil([&] { return read().has_value(); });
+  auto state = read();
   REQUIRE(state);
   CHECK(*state == Provider::CredentialState::NotFound);
 }
@@ -61,7 +76,13 @@ TEST_CASE("A name is formatted by the system's formatter in the style asked") {
   CHECK(full.find("Ada") != std::string::npos);
   CHECK(full.find("Lovelace") != std::string::npos);
   CHECK(provider->formatName(ada, "abbreviated") == "AL");
-  CHECK(provider->formatName(ada, "short").find("Lovelace") == std::string::npos);
+  // Short follows the user's short-name settings, so it is compared with the system's own.
+  NSPersonNameComponents *components = [NSPersonNameComponents new];
+  components.givenName = @"Ada";
+  components.familyName = @"Lovelace";
+  NSPersonNameComponentsFormatter *formatter = [NSPersonNameComponentsFormatter new];
+  formatter.style = NSPersonNameComponentsFormatterStyleShort;
+  CHECK(provider->formatName(ada, "short") == std::string([formatter stringFromPersonNameComponents:components].UTF8String));
   CHECK(provider->formatName({}, "default").empty());
 }
 
