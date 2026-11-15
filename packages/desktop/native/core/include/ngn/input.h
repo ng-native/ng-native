@@ -48,6 +48,14 @@ struct WheelDelta {
   bool naturalScrolling{true};
 };
 
+// What became of a wheel turn (InputSink::wheel).
+struct WheelResult {
+  // A view listening for it (`onWheel`) heard it.
+  bool heard{false};
+  // A gesture handler took it, so the toolkit leaves the view under it unscrolled.
+  bool taken{false};
+};
+
 // A file dragged onto a view: its `file://` url and its name.
 struct DroppedFile {
   std::string uri;
@@ -85,8 +93,9 @@ class InputSink {
   // A secondary click (or Control-click). True when a view took it, so the toolkit shows no menu
   // of its own.
   virtual bool contextMenu(const PointerInput &input) = 0;
-  // A wheel turn over the container. It still scrolls what it is over; true when a view heard it.
-  virtual bool wheel(const PointerInput &input, const WheelDelta &delta) = 0;
+  // A wheel turn over the container: whether a view heard it, and whether a gesture handler took
+  // it. One taken is not the view's to scroll as well; any other still scrolls what it is over.
+  virtual WheelResult wheel(const PointerInput &input, const WheelDelta &delta) = 0;
   // A drag over the container, as it enters and each time it moves. True when a view under it
   // takes drops, so the toolkit shows a copy; false and it shows none.
   virtual bool dragOver(const PointerInput &input, const DragItems &items) = 0;

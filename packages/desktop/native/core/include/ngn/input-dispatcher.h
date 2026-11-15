@@ -83,7 +83,7 @@ class InputDispatcher : public InputSink {
   void pointerUp(const PointerInput &input) override;
   void pointerLeave(SurfaceId surfaceId, const PointerInput &input) override;
   bool contextMenu(const PointerInput &input) override;
-  bool wheel(const PointerInput &input, const WheelDelta &delta) override;
+  WheelResult wheel(const PointerInput &input, const WheelDelta &delta) override;
   bool dragOver(const PointerInput &input, const DragItems &items) override;
   void dragExit(ContainerId container) override;
   bool drop(const PointerInput &input, const DragItems &items) override;
@@ -172,12 +172,17 @@ class InputDispatcher : public InputSink {
   GesturePointer gesturePointer(const Container &container, const PointerInput &input) const;
   // A gesture took the press: JavaScript's touch is cancelled.
   void claimPress();
+  // The gestures lose the press (a drag out took it, or its container went): its handlers are
+  // cancelled and see no more of it.
+  void cancelGesturePress();
 
   const ViewTree &tree_;
   Gestures *gestures_{nullptr};
   std::optional<PointerInput> lastInput_;
-  // The press the gestures saw, which they keep after one of them takes it from JavaScript.
-  bool gesturePressed_{false};
+  // The container of the press the gestures saw, which they keep after one of them takes it from
+  // JavaScript, and its button as the gestures name it (0 primary, 1 middle, 2 secondary).
+  std::optional<ContainerId> gesturePress_;
+  int gestureButton_{0};
   std::map<ContainerId, Container> containers_;
   std::map<SurfaceId, std::vector<Tag>> hovered_;
   std::optional<Press> press_;

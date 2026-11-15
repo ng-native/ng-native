@@ -303,11 +303,11 @@ TEST_CASE("a wheel turn goes to a view that opts in, with its deltas") {
   Fixture f;
   setProps(f.tree, 4, desktopView(folly::dynamic::object("onWheel", true)));
 
-  CHECK(f.input.wheel(Fixture::at({120, 120}), {.x = 0, .y = -12.5, .z = 0, .mode = 0}));
+  CHECK(f.input.wheel(Fixture::at({120, 120}), {.x = 0, .y = -12.5, .z = 0, .mode = 0}).heard);
   CHECK(f.input.events == Events{R"(wheel 4 {"deltaMode":0,"deltaX":0,"deltaY":-12.5,"deltaZ":0})"});
 
   f.input.events.clear();
-  CHECK_FALSE(f.input.wheel(Fixture::at({35, 35}), {.y = 3}));
+  CHECK_FALSE(f.input.wheel(Fixture::at({35, 35}), {.y = 3}).heard);
   CHECK(f.input.events.empty());
 }
 
@@ -615,4 +615,103 @@ TEST_CASE("a transformed view is pressed where it is drawn, and reports its own 
   CHECK(only(f.input.events, "touch").back() == "touch move 4 page 110,100 offset 70,50 touches 1");
   REQUIRE_FALSE(f.input.pointerEvents.empty());
   CHECK(f.input.pointerEvents.back().offsetPoint.x == doctest::Approx(70));
+}
+
+namespace {
+
+// A gesture fixture over the input fixture: handler events as "tag state".
+struct WithGestures : Fixture {
+  ngn::Gestures gestures{tree, nullptr};
+  std::vector<std::string> sent;
+  WithGestures() {
+    input.setGestures(&gestures);
+    gestures.onDeviceEvent = [this](const folly::dynamic &body) {
+      sent.push_back(std::to_string(body["handlerTag"].asInt()) + " " + std::to_string(body["state"].asInt()));
+    };
+  }
+};
+
+} // namespace
+
+TEST_CASE("dragging a view out cancels the gesture handlers the press began, which see none of the drag") {
+  ngn::testing::ViewFileAccess files(ngn::testing::readsEverywhere());
+  WithGestures f;
+  setProps(
+      f.tree, 2,
+      desktopView(folly::dynamic::object(
+          "dragItem", folly::dynamic::object("files", folly::dynamic::array("file:///tmp/a.md"))("text", nullptr)("url", nullptr))));
+  f.input.onDragOut = [](Tag, const ngn::PointerInput &, const ngn::DragOutItem &) {};
+  f.gestures.create("TapGestureHandler", 1, folly::dynamic::object());
+  f.gestures.attach(1, 2, ngn::GestureAction::JsFunctionNewApi);
+  f.input.pointerDown(Fixture::at({35, 35}));
+  CHECK(f.sent == std::vector<std::string>{"1 2"});
+  f.input.pointerMove(Fixture::at({45, 35}));
+  // Cancelled as the drag starts: the tap never recognises the release.
+  CHECK(f.sent == std::vector<std::string>{"1 2", "1 3"});
+  f.input.pointerMove(Fixture::at({46, 35}));
+  f.input.pointerUp(Fixture::at({46, 35}));
+  CHECK(f.sent == std::vector<std::string>{"1 2", "1 3"});
+}
+
+TEST_CASE("a gesture handler hears the mouse button that was pressed") {
+  WithGestures f;
+  // RNGH's MouseButton.RIGHT.
+  f.gestures.create("TapGestureHandler", 1, folly::dynamic::object("mouseButton", 2));
+  f.gestures.attach(1, 2, ngn::GestureAction::JsFunctionNewApi);
+  auto left = Fixture::at({35, 35});
+  left.buttons = 1;
+  f.input.pointerDown(left);
+  left.buttons = 0;
+  f.input.pointerUp(left);
+  CHECK(f.sent.empty());
+  auto right = Fixture::at({35, 35});
+  right.buttons = 2;
+  f.input.pointerDown(right);
+  right.buttons = 0;
+  f.input.pointerUp(right);
+  // Began, active and ended: the right click is the tap's.
+  REQUIRE_FALSE(f.sent.empty());
+  CHECK(f.sent.front() == "1 2");
+  CHECK(f.sent.back() == "1 5");
+}
+
+TEST_CASE("removing a container cancels the press and the gesture handlers in it") {
+  WithGestures f;
+  f.tree.addContainerRoot(5);
+  f.input.addContainer(7, 1, 5);
+  f.gestures.create("TapGestureHandler", 1, folly::dynamic::object());
+  f.gestures.attach(1, 6, ngn::GestureAction::JsFunctionNewApi);
+  f.input.pointerDown(Fixture::at({15, 15}, 7));
+  CHECK(f.sent == std::vector<std::string>{"1 2"});
+  f.input.events.clear();
+  // The popover closes under the press.
+  f.input.removeContainer(7);
+  CHECK(only(f.input.events, "touch") == Events{"touch cancel 6 page 215,15 offset 5,5 touches 0"});
+  CHECK(f.sent == std::vector<std::string>{"1 2", "1 3"});
+  f.input.pointerUp(Fixture::at({15, 15}, 7));
+  CHECK(f.sent == std::vector<std::string>{"1 2", "1 3"});
+}
+
+TEST_CASE("a press that moves into a popover reports where the pointer is in the surface") {
+  Fixture f;
+  f.tree.addContainerRoot(5);
+  f.input.addContainer(7, 1, 5);
+  f.input.pointerDown(Fixture::at({35, 35}));
+  f.input.pointerMove(Fixture::at({15, 15}, 7));
+  // The popover's 15,15 is the surface's 215,15, and 185,-15 from 3, which is at 30,30.
+  CHECK(only(f.input.events, "touch move") == Events{"touch move 3 page 215,15 offset 185,-15 touches 1"});
+}
+
+TEST_CASE("a wheel turn a gesture handler takes is not the view's to scroll") {
+  WithGestures f;
+  f.gestures.create("PanGestureHandler", 1, folly::dynamic::object("enableTrackpadTwoFingerGesture", true));
+  f.gestures.attach(1, 2, ngn::GestureAction::JsFunctionNewApi);
+  auto at = Fixture::at({35, 35});
+  CHECK_FALSE(f.input.wheel(at, {.phase = ngn::GesturePhase::Began}).taken);
+  at.timestamp = 0.016;
+  CHECK(f.input.wheel(at, {.x = -12, .phase = ngn::GesturePhase::Changed}).taken);
+  at.timestamp = 0.032;
+  f.input.wheel(at, {.phase = ngn::GesturePhase::Ended});
+  // No handler wants it over 4: the view scrolls.
+  CHECK_FALSE(f.input.wheel(Fixture::at({120, 120}), {.y = 3}).taken);
 }
