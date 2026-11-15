@@ -96,6 +96,9 @@ struct Folder {
 TEST_CASE("cameraMount asks only when it can, starts only with the camera allowed and present, and says why not") {
   CHECK(ngn::cameraMount(Access::NotDetermined, true, false) == ngn::CameraMount::Ask);
   CHECK(ngn::cameraMount(Access::NotDetermined, true, true) == ngn::CameraMount::NotPermitted);
+  // Still undetermined after asking (no usage string, so no prompt): not asked again.
+  CHECK(ngn::cameraMount(Access::NotDetermined, true, false, true) == ngn::CameraMount::NotPermitted);
+  CHECK(ngn::cameraMount(Access::Granted, true, false, true) == ngn::CameraMount::Start);
   CHECK(ngn::cameraMount(Access::Denied, true, false) == ngn::CameraMount::NotPermitted);
   CHECK(ngn::cameraMount(Access::Restricted, true, false) == ngn::CameraMount::NotPermitted);
   CHECK(ngn::cameraMount(Access::Granted, true, false) == ngn::CameraMount::Start);

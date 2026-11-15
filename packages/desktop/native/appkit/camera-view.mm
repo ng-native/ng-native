@@ -12,7 +12,12 @@ bool gNoPrompts = false;
   std::shared_ptr<ngn::appkit::SessionCapture> _capture;
   AVCaptureVideoPreviewLayer *_preview;
   bool _asking;
+  // Asked once: a request that left the permission undetermined is not repeated (cameraMount).
+  bool _asked;
   bool _reported;
+  // Which start a running callback belongs to: a stop moves it on, so an earlier capture's late
+  // callback never reports a later one ready.
+  uint64_t _start;
 }
 
 + (void)useHardware:(std::shared_ptr<ngn::CameraHardware>)hardware views:(std::shared_ptr<ngn::CameraViews>)views noPrompts:(bool)noPrompts {
@@ -59,9 +64,10 @@ bool gNoPrompts = false;
   if (_capture || _asking) {
     return;
   }
-  auto mount = ngn::cameraMount(gHardware->access(), gHardware->hasCamera(), gNoPrompts);
+  auto mount = ngn::cameraMount(gHardware->access(), gHardware->hasCamera(), gNoPrompts, _asked);
   if (mount == ngn::CameraMount::Ask) {
     _asking = true;
+    _asked = true;
     __weak NGNCameraView *weakSelf = self;
     gHardware->requestAccess([weakSelf](ngn::CameraHardware::Access) {
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -80,9 +86,10 @@ bool gNoPrompts = false;
   }
   std::string error;
   __weak NGNCameraView *weakSelf = self;
-  auto ready = [weakSelf] {
+  uint64_t start = ++_start;
+  auto ready = [weakSelf, start] {
     NGNCameraView *view = weakSelf;
-    if (view != nil && view->_capture) {
+    if (view != nil && view->_capture && view->_start == start) {
       [view send:"cameraReady" payload:folly::dynamic::object()];
     }
   };
@@ -108,6 +115,7 @@ bool gNoPrompts = false;
 }
 
 - (void)stopCamera {
+  _start++;
   if (gViews) {
     gViews->detach(static_cast<int>(self.reactTag));
   }
