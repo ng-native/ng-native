@@ -19,8 +19,10 @@ TEST_CASE("NetworkPathMonitor reports this Mac's path, and stops") {
       dispatch_semaphore_signal(reported);
     }
   });
-  REQUIRE(dispatch_semaphore_wait(reported, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0);
+  // Stopped before any assertion, so no change can reach the locals after the test leaves.
+  bool answered = dispatch_semaphore_wait(reported, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0;
   stop();
+  REQUIRE(answered);
   int after = reports;
   // A satisfied path uses an interface; an unsatisfied one is NONE whatever it lists.
   if (path.satisfied) {
@@ -29,4 +31,27 @@ TEST_CASE("NetworkPathMonitor reports this Mac's path, and stops") {
   CHECK(ngn::networkStateOf(path)["isConnected"] == folly::dynamic(path.satisfied));
   usleep(100 * 1000);
   CHECK(reports == after);
+}
+
+TEST_CASE("NetworkPathMonitor stops from inside its own change without waiting for itself") {
+  auto monitor = ngn::appkit::makePathMonitor();
+  auto stop = std::make_shared<std::function<void()>>();
+  auto state = std::make_shared<std::pair<std::atomic<int>, dispatch_semaphore_t>>();
+  state->second = dispatch_semaphore_create(0);
+  dispatch_semaphore_t ready = dispatch_semaphore_create(0);
+  *stop = monitor->watch([stop, state, ready](const ngn::NetworkPath &) {
+    if (state->first++ == 0) {
+      dispatch_semaphore_wait(ready, DISPATCH_TIME_FOREVER);
+      (*stop)();
+      dispatch_semaphore_signal(state->second);
+    }
+  });
+  dispatch_semaphore_signal(ready);
+  bool returned = dispatch_semaphore_wait(state->second, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0;
+  // A second stop, from here, returns at once.
+  (*stop)();
+  REQUIRE(returned);
+  usleep(100 * 1000);
+  CHECK(state->first == 1);
+  *stop = nullptr;
 }
