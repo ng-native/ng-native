@@ -1167,7 +1167,20 @@ void GestureHandler::after(double ms, std::function<void()> fn) {
   if (!owner_.schedule()) {
     return;
   }
-  cancelTimer_ = owner_.schedule()(ms, std::move(fn));
+  cancelTimer_ = owner_.schedule()(
+      ms, [owner = &owner_, due = owner_.now() + ms, fn = std::move(fn)] { owner->runScheduled(due, fn); });
+}
+
+bool GestureHandler::leaveBounds() {
+  if (!shouldCancelWhenOutside_) {
+    return false;
+  }
+  if (state_ == GestureState::Active) {
+    cancel();
+  } else if (state_ == GestureState::Began) {
+    fail();
+  }
+  return true;
 }
 
 void GestureHandler::clearTimer() {
@@ -1398,7 +1411,11 @@ void Gestures::pointerMove(const GesturePointer &pointer) {
   now_ = pointer.time;
   for (int tag : std::vector<int>(pressed_)) {
     if (auto *handler = find(tag)) {
-      handler->pointerMove(pointer, inBounds(*handler, pointer.page));
+      bool inside = inBounds(*handler, pointer.page);
+      if (!inside && handler->leaveBounds()) {
+        continue;
+      }
+      handler->pointerMove(pointer, inside);
     }
   }
   settle();
@@ -1409,9 +1426,19 @@ void Gestures::pointerUp(const GesturePointer &pointer) {
   auto pressed = std::exchange(pressed_, {});
   for (int tag : pressed) {
     if (auto *handler = find(tag)) {
+      // A release outside is no tap: the handler leaves first, with no move to have done it.
+      if (!inBounds(*handler, pointer.page)) {
+        handler->leaveBounds();
+      }
       handler->pointerUp(pointer);
     }
   }
+  settle();
+}
+
+void Gestures::runScheduled(double due, const std::function<void()> &fn) {
+  now_ = std::max(now_, due);
+  fn();
   settle();
 }
 
@@ -1458,8 +1485,9 @@ bool Gestures::scroll(
     std::optional<GesturePhase> phase) {
   surface_ = surface;
   now_ = pointer.time;
-  // The handlers a scroll begins on keep it until it ends, wherever the pointer goes.
-  if (phase == GesturePhase::Began || scrolling_.empty()) {
+  // The handlers a scroll begins on keep it until it ends, wherever the pointer goes. A wheel's
+  // turns have no phases, and go to the handlers under the pointer at each.
+  if (!phase || phase == GesturePhase::Began || scrolling_.empty()) {
     scrolling_.clear();
     for (auto *handler : handlersOn(chain)) {
       if (handler->wantsScroll()) {
