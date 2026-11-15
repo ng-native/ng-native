@@ -263,3 +263,25 @@ TEST_CASE("a tab's title and badge reach the sidebar") {
   f.mount({ShadowViewMutation::UpdateMutation(tab(4, "search", "Search"), renamed, 1)});
   CHECK(f.calls() == Lines{"lists of 2: [2: 3 Library <books.vertical> *, 4 Find (2), 5 Locked]"});
 }
+
+TEST_CASE("the selected tab taken away selects the tab shown in its place, as UIKit reconciles it") {
+  Fixture f;
+  f.mount(tabsApp());
+  // Library, shown without a request, goes: search shows, and the app hears the change as implicit.
+  f.mount({ShadowViewMutation::RemoveMutation(2, tab(3, "library", "Library"), 0),
+           ShadowViewMutation::DeleteMutation(tab(3, "library", "Library"))});
+  REQUIRE_FALSE(f.events.empty());
+  CHECK(f.events[0] ==
+        R"(tabSelected 2 {"actionOrigin":"implicit","hasTriggeredSpecialEffect":false,"isRepeated":false,"provenance":1,"selectedScreenKey":"search"})");
+  CHECK(f.calls() == Lines{"uncover 4", "lists of 2: [2: 4 Search *, 5 Locked]"});
+
+  // A prevented click names the tab shown.
+  f.choose(5);
+  CHECK(f.events == Lines{R"(tabSelectionPrevented 2 {"preventedScreenKey":"locked","provenance":1,"selectedScreenKey":"search"})"});
+
+  // Library back again stays behind search: nothing asked for it.
+  auto library = tab(3, "library", "Library");
+  f.mount({ShadowViewMutation::CreateMutation(library), ShadowViewMutation::InsertMutation(2, library, 0)});
+  CHECK(f.events.empty());
+  CHECK(f.calls() == Lines{"cover 3", "lists of 2: [2: 3 Library <books.vertical>, 4 Search *, 5 Locked]"});
+}

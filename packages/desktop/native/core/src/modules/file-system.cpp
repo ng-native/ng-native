@@ -4,6 +4,7 @@
 
 #include <folly/json.h>
 
+#include <fcntl.h>
 #include <sys/stat.h>
 
 #include <unistd.h>
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -42,14 +44,30 @@ bool replaceFile(const std::string &path, const std::string &bytes) {
   static std::atomic<unsigned> written{0};
   auto partial = path + ".part-" + std::to_string(::getpid()) + "-" + std::to_string(++written);
   std::error_code ignored;
-  {
-    std::ofstream out(partial, std::ios::binary | std::ios::trunc);
-    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    out.close();
-    if (!out) {
-      fs::remove(partial, ignored);
-      return false;
+  // Created here or not at all: an entry already at the name, a link to another file included,
+  // is never opened, so nothing is written through it and the failure removes nothing.
+  int fd = ::open(partial.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
+  if (fd < 0) {
+    return false;
+  }
+  bool whole = true;
+  for (size_t offset = 0; offset < bytes.size();) {
+    auto n = ::write(fd, bytes.data() + offset, bytes.size() - offset);
+    if (n < 0 && errno == EINTR) {
+      continue;
     }
+    if (n <= 0) {
+      whole = false;
+      break;
+    }
+    offset += static_cast<size_t>(n);
+  }
+  if (::close(fd) != 0) {
+    whole = false;
+  }
+  if (!whole) {
+    fs::remove(partial, ignored);
+    return false;
   }
   std::error_code error;
   fs::rename(partial, path, error);
@@ -522,6 +540,14 @@ void copyWithin(const FileAccess &access, const std::string &from, const std::st
   if (!fs::is_directory(from) && fs::is_directory(to)) {
     target /= fs::path(from).filename();
   }
+  // A folder copied into itself would list each copy it makes, nesting until a path is too long.
+  if (fs::is_directory(from)) {
+    auto source = fs::weakly_canonical(from);
+    auto destination = fs::weakly_canonical(target);
+    if (std::mismatch(source.begin(), source.end(), destination.begin(), destination.end()).first == source.end()) {
+      throw FileError(from + " cannot be copied into itself");
+    }
+  }
   copyEntry(access, from, target, true);
 }
 
@@ -559,6 +585,14 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         auto normal = fs::path(*path).lexically_normal().string();
         if (normal.size() > 1 && normal.ends_with('/')) {
           normal.pop_back();
+        }
+        // And the path handed on is the one the OS would use: a `..` after a symbolic link climbs
+        // out of where the link leads, not out of the link, so a path where the two differ is
+        // refused rather than acted on as another file.
+        auto parts = fs::path(*path);
+        if (std::find(parts.begin(), parts.end(), "..") != parts.end() && resolved(*path) != resolved(normal)) {
+          throw FileError(*path +
+                          " climbs out of a symbolic link with .., which names another file: use the path it leads to.");
         }
         auto had = access->accessTo(normal);
         if (had < needed) {

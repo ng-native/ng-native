@@ -11,6 +11,8 @@
 //   A click on a tab with `preventNativeSelection` selects nothing and sends
 //   `tabSelectionPrevented` instead.
 // - Before the app asks for one, the first tab shows, as UIKit's tab bar controller does.
+// - When the selected tab is taken away, the first tab left shows and becomes the selection,
+//   reported with `actionOrigin` `implicit`, as react-native-screens reconciles it on iOS.
 //
 // The screens not selected are covered (screen-stacks.h): mounted, but neither drawn nor hit. The
 // selected one hears willAppear and didAppear, the one it replaces willDisappear and didDisappear.
@@ -65,6 +67,9 @@ class TabsNavigation {
   // The tab the host shows before any request or click names one: where the count starts, so the
   // first click is a change the user made.
   void show(const std::string &screenKey);
+  // The tab the host shows in place of the selected one, once that one is taken away: a change
+  // neither the app nor the user asked for, which iOS reports as `implicit`.
+  Outcome reconcile(const std::string &screenKey);
 
   // The selected key, or empty before the first change.
   const std::string &selected() const {
