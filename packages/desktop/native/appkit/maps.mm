@@ -163,7 +163,10 @@ NSColor *NGNMapColor(std::optional<uint32_t> argb, NSColor *fallback) {
       [_mapView addOverlay:shape];
     }
   }
-  if (model.camera && (!_camera || *model.camera != *_camera)) {
+  // A camera prop that goes away is forgotten, so the same camera given again moves the map.
+  if (!model.camera) {
+    _camera.reset();
+  } else if (!_camera || *model.camera != *_camera) {
     _camera = model.camera;
     [_mapView setRegion:regionFor(*model.camera) animated:NO];
   }
@@ -171,6 +174,7 @@ NSColor *NGNMapColor(std::optional<uint32_t> argb, NSColor *fallback) {
   _mapView.showsCompass = model.compass;
   _mapView.showsScale = model.scaleBar;
   _mapView.showsPitchControl = model.pitchToggle;
+  _mapView.showsUserTrackingButton = model.userLocationButton;
   switch (model.colorScheme) {
     case ngn::MapColorScheme::Light:
       _mapView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
