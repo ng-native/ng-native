@@ -68,7 +68,7 @@ import {
 } from './transition.ts';
 import { isFormsInput } from './forms-inputs.ts';
 import { measuredTransform, transformList } from './inline-transform.ts';
-import { tokenFromValue } from './inline-token.ts';
+import { cssTrim, tokenFromValue } from './inline-token.ts';
 import { tokenText } from './token-text.ts';
 import {
   NativeScrollDriver,
@@ -7399,6 +7399,11 @@ const emptyBrush = (value: unknown): boolean =>
   (value as { type?: unknown }).type === 0 &&
   (value as { payload?: unknown }).payload == null;
 
+/** A token set to whitespace alone: there, of no kind a declaration reads. */
+const BLANK_TOKEN: TokenValue = Object.freeze({});
+const isBlank = (value: unknown): boolean =>
+  typeof value === 'string' && value !== '' && cssTrim(value) === '';
+
 export class Engine implements HostEngine {
   /** Scopes the CSS resolver's memo. Bumped once per commit. */
   private styleEpoch = 0;
@@ -9072,7 +9077,14 @@ export class Engine implements HostEngine {
    * changing it re-resolves the node and so everything under it.
    */
   setCustomProperty(node: EngineNode, name: string, value: unknown): void {
-    const token = value === null || value === undefined ? undefined : tokenFromValue(value);
+    const token =
+      value === null || value === undefined
+        ? undefined
+        : // Only whitespace is a value a token takes, as a browser keeps `--x: ;`: one that
+          // hides a token of the same name above it, and that no declaration can read.
+          isBlank(value)
+          ? BLANK_TOKEN
+          : tokenFromValue(value);
     const current = node.customProperties;
     if (!token) {
       if (!current || !(name in current)) return;

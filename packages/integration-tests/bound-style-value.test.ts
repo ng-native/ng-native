@@ -113,6 +113,42 @@ export class Empty {
     assert.equal(styleOf(app.fabric, 'a')['width'], 15, 'and set again after');
   });
 
+  it('that is blank keeps a token there, blank, so the class token under it stays hidden', async () => {
+    const mod = await build(
+      'blank-token',
+      `
+import { Component, signal } from '@angular/core';
+import { View } from '../components/src/view.ts';
+
+@Component({
+  selector: 'x-blank-token',
+  imports: [View],
+  styles: ['.box { --h: 70px }'],
+  template: \`<view nativeID="a" class="box" [style.--h]="token()" [style.min-height]="'var(--h)'" />\`,
+})
+export class BlankToken {
+  readonly token = signal('30px');
+}
+`,
+    );
+    const app = await render(mod['BlankToken'] as Type<unknown>);
+    const set = (value: string) =>
+      (app.instance as { token: { set(value: string): void } }).token.set(value);
+    assert.equal(styleOf(app.fabric, 'a')['minHeight'], 30);
+
+    set('  ');
+    await app.detectChanges();
+    assert.equal(
+      styleOf(app.fabric, 'a')['minHeight'] ?? null,
+      null,
+      'nothing to read, where Chrome keeps --h: ; and computes no min-height',
+    );
+
+    set('');
+    await app.detectChanges();
+    assert.equal(styleOf(app.fabric, 'a')['minHeight'], 70, 'an empty one takes it out');
+  });
+
   it('that is blank is dropped with a warning, and the one before it kept, as Chrome does', async () => {
     const mod = await build(
       'blank',

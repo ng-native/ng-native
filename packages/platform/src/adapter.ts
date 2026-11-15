@@ -505,8 +505,10 @@ class NativeRenderer implements Renderer2 {
     // And it takes `!important` off the end of a bound value and leaves the space before it, so
     // `'10px !important'` arrives as `'10px '`, which no reading of a length takes.
     const text = typeof value === 'string' ? cssTrim(value) : value;
-    // Blank is no value but a token's: a browser drops it and keeps the declaration it had.
-    if (text === '' && !style.startsWith('--')) {
+    // Blank is no value but a token's: a browser drops it and keeps the declaration it had. A
+    // token keeps it blank, so it is handed on as written: trimmed it would read as removed.
+    if (text === '') {
+      if (style.startsWith('--')) return this.setStyleValue(el, style, value);
       return this.engine.reportDroppedDeclaration(
         styleKey(style),
         String(value),
