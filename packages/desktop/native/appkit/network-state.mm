@@ -2,6 +2,8 @@
 
 #import <Network/Network.h>
 
+#include <atomic>
+
 namespace ngn::appkit {
 
 namespace {
@@ -23,17 +25,31 @@ class NetworkPathMonitor final : public PathMonitor {
   std::function<void()> watch(std::function<void(const NetworkPath &)> changed) override {
     nw_path_monitor_t monitor = nw_path_monitor_create();
     dispatch_queue_t queue = dispatch_queue_create("ng-native.network", DISPATCH_QUEUE_SERIAL);
+    // Marks the queue, so a stop called from a change on it knows not to wait for itself.
+    static char onQueue;
+    dispatch_queue_set_specific(queue, &onQueue, &onQueue, nullptr);
     nw_path_monitor_set_queue(monitor, queue);
     auto listener = std::make_shared<std::function<void(const NetworkPath &)>>(std::move(changed));
     nw_path_monitor_set_update_handler(monitor, ^(nw_path_t path) {
       (*listener)(pathOf(path));
     });
+    // The cancel handler is the monitor's last call on the queue: no update follows it.
+    dispatch_semaphore_t cancelled = dispatch_semaphore_create(0);
+    nw_path_monitor_set_cancel_handler(monitor, ^{
+      dispatch_semaphore_signal(cancelled);
+    });
     nw_path_monitor_start(monitor);
-    return [monitor, queue] {
+    auto stopped = std::make_shared<std::atomic<bool>>(false);
+    return [monitor, cancelled, stopped] {
+      if (stopped->exchange(true)) {
+        return;
+      }
       nw_path_monitor_cancel(monitor);
-      // Waits out an update already running, so none arrives after this returns.
-      dispatch_sync(queue, ^{
-                    });
+      // From a change on the queue, the change running is the last: waiting would deadlock.
+      if (dispatch_get_specific(&onQueue) == &onQueue) {
+        return;
+      }
+      dispatch_semaphore_wait(cancelled, DISPATCH_TIME_FOREVER);
     };
   }
 };
