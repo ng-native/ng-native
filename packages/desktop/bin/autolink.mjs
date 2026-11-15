@@ -11,7 +11,8 @@
  *
  * - The app's own modules are each `modules/<name>/macos/`, beside `ios/` and `android/`, compiled
  *   in with nothing to register. The module's `expo-module.config.json` may name its CMake target.
- * - A package in the plugin options' `deny` list stays out, whatever it ships.
+ * - A package in the plugin options' `deny` list stays out, whatever it ships; the packages it
+ *   depends on are still walked.
  * - A dependency with native code and none for the desktop is listed, so `run` and `package` can
  *   say its native modules are absent on macOS.
  *
@@ -68,11 +69,12 @@ export function desktopLinks(appDir, { deny = [], builtIn = [] } = {}) {
   const queue = [appDir];
   for (let from = queue.shift(); from !== undefined; from = queue.shift()) {
     for (const name of dependencyNames(from)) {
-      if (seen.has(name) || deny.includes(name) || suppliedOtherwise(name)) continue;
+      if (seen.has(name) || suppliedOtherwise(name)) continue;
       seen.add(name);
       const dir = packageDir(from, name);
       if (dir === null) continue;
-      if (!builtIn.includes(name)) classify(links, name, dir);
+      // A denied package stays out of the build and the warning, but what it depends on does not.
+      if (!deny.includes(name) && !builtIn.includes(name)) classify(links, name, dir);
       queue.push(dir);
     }
   }

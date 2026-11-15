@@ -4,6 +4,7 @@
  * CMake, which the workflow sets to ccache.
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -168,10 +169,13 @@ describe('the desktop build scripts', () => {
         join(lib, 'react-native.config.js'),
         "module.exports = { dependency: { platforms: { android: { libraryName: 'foo' } } } };",
       );
-      // Generated already, so the script answers the directory without running the codegen.
-      const out = join(root, 'cache', 'rn-0.0.1', 'libraries', 'NativeFooSpec');
+      // Generated already, so the script answers the directory without running the codegen. The
+      // directory is named for the codegen name and a hash of the stamp.
+      const stamp = `foo@1.0.0 ${lib} 3`;
+      const key = createHash('sha1').update(stamp).digest('hex').slice(0, 12);
+      const out = join(root, 'cache', 'rn-0.0.1', 'libraries', `NativeFooSpec-${key}`);
       mkdirSync(out, { recursive: true });
-      writeFileSync(join(out, 'stamp'), `foo@1.0.0 ${lib} 3\n`);
+      writeFileSync(join(out, 'stamp'), `${stamp}\n`);
       const run = script('codegen-library.sh', [rn, lib], env);
       assert.equal(run.stdout.trim(), out, run.stderr);
     } finally {

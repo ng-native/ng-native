@@ -13,7 +13,8 @@ namespace {
 
 const std::set<std::string> kRefusedPrograms{
     "sh",  "bash",  "zsh",  "dash", "ksh",  "mksh", "csh", "tcsh",      "fish", "nu",
-    "env", "xargs", "sudo", "doas", "su",   "osascript", "cmd", "powershell", "pwsh"};
+    "env", "xargs", "sudo", "doas", "su",   "osascript", "cmd", "powershell", "pwsh",
+    "nice", "nohup"};
 
 std::string lower(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });

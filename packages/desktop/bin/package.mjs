@@ -215,6 +215,12 @@ const DMG_SIGN_IN = ['NGN_SIGN_IDENTITY', 'NGN_PROVISIONING_PROFILE', 'APPLE_TEA
  */
 function credentials({ format, skipNotarize, feedUrl }, env) {
   if (format === 'app') return null;
+  if (feedUrl && env['NGN_SIGN_IDENTITY'] === '-') {
+    throw new UsageError(
+      "--feed-url needs a NGN_SIGN_IDENTITY other than -, codesign's ad hoc identity: Sparkle " +
+        'loads only into an app signed with a Team ID, and an ad hoc signature has none.',
+    );
+  }
   if (format === 'dmg' && skipNotarize) return localSigning(feedUrl, env);
   const required =
     format === 'dmg'

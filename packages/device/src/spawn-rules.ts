@@ -71,8 +71,8 @@ export const SEARCH_PATH: readonly string[] = [
 
 /**
  * Programs refused whatever their path: shells, and programs whose job is to run their own
- * arguments as a command (`env`, `xargs`, `sudo`), which would turn an argument pattern into a
- * command line.
+ * arguments as a command (`env`, `xargs`, `sudo`, `nice`, `nohup`), which would turn an argument
+ * pattern into a command line.
  */
 const REFUSED_PROGRAMS = new Set([
   'sh',
@@ -94,6 +94,8 @@ const REFUSED_PROGRAMS = new Set([
   'cmd',
   'powershell',
   'pwsh',
+  'nice',
+  'nohup',
 ]);
 
 /** Windows batch files, which run through `cmd.exe` and so re-parse their arguments. */
@@ -146,6 +148,11 @@ export function parseArgument(arg: string): ArgumentRule {
   const placeholder = PLACEHOLDER.exec(arg);
   if (!placeholder) return { kind: 'literal', value: arg };
   const [, name, source, dots] = placeholder as unknown as [string, string, string, string?];
+  if (hasLookbehindOrNamedGroup(source)) {
+    throw new SpawnRuleError(
+      `{${name}} has a (?< named group or lookbehind, which the desktop's native rules cannot compile`,
+    );
+  }
   let pattern: RegExp;
   try {
     // On its own first: a pattern that compiles alone has balanced groups, so one such as
@@ -158,6 +165,23 @@ export function parseArgument(arg: string): ArgumentRule {
   }
   const option = alternatives(source).every((one) => /^\^?\\?-/.test(one));
   return { kind: 'placeholder', name, pattern, option, repeated: dots !== undefined };
+}
+
+/**
+ * Whether a pattern opens a `(?<` group (a named group or a lookbehind) outside an escape or a
+ * class. JavaScript compiles one, but the native rules' ECMAScript `std::regex` does not, and a
+ * declaration it cannot compile would be dropped there with no error.
+ */
+function hasLookbehindOrNamedGroup(source: string): boolean {
+  let inClass = false;
+  for (let at = 0; at < source.length; at++) {
+    const char = source[at];
+    if (char === '\\') at++;
+    else if (inClass) inClass = char !== ']';
+    else if (char === '[') inClass = true;
+    else if (source.startsWith('(?<', at)) return true;
+  }
+  return false;
 }
 
 /**

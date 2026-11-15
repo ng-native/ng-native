@@ -211,6 +211,23 @@ describe('desktopLinks', () => {
     assert.deepEqual(links.withoutDesktop, []);
   });
 
+  it('keeps a denied package out but still links what it depends on', () => {
+    const root = app({
+      'package.json': { dependencies: { kit: '1.0.0' } },
+      ...pkg('kit', { 'ios/Kit.m': '' }, { 'rn-haptics': '1.0.0' }),
+      ...pkg('rn-haptics', {
+        'expo-module.config.json': desktopConfig(),
+        'desktop/CMakeLists.txt': '',
+      }),
+    });
+    const links = desktopLinks(root, { deny: ['kit'] });
+    assert.deepEqual(
+      links.libraries.map((library) => library.name),
+      ['rn-haptics'],
+    );
+    assert.deepEqual(links.withoutDesktop, []);
+  });
+
   it('leaves the libraries the host compiles in itself unreported', () => {
     const root = app({
       'package.json': { dependencies: { 'react-native-screens': '4.0.0' } },

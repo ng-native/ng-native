@@ -62,8 +62,22 @@ describe('a declared program', () => {
       'C:\\Windows\\System32\\cmd.exe',
       'powershell.exe',
       'pwsh',
+      'nice',
+      '/usr/bin/nice',
+      'nohup',
+      '/usr/bin/nohup',
     ]) {
       assert.ok(programProblem(program), `${program} is refused`);
+    }
+  });
+
+  it('is never nice or nohup, which run the utility they are given with no option to name it', () => {
+    for (const program of ['/usr/bin/nice', 'nohup']) {
+      assert.throws(
+        () => compileCapability({ program, args: ['{args:\\S+}...'] }),
+        { name: 'SpawnRuleError', message: /runs its arguments as a command/ },
+        program,
+      );
     }
   });
 
@@ -89,6 +103,23 @@ describe('a declared program', () => {
 describe('a declared argument list', () => {
   it('rejects a pattern that does not compile', () => {
     assert.throws(() => compileCapability({ program: 'git', args: ['{x:[}'] }), SpawnRuleError);
+  });
+
+  it('rejects a named group or a lookbehind, which the native rules cannot compile', () => {
+    for (const pattern of ['(?<stem>[a-z]+)', 'a(?<=a)', 'x(?<!y)', 'a|(b(?<n>c))']) {
+      assert.throws(
+        () => compileCapability({ program: 'git', args: [`{x:${pattern}}`] }),
+        { name: 'SpawnRuleError', message: /\(\?</ },
+        pattern,
+      );
+    }
+    // Escaped, or in a class, it is plain text.
+    for (const pattern of ['\\(?<a', '[(?<]+', '[\\](?<]+']) {
+      assert.doesNotThrow(
+        () => compileCapability({ program: 'git', args: [`{x:${pattern}}`] }),
+        pattern,
+      );
+    }
   });
 
   it('rejects a pattern that would close the anchoring group and escape it', () => {

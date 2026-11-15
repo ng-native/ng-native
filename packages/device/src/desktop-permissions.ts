@@ -125,6 +125,13 @@ export interface ExpoPermissionConfig {
 
 const USAGE_KEY = /^NS[A-Za-z]+UsageDescription$/;
 
+/** The iOS location keys macOS's own takes its string from, in order of preference. */
+const MACOS_LOCATION_FROM = [
+  'NSLocationWhenInUseUsageDescription',
+  'NSLocationAlwaysAndWhenInUseUsageDescription',
+  'NSLocationAlwaysUsageDescription',
+] as const;
+
 /**
  * The usage strings and sandbox entitlements a macOS build declares, from the Expo config's
  * `ios.infoPlist` and plugins. A plugin's option wins over the same key in `infoPlist`, which wins
@@ -134,6 +141,10 @@ const USAGE_KEY = /^NS[A-Za-z]+UsageDescription$/;
 export function macosPermissions(config: ExpoPermissionConfig): MacosPermissions {
   const usageStrings = fromInfoPlist(config.ios?.infoPlist ?? {});
   for (const entry of config.plugins ?? []) applyPlugin(usageStrings, entry);
+  // macOS asks for location with NSLocationUsageDescription, which no iOS key or plugin option
+  // sets: it reads the app's own location string, unless the app gives the macOS key itself.
+  const location = MACOS_LOCATION_FROM.map((key) => usageStrings[key]).find(Boolean);
+  if (location !== undefined) usageStrings['NSLocationUsageDescription'] ??= location;
   const name = config.name ?? 'this app';
   for (const [key, value] of Object.entries(usageStrings)) {
     usageStrings[key] = value.replaceAll('$(PRODUCT_NAME)', name);
