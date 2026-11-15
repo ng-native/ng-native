@@ -5,6 +5,7 @@
 
 #include <folly/dynamic.h>
 
+#include <deque>
 #include <functional>
 #include <map>
 #include <memory>
@@ -52,18 +53,23 @@ class Listeners {
     return state_->entries.empty();
   }
 
-  void notify(const T &value) const {
+  // Calls each listener, and answers how many were called: none when the last handle went while
+  // this ran.
+  size_t notify(const T &value) const {
     std::map<int, std::shared_ptr<Entry>> entries;
     {
       std::lock_guard lock(state_->mutex);
       entries = state_->entries;
     }
+    size_t called = 0;
     for (auto &[_, entry] : entries) {
       std::lock_guard calling(entry->calling);
       if (entry->live) {
         entry->call(value);
+        called++;
       }
     }
+    return called;
   }
 
  private:
@@ -81,7 +87,9 @@ class Listeners {
   std::shared_ptr<State> state_ = std::make_shared<State>();
 };
 
-// A value with listeners. Setting it to what it already is notifies nobody.
+// A value with listeners. Setting it to what it already is notifies nobody. Listeners hear the
+// values in the order they were set, a value set by a listener after the one it is hearing, and
+// a set made while another thread is notifying returns at once, that thread notifying for it.
 template <typename T>
 class Watched {
  public:
@@ -101,8 +109,13 @@ class Watched {
         return;
       }
       value_ = value;
+      queued_.push_back(std::move(value));
+      if (notifying_) {
+        return;
+      }
+      notifying_ = true;
     }
-    listeners_.notify(value);
+    notifyQueued();
   }
 
   // Listens until the returned handle is destroyed.
@@ -111,8 +124,34 @@ class Watched {
   }
 
  private:
+  void notifyQueued() {
+    for (;;) {
+      std::optional<T> next;
+      {
+        std::lock_guard lock(mutex_);
+        if (queued_.empty()) {
+          notifying_ = false;
+          return;
+        }
+        next = std::move(queued_.front());
+        queued_.pop_front();
+      }
+      try {
+        listeners_.notify(*next);
+      } catch (...) {
+        std::lock_guard lock(mutex_);
+        queued_.clear();
+        notifying_ = false;
+        throw;
+      }
+    }
+  }
+
   mutable std::mutex mutex_;
   T value_;
+  // Set, and not yet sent to the listeners.
+  std::deque<T> queued_;
+  bool notifying_{false};
   Listeners<T> listeners_;
 };
 

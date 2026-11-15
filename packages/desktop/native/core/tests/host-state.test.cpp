@@ -69,3 +69,33 @@ TEST_CASE("Dropping a URL listener waits for a call to it already running on ano
   CHECK(finished);
   opener.join();
 }
+
+TEST_CASE("Listeners answer how many listeners a notify called, leaving out one dropped during it") {
+  ngn::Listeners<int> listeners;
+  std::shared_ptr<void> second;
+  int secondCalls = 0;
+  auto first = listeners.add([&](const int &) { second.reset(); });
+  second = listeners.add([&](const int &) { secondCalls++; });
+  CHECK(listeners.notify(1) == 1);
+  CHECK(secondCalls == 0);
+  first.reset();
+  CHECK(listeners.notify(2) == 0);
+}
+
+TEST_CASE("Watched sends values in the order they were set, one a listener sets after the one it hears") {
+  ngn::Watched<int> value{0};
+  std::vector<int> first;
+  std::vector<int> second;
+  auto a = value.listen([&](const int &v) {
+    first.push_back(v);
+    if (v == 1) {
+      value.set(2);
+    }
+  });
+  auto b = value.listen([&](const int &v) { second.push_back(v); });
+  value.set(1);
+  CHECK(value.get() == 2);
+  CHECK(first == std::vector<int>{1, 2});
+  // Without the queue, b heard 2 inside a's call and then 1, ending on a value that is not set.
+  CHECK(second == std::vector<int>{1, 2});
+}
