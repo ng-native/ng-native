@@ -147,21 +147,39 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGContextRestoreGState(context_);
   }
 
-  // A mask is drawn in a grey bitmap of the view's pixels, black where nothing is drawn, so its
-  // grey is the luminance times the alpha SVG masks by. An alpha mask is drawn the same way.
+  // A luminance mask is drawn in a grey bitmap of the view's pixels, black where nothing is
+  // drawn, so its grey is the luminance times the alpha SVG masks by. An alpha mask is drawn in an
+  // alpha-only bitmap, clear where nothing is drawn, so only its content's alpha counts. A mask
+  // whose bitmap cannot be made (too many pixels) masks nothing out.
   void beginMask(bool alpha) override {
     size_t width = std::max<size_t>(1, static_cast<size_t>(std::ceil(size_.width * scale_)));
     size_t height = std::max<size_t>(1, static_cast<size_t>(std::ceil(size_.height * scale_)));
-    CGColorSpaceRef grey = CGColorSpaceCreateDeviceGray();
-    CGContextRef mask = CGBitmapContextCreate(nullptr, width, height, 8, 0, grey, kCGImageAlphaNone);
-    CGColorSpaceRelease(grey);
-    CGContextSetGrayFillColor(mask, 0, 1);
-    CGContextFillRect(mask, CGRectMake(0, 0, width, height));
+    CGContextRef mask;
+    if (alpha) {
+      mask = CGBitmapContextCreate(nullptr, width, height, 8, 0, nullptr, kCGImageAlphaOnly);
+      if (mask != nullptr) {
+        CGContextClearRect(mask, CGRectMake(0, 0, width, height));
+      }
+    } else {
+      CGColorSpaceRef grey = CGColorSpaceCreateDeviceGray();
+      mask = CGBitmapContextCreate(nullptr, width, height, 8, 0, grey, kCGImageAlphaNone);
+      CGColorSpaceRelease(grey);
+      if (mask != nullptr) {
+        CGContextSetGrayFillColor(mask, 0, 1);
+        CGContextFillRect(mask, CGRectMake(0, 0, width, height));
+      }
+    }
+    if (mask == nullptr) {
+      // The mask's content is drawn into a context that keeps nothing, and the clip is skipped.
+      masks_.push_back({.parent = context_, .mask = nullptr, .saved = saved_, .alpha = alpha, .scratch = scratchContext()});
+      context_ = masks_.back().scratch;
+      return;
+    }
     // The view's coordinates: top left, y down, in points.
     CGContextTranslateCTM(mask, 0, height);
     CGContextScaleCTM(mask, scale_, -scale_);
     CGContextConcatCTM(mask, affine(matrix_));
-    masks_.push_back({.parent = context_, .mask = mask, .saved = saved_});
+    masks_.push_back({.parent = context_, .mask = mask, .saved = saved_, .alpha = alpha});
     context_ = mask;
   }
 
@@ -170,10 +188,31 @@ class CGCanvas final : public ngn::SvgCanvas {
       return;
     }
     auto frame = masks_.back();
-    CGImageRef image = CGBitmapContextCreateImage(frame.mask);
-    CGContextRelease(frame.mask);
     context_ = frame.parent;
     saved_ = frame.saved;
+    if (frame.mask == nullptr) {
+      CGContextRelease(frame.scratch);
+      masks_.back().scratch = nullptr;
+      CGContextSaveGState(context_);
+      return;
+    }
+    // A clip mask is a grey image: an alpha mask's alpha bytes are read as grey.
+    CGImageRef image;
+    if (frame.alpha) {
+      size_t width = CGBitmapContextGetWidth(frame.mask), height = CGBitmapContextGetHeight(frame.mask);
+      size_t row = CGBitmapContextGetBytesPerRow(frame.mask);
+      CFDataRef bytes = CFDataCreate(nullptr, static_cast<const UInt8 *>(CGBitmapContextGetData(frame.mask)), static_cast<CFIndex>(row * height));
+      CGDataProviderRef provider = CGDataProviderCreateWithCFData(bytes);
+      CGColorSpaceRef grey = CGColorSpaceCreateDeviceGray();
+      image = CGImageCreate(width, height, 8, 8, row, grey, static_cast<CGBitmapInfo>(kCGImageAlphaNone), provider, nullptr, false,
+                            kCGRenderingIntentDefault);
+      CGColorSpaceRelease(grey);
+      CGDataProviderRelease(provider);
+      CFRelease(bytes);
+    } else {
+      image = CGBitmapContextCreateImage(frame.mask);
+    }
+    CGContextRelease(frame.mask);
     masks_.back().mask = nullptr;
     // Clip in the view's coordinates, the image's top row at the view's top, then come back.
     CGContextSaveGState(context_);
@@ -220,6 +259,10 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     CGContextRef bitmap = CGBitmapContextCreate(nullptr, width, height, 8, 0, space, kCGImageAlphaPremultipliedLast);
     CGColorSpaceRelease(space);
+    // A tile whose bitmap cannot be made paints nothing.
+    if (bitmap == nullptr) {
+      return;
+    }
     CGContextTranslateCTM(bitmap, 0, height);
     CGContextScaleCTM(bitmap, width / tile.tile.width, -(height / tile.tile.height));
     {
@@ -248,6 +291,11 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     CGContextRef bitmap = CGBitmapContextCreate(nullptr, width, height, 8, width * 4, space, kCGImageAlphaPremultipliedLast);
     CGColorSpaceRelease(space);
+    // With no bitmap (too many pixels) the source is drawn as it is, unfiltered.
+    if (bitmap == nullptr) {
+      filters_.push_back({.parent = context_, .bitmap = nullptr, .saved = saved_, .filter = filter, .width = 0, .height = 0});
+      return;
+    }
     CGContextTranslateCTM(bitmap, 0, height);
     CGContextScaleCTM(bitmap, scale_, -scale_);
     CGContextConcatCTM(bitmap, affine(matrix_));
@@ -261,6 +309,9 @@ class CGCanvas final : public ngn::SvgCanvas {
     }
     auto frame = std::move(filters_.back());
     filters_.pop_back();
+    if (frame.bitmap == nullptr) {
+      return;
+    }
     context_ = frame.parent;
     saved_ = frame.saved;
     ngn::SvgPixels source{.width = static_cast<int>(frame.width), .height = static_cast<int>(frame.height)};
@@ -332,9 +383,9 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGColorRef color = createColorImpl(argb, fill ? fill->opacity : 0);
     NSAttributedString *string = [[NSAttributedString alloc]
         initWithString:@(text.c_str())
-            attributes:@{NSFontAttributeName : font, (id)kCTForegroundColorAttributeName : (__bridge id)color}];
+            attributes:@{NSFontAttributeName : font, (__bridge id)kCTForegroundColorAttributeName : (__bridge id)color}];
     CGColorRelease(color);
-    CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)string);
+    CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)string);
     double width = CTLineGetTypographicBounds(line, nullptr, nullptr, nullptr);
     if (fill != nullptr) {
       CGContextSaveGState(context_);
@@ -354,7 +405,18 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGContextRef parent;
     CGContextRef mask;
     std::vector<ngn::SvgMatrix> saved;
+    bool alpha{false};
+    // Where a mask with no bitmap has its content drawn, and dropped.
+    CGContextRef scratch{nullptr};
   };
+
+  // A one-pixel context that the content of a mask with no bitmap is drawn into.
+  static CGContextRef scratchContext() {
+    CGColorSpaceRef grey = CGColorSpaceCreateDeviceGray();
+    CGContextRef scratch = CGBitmapContextCreate(nullptr, 1, 1, 8, 0, grey, kCGImageAlphaNone);
+    CGColorSpaceRelease(grey);
+    return scratch;
+  }
 
   struct Filter {
     CGContextRef parent;
@@ -391,9 +453,13 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGGradientRelease(gradient);
   }
 
+  // Every canvas that asks for a uri while it loads is told when it is in the cache.
   void load(NSString *uri) {
-    static NSMutableSet<NSString *> *loading = [NSMutableSet set];
-    if ([loading containsObject:uri]) {
+    static NSMutableDictionary<NSString *, NSMutableArray *> *loading = [NSMutableDictionary dictionary];
+    if (NSMutableArray *waiters = loading[uri]) {
+      if (imageLoaded_ != nil) {
+        [waiters addObject:[imageLoaded_ copy]];
+      }
       return;
     }
     // An <image> href's file only inside the file boundary, and exactly the file checked.
@@ -409,18 +475,18 @@ class CGCanvas final : public ngn::SvgCanvas {
     if (url == nil) {
       return;
     }
-    [loading addObject:uri];
-    void (^loaded)(void) = imageLoaded_;
+    loading[uri] = imageLoaded_ != nil ? [NSMutableArray arrayWithObject:[imageLoaded_ copy]] : [NSMutableArray array];
     [[NSURLSession.sharedSession dataTaskWithURL:url
                                completionHandler:^(NSData *data, NSURLResponse *, NSError *) {
                                  (void)use;
                                  NSImage *image = data ? [[NSImage alloc] initWithData:data] : nil;
                                  dispatch_async(dispatch_get_main_queue(), ^{
-                                   [loading removeObject:uri];
+                                   NSArray *waiters = loading[uri];
+                                   [loading removeObjectForKey:uri];
                                    if (image != nil) {
                                      [imageCache() setObject:image forKey:uri];
-                                     if (loaded) {
-                                       loaded();
+                                     for (void (^waiter)(void) in waiters) {
+                                       waiter();
                                      }
                                    }
                                  });

@@ -169,3 +169,71 @@ TEST_CASE("a marker draws its content at the line's end, turned along it") {
   CHECK(bitmap.at(22, 26)[3] == 0);
   CHECK(bitmap.at(22, 39)[3] == 0);
 }
+
+TEST_CASE("an alpha mask lets its content's alpha through, so black content shows what it masks") {
+  for (int type : {1, 0}) {
+    SvgElement mask = named(SvgKind::Mask, "m");
+    mask.maskType = type;
+    SvgElement shape = rect(0, 0, 20, 20, 0xffff0000);
+    shape.mask = "m";
+    Bitmap bitmap(node({.kind = SvgKind::Svg}, {node(mask, {node(rect(0, 0, 10, 20, 0xff000000))}), node(shape)}), 20, 20);
+    auto inside = bitmap.at(5, 5), outside = bitmap.at(15, 5);
+    INFO("maskType ", type, ": ", show(inside), " / ", show(outside));
+    // Alpha: opaque black shows the shape. Luminance: black hides it.
+    CHECK(inside[3] == (type == 1 ? 255 : 0));
+    CHECK(outside[3] == 0);
+  }
+}
+
+TEST_CASE("a filter or mask whose bitmap cannot be made draws its content unfiltered, or unmasked") {
+  // A canvas that says it is far larger than any bitmap can be, over a small context.
+  std::vector<uint8_t> data(20 * 20 * 4, 0);
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(data.data(), 20, 20, 8, 80, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  CGContextTranslateCTM(context, 0, 20);
+  CGContextScaleCTM(context, 1, -1);
+  const double huge = 1e9;
+  for (bool masked : {false, true}) {
+    std::fill(data.begin(), data.end(), 0);
+    SvgElement effect = masked ? named(SvgKind::Mask, "e") : named(SvgKind::Filter, "e");
+    SvgElement shape = rect(0, 0, 10, 10, 0xffff0000);
+    (masked ? shape.mask : shape.filter) = "e";
+    std::vector<SvgNode> inner;
+    if (!masked) {
+      SvgElement matrix{.kind = SvgKind::FeColorMatrix};
+      matrix.op = 1;
+      matrix.values = {0};
+      inner.push_back(node(matrix));
+    }
+    auto canvas = NGNMakeCGCanvas(context, CGSizeMake(huge, huge), 1, nil);
+    ngn::drawSvg({.root = node({.kind = SvgKind::Svg}, {node(effect, std::move(inner)), node(shape)})}, huge, huge, *canvas);
+    canvas.reset();
+    const uint8_t *p = &data[(5 * 20 + 5) * 4];
+    INFO(std::string(masked ? "mask" : "filter"));
+    CHECK(p[0] == 255);
+    CHECK(p[3] == 255);
+  }
+  CGContextRelease(context);
+}
+
+TEST_CASE("every canvas waiting for the same image is told when it loads") {
+  std::vector<uint8_t> data(4, 0);
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(data.data(), 1, 1, 8, 4, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  // A uri no earlier run has cached.
+  std::string uri = "data:image/png;run=" + std::to_string(arc4random()) + ";base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+  __block int first = 0, second = 0;
+  auto a = NGNMakeCGCanvas(context, CGSizeMake(1, 1), 1, ^{ first++; });
+  auto b = NGNMakeCGCanvas(context, CGSizeMake(1, 1), 1, ^{ second++; });
+  a->image(uri, {.x = 0, .y = 0, .width = 1, .height = 1}, "none", 0, 1);
+  b->image(uri, {.x = 0, .y = 0, .width = 1, .height = 1}, "none", 0, 1);
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:10];
+  while ((first == 0 || second == 0) && [until timeIntervalSinceNow] > 0) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
+  }
+  CHECK(first == 1);
+  CHECK(second == 1);
+  CGContextRelease(context);
+}
