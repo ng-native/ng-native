@@ -39,16 +39,19 @@ const Component kComponents[] = {
     {"hour", 0, 23},   {"minute", 0, 59}, {"second", 0, 59},
 };
 
-// The named components of `trigger`, required ones first; `monthFromZero` reads `month` as Expo's
-// yearly trigger does (0 is January).
+// The components of `trigger` a type names, each required; with none named, every one given (a
+// calendar trigger's). `monthFromZero` reads `month` as Expo's yearly trigger does (0 is January).
 std::optional<std::string> readComponents(
     const folly::dynamic &trigger,
     const std::vector<std::string> &required,
     bool monthFromZero,
     NotificationTrigger &out) {
   for (const auto &component : kComponents) {
-    auto value = number(trigger, component.name);
     bool needed = std::find(required.begin(), required.end(), component.name) != required.end();
+    if (!needed && !required.empty()) {
+      continue;
+    }
+    auto value = number(trigger, component.name);
     if (!value) {
       if (needed) {
         return std::string("the trigger needs ") + component.name;
@@ -142,7 +145,6 @@ std::variant<NotificationTrigger, std::string> parseNotificationTrigger(const fo
   if (problem) {
     return *problem;
   }
-  // Only the components a trigger type names: a daily trigger never pins a weekday.
   return out;
 }
 
@@ -217,8 +219,11 @@ NotificationRequest remoteNotificationRequest(const std::string &identifier, con
   out.identifier = identifier;
   out.trigger.kind = NotificationTrigger::Kind::Push;
   out.trigger.payload = payload.isObject() ? payload : folly::dynamic::object();
-  // The app's data is the payload past `aps`, as expo-notifications reads it on iOS.
-  out.data = nullptr;
+  // The data where expo-notifications reads it on iOS: under `body`, as Expo's push service sends
+  // it. A plain APNs payload's own keys are left to the app's side, which takes them from the
+  // trigger's payload.
+  const auto *body = payload.isObject() ? payload.get_ptr("body") : nullptr;
+  out.data = body && body->isObject() ? *body : folly::dynamic(nullptr);
   const auto *aps = payload.isObject() ? payload.get_ptr("aps") : nullptr;
   if (!aps || !aps->isObject()) {
     return out;
