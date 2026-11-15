@@ -60,6 +60,9 @@ TEST_CASE("NetworkPathMonitor stopped from another monitor's change waits for it
   auto monitor = ngn::appkit::makePathMonitor();
   struct State {
     dispatch_semaphore_t bRunning = dispatch_semaphore_create(0);
+    dispatch_semaphore_t releaseB = dispatch_semaphore_create(0);
+    dispatch_semaphore_t aStopping = dispatch_semaphore_create(0);
+    dispatch_semaphore_t aStopped = dispatch_semaphore_create(0);
     dispatch_semaphore_t aFinished = dispatch_semaphore_create(0);
     std::atomic<bool> bDone{false};
     std::atomic<bool> doneAtStop{false};
@@ -68,23 +71,35 @@ TEST_CASE("NetworkPathMonitor stopped from another monitor's change waits for it
     std::function<void()> stopB;
   };
   auto state = std::make_shared<State>();
+  // B's change runs until it is released, which is after A's stop of B has returned or has waited
+  // 200 ms: a stop that does not wait returns while B is still running, whatever the timing.
   state->stopB = monitor->watch([state](const ngn::NetworkPath &) {
     if (state->bReports++ == 0) {
       dispatch_semaphore_signal(state->bRunning);
-      usleep(300 * 1000);
+      dispatch_semaphore_wait(state->releaseB, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
       state->bDone = true;
     }
+  });
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    if (dispatch_semaphore_wait(state->aStopping, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0) {
+      dispatch_semaphore_wait(state->aStopped, dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC));
+    }
+    dispatch_semaphore_signal(state->releaseB);
   });
   auto stopA = monitor->watch([state](const ngn::NetworkPath &) {
     if (state->aReports++ == 0) {
       if (dispatch_semaphore_wait(state->bRunning, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0) {
+        dispatch_semaphore_signal(state->aStopping);
         state->stopB();
         state->doneAtStop = state->bDone.load();
+        dispatch_semaphore_signal(state->aStopped);
       }
       dispatch_semaphore_signal(state->aFinished);
     }
   });
   bool finished = dispatch_semaphore_wait(state->aFinished, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) == 0;
+  // Released whatever happened, so a failure leaves no change blocked.
+  dispatch_semaphore_signal(state->releaseB);
   stopA();
   state->stopB();
   REQUIRE(finished);
