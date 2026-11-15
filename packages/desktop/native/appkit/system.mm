@@ -116,8 +116,24 @@ class AppKitSystem final : public System {
       // since the app's appearance may not change and so tell nothing.
       if (!scheme) {
         systemSchemeChanged(schemeOf(NSApp.effectiveAppearance));
+        // Whoever read the scheme as the override went (JavaScript, from its own thread) may have
+        // read the one cached before this, and the app's appearance may not change to correct it.
+        std::function<void(std::string)> read;
+        {
+          std::lock_guard lock(mutex_);
+          read = schemeRead_;
+        }
+        if (read) {
+          read(colorScheme());
+        }
       }
     });
+  }
+
+  // Told the scheme again on the main thread once clearing the override has read the system's.
+  void setSchemeRead(std::function<void(std::string)> read) {
+    std::lock_guard lock(mutex_);
+    schemeRead_ = std::move(read);
   }
 
   // The system's own scheme, with no override. Main thread.
@@ -263,6 +279,7 @@ class AppKitSystem final : public System {
   std::mutex mutex_;
   std::string systemScheme_;
   std::optional<std::string> override_;
+  std::function<void(std::string)> schemeRead_;
   bool rightToLeft_{false};
 };
 
@@ -386,7 +403,17 @@ void watchApp(std::shared_ptr<HostState> state, std::shared_ptr<System> system) 
   observer = [NGNAppObserver new];
   observer.state = std::move(state);
   observer.system = std::static_pointer_cast<AppKitSystem>(system);
+  std::weak_ptr<HostState> weak = observer.state;
+  observer.system->setSchemeRead([weak](std::string scheme) {
+    if (auto state = weak.lock()) {
+      state->colorScheme.set(std::move(scheme));
+    }
+  });
   [observer start];
+}
+
+void onSchemeRead(const std::shared_ptr<System> &system, std::function<void(std::string)> read) {
+  std::static_pointer_cast<AppKitSystem>(system)->setSchemeRead(std::move(read));
 }
 
 } // namespace ngn::appkit
