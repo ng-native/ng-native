@@ -301,4 +301,12 @@ TEST_CASE("a load answered late shows nothing once the source changed or went aw
   CHECK(shown == std::vector<std::string>{"b"});
   serve(*http, 4, "a");
   CHECK(shown == std::vector<std::string>{"b", "a"});
+  // Recycled with no source after it: the fit that follows moves no turn, so the recycle alone
+  // keeps the old load from showing.
+  fit(b);
+  loads.recycle();
+  fit(std::nullopt);
+  REQUIRE(http->sent.size() == 6);
+  serve(*http, 5, "b, for the last item");
+  CHECK(shown == std::vector<std::string>{"b", "a"});
 }
