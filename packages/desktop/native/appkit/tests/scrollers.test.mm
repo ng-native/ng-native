@@ -44,13 +44,13 @@ TEST_CASE("the preferred style is AppKit's") {
 TEST_CASE("the observer hears the preferred style change, until it is released") {
   __block int changes = 0;
   @autoreleasepool {
-    NGNScrollerStyleObserver *observer = [[NGNScrollerStyleObserver alloc] initWithChanged:^{
+    // Precise, so ARC keeps it to the end of this scope, not only to its last use.
+    __attribute__((objc_precise_lifetime)) NGNScrollerStyleObserver *observer = [[NGNScrollerStyleObserver alloc] initWithChanged:^{
       changes++;
     }];
     [NSNotificationCenter.defaultCenter postNotificationName:NSPreferredScrollerStyleDidChangeNotification object:nil];
     drain();
     CHECK(changes == 1);
-    (void)observer;
   }
   [NSNotificationCenter.defaultCenter postNotificationName:NSPreferredScrollerStyleDidChangeNotification object:nil];
   drain();
