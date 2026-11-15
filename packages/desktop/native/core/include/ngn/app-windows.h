@@ -154,7 +154,8 @@ class WindowHost {
   void finishTerminate();
   void autosave(SurfaceId surface, const WindowFrame &frame);
   void reloading();
-  void dropUnclaimed();
+  // The windows the reload `reload` kept that the app has not asked for again close.
+  void dropUnclaimed(uint64_t reload);
   WindowPlacement placement(const WindowRequest &request);
 
   std::shared_ptr<WindowBackend> backend_;
@@ -167,6 +168,8 @@ class WindowHost {
   bool quitAgreed_{false};
   std::optional<std::function<void()>> terminating_;
   bool attached_{false};
+  // Counts the reloads, so a claim timer only drops the windows of the reload that set it.
+  uint64_t reloads_{0};
   // A dropped handle waits for its listener's call in progress, so a module going with a reload
   // is never called after.
   Listeners<folly::dynamic> listeners_;
