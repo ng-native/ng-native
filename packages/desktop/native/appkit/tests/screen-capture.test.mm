@@ -85,7 +85,9 @@ TEST_CASE("WindowShield applies each request's own state before answering it, th
     std::atomic<NSWindowSharingType> atAllow{NSWindowSharingNone};
   };
   auto seen = std::make_shared<Seen>();
-  // Both asked before the main thread applies either.
+  // Both asked before the main thread applies either: setProtected only queues off the main thread,
+  // so the main thread can wait for both without running its queue.
+  dispatch_semaphore_t asked = dispatch_semaphore_create(0);
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     shield->setProtected(true, [window, seen] {
       seen->atProtect = window.sharingType;
@@ -95,7 +97,9 @@ TEST_CASE("WindowShield applies each request's own state before answering it, th
       seen->atAllow = window.sharingType;
       seen->answered++;
     });
+    dispatch_semaphore_signal(asked);
   });
+  REQUIRE(dispatch_semaphore_wait(asked, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0);
   NSDate *until = [NSDate dateWithTimeIntervalSinceNow:5];
   while (seen->answered < 2 && [until timeIntervalSinceNow] > 0) {
     CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, false);
