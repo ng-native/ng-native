@@ -1,0 +1,123 @@
+#include "ngn/input-script.h"
+
+#include <sstream>
+
+namespace ngn {
+
+namespace {
+
+std::optional<GesturePhase> phaseNamed(const std::string &name, bool &ok) {
+  ok = true;
+  if (name == "began") {
+    return GesturePhase::Began;
+  }
+  if (name == "changed") {
+    return GesturePhase::Changed;
+  }
+  if (name == "ended") {
+    return GesturePhase::Ended;
+  }
+  ok = name.empty();
+  return std::nullopt;
+}
+
+} // namespace
+
+InputScript parseInputScript(const std::string &text) {
+  InputScript script;
+  std::istringstream lines(text);
+  std::string line;
+  int number = 0;
+  while (std::getline(lines, line)) {
+    ++number;
+    if (auto hash = line.find('#'); hash != std::string::npos) {
+      line.erase(hash);
+    }
+    std::istringstream words(line);
+    std::string verb;
+    if (!(words >> verb)) {
+      continue;
+    }
+    auto fail = [&](const std::string &why) {
+      script.steps.clear();
+      script.error = "line " + std::to_string(number) + ": " + why;
+      return script;
+    };
+    InputStep step{};
+    std::string phase;
+    if (verb == "wait") {
+      step.kind = InputStep::Kind::Wait;
+      if (!(words >> step.amount) || step.amount < 0) {
+        return fail("wait needs a number of milliseconds");
+      }
+    } else if (verb == "move" || verb == "down" || verb == "drag" || verb == "up" || verb == "secondary") {
+      step.kind = verb == "move" ? InputStep::Kind::Move
+          : verb == "down"       ? InputStep::Kind::Down
+          : verb == "drag"       ? InputStep::Kind::Drag
+          : verb == "up"         ? InputStep::Kind::Up
+                                 : InputStep::Kind::Secondary;
+      if (!(words >> step.x >> step.y)) {
+        return fail(verb + " needs x and y");
+      }
+    } else if (verb == "scroll") {
+      step.kind = InputStep::Kind::Scroll;
+      if (!(words >> step.x >> step.y >> step.amount >> step.dy)) {
+        return fail("scroll needs x, y, dx and dy");
+      }
+      words >> phase;
+    } else if (verb == "magnify" || verb == "rotate") {
+      step.kind = verb == "magnify" ? InputStep::Kind::Magnify : InputStep::Kind::Rotate;
+      if (!(words >> step.x >> step.y >> step.amount >> phase) || phase.empty()) {
+        return fail(verb + " needs x, y, an amount and a phase");
+      }
+    } else if (verb == "key") {
+      step.kind = InputStep::Kind::Key;
+      if (!(words >> step.key)) {
+        return fail("key needs a key");
+      }
+      if (step.key.size() != 1 && step.key != "escape" && step.key != "return" && step.key != "space" &&
+          step.key != "tab" && step.key != "delete") {
+        return fail("unknown key " + step.key);
+      }
+      std::string modifier;
+      while (words >> modifier) {
+        if (modifier == "cmd") {
+          step.modifiers |= InputStep::Command;
+        } else if (modifier == "shift") {
+          step.modifiers |= InputStep::Shift;
+        } else if (modifier == "option") {
+          step.modifiers |= InputStep::Option;
+        } else if (modifier == "ctrl") {
+          step.modifiers |= InputStep::Control;
+        } else {
+          return fail("unknown modifier " + modifier);
+        }
+      }
+    } else if (verb == "choose" || verb == "type") {
+      step.kind = verb == "choose" ? InputStep::Kind::Choose : InputStep::Kind::Type;
+      std::string rest;
+      std::getline(words, rest);
+      auto first = rest.find_first_not_of(" \t");
+      auto last = rest.find_last_not_of(" \t\r");
+      if (first == std::string::npos) {
+        return fail(verb == "choose" ? "choose needs an item's title" : "type needs some text");
+      }
+      step.key = rest.substr(first, last - first + 1);
+    } else {
+      return fail("unknown step " + verb);
+    }
+    bool ok = true;
+    step.phase = phaseNamed(phase, ok);
+    if (!ok) {
+      return fail("unknown phase " + phase);
+    }
+    std::string extra;
+    if (words >> extra) {
+      return fail("unexpected " + extra);
+    }
+    script.steps.push_back(step);
+  }
+  return script;
+}
+
+} // namespace ngn

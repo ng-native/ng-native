@@ -61,12 +61,24 @@ include(cmake/react-native.cmake)
 add_library(ngn_core STATIC
     core/src/absent-views.cpp
     core/src/accessibility.cpp
+    core/src/animation-frames.cpp
+    core/src/app-menus.cpp
+    core/src/app-windows.cpp
     core/src/back-swipe.cpp
     core/src/bytes.cpp
     core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp
+    core/src/default-menu.cpp
+    core/src/dev-server.cpp
+    core/src/focus-order.cpp
+    core/src/gestures.cpp
     core/src/glass.cpp
     core/src/header-bar.cpp
+    core/src/host-state.cpp
+    core/src/input-dispatcher.cpp
+    core/src/input-script.cpp
+    core/src/key-value-store.cpp
+    core/src/launch-settings.cpp
     core/src/live-regions.cpp
     core/src/library-glue.cpp
     core/src/module-registry.cpp
@@ -76,6 +88,7 @@ add_library(ngn_core STATIC
     core/src/network.cpp
     core/src/text-input.cpp
     core/src/text-layout-manager.cpp
+    core/src/tray-and-dock.cpp
     core/src/safe-areas.cpp
     core/src/scrollers.cpp
     core/src/posix-launcher.cpp
@@ -88,18 +101,54 @@ add_library(ngn_core STATIC
     core/src/symbol.cpp
     core/src/tabs-host.cpp
     core/src/download.cpp
+    core/src/updates.cpp
+    core/src/view-box.cpp
     core/src/view-transform.cpp
+    core/src/red-box.cpp
     core/src/expo-image.cpp
     core/src/expo-ui.cpp
     core/src/view-tree.cpp
     core/src/web-view.cpp
+    core/src/worklet-host.cpp
+    core/src/modules/accessibility-manager.cpp
+    core/src/modules/address-search.cpp
+    core/src/modules/alert-manager.cpp
+    core/src/modules/app-info.cpp
+    core/src/modules/app-modules.cpp
     core/src/modules/apple-authentication.cpp
+    core/src/modules/asset.cpp
+    core/src/modules/async-storage.cpp
+    core/src/modules/audio.cpp
+    core/src/modules/battery.cpp
+    core/src/modules/calendar.cpp
     core/src/modules/camera.cpp
+    core/src/modules/core-modules.cpp
     core/src/modules/crypto.cpp
+    core/src/modules/desktop-expo.cpp
     core/src/modules/file-system.cpp
+    core/src/modules/fonts.cpp
+    core/src/modules/image-loader.cpp
+    core/src/modules/image-manipulator.cpp
+    core/src/modules/language-model.cpp
+    core/src/modules/local-authentication.cpp
     core/src/modules/location.cpp
     core/src/modules/maps.cpp
-    core/src/modules/video.cpp)
+    core/src/modules/network-state.cpp
+    core/src/modules/networking.cpp
+    core/src/modules/notifications.cpp
+    core/src/modules/photo-library.cpp
+    core/src/modules/printing.cpp
+    core/src/modules/screen-capture.cpp
+    core/src/modules/sharing.cpp
+    core/src/modules/splash-screen.cpp
+    core/src/modules/sqlite.cpp
+    core/src/modules/store-review.cpp
+    core/src/modules/text-recognition.cpp
+    core/src/modules/tracking.cpp
+    core/src/modules/undo.cpp
+    core/src/modules/video.cpp
+    core/src/modules/web-browser.cpp
+    core/src/modules/web-socket.cpp)
 target_include_directories(ngn_core PUBLIC core/include)
 # The system's sqlite3, behind NgNativeSqlite (libsqlite3-dev on Linux).
 find_package(SQLite3 REQUIRED)
