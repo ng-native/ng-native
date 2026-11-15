@@ -85,9 +85,19 @@ std::shared_ptr<NativeModule> makeProcessesModule(std::shared_ptr<ProcessLaunche
     std::shared_ptr<ProcessLauncher> launcher;
     std::mutex spawnedMutex;
     std::set<int> spawned;
+    // Programs that exited before spawn() answered their handle, so started() never keeps them.
+    std::set<int> exitedEarly;
     void exited(int handle) {
       std::lock_guard lock(spawnedMutex);
-      spawned.erase(handle);
+      if (spawned.erase(handle) == 0) {
+        exitedEarly.insert(handle);
+      }
+    }
+    void started(int handle) {
+      std::lock_guard lock(spawnedMutex);
+      if (exitedEarly.erase(handle) == 0) {
+        spawned.insert(handle);
+      }
     }
     ~Processes() override {
       std::lock_guard lock(spawnedMutex);
@@ -174,10 +184,7 @@ std::shared_ptr<NativeModule> makeProcessesModule(std::shared_ptr<ProcessLaunche
         }
         auto started = launcher->spawn(*path, argv, cwd, filterEnvironment(given, envNames));
         if (const auto *handle = std::get_if<int>(&started)) {
-          {
-            std::lock_guard lock(spawnedMutex);
-            spawned.insert(*handle);
-          }
+          this->started(*handle);
           promise.resolve(*handle);
         } else {
           promise.reject(std::get<std::string>(started));

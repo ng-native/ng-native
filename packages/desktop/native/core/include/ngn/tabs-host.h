@@ -62,6 +62,9 @@ class TabsNavigation {
   Outcome request(const std::string &screenKey, int baseProvenance, bool rejectStale);
   // A click on a tab.
   Outcome userSelect(const std::string &screenKey, bool preventNativeSelection);
+  // The tab the host shows before any request or click names one: where the count starts, so the
+  // first click is a change the user made.
+  void show(const std::string &screenKey);
 
   // The selected key, or empty before the first change.
   const std::string &selected() const {

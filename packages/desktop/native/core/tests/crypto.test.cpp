@@ -3,6 +3,8 @@
 
 #include <doctest/doctest.h>
 
+#include <cmath>
+
 #include <optional>
 
 using folly::dynamic;
@@ -67,6 +69,8 @@ TEST_CASE("NgNativeCrypto's getRandomBytes takes 0 to 1024 and answers {base64}"
   CHECK_THROWS(module->call("getRandomBytes", dynamic::array(-1)));
   CHECK_THROWS(module->call("getRandomBytes", dynamic::array(1.5)));
   CHECK_THROWS(module->call("getRandomBytes", dynamic::array("3")));
+  CHECK_THROWS(module->call("getRandomBytes", dynamic::array(NAN)));
+  CHECK_THROWS(module->call("getRandomBytes", dynamic::array(INFINITY)));
   // Nothing drawn for the empty and refused calls.
   CHECK(source->drawn == std::vector<size_t>{3, 1024});
 }

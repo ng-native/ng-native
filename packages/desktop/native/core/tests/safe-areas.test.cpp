@@ -121,6 +121,20 @@ TEST_CASE("a change in the container's insets reaches its views at once, and a d
   CHECK(f.sent.empty());
 }
 
+TEST_CASE("the provider hears a change in the window controls' room alone") {
+  Fixture f;
+  f.mounting->setContainerInsets(1, kWindow);
+  auto provider = shadowView(2, "RNCSafeAreaProvider", {{0, 0}, {800, 600}});
+  f.mount({ShadowViewMutation::CreateMutation(provider), ShadowViewMutation::InsertMutation(1, provider, 0)});
+  CHECK(f.sent == Lines{"provider 2 52,0,0,0 at 0,0 leading 78"});
+  // Full screen hides the controls; the insets and frame stay as they were.
+  f.sent.clear();
+  auto controlsHidden = kWindow;
+  controlsHidden.titlebarLeading = 0;
+  f.mounting->setContainerInsets(1, controlsHidden);
+  CHECK(f.sent == Lines{"provider 2 52,0,0,0 at 0,0 leading 0"});
+}
+
 TEST_CASE("a view in a container of its own takes that container's insets") {
   Fixture f;
   f.mounting->setContainerInsets(1, kWindow);

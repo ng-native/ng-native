@@ -6,7 +6,10 @@
 
 #include <sys/stat.h>
 
+#include <unistd.h>
+
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -33,6 +36,28 @@ std::string fileUri(const std::string &path) {
     }
   }
   return out;
+}
+
+bool replaceFile(const std::string &path, const std::string &bytes) {
+  static std::atomic<unsigned> written{0};
+  auto partial = path + ".part-" + std::to_string(::getpid()) + "-" + std::to_string(++written);
+  std::error_code ignored;
+  {
+    std::ofstream out(partial, std::ios::binary | std::ios::trunc);
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    out.close();
+    if (!out) {
+      fs::remove(partial, ignored);
+      return false;
+    }
+  }
+  std::error_code error;
+  fs::rename(partial, path, error);
+  if (error) {
+    fs::remove(partial, ignored);
+    return false;
+  }
+  return true;
 }
 
 std::optional<std::string> pathOfUri(const std::string &uri) {
@@ -462,6 +487,44 @@ std::string readAll(const std::string &path) {
   return bytes.str();
 }
 
+// fs::copy's recursive copy, with each file it writes checked against `access` on its own: a
+// symbolic link inside the folder is copied as a link, never followed out of reach, and a link
+// already at a destination is never written through to a file the app may not write.
+void copyEntry(const FileAccess &access, const fs::path &from, const fs::path &to, bool top) {
+  auto status = top ? fs::status(from) : fs::symlink_status(from);
+  auto writable = [&](const fs::path &path) {
+    if (access.accessTo(path.string()) < FileAccess::Access::ReadWrite) {
+      throw FileError(path.string() + " is outside the folders the app can write");
+    }
+  };
+  if (fs::is_symlink(status)) {
+    if (fs::is_symlink(fs::symlink_status(to)) || fs::exists(to)) {
+      fs::remove(to);
+    }
+    fs::copy_symlink(from, to);
+  } else if (fs::is_directory(status)) {
+    writable(to);
+    if (!fs::exists(to)) {
+      fs::create_directory(to, from);
+    }
+    for (const auto &entry : fs::directory_iterator(from)) {
+      copyEntry(access, entry.path(), to / entry.path().filename(), false);
+    }
+  } else if (fs::is_regular_file(status)) {
+    writable(to);
+    fs::copy_file(from, to, fs::copy_options::overwrite_existing);
+  }
+}
+
+void copyWithin(const FileAccess &access, const std::string &from, const std::string &to) {
+  // A file onto a folder lands in it, as fs::copy puts it.
+  fs::path target = to;
+  if (!fs::is_directory(from) && fs::is_directory(to)) {
+    target /= fs::path(from).filename();
+  }
+  copyEntry(access, from, target, true);
+}
+
 // The open watches and where their changes go, outliving the module for a callback in flight.
 struct WatchSink {
   std::mutex mutex;
@@ -490,18 +553,20 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         if (!path) {
           throw FileError("Not a file uri or an absolute path: " + uri);
         }
-        auto had = access->accessTo(*path);
+        // No trailing slash, so a folder's path compares equal however its uri was written. The
+        // path checked is the one handed on: `..` after a symbolic link names another file once
+        // it is taken away, so the check never sees a path the call does not use.
+        auto normal = fs::path(*path).lexically_normal().string();
+        if (normal.size() > 1 && normal.ends_with('/')) {
+          normal.pop_back();
+        }
+        auto had = access->accessTo(normal);
         if (had < needed) {
           throw FileError(
               *path +
               (had == FileAccess::Access::Read
                    ? " can only be read: declare it with access 'readwrite' in the @ng-native/desktop plugin's capabilities.paths."
                    : " is outside the folders the app can reach: declare it in the @ng-native/desktop plugin's capabilities.paths."));
-        }
-        // No trailing slash, so a folder's path compares equal however its uri was written.
-        auto normal = fs::path(*path).lexically_normal().string();
-        if (normal.size() > 1 && normal.ends_with('/')) {
-          normal.pop_back();
         }
         return normal;
       };
@@ -585,6 +650,8 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         }
         std::ofstream out(path, std::ios::binary | (flagOption(args, 2, "append") ? std::ios::app : std::ios::trunc));
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        // Closed first, so a flush that fails is reported rather than lost in the destructor.
+        out.close();
         if (!out) {
           throw FileError("The file could not be written: " + path);
         }
@@ -625,7 +692,7 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         auto to = reach(option(args, 0, "to").isString() ? option(args, 0, "to").asString() : "", Write);
         auto useFrom = access->use(from);
         auto useTo = access->use(to);
-        fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+        copyWithin(*access, from, to);
         return folly::dynamic(nullptr);
       });
       answer("createFile", [reach, access](const folly::dynamic &args) {
@@ -660,22 +727,44 @@ std::shared_ptr<NativeModule> makeFileSystemModule(std::shared_ptr<FileAccess> a
         if (!fs::exists(path)) {
           return nullptr;
         }
-        auto id = std::make_shared<int>(0);
-        auto exists = [](const std::string &p) { return fs::exists(fs::symlink_status(p)); };
-        // Called on the watcher's own serial queue, one batch at a time.
-        auto tracker = std::make_shared<FileChanges>(path, exists);
-        int handle = watcher->start(path, [sink = sink, tracker, exists, id](std::vector<FileWatcher::Event> events) {
-          auto changes = tracker->changes(events, exists);
+        // The watch's id, which start() answers only after the watcher may have sent a batch:
+        // the changes before it are held, then sent with the id, ahead of any later ones.
+        struct Id {
+          std::mutex mutex;
+          int value{0};
+          std::vector<folly::dynamic> held;
+        };
+        auto id = std::make_shared<Id>();
+        auto send = [sink = sink](folly::dynamic changes, int watch) {
           std::lock_guard lock(sink->mutex);
           if (!sink->open) {
             return;
           }
           for (auto &change : changes) {
-            change["watch"] = *id;
+            change["watch"] = watch;
             sink->emit(std::move(change));
           }
+        };
+        auto exists = [](const std::string &p) { return fs::exists(fs::symlink_status(p)); };
+        // Called on the watcher's own serial queue, one batch at a time.
+        auto tracker = std::make_shared<FileChanges>(path, exists);
+        int handle = watcher->start(path, [send, tracker, exists, id](std::vector<FileWatcher::Event> events) {
+          auto changes = tracker->changes(events, exists);
+          std::lock_guard lock(id->mutex);
+          if (id->value == 0) {
+            id->held.push_back(std::move(changes));
+            return;
+          }
+          send(std::move(changes), id->value);
         });
-        *id = handle;
+        {
+          std::lock_guard lock(id->mutex);
+          id->value = handle;
+          for (auto &changes : id->held) {
+            send(std::move(changes), handle);
+          }
+          id->held.clear();
+        }
         std::lock_guard lock(watchesMutex);
         watches.push_back(handle);
         uses[handle] = use;

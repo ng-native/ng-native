@@ -124,14 +124,20 @@ std::optional<WebViewFile> webViewFile(const FileAccess *access, const std::stri
   auto path = *pathOfUri(source.uri);
   auto folder = path.substr(0, path.rfind('/'));
   std::string readAccess = source.uri;
+  auto use = source.use;
   if (!folder.empty()) {
     try {
-      readableFile(access, folder);
+      auto folderUse = readableFile(access, folder);
       readAccess = fileUri(folder) + "/";
+      // The page reads its whole folder: the folder's pick is held open, which holds the file
+      // too, where the folder is a pick of its own.
+      if (folderUse && folderUse->started()) {
+        use = std::move(folderUse);
+      }
     } catch (const FileRefused &) {
     }
   }
-  return WebViewFile{.uri = source.uri, .readAccess = readAccess, .use = source.use};
+  return WebViewFile{.uri = source.uri, .readAccess = readAccess, .use = use};
 }
 
 } // namespace ngn

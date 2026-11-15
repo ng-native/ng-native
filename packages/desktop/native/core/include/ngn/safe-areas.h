@@ -65,6 +65,8 @@ class SafeAreas {
     bool known{false};
     EdgeInsets insets;
     Rect frame;
+    // A provider's: the last titlebarLeading its event said.
+    double titlebarLeading{0};
   };
   std::unordered_map<Tag, Tracked> tracked_;
   std::unordered_map<Tag, ContainerInsets> containers_;

@@ -43,6 +43,11 @@ std::string fileUri(const std::string &path);
 // another scheme or a relative path.
 std::optional<std::string> pathOfUri(const std::string &uri);
 
+// Writes `bytes` to `path` through a temporary file beside it, renamed over `path` only once the
+// whole write and its close succeeded, so a failed write leaves whatever was at `path` as it was.
+// False when the write failed.
+bool replaceFile(const std::string &path, const std::string &bytes);
+
 // The toolkit's security-scoped bookmarks (macOS): what finds a file or folder the user picked
 // again in a later launch, wherever it has moved, and reopens the sandbox to it.
 class Bookmarks {

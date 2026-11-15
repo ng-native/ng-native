@@ -116,6 +116,25 @@ TEST_CASE("a child outside its parent is hit only when the parent lets content o
   }
 }
 
+TEST_CASE("hitSlop widens where a view is hit, inside a parent that still clips") {
+  Tree t;
+  auto slop = std::make_shared<ViewProps>();
+  slop->hitSlop = {10, 10, 10, 10};
+  // 3 is at 30,30 to 60,60 in the root; 25,40 is 5 points left of it, still inside 2.
+  t.setProps(3, slop);
+  CHECK(t.tree.hitTest(1, {25, 40}) == Chain{1, 2, 3});
+  CHECK(t.tree.hitTest(1, {65, 40}) == Chain{1, 2, 3});
+  CHECK(t.tree.hitTest(1, {15, 40}) == Chain{1, 2});
+  // 6 is at 10,10 in 5 (200,0 in the root).
+  t.setProps(6, slop);
+  CHECK(t.tree.hitTest(1, {215, 5}) == Chain{1, 5, 6});
+  // Lifted to the top of 5, its slop above reaches past 5, which clips it there.
+  auto lifted = t.tree.find(6)->view;
+  lifted.layoutMetrics.frame.origin = {10, 0};
+  t.tree.update(lifted);
+  CHECK(t.tree.hitTest(1, {215, -5}) == Chain{1});
+}
+
 TEST_CASE("each container hit-tests from its own root, and the main one skips presented subtrees") {
   Tree t;
   // Before 5 is presented, it is part of the window's tree.

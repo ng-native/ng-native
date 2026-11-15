@@ -65,9 +65,16 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
       const std::vector<std::string> &args,
       const std::optional<std::string> &cwd,
       const std::map<std::string, std::string> &env) override {
-    int in[2], out[2], err[2];
+    int in[2] = {-1, -1}, out[2] = {-1, -1}, err[2] = {-1, -1};
     if (pipe(in) != 0 || pipe(out) != 0 || pipe(err) != 0) {
-      return std::string("could not make pipes: ") + std::strerror(errno);
+      int error = errno;
+      // The pipes made before the one that failed.
+      for (int fd : {in[0], in[1], out[0], out[1], err[0], err[1]}) {
+        if (fd != -1) {
+          close(fd);
+        }
+      }
+      return std::string("could not make pipes: ") + std::strerror(error);
     }
     for (int fd : {in[1], out[0], err[0]}) {
       fcntl(fd, F_SETFD, FD_CLOEXEC);
@@ -82,6 +89,13 @@ class PosixLauncher final : public ProcessLauncher, public std::enable_shared_fr
     posix_spawn_file_actions_adddup2(&actions, in[0], 0);
     posix_spawn_file_actions_adddup2(&actions, out[1], 1);
     posix_spawn_file_actions_adddup2(&actions, err[1], 2);
+    // The originals closed once copied, where nothing closes them on exec (Linux): an extra reader
+    // of stdin keeps a write from failing, and an extra writer of an output delays its end.
+    for (int fd : {in[0], out[1], err[1]}) {
+      if (fd > 2) {
+        posix_spawn_file_actions_addclose(&actions, fd);
+      }
+    }
     if (cwd) {
       posix_spawn_file_actions_addchdir_np(&actions, cwd->c_str());
     }

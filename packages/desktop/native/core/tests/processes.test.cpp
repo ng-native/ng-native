@@ -25,6 +25,8 @@ using Lines = std::vector<std::string>;
 struct FakeLauncher final : ngn::ProcessLauncher {
   Lines calls;
   int issued{0};
+  // The program exits before spawn answers its handle, as a short one can on a real launcher.
+  bool exitsAtOnce{false};
   int lastHandle() const override {
     return issued;
   }
@@ -46,6 +48,9 @@ struct FakeLauncher final : ngn::ProcessLauncher {
       line += " " + k + "=" + v;
     }
     calls.push_back(line);
+    if (exitsAtOnce) {
+      events.exit(7, 0, std::nullopt);
+    }
     return 7;
   }
   void write(int handle, const std::string &data) override {
@@ -59,6 +64,68 @@ struct FakeLauncher final : ngn::ProcessLauncher {
   }
   void killAll(int signal) override {
     calls.push_back("kill all " + std::to_string(signal));
+  }
+};
+
+// What a real launcher's callbacks record. The callbacks hold it, so one that runs after a failed
+// wait has ended the test still has somewhere to write.
+struct Recorded {
+  std::mutex mutex;
+  std::condition_variable done;
+  std::map<int, std::string> output;
+  std::map<int, size_t> received;
+  std::map<int, std::string> exits;
+
+  bool wait(int handle) {
+    std::unique_lock lock(mutex);
+    return done.wait_for(lock, std::chrono::seconds(10), [&] { return exits.contains(handle); });
+  }
+};
+
+// A real launcher whose events go to a Recorded, and whose programs are all stopped when the test
+// ends, however it ends.
+struct RealLauncher {
+  std::shared_ptr<ngn::ProcessLauncher> launcher = ngn::makePosixLauncher();
+  std::shared_ptr<Recorded> recorded = std::make_shared<Recorded>();
+  RealLauncher() {
+    launcher->setEvents({
+        .output =
+            [recorded = recorded](int h, bool, std::string data) {
+              std::lock_guard lock(recorded->mutex);
+              recorded->received[h] += data.size();
+              recorded->output[h] += data;
+              recorded->done.notify_all();
+            },
+        .exit =
+            [recorded = recorded](int h, std::optional<int> code, std::optional<std::string> signal) {
+              std::lock_guard lock(recorded->mutex);
+              recorded->exits[h] = code ? "code " + std::to_string(*code) : signal.value_or("");
+              recorded->done.notify_all();
+            },
+    });
+  }
+  RealLauncher(const RealLauncher &) = delete;
+  RealLauncher &operator=(const RealLauncher &) = delete;
+  ~RealLauncher() {
+    launcher->killAll(SIGKILL);
+  }
+  ngn::ProcessLauncher *operator->() const {
+    return launcher.get();
+  }
+  bool wait(int handle) const {
+    return recorded->wait(handle);
+  }
+  std::string output(int handle) const {
+    std::lock_guard lock(recorded->mutex);
+    return recorded->output[handle];
+  }
+  size_t received(int handle) const {
+    std::lock_guard lock(recorded->mutex);
+    return recorded->received[handle];
+  }
+  std::string exit(int handle) const {
+    std::lock_guard lock(recorded->mutex);
+    return recorded->exits[handle];
   }
 };
 
@@ -174,43 +241,29 @@ TEST_CASE("a reloaded module never sends the old runtime's programs' events") {
 }
 
 TEST_CASE("the POSIX launcher runs a real program with only the environment given") {
-  auto launcher = ngn::makePosixLauncher();
-  std::mutex mutex;
-  std::condition_variable done;
-  std::map<int, std::string> output;
-  std::map<int, std::string> exits;
-  launcher->setEvents({
-      .output = [&](int h, bool, std::string data) { std::lock_guard lock(mutex); output[h] += data; },
-      .exit =
-          [&](int h, std::optional<int> code, std::optional<std::string> signal) {
-            std::lock_guard lock(mutex);
-            exits[h] = code ? "code " + std::to_string(*code) : *signal;
-            done.notify_all();
-          },
-  });
-  auto wait = [&](int h) {
-    std::unique_lock lock(mutex);
-    return done.wait_for(lock, std::chrono::seconds(10), [&] { return exits.contains(h); });
-  };
+  RealLauncher launcher;
+  auto wait = [&](int h) { return launcher.wait(h); };
+  auto output = [&](int h) { return launcher.output(h); };
+  auto exits = [&](int h) { return launcher.exit(h); };
 
   auto env = launcher->spawn("/usr/bin/env", {}, std::string("/"), {{"ONLY", "this"}});
   REQUIRE(std::holds_alternative<int>(env));
   REQUIRE(wait(std::get<int>(env)));
-  CHECK(output[std::get<int>(env)] == "ONLY=this\n");
-  CHECK(exits[std::get<int>(env)] == "code 0");
+  CHECK(output(std::get<int>(env)) == "ONLY=this\n");
+  CHECK(exits(std::get<int>(env)) == "code 0");
 
   auto cat = launcher->spawn("/bin/cat", {}, std::nullopt, {});
   REQUIRE(std::holds_alternative<int>(cat));
   launcher->write(std::get<int>(cat), "hello; $(reboot)");
   launcher->closeStdin(std::get<int>(cat));
   REQUIRE(wait(std::get<int>(cat)));
-  CHECK(output[std::get<int>(cat)] == "hello; $(reboot)");
+  CHECK(output(std::get<int>(cat)) == "hello; $(reboot)");
 
   auto sleeper = launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {});
   REQUIRE(std::holds_alternative<int>(sleeper));
   launcher->kill(std::get<int>(sleeper), SIGTERM);
   REQUIRE(wait(std::get<int>(sleeper)));
-  CHECK(exits[std::get<int>(sleeper)] == "SIGTERM");
+  CHECK(exits(std::get<int>(sleeper)) == "SIGTERM");
 
   CHECK(std::holds_alternative<std::string>(launcher->spawn("/nonexistent/tool", {}, std::nullopt, {})));
 }
@@ -327,24 +380,8 @@ TEST_CASE("Shell.openPath and showItemInFolder take a path only inside the file 
 }
 
 TEST_CASE("the POSIX launcher's stdin writes never block the caller, and a closed reader never raises SIGPIPE") {
-  auto launcher = ngn::makePosixLauncher();
-  std::mutex mutex;
-  std::condition_variable done;
-  std::map<int, size_t> received;
-  std::set<int> exited;
-  launcher->setEvents({
-      .output = [&](int h, bool, std::string data) { std::lock_guard lock(mutex); received[h] += data.size(); },
-      .exit =
-          [&](int h, std::optional<int>, std::optional<std::string>) {
-            std::lock_guard lock(mutex);
-            exited.insert(h);
-            done.notify_all();
-          },
-  });
-  auto wait = [&](int h) {
-    std::unique_lock lock(mutex);
-    return done.wait_for(lock, std::chrono::seconds(10), [&] { return exited.contains(h); });
-  };
+  RealLauncher launcher;
+  auto wait = [&](int h) { return launcher.wait(h); };
   const std::string big(4 * 1024 * 1024, 'x');
 
   // A program that never reads: the write is queued, not waited on.
@@ -363,11 +400,17 @@ TEST_CASE("the POSIX launcher's stdin writes never block the caller, and a close
   launcher->write(cat, "end");
   launcher->closeStdin(cat);
   REQUIRE(wait(cat));
-  CHECK(received[cat] == big.size() + 3);
+  CHECK(launcher.received(cat) == big.size() + 3);
 
-  // A program that closed its stdin: writing to it would raise SIGPIPE, which ends the host.
-  auto closed = std::get<int>(launcher->spawn("/bin/sh", {"-c", "exec 0<&-; sleep 2"}, std::nullopt, {}));
-  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  // A program that closed its stdin: writing to it would raise SIGPIPE, which ends the host. It
+  // says so once it has, so the writes come after.
+  auto closed = std::get<int>(launcher->spawn("/bin/sh", {"-c", "exec 0<&-; echo closed; sleep 2"}, std::nullopt, {}));
+  {
+    std::unique_lock lock(launcher.recorded->mutex);
+    REQUIRE(launcher.recorded->done.wait_for(lock, std::chrono::seconds(10), [&] {
+      return launcher.recorded->output[closed] == "closed\n";
+    }));
+  }
   launcher->write(closed, "anyone there?");
   launcher->write(closed, big);
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
@@ -394,27 +437,25 @@ TEST_CASE("a module going, as on a reload, stops the programs it started that ar
   CHECK(launcher->calls.size() == 1);
 }
 
+TEST_CASE("a program that exits before spawn answers is not stopped again when the module goes") {
+  auto launcher = std::make_shared<FakeLauncher>();
+  launcher->exitsAtOnce = true;
+  {
+    auto module = ngn::makeProcessesModule(launcher, setup());
+    REQUIRE(spawn(*module, dynamic::array("git", dynamic::array("status", "--porcelain"))).value == dynamic(7));
+  }
+  CHECK(launcher->calls.size() == 1);
+}
+
 TEST_CASE("the POSIX launcher stops every program it started, for the host quitting") {
-  auto launcher = ngn::makePosixLauncher();
-  std::mutex mutex;
-  std::condition_variable done;
-  std::map<int, std::string> exits;
-  launcher->setEvents({
-      .output = [](int, bool, std::string) {},
-      .exit =
-          [&](int h, std::optional<int> code, std::optional<std::string> signal) {
-            std::lock_guard lock(mutex);
-            exits[h] = code ? "code " + std::to_string(*code) : *signal;
-            done.notify_all();
-          },
-  });
+  RealLauncher launcher;
   auto a = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
   auto b = std::get<int>(launcher->spawn("/bin/sleep", {"30"}, std::nullopt, {}));
   launcher->killAll(SIGKILL);
-  std::unique_lock lock(mutex);
-  REQUIRE(done.wait_for(lock, std::chrono::seconds(10), [&] { return exits.size() == 2; }));
-  CHECK(exits[a] == "SIGKILL");
-  CHECK(exits[b] == "SIGKILL");
+  REQUIRE(launcher.wait(a));
+  REQUIRE(launcher.wait(b));
+  CHECK(launcher.exit(a) == "SIGKILL");
+  CHECK(launcher.exit(b) == "SIGKILL");
 }
 
 TEST_CASE("the POSIX launcher forgets a program while its pid is still held, so a kill never reaches a reused pid") {

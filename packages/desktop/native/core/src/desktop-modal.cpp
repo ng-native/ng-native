@@ -96,14 +96,31 @@ Size extent(const SheetNode &parent) {
 
 } // namespace
 
+namespace {
+
+// The definite size of `parent`'s only child, with the room around it in the parent: where the
+// child sits (the parent's padding and the child's margin before it) and the parent's padding and
+// border after it.
+std::pair<std::optional<Float>, std::optional<Float>> definiteSize(const SheetNode &parent) {
+  if (parent.children.size() != 1) {
+    return {};
+  }
+  const auto &child = parent.children[0];
+  std::optional<Float> width, height;
+  if (child.width) {
+    width = child.frame.origin.x + *child.width + parent.insets.right;
+  }
+  if (child.height) {
+    height = child.frame.origin.y + *child.height + parent.insets.bottom;
+  }
+  return {width, height};
+}
+
+} // namespace
+
 Size sheetSize(const SheetNode &modal, Size window) {
   const SheetNode &node = contentParent(modal);
-  std::optional<Float> width;
-  std::optional<Float> height;
-  if (node.children.size() == 1) {
-    width = node.children[0].width;
-    height = node.children[0].height;
-  }
+  auto [width, height] = definiteSize(node);
   auto clamp = [](Float value, Float min, Float max) { return std::max(min, std::min(value, std::max(min, max))); };
   return {
       .width = clamp(width.value_or(kDefaultSheetWidth), kMinimumSheetSize.width, window.width),
@@ -114,10 +131,9 @@ Size sheetSize(const SheetNode &modal, Size window) {
 Size popoverSize(const SheetNode &presented, Size window) {
   const SheetNode &node = contentParent(presented);
   auto reach = extent(node);
-  if (node.children.size() == 1) {
-    reach.width = node.children[0].width.value_or(reach.width);
-    reach.height = node.children[0].height.value_or(reach.height);
-  }
+  auto [width, height] = definiteSize(node);
+  reach.width = width.value_or(reach.width);
+  reach.height = height.value_or(reach.height);
   return {
       .width = std::min({reach.width, kPopoverMax, window.width}),
       .height = std::min({reach.height, kPopoverMax, window.height}),

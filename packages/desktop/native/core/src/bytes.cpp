@@ -1,6 +1,8 @@
 #include "ngn/bytes.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace ngn {
 
@@ -49,25 +51,32 @@ std::optional<std::string> base64Decode(const std::string &text) {
   std::string out;
   uint32_t buffer = 0;
   int bits = 0;
-  bool padding = false;
+  size_t sextets = 0;
+  size_t padding = 0;
   for (char c : text) {
     if (c == '\n' || c == '\r' || c == ' ') {
       continue;
     }
     if (c == '=') {
-      padding = true;
+      padding++;
       continue;
     }
     int v = valueOf(c);
-    if (v < 0 || padding) {
+    if (v < 0 || padding > 0) {
       return std::nullopt;
     }
     buffer = buffer << 6 | v;
     bits += 6;
+    sextets++;
     if (bits >= 8) {
       bits -= 8;
       out += static_cast<char>(buffer >> bits & 0xff);
     }
+  }
+  // One character left over holds no whole byte; padding, where there is any, fills the last
+  // quantum exactly. Unpadded input is fine.
+  if (sextets % 4 == 1 || (padding > 0 && ((sextets + padding) % 4 != 0 || padding > 2))) {
+    return std::nullopt;
   }
   return out;
 }
@@ -99,10 +108,16 @@ std::optional<std::string> BlobStore::resolve(const folly::dynamic &blob) const 
     return std::nullopt;
   }
   const std::string &bytes = it->second;
-  size_t offset = blob.count("offset") && blob["offset"].isNumber() ? static_cast<size_t>(blob["offset"].asDouble()) : 0;
-  offset = std::min(offset, bytes.size());
-  size_t size = blob.count("size") && blob["size"].isNumber() ? static_cast<size_t>(blob["size"].asDouble())
-                                                              : bytes.size() - offset;
+  // Clamped while still a double, so a negative, huge or NaN bound is never converted out of range.
+  auto bound = [&](const char *name, size_t limit, size_t otherwise) {
+    if (!blob.count(name) || !blob[name].isNumber()) {
+      return otherwise;
+    }
+    double value = blob[name].asDouble();
+    return std::isnan(value) ? size_t{0} : static_cast<size_t>(std::clamp(value, 0.0, static_cast<double>(limit)));
+  };
+  size_t offset = bound("offset", bytes.size(), 0);
+  size_t size = bound("size", bytes.size() - offset, bytes.size() - offset);
   return bytes.substr(offset, size);
 }
 

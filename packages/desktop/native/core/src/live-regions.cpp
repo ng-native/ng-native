@@ -53,6 +53,11 @@ std::vector<Announcement> LiveRegions::didMount(SurfaceId surfaceId) {
     if (region.surfaceId != surfaceId || !tree_.contains(tag)) {
       continue;
     }
+    // A hidden region, or one under a hidden view, says nothing, and what it held stays the text
+    // its next change is compared with.
+    if (hiddenAt(tag)) {
+      continue;
+    }
     auto text = textOf(tag);
     bool news = !region.fresh && !text.empty() && text != region.text;
     region.fresh = false;
@@ -62,6 +67,15 @@ std::vector<Announcement> LiveRegions::didMount(SurfaceId surfaceId) {
     }
   }
   return said;
+}
+
+bool LiveRegions::hiddenAt(Tag tag) const {
+  for (const auto *node = tree_.find(tag); node != nullptr; node = tree_.find(node->parent)) {
+    if (const auto *props = viewProps(node->view); props && hidden(*props)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::string LiveRegions::textOf(Tag tag) const {

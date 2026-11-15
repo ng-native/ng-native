@@ -181,6 +181,20 @@ TEST_CASE("ImageCache keeps bytes in memory and on disk by policy, the least rec
   CHECK_FALSE(cache.find("b", "disk"));
 }
 
+TEST_CASE("ImageCache publishes a disk entry only once its bytes are written, whatever a stale partial left") {
+  Folder folder;
+  ngn::ImageCache cache(folder.path.string(), 10);
+  cache.store("old", "aaaa", "disk");
+  // Something left where an earlier write's partial file would be: a folder.
+  std::filesystem::create_directories(cache.diskPath("k") + ".part/x");
+  cache.store("k", "kkkk", "disk");
+  CHECK_FALSE(std::filesystem::is_directory(cache.diskPath("k")));
+  auto k = cache.find("k", "disk");
+  REQUIRE(k);
+  CHECK(k->first == "kkkk");
+  CHECK(cache.find("old", "disk")->first == "aaaa");
+}
+
 TEST_CASE("loadImageBytes fetches with the source's headers once, then answers from the cache by its cache key") {
   Folder folder;
   auto http = std::make_shared<ngn::testing::FakeHttp>();

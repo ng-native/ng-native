@@ -1,5 +1,6 @@
 #include "helpers.h"
 #include "ngn/file-system.h"
+#include "ngn/web-view.h"
 
 #include <doctest/doctest.h>
 
@@ -8,6 +9,7 @@
 #include <map>
 #include <random>
 #include <set>
+#include <utility>
 
 #include <folly/json.h>
 
@@ -71,7 +73,12 @@ ngn::FileAccess::Folders foldersIn(const fs::path &root) {
 struct FakeWatcher final : ngn::FileWatcher {
   std::map<int, std::pair<std::string, std::function<void(std::vector<Event>)>>> watches;
   int next{0};
+  // A batch sent from inside start, before the watch's id is answered.
+  std::vector<Event> early;
   int start(const std::string &path, std::function<void(std::vector<Event>)> events) override {
+    if (!early.empty()) {
+      events(std::exchange(early, {}));
+    }
     watches[++next] = {path, std::move(events)};
     return next;
   }
@@ -229,6 +236,56 @@ TEST_CASE("FileSystem makes folders and files, moves, copies and deletes, within
   CHECK(ask(*module, "deleteAsync", dynamic::array(data + "/a", dynamic::object("idempotent", true))).value == dynamic(nullptr));
 }
 
+TEST_CASE("FileSystem checks the path a call uses, not one a symbolic link and .. would lead to") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  // outside/link is data/sub: outside/link/.. is data to the OS, and outside once .. is taken away.
+  fs::create_directories(dir.path / "data/sub");
+  write(dir.path / "outside/secret.txt", "secret");
+  write(dir.path / "data/secret.txt", "mine");
+  fs::create_directory_symlink(dir.path / "data/sub", dir.path / "outside/link");
+  auto module = ngn::makeFileSystemModule(std::make_shared<ngn::FileAccess>(folders, dynamic::array()),
+                                          std::make_shared<FakeWatcher>());
+  auto through = ngn::fileUri((dir.path / "outside/link/../secret.txt").string());
+  auto read = ask(*module, "readAsStringAsync", dynamic::array(through));
+  CHECK(read.error);
+  CHECK_FALSE(read.value);
+  CHECK(ask(*module, "deleteAsync", dynamic::array(through)).error);
+  CHECK(fs::exists(dir.path / "outside/secret.txt"));
+}
+
+TEST_CASE("FileSystem copies a folder's symbolic links as links, and never writes through one out of reach") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  write(dir.path / "outside/secret.txt", "secret");
+  write(dir.path / "data/src/a.txt", "a");
+  fs::create_symlink(dir.path / "outside/secret.txt", dir.path / "data/src/link");
+  auto module = ngn::makeFileSystemModule(std::make_shared<ngn::FileAccess>(folders, dynamic::array()),
+                                          std::make_shared<FakeWatcher>());
+  auto data = ngn::fileUri(folders.appData);
+  CHECK(ask(*module, "copyAsync", dynamic::array(dynamic::object("from", data + "/src")("to", data + "/dst"))).value ==
+        dynamic(nullptr));
+  CHECK(fs::is_regular_file(fs::symlink_status(dir.path / "data/dst/a.txt")));
+  CHECK(fs::is_symlink(fs::symlink_status(dir.path / "data/dst/link")));
+  CHECK(ask(*module, "readAsStringAsync", dynamic::array(data + "/dst/link")).error);
+
+  // A link at the destination that points out of reach is not written through.
+  write(dir.path / "outside/kept.txt", "kept");
+  fs::create_directories(dir.path / "data/into");
+  fs::create_symlink(dir.path / "outside/kept.txt", dir.path / "data/into/a.txt");
+  write(dir.path / "data/only/a.txt", "overwrite");
+  CHECK(ask(*module, "copyAsync", dynamic::array(dynamic::object("from", data + "/only")("to", data + "/into"))).error);
+  std::ifstream kept(dir.path / "outside/kept.txt");
+  std::string text((std::istreambuf_iterator<char>(kept)), std::istreambuf_iterator<char>());
+  CHECK(text == "kept");
+
+  // A file copied onto a folder lands in it.
+  fs::create_directories(dir.path / "data/folder");
+  CHECK(ask(*module, "copyAsync", dynamic::array(dynamic::object("from", data + "/src/a.txt")("to", data + "/folder")))
+            .value == dynamic(nullptr));
+  CHECK(fs::is_regular_file(dir.path / "data/folder/a.txt"));
+}
+
 TEST_CASE("FileSystem answers each call synchronously too, as <name>Sync, throwing its failure") {
   TempDir dir;
   auto folders = foldersIn(dir.path);
@@ -360,6 +417,22 @@ TEST_CASE("FileSystem watches a path it can reach, reports its changes with the 
   }
   // The module going, as on a reload, stops what it started.
   CHECK(watcher->watches.empty());
+}
+
+TEST_CASE("a change the watcher sends before the watch's id is answered goes out with that id") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto watcher = std::make_shared<FakeWatcher>();
+  std::vector<dynamic> events;
+  auto module = ngn::makeFileSystemModule(std::make_shared<ngn::FileAccess>(folders, dynamic::array()), watcher);
+  module->setEmitter([&](const std::string &, dynamic body) { events.push_back(body); });
+  write(dir.path / "cache/early.txt", "");
+  watcher->early = {{.path = folders.cache + "/early.txt", .created = true}};
+  auto id = module->call("watch", dynamic::array(ngn::fileUri(folders.cache)));
+  REQUIRE(id.isInt());
+  REQUIRE(events.size() == 1);
+  CHECK(events[0]["watch"] == id);
+  CHECK(events[0]["uri"] == dynamic(ngn::fileUri(folders.cache + "/early.txt")));
 }
 
 namespace {
@@ -707,4 +780,25 @@ TEST_CASE("a watch keeps its pick open until it stops, and a refused start opens
   bookmarks->refuse = true;
   auto use = access->use(picked + "/x");
   CHECK_FALSE(use.started());
+}
+
+TEST_CASE("a web view page read with its folder holds the folder's pick open, not only its own") {
+  TempDir dir;
+  auto folders = foldersIn(dir.path);
+  auto site = (dir.path / "outside/site").string();
+  write(site + "/index.html", "<p>");
+  write(site + "/style.css", "p{}");
+  Saved saved;
+  auto bookmarks = std::make_shared<FakeBookmarks>();
+  ngn::FileAccess access(folders, dynamic::array());
+  access.keepPicks(std::make_shared<ngn::PickStore>(saved.persistence(), bookmarks));
+  access.allowPicked(site);
+  access.allowPicked(site + "/index.html");
+  {
+    auto page = ngn::webViewFile(&access, ngn::fileUri(site + "/index.html"));
+    REQUIRE(page);
+    CHECK(page->readAccess == ngn::fileUri(site) + "/");
+    CHECK(bookmarks->open["bm:" + site] == 1);
+  }
+  CHECK(bookmarks->opened() == 0);
 }

@@ -67,3 +67,23 @@ TEST_CASE("an empty string measures one line high and no width, as React Native 
   CHECK(size.width == doctest::Approx(0));
   CHECK(size.height == doctest::Approx(17.5));
 }
+
+TEST_CASE("an empty text and a visible I never share a cached size, whichever is measured first") {
+  Fixture f;
+  CHECK(f.measure("", {1000, 1000}).width == 0);
+  CHECK(f.measure("I", {1000, 1000}).width > 0);
+  Fixture g;
+  CHECK(g.measure("I", {1000, 1000}).width > 0);
+  CHECK(g.measure("", {1000, 1000}).width == 0);
+}
+
+TEST_CASE("a size measured before the measurer is installed is not kept for after") {
+  auto context = std::make_shared<ContextContainer>();
+  TextLayoutManager manager{context};
+  TextLayoutContext layoutContext;
+  layoutContext.pointScaleFactor = 2;
+  LayoutConstraints constraints{{0, 0}, {1000, 1000}};
+  CHECK(manager.measure(AttributedStringBox{text("hello")}, {}, layoutContext, constraints).size.width == 0);
+  ngn::installTextMeasurer(*context, std::make_shared<FakeTextMeasurer>());
+  CHECK(manager.measure(AttributedStringBox{text("hello")}, {}, layoutContext, constraints).size.width == doctest::Approx(36.5));
+}
