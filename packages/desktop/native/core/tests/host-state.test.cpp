@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 
+#include <functional>
 #include <vector>
 
 TEST_CASE("Watched calls each listener with a change, and stops when its handle goes") {
@@ -22,6 +23,25 @@ TEST_CASE("Dropping a Watched listener waits for a call to it already running on
   // The module a listener belongs to is being destroyed: once the handle is gone, nothing may call
   // into it.
   CHECK(ngn::testing::dropWaitsForRunningCall([&](auto listener) { return value.listen(listener); }, [&] { value.set(1); }));
+}
+
+TEST_CASE("dropWaitsForRunningCall answers false for a handle whose drop does not wait") {
+  std::function<void(const int &)> listener;
+  auto listen = [&](auto added) {
+    listener = added;
+    return std::make_shared<int>(0);
+  };
+  CHECK_FALSE(ngn::testing::dropWaitsForRunningCall(listen, [&] { listener(1); }));
+}
+
+TEST_CASE("dropWaitsForRunningCall reports a held call that gave up, not a drop that did not wait") {
+  ngn::Watched<int> value{0};
+  // The held call gives up after 50 ms, before the 200 ms the drop is given, so a drop that waits
+  // finishes inside it.
+  CHECK_THROWS_AS(
+      ngn::testing::dropWaitsForRunningCall(
+          [&](auto listener) { return value.listen(listener); }, [&] { value.set(1); }, std::chrono::milliseconds(50)),
+      std::runtime_error);
 }
 
 TEST_CASE("A listener can drop its own handle while it is being called") {
