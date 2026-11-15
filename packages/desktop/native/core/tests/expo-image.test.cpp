@@ -257,3 +257,48 @@ TEST_CASE("a recycling key changed from one key to another clears the image show
   CHECK_FALSE(ngn::recyclingKeyClears("", "row-1"));
   CHECK_FALSE(ngn::recyclingKeyClears("", ""));
 }
+
+TEST_CASE("a load answered late shows nothing once the source changed or went away, or the view was recycled") {
+  Folder folder;
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  auto cache = std::make_shared<ngn::ImageCache>(folder.path.string(), 1 << 20);
+  ngn::ImageLoads loads;
+  std::vector<std::string> shown;
+  // As the view loads: only a source that changed starts a load, and a late answer shows only
+  // while its turn is current.
+  auto fit = [&](std::optional<ngn::ImageSourceRef> source) {
+    auto turn = loads.fit(source);
+    if (turn && source) {
+      ngn::loadImageBytes(http, cache, nullptr, *source, "none", [&, turn = *turn](std::string bytes, ngn::ImageCache::Hit, const std::string &) {
+        if (loads.current(turn)) {
+          shown.push_back(bytes);
+        }
+      });
+    }
+  };
+  auto a = ngn::ImageSourceRef{.uri = "https://example.com/a.png"};
+  auto b = ngn::ImageSourceRef{.uri = "https://example.com/b.png"};
+  // The source changed while a's load ran.
+  fit(a);
+  fit(b);
+  fit(b);
+  REQUIRE(http->sent.size() == 2);
+  serve(*http, 0, "a");
+  CHECK(shown.empty());
+  serve(*http, 1, "b");
+  CHECK(shown == std::vector<std::string>{"b"});
+  // The source went away while a's load ran.
+  fit(a);
+  fit(std::nullopt);
+  serve(*http, 2, "a");
+  CHECK(shown == std::vector<std::string>{"b"});
+  // Recycled while a's load ran: the same source loads again, and only that load shows.
+  fit(a);
+  loads.recycle();
+  fit(a);
+  REQUIRE(http->sent.size() == 5);
+  serve(*http, 3, "a, for the last item");
+  CHECK(shown == std::vector<std::string>{"b"});
+  serve(*http, 4, "a");
+  CHECK(shown == std::vector<std::string>{"b", "a"});
+}

@@ -26,9 +26,8 @@ struct Shown {
   Shown _image;
   Shown _placeholder;
   // The source shown or loading, and which load is current: a later one supersedes it.
-  std::optional<ngn::ImageSourceRef> _source;
+  ngn::ImageLoads _loads;
   std::optional<ngn::ImageSourceRef> _placeholderSource;
-  uint64_t _generation;
   std::string _recyclingKey;
 }
 
@@ -70,8 +69,7 @@ struct Shown {
     [self setNeedsDisplay:YES];
     // The image is gone: the same source loads again below, and a load still running for the last
     // item shows nothing, even when this item has no source to load.
-    _source.reset();
-    ++_generation;
+    _loads.recycle();
   }
   _recyclingKey = props->recyclingKey;
   double scale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
@@ -81,11 +79,11 @@ struct Shown {
     [self loadPlaceholder:placeholder cachePolicy:props->cachePolicy];
   }
   auto source = ngn::bestImageSource(ngn::imageSources(props->source), self.bounds.size.width, self.bounds.size.height, scale);
-  if (source == _source) {
+  auto turn = _loads.fit(source);
+  if (!turn) {
     return;
   }
-  _source = source;
-  uint64_t generation = ++_generation;
+  uint64_t generation = *turn;
   if (!source) {
     _image.set(nullptr);
     [self setNeedsDisplay:YES];
@@ -138,7 +136,7 @@ struct Shown {
            hit:(ngn::ImageCache::Hit)hit
            url:(const std::string &)url
          error:(const std::string &)error {
-  if (generation != _generation) {
+  if (!_loads.current(generation)) {
     return;
   }
   if (!error.empty()) {
