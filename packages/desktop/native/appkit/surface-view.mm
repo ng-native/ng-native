@@ -198,11 +198,11 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
     _input->addContainer(container, surfaceId, rootTag);
     // The wheel reaches the core before the scroll view under the pointer takes it, and still
     // scrolls it: a `(wheel)` listener hears the turn without stopping the scroll, as on the web.
+    // A turn a gesture handler took goes no further, so the view does not scroll with it.
     __weak NGNSurfaceView *weakSelf = self;
     _wheelMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
                                                           handler:^NSEvent *(NSEvent *event) {
-                                                            [weakSelf wheelEvent:event];
-                                                            return event;
+                                                            return [weakSelf wheelEvent:event] ? nil : event;
                                                           }];
     // Files, urls and text dragged in from Finder and other apps go to the view under the drag
     // that takes drops (input-dispatcher.h); a text field under it takes text itself.
@@ -350,9 +350,10 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
   }
 }
 
-- (void)wheelEvent:(NSEvent *)event {
+// True when a gesture handler took the turn.
+- (BOOL)wheelEvent:(NSEvent *)event {
   if (event.window != self.window || ![self ownsPointer:event]) {
-    return;
+    return NO;
   }
   // The DOM's deltas are how far the content would move, down and right positive: AppKit's are
   // the other way round. A wheel without precise deltas counts lines.
@@ -366,8 +367,9 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
   };
   // A trackpad scroll's beginning and end carry no movement, and a gesture needs both.
   if (delta.x != 0 || delta.y != 0 || delta.phase) {
-    _input->wheel([self inputFor:event], delta);
+    return _input->wheel([self inputFor:event], delta).taken;
   }
+  return NO;
 }
 
 // A trackpad's pinch and rotation, for the gesture handler's pinch and rotation.
