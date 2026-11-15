@@ -29,7 +29,8 @@ class KeyValueStore {
 
  private:
   std::map<std::string, std::string> &load(const std::string &db);
-  bool save(const std::string &db);
+  // Writes `values` as the database, and keeps them once written.
+  bool save(const std::string &db, std::map<std::string, std::string> values);
   std::string path(const std::string &db) const;
 
   std::string directory_;
