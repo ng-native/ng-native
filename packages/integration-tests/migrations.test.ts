@@ -1291,6 +1291,7 @@ describe('available-signal in template text, which a template shows rather than 
   const html = [
     '<text>Uses haptics.available here</text>',
     '<text label="@if (haptics.available) yes @let x = haptics.available;"></text>',
+    "<text label=\"[hint]='haptics.available' (press)='haptics.available'\"></text>",
     '<text label="haptics.available" [hint]="haptics.available ? 1 : 2">{{ haptics.available }}</text>',
     '<pressable (press)="go(haptics.available)" *ngIf="haptics.available"></pressable>',
     '@if (haptics.available) { <text>haptics.available</text> } @else if (haptics.available) {}',
@@ -1302,6 +1303,7 @@ describe('available-signal in template text, which a template shows rather than 
   const called = [
     '<text>Uses haptics.available here</text>',
     '<text label="@if (haptics.available) yes @let x = haptics.available;"></text>',
+    "<text label=\"[hint]='haptics.available' (press)='haptics.available'\"></text>",
     '<text label="haptics.available" [hint]="haptics.available() ? 1 : 2">{{ haptics.available() }}</text>',
     '<pressable (press)="go(haptics.available())" *ngIf="haptics.available()"></pressable>',
     '@if (haptics.available()) { <text>haptics.available</text> } @else if (haptics.available()) {}',
