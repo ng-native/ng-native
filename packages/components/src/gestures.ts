@@ -61,6 +61,7 @@ import {
   type GestureEndValues,
 } from './gesture-backend.ts';
 import { NativeGestureBase } from './native-gesture.ts';
+import { trackedGestures } from './gesture-tracking.ts';
 
 // For the side effect: evaluating the package's index is what starts its event receiver, which
 // is what delivers a gesture whose callbacks are ordinary functions. An app importing `Gesture`
@@ -69,6 +70,7 @@ import { NativeGestureBase } from './native-gesture.ts';
 require('react-native-gesture-handler');
 
 export { type GestureSpec, type GestureTarget } from './gesture-backend.ts';
+export { untrackedGesture } from './gesture-tracking.ts';
 
 /**
  * The internals, required rather than imported, and each with a literal path because Metro builds
@@ -230,11 +232,13 @@ const backend: GestureBackend = {
     // One dispatcher for both event names, as the library's own event handler is: a gesture's
     // state changes and its updates arrive on different names and share the same state.
     const animated = gesturesToAttach.filter((g) => g.shouldUseReanimated);
-    const reports = report ? reporting(gesturesToAttach, report) : null;
+    const tracked = report ? trackedGestures(gesturesToAttach) : [];
+    const reports = report && tracked.length ? reporting(tracked, report) : null;
     const dispatch = gestureDispatcher(
       animated.map((g) => g.handlers),
       createManager,
       reports?.fromUI,
+      tracked.map((g) => g.handlers.handlerTag),
     );
     const registrations = animated.length
       ? EVENT_NAMES.map((name) => registerEventHandler(dispatch, name, target.tag))

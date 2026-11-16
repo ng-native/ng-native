@@ -190,12 +190,14 @@ function touches(
  * closure holds is serialised onto the UI runtime with it.
  *
  * `report`, when given, hears each gesture that ends successfully, once, after its own `onEnd`.
- * On a device it is a worklet that schedules the report onto the JavaScript thread.
+ * On a device it is a worklet that schedules the report onto the JavaScript thread. `reported`
+ * narrows it to the gestures with those handler tags, and the rest do no reporting work.
  */
 export function gestureDispatcher(
   callbacks: readonly GestureCallbacks[],
   createManager: (handlerTag: number) => GestureStateManager,
   report?: GestureEndReport,
+  reported?: readonly number[],
 ): (event: GestureEvent) => void {
   // Captured, not passed: a worklet's closure is serialised once and reused, so this is how what
   // one event knew survives to the next. Reanimated's own dispatcher keeps its state the same way.
@@ -206,7 +208,9 @@ export function gestureDispatcher(
       if (event.handlerTag !== gesture.handlerTag) continue;
       if (event.oldState != null) {
         stateChange(gesture, event, memory);
-        if (report) reportEnd(gesture.handlerTag, event, memory, report);
+        if (report && (!reported || reported.includes(gesture.handlerTag))) {
+          reportEnd(gesture.handlerTag, event, memory, report);
+        }
       } else if (event.eventType != null) touches(gesture, event, memory, createManager);
       else update(gesture, event, memory);
     }

@@ -7,6 +7,7 @@ import { describe, it } from 'node:test';
 import { SWIPE_VELOCITY } from '@ng-native/components';
 import type { GestureEndValues } from '../components/src/gesture-backend.ts';
 import { gestureInteraction } from '../components/src/gesture-interaction.ts';
+import { trackedGestures, untrackedGesture } from '../components/src/gesture-tracking.ts';
 
 const ended = (
   handlerName: string,
@@ -167,5 +168,48 @@ describe('gesture interaction', () => {
   it('reports neither a hover nor a native view, which reports itself', () => {
     assert.equal(ended('HoverGestureHandler', {}), null);
     assert.equal(ended('NativeViewGestureHandler', {}), null);
+  });
+});
+
+describe('gesture interaction, one gesture kept out', () => {
+  /** A gesture as the library builds one: a single gesture attaches itself. */
+  const gesture = (handlerName: string) => {
+    const self = { handlerName, toGestureArray: () => [self] };
+    return self;
+  };
+  /** A composed gesture attaches the single gestures it is made of. */
+  const composed = (...parts: ReturnType<typeof gesture>[]) => ({
+    toGestureArray: () => parts,
+  });
+
+  it('keeps an untracked gesture of a composed one out, and reports the rest', () => {
+    const tap = gesture('TapGestureHandler');
+    const pan = gesture('PanGestureHandler');
+    const pinch = gesture('PinchGestureHandler');
+
+    assert.equal(untrackedGesture(pan), pan, 'the same gesture, so it nests in a composition');
+    assert.deepEqual(
+      trackedGestures(composed(tap, pan, pinch).toGestureArray()).map((g) => g.handlerName),
+      ['TapGestureHandler', 'PinchGestureHandler'],
+    );
+  });
+
+  it('keeps every gesture of an untracked composed gesture out', () => {
+    const tap = gesture('TapGestureHandler');
+    const pan = gesture('PanGestureHandler');
+    const pinch = gesture('PinchGestureHandler');
+    const both = composed(pan, pinch);
+
+    assert.equal(untrackedGesture(both), both);
+    assert.deepEqual(
+      trackedGestures([tap, ...both.toGestureArray()]).map((g) => g.handlerName),
+      ['TapGestureHandler'],
+    );
+  });
+
+  it('keeps a gesture with no gesture array of its own out, as the test stand-in builds one', () => {
+    const standIn = { kind: 'Pan' };
+    assert.equal(untrackedGesture(standIn), standIn);
+    assert.deepEqual(trackedGestures([standIn, { kind: 'Tap' }]), [{ kind: 'Tap' }]);
   });
 });

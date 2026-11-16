@@ -12,6 +12,7 @@ import type { GestureSpec } from './gesture-backend.ts';
 import { booleanOr } from './transforms.ts';
 
 export { type GestureSpec, type GestureTarget } from './gesture-backend.ts';
+export { untrackedGesture } from './gesture-tracking.ts';
 
 @Directive({ selector: '[gesture]' })
 export class NativeGesture {

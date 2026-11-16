@@ -262,4 +262,23 @@ describe('gesture dispatch, reporting an end', () => {
 
     assert.deepEqual(reports, [{ handlerTag: TAG, scale: 2, startX: 10, startY: 20 }]);
   });
+
+  it('reports only the gestures it was told to, and keeps the others out', () => {
+    const reports: GestureEndValues[] = [];
+    const other = TAG + 1;
+    const dispatch = gestureDispatcher(
+      [recording().callbacks, { ...recording().callbacks, handlerTag: other }],
+      managers,
+      (end) => reports.push(end),
+      [TAG],
+    );
+
+    for (const handlerTag of [other, TAG]) {
+      dispatch({ handlerTag, oldState: GESTURE_STATE.UNDETERMINED, state: GESTURE_STATE.BEGAN });
+      dispatch({ handlerTag, oldState: GESTURE_STATE.BEGAN, state: GESTURE_STATE.ACTIVE });
+      dispatch({ handlerTag, oldState: GESTURE_STATE.ACTIVE, state: GESTURE_STATE.END });
+    }
+
+    assert.deepEqual(reports, [{ handlerTag: TAG }]);
+  });
 });

@@ -158,6 +158,28 @@ every stroke is not worth recording, set `trackGesture` to `false`:
 <view [gesture]="draw" [trackGesture]="false"></view>
 ```
 
+To keep one gesture of a composed gesture out and report the others, wrap it in
+`untrackedGesture()` from `@ng-native/components/gestures`. It returns the same gesture, so it nests
+inside a composition, and an untracked composed gesture keeps every gesture it is made of out. This
+reports the tap and never the stroke:
+
+```ts
+import { Component } from '@angular/core';
+import { Gesture } from 'react-native-gesture-handler';
+import { NativeGesture, untrackedGesture } from '@ng-native/components/gestures';
+
+@Component({
+  selector: 'app-canvas',
+  imports: [NativeGesture],
+  template: '<view [gesture]="draw"></view>',
+})
+export class Canvas {
+  protected readonly draw = Gesture.Race(Gesture.Tap(), untrackedGesture(Gesture.Pan()));
+}
+```
+
+Like the input, it is read when the gesture is attached.
+
 On the web host, `[gesture]` attaches nothing, so nothing is reported.
 
 ## Privacy
