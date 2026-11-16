@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
 import type { Type, WritableSignal } from '@angular/core';
 import { registerPlatformComponents } from '@ng-native/fabric';
-import { registerExpoUiViews } from '@ng-native/expo';
+import { registerExpoUiViews, registerNativeViews } from '@ng-native/expo';
 import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { provideInteractionObserver, type InteractionEvent } from '@ng-native/components';
 import { compileFixture } from './compile.ts';
@@ -246,5 +246,73 @@ describe('controls left out', () => {
     const { byTestID, emit, reports } = await boot('ios');
     await emit(byTestID('name'), 'topValueChanged', { value: 'Ada' });
     assert.deepEqual(reports(), []);
+  });
+});
+
+describe('a segmented control', () => {
+  let Segmented: Type<{ events: string[] }>;
+
+  before(async () => {
+    const mod = await compileFixture('fixtures/expo-ui-interactions.ts');
+    Segmented = mod['SegmentedControlInteractionsFixture'] as typeof Segmented;
+    registerNativeViews('segmented-control');
+  });
+
+  async function bootSegmented(observer?: () => void) {
+    const heard: InteractionEvent[] = [];
+    const logged: string[][] = [];
+    const rendered = await render(Segmented, {
+      providers: [
+        provideInteractionObserver(
+          observer ??
+            ((event) => {
+              heard.push(event);
+              logged.push([...rendered.instance.events]);
+            }),
+        ),
+      ],
+    });
+    await settle();
+    const control = rendered.fabric.find('RNCSegmentedControl')!;
+    const pick = async (index: number) => {
+      rendered.fabric.emit(control, 'topChange', {
+        selectedSegmentIndex: index,
+        value: ['List', 'Grid'][index],
+      });
+      await settle();
+    };
+    return { ...rendered, heard, logged, pick };
+  }
+
+  it('reports each pick as one click, after its own change, without the segment picked', async () => {
+    const { heard, logged, pick } = await bootSegmented();
+    await pick(1);
+    assert.deepEqual(heard.map(stable), [
+      {
+        type: 'click',
+        element: 'segmented-control',
+        label: 'View',
+        testID: 'view',
+        source: 'click',
+      },
+    ]);
+    assert.deepEqual(logged, [['view']], 'after the control has run its own change');
+    await pick(0);
+    assert.equal(heard.length, 2, 'once a pick');
+  });
+
+  it('keeps working when an observer throws', async () => {
+    const { instance, pick } = await bootSegmented(() => {
+      throw new Error('broken observer');
+    });
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await pick(1);
+      await pick(0);
+    } finally {
+      console.warn = warn;
+    }
+    assert.deepEqual(instance.events, ['view', 'view']);
   });
 });

@@ -77,14 +77,18 @@ name, such as `ui-button`:
   reports as the picker is first drawn, and the date SwiftUI reports as an empty picker appears,
   are not the user's, and are not reported.
 
+From `@ng-native/expo`, a `<segmented-control>` claimed by the `SegmentedControl` component reports
+each segment the user picks, after its `change`, on iOS and macOS, where it is a native control.
+
 `ui-text-field` (typing), opening a `ui-exposed-dropdown-menu-box`, and dismissing a
 `ui-bottom-sheet` report nothing.
 
 From `@ng-native/router`, a tap on an item of the native tab bar, including the tab already in
 front and a tab a guard refuses, and a tap on a `<native-header-item>` that is a native bar button
 are reported as a `click` with the item's `title` as `label`, or its `accessibilityLabel` when it
-has no title. The navigation a tab starts is not reported, nor are tab changes made by code. Taps on
-the actions of a header item's `[menu]` are not reported.
+has no title. An action tapped in a header item's `[menu]`, which only iOS draws, is reported the
+same way after it runs, with the action's title as `label` and the `role` `menuitem`. The navigation
+a tab starts is not reported, nor are tab changes made by code.
 
 None of these carry what the control was set to, since that can be user data. They carry no touch
 point, so their `source` is `click`. A disabled one reports nothing.

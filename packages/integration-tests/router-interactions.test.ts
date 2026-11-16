@@ -1,7 +1,8 @@
 /**
- * Interaction observers hear the router's native controls: a tab tapped in the native tab bar, and
- * a native header bar button. Each is a `click` labelled with the item's title. The navigation a
- * tab tap starts is not an interaction, and is not reported.
+ * Interaction observers hear the router's native controls: a tab tapped in the native tab bar, a
+ * native header bar button, and an action of a bar button's menu. Each is a `click` labelled with
+ * the item's or the action's title. The navigation a tab tap starts is not an interaction, and is
+ * not reported.
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
@@ -191,5 +192,120 @@ describe('a native header bar button tapped', () => {
       console.warn = warn;
     }
     assert.equal(saved, 2);
+  });
+});
+
+describe('an action of a native header bar menu tapped', () => {
+  type Entry = Record<string, unknown> & { items?: Entry[] };
+  let ObjectMenu: Type<{ chosen: string[] }>;
+  let TemplateMenu: Type<{ chosen: string[] }>;
+
+  before(async () => {
+    registerScreenComponents();
+    const mod = await compileFixture('fixtures/header-item.ts');
+    ObjectMenu = mod['HeaderMenuHost'] as typeof ObjectMenu;
+    TemplateMenu = mod['HeaderTemplateMenuHost'] as typeof TemplateMenu;
+  });
+
+  async function boot(host: Type<{ chosen: string[] }>, observe = true) {
+    const heard: InteractionEvent[] = [];
+    const logged: string[][] = [];
+    const app = await render(host, {
+      providers: observe
+        ? [
+            provideInteractionObserver((event) => {
+              heard.push(event);
+              logged.push([...app.instance.chosen]);
+            }),
+          ]
+        : [],
+    });
+    const config = () => app.fabric.find('RNSScreenStackHeaderConfig')!;
+    const menu = (side: 'Left' | 'Right') =>
+      (config().props[`header${side}BarButtonItems`] as Entry[])[0]!['menu'] as Entry;
+    const choose = (menuId: unknown) =>
+      fireEvent(config(), 'pressHeaderBarButtonMenuItem', { menuId });
+    return { ...app, heard, logged, menu, choose };
+  }
+
+  it('is reported as a click with its title, after (menuSelect), at any depth', async () => {
+    const { heard, logged, menu, choose } = await boot(ObjectMenu);
+    await choose(menu('Left').items![0]!['menuId']);
+    assert.deepEqual(heard.map(stable), [
+      {
+        type: 'click',
+        element: 'native-header-item',
+        label: 'Name',
+        role: 'menuitem',
+        source: 'click',
+      },
+    ]);
+    assert.deepEqual(logged, [['name']], 'after the item has emitted (menuSelect)');
+    await choose(menu('Left').items![2]!.items![1]!.items![0]!['menuId']);
+    assert.deepEqual(
+      heard.map((event) => event.label),
+      ['Name', 'Deeper'],
+    );
+  });
+
+  it('is reported for a menu written as a template, after the item s (select)', async () => {
+    const { heard, logged, menu, choose } = await boot(TemplateMenu);
+    await choose(menu('Right').items![1]!.items![0]!.items![0]!['menuId']);
+    assert.deepEqual(
+      heard.map((event) => [event.type, event.element, event.label, event.role]),
+      [['click', 'native-header-item', 'Copy Link', 'menuitem']],
+    );
+    assert.deepEqual(logged, [['copy']]);
+  });
+
+  it('reports nothing for an action the menu no longer has, a disabled one or no action', async () => {
+    const { heard, menu, choose, instance, detectChanges } = await boot(ObjectMenu);
+    const host = instance as unknown as { menu: { set(value: unknown): void } };
+    await choose(menu('Left').items![1]!['menuId']);
+    const name = menu('Left').items![0]!['menuId'];
+    host.menu.set({ items: [{ type: 'action', id: 'other', title: 'Other' }] });
+    await detectChanges();
+    // The engine hands what a listener throws to the error handler, which logs it.
+    const error = console.error;
+    const errors: unknown[] = [];
+    console.error = (...args: unknown[]) => void errors.push(args);
+    try {
+      await choose(name);
+      await choose('someone-else/name');
+      await choose(undefined);
+    } finally {
+      console.error = error;
+    }
+    assert.deepEqual(errors, []);
+    assert.deepEqual(heard, []);
+  });
+
+  it('reports nothing without an observer, and still runs the action', async () => {
+    const { heard, menu, choose, instance } = await boot(ObjectMenu, false);
+    await choose(menu('Left').items![0]!['menuId']);
+    assert.deepEqual(instance.chosen, ['name']);
+    assert.deepEqual(heard, []);
+  });
+
+  it('keeps working when an observer throws', async () => {
+    const app = await render(ObjectMenu, {
+      providers: [
+        provideInteractionObserver(() => {
+          throw new Error('broken observer');
+        }),
+      ],
+    });
+    const config = () => app.fabric.find('RNSScreenStackHeaderConfig')!;
+    const left = config().props['headerLeftBarButtonItems'] as Entry[];
+    const name = (left[0]!['menu'] as Entry).items![0]!['menuId'];
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await fireEvent(config(), 'pressHeaderBarButtonMenuItem', { menuId: name });
+      await fireEvent(config(), 'pressHeaderBarButtonMenuItem', { menuId: name });
+    } finally {
+      console.warn = warn;
+    }
+    assert.deepEqual(app.instance.chosen, ['name', 'name']);
   });
 });

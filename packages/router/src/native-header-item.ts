@@ -283,25 +283,34 @@ export class NativeHeaderItem implements AfterContentInit {
    * `click` with its title, or its spoken label for a symbol alone.
    */
   private reportPress(): void {
+    this.reportClick(this.title() ?? this.accessibilityLabel(), 'button');
+  }
+
+  private reportClick(label: string | undefined, role: string): void {
     const observers = interactionObservers(this.injector);
     if (!observers) return;
-    const label = this.title() ?? this.accessibilityLabel();
     notifyInteraction(observers, {
       type: 'click',
       ...describeElement(this.engine as HostEngine, this.node),
       ...(label !== undefined && { label }),
-      role: 'button',
+      role,
       source: 'click',
       timestamp: Date.now(),
     });
   }
 
+  /**
+   * Run the action of this item's menu that native names, then report it to the app's interaction
+   * observers as a `click` with the action's title.
+   */
   private chooseFrom(menuId: string): void {
     const resolved = this.resolvedMenu();
     if (!resolved || !menuId.startsWith(this.menuIdPrefix)) return;
     const id = menuId.slice(this.menuIdPrefix.length);
+    const action = findAction(resolved.menu, id);
     if (resolved.actions) resolved.actions.get(id)?.();
-    else if (hasAction(resolved.menu, id)) this.menuSelect.emit(id);
+    else if (action) this.menuSelect.emit(id);
+    if (action && !action.disabled) this.reportClick(action.title, 'menuitem');
   }
 
   // --- a menu written as a template ------------------------------------------------------
@@ -438,9 +447,17 @@ function headerAction(
   };
 }
 
-/** Whether a menu still has an action. Native can report one it drew before the menu changed. */
-function hasAction(menu: HeaderMenu, id: string): boolean {
-  return menu.items.some((item) => (item.type === 'action' ? item.id === id : hasAction(item, id)));
+/**
+ * A menu's action by its id, if the menu still has it. Native can report one it drew before the
+ * menu changed.
+ */
+function findAction(menu: HeaderMenu, id: string): HeaderMenuAction | undefined {
+  for (const item of menu.items) {
+    const found =
+      item.type === 'action' ? (item.id === id ? item : undefined) : findAction(item, id);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /** Says once, in development, that Android's header has no bar buttons to draw. */

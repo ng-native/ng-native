@@ -12,6 +12,7 @@ import {
   UiTextField,
   UiToggle,
 } from '../../expo/src/expo-ui-components.ts';
+import { SegmentedControl } from '../../expo/src/segmented-control.ts';
 
 /** Each `@expo/ui` control that reports a tap, logging its own outputs, for the interaction observers. */
 @Component({
@@ -63,6 +64,28 @@ export class ExpoUiInteractionsFixture {
   readonly when = signal<Date | null>(new Date(0));
   readonly locked = signal(false);
   readonly pickerStyle = signal<'segmented' | 'menu'>('segmented');
+
+  log(event: string): void {
+    this.events.push(event);
+  }
+}
+
+/** A `<segmented-control>`, a UIKit control outside `@expo/ui`, logging its `change`. */
+@Component({
+  selector: 'x-segmented-control-interactions',
+  imports: [SegmentedControl],
+  template: `
+    <segmented-control
+      testID="view"
+      accessibilityLabel="View"
+      [values]="['List', 'Grid']"
+      [selectedIndex]="0"
+      (change)="log('view')"
+    />
+  `,
+})
+export class SegmentedControlInteractionsFixture {
+  readonly events: string[] = [];
 
   log(event: string): void {
     this.events.push(event);

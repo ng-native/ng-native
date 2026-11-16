@@ -5,11 +5,15 @@
  * only claims it so strict templates know its props. Each input goes straight to the node, and
  * `change` is an output for its type only: the element's own event is what arrives, as with the
  * `@expo/ui` components in `expo-ui-components.ts`.
+ *
+ * Each pick the user makes is reported to the app's interaction observers as a `click`, after
+ * `change`, without the segment picked, since what a control was set to can be user data.
  */
 import { Component, input, output } from '@angular/core';
 import type { ControlSize } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
+import { reportClicksOn } from './ui-click-reports.ts';
 
 /** The font the segments' titles are drawn in. */
 export interface SegmentedControlFont {
@@ -61,4 +65,8 @@ export class SegmentedControl {
   });
   readonly accessibilityLabel = input<string>();
   readonly change = output<SegmentedControlChangeEvent>();
+
+  constructor() {
+    reportClicksOn('topChange');
+  }
 }
