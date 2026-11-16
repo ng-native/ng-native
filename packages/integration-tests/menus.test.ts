@@ -25,7 +25,7 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import { signal, type Type, type WritableSignal } from '@angular/core';
+import { ErrorHandler, signal, type Type, type WritableSignal } from '@angular/core';
 import {
   Menus,
   OS,
@@ -45,6 +45,7 @@ type Fixture = {
   dirty: WritableSignal<boolean>;
   wrap: WritableSignal<boolean>;
   renaming: WritableSignal<boolean>;
+  copy: () => { select: { subscribe(listener: () => void): { unsubscribe(): void } } } | undefined;
   said: string[];
 };
 let Fixture: Type<Fixture>;
@@ -267,6 +268,57 @@ describe('shortcuts', () => {
       host.shortcuts().find((one) => one.label === 'New'),
       undefined,
     );
+  });
+});
+
+describe('a shortcut with no host to send it to', () => {
+  it('is still checked, as it is first given and as it changes', async () => {
+    const errors: unknown[] = [];
+    const key = signal('mod+k');
+    const { Shortcut, View } = await import('@ng-native/components');
+    const app = await render(`<view [shortcut]="key()" (shortcutPress)="0"></view>`, {
+      imports: [Shortcut, View],
+      providers: [
+        { provide: Menus.SOURCE, useValue: null },
+        {
+          provide: ErrorHandler,
+          useValue: { handleError: (error: unknown) => errors.push(error) },
+        },
+      ],
+      componentProperties: { key },
+    });
+    await settle();
+    assert.deepEqual(errors, []);
+    key.set('hyper+k');
+    // Thrown out of change detection, or handed to the ErrorHandler: either way, said.
+    const failure = await app.detectChanges().then(
+      () => settle().then(() => errors[0]),
+      (error: unknown) => error,
+    );
+    assert.match(String(failure), /no modifier 'hyper'/);
+  });
+});
+
+describe('a role item listened to later', () => {
+  after(() => registerPlatformComponents('ios'));
+
+  it("is the app's while something listens to its select, and the OS's again after", async () => {
+    const { host, app, said } = await open('macos', true);
+    const copy = () => item(host.bar()[2], 'Copy Note');
+    assert.equal(copy()?.handled, undefined);
+    const subscription = app.instance.copy()!.select.subscribe(() => said.push('copy'));
+    await app.detectChanges();
+    assert.equal(copy()?.handled, true);
+    await host.send({ type: 'menuSelect', id: copy()!.id });
+    assert.deepEqual(said, ['copy']);
+    const another = app.instance.copy()!.select.subscribe(() => {});
+    subscription.unsubscribe();
+    subscription.unsubscribe();
+    await app.detectChanges();
+    assert.equal(copy()?.handled, true, 'one listener stopped twice leaves the other');
+    another.unsubscribe();
+    await app.detectChanges();
+    assert.equal(copy()?.handled, undefined);
   });
 });
 

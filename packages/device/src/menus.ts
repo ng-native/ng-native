@@ -387,7 +387,12 @@ export class Menus {
 
   constructor() {
     const native = this.native;
-    if (!native) return;
+    if (!native) {
+      // Read for nothing, so a shortcut the app gets wrong throws where there is no host too, and
+      // not first on a device that has one.
+      effect(() => this.sentShortcuts());
+      return;
+    }
     effect(() => {
       if (this.menuBarShown()) native.setMenuBar(this.sentBar().sent);
     });

@@ -1,4 +1,4 @@
-import { DestroyRef, Directive, inject, input, output } from '@angular/core';
+import { DestroyRef, Directive, inject, input, output, type OnInit } from '@angular/core';
 import { Menus } from '@ng-native/device';
 
 /**
@@ -8,16 +8,24 @@ import { Menus } from '@ng-native/device';
  * `shortcutLabel`. The editing keys (mod+z, x, c, v and a) go to a focused text input first.
  */
 @Directive({ selector: '[shortcut]:not(menu-item)' })
-export class Shortcut {
+export class Shortcut implements OnInit {
   readonly shortcut = input.required<string>();
   /** What Android's Keyboard Shortcuts helper lists it as. */
   readonly shortcutLabel = input('');
   readonly shortcutPress = output<void>();
 
-  constructor() {
-    const stop = inject(Menus).addShortcut(this.shortcut, this.shortcutLabel, () =>
+  private readonly menus = inject(Menus);
+  private readonly destroyRef = inject(DestroyRef);
+
+  /** Once the inputs are set: a bound `[shortcut]` has no value while the constructor runs. */
+  ngOnInit(): void {
+    this.register();
+  }
+
+  private register(): void {
+    const stop = this.menus.addShortcut(this.shortcut, this.shortcutLabel, () =>
       this.shortcutPress.emit(),
     );
-    inject(DestroyRef).onDestroy(stop);
+    this.destroyRef.onDestroy(stop);
   }
 }
