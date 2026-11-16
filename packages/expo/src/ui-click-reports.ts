@@ -6,6 +6,7 @@
 import { DestroyRef, ElementRef, Injector, afterNextRender, inject } from '@angular/core';
 import {
   type InteractionEvent,
+  MAX_TEXT_LENGTH,
   describeElement,
   interactionObservers,
   notifyInteraction,
@@ -26,10 +27,12 @@ export function clickReporter(extra?: Extra): () => void {
   return () => {
     const observers = interactionObservers(injector);
     if (!observers) return;
+    const added = extra?.();
     notifyInteraction(observers, {
       type: 'click',
       ...describeElement(engine, node),
-      ...extra?.(),
+      ...added,
+      ...(added?.text && { text: added.text.slice(0, MAX_TEXT_LENGTH) }),
       source: 'click',
       timestamp: Date.now(),
     });

@@ -66,8 +66,8 @@ The typed `@expo/ui` controls from `@ng-native/expo` report the same way, each w
 name, such as `ui-button`:
 
 - `ui-button`, `ui-segmented-button` and `ui-dropdown-menu-item`, when pressed. A `ui-button`
-  carries its `label` as `text`, and the `role` `button`.
-- `ui-toggle`, `ui-stepper` and `ui-color-picker`, each time the user changes them.
+  carries its `label` as `text`, cut to 100 characters, and the `role` `button`.
+- `ui-toggle`, and on iOS only `ui-stepper` and `ui-color-picker`, each time the user changes them.
 - `ui-slider`, once a drag, as the finger lifts, rather than for every value the thumb moves
   through.
 - `ui-picker`, each time the user picks an option, including on Android, where the picker is drawn

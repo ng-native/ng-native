@@ -32,6 +32,7 @@ import {
   template: `
     <ui-host>
       <ui-button testID="save" label="Save" role="destructive" (buttonPress)="log('save')" />
+      <ui-button testID="long" [label]="'x'.repeat(150)" />
       <ui-toggle testID="wifi" label="Wi-Fi" (isOnChange)="log('wifi')" />
       <ui-slider testID="volume" [value]="0.5" (valueChanged)="log('volume')" />
       <ui-stepper testID="guests" [value]="2" (valueChange)="log('guests')" />

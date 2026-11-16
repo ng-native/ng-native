@@ -142,6 +142,12 @@ describe('an @expo/ui button', () => {
     ]);
   });
 
+  it('cuts a long label to the length of any other reported text', async () => {
+    const { byTestID, emit, heard } = await boot('ios');
+    await emit(byTestID('long'), 'topButtonPress');
+    assert.equal(heard[0]?.text, 'x'.repeat(100));
+  });
+
   it('keeps working when an observer throws', async () => {
     registerPlatformComponents('ios');
     registerExpoUiViews('ios');
