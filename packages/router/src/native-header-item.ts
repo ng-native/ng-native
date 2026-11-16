@@ -57,7 +57,10 @@ import {
 import {
   buildMenuTemplate,
   isSeparator,
+  describeElement,
+  interactionObservers,
   menuActionId,
+  notifyInteraction,
   type MenuEntry,
   type MenuItemModel,
   type MenuTemplate,
@@ -157,7 +160,10 @@ export class NativeHeaderItem implements AfterContentInit {
           side: this.side,
           hidden: computed(() => this.hidden() === true),
           button: this.button,
-          press: () => this.press.emit(),
+          press: () => {
+            this.press.emit();
+            this.reportPress();
+          },
           choose: (menuId) => this.chooseFrom(menuId),
         }),
       );
@@ -271,6 +277,24 @@ export class NativeHeaderItem implements AfterContentInit {
     for (const key of Object.keys(config)) if (config[key] === undefined) delete config[key];
     return config;
   });
+
+  /**
+   * Tell the app's interaction observers, if it has any, that the bar button was tapped, as a
+   * `click` with its title, or its spoken label for a symbol alone.
+   */
+  private reportPress(): void {
+    const observers = interactionObservers(this.injector);
+    if (!observers) return;
+    const label = this.title() ?? this.accessibilityLabel();
+    notifyInteraction(observers, {
+      type: 'click',
+      ...describeElement(this.engine as HostEngine, this.node),
+      ...(label !== undefined && { label }),
+      role: 'button',
+      source: 'click',
+      timestamp: Date.now(),
+    });
+  }
 
   private chooseFrom(menuId: string): void {
     const resolved = this.resolvedMenu();

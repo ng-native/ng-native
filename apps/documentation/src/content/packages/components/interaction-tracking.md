@@ -62,7 +62,32 @@ and report a `click` from their own native event instead:
   fires `press`. On Android it is pressed through the responder like a `<pressable>`, and reported
   as one.
 
-These carry no touch point, so their `source` is `click`. A disabled one reports nothing.
+The typed `@expo/ui` controls from `@ng-native/expo` report the same way, each with its element
+name, such as `ui-button`:
+
+- `ui-button`, `ui-segmented-button` and `ui-dropdown-menu-item`, when pressed. A `ui-button`
+  carries its `label` as `text`, and the `role` `button`.
+- `ui-toggle`, `ui-stepper` and `ui-color-picker`, each time the user changes them.
+- `ui-slider`, once a drag, as the finger lifts, rather than for every value the thumb moves
+  through.
+- `ui-picker`, each time the user picks an option, including on Android, where the picker is drawn
+  with segmented buttons or a dropdown menu: the event names the picker, not the button or menu
+  item inside it.
+- `ui-date-picker`, each time the user picks a date other than the one it holds. The date Compose
+  reports as the picker is first drawn, and the date SwiftUI reports as an empty picker appears,
+  are not the user's, and are not reported.
+
+`ui-text-field` (typing), opening a `ui-exposed-dropdown-menu-box`, and dismissing a
+`ui-bottom-sheet` report nothing.
+
+From `@ng-native/router`, a tap on an item of the native tab bar, including the tab already in
+front and a tab a guard refuses, and a tap on a `<native-header-item>` that is a native bar button
+are reported as a `click` with the item's `title` as `label`, or its `accessibilityLabel` when it
+has no title. The navigation a tab starts is not reported, nor are tab changes made by code. Taps on
+the actions of a header item's `[menu]` are not reported.
+
+None of these carry what the control was set to, since that can be user data. They carry no touch
+point, so their `source` is `click`. A disabled one reports nothing.
 
 Each event carries:
 

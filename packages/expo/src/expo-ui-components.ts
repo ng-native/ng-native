@@ -57,6 +57,7 @@ import {
   nativePlatform,
 } from '@ng-native/fabric';
 import { optional } from './native.ts';
+import { clickReporter, reportClicksOn } from './ui-click-reports.ts';
 import { booleanOr, optionalBoolean, optionalNumber } from './transforms.ts';
 import { UiBottomSheetContent } from './ui-bottom-sheet-content.ts';
 import { type UiBottomSheetPresentedEvent, UiBottomSheetView } from './ui-bottom-sheet-view.ts';
@@ -228,6 +229,13 @@ export class UiButton {
   readonly target = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
   readonly buttonPress = output<NativeSyntheticEvent<Record<string, never>>>();
+
+  constructor() {
+    reportClicksOn(this.android ? 'topButtonPressed' : 'topButtonPress', undefined, () => ({
+      role: 'button',
+      ...(this.label() && { text: this.label() }),
+    }));
+  }
 }
 
 /** A SwiftUI `Divider`, or Compose's `HorizontalDivider`: a separator between groups of items. */
@@ -360,6 +368,12 @@ export class UiSlider {
   readonly valueChanged = output<UiSliderChangeEvent>();
 
   protected readonly android = nativePlatform() === 'android';
+
+  constructor() {
+    // Once a drag, as the finger lifts: SwiftUI says editing ended, Compose that the value is final.
+    if (this.android) reportClicksOn('topValueChangeFinished');
+    else reportClicksOn('topEditingChanged', ({ isEditing }) => isEditing === false);
+  }
   /** A whole number of steps, which is all Compose can draw. */
   private readonly wholeSteps = computed(() => {
     const steps = Math.round(this.steps() ?? 0);
@@ -672,15 +686,27 @@ export class UiDatePicker {
       const describingItself =
         !this.settled && this.value() === null && Date.now() - this.appeared < APPEARING_MS;
       this.settled = true;
+      // Compose sends the date it holds as it is first drawn, which is no pick either.
+      this.picked = !describingItself && new Date(date).getTime() !== this.value()?.getTime();
       if (describingItself) return;
       this.value.set(new Date(date));
       this.touch.emit();
     });
+    reportClicksOn(this.android ? 'topDateSelected' : 'topDateChange', () => this.picked);
   }
+
+  /** Whether the last report was the user's pick, not the picker describing itself. */
+  private picked = false;
 }
 
 /** How long after a date picker appears its first report is taken to be about itself. */
 const APPEARING_MS = 1000;
+
+/**
+ * Present in a `ui-picker`'s own view, whose segmented buttons and menu items on Android are the
+ * picker's: it reports the pick, as it does on iOS, and they report nothing of their own.
+ */
+const PICKER_REPORTS = new InjectionToken<true>('PICKER_REPORTS');
 
 /** Compose's `SingleChoiceSegmentedButtonRow`, Android only: a row of `ui-segmented-button`s. */
 @Component({
@@ -710,6 +736,10 @@ export class UiSegmentedButton {
   readonly enabled = input(true, { transform: booleanOr(true) });
   readonly modifiers = input<readonly UiModifier[]>();
   readonly press = output<void>();
+
+  constructor() {
+    if (!inject(PICKER_REPORTS, { optional: true })) reportClicksOn('topButtonPressed');
+  }
 }
 
 /**
@@ -767,6 +797,10 @@ export class UiDropdownMenuItem {
   readonly enabled = input(true, { transform: booleanOr(true) });
   readonly modifiers = input<readonly UiModifier[]>();
   readonly press = output<void>();
+
+  constructor() {
+    if (!inject(PICKER_REPORTS, { optional: true })) reportClicksOn('topItemPressed');
+  }
 }
 
 /**
@@ -856,6 +890,7 @@ export interface UiPickerOption {
     '[selection]': 'android ? undefined : value()',
     '[modifiers]': 'android ? undefined : resolvedModifiers()',
   },
+  viewProviders: [{ provide: PICKER_REPORTS, useValue: true }],
 })
 export class UiPicker {
   protected readonly nativeView = nativeView();
@@ -917,13 +952,24 @@ export class UiPicker {
       if (typeof selection !== 'string' && typeof selection !== 'number') return;
       this.choose(selection);
     });
+    // SwiftUI's event goes to the app's `(selectionChange)` too, which this runs after.
+    if (!this.android) {
+      reportClicksOn(
+        'topSelectionChange',
+        ({ selection }) =>
+          (typeof selection === 'string' || typeof selection === 'number') && !this.disabled(),
+      );
+    }
   }
+
+  private readonly reportPick = clickReporter();
 
   protected choose(selection: string | number): void {
     this.open.set(false);
     if (this.disabled()) return;
     this.value.set(selection);
     this.touch.emit();
+    if (this.android) this.reportPick();
   }
 }
 
@@ -955,6 +1001,10 @@ export class UiToggle {
   protected readonly android = nativePlatform() === 'android';
   /** What Compose's switch shows without `isOn`: SwiftUI's keeps this itself, Compose's does not. */
   protected readonly switchedOn = signal(false);
+  constructor() {
+    reportClicksOn(this.android ? 'topCheckedChange' : 'topIsOnChange');
+  }
+
   protected checked(event: NativeSyntheticEvent<{ readonly value: boolean }>): void {
     this.switchedOn.set(event.nativeEvent.value);
     this.isOnChange.emit(withNativeEvent(event, { isOn: event.nativeEvent.value }));
@@ -986,6 +1036,10 @@ export class UiStepper {
   readonly label = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
   readonly valueChange = output<UiStepperChangeEvent>();
+
+  constructor() {
+    reportClicksOn('topValueChange');
+  }
 }
 
 /** What `ui-text-field` sends as it is typed into: the text so far. */
@@ -1033,6 +1087,10 @@ export class UiColorPicker {
   readonly supportsOpacity = input<boolean>(undefined, { transform: optionalBoolean });
   readonly modifiers = input<readonly UiModifier[]>();
   readonly selectionChange = output<UiColorChangeEvent>();
+
+  constructor() {
+    reportClicksOn('topSelectionChange');
+  }
 }
 
 /**

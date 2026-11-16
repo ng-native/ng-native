@@ -226,3 +226,17 @@ export {
   type WindowRestoreStore,
 } from './window-restore.ts';
 export { buildMenuTemplate, type MenuTemplate } from './menu-template.ts';
+export {
+  INTERACTION_OBSERVERS,
+  MAX_TEXT_LENGTH,
+  describeElement,
+  interactionObservers,
+  notifyInteraction,
+  provideInteractionObserver,
+  textWithin,
+  type InteractionDirection,
+  type InteractionEvent,
+  type InteractionGesture,
+  type InteractionObserver,
+  type InteractionType,
+} from './interaction-observer.ts';
