@@ -133,9 +133,14 @@ module.exports = function macosPlatformPlugin({ types: t }) {
    * object or array of those. An option `select` does not pick is dropped only when it is one.
    */
   function isInert(node) {
-    if (t.isTemplateLiteral(node)) return node.expressions.every(isInert);
+    // A substitution or a numeric conversion of anything but a literal can run its valueOf or
+    // toString; `!`, `typeof` and `void` never do.
+    if (t.isTemplateLiteral(node)) return node.expressions.length === 0;
     if (t.isLiteral(node) || t.isIdentifier(node) || t.isFunction(node)) return true;
-    if (t.isUnaryExpression(node)) return node.operator !== 'delete' && isInert(node.argument);
+    if (t.isUnaryExpression(node)) {
+      if (['!', 'typeof', 'void'].includes(node.operator)) return isInert(node.argument);
+      return node.operator !== 'delete' && t.isLiteral(node.argument);
+    }
     if (t.isArrayExpression(node))
       return node.elements.every((one) => one !== null && isInert(one));
     if (!t.isObjectExpression(node)) return false;
