@@ -54,9 +54,9 @@ internal object ContextMenuPopup {
   /** What closes `menu` when its view detaches: each submenu, then the popup through `dismiss`. */
   fun closingOnDetach(menu: Menu, dismiss: () -> Unit) =
     object : View.OnAttachStateChangeListener {
-      override fun onViewAttachedToWindow(v: View?) = Unit
+      override fun onViewAttachedToWindow(v: View) = Unit
 
-      override fun onViewDetachedFromWindow(v: View?) {
+      override fun onViewDetachedFromWindow(v: View) {
         closeSubmenus(menu)
         dismiss()
       }
