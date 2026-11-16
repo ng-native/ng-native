@@ -60,8 +60,9 @@ Each event carries:
   every `<app-button>` can be told apart from taps on every `<app-list-row>` when both draw a
   `<pressable>`. A `<pressable>` in a button's template reports the button, even with the button
   in a card, and a control projected into a component's `<ng-content>` reports that component.
-  Absent for a control in the root component's own template, and where the control is the
-  component itself, as `element` already names it.
+  A component that is the control itself, through `PressBehavior`, is named by `element`, and
+  `component` is then the one around it. Absent for a control in the root component's own
+  template.
 - `label`, `testID`, `nativeID` and `role`: what the element committed, so a label a component
   gave it or a role it implies is the one reported, as a screen reader hears it.
 - `text`: for a `click` and a `long-press`, never a `scroll` or `swipe`, the text inside the

@@ -306,6 +306,12 @@ describe('an interaction observer names the component a control belongs to', () 
     assert.equal('component' in event, false);
   });
 
+  it('reports the component around a component composing the press machine', async () => {
+    const event = await componentOf('composed-in-card');
+    assert.equal(event.element, 'x-observed-button');
+    assert.equal(event.component, 'x-observed-card');
+  });
+
   it('names the component a scroll view is in as well', async () => {
     const heard: InteractionEvent[] = [];
     const { fabric } = await renderObserved(heard);

@@ -31,11 +31,12 @@ export class Region {}
 /** A card with a pressable and a scroll view of its own, a wrapped button and a slot. */
 @Component({
   selector: 'x-observed-card',
-  imports: [Pressable, Region, ScrollView, View, WrappedButton],
+  imports: [ObservedButton, Pressable, Region, ScrollView, View, WrappedButton],
   template: `
     <view>
       <pressable testID="card-action" />
       <x-region><pressable testID="in-region" /></x-region>
+      <x-observed-button testID="composed-in-card" />
       <x-wrapped-button />
       <scroll-view testID="card-scroll" />
       <ng-content />

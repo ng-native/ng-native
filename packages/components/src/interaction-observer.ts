@@ -27,9 +27,9 @@ export interface InteractionEvent {
   readonly element: string;
   /**
    * The selector of the nearest component the control is rendered inside, such as `app-button`
-   * for the `<pressable>` in its template, or for one projected into its `<ng-content>`. Absent
-   * for a control in the root component's own template, and for a component that is the control
-   * itself, which `element` names.
+   * for the `<pressable>` in its template, or for one projected into its `<ng-content>`. A
+   * component that is the control itself is named by `element` instead, and this is the component
+   * around it. Absent for a control in the root component's own template.
    */
   readonly component?: string;
   /** `accessibilityLabel`, or `aria-label`. */
