@@ -51,6 +51,17 @@ internal object ContextMenuPopup {
     }
   }
 
+  /** What closes `menu` when its view detaches: each submenu, then the popup through `dismiss`. */
+  fun closingOnDetach(menu: Menu, dismiss: () -> Unit) =
+    object : View.OnAttachStateChangeListener {
+      override fun onViewAttachedToWindow(v: View?) = Unit
+
+      override fun onViewDetachedFromWindow(v: View?) {
+        closeSubmenus(menu)
+        dismiss()
+      }
+    }
+
   /** Show `entries` for `view` at (`x`, `y`) in `activity`'s window. Whether there was a menu. */
   fun show(activity: Activity, view: View, entries: List<Map<String, Any?>>, x: Float, y: Float): Boolean {
     val content = activity.findViewById<ViewGroup>(android.R.id.content) ?: return false
@@ -81,14 +92,7 @@ internal object ContextMenuPopup {
     }
     // The menu goes with its view: when it unmounts, or its activity is recreated or destroyed.
     // A submenu open in its own popup goes too.
-    val gone = object : View.OnAttachStateChangeListener {
-      override fun onViewAttachedToWindow(v: View) = Unit
-
-      override fun onViewDetachedFromWindow(v: View) {
-        closeSubmenus(popup.menu)
-        popup.dismiss()
-      }
-    }
+    val gone = closingOnDetach(popup.menu, popup::dismiss)
     view.addOnAttachStateChangeListener(gone)
     // Later, not while the view tree may be detaching its children.
     val done = {
