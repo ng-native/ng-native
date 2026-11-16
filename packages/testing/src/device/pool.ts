@@ -17,6 +17,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -111,6 +112,8 @@ class DeviceWorker implements PoolWorker {
   private launchedAt = 0;
   /** Settles when the worker has an app to send to: after a start, and after a relaunch. */
   private ready: Promise<void> = Promise.resolve();
+  /** Aborted as the worker stops: a claim it is waiting on is given up, and nothing launches. */
+  private shutdown = new AbortController();
 
   constructor(pool: PoolOptions, options: DevicePoolOptions) {
     this.options = options;
@@ -133,6 +136,7 @@ class DeviceWorker implements PoolWorker {
   }
 
   async start(): Promise<void> {
+    this.shutdown = new AbortController();
     this.bridge.hold(1);
     try {
       await this.connect();
@@ -143,6 +147,9 @@ class DeviceWorker implements PoolWorker {
   }
 
   async stop(): Promise<void> {
+    this.shutdown.abort();
+    // A replacement under way settles first, so it launches nothing once the worker has stopped.
+    await this.ready.catch(() => {});
     const launched = this.launched;
     // An app this worker launched is about to stop: no other worker may be handed it.
     if (this.session && launched) this.bridge.drop(this.session);
@@ -165,7 +172,7 @@ class DeviceWorker implements PoolWorker {
         platform: this.options.platform,
         timeout: this.options.connectTimeout ?? 60_000,
         root: this.projectRoot,
-        signal,
+        signal: signal ? AbortSignal.any([signal, this.shutdown.signal]) : this.shutdown.signal,
       });
     if (!launch || this.bridge.hasFree(this.options.platform)) {
       this.session = await claim();
@@ -231,6 +238,7 @@ class DeviceWorker implements PoolWorker {
     this.launched = null;
     if (dead) this.bridge.drop(dead);
     await launched?.stop();
+    if (this.shutdown.signal.aborted) return;
     await this.connect();
   }
 
@@ -377,14 +385,15 @@ const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 
 /**
  * The files a specifier may name, from the file that names it, in the order Metro's resolver tries
- * them: the platform's own file (`dep.ios.ts`), then `.native`, then the plain one.
+ * them: for each extension in turn, the platform's own file (`dep.ios.ts`), then `.native`, then
+ * the plain one.
  */
 function candidates(from: string, specifier: string, platform: string): string[] {
   if (specifier.startsWith('.') || path.isAbsolute(specifier)) {
     const base = path.resolve(path.dirname(from), specifier);
     const withExtensions = (stem: string) =>
-      [`.${platform}`, '.native', ''].flatMap((variant) =>
-        EXTENSIONS.map((extension) => stem + variant + extension),
+      EXTENSIONS.flatMap((extension) =>
+        [`.${platform}`, '.native', ''].map((variant) => stem + variant + extension),
       );
     return [base, ...withExtensions(base), ...withExtensions(path.join(base, 'index'))];
   }
@@ -832,6 +841,8 @@ class Bridge {
       session.claimant?.(answer);
     }
     this.flush(session);
+    // A request still owed keeps the watchdog on, though this poll sent nothing: a repeated reply.
+    if (session.owed.size > 0) this.watch(session);
     this.offer();
   }
 
@@ -901,22 +912,39 @@ function snapshotFile(
 function permitted(session: Session, file: string): boolean {
   const resolved = path.resolve(file);
   if (session.files.has(resolved)) return true;
-  if (!/\.snap$/.test(resolved) || resolved.split(path.sep).includes('node_modules')) return false;
-  return inside(session.root!, resolved) && inside(real(session.root!), realPath(resolved));
+  const target = realPath(resolved);
+  return (
+    target !== null &&
+    snapshotPath(resolved) &&
+    snapshotPath(target) &&
+    inside(session.root!, resolved) &&
+    inside(real(session.root!), target)
+  );
 }
+
+/** A `.snap` file outside any package. */
+const snapshotPath = (file: string): boolean =>
+  /\.snap$/.test(file) && !file.split(path.sep).includes('node_modules');
 
 function inside(root: string, file: string): boolean {
   const relative = path.relative(root, file);
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-/** `file`'s real path, through its nearest directory that exists: a file to write may not yet. */
-function realPath(file: string): string {
+/**
+ * `file`'s real path, through its nearest entry that exists: a file to write may not yet. Null for
+ * a link that points nowhere, which a write would follow to wherever it names.
+ */
+function realPath(file: string): string | null {
   let existing = file;
-  while (!existsSync(existing) && path.dirname(existing) !== existing) {
+  while (!lstatSync(existing, { throwIfNoEntry: false }) && path.dirname(existing) !== existing) {
     existing = path.dirname(existing);
   }
-  return path.join(real(existing), path.relative(existing, file));
+  try {
+    return path.join(realpathSync(existing), path.relative(existing, file));
+  } catch {
+    return null;
+  }
 }
 
 /** What a launcher can say of a lost app's crash: nothing, rather than a failure of its own. */

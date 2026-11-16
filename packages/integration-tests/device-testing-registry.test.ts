@@ -330,4 +330,19 @@ describe('vi.mock on a device, at its edges', () => {
       restoreMocks();
     }
   });
+
+  it('gives vi.importMock the factory of a vi.doMock still installing', async () => {
+    define(payload(450, [{ id: 450, code: source(450, [], 'src/slow.ts', exporting('real')) }]));
+    try {
+      await prepareMocks({ './slow.ts': 450 }, 450, () => {});
+      viOf()['doMock']!('./slow.ts', async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return { value: 'mocked' };
+      });
+      const mock = (await viOf()['importMock']!('./slow.ts')) as { value: string };
+      assert.equal(mock.value, 'mocked');
+    } finally {
+      restoreMocks();
+    }
+  });
 });

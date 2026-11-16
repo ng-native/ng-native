@@ -70,4 +70,14 @@ describe('a marker in a fenced example', () => {
     expect(html).toContain('platforms: Nothing');
     expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
   });
+
+  test('ends at a closing fence longer or indented differently from its opener', async () => {
+    for (const close of ['````', '  ```', '~~~~~']) {
+      const open = close.includes('~') ? '~~~' : '```';
+      const html = await render(
+        `# Markers\n\n${open}md\n<!-- platforms: Nothing -->\n${close}\n\n<!-- platforms: Dock -->\n`,
+      );
+      expect(html, close).toContain('<strong>Platforms.</strong> Available on macOS.');
+    }
+  });
 });

@@ -482,6 +482,92 @@ describe('the device pool', () => {
     }
   });
 
+  it('still fails a request the app owes after it repeats an earlier reply, then goes quiet', async () => {
+    const run = await setup({ appTimeout: 300 });
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      const first = phone.poll();
+      await starting;
+      worker.send(request('start') as never);
+      const asked = await first;
+      const reply = {
+        __vitest_worker_response__: true,
+        type: 'started',
+        deviceRequest: asked.deviceRequest,
+      };
+      const second = phone.poll({ reply });
+      await wait(20);
+      worker.send(request('cancel') as never);
+      await second;
+      // The repeat comes while the cancel is still owed, and then the app is heard from no more.
+      void phone.poll({ reply }).catch(() => {});
+      await wait(700);
+      const failed = (messages as { error?: Error }[]).find((message) => message.error);
+      assert.match(String(failed?.error?.message), /stopped answering/);
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('refuses a snapshot path that resolves to a file it may not touch, or nowhere', async () => {
+    const run = await setup();
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      const first = phone.poll();
+      await starting;
+      worker.send(
+        request('run', { files: [{ filepath: join(run.root, 'src/a.device.ts') }] }) as never,
+      );
+      await first;
+      const refused = async (body: Record<string, unknown>) =>
+        assert.match((await phone.post('/files', body)).error, /Not a snapshot file/);
+      // A .snap name for a source file.
+      symlinkSync(join(run.root, 'src/dep.ts'), join(run.root, 'src/alias.snap'));
+      await refused({ op: 'write', path: join(run.root, 'src/alias.snap'), content: '' });
+      assert.equal(readFileSync(join(run.root, 'src/dep.ts'), 'utf8'), 'export const x = 1;\n');
+      // A way into the project's packages.
+      mkdirSync(join(run.root, 'node_modules/pkg'), { recursive: true });
+      symlinkSync(join(run.root, 'node_modules'), join(run.root, 'src/packages'));
+      await refused({ op: 'write', path: join(run.root, 'src/packages/pkg/a.snap'), content: '' });
+      assert.equal(existsSync(join(run.root, 'node_modules/pkg/a.snap')), false);
+      // A link to a file outside the project that does not exist yet.
+      const outside = join(tmpdir(), `device-pool-escape-${process.pid}.snap`);
+      symlinkSync(outside, join(run.root, 'src/escape.snap'));
+      try {
+        await refused({ op: 'write', path: join(run.root, 'src/escape.snap'), content: '' });
+        assert.equal(existsSync(outside), false);
+      } finally {
+        rmSync(outside, { force: true });
+      }
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('maps a mock to the file Metro resolves, trying each extension in turn', async () => {
+    const run = await setup();
+    try {
+      writeFileSync(join(run.root, 'src/a.device.ts'), "vi.mock('./dep', () => ({}));\n");
+      writeFileSync(join(run.root, 'src/dep.ios.js'), 'exports.x = 2;\n');
+      // Metro takes dep.ts for './dep', as .ts comes before .js; dep.ios.js is in the bundle too.
+      run.served.bundle += `\n${define(13, [], 'src/dep.ios.js')}`;
+      const phone = run.app('one');
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const first = phone.poll();
+      await starting;
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      assert.deepEqual((await first).files[test].mocks, { './dep': 11 });
+    } finally {
+      await run.done();
+    }
+  });
+
   it('keeps an idle app on another device when a second one connects', async () => {
     const run = await setup();
     try {
@@ -546,6 +632,37 @@ describe('the device pool', () => {
       b.worker.send(request('cancel') as never);
       const asked = await Promise.race([two, wait(1000).then(() => ({ type: 'nothing' }))]);
       assert.equal(asked?.type, 'cancel', 'the app B launched, not the one A was stopping');
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('launches no app after it stops while replacing one that exited', async () => {
+    const { launch, launches } = fakeLauncher();
+    let release!: () => void;
+    const slowStop = new Promise<void>((resolve) => (release = resolve));
+    const start = launch.start;
+    launch.start = () => {
+      const app = start();
+      return { ...app, stop: () => app.stop().then(() => slowStop) };
+    };
+    const run = await setup({ launch });
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      void run
+        .app('one')
+        .poll()
+        .catch(() => {});
+      await starting;
+      // The app exits with nothing owed: the worker stops it, slowly, to replace it.
+      launches[0]!.exit('status 0');
+      await wait(20);
+      const stopping = worker.stop();
+      release();
+      await stopping;
+      await wait(50);
+      assert.equal(launches.length, 1, 'no replacement after the stop');
     } finally {
       await run.done();
     }

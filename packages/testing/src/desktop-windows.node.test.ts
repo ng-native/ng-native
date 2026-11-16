@@ -28,6 +28,7 @@ import {
 import {
   cleanup,
   fakeMenus,
+  fakeWindows,
   render,
   screen,
   settle,
@@ -192,6 +193,24 @@ test('starts with no window under autoOpen: false', async () => {
   assert.deepEqual(screen.windows(), []);
   await userEvent.reopen();
   assert.equal(screen.windows().length, 1);
+});
+
+test('waits for the window a Dock click opens, however late the host opens it', async () => {
+  const host = fakeWindows();
+  const open = host.open;
+  host.open = async (request) => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    return open(request);
+  };
+  await render(Notes, {
+    os: 'macos',
+    providers: [
+      provideMainWindow({ autoOpen: false }),
+      { provide: AppWindows.SOURCE, useValue: host },
+    ],
+  });
+  await userEvent.reopen();
+  assert.equal(screen.windows().length, 1, 'open once reopen resolves');
 });
 
 test('delivers a url the OS opens the app with', async () => {
