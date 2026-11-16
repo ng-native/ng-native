@@ -85,6 +85,22 @@ describe('toolchainProblems', () => {
     assert.doesNotMatch(problems.join('\n'), /not installed/);
   });
 
+  it('says xcode-select or xcrun failed, not that tools are missing, on another exit status', () => {
+    const selectFailed = toolchainProblems(
+      mac({ ...EVERYTHING, 'xcode-select --print-path': { status: 1, stdout: '' } }),
+    );
+    assert.equal(selectFailed.length, 1);
+    assert.match(selectFailed[0]!, /^xcode-select --print-path failed \(status 1\)/);
+    // xcrun exits 69 while Xcode's licence is not yet accepted.
+    const swiftFailed = toolchainProblems(
+      mac({ ...EVERYTHING, 'xcrun swiftc --version': { status: 69, stdout: '' } }),
+    );
+    assert.equal(swiftFailed.length, 1);
+    assert.match(swiftFailed[0]!, /^xcrun swiftc --version failed \(status 69\)/);
+    assert.match(swiftFailed[0]!, /sudo xcodebuild -license/);
+    assert.doesNotMatch([...selectFailed, ...swiftFailed].join('\n'), /not installed|missing/);
+  });
+
   it('says how to get swiftc back when the selected tools have none', () => {
     const problems = toolchainProblems(
       mac({ ...EVERYTHING, 'xcrun swiftc --version': { status: 72, stdout: '' } }),
