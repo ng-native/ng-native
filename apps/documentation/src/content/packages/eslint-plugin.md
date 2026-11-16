@@ -210,14 +210,13 @@ Reports, in TypeScript:
 Reports a service's `available` read as a condition without calling it: the test of an `if`, a loop
 or a `?:`, the operand of `!`, the left operand of `&&` or `||`, or the right one where the whole is
 a condition. Every service's `available` is a `Signal<boolean>`, and a signal is a function, so
-`if (haptics.available)` is always true.
+`if (haptics.available)` is always true. `eslint --fix` writes the call, `if (haptics.available())`.
 
-It reads the member by name, in TypeScript. A signal kept under another name first, then tested, is
-not followed, and a template is left to Angular's own checks. `eslint --fix` writes the call,
-`if (haptics.available())`, where what it is read off is an `@ng-native` service: `inject()` of one,
-a variable, parameter or field initialised with one or typed as one, or a name the package exports,
-such as `splashScreen`. Anything else named `available` may be a plain boolean, which a call would
-break, so it is reported with the call as a suggestion your editor can apply, and not fixed.
+It reports only an `available` read off an `@ng-native` service it can identify in TypeScript:
+`inject()` of one, a variable, parameter or field initialised with one or typed as one, or a name
+the package exports, such as `splashScreen`. Anything else named `available` may be a plain boolean,
+so it is left alone, and so is a signal kept under another name first, then tested. A template is
+left to Angular's own checks.
 
 ### prefer-hairline-token
 

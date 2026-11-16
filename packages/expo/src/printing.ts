@@ -79,7 +79,13 @@ export class Printing {
   /** Overridden in a test to print without a printer. */
   static readonly SOURCE = new InjectionToken<NativePrinting | null>(
     'angular-native.printingSource',
-    { factory: () => expoModule('expo-print', () => require('expo-print') as NativePrinting) },
+    {
+      factory: () =>
+        // expo-print's web module opens the browser's print dialog, so the web is left absent.
+        expoModule('expo-print', () =>
+          currentPlatform() === 'web' ? null : (require('expo-print') as NativePrinting),
+        ),
+    },
   );
 
   private readonly native = inject(Printing.SOURCE);

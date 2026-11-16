@@ -1212,6 +1212,7 @@ describe('available-signal, through nx migrate, ng update and ng-native-migrate'
     assert.equal(nx.files['src/app/plain.ts'], files['src/app/plain.ts']);
     assert.deepEqual(nx.notes, [
       "src/app/everything.ts:1: A namespace import of '@ng-native/expo/store-review' cannot be followed automatically. A service's available is a signal now: read it as available(), and do not await it.",
+      'src/app/privacy.ts:16: available() is a signal now, false until the platform answers, so without the await this reads false at first. Read it where a change shows, in a template or a computed(), rather than once.',
       'src/app/privacy.ts:20: available() is a signal now, not a promise. Read it as available(), without awaiting it or calling then().',
       "src/app/sensor.ts:5: A sensor's available() is never null now: it is false until the platform answers.",
       "src/app/sensor.ts:6: A sensor's available() is never null now: it is false until the platform answers.",
@@ -1281,8 +1282,56 @@ describe('available-signal on code that is already migrated, and on bracket read
     assert.match(nx.files['src/app/panel.ts']!, /@if \(haptics\["available"\]\(\)\)/);
     assert.deepEqual(
       nx.notes.filter((note) => note.startsWith('src/app/bracket.ts')).map((n) => n.split(': ')[0]),
-      ['src/app/bracket.ts:9'],
+      ['src/app/bracket.ts:8', 'src/app/bracket.ts:9'],
     );
+  });
+});
+
+describe('available-signal in template text, which a template shows rather than reads', () => {
+  const html = [
+    '<text>Uses haptics.available here</text>',
+    '<text label="haptics.available" [hint]="haptics.available ? 1 : 2">{{ haptics.available }}</text>',
+    '<pressable (press)="go(haptics.available)" *ngIf="haptics.available"></pressable>',
+    '@if (haptics.available) { <text>haptics.available</text> } @else if (haptics.available) {}',
+    '@switch (haptics.available) { @case (haptics.available) {} }',
+    '@for (item of list(haptics.available); track item) {} @defer (when haptics.available) {}',
+    '@let on = haptics.available;',
+    '',
+  ].join('\n');
+  const called = [
+    '<text>Uses haptics.available here</text>',
+    '<text label="haptics.available" [hint]="haptics.available() ? 1 : 2">{{ haptics.available() }}</text>',
+    '<pressable (press)="go(haptics.available())" *ngIf="haptics.available()"></pressable>',
+    '@if (haptics.available()) { <text>haptics.available</text> } @else if (haptics.available()) {}',
+    '@switch (haptics.available()) { @case (haptics.available()) {} }',
+    '@for (item of list(haptics.available()); track item) {} @defer (when haptics.available()) {}',
+    '@let on = haptics.available();',
+    '',
+  ].join('\n');
+  const component = (template: string) =>
+    [
+      "import { Component, inject } from '@angular/core';",
+      "import { Haptics } from '@ng-native/expo/haptics';",
+      '',
+      `@Component({ selector: 'app-text', ${template} })`,
+      'export class Shown {',
+      '  readonly haptics = inject(Haptics);',
+      '}',
+      '',
+    ].join('\n');
+
+  it('rewrites only bindings, interpolations and block parameters, inline and in a file', async () => {
+    const files = {
+      'src/app/inline.ts': component(`template: \`${html}\``),
+      'src/app/external.ts': component("templateUrl: './external.html'"),
+      'src/app/external.html': html,
+    };
+    const { nx, angular, cli } = await acrossAdapters(files, 'available-signal', '0.22.2');
+    assert.equal(nx.files['src/app/external.html'], called);
+    assert.equal(nx.files['src/app/inline.ts'], component(`template: \`${called}\``));
+    assert.deepEqual(nx.notes, []);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
   });
 });
 
@@ -1305,7 +1354,7 @@ describe('available-signal on names that only look like a service', () => {
       '',
       '@Component({',
       "  selector: 'app-nested',",
-      '  template: `@if (model.haptics.available && model?.haptics.available) {} @if (haptics.available) {}`,',
+      '  template: `@if (model.haptics.available && model?.haptics.available) {} @if (haptics.available) {} @if (this.haptics.available) {}`,',
       '})',
       'export class Nested {',
       '  protected readonly haptics = inject(Haptics);',
@@ -1342,7 +1391,7 @@ describe('available-signal on names that only look like a service', () => {
     assert.match(shadow, /real = \(\) => inject\(Haptics\)\.available\(\);/, 'the import');
     assert.match(
       nx.files['src/app/nested.ts']!,
-      /`@if \(model\.haptics\.available && model\?\.haptics\.available\) \{\} @if \(haptics\.available\(\)\) \{\}`/,
+      /`@if \(model\.haptics\.available && model\?\.haptics\.available\) \{\} @if \(haptics\.available\(\)\) \{\} @if \(this\.haptics\.available\(\)\) \{\}`/,
     );
     assert.equal(nx.files['src/app/shared.html'], files['src/app/shared.html']);
     assert.deepEqual(nx.notes, [
@@ -1350,6 +1399,25 @@ describe('available-signal on names that only look like a service', () => {
     ]);
     assert.deepEqual(angular, nx);
     assert.deepEqual(cli, nx);
+  });
+
+  it('counts a component whose decorator is read off a namespace import of @angular/core', async () => {
+    const namespaced = {
+      'src/app/buzz.ts': files['src/app/buzz.ts'],
+      'src/app/quiet.ts': [
+        "import * as ng from '@angular/core';",
+        '',
+        "@ng.Component({ selector: 'app-quiet', templateUrl: './shared.html' })",
+        'export class Quiet {',
+        '  readonly haptics = { available: false };',
+        '}',
+        '',
+      ].join('\n'),
+      'src/app/shared.html': files['src/app/shared.html'],
+    };
+    const { nx } = await acrossAdapters(namespaced, 'available-signal', '0.22.2');
+    assert.equal(nx.files['src/app/shared.html'], files['src/app/shared.html']);
+    assert.equal(nx.notes.length, 1);
   });
 
   it('rewrites a shared template when every component that uses it holds the service', async () => {

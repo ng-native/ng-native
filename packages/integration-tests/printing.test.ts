@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { OS } from '@ng-native/device';
 import { Printing, type NativePrinting } from '@ng-native/expo/printing';
+import { cleanup, injectService } from '@ng-native/testing';
 import { serviceWith, servicesWith } from './injected.ts';
 
 function platform(overrides: Partial<NativePrinting> = {}) {
@@ -117,5 +118,38 @@ describe('Printing', () => {
     assert.equal(await printing.print({ html: '<p />' }), undefined);
     assert.equal(await printing.printToPdf('<p />'), null);
     assert.equal(await printing.selectPrinter(), null);
+  });
+});
+
+describe('the default source', () => {
+  /** `Printing` on `os`, where `expo-print` loads as `module`, and the modules it loaded. */
+  function on(os: string, run: (printing: Printing, loaded: string[]) => void) {
+    const global = globalThis as Record<string, unknown>;
+    const loaded: string[] = [];
+    global['require'] = (id: string) => {
+      loaded.push(id);
+      if (id === 'react-native') return { Platform: { OS: os } };
+      if (id === 'expo-print') return platform().native;
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    try {
+      run(injectService(Printing), loaded);
+    } finally {
+      delete global['require'];
+      cleanup();
+    }
+  }
+
+  it("is absent on the web, where expo-print's own module opens the browser's print dialog", () => {
+    on('web', (printing, loaded) => {
+      assert.equal(printing.available(), false);
+      assert.equal(loaded.includes('expo-print'), false);
+    });
+  });
+
+  it('loads expo-print on iOS and Android', () => {
+    for (const os of ['ios', 'android']) {
+      on(os, (printing) => assert.equal(printing.available(), true, os));
+    }
   });
 });

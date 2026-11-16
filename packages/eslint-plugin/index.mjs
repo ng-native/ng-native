@@ -599,8 +599,8 @@ function thisClass(node) {
 /**
  * Whether `receiver`, what `available` is read off, is known to be an `@ng-native/` service: an
  * `inject()` of one, a name or a `this.` field initialised with one or typed as one, or a name
- * imported from the package itself, such as `splashScreen`. Only then is the call written for
- * `eslint --fix`; anything else may be a plain boolean, which a call would break.
+ * imported from the package itself, such as `splashScreen`. Only then is a read reported: anything
+ * else named `available` may be a plain boolean, which a call would break.
  */
 function isService(context, receiver) {
   if (isInjectedService(context, receiver)) return true;
@@ -643,28 +643,23 @@ const noUncalledAvailable = {
     },
     messages: {
       uncalled: 'available is a signal, so it is always truthy. Call it: available().',
-      call: 'Call it: available().',
     },
     fixable: 'code',
-    hasSuggestions: true,
     schema: [],
   },
   create(context) {
     return {
       // Every service's `available` is a `Signal<boolean>`: a function, and so always truthy.
-      // ponytail: read by name, not by type, so a signal kept under another name is not followed;
-      // that would need the type checker, which the recommended config does not set up.
+      // ponytail: read from the syntax, not by type, so a service reached any other way, or a
+      // signal kept under another name, is not followed; that would need the type checker, which
+      // the recommended config does not set up.
       'MemberExpression[computed=false][property.name="available"]'(node) {
         if (node.parent?.type === 'CallExpression' && node.parent.callee === node) return;
-        if (!readAsCondition(node)) return;
-        const call = (fixer) => fixer.insertTextAfter(node, '()');
-        // A service's is fixed; anything else named `available` may be a boolean, so is suggested.
+        if (!readAsCondition(node) || !isService(context, node.object)) return;
         context.report({
           node: node.property,
           messageId: 'uncalled',
-          ...(isService(context, node.object)
-            ? { fix: call }
-            : { suggest: [{ messageId: 'call', fix: call }] }),
+          fix: (fixer) => fixer.insertTextAfter(node, '()'),
         });
       },
     };

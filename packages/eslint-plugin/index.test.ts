@@ -338,14 +338,14 @@ test("a service's available read as a condition without being called is reported
     "import { Haptics } from '@ng-native/expo/haptics';",
     'const haptics = inject(Haptics);',
     'if (haptics.available) haptics.impact();',
-    'const on = !this.haptics.available || other;',
+    'const on = !inject(Haptics).available || other;',
     'const label = haptics.available && ready ? 1 : 2;',
     'while (haptics?.available) break;',
     '',
   ].join('\n');
   assert.deepEqual(await lint(code, 'a.ts'), [
     '4:13 @ng-native/no-uncalled-available: available is a signal, so it is always truthy. Call it: available().',
-    '5:26 @ng-native/no-uncalled-available: available is a signal, so it is always truthy. Call it: available().',
+    '5:29 @ng-native/no-uncalled-available: available is a signal, so it is always truthy. Call it: available().',
     '6:23 @ng-native/no-uncalled-available: available is a signal, so it is always truthy. Call it: available().',
     '7:17 @ng-native/no-uncalled-available: available is a signal, so it is always truthy. Call it: available().',
   ]);
@@ -385,7 +385,7 @@ test("available read uncalled is fixed to a call where it is an @ng-native servi
   assert.equal(await fix(code, 'a.ts'), code.replace(/\.available\b/g, '.available()'));
 });
 
-test('available on anything else is reported, and only suggested a call, never fixed', async () => {
+test('available on anything that is not an @ng-native service is left alone', async () => {
   const code = [
     "import { inject, InjectionToken } from '@angular/core';",
     "import { Haptics } from '@ng-native/expo/haptics';",
@@ -403,16 +403,14 @@ test('available on anything else is reported, and only suggested a call, never f
     '}',
     '',
   ].join('\n');
-  assert.equal(await fix(code, 'a.ts'), code);
-  assert.equal((await lint(code, 'a.ts')).length, 3);
-  assert.equal(
-    await suggest('if (item.available) go();\n', 'a.ts'),
-    'if (item.available()) go();\n',
-  );
+  assert.deepEqual(await lint(code, 'a.ts'), []);
 });
 
 test('the last operand of && or || is a condition only where the whole is one', async () => {
   const code = [
+    "import { inject } from '@angular/core';",
+    "import { Haptics } from '@ng-native/expo/haptics';",
+    'const haptics = inject(Haptics);',
     'const shown = ready && haptics.available;',
     'const either = ready || haptics.available;',
     'if (ready && haptics.available) go();',
@@ -420,7 +418,7 @@ test('the last operand of && or || is a condition only where the whole is one', 
   ].join('\n');
   assert.deepEqual(
     (await lint(code, 'a.ts')).map((problem) => problem.split(' ')[0]),
-    ['3:22'],
+    ['6:22'],
   );
 });
 
