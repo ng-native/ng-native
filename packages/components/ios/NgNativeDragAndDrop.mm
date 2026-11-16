@@ -3,6 +3,7 @@
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
+#import "NgNativeDropItems.h"
 #import "NgNativeViewBinder.h"
 
 /**
@@ -93,17 +94,13 @@ static NSString *nonEmptyString(id value)
   NSUInteger index = 0;
   for (UIDragItem *item in session.items) {
     NSItemProvider *provider = item.itemProvider;
-    BOOL isWebURL = [provider hasItemConformingToTypeIdentifier:UTTypeURL.identifier] &&
-        ![provider hasItemConformingToTypeIdentifier:UTTypeFileURL.identifier] &&
-        [provider canLoadObjectOfClass:[NSURL class]];
-    BOOL isText = !isWebURL && [provider hasItemConformingToTypeIdentifier:UTTypePlainText.identifier] &&
-        [provider canLoadObjectOfClass:[NSString class]];
-    NSString *type = provider.registeredTypeIdentifiers.firstObject;
-    if (!isWebURL && !isText && type == nil) {
+    NgNativeDropKind kind = NgNativeDropKindOf(provider);
+    NSString *type = NgNativeDropFileType(provider);
+    if (kind == NgNativeDropKindNone || (kind == NgNativeDropKindFile && type == nil)) {
       continue;
     }
     dispatch_group_enter(group);
-    if (isWebURL) {
+    if (kind == NgNativeDropKindWebURL) {
       [provider loadObjectOfClass:[NSURL class]
                 completionHandler:^(id<NSItemProviderReading> object, NSError *error) {
                   NSURL *url = [(NSObject *)object isKindOfClass:[NSURL class]] ? (NSURL *)object : nil;
@@ -114,7 +111,7 @@ static NSString *nonEmptyString(id value)
                   }
                   dispatch_group_leave(group);
                 }];
-    } else if (isText) {
+    } else if (kind == NgNativeDropKindText) {
       [provider loadObjectOfClass:[NSString class]
                 completionHandler:^(id<NSItemProviderReading> object, NSError *error) {
                   if ([(NSObject *)object isKindOfClass:[NSString class]]) {
@@ -125,11 +122,7 @@ static NSString *nonEmptyString(id value)
                   dispatch_group_leave(group);
                 }];
     } else {
-      NSString *name = provider.suggestedName ?: @"file";
-      NSString *extension = [UTType typeWithIdentifier:type].preferredFilenameExtension;
-      if (extension.length > 0 && name.pathExtension.length == 0) {
-        name = [name stringByAppendingPathExtension:extension];
-      }
+      NSString *name = NgNativeDropFileName(provider.suggestedName, type);
       // A folder for each item, so two files of one name both arrive.
       NSURL *itemFolder = [folder URLByAppendingPathComponent:[NSString stringWithFormat:@"%lu", (unsigned long)index]];
       [provider loadFileRepresentationForTypeIdentifier:type

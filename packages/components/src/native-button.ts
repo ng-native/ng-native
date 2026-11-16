@@ -3,7 +3,10 @@ import { isApplePlatform, registerViewName, type HostNode } from '@ng-native/fab
 import type { ControlSize } from '@ng-native/device';
 import { ControlBase, TouchableBase } from './pressable.ts';
 
-/** What a button does in its window: Return presses `default`, Escape presses `cancel`. */
+/**
+ * What a button does in its window: on macOS, Return presses `default` and Escape presses `cancel`.
+ * On iOS they are styles only.
+ */
 export type ButtonKind = 'default' | 'cancel' | 'destructive' | 'plain';
 
 /** A button's picture, as on `<native-tab>`: an SF Symbol on Apple's OSes, a drawable on Android. */

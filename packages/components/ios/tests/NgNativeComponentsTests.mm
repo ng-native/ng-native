@@ -1,13 +1,18 @@
 // Unit tests for the iOS code of @ng-native/components that runs without React Native: the view
 // binder, the menu building (the iPad menu bar's duplicate keys among it), the long press a view
-// inside a context menu takes, and the responder hooks' call-through and undo routing. Run by
-// `run-tests.sh` on a simulator, through XCTest's own runner.
+// inside a context menu takes, `NgNativeHook`'s call-through, which first responders answer the
+// shared undo manager, the undo steps, and what a dropped item is. The hooks installed on
+// UIApplication and the app delegate, and the modules themselves, need React Native and are not
+// here. Run by `run-tests.sh` on a simulator, through XCTest's own runner; no CI job runs them.
 #import <React/RCTViewComponentView.h>
 #import <XCTest/XCTest.h>
 #import <objc/runtime.h>
 
 #import "../NgNativeMenuBuilding.h"
 #import "../NgNativeResponderHooks.h"
+#import "../NgNativeUndoSteps.h"
+#import "../NgNativeDropItems.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "../NgNativeViewBinder.h"
 
 @implementation RCTViewComponentView
@@ -282,6 +287,116 @@ static RCTViewComponentView *viewNamed(NSString *nativeID)
   XCTAssertTrue(NgNativeAnswersSharedUndo([UIViewController new]), @"a screen's controller");
   XCTAssertFalse(NgNativeAnswersSharedUndo([UITextView new]), @"a text input keeps its own");
   XCTAssertFalse(NgNativeAnswersSharedUndo([UIView new]), @"another view, a canvas, keeps its window's");
+}
+
+@end
+
+#pragma mark - Undo steps
+
+@interface NgNativeUndoStepsTests : XCTestCase
+@end
+
+@implementation NgNativeUndoStepsTests
+
+- (void)testTwoActionsInOnePassAreTwoSteps
+{
+  NSUndoManager *manager = NgNativeMakeUndoManager();
+  NSMutableArray<NSString *> *undone = [NSMutableArray array];
+  NSObject *target = [NSObject new];
+  NgNativeRegisterUndoStep(manager, target, @"Add", ^(id) {
+    [undone addObject:@"add"];
+  });
+  NgNativeRegisterUndoStep(manager, target, @"Rename", ^(id) {
+    [undone addObject:@"rename"];
+  });
+  XCTAssertEqualObjects(manager.undoActionName, @"Rename");
+  [manager undo];
+  XCTAssertEqualObjects(undone, (@[ @"rename" ]));
+  XCTAssertEqualObjects(manager.undoActionName, @"Add");
+  [manager undo];
+  XCTAssertEqualObjects(undone, (@[ @"rename", @"add" ]));
+  XCTAssertFalse(manager.canUndo);
+}
+
+- (void)testAStepRegisteredWhileUndoingIsItsRedo
+{
+  NSUndoManager *manager = NgNativeMakeUndoManager();
+  NSMutableArray<NSString *> *said = [NSMutableArray array];
+  NSObject *target = [NSObject new];
+  __block void (^step)(void);
+  __weak __block void (^weakStep)(void);
+  step = ^{
+    NgNativeRegisterUndoStep(manager, target, @"Add", ^(id) {
+      [said addObject:manager.isUndoing ? @"undo" : @"redo"];
+      weakStep();
+    });
+  };
+  weakStep = step;
+  step();
+  [manager undo];
+  XCTAssertTrue(manager.canRedo);
+  XCTAssertEqualObjects(manager.redoActionName, @"Add");
+  [manager redo];
+  XCTAssertEqualObjects(said, (@[ @"undo", @"redo" ]));
+  XCTAssertTrue(manager.canUndo);
+}
+
+@end
+
+#pragma mark - Dropped items
+
+@interface NgNativeDropItemsTests : XCTestCase
+@end
+
+@implementation NgNativeDropItemsTests
+
+- (void)testTakesAPlainTextFileAsAFileAndNotItsText
+{
+  NSItemProvider *provider = [NSItemProvider new];
+  [provider registerFileRepresentationForTypeIdentifier:UTTypePlainText.identifier
+                                            fileOptions:NSItemProviderFileOptionOpenInPlace
+                                             visibility:NSItemProviderRepresentationVisibilityAll
+                                            loadHandler:^NSProgress *(void (^done)(NSURL *, BOOL, NSError *)) {
+                                              done(nil, NO, nil);
+                                              return nil;
+                                            }];
+  provider.suggestedName = @"notes.txt";
+  XCTAssertTrue([provider canLoadObjectOfClass:[NSString class]], @"it could load as text");
+  XCTAssertEqual(NgNativeDropKindOf(provider), NgNativeDropKindFile);
+  XCTAssertEqualObjects(NgNativeDropFileType(provider), UTTypePlainText.identifier);
+}
+
+- (void)testTakesAFileURLItemAsAFile
+{
+  NSURL *url = [[NSURL fileURLWithPath:NSTemporaryDirectory()] URLByAppendingPathComponent:@"ngn-drop-test.txt"];
+  [@"hello" writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:nil];
+  @try {
+    NSItemProvider *provider = [[NSItemProvider alloc] initWithContentsOfURL:url];
+    XCTAssertEqual(NgNativeDropKindOf(provider), NgNativeDropKindFile);
+    XCTAssertFalse([[UTType typeWithIdentifier:NgNativeDropFileType(provider)] conformsToType:UTTypeURL]);
+  } @finally {
+    [NSFileManager.defaultManager removeItemAtURL:url error:nil];
+  }
+}
+
+- (void)testTakesASelectionAsTextAndALinkAsAURL
+{
+  XCTAssertEqual(NgNativeDropKindOf([[NSItemProvider alloc] initWithObject:@"hello"]), NgNativeDropKindText);
+  NSURL *link = [NSURL URLWithString:@"https://ng-native.com"];
+  XCTAssertEqual(NgNativeDropKindOf([[NSItemProvider alloc] initWithObject:link]), NgNativeDropKindWebURL);
+  XCTAssertEqual(NgNativeDropKindOf([NSItemProvider new]), NgNativeDropKindNone);
+}
+
+- (void)testKeepsAFileNameInsideTheItemsFolder
+{
+  XCTAssertEqualObjects(NgNativeDropFileName(@"../../../Documents/x.txt", nil), @"x.txt");
+  XCTAssertEqualObjects(NgNativeDropFileName(@"/etc/hosts", UTTypePlainText.identifier), @"hosts.txt");
+  XCTAssertEqualObjects(NgNativeDropFileName(@"..", nil), @"file");
+  XCTAssertEqualObjects(NgNativeDropFileName(@".", nil), @"file");
+  XCTAssertEqualObjects(NgNativeDropFileName(@"", UTTypePNG.identifier), @"file.png");
+  XCTAssertEqualObjects(NgNativeDropFileName(nil, nil), @"file");
+  XCTAssertEqualObjects(NgNativeDropFileName(@"photo", UTTypeJPEG.identifier), @"photo.jpeg");
+  XCTAssertEqualObjects(NgNativeDropFileName(@"a.pdf", UTTypePNG.identifier), @"a.pdf");
 }
 
 @end
