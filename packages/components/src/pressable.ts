@@ -26,6 +26,13 @@ import {
 } from '@ng-native/fabric';
 import { CONTEXT_MENU } from './context-menu.ts';
 import type { Insets, TouchEvent } from './events.ts';
+import {
+  describeElement,
+  interactionObservers,
+  notifyInteraction,
+  textWithin,
+  type InteractionType,
+} from './interaction-observer.ts';
 import { byNativeId } from './native-id.ts';
 import { booleanOr, numberOr, optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
@@ -84,6 +91,27 @@ function touchPoint(event: NativeSyntheticEvent): { x: number; y: number } {
     x: native.pageX ?? touch?.pageX ?? 0,
     y: native.pageY ?? touch?.pageY ?? 0,
   };
+}
+
+type TouchPosition = { pageX?: number; pageY?: number; locationX?: number; locationY?: number };
+
+/**
+ * Where the touch was, in the window and in the view it landed on, or nothing for a press that
+ * had no touch. A release carries the point on the event itself or in `changedTouches`, since the
+ * lifted touch is no longer in `touches`.
+ */
+function touchPosition(event: NativeSyntheticEvent): TouchPosition {
+  const native = (event.nativeEvent ?? {}) as TouchPosition & {
+    touches?: TouchPosition[];
+    changedTouches?: TouchPosition[];
+  };
+  const touch = native.changedTouches?.[0] ?? native.touches?.[0];
+  const position: TouchPosition = {};
+  for (const key of ['pageX', 'pageY', 'locationX', 'locationY'] as const) {
+    const value = native[key] ?? touch?.[key];
+    if (typeof value === 'number') position[key] = value;
+  }
+  return position;
 }
 
 /** What `rippleDrawable` builds: Android's `RippleAndroid` drawable description. */
@@ -209,7 +237,10 @@ export abstract class TouchableBase extends ViewBase {
   private longPressListeners = 0;
   /** A `[contextMenu]` on the same element, whose menu a long press may open instead. */
   private readonly contextMenu = inject(CONTEXT_MENU, { self: true, optional: true });
-  /** For `Menus`, read only where there is a `(longPress)`: see `takeLongPressFromMenus`. */
+  /**
+   * For `Menus`, read only where there is a `(longPress)` (see `takeLongPressFromMenus`), and for
+   * the interaction observers, read only once something is pressed.
+   */
   private readonly injector = inject(Injector);
   private pressedAt = 0;
   private pressInTimer: ReturnType<typeof setTimeout> | null = null;
@@ -370,7 +401,9 @@ export abstract class TouchableBase extends ViewBase {
         click.stopPropagation();
         return;
       }
-      if (this.claims()) this.press.emit(click);
+      if (!this.claims()) return;
+      this.press.emit(click);
+      this.reportInteraction('click', click, 'click');
     });
   }
 
@@ -474,6 +507,7 @@ export abstract class TouchableBase extends ViewBase {
       this.longPressTimer = null;
       this.longPressed = true;
       this.longPress.emit(event);
+      this.reportInteraction('long-press', event, 'touch');
     }, this.delayLongPress());
   }
 
@@ -514,7 +548,35 @@ export abstract class TouchableBase extends ViewBase {
     }
     const longPressed = this.longPressed;
     this.deactivate(event);
-    if (!longPressed) this.press.emit(event);
+    if (longPressed) return;
+    this.press.emit(event);
+    this.reportInteraction('click', event, 'touch');
+  }
+
+  /**
+   * Tell the app's interaction observers, if it has any, about a press that has just fired. They
+   * are looked up here rather than injected, because a press is rare and a lookup for every
+   * `<text>` on screen is not.
+   * Reported whether or not `(press)` has a listener: a control that does nothing when tapped is
+   * what an observer looking for dead taps wants to hear about.
+   */
+  private reportInteraction(
+    type: InteractionType,
+    event: PressEvent,
+    source: 'touch' | 'click',
+  ): void {
+    const observers = interactionObservers(this.injector);
+    if (!observers) return;
+    const text = textWithin(this.node);
+    notifyInteraction(observers, {
+      type,
+      ...describeElement(this.engine, this.node),
+      ...(text !== undefined && { text }),
+      ...touchPosition(event),
+      ...(this.size && { width: this.size.width, height: this.size.height }),
+      source,
+      timestamp: Date.now(),
+    });
   }
 
   private onTerminate(event: PressEvent): void {

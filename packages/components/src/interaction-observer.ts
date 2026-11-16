@@ -1,0 +1,158 @@
+/**
+ * Interactions as plain events, for an analytics or monitoring tool to record.
+ *
+ * Such a tool usually learns about taps by wrapping React Native's own `Pressable` and
+ * `ScrollView`, which never render here: every control is a host view on the press machine in
+ * `pressable.ts`. So the machine says what happened, and an app maps it to whatever its tool takes.
+ * Nothing is built while no observer is registered.
+ */
+import { InjectionToken, type Injector, type Provider } from '@angular/core';
+import type { HostEngine, HostNode } from '@ng-native/fabric';
+
+/** What the user did. */
+export type InteractionType = 'click' | 'long-press' | 'scroll' | 'swipe';
+
+/** Which way a scroll or swipe moved the content into view: `down` shows what is below. */
+export type InteractionDirection = 'up' | 'down' | 'left' | 'right';
+
+/** One interaction, as an observer receives it. */
+export interface InteractionEvent {
+  readonly type: InteractionType;
+  /** The element's name as written in the template: `pressable`, `text`, `scroll-view`, ... */
+  readonly element: string;
+  /** `accessibilityLabel`, or `aria-label`. */
+  readonly label?: string;
+  readonly testID?: string;
+  /** `nativeID`, or `id`. */
+  readonly nativeID?: string;
+  /** `role`, or `accessibilityRole`. */
+  readonly role?: string;
+  /**
+   * The text inside the control, joined with spaces and cut to `MAX_TEXT_LENGTH` characters. Taps
+   * only. It can hold what the user typed or was shown, so redact it before it leaves the device.
+   */
+  readonly text?: string;
+  /** The tag the control's own view was committed with, or null where the host has none. */
+  readonly nativeTag: number | null;
+  /** Where the touch landed in the window. Absent for a press that had no touch. */
+  readonly pageX?: number;
+  readonly pageY?: number;
+  /** Where the touch landed in the control. */
+  readonly locationX?: number;
+  readonly locationY?: number;
+  /** The control's size from its last layout, once it has had one. */
+  readonly width?: number;
+  readonly height?: number;
+  /** Scrolls and swipes only. */
+  readonly direction?: InteractionDirection;
+  /** A touch, or a press with none: Android's click from a keyboard or TalkBack. */
+  readonly source: 'touch' | 'click';
+  /** Milliseconds since the epoch. */
+  readonly timestamp: number;
+}
+
+export type InteractionObserver = (event: InteractionEvent) => void;
+
+/** Every observer the app registered. See `provideInteractionObserver`. */
+export const INTERACTION_OBSERVERS = new InjectionToken<readonly InteractionObserver[]>(
+  'INTERACTION_OBSERVERS',
+);
+
+/**
+ * Hear every tap, long press, scroll and swipe in the app. Can be given more than once, and every
+ * observer hears every interaction, after the control's own `(press)` has run.
+ *
+ * ```ts
+ * providers: [
+ *   provideInteractionObserver((event) => {
+ *     if (event.type === 'click') analytics.tap(event.label ?? event.element);
+ *   }),
+ * ]
+ * ```
+ */
+export function provideInteractionObserver(observer: InteractionObserver): Provider {
+  return { provide: INTERACTION_OBSERVERS, useValue: observer, multi: true };
+}
+
+/** How much of a control's text an event carries. */
+export const MAX_TEXT_LENGTH = 100;
+
+/** The observers an injector can see, or null. Read at the moment of an interaction, not before. */
+export function interactionObservers(injector: Injector): readonly InteractionObserver[] | null {
+  return injector.get(INTERACTION_OBSERVERS, null, { optional: true });
+}
+
+/** Observers that have thrown once already, so a broken one warns once rather than on every tap. */
+const warned = new WeakSet<InteractionObserver>();
+
+/**
+ * Hand the event to each observer. One that throws is reported, and stops neither the others nor
+ * the app.
+ */
+export function notifyInteraction(
+  observers: readonly InteractionObserver[],
+  event: InteractionEvent,
+): void {
+  for (const observer of observers) {
+    try {
+      observer(event);
+    } catch (error) {
+      if (warned.has(observer)) continue;
+      warned.add(observer);
+      console.warn('[ng-native] An interaction observer threw:', error);
+    }
+  }
+}
+
+/**
+ * The parts of an event that come from the element: what it committed, so a label or role a
+ * component composed onto it, or implied, is the one reported, as a screen reader hears it.
+ */
+export function describeElement(
+  engine: HostEngine,
+  node: HostNode,
+): Pick<InteractionEvent, 'element' | 'label' | 'testID' | 'nativeID' | 'role' | 'nativeTag'> {
+  const props = node.props;
+  const label = text(props['accessibilityLabel']);
+  const testID = text(props['testID']);
+  const nativeID = text(props['nativeID']);
+  const role = text(props['role']) ?? text(props['accessibilityRole']);
+  return {
+    element: elementName(node),
+    ...(label !== undefined && { label }),
+    ...(testID !== undefined && { testID }),
+    ...(nativeID !== undefined && { nativeID }),
+    ...(role !== undefined && { role }),
+    nativeTag: engine.tagOf?.(node) ?? null,
+  };
+}
+
+const text = (value: unknown): string | undefined =>
+  typeof value === 'string' && value !== '' ? value : undefined;
+
+/** `tag` on the native host, `tagName` on the web host, lowercased as templates write it. */
+function elementName(node: HostNode): string {
+  const named = node as HostNode & { tag?: string; tagName?: string };
+  return (named.tag ?? named.tagName ?? '').toLowerCase();
+}
+
+/** The text under a node, in order, with runs of whitespace collapsed, or undefined if none. */
+export function textWithin(node: HostNode): string | undefined {
+  const parts: string[] = [];
+  let length = 0;
+  const visit = (current: HostNode): void => {
+    for (const child of current.childList) {
+      if (length > MAX_TEXT_LENGTH) return;
+      if (child.nodeKind === 'text') {
+        const words = child.nodeText.trim();
+        if (words) {
+          parts.push(words);
+          length += words.length + 1;
+        }
+      } else visit(child);
+    }
+  };
+  visit(node);
+  const text = parts.join(' ').replace(/\s+/g, ' ');
+  return text ? text.slice(0, MAX_TEXT_LENGTH) : undefined;
+}

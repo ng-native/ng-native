@@ -154,6 +154,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/components/pressable', title: 'Pressable' },
         { path: 'packages/components/native-button', title: 'Native button' },
         { path: 'packages/components/gestures', title: 'Gestures' },
+        { path: 'packages/components/interaction-tracking', title: 'Interaction tracking' },
         { path: 'packages/components/modal', title: 'Modal', group: 'Presentation' },
         { path: 'packages/components/menus', title: 'Menus and shortcuts', group: 'Presentation' },
         { path: 'packages/components/sidebar', title: 'Sidebar and split view' },

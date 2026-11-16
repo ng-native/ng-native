@@ -1,7 +1,38 @@
-import { Directive, computed, input } from '@angular/core';
+import { DestroyRef, Directive, computed, inject, input } from '@angular/core';
+import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Insets } from './events.ts';
+import {
+  INTERACTION_OBSERVERS,
+  describeElement,
+  notifyInteraction,
+  type InteractionDirection,
+  type InteractionObserver,
+} from './interaction-observer.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
+
+/**
+ * How fast, in points per millisecond, a drag has to be moving as the finger lifts to be a swipe
+ * rather than a scroll: a flick that leaves the content gliding on, not a drag set down.
+ */
+export const SWIPE_VELOCITY = 0.5;
+
+type DragEvent = NativeSyntheticEvent<{
+  contentOffset?: { x: number; y: number };
+  velocity?: { x: number; y: number };
+}>;
+
+/** Which way the content moved, by the axis it moved further along, or null if it did not move. */
+function dragDirection(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): InteractionDirection | null {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (dx === 0 && dy === 0) return null;
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'right' : 'left';
+  return dy > 0 ? 'down' : 'up';
+}
 
 /** RN's `processDecelerationRate`: the named rates, as UIKit and Android define them. */
 const DECELERATION: Record<string, number> = { normal: 0.998, fast: 0.99 };
@@ -145,4 +176,43 @@ export abstract class ScrollViewProps extends ViewBase {
     const rate = this.decelerationRate();
     return typeof rate === 'string' ? DECELERATION[rate] : rate;
   });
+
+  constructor() {
+    super();
+    // Scroll views are few, so unlike a press this looks once, and listens only for an app that
+    // asked.
+    const observers = inject(INTERACTION_OBSERVERS, { optional: true });
+    if (observers?.length) this.reportDrags(observers);
+  }
+
+  /**
+   * One `scroll` or `swipe` per drag the user makes, as the finger lifts. A scroll made by code,
+   * `scrollTo` or a tap on the status bar, has no drag, so reports nothing.
+   */
+  private reportDrags(observers: readonly InteractionObserver[]): void {
+    let start: { x: number; y: number } | null = null;
+    const begin = this.engine.setEventListener(this.node, 'topScrollBeginDrag', (event) => {
+      start = (event as DragEvent).nativeEvent?.contentOffset ?? null;
+    });
+    const end = this.engine.setEventListener(this.node, 'topScrollEndDrag', (event) => {
+      const { contentOffset, velocity } = (event as DragEvent).nativeEvent ?? {};
+      const from = start;
+      start = null;
+      if (!from || !contentOffset) return;
+      const direction = dragDirection(from, contentOffset);
+      if (!direction) return;
+      const speed = velocity ? Math.hypot(velocity.x, velocity.y) : 0;
+      notifyInteraction(observers, {
+        type: speed >= SWIPE_VELOCITY ? 'swipe' : 'scroll',
+        ...describeElement(this.engine, this.node),
+        direction,
+        source: 'touch',
+        timestamp: Date.now(),
+      });
+    });
+    inject(DestroyRef).onDestroy(() => {
+      begin();
+      end();
+    });
+  }
 }

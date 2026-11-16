@@ -176,6 +176,12 @@ export abstract class HostEngine {
   keepDrag?(node: HostNode): void;
 
   /**
+   * The tag a node's native view was committed with, or null before its first commit. A host with
+   * no native views leaves it out.
+   */
+  tagOf?(node: HostNode): number | null;
+
+  /**
    * Take the user to a node: a text input gets the cursor, and anything else is brought on
    * screen. What a DOM element's own `focus()` does, for code that calls it on an element.
    */
