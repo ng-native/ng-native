@@ -152,9 +152,10 @@ Every service says whether its feature is there as `available`, a `Signal<boolea
 `available()`, in code and in templates alike: `@if (haptics.available())`. Where the answer is
 known at once, such as whether the module is in the build, it never changes. Where it is a native
 check, such as whether a face or fingerprint is enrolled for
-[Biometrics](/packages/expo/biometrics), Sign in with Apple, screen capture, the store review
-prompt or a sensor, it is `false` until the platform answers, no sooner than a turn after it is
-first read and sometimes later. [Biometrics](/packages/expo/biometrics) asks again each time the
+[Biometrics](/packages/expo/biometrics), Sign in with Apple, screen capture or the store review
+prompt, it is `false` until the platform answers, no sooner than a turn after it is first read and
+sometimes later. A sensor asks as it is created, so its answer can be there before the first read,
+and is `false` until then. [Biometrics](/packages/expo/biometrics) asks again each time the
 app comes back to the front. The hinge of a
 [foldable](/packages/expo/foldable) and the on-device language model follow the feature as it comes
 and goes.
