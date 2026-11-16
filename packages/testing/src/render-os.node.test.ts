@@ -72,6 +72,24 @@ test('puts the platform back once the render goes', async () => {
   assert.equal(nativePlatform(), before);
 });
 
+test('puts the first platform back after several renders as other OSes', async () => {
+  const before = nativePlatform();
+  await render(Gate, { os: 'macos' });
+  await render(Gate, { os: 'android' });
+  cleanup();
+  assert.equal(nativePlatform(), before);
+});
+
+test('keeps a newer render on its OS when an older one is unmounted first', async () => {
+  const before = nativePlatform();
+  const older = await render(Gate, { os: 'macos' });
+  await render(Gate, { os: 'android' });
+  older.unmount();
+  assert.equal(nativePlatform(), 'android', 'the render still mounted keeps its OS');
+  cleanup();
+  assert.equal(nativePlatform(), before);
+});
+
 test("names a view that takes its text as a prop by that text, as a native button's title", async () => {
   await render(Gate, { os: 'macos' });
   assert.equal(screen.getByRole('button', { name: 'Save' }), screen.getByTestId('button'));

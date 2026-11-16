@@ -16,7 +16,15 @@ import {
   View,
 } from '@ng-native/components';
 import { Menus, Processes } from '@ng-native/device';
-import { cleanup, fakeMenus, fakeProcesses, render, screen, userEvent } from '@ng-native/testing';
+import {
+  cleanup,
+  fakeMenus,
+  fakeProcesses,
+  fireEvent,
+  render,
+  screen,
+  userEvent,
+} from '@ng-native/testing';
 
 afterEach(cleanup);
 
@@ -157,6 +165,24 @@ test('walks focus with Tab, as focus from the keyboard, and leaves the editing k
   await userEvent.tab({ shift: true });
   await userEvent.keyboard('mod+z');
   assert.deepEqual(instance.heard(), ['undo']);
+});
+
+test('walks focus on from where typing and blur left it', async () => {
+  const { instance } = await render(Keys, { os: 'macos' });
+  const field = screen.getByTestId('field');
+  await userEvent.type(field, 'a', { skipBlur: true });
+  await userEvent.keyboard('mod+z');
+  assert.deepEqual(instance.heard(), [], 'the field typed in keeps undo');
+  await userEvent.tab({ shift: true });
+  await userEvent.keyboard('mod+z');
+  assert.deepEqual(instance.heard(), ['undo'], 'Tab went back from the field');
+  await userEvent.type(field, 'b');
+  await userEvent.keyboard('mod+z');
+  assert.deepEqual(instance.heard(), ['undo', 'undo'], 'typing ended with a blur');
+  await fireEvent.focus(field);
+  await fireEvent.blur(field);
+  await userEvent.keyboard('mod+z');
+  assert.deepEqual(instance.heard(), ['undo', 'undo', 'undo'], 'a blur leaves no field focused');
 });
 
 @Component({ selector: 'app-git', template: '' })

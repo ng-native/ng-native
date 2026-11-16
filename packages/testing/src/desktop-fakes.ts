@@ -136,7 +136,14 @@ export function fakeWindows(): FakeWindows {
   return {
     windows,
     quitAnswers,
-    emit: events.emit,
+    emit: (event) => {
+      // The host's record goes with a window the OS closed; a `closeRequest` the app can refuse.
+      if (event.type === 'closed') {
+        const window = find(event.surface);
+        if (window) window.open = false;
+      }
+      events.emit(event);
+    },
     subscribe: events.subscribe,
     open: async (request) => {
       const surface = next++;
