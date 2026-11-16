@@ -121,7 +121,34 @@ describe('a date picker in a form', () => {
     await fireEvent(date, 'dateSelected', { date: Date.parse('2027-01-02T00:00:00.000Z') });
     assert.equal(instance.data().arrival.toISOString(), '2027-01-02T00:00:00.000Z');
   });
+
+  // Compose's picker sends the date it holds as it is first drawn.
+  for (const [platform, event] of [
+    ['android', 'dateSelected'],
+    ['ios', 'dateChange'],
+  ] as const) {
+    it(`leaves its field untouched when it reports the date it holds on ${platform}`, async () => {
+      registerPlatformComponents(platform);
+      registerExpoUiViews(platform);
+      const { instance } = await boot();
+      const f = (instance as unknown as { f: { arrival: () => FieldState } }).f;
+      const held = instance.data().arrival;
+      await fireEvent(screen.getByTestId('date'), event, { date: held.getTime() });
+      assert.equal(f.arrival().touched(), false);
+      assert.equal(f.arrival().dirty(), false);
+      assert.equal(instance.data().arrival, held, 'the value is not written again');
+
+      await fireEvent(screen.getByTestId('date'), event, { date: held.getTime() + 86_400_000 });
+      assert.equal(f.arrival().touched(), true, 'a different date is a pick');
+      assert.equal(instance.data().arrival.getTime(), held.getTime() + 86_400_000);
+    });
+  }
 });
+
+interface FieldState {
+  touched(): boolean;
+  dirty(): boolean;
+}
 
 describe('which parts a date picker shows', () => {
   const shown = async () => {

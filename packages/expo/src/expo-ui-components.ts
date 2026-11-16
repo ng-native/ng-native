@@ -686,9 +686,10 @@ export class UiDatePicker {
       const describingItself =
         !this.settled && this.value() === null && Date.now() - this.appeared < APPEARING_MS;
       this.settled = true;
-      // Compose sends the date it holds as it is first drawn, which is no pick either.
+      // Compose sends the date it holds as it is first drawn, which is no pick either: writing it
+      // back would mark the field touched before the user did anything.
       this.picked = !describingItself && new Date(date).getTime() !== this.value()?.getTime();
-      if (describingItself) return;
+      if (!this.picked) return;
       this.value.set(new Date(date));
       this.touch.emit();
     });

@@ -147,9 +147,11 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   [Time between updates](/packages/expo/live-activity#time-between-updates).
 - **`UiDatePicker`** - SwiftUI's `DatePicker` on iOS, Compose's on Android, and a Signal Forms
   field: its `value` model is a `Date` or null, whichever way each platform takes and reports one.
-  A pick is when it emits `touch`. SwiftUI's picker always shows a date, today when the field is
-  empty, and the report it makes as it appears is not taken as the user's choice, so an optional
-  date is best asked for behind a button that shows the picker. Without a form, `selection` still
+  A pick is when it emits `touch`. A report of the date it already holds, such as the one Compose
+  makes as the picker is first drawn, is not a pick: the field is neither written nor touched.
+  SwiftUI's picker always shows a date, today when the field is empty, and the report it makes as
+  it appears is not taken as the user's choice, so an optional date is best asked for behind a
+  button that shows the picker. Without a form, `selection` still
   takes ISO text on iOS. `displayedComponents` is a list of `'date'` and `'hourAndMinute'`; an
   empty list shows nothing on iOS, and the date and time on Android, which has no way to show
   nothing. `range`, an optional `start` and an optional `end` as ISO text, limits the dates that
