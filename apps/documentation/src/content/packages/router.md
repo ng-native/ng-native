@@ -61,8 +61,10 @@ The routes can come from files instead of an array: `fileRoutes(pages)` routes e
 [File routes](/packages/router/file-routes).
 
 `withComponentInputBinding()` is opt-in here exactly as it is on the web: with it, a `:id` param,
-a query param or resolved data arrives as the page's `id` input; without it, both outlets leave a
-page's inputs alone, as Angular's `RouterOutlet` does, and the page reads `ActivatedRoute` instead.
+a query param, resolved data or a route resource arrives as the page's `id` input; without it, both
+outlets leave a page's inputs alone, as Angular's `RouterOutlet` does, and the page reads
+`ActivatedRoute` instead. Route resources need `withRouterResources()` as well, as on the web: a
+blocking resource arrives as its value, and one marked `nonBlocking()` as the resource itself.
 The feature's options hold too: `queryParams: false` leaves query params off the inputs, and
 `unmatchedInputBehavior: 'undefinedIfStale'` keeps an input's default until its key has been in
 the route.

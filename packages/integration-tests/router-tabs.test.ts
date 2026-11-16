@@ -25,7 +25,7 @@ import {
   type Route,
   type ActivatedRouteSnapshot,
 } from '@angular/router';
-import { ROUTE_INPUT_OPTIONS, type RouteInputOptions } from '../router/src/bind-route-inputs.ts';
+import { ROUTE_INPUT_BINDER } from '../router/src/bind-route-inputs.ts';
 import { NativeStackReuseStrategy } from '../router/src/native-stack-reuse-strategy.ts';
 import { registerScreenComponents } from '../router/src/screens.ts';
 import { registerPlatformComponents } from '@ng-native/fabric';
@@ -82,8 +82,11 @@ describe('native tabs outlet', () => {
   let reported: unknown[];
   /** Whether the app asked for `withComponentInputBinding()`, as `Router` reports it. */
   let inputBinding: boolean;
-  /** The `withComponentInputBinding()` options, as `provideNativeRouter` hands them on. */
-  let inputOptions: RouteInputOptions;
+  /**
+   * The `withComponentInputBinding()` options, on a binder without Angular's methods, so these
+   * tabs bind through the outlet's fallback; router-resource-inputs.test.ts covers Angular's.
+   */
+  let inputOptions: { queryParams: boolean; unmatchedInputBehavior: string };
   /** Just enough of `Router.events` for the outlet to follow navigations. */
   let routerEvents: {
     next(event: unknown): void;
@@ -192,14 +195,11 @@ describe('native tabs outlet', () => {
         // The template form these assert; router-tab-template-icon.test.ts covers 4.29 and later.
         { provide: SCREENS_VERSION, useValue: '4.26.2' },
         {
-          provide: ROUTE_INPUT_OPTIONS,
+          provide: ROUTE_INPUT_BINDER,
           // Read when a tab binds rather than when the outlet is built, so a test can set it.
           useValue: {
-            get queryParams() {
-              return inputOptions.queryParams;
-            },
-            get unmatchedInputBehavior() {
-              return inputOptions.unmatchedInputBehavior;
+            get options() {
+              return inputOptions;
             },
           },
         },

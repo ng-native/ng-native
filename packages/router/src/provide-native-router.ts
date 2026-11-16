@@ -47,7 +47,7 @@ import {
   type SchemeDefaults,
   type TabDefaults,
 } from './native-bar-defaults.ts';
-import { provideRouteInputOptions } from './bind-route-inputs.ts';
+import { provideRouteInputBinder } from './bind-route-inputs.ts';
 import { discardFailedEntries } from './discard-failed-entries.ts';
 import { restoreFailedSnapshots } from './native-back.ts';
 import { followLink, linkAncestry, type LinkParent } from './native-links.ts';
@@ -149,7 +149,7 @@ export function provideNativeRouter(
   const parentOf = native.find((feature) => feature.linkParent)?.linkParent;
   return makeEnvironmentProviders([
     provideRouter(routes, ...angular),
-    ...provideRouteInputOptions(angular),
+    ...provideRouteInputBinder(angular),
     ...nativeProviders(parentOf),
     ...native.flatMap((feature) => feature.providers ?? []),
   ]);

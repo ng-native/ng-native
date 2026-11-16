@@ -68,7 +68,7 @@ import {
   type Route,
   type RouterOutletContract,
 } from '@angular/router';
-import { ROUTE_INPUT_OPTIONS, bindRouteInputs } from './bind-route-inputs.ts';
+import { ROUTE_INPUT_BINDER, bindRouteInputs } from './bind-route-inputs.ts';
 import { NATIVE_TAB_DEFAULTS } from './native-bar-defaults.ts';
 import { NativeBack, isShowing } from './native-back.ts';
 import { optionalBoolean } from './transforms.ts';
@@ -189,7 +189,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private readonly route = inject(ActivatedRoute);
   /** Optional so the outlet can be driven through `RouterOutletContract` directly, as tests do. */
   private readonly router = inject(Router, { optional: true });
-  private readonly inputOptions = inject(ROUTE_INPUT_OPTIONS);
+  private readonly inputBinder = inject(ROUTE_INPUT_BINDER);
   private readonly errors = inject(ErrorHandler);
   /** What activation has reported already, so the failed navigation it causes is not reported again. */
   private readonly reported = new WeakSet<object>();
@@ -480,7 +480,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   /** Route params onto inputs only under `withComponentInputBinding()`, as in the stack outlet. */
   private bindInputs(ref: ComponentRef<unknown>, route: ActivatedRoute): () => void {
     return this.router?.componentInputBindingEnabled
-      ? bindRouteInputs(ref, route, this.inputOptions)
+      ? bindRouteInputs(ref, route, this.inputBinder)
       : () => {};
   }
 
