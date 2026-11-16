@@ -108,7 +108,8 @@ After the query changes, resolve one of the new suggestions.
   A street suggestion can resolve with only the first part of its postcode (`LS6`), so a form
   should let the person finish it.
 - **macOS:** the desktop host's `NgNativeAddressSearch`, over the same MapKit classes as iOS. The
-  `region` option looks only in that country from macOS 15, and there first before.
+  `region` option looks only in a box around that country from macOS 15, so a place just over
+  its border can still be suggested, and there first before.
 - **Android:** the platform's `Geocoder`, asked once the query has not changed for 300 ms. It
   answers whole addresses that match the query rather than completions, so a partial street name
   finds less than on iOS. It goes to the network for each lookup. On a device with no geocoder,

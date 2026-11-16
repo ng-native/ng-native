@@ -80,8 +80,10 @@ round; a listbox and a grid stop at their ends. In a grid, Control-Home and Cont
 first and last cell. A `tabIndex` of -1 keeps an item out of Tab order while the arrows still reach
 it. The host only moves the focus: select a tab or check a radio from its `(focus)` handler.
 
-The desktop host has no accessibility settings module, so on macOS every value here stays at its
-neutral setting and `announce()` does nothing. `fontScale` is one, since nothing resizes a Mac app.
+On macOS the desktop host reads the system's settings: `screenReader` is VoiceOver running and
+`reduceMotion` follows System Settings. macOS has no bold text setting an app can read, so
+`boldText` stays false. `announce()` hands a message that is not empty to VoiceOver. `fontScale`
+is one, since nothing resizes a Mac app.
 
 ## Off a device and on the web
 

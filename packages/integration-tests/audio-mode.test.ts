@@ -48,6 +48,15 @@ describe('setAudioMode', () => {
     assert.deepEqual(modes, [{ allowsRecording: true }]);
   });
 
+  it('says to rebuild the desktop host on macOS without NgNativeAudio', async () => {
+    withModules({
+      'react-native': { Platform: { OS: 'macos' }, TurboModuleRegistry: { get: () => null } },
+    });
+    await assert.rejects(setAudioMode({ allowsRecording: true }), {
+      name: 'MissingModuleError',
+    });
+  });
+
   it('does nothing, and resolves, where there is no audio module', async () => {
     withModules({});
     await setAudioMode({ playsInSilentMode: true });

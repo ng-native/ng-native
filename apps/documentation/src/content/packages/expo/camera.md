@@ -150,9 +150,14 @@ microphone permission.
 protected readonly microphone = microphonePermission();
 
 protected async start(): Promise<void> {
-  await this.microphone.ensure(); // a refusal still records, without sound, on iOS and macOS
-  const video = await this.camera()?.record({ maxDuration: 60 });
-  if (video) console.log(video.uri);
+  // A refusal records without sound on iOS and macOS, and makes record() reject on Android.
+  await this.microphone.ensure();
+  try {
+    const video = await this.camera()?.record({ maxDuration: 60 });
+    if (video) console.log(video.uri);
+  } catch (error) {
+    console.warn('Not recorded', error);
+  }
 }
 ```
 
