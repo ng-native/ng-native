@@ -136,6 +136,9 @@ describe('the macOS Babel plugin, on Platform.select', () => {
       'x = Platform.select({\n  ios: 1,\n  android: f()\n});',
       'x = Platform.select({\n  ios: 1,\n  android: {\n    a: g()\n  }\n});',
       'x = Platform.select({\n  ios: 1,\n  android: y = 2\n});',
+      // A conversion runs the object's valueOf or toString.
+      'x = Platform.select({\n  ios: +side,\n  macos: n\n});',
+      'x = Platform.select({\n  ios: `${side}`,\n  macos: n\n});',
     ]) {
       assert.equal(select(code), code);
     }
