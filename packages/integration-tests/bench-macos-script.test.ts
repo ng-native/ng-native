@@ -5,7 +5,9 @@
  * as a breach does, unless the budget file waives it.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 
 type Result = { metric: string; value: number | null; ceiling: number; status: string };
@@ -21,6 +23,12 @@ const bench = (await import(script.href)) as {
   ): { cold: Record<string, number | null>[]; judged: Record<string, number | null> };
   hostEnv(env: Record<string, string | undefined>): Record<string, string | undefined>;
   footprintMb(output: string): number | null;
+  measure(
+    host: string,
+    bundle: string,
+    counterBinary: string,
+    timing?: { settleMs?: number },
+  ): Promise<Record<string, number | null>>;
   judge(
     measured: Record<string, number | null>,
     budget: {
@@ -138,5 +146,36 @@ describe('judging against the budget', () => {
       'launchMs',
       'memoryMb',
     ]);
+  });
+});
+
+describe('a measured launch', () => {
+  it('reads a commit the host logs while idle is sampled', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'bench-macos-test-'));
+    try {
+      const script = (name: string, body: string) => {
+        const file = path.join(dir, name);
+        writeFileSync(file, `#!/usr/bin/env node\n${body}\n`);
+        chmodSync(file, 0o755);
+        return file;
+      };
+      // A host that logs a slow commit only once sampling has started, then stays up.
+      const host = script(
+        'host',
+        "console.log('[ngn] first frame 100 ms after launch\\n[ngn] commit 4 ms');" +
+          "setTimeout(() => console.log('[ngn] commit 25 ms'), 300);" +
+          'setInterval(() => {}, 1000);',
+      );
+      const counter = script(
+        'counter',
+        "setTimeout(() => console.log('cpu 0.01\\nwakeups 1'), 900);",
+      );
+      const measured = await bench.measure(host, 'main.hbc', counter, { settleMs: 0 });
+      assert.equal(measured.launchMs, 100);
+      assert.equal(measured.idleCpu, 0.01);
+      assert.equal(measured.commitMs, 25);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

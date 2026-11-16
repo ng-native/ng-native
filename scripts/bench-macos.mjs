@@ -165,8 +165,34 @@ function buildCounter(dir) {
   return out;
 }
 
-/** Launch the host on `bundle`, measure it, and quit it. */
-async function measure(host, bundle, counterBinary) {
+/**
+ * A command's standard output, run without blocking the event loop, so the host's output goes on
+ * being read while it runs. Empty when the command could not start.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @returns {Promise<string>}
+ */
+function output(command, args) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    let text = '';
+    child.stdout.on('data', (chunk) => (text += chunk));
+    child.on('error', () => resolve(''));
+    child.on('close', () => resolve(text));
+  });
+}
+
+/**
+ * Launch the host on `bundle`, measure it, and quit it.
+ *
+ * @param {string} host
+ * @param {string} bundle
+ * @param {string} counterBinary
+ * @param {{ settleMs?: number }} [timing] `settleMs`: how long after the first frame idle is
+ *   measured from
+ */
+export async function measure(host, bundle, counterBinary, { settleMs = 5_000 } = {}) {
   const child = spawn(host, [bundle, '--title', 'bench:macos'], {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: hostEnv(process.env),
@@ -177,16 +203,16 @@ async function measure(host, bundle, counterBinary) {
   try {
     for (let waited = 0; firstFrameMs(log) === null && waited < 10_000; waited += 100)
       await wait(100);
-    await wait(5_000);
+    await wait(settleMs);
     const pid = String(child.pid);
-    const counter = spawnSync(counterBinary, [pid, '30'], { encoding: 'utf8' });
-    const idle = idleFromCounter(counter.stdout ?? '');
-    const footprint = spawnSync('footprint', [pid], { encoding: 'utf8' });
+    // Awaited rather than run synchronously: a commit the host logs during the 30 s is read too.
+    const idle = idleFromCounter(await output(counterBinary, [pid, '30']));
+    const footprint = await output('footprint', [pid]);
     return {
       launchMs: firstFrameMs(log),
       idleCpu: idle?.cpu ?? null,
       idleWakeups: idle?.wakeups ?? null,
-      memoryMb: footprintMb(footprint.stdout ?? ''),
+      memoryMb: footprintMb(footprint),
       commitMs: commitMs(log),
     };
   } finally {
