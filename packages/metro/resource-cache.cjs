@@ -89,6 +89,39 @@ function checkingResources(stores, projectRoot) {
   );
 }
 
+/** The Metro servers already told that a resource edit reaches the app through its own module alone. */
+const WARNED = new WeakSet();
+
+const SINGLE_MODULE_ADVICE =
+  "So an edit to only a component's templateUrl or styleUrl reaches a running app through that file's own module alone. Save the component, or restart Metro, if the edit does not show.";
+
+const SINGLE_MODULE = `[angular-native] This Metro cannot transform a component again when its resources change. ${SINGLE_MODULE_ADVICE}`;
+
+/**
+ * The delta bundler and bundler a Metro dev server rereads resources through, or null where it
+ * has not both, said once for that server.
+ */
+function hooksOf(server) {
+  const incremental = server?.getBundler?.();
+  const deltaBundler = incremental?.getDeltaBundler?.();
+  const bundler = incremental?.getBundler?.();
+  if (
+    typeof deltaBundler?.getDelta === 'function' &&
+    typeof bundler?.transformFile === 'function'
+  ) {
+    return { deltaBundler, bundler };
+  }
+  if (incremental) warnOnce(server);
+  return null;
+}
+
+/** Says once for a Metro server that a resource edit reaches the app through its own module. */
+function warnOnce(server) {
+  if (WARNED.has(server)) return;
+  WARNED.add(server);
+  console.warn(SINGLE_MODULE);
+}
+
 /**
  * A dev server that transforms again each module of a graph whose resources have changed, or gone,
  * whenever it works out what changed in that graph: for a bundle request, a reload's or a
@@ -112,15 +145,9 @@ function checkingResources(stores, projectRoot) {
  * through the template's own module alone.
  */
 function rereadingResources(server, projectRoot) {
-  const incremental = server?.getBundler?.();
-  const deltaBundler = incremental?.getDeltaBundler?.();
-  const bundler = incremental?.getBundler?.();
-  if (
-    typeof deltaBundler?.getDelta !== 'function' ||
-    typeof bundler?.transformFile !== 'function'
-  ) {
-    return;
-  }
+  const hooks = hooksOf(server);
+  if (!hooks) return;
+  const { deltaBundler, bundler } = hooks;
   if (deltaBundler[RESOURCES]) return;
   deltaBundler[RESOURCES] = true;
 
@@ -147,7 +174,7 @@ function rereadingResources(server, projectRoot) {
     } else if (!warned) {
       warned = true;
       console.warn(
-        "[angular-native] This Metro does not say which files changed in a way that can be added to, so an edit to only a component's templateUrl or styleUrl reaches a running app through that file's own module alone. Save the component, or restart Metro, if the edit does not show.",
+        `[angular-native] This Metro does not say which files changed in a way that can be added to. ${SINGLE_MODULE_ADVICE}`,
       );
     }
     return getDelta.call(this, graph, options);
