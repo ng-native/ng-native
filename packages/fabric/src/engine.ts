@@ -7902,6 +7902,21 @@ export class Engine implements HostEngine {
     }
   }
 
+  /** Hovered nodes whose views were forgotten, as one hidden with `display: none` is. */
+  private readonly hoverForgotten = new Set<EngineNode>();
+
+  /**
+   * Forget the hover of each node whose view went, once the commit that let it go is done, so it is
+   * not hovered when it is made again and native says nothing of a pointer over it.
+   */
+  private unhoverForgotten(): void {
+    if (!this.hoverForgotten.size) return;
+    let moved = false;
+    for (const node of this.hoverForgotten) moved = this.setHovered(node, false) || moved;
+    this.hoverForgotten.clear();
+    if (moved) this.commit();
+  }
+
   /** Hovered nodes out of the tree: native has no view to say the pointer left. */
   private dropDetachedHover(): void {
     for (const node of this.hoveredNodes) {
@@ -8817,6 +8832,8 @@ export class Engine implements HostEngine {
       }
     }
     if (this.focusedNode && this.topOf(this.focusedNode) !== this.root) this.dropFocus();
+    // Moved within the tree, it keeps its focus, and `:focus-within` follows its new ancestors.
+    else if (this.focusedNode) this.setFocusWithin(this.focusedNode);
     this.dropDetachedPress();
     if (this.hoveredNodes.size) this.dropDetachedHover();
   }
@@ -9867,6 +9884,7 @@ export class Engine implements HostEngine {
     if (facesAdded) this.rematchFonts();
     this.commitHandedOn();
     this.blurHidden();
+    this.unhoverForgotten();
     return true;
   }
 
@@ -16162,6 +16180,8 @@ export class Engine implements HostEngine {
    * for hoisted names go too: they are children of the native view it is losing.
    */
   private forgetCommitted(node: EngineNode): void {
+    // Native has no view left to say the pointer left: see `unhoverForgotten`.
+    if (node.hovered) this.hoverForgotten.add(node);
     node.committed = null;
     node.committedUnder = null;
     // Another view, with another tag, which no graph has set anything on.
