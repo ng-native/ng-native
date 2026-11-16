@@ -13,7 +13,7 @@
  * checked by SHA-256, so no Developer ID is needed.
  */
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** The manifest's format, which `prebuilt.json` names. */
@@ -66,20 +66,57 @@ export function withHost(manifest, host) {
 /**
  * Puts a packed archive in `out` under its name, with its `prebuilt-host.json` entry, and writes
  * the entry into `manifest` when one is given. Runs into the same folder take turns, holding
- * `<out>/.make-prebuilt.lock`, so the archive, its entry and the manifest always describe the same
- * build; each file is replaced by a rename, so none is seen half written.
+ * `<out>/.make-prebuilt.lock`, and the manifest's folder's lock too when it is elsewhere, so the
+ * archive, its entry and the manifest always describe the same build and no run's manifest entry is
+ * lost; each file is replaced by a rename, so none is seen half written.
  *
  * @param {{ out: string, archive: string, name: string, host: PrebuiltHost, manifest?: string }} files
  *   `archive` is the packed archive at a temporary name in `out`
  * @param {{ wait?: number }} [options] how long to wait for another run, in milliseconds
  */
 export function publishPrebuilt({ out, archive, name, host, manifest }, { wait = 600_000 } = {}) {
-  const lock = path.join(out, '.make-prebuilt.lock');
+  // The manifest's folder too when it is elsewhere, since another run may be updating it: by real
+  // path, so one folder reached two ways is locked once, and in path order, so two runs never each
+  // hold the lock the other waits for.
+  const folders = [
+    ...new Set([out, ...(manifest ? [path.dirname(manifest)] : [])].map((f) => realpathSync(f))),
+  ].sort();
   const give = Date.now() + wait;
+  /** @type {string[]} */
+  const held = [];
+  /** @param {string} file @param {string} text */
+  const replace = (file, text) => {
+    const temp = `${file}.${process.pid}-${randomBytes(4).toString('hex')}`;
+    writeFileSync(temp, text);
+    renameSync(temp, file);
+  };
+  try {
+    for (const folder of folders) {
+      held.push(takeLock(path.join(folder, '.make-prebuilt.lock'), give));
+    }
+    renameSync(archive, path.join(out, name));
+    replace(path.join(out, 'prebuilt-host.json'), `${JSON.stringify(host, null, 2)}\n`);
+    if (manifest) {
+      const updated = withHost(readManifest(readFileSync(manifest, 'utf8')), host);
+      replace(manifest, `${JSON.stringify(updated, null, 2)}\n`);
+    }
+  } finally {
+    for (const lock of held.reverse()) rmSync(lock, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Makes `lock`, waiting until `give` (a time in milliseconds) while another run holds it.
+ *
+ * @param {string} lock
+ * @param {number} give
+ * @returns {string} the lock
+ */
+function takeLock(lock, give) {
   for (;;) {
     try {
       mkdirSync(lock);
-      break;
+      return lock;
     } catch (error) {
       if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EEXIST') throw error;
       if (Date.now() >= give) {
@@ -90,22 +127,6 @@ export function publishPrebuilt({ out, archive, name, host, manifest }, { wait =
       }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
     }
-  }
-  /** @param {string} file @param {string} text */
-  const replace = (file, text) => {
-    const temp = `${file}.${process.pid}-${randomBytes(4).toString('hex')}`;
-    writeFileSync(temp, text);
-    renameSync(temp, file);
-  };
-  try {
-    renameSync(archive, path.join(out, name));
-    replace(path.join(out, 'prebuilt-host.json'), `${JSON.stringify(host, null, 2)}\n`);
-    if (manifest) {
-      const updated = withHost(readManifest(readFileSync(manifest, 'utf8')), host);
-      replace(manifest, `${JSON.stringify(updated, null, 2)}\n`);
-    }
-  } finally {
-    rmSync(lock, { recursive: true, force: true });
   }
 }
 

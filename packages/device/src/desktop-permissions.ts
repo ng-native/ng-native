@@ -141,10 +141,17 @@ const MACOS_LOCATION_FROM = [
  */
 export function macosPermissions(config: ExpoPermissionConfig): MacosPermissions {
   const usageStrings = fromInfoPlist(config.ios?.infoPlist ?? {});
-  for (const entry of config.plugins ?? []) applyPlugin(usageStrings, entry);
+  const defaulted = new Set<string>();
+  for (const entry of config.plugins ?? []) applyPlugin(usageStrings, defaulted, entry);
   // macOS asks for location with NSLocationUsageDescription, which no iOS key or plugin option
-  // sets: it reads the app's own location string, unless the app gives the macOS key itself.
-  const location = MACOS_LOCATION_FROM.map((key) => usageStrings[key]).find(Boolean);
+  // sets: it reads the app's own location string, one the app wrote before a plugin's default,
+  // unless the app gives the macOS key itself.
+  const location = [
+    ...MACOS_LOCATION_FROM.filter((key) => !defaulted.has(key)),
+    ...MACOS_LOCATION_FROM.filter((key) => defaulted.has(key)),
+  ]
+    .map((key) => usageStrings[key])
+    .find(Boolean);
   if (location !== undefined) usageStrings['NSLocationUsageDescription'] ??= location;
   const name = config.name ?? 'this app';
   for (const [key, value] of Object.entries(usageStrings)) {
@@ -167,8 +174,15 @@ function fromInfoPlist(infoPlist: Readonly<Record<string, unknown>>): Record<str
   return usageStrings;
 }
 
-/** Write the usage strings one `plugins` entry writes, or take away those it turns off. */
-function applyPlugin(usageStrings: Record<string, string>, entry: unknown): void {
+/**
+ * Write the usage strings one `plugins` entry writes, or take away those it turns off. `defaulted`
+ * holds the keys that have a plugin's default rather than a string the app wrote.
+ */
+function applyPlugin(
+  usageStrings: Record<string, string>,
+  defaulted: Set<string>,
+  entry: unknown,
+): void {
   const [name, given] = Array.isArray(entry) ? entry : [entry, undefined];
   const options = (typeof given === 'object' && given !== null ? given : {}) as Record<
     string,
@@ -177,8 +191,15 @@ function applyPlugin(usageStrings: Record<string, string>, entry: unknown): void
   const usages = typeof name === 'string' ? PLUGIN_USAGE[name]?.(options) : undefined;
   for (const [option, key, fallback] of usages ?? []) {
     const value = options[option];
-    if (value === false) delete usageStrings[key];
-    else if (typeof value === 'string' && value !== '') usageStrings[key] = value;
-    else usageStrings[key] ??= fallback;
+    if (value === false) {
+      delete usageStrings[key];
+      defaulted.delete(key);
+    } else if (typeof value === 'string' && value !== '') {
+      usageStrings[key] = value;
+      defaulted.delete(key);
+    } else if (usageStrings[key] === undefined) {
+      usageStrings[key] = fallback;
+      defaulted.add(key);
+    }
   }
 }

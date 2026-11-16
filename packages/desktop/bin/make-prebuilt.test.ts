@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -154,6 +155,33 @@ describe('publishPrebuilt', () => {
       assert.ok(!existsSync(path.join(out, 'prebuilt-host.json')));
     } finally {
       rmSync(out, { recursive: true, force: true });
+    }
+  });
+
+  it('locks the folder of a manifest elsewhere too, and lets go of both when it cannot', () => {
+    const { out, archive } = packed();
+    const elsewhere = realpathSync(mkdtempSync(path.join(tmpdir(), 'ngn-publish-manifest-')));
+    try {
+      const manifest = path.join(elsewhere, 'prebuilt.json');
+      writeFileSync(manifest, JSON.stringify({ version: 1, hosts: [] }));
+      // Another run, for another React Native version, is updating that manifest.
+      mkdirSync(path.join(elsewhere, '.make-prebuilt.lock'));
+      assert.throws(
+        () => publishPrebuilt({ out, archive, name: 'h.tar.gz', host, manifest }, { wait: 100 }),
+        (error: Error) => error.message.includes(path.join(elsewhere, '.make-prebuilt.lock')),
+      );
+      assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, []);
+      assert.ok(!existsSync(path.join(out, 'h.tar.gz')), 'nothing published');
+      assert.ok(!existsSync(path.join(out, '.make-prebuilt.lock')), 'its own lock let go');
+
+      // Free, both folders are locked and let go, and the entry is written.
+      rmSync(path.join(elsewhere, '.make-prebuilt.lock'), { recursive: true });
+      publishPrebuilt({ out, archive, name: 'h.tar.gz', host, manifest }, { wait: 100 });
+      assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host]);
+      assert.deepEqual(readdirSync(elsewhere), ['prebuilt.json']);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+      rmSync(elsewhere, { recursive: true, force: true });
     }
   });
 });

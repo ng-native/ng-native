@@ -101,6 +101,26 @@ describe('macOS permissions from the Expo keys', () => {
     assert.equal(macosPermissions({}).usageStrings['NSLocationUsageDescription'], undefined);
   });
 
+  it("prefers a location string the app gave to expo-location's own defaults", () => {
+    const { usageStrings } = macosPermissions({
+      name: 'Runs',
+      plugins: [['expo-location', { locationAlwaysAndWhenInUsePermission: 'To log your runs.' }]],
+    });
+    assert.equal(usageStrings['NSLocationUsageDescription'], 'To log your runs.');
+    // The keys it left to the plugin keep the plugin's default.
+    assert.equal(
+      usageStrings['NSLocationWhenInUseUsageDescription'],
+      'Allow Runs to access your location',
+    );
+    // With nothing given, macOS gets the plugin's default too.
+    assert.equal(
+      macosPermissions({ name: 'Runs', plugins: ['expo-location'] }).usageStrings[
+        'NSLocationUsageDescription'
+      ],
+      'Allow Runs to access your location',
+    );
+  });
+
   it('keeps an NSLocationUsageDescription the app sets itself', () => {
     const { usageStrings } = macosPermissions({
       ios: { infoPlist: { NSLocationUsageDescription: 'On the Mac, to find your office.' } },
