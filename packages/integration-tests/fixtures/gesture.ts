@@ -20,3 +20,11 @@ export class Draggable {
   readonly pan = signal<object>({ name: 'pan' });
   readonly track = signal(true);
 }
+
+/** `x-draggable` inside an app, so its gesture is in a component other than the root. */
+@Component({
+  selector: 'x-gesture-app',
+  imports: [Draggable],
+  template: `<x-draggable />`,
+})
+export class GestureApp {}

@@ -36,9 +36,9 @@ before(async () => {
   mod = await compileFixture('fixtures/gesture.ts');
 });
 
-async function boot(heard?: InteractionEvent[]) {
+async function boot(heard?: InteractionEvent[], root = 'Draggable') {
   const attached: Attached[] = [];
-  const rendered = await render(mod['Draggable'] as Type<unknown>, {
+  const rendered = await render(mod[root] as Type<unknown>, {
     providers: [
       ...(heard ? [provideInteractionObserver((event) => heard.push(event))] : []),
       {
@@ -130,6 +130,16 @@ describe('native gesture, reported to interaction observers', () => {
       source: 'touch',
     });
     assert.equal(typeof timestamp, 'number');
+    cleanup();
+  });
+
+  it('names the component the gesture is attached inside', async () => {
+    const heard: InteractionEvent[] = [];
+    const { attached } = await boot(heard, 'GestureApp');
+
+    attached[0]!.report!(tap);
+
+    assert.equal(heard[0]!.component, 'x-draggable', 'as a pressed control names its component');
     cleanup();
   });
 

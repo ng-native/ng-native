@@ -117,10 +117,11 @@ a scroll view took over, reports nothing, and nothing is reported while it moves
 Every such event carries `gesture`, the builder's name: `tap`, `long-press`, `fling`, `pan`,
 `pinch`, `rotation`, `manual` and so on, so a tap gesture can be told from a pressed control. The
 element, `label`, `testID`, `nativeID`, `role` and `nativeTag` are the element the gesture is
-attached to. A composed gesture (`Gesture.Race`, `Gesture.Simultaneous`, `Gesture.Exclusive`)
-reports each gesture in it that ended; in a race that is the one that won. `Gesture.Hover()` and
-`Gesture.Native()` report nothing: the first is a pointer passing over, and the second is the
-wrapped view's own touch handling, which a scroll view or a pressable control reports itself.
+attached to, and `component` the component around it, as for a pressed control. A composed gesture
+(`Gesture.Race`, `Gesture.Simultaneous`, `Gesture.Exclusive`) reports each gesture in it that
+ended; in a race that is the one that won. `Gesture.Hover()` and `Gesture.Native()` report nothing:
+the first is a pointer passing over, and the second is the wrapped view's own touch handling, which
+a scroll view or a pressable control reports itself.
 
 A gesture whose callbacks are worklets ends on the UI thread, and its report is scheduled onto the
 JavaScript thread, so observers always run there, after the gesture's own `onEnd`.
