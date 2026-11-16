@@ -713,16 +713,30 @@ describe('after a reload or a relaunch', () => {
     assert.equal(second.windows.windows()[1]!.key, 'note-1');
   });
 
+  /** A value as a property list keeps it, as user defaults do: null goes, from objects and arrays. */
+  function propertyList(value: unknown): unknown {
+    if (Array.isArray(value)) return value.filter((item) => item !== null).map(propertyList);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([, item]) => item !== null)
+          .map(([key, item]) => [key, propertyList(item)]),
+      );
+    }
+    return value;
+  }
+
   /**
    * The store `AppWindows` gets unprovided, made on a device running `os` whose React Native has
-   * `Settings` backed by `defaults`, which outlives a reload as the app's user defaults do.
+   * `Settings` backed by `defaults`, which outlives a reload as the app's user defaults do and keeps
+   * values as a property list.
    */
   function defaultStore(os: 'ios' | 'macos' | 'android', defaults: Map<string, unknown>) {
     const host = globalThis as Record<string, unknown>;
     const settings = {
       get: (key: string) => defaults.get(key),
       set: (values: Record<string, unknown>) =>
-        Object.entries(values).forEach(([key, value]) => defaults.set(key, value)),
+        Object.entries(values).forEach(([key, value]) => defaults.set(key, propertyList(value))),
     };
     host['require'] = (id: string) =>
       id === 'react-native' ? { Platform: { OS: os }, Settings: settings } : undefined;
@@ -770,6 +784,30 @@ describe('after a reload or a relaunch', () => {
     }
     // Android has no user defaults in React Native, and no windows to keep.
     assert.equal(defaultStore('android', new Map()), null);
+  });
+
+  it("gives a window's inputs back with their nulls from the user defaults, and reads the older form", () => {
+    for (const os of ['ios', 'macos'] as const) {
+      const defaults = new Map<string, unknown>();
+      const store = defaultStore(os, defaults)!;
+      const windows = [
+        { kind: 'main' },
+        {
+          kind: 'component',
+          key: 'library',
+          component: 'NoteWindow',
+          inputs: { selected: null, slots: [null, 'B'] },
+          options: {},
+        },
+      ] as const;
+      store.write(windows as never);
+      assert.deepEqual(store.read(), windows, `${os} keeps null`);
+      // What an earlier version saved: the records themselves, as a property list.
+      defaults.set('ngNative.windows', [{ kind: 'main' }]);
+      assert.deepEqual(store.read(), [{ kind: 'main' }]);
+      defaults.set('ngNative.windows', 'not json');
+      assert.deepEqual(store.read(), []);
+    }
   });
 
   it('does not open a window that was closed, or one whose component is not restorable', async () => {
