@@ -6,6 +6,7 @@
  * expects. `expo-haptics`'s JavaScript adds none of that, which is why `./haptics.ts` skips it.
  */
 import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
+import { desktopHost } from './desktop-host.ts';
 import { expoModule, presence, present } from './native.ts';
 
 /** The slice of `expo-clipboard` this needs. */
@@ -24,19 +25,13 @@ type DesktopClipboard = Omit<NativeClipboard, 'addClipboardListener'>;
  * where the host has no such module.
  */
 function desktopClipboard(): NativeClipboard | null {
-  const native = require('react-native') as {
-    TurboModuleRegistry: { get(name: string): unknown };
-    DeviceEventEmitter: {
-      addListener(event: string, listener: () => void): { remove(): void };
-    };
-  };
-  const module = native.TurboModuleRegistry.get('NgNativeClipboard') as DesktopClipboard | null;
-  if (!module) return null;
+  const host = desktopHost<DesktopClipboard>('NgNativeClipboard');
+  if (!host) return null;
+  const { module } = host;
   return {
     getStringAsync: () => module.getStringAsync(),
     setStringAsync: (text) => module.setStringAsync(text),
-    addClipboardListener: (listener) =>
-      native.DeviceEventEmitter.addListener('ngNativeClipboard', () => listener()),
+    addClipboardListener: (listener) => host.listen('ngNativeClipboard', () => listener()),
   };
 }
 

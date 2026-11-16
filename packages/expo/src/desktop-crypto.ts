@@ -7,6 +7,7 @@
  */
 import { base64Of, bytesOf } from './base64.ts';
 import type { NativeCrypto } from './crypto.ts';
+import { desktopHost } from './desktop-host.ts';
 
 interface Host {
   randomUUID(): string;
@@ -27,8 +28,7 @@ function viewOf(data: ArrayBuffer | ArrayBufferView): Uint8Array {
 
 /** The desktop host's `NgNativeCrypto` in expo-crypto's shape, or null where it has none. */
 export function desktopCrypto(): NativeCrypto | null {
-  const { TurboModuleRegistry } = require('react-native') as typeof import('react-native');
-  const host = TurboModuleRegistry.get('NgNativeCrypto') as Host | null;
+  const host = desktopHost<Host>('NgNativeCrypto')?.module;
   if (!host) return null;
   const randomBytes = (count: number) => bytesOf(host.getRandomBytes(count).base64);
   const crypto = {

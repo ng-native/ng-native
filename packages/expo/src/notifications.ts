@@ -43,6 +43,7 @@ import type {
   NotificationResponse,
   SchedulableTriggerInputTypes,
 } from 'expo-notifications';
+import { desktopHost } from './desktop-host.ts';
 import { currentPlatform, expoModule, optional, presence, present } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
@@ -554,19 +555,11 @@ function hostTrigger(trigger: unknown): unknown {
  * nothing. Null where the host has no such module.
  */
 function desktopNotifications(): NativeNotifications | null {
-  const native = require('react-native') as {
-    TurboModuleRegistry: { get(name: string): unknown };
-    DeviceEventEmitter: {
-      addListener(event: string, listener: (event: unknown) => void): { remove(): void };
-    };
-  };
-  const host = native.TurboModuleRegistry.get('NgNativeNotifications') as Record<
-    string,
-    (...args: unknown[]) => unknown
-  > | null;
-  if (!host) return null;
+  const found = desktopHost('NgNativeNotifications');
+  if (!found) return null;
+  const host = found.module;
   const listen = (type: string, key: string) => (listener: (payload: never) => void) =>
-    native.DeviceEventEmitter.addListener('ngNativeNotifications', (event) => {
+    found.listen('ngNativeNotifications', (event) => {
       const sent = event as { type?: string } | null;
       if (sent?.type === type) listener((sent as Record<string, never>)[key] as never);
     });

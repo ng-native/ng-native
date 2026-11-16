@@ -28,7 +28,7 @@ import {
   onFontsRegistered,
   registeredFaces,
 } from '@ng-native/fabric';
-import { assetUri } from './desktop-host.ts';
+import { assetUri, desktopHost } from './desktop-host.ts';
 import { expoModule, present } from './native.ts';
 import { noteRegisteredNames } from './ui-font-names.ts';
 
@@ -206,12 +206,11 @@ function warnIfASheetIsNull(sheets: readonly (SheetWithFonts | null | undefined)
  * file under a name at a time. Null where the host has no such module.
  */
 function desktopFonts(): typeof import('expo-font') | null {
-  const { TurboModuleRegistry } = require('react-native') as typeof import('react-native');
-  const host = TurboModuleRegistry.get('NgNativeFont') as {
+  const host = desktopHost<{
     loadAsync(name: string, uri: string): Promise<void>;
     isLoaded(name: string): boolean;
     getLoadedFonts(): string[];
-  } | null;
+  }>('NgNativeFont')?.module;
   if (!host) return null;
   const fonts: NativeFonts = {
     loadAsync: async (map) => {

@@ -8,11 +8,13 @@ import { afterEach, describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { Permission } from '@ng-native/expo';
 import { injectService } from '@ng-native/testing';
+import { asHost } from './desktop-host-methods.ts';
 
 type Listener = (event: unknown) => void;
 
 /** A Mac whose desktop host registers `modules`, with the events the host sends on `send`. */
 function mac(modules: Record<string, object>) {
+  for (const [name, fake] of Object.entries(modules)) asHost(name, fake);
   const listeners = new Map<string, Set<Listener>>();
   (globalThis as Record<string, unknown>)['require'] = (id: string) => {
     if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
@@ -177,6 +179,24 @@ describe('Battery on macOS', () => {
     assert.equal(battery.state(), 'unknown');
     assert.equal(battery.low(), false);
   });
+
+  it('reads a host without one of the methods as not known, rather than throwing', async () => {
+    mac({ NgNativeBattery: {} });
+    const { Battery } = await import('@ng-native/expo/battery');
+    const battery = injectService(Battery);
+    const failures: unknown[] = [];
+    const record = (failure: unknown) => void failures.push(failure);
+    process.on('unhandledRejection', record);
+    try {
+      await new Promise((resolve) => setTimeout(resolve));
+    } finally {
+      process.off('unhandledRejection', record);
+    }
+    assert.deepEqual(failures, []);
+    assert.equal(battery.known(), false);
+    assert.equal(battery.state(), 'unknown');
+    assert.equal(battery.saving(), false);
+  });
 });
 
 describe('Fonts on macOS', () => {
@@ -289,6 +309,14 @@ describe('Calendar on macOS', () => {
       ['requestCalendarPermissionsAsync', false],
       ['getCalendarsAsync', 'event'],
     ]);
+  });
+
+  it('reads nothing from a host built without the read methods, rather than throwing', async () => {
+    mac({ NgNativeCalendar: {} });
+    const { Calendar } = await import('@ng-native/expo/calendar');
+    const calendar = injectService(Calendar);
+    assert.deepEqual(await calendar.calendars(), []);
+    assert.deepEqual(await calendar.events(['c1'], new Date(1_000), new Date(2_000)), []);
   });
 
   it('lists events by calendar id, with the dates as milliseconds', async () => {
@@ -910,6 +938,17 @@ describe('ScreenCapture on macOS', () => {
     ]);
     assert.equal(capture.screenshots(), 0);
   });
+
+  it('is inert on a host without one of the methods, rather than throwing', async () => {
+    mac({ NgNativeScreenCapture: {} });
+    const { ScreenCapture } = await import('@ng-native/expo/screen-capture');
+    const capture = injectService(ScreenCapture);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(capture.available(), false);
+    await capture.prevent('card');
+    await capture.allow('card');
+    await capture.protectAppSwitcher();
+  });
 });
 
 describe('SplashScreen on macOS', () => {
@@ -988,6 +1027,21 @@ describe('MediaLibrary on macOS', () => {
     const saved = await library.save('file:///tmp/a.jpg', album!);
     assert.equal(saved?.id, 'new-1');
     assert.deepEqual(calls.at(-1), ['createAsset', 'file:///tmp/a.jpg', 'al1']);
+  });
+
+  it("reads an album's title each time it is asked, as one renamed in Photos changes", async () => {
+    const albums = [{ id: 'al1', title: 'Holiday', type: 'album' }];
+    mac({
+      NgNativeMediaLibrary: {
+        getPermissionsAsync: async () => ({ status: 'granted', granted: true, canAskAgain: false }),
+        albums: async () => albums.map((album) => ({ ...album })),
+      },
+    });
+    const { MediaLibrary } = await import('@ng-native/expo/media-library');
+    const [album] = await injectService(MediaLibrary).albums();
+    assert.equal(await album!.getTitle(), 'Holiday');
+    albums[0]!.title = 'Summer';
+    assert.equal(await album!.getTitle(), 'Summer');
   });
 
   it('reads nothing and saves nothing without access, and starts watching only when asked', async () => {

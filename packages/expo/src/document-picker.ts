@@ -21,6 +21,7 @@
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import type { NativeFile, PickedDirectory } from './file-system.ts';
 import { base64Of } from './base64.ts';
+import { desktopFolder } from './desktop-file-system.ts';
 import { expoModule, presence, present } from './native.ts';
 
 type Expo = typeof import('expo-document-picker');
@@ -187,26 +188,6 @@ interface DesktopDialogs {
   saveDocumentAsync(
     options: Omit<NativeSaveOptions, 'contents'> & { contents: string | { base64: string } },
   ): Promise<string | null>;
-}
-
-/**
- * The host's folder as a `PickedDirectory`, and a dismissed panel as the cancelled error the
- * other OSes reject with. The desktop host has no file system module to make a file in it with
- * yet, so `createFile` says so; `save()` writes through the save panel instead.
- */
-async function desktopFolder(picked: Promise<{ uri: string } | null>): Promise<PickedDirectory> {
-  const folder = await picked;
-  if (!folder)
-    throw Object.assign(new Error('The folder picker was dismissed.'), { code: CANCELLED[0] });
-  return {
-    uri: folder.uri,
-    createFile: () => {
-      throw new Error(
-        '[angular-native] the desktop host cannot create a file in a picked folder yet. Use ' +
-          'DocumentPicker.save(), which writes the file through the save panel.',
-      );
-    },
-  };
 }
 
 /** Android codes a dismissed picker ERR_PICKER_CANCELLED, iOS ERR_FILE_PICKING_CANCELLED. */

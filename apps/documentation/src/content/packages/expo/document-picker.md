@@ -72,7 +72,7 @@ component, or `.bytes()` for anything that is not text.
   other failure is rethrown. It uses `expo-file-system`'s picker, so that package must be installed
   too. Make a file in the folder with `createFile(name, mimeType)`, then write it with
   [`FileSystem.write()`](/packages/expo/file-system). On macOS it is the desktop host's open
-  panel, and the folder has a `uri` but no `createFile` yet: write a file with `save()` instead.
+  panel, and `createFile` makes the file in the folder through the desktop host.
 - **`save(options)`** - writes a file where the user chooses and resolves to where it went, or
   `null` if they dismissed the dialog or there is nowhere to save. On macOS it is the save panel;
   on iOS and Android the user picks a folder and the file is made in it.
