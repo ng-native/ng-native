@@ -58,8 +58,8 @@ Each event carries:
   `scroll-view`, or a component's own selector where `PressBehavior` is composed onto it.
 - `label`, `testID`, `nativeID` and `role`: what the element committed, so a label a component
   gave it or a role it implies is the one reported, as a screen reader hears it.
-- `text`: for a press, the text inside the control, joined with single spaces and cut to 100
-  characters.
+- `text`: for a `click` and a `long-press`, never a `scroll` or `swipe`, the text inside the
+  control, joined with single spaces and cut to 100 characters.
 - `nativeTag`: the tag the control's own native view was committed with, not that of the view
   inside it the finger landed on. `null` on the web.
 - `pageX` and `pageY`, where the touch was in the window, and `locationX` and `locationY`, where it

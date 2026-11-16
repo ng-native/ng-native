@@ -28,8 +28,9 @@ export interface InteractionEvent {
   /** `role`, or `accessibilityRole`. */
   readonly role?: string;
   /**
-   * The text inside the control, joined with spaces and cut to `MAX_TEXT_LENGTH` characters. Taps
-   * only. It can hold what the user typed or was shown, so redact it before it leaves the device.
+   * The text inside the control, joined with spaces and cut to `MAX_TEXT_LENGTH` characters. On a
+   * `click` and a `long-press`, never a `scroll` or `swipe`. It can hold what the user typed or was
+   * shown, so redact it before it leaves the device.
    */
   readonly text?: string;
   /** The tag the control's own view was committed with, or null where the host has none. */
