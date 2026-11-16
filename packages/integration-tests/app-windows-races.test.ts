@@ -408,7 +408,9 @@ describe('the main window on the platform mounter', () => {
         node.viewName === 'RawText'
           ? String(node.props['text'] ?? '')
           : node.children.map(text).join('');
-      assert.equal(fabric.committed.map(text).join('').trim(), 'Groceries 0');
+      // The main window's own surface, the first the host opens: another surface's later commit
+      // replaces what fabric.committed holds.
+      assert.equal(fabric.committedOn(11).map(text).join('').trim(), 'Groceries 0');
     } finally {
       app.applicationRef.destroy();
     }
