@@ -27,7 +27,7 @@ mkdir -p "$bundle"
   -c 'Add :CFBundlePackageType string BNDL' "$bundle/Info.plist" >/dev/null
 
 xcrun --sdk iphonesimulator clang++ -std=c++20 -fobjc-arc -fmodules -bundle \
-  -target arm64-apple-ios17.0-simulator -isysroot "$sdk" \
+  -target arm64-apple-ios16.4-simulator -isysroot "$sdk" \
   -I "$here/stubs" -F "$platform/Developer/Library/Frameworks" \
   -Xlinker -rpath -Xlinker "$platform/Developer/Library/Frameworks" \
   -framework XCTest -framework UIKit -framework QuartzCore -framework UniformTypeIdentifiers \
