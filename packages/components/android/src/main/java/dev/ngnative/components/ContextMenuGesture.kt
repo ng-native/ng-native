@@ -24,7 +24,8 @@ import kotlin.math.hypot
  *
  * The innermost handler wins a long press: a view on the way up that takes one itself (a
  * `(longPress)`, in `MenuHost.longPressTakers`) keeps it, and no menu above it opens. A right-click
- * still opens the menu.
+ * still opens the menu. A `<pressable>` around the menu finds its owner as `menuOwner` does, from
+ * what `Menus` sent, and leaves the long press to it.
  */
 internal class ContextMenuGesture(
   private val activity: Activity,
@@ -85,7 +86,9 @@ internal class ContextMenuGesture(
       cancel.recycle()
     }
     pending = longPress
-    main.postDelayed(longPress, longPressDelay(ViewConfiguration.getLongPressTimeout()))
+    // The system's timeout, with the Touch & hold delay setting. A `<pressable>` around the menu
+    // leaves the hold to it whatever its `delayLongPress`, as it finds the menu the way this does.
+    main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
     return false
   }
 
@@ -96,10 +99,13 @@ internal class ContextMenuGesture(
     down = null
   }
 
-  /** Open the menu for `nativeId` on `view` at `event`'s point, in the window. */
+  /**
+   * Open the menu for `nativeId` on `view` at `event`'s point, in the window, while `view` is still
+   * that menu's: a long press waits, and React Native can recycle the view for another meanwhile.
+   */
   private fun open(view: View, nativeId: String, event: MotionEvent): Boolean {
     val entries = MenuHost.contextMenus[nativeId] ?: return false
-    if (!view.isAttachedToWindow) return false
+    if (!stillOwns(view.isAttachedToWindow, view.getTag(R.id.view_tag_native_id), nativeId)) return false
     return ContextMenuPopup.show(activity, view, entries, event.x, event.y)
   }
 
@@ -126,15 +132,8 @@ internal class ContextMenuGesture(
     isSecondaryClick(event.isFromSource(InputDevice.SOURCE_MOUSE), event.buttonState)
 
   companion object {
-    /** A `<pressable>`'s `delayLongPress` unless the app sets one, in milliseconds. */
-    private const val PRESSABLE_LONG_PRESS = 500
-
-    /**
-     * How long a press is held before the menu opens: the system's long-press timeout, but no
-     * longer than a `<pressable>` around the menu waits to fire its own `(longPress)`. Android 11
-     * and earlier, and the Touch & hold delay setting, wait longer than that.
-     */
-    fun longPressDelay(systemTimeout: Int): Long = minOf(systemTimeout, PRESSABLE_LONG_PRESS).toLong()
+    /** Whether a view, `attached` with the `nativeID` `tag`, is still the one with `nativeId`'s menu. */
+    fun stillOwns(attached: Boolean, tag: Any?, nativeId: String): Boolean = attached && tag == nativeId
 
     /**
      * Which of `chain`, the `nativeID`s from the pressed view outwards, has the menu a press

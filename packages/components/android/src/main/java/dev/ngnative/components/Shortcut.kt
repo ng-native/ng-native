@@ -44,8 +44,9 @@ internal class Shortcut(
   ): Boolean {
     if (pressed == null || ctrl != this.ctrl || meta != this.meta || alt != this.alt) return false
     if (pressed.equals(normalKey, ignoreCase = key.length > 1)) return shift == this.shift
-    // `KeyboardEvent.key` names the shifted character, so `mod+?` is Ctrl-Shift-/.
-    return shift && !this.shift && shifted == normalKey
+    // `KeyboardEvent.key` names the shifted character, so `mod+?` is Ctrl-Shift-/, and so is
+    // `mod+shift+?`, which names the Shift too.
+    return shift && shifted == normalKey
   }
 
   /** `Space` and `Spacebar` are the space key, as `KeyboardEvent.key` has it. */

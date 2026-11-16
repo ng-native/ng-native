@@ -34,6 +34,9 @@ class ShortcutTest {
     assertTrue(shortcut("?").matches("/", "?", ctrl = true, meta = false, alt = false, shift = true))
     assertTrue(shortcut("+").matches("=", "+", ctrl = true, meta = false, alt = false, shift = true))
     assertFalse(shortcut("?").matches("/", null, ctrl = true, meta = false, alt = false, shift = false))
+    // So is `mod+shift+?`, which names the Shift the character takes.
+    assertTrue(shortcut("?", shift = true).matches("/", "?", ctrl = true, meta = false, alt = false, shift = true))
+    assertFalse(shortcut("?", shift = true).matches("/", null, true, false, false, false))
     // A chord that names Shift still matches the unshifted key.
     assertTrue(shortcut("/", shift = true).matches("/", "?", true, false, false, true))
     // Shift on a letter is a different chord.

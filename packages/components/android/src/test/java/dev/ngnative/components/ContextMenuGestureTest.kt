@@ -47,11 +47,11 @@ class ContextMenuGestureTest {
   }
 
   @Test
-  fun opensBeforeAPressableAroundItFiresItsLongPress() {
-    // Android 12 and later wait 400 ms; Android 11 and the Touch & hold delay setting wait longer
-    // than a <pressable>'s 500 ms.
-    assertEquals(400L, ContextMenuGesture.longPressDelay(400))
-    assertEquals(500L, ContextMenuGesture.longPressDelay(500))
-    assertEquals(500L, ContextMenuGesture.longPressDelay(1500))
+  fun opensOnlyOnAViewStillAttachedAndNamedAsWhenPressed() {
+    assertTrue(ContextMenuGesture.stillOwns(attached = true, tag = "row-a", nativeId = "row-a"))
+    // Recycled for another row while the press was held: row-a's menu is not opened on it.
+    assertFalse(ContextMenuGesture.stillOwns(attached = true, tag = "row-b", nativeId = "row-a"))
+    assertFalse(ContextMenuGesture.stillOwns(attached = true, tag = null, nativeId = "row-a"))
+    assertFalse(ContextMenuGesture.stillOwns(attached = false, tag = "row-a", nativeId = "row-a"))
   }
 }
