@@ -251,6 +251,32 @@ describe('the config plugin', () => {
       }
     });
 
+    it('goes back to one scene when the option is turned off again, keeping the app activities', () => {
+      const on = adoptInfoPlist(
+        { UIApplicationSceneManifest: manifest, NSUserActivityTypes: ['com.example.open'] },
+        { ios: { multipleWindows: true } },
+      );
+      for (const options of [undefined, { ios: { multipleWindows: false } }]) {
+        const off = adoptInfoPlist(on, options);
+        assert.deepEqual(off['UIApplicationSceneManifest'], manifest);
+        assert.deepEqual(off['NSUserActivityTypes'], ['com.example.open']);
+      }
+      const onlyOurs = adoptInfoPlist(adoptInfoPlist({}, { ios: { multipleWindows: true } }), {});
+      assert.equal(
+        (onlyOurs['UIApplicationSceneManifest'] as Record<string, unknown>)[
+          'UIApplicationSupportsMultipleScenes'
+        ],
+        false,
+      );
+      assert.equal('NSUserActivityTypes' in onlyOurs, false);
+    });
+
+    it('leaves an app that supports several scenes itself as it is', () => {
+      const own = { ...manifest, UIApplicationSupportsMultipleScenes: true };
+      const plist = adoptInfoPlist({ UIApplicationSceneManifest: own }, {});
+      assert.deepEqual(plist['UIApplicationSceneManifest'], own);
+    });
+
     it('refuses an option that is not true or false', () => {
       assert.throws(
         () => adoptInfoPlist({}, { ios: { multipleWindows: 'yes' } }),

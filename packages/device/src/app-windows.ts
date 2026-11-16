@@ -137,7 +137,13 @@ export type NativeWindowEvent =
    */
   | { readonly type: 'quitRequest'; readonly terminate?: boolean }
   /** A Dock click, or the app opened again, with no window visible. */
-  | { readonly type: 'reopen' };
+  | { readonly type: 'reopen' }
+  /**
+   * iPadOS: a window the user made from the system (New Window, or the app opened again with none
+   * open). The app opens the main window in it, or brings the main window forward, and the host
+   * then closes the window the user made.
+   */
+  | { readonly type: 'newWindow' };
 
 /**
  * The host's windows: the desktop host on macOS, and on iPadOS the components pod, whose windows
@@ -661,6 +667,9 @@ export class AppWindows {
         return;
       case 'reopen':
         if (!this.open$().length) void this.openMain();
+        return;
+      case 'newWindow':
+        void this.openMain();
         return;
     }
   }

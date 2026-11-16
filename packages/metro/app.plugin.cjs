@@ -281,19 +281,24 @@ function adoptInfoPlist(plist, options) {
   const manifest = plist.UIApplicationSceneManifest ?? SCENE_MANIFEST;
   const multiple = wantsMultipleWindows(options);
   const activities = plist.NSUserActivityTypes ?? [];
+  // The window activity says the plugin turned several scenes on: a prebuild without the option
+  // that merges into that Info.plist turns them off again.
+  const turnedOn = activities.includes(WINDOW_ACTIVITY);
+  const others = activities.filter((activity) => activity !== WINDOW_ACTIVITY);
+  const { NSUserActivityTypes: _activities, ...rest } = plist;
   return {
-    ...plist,
+    ...(multiple || turnedOn ? rest : plist),
     UIApplicationSceneManifest: multiple
       ? { ...manifest, UIApplicationSupportsMultipleScenes: true }
-      : manifest,
+      : turnedOn
+        ? { ...manifest, UIApplicationSupportsMultipleScenes: false }
+        : manifest,
     // What iOS and react-native-screens need to ask view controllers about the bar.
     UIViewControllerBasedStatusBarAppearance: true,
     // Several scenes, for `AppWindows` on an iPad, each asked for with the window activity.
-    ...(multiple && {
-      NSUserActivityTypes: activities.includes(WINDOW_ACTIVITY)
-        ? activities
-        : [...activities, WINDOW_ACTIVITY],
-    }),
+    ...(multiple
+      ? { NSUserActivityTypes: [...others, WINDOW_ACTIVITY] }
+      : turnedOn && others.length > 0 && { NSUserActivityTypes: others }),
   };
 }
 
