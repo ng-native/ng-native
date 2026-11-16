@@ -85,7 +85,9 @@ Each takes a uri, or anything with one: a file, a folder from `paths`, a folder 
   is.
 - **`watch(path, listener)`** calls the listener with each change to a file, or to what is in a
   folder: its `type` (`created`, `modified`, `deleted` or `renamed`), its `uri`, and for a rename
-  the `newUri`. It answers the function that stops watching.
+  the `newUri`. It answers the function that stops watching. On iOS a folder's watch reports a
+  change to what is in it as `modified` on the folder itself, with the folder's `uri`, so it does
+  not say which entry was created, deleted or renamed: read the folder again to find out.
 
 ```ts
 const entries = await this.files.readdir(this.files.paths.document!);
@@ -118,12 +120,14 @@ On iOS and Android, a missing `expo-file-system` - never installed, or installed
 being rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of
 a value only the module knows, throws a `MissingModuleError`. Its message names the module and the
 commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed). On macOS
+the same is true of a desktop host built without its file system module, and the message says to
+rebuild it.
 
-On the web, on macOS until the desktop host has its module, and in a test that provides no fake,
-`FileSystem` is absent: `available()` is `false`, `cache()`, `document()` and `file()` answer a file
-that is not there, which `write()` leaves alone and which reads as empty, `readdir()` answers no
-entries, `stat()` answers `null`, `watch()` reports nothing and every folder in `paths` is `null`.
+On the web, and in a test that provides no fake, `FileSystem` is absent: `available()` is `false`,
+`cache()`, `document()` and `file()` answer a file that is not there, which `write()` leaves alone
+and which reads as empty, `readdir()` answers no entries, `stat()` answers `null`, `watch()`
+reports nothing and every folder in `paths` is `null`.
 
 ## Reference
 

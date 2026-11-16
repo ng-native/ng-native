@@ -101,22 +101,31 @@ import { InjectionToken, Service, inject } from '@angular/core';
 import { expoModule } from '@ng-native/expo';
 
 interface NativeContacts {
+  requestPermissionsAsync(): Promise<{ granted: boolean }>;
   getContactsAsync(): Promise<{ data: { name: string }[] }>;
 }
 
 export const CONTACTS = new InjectionToken<NativeContacts | null>('app.contacts', {
-  factory: () => expoModule('expo-contacts', () => require('expo-contacts') as NativeContacts),
+  factory: () =>
+    expoModule('expo-contacts', () => require('expo-contacts/legacy') as NativeContacts),
 });
 
 @Service()
 export class People {
   private readonly native = inject(CONTACTS);
 
+  /** The contacts' names, or none when the user refuses access. */
   async names(): Promise<string[]> {
-    return (await this.native?.getContactsAsync())?.data.map((contact) => contact.name) ?? [];
+    const native = this.native;
+    if (!native || !(await native.requestPermissionsAsync()).granted) return [];
+    return (await native.getContactsAsync()).data.map((contact) => contact.name);
   }
 }
 ```
+
+On SDK 57 and 58 these functions are in `expo-contacts/legacy`: the same names imported from
+`expo-contacts` itself throw when called, in favour of its class-based `Contact` API. Reading the
+contacts needs the user's permission, which `names()` asks for before it reads them.
 
 The `require` runs when the token is first injected rather than when the file loads. In a test
 `expoModule()` answers `null`, so the service is inert, and a test that wants an answer provides
@@ -124,7 +133,13 @@ one under the token.
 
 ```ts
 providers: [
-  { provide: CONTACTS, useValue: { getContactsAsync: async () => ({ data: [{ name: 'Ada' }] }) } },
+  {
+    provide: CONTACTS,
+    useValue: {
+      requestPermissionsAsync: async () => ({ granted: true }),
+      getContactsAsync: async () => ({ data: [{ name: 'Ada' }] }),
+    },
+  },
 ];
 ```
 
