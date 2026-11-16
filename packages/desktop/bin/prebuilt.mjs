@@ -1,8 +1,11 @@
 /**
- * Prebuilt desktop hosts: the signed, universal Release host each release publishes per React
- * Native version, so an app with no native desktop code of its own compiles nothing.
+ * Prebuilt desktop hosts: the signed, universal hosts each release publishes per React Native
+ * version, so an app with no native desktop code of its own compiles nothing. Each version has two
+ * flavours: `debug`, the dev build `run` uses, which carries React Native's debugger, and
+ * `release`, the Release build `package` ships, which leaves it out.
  *
- * `prebuilt.json` beside this package lists them. The release workflow writes each entry before
+ * `prebuilt.json` beside this package lists them, one entry per version and flavour; an entry
+ * that names no flavour is a release host. The release workflow writes each entry before
  * the package is packed (`docs/desktop-host.md` has the steps), so the SHA-256 of each archive
  * travels inside the npm package, not beside the archive it vouches for. An archive holds `appkit/ngn-macos`, `appkit/hermesc` and
  * `appkit/Sparkle.framework`, the files a host build's `appkit` folder has, and unpacks into the
@@ -27,20 +30,48 @@ import path from 'node:path';
 /** The manifest's format, which `prebuilt.json` names. */
 export const MANIFEST_VERSION = 1;
 
+/** The flavours a prebuilt host comes in. */
+export const FLAVOURS = /** @type {const} */ (['debug', 'release']);
+
 /**
- * @typedef {{ reactNative: string, url: string, sha256: string, libraries: Record<string, string> }} PrebuiltHost
+ * @typedef {typeof FLAVOURS[number]} Flavour
+ * @typedef {{ reactNative: string, flavour?: Flavour, url: string, sha256: string, libraries: Record<string, string> }} PrebuiltHost
+ *   `flavour` is `release` when it is left out, as a manifest from before the debug host has it
  * @typedef {{ version: number, hosts: PrebuiltHost[] }} PrebuiltManifest
  * @typedef {import('./host.mjs').system} System
  */
 
 /**
- * The archive's file name for a release of this package and a React Native version.
+ * The archive's file name for a release of this package, a React Native version and a flavour.
+ * The release host's name has no flavour in it.
  *
  * @param {string} desktopVersion
  * @param {string} reactNative
+ * @param {Flavour} [flavour]
  */
-export function prebuiltName(desktopVersion, reactNative) {
-  return `ng-native-desktop-host-${desktopVersion}-rn-${reactNative}-macos-universal.tar.gz`;
+export function prebuiltName(desktopVersion, reactNative, flavour = 'release') {
+  const suffix = flavour === 'release' ? '' : `-${flavour}`;
+  return `ng-native-desktop-host-${desktopVersion}-rn-${reactNative}-macos-universal${suffix}.tar.gz`;
+}
+
+/**
+ * The file `make-prebuilt.mjs` writes a host's manifest entry to, beside its archive: one per
+ * flavour, so both flavours' builds can share a folder.
+ *
+ * @param {Flavour} flavour
+ */
+export function entryName(flavour) {
+  return `prebuilt-host-${flavour}.json`;
+}
+
+/**
+ * A host's flavour: `release` when its entry names none.
+ *
+ * @param {PrebuiltHost} host
+ * @returns {Flavour}
+ */
+export function flavourOf(host) {
+  return host.flavour ?? 'release';
 }
 
 /**
@@ -60,19 +91,21 @@ export function readManifest(text) {
 }
 
 /**
- * `manifest` with `host` in it, in place of the one for the same React Native version.
+ * `manifest` with `host` in it, in place of the one for the same React Native version and flavour.
  *
  * @param {PrebuiltManifest} manifest
  * @param {PrebuiltHost} host
  * @returns {PrebuiltManifest}
  */
 export function withHost(manifest, host) {
-  const hosts = manifest.hosts.filter((each) => each.reactNative !== host.reactNative);
+  const hosts = manifest.hosts.filter(
+    (each) => each.reactNative !== host.reactNative || flavourOf(each) !== flavourOf(host),
+  );
   return { version: MANIFEST_VERSION, hosts: [...hosts, host] };
 }
 
 /**
- * Puts a packed archive in `out` under its name, with its `prebuilt-host.json` entry, and writes
+ * Puts a packed archive in `out` under its name, with its manifest entry (`entryName`), and writes
  * the entry into `manifest` when one is given. Runs into the same folder take turns, holding
  * `<out>/.make-prebuilt.lock`, and the manifest's folder's lock too when it is elsewhere, so the
  * archive, its entry and the manifest always describe the same build and no run's manifest entry is
@@ -111,7 +144,7 @@ export function publishPrebuilt({ out, archive, name, host, manifest }, { wait =
       throw new Error(`${target} is already published. Remove it first to publish another build.`);
     }
     renameSync(archive, target);
-    replace(path.join(out, 'prebuilt-host.json'), `${JSON.stringify(host, null, 2)}\n`);
+    replace(path.join(out, entryName(flavourOf(host))), `${JSON.stringify(host, null, 2)}\n`);
     if (manifest) {
       const updated = withHost(readManifest(readFileSync(manifest, 'utf8')), host);
       replace(manifest, `${JSON.stringify(updated, null, 2)}\n`);
@@ -148,19 +181,22 @@ function takeLock(lock, give) {
 
 /**
  * The prebuilt host an app can run on, or why it builds its own: one is used only for the app's
- * React Native version, when the app links no native desktop code, and when each host library it
- * has is the version the host was built with and is not denied.
+ * React Native version and the flavour asked for, when the app links no native desktop code, and
+ * when each host library it has is the version the host was built with and is not denied.
  *
  * @param {PrebuiltManifest} manifest
- * @param {{ reactNative: string, linked: number, libraries: Record<string, string | null>, deny: readonly string[], env: Record<string, string | undefined> }} app
- *   `libraries` holds each host library's installed version, or null where the app lacks it
+ * @param {{ reactNative: string, flavour: Flavour, linked: number, libraries: Record<string, string | null>, deny: readonly string[], env: Record<string, string | undefined> }} app
+ *   `flavour` is `debug` for a dev run and `release` for a packaged app; `libraries` holds each
+ *   host library's installed version, or null where the app lacks it
  * @returns {{ host: PrebuiltHost } | { reason: string }}
  */
-export function choosePrebuilt(manifest, { reactNative, linked, libraries, deny, env }) {
+export function choosePrebuilt(manifest, { reactNative, flavour, linked, libraries, deny, env }) {
   if (env['NGN_DESKTOP_FROM_SOURCE'] === '1') return { reason: 'NGN_DESKTOP_FROM_SOURCE=1' };
   if (linked > 0) return { reason: 'the app links native desktop code' };
-  const host = manifest.hosts.find((each) => each.reactNative === reactNative);
-  if (!host) return { reason: `no prebuilt host for React Native ${reactNative}` };
+  const host = manifest.hosts.find(
+    (each) => each.reactNative === reactNative && flavourOf(each) === flavour,
+  );
+  if (!host) return { reason: `no prebuilt ${flavour} host for React Native ${reactNative}` };
   for (const name of Object.keys(host.libraries)) {
     if (deny.includes(name)) return { reason: `${name} is denied, and the prebuilt host has it` };
   }
@@ -189,7 +225,9 @@ export function choosePrebuilt(manifest, { reactNative, linked, libraries, deny,
  */
 export function fetchPrebuilt(sys, host, cache) {
   if (!/^[0-9a-f]{64}$/.test(host.sha256)) {
-    throw new Error(`prebuilt.json gives React Native ${host.reactNative} no SHA-256 to check.`);
+    throw new Error(
+      `prebuilt.json gives the React Native ${host.reactNative} ${flavourOf(host)} host no SHA-256 to check.`,
+    );
   }
   const dir = path.join(cache, 'prebuilt', host.sha256.slice(0, 16));
   if (sys.exists(path.join(dir, 'appkit', 'ngn-macos'))) return dir;

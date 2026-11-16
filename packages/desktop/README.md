@@ -29,7 +29,8 @@ npx ng-native-desktop package      # dist/macos/<name>.app; --format dmg or mas 
 
 The first run for a React Native version builds the host from source, which needs Xcode 16 or its
 Command Line Tools, CMake and Ninja, unless the package has a prebuilt host for that version and
-the app has no native desktop code of its own.
+the app has no native desktop code of its own: `run` downloads the debug host, with React Native's
+debugger, and `package` the release one.
 
 ## Docs
 

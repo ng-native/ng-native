@@ -63,6 +63,27 @@ describe('make-prebuilt.mjs', () => {
     }
   });
 
+  it('takes debug or release for --flavour, before it builds', () => {
+    for (const flavour of ['', 'Debug', 'dev', 'profile']) {
+      const result = makePrebuilt(['--flavour', flavour]);
+      assert.equal(result.status, 2, `${flavour}: ${result.stderr}`);
+      assert.match(result.stderr, /--flavour takes debug or release/);
+      assert.ok(!result.wroteOut, 'nothing built or written');
+    }
+    for (const flavour of ['debug', 'release']) {
+      // Stopped by the empty app instead.
+      assert.match(makePrebuilt(['--flavour', flavour]).stderr, /react-native is not installed/);
+    }
+  });
+
+  it('builds the release host as a packaged app ships it and the debug host as a dev run builds it', () => {
+    const source = readFileSync(path.join(scripts, 'make-prebuilt.mjs'), 'utf8');
+    assert.match(source, /flavour: \{ type: 'string', default: 'release' \}/);
+    assert.match(source, /flavour === 'release' \? '--release' : '--no-tests'/);
+    assert.match(source, /prebuiltName\(desktopVersion, reactNative, flavour\)/);
+    assert.match(source, /const host = \{\s*reactNative,\s*flavour,/);
+  });
+
   it('gets past the URL check with an absolute --base-url', () => {
     const result = makePrebuilt([
       '--manifest',
@@ -85,12 +106,18 @@ describe('make-prebuilt.mjs', () => {
   it('publishes through publishPrebuilt, so runs into the same folder never mix their files', () => {
     const source = readFileSync(path.join(scripts, 'make-prebuilt.mjs'), 'utf8');
     assert.match(source, /publishPrebuilt\(/);
-    assert.doesNotMatch(source, /writeFileSync\(path\.join\(out, 'prebuilt-host\.json'\)/);
+    assert.doesNotMatch(source, /writeFileSync\(path\.join\(out, 'prebuilt-host/);
   });
 });
 
 describe('publishPrebuilt', () => {
-  const host = { reactNative: '0.88.0', url: 'https://e.com/h.tar.gz', sha256: 'a', libraries: {} };
+  const host = {
+    reactNative: '0.88.0',
+    flavour: 'release' as const,
+    url: 'https://e.com/h.tar.gz',
+    sha256: 'a',
+    libraries: {},
+  };
 
   /** An out folder holding a packed archive at a temp name, as make-prebuilt.mjs leaves it. */
   function packed() {
@@ -108,13 +135,49 @@ describe('publishPrebuilt', () => {
       publishPrebuilt({ out, archive, name: 'h.tar.gz', host, manifest });
       assert.equal(readFileSync(path.join(out, 'h.tar.gz'), 'utf8'), 'archive');
       assert.deepEqual(
-        JSON.parse(readFileSync(path.join(out, 'prebuilt-host.json'), 'utf8')),
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8')),
         host,
       );
       assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host]);
       assert.deepEqual(readdirSync(out).sort(), [
         'h.tar.gz',
-        'prebuilt-host.json',
+        'prebuilt-host-release.json',
+        'prebuilt.json',
+      ]);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  });
+
+  it('publishes both flavours into one folder and manifest, each with its own entry', () => {
+    const { out, archive } = packed();
+    try {
+      const manifest = path.join(out, 'prebuilt.json');
+      writeFileSync(manifest, JSON.stringify({ version: 1, hosts: [] }));
+      const debug = {
+        ...host,
+        flavour: 'debug' as const,
+        url: 'https://e.com/d.tar.gz',
+        sha256: 'd',
+      };
+      publishPrebuilt({ out, archive, name: 'h.tar.gz', host, manifest });
+      const second = path.join(out, '.debug.partial');
+      writeFileSync(second, 'debug build');
+      publishPrebuilt({ out, archive: second, name: 'd.tar.gz', host: debug, manifest });
+      assert.deepEqual(
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8')),
+        host,
+      );
+      assert.deepEqual(
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-debug.json'), 'utf8')),
+        debug,
+      );
+      assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host, debug]);
+      assert.deepEqual(readdirSync(out).sort(), [
+        'd.tar.gz',
+        'h.tar.gz',
+        'prebuilt-host-debug.json',
+        'prebuilt-host-release.json',
         'prebuilt.json',
       ]);
     } finally {
@@ -143,7 +206,7 @@ describe('publishPrebuilt', () => {
       );
       assert.equal(readFileSync(path.join(out, 'h.tar.gz'), 'utf8'), 'archive');
       assert.equal(
-        JSON.parse(readFileSync(path.join(out, 'prebuilt-host.json'), 'utf8')).sha256,
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8')).sha256,
         'a',
       );
       assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host]);
@@ -184,7 +247,7 @@ describe('publishPrebuilt', () => {
         /\.make-prebuilt\.lock/,
       );
       assert.ok(!existsSync(path.join(out, 'h.tar.gz')));
-      assert.ok(!existsSync(path.join(out, 'prebuilt-host.json')));
+      assert.ok(!existsSync(path.join(out, 'prebuilt-host-release.json')));
     } finally {
       rmSync(out, { recursive: true, force: true });
     }

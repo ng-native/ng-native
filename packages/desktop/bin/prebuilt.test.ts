@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import type { system } from './host.mjs';
 import {
   choosePrebuilt,
+  entryName,
   fetchPrebuilt,
   prebuiltName,
   readManifest,
@@ -19,9 +20,16 @@ const HOST: PrebuiltHost = {
   sha256: SHA,
   libraries: { 'react-native-screens': '4.20.0', 'react-native-safe-area-context': '5.10.1' },
 };
+const DEBUG: PrebuiltHost = {
+  ...HOST,
+  flavour: 'debug',
+  url: 'https://example.com/host-debug.tar.gz',
+  sha256: 'd'.repeat(64),
+};
 const MANIFEST = { version: 1, hosts: [HOST] };
 const APP = {
   reactNative: '0.88.0',
+  flavour: 'release' as const,
   linked: 0,
   libraries: { 'react-native-screens': null, 'react-native-safe-area-context': '5.10.1' },
   deny: [],
@@ -34,6 +42,19 @@ describe('the prebuilt manifest', () => {
       prebuiltName('0.23.0', '0.88.0'),
       'ng-native-desktop-host-0.23.0-rn-0.88.0-macos-universal.tar.gz',
     );
+    assert.equal(
+      prebuiltName('0.23.0', '0.88.0', 'release'),
+      'ng-native-desktop-host-0.23.0-rn-0.88.0-macos-universal.tar.gz',
+    );
+    assert.equal(
+      prebuiltName('0.23.0', '0.88.0', 'debug'),
+      'ng-native-desktop-host-0.23.0-rn-0.88.0-macos-universal-debug.tar.gz',
+    );
+  });
+
+  it("names each flavour's entry file apart, so both builds can share a folder", () => {
+    assert.equal(entryName('debug'), 'prebuilt-host-debug.json');
+    assert.equal(entryName('release'), 'prebuilt-host-release.json');
   });
 
   it('reads a manifest, and anything else as none', () => {
@@ -43,16 +64,65 @@ describe('the prebuilt manifest', () => {
     }
   });
 
-  it('keeps one host per React Native version', () => {
+  it('reads both flavours of a React Native version', () => {
+    const release = { ...HOST, flavour: 'release' as const };
+    const both = { version: 1, hosts: [DEBUG, release] };
+    assert.deepEqual(readManifest(JSON.stringify(both)), both);
+  });
+
+  it('keeps one host per React Native version and flavour', () => {
     const newer = { ...HOST, sha256: 'b'.repeat(64) };
     const other = { ...HOST, reactNative: '0.89.0' };
     assert.deepEqual(withHost(withHost(MANIFEST, other), newer).hosts, [other, newer]);
+
+    // The debug host goes in beside the release one, and replaces only the debug one.
+    const both = withHost(MANIFEST, DEBUG);
+    assert.deepEqual(both.hosts, [HOST, DEBUG]);
+    const newerDebug = { ...DEBUG, sha256: 'e'.repeat(64) };
+    assert.deepEqual(withHost(both, newerDebug).hosts, [HOST, newerDebug]);
+
+    // An entry with no flavour is the release host, so a release entry replaces it.
+    const release = { ...HOST, flavour: 'release' as const, sha256: 'b'.repeat(64) };
+    assert.deepEqual(withHost(both, release).hosts, [DEBUG, release]);
   });
 });
 
 describe('choosePrebuilt', () => {
   it("takes the app's React Native version when its host libraries match or are absent", () => {
     assert.deepEqual(choosePrebuilt(MANIFEST, APP), { host: HOST });
+  });
+
+  it('takes the debug host for a dev run and the release host for a packaged app', () => {
+    const release = { ...HOST, flavour: 'release' as const };
+    const both = { version: 1, hosts: [release, DEBUG] };
+    assert.deepEqual(choosePrebuilt(both, { ...APP, flavour: 'debug' }), { host: DEBUG });
+    assert.deepEqual(choosePrebuilt(both, APP), { host: release });
+    // In the other order too, so neither is picked for being first.
+    const reversed = { version: 1, hosts: [DEBUG, release] };
+    assert.deepEqual(choosePrebuilt(reversed, { ...APP, flavour: 'debug' }), { host: DEBUG });
+    assert.deepEqual(choosePrebuilt(reversed, APP), { host: release });
+  });
+
+  it('reads an entry with no flavour as the release host', () => {
+    assert.deepEqual(choosePrebuilt(MANIFEST, APP), { host: HOST });
+    assert.deepEqual(choosePrebuilt(MANIFEST, { ...APP, flavour: 'debug' }), {
+      reason: 'no prebuilt debug host for React Native 0.88.0',
+    });
+  });
+
+  it('builds from source when only the other flavour fits', () => {
+    const onlyDebug = { version: 1, hosts: [DEBUG] };
+    assert.deepEqual(choosePrebuilt(onlyDebug, APP), {
+      reason: 'no prebuilt release host for React Native 0.88.0',
+    });
+    const both = { version: 1, hosts: [HOST, DEBUG] };
+    assert.deepEqual(choosePrebuilt(both, { ...APP, env: { NGN_DESKTOP_FROM_SOURCE: '1' } }), {
+      reason: 'NGN_DESKTOP_FROM_SOURCE=1',
+    });
+    assert.deepEqual(
+      choosePrebuilt(both, { ...APP, flavour: 'debug', env: { NGN_DESKTOP_FROM_SOURCE: '1' } }),
+      { reason: 'NGN_DESKTOP_FROM_SOURCE=1' },
+    );
   });
 
   it('builds from source for linked native code, another version, a library or a deny', () => {

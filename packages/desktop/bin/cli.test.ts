@@ -18,6 +18,7 @@ import {
   system,
   UsageError,
 } from './cli.mjs';
+import { prepareHost } from './host.mjs';
 import { FIRST_BUILD_NOTE } from './toolchain.mjs';
 
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -202,11 +203,25 @@ describe('run', () => {
     ]);
   });
 
-  it('runs on the prebuilt host for its React Native version, compiling nothing', async () => {
+  it('runs on the prebuilt debug host for its React Native version, compiling nothing', async () => {
     const sha = 'c'.repeat(64);
     const manifest = JSON.stringify({
       version: 1,
-      hosts: [{ reactNative: '0.88.0', url: 'https://e.com/h.tar.gz', sha256: sha, libraries: {} }],
+      hosts: [
+        {
+          reactNative: '0.88.0',
+          url: 'https://e.com/r.tar.gz',
+          sha256: 'f'.repeat(64),
+          libraries: {},
+        },
+        {
+          reactNative: '0.88.0',
+          flavour: 'debug',
+          url: 'https://e.com/h.tar.gz',
+          sha256: sha,
+          libraries: {},
+        },
+      ],
     });
     const cache = { NGN_DESKTOP_CACHE: '/cache' };
     const host = '/cache/rn-0.88.0/prebuilt/cccccccccccccccc/appkit/ngn-macos';
@@ -236,6 +251,7 @@ describe('run', () => {
               hosts: [
                 {
                   reactNative: '0.88.0',
+                  flavour: 'debug',
                   url: 'https://e.com/h.tar.gz',
                   sha256: sha,
                   libraries: { 'react-native-svg': '15.16.0' },
@@ -272,6 +288,55 @@ describe('run', () => {
     });
     await run({ bundle: 'dist/main.hbc', module: 'main', universal: false }, linked.sys);
     assert.ok(linked.calls[0]!.command.endsWith('build.sh'));
+  });
+
+  it('takes the debug prebuilt host for a run and the release one for a package', () => {
+    const entry = (flavour: string | undefined, hash: string) => ({
+      reactNative: '0.88.0',
+      ...(flavour && { flavour }),
+      url: `https://e.com/${hash}.tar.gz`,
+      sha256: hash.repeat(64),
+      libraries: {},
+    });
+    const hostOf = (hash: string) => `/cache/rn-0.88.0/prebuilt/${hash.repeat(16)}`;
+    const prepare = (hosts: object[], release: boolean, env: Record<string, string> = {}) => {
+      const { sys, calls } = fakeSystem({
+        env: { NGN_DESKTOP_CACHE: '/cache', ...env },
+        readFile: (file) =>
+          file === path.join(packageDir, 'prebuilt.json')
+            ? JSON.stringify({ version: 1, hosts })
+            : file === '/apps/demo/node_modules/react-native/package.json'
+              ? '{"version":"0.88.0"}'
+              : '',
+        // Both hosts are already in the cache.
+        exists: (file) => ['d', 'e'].some((hash) => file === `${hostOf(hash)}/appkit/ngn-macos`),
+      });
+      const { buildDir } = prepareHost(sys, { universal: release, release });
+      return { buildDir, calls };
+    };
+    const both = [entry('release', 'e'), entry('debug', 'd')];
+    assert.equal(prepare(both, false).buildDir, hostOf('d'));
+    assert.equal(prepare(both, true).buildDir, hostOf('e'));
+    // An entry with no flavour, as an older manifest has, is the release host.
+    const older = [entry(undefined, 'e')];
+    assert.equal(prepare(older, true).buildDir, hostOf('e'));
+
+    // No host of the flavour asked for: built from source, as a run and a package build it.
+    const build = path.join(packageDir, 'native', 'scripts', 'build.sh');
+    for (const [hosts, release, flag] of [
+      [older, false, '--no-tests'],
+      [[entry('debug', 'd')], true, '--release'],
+    ] as const) {
+      const { buildDir, calls } = prepare([...hosts], release);
+      assert.equal(buildDir, '/cache/rn-0.88.0/host/appkit-arm64-RelWithDebInfo');
+      assert.equal(calls[0]!.command, build);
+      assert.equal(calls[0]!.args.at(-1), flag);
+    }
+    // NGN_DESKTOP_FROM_SOURCE=1 builds from source for both, with both hosts there.
+    for (const release of [false, true]) {
+      const { calls } = prepare(both, release, { NGN_DESKTOP_FROM_SOURCE: '1' });
+      assert.equal(calls[0]!.command, build);
+    }
   });
 
   it('compiles in the host libraries the app has installed, and only those', async () => {

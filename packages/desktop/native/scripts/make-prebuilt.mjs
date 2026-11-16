@@ -1,25 +1,29 @@
 #!/usr/bin/env node
 /**
- * Builds the prebuilt desktop host for one React Native version and packs it for a release.
+ * Builds the prebuilt desktop host for one React Native version and flavour and packs it for a
+ * release.
  *
- *   make-prebuilt.mjs <app> <out> [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>]
+ *   make-prebuilt.mjs <app> <out> [--flavour debug|release] [--version <v>] [--base-url <url>]
+ *                     [--manifest <prebuilt.json>]
  *
  * - <app>: the app whose react-native and host libraries (react-native-screens,
  *   react-native-safe-area-context) the host is built against: the desktop template.
- * - <out>: where the archive and `prebuilt-host.json`, its manifest entry, go. Runs into the same
- *   folder take turns there (publishPrebuilt), so the two always come from the same build.
+ * - <out>: where the archive and `prebuilt-host-<flavour>.json`, its manifest entry, go. Runs into
+ *   the same folder take turns there (publishPrebuilt), so the two always come from the same build.
+ * - --flavour: `release` (the default), the universal Release build a packaged app ships
+ *   (`build.sh --universal --release`), or `debug`, the universal dev build `run` uses
+ *   (`build.sh --universal --no-tests`), which carries React Native's debugger.
  * - --version: the release the archive is named for (default: this package's version), for a
  *   release whose version is not yet in package.json.
  * - --base-url: where the release serves the archive, an absolute http or https URL with no query
  *   or fragment; the archive's URL is this and its name. Needed with --manifest, since the CLI
  *   downloads from the URL as it is.
  * - --manifest: a `prebuilt.json` to write the entry into, in place of the one for the same React
- *   Native version.
+ *   Native version and flavour.
  *
- * The host is the universal Release build (`build.sh --universal --release`), with no app's
- * linked code, built from scratch in a directory of its own so no other build can replace it before
- * it is archived. `ngn-macos` and `hermesc` have their local symbols stripped and are signed with the
- * hardened runtime, ad hoc (`codesign --sign -`) unless `NGN_SIGN_IDENTITY` names an identity: an
+ * The host has no app's linked code and is built from scratch in a directory of its own, so no other
+ * build can replace it before it is archived. `ngn-macos` and `hermesc` have their local symbols
+ * stripped and are signed with the hardened runtime, ad hoc (`codesign --sign -`) unless `NGN_SIGN_IDENTITY` names an identity: an
  * app re-signs the host when it packages, so the release needs no Developer ID. Nothing is uploaded.
  */
 import { spawnSync } from 'node:child_process';
@@ -32,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { HOST_LIBRARIES, packageDir } from '../../bin/host.mjs';
-import { prebuiltName, publishPrebuilt, signPrebuiltFiles } from '../../bin/prebuilt.mjs';
+import { FLAVOURS, prebuiltName, publishPrebuilt, signPrebuiltFiles } from '../../bin/prebuilt.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +52,7 @@ function run(command, args, options = {}) {
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
+    flavour: { type: 'string', default: 'release' },
     version: { type: 'string' },
     'base-url': { type: 'string' },
     manifest: { type: 'string' },
@@ -56,8 +61,13 @@ const { values, positionals } = parseArgs({
 const [appArg, outArg] = positionals;
 if (!appArg || !outArg) {
   console.error(
-    'Usage: make-prebuilt.mjs <app> <out> [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>]',
+    'Usage: make-prebuilt.mjs <app> <out> [--flavour debug|release] [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>]',
   );
+  process.exit(2);
+}
+const flavour = /** @type {import('../../bin/prebuilt.mjs').Flavour} */ (values.flavour);
+if (!FLAVOURS.includes(flavour)) {
+  console.error(`--flavour takes debug or release, not "${values.flavour}".`);
   process.exit(2);
 }
 const baseUrl = values['base-url'];
@@ -110,7 +120,8 @@ try {
     [
       reactNativeDir,
       '--universal',
-      '--release',
+      // The debug host is the dev build an app's `run` makes, with React Native's debugger.
+      flavour === 'release' ? '--release' : '--no-tests',
       ...Object.values(libraries).flatMap((dir) => ['--library', dir]),
       '--build-dir',
       buildRoot,
@@ -139,7 +150,7 @@ try {
   }
 
   const desktopVersion = values.version ?? versionOf(packageDir);
-  const name = prebuiltName(desktopVersion, reactNative);
+  const name = prebuiltName(desktopVersion, reactNative, flavour);
   mkdirSync(out, { recursive: true });
   // Packed at a name of its own in <out>, and moved into place with its entry by publishPrebuilt.
   const packed = path.join(out, `.${name}.${process.pid}.partial`);
@@ -148,6 +159,7 @@ try {
   const sha256 = createHash('sha256').update(readFileSync(packed)).digest('hex');
   const host = {
     reactNative,
+    flavour,
     url: `${(baseUrl ?? '').replace(/\/$/, '')}/${name}`,
     sha256,
     libraries: Object.fromEntries(

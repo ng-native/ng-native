@@ -284,8 +284,9 @@ export function linkFile(appDir) {
  *
  * @param {typeof system} sys
  * @param {{ universal: boolean, release?: boolean, expo?: ExpoConfig }} options `release` builds
- *   the host as a packaged app ships it, without the core tests; `expo` is the app's config when
- *   the caller has read it already
+ *   the host as a packaged app ships it, without the core tests or the debugger, and takes the
+ *   release prebuilt host where one fits (the debug one otherwise); `expo` is the app's config
+ *   when the caller has read it already
  */
 export function prepareHost(sys, options) {
   if (sys.platform !== 'darwin') {
@@ -318,6 +319,8 @@ export function prepareHost(sys, options) {
   });
   const buildDir =
     prebuiltHost(sys, reactNative, {
+      // A packaged app ships the Release host; a dev run gets the one with the debugger.
+      flavour: options.release ? 'release' : 'debug',
       deny,
       linked: libraries.length + appModules.length,
       hostLibraries,
@@ -353,10 +356,10 @@ function versionIn(sys, dir) {
  *
  * @param {typeof system} sys
  * @param {string} reactNative
- * @param {{ deny: readonly string[], linked: number, hostLibraries: { name: string, dir: string }[] }} app
+ * @param {{ flavour: import('./prebuilt.mjs').Flavour, deny: readonly string[], linked: number, hostLibraries: { name: string, dir: string }[] }} app
  *   `hostLibraries`: where each host library the app has is installed
  */
-function prebuiltHost(sys, reactNative, { deny, linked, hostLibraries }) {
+function prebuiltHost(sys, reactNative, { flavour, deny, linked, hostLibraries }) {
   let text = '';
   try {
     text = sys.readFile(path.join(packageDir, 'prebuilt.json'));
@@ -370,6 +373,7 @@ function prebuiltHost(sys, reactNative, { deny, linked, hostLibraries }) {
   );
   const choice = choosePrebuilt(readManifest(text), {
     reactNative: version,
+    flavour,
     linked,
     libraries,
     deny,
