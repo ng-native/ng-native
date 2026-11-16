@@ -127,9 +127,12 @@ For each:
   release changed packaging.
 
 Then, from this repository on the release tag, `pnpm bench:macos --host <path>` against the
-release host the template app's `npm run package` built, `dist/macos/<name>.app/Contents/MacOS/<name>`:
-the budget is a release build's, and `npm run macos` runs the debug host. Never the newest host in
-the cache, which it picks without `--host`. Every
+release prebuilt host the template app's `npm run package` downloaded, unpackaged:
+`~/Library/Caches/ng-native/desktop/prebuilt/<sha>/appkit/ngn-macos`, where `<sha>` is the first
+16 characters of the `release` entry's `sha256` in the app's
+`node_modules/@ng-native/desktop/prebuilt.json`. The budget is a release build's, `npm run macos`
+runs the debug host, and the host inside the packaged `.app` reads no environment, so it would log
+no commit timings. Never the newest host in the cache, which it picks without `--host`. Every
 metric passes or carries a waiver in `scripts/bench-macos-budget.json`. A breach without one
 blocks the release; a metric it could not measure fails it as a breach does.
 
