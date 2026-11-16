@@ -20,7 +20,9 @@
  *   chosen as `{ type: 'contextMenuSelect', nativeID, id }`.
  * - Where it draws context menus, `setTakesLongPress(nativeID, takes)` names a view inside one
  *   whose own `(longPress)` takes a long press first: a long press there opens no menu around it,
- *   as the innermost handler wins in a native app. A right-click still opens the menu.
+ *   as the innermost handler wins in a native app. A right-click still opens the menu on Android.
+ *   iOS tells a long press from a secondary click only by the gesture, so an iPad pointer's
+ *   secondary click there opens none either.
  */
 import {
   InjectionToken,

@@ -11,7 +11,9 @@ using namespace facebook::react;
  `<native-button>` on iOS: a UIButton drawn from a button configuration, the glass ones on iOS 26
  and later. `kind` picks the style (`default` the prominent one, `destructive` in red, `plain`
  borderless, anything else the plain push button), `controlSize` UIButton's own size with the
- metrics the shadow node measures with, and a tap sends `topButtonPress`.
+ metrics the shadow node measures with, and a tap sends `topButtonPress`. The title follows the
+ user's text size: the button is configured again as it changes, and React Native measures it again.
+ Return and Escape press no button on iOS: `default` and `cancel` are only styles there.
  */
 @interface NgNativeButtonComponentView : RCTViewComponentView
 @end
@@ -108,6 +110,16 @@ static UIButtonConfiguration *configurationForKind(NSString *kind)
   _button.configuration = configuration;
   // One line, so the title truncates in a box narrower than it.
   _button.titleLabel.numberOfLines = 1;
+}
+
+- (void)traitCollectionDidChange:(nullable UITraitCollection *)previousTraitCollection
+{
+  [super traitCollectionDidChange:previousTraitCollection];
+  // The font is fixed in the configuration, at the text size it was made at.
+  if (![self.traitCollection.preferredContentSizeCategory
+          isEqualToString:previousTraitCollection.preferredContentSizeCategory]) {
+    [self ngn_configureWith:static_cast<const NgNativeButtonProps &>(*_props)];
+  }
 }
 
 - (void)ngn_sendPress

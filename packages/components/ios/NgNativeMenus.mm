@@ -154,13 +154,17 @@ RCT_EXPORT_MODULE()
   return self;
 }
 
-// A reload makes a new module: this one's menus go with it.
+// A reload makes a new module: this one's menus go with it, the menu bar's groups among them,
+// which UIKit keeps until it is asked to build the menu bar again.
 - (void)invalidate
 {
   dispatch_async(dispatch_get_main_queue(), ^{
     [self->_contextMenuViews unbindAll];
     [self->_contextMenus removeAllObjects];
     [self->_longPressTakers removeAllObjects];
+    self->_menuBar = @[];
+    self->_shortcuts = @[];
+    [UIMenuSystem.mainSystem setNeedsRebuild];
   });
 }
 

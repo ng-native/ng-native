@@ -3,6 +3,7 @@
 #import <UIKit/UIKit.h>
 
 #import "NgNativeResponderHooks.h"
+#import "NgNativeUndoSteps.h"
 
 /**
  The `NgNativeUndo` module on iOS (`NativeUndo` in @ng-native/device), over one NSUndoManager that
@@ -38,7 +39,7 @@ RCT_EXPORT_MODULE()
 - (instancetype)init
 {
   if (self = [super init]) {
-    _manager = [NSUndoManager new];
+    _manager = NgNativeMakeUndoManager();
     dispatch_async(dispatch_get_main_queue(), ^{
       NgNativeInstallResponderHooks();
       NgNativeSetUndoHost(self);
@@ -72,13 +73,11 @@ RCT_EXPORT_MODULE()
 // undo again. NSUndoManager puts a registration made while undoing on the redo stack.
 - (void)registerStep:(NSString *)itemId label:(NSString *)label
 {
-  [_manager registerUndoWithTarget:self
-                           handler:^(NgNativeUndo *target) {
-                             NSString *type = target->_manager.isUndoing ? @"undo" : @"redo";
-                             [target send:type itemId:itemId];
-                             [target registerStep:itemId label:label];
-                           }];
-  [_manager setActionName:label];
+  NgNativeRegisterUndoStep(_manager, self, label, ^(NgNativeUndo *target) {
+    NSString *type = target->_manager.isUndoing ? @"undo" : @"redo";
+    [target send:type itemId:itemId];
+    [target registerStep:itemId label:label];
+  });
 }
 
 RCT_EXPORT_METHOD(register : (NSString *)itemId label : (NSString *)label)

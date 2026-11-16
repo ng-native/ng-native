@@ -81,9 +81,10 @@ pnpm --filter documentation dev  # the documentation site, on http://localhost:5
 - `packages/testing` has tests of its own, for the fake Fabric and the Testing Library layer it
   ships to everyone else.
 - `packages/components/ios/tests` unit-tests the iOS code that runs without React Native (the view
-  binder, menu building, the responder hooks) under XCTest on a simulator:
-  `pnpm --filter @ng-native/components test:ios` with one simulator booted, or the one
-  `NGN_IOS_TEST_SIMULATOR` names. It needs Xcode, so `pnpm test` does not run it.
+  binder, menu building, the responder hooks' helpers, undo steps and dropped items) under XCTest
+  on a simulator: `pnpm --filter @ng-native/components test:ios` with one simulator booted, or the
+  one `NGN_IOS_TEST_SIMULATOR` names. It needs Xcode, so neither `pnpm test` nor CI runs it: run it
+  by hand after a change to that code.
 
 `packages/nx` and `packages/schematics` carry `*.test.ts` files next to the source they test, and
 `packages/web-compat` does too, with the Web Platform Tests below. Every package not named here has

@@ -5,6 +5,8 @@
 
 #import "NgNativeSplitViewShadowNodes.h"
 
+#include <optional>
+
 using namespace facebook::react;
 
 /**
@@ -123,22 +125,31 @@ using namespace facebook::react;
 
 #pragma mark - The sidebar and content columns
 
-/** A column's size into its node's state, where it changed: Yoga then lays the column out at it. */
+/**
+ A column's size into its node's state, where it changed: Yoga then lays the column out at it. The
+ state updates later, so a size is compared with the last one asked for, not the last committed: a
+ column that goes from A to B and back to A before B commits still asks for A, after B.
+ */
 template <class StateT>
-static void putColumnSize(const std::shared_ptr<const StateT> &state, CGSize size)
+static void putColumnSize(
+    const std::shared_ptr<const StateT> &state,
+    std::optional<facebook::react::Size> &requested,
+    CGSize size)
 {
   if (state == nullptr) {
     return;
   }
   facebook::react::Size next{.width = (Float)size.width, .height = (Float)size.height};
-  if (state->getData().size == next) {
+  if (next == requested.value_or(state->getData().size)) {
     return;
   }
+  requested = next;
   state->updateState(NgNativeSplitPaneState(next));
 }
 
 @implementation NgNativeSidebarComponentView {
   NgNativeSidebarShadowNode::ConcreteState::Shared _state;
+  std::optional<facebook::react::Size> _requestedSize;
 }
 
 + (void)load
@@ -177,7 +188,7 @@ static void putColumnSize(const std::shared_ptr<const StateT> &state, CGSize siz
 
 - (void)ngn_columnSized:(CGSize)size
 {
-  putColumnSize(_state, size);
+  putColumnSize(_state, _requestedSize, size);
 }
 
 - (void)ngn_sendCollapsed:(BOOL)collapsed
@@ -191,6 +202,7 @@ static void putColumnSize(const std::shared_ptr<const StateT> &state, CGSize siz
 
 @implementation NgNativeSplitContentComponentView {
   NgNativeSplitContentShadowNode::ConcreteState::Shared _state;
+  std::optional<facebook::react::Size> _requestedSize;
 }
 
 + (void)load
@@ -218,7 +230,7 @@ static void putColumnSize(const std::shared_ptr<const StateT> &state, CGSize siz
 
 - (void)ngn_columnSized:(CGSize)size
 {
-  putColumnSize(_state, size);
+  putColumnSize(_state, _requestedSize, size);
 }
 
 @end
@@ -234,6 +246,8 @@ static void putColumnSize(const std::shared_ptr<const StateT> &state, CGSize siz
   BOOL _contentShown;
   // The collapsed state last applied or reported, so a change is sent once.
   BOOL _collapsed;
+  // While the columns expand out of the stack: the sidebar showing then is no step back.
+  BOOL _expanding;
 }
 
 + (void)load
@@ -414,14 +428,26 @@ static void putColumnSize(const std::shared_ptr<const StateT> &state, CGSize siz
 - (UISplitViewControllerDisplayMode)splitViewController:(UISplitViewController *)svc
                 displayModeForExpandingToProposedDisplayMode:(UISplitViewControllerDisplayMode)proposedDisplayMode
 {
+  _expanding = YES;
   return _collapsed ? UISplitViewControllerDisplayModeSecondaryOnly
                     : UISplitViewControllerDisplayModeOneBesideSecondary;
 }
 
+- (void)splitViewControllerDidExpand:(UISplitViewController *)svc
+{
+  _expanding = NO;
+}
+
+- (void)splitViewControllerDidCollapse:(UISplitViewController *)svc
+{
+  _expanding = NO;
+}
+
 - (void)splitViewController:(UISplitViewController *)svc willShowColumn:(UISplitViewControllerColumn)column
 {
-  // Back from the content, in the stack the columns collapsed into.
-  if (svc.isCollapsed && column == UISplitViewControllerColumnPrimary) {
+  // Back from the content, in the stack the columns collapsed into. Expanding shows the sidebar
+  // too, while the controller still says it is collapsed, and keeps what the app had shown.
+  if (svc.isCollapsed && !_expanding && column == UISplitViewControllerColumnPrimary) {
     _contentShown = NO;
   }
 }

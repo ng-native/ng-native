@@ -22,7 +22,9 @@
  * UIWindowScene: the first takes the scene the app launched in, and each later one is a scene
  * iPadOS is asked for. iPadOS closes a scene without asking, so it sends `closed` and never
  * `closeRequest`; it has no quitting, so `quit` and `answerQuit` do nothing and no `quitRequest`
- * comes. A scene the user makes sends `reopen`.
+ * comes. A scene the user makes (New Window) sends `newWindow`, which the app answers with the
+ * main window: opened in that scene, or where it is open, brought forward while the host closes
+ * the scene.
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
@@ -197,6 +199,26 @@ describe('the main window', () => {
     assert.equal(windows.windows().length, 0);
     assert.equal(host.quits(), 0, 'macOS keeps an app with no window running');
     host.send({ type: 'reopen' });
+    await settle();
+    assert.equal(host.opened.length, 2);
+    assert.equal(textOn(fabric, 21, 'main-count'), '0');
+  });
+
+  it('answers a window the user made on iPadOS with the main window, opened or brought forward', async () => {
+    const host = fakeHost();
+    const { fabric, windows } = start('MainWindowApp', host);
+    await settle();
+    // New Window with the main window open: the main window comes forward, and the host closes
+    // the scene the user made.
+    host.send({ type: 'newWindow' });
+    await settle();
+    assert.equal(host.opened.length, 1);
+    assert.deepEqual(host.focused, [11]);
+    // Once it has closed, a scene the user makes gets the main window.
+    host.send({ type: 'closed', surface: 11 });
+    await settle();
+    assert.equal(windows.windows().length, 0);
+    host.send({ type: 'newWindow' });
     await settle();
     assert.equal(host.opened.length, 2);
     assert.equal(textOn(fabric, 21, 'main-count'), '0');
