@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -482,6 +482,50 @@ test('a desktop event is a warning that it fires only there, in a project that b
     assert.equal(messages.filter((m) => m.includes('desktop-only-events')).length, 4);
     assert.match(messages[0]!, /\(mouseenter\) fires only on macOS: iOS and Android never send it/);
     assert.match(messages[4]!, /no-dom-events: \(click\) is a DOM event/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a project's app.json without expo.platforms builds for no desktop OS, whatever a project above lists", async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ng-native-eslint-'));
+  try {
+    writeFileSync(join(dir, 'app.json'), JSON.stringify({ expo: { platforms: ['ios', 'macos'] } }));
+    mkdirSync(join(dir, 'nested'));
+    writeFileSync(join(dir, 'nested', 'app.json'), JSON.stringify({ expo: { name: 'nested' } }));
+    const messages = await lint(
+      '<view (mouseenter)="go()"></view>',
+      join(dir, 'nested', 'a.html'),
+      dir,
+    );
+    assert.deepEqual(
+      messages.map((m) => m.split(' ')[1]),
+      ['@ng-native/no-dom-events:'],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('expo.platforms is read again when app.json changes or goes away', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ng-native-eslint-'));
+  const rules = async () =>
+    (await lint('<view (mouseenter)="go()"></view>', join(dir, 'src', 'a.html'), dir)).map(
+      (m) => m.split(' ')[1],
+    );
+  try {
+    writeFileSync(
+      join(dir, 'app.json'),
+      JSON.stringify({ expo: { platforms: ['ios', 'android'] } }),
+    );
+    assert.deepEqual(await rules(), ['@ng-native/no-dom-events:']);
+    writeFileSync(
+      join(dir, 'app.json'),
+      JSON.stringify({ expo: { platforms: ['ios', 'android', 'macos'] } }),
+    );
+    assert.deepEqual(await rules(), ['@ng-native/desktop-only-events:']);
+    rmSync(join(dir, 'app.json'));
+    assert.deepEqual(await rules(), ['@ng-native/no-dom-events:']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

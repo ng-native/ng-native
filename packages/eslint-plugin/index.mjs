@@ -6,7 +6,7 @@
  * never sent, the button draws as a plain view and `document` is undefined. Each rule names what
  * to write instead.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import domEvents from '@ng-native/metro/dom-events.cjs';
 import angular from 'angular-eslint';
@@ -135,11 +135,14 @@ const DOM_MEMBERS = new Map([
 
 const { DOM_EVENTS, DESKTOP_PLATFORMS, isNativeElement } = domEvents;
 
-/** `expo.platforms` from the `app.json` nearest `directory`, by directory. */
+/**
+ * `expo.platforms` by `app.json` path, with the modification time and size it was read at, so an
+ * editor's long-lived process reads the file again when it changes.
+ */
 const PLATFORMS = new Map();
 
 /**
- * Whether the project a file is in builds for a desktop OS: one its `app.json` lists in
+ * Whether the project a file is in builds for a desktop OS: one the nearest `app.json` lists in
  * `expo.platforms`. A project with no `app.json`, or none listed, builds for iOS and Android,
  * Expo's default.
  */
@@ -149,19 +152,25 @@ function buildsForDesktop(context) {
 }
 
 function platformsAbove(directory) {
-  if (PLATFORMS.has(directory)) return PLATFORMS.get(directory);
   const file = join(directory, 'app.json');
-  let platforms;
-  if (existsSync(file)) {
-    try {
-      platforms = JSON.parse(readFileSync(file, 'utf8'))?.expo?.platforms;
-    } catch {
-      platforms = undefined;
-    }
+  const stat = statSync(file, { throwIfNoEntry: false });
+  if (!stat) {
+    PLATFORMS.delete(file);
+    const parent = dirname(directory);
+    return parent === directory ? [] : platformsAbove(parent);
   }
-  const parent = dirname(directory);
-  if (!Array.isArray(platforms)) platforms = parent === directory ? [] : platformsAbove(parent);
-  PLATFORMS.set(directory, platforms);
+  const cached = PLATFORMS.get(file);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    return cached.platforms;
+  }
+  let platforms;
+  try {
+    platforms = JSON.parse(readFileSync(file, 'utf8'))?.expo?.platforms;
+  } catch {
+    platforms = undefined;
+  }
+  if (!Array.isArray(platforms)) platforms = [];
+  PLATFORMS.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, platforms });
   return platforms;
 }
 
