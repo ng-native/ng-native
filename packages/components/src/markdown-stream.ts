@@ -2,7 +2,8 @@
  * A Markdown source that grows as it streams in, lexed a chunk at a time: the blocks before the
  * last one are kept, only the last is lexed again, and syntax still open at its end is held back
  * until it closes, so a half-written code span, emphasis, link, image, table row or code fence
- * line never shows as the characters it is written with.
+ * line never shows as the characters it is written with. A last line of only dashes or `=` waits
+ * for its end too, since until then it may make the text above a heading, a list or a table.
  *
  * Plain functions and a class with no Angular in them, beside `markdown-blocks.ts`.
  */
@@ -149,12 +150,20 @@ function heldInline(inline: readonly Token[], tail: string, start: number): numb
   return null;
 }
 
+/**
+ * A line of `=`, or of dashes with pipes, colons and spaces, after any quote markers. Until it
+ * ends it may be a setext underline, a list item, a table's delimiter row or a thematic break.
+ */
+const UNDERLINE = /^(?:[ \t]*>)*(?:[ \t]*=+[ \t]*|[|: \t]*-[-|: \t]*)$/;
+
 /** Where `tail` is cut so its last block shows nothing half written, or null to show all of it. */
 function holdBackAt(tail: string, tokens: readonly Token[]): number | null {
   const block = lastBlock(tokens);
   if (!block) return null;
   if (block.type === 'code') return heldFence(block, tail);
-  if (block.type === 'table') return tail.endsWith('\n') ? null : tail.lastIndexOf('\n') + 1;
+  const lineStart = tail.lastIndexOf('\n') + 1;
+  if (block.type === 'table') return tail.endsWith('\n') ? null : lineStart;
+  if (UNDERLINE.test(tail.slice(lineStart))) return lineStart;
   const header = block.type === 'paragraph' ? heldHeaderRow(block, tail) : null;
   if (header !== null) return header;
   const inline = (block as Tokens.Generic).tokens;
