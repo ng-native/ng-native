@@ -17,7 +17,7 @@ describe('a context menu inside a context menu on macOS', () => {
   it('runs the chosen item of the inner menu only', async () => {
     const heard: string[] = [];
     await render(
-      `<view testID="outer" [contextMenu]="outerMenu">
+      `<view testID="outer" [contextMenu]="outerMenu" (contextMenuSelect)="heard.push('outer selection')">
         <view testID="inner" [contextMenu]="innerMenu"></view>
       </view>
       <ng-template #outerMenu><menu-item label="Outer" (select)="heard.push('outer')" /></ng-template>
@@ -32,6 +32,8 @@ describe('a context menu inside a context menu on macOS', () => {
     const inner = screen.getByTestId('inner');
     const [item] = inner.props['contextMenu'] as { id: string }[];
     await fireEvent(inner, 'contextMenuSelect', { id: item!.id });
+    // The outer view's own handler, which would find no item for the inner id and stay quiet.
+    assert.ok(!heard.includes('outer selection'), 'the outer view heard the selection');
     assert.deepEqual(heard, ['inner']);
   });
 });
