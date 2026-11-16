@@ -277,46 +277,62 @@ const BOUND = /(?:\[\(?[^\s=\]]+\)?\]|\([^\s=)]+\)|\*[\w-]+)\s*=\s*(["'])/g;
 /** A block whose parameters are an expression: `@if (`, `@else if (`, `@for (` and the rest. */
 const BLOCK = /@(?:if|else\s+if|for|switch|case|defer)\s*\(/g;
 
-/** Where the parenthesis opened just before `from` closes, past quoted text; the end if never. */
-function closing(text, from) {
-  let depth = 1;
+/**
+ * An expression from `from` to where `ends` says it ends, outside any quoted string in it: where it
+ * ends, and the pieces of it that are code rather than a string's contents, which are text.
+ */
+function scan(text, from, ends) {
+  const code = [];
+  let piece = from;
   let quote = null;
   for (let at = from; at < text.length; at++) {
     const char = text[at];
     if (quote) {
-      if (char === quote) quote = null;
-    } else if (char === "'" || char === '"' || char === '`') quote = char;
-    else if (char === '(') depth++;
-    else if (char === ')' && --depth === 0) return at;
+      if (char === '\\') at++;
+      else if (char === quote) [quote, piece] = [null, at + 1];
+    } else if (ends(at)) {
+      code.push([piece, at]);
+      return { end: at, code };
+    } else if (char === "'" || char === '"' || char === '`') {
+      code.push([piece, at]);
+      quote = char;
+    }
   }
-  return text.length;
+  if (!quote) code.push([piece, text.length]);
+  return { end: text.length, code };
+}
+
+/** For `scan`: the end is where the parenthesis open before it closes, past the ones inside it. */
+function closing(text) {
+  let depth = 1;
+  return (at) => {
+    if (text[at] === '(') depth++;
+    else if (text[at] === ')') depth--;
+    return depth === 0;
+  };
 }
 
 /**
- * The spans of a template Angular reads as expressions: `{{ }}` interpolations, bound attribute
- * values, block parameters and `@let` values. Text and plain attribute values are shown as they
- * are, so a `name.available` there is left alone.
+ * The spans of a template Angular reads as code: `{{ }}` interpolations, bound attribute values,
+ * block parameters and `@let` values, less the strings in them. Text, plain attribute values and
+ * a string constant are shown as they are, so a `name.available` there is left alone.
  */
 function expressions(text) {
   const spans = [];
   for (let at = text.indexOf('{{'); at !== -1; at = text.indexOf('{{', at)) {
-    const end = text.indexOf('}}', at + 2);
-    spans.push([at + 2, end === -1 ? text.length : end]);
-    at = end === -1 ? text.length : end + 2;
+    const { end, code } = scan(text, at + 2, (here) => text.startsWith('}}', here));
+    spans.push(...code);
+    at = end + 2;
   }
   for (const match of text.matchAll(BOUND)) {
-    const start = match.index + match[0].length;
-    const end = text.indexOf(match[1], start);
-    spans.push([start, end === -1 ? text.length : end]);
+    const quote = match[1];
+    spans.push(...scan(text, match.index + match[0].length, (at) => text[at] === quote).code);
   }
   for (const match of text.matchAll(BLOCK)) {
-    const start = match.index + match[0].length;
-    spans.push([start, closing(text, start)]);
+    spans.push(...scan(text, match.index + match[0].length, closing(text)).code);
   }
   for (const match of text.matchAll(/@let\s+[\w$]+\s*=/g)) {
-    const start = match.index + match[0].length;
-    const end = text.indexOf(';', start);
-    spans.push([start, end === -1 ? text.length : end]);
+    spans.push(...scan(text, match.index + match[0].length, (at) => text[at] === ';').code);
   }
   return spans;
 }
