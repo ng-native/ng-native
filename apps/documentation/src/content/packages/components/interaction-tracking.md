@@ -121,8 +121,8 @@ Observers run after the control's own `(press)` handler, so what the tap does is
 recording it. One that throws is reported once with `console.warn`, and neither the other observers
 nor the app are stopped by it.
 
-On the web host, taps are reported, with a `nativeTag` of `null` and no `component`, and scrolls
-are not, since a browser's scroll has no drag events to report them from.
+On the web host, taps are reported, with a `nativeTag` of `null`, and scrolls are not, since a
+browser's scroll has no drag events to report them from.
 
 ## Gestures
 

@@ -184,13 +184,17 @@ function elementName(node: HostNode): string {
  * The name of the nearest element around `node` that Angular mounted a component on, read at the
  * moment of an interaction from what the platform adapter already marks, so nothing is kept per
  * element. A primitive, whose name is a native view's, is passed over, and so is the root
- * component, which sits straight under the surface: it is the app rather than a part of it.
+ * component, the outermost one marked: it is the app rather than a part of it. Told by what is
+ * marked rather than by depth, since the root's host is under a surface on a device and is the
+ * page's own mount point on the web.
  */
 function componentAround(node: HostNode): string | undefined {
-  for (let current = node.parent; current?.parent?.parent; current = current.parent) {
+  let nearest: string | undefined;
+  for (let current = node.parent; current; current = current.parent) {
     if (!(current as EngineNode).componentHost) continue;
+    if (nearest !== undefined) return nearest;
     const name = elementName(current);
-    if (!registeredViewName(name)) return name;
+    if (!registeredViewName(name)) nearest = name;
   }
   return undefined;
 }

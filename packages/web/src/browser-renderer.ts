@@ -26,7 +26,7 @@ import {
   type Renderer2,
   type RendererFactory2,
 } from '@angular/core';
-import { reportUnboundFormsInput } from '@ng-native/fabric';
+import { markComponentHost, reportUnboundFormsInput } from '@ng-native/fabric';
 import { letBrowserNodesPassAsDomNodes, type BrowserNode } from './dom-node.ts';
 import type { BrowserEngine } from './browser-engine.ts';
 import { dashCase } from './css-units.ts';
@@ -304,8 +304,12 @@ export class BrowserRendererFactory implements RendererFactory2 {
    *
    * The compiler already turns `Emulated` into `None` for a component with no styles, so the
    * shared renderer is still what nearly every component here gets.
+   *
+   * `host` is marked as a component's whatever its styles, as the native adapter marks it: an
+   * interaction report names the component around a control by it.
    */
   createRenderer(host: unknown, type: ComponentDefLike | null): Renderer2 {
+    if (host && typeof host === 'object') markComponentHost(host as BrowserNode);
     if (!type?.styles?.length) return this.renderer;
     this.addStyles(type.id, type.styles);
     if (type.encapsulation === ViewEncapsulation.None) return this.renderer;

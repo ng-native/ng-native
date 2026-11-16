@@ -296,6 +296,10 @@ describe('an interaction observer names the component a control belongs to', () 
     assert.equal((await componentOf('projected')).component, 'x-observed-card');
   });
 
+  it('reports a component written straight into the app component', async () => {
+    assert.equal((await componentOf('top-action')).component, 'x-top-bar');
+  });
+
   it('reports no component for a pressable in the app component itself', async () => {
     assert.equal('component' in (await componentOf('save')), false);
   });

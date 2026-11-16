@@ -45,6 +45,14 @@ export class Region {}
 })
 export class ObservedCard {}
 
+/** A bar written straight into the root component's template, with nothing around it. */
+@Component({
+  selector: 'x-top-bar',
+  imports: [Pressable],
+  template: `<pressable testID="top-action" />`,
+})
+export class TopBar {}
+
 /** Every kind of touchable, a scroll view and a list, each logging its own presses. */
 @Component({
   selector: 'x-interaction-observer',
@@ -54,6 +62,7 @@ export class ObservedCard {}
     Pressable,
     ScrollView,
     Text,
+    TopBar,
     TouchableOpacity,
     View,
     VirtualList,
@@ -91,6 +100,7 @@ export class ObservedCard {}
       <pressable testID="off" [disabled]="true" (press)="log('off')" />
       <x-observed-card><pressable testID="projected" /></x-observed-card>
     </scroll-view>
+    <x-top-bar />
     <virtual-list testID="rows" [items]="rows" [itemHeight]="20" [style]="{ height: 60 }" />
   `,
 })
