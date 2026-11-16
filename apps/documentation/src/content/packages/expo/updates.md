@@ -92,7 +92,8 @@ await updates.checkForAppUpdate();
   the app no way to ask.
 
 On iOS and Android the page is the `ios.appStoreUrl` or `android.playStoreUrl` in the app config,
-the same one `StoreReview.storeUrl()` reads, and `expo-store-review` must be installed. A `dmg`
+the same one `StoreReview.storeUrl()` reads. Both `expo-updates` and `expo-store-review` must be
+installed: without either, `checkForAppUpdate()` opens nothing and resolves `false`. A `dmg`
 build is the only one with Sparkle. In development, in `app` and `mas` builds, and on the web, both
 are inert: `appUpdateAvailable()` stays `false`.
 
