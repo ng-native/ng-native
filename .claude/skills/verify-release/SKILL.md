@@ -49,8 +49,9 @@ log before deciding a package is missing.
 
 While waiting, make the **upgrade baselines** on the previous version, so step 4 has something to
 upgrade: an Angular CLI workspace with `ng add @ng-native/schematics@<previous>`, an Nx
-`--preset=ts` workspace with `nx add @ng-native/nx@<previous>` plus an app and a library, and a
-template app pinned to the previous version. Commit each, so the upgrade's diff is readable.
+`--preset=ts` workspace with `nx add @ng-native/nx@<previous>` plus an app and a library, a
+template app pinned to the previous version, and, once a previous release has it, a Mac app from
+`@ng-native/template-desktop@<previous>`. Commit each, so the upgrade's diff is readable.
 
 ## 2. Record today's versions
 
@@ -112,17 +113,22 @@ Each runs the common checks with `expo export --platform macos` in place of `--p
 
 For each:
 
-- **The dev loop.** `npm start`, then `npm run macos` on a side port. The first run builds the
-  desktop host, a native build, so one at a time. The app opens with no error in the Metro log, and
-  an edit to a template and to a stylesheet reaches the window with its state kept.
-- **Packaging.** `npm run package` writes `dist/macos/<name>.app`. Launch it from Finder (`open`),
+- **The dev loop.** The dev server, then the app on a side port: `npm start` and `npm run macos`
+  for the template and the Expo app, `nx start <app>` and `nx run <app>:macos` for Nx, and the
+  targets its page lists for the Angular CLI. The first run gets the desktop host, a download or a
+  native build, so one at a time. The app opens with no error in the Metro log, and an edit to a
+  template and to a stylesheet reaches the window with its state kept.
+- **Packaging.** `npm run package` (`nx run <app>:package` for Nx, the target its page lists for
+  the Angular CLI) writes `dist/macos/<name>.app`. Launch it from Finder (`open`),
   with Metro stopped, and screenshot its first window (`screencapture -l <window id>`).
 - **Signing.** `codesign --verify --deep --strict dist/macos/<name>.app` passes. An ad-hoc
   signature is expected for `app`; `dmg` and `mas` need credentials and are checked only when the
   release changed packaging.
 
-Then, from this repository on the release tag, `pnpm bench:macos` against the template's host build:
-every metric passes or carries a waiver in `scripts/bench-macos-budget.json`. A breach without one
+Then, from this repository on the release tag, `pnpm bench:macos --host <path>` against the
+template's host build, never the newest host in the cache it picks without `--host`: `pgrep -fl
+appkit/ngn-macos` prints the path while the template app's `npm run macos` window is open. Every
+metric passes or carries a waiver in `scripts/bench-macos-budget.json`. A breach without one
 blocks the release; a metric it could not measure fails it as a breach does.
 
 Upgrades of a desktop app (step 4) start from the second release that has `@ng-native/desktop`.
