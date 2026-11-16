@@ -35,14 +35,18 @@ export const FIRST_BUILD_NOTE =
  * @param {ToolRunner} sys
  * @param {string} command
  * @param {string[]} args
- * @returns {{ stdout: string } | { missing: true } | { failed: string, exited: boolean }}
+ * @returns {{ stdout: string } | { missing: true } | { failed: string, exited: boolean, status?: number | null }}
  */
 function probe(sys, command, args) {
   const line = [command, ...args].join(' ');
   try {
     const result = sys.run(command, args, { capture: true });
     if (result.status === 0) return { stdout: result.stdout };
-    return { failed: `${line} failed (status ${result.status})`, exited: true };
+    return {
+      failed: `${line} failed (status ${result.status})`,
+      exited: true,
+      status: result.status,
+    };
   } catch (error) {
     const code = /** @type {NodeJS.ErrnoException} */ (error)?.code;
     if (code === 'ENOENT') return { missing: true };
@@ -98,16 +102,36 @@ function developerToolsProblem(sys) {
   if ('failed' in developer && !developer.exited) {
     return `${developer.failed}. Check its permissions, or reinstall: xcode-select --install`;
   }
+  // No developer folder selected: xcode-select exits 2. Any other status is a failure to run.
+  if ('failed' in developer && developer.status !== 2) {
+    return `${developer.failed}. Reinstall the Command Line Tools: xcode-select --install`;
+  }
   if (!('stdout' in developer) || developer.stdout.trim() === '') {
-    // No developer folder selected: xcode-select exits 2.
     return (
       'Xcode or its Command Line Tools are not installed. Install the Command Line Tools: ' +
       'xcode-select --install'
     );
   }
+  return swiftProblem(sys);
+}
+
+/**
+ * What is wrong with the selected developer tools' swiftc, or null.
+ *
+ * @param {ToolRunner} sys
+ */
+function swiftProblem(sys) {
   const swift = probe(sys, 'xcrun', ['swiftc', '--version']);
   if ('failed' in swift && !swift.exited) {
     return `${swift.failed}. Check its permissions, or reinstall: xcode-select --install`;
+  }
+  // xcrun exits 72 when the selected tools have no swiftc; any other status (69 while Xcode's
+  // licence is not accepted) is a failure to run it.
+  if ('failed' in swift && swift.status !== 72) {
+    return (
+      `${swift.failed}. If Xcode's licence is not yet accepted: sudo xcodebuild -license accept; ` +
+      'otherwise reinstall the Command Line Tools: xcode-select --install'
+    );
   }
   const version =
     'stdout' in swift ? swift.stdout.match(/Swift version (\d+(?:\.\d+)*)/)?.[1] : undefined;
