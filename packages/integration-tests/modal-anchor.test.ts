@@ -11,7 +11,6 @@ import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { OS } from '@ng-native/device';
-import { HostEngine } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 import {
   cleanup,
@@ -89,11 +88,11 @@ describe('a modal with an anchor', () => {
     const app = mount(1, Fixture, fabric);
     try {
       await settle();
-      const engine = app.applicationRef.injector.get(HostEngine);
+      const engine = app.engine;
       const late = engine.createElement('view');
       engine.appendChild(engine.root, late);
       commits.length = 0;
-      app.componentRef.instance.other.set(late);
+      (app.componentRef.instance as Fixture).other.set(late);
       await settle();
       assert.ok(commits.length > 0, 'the change was committed');
       for (const props of commits) assert.equal(props?.['visible'], true);
