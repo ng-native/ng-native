@@ -91,7 +91,10 @@ describe('the desktop generator', () => {
     for (const entry of ['expo start --port 8083', { command: 'expo start --port 8083' }]) {
       const tree = await app();
       const start = readProjectConfiguration(tree, 'mobile');
-      start.targets!['start'] = { executor: 'nx:run-commands', options: { commands: [entry] } };
+      start.targets!['start'] = {
+        executor: 'nx:run-commands',
+        options: { commands: ['node tools/service.js --port 9000', entry] },
+      };
       updateProjectConfiguration(tree, 'mobile', start);
       await run(tree);
       const { targets } = readProjectConfiguration(tree, 'mobile');

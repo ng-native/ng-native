@@ -35,7 +35,7 @@ function metroPort(project) {
   const options = project.targets?.start?.options;
   const port = [options?.command, ...(options?.commands ?? [])]
     .map((entry) => (typeof entry === 'string' ? entry : entry?.command))
-    .filter((command) => typeof command === 'string')
+    .filter((command) => typeof command === 'string' && /\bexpo start\b/.test(command))
     .map((command) => /--port[= ](\d+)/.exec(command)?.[1])
     .find(Boolean);
   return port ? Number(port) : DEFAULT_PORT;
