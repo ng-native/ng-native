@@ -41,6 +41,10 @@ function recordingHost() {
   return { native, calls, send };
 }
 
+function registeredIds(calls: readonly string[]): string[] {
+  return calls.filter((call) => call.startsWith('register ')).map((call) => call.split(' ')[1]);
+}
+
 function rename(log: string[], from: string, to: string) {
   return {
     label: `Rename to ${to}`,
@@ -57,19 +61,20 @@ it('registers each action with the host, and runs it when the host undoes or red
   const log: string[] = [];
   stack.push(rename(log, 'a', 'b'));
   stack.push(rename(log, 'b', 'c'));
-  assert.deepEqual(host.calls, ['register 1 Rename to b', 'register 2 Rename to c']);
+  const [first, second] = registeredIds(host.calls);
+  assert.deepEqual(host.calls, [`register ${first} Rename to b`, `register ${second} Rename to c`]);
   assert.equal(stack.available(), true);
   assert.equal(stack.undoLabel(), 'Rename to c');
 
   stack.undo();
   assert.deepEqual(host.calls.at(-1), 'undo');
   assert.deepEqual(log, [], 'the host undoes; the action runs when it says so');
-  await host.send({ type: 'undo', id: '2' });
+  await host.send({ type: 'undo', id: second });
   assert.deepEqual(log, ['back to b']);
   assert.equal(stack.undoLabel(), 'Rename to b');
   assert.equal(stack.redoLabel(), 'Rename to c');
 
-  await host.send({ type: 'redo', id: '2' });
+  await host.send({ type: 'redo', id: second });
   assert.deepEqual(log, ['back to b', 'again to c']);
   assert.equal(stack.canRedo(), false);
 
@@ -86,12 +91,31 @@ it('drops the redo history when something new is done, and ignores an id it no l
   });
   const log: string[] = [];
   stack.push(rename(log, 'a', 'b'));
-  await host.send({ type: 'undo', id: '1' });
+  const [first] = registeredIds(host.calls);
+  await host.send({ type: 'undo', id: first });
   assert.equal(stack.canRedo(), true);
   stack.push(rename(log, 'a', 'z'));
   assert.equal(stack.canRedo(), false);
-  await host.send({ type: 'redo', id: '1' });
+  await host.send({ type: 'redo', id: first });
   assert.deepEqual(log, ['back to a']);
+});
+
+it("gives each action an id no other stack has, so one window's undo runs only its own action", async () => {
+  // Every window's UndoStack listens on the one undo manager's events.
+  const host = recordingHost();
+  const providers = [{ provide: UndoStack.SOURCE, useValue: host.native }];
+  const one = injectService(UndoStack, { providers });
+  const two = injectService(UndoStack, { providers });
+  const log: string[] = [];
+  one.push(rename(log, 'a', 'b'));
+  two.push(rename(log, 'x', 'y'));
+  const [fromOne, fromTwo] = registeredIds(host.calls);
+  assert.notEqual(fromOne, fromTwo);
+  assert.match(fromTwo, /^\d+$/);
+  await host.send({ type: 'undo', id: fromTwo });
+  assert.deepEqual(log, ['back to x']);
+  assert.equal(one.canUndo(), true);
+  assert.equal(two.canUndo(), false);
 });
 
 it('follows Edit > Undo and Redo on the testing fake, as the undo manager orders them', async () => {
