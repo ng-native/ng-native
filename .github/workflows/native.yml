@@ -233,6 +233,17 @@ jobs:
           -PreactNativeArchitectures=x86_64
           -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
 
+      # The JVM tests of @ng-native/components' Android sources (packages/components/android/src/test),
+      # whenever the native half changed, which those sources are part of. Expo modules have no
+      # release unit-test task, so this is the debug one.
+      - name: Run the components package's Android JVM tests
+        if: steps.rebundle.outcome != 'success'
+        working-directory: examples/canary/android
+        run: >
+          ./gradlew :ng-native-components:testDebugUnitTest --build-cache
+          -PreactNativeArchitectures=x86_64
+          -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
+
       # What a later run needs to reuse this build: the APK, the key it is signed with, and the
       # list of assets it ships, which is what decides whether a bundle can be swapped into it.
       - name: Keep the APK, drop the build's intermediates

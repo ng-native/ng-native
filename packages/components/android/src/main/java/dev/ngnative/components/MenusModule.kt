@@ -15,8 +15,9 @@ import expo.modules.kotlin.modules.ModuleDefinition
  *
  * `setContextMenu` keeps each `[contextMenu]` by its view's `nativeID`, since React Native's view
  * drops a `contextMenu` prop it does not know. A long press or a right-click on the view opens it
- * as a PopupMenu at the press point. `setTakesLongPress` names views inside one that take a long
- * press themselves, where a long press opens no menu.
+ * as a PopupMenu at the press point, and so does the view's long-press accessibility action.
+ * `setTakesLongPress` names views inside one that take a long press themselves, where a long press
+ * opens no menu.
  */
 class MenusModule : Module() {
   private val main = Handler(Looper.getMainLooper())
@@ -44,6 +45,7 @@ class MenusModule : Module() {
       main.post {
         if (entries.isNullOrEmpty()) MenuHost.contextMenus.remove(nativeId)
         else MenuHost.contextMenus[nativeId] = entries
+        ContextMenuAccessibility.update(appContext.currentActivity, nativeId)
       }
     }
 
@@ -69,7 +71,10 @@ class MenusModule : Module() {
     // A reload makes a new module, which starts with no shortcuts or menus. The old one lets go
     // only of what it set: the new one may have attached first.
     OnDestroy {
-      main.post { MenuHost.detach(sender) }
+      main.post {
+        MenuHost.detach(sender)
+        if (MenuHost.send == null) ContextMenuAccessibility.stop()
+      }
     }
   }
 

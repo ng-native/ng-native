@@ -54,7 +54,8 @@ focused text input first, so a shortcut on one of them fires only while no text 
 
 On Android a shortcut works from a hardware keyboard once it has a modifier (Ctrl, Alt, Shift or
 Meta), and Meta-/ lists it in the Keyboard Shortcuts helper by its `shortcutLabel`, under the app's
-name.
+name. While a `<modal>` is open, the keyboard goes to the modal's own window, and on Android the
+app's shortcuts do not fire there yet.
 
 ## Context menus
 
@@ -70,10 +71,10 @@ name.
 
 A right-click opens it on macOS. On Android a long press or a right-click opens it as a menu at the
 press point, and there the long press is the menu's, so the element's `(longPress)` does not also
-fire. A destructive item's label is red, `icon` names a drawable resource shown beside the label
-(Android 10 and later), and `subtitle` is the item's tooltip. Android finds the view by its
-`nativeID`, so an element without one is given one. Menus inside a `<modal>` do not open on
-Android yet.
+fire. TalkBack opens it with the element's long-press action (double-tap and hold). A destructive
+item's label is red, `icon` names a drawable resource shown beside the label (Android 10 and
+later), and `subtitle` is not shown on Android. Android finds the view by its `nativeID`, so an
+element without one is given one. Menus inside a `<modal>` do not open on Android yet.
 
 A view with a `nativeID` is a stacking context, as one with `opacity` below 1 is: a `z-index`
 inside an element with a menu orders its children against each other, not against the element's

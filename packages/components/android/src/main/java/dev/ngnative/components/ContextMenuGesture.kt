@@ -85,7 +85,7 @@ internal class ContextMenuGesture(
       cancel.recycle()
     }
     pending = longPress
-    main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
+    main.postDelayed(longPress, longPressDelay(ViewConfiguration.getLongPressTimeout()))
     return false
   }
 
@@ -111,17 +111,52 @@ internal class ContextMenuGesture(
   private fun menuViewAt(x: Float, y: Float, longPress: Boolean): Pair<View, String>? {
     val root = activity.window?.decorView as? ViewGroup ?: return null
     val path = TouchTargetHelper.findTargetPathAndCoordinatesForTouch(x, y, root, FloatArray(2))
-    var view: View? = path.firstNotNullOfOrNull { it.getView() }
-    while (view != null) {
-      val nativeId = view.getTag(R.id.view_tag_native_id) as? String
-      if (nativeId != null && MenuHost.contextMenus.containsKey(nativeId)) return view to nativeId
-      if (longPress && nativeId != null && nativeId in MenuHost.longPressTakers) return null
-      view = view.parent as? View
-    }
-    return null
+    val views = generateSequence(path.firstNotNullOfOrNull { it.getView() }) { it.parent as? View }.toList()
+    val ids = views.map { it.getTag(R.id.view_tag_native_id) as? String }
+    val owner = menuOwner(
+      ids,
+      longPress,
+      MenuHost.contextMenus::containsKey,
+      MenuHost.longPressTakers::contains,
+    ) ?: return null
+    return views[owner] to (ids[owner] ?: return null)
   }
 
   private fun isSecondaryClick(event: MotionEvent): Boolean =
-    event.isFromSource(InputDevice.SOURCE_MOUSE) &&
-      event.buttonState and MotionEvent.BUTTON_SECONDARY != 0
+    isSecondaryClick(event.isFromSource(InputDevice.SOURCE_MOUSE), event.buttonState)
+
+  companion object {
+    /** A `<pressable>`'s `delayLongPress` unless the app sets one, in milliseconds. */
+    private const val PRESSABLE_LONG_PRESS = 500
+
+    /**
+     * How long a press is held before the menu opens: the system's long-press timeout, but no
+     * longer than a `<pressable>` around the menu waits to fire its own `(longPress)`. Android 11
+     * and earlier, and the Touch & hold delay setting, wait longer than that.
+     */
+    fun longPressDelay(systemTimeout: Int): Long = minOf(systemTimeout, PRESSABLE_LONG_PRESS).toLong()
+
+    /**
+     * Which of `chain`, the `nativeID`s from the pressed view outwards, has the menu a press
+     * opens: the nearest with one. For a `longPress`, none where a view on the way takes the long
+     * press itself.
+     */
+    fun menuOwner(
+      chain: List<String?>,
+      longPress: Boolean,
+      hasMenu: (String) -> Boolean,
+      takesLongPress: (String) -> Boolean,
+    ): Int? {
+      for ((index, nativeId) in chain.withIndex()) {
+        if (nativeId == null) continue
+        if (hasMenu(nativeId)) return index
+        if (longPress && takesLongPress(nativeId)) return null
+      }
+      return null
+    }
+
+    /** Whether a press is a right-click: a mouse's, with its secondary button down. */
+    fun isSecondaryClick(fromMouse: Boolean, buttonState: Int): Boolean =
+      fromMouse && buttonState and MotionEvent.BUTTON_SECONDARY != 0
+  }
 }

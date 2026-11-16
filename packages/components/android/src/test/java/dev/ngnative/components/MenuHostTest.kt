@@ -21,17 +21,22 @@ class MenuHostTest {
   fun keepsTheNewSenderWhenTheOldModuleLetsGoAfterIt() {
     MenuHost.attach(old)
     MenuHost.attach(new)
+    MenuHost.shortcuts = listOf(save)
     MenuHost.contextMenus["row"] = listOf(mapOf("id" to "0"))
     MenuHost.longPressTakers.add("handle")
     MenuHost.detach(old)
     assertSame(new, MenuHost.send)
+    assertEquals(listOf(save), MenuHost.shortcuts)
     assertEquals(setOf("row"), MenuHost.contextMenus.keys)
     assertEquals(setOf("handle"), MenuHost.longPressTakers)
   }
 
+  private val save = Shortcut("save", "s", true, false, false, false, "Save", "")
+
   @Test
   fun letsGoOfEverythingWhenTheModuleThatSetItGoes() {
     MenuHost.attach(old)
+    MenuHost.shortcuts = listOf(save)
     MenuHost.contextMenus["row"] = listOf(mapOf("id" to "0"))
     MenuHost.longPressTakers.add("handle")
     MenuHost.detach(old)
@@ -44,9 +49,11 @@ class MenuHostTest {
   @Test
   fun startsANewModuleWithNothingTheOldOneSent() {
     MenuHost.attach(old)
+    MenuHost.shortcuts = listOf(save)
     MenuHost.contextMenus["ngn-view-1"] = listOf(mapOf("id" to "0"))
     MenuHost.longPressTakers.add("ngn-view-2")
     MenuHost.attach(new)
+    assertTrue(MenuHost.shortcuts.isEmpty())
     assertTrue(MenuHost.contextMenus.isEmpty())
     assertTrue(MenuHost.longPressTakers.isEmpty())
   }
