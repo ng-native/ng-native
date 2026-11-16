@@ -15,6 +15,7 @@ import {
   provideInteractionObserver,
   type InteractionEvent,
 } from '@ng-native/components';
+import { provideWebCompat } from '@ng-native/web-compat';
 import { compileFixture } from './compile.ts';
 
 type Fixture = {
@@ -326,6 +327,80 @@ describe('an interaction observer names the component a control belongs to', () 
       heard.map((event) => [event.element, event.component]),
       [['scroll-view', 'x-observed-card']],
     );
+  });
+
+  it('names a component matched by an attribute by its selector', async () => {
+    assert.equal((await componentOf('attribute-action')).component, 'section[x-attribute-card]');
+  });
+
+  it('names a component of several selectors by the one for its element', async () => {
+    assert.equal((await componentOf('tile-action')).component, 'article[x-tile].wide');
+  });
+});
+
+describe('an interaction observer in an app that asked for web-compat', () => {
+  const host = globalThis as Record<string, unknown>;
+  const REGISTRY = '__nativeComponentRegistry__hasComponent';
+  let Framed: Type<unknown>;
+  before(async () => {
+    const mod = await compileFixture('fixtures/interaction-observer.ts');
+    Framed = mod['FramedFixture'] as Type<unknown>;
+  });
+
+  /** Render the web-compat fixture on a device with the web view installed. */
+  async function renderFramed<T>(
+    use: (rendered: Awaited<ReturnType<typeof render>>, heard: InteractionEvent[]) => Promise<T>,
+  ): Promise<T> {
+    const saved = Object.getOwnPropertyDescriptor(host, REGISTRY);
+    // Where the web view is installed, an emulated iframe is still a plain view.
+    host[REGISTRY] = (name: string) => name === 'RNCWebView';
+    try {
+      const heard: InteractionEvent[] = [];
+      const rendered = await render(Framed, {
+        providers: [
+          provideWebCompat({ frames: 'emulated' }),
+          provideInteractionObserver((event) => heard.push(event)),
+        ],
+      });
+      return await use(rendered, heard);
+    } finally {
+      if (saved) Object.defineProperty(host, REGISTRY, saved);
+      else delete host[REGISTRY];
+    }
+  }
+
+  const heardOf = (heard: InteractionEvent[]) =>
+    heard.map((event) => [event.testID, event.component]);
+
+  it('names the component around an iframe, not the iframe web-compat keeps a plain view', async () => {
+    await renderFramed(async ({ fabric }, heard) => {
+      tap(fabric, 'in-frame');
+      await settle();
+      assert.deepEqual(heardOf(heard), [['in-frame', 'x-framed-card']]);
+    });
+  });
+
+  it('writes an attribute value out, and leaves a :not() out of the name', async () => {
+    await renderFramed(async ({ fabric }, heard) => {
+      tap(fabric, 'note-action');
+      await settle();
+      assert.deepEqual(heardOf(heard), [['note-action', 'aside[x-note=warn]']]);
+    });
+  });
+
+  it('keeps a component on an input web-compat makes a plain view, and back to a field', async () => {
+    await renderFramed(async ({ fabric, instance, fixture }, heard) => {
+      tap(fabric, 'in-check');
+      await settle();
+      (instance as { checkType: { set(type: string): void } }).checkType.set('text');
+      await fixture.detectChanges();
+      tap(fabric, 'in-check');
+      await settle();
+      assert.deepEqual(heardOf(heard), [
+        ['in-check', 'input[x-check]'],
+        ['in-check', 'input[x-check]'],
+      ]);
+    });
   });
 });
 

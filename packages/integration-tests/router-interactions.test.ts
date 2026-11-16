@@ -7,7 +7,14 @@ import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
-import { cleanup, fireEvent, render, settle, type FakeFabricNode } from '@ng-native/testing';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  settle,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 import { provideInteractionObserver, type InteractionEvent } from '@ng-native/components';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
 import { registerScreenComponents } from '../router/src/screens.ts';
@@ -27,6 +34,56 @@ const stable = ({ timestamp, nativeTag, ...rest }: InteractionEvent) => {
 };
 
 afterEach(() => cleanup());
+
+describe('a control on a routed page', () => {
+  let mod: Record<string, unknown>;
+
+  before(async () => {
+    mod = await compileFixture('fixtures/router-interactions.ts');
+  });
+
+  /** Open `url`, tap the pressable `id` on the page there, and answer what was heard. */
+  async function tapOn(url: string, id: string): Promise<InteractionEvent[]> {
+    const heard: InteractionEvent[] = [];
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(mod['routes'] as Routes),
+        provideInteractionObserver((event) => heard.push(event)),
+      ],
+    });
+    await idle();
+    await app.componentRef.injector.get(Router).navigateByUrl(url);
+    await idle();
+    const point = { pageX: 1, pageY: 1, locationX: 1, locationY: 1 };
+    const node = screen.getByTestId(id);
+    app.fabric.emit(node, 'topTouchStart', { touches: [point], changedTouches: [point], ...point });
+    app.fabric.emit(node, 'topTouchEnd', { touches: [], changedTouches: [point], ...point });
+    await idle();
+    return heard;
+  }
+
+  it('reports the page a native stack shows', async () => {
+    const heard = await tapOn('/detail', 'detail-action');
+    assert.deepEqual(
+      heard.map((event) => [event.testID, event.component]),
+      [['detail-action', 'x-detail']],
+    );
+  });
+
+  it('reports the page a native tab shows', async () => {
+    const heard = await tapOn('/home', 'home-action');
+    assert.deepEqual(
+      heard.map((event) => [event.testID, event.component]),
+      [['home-action', 'x-home']],
+    );
+  });
+
+  it('reports no component for a page with no selector', async () => {
+    const heard = await tapOn('/unnamed', 'unnamed-action');
+    assert.equal(heard.length, 1);
+    assert.equal('component' in heard[0]!, false);
+  });
+});
 
 describe('a native tab tapped', () => {
   let mod: Record<string, unknown>;
@@ -66,8 +123,21 @@ describe('a native tab tapped', () => {
     await tap('home');
     assert.equal(router.url, '/home');
     assert.deepEqual(heard.map(stable), [
-      { type: 'click', element: 'native-tab', label: 'Search', source: 'click' },
-      { type: 'click', element: 'native-tab', label: 'Home', testID: 'home-tab', source: 'click' },
+      {
+        type: 'click',
+        element: 'native-tab',
+        component: 'x-bar',
+        label: 'Search',
+        source: 'click',
+      },
+      {
+        type: 'click',
+        element: 'native-tab',
+        component: 'x-bar',
+        label: 'Home',
+        testID: 'home-tab',
+        source: 'click',
+      },
     ]);
   });
 

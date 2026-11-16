@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import type { Routes } from '@angular/router';
+import { Pressable } from '../../components/src/pressable.ts';
 import { Text } from '../../components/src/text.ts';
 import { NativeStackOutlet } from '../../router/src/native-stack-outlet.ts';
 import { NativeTab } from '../../router/src/native-tab.ts';
@@ -25,8 +26,24 @@ export class Shell {}
 })
 export class Bar {}
 
-@Component({ selector: 'x-home', imports: [Text], template: `<text>Home</text>` })
+@Component({
+  selector: 'x-home',
+  imports: [Pressable, Text],
+  template: `<text>Home</text><pressable testID="home-action" />`,
+})
 export class Home {}
+
+/** A page pushed onto the stack. */
+@Component({
+  selector: 'x-detail',
+  imports: [Pressable],
+  template: `<pressable testID="detail-action" />`,
+})
+export class Detail {}
+
+/** A page with no selector of its own. */
+@Component({ imports: [Pressable], template: `<pressable testID="unnamed-action" />` })
+export class Unnamed {}
 
 @Component({ selector: 'x-search', imports: [Text], template: `<text>Search</text>` })
 export class Search {}
@@ -41,4 +58,6 @@ export const routes: Routes = [
       { path: 'search', component: Search },
     ],
   },
+  { path: 'detail', component: Detail },
+  { path: 'unnamed', component: Unnamed },
 ];

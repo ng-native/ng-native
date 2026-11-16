@@ -309,7 +309,7 @@ export class BrowserRendererFactory implements RendererFactory2 {
    * interaction report names the component around a control by it.
    */
   createRenderer(host: unknown, type: ComponentDefLike | null): Renderer2 {
-    if (host && typeof host === 'object') markComponentHost(host as BrowserNode);
+    if (host && typeof host === 'object') markComponentHost(host as BrowserNode, type ?? undefined);
     if (!type?.styles?.length) return this.renderer;
     this.addStyles(type.id, type.styles);
     if (type.encapsulation === ViewEncapsulation.None) return this.renderer;

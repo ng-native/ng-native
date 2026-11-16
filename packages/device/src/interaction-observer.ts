@@ -46,7 +46,9 @@ export interface InteractionEvent {
    * The selector of the nearest component the control is rendered inside, such as `app-button`
    * for the `<pressable>` in its template, or for one projected into its `<ng-content>`. A
    * component that is the control itself is named by `element` instead, and this is the component
-   * around it. Absent for a control in the root component's own template.
+   * around it. A routed page is named the same way. A component matched by an attribute is named
+   * by its selector written out, such as `section[x-card]`. Absent for a control in the root
+   * component's own template, and in a component with no selector, such as a page that has none.
    */
   readonly component?: string;
   /** `accessibilityLabel`, or `aria-label`. */
@@ -181,22 +183,71 @@ function elementName(node: HostNode): string {
 }
 
 /**
- * The name of the nearest element around `node` that Angular mounted a component on, read at the
- * moment of an interaction from what the platform adapter already marks, so nothing is kept per
- * element. A primitive, whose name is a native view's, is passed over, and so is the root
- * component, the outermost one marked: it is the app rather than a part of it. Told by what is
- * marked rather than by depth, since the root's host is under a surface on a device and is the
- * page's own mount point on the web.
+ * The name of the nearest component around `node`, read at the moment of an interaction from the
+ * definition the platform adapter keeps on each component's host, so nothing is kept per element.
+ * A primitive, whose name is a native view's, is passed over, and so is the root component, the
+ * outermost one: it is the app rather than a part of it. Told by what is marked rather than by
+ * depth, since the root's host is under a surface on a device and is the page's own mount point on
+ * the web. An element a package marks with no definition, to keep it a plain view, is no component.
  */
 function componentAround(node: HostNode): string | undefined {
   let nearest: string | undefined;
   for (let current = node.parent; current; current = current.parent) {
-    if (!(current as EngineNode).componentHost) continue;
+    const definition = (current as EngineNode).componentHost;
+    if (typeof definition !== 'object') continue;
     if (nearest !== undefined) return nearest;
-    const name = elementName(current);
-    if (!registeredViewName(name)) nearest = name;
+    const name = componentName(definition, elementName(current));
+    // A component with no selector of its own, such as a routed page, names nothing around it.
+    if (name === null) return undefined;
+    if (name !== undefined) nearest = name;
   }
   return undefined;
+}
+
+/** The slice of Angular's component definition a name is read from. */
+interface NamedDefinition {
+  /** Each selector, as Angular compiles it: the element name, then attributes and flags. */
+  readonly selectors?: readonly (readonly unknown[])[];
+}
+
+/** The selector Angular gives a component that has none. */
+const NO_SELECTOR = 'ng-component';
+
+/**
+ * A component's name by its selector: the element name a template writes, or for a selector of
+ * attributes the selector rebuilt, such as `section[x-card]`, since its element is a plain one.
+ * Of several selectors, the one for the element it is mounted on. Undefined for a primitive, whose
+ * element is a native view's, and null for a component with no selector.
+ */
+function componentName(definition: NamedDefinition, element: string): string | null | undefined {
+  const selectors = definition.selectors ?? [];
+  const selector = selectors.find((each) => each[0] === element) ?? selectors[0];
+  const tag = typeof selector?.[0] === 'string' ? selector[0] : '';
+  if (!selector || tag === NO_SELECTOR) return null;
+  if (selector.length > 1) return selectorText(selector, tag);
+  return registeredViewName(tag) ? undefined : tag;
+}
+
+/** Angular's selector flags: what the parts after one are. */
+const NOT = 1;
+const CLASS = 8;
+
+/** A compiled selector written out again, up to any `:not()`. */
+function selectorText(selector: readonly unknown[], tag: string): string {
+  let text = tag;
+  let mode = 0;
+  for (let index = 1; index < selector.length; index++) {
+    const part = selector[index];
+    if (typeof part === 'number') {
+      if (part & NOT) break;
+      mode = part;
+    } else if (mode & CLASS) text += `.${String(part)}`;
+    else {
+      const value = selector[++index];
+      text += value ? `[${String(part)}=${String(value)}]` : `[${String(part)}]`;
+    }
+  }
+  return text;
 }
 
 /** The text under a node, in order, with runs of whitespace collapsed, or undefined if none. */

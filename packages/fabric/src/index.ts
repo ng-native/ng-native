@@ -66,6 +66,7 @@ export {
   fontsRegistered,
   fontsSettled,
   markComponentHost,
+  unmarkPlainView,
   markPage,
   scrollsOverflow,
   nativePlatform,

@@ -1,4 +1,9 @@
-import { markComponentHost, type Engine, type EngineNode } from '@ng-native/fabric';
+import {
+  markComponentHost,
+  unmarkPlainView,
+  type Engine,
+  type EngineNode,
+} from '@ng-native/fabric';
 import { documentOf } from './document.ts';
 import { keepTaken } from './node-members.ts';
 import { inputTypeOf } from './input-type.ts';
@@ -330,7 +335,7 @@ function setSize(node: EngineNode, attribute: string, value: unknown, engine: En
 export function setField(node: EngineNode, name: string, value: unknown, engine: Engine): boolean {
   // An input made another kind of control, given a type that is typed into again.
   if (name === 'type' && hostedHere.delete(node)) {
-    (node as { componentHost?: true }).componentHost = undefined;
+    unmarkPlainView(node);
     becomeField(node, engine);
   }
   const field = fields.get(node);

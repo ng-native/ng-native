@@ -1,5 +1,6 @@
 import {
   markComponentHost,
+  unmarkPlainView,
   registerViewName,
   type Engine,
   type EngineNode,
@@ -240,7 +241,7 @@ function sizeOf(drawing: Reflecting): { width: number; height: number } {
 
 /** Stop drawing an image from markup: it is the platform's image view again. */
 function undraw(node: EngineNode, engine: Engine): void {
-  if (hosting.delete(node)) (node as { componentHost?: true }).componentHost = undefined;
+  if (hosting.delete(node)) unmarkPlainView(node);
   const drawing = drawings.get(node);
   if (!drawing) return;
   drawings.delete(node);

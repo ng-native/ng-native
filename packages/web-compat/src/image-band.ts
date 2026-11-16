@@ -1,4 +1,9 @@
-import { markComponentHost, type Engine, type EngineNode } from '@ng-native/fabric';
+import {
+  markComponentHost,
+  unmarkPlainView,
+  type Engine,
+  type EngineNode,
+} from '@ng-native/fabric';
 import { watchCommits } from './commit-watch.ts';
 import { styled } from './geometry.ts';
 import { keptOwn } from './in-document.ts';
@@ -160,7 +165,7 @@ export function unband(node: EngineNode, engine: Engine): boolean {
   drawnBy.delete(node);
   keptOwn.delete(band.box);
   if (band.box.parent === node) engine.removeChild(node, band.box);
-  (node as { componentHost?: true }).componentHost = undefined;
+  unmarkPlainView(node);
   engine.setProp(node, 'source', band.picture.props['source'] ?? null);
   return true;
 }

@@ -880,10 +880,11 @@ export class NativeRendererFactory implements RendererFactory2 {
     // the two are both in hand, and it is what makes `:host` reachable at all.
     //
     // It is also the one sure sign that an element hosts a component, whatever the selector
-    // that put it there, which is what tells an `<x-card>` from a typo.
+    // that put it there, which is what tells an `<x-card>` from a typo. Its definition, kept on
+    // the host, is what names the component in an interaction report.
     if (host && typeof host === 'object') {
       this.engine.setHostSheet(host as EngineNode, sheet);
-      markComponentHost(host as EngineNode);
+      markComponentHost(host as EngineNode, type ?? undefined);
       this.keepInputAttributes(host as EngineNode, type);
     }
     if (type) this.declareElements(type);

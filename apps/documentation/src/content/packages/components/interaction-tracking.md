@@ -98,8 +98,12 @@ Each event carries:
   `<pressable>`. A `<pressable>` in a button's template reports the button, even with the button
   in a card, and a control projected into a component's `<ng-content>` reports that component.
   A component that is the control itself, through `PressBehavior`, is named by `element`, and
-  `component` is then the one around it. Absent for a control in the root component's own
-  template.
+  `component` is then the one around it. A routed page is named the same way, so a control on a
+  page a `<native-stack-outlet>` or a native tab shows reports that page, and a tap on a native
+  tab reports the component whose template declares the tab bar. A component matched by an
+  attribute is named by its selector written out, such as `section[x-card]` or
+  `button[app-button=primary]`. Absent for a control in the root component's own template, and
+  in a page with no selector of its own.
 - `label`, `testID`, `nativeID` and `role`: what the element committed, so a label a component
   gave it or a role it implies is the one reported, as a screen reader hears it.
 - `text`: for a `click` and a `long-press`, never a `scroll` or `swipe`, the text inside the
