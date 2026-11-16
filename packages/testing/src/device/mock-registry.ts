@@ -38,6 +38,8 @@ const actuals = new Map<number, unknown>();
 const mocked = new Map<number, unknown>();
 /** The install each module's mock is from: one that finishes after its mock went is dropped. */
 const installing = new Map<number, symbol>();
+/** Each module's install still running, for `vi.importMock` to wait on before it looks. */
+const installs = new Map<number, Promise<void>>();
 /** Where Metro bundles the app's Vitest: its runtime, which the gate in it closes and opens. */
 const VITEST_RUNTIME = /ng-native-device-testing\/vitest-[^/]*\.cjs$/;
 
@@ -74,6 +76,7 @@ export function installMocking(vi: ViLike): void {
   // The module's mock where the file has one, or else its exports automocked, the module left as is.
   vi['importMock'] = async (specifier: unknown) => {
     const id = idOf(specifier);
+    await installed(id);
     return mocked.has(id) ? mocked.get(id) : automock(await actualOf(id));
   };
   automock = (exports: unknown) => automockOf(exports, vi);
@@ -141,7 +144,21 @@ export function restoreMocks(): void {
   hoistedIndex = 0;
 }
 
-async function install({ id, factory }: Registration): Promise<void> {
+function install(registration: Registration): Promise<void> {
+  const { id } = registration;
+  const done: Promise<void> = installNow(registration).finally(() => {
+    if (installs.get(id) === done) installs.delete(id);
+  });
+  installs.set(id, done);
+  return done;
+}
+
+/** Once every install of `id` started so far has finished, a later one included. */
+async function installed(id: number): Promise<void> {
+  for (let at = installs.get(id); at; at = installs.get(id)) await at.catch(() => {});
+}
+
+async function installNow({ id, factory }: Registration): Promise<void> {
   const registry = modules();
   if (!originals.has(id)) {
     const real = registry.get(id);
@@ -164,7 +181,10 @@ async function install({ id, factory }: Registration): Promise<void> {
 
 function restore(restoring: number[]): void {
   const registry = modules();
-  for (const id of restoring) installing.delete(id);
+  for (const id of restoring) {
+    installing.delete(id);
+    installs.delete(id);
+  }
   const back = restoring.filter((id) => originals.has(id));
   for (const id of back) {
     registry.set(id, originals.get(id)!);
