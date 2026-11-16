@@ -1290,6 +1290,7 @@ describe('available-signal on code that is already migrated, and on bracket read
 describe('available-signal in template text, which a template shows rather than reads', () => {
   const html = [
     '<text>Uses haptics.available here</text>',
+    '<text label="@if (haptics.available) yes @let x = haptics.available;"></text>',
     '<text label="haptics.available" [hint]="haptics.available ? 1 : 2">{{ haptics.available }}</text>',
     '<pressable (press)="go(haptics.available)" *ngIf="haptics.available"></pressable>',
     '@if (haptics.available) { <text>haptics.available</text> } @else if (haptics.available) {}',
@@ -1300,6 +1301,7 @@ describe('available-signal in template text, which a template shows rather than 
   ].join('\n');
   const called = [
     '<text>Uses haptics.available here</text>',
+    '<text label="@if (haptics.available) yes @let x = haptics.available;"></text>',
     '<text label="haptics.available" [hint]="haptics.available() ? 1 : 2">{{ haptics.available() }}</text>',
     '<pressable (press)="go(haptics.available())" *ngIf="haptics.available()"></pressable>',
     '@if (haptics.available()) { <text>haptics.available</text> } @else if (haptics.available()) {}',
