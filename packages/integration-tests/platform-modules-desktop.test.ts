@@ -939,6 +939,29 @@ describe('ScreenCapture on macOS', () => {
     assert.equal(capture.screenshots(), 0);
   });
 
+  it('keeps a key another app holds when one app allows it', async () => {
+    const calls: unknown[][] = [];
+    const record =
+      (name: string) =>
+      async (...args: unknown[]) =>
+        void calls.push([name, ...args]);
+    mac({
+      NgNativeScreenCapture: {
+        preventScreenCaptureAsync: record('prevent'),
+        allowScreenCaptureAsync: record('allow'),
+      },
+    });
+    const { ScreenCapture } = await import('@ng-native/expo/screen-capture');
+    const first = injectService(ScreenCapture, { providers: [] });
+    const second = injectService(ScreenCapture, { providers: [] });
+    await first.prevent('card');
+    await second.prevent('card');
+    await first.allow('card');
+    assert.equal(calls.filter(([name]) => name === 'allow').length, 0);
+    await second.allow('card');
+    assert.deepEqual(calls.at(-1), ['allow', 'card']);
+  });
+
   it('is inert on a host without one of the methods, rather than throwing', async () => {
     mac({ NgNativeScreenCapture: {} });
     const { ScreenCapture } = await import('@ng-native/expo/screen-capture');

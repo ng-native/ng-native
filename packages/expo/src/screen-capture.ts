@@ -208,6 +208,17 @@ function desktopScreenCapture(): NativeScreenCapture | null {
     );
   if (!host) return null;
   const native = host.module;
+  // One per host module, so every app shares the keys held: the host's are one set for the app.
+  let adapter = desktopAdapters.get(native);
+  if (!adapter) desktopAdapters.set(native, (adapter = desktopAdapter(native)));
+  return adapter;
+}
+
+const desktopAdapters = new WeakMap<object, NativeScreenCapture>();
+
+function desktopAdapter(
+  native: Record<string, (...args: unknown[]) => Promise<never> | undefined>,
+): NativeScreenCapture {
   // A host built without a method is inert: nothing kept out of capture, and no permission.
   const call = async (name: string, ...args: unknown[]) => native[name]?.(...args);
   return {
