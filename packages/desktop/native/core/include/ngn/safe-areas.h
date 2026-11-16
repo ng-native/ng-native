@@ -25,8 +25,10 @@ using facebook::react::Size;
 struct ContainerInsets {
   Size size;
   EdgeInsets insets;
-  // How far the window controls reach into the content from the leading edge, for
-  // --safe-area-inset-titlebar-leading; 0 when a sidebar holds them.
+  // How far the window controls reach into this container from its leading edge, for
+  // --safe-area-inset-titlebar-leading: their extent in a window's content with no sidebar and in
+  // the sidebar pane under them, and 0 in the content pane beside a sidebar, which they do not
+  // reach.
   double titlebarLeading{0};
   bool operator==(const ContainerInsets &) const = default;
 };

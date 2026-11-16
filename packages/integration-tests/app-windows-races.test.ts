@@ -8,6 +8,8 @@ import { before, describe, it } from 'node:test';
 import {
   APP_BOOTSTRAP_LISTENER,
   Injector,
+  createEnvironmentInjector,
+  type EnvironmentInjector,
   inputBinding,
   type Type,
   ɵINJECTOR_SCOPE as INJECTOR_SCOPE,
@@ -19,6 +21,7 @@ import {
   WINDOW_NAVIGATOR,
   WINDOW_RESTORE_STORE,
   provideMainWindow,
+  provideRestorableWindows,
   type NativeWindowEvent,
   type NativeWindowRequest,
   type NativeWindows,
@@ -26,6 +29,7 @@ import {
   type WindowMounter,
   type WindowNavigator,
 } from '@ng-native/device';
+import type { Engine } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric, settle, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -84,17 +88,20 @@ function start(
   options: {
     failing?: Set<Type<unknown>>;
     store?: RestoredWindow[][];
+    navigator?: WindowNavigator;
   } = {},
 ) {
   const host = fakeHost();
   const mounter = fakeMounter(options.failing);
   const writes = options.store;
-  const injector = Injector.create({
-    providers: [
+  const injector = createEnvironmentInjector(
+    [
       { provide: INJECTOR_SCOPE, useValue: 'root' },
+      // Note is written down to open again, so a window of it leaves a restore entry.
+      provideRestorableWindows({ Note }),
       { provide: AppWindows.SOURCE, useValue: host.native },
       { provide: WINDOW_MOUNTER, useValue: mounter.mounter },
-      { provide: WINDOW_NAVIGATOR, useValue: navigator },
+      { provide: WINDOW_NAVIGATOR, useValue: options.navigator ?? navigator },
       {
         provide: WINDOW_RESTORE_STORE,
         useValue: writes
@@ -102,7 +109,8 @@ function start(
           : null,
       },
     ],
-  });
+    Injector.NULL as EnvironmentInjector,
+  );
   const windows = injector.get(AppWindows);
   windows.launch(Root);
   return { host, mounter, windows, lifecycle: injector.get(AppLifecycle) };
@@ -159,6 +167,23 @@ describe('opening one key twice at once', () => {
   });
 });
 
+describe('a route window asked for a path it is refused', () => {
+  it('keeps restoring the path it shows', async () => {
+    const store: RestoredWindow[][] = [];
+    const { windows } = start({
+      store,
+      navigator: { ...navigator, navigate: async (_outlet, path) => path !== 'privacy' },
+    });
+    await flush();
+    await windows.open({ outlet: 'prefs', path: 'general' });
+    await windows.open({ outlet: 'prefs', path: 'privacy' });
+    const paths = (writes: RestoredWindow[] | undefined) =>
+      (writes ?? []).flatMap((entry) => (entry.kind === 'route' ? [entry.path] : []));
+    assert.deepEqual(paths(store.at(-1)), ['general']);
+    assert.ok(!store.some((writes) => paths(writes).includes('privacy')), 'never saved');
+  });
+});
+
 describe('a window whose mount throws', () => {
   it('closes the surface, forgets the window and its restore entry, and rethrows', async () => {
     const store: RestoredWindow[][] = [];
@@ -170,6 +195,9 @@ describe('a window whose mount throws', () => {
       windows.windows().map((window) => window.key),
       ['main'],
     );
+    const noted = (writes: RestoredWindow[]) =>
+      writes.some((entry) => entry.kind === 'component' && entry.key === 'note');
+    assert.ok(store.some(noted), 'the note was written down before its mount threw');
     assert.deepEqual(store.at(-1), [{ kind: 'main' }]);
   });
 });
@@ -186,6 +214,29 @@ describe('quitting while guards decide', () => {
     held.answer(true);
     await flush();
     assert.deepEqual(host.answers, [false]);
+  });
+
+  it('refuses a window opened while willQuit runs, so no guard it adds is skipped', async () => {
+    const { host, windows, lifecycle } = start();
+    await flush();
+    let refused: unknown = null;
+    lifecycle.willQuit(async () => {
+      try {
+        const late = await windows.open(Note);
+        late?.canClose(() => false);
+      } catch (error) {
+        refused = error;
+      }
+    });
+    host.send({ type: 'quitRequest' });
+    await flush();
+    await flush();
+    assert.match(String(refused), /quitting/);
+    assert.deepEqual(host.answers, [true]);
+    assert.deepEqual(
+      windows.windows().map((window) => window.key),
+      ['main'],
+    );
   });
 
   it('runs willQuit once when a SIGTERM arrives during a Cmd-Q, and answers once', async () => {
@@ -257,6 +308,33 @@ describe('the main window on the platform mounter', () => {
       assert.equal(app.applicationRef.components.length, 0, 'the root is no app component');
       assert.equal(app.applicationRef.viewCount, 0, 'nor a view change detection checks');
       assert.deepEqual(host.closed, [11]);
+    } finally {
+      app.applicationRef.destroy();
+    }
+  });
+
+  it("keeps the app's safe-area insets out of a window, and gives it the app's other tokens", async () => {
+    const { app, windows } = mountWindowed('NoteWindow');
+    const appTokens = (top: number, accent: number) => ({
+      '--safe-area-inset-top': { length: top },
+      '--safe-area-inset-titlebar-leading': { length: 78 },
+      '--accent-gap': { length: accent },
+    });
+    try {
+      await settle();
+      // What the main window's provider reported before the window opened, and after.
+      app.engine.updateTokens(appTokens(52, 4));
+      await windows.open(fixtures['ScreenWindow']!);
+      const made = (fixtures['ScreenWindow'] as unknown as { made: { engine: Engine }[] }).made;
+      const engine = made.at(-1)!.engine;
+      const seen = () => [
+        engine.token('--safe-area-inset-top'),
+        engine.token('--safe-area-inset-titlebar-leading'),
+        engine.token('--accent-gap'),
+      ];
+      assert.deepEqual(seen(), [undefined, undefined, '4px'], 'what the window starts with');
+      app.engine.updateTokens(appTokens(28, 8));
+      assert.deepEqual(seen(), [undefined, undefined, '8px'], 'what the window follows');
     } finally {
       app.applicationRef.destroy();
     }

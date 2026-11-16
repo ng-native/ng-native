@@ -261,4 +261,59 @@ describe('tokens another surface follows', () => {
       stop();
     }
   });
+
+  it('end on the latest value on every follower, when one follower sets one as it hears it', () => {
+    const { engine } = scene();
+    engine.commit();
+    const follower = () =>
+      new Engine(createFakeFabric(), 2, {
+        conditions: { width: 400, height: 800, colorScheme: 'light' },
+      });
+    const first = follower();
+    const second = follower();
+    const stops = [first, second].map((window) =>
+      engine.watchShared((change) => {
+        if (change.kind === 'tokens') window.updateTokens(change.tokens);
+      }),
+    );
+    // The first window's watcher sets the app's token again while the app is telling every
+    // window the value before.
+    const unwatch = first.watchToken('--fresh', (value) => {
+      if (value === '11px') engine.updateTokens({ '--fresh': { length: 12 } });
+    });
+    try {
+      engine.updateTokens({ '--fresh': { length: 11 } });
+      assert.deepEqual(
+        [engine.token('--fresh'), first.token('--fresh'), second.token('--fresh')],
+        ['12px', '12px', '12px'],
+      );
+    } finally {
+      unwatch();
+      for (const stop of stops) stop();
+    }
+  });
+
+  it('still reach the rest, and the source still commits, when a follower throws', () => {
+    const errors: [unknown, string][] = [];
+    const { engine } = scene((error, type) => errors.push([error, type]));
+    engine.commit();
+    const heard: (string | undefined)[] = [];
+    const followed: unknown[] = [];
+    const unwatch = engine.watchToken('--fresh', (value) => heard.push(value));
+    const stopThrowing = engine.watchShared(() => {
+      throw new Error('follower');
+    });
+    const stop = engine.watchShared((change) => followed.push(change.kind));
+    try {
+      engine.updateTokens({ '--fresh': { length: 20 } });
+      assert.deepEqual(followed, ['tokens']);
+      assert.equal(errors.length, 1);
+      assert.equal((errors[0]?.[0] as Error).message, 'follower');
+      assert.deepEqual(heard, ['20px'], 'the source committed the new value');
+    } finally {
+      unwatch();
+      stopThrowing();
+      stop();
+    }
+  });
 });

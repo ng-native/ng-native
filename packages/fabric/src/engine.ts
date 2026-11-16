@@ -8036,8 +8036,32 @@ export class Engine implements HostEngine {
     return () => this.sharedWatchers.delete(listener);
   }
 
+  /** The changes still to reach every follower while one is being handed out; null when none is. */
+  private sharedQueue: SharedChange[] | null = null;
+
   private sharedChanged(change: SharedChange): void {
-    for (const watcher of this.sharedWatchers) watcher(change);
+    // A follower that changes this engine as it hears a change (a token watcher setting the token
+    // again) waits its turn: handed out at once, it would reach the followers after it before the
+    // change it answered, and they would end on the older one.
+    if (this.sharedQueue) {
+      this.sharedQueue.push(change);
+      return;
+    }
+    const queue = (this.sharedQueue = [change]);
+    try {
+      for (let at = 0; at < queue.length; at++) {
+        // One follower that throws stops neither the rest nor this engine's own commit after them.
+        for (const watcher of this.sharedWatchers) {
+          try {
+            watcher(queue[at]!);
+          } catch (error) {
+            this.reportEventError(error, 'shared');
+          }
+        }
+      }
+    } finally {
+      this.sharedQueue = null;
+    }
   }
 
   updateTokens(next: Readonly<Record<string, TokenValue>>): void {

@@ -449,6 +449,7 @@ export class AppWindows {
    * route, the window for that outlet, navigated to `path`; the outlet's window is brought to the
    * front and navigated where it is open already, since a route window is one of a kind
    * (Preferences). Resolves null where the OS has no windows, or the host would not open one.
+   * Rejects once a quit has passed every window's guards and runs `willQuit`.
    */
   open(component: Type<unknown>, options?: ComponentWindowOptions): Promise<AppWindow | null>;
   open(route: RouteWindowOptions): Promise<AppWindow | null>;
@@ -485,10 +486,12 @@ export class AppWindows {
     return this.reserve(outlet, async () => {
       const existing = this.byKey(outlet);
       if (existing) {
-        await navigator.navigate(outlet, path);
-        const open = this.find(existing.surface);
-        if (open) open.restore = restore;
-        this.remember();
+        // A refused navigation leaves the window where it was, and so what it restores to.
+        if (await navigator.navigate(outlet, path)) {
+          const open = this.find(existing.surface);
+          if (open) open.restore = restore;
+          this.remember();
+        }
         return this.front(existing);
       }
       const window = navigator.window(outlet);
@@ -529,6 +532,7 @@ export class AppWindows {
     const native = this.native;
     const mounter = this.mounter;
     if (!native || !mounter) return null;
+    this.refuseWhileQuitting();
     const {
       key,
       inputs,
@@ -547,6 +551,11 @@ export class AppWindows {
       title,
     });
     if (surface === null) return null;
+    // One the host opened as the quit began goes again.
+    if (this.closing) {
+      native.close(surface);
+      this.refuseWhileQuitting();
+    }
     const open = this.track(surface, key, outlet ?? null, title);
     open.restore = restore?.() ?? null;
     this.remember();
@@ -746,8 +755,23 @@ export class AppWindows {
   }
 
   private async finishQuit(): Promise<void> {
-    await this.lifecycle.runWillQuit();
-    this.native?.answerQuit(true);
+    // From here the app is quitting: a window opened now would have guards no one asks.
+    this.closing = true;
+    try {
+      await this.lifecycle.runWillQuit();
+      this.native?.answerQuit(true);
+    } finally {
+      this.closing = false;
+    }
+  }
+
+  /** Whether a quit has passed its guards and is running `willQuit`: no window opens then. */
+  private closing = false;
+
+  private refuseWhileQuitting(): void {
+    if (this.closing) {
+      throw new Error('[angular-native] A window cannot open while the app is quitting.');
+    }
   }
 
   /** Stop listening to the host: for a test that makes the service more than once. */
