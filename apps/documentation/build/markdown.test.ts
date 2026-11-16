@@ -110,6 +110,22 @@ describe('a marker in a fenced example', () => {
     expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
   });
 
+  test('keeps a marker in indented code inside a list item', async () => {
+    const html = await render(
+      '# Markers\n\n- Item:\n\n      <!-- platforms: Nothing -->\n\n<!-- platforms: Dock -->\n',
+    );
+    expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
+    expect(html).toContain('platforms: Nothing');
+  });
+
+  test('takes an indented list marker for code, and keeps the marker after it as code', async () => {
+    const html = await render(
+      '# Markers\n\n    - not a list\n    <!-- platforms: Nothing -->\n\n<!-- platforms: Dock -->\n',
+    );
+    expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
+    expect(html).toContain('platforms: Nothing');
+  });
+
   test('closes a fence inside a list item at its own indentation', async () => {
     const html = await render(
       '# Markers\n\n1. A step:\n\n    ```md\n    <!-- platforms: Nothing -->\n    ```\n\n<!-- platforms: Dock -->\n',
