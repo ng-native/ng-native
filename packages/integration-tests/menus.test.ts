@@ -546,6 +546,60 @@ for (const os of ['android', 'ios'] as const) {
       assert.deepEqual([...host.longPressTakers], [], 'and takes it back as the pressable goes');
     });
 
+    // The host opens the innermost menu after its own long-press timeout, which can be later than
+    // a pressable around it fires its (longPress): that pressable leaves the hold to the menu.
+    it('leaves a long press on a menu inside a pressable to the menu', async () => {
+      registerPlatformComponents(os);
+      const host = fakeHost(false, true, true);
+      const said: string[] = [];
+      const pinnable = signal(true);
+      const { ContextMenu, MenuItem, Pressable, View } = await import('@ng-native/components');
+      const app = await render(
+        `<pressable testID="card" [delayLongPress]="50" (longPress)="said.push('card')">
+          <view testID="row" [contextMenu]="menu">
+            <pressable testID="off" [disabled]="true" (longPress)="0"></pressable>
+          </view>
+          <view testID="plain"></view>
+        </pressable>
+        <ng-template #menu>
+          @if (pinnable()) {
+            <menu-item label="Pin" />
+          }
+        </ng-template>`,
+        {
+          imports: [View, ContextMenu, MenuItem, Pressable],
+          providers: [
+            { provide: Menus.SOURCE, useValue: host.native },
+            { provide: OS, useValue: os },
+          ],
+          componentProperties: { said, pinnable },
+        },
+      );
+      await settle();
+      const { fireEvent } = await import('@ng-native/testing');
+      const hold = async (testId: string) => {
+        const target = screen.getByTestId(testId);
+        await fireEvent(target, 'touchStart', { touches: [{}], changedTouches: [{}] });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        await fireEvent(target, 'touchEnd', { touches: [], changedTouches: [{}] });
+      };
+      await hold('row');
+      assert.deepEqual(said, [], 'the menu on the row takes the hold');
+      await hold('plain');
+      assert.deepEqual(said, ['card'], 'outside the menu the pressable keeps it');
+      await hold('off');
+      assert.deepEqual(
+        said,
+        ['card', 'card'],
+        'a view inside the menu that takes the long press opens no menu, as the host decides',
+      );
+      pinnable.set(false);
+      await app.detectChanges();
+      await settle();
+      await hold('row');
+      assert.deepEqual(said, ['card', 'card', 'card'], 'nor does a menu whose items went');
+    });
+
     it('names nothing for a host that cannot be told, nor where there is no host', async () => {
       await openRow(fakeHost(false, true, false));
       assert.equal(screen.getByTestId('handle').props['nativeID'], undefined);

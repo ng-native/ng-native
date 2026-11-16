@@ -295,7 +295,28 @@ export class Menus {
    * context menu around it.
    */
   setTakesLongPress(nativeID: string, takes: boolean): void {
+    if (takes) this.longPressTakers.add(nativeID);
+    else this.longPressTakers.delete(nativeID);
     this.native?.setTakesLongPress?.(nativeID, takes);
+  }
+
+  /** The `nativeID`s sent with a context menu, and with a long press of their own. */
+  private readonly withContextMenu = new Set<string>();
+  private readonly longPressTakers = new Set<string>();
+
+  /**
+   * Whether the host opens a context menu on a long press of the view whose `nativeID`s, from it
+   * outwards, are `chain`: as it decides, the nearest view with a menu, unless one on the way takes
+   * the long press itself. A `(longPress)` around that view leaves the hold to the menu, which the
+   * host opens after its own long-press timeout.
+   */
+  opensContextMenu(chain: Iterable<string | null>): boolean {
+    for (const nativeID of chain) {
+      if (nativeID === null) continue;
+      if (this.withContextMenu.has(nativeID)) return true;
+      if (this.longPressTakers.has(nativeID)) return false;
+    }
+    return false;
   }
 
   /** What choosing an item does, by the `nativeID` of the view whose menu it is in. */
@@ -312,6 +333,8 @@ export class Menus {
   ): void {
     if (entries && choose) this.contextMenuChoices.set(nativeID, choose);
     else this.contextMenuChoices.delete(nativeID);
+    if (entries?.length) this.withContextMenu.add(nativeID);
+    else this.withContextMenu.delete(nativeID);
     this.native?.setContextMenu?.(nativeID, entries);
   }
 

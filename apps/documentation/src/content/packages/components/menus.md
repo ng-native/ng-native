@@ -83,8 +83,9 @@ over the next row outside the element with the menu, or give it a `z-index` on t
 
 On Android and iOS the innermost handler wins a long press, as in a native app: a `<pressable>` with
 its own `(longPress)` inside the element keeps its long press, and the menu opens only on a long
-press nothing inside it takes. On Android a right-click there still opens the menu. iOS tells a
-long press from an iPad pointer's secondary click only by the gesture, so a secondary click there
+press nothing inside it takes. A `<pressable>` around the element leaves a long press on it to the
+menu, whatever its `delayLongPress`. On Android a right-click there still opens the menu. iOS tells
+a long press from an iPad pointer's secondary click only by the gesture, so a secondary click there
 opens no menu either.
 
 ```angular-html
