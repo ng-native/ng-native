@@ -184,8 +184,12 @@ function platforms(_marker: string, services: string): string {
   return [...new Set(lines)].join('\n\n');
 }
 
-/** A fenced code block, from its opening fence to the matching close or the end of the page. */
-const FENCE = /^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^\1\2[ \t]*$|(?![\s\S]))/gm;
+/**
+ * A fenced code block, from its opening fence to the matching close or the end of the page. As in
+ * Marked, the close is a run of the opener's character at least as long as the opener, at any
+ * indentation.
+ */
+const FENCE = /^[ \t]*(?=([`~]))(\1{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\2\1*[ \t]*$|(?![\s\S]))/gm;
 
 /** `text` with `change` applied to everything but its fenced code blocks, which stay as written. */
 function outsideFences(text: string, change: (prose: string) => string): string {
