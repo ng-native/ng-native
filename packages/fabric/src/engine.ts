@@ -8037,8 +8037,10 @@ export class Engine implements HostEngine {
     this.want(tokensAsk(next));
     this.root.subtreeDirty = true;
     this.layoutStale = true;
-    this.commit();
+    // Before the commit, whose token watchers can update the tokens again: those who follow hear
+    // each update in the order it was made, and end at the last.
     this.sharedChanged({ kind: 'tokens', tokens: next });
+    this.commit();
   }
 
   /**
@@ -9119,7 +9121,11 @@ export class Engine implements HostEngine {
     let heard = watches.get(key);
     if (!heard) watches.set(key, (heard = new Set()));
     heard.add(listener);
+    let stopped = false;
     return () => {
+      // Once: a second call would otherwise take away a set a later watcher made for the key.
+      if (stopped) return;
+      stopped = true;
       heard.delete(listener);
       if (heard.size === 0) watches.delete(key);
       if (watches.size === 0) delete node.propWatches;

@@ -237,3 +237,28 @@ describe('a token watched from TypeScript', () => {
     assert.deepEqual(heard, tints);
   });
 });
+
+describe('tokens another surface follows', () => {
+  it('reach it in the order they were set, when a watcher sets one during the commit', () => {
+    const { engine } = scene();
+    engine.commit();
+    const follower = new Engine(createFakeFabric(), 2, {
+      conditions: { width: 400, height: 800, colorScheme: 'light' },
+    });
+    const stop = engine.watchShared((change) => {
+      if (change.kind === 'tokens') follower.updateTokens(change.tokens);
+    });
+    // A watcher that keeps the space even, as an app normalising a token would.
+    const unwatch = engine.watchToken('--space', (value) => {
+      if (value === '11px') engine.updateTokens({ '--space': { length: 12 } });
+    });
+    try {
+      engine.updateTokens({ '--space': { length: 11 } });
+      assert.equal(engine.token('--space'), '12px');
+      assert.equal(follower.token('--space'), '12px');
+    } finally {
+      unwatch();
+      stop();
+    }
+  });
+});
