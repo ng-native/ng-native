@@ -5,10 +5,6 @@
  * behind it, which is how a template that forgot an import is caught. Navigation's elements need
  * the same treatment for the opposite reason: the outlet creates a `screen` itself, and the
  * header components own theirs, so both are accounted for rather than reported.
- *
- * This duplicates a few lines of the components package on purpose. `@nx/enforce-module-boundaries`
- * keeps the Angular-facing packages from reaching into each other, and a package dependency is a
- * heavier price than the copy.
  */
 import { reflectComponentType, type Type } from '@angular/core';
 import { claimHost, type EngineNode } from '@ng-native/fabric';

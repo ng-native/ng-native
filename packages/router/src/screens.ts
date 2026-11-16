@@ -8,6 +8,7 @@
  * No decorators here on purpose: tests import these at runtime, and Node's type stripping
  * refuses decorators.
  */
+import { expoViewName } from '@ng-native/device';
 import { registerHoist, registerViewName } from '@ng-native/fabric';
 
 /**
@@ -88,18 +89,9 @@ export const ActivityState = {
 
 export type ActivityStateValue = (typeof ActivityState)[keyof typeof ActivityState];
 
-/**
- * The Fabric name of one of `ExpoRouterToolbarModule`'s views, as `requireNativeView` in
- * `expo-modules-core` computes it. Expo Go runs many projects in one binary and names every view
- * after the one it is running; a build of the app's own has no such suffix.
- *
- * `@ng-native/expo` derives the same name for its own views. The Angular-facing packages do not
- * import each other, and this is three lines.
- */
+/** The Fabric name of one of `ExpoRouterToolbarModule`'s views. */
 function expoRouterToolbarView(view: string): string {
-  const identifier = (globalThis as { expo?: { __expo_app_identifier__?: string } }).expo
-    ?.__expo_app_identifier__;
-  return `ViewManagerAdapter_ExpoRouterToolbarModule_${view}${identifier ? `_${identifier}` : ''}`;
+  return expoViewName('ExpoRouterToolbarModule', view);
 }
 
 /**

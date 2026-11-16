@@ -185,6 +185,7 @@ export {
   type TrayIconModel,
 } from './tray.ts';
 export { SIDEBAR_SELECTION } from './sidebar-selection.ts';
+export { expoViewName } from './expo-view-name.ts';
 export { WINDOW_NAVIGATOR, type WindowNavigator } from './window-navigator.ts';
 export {
   AppWindows,
