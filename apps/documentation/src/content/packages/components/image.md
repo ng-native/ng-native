@@ -69,9 +69,10 @@ both.
 An image covers its box when the app sets neither `resizeMode` nor `object-fit`, on iOS, Android
 and macOS, as React Native's `Image` does, and in the web host. An explicit `resizeMode` replaces
 it, and so does an `object-fit` in a stylesheet on iOS, Android and macOS. The web host paints the
-picture as a background, so there only `resizeMode` changes how it fits. An image that should
-fill its box without keeping the picture's proportions, which is what an image did before on iOS
-and macOS, takes `resizeMode="stretch"`.
+picture as a background, so there only `resizeMode` changes how it fits.
+
+On iOS and macOS an image with neither used to stretch to fill its box, without keeping the
+picture's proportions. To keep that fit, set `resizeMode="stretch"`.
 
 ## Events
 
