@@ -146,7 +146,7 @@ module.exports = function macosPlatformPlugin({ types: t }) {
     if (!t.isObjectExpression(node)) return false;
     return node.properties.every(
       (prop) =>
-        t.isObjectMethod(prop) ||
+        (t.isObjectMethod(prop) && !prop.computed) ||
         (t.isObjectProperty(prop) && !prop.computed && isInert(prop.value)),
     );
   }
