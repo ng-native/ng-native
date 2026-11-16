@@ -747,6 +747,8 @@ export class AppWindows {
       asked.add(open);
       if (!(await this.guardsAgree(open))) return false;
     }
+    // In the same turn as the last check, so a window the host finishes opening after it is refused.
+    this.closing = true;
     return true;
   }
 
