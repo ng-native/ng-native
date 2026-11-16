@@ -4,7 +4,16 @@
  * requests the preset empties, and the error for an app that asks for macOS without Expo's flag.
  */
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -15,9 +24,10 @@ const babel = require('@babel/core') as {
 };
 const plugin = require('@ng-native/metro/macos-babel.cjs');
 const { withAngularNative } = require('@ng-native/metro/config.cjs');
-const { checkOutOfTreePlatforms, requestedPlatforms, withMacosPlugins } =
+const { checkOutOfTreePlatforms, expoConfig, requestedPlatforms, withMacosPlugins } =
   require('@ng-native/metro/macos.cjs') as {
     checkOutOfTreePlatforms(expo: object | undefined, argv?: readonly string[]): void;
+    expoConfig(projectRoot: string | undefined): object | undefined;
     requestedPlatforms(argv: readonly string[]): string[];
     withMacosPlugins<P extends { options?: { platform?: string }; plugins?: unknown[] }>(
       params: P,
@@ -311,6 +321,30 @@ describe("Expo's out-of-tree platforms flag", () => {
       'ios',
       'macos',
     ]);
+  });
+
+  it("is asked for when app.json lists macos, which Expo's config drops without the flag", () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'macos-platforms-'));
+    try {
+      const expo = path.dirname(require.resolve('expo/package.json'));
+      mkdirSync(path.join(root, 'node_modules'));
+      symlinkSync(expo, path.join(root, 'node_modules', 'expo'), 'dir');
+      writeFileSync(path.join(root, 'package.json'), '{ "name": "app" }\n');
+      const app = (extra: object) =>
+        writeFileSync(
+          path.join(root, 'app.json'),
+          JSON.stringify({ expo: { name: 'app', platforms: ['ios', 'macos'], ...extra } }),
+        );
+      app({});
+      assert.throws(
+        () => checkOutOfTreePlatforms(expoConfig(root), []),
+        /"outOfTreePlatforms": true/,
+      );
+      app({ experiments: { outOfTreePlatforms: true } });
+      assert.doesNotThrow(() => checkOutOfTreePlatforms(expoConfig(root), []));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('is not asked for by an app that never mentions macos', () => {

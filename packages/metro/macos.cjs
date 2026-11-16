@@ -164,6 +164,9 @@ function checkOutOfTreePlatforms(expo, argv = process.argv) {
  * The app's `expo` config, as the Expo CLI reads it, or nothing where it cannot be read: a project
  * with no Expo config, or a config that throws, which the Expo CLI reports itself.
  *
+ * Its `platforms` are the ones app.json declares, where it declares any: Expo's own reading drops
+ * `macos` from them when `outOfTreePlatforms` is not set, which is the case to say so for.
+ *
  * @param {string | undefined} projectRoot
  */
 function expoConfig(projectRoot) {
@@ -171,7 +174,12 @@ function expoConfig(projectRoot) {
   try {
     const from = { paths: [projectRoot] };
     const { getConfig } = require(require.resolve('expo/config', from));
-    return getConfig(projectRoot, { skipSDKVersionRequirement: true, skipPlugins: true }).exp;
+    const { exp, rootConfig } = getConfig(projectRoot, {
+      skipSDKVersionRequirement: true,
+      skipPlugins: true,
+    });
+    const declared = (rootConfig?.expo ?? rootConfig)?.platforms;
+    return Array.isArray(declared) ? { ...exp, platforms: declared } : exp;
   } catch {
     return undefined;
   }
