@@ -287,7 +287,12 @@ function scan(text, from, ends) {
   let quote = null;
   for (let at = from; at < text.length; at++) {
     const char = text[at];
-    if (quote) {
+    if (quote === '`' && text.startsWith('${', at)) {
+      // A substitution in a template string is code again, to its closing brace.
+      const inner = scan(text, at + 2, closingBrace(text));
+      code.push(...inner.code);
+      at = inner.end;
+    } else if (quote) {
       if (char === '\\') at++;
       else if (char === quote) [quote, piece] = [null, at + 1];
     } else if (ends(at)) {
@@ -331,6 +336,16 @@ function tagsOf(text) {
   return tags;
 }
 
+/** For `scan`: the end is where the brace open before it closes, past the ones inside it. */
+function closingBrace(text) {
+  let depth = 1;
+  return (at) => {
+    if (text[at] === '{') depth++;
+    else if (text[at] === '}') depth--;
+    return depth === 0;
+  };
+}
+
 /**
  * The spans of a template Angular reads as code: `{{ }}` interpolations, bound attribute values,
  * block parameters and `@let` values, less the strings in them. Text, plain attribute values and
@@ -369,19 +384,60 @@ function readsOf(text, name) {
 
 /** A template with each holder's `.available` called, and the names it left as declared there. */
 function inTemplate(text, names) {
-  let next = text;
+  const calls = [];
   const left = [];
   for (const name of new Set(names)) {
-    const reads = new Set(readsOf(next, name));
+    const reads = new Set(readsOf(text, name));
     if (declaration(name).test(text)) {
       if (reads.size) left.push(name);
       continue;
     }
-    next = next.replace(propertyRead(name), (read, index) =>
-      reads.has(index) ? `${read}()` : read,
-    );
+    for (const match of text.matchAll(propertyRead(name))) {
+      if (reads.has(match.index)) calls.push(match.index + match[0].length);
+    }
   }
-  return { text: next, left };
+  return { calls, left };
+}
+
+/** `text` with `()` written at each of `calls`. */
+const withCalls = (text, calls) =>
+  applied(
+    text,
+    calls.map((at) => ({ start: at, end: at, text: '()' })),
+  );
+
+/**
+ * A string literal's text as it decodes, which is the template Angular reads, and for each of its
+ * characters, and its end, where it is in the literal's source: `\'` is one character, two long.
+ */
+function decode(raw) {
+  let text = '';
+  const at = [];
+  for (let index = 1; index < raw.length - 1; index++) {
+    at.push(index);
+    if (raw[index] !== '\\') {
+      text += raw[index];
+      continue;
+    }
+    const [char, length] = escaped(raw, index + 1);
+    if (char === '') at.pop();
+    text += char;
+    index += length;
+  }
+  at.push(raw.length - 1);
+  return { text, at };
+}
+
+const ESCAPES = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', 0: '\0' };
+
+/** The character an escape after a backslash at `index` stands for, and how long it is. */
+function escaped(raw, index) {
+  const char = raw[index];
+  const hex = /^(?:x([\da-fA-F]{2})|u([\da-fA-F]{4})|u\{([\da-fA-F]+)\})/.exec(raw.slice(index));
+  if (hex) return [String.fromCodePoint(parseInt(hex[1] ?? hex[2] ?? hex[3], 16)), hex[0].length];
+  if (char === '\r' && raw[index + 1] === '\n') return ['', 2];
+  if (char === '\n' || char === '\r') return ['', 1];
+  return [ESCAPES[char] ?? char, 1];
 }
 
 const declarationLine = (text, name) =>
@@ -445,11 +501,15 @@ function componentTemplate(ts, source, file, metadata, names, dir, found) {
     if (!ts.isStringLiteralLike(value)) continue;
     if (property.name.text === 'templateUrl') found.urls.push([normalise(dir + value.text), names]);
     if (property.name.text !== 'template') continue;
-    const { text, left } = inTemplate(value.getText(), names);
-    const at = source.getLineAndCharacterOfPosition(property.getStart()).line + 1;
-    for (const name of left) found.notes.push(localNote(`${file}:${at}`, name));
-    if (text !== value.getText()) {
-      found.edits.push({ start: value.getStart(), end: value.getEnd(), text });
+    // Read as it decodes, so an escaped quote is the quote Angular sees, and each call written
+    // back where that character is in the source.
+    const decoded = decode(value.getText());
+    const { calls, left } = inTemplate(decoded.text, names);
+    const line = source.getLineAndCharacterOfPosition(property.getStart()).line + 1;
+    for (const name of left) found.notes.push(localNote(`${file}:${line}`, name));
+    for (const call of calls) {
+      const start = value.getStart() + decoded.at[call];
+      found.edits.push({ start, end: start, text: '()' });
     }
   }
 }
@@ -542,9 +602,9 @@ function rewriteTemplate(host, url, held, notes) {
     for (const name of split) notes.push(sharedNote(`${url}:${readLine(text, name)}`, name));
     return;
   }
-  const { text: next, left } = inTemplate(text, names);
+  const { calls, left } = inTemplate(text, names);
   for (const name of left) notes.push(localNote(`${url}:${declarationLine(text, name)}`, name));
-  if (next !== text) host.write(url, next);
+  if (calls.length) host.write(url, withCalls(text, calls));
 }
 
 module.exports = { availableSignal };
