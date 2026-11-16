@@ -7,7 +7,7 @@
  * handler nobody drops stays attached to a tag that will be reused.
  */
 import assert from 'node:assert/strict';
-import { before, describe, it } from 'node:test';
+import { afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, render, settle } from '@ng-native/testing';
@@ -35,6 +35,7 @@ let mod: Record<string, unknown>;
 before(async () => {
   mod = await compileFixture('fixtures/gesture.ts');
 });
+afterEach(cleanup);
 
 async function boot(heard?: InteractionEvent[], root = 'Draggable') {
   const attached: Attached[] = [];
@@ -71,7 +72,6 @@ describe('native gesture', () => {
     assert.equal(attached.length, 1);
     assert.equal(attached[0]!.target.tag, engine.tagOf(dragged().instanceHandle as never));
     assert.deepEqual(attached[0]!.gesture, { name: 'pan' });
-    cleanup();
   });
 
   it('drops the old gesture when the bound one is replaced', async () => {
@@ -83,7 +83,6 @@ describe('native gesture', () => {
 
     assert.equal(attached.length, 2, 'the new gesture attached');
     assert.equal(attached[0]!.detached, 1, 'and the old one dropped');
-    cleanup();
   });
 
   it('drops the gesture when the element goes away', async () => {
@@ -107,7 +106,6 @@ describe('native gesture, reported to interaction observers', () => {
   it('asks the backend for no reports when no observer is registered', async () => {
     const { attached } = await boot();
     assert.equal(attached[0]!.report, undefined);
-    cleanup();
   });
 
   it('reports a gesture that ended as the element it is attached to', async () => {
@@ -130,7 +128,6 @@ describe('native gesture, reported to interaction observers', () => {
       source: 'touch',
     });
     assert.equal(typeof timestamp, 'number');
-    cleanup();
   });
 
   it('names the component the gesture is attached inside', async () => {
@@ -140,7 +137,6 @@ describe('native gesture, reported to interaction observers', () => {
     attached[0]!.report!(tap);
 
     assert.equal(heard[0]!.component, 'x-draggable', 'as a pressed control names its component');
-    cleanup();
   });
 
   it('gives a tap the text inside the element, as a pressed control has', async () => {
@@ -152,7 +148,6 @@ describe('native gesture, reported to interaction observers', () => {
     assert.equal(heard[0]!.type, 'click');
     assert.equal(heard[0]!.text, 'Open draft');
     assert.equal(heard[0]!.pageX, 20);
-    cleanup();
   });
 
   it('reports nothing for a gesture the observers do not hear about', async () => {
@@ -162,7 +157,6 @@ describe('native gesture, reported to interaction observers', () => {
     attached[0]!.report!({ handlerName: 'HoverGestureHandler', end: { handlerTag: 3 } });
 
     assert.deepEqual(heard, []);
-    cleanup();
   });
 
   it('keeps an element out with trackGesture, and lets it back in when bound to nothing', async () => {
@@ -180,6 +174,5 @@ describe('native gesture, reported to interaction observers', () => {
     await settle();
     attached[2]!.report!(pan);
     assert.equal(heard.length, 1, 'unbound to a value, it takes its default of true');
-    cleanup();
   });
 });

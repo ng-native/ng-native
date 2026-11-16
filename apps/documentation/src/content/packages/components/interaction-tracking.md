@@ -105,14 +105,14 @@ A native gesture attached with `[gesture]` from `@ng-native/components/gestures`
 ends successfully, once, after its own `onEnd`. A gesture that fails or is cancelled, such as a pan
 a scroll view took over, reports nothing, and nothing is reported while it moves.
 
-| Gesture                             | `type`                                                                                                                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Gesture.Tap()`                     | `click`, with `pageX`, `pageY`, `locationX`, `locationY` and the `text` inside the element.                                                            |
-| `Gesture.LongPress()`               | `long-press`, with the same.                                                                                                                           |
-| `Gesture.Fling()`                   | `swipe`, with the `direction` it was set to, or the way the finger moved when set to several, and the `distance` the finger moved.                     |
-| `Gesture.Pan()`                     | `swipe` when released at `SWIPE_VELOCITY` or faster, otherwise `gesture`. Either way with `direction` and `distance`, in points from where it started. |
-| `Gesture.Pinch()`                   | `gesture`, with the `scale` it ended at.                                                                                                               |
-| `Gesture.Rotation()` and the others | `gesture`.                                                                                                                                             |
+| Gesture                             | `type`                                                                                                                                                                                                |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Gesture.Tap()`                     | `click`, with `pageX`, `pageY`, `locationX`, `locationY` and the `text` inside the element.                                                                                                           |
+| `Gesture.LongPress()`               | `long-press`, with the same.                                                                                                                                                                          |
+| `Gesture.Fling()`                   | `swipe`, with the `direction` it was set to, or the way the finger moved when set to several, and the `distance` the finger moved.                                                                    |
+| `Gesture.Pan()`                     | `swipe` when released at `SWIPE_VELOCITY` or faster, otherwise `gesture`. Either way with `distance`, in points from where it started, and `direction`, except for a pan that ended where it started. |
+| `Gesture.Pinch()`                   | `gesture`, with the `scale` it ended at.                                                                                                                                                              |
+| `Gesture.Rotation()` and the others | `gesture`.                                                                                                                                                                                            |
 
 Every such event carries `gesture`, the builder's name: `tap`, `long-press`, `fling`, `pan`,
 `pinch`, `rotation`, `manual` and so on, so a tap gesture can be told from a pressed control. The
