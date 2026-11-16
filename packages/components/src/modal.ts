@@ -97,8 +97,8 @@ export class Modal extends ViewBase {
   readonly hardwareAccelerated = input(undefined, { transform: optionalBoolean });
 
   /**
-   * The element the modal points at. With one, it shows as a popover at the element on macOS; iOS,
-   * iPadOS included, and Android present it as they would without one. Committed as the react tag
+   * The element the modal points at. With one, it shows as a popover at the element on macOS; on
+   * every other OS, iPadOS included, it shows as it would without one. Committed as the react tag
    * of the element's view.
    */
   readonly anchor = input<ModalAnchor>();
