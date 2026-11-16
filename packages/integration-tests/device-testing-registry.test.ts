@@ -180,3 +180,154 @@ exports.testShared = shared;
     }
   });
 });
+
+describe('vi.mock on a device, at its edges', () => {
+  const vi: Record<string, unknown> & { fn: () => () => string } = {
+    fn: () => () => 'auto',
+  };
+  installMocking(vi as never);
+  const viOf = () => vi as unknown as Record<string, (...args: unknown[]) => unknown>;
+
+  it('gives vi.hoisted its value in a file that mocks nothing', async () => {
+    await prepareMocks({}, 400, () => assert.fail('nothing to hear'));
+    assert.equal(
+      viOf()['hoisted']!(() => 42),
+      42,
+    );
+    restoreMocks();
+  });
+
+  it('runs a helper again that first ran while registration was closed', async () => {
+    // A helper such as `export const test = base.extend({})`, first run in the pass that only
+    // hears what the file mocks, holds what the closed gate gave it unless it runs again.
+    scope['__gate'] = { closed: false };
+    try {
+      const vitestRuntime = source(
+        410,
+        [],
+        'node_modules/.cache/ng-native-device-testing/vitest-4.0.0.cjs',
+        'exports.test = { extend: () => (globalThis.__gate.closed ? "quiet" : "real") };',
+      );
+      const fixtures = source(
+        411,
+        [410],
+        'src/fixtures.ts',
+        'exports.test = require(_dependencyMap[0]).test.extend();',
+      );
+      const dep = source(412, [], 'src/dep.ts', exporting('real'));
+      const file = source(
+        413,
+        [411, 412],
+        'src/fixture.device.ts',
+        'exports.test = require(_dependencyMap[0]).test; require(_dependencyMap[1]);',
+      );
+      const sent = payload(
+        413,
+        [
+          { id: 410, code: vitestRuntime },
+          { id: 411, code: fixtures },
+          { id: 412, code: dep },
+          { id: 413, code: file },
+        ],
+        { mocks: { './dep.ts': 412 } },
+      );
+      define(sent);
+      metroRequire(410);
+      await prepareMocks(sent.mocks, sent.entry, () => {
+        (scope['__gate'] as { closed: boolean }).closed = true;
+        try {
+          viOf()['mock']!('./dep.ts', () => ({ value: 'mocked' }));
+          rerun(413);
+        } finally {
+          (scope['__gate'] as { closed: boolean }).closed = false;
+        }
+      });
+      assert.equal((rerun(413) as { test: string }).test, 'real');
+    } finally {
+      restoreMocks();
+      delete scope['__gate'];
+    }
+  });
+
+  it('keeps a mock out that an async factory finishes after vi.doUnmock', async () => {
+    define(payload(420, [{ id: 420, code: source(420, [], 'src/late.ts', exporting('real')) }]));
+    await prepareMocks({ './late.ts': 420 }, 420, () => {});
+    let finish!: () => void;
+    const finished = new Promise<void>((resolve) => (finish = resolve));
+    viOf()['doMock']!('./late.ts', async () => {
+      await finished;
+      return { value: 'mocked' };
+    });
+    viOf()['doUnmock']!('./late.ts');
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    try {
+      assert.equal((metroRequire(420) as { value: string }).value, 'real');
+    } finally {
+      restoreMocks();
+    }
+  });
+
+  it('automocks an array export as an empty array', async () => {
+    const list = source(430, [], 'src/list.ts', 'exports.items = [1, 2, 3];');
+    const sent = payload(
+      431,
+      [
+        { id: 430, code: list },
+        {
+          id: 431,
+          code: source(
+            431,
+            [430],
+            'src/list.device.ts',
+            'exports.items = require(_dependencyMap[0]).items;',
+          ),
+        },
+      ],
+      { mocks: { './list.ts': 430 } },
+    );
+    define(sent);
+    try {
+      await prepareMocks(sent.mocks, sent.entry, () => viOf()['mock']!('./list.ts'));
+      const items = (rerun(431) as { items: unknown }).items;
+      assert.ok(Array.isArray(items));
+      assert.deepEqual(
+        (items as number[]).map((n) => n),
+        [],
+      );
+    } finally {
+      restoreMocks();
+    }
+  });
+
+  it('gives vi.importMock a mocked module where the file did not mock it', async () => {
+    const sent = payload(440, [
+      {
+        id: 440,
+        code: source(
+          440,
+          [],
+          'src/tools.ts',
+          'exports.add = (a, b) => a + b; exports.nested = { run: () => "real" };',
+        ),
+      },
+    ]);
+    define(sent);
+    try {
+      await prepareMocks({ './tools.ts': 440 }, 440, () => {});
+      const mock = (await viOf()['importMock']!('./tools.ts')) as {
+        add: () => string;
+        nested: { run: () => string };
+      };
+      assert.equal(mock.add(), 'auto');
+      assert.equal(mock.nested.run(), 'auto');
+      assert.equal(
+        (metroRequire(440) as { nested: { run: () => string } }).nested.run(),
+        'real',
+        'the module itself is left as it is',
+      );
+    } finally {
+      restoreMocks();
+    }
+  });
+});

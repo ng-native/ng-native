@@ -91,6 +91,8 @@ async function rootComponent(app: MountResult): Promise<DeviceTestHost> {
 interface Request {
   __vitest_worker_request__: true;
   type: 'start' | 'run' | 'collect' | 'stop' | 'cancel';
+  /** The pool's id for the request, which the answer to it carries back. */
+  deviceRequest?: number;
   context?: RunRequest['context'] & { config?: Record<string, unknown> };
   files?: RunRequest['files'];
 }
@@ -116,8 +118,14 @@ async function serve(url: string, status: (text: string) => void): Promise<void>
     }
     reply = null;
     if (!request) continue;
+    const { deviceRequest } = request;
     const respond = (type: string, error?: unknown) =>
-      (reply = { __vitest_worker_response__: true, type, ...(error ? { error } : {}) });
+      (reply = {
+        __vitest_worker_response__: true,
+        type,
+        deviceRequest,
+        ...(error ? { error } : {}),
+      });
     try {
       if (request.type === 'start') {
         config = request.context?.config ?? {};

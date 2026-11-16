@@ -106,7 +106,7 @@ async function setup(options: Parameters<typeof devicePool>[0] = {}) {
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src/a.device.ts'), "vi.mock('./dep.ts', () => ({}));\n");
   writeFileSync(join(root, 'src/dep.ts'), 'export const x = 1;\n');
-  const served = {
+  const served: { bundle: string; hold?: Promise<void> } = {
     bundle: [
       define(10, [11, 12], 'src/a.device.ts'),
       define(11, [], 'src/dep.ts', 'exports.x = 1;'),
@@ -114,8 +114,10 @@ async function setup(options: Parameters<typeof devicePool>[0] = {}) {
     ].join('\n'),
   };
   const metro: Server = createHttpServer((request, response) => {
-    if (request.url?.startsWith('/src/a.device.bundle')) response.end(served.bundle);
-    else response.writeHead(404).end('{"message":"not found"}');
+    void Promise.resolve(served.hold).then(() => {
+      if (request.url?.startsWith('/src/a.device.bundle')) response.end(served.bundle);
+      else response.writeHead(404).end('{"message":"not found"}');
+    });
   });
   await new Promise<void>((resolve) => metro.listen(0, '127.0.0.1', resolve));
   const metroPort = (metro.address() as { port: number }).port;
@@ -161,6 +163,27 @@ async function setup(options: Parameters<typeof devicePool>[0] = {}) {
     rmSync(root, { recursive: true, force: true });
   };
   return { root, served, app, worker, done, port };
+}
+
+/** A launcher whose apps a test ends by hand, as their processes would. */
+function fakeLauncher(crashReport?: () => string | undefined | Promise<string | undefined>) {
+  const launches: { exit: (how: string) => void; stopped: boolean }[] = [];
+  const launch = {
+    start: () => {
+      let exit!: (how: string) => void;
+      const exited = new Promise<string>((resolve) => (exit = resolve));
+      const launched = { exit, stopped: false };
+      launches.push(launched);
+      return {
+        exited,
+        stop: async () => {
+          launched.stopped = true;
+        },
+      };
+    },
+    ...(crashReport && { crashReport }),
+  };
+  return { launch, launches };
 }
 
 const request = (type: string, context: unknown = {}) => ({
@@ -248,7 +271,8 @@ describe('the device pool', () => {
     }
   });
 
-  it('fails the request an app owed when it relaunched, rather than waiting it out', async () => {
+  it('fails no request a quiet app owes when a second device connects', async () => {
+    // The same app on another simulator has the same platform and Metro: it is no relaunch.
     const run = await setup();
     try {
       const { worker, messages } = run.worker();
@@ -263,8 +287,7 @@ describe('the device pool', () => {
         .poll()
         .catch(() => {});
       await wait(50);
-      const [failed] = messages as { error?: Error }[];
-      assert.match(String(failed?.error?.message), /restarted during the run/);
+      assert.deepEqual(messages, []);
     } finally {
       await run.done();
     }
@@ -354,11 +377,17 @@ describe('the device pool', () => {
     }
   });
 
-  it('reads and writes snapshot files for the app, and nothing else', async () => {
+  it('reads and writes snapshot files for the app it runs, and nothing else', async () => {
     const run = await setup();
     try {
-      run.worker();
+      const { worker } = run.worker();
+      const starting = worker.start();
       const phone = run.app('one');
+      const first = phone.poll();
+      await starting;
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      await first;
       const snap = join(run.root, 'src/__snapshots__/a.device.ts.snap');
       await phone.post('/files', { op: 'write', path: snap, content: 'exports[`a`] = `1`;' });
       assert.deepEqual(await phone.post('/files', { op: 'read', path: snap }), {
@@ -366,12 +395,218 @@ describe('the device pool', () => {
       });
       await phone.post('/files', { op: 'remove', path: snap });
       assert.equal(existsSync(snap), false);
-      const refused = await phone.post('/files', { op: 'read', path: '/etc/passwd' });
-      assert.match(refused.error, /Not a snapshot file/);
+      assert.deepEqual(
+        await phone.post('/files', { op: 'read', path: test }),
+        { result: "vi.mock('./dep.ts', () => ({}));\n" },
+        'the test file it runs, which an inline snapshot is written into',
+      );
+      const refused = async (body: Record<string, unknown>, from = phone) =>
+        assert.match((await from.post('/files', body)).error, /Not a snapshot file/);
+      await refused({ op: 'read', path: '/etc/passwd' });
+      await refused({ op: 'write', path: join(run.root, 'src/dep.ts'), content: '' });
+      await refused({ op: 'write', path: join(tmpdir(), 'elsewhere.snap'), content: '' });
+      await refused({ op: 'read', path: join(run.root, 'src/../../elsewhere.snap') });
+      const linked = join(run.root, 'src/__linked__');
+      symlinkSync(tmpdir(), linked);
+      await refused({ op: 'write', path: join(linked, 'escape.snap'), content: '' });
+      await refused({ op: 'read', path: snap }, run.app('stranger'));
     } finally {
       await run.done();
     }
   });
+
+  it('answers a request it cannot read with a 400', async () => {
+    const run = await setup();
+    try {
+      run.worker();
+      const response = await Promise.race([
+        fetch(`http://127.0.0.1:${run.port}/files`, { method: 'POST', body: '{' }),
+        wait(1000).then(() => null),
+      ]);
+      assert.equal(response?.status, 400);
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('finds a mocked module that exists only as a platform file', async () => {
+    const run = await setup();
+    try {
+      writeFileSync(join(run.root, 'src/a.device.ts'), "vi.mock('./dep', () => ({}));\n");
+      rmSync(join(run.root, 'src/dep.ts'));
+      writeFileSync(join(run.root, 'src/dep.ios.ts'), 'export const x = 1;\n');
+      writeFileSync(join(run.root, 'src/dep.android.ts'), 'export const x = 2;\n');
+      run.served.bundle = run.served.bundle.replace('"src/dep.ts"', '"src/dep.ios.ts"');
+      const phone = run.app('one');
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const first = phone.poll();
+      await starting;
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      assert.deepEqual((await first).files[test].mocks, { './dep': 11 });
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('takes a reply only for the request it answers, and only once', async () => {
+    const run = await setup();
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      const first = phone.poll();
+      await starting;
+      worker.send(request('start') as never);
+      const asked = await first;
+      const reply = {
+        __vitest_worker_response__: true,
+        type: 'started',
+        deviceRequest: asked.deviceRequest,
+      };
+      const second = phone.poll({ reply });
+      await wait(20);
+      worker.send(request('cancel') as never);
+      await second;
+      // The same reply again, as the app sends it when a poll fails on the way back.
+      void phone.poll({ reply }).catch(() => {});
+      await wait(50);
+      assert.deepEqual(
+        (messages as { type?: string }[]).map((message) => message.type),
+        ['started'],
+        'the repeat answers nothing',
+      );
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('keeps an idle app on another device when a second one connects', async () => {
+    const run = await setup();
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const one = run.app('one');
+      void one.poll().catch(() => {});
+      await starting;
+      // The same app on a second simulator: the same platform and the same Metro.
+      void run
+        .app('two')
+        .poll()
+        .catch(() => {});
+      await wait(20);
+      const next = one.poll();
+      await wait(20);
+      worker.send(request('cancel') as never);
+      const asked = await Promise.race([next, wait(1000).then(() => ({ type: 'nothing' }))]);
+      assert.equal(asked?.type, 'cancel', 'the worker still has the first app');
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('lets go of its claim when the app it launched exits before it connects', async () => {
+    const { launch, launches } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const first = run.worker().worker.start();
+      await wait(20);
+      launches[0]!.exit('status 1');
+      await assert.rejects(first, /exited before it connected/);
+      void run
+        .app('one')
+        .poll()
+        .catch(() => {});
+      await wait(50);
+      await run.worker().worker.start();
+      assert.equal(launches.length, 1, 'the next worker found the app free, and launched none');
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('hands no other worker the app it launched as it stops', async () => {
+    const { launch } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const a = run.worker();
+      const startingA = a.worker.start();
+      void run
+        .app('one')
+        .poll()
+        .catch(() => {});
+      await startingA;
+      const b = run.worker();
+      const startingB = b.worker.start();
+      await wait(20);
+      await a.worker.stop();
+      const two = run.app('two').poll();
+      await startingB;
+      b.worker.send(request('cancel') as never);
+      const asked = await Promise.race([two, wait(1000).then(() => ({ type: 'nothing' }))]);
+      assert.equal(asked?.type, 'cancel', 'the app B launched, not the one A was stopping');
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('sends a file to the app that replaced one that exited while Metro bundled it', async () => {
+    const { launch, launches } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      void run
+        .app('one')
+        .poll()
+        .catch(() => {});
+      await starting;
+      let release!: () => void;
+      run.served.hold = new Promise<void>((resolve) => (release = resolve));
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      await wait(20);
+      launches[0]!.exit('status 0');
+      await wait(20);
+      const two = run.app('two').poll();
+      await wait(20);
+      release();
+      const asked = await Promise.race([two, wait(1000).then(() => ({ type: 'nothing' }))]);
+      assert.equal(asked?.type, 'run');
+    } finally {
+      await run.done();
+    }
+  });
+
+  for (const [how, crashReport] of [
+    ['rejects', () => Promise.reject(new Error('no reports'))],
+    [
+      'throws',
+      () => {
+        throw new Error('no reports');
+      },
+    ],
+  ] as const) {
+    it(`fails the file a lost app was running when reading its crash report ${how}`, async () => {
+      const { launch, launches } = fakeLauncher(crashReport);
+      const run = await setup({ launch });
+      try {
+        const { worker, messages } = run.worker();
+        const starting = worker.start();
+        const first = run.app('one').poll();
+        await starting;
+        worker.send(request('cancel') as never);
+        await first;
+        launches[0]!.exit('signal SIGKILL');
+        await wait(50);
+        const [failed] = messages as { error?: Error }[];
+        assert.match(String(failed?.error?.message), /The app exited \(signal SIGKILL\)/);
+      } finally {
+        await run.done();
+      }
+    });
+  }
 
   it('fails at once when its port is taken, rather than waiting on an app it cannot hear', async () => {
     const blocker = createServer();
@@ -407,9 +642,19 @@ describe('withDeviceTests', () => {
         resolver: { resolveRequest: Function };
         transformer: Record<string, unknown>;
       };
-      assert.match(
-        resolveOf(config, '@ng-native/testing/device/host').filePath,
-        /host-disabled\.ts$/,
+      const stub = resolveOf(config, '@ng-native/testing/device/host').filePath as string;
+      assert.match(stub, /host-disabled\.c?[jt]s$/);
+      assert.ok(existsSync(stub), stub);
+      // The published package holds only what its manifest lists: a stub outside it is a missing
+      // file in every app that installs the package.
+      const root = dirname(require.resolve('@ng-native/testing/package.json'));
+      const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+        files: string[];
+      };
+      const relative = stub.slice(root.length + 1);
+      assert.ok(
+        manifest.files.some((entry) => relative.startsWith(`${entry}/`)),
+        `${relative} is in the published files`,
       );
       assert.deepEqual(resolveOf(config, 'vitest'), { type: 'empty' }, 'Vitest left alone');
       assert.equal(config.transformer.dynamicDepsInPackages, undefined);
@@ -418,6 +663,62 @@ describe('withDeviceTests', () => {
       else process.env['EXPO_PUBLIC_DEVICE_TESTS'] = before;
     }
   });
+
+  for (const [vitest, instrumenter] of [
+    ['4.0.8', 'istanbul-lib-instrument'],
+    ['5.1.0', '@vitest/istanbul-lib-instrument'],
+  ] as const) {
+    it(`instruments with the package Vitest ${vitest}'s istanbul provider uses`, () => {
+      // Vitest 4's provider depends on istanbul-lib-instrument, Vitest 5's on the scoped fork.
+      const project = mkdtempSync(join(tmpdir(), 'ng-native-coverage-'));
+      const before = process.env['NG_NATIVE_DEVICE_TESTS_TRANSFORMER'];
+      const scope = globalThis as { __instrumented?: string[] };
+      try {
+        const provider = join(project, 'node_modules/@vitest/coverage-istanbul');
+        const own = join(provider, 'node_modules', instrumenter);
+        mkdirSync(own, { recursive: true });
+        writeFileSync(
+          join(provider, 'package.json'),
+          JSON.stringify({
+            name: '@vitest/coverage-istanbul',
+            version: vitest,
+            dependencies: { [instrumenter]: '*' },
+          }),
+        );
+        writeFileSync(join(own, 'package.json'), JSON.stringify({ name: instrumenter }));
+        writeFileSync(
+          join(own, 'index.js'),
+          'exports.programVisitor = (_t, file) => ({ enter() { (globalThis.__instrumented ??= []).push(file); }, exit() {} });',
+        );
+        mkdirSync(join(project, 'node_modules/@babel'), { recursive: true });
+        symlinkSync(
+          dirname(createRequire(import.meta.url).resolve('@babel/core/package.json')),
+          join(project, 'node_modules/@babel/core'),
+        );
+        const upstream = join(project, 'upstream.cjs');
+        writeFileSync(
+          upstream,
+          'module.exports = { transform: ({ src }) => ({ ast: require("@babel/core").parseSync(src, { sourceType: "module" }) }) };',
+        );
+        process.env['NG_NATIVE_DEVICE_TESTS_TRANSFORMER'] = upstream;
+        const load = createRequire(import.meta.url);
+        const path = load.resolve('@ng-native/testing/device/transformer');
+        delete load.cache[path];
+        const transformer = load(path) as { transform(params: object): unknown };
+        transformer.transform({
+          filename: 'src/a.ts',
+          src: 'export const a = 1;',
+          options: { projectRoot: project },
+        });
+        assert.deepEqual(scope.__instrumented, [join(project, 'src/a.ts')]);
+      } finally {
+        delete scope.__instrumented;
+        if (before === undefined) delete process.env['NG_NATIVE_DEVICE_TESTS_TRANSFORMER'];
+        else process.env['NG_NATIVE_DEVICE_TESTS_TRANSFORMER'] = before;
+        rmSync(project, { recursive: true, force: true });
+      }
+    });
+  }
 
   it('leaves esbuild out of what an app installs with @ng-native/testing', () => {
     // pnpm stops an app's install on a dependency's build script it was not told to allow, and

@@ -68,7 +68,12 @@ describe('a Vitest run with an os', () => {
   after(() => rmSync(root, { recursive: true, force: true }));
 
   /** Runs a test that passes when `./storage` is `expected` and the engine renders as `os`. */
-  async function run(expected: string, platform: string, options?: Parameters<typeof ngNative>[0]) {
+  async function run(
+    expected: string,
+    platform: string,
+    options?: Parameters<typeof ngNative>[0],
+    extensions?: string[],
+  ) {
     writeFileSync(
       path.join(root, 'os.test.ts'),
       "import { expect, it } from 'vitest';\n" +
@@ -80,7 +85,7 @@ describe('a Vitest run with an os', () => {
     const vitest = await createVitest(
       'test',
       { root, config: false, watch: false, reporters: [], include: ['os.test.ts'] },
-      { plugins: [ngNative(options)] },
+      { plugins: [ngNative(options)], ...(extensions && { resolve: { extensions } }) },
     );
     try {
       await vitest.start();
@@ -114,6 +119,10 @@ describe('a Vitest run with an os', () => {
     } finally {
       rmSync(path.join(root, 'app.json'), { force: true });
     }
+  });
+
+  it("resolves the platform file ahead of an app's own extensions", async () => {
+    assert.equal(await run('macos', 'macos', { os: 'macos' }, ['.ts', '.js', '.custom']), 0);
   });
 
   it('resolves the .ios file by default', async () => {

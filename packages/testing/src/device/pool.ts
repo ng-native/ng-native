@@ -143,9 +143,11 @@ class DeviceWorker implements PoolWorker {
   }
 
   async stop(): Promise<void> {
-    if (this.session) this.bridge.release(this.session);
-    this.session = null;
     const launched = this.launched;
+    // An app this worker launched is about to stop: no other worker may be handed it.
+    if (this.session && launched) this.bridge.drop(this.session);
+    else if (this.session) this.bridge.release(this.session);
+    this.session = null;
     this.launched = null;
     // An app this pool started goes with the run; one opened by hand stays for the next.
     await launched?.stop();
@@ -158,10 +160,15 @@ class DeviceWorker implements PoolWorker {
    */
   private async connect(): Promise<void> {
     const { launch } = this.options;
-    const claim = (timeout: number) =>
-      this.bridge.claim((message) => this.receive(message), this.options.platform, timeout);
+    const claim = (signal?: AbortSignal) =>
+      this.bridge.claim((message) => this.receive(message), {
+        platform: this.options.platform,
+        timeout: this.options.connectTimeout ?? 60_000,
+        root: this.projectRoot,
+        signal,
+      });
     if (!launch || this.bridge.hasFree(this.options.platform)) {
-      this.session = await claim(this.options.connectTimeout ?? 60_000);
+      this.session = await claim();
       return;
     }
     this.launchedAt = Date.now();
@@ -173,19 +180,21 @@ class DeviceWorker implements PoolWorker {
     this.launched = app;
     const early = app.exited.then((how) => {
       const error = new Error(`The app exited before it connected (${how}).`);
-      return Promise.resolve(launch.crashReport?.(this.launchedAt)).then((report) => {
+      return crashReportOf(launch, this.launchedAt).then((report) => {
         if (report) error.message += `\n${report}`;
         throw error;
       });
     });
-    early.catch(() => {});
-    this.session = await Promise.race([claim(this.options.connectTimeout ?? 60_000), early]);
+    // An app that ended takes its claim with it: a claim left waiting would take the next app.
+    const claiming = new AbortController();
+    early.catch(() => claiming.abort());
+    this.session = await Promise.race([claim(claiming.signal), early]);
     // From here a process that ends is a lost app at once, not after the silence is waited out.
     void app.exited.then((how) => {
       const session = this.session;
       if (this.launched !== app || !session) return;
-      if (session.outstanding > 0) this.bridge.lose(session, `The app exited (${how}).`);
-      else this.ready = this.replace();
+      if (session.owed.size > 0) this.bridge.lose(session, `The app exited (${how}).`);
+      else this.relaunch();
     });
   }
 
@@ -198,11 +207,20 @@ class DeviceWorker implements PoolWorker {
       return;
     }
     // The relaunch starts at once, and the file fails with the crash report once it is found.
-    this.ready = this.replace();
-    void Promise.resolve(launch.crashReport?.(this.launchedAt)).then((report) => {
+    this.relaunch();
+    void crashReportOf(launch, this.launchedAt).then((report) => {
       if (report) error.message += `\n${report}`;
       this.events.emit('message', message);
     });
+  }
+
+  /**
+   * Start a fresh app, which the next request waits for. A relaunch that fails fails that request;
+   * with none to come it is no unhandled rejection.
+   */
+  private relaunch(): void {
+    this.ready = this.replace();
+    this.ready.catch(() => {});
   }
 
   /** The app is gone: a fresh one, on fresh state, for the files that remain. */
@@ -243,9 +261,12 @@ class DeviceWorker implements PoolWorker {
         }
         // The bundles are fetched before the request goes: a Vitest request is answered in order,
         // so nothing else is sent meanwhile.
-        return this.payloads(session, request.context?.files ?? []).then((files) =>
-          this.bridge.send(session, { ...request, files }),
-        );
+        return this.payloads(session, request.context?.files ?? []).then((files) => {
+          // The app went while Metro bundled, and nothing was sent it: the app that replaces it
+          // is sent the request instead.
+          if (this.session !== session) this.send(message);
+          else this.bridge.send(session, { ...request, files });
+        });
       },
       (error: unknown) =>
         this.events.emit('message', {
@@ -316,7 +337,7 @@ async function payload(
     entry: entry.id,
     modules: sent,
     changed,
-    mocks: mockIds(filepath, modules, projectRoot),
+    mocks: mockIds(filepath, modules, projectRoot, session.platform),
     url,
   };
 }
@@ -326,6 +347,7 @@ function mockIds(
   filepath: string,
   modules: BundleModule[],
   projectRoot: string,
+  platform: string,
 ): Record<string, number> {
   const ids: Record<string, number> = {};
   let source: string;
@@ -340,7 +362,7 @@ function mockIds(
     modules.map(({ id, name }) => [real(path.resolve(projectRoot, name)), id]),
   );
   for (const specifier of mockedSpecifiers(source)) {
-    for (const candidate of candidates(filepath, specifier)) {
+    for (const candidate of candidates(filepath, specifier, platform)) {
       const id = byPath.get(real(candidate));
       if (id !== undefined) {
         ids[specifier] = id;
@@ -353,15 +375,18 @@ function mockIds(
 
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 
-/** The files a specifier may name, from the file that names it, in the order a resolver tries. */
-function candidates(from: string, specifier: string): string[] {
+/**
+ * The files a specifier may name, from the file that names it, in the order Metro's resolver tries
+ * them: the platform's own file (`dep.ios.ts`), then `.native`, then the plain one.
+ */
+function candidates(from: string, specifier: string, platform: string): string[] {
   if (specifier.startsWith('.') || path.isAbsolute(specifier)) {
     const base = path.resolve(path.dirname(from), specifier);
-    return [
-      base,
-      ...EXTENSIONS.map((extension) => base + extension),
-      ...EXTENSIONS.map((extension) => path.join(base, `index${extension}`)),
-    ];
+    const withExtensions = (stem: string) =>
+      [`.${platform}`, '.native', ''].flatMap((variant) =>
+        EXTENSIONS.map((extension) => stem + variant + extension),
+      );
+    return [base, ...withExtensions(base), ...withExtensions(path.join(base, 'index'))];
   }
   // A package: the entries its manifest names, as Metro reads them first.
   const require = createRequire(from);
@@ -444,7 +469,14 @@ interface Session {
   /** Where the next request goes: the app's poll, held open. */
   waiting: ServerResponse | null;
   queue: { type?: string; [key: string]: unknown }[];
-  outstanding: number;
+  /** The requests the app was sent and has not answered, by the id each was sent with. */
+  owed: Set<number>;
+  /** The id the next request is sent with. */
+  nextRequest: number;
+  /** The project of the worker that has the app, which its snapshot files are in. */
+  root: string | null;
+  /** The test files the app was sent to run, which an inline snapshot is written into. */
+  files: Set<string>;
   lastType: string | undefined;
   lastSeen: number;
   /** The worker that has the app, and where its messages go. */
@@ -529,14 +561,25 @@ class Bridge {
     }
   }
 
-  /** Wait for an app no other worker has, on the platform asked for, and take it. */
+  /**
+   * Wait for an app no other worker has, on the platform asked for, and take it, for the worker
+   * whose project is `root`. An abort of `signal` gives up the wait.
+   */
   claim(
     claimant: (message: unknown) => void,
-    platform: string | undefined,
-    timeout: number,
+    {
+      platform,
+      timeout,
+      root,
+      signal,
+    }: { platform?: string; timeout: number; root: string; signal?: AbortSignal },
   ): Promise<Session> {
     if (this.failure) return Promise.reject(this.listenError(this.failure));
     return new Promise((resolve, reject) => {
+      const abort = () => {
+        cleanup();
+        reject(new Error('The claim was given up.'));
+      };
       const fail = (error: Error) => {
         cleanup();
         reject(this.listenError(error));
@@ -556,15 +599,23 @@ class Bridge {
         take: (session: Session) => {
           cleanup();
           session.claimant = claimant;
+          session.root = root;
+          session.files.clear();
           resolve(session);
         },
       };
       const cleanup = () => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
         this.onFailure.delete(fail);
         const index = this.waiters.indexOf(waiter);
         if (index !== -1) this.waiters.splice(index, 1);
       };
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      signal?.addEventListener('abort', abort);
       this.onFailure.add(fail);
       this.waiters.push(waiter);
       this.offer();
@@ -583,12 +634,17 @@ class Bridge {
   drop(session: Session): void {
     this.unwatch(session);
     session.waiting?.end('null');
+    session.waiting = null;
     session.claimant = null;
+    session.root = null;
+    session.files.clear();
     for (const [id, one] of this.sessions) if (one === session) this.sessions.delete(id);
   }
 
   release(session: Session): void {
     session.claimant = null;
+    session.root = null;
+    session.files.clear();
     this.offer();
   }
 
@@ -606,6 +662,10 @@ class Bridge {
   }
 
   send(session: Session, message: { type?: string; [key: string]: unknown }): void {
+    const files = message['files'];
+    if (files && typeof files === 'object') {
+      for (const file of Object.keys(files)) session.files.add(path.resolve(file));
+    }
     session.queue.push(message);
     this.flush(session);
   }
@@ -616,9 +676,11 @@ class Bridge {
     session.waiting = null;
     response.setHeader('content-type', 'application/json');
     const message = session.queue.shift()!;
-    response.end(JSON.stringify(message));
+    // The app answers with the id, so an answer is matched to its request, and counted once.
+    const id = session.nextRequest++;
+    response.end(JSON.stringify({ ...message, deviceRequest: id }));
     session.lastType = message.type;
-    session.outstanding++;
+    session.owed.add(id);
     this.watch(session);
   }
 
@@ -655,8 +717,8 @@ class Bridge {
 
   private abandon(session: Session, reason: string): void {
     this.unwatch(session);
-    if (session.outstanding === 0) return;
-    session.outstanding = 0;
+    if (session.owed.size === 0) return;
+    session.owed.clear();
     session.claimant?.({
       __vitest_worker_response__: true,
       type: session.lastType === 'start' ? 'started' : 'testfileFinished',
@@ -684,12 +746,18 @@ class Bridge {
   private async receive(request: IncomingMessage, response: ServerResponse): Promise<void> {
     let body = '';
     for await (const chunk of request) body += chunk;
-    const message = JSON.parse(body || 'null') as Record<string, unknown> | null;
+    let message: Record<string, unknown> | null;
+    try {
+      message = JSON.parse(body || 'null') as Record<string, unknown> | null;
+    } catch {
+      response.writeHead(400).end();
+      return;
+    }
     const session = this.sessions.get(String(message?.['session'] ?? ''));
     if (session) session.lastSeen = Date.now();
     if (request.url === '/alive') response.end();
     else if (request.url === '/rpc') this.call(session, message, response);
-    else if (request.url === '/files') this.files(message, response);
+    else if (request.url === '/files') this.files(session, message, response);
     else this.poll(message as unknown as Poll, response);
   }
 
@@ -712,11 +780,18 @@ class Bridge {
     session.claimant(coverageFile(restoreLinks(call)));
   }
 
-  /** Snapshot files, which the app reads and writes through here. */
-  private files(message: Record<string, unknown> | null, response: ServerResponse): void {
+  /**
+   * Snapshot files, which the app reads and writes through here: only an app a worker has, and
+   * only its project's `.snap` files and the test files it was sent.
+   */
+  private files(
+    session: Session | undefined,
+    message: Record<string, unknown> | null,
+    response: ServerResponse,
+  ): void {
     response.setHeader('content-type', 'application/json');
     try {
-      response.end(JSON.stringify({ result: snapshotFile(message ?? {}) }));
+      response.end(JSON.stringify({ result: snapshotFile(session, message ?? {}) }));
     } catch (error) {
       response.end(JSON.stringify({ error: String(error) }));
     }
@@ -739,36 +814,36 @@ class Bridge {
     // An older poll still held is one the app has given up on.
     session.waiting?.end('null');
     session.waiting = response;
+    // A poll whose connection closes is not one a request can go on: the app went with it.
+    const held = session;
+    response.on('close', () => {
+      if (held.waiting === response) held.waiting = null;
+    });
     this.unwatch(session);
-    // An answer only counts when it answers a request the app was sent.
-    if (poll.reply && session.outstanding > 0) {
-      session.outstanding--;
-      session.claimant?.(poll.reply);
+    // An answer counts only for a request the app was sent and has not answered: a repeat of an
+    // answer, as a poll the app sends again carries, answers nothing.
+    const reply = poll.reply as { deviceRequest?: unknown } | null;
+    if (
+      reply &&
+      typeof reply.deviceRequest === 'number' &&
+      session.owed.delete(reply.deviceRequest)
+    ) {
+      const { deviceRequest: _, ...answer } = reply;
+      session.claimant?.(answer);
     }
     this.flush(session);
     this.offer();
   }
 
   /**
-   * A new launch of an app. If a worker had the same app (the same platform and Metro) and it went
-   * quiet with an answer owed, the app has reloaded or crashed and reopened: what it was asked
-   * went with it, so that request fails now rather than waiting out the silence.
+   * A new launch of an app. The same platform and Metro is no sign it is an earlier launch come
+   * back: a second simulator running the app looks the same, and nothing in a poll names the
+   * device. An app that reloads with an answer owed fails as one that went quiet does, after the
+   * silence; an earlier launch no worker has and with no poll held is forgotten.
    */
   private open(poll: Poll): Session {
     for (const [id, old] of this.sessions) {
-      const same = old.platform === poll.platform && old.script === poll.script;
-      if (!same) continue;
-      if (old.outstanding > 0 && Date.now() - old.lastSeen > RELAUNCH_QUIET_MS) {
-        this.abandon(
-          old,
-          'The app restarted during the run (a reload, or a crash): see the Metro log.',
-        );
-      }
-      if (old.outstanding === 0) {
-        old.waiting?.end('null');
-        this.unwatch(old);
-        this.sessions.delete(id);
-      }
+      if (!old.claimant && !old.waiting) this.sessions.delete(id);
     }
     const session: Session = {
       id: poll.session,
@@ -778,7 +853,10 @@ class Bridge {
       hashes: [],
       waiting: null,
       queue: [],
-      outstanding: 0,
+      owed: new Set(),
+      nextRequest: 1,
+      root: null,
+      files: new Set(),
       lastType: undefined,
       lastSeen: Date.now(),
       claimant: null,
@@ -789,17 +867,18 @@ class Bridge {
   }
 }
 
-/** Longer than an app's heartbeat: the old launch has said nothing since the new one began. */
-const RELAUNCH_QUIET_MS = 2500;
-
 /**
  * Read, write or remove a snapshot file, for the app. Only a `.snap` file, or a test file itself,
  * which an inline snapshot is written into.
  */
-function snapshotFile(message: Record<string, unknown>): string | null {
+function snapshotFile(
+  session: Session | undefined,
+  message: Record<string, unknown>,
+): string | null {
   const file = String(message['path'] ?? '');
-  const allowed = /\.snap$/.test(file) || /\.[cm]?[jt]sx?$/.test(file);
-  if (!path.isAbsolute(file) || !allowed) throw new Error(`Not a snapshot file: ${file}`);
+  if (!session?.claimant || !session.root || !path.isAbsolute(file) || !permitted(session, file)) {
+    throw new Error(`Not a snapshot file: ${file}`);
+  }
   switch (message['op']) {
     case 'read':
       return existsSync(file) ? readFileSync(file, 'utf8') : null;
@@ -812,6 +891,40 @@ function snapshotFile(message: Record<string, unknown>): string | null {
       return null;
     default:
       throw new Error(`Unknown snapshot file operation ${String(message['op'])}`);
+  }
+}
+
+/**
+ * Whether the app may touch `file`: a test file it was sent, or a `.snap` file in its worker's
+ * project and outside its packages, whichever way a symlink on the path points.
+ */
+function permitted(session: Session, file: string): boolean {
+  const resolved = path.resolve(file);
+  if (session.files.has(resolved)) return true;
+  if (!/\.snap$/.test(resolved) || resolved.split(path.sep).includes('node_modules')) return false;
+  return inside(session.root!, resolved) && inside(real(session.root!), realPath(resolved));
+}
+
+function inside(root: string, file: string): boolean {
+  const relative = path.relative(root, file);
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/** `file`'s real path, through its nearest directory that exists: a file to write may not yet. */
+function realPath(file: string): string {
+  let existing = file;
+  while (!existsSync(existing) && path.dirname(existing) !== existing) {
+    existing = path.dirname(existing);
+  }
+  return path.join(real(existing), path.relative(existing, file));
+}
+
+/** What a launcher can say of a lost app's crash: nothing, rather than a failure of its own. */
+async function crashReportOf(launch: AppLauncher, since: number): Promise<string | undefined> {
+  try {
+    return await launch.crashReport?.(since);
+  } catch {
+    return undefined;
   }
 }
 

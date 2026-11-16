@@ -36,6 +36,10 @@ const originals = new Map<number, MetroModule>();
 /** What each mocked module's real exports are, for `importOriginal` and `vi.importActual`. */
 const actuals = new Map<number, unknown>();
 const mocked = new Map<number, unknown>();
+/** The install each module's mock is from: one that finishes after its mock went is dropped. */
+const installing = new Map<number, symbol>();
+/** Where Metro bundles the app's Vitest: its runtime, which the gate in it closes and opens. */
+const VITEST_RUNTIME = /ng-native-device-testing\/vitest-[^/]*\.cjs$/;
 
 /** Whether the file is being run only to hear what it mocks. */
 export const isRegistering = (): boolean => registering;
@@ -62,12 +66,16 @@ export function installMocking(vi: ViLike): void {
   vi['unmock'] = vi['doUnmock'] = (specifier: unknown) => restore([idOf(specifier)]);
   vi['hoisted'] = (factory: () => unknown) => {
     const index = hoistedIndex++;
-    if (registering) hoistedValues[index] = factory();
+    // A file that mocks nothing has no pass to hear it in: its one run makes the value.
+    if (registering || !(index in hoistedValues)) hoistedValues[index] = factory();
     return hoistedValues[index];
   };
   vi['importActual'] = async (specifier: unknown) => actualOf(idOf(specifier));
-  vi['importMock'] = async (specifier: unknown) =>
-    mocked.get(idOf(specifier)) ?? metro()(idOf(specifier));
+  // The module's mock where the file has one, or else its exports automocked, the module left as is.
+  vi['importMock'] = async (specifier: unknown) => {
+    const id = idOf(specifier);
+    return mocked.has(id) ? mocked.get(id) : automock(await actualOf(id));
+  };
   automock = (exports: unknown) => automockOf(exports, vi);
 }
 
@@ -87,6 +95,7 @@ export async function prepareMocks(
   hoistedValues = [];
   hoistedIndex = 0;
   if (Object.keys(specifiers).length === 0) return;
+  const before = initialized();
   registering = true;
   try {
     run();
@@ -94,11 +103,35 @@ export async function prepareMocks(
     registering = false;
     hoistedIndex = 0;
   }
+  const gated = ranGated(before);
   for (const registration of pending) await install(registration);
   // Whatever imported a mocked module holds its real exports: it runs again, as does the file.
   const stale = dependents(modules(), new Set(pending.map(({ id }) => id)));
   stale.add(entry);
+  for (const id of gated) stale.add(id);
   reset(stale);
+}
+
+function initialized(): Set<number> {
+  const ready = new Set<number>();
+  for (const [id, mod] of modules()) if (mod.isInitialized) ready.add(id);
+  return ready;
+}
+
+/**
+ * The modules that use Vitest and first ran in the pass that only hears what a file mocks: a helper
+ * such as `export const test = base.extend({})` holds what the closed gate gave it until it runs
+ * again with the gate open.
+ */
+function ranGated(before: ReadonlySet<number>): number[] {
+  const registry = modules();
+  const runtime = new Set<number>();
+  for (const [id, mod] of registry) {
+    if (mod.verboseName && VITEST_RUNTIME.test(mod.verboseName)) runtime.add(id);
+  }
+  return [...dependents(registry, runtime)].filter(
+    (id) => registry.get(id)?.isInitialized && !before.has(id),
+  );
 }
 
 /** After a file: the real modules back, and what imported the mocks run again to see them. */
@@ -116,7 +149,11 @@ async function install({ id, factory }: Registration): Promise<void> {
     originals.set(id, real);
     actuals.set(id, metro()(id));
   }
+  const own = Symbol(id);
+  installing.set(id, own);
   const exports = factory ? await factory(async () => actualOf(id)) : automock(actuals.get(id));
+  // Unmocked, or mocked again, while the factory ran: this mock is no longer wanted.
+  if (installing.get(id) !== own) return;
   const value = esModule(exports);
   mocked.set(id, value);
   registry.set(
@@ -127,6 +164,7 @@ async function install({ id, factory }: Registration): Promise<void> {
 
 function restore(restoring: number[]): void {
   const registry = modules();
+  for (const id of restoring) installing.delete(id);
   const back = restoring.filter((id) => originals.has(id));
   for (const id of back) {
     registry.set(id, originals.get(id)!);
@@ -157,6 +195,8 @@ function automockOf(exports: unknown, vi: ViLike, seen = new WeakMap<object, unk
   if (typeof exports === 'function') return vi.fn();
   if (!exports || typeof exports !== 'object') return exports;
   if (seen.has(exports)) return seen.get(exports);
+  // An array is mocked as an empty one, as Vitest does, and keeps its methods.
+  if (Array.isArray(exports)) return [];
   const copy: Record<string, unknown> = {};
   seen.set(exports, copy);
   for (const key of Object.keys(exports)) {

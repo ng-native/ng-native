@@ -100,7 +100,7 @@ let reply = null;
       fs.writeFileSync(env.REPORTS + '/ngn-macos-2026-11-14.ips', 'crash');
       process.kill(process.pid, 'SIGKILL');
     }
-    reply = { __vitest_worker_response__: true, type: 'testfileFinished' };
+    reply = { __vitest_worker_response__: true, type: 'testfileFinished', deviceRequest: request.deviceRequest };
   }
 })();
 `;
