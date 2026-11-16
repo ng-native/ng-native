@@ -370,29 +370,15 @@ function headerMenuOf(
         return;
       }
       const place = `${at}${index}`;
-      const id = entry.select && !entry.items ? menuActionId(entry.select) : place;
-      const symbol = entry.sfSymbol === undefined ? {} : { systemImageName: entry.sfSymbol };
-      const shared = {
-        ...symbol,
-        ...(entry.destructive && { destructive: true }),
-      };
       const item: HeaderMenu['items'][number] = entry.items
         ? {
             type: 'submenu',
             title: entry.label,
             items: walk(entry.items, `${place}.`),
             ...(entry.inline && { displayInline: true }),
-            ...shared,
+            ...headerLook(entry),
           }
-        : {
-            type: 'action',
-            id,
-            title: entry.label,
-            ...shared,
-            ...(entry.checked !== undefined && { state: entry.checked ? 'on' : 'off' }),
-            ...(entry.disabled && { disabled: true }),
-          };
-      if (!entry.items && entry.select) actions.set(id, entry.select);
+        : headerAction(entry, place, actions);
       (sections.at(-1) as HeaderMenu['items'][number][]).push(item);
     });
     const filled = sections.filter((section) => section.length);
@@ -400,6 +386,32 @@ function headerMenuOf(
     return filled.map((items) => ({ type: 'submenu', title: '', displayInline: true, items }));
   };
   return { menu: { items: walk(entries, '') }, actions };
+}
+
+/** An item's symbol and colour, as a header menu entry takes them. */
+function headerLook(entry: MenuItemModel): { systemImageName?: string; destructive?: true } {
+  return {
+    ...(entry.sfSymbol !== undefined && { systemImageName: entry.sfSymbol }),
+    ...(entry.destructive && { destructive: true }),
+  };
+}
+
+/** An item as a header menu's action, its handler listed under its id. */
+function headerAction(
+  entry: MenuItemModel,
+  place: string,
+  actions: Map<string, () => void>,
+): HeaderMenu['items'][number] {
+  const id = entry.select ? menuActionId(entry.select) : place;
+  if (entry.select) actions.set(id, entry.select);
+  return {
+    type: 'action',
+    id,
+    title: entry.label,
+    ...headerLook(entry),
+    ...(entry.checked !== undefined && { state: entry.checked ? 'on' : 'off' }),
+    ...(entry.disabled && { disabled: true }),
+  };
 }
 
 /** Whether a menu still has an action. Native can report one it drew before the menu changed. */

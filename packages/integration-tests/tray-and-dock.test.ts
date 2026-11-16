@@ -56,20 +56,21 @@ describe('a tray icon', () => {
     });
     await settle();
     const timer = tray.icons().find((icon) => icon.sfSymbol === 'timer');
+    const pauseId = () => (timer!.menu![0] as { id: string }).id;
     const sync = tray.icons().find((icon) => icon.image === 'sync');
     assert.deepEqual(timer, {
       id: timer!.id,
       title: '25:00',
       sfSymbol: 'timer',
       tooltip: 'Focus timer',
-      menu: [{ id: timer!.menu![0]!.id, label: 'Pause' }],
+      menu: [{ id: pauseId(), label: 'Pause' }],
     });
-    assert.match((timer!.menu![0] as { id: string }).id, /^a\d+$/);
+    assert.match(pauseId(), /^a\d+$/);
     assert.deepEqual(sync, { id: sync!.id, image: 'sync', menu: null });
     app.instance.time.set('24:59');
     await app.detectChanges();
     assert.equal(tray.icons().find((icon) => icon.sfSymbol)!.title, '24:59');
-    await tray.send({ type: 'menuSelect', icon: timer!.id, id: timer!.menu![0]!.id });
+    await tray.send({ type: 'menuSelect', icon: timer!.id, id: pauseId() });
     await tray.send({ type: 'press', icon: sync!.id });
     assert.deepEqual(app.instance.said, ['pause', 'sync']);
   });

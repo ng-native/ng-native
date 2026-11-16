@@ -534,7 +534,7 @@ export class AppWindows {
       inputs,
       bindings,
       outlet,
-      providers = [],
+      providers,
       main,
       autosave,
       title = '',
@@ -550,19 +550,37 @@ export class AppWindows {
     const open = this.track(surface, key, outlet ?? null, title);
     open.restore = restore?.() ?? null;
     this.remember();
+    this.mountIn(open, mounter, component, { inputs, bindings, providers, main });
+    return open.handle;
+  }
+
+  /**
+   * Render `component` in the window. Where it throws, the mounter has taken down what it made,
+   * and the window goes too, forgotten for a reload, before the error goes on.
+   */
+  private mountIn(
+    open: Open,
+    mounter: WindowMounter,
+    component: Type<unknown>,
+    options: {
+      inputs?: Readonly<Record<string, unknown>> | undefined;
+      bindings?: Binding[] | undefined;
+      providers?: Provider[] | undefined;
+      main?: boolean | undefined;
+    },
+  ): void {
+    const { inputs, bindings, providers = [], main } = options;
     try {
-      open.mount = mounter.mount(surface, component, {
+      open.mount = mounter.mount(open.handle.surface, component, {
         ...(inputs && { inputs }),
         ...(bindings && { bindings }),
         providers: [{ provide: CURRENT_WINDOW, useValue: open.handle }, ...providers],
         ...(main && { main }),
       });
     } catch (error) {
-      // The mounter took down what it had made; the window goes too, and is not opened again.
-      this.closeNow(surface, true);
+      this.closeNow(open.handle.surface, true);
       throw error;
     }
-    return open.handle;
   }
 
   /** Make the handle for a window that has opened on `surface`, and list it. */
