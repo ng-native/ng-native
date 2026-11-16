@@ -153,9 +153,9 @@ function install(registration: Registration): Promise<void> {
   return done;
 }
 
-/** Once every install of `id` started so far has finished, a later one included. */
+/** Once every install of `id` started so far has finished, a later one included. A failed one rejects. */
 async function installed(id: number): Promise<void> {
-  for (let at = installs.get(id); at; at = installs.get(id)) await at.catch(() => {});
+  for (let at = installs.get(id); at; at = installs.get(id)) await at;
 }
 
 async function installNow({ id, factory }: Registration): Promise<void> {

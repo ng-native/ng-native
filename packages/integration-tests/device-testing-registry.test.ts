@@ -345,4 +345,18 @@ describe('vi.mock on a device, at its edges', () => {
       restoreMocks();
     }
   });
+
+  it('rejects vi.importMock when the vi.doMock factory still installing rejects', async () => {
+    define(payload(451, [{ id: 451, code: source(451, [], 'src/bad.ts', exporting('real')) }]));
+    try {
+      await prepareMocks({ './bad.ts': 451 }, 451, () => {});
+      viOf()['doMock']!('./bad.ts', async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        throw new Error('factory failed');
+      });
+      await assert.rejects(async () => viOf()['importMock']!('./bad.ts'), /factory failed/);
+    } finally {
+      restoreMocks();
+    }
+  });
 });
