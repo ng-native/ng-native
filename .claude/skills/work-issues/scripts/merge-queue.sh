@@ -38,8 +38,10 @@ reverted_commit() {
   for m in $(git rev-list --max-count=40 $base); do
     files=(${(f)"$(git diff-tree --no-commit-id --name-only -r $m)"})
     (( ${#files} > 2 )) || continue
-    # Of the commit's files, those the PR's head has as they were before it and not as it left them.
-    back=(${(f)"$(comm -23 <(git diff --name-only $m $head -- $files | sort) <(git diff --name-only $m^ $head -- $files | sort))"})
+    # Of the commit's files, those the PR's head has as they were before it and not as it left them, and
+    # changed by the PR itself: a revert main already has is not the PR's.
+    back=(${(f)"$(comm -23 <(git diff --name-only $m $head -- $files | sort) <(git diff --name-only $m^ $head -- $files | sort) |
+      comm -12 - <(git diff --name-only $base $head -- $files | sort))"})
     r=${#back}
     (( r > 2 && r * 2 >= ${#files} )) && { git log --format=%s -1 $m; return; }
   done
