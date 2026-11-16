@@ -226,6 +226,9 @@ See [RELEASING.md](./docs/RELEASING.md) for how an actual release goes out.
 - Commit messages here are sentence-case summaries of the change, often followed by a body
   explaining why (see `git log --oneline -20` for the style); there is no conventional-commits
   prefix convention (`feat:`, `fix:`, and so on) in use.
+- Every package is built from a ready pull request and published to
+  [pkg.pr.new](https://pkg.pr.new) (`.github/workflows/preview.yml`); a comment on the pull request
+  gives the install commands for trying the change in another project.
 
 ### Checking a change against main
 

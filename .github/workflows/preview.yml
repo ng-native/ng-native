@@ -1,0 +1,42 @@
+name: Preview
+
+# Every package `nx release` publishes, built from the pull request and published to pkg.pr.new,
+# so a change can be installed and tried before it is released. The pkg.pr.new GitHub app posts
+# the install commands as one comment on the pull request and updates it on each push.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  publish:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      - run: npx nx run-many -t build -p '@ng-native/*'
+
+      # The same list the release packs, so the two cannot drift apart. `--pnpm` packs with pnpm,
+      # which turns `workspace:*` into a version; pkg.pr.new then points each package's
+      # dependencies and peer dependencies on the others at this build's previews.
+      - name: Publish to pkg.pr.new
+        run: |
+          # One assignment per project, so a failed lookup stops the step instead of dropping a
+          # package from the list.
+          roots=()
+          for project in $(jq -r '.release.projects[]' nx.json); do
+            roots+=("$(npx nx show project "$project" --json | jq -er .root)")
+          done
+          npx --yes pkg-pr-new@0.0.93 publish --pnpm --peerDeps --packageManager=pnpm,npm "${roots[@]}"
