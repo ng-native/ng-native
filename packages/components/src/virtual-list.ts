@@ -796,7 +796,17 @@ export class VirtualList<T> extends ScrollViewProps {
 
     let last = visible;
     while (last < items.length && this.topOf(last) < top + budget) last++;
-    return { first, last: Math.min(items.length, last + overscan) };
+    /*
+     * The viewport starts anywhere inside the visible row, so it can end up to that row's size
+     * past `top + budget`. The overscan below covers that for a row no taller than the rows after
+     * it; a taller one, a photo over its comments, needs the rows down to there as well. Taken
+     * from the scroll offset instead, the window would change on every scroll event rather than
+     * when the visible row does.
+     */
+    let end = Math.min(items.length, last + overscan);
+    const deepest = top + this.heightOf(visible) + this.rowGap() + budget;
+    while (end < items.length && this.topOf(end) < deepest) end++;
+    return { first, last: end };
   });
 
   readonly window = computed<VirtualRow<T>[]>(() => {

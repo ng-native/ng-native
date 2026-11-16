@@ -730,3 +730,61 @@ describe('windowed list with mixed row heights', () => {
     assert.deepEqual(missing, [], `rows on screen but not rendered: ${missing.join(', ')}`);
   });
 });
+
+describe('windowed list scrolled partway into a tall row', () => {
+  const VIEW = 600;
+  const TALL = 400;
+  const SHORT = 20;
+  let Component: Type<unknown>;
+
+  before(async () => {
+    const mod = await compileFixture('fixtures/virtual.ts');
+    Component = mod['VirtualTallRow'] as Type<unknown>;
+  });
+
+  const cases = [
+    { name: 'the first row', tall: 0, measured: false, horizontal: false },
+    { name: 'a row further down', tall: 50, measured: false, horizontal: false },
+    { name: 'a row measuring itself', tall: 0, measured: true, horizontal: false },
+    { name: 'a horizontal list', tall: 0, measured: false, horizontal: true },
+  ];
+
+  for (const { name, tall, measured, horizontal } of cases) {
+    it(`renders every row down to the end of the viewport, for ${name}`, async () => {
+      const { fabric, instance, detectChanges } = await render(Component);
+      const page = instance as {
+        tall: { set(index: number): void };
+        measured: { set(on: boolean): void };
+        horizontal: { set(on: boolean): void };
+      };
+      page.tall.set(tall);
+      page.measured.set(measured);
+      page.horizontal.set(horizontal);
+      await detectChanges();
+
+      const host = () => flatten(fabric.committed).find((n) => n.viewName === 'ScrollView')!;
+      await fireEvent(host(), 'layout', { layout: { width: VIEW, height: VIEW } });
+
+      // Ten points short of the end of the tall row, which is still the first one on screen.
+      const topOf = (index: number) => index * SHORT + (index > tall ? TALL - SHORT : 0);
+      const offset = topOf(tall) + TALL - 10;
+      const contentOffset = horizontal ? { x: offset, y: 0 } : { x: 0, y: offset };
+      await fireEvent.scroll(host(), { contentOffset });
+
+      const rendered = new Set(
+        flatten(fabric.committed)
+          .map((n) => /^row(\d+)$/.exec(String(n.props['nativeID'] ?? ''))?.[1])
+          .filter((id) => id !== undefined)
+          .map(Number),
+      );
+      const needed: number[] = [];
+      for (let i = 0; i < 200; i++) {
+        const height = i === tall ? TALL : SHORT;
+        if (topOf(i) + height > offset && topOf(i) < offset + VIEW) needed.push(i);
+      }
+      const missing = needed.filter((i) => !rendered.has(i));
+      assert.deepEqual(missing, [], `rows on screen but not rendered: ${missing.join(', ')}`);
+      assert.ok(rendered.size < 200, 'the list is still windowed');
+    });
+  }
+});

@@ -248,3 +248,55 @@ export class BoundTouchIcon {
   touches = signal<string | null>('none');
   icon = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>';
 }
+
+/**
+ * One tall row among short ones, as a photo post among its comments: the case where the row the
+ * viewport starts in reaches far past its leading edge. Its heights are known up front, or left
+ * to be measured, and it scrolls along y or along x.
+ */
+@Component({
+  selector: 'x-virtual-tall-row',
+  imports: [VirtualList, VirtualListRow, Text, View],
+  template: `
+    @if (measured()) {
+      <virtual-list
+        #list
+        [items]="rows()"
+        [estimatedItemHeight]="heightOf"
+        [keyExtractor]="keyOf"
+        [horizontal]="horizontal()"
+        [style]="fill"
+      >
+        @for (row of list.window(); track row.slot) {
+          <view [virtualListRow]="row" [nativeID]="'row' + row.index"
+            ><text>{{ row.item }}</text></view
+          >
+        }
+      </virtual-list>
+    } @else {
+      <virtual-list
+        #list
+        [items]="rows()"
+        [itemHeight]="heightOf"
+        [horizontal]="horizontal()"
+        [style]="fill"
+      >
+        @for (row of list.window(); track row.slot) {
+          <view [virtualListRow]="row" [nativeID]="'row' + row.index"
+            ><text>{{ row.item }}</text></view
+          >
+        }
+      </virtual-list>
+    }
+  `,
+})
+export class VirtualTallRow {
+  readonly fill = { flex: 1 };
+  readonly rows = signal(Array.from({ length: 200 }, (_, i) => i));
+  /** Which row is the tall one. */
+  readonly tall = signal(0);
+  readonly measured = signal(false);
+  readonly horizontal = signal(false);
+  readonly heightOf = (_item: number, index: number) => (index === this.tall() ? 400 : 20);
+  readonly keyOf = (item: number) => item;
+}
