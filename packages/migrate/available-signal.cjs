@@ -312,6 +312,25 @@ function closing(text) {
   };
 }
 
+/** Each tag's span, from its `<` to its `>`, past a `>` in a quoted attribute value. */
+function tagsOf(text) {
+  const tags = [];
+  for (const match of text.matchAll(/<[a-zA-Z/]/g)) {
+    if (tags.length && match.index < tags[tags.length - 1][1]) continue;
+    let quote = null;
+    let end = match.index + 1;
+    for (; end < text.length; end++) {
+      const char = text[end];
+      if (quote) {
+        if (char === quote) quote = null;
+      } else if (char === '"' || char === "'") quote = char;
+      else if (char === '>') break;
+    }
+    tags.push([match.index, end]);
+  }
+  return tags;
+}
+
 /**
  * The spans of a template Angular reads as code: `{{ }}` interpolations, bound attribute values,
  * block parameters and `@let` values, less the strings in them. Text, plain attribute values and
@@ -328,10 +347,13 @@ function expressions(text) {
     const quote = match[1];
     spans.push(...scan(text, match.index + match[0].length, (at) => text[at] === quote).code);
   }
-  for (const match of text.matchAll(BLOCK)) {
+  // A block is one only outside a tag: `label="@if (x)"` is an attribute's text.
+  const tags = tagsOf(text);
+  const outside = (match) => !tags.some(([start, end]) => match.index > start && match.index < end);
+  for (const match of [...text.matchAll(BLOCK)].filter(outside)) {
     spans.push(...scan(text, match.index + match[0].length, closing(text)).code);
   }
-  for (const match of text.matchAll(/@let\s+[\w$]+\s*=/g)) {
+  for (const match of [...text.matchAll(/@let\s+[\w$]+\s*=/g)].filter(outside)) {
     spans.push(...scan(text, match.index + match[0].length, (at) => text[at] === ';').code);
   }
   return spans;
