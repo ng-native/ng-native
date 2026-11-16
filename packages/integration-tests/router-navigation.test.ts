@@ -351,13 +351,17 @@ describe('the helpers the router is built from', () => {
     assert.equal((node as { claimed?: true }).claimed, true);
   });
 
-  it('fails loudly on a type that is not a component, rather than leaving its props behind', async () => {
+  it("takes a directive's inputs off too, and claims a type that is neither", async () => {
     const { OwnedDirective } = (await compileFixture('fixtures/own-host.ts')) as {
       OwnedDirective: Type<unknown>;
     };
     const node = { props: { title: 'Inbox' } };
-    assert.throws(() => ownHost(node, OwnedDirective), /OwnedDirective is not a component/);
-    assert.throws(() => ownHost({ props: {} }, class Plain {}), /Plain is not a component/);
+    ownHost(node, OwnedDirective);
+    assert.deepEqual(node.props, {});
+    const plain = { props: { title: 'Inbox' } };
+    ownHost(plain, class Plain {});
+    assert.deepEqual(plain.props, { title: 'Inbox' });
+    assert.equal((plain as { claimed?: true }).claimed, true);
   });
 
   it("gives a tab's selected icon the selected icon's own image", () => {

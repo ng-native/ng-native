@@ -14,7 +14,8 @@
  * `(accessibilityAction)` and so on. They are deliberately not outputs; see that file.
  */
 import { Directive, ElementRef, type SimpleChanges, inject, input } from '@angular/core';
-import { HostEngine, claimHost, declareNativeProps, type HostNode } from '@ng-native/fabric';
+import { hostInputNames, ownHost } from '@ng-native/device';
+import { HostEngine, declareNativeProps, type HostNode } from '@ng-native/fabric';
 import type { Insets } from './events.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 import { WRITTEN_PROPS } from './written-props.ts';
@@ -216,18 +217,6 @@ export type PointerEvents = 'box-none' | 'none' | 'box-only' | 'auto';
 export type ImportantForAccessibility = 'auto' | 'yes' | 'no' | 'no-hide-descendants';
 export type AccessibilityLiveRegion = 'none' | 'polite' | 'assertive';
 
-/**
- * Angular writes a static attribute to the element as well as feeding it to the input of the
- * same name, so `<switch thumbColor="#fff">` leaves a stray `thumbColor` prop on the node next to
- * the `thumbTintColor` the input produces. The inputs of the directive are what consumed them,
- * so those names come off the node; a host binding puts back any that native does read.
- *
- * Walking the *node's* props rather than the directive's inputs is not a detail. This runs for
- * every element on screen, a primitive declares some forty-five inputs, and at this point the node
- * usually has no props at all - bindings have not run yet, so only static attributes are there.
- * The other way round it was forty-five `delete`s per element on an object that had none of them,
- * which is both wasted work and the way to push an object into dictionary mode.
- */
 /** Shallow equality, so a re-merged state that says the same thing keeps its identity. */
 function sameState(a: AccessibilityState, b: AccessibilityState): boolean {
   const keys = Object.keys(a) as (keyof AccessibilityState)[];
@@ -244,31 +233,10 @@ const declared = new WeakSet<object>();
 function declareProps(ctor: unknown, node: HostNode): void {
   if (declared.has(ctor as object)) return;
   declared.add(ctor as object);
-  const def =
-    (ctor as { ɵcmp?: { inputs?: object }; ɵdir?: { inputs?: object } }).ɵcmp ??
-    (ctor as { ɵdir?: { inputs?: object } }).ɵdir;
   const tag = (node as { tag?: string }).tag;
-  if (!tag || !def?.inputs) return;
-  declareNativeProps(tag, [...Object.keys(def.inputs), ...WRITTEN_PROPS]);
-}
-
-function stripConsumedAttributes(ctor: unknown, node: HostNode): void {
-  // A directive with no selector is only ever a `hostDirectives` entry, which exposes the inputs
-  // it lists and no others, so an attribute of the same name as the rest was not consumed.
-  type Def = { inputs?: Record<string, unknown>; selectors?: readonly unknown[] };
-  const { ɵcmp, ɵdir } = ctor as { ɵcmp?: Def; ɵdir?: Def };
-  const def = ɵcmp ?? (ɵdir?.selectors?.length ? ɵdir : undefined);
-  const inputs = def?.inputs;
-  if (!inputs) return;
-  // A host that has not put a bag on the node yet has no attributes to take off it. Read
-  // unconditionally, this threw `Cannot convert undefined or null to object` on the first
-  // component a browser host ever mounted, before anything rendered - which is a hard crash
-  // standing between this package and a second platform, for a loop with nothing to do.
-  const props = node.props as Record<string, unknown> | undefined;
-  if (!props) return;
-  for (const name of Object.keys(props)) {
-    if (name in inputs) delete props[name];
-  }
+  const inputs = hostInputNames(ctor);
+  if (!tag || !inputs.size) return;
+  declareNativeProps(tag, [...inputs, ...WRITTEN_PROPS]);
 }
 
 /**
@@ -339,8 +307,7 @@ export abstract class ViewBase {
   }
 
   constructor() {
-    claimHost(this.node);
-    stripConsumedAttributes(this.constructor, this.node);
+    ownHost(this.node, this.constructor);
     declareProps(this.constructor, this.node);
     this.engine.settle(this);
   }
