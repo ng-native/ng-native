@@ -185,23 +185,41 @@ function platforms(_marker: string, services: string): string {
 }
 
 /**
- * A fenced code block, from its opening fence to the matching close or the end of the page. As in
- * Marked, the close is a run of the opener's character at least as long as the opener, indented by at
- * most three spaces past the opener's own indentation (a fence in a list item is indented with it);
- * four more make it content.
+ * `text` with `change` applied to everything but its fenced code blocks, which stay as written. As
+ * in Marked, a fence closes on a run of its opener's character at least as long as the opener. An
+ * opener indented up to three spaces is at the top level, so its closer is too; one indented further
+ * sits in a list item, whose closer may be up to three spaces past it. Four more make the run code.
  */
-const FENCE =
-  /^([ \t]*)(?=([`~]))(\2{3,})[^\n]*\n[\s\S]*?(?:^(?:\1)? {0,3}\3\2*[ \t]*$|(?![\s\S]))/gm;
-
-/** `text` with `change` applied to everything but its fenced code blocks, which stay as written. */
 function outsideFences(text: string, change: (prose: string) => string): string {
   let result = '';
-  let at = 0;
-  for (const fence of text.matchAll(FENCE)) {
-    result += change(text.slice(at, fence.index)) + fence[0];
-    at = fence.index + fence[0].length;
+  let prose = '';
+  let fence: { char: string; length: number; indent: number } | null = null;
+  for (const line of text.split(/(?<=\n)/)) {
+    if (fence) {
+      result += line;
+      const close = /^( *)(`+|~+)[ \t]*\r?\n?$/.exec(line);
+      const indent = close?.[1]!.length ?? -1;
+      if (
+        close?.[2]![0] === fence.char &&
+        close[2]!.length >= fence.length &&
+        indent >= fence.indent &&
+        indent <= fence.indent + 3
+      ) {
+        fence = null;
+      }
+      continue;
+    }
+    const open = /^( *)(`{3,}|~{3,})/.exec(line);
+    if (!open) {
+      prose += line;
+      continue;
+    }
+    result += change(prose) + line;
+    prose = '';
+    const indent = open[1]!.length;
+    fence = { char: open[2]![0]!, length: open[2]!.length, indent: indent <= 3 ? 0 : indent };
   }
-  return result + change(text.slice(at));
+  return result + change(prose);
 }
 
 async function render(source: string, headings: DocHeading[]): Promise<string> {
