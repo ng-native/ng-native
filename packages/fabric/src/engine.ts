@@ -8029,7 +8029,14 @@ export class Engine implements HostEngine {
   }
 
   private sharedChanged(change: SharedChange): void {
-    for (const watcher of this.sharedWatchers) watcher(change);
+    // One follower that throws stops neither the rest nor this engine's own commit after them.
+    for (const watcher of this.sharedWatchers) {
+      try {
+        watcher(change);
+      } catch (error) {
+        this.reportEventError(error, 'shared');
+      }
+    }
   }
 
   updateTokens(next: Readonly<Record<string, TokenValue>>): void {

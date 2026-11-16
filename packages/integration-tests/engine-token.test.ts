@@ -261,4 +261,28 @@ describe('tokens another surface follows', () => {
       stop();
     }
   });
+
+  it('still reach the rest, and the source still commits, when a follower throws', () => {
+    const errors: [unknown, string][] = [];
+    const { engine } = scene((error, type) => errors.push([error, type]));
+    engine.commit();
+    const heard: (string | undefined)[] = [];
+    const followed: unknown[] = [];
+    const unwatch = engine.watchToken('--fresh', (value) => heard.push(value));
+    const stopThrowing = engine.watchShared(() => {
+      throw new Error('follower');
+    });
+    const stop = engine.watchShared((change) => followed.push(change.kind));
+    try {
+      engine.updateTokens({ '--fresh': { length: 20 } });
+      assert.deepEqual(followed, ['tokens']);
+      assert.equal(errors.length, 1);
+      assert.equal((errors[0]?.[0] as Error).message, 'follower');
+      assert.deepEqual(heard, ['20px'], 'the source committed the new value');
+    } finally {
+      unwatch();
+      stopThrowing();
+      stop();
+    }
+  });
 });
