@@ -67,8 +67,9 @@ must not stretch. `resizeMode`, `blurRadius` and `fadeDuration` (Android, defaul
 both.
 
 An image covers its box when the app sets neither `resizeMode` nor `object-fit`, on iOS, Android
-and macOS, as React Native's `Image` does, and in the web host. An explicit `resizeMode` or an
-`object-fit` in a stylesheet replaces it. An image that should fill its box without keeping the
+and macOS, as React Native's `Image` does, and in the web host. An explicit `resizeMode` replaces
+it, and so does an `object-fit` in a stylesheet on iOS, Android and macOS. The web host paints the
+picture as a background, so there only `resizeMode` changes how it fits. An image that should fill its box without keeping the
 picture's proportions, which is what an image did before on iOS and macOS, takes
 `resizeMode="stretch"`.
 
