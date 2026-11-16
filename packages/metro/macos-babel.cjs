@@ -139,7 +139,7 @@ module.exports = function macosPlatformPlugin({ types: t }) {
     if (t.isLiteral(node) || t.isIdentifier(node) || t.isFunction(node)) return true;
     if (t.isUnaryExpression(node)) {
       if (['!', 'typeof', 'void'].includes(node.operator)) return isInert(node.argument);
-      return node.operator !== 'delete' && t.isLiteral(node.argument);
+      return node.operator !== 'delete' && t.isLiteral(node.argument) && isInert(node.argument);
     }
     if (t.isArrayExpression(node))
       return node.elements.every((one) => one !== null && isInert(one));
