@@ -239,6 +239,46 @@ describe('quitting while guards decide', () => {
     );
   });
 
+  it('never approves a quit past a window whose host open finished after the last guard', async () => {
+    // However many turns after the last guard's yes the host finishes an open, the window is
+    // either asked (and its guard says no) or refused: never mounted unasked into an approved quit.
+    for (let turns = 0; turns <= 20; turns++) {
+      const { host, windows, mounter } = start();
+      await flush();
+      const held = heldGuard();
+      windows.windows()[0]!.canClose(held.guard);
+      // The late window says no as it mounts, as an app's own guard would.
+      const mount = mounter.mounter.mount;
+      mounter.mounter.mount = (surface, ...rest) => {
+        const mounted = mount(surface, ...rest);
+        if (surface === 99)
+          windows
+            .windows()
+            .at(-1)!
+            .canClose(() => false);
+        return mounted;
+      };
+      let finishOpen!: (surface: number) => void;
+      const open = host.native.open;
+      host.native.open = () => new Promise<number>((resolve) => (finishOpen = resolve));
+      const late = windows.open(Note).then(
+        () => 'opened',
+        () => 'refused',
+      );
+      await flush();
+      host.native.open = open;
+      host.send({ type: 'quitRequest' });
+      await flush();
+      held.answer(true);
+      for (let turn = 0; turn < turns; turn++) await Promise.resolve();
+      finishOpen(99);
+      await flush();
+      await flush();
+      const approved = host.answers.includes(true);
+      assert.ok(!(approved && (await late) === 'opened'), `after ${turns} turns`);
+    }
+  });
+
   it('still refuses a window opened after the quit was approved', async () => {
     const { host, windows } = start();
     await flush();
