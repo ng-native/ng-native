@@ -52,6 +52,17 @@ nothing when tapped is what an observer looking for dead taps wants to know abou
 finger dragged off, a press a scrolling list took over, a disabled control, a `<text>` that is not
 `pressable`, a drag that ended where it started, and a scroll made by code report nothing.
 
+Some controls are drawn by the platform rather than pressed through this package's press handling,
+and report a `click` from their own native event instead:
+
+- `<switch>`, each time the user flips it, on every platform. The event does not say whether it is
+  now on or off, since that can be user data; read the app's own state for that.
+- `<native-button>` where the platform draws it, a UIButton on iOS and an NSButton on macOS, when it
+  fires `press`. On Android it is pressed through the responder like a `<pressable>`, and reported
+  as one.
+
+These carry no touch point, so their `source` is `click`. A disabled one reports nothing.
+
 Each event carries:
 
 - `element`: the element's name as written in the template, such as `pressable`, `text` or
@@ -68,7 +79,7 @@ Each event carries:
 - `direction`: for a scroll or swipe, `up`, `down`, `left` or `right`, the way the content moved
   into view, so `down` shows what was below. A diagonal drag goes by the axis it moved further
   along.
-- `source`: `touch`, or `click` for a press with no touch.
+- `source`: `touch`, or `click` for a press with no touch, such as a switch the user flipped.
 - `timestamp`, in milliseconds since the epoch.
 
 Observers run after the control's own `(press)` handler, so what the tap does is not held up by

@@ -13,6 +13,11 @@ import {
 } from '@angular/core';
 import { type NativeSyntheticEvent, nativePlatform } from '@ng-native/fabric';
 import { ControlledModel } from './controlled-model.ts';
+import {
+  describeElement,
+  interactionObservers,
+  notifyInteraction,
+} from './interaction-observer.ts';
 import type { ControlSize } from '@ng-native/device';
 import { optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
@@ -119,7 +124,23 @@ export class Switch extends ViewBase {
     this.nativeValue = event.nativeEvent?.value ?? false;
     this.control.propose(this.nativeValue);
     this.touch.emit();
+    this.reportFlip();
     afterNextRender({ write: () => this.reconcile() }, { injector: this.injector });
+  }
+
+  /**
+   * Tell the app's interaction observers, if it has any, as a `click` with no value: whether a
+   * switch is on can be user data. Looked up only once the user has flipped it.
+   */
+  private reportFlip(): void {
+    const observers = interactionObservers(this.injector);
+    if (!observers) return;
+    notifyInteraction(observers, {
+      type: 'click',
+      ...describeElement(this.engine, this.node),
+      source: 'click',
+      timestamp: Date.now(),
+    });
   }
 
   /**

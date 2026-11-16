@@ -560,7 +560,7 @@ export abstract class TouchableBase extends ViewBase {
    * Reported whether or not `(press)` has a listener: a control that does nothing when tapped is
    * what an observer looking for dead taps wants to hear about.
    */
-  private reportInteraction(
+  protected reportInteraction(
     type: InteractionType,
     event: PressEvent,
     source: 'touch' | 'click',

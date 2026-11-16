@@ -46,7 +46,10 @@ export interface InteractionEvent {
   readonly height?: number;
   /** Scrolls and swipes only. */
   readonly direction?: InteractionDirection;
-  /** A touch, or a press with none: Android's click from a keyboard or TalkBack. */
+  /**
+   * A touch, or a press with none: Android's click from a keyboard or TalkBack, or a control the
+   * platform draws, such as a `<switch>`, which reports no touch point.
+   */
   readonly source: 'touch' | 'click';
   /** Milliseconds since the epoch. */
   readonly timestamp: number;
