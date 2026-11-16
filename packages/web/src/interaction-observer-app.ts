@@ -61,9 +61,18 @@ export class Banner {}
 })
 export class Badge {}
 
+/** A card that names itself in interaction reports. */
+@Component({
+  selector: 'x-named-card',
+  imports: [Pressable, Text],
+  host: { interactionName: 'Checkout card' },
+  template: `<pressable testID="named"><text>named</text></pressable>`,
+})
+export class NamedCard {}
+
 @Component({
   selector: 'app-root',
-  imports: [Badge, Banner, ObservedCard, Panel, Pressable, Text],
+  imports: [Badge, Banner, NamedCard, ObservedCard, Panel, Pressable, Text],
   template: `
     <pressable testID="save"><text>save</text></pressable>
     <x-observed-card>
@@ -72,6 +81,7 @@ export class Badge {}
     <section x-secondary></section>
     <section class="x-second-badge"></section>
     <header class="x-off" x-mute x-on></header>
+    <x-named-card />
   `,
 })
 export class InteractionObserverApp {}

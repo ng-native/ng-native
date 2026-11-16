@@ -79,6 +79,14 @@ describe('a control on a routed page', () => {
     );
   });
 
+  it('reports the name a page with no selector gives its host', async () => {
+    const heard = await tapOn('/welcome', 'welcome-action');
+    assert.deepEqual(
+      heard.map((event) => [event.testID, event.component]),
+      [['welcome-action', 'Welcome page']],
+    );
+  });
+
   it('reports no component for a page with no selector', async () => {
     const heard = await tapOn('/unnamed', 'unnamed-action');
     assert.equal(heard.length, 1);

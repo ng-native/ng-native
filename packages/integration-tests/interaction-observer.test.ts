@@ -354,6 +354,43 @@ describe('an interaction observer names the component a control belongs to', () 
   });
 });
 
+describe('a component named in interaction reports by interactionName', () => {
+  async function componentOf(id: string): Promise<InteractionEvent> {
+    const heard: InteractionEvent[] = [];
+    const { fabric } = await renderObserved(heard);
+    tap(fabric, id);
+    await settle();
+    assert.equal(heard.length, 1);
+    return heard[0]!;
+  }
+
+  it('reports the name a component gives its host', async () => {
+    assert.equal((await componentOf('named-action')).component, 'Checkout card');
+  });
+
+  it('reports the name a template gives a component where it is used', async () => {
+    assert.equal((await componentOf('renamed-action')).component, 'Plain renamed');
+  });
+
+  it('skips a component that opts out, for the one around it', async () => {
+    assert.equal((await componentOf('hidden-action')).component, 'x-observed-card');
+  });
+
+  it('reports no component where the one that opts out has none around it', async () => {
+    assert.equal('component' in (await componentOf('quiet-action')), false);
+  });
+
+  it('stops at a component with no selector around one that opts out', async () => {
+    assert.equal('component' in (await componentOf('unnamed-quiet-action')), false);
+  });
+
+  it('commits no interactionName to the native view', async () => {
+    await renderObserved([]);
+    assert.equal(node('named-host').props['interactionName'], undefined);
+    assert.equal(node('named-host').props['testID'], 'named-host');
+  });
+});
+
 describe('an interaction observer in an app that asked for web-compat', () => {
   const host = globalThis as Record<string, unknown>;
   const REGISTRY = '__nativeComponentRegistry__hasComponent';

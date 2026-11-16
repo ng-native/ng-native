@@ -108,7 +108,8 @@ Each event carries:
   attribute is named by its selector written out, such as `section[x-card]` or
   `button[app-button=primary]`, and a component of several selectors by the one its host matches.
   Absent for a control in the root component's own template, and
-  in a page with no selector of its own.
+  in a page with no selector of its own. A component can give another name, or none, with
+  `interactionName`: see [Naming components](#naming-components).
 - `label`, `testID`, `nativeID` and `role`: what the element committed, so a label a component
   gave it or a role it implies is the one reported, as a screen reader hears it.
 - `text`: for a `click` and a `long-press`, never a `scroll` or `swipe`, the text inside the
@@ -132,6 +133,52 @@ nor the app are stopped by it.
 
 On the web host, taps are reported, with a `nativeTag` of `null`, and scrolls are not, since a
 browser's scroll has no drag events to report them from.
+
+## Naming components
+
+A selector is not always the name a report should carry: it can have a prefix, or be an internal
+name. A component gives the name its events report in `component` with an `interactionName`
+attribute on its host:
+
+```ts
+import { Component } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
+
+@Component({
+  selector: 'acme-checkout-card',
+  imports: [Pressable, Text],
+  host: { interactionName: 'Checkout card' },
+  template: '<pressable (press)="pay()"><text>Pay</text></pressable>',
+})
+export class CheckoutCard {
+  pay(): void {}
+}
+```
+
+The same attribute where a component is used names that use of it, which is how a component from
+a library is given a name:
+
+```html
+<acme-row interactionName="Order row" />
+```
+
+A routed page with no selector is never written in a template, so it names itself in its own
+metadata:
+
+```ts
+@Component({
+  host: { interactionName: 'Welcome page' },
+  template: '...',
+})
+export class Welcome {}
+```
+
+An empty `interactionName` leaves the component out: its controls report the component around it
+instead, or no `component` when there is none. When the component around it has no selector and no
+`interactionName`, such as a routed page, they report no `component` either, even inside a named
+component farther out. Nothing changes for a component that sets neither.
+The attribute is read only when an interaction is reported, and is never committed to the native
+view.
 
 ## Gestures
 

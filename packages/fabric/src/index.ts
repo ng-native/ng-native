@@ -65,6 +65,7 @@ export {
   fontsLoading,
   fontsRegistered,
   fontsSettled,
+  INTERACTION_NAME,
   markComponentHost,
   unmarkPlainView,
   markPage,

@@ -70,6 +70,10 @@ describe('an interaction observer on the web host names the component a control 
     assert.equal((await componentOf('badge-action')).component, '.x-second-badge');
   });
 
+  it('reports the name a component gives its host', async () => {
+    assert.equal((await componentOf('named')).component, 'Checkout card');
+  });
+
   it('reports no component for a pressable in the app component itself', async () => {
     assert.equal('component' in (await componentOf('save')), false);
   });

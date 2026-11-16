@@ -12,6 +12,7 @@
  */
 import { InjectionToken, type Injector, type Provider } from '@angular/core';
 import {
+  INTERACTION_NAME,
   registeredViewName,
   type EngineNode,
   type HostEngine,
@@ -49,6 +50,8 @@ export interface InteractionEvent {
    * around it. A routed page is named the same way. A component matched by an attribute is named
    * by its selector written out, such as `section[x-card]`. Absent for a control in the root
    * component's own template, and in a component with no selector, such as a page that has none.
+   * A component's host can give another name with an `interactionName` attribute, or `''` to be
+   * passed over for the component around it.
    */
   readonly component?: string;
   /** `accessibilityLabel`, or `aria-label`. */
@@ -196,6 +199,12 @@ function componentAround(node: HostNode): string | undefined {
     const definition = (current as EngineNode).componentHost;
     if (typeof definition !== 'object') continue;
     if (nearest !== undefined) return nearest;
+    // The name its host gives it, and an empty one to be passed over for the one around it.
+    const given = current.props[INTERACTION_NAME];
+    if (typeof given === 'string') {
+      if (given) nearest = given;
+      continue;
+    }
     const name = componentName(definition, current);
     // A component with no selector of its own, such as a routed page, names nothing around it.
     if (name === null) return undefined;

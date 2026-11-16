@@ -45,6 +45,14 @@ export class Detail {}
 @Component({ imports: [Pressable], template: `<pressable testID="unnamed-action" />` })
 export class Unnamed {}
 
+/** A page with no selector, named by its host. */
+@Component({
+  imports: [Pressable],
+  host: { interactionName: 'Welcome page' },
+  template: `<pressable testID="welcome-action" />`,
+})
+export class Welcome {}
+
 @Component({ selector: 'x-search', imports: [Text], template: `<text>Search</text>` })
 export class Search {}
 
@@ -60,4 +68,5 @@ export const routes: Routes = [
   },
   { path: 'detail', component: Detail },
   { path: 'unnamed', component: Unnamed },
+  { path: 'welcome', component: Welcome },
 ];

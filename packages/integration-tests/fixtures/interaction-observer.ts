@@ -1,4 +1,5 @@
-import { Component, Directive, ElementRef, signal, viewChild } from '@angular/core';
+import { NgComponentOutlet } from '@angular/common';
+import { Component, Directive, ElementRef, input, signal, viewChild } from '@angular/core';
 import { PressBehavior, Pressable } from '../../components/src/pressable.ts';
 import { ScrollView } from '../../components/src/scroll-view.ts';
 import { Text } from '../../components/src/text.ts';
@@ -28,10 +29,19 @@ export class WrappedButton {
 @Directive({ selector: 'x-region' })
 export class Region {}
 
+/** A card that asks to be left out of interaction reports. */
+@Component({
+  selector: 'x-hidden-card',
+  imports: [Pressable],
+  host: { interactionName: '' },
+  template: `<pressable testID="hidden-action" />`,
+})
+export class HiddenCard {}
+
 /** A card with a pressable and a scroll view of its own, a wrapped button and a slot. */
 @Component({
   selector: 'x-observed-card',
-  imports: [ObservedButton, Pressable, Region, ScrollView, View, WrappedButton],
+  imports: [HiddenCard, ObservedButton, Pressable, Region, ScrollView, View, WrappedButton],
   template: `
     <view>
       <pressable testID="card-action" />
@@ -39,6 +49,7 @@ export class Region {}
       <x-observed-button testID="composed-in-card" />
       <x-wrapped-button />
       <scroll-view testID="card-scroll" />
+      <x-hidden-card />
       <ng-content />
     </view>
   `,
@@ -141,6 +152,42 @@ export class FramedFixture {
   readonly checkType = signal('checkbox');
 }
 
+/** A card that names itself in interaction reports. */
+@Component({
+  selector: 'x-named-card',
+  imports: [Pressable],
+  host: { interactionName: 'Checkout card' },
+  template: `<pressable testID="named-action" />`,
+})
+export class NamedCard {}
+
+/** A card named, or left out, where it is used. */
+@Component({
+  selector: 'x-plain-card',
+  imports: [Pressable],
+  template: `<pressable [testID]="actionID()" />`,
+})
+export class PlainCard {
+  readonly actionID = input.required<string>();
+}
+
+/** A component with no selector, as a routed page is, holding one that opts out. */
+@Component({
+  imports: [PlainCard],
+  template: `<x-plain-card actionID="unnamed-quiet-action" interactionName="" />`,
+})
+export class UnnamedPanel {}
+
+/** A named card that shows the selectorless panel. */
+@Component({
+  selector: 'x-outlet-card',
+  imports: [NgComponentOutlet],
+  template: `<ng-container *ngComponentOutlet="panel" />`,
+})
+export class OutletCard {
+  protected readonly panel = UnnamedPanel;
+}
+
 /** Every kind of touchable, a scroll view and a list, each logging its own presses. */
 @Component({
   selector: 'x-interaction-observer',
@@ -149,9 +196,12 @@ export class FramedFixture {
     Badge,
     Banner,
     Level,
+    NamedCard,
     ObservedButton,
     ObservedCard,
+    OutletCard,
     Panel,
+    PlainCard,
     Pressable,
     ScrollView,
     Text,
@@ -193,6 +243,7 @@ export class FramedFixture {
       >
       <pressable testID="off" [disabled]="true" (press)="log('off')" />
       <x-observed-card><pressable testID="projected" /></x-observed-card>
+      <x-outlet-card />
       <section x-attribute-card></section>
       <article x-tile class="wide"></article>
       <section x-secondary></section>
@@ -201,6 +252,9 @@ export class FramedFixture {
       <header class="x-off" x-mute x-on></header>
     </scroll-view>
     <x-top-bar />
+    <x-named-card testID="named-host" />
+    <x-plain-card actionID="renamed-action" interactionName="Plain renamed" />
+    <x-plain-card actionID="quiet-action" interactionName="" />
     <virtual-list testID="rows" [items]="rows" [itemHeight]="20" [style]="{ height: 60 }" />
   `,
 })
