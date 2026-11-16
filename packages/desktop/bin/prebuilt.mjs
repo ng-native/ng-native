@@ -13,7 +13,15 @@
  * checked by SHA-256, so no Developer ID is needed.
  */
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 
 /** The manifest's format, which `prebuilt.json` names. */
@@ -68,7 +76,8 @@ export function withHost(manifest, host) {
  * the entry into `manifest` when one is given. Runs into the same folder take turns, holding
  * `<out>/.make-prebuilt.lock`, and the manifest's folder's lock too when it is elsewhere, so the
  * archive, its entry and the manifest always describe the same build and no run's manifest entry is
- * lost; each file is replaced by a rename, so none is seen half written.
+ * lost; each file is replaced by a rename, so none is seen half written. An archive already in
+ * `out` under `name` is never replaced, since a manifest may name it with its hash.
  *
  * @param {{ out: string, archive: string, name: string, host: PrebuiltHost, manifest?: string }} files
  *   `archive` is the packed archive at a temporary name in `out`
@@ -94,7 +103,14 @@ export function publishPrebuilt({ out, archive, name, host, manifest }, { wait =
     for (const folder of folders) {
       held.push(takeLock(path.join(folder, '.make-prebuilt.lock'), give));
     }
-    renameSync(archive, path.join(out, name));
+    // A published archive is never replaced: a manifest written by another run may name it with
+    // its hash. A rebuild under the same name needs the old archive removed first.
+    const target = path.join(out, name);
+    if (existsSync(target)) {
+      rmSync(archive, { force: true });
+      throw new Error(`${target} is already published. Remove it first to publish another build.`);
+    }
+    renameSync(archive, target);
     replace(path.join(out, 'prebuilt-host.json'), `${JSON.stringify(host, null, 2)}\n`);
     if (manifest) {
       const updated = withHost(readManifest(readFileSync(manifest, 'utf8')), host);
