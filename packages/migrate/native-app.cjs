@@ -164,12 +164,18 @@ const desktopDependencies = { [DESKTOP_PACKAGE]: version };
 /**
  * A desktop-only app's dependencies, the desktop template's: the mobile app's, less the two that
  * only set up a phone's status bar and system UI, with the desktop host and `@ng-native/expo`, whose
- * services the desktop starter uses.
+ * services the desktop starter uses. A host library is pinned to the prebuilt host's version.
  *
  * @type {Record<string, string>}
  */
 const desktopOnlyDependencies = Object.fromEntries(
-  Object.entries({ ...dependencies, ...desktopDependencies, '@ng-native/expo': version })
+  Object.entries({
+    ...dependencies,
+    ...desktopDependencies,
+    '@ng-native/expo': version,
+    // Exactly the version the prebuilt desktop host is built with, so the app runs on it.
+    'react-native-safe-area-context': '5.10.1',
+  })
     .filter(([name]) => name !== 'expo-status-bar' && name !== 'expo-system-ui')
     .sort(([a], [b]) => (a < b ? -1 : 1)),
 );

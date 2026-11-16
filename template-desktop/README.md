@@ -25,8 +25,10 @@ npx vitest --project macos
 
 `npm test` runs the Node project, `node-macos`, alone.
 
-The first `npm run macos` builds the desktop host from source, which takes a few minutes and needs
-Xcode's command line tools, CMake and Ninja. Later runs reuse it. `npm run package` needs full Xcode
+`npm run macos` uses the prebuilt desktop host published for the app's React Native version when
+the app links no native code of its own and its host libraries are the versions the host was built
+with. Otherwise the first run builds the host from source, which takes a few minutes and needs
+Xcode's command line tools, CMake and Ninja; later runs reuse it. `npm run package` needs full Xcode
 for the app icon.
 
 `src/app/app.ts` is the root component and `src/main.ts` mounts it. The app's settings are Expo's
