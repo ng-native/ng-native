@@ -80,11 +80,11 @@ jobs:
 credential before it builds anything, and names any that is missing. A notarisation Apple rejects
 stops it with the submission's id, for `xcrun notarytool log <id>` with the same key.
 
-The first package downloads the prebuilt desktop host when `@ng-native/desktop` has one for the
-app's React Native version and the app links no native desktop code of its own. Otherwise it builds
-the host from source, which needs CMake and Ninja (the `brew install ninja` step) and takes a few
-minutes. Either way the host goes into `~/Library/Caches/ng-native/desktop`, which `actions/cache`
-can keep between runs.
+The first package downloads the prebuilt release desktop host when `@ng-native/desktop` has one
+for the app's React Native version and the app links no native desktop code of its own. Otherwise
+it builds the host from source, which needs CMake and Ninja (the `brew install ninja` step) and
+takes a few minutes. Either way the host goes into `~/Library/Caches/ng-native/desktop`, which
+`actions/cache` can keep between runs.
 
 ## Updates
 

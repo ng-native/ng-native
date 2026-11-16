@@ -38,18 +38,49 @@ this repository build them.
 
 ## Publishing a prebuilt host
 
-The release workflow (`.github/workflows/release.yml`) publishes one with each release, for the
-React Native version the packages support:
+The release workflow (`.github/workflows/release.yml`) publishes two with each release, for the
+React Native version the packages support: the `debug` host, the dev build (`build.sh --universal
+--no-tests`) with React Native's debugger, which `run` downloads, and the `release` host, the
+Release build (`build.sh --universal --release`), which `package` downloads.
 
-1. Its `desktop-host` job builds the universal Release host against `examples/canary`, which has
-   every host library but `react-native-webview` (an app with it builds the host from source),
-   signs it ad hoc and packs it with
-   `native/scripts/make-prebuilt.mjs examples/canary .prebuilt --version <release> --base-url <url>`,
-   where `<url>` is the release's downloads URL.
-2. The release job writes the host's entry, with its SHA-256, into `packages/desktop/prebuilt.json`
-   before the packages are packed, so the npm package names the archive.
-3. The archive goes up with the GitHub release.
+1. Its `desktop-host` job, once per flavour, builds the universal host against `examples/canary`,
+   which has every host library but `react-native-webview` (an app with it builds the host from
+   source), signs it ad hoc and packs it with
+   `native/scripts/make-prebuilt.mjs examples/canary .prebuilt --flavour <flavour> --version <release> --base-url <url>`,
+   where `<url>` is the release's downloads URL. The entry goes into
+   `.prebuilt/prebuilt-host-<flavour>.json`.
+2. The release job writes both entries, each with its flavour and SHA-256, into
+   `packages/desktop/prebuilt.json` before the packages are packed, so the npm package names both
+   archives. It stops when either is missing.
+3. Both archives go up with the GitHub release.
+
+`prebuilt.json` holds one entry per React Native version and flavour:
+
+```json
+{
+  "version": 1,
+  "hosts": [
+    {
+      "reactNative": "0.88.0",
+      "flavour": "debug",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal-debug.tar.gz",
+      "sha256": "<64 hex digits>",
+      "libraries": { "react-native-screens": "<version>" }
+    },
+    {
+      "reactNative": "0.88.0",
+      "flavour": "release",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal.tar.gz",
+      "sha256": "<64 hex digits>",
+      "libraries": { "react-native-screens": "<version>" }
+    }
+  ]
+}
+```
+
+An entry with no `flavour` is a release host. A command with no entry of its flavour builds the
+host from source.
 
 To publish a host by hand, for another React Native version or another app, run `make-prebuilt.mjs`
-with `--manifest prebuilt.json` to write its entry, commit `prebuilt.json`, and attach the archive
-to the GitHub release at `<url>`.
+with `--flavour`, and `--manifest prebuilt.json` to write its entry, for each flavour, commit
+`prebuilt.json`, and attach both archives to the GitHub release at `<url>`.

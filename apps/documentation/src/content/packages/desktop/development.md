@@ -14,9 +14,9 @@ app is a Hermes target in its `/json/list` under its app id and the Mac's name, 
 DevTools opens on it from `j` in the Expo CLI or Developer > Open DevTools (Command-Option-I): its
 console, sources with source maps, breakpoints and stepping. While the debugger holds the
 JavaScript, "Paused in debugger" shows over the top of the app's window with a Resume button. A
-packaged app (a Release build) has no debugger, and neither has a dev run on the
-[prebuilt host](/packages/desktop/packaging#prebuilt-hosts), which is a Release build too:
-`NGN_DESKTOP_FROM_SOURCE=1 npm run macos` builds a host with one.
+packaged app (a Release build) has no debugger. A dev run has one on a host built from source and
+on the [prebuilt host](/packages/desktop/packaging#prebuilt-hosts) alike: `run` downloads the debug
+host, the dev build with the debugger, and `package` the release one.
 
 JavaScript's errors show in a red box, a window over the app's: fatal ones, the errors
 `ErrorUtils` and React Native's error pipeline hand on, and soft ones logged with `console.error`

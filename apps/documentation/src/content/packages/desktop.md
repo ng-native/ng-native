@@ -49,9 +49,10 @@ npm start        # the Expo CLI's dev server, in one terminal
 npm run macos    # gets the host the first time, then opens the app from the dev server
 ```
 
-The first `npm run macos` for a React Native version downloads the prebuilt host, when
-`@ng-native/desktop` has one for that version and the app links no native desktop code of its own
-(see [Prebuilt hosts](/packages/desktop/packaging#prebuilt-hosts)). Otherwise it builds the host
+The first `npm run macos` for a React Native version downloads the prebuilt debug host, which
+carries React Native's debugger, when `@ng-native/desktop` has one for that version and the app
+links no native desktop code of its own (see
+[Prebuilt hosts](/packages/desktop/packaging#prebuilt-hosts)). Otherwise it builds the host
 from source, React Native and Hermes included, against the app's own `react-native` (0.88), into
 `~/Library/Caches/ng-native/desktop/rn-<version>`: about 4 minutes on an Apple silicon Mac, and
 about 6 for a universal release build, which the command says before it starts. `run` builds it

@@ -66,19 +66,19 @@ with `expo-updates` on iOS and Android.
 ## Prebuilt hosts
 
 An app with no native desktop code of its own compiles nothing when `prebuilt.json` has a host for
-its React Native version: `run` and `package` download that host, the universal Release build with
-its `hermesc` and Sparkle, and unpack it into the per-user cache under its hash. The archive's
-SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does not match it is
-deleted and stops the command. The host is built from source instead when the app links a library's
-or its own native desktop code, when a host library it has installed (`react-native-screens`,
-`react-native-safe-area-context`, `react-native-svg`, `react-native-webview`,
-`react-native-worklets`, `react-native-reanimated`) is another version than the prebuilt one or
-one the prebuilt host lacks, when the prebuilt host has a library the app denies, when
-`prebuilt.json` has no host for its React Native version, when the download fails (with a
-warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set. Being a Release build, the prebuilt host
-has no debugger in a dev run either; a host built from source for `run` has one.
+its React Native version. Each version has two, both universal and packed with their `hermesc` and
+Sparkle: `run` downloads the debug host, the dev build with React Native's debugger, and `package`
+the release host, the Release build without it. Each unpacks into the per-user cache under its
+hash. Each archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that
+does not match it is deleted and stops the command. The host is built from source instead when
+the app links a library's or its own native desktop code, when a host library it has installed
+(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`,
+`react-native-webview`, `react-native-worklets`, `react-native-reanimated`) is another version than
+the prebuilt one or one the prebuilt host lacks, when the prebuilt host has a library the app
+denies, when `prebuilt.json` has no host of the command's flavour for its React Native version,
+when the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
 
 The host's `ngn-macos` and `hermesc` are signed ad hoc with the hardened runtime, with no
 Developer ID: `package` signs the app, host included, with the app's own identity, and the download
-is checked by the SHA-256 in `prebuilt.json`. Each release attaches its prebuilt host to the
+is checked by the SHA-256 in `prebuilt.json`. Each release attaches both prebuilt hosts to the
 GitHub release.
