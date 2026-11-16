@@ -1291,6 +1291,7 @@ describe('available-signal in template text, which a template shows rather than 
   const html = [
     '<text>Uses haptics.available here</text>',
     '{{ a <b }} @if (haptics.available) {}',
+    '{{ \'{{\' }}<text [hint]="haptics.available"></text>',
     '<text label="@if (haptics.available) yes @let x = haptics.available;"></text>',
     "<text label=\"[hint]='haptics.available' (press)='haptics.available'\"></text>",
     '<text label="haptics.available" [hint]="haptics.available ? 1 : 2">{{ haptics.available }}</text>',
@@ -1304,6 +1305,7 @@ describe('available-signal in template text, which a template shows rather than 
   const called = [
     '<text>Uses haptics.available here</text>',
     '{{ a <b }} @if (haptics.available()) {}',
+    '{{ \'{{\' }}<text [hint]="haptics.available()"></text>',
     '<text label="@if (haptics.available) yes @let x = haptics.available;"></text>',
     "<text label=\"[hint]='haptics.available' (press)='haptics.available'\"></text>",
     '<text label="haptics.available" [hint]="haptics.available() ? 1 : 2">{{ haptics.available() }}</text>',
