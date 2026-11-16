@@ -1128,4 +1128,30 @@ describe('os-comparisons-on-macos, through nx migrate, ng update and ng-native-m
     assert.deepEqual(angular, nx);
     assert.deepEqual(cli, nx);
   });
+
+  it('notes a comparison a template breaks over lines, at the line it starts on', async () => {
+    const split = {
+      'src/app/split.html': "<text>Top</text>\n@if (\n  os() ===\n    'ios'\n) {}\n",
+      'src/app/split.ts': [
+        "import { Component } from '@angular/core';",
+        '@Component({',
+        "  selector: 'app-split',",
+        '  template: `',
+        '    @if (OS_VERSION',
+        '      >= 26) {}',
+        '  `,',
+        '})',
+        'export class Split {}',
+        '',
+      ].join('\n'),
+    };
+    const { nx, angular, cli } = await acrossAdapters(split, 'os-comparisons-on-macos', '0.22.0');
+    assert.deepEqual(nx.files, split);
+    assert.deepEqual(nx.notes, [
+      `src/app/split.html:3: os() === 'ios' ${ios}`,
+      `src/app/split.ts:5: OS_VERSION >= 26 ${version}`,
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
 });

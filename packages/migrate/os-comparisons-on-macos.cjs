@@ -117,24 +117,18 @@ const isInlineTemplate = (ts, node) =>
  */
 function templateNotes(file, text, first = 1) {
   const notes = [];
-  text.split('\n').forEach((line, index) => {
-    for (const match of line.matchAll(COMPARISON)) {
-      const {
-        osOperator,
-        literal,
-        firstOperator,
-        firstLiteral,
-        versionOperator,
-        reversedOperator,
-      } = match.groups ?? {};
-      const reason = osOperator
-        ? why(osOperator, literal, false)
-        : firstOperator
-          ? why(firstOperator, firstLiteral, false)
-          : why(versionOperator ?? reversedOperator, '', true);
-      if (reason) notes.push(`${file}:${first + index}: ${match[0]} ${reason}`);
-    }
-  });
+  // The whole template, since a comparison may break over lines; noted at the line it starts on.
+  for (const match of text.matchAll(COMPARISON)) {
+    const { osOperator, literal, firstOperator, firstLiteral, versionOperator, reversedOperator } =
+      match.groups ?? {};
+    const reason = osOperator
+      ? why(osOperator, literal, false)
+      : firstOperator
+        ? why(firstOperator, firstLiteral, false)
+        : why(versionOperator ?? reversedOperator, '', true);
+    const line = first + (text.slice(0, match.index).match(/\n/g)?.length ?? 0);
+    if (reason) notes.push(`${file}:${line}: ${match[0].replace(/\s+/g, ' ')} ${reason}`);
+  }
   return notes;
 }
 
