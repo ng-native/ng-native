@@ -29,8 +29,8 @@ registerViewName(
  *   <native-button kind="default" (press)="save()">Save</native-button>
  *
  * On macOS it is an NSButton and on iOS a UIButton, drawn by the host, which sends
- * `topButtonPress` when it is clicked, tapped, or pressed by Return (a `default` button), Escape
- * (a `cancel` one) or Space. On Android it is a view pressed through the responder, as a
+ * `topButtonPress` when it is clicked, tapped, or pressed by Space, and on macOS by Return (a
+ * `default` button) or Escape (a `cancel` one). On Android it is a view pressed through the responder, as a
  * `<pressable>` is, and takes `android_ripple` as one does. The web host draws an HTML `button`.
  * It is a button to assistive technology everywhere, and takes focus.
  */
@@ -48,8 +48,8 @@ registerViewName(
 })
 export class NativeButton extends ControlBase {
   /**
-   * What the button does in its window. `default` takes Return and `cancel` takes Escape. Unset,
-   * it is a plain push button that takes neither.
+   * What the button does in its window. In a desktop window `default` takes Return and `cancel`
+   * takes Escape; elsewhere the kind is a style alone. Unset, it is a plain push button.
    */
   readonly kind = input<ButtonKind>();
   /** AppKit's control size on macOS, and UIKit's button size on iOS. Ignored elsewhere. */
