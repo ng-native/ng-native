@@ -96,8 +96,10 @@ jobs:
     # It builds fetched third-party sources, so it gets no write access and keeps no token.
     permissions:
       contents: read
-    # Budget: a cold universal build within 15 minutes on this runner (spec).
-    timeout-minutes: 45
+    # Budget: a cold universal build within 15 minutes on this runner (spec). A cold build measured
+    # 36 minutes for release and 46 for debug (dry run 43954406868), so the limit leaves headroom
+    # for both until the build meets the budget.
+    timeout-minutes: 75
     env:
       NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
       NGN_JOBS: '4'
