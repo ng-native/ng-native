@@ -429,8 +429,12 @@ static void hookSceneDiscard(Class delegate)
   };
   NSUserActivity *activity = [[NSUserActivity alloc] initWithActivityType:WindowActivity];
   activity.userInfo = @{@"request" : requestId, @"key" : key ?: @""};
-  UISceneActivationRequestOptions *options = [UISceneActivationRequestOptions new];
-  options.requestingScene = [self activeScene];
+  // Options from iOS 17, as focus: passes them; nil below, where the system picks the scene.
+  UISceneActivationRequestOptions *options = nil;
+  if (@available(iOS 17.0, *)) {
+    options = [UISceneActivationRequestOptions new];
+    options.requestingScene = [self activeScene];
+  }
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
   [UIApplication.sharedApplication requestSceneSessionActivation:nil
