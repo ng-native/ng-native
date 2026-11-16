@@ -133,13 +133,16 @@ pass, it runs the same gate CI does, then:
   the version of the release that brought it. `nx release changelog`
   turns the version plans into the `CHANGELOG.md` entry, then commits all of it as
   `Release <version>` and tags it `v<version>`.
+- The `desktop-host` job, on a macOS runner beside the others, builds the prebuilt desktop host
+  ([docs/desktop-host.md](desktop-host.md#publishing-a-prebuilt-host)), and the release job writes
+  its SHA-256 into `packages/desktop/prebuilt.json` before the packages are packed.
 - `nx run-many -t build` compiles each Angular package into its `dist`: partial-compiled
   JavaScript and declarations, which its `publishConfig.exports` point at.
 - `pnpm pack` turns each `workspace:*` dependency into that exact version, and `npm publish`
   publishes each tarball with provenance, on `latest`. A version with a prerelease suffix
   (`0.2.0-rc.0`) would go out under that suffix's dist-tag instead, so `latest` never moves to it.
 - The commit and tag are pushed, and a GitHub release is created with the changelog entry as its
-  notes.
+  notes and the prebuilt desktop host's archive attached.
 - The documentation site is built from the tag and deployed to production (`docs.yml`), so
   ng-native.com documents what is on npm, not what is on `main`. A documentation-only fix can go
   live sooner by running **Docs** by hand on `main`.
@@ -148,6 +151,9 @@ If it fails before publishing, nothing has left the runner: fix it and run it ag
 way through publishing, run it again with the same exact version (not a bump): packages already on
 npm at that version are skipped, and the rest are published. `validate` lets that version through
 again because the `Release <version>` commit, pushed only after publishing, is not on `main` yet.
+Once `@ng-native/desktop` is out, finish with **Re-run failed jobs** on the same run instead: its
+`prebuilt.json` names that run's desktop host by SHA-256, a new run builds another, and the release
+job stops rather than attach an archive the published package would refuse.
 
 ## Checking distribution locally
 
