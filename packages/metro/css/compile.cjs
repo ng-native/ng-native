@@ -3173,6 +3173,17 @@ const KEPT_BY_LIGHTNINGCSS = new Set(['UnsupportedPseudoClass', 'UnsupportedPseu
 /** Both native platforms, which is who a sheet is for when the build does not say. */
 const NATIVE = ['ios', 'android'];
 
+/** The platforms a build can name, each of which a sheet is then built for alone. */
+const BUILDS = [...NATIVE, 'macos'];
+
+/**
+ * The platforms refused a filter iOS does not draw: iOS, and macOS, whose host draws no more of them
+ * than iOS does. The macOS host hands AppKit the whole transform matrix, skews included, so a skew
+ * is refused on Android alone.
+ */
+const IOS_FILTERS = new Set(['ios', 'macos']);
+const drawsIosFilters = (platforms) => platforms.some((platform) => IOS_FILTERS.has(platform));
+
 /** The class `mount` puts on the root for each platform, which is how a rule is scoped to one. */
 const PLATFORM_CLASS = {
   'platform-ios': 'ios',
@@ -3203,7 +3214,7 @@ function rulePlatforms(selectors, targets) {
   for (const parts of selectors ?? []) {
     const named = platformClasses(parts);
     // Two platform classes in one selector ask for a root that is both, which never exists.
-    const scope = named.size === 0 ? NATIVE : named.size === 1 ? [...named] : [];
+    const scope = named.size === 0 ? targets : named.size === 1 ? [...named] : [];
     for (const platform of scope) if (targets.includes(platform)) platforms.add(platform);
   }
   return [...platforms];
@@ -3215,7 +3226,7 @@ function rulePlatforms(selectors, targets) {
  * dropped with a warning keeps the rest of the rule.
  */
 function assertDrawn(out, deferred, from, platforms, context) {
-  if (!platforms.includes('ios')) return;
+  if (!drawsIosFilters(platforms)) return;
   const settled = undrawnOnIos(out.filter);
   const pending = deferred
     .slice(from)
@@ -3233,7 +3244,7 @@ function assertDrawn(out, deferred, from, platforms, context) {
  * filter slot read on device, so this is the last place that knows which platforms it is for.
  */
 function assertTokenDrawn(tokens, name, platforms, context) {
-  if (!platforms.includes('ios') || typeof name !== 'string') return;
+  if (!drawsIosFilters(platforms) || typeof name !== 'string') return;
   const fn = undrawnOnIos(tokens[name]?.filter);
   if (!fn) return;
   delete tokens[name];
@@ -3434,7 +3445,7 @@ function compileCss(source, context = 'styles', options = {}) {
   const fonts = [];
   const { onUnsupported } = options;
   /** The platforms this sheet is built for: the one Metro is bundling, or both when it is not said. */
-  const targets = NATIVE.includes(options.platform) ? [options.platform] : NATIVE;
+  const targets = BUILDS.includes(options.platform) ? [options.platform] : NATIVE;
   let order = 0;
   /** The tokens each declaration reads, for `reportPlatformColourReads` once the sheet is read. */
   const reads = [];

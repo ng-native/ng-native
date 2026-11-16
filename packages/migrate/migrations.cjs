@@ -103,7 +103,7 @@ const migrations = [
     name: 'os-comparisons-on-macos',
     version: '0.23.0',
     description:
-      "Note each comparison with 'ios', each !== 'android' and each OS_VERSION comparison, which answer differently now that macOS is reported as 'macos'.",
+      "Note each comparison with 'ios', which answers differently now that macOS is reported as 'macos', and each !== 'android' and OS_VERSION comparison, which a Mac passes into a branch that may be written for iOS.",
     run: osComparisonsOnMacos,
   },
   {

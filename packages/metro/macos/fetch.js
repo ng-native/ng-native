@@ -51,6 +51,14 @@ function isRequest(input) {
   return input != null && typeof input === 'object' && typeof input.url === 'string';
 }
 
+/**
+ * Whether `input` is a `Request` whose body was read already, which `fetch` refuses as the Fetch
+ * standard's `Request` constructor does, unless `init` gives a body in its place.
+ */
+function consumedRequest(init, input) {
+  return isRequest(input) && input.bodyUsed === true && !(init && init.body != null);
+}
+
 /** A request's body: `whatwg-fetch`'s `Request` keeps what it was given in `_bodyInit`. */
 function requestBody(init, input) {
   if (init && init.body != null) return init.body;
@@ -92,13 +100,25 @@ function pulledStream(next, cancel, markUsed) {
   );
 }
 
-/** Chunks from Networking, waiting for a reader; `end` closes it and `fail` errors it. */
+/**
+ * Chunks from Networking, waiting for a reader; `end` closes it and `fail` errors it. `fail` still
+ * errors it after `end`, until the reader has taken the end, so an abort drops what was not read.
+ * `onClose` runs once the reader has taken the end or the error, or `fail` errors it.
+ */
 class Chunks {
-  constructor() {
+  constructor(onClose) {
     this.queue = [];
     this.waiting = [];
     this.done = false;
+    this.closed = false;
     this.error = undefined;
+    this.onClose = onClose;
+  }
+
+  close() {
+    if (this.closed) return;
+    this.closed = true;
+    this.onClose?.();
   }
 
   push(chunk) {
@@ -111,21 +131,27 @@ class Chunks {
   end() {
     if (this.done) return;
     this.done = true;
-    for (const waiter of this.waiting.splice(0)) waiter.resolve({ done: true, value: undefined });
+    const waiting = this.waiting.splice(0);
+    if (waiting.length > 0) this.close();
+    for (const waiter of waiting) waiter.resolve({ done: true, value: undefined });
   }
 
   fail(error) {
-    if (this.done) return;
+    if (this.closed || this.error !== undefined) return;
     this.done = true;
     this.error = error;
     this.queue.length = 0;
+    this.close();
     for (const waiter of this.waiting.splice(0)) waiter.reject(error);
   }
 
   next() {
     if (this.queue.length > 0) return Promise.resolve({ done: false, value: this.queue.shift() });
     if (this.error !== undefined) return Promise.reject(this.error);
-    if (this.done) return Promise.resolve({ done: true, value: undefined });
+    if (this.done) {
+      this.close();
+      return Promise.resolve({ done: true, value: undefined });
+    }
     return new Promise((resolve, reject) => this.waiting.push({ resolve, reject }));
   }
 }
@@ -262,6 +288,10 @@ function createFetch(networking) {
         reject(abortError(signal));
         return;
       }
+      if (consumedRequest(init, input)) {
+        reject(new TypeError("Failed to execute 'fetch': the Request's body is already used."));
+        return;
+      }
       const method = String((init && init.method) ?? (isRequest(input) ? input.method : 'GET'));
       const headers = new Headers(
         (init && init.headers) ?? (isRequest(input) ? input.headers : undefined),
@@ -285,17 +315,19 @@ function createFetch(networking) {
       const credentials =
         (init && init.credentials) ?? (isRequest(input) ? input.credentials : undefined);
 
-      const chunks = new Chunks();
+      // The signal is listened to until the body is read to its end or errored, past the request's
+      // completion: an abort then errors what is left unread, as the Fetch standard has it.
+      const chunks = new Chunks(() => signal?.removeEventListener('abort', onAbort));
       let id = null;
       let early = [];
       let settled = false;
       let finished = false;
       let abortWhenKnown = false;
+      let hasBody = true;
 
       const subscriptions = [];
       function stop() {
         for (const subscription of subscriptions.splice(0)) subscription.remove();
-        signal?.removeEventListener('abort', onAbort);
       }
       function abortNative() {
         if (finished) return;
@@ -309,6 +341,7 @@ function createFetch(networking) {
         settled = true;
         const headerList = new Headers(responseHeaders ?? {});
         const finalUrl = responseUrl || url;
+        hasBody = !(method.toUpperCase() === 'HEAD' || status === 204 || status === 304);
         resolve(
           new StreamingResponse(
             {
@@ -317,13 +350,14 @@ function createFetch(networking) {
               url: finalUrl,
               redirected: finalUrl !== url,
             },
-            method.toUpperCase() === 'HEAD' || status === 204 || status === 304
+            !hasBody
               ? null
               : (markUsed) =>
                   pulledStream(
                     () => chunks.next(),
                     () => {
                       chunks.end();
+                      chunks.close();
                       abortNative();
                       stop();
                     },
@@ -351,6 +385,7 @@ function createFetch(networking) {
         }
         if (!settled) onResponse(200, {}, url);
         chunks.end();
+        if (!hasBody) chunks.close();
       }
       function dispatch(event, args) {
         if (event === 'response') onResponse(args[1], args[2], args[3]);

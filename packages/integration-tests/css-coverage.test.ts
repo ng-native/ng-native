@@ -386,6 +386,25 @@ describe('skew, per platform', () => {
       transform: [{ skewX: '12deg' }],
     });
   });
+
+  // The macOS host hands AppKit the whole matrix React Native resolves, skews included, so a
+  // macOS build keeps a skew written either way, and refuses an iOS filter either way.
+  it('keeps a skew in a macOS build, unscoped and scoped to macOS alike', () => {
+    for (const css of [
+      '.a { transform: skewX(12deg) }',
+      '.platform-macos .a { transform: skewX(12deg) }',
+    ]) {
+      assert.deepEqual(compileCss(css, 'test', { platform: 'macos' }).rules[0].declarations, {
+        transform: [{ skewX: '12deg' }],
+      });
+    }
+  });
+
+  it('refuses a filter iOS does not draw in a macOS build, unscoped and scoped to macOS alike', () => {
+    for (const css of ['.a { filter: blur(4px) }', '.platform-macos .a { filter: blur(4px) }']) {
+      assert.throws(() => compileCss(css, 'test', { platform: 'macos' }), /not drawn on iOS/);
+    }
+  });
 });
 
 describe('background sizing', () => {
