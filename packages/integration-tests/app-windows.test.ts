@@ -807,6 +807,9 @@ describe('after a reload or a relaunch', () => {
       assert.deepEqual(store.read(), [{ kind: 'main' }]);
       defaults.set('ngNative.windows', 'not json');
       assert.deepEqual(store.read(), []);
+      // Written outside the app: what is not a record is left out.
+      defaults.set('ngNative.windows', '[null, 1, {"kind":"main"}]');
+      assert.deepEqual(store.read(), [{ kind: 'main' }]);
     }
   });
 

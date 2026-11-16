@@ -59,16 +59,21 @@ function settingsStore(): WindowRestoreStore | null {
   return {
     read: () => {
       const saved = settings.get(SETTINGS_KEY);
+      let records: unknown = saved;
       if (typeof saved === 'string') {
         try {
-          const parsed: unknown = JSON.parse(saved);
-          return Array.isArray(parsed) ? (parsed as RestoredWindow[]) : [];
+          records = JSON.parse(saved);
         } catch {
           return [];
         }
       }
-      // Kept as a property list before: still opens what an earlier version saved.
-      return Array.isArray(saved) ? (saved as RestoredWindow[]) : [];
+      // A list as a property list too: what an earlier version saved still opens. Only records,
+      // since a value written outside the app can hold anything.
+      return Array.isArray(records)
+        ? records.filter(
+            (window): window is RestoredWindow => typeof window === 'object' && window !== null,
+          )
+        : [];
     },
     // As JSON: a property list drops null, from an object and from an array, so a window's inputs
     // would not come back as they were given.
