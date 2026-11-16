@@ -1106,6 +1106,8 @@ describe('os-comparisons-on-macos, through nx migrate, ng update and ng-native-m
     'src/app/glass.html':
       '@if (OS_VERSION >= 26) {\n  <view></view>\n}\n@if (17 <= OS_VERSION) {}\n',
     'src/app/os.ts': "export const wide = Platform.OS !== 'android';\n",
+    'src/app/reversed.html':
+      "@if ('ios' === os()) {}\n<text [class.wide]=\"'android' != os\"></text>\n",
     'src/app/shell.ts': 'export const tall = Platform.OS === `ios`;\n',
   };
 
@@ -1119,6 +1121,8 @@ describe('os-comparisons-on-macos, through nx migrate, ng update and ng-native-m
       `src/app/home.ts:6: os() === 'ios' ${ios}`,
       `src/app/home.ts:9: OS_VERSION >= 26 ${version}`,
       "src/app/os.ts:1: Platform.OS !== 'android' is true on macOS too, so a Mac takes this branch. Check that it is right there.",
+      `src/app/reversed.html:1: 'ios' === os() ${ios}`,
+      "src/app/reversed.html:2: 'android' != os is true on macOS too, so a Mac takes this branch. Check that it is right there.",
       `src/app/shell.ts:1: Platform.OS === \`ios\` ${ios}`,
     ]);
     assert.deepEqual(angular, nx);

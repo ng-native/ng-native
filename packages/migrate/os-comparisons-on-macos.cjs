@@ -25,10 +25,14 @@ const ORDER = new Set(['<', '<=', '>', '>=', '===', '==', '!==', '!=']);
 const mentions = (text) =>
   text !== null && (/['"`](ios|android)\\?['"`]/.test(text) || text.includes('OS_VERSION'));
 
-/** A comparison in a template binding: with a quoted OS, or of `OS_VERSION` with a number. */
+/**
+ * A comparison in a template binding: with a quoted OS on either side, or of `OS_VERSION` with a
+ * number on either side.
+ */
 const COMPARISON = new RegExp(
   [
     /(?<os>[\w.$?!]+(?:\(\))?)\s*(?<osOperator>===|!==|==|!=)\s*(?<quote>['"`])(?<literal>ios|android)\k<quote>/,
+    /(?<firstQuote>['"`])(?<firstLiteral>ios|android)\k<firstQuote>\s*(?<firstOperator>===|!==|==|!=)\s*[\w$][\w.$?!]*(?:\(\))?/,
     /\bOS_VERSION\b(?:\(\))?\s*(?<versionOperator><=|>=|<|>|===|!==|==|!=)\s*\d+/,
     /\b\d+\s*(?<reversedOperator><=|>=|<|>|===|!==|==|!=)\s*OS_VERSION\b(?:\(\))?/,
   ]
@@ -115,10 +119,19 @@ function templateNotes(file, text, first = 1) {
   const notes = [];
   text.split('\n').forEach((line, index) => {
     for (const match of line.matchAll(COMPARISON)) {
-      const { osOperator, literal, versionOperator, reversedOperator } = match.groups ?? {};
+      const {
+        osOperator,
+        literal,
+        firstOperator,
+        firstLiteral,
+        versionOperator,
+        reversedOperator,
+      } = match.groups ?? {};
       const reason = osOperator
         ? why(osOperator, literal, false)
-        : why(versionOperator ?? reversedOperator, '', true);
+        : firstOperator
+          ? why(firstOperator, firstLiteral, false)
+          : why(versionOperator ?? reversedOperator, '', true);
       if (reason) notes.push(`${file}:${first + index}: ${match[0]} ${reason}`);
     }
   });
