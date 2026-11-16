@@ -130,6 +130,23 @@ describe('a native button pressed', () => {
         assert.deepEqual(logged, [['save']], 'after the button has run its own (press)');
       });
 
+      it('is reported as it was pressed when its own (press) removes it', async () => {
+        const { heard, fabric } = await renderObserved();
+        fabric.emit(node('dismiss'), 'topButtonPress', {});
+        await settle();
+        assert.equal(screen.queryByTestId('dismiss'), null, 'the handler removed the button');
+        assert.deepEqual(heard.map(stable), [
+          {
+            type: 'click',
+            element: 'native-button',
+            testID: 'dismiss',
+            role: 'button',
+            text: 'Dismiss',
+            source: 'click',
+          },
+        ]);
+      });
+
       it('is reported when nothing listens to it, which is a dead tap', async () => {
         const { heard, fabric } = await renderObserved();
         fabric.emit(node('silent'), 'topButtonPress', {});

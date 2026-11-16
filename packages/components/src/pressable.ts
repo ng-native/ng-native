@@ -31,6 +31,7 @@ import {
   interactionObservers,
   notifyInteraction,
   textWithin,
+  type InteractionEvent,
   type InteractionType,
 } from './interaction-observer.ts';
 import { byNativeId } from './native-id.ts';
@@ -402,8 +403,7 @@ export abstract class TouchableBase extends ViewBase {
         return;
       }
       if (!this.claims()) return;
-      this.press.emit(click);
-      this.reportInteraction('click', click, 'click');
+      this.emitReported(this.press, 'click', click, 'click');
     });
   }
 
@@ -506,8 +506,7 @@ export abstract class TouchableBase extends ViewBase {
     this.longPressTimer = setTimeout(() => {
       this.longPressTimer = null;
       this.longPressed = true;
-      this.longPress.emit(event);
-      this.reportInteraction('long-press', event, 'touch');
+      this.emitReported(this.longPress, 'long-press', event, 'touch');
     }, this.delayLongPress());
   }
 
@@ -549,26 +548,37 @@ export abstract class TouchableBase extends ViewBase {
     const longPressed = this.longPressed;
     this.deactivate(event);
     if (longPressed) return;
-    this.press.emit(event);
-    this.reportInteraction('click', event, 'touch');
+    this.emitReported(this.press, 'click', event, 'touch');
   }
 
   /**
-   * Tell the app's interaction observers, if it has any, about a press that has just fired. They
-   * are looked up here rather than injected, because a press is rare and a lookup for every
-   * `<text>` on screen is not.
-   * Reported whether or not `(press)` has a listener: a control that does nothing when tapped is
-   * what an observer looking for dead taps wants to hear about.
+   * Fire a press output, and tell the app's interaction observers, if it has any, about it.
+   *
+   * The event is described before the output runs and handed over after it: the app's own handler
+   * goes first, and one that removes the control still has it reported as it was when pressed.
+   * Observers are looked up here rather than injected, because a press is rare and a lookup for
+   * every `<text>` on screen is not. A press is reported whether or not anything listens to it: a
+   * control that does nothing when tapped is what an observer looking for dead taps wants to hear.
    */
-  protected reportInteraction(
+  protected emitReported(
+    output: { emit(event: PressEvent): void },
     type: InteractionType,
     event: PressEvent,
     source: 'touch' | 'click',
   ): void {
     const observers = interactionObservers(this.injector);
-    if (!observers) return;
+    const interaction = observers && this.describeInteraction(type, event, source);
+    output.emit(event);
+    if (observers && interaction) notifyInteraction(observers, interaction);
+  }
+
+  private describeInteraction(
+    type: InteractionType,
+    event: PressEvent,
+    source: 'touch' | 'click',
+  ): InteractionEvent {
     const text = textWithin(this.node);
-    notifyInteraction(observers, {
+    return {
       type,
       ...describeElement(this.engine, this.node),
       ...(text !== undefined && { text }),
@@ -576,7 +586,7 @@ export abstract class TouchableBase extends ViewBase {
       ...(this.size && { width: this.size.width, height: this.size.height }),
       source,
       timestamp: Date.now(),
-    });
+    };
   }
 
   private onTerminate(event: PressEvent): void {

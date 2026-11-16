@@ -103,8 +103,7 @@ export class NativeButton extends ControlBase {
       'topButtonPress',
       (event) => {
         if (this.pressDisabled()) return;
-        this.press.emit(event as never);
-        this.reportInteraction('click', event as never, 'click');
+        this.emitReported(this.press, 'click', event as never, 'click');
       },
     );
   }

@@ -1,5 +1,14 @@
 import { NgComponentOutlet } from '@angular/common';
-import { Component, Directive, ElementRef, input, signal, viewChild } from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component,
+  Directive,
+  ElementRef,
+  inject,
+  input,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { PressBehavior, Pressable } from '../../components/src/pressable.ts';
 import { ScrollView } from '../../components/src/scroll-view.ts';
 import { Text } from '../../components/src/text.ts';
@@ -250,6 +259,11 @@ export class OutletCard {
       <aside x-level="warn"></aside>
       <section class="x-second-badge"></section>
       <header class="x-off" x-mute x-on></header>
+      @if (dismissible()) {
+        <pressable testID="dismiss" accessibilityLabel="Dismiss" (press)="dismiss()">
+          <text>Dismiss</text>
+        </pressable>
+      }
     </scroll-view>
     <x-top-bar />
     <x-named-card testID="named-host" />
@@ -265,6 +279,15 @@ export class InteractionObserverFixture {
   /** The scroll view's own node, to see what it listens for. */
   readonly scroll = viewChild.required('scroll', { read: ElementRef });
   readonly rows = [1, 2, 3];
+
+  readonly dismissible = signal(true);
+  private readonly changes = inject(ChangeDetectorRef);
+
+  /** Removes its own control before the press is over, as a dismiss button does. */
+  dismiss(): void {
+    this.dismissible.set(false);
+    this.changes.detectChanges();
+  }
 
   log(event: string): void {
     this.events.push(event);

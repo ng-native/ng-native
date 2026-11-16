@@ -94,6 +94,17 @@ describe('an interaction observer hears taps', () => {
     assert.deepEqual({ pageX, pageY, locationX, locationY }, up);
   });
 
+  it('describes a control its own press handler removes, as it was when pressed', async () => {
+    const heard: InteractionEvent[] = [];
+    const { fabric } = await renderObserved(heard);
+    tap(fabric, 'dismiss');
+    await settle();
+    assert.equal(heard.length, 1);
+    assert.equal(heard[0]?.label, 'Dismiss');
+    assert.equal(heard[0]?.text, 'Dismiss');
+    assert.equal(typeof heard[0]?.nativeTag, 'number');
+  });
+
   it('reports a tap on a control nothing listens to, which is a dead tap', async () => {
     const heard: InteractionEvent[] = [];
     const { fabric } = await renderObserved(heard);
