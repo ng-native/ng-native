@@ -128,6 +128,10 @@ export class SidebarItemPath {
   }
 
   private target(): UrlTree {
-    return this.router.createUrlTree(segmentsOf(this.path()), { relativeTo: this.route });
+    // No commands at all would keep the url as it is: '.' is the parent route's own url.
+    const segments = segmentsOf(this.path());
+    return this.router.createUrlTree(segments.length ? segments : ['.'], {
+      relativeTo: this.route,
+    });
   }
 }

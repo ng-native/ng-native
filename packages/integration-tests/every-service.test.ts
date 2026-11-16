@@ -289,6 +289,10 @@ const ARGUMENTS: Readonly<Record<string, (service: Record<string, unknown>) => u
   'StatusBar.set': () => [{}],
   'StatusBar.push': () => [{}],
   'FileSystem.write': (files) => [(files['cache'] as (name: string) => unknown)('a.txt'), 'a'],
+  // Valid, so each call gets past its own checks to the module that is not there.
+  'Shell.openExternal': () => ['https://example.com'],
+  'Shell.openPath': () => ['/Users/me/a.txt'],
+  'Shell.showItemInFolder': () => ['/Users/me/a.txt'],
 };
 
 /** The public methods a class declares in `file`: not private, protected, static or a getter. */
@@ -296,8 +300,10 @@ function publicMethods(file: string, cls: string): string[] {
   const path = fileURLToPath(new URL(`../${file}`, import.meta.url));
   const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest);
   const names: string[] = [];
+  let found = false;
   const visit = (node: ts.Node) => {
     if (ts.isClassDeclaration(node) && node.name?.text === cls) {
+      found = true;
       for (const member of node.members) {
         const hidden = ts
           .getModifiers(member as ts.HasModifiers)
@@ -315,6 +321,8 @@ function publicMethods(file: string, cls: string): string[] {
     ts.forEachChild(node, visit);
   };
   visit(source);
+  // A class renamed or moved would otherwise read as one with no methods to check.
+  if (!found) throw new Error(`No class ${cls} in ${file}`);
   return names;
 }
 
@@ -439,5 +447,13 @@ describe('every service', () => {
       0,
     );
     assert.ok(counted > 100, `found ${counted} methods`);
+  });
+});
+
+describe('the support row of a service', () => {
+  it("is no row for a name only an object's prototype has", () => {
+    assert.equal(supportRowOf('constructor'), undefined);
+    assert.equal(supportRowOf('toString'), undefined);
+    assert.ok(supportRowOf('Dock'), 'a service a row names');
   });
 });

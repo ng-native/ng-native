@@ -20,7 +20,7 @@ import { View } from '../../components/src/view.ts';
         autosave="main"
       >
         <view testID="search" />
-        <sidebar-section testID="mail" title="Mailboxes" collapsible>
+        <sidebar-section testID="mail" [title]="mailTitle()" [collapsible]="mailCollapsible()">
           <sidebar-item
             testID="inbox"
             label="Inbox"
@@ -51,6 +51,8 @@ import { View } from '../../components/src/view.ts';
 })
 export class SidebarFixture {
   readonly collapsed = signal(false);
+  readonly mailTitle = signal<string | undefined>('Mailboxes');
+  readonly mailCollapsible = signal(true);
   readonly inbox = signal(true);
   readonly sent = signal(false);
   readonly unread = signal(3);

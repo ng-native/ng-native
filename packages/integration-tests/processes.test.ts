@@ -149,6 +149,33 @@ describe('Processes.spawn', () => {
     assert.deepEqual(out, ['hi\n']);
   });
 
+  it('keeps live output behind what it held before the spawn resolved, in order', async () => {
+    // Output the host sends after the spawn resolves, before the held events are replayed, still
+    // comes after them, and an exit among it does not drop the held output.
+    const fake = fakeHost();
+    const processes = injectService(Processes, {
+      providers: [
+        {
+          provide: Processes.SOURCE,
+          useValue: {
+            ...fake.host,
+            spawn: async () => {
+              fake.emit({ type: 'stdout', handle: 7, data: 'first\n' });
+              return 7;
+            },
+          },
+        },
+      ],
+    });
+    const git = await processes.spawn('git', ['status', '--porcelain']);
+    const out: string[] = [];
+    git!.onStdout((chunk) => out.push(chunk));
+    fake.emit({ type: 'stdout', handle: 7, data: 'second\n' });
+    fake.emit({ type: 'exit', handle: 7, code: 0, signal: null });
+    assert.deepEqual(await git!.exit, { code: 0, signal: null });
+    assert.deepEqual(out, ['first\n', 'second\n']);
+  });
+
   it('throws for a call the app did not declare, and runs nothing', async () => {
     const { host, spawned } = fakeHost();
     const processes = injectService(Processes, {

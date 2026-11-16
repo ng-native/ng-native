@@ -36,6 +36,8 @@ import { compileFixture } from './compile.ts';
 type Signalish<T> = { (): T; set(value: T): void };
 type Fixture = {
   collapsed: Signalish<boolean>;
+  mailTitle: Signalish<string | undefined>;
+  mailCollapsible: Signalish<boolean>;
   inbox: Signalish<boolean>;
   sent: Signalish<boolean>;
   unread: Signalish<number>;
@@ -212,6 +214,24 @@ describe('drawn, beside the content', () => {
     assert.ok(queryByTestId('inbox'));
     assert.equal(instance.inbox(), true, 'the selection survives the section collapsing');
   });
+
+  for (const [what, take] of [
+    ['is no longer collapsible', (instance: Fixture) => instance.mailCollapsible.set(false)],
+    ['loses its title', (instance: Fixture) => instance.mailTitle.set(undefined)],
+  ] as const) {
+    it(`shows a collapsed section's items once it ${what}`, async () => {
+      // With no title to press, nothing could show them again.
+      const wide = [{ provide: Screen.SOURCE, useValue: screenOf(1024) }];
+      const { instance, getByText, queryByTestId, rerender } = await render(Fixture, {
+        providers: wide,
+      });
+      await touch(getByText('Mailboxes'));
+      assert.equal(queryByTestId('inbox'), null);
+      take(instance);
+      await rerender();
+      assert.ok(queryByTestId('inbox'));
+    });
+  }
 });
 
 describe('drawn, at a compact width', () => {

@@ -35,11 +35,20 @@ describe('tabs on macOS', () => {
   });
   afterEach(cleanup);
 
-  it("commits iOS's tabs host and screens, which the host draws as sidebar items", async () => {
-    const { fabric } = await render(mod['Bar'] as Type<unknown>, {
+  /**
+   * The tab app, rendered and settled: each test renders its own, so each runs alone too. The
+   * warning comes once per path in a process, so what the first render warned is kept.
+   */
+  async function renderBar() {
+    const rendered = await render(mod['Bar'] as Type<unknown>, {
       providers: [provideNativeRouter(mod['routes'] as Routes)],
     });
     for (let turn = 0; turn < 5; turn++) await settle();
+    return rendered;
+  }
+
+  it("commits iOS's tabs host and screens, which the host draws as sidebar items", async () => {
+    const { fabric } = await renderBar();
     const nodes = flatten(fabric.committed);
     assert.ok(nodes.some((node) => node.viewName === 'RNSTabsHostIOS'));
     const tabs = nodes.filter((node) => node.viewName === 'RNSTabsScreenIOS');
@@ -53,7 +62,8 @@ describe('tabs on macOS', () => {
     assert.equal(tabs[0]!.props['badgeValue'], '3');
   });
 
-  it('warns that a tab naming only a drawable has no icon on macOS', () => {
+  it('warns that a tab naming only a drawable has no icon on macOS', async () => {
+    await renderBar();
     assert.ok(
       warnings.some((message) => message.includes('path="search"') && message.includes('macOS')),
       warnings.join('\n'),

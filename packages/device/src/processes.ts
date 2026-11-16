@@ -187,6 +187,8 @@ export class Processes {
   private readonly early = new Map<number, ProcessEvent[]>();
   /** Spawns waiting on the host, while which an unknown handle's events are kept. */
   private spawning = 0;
+  /** Held events not yet replayed, by handle: live ones queue behind them, in order. */
+  private readonly replaying = new Map<number, ProcessEvent[]>();
   private readonly unsubscribe = this.native?.subscribe?.((event) => this.heard(event)) ?? null;
 
   /** Whether the OS gives the app processes: a desktop OS with the desktop host's module. */
@@ -245,8 +247,12 @@ export class Processes {
     const early = this.early.get(handle);
     if (early) {
       this.early.delete(handle);
+      this.replaying.set(handle, early);
       // A turn later, as the host's events arrive, so the caller has listened by then.
-      setTimeout(() => early.forEach((event) => this.heard(event)), 0);
+      setTimeout(() => {
+        this.replaying.delete(handle);
+        early.forEach((event) => this.heard(event));
+      }, 0);
     }
     const listen = (set: Set<(chunk: string) => void>, listener: (chunk: string) => void) => {
       set.add(listener);
@@ -263,6 +269,11 @@ export class Processes {
   }
 
   private heard(event: ProcessEvent): void {
+    const queued = this.replaying.get(event.handle);
+    if (queued) {
+      queued.push(event);
+      return;
+    }
     const running = this.running.get(event.handle);
     if (!running) {
       if (!this.spawning) return;
