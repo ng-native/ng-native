@@ -7,7 +7,12 @@
  * Nothing is built while no observer is registered.
  */
 import { InjectionToken, type Injector, type Provider } from '@angular/core';
-import type { HostEngine, HostNode } from '@ng-native/fabric';
+import {
+  registeredViewName,
+  type EngineNode,
+  type HostEngine,
+  type HostNode,
+} from '@ng-native/fabric';
 
 /** What the user did. */
 export type InteractionType = 'click' | 'long-press' | 'scroll' | 'swipe';
@@ -20,6 +25,13 @@ export interface InteractionEvent {
   readonly type: InteractionType;
   /** The element's name as written in the template: `pressable`, `text`, `scroll-view`, ... */
   readonly element: string;
+  /**
+   * The selector of the nearest component the control is rendered inside, such as `app-button`
+   * for the `<pressable>` in its template, or for one projected into its `<ng-content>`. Absent
+   * for a control in the root component's own template, and for a component that is the control
+   * itself, which `element` names.
+   */
+  readonly component?: string;
   /** `accessibilityLabel`, or `aria-label`. */
   readonly label?: string;
   readonly testID?: string;
@@ -112,14 +124,19 @@ export function notifyInteraction(
 export function describeElement(
   engine: HostEngine,
   node: HostNode,
-): Pick<InteractionEvent, 'element' | 'label' | 'testID' | 'nativeID' | 'role' | 'nativeTag'> {
+): Pick<
+  InteractionEvent,
+  'element' | 'component' | 'label' | 'testID' | 'nativeID' | 'role' | 'nativeTag'
+> {
   const props = node.props;
+  const component = componentAround(node);
   const label = text(props['accessibilityLabel']);
   const testID = text(props['testID']);
   const nativeID = text(props['nativeID']);
   const role = text(props['role']) ?? text(props['accessibilityRole']);
   return {
     element: elementName(node),
+    ...(component !== undefined && { component }),
     ...(label !== undefined && { label }),
     ...(testID !== undefined && { testID }),
     ...(nativeID !== undefined && { nativeID }),
@@ -135,6 +152,21 @@ const text = (value: unknown): string | undefined =>
 function elementName(node: HostNode): string {
   const named = node as HostNode & { tag?: string; tagName?: string };
   return (named.tag ?? named.tagName ?? '').toLowerCase();
+}
+
+/**
+ * The name of the nearest element around `node` that Angular mounted a component on, read at the
+ * moment of an interaction from what the platform adapter already marks, so nothing is kept per
+ * element. A primitive, whose name is a native view's, is passed over, and so is the root
+ * component, which sits straight under the surface: it is the app rather than a part of it.
+ */
+function componentAround(node: HostNode): string | undefined {
+  for (let current = node.parent; current?.parent?.parent; current = current.parent) {
+    if (!(current as EngineNode).componentHost) continue;
+    const name = elementName(current);
+    if (!registeredViewName(name)) return name;
+  }
+  return undefined;
 }
 
 /** The text under a node, in order, with runs of whitespace collapsed, or undefined if none. */

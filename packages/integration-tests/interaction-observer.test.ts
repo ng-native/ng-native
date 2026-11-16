@@ -268,6 +268,57 @@ describe('an interaction observer hears taps', () => {
   });
 });
 
+describe('an interaction observer names the component a control belongs to', () => {
+  async function componentOf(id: string): Promise<InteractionEvent> {
+    const heard: InteractionEvent[] = [];
+    const { fabric } = await renderObserved(heard);
+    tap(fabric, id);
+    await settle();
+    assert.equal(heard.length, 1);
+    return heard[0]!;
+  }
+
+  it('reports the component whose template holds the pressable', async () => {
+    const event = await componentOf('card-action');
+    assert.equal(event.element, 'pressable');
+    assert.equal(event.component, 'x-observed-card');
+  });
+
+  it('passes over an element that only a directive matches', async () => {
+    assert.equal((await componentOf('in-region')).component, 'x-observed-card');
+  });
+
+  it('reports the innermost component, not the one around it', async () => {
+    assert.equal((await componentOf('wrapped')).component, 'x-wrapped-button');
+  });
+
+  it('reports the component a pressable is projected into', async () => {
+    assert.equal((await componentOf('projected')).component, 'x-observed-card');
+  });
+
+  it('reports no component for a pressable in the app component itself', async () => {
+    assert.equal('component' in (await componentOf('save')), false);
+  });
+
+  it('reports a component composing the press machine by its own name, with no component', async () => {
+    const event = await componentOf('composed');
+    assert.equal(event.element, 'x-observed-button');
+    assert.equal('component' in event, false);
+  });
+
+  it('names the component a scroll view is in as well', async () => {
+    const heard: InteractionEvent[] = [];
+    const { fabric } = await renderObserved(heard);
+    fabric.emit(node('card-scroll'), 'topScrollBeginDrag', { contentOffset: { x: 0, y: 0 } });
+    fabric.emit(node('card-scroll'), 'topScrollEndDrag', { contentOffset: { x: 0, y: 80 } });
+    await settle();
+    assert.deepEqual(
+      heard.map((event) => [event.element, event.component]),
+      [['scroll-view', 'x-observed-card']],
+    );
+  });
+});
+
 describe('an interaction observer hears clicks on Android', () => {
   before(() => registerPlatformComponents('android'));
   after(() => {

@@ -56,6 +56,12 @@ Each event carries:
 
 - `element`: the element's name as written in the template, such as `pressable`, `text` or
   `scroll-view`, or a component's own selector where `PressBehavior` is composed onto it.
+- `component`: the selector of the nearest component the control is rendered inside, so taps on
+  every `<app-button>` can be told apart from taps on every `<app-list-row>` when both draw a
+  `<pressable>`. A `<pressable>` in a button's template reports the button, even with the button
+  in a card, and a control projected into a component's `<ng-content>` reports that component.
+  Absent for a control in the root component's own template, and where the control is the
+  component itself, as `element` already names it.
 - `label`, `testID`, `nativeID` and `role`: what the element committed, so a label a component
   gave it or a role it implies is the one reported, as a screen reader hears it.
 - `text`: for a `click` and a `long-press`, never a `scroll` or `swipe`, the text inside the
@@ -75,8 +81,8 @@ Observers run after the control's own `(press)` handler, so what the tap does is
 recording it. One that throws is reported once with `console.warn`, and neither the other observers
 nor the app are stopped by it.
 
-On the web host, taps are reported, with a `nativeTag` of `null`, and scrolls are not, since a
-browser's scroll has no drag events to report them from.
+On the web host, taps are reported, with a `nativeTag` of `null` and no `component`, and scrolls
+are not, since a browser's scroll has no drag events to report them from.
 
 ## Privacy
 

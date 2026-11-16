@@ -1,4 +1,4 @@
-import { Component, ElementRef, viewChild } from '@angular/core';
+import { Component, Directive, ElementRef, viewChild } from '@angular/core';
 import { PressBehavior, Pressable } from '../../components/src/pressable.ts';
 import { ScrollView } from '../../components/src/scroll-view.ts';
 import { Text } from '../../components/src/text.ts';
@@ -14,10 +14,49 @@ import { VirtualList } from '../../components/src/virtual-list.ts';
 })
 export class ObservedButton {}
 
+/** A design-system button, with its pressable inside its template. */
+@Component({
+  selector: 'x-wrapped-button',
+  imports: [Pressable, Text],
+  template: `<pressable testID="wrapped" (press)="pressed = true"><text>Wrapped</text></pressable>`,
+})
+export class WrappedButton {
+  pressed = false;
+}
+
+/** An element only a directive matches: not a component, so never the one an event names. */
+@Directive({ selector: 'x-region' })
+export class Region {}
+
+/** A card with a pressable and a scroll view of its own, a wrapped button and a slot. */
+@Component({
+  selector: 'x-observed-card',
+  imports: [Pressable, Region, ScrollView, View, WrappedButton],
+  template: `
+    <view>
+      <pressable testID="card-action" />
+      <x-region><pressable testID="in-region" /></x-region>
+      <x-wrapped-button />
+      <scroll-view testID="card-scroll" />
+      <ng-content />
+    </view>
+  `,
+})
+export class ObservedCard {}
+
 /** Every kind of touchable, a scroll view and a list, each logging its own presses. */
 @Component({
   selector: 'x-interaction-observer',
-  imports: [ObservedButton, Pressable, ScrollView, Text, TouchableOpacity, View, VirtualList],
+  imports: [
+    ObservedButton,
+    ObservedCard,
+    Pressable,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
+    VirtualList,
+  ],
   template: `
     <scroll-view #scroll testID="list">
       <pressable
@@ -49,6 +88,7 @@ export class ObservedButton {}
         ><text>{{ longText }}</text></pressable
       >
       <pressable testID="off" [disabled]="true" (press)="log('off')" />
+      <x-observed-card><pressable testID="projected" /></x-observed-card>
     </scroll-view>
     <virtual-list testID="rows" [items]="rows" [itemHeight]="20" [style]="{ height: 60 }" />
   `,
