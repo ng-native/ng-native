@@ -25,22 +25,23 @@ interface VideoState {
   readonly timeUpdateEventInterval: number;
 }
 
+/** A host built without a method answers nothing for it: the player is idle and ignores the call. */
 interface VideoHost {
   createPlayer(uri: string | null): number;
-  replace(id: number, uri: string | null): void;
-  release(id: number): void;
-  play(id: number): void;
-  pause(id: number): void;
-  replay(id: number): void;
-  seekBy(id: number, seconds: number): void;
-  setCurrentTime(id: number, seconds: number): void;
-  setPlaybackRate(id: number, rate: number): void;
-  setVolume(id: number, volume: number): void;
-  setMuted(id: number, muted: boolean): void;
-  setLoop(id: number, loop: boolean): void;
-  setPreservesPitch(id: number, preserves: boolean): void;
-  setTimeUpdateEventInterval(id: number, seconds: number): void;
-  state(id: number): VideoState | null;
+  replace?(id: number, uri: string | null): void;
+  release?(id: number): void;
+  play?(id: number): void;
+  pause?(id: number): void;
+  replay?(id: number): void;
+  seekBy?(id: number, seconds: number): void;
+  setCurrentTime?(id: number, seconds: number): void;
+  setPlaybackRate?(id: number, rate: number): void;
+  setVolume?(id: number, volume: number): void;
+  setMuted?(id: number, muted: boolean): void;
+  setLoop?(id: number, loop: boolean): void;
+  setPreservesPitch?(id: number, preserves: boolean): void;
+  setTimeUpdateEventInterval?(id: number, seconds: number): void;
+  state?(id: number): VideoState | null;
 }
 
 /** What `ngNativeVideo` carries. */
@@ -105,7 +106,7 @@ export function desktopVideo(): ExpoVideo | null {
       return this.__expo_shared_object_id__;
     }
     get #state(): VideoState {
-      return native.state(this.#id) ?? NO_STATE;
+      return native.state?.(this.#id) ?? NO_STATE;
     }
     get status(): VideoPlayerStatus {
       return this.#state.status;
@@ -123,59 +124,59 @@ export function desktopVideo(): ExpoVideo | null {
       return this.#state.currentTime;
     }
     set currentTime(seconds: number) {
-      native.setCurrentTime(this.#id, seconds);
+      native.setCurrentTime?.(this.#id, seconds);
     }
     get playbackRate(): number {
       return this.#state.playbackRate;
     }
     set playbackRate(rate: number) {
-      native.setPlaybackRate(this.#id, rate);
+      native.setPlaybackRate?.(this.#id, rate);
     }
     get volume(): number {
       return this.#state.volume;
     }
     set volume(volume: number) {
-      native.setVolume(this.#id, volume);
+      native.setVolume?.(this.#id, volume);
     }
     get muted(): boolean {
       return this.#state.muted;
     }
     set muted(muted: boolean) {
-      native.setMuted(this.#id, muted);
+      native.setMuted?.(this.#id, muted);
     }
     get loop(): boolean {
       return this.#state.loop;
     }
     set loop(loop: boolean) {
-      native.setLoop(this.#id, loop);
+      native.setLoop?.(this.#id, loop);
     }
     get preservesPitch(): boolean {
       return this.#state.preservesPitch;
     }
     set preservesPitch(preserves: boolean) {
-      native.setPreservesPitch(this.#id, preserves);
+      native.setPreservesPitch?.(this.#id, preserves);
     }
     get timeUpdateEventInterval(): number {
       return this.#state.timeUpdateEventInterval;
     }
     set timeUpdateEventInterval(seconds: number) {
-      native.setTimeUpdateEventInterval(this.#id, seconds);
+      native.setTimeUpdateEventInterval?.(this.#id, seconds);
     }
 
     play(): void {
-      native.play(this.#id);
+      native.play?.(this.#id);
     }
     pause(): void {
-      native.pause(this.#id);
+      native.pause?.(this.#id);
     }
     replay(): void {
-      native.replay(this.#id);
+      native.replay?.(this.#id);
     }
     seekBy(seconds: number): void {
-      native.seekBy(this.#id, seconds);
+      native.seekBy?.(this.#id, seconds);
     }
     replace(source: unknown): void {
-      native.replace(this.#id, sourceUri(source));
+      native.replace?.(this.#id, sourceUri(source));
     }
     async replaceAsync(source: unknown): Promise<void> {
       this.replace(source);
@@ -193,7 +194,7 @@ export function desktopVideo(): ExpoVideo | null {
       });
     }
     release(): void {
-      native.release(this.#id);
+      native.release?.(this.#id);
     }
   }
 

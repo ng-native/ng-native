@@ -13,7 +13,7 @@ type ImageResult = import('expo-image-manipulator').ImageResult;
 type ImageLoadOptions = import('expo-image-manipulator').ImageLoadOptions;
 type SaveOptions = import('expo-image-manipulator').SaveOptions;
 
-interface ImageManipulatorHost {
+type ImageManipulatorHost = Partial<{
   renderAsync(
     uri: string,
     actions: readonly Action[],
@@ -25,13 +25,23 @@ interface ImageManipulatorHost {
     options: ImageLoadOptions | null,
     save: SaveOptions,
   ): Promise<ImageResult>;
-}
+}>;
 
 /** The slice of expo-image-manipulator `ImageEditor` uses, or null with no NgNativeImageManipulator. */
 export function desktopImageEditor(): Pick<Expo, 'ImageManipulator'> | null {
   const found = desktopHost<ImageManipulatorHost>('NgNativeImageManipulator');
   if (!found) return null;
   const host = found.module;
+  // A host built without a method rejects the call that needs it, saying how to get it.
+  const need = <K extends keyof ImageManipulatorHost>(name: K) => {
+    const method = host[name];
+    if (!method) {
+      throw new Error(
+        `[angular-native] ImageEditor: this build of the macOS host has no ${name}: rebuild it with "npm run macos".`,
+      );
+    }
+    return method;
+  };
 
   class ImageRef {
     readonly #edit: [string, readonly Action[], ImageLoadOptions | null];
@@ -48,8 +58,8 @@ export function desktopImageEditor(): Pick<Expo, 'ImageManipulator'> | null {
       this.height = height;
     }
 
-    saveAsync(save: SaveOptions = {}): Promise<ImageResult> {
-      return host.saveAsync(...this.#edit, save);
+    async saveAsync(save: SaveOptions = {}): Promise<ImageResult> {
+      return need('saveAsync')(...this.#edit, save);
     }
 
     release(): void {}
@@ -71,7 +81,8 @@ export function desktopImageEditor(): Pick<Expo, 'ImageManipulator'> | null {
     }
 
     resize(size: { width?: number | null; height?: number | null }): this {
-      return this.#add({ resize: size } as Action);
+      // Copied, as the native module reads it now: changing the object later changes no edit.
+      return this.#add({ resize: { ...size } } as Action);
     }
 
     rotate(degrees: number): this {
@@ -83,7 +94,7 @@ export function desktopImageEditor(): Pick<Expo, 'ImageManipulator'> | null {
     }
 
     crop(rect: { originX: number; originY: number; width: number; height: number }): this {
-      return this.#add({ crop: rect });
+      return this.#add({ crop: { ...rect } });
     }
 
     reset(): this {
@@ -93,7 +104,7 @@ export function desktopImageEditor(): Pick<Expo, 'ImageManipulator'> | null {
 
     async renderAsync(): Promise<ImageRef> {
       const actions = [...this.#actions];
-      const { width, height } = await host.renderAsync(this.#uri, actions, this.#options);
+      const { width, height } = await need('renderAsync')(this.#uri, actions, this.#options);
       return new ImageRef([this.#uri, actions, this.#options], width, height);
     }
 

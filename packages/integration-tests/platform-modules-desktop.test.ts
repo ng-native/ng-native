@@ -130,6 +130,17 @@ describe('Network on macOS', () => {
     host.send('ngNativeNetwork', { type: 'NONE', isConnected: false, isInternetReachable: false });
     assert.deepEqual(network.status(), { connected: false, type: 'none', reachable: false });
   });
+
+  it('reads a state with nothing established on a host without getNetworkStateAsync', async () => {
+    mac({ NgNativeNetwork: {} });
+    const { Network } = await import('@ng-native/expo/network');
+    const source = injectService(Network.SOURCE);
+    assert.deepEqual(await source?.current(), {
+      connected: false,
+      type: 'unknown',
+      reachable: null,
+    });
+  });
 });
 
 describe('Battery on macOS', () => {
@@ -317,6 +328,7 @@ describe('Calendar on macOS', () => {
     const calendar = injectService(Calendar);
     assert.deepEqual(await calendar.calendars(), []);
     assert.deepEqual(await calendar.events(['c1'], new Date(1_000), new Date(2_000)), []);
+    assert.deepEqual(calendar.sources(), []);
   });
 
   it('lists events by calendar id, with the dates as milliseconds', async () => {
@@ -791,6 +803,23 @@ describe('Video on macOS', () => {
     assert.deepEqual(calls.at(-1), ['release', 5]);
     assert.equal(host.listening('ngNativeVideo'), 0);
   });
+
+  it('makes an idle player on a host without its state, and releases it', async () => {
+    const released: number[] = [];
+    mac({
+      NgNativeVideo: {
+        createPlayer: () => 9,
+        release: (id: number) => void released.push(id),
+      },
+    });
+    const { videoPlayer } = await import('@ng-native/expo/video');
+    const injector = Injector.create({ providers: [] });
+    const owned = runInInjectionContext(injector, () => videoPlayer('file:///a.mp4'));
+    assert.equal(owned.native.status, 'idle');
+    owned.native.play();
+    injector.destroy();
+    assert.deepEqual(released, [9]);
+  });
 });
 
 describe('LanguageModel on macOS', () => {
@@ -838,6 +867,14 @@ describe('LanguageModel on macOS', () => {
     });
     return { host, calls };
   }
+
+  it('answers notEligible on a host without getAvailability, rather than throwing', async () => {
+    mac({ NgNativeLocalLlm: { createSession: () => '1' } });
+    const { LanguageModel } = await import('@ng-native/expo/language-model');
+    const model = injectService(LanguageModel);
+    assert.equal(model.availability(), 'notEligible');
+    assert.equal(model.refresh(), 'notEligible');
+  });
 
   it("generates through NgNativeLocalLlm with expo-local-llm's config, and releases the session", async () => {
     const { calls } = llmHost();
@@ -1216,6 +1253,40 @@ describe('ImageEditor on macOS', () => {
     context.release();
     image.release();
   });
+
+  it('keeps the size and the rectangle each action was given, though the caller changes them', async () => {
+    const calls: unknown[][] = [];
+    mac({
+      NgNativeImageManipulator: {
+        renderAsync: async () => ({ width: 3, height: 4 }),
+        saveAsync: async (...args: unknown[]) => (
+          calls.push(args),
+          { uri: 'file:///caches/A.png', width: 3, height: 4 }
+        ),
+      },
+    });
+    const { ImageEditor } = await import('@ng-native/expo/image-editor');
+    const context = injectService(ImageEditor).manipulate('file:///photo.png');
+    assert.ok(context);
+    const size = { width: 10 };
+    const rect = { originX: 1, originY: 2, width: 3, height: 4 };
+    const image = await context.resize(size).crop(rect).renderAsync();
+    size.width = 99;
+    rect.width = 99;
+    await image.saveAsync();
+    assert.deepEqual(calls[0]?.[1], [
+      { resize: { width: 10 } },
+      { crop: { originX: 1, originY: 2, width: 3, height: 4 } },
+    ]);
+  });
+
+  it('rejects, saying to rebuild, on a host without the method an edit needs', async () => {
+    mac({ NgNativeImageManipulator: {} });
+    const { ImageEditor } = await import('@ng-native/expo/image-editor');
+    const context = injectService(ImageEditor).manipulate('file:///photo.png');
+    assert.ok(context);
+    await assert.rejects(context.renderAsync(), /no renderAsync: rebuild it/);
+  });
 });
 
 describe('AddressSearch on macOS', () => {
@@ -1254,6 +1325,16 @@ describe('AddressSearch on macOS', () => {
       ['resolve', '1:1:0'],
       ['end', 1],
     ]);
+  });
+
+  it('suggests nothing and resolves nothing on a host without those methods', async () => {
+    mac({ NgNativeAddressSearch: {} });
+    const { AddressSearch } = await import('@ng-native/expo/address-search');
+    const native = injectService(AddressSearch.SOURCE);
+    assert.ok(native);
+    assert.deepEqual(await native.complete(1, '22 H', {}), []);
+    assert.equal(await native.resolve('1:1:0'), null);
+    native.end(1);
   });
 });
 
@@ -1328,6 +1409,17 @@ describe('Camera on macOS', () => {
       ['stopRecording', 12],
     ]);
   });
+
+  it('takes no picture and records nothing on a host without those functions', async () => {
+    mac({ NgNativeCamera: {} });
+    const { Camera } = await import('@ng-native/expo/camera');
+    const functions = injectService(Camera.SOURCE);
+    assert.ok(functions);
+    assert.equal(await functions.takePicture.call({ nativeTag: 12 }, {}), null);
+    assert.equal(await functions.record.call({ nativeTag: 12 }, {}), null);
+    await functions.stopRecording.call({ nativeTag: 12 });
+  });
+
   it('reads and asks for the camera through NgNativeCamera, and the microphone through NgNativeAudio', async () => {
     const calls: string[] = [];
     let camera = { status: 'undetermined', granted: false, canAskAgain: true };
@@ -1415,6 +1507,15 @@ describe('MapView on macOS', () => {
       ['select', 9, null, null],
     ]);
   });
+
+  it('skips a command on a host without it', async () => {
+    mac({ NgNativeMaps: {} });
+    const { MapView } = await import('@ng-native/expo/map-view');
+    const functions = injectService(MapView.SOURCE);
+    assert.ok(functions);
+    await functions.setCameraPosition.call({ nativeTag: 9 });
+    await functions.selectMarker.call({ nativeTag: 9 });
+  });
 });
 
 describe('AppleSignIn on macOS', () => {
@@ -1470,6 +1571,17 @@ describe('AppleSignIn on macOS', () => {
     host({ request: async () => ({ user: 'u1' }) });
     const { AppleSignIn } = await import('@ng-native/expo/apple-sign-in');
     await assert.rejects(injectService(AppleSignIn).signIn(), { code: 'ERR_REQUEST_FAILED' });
+  });
+
+  it('offers nothing on a host without the methods, and formats no name, rather than throwing', async () => {
+    mac({ NgNativeAppleAuthentication: {} });
+    const { AppleSignIn } = await import('@ng-native/expo/apple-sign-in');
+    const apple = injectService(AppleSignIn);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(apple.available(), false);
+    assert.equal(apple.formatName({ givenName: 'Ada' } as never), '');
+    assert.equal(await apple.credentialState('u1'), null);
+    await assert.rejects(apple.signIn(), { code: 'ERR_REQUEST_FAILED' });
   });
 
   it("counts the host's revocations", async () => {

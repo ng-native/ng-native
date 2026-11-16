@@ -309,11 +309,14 @@ export class MapView {
   }
 }
 
-/** What the desktop host's `NgNativeMaps` takes: the map's functions, by the view's tag. */
-interface MapsHost {
+/**
+ * What the desktop host's `NgNativeMaps` takes: the map's functions, by the view's tag. A host
+ * built without one skips that command.
+ */
+type MapsHost = Partial<{
   setCameraPosition(tag: number, position: MapCameraMove | null): Promise<void>;
   selectMarker(tag: number, id: string | null, options: MapSelectOptions | null): Promise<void>;
-}
+}>;
 
 /**
  * The map's functions over the desktop host's `NgNativeMaps`, for macOS, where the map is the
@@ -324,11 +327,11 @@ function desktopMaps(): MapViewFunctions | null {
   const host = desktopHost<MapsHost>('NgNativeMaps')?.module;
   if (!host) return null;
   return {
-    setCameraPosition(position) {
-      return host.setCameraPosition(this.nativeTag, position ?? null);
+    async setCameraPosition(position) {
+      await host.setCameraPosition?.(this.nativeTag, position ?? null);
     },
-    selectMarker(id, options) {
-      return host.selectMarker(this.nativeTag, id ?? null, options ?? null);
+    async selectMarker(id, options) {
+      await host.selectMarker?.(this.nativeTag, id ?? null, options ?? null);
     },
   };
 }

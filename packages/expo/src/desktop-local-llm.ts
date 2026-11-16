@@ -9,16 +9,20 @@ import { coded, desktopHost, type DesktopHost } from './desktop-host.ts';
 
 type ExpoLocalLlm = typeof import('expo-local-llm');
 
+/**
+ * A host built without `getAvailability` has no model to offer, and one without a method that only
+ * tells the host something (cancelling, releasing, answering a tool call) is not told it.
+ */
 interface LocalLlmHost {
-  getAvailability(): string;
-  downloadModel(): Promise<void>;
+  getAvailability?(): string;
+  downloadModel?(): Promise<void>;
   createSession(config: unknown): string;
   respond(id: string, prompt: string, requestId: string | null): Promise<string>;
   streamResponse(id: string, prompt: string, requestId: string | null): Promise<string>;
-  cancelStream(id: string): Promise<void>;
-  release(id: string): void;
-  resolveToolCall(id: string, callId: string, output: string): void;
-  rejectToolCall(id: string, callId: string, error: string): void;
+  cancelStream?(id: string): Promise<void>;
+  release?(id: string): void;
+  resolveToolCall?(id: string, callId: string, output: string): void;
+  rejectToolCall?(id: string, callId: string, error: string): void;
 }
 
 interface LocalLlmEvent {
@@ -36,10 +40,11 @@ function session(host: DesktopHost<LocalLlmHost>, config: unknown) {
       coded(native.respond(id, prompt, requestId ?? null)),
     streamResponse: (prompt: string, requestId?: string) =>
       coded(native.streamResponse(id, prompt, requestId ?? null)),
-    cancelStream: () => native.cancelStream(id),
-    resolveToolCall: (callId: string, output: string) => native.resolveToolCall(id, callId, output),
-    rejectToolCall: (callId: string, error: string) => native.rejectToolCall(id, callId, error),
-    release: () => native.release(id),
+    cancelStream: async () => native.cancelStream?.(id),
+    resolveToolCall: (callId: string, output: string) =>
+      native.resolveToolCall?.(id, callId, output),
+    rejectToolCall: (callId: string, error: string) => native.rejectToolCall?.(id, callId, error),
+    release: () => native.release?.(id),
     addListener: (event: string, listener: (payload: never) => void) =>
       host.listen('ngNativeLocalLlm', (body) => {
         const { type, session: from, ...payload } = (body ?? {}) as LocalLlmEvent;
@@ -65,14 +70,15 @@ export function desktopLocalLlm(): ExpoLocalLlm | null {
   const host = desktopHost<LocalLlmHost>('NgNativeLocalLlm');
   if (!host) return null;
   const native = host.module;
+  const availability = () => native.getAvailability?.() ?? 'notEligible';
   const module = {
-    getAvailability: () => native.getAvailability(),
-    downloadModel: () => native.downloadModel(),
+    getAvailability: availability,
+    downloadModel: async () => native.downloadModel?.(),
     addListener: (event: string, listener: (payload: never) => void) => {
       if (event !== 'availabilityChange') return { remove() {} };
-      let last = native.getAvailability();
+      let last = availability();
       return onActive(() => {
-        const now = native.getAvailability();
+        const now = availability();
         if (now === last) return;
         last = now;
         listener({ availability: now } as never);

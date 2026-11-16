@@ -110,13 +110,15 @@ const MODULE = 'NgNativeAddressSearch';
 function nativeAddressSearch(): NativeAddressSearch | null {
   if (currentPlatform() === 'macos') {
     return optional(() => {
-      const host = desktopHost<NativeAddressSearch>(MODULE);
+      const host = desktopHost<Partial<NativeAddressSearch>>(MODULE);
       if (!host) return null;
       const module = host.module;
+      // A host built without a method suggests nothing, and resolves nothing.
       return {
-        complete: (session, query, options) => module.complete(session, query, options),
-        resolve: (id) => module.resolve(id),
-        end: (session) => module.end(session),
+        complete: async (session, query, options) =>
+          (await module.complete?.(session, query, options)) ?? [],
+        resolve: async (id) => (await module.resolve?.(id)) ?? null,
+        end: (session) => module.end?.(session),
         addListener: (_, listener) =>
           host.listen('ngNativeAddressSearch', (update) =>
             listener(update as AddressSuggestionsUpdate),

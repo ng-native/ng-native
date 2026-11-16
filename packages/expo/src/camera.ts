@@ -117,12 +117,15 @@ export class Camera {
   }
 }
 
-/** What the desktop host's `NgNativeCamera` takes: the view's functions, by the view's tag. */
-interface CameraHost {
+/**
+ * What the desktop host's `NgNativeCamera` takes: the view's functions, by the view's tag. A host
+ * built without one takes no picture and records nothing, as the service does without the module.
+ */
+type CameraHost = Partial<{
   takePicture(tag: number, options: PictureOptions): Promise<CameraPicture>;
   record(tag: number, options: RecordingOptions): Promise<CameraRecording>;
   stopRecording(tag: number): Promise<void>;
-}
+}>;
 
 /**
  * The camera view's functions over the desktop host's `NgNativeCamera`, for macOS, where the view
@@ -134,14 +137,14 @@ function desktopCamera(): { ViewPrototypes: Record<string, CameraViewFunctions> 
   return {
     ViewPrototypes: {
       ExpoCamera: {
-        takePicture(options) {
-          return host.takePicture(this.nativeTag, options);
+        async takePicture(options) {
+          return (await host.takePicture?.(this.nativeTag, options)) ?? (null as never);
         },
-        record(options) {
-          return host.record(this.nativeTag, options);
+        async record(options) {
+          return (await host.record?.(this.nativeTag, options)) ?? (null as never);
         },
-        stopRecording() {
-          return host.stopRecording(this.nativeTag);
+        async stopRecording() {
+          await host.stopRecording?.(this.nativeTag);
         },
       },
     },

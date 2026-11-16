@@ -97,15 +97,16 @@ export class Network {
  * `ngNativeNetwork` events. Null where the host has no such module.
  */
 function desktopNetwork(): typeof import('expo-network') | null {
-  const host = desktopHost<{ getNetworkStateAsync(): Promise<unknown> }>('NgNativeNetwork');
+  const host = desktopHost<{ getNetworkStateAsync?(): Promise<unknown> }>('NgNativeNetwork');
   if (!host) return null;
   const network: Pick<
     typeof import('expo-network'),
     'getNetworkStateAsync' | 'addNetworkStateListener'
   > = {
-    getNetworkStateAsync: () =>
-      host.module.getNetworkStateAsync() as ReturnType<
-        typeof import('expo-network').getNetworkStateAsync
+    // A host built without it answers a state with nothing established: OFFLINE, read as "not yet".
+    getNetworkStateAsync: async () =>
+      ((await host.module.getNetworkStateAsync?.()) ?? {}) as Awaited<
+        ReturnType<typeof import('expo-network').getNetworkStateAsync>
       >,
     addNetworkStateListener: (listener) =>
       host.listen('ngNativeNetwork', (state) => listener(state as never)) as never,

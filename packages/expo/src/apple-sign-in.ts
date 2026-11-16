@@ -161,13 +161,16 @@ export class AppleSignIn {
   }
 }
 
-/** What the desktop host's `NgNativeAppleAuthentication` answers: expo's native module. */
-interface AppleAuthenticationHost {
+/**
+ * What the desktop host's `NgNativeAppleAuthentication` answers: expo's native module. A host built
+ * without one of its methods cannot sign in, knows no credential's state, and formats no name.
+ */
+type AppleAuthenticationHost = Partial<{
   isAvailableAsync(): Promise<boolean>;
   requestAsync(options: object): Promise<AppleAuthenticationCredential>;
   getCredentialStateAsync(user: string): Promise<ExpoCredentialState>;
   formatFullName(name: object, style: string | null): string;
-}
+}>;
 
 /** expo-apple-authentication's `requestedOperation`s. */
 const LOGIN = 1;
@@ -185,6 +188,12 @@ function desktopAppleAuthentication(): NativeAppleAuthentication | null {
   if (!host) return null;
   const native = host.module;
   const request = async (options: object | undefined, operation: number, name: string) => {
+    if (!native.requestAsync) {
+      throw Object.assign(
+        new Error(`This build of the macOS host cannot ${name}: rebuild it with "npm run macos".`),
+        { code: 'ERR_REQUEST_FAILED' },
+      );
+    }
     const credential = await coded(
       native.requestAsync({ ...options, requestedOperation: operation }),
     );
@@ -200,12 +209,15 @@ function desktopAppleAuthentication(): NativeAppleAuthentication | null {
     return credential;
   };
   return {
-    isAvailableAsync: () => native.isAvailableAsync(),
+    isAvailableAsync: async () => (await native.isAvailableAsync?.()) ?? false,
     signInAsync: (options) => request(options, LOGIN, 'signInAsync'),
     refreshAsync: (options) => request(options, REFRESH, 'refreshAsync'),
     signOutAsync: (options) => request(options, LOGOUT, 'signOutAsync'),
-    getCredentialStateAsync: (user) => coded(native.getCredentialStateAsync(user)),
-    formatFullName: (name, style) => native.formatFullName(name, style ?? null),
+    getCredentialStateAsync: async (user) =>
+      native.getCredentialStateAsync
+        ? coded(native.getCredentialStateAsync(user))
+        : (null as unknown as ExpoCredentialState),
+    formatFullName: (name, style) => native.formatFullName?.(name, style ?? null) ?? '',
     addRevokeListener: (listener) =>
       host.listen('ngNativeAppleAuthentication', (event) => {
         if ((event as { type?: unknown } | null)?.type === 'revoked') listener();

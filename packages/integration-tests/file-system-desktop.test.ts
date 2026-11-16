@@ -23,8 +23,11 @@ const PATHS = {
 
 type Call = [string, ...unknown[]];
 
-/** A desktop host with `files` (uri to text) in memory, recording each call. */
-function host(files: Record<string, string> = {}) {
+/**
+ * A desktop host with `files` (uri to text) in memory, recording each call, built without the
+ * methods `without` names.
+ */
+function host(files: Record<string, string> = {}, without: readonly string[] = []) {
   const calls: Call[] = [];
   // Files `statSync` does not see yet: another writer's, made after a check.
   const unseen = new Set<string>();
@@ -90,6 +93,7 @@ function host(files: Record<string, string> = {}) {
     watch: (...args: unknown[]) => (calls.push(['watch', ...args]), 11),
     unwatch: (...args: unknown[]) => void calls.push(['unwatch', ...args]),
   };
+  for (const name of without) delete (module as Record<string, unknown>)[name];
   (globalThis as Record<string, unknown>)['require'] = (id: string) => {
     if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
     return {
@@ -249,6 +253,14 @@ describe('FileSystem on macOS', () => {
       calls.some((call) => call[0] === 'readdir'),
       true,
     );
+  });
+
+  it('lists nothing, describes nothing and watches nothing on a host without those methods', async () => {
+    host({ 'file:///app/Documents/a': 'xy' }, ['readdir', 'stat', 'watch', 'unwatch']);
+    const fs = injectService(FileSystem);
+    assert.deepEqual(await fs.readdir('file:///app/Documents/'), []);
+    assert.equal(await fs.stat('file:///app/Documents/a'), null);
+    fs.watch('file:///app/Documents/', () => {})();
   });
 
   it('watches by id, and stops the watch', () => {

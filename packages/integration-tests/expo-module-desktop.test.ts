@@ -263,6 +263,24 @@ describe('the clipboard on macOS', () => {
     assert.equal(clipboard.changes(), 2);
     assert.equal(await clipboard.read(), 'copied');
   });
+
+  it('reads an empty clipboard and writes nothing on a host without those methods', async () => {
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) => (name === 'NgNativeClipboard' ? {} : null),
+        },
+        DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
+      };
+    };
+    const { Clipboard } = await import('@ng-native/expo/clipboard');
+    const { injectService } = await import('@ng-native/testing');
+    const clipboard = injectService(Clipboard);
+    assert.equal(await clipboard.read(), '');
+    await clipboard.write('kept');
+  });
 });
 
 /**

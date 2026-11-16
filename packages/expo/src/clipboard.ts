@@ -17,7 +17,7 @@ export interface NativeClipboard {
 }
 
 /** The desktop host's slice of the clipboard: everything but the change listener. */
-type DesktopClipboard = Omit<NativeClipboard, 'addClipboardListener'>;
+type DesktopClipboard = Partial<Omit<NativeClipboard, 'addClipboardListener'>>;
 
 /**
  * The desktop host's `NgNativeClipboard`, with the change listener on its `ngNativeClipboard`
@@ -29,8 +29,9 @@ function desktopClipboard(): NativeClipboard | null {
   if (!host) return null;
   const { module } = host;
   return {
-    getStringAsync: () => module.getStringAsync(),
-    setStringAsync: (text) => module.setStringAsync(text),
+    // A host built without a method reads an empty clipboard, and writes nothing.
+    getStringAsync: async () => (await module.getStringAsync?.()) ?? '',
+    setStringAsync: async (text) => (await module.setStringAsync?.(text)) ?? false,
     addClipboardListener: (listener) => host.listen('ngNativeClipboard', () => listener()),
   };
 }

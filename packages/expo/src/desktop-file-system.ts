@@ -27,9 +27,9 @@ type Host = {
   readonly paths?: Partial<Record<FolderName, string>>;
   readonly documentDirectory: string;
   readonly cacheDirectory: string;
-  stat(uri: string): Promise<FileStat | null>;
+  stat?(uri: string): Promise<FileStat | null>;
   statSync(uri: string): FileStat | null;
-  readdir(uri: string): Promise<FileEntry[]>;
+  readdir?(uri: string): Promise<FileEntry[]>;
   readAsStringAsync(uri: string, options: Encoding): Promise<string>;
   readAsStringSync(uri: string, options: Encoding): string;
   writeAsStringSync(uri: string, text: string, options: Encoding): void;
@@ -37,8 +37,8 @@ type Host = {
   /** Makes an empty file named `name` in a folder, failing rather than empty one that is there. */
   createFileSync(folder: string, name: string): { uri: string };
   deleteSync(uri: string, options: { idempotent: boolean }): void;
-  watch(uri: string): number | null;
-  unwatch(id: number): void;
+  watch?(uri: string): number | null;
+  unwatch?(id: number): void;
 };
 
 class HostFile implements NativeFile {
@@ -172,20 +172,24 @@ export function desktopFiles(): NativeFiles | null {
     documentDirectory: directory(host.documentDirectory),
     file: (folder, name) => new HostFile(host, underFolder((folder as { uri: string }).uri, name)),
     fileAt: (uri) => new HostFile(host, uri),
-    readdir: (uri) => host.readdir(uri),
-    stat: (uri) => host.stat(uri),
-    watch: (uri, listener) => {
-      const id = host.watch(uri);
-      if (id === null || id === undefined) return () => {};
-      const subscription = found.listen('ngNativeFileSystem', (event) => {
-        const { watch, ...change } = event as { watch: number } & FileChange;
-        if (watch === id) listener(change);
-      });
-      return () => {
-        subscription.remove();
-        host.unwatch(id);
-      };
-    },
+    // Left out where the host was built without them, so the service answers its empty list, its
+    // null and its no-op.
+    ...(host.readdir && { readdir: (uri: string) => host.readdir!(uri) }),
+    ...(host.stat && { stat: (uri: string) => host.stat!(uri) }),
+    ...(host.watch && {
+      watch: (uri: string, listener: (change: FileChange) => void) => {
+        const id = host.watch!(uri);
+        if (id === null || id === undefined) return () => {};
+        const subscription = found.listen('ngNativeFileSystem', (event) => {
+          const { watch, ...change } = event as { watch: number } & FileChange;
+          if (watch === id) listener(change);
+        });
+        return () => {
+          subscription.remove();
+          host.unwatch?.(id);
+        };
+      },
+    }),
     paths: host.paths,
     ...(panel?.pickDirectoryAsync && {
       pickDirectoryAsync: () => desktopFolder(panel.pickDirectoryAsync!()),

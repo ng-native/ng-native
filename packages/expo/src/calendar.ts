@@ -304,7 +304,7 @@ function desktopCalendar(): NativeCalendar | null {
       (((await call('getCalendarsAsync')(entityType ?? 'event')) ?? []) as Row[]).map(calendar),
     getDefaultCalendarSync: () =>
       calendar((call('getDefaultCalendarSync')() as Row | null) ?? null),
-    getSourcesSync: call('getSourcesSync'),
+    getSourcesSync: () => (call('getSourcesSync')() as Source[] | undefined) ?? [],
     listEvents: async (calendars: readonly (string | { id: string })[], start: Date, end: Date) =>
       (
         ((await call('listEventsAsync')(
