@@ -21,7 +21,14 @@
  * offer no way to ask. Elsewhere both are inert: in development, in `app` and `mas` builds, and on
  * the web.
  */
-import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
+import {
+  InjectionToken,
+  Service,
+  inject,
+  signal,
+  type OnDestroy,
+  type Signal,
+} from '@angular/core';
 import { currentPlatform, expoModule, presence, present } from './native.ts';
 
 export interface NativeUpdates {
@@ -84,10 +91,7 @@ function storePageUpdaterOf(): NativeAppUpdater | null {
   return {
     available: () => false,
     check: async () => {
-      const review = expoModule(
-        'expo-store-review',
-        () => require('expo-store-review') as typeof import('expo-store-review'),
-      );
+      const review = expoModule('expo-store-review', storeReview);
       const url = present(review)?.storeUrl() ?? null;
       if (!url) return false;
       const { Linking } = require('react-native') as typeof import('react-native');
@@ -98,10 +102,23 @@ function storePageUpdaterOf(): NativeAppUpdater | null {
   };
 }
 
+/**
+ * `expo-store-review`, or null where it is not installed. Its `require` is directly inside a `try`,
+ * which is what makes Metro, with Expo's `allowOptionalDependencies`, bundle an app without it
+ * rather than fail: the store page is its, and an app may have only the bundle updates.
+ */
+function storeReview(): typeof import('expo-store-review') | null {
+  try {
+    return require('expo-store-review') as typeof import('expo-store-review');
+  } catch {
+    return null;
+  }
+}
+
 export type UpdateState = 'idle' | 'checking' | 'downloading' | 'ready' | 'error';
 
 @Service()
-export class Updates {
+export class Updates implements OnDestroy {
   /** Overridden in a test to offer an update without a server. */
   static readonly SOURCE = new InjectionToken<NativeUpdates | null>(
     'angular-native.updatesSource',

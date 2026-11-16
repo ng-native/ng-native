@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { DESKTOP_MODULES, MissingModuleError, expoModule } from '@ng-native/expo';
 import { Storage } from '@ng-native/expo/async-storage';
+import { asHost, hostMethods } from './desktop-host-methods.ts';
 
 /** A device on `os` whose desktop host registers the TurboModules in `registered`. */
 function on(os: string, registered: Record<string, object> = {}): void {
@@ -178,6 +179,11 @@ describe('the services with a desktop source in v1', () => {
     assert.deepEqual(DESKTOP_MODULES, V1);
   });
 
+  it('are each a module the desktop host registers', () => {
+    const missing = Object.values(DESKTOP_MODULES).filter((name) => !hostMethods(name));
+    assert.deepEqual(missing, []);
+  });
+
   it('leave a mobile-only module absent', () => {
     on('macos', Object.fromEntries(Object.values(V1).map((name) => [name, {}])));
     for (const module of ABSENT) assert.equal(expoModule(module, loader().load), null, module);
@@ -231,11 +237,11 @@ describe('the clipboard on macOS', () => {
         TurboModuleRegistry: {
           get: (name: string) =>
             name === 'NgNativeClipboard'
-              ? {
+              ? asHost('NgNativeClipboard', {
                   getStringAsync: async () => 'copied',
                   setStringAsync: async () => true,
                   hasStringAsync: async () => true,
-                }
+                })
               : null,
         },
         DeviceEventEmitter: {
@@ -277,7 +283,7 @@ describe('notifications on macOS', () => {
         TurboModuleRegistry: {
           get: (name: string) =>
             name === 'NgNativeNotifications'
-              ? {
+              ? asHost('NgNativeNotifications', {
                   getPermissionsAsync: async () => ({ status: 'granted', granted: true }),
                   requestPermissionsAsync: async () => ({ status: 'granted', granted: true }),
                   scheduleNotificationAsync: async (request: unknown) => (
@@ -296,7 +302,7 @@ describe('notifications on macOS', () => {
                   ),
                   unregisterForNotificationsAsync: async () =>
                     void calls.push(['unregister', null]),
-                }
+                })
               : null,
         },
         DeviceEventEmitter: {
@@ -427,7 +433,7 @@ describe('the app updater on macOS', () => {
         TurboModuleRegistry: {
           get: (name: string) =>
             name === 'NgNativeUpdates'
-              ? {
+              ? asHost('NgNativeUpdates', {
                   isEnabled: false,
                   isAppUpdaterAvailable: updater,
                   isAppUpdateAvailable: () => updater && startsAvailable,
@@ -435,7 +441,7 @@ describe('the app updater on macOS', () => {
                   checkForUpdateAsync: async () => ({ isAvailable: false }),
                   fetchUpdateAsync: async () => ({ isNew: false }),
                   reloadAsync: async () => {},
-                }
+                })
               : null,
         },
         DeviceEventEmitter: {
@@ -485,7 +491,9 @@ describe('the app updater on macOS', () => {
 describe('the file dialogs on macOS', () => {
   function host() {
     const saved: unknown[] = [];
-    let folder: { uri: string } | null = { uri: 'file:///Users/me/Exports' };
+    const created: [string, string][] = [];
+    const written: [string, string][] = [];
+    let folder: { uri: string } | null = { uri: 'file:///Users/me/Exports/' };
     (globalThis as Record<string, unknown>)['require'] = (id: string) => {
       if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
       return {
@@ -493,19 +501,28 @@ describe('the file dialogs on macOS', () => {
         TurboModuleRegistry: {
           get: (name: string) =>
             name === 'NgNativeDocumentPicker'
-              ? {
+              ? asHost('NgNativeDocumentPicker', {
                   getDocumentAsync: async () => ({ canceled: true, assets: null }),
                   saveDocumentAsync: async (options: unknown) => {
                     saved.push(options);
                     return 'file:///Users/me/export.csv';
                   },
                   pickDirectoryAsync: async () => folder,
-                }
-              : null,
+                })
+              : name === 'NgNativeFileSystem'
+                ? asHost('NgNativeFileSystem', {
+                    createFileSync: (folderUri: string, file: string) => {
+                      created.push([folderUri, file]);
+                      return { uri: folderUri + file };
+                    },
+                    writeAsStringSync: (uri: string, text: string) =>
+                      void written.push([uri, text]),
+                  })
+                : null,
         },
       };
     };
-    return { saved, dismiss: () => void (folder = null) };
+    return { saved, created, written, dismiss: () => void (folder = null) };
   }
 
   it('saves through the save panel, with bytes as base64', async () => {
@@ -529,8 +546,19 @@ describe('the file dialogs on macOS', () => {
     const { DocumentPicker } = await import('@ng-native/expo/document-picker');
     const { injectService } = await import('@ng-native/testing');
     const picker = injectService(DocumentPicker);
-    assert.equal((await picker.pickDirectory())?.uri, 'file:///Users/me/Exports');
+    assert.equal((await picker.pickDirectory())?.uri, 'file:///Users/me/Exports/');
     panel.dismiss();
     assert.equal(await picker.pickDirectory(), null);
+  });
+
+  it('creates a file in a picked folder, as on iOS and Android', async () => {
+    const panel = host();
+    const { DocumentPicker } = await import('@ng-native/expo/document-picker');
+    const { injectService } = await import('@ng-native/testing');
+    const folder = await injectService(DocumentPicker).pickDirectory();
+    const file = folder!.createFile('a.csv', 'text/csv');
+    file.write('a,b');
+    assert.deepEqual(panel.created, [['file:///Users/me/Exports/', 'a.csv']]);
+    assert.deepEqual(panel.written, [['file:///Users/me/Exports/a.csv', 'a,b']]);
   });
 });

@@ -10,6 +10,7 @@
  * `serializeAsync` have no host call and throw; `getEachAsync` reads every row, then yields them.
  */
 import { base64Of, bytesOf } from './base64.ts';
+import { desktopHost } from './desktop-host.ts';
 
 type Host = Record<string, (...args: unknown[]) => unknown>;
 
@@ -102,9 +103,7 @@ function databaseOver(host: Host, handle: { id: number; databasePath: string }) 
 export function desktopSqlite(): {
   openDatabaseAsync(name: string, options?: unknown, directory?: string): Promise<unknown>;
 } | null {
-  const registry = (require('react-native') as typeof import('react-native'))
-    .TurboModuleRegistry as { get(name: string): unknown };
-  const host = registry.get('NgNativeSqlite') as Host | null;
+  const host = desktopHost<Host>('NgNativeSqlite')?.module;
   if (!host) return null;
   return {
     openDatabaseAsync: async (name, ...rest) =>

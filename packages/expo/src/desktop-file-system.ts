@@ -9,6 +9,7 @@
  * `bytes()` answer a promise.
  */
 import { base64Of, bytesOf } from './base64.ts';
+import { desktopHost } from './desktop-host.ts';
 import type {
   FileChange,
   FileEntry,
@@ -17,6 +18,7 @@ import type {
   NativeDirectory,
   NativeFile,
   NativeFiles,
+  PickedDirectory,
 } from './file-system.ts';
 
 type Encoding = { encoding: 'utf8' | 'base64' };
@@ -32,6 +34,8 @@ type Host = {
   readAsStringSync(uri: string, options: Encoding): string;
   writeAsStringSync(uri: string, text: string, options: Encoding): void;
   makeDirectorySync(uri: string, options: { intermediates: boolean }): void;
+  /** Makes an empty file named `name` in a folder, failing rather than empty one that is there. */
+  createFileSync(folder: string, name: string): { uri: string };
   deleteSync(uri: string, options: { idempotent: boolean }): void;
   watch(uri: string): number | null;
   unwatch(id: number): void;
@@ -60,10 +64,14 @@ class HostFile implements NativeFile {
       const parent = this.uri.slice(0, this.uri.lastIndexOf('/') + 1);
       this.host.makeDirectorySync(parent, { intermediates: true });
     }
-    if (!options?.overwrite && this.exists) {
-      throw new Error(`[angular-native] A file already exists at ${this.uri}.`);
+    if (options?.overwrite) {
+      this.host.writeAsStringSync(this.uri, '', { encoding: 'utf8' });
+      return;
     }
-    this.host.writeAsStringSync(this.uri, '', { encoding: 'utf8' });
+    if (this.exists) throw new Error(`[angular-native] A file already exists at ${this.uri}.`);
+    // In one step on the host, so a file another writer makes after the check is not emptied.
+    const slash = this.uri.lastIndexOf('/') + 1;
+    this.host.createFileSync(this.uri.slice(0, slash), decodeURIComponent(this.uri.slice(slash)));
   }
 
   write(content: string | Uint8Array): void {
@@ -112,19 +120,52 @@ class HostFile implements NativeFile {
 const underFolder = (folder: string, name: string): string =>
   folder + name.split('/').map(encodeURIComponent).join('/');
 
+/** The host's `NgNativeDocumentPicker`, as far as its folder panel goes. */
+interface FolderPanel {
+  pickDirectoryAsync?(): Promise<{ uri: string } | null>;
+}
+
+/** Android codes a dismissed picker ERR_PICKER_CANCELLED, as `pickDirectory()` expects. */
+const DISMISSED = 'ERR_PICKER_CANCELLED';
+
+/**
+ * The host's picked folder as a `PickedDirectory`, and a dismissed panel as the cancelled error
+ * the other OSes reject with. `createFile` makes the file through the host's `NgNativeFileSystem`,
+ * which can write in the folder because the user picked it.
+ */
+export async function desktopFolder(
+  picked: Promise<{ uri: string } | null>,
+): Promise<PickedDirectory> {
+  const folder = await picked;
+  if (!folder) {
+    throw Object.assign(new Error('The folder picker was dismissed.'), { code: DISMISSED });
+  }
+  const uri = folder.uri.endsWith('/') ? folder.uri : `${folder.uri}/`;
+  return {
+    uri: folder.uri,
+    createFile: (name) => {
+      const files = desktopHost<Host>('NgNativeFileSystem')?.module;
+      if (!files) {
+        throw new Error(
+          '[angular-native] this build of the desktop host has no NgNativeFileSystem to create a ' +
+            'file with: rebuild it with "npm run macos".',
+        );
+      }
+      return new HostFile(files, files.createFileSync(uri, name).uri);
+    },
+  };
+}
+
 /**
  * `NativeFiles` over the host's `NgNativeFileSystem`, or null where the host has no such module.
- * `paths` are the folders it says the app can reach.
+ * `paths` are the folders it says the app can reach, and `pickDirectoryAsync` is the host's folder
+ * panel, from `NgNativeDocumentPicker`.
  */
 export function desktopFiles(): NativeFiles | null {
-  const native = require('react-native') as {
-    TurboModuleRegistry: { get(name: string): unknown };
-    DeviceEventEmitter: {
-      addListener(event: string, listener: (event: unknown) => void): { remove(): void };
-    };
-  };
-  const host = native.TurboModuleRegistry.get('NgNativeFileSystem') as Host | null;
-  if (!host) return null;
+  const found = desktopHost<Host>('NgNativeFileSystem');
+  if (!found) return null;
+  const host = found.module;
+  const panel = desktopHost<FolderPanel>('NgNativeDocumentPicker')?.module;
   const directory = (uri: string): NativeDirectory => ({ uri });
   return {
     cacheDirectory: directory(host.cacheDirectory),
@@ -136,7 +177,7 @@ export function desktopFiles(): NativeFiles | null {
     watch: (uri, listener) => {
       const id = host.watch(uri);
       if (id === null || id === undefined) return () => {};
-      const subscription = native.DeviceEventEmitter.addListener('ngNativeFileSystem', (event) => {
+      const subscription = found.listen('ngNativeFileSystem', (event) => {
         const { watch, ...change } = event as { watch: number } & FileChange;
         if (watch === id) listener(change);
       });
@@ -146,5 +187,8 @@ export function desktopFiles(): NativeFiles | null {
       };
     },
     paths: host.paths,
+    ...(panel?.pickDirectoryAsync && {
+      pickDirectoryAsync: () => desktopFolder(panel.pickDirectoryAsync!()),
+    }),
   };
 }

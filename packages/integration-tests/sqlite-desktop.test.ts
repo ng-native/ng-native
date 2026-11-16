@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { database } from '@ng-native/expo/database';
+import { hostMethods } from './desktop-host-methods.ts';
 
 type Call = [string, ...unknown[]];
 
@@ -18,6 +19,7 @@ function host(answers: Record<string, (...args: unknown[]) => unknown> = {}) {
       get:
         (_, name: string) =>
         async (...args: unknown[]) => {
+          assert.ok(hostMethods('NgNativeSqlite')?.has(name), `NgNativeSqlite has no ${name}`);
           calls.push([name, ...args]);
           if (name === 'openDatabaseAsync') {
             return { id: 7, databasePath: `/data/SQLite/${args[0]}`, databaseName: args[0] };

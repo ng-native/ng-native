@@ -141,10 +141,12 @@ function desktopBattery(): ExpoBattery | null {
   > = {
     // expo-battery's enum, whose values the host answers.
     BatteryState: { UNKNOWN: 0, UNPLUGGED: 1, CHARGING: 2, FULL: 3, NOT_CHARGING: 4 } as never,
-    getBatteryLevelAsync: () => host.module['getBatteryLevelAsync']!(),
-    getBatteryStateAsync: () => host.module['getBatteryStateAsync']!(),
-    isLowPowerModeEnabledAsync: () => host.module['isLowPowerModeEnabledAsync']!(),
-    isAvailableAsync: () => host.module['isAvailableAsync']!(),
+    // A host built without a method answers what a Mac with no battery does.
+    getBatteryLevelAsync: async () => (await host.module['getBatteryLevelAsync']?.()) ?? -1,
+    getBatteryStateAsync: async () => (await host.module['getBatteryStateAsync']?.()) ?? 0,
+    isLowPowerModeEnabledAsync: async () =>
+      (await host.module['isLowPowerModeEnabledAsync']?.()) ?? false,
+    isAvailableAsync: async () => (await host.module['isAvailableAsync']?.()) ?? false,
     addBatteryLevelListener: on('level') as never,
     addBatteryStateListener: on('state') as never,
     addLowPowerModeListener: on('lowPowerMode') as never,

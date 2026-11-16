@@ -203,17 +203,22 @@ class CaptureWindow {
  */
 function desktopScreenCapture(): NativeScreenCapture | null {
   const host =
-    desktopHost<Record<string, (...args: unknown[]) => Promise<never>>>('NgNativeScreenCapture');
+    desktopHost<Record<string, (...args: unknown[]) => Promise<never> | undefined>>(
+      'NgNativeScreenCapture',
+    );
   if (!host) return null;
   const native = host.module;
+  // A host built without a method is inert: nothing kept out of capture, and no permission.
+  const call = async (name: string, ...args: unknown[]) => native[name]?.(...args);
   return {
-    isAvailableAsync: () => native['isAvailableAsync']!(),
-    preventScreenCaptureAsync: (key) => native['preventScreenCaptureAsync']!(key ?? null),
-    allowScreenCaptureAsync: (key) => native['allowScreenCaptureAsync']!(key ?? null),
-    enableAppSwitcherProtectionAsync: () => native['enableAppSwitcherProtectionAsync']!(),
-    disableAppSwitcherProtectionAsync: () => native['disableAppSwitcherProtectionAsync']!(),
+    isAvailableAsync: async () => (await call('isAvailableAsync')) ?? false,
+    preventScreenCaptureAsync: (key) => call('preventScreenCaptureAsync', key ?? null),
+    allowScreenCaptureAsync: (key) => call('allowScreenCaptureAsync', key ?? null),
+    enableAppSwitcherProtectionAsync: () => call('enableAppSwitcherProtectionAsync'),
+    disableAppSwitcherProtectionAsync: () => call('disableAppSwitcherProtectionAsync'),
     addScreenshotListener: () => ({ remove() {} }) as never,
-    getPermissionsAsync: () => native['getPermissionsAsync']!(),
-    requestPermissionsAsync: () => native['requestPermissionsAsync']!(),
+    getPermissionsAsync: async () => (await call('getPermissionsAsync')) ?? (UNAVAILABLE as never),
+    requestPermissionsAsync: async () =>
+      (await call('requestPermissionsAsync')) ?? (UNAVAILABLE as never),
   };
 }

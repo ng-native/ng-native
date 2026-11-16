@@ -98,19 +98,19 @@ export function desktopMediaLibrary(): NativeMediaLibrary | null {
     delete = () => native.deleteAssets([this.id]);
   }
 
+  // Holds only its id, and reads its title and type from the host each time, as expo-media-library's
+  // does: an album renamed in Photos while the app holds it answers the new name.
   class Album {
     readonly id: string;
-    readonly #metadata: AlbumMetadata | undefined;
-    constructor(id: string, metadata?: AlbumMetadata) {
+    constructor(id: string) {
       this.id = id;
-      this.#metadata = metadata;
     }
     static async getAll(): Promise<Album[]> {
-      return (await native.albums()).map((album) => new Album(album.id, album));
+      return (await native.albums()).map((album) => new Album(album.id));
     }
     static async get(title: string): Promise<Album | null> {
       const found = (await native.albums()).find((album) => album.title === title);
-      return found ? new Album(found.id, found) : null;
+      return found ? new Album(found.id) : null;
     }
     static async create(
       name: string,
@@ -118,13 +118,13 @@ export function desktopMediaLibrary(): NativeMediaLibrary | null {
       moveAssets = false,
     ): Promise<Album> {
       const album = await native.createAlbum(name, assets.map(idOf), moveAssets);
-      return new Album(album.id, album);
+      return new Album(album.id);
     }
     static delete(albums: Album[], deleteAssets = false): Promise<void> {
       return native.deleteAlbums(albums.map(idOf), deleteAssets);
     }
     async #read(): Promise<AlbumMetadata> {
-      const found = this.#metadata ?? (await native.albums()).find((album) => album.id === this.id);
+      const found = (await native.albums()).find((album) => album.id === this.id);
       if (!found) throw new Error(`MediaLibrary: there is no album ${this.id}, or no access to it`);
       return found;
     }

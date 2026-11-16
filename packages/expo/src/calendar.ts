@@ -218,8 +218,8 @@ export class Calendar {
  * calendar, an event and a reminder read on macOS carry expo-calendar's fields, and the methods its
  * handles have are added to each (not enumerable, so a record still compares as its fields). A
  * calendar lists its events and reminders and creates them; an event and a reminder update and
- * delete themselves. Dates go to the host as milliseconds. Creating, changing or deleting a
- * calendar is not available there. Null where the host has no such module.
+ * delete themselves. Dates go to the host as milliseconds. A calendar is created and deleted
+ * there, but its own `update()` is not available. Null where the host has no such module.
  */
 function desktopCalendar(): NativeCalendar | null {
   const host =
@@ -301,17 +301,17 @@ function desktopCalendar(): NativeCalendar | null {
     getRemindersPermissions: call('getRemindersPermissionsAsync'),
     requestRemindersPermissions: call('requestRemindersPermissionsAsync'),
     getCalendars: async (entityType?: string) =>
-      ((await call('getCalendarsAsync')(entityType ?? 'event')) as Row[]).map(calendar),
+      (((await call('getCalendarsAsync')(entityType ?? 'event')) ?? []) as Row[]).map(calendar),
     getDefaultCalendarSync: () =>
       calendar((call('getDefaultCalendarSync')() as Row | null) ?? null),
     getSourcesSync: call('getSourcesSync'),
     listEvents: async (calendars: readonly (string | { id: string })[], start: Date, end: Date) =>
       (
-        (await call('listEventsAsync')(
+        ((await call('listEventsAsync')(
           calendars.map((each) => (typeof each === 'string' ? each : each.id)),
           start.getTime(),
           end.getTime(),
-        )) as Row[]
+        )) ?? []) as Row[]
       ).map(event),
     createCalendar: async (details: Record<string, unknown> = {}) =>
       calendar(await write('createCalendarAsync')(wire(details))),

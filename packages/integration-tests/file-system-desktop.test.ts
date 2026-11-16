@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { FileSystem } from '@ng-native/expo/file-system';
 import { injectService } from '@ng-native/testing';
+import { asHost } from './desktop-host-methods.ts';
 
 const PATHS = {
   cache: 'file:///app/Caches/',
@@ -25,6 +26,9 @@ type Call = [string, ...unknown[]];
 /** A desktop host with `files` (uri to text) in memory, recording each call. */
 function host(files: Record<string, string> = {}) {
   const calls: Call[] = [];
+  // Files `statSync` does not see yet: another writer's, made after a check.
+  const unseen = new Set<string>();
+  let folder: { uri: string } | null = { uri: 'file:///Users/me/Exports/' };
   const listeners = new Set<(event: unknown) => void>();
   const record =
     <A extends unknown[], R>(name: string, fn: (...args: A) => R) =>
@@ -34,7 +38,7 @@ function host(files: Record<string, string> = {}) {
     };
   const stat = (uri: string) => {
     if (uri.includes('unreachable')) throw new Error(`Outside the folders: ${uri}`);
-    return uri in files
+    return uri in files && !unseen.has(uri)
       ? { uri, directory: false, size: files[uri]!.length, modified: 1, created: 1 }
       : null;
   };
@@ -54,6 +58,14 @@ function host(files: Record<string, string> = {}) {
     delete files[uri];
     return null;
   };
+  // Atomic, as the host's `fopen(..., "wx")`: fails rather than empty a file that is there.
+  const createFile = (folderUri: string, name: string) => {
+    const uri = folderUri + encodeURIComponent(name);
+    if (uri in files)
+      throw new Error(`The file could not be created (it may be there already): ${uri}`);
+    files[uri] = '';
+    return { uri };
+  };
   const sync =
     <A extends unknown[], R>(name: string, fn: (...args: A) => R) =>
     (...args: A): R => {
@@ -72,6 +84,7 @@ function host(files: Record<string, string> = {}) {
     writeAsStringAsync: record('writeAsStringAsync', write),
     writeAsStringSync: sync('writeAsStringSync', write),
     makeDirectorySync: sync('makeDirectorySync', () => null),
+    createFileSync: sync('createFileSync', createFile),
     deleteAsync: record('deleteAsync', remove),
     deleteSync: sync('deleteSync', remove),
     watch: (...args: unknown[]) => (calls.push(['watch', ...args]), 11),
@@ -82,7 +95,12 @@ function host(files: Record<string, string> = {}) {
     return {
       Platform: { OS: 'macos' },
       TurboModuleRegistry: {
-        get: (name: string) => (name === 'NgNativeFileSystem' ? module : null),
+        get: (name: string) =>
+          name === 'NgNativeFileSystem'
+            ? asHost('NgNativeFileSystem', module)
+            : name === 'NgNativeDocumentPicker'
+              ? asHost('NgNativeDocumentPicker', { pickDirectoryAsync: async () => folder })
+              : null,
       },
       DeviceEventEmitter: {
         addListener: (event: string, listener: (event: unknown) => void) => {
@@ -93,7 +111,7 @@ function host(files: Record<string, string> = {}) {
       },
     };
   };
-  return { calls, files, listeners };
+  return { calls, files, listeners, unseen, dismiss: () => void (folder = null) };
 }
 
 afterEach(() => {
@@ -161,6 +179,34 @@ describe('FileSystem on macOS', () => {
     assert.equal(files['file:///app/Documents/old.txt'], 'kept');
     old.create({ overwrite: true });
     assert.equal(files['file:///app/Documents/old.txt'], '');
+  });
+
+  it('creates a file without emptying one another writer made after the check', () => {
+    const { calls, files, unseen } = host({ 'file:///app/Documents/raced.txt': 'theirs' });
+    unseen.add('file:///app/Documents/raced.txt');
+    const fs = injectService(FileSystem);
+    assert.throws(() => fs.document('raced.txt').create(), /there already/);
+    assert.equal(files['file:///app/Documents/raced.txt'], 'theirs');
+    fs.document('a b.txt').create();
+    assert.deepEqual(calls.filter((call) => call[0] === 'createFileSync').at(-1), [
+      'createFileSync',
+      'file:///app/Documents/',
+      'a b.txt',
+    ]);
+    assert.equal(files['file:///app/Documents/a%20b.txt'], '');
+  });
+
+  it('picks a folder with the folder panel and creates a file in it', async () => {
+    const panel = host();
+    const fs = injectService(FileSystem);
+    const folder = await fs.pickDirectory();
+    assert.equal(folder?.uri, 'file:///Users/me/Exports/');
+    const file = folder!.createFile('a.csv', 'text/csv');
+    assert.equal(file.uri, 'file:///Users/me/Exports/a.csv');
+    file.write('a,b');
+    assert.equal(panel.files['file:///Users/me/Exports/a.csv'], 'a,b');
+    panel.dismiss();
+    assert.equal(await fs.pickDirectory(), null);
   });
 
   it('writes bytes as base64 and reads them back as bytes', async () => {

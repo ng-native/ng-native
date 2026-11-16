@@ -35,6 +35,8 @@ const BACKENDS = [
   'expo-video',
   'expo-document-picker',
   'expo-file-system',
+  'expo-updates',
+  'expo-store-review',
 ];
 
 /** The native modules Metro collects for `entry`, each with whether it is optional. */
@@ -71,6 +73,8 @@ describe('the native module each Expo entry point needs', () => {
       '@ng-native/expo/document-picker',
       { 'expo-document-picker': 'required', 'expo-file-system': 'optional' },
     ],
+    // The store page is expo-store-review's, which an app with only bundle updates lacks.
+    ['@ng-native/expo/updates', { 'expo-updates': 'required', 'expo-store-review': 'optional' }],
   ] as const) {
     it(`${entry} needs ${Object.keys(needs).join(' and ') || 'none of them'}`, () => {
       assert.deepEqual(backendsOf(entry), needs);
