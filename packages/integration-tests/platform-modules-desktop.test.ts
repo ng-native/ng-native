@@ -992,6 +992,10 @@ describe('MediaLibrary on macOS', () => {
           : async () => {
               throw new Error('MediaLibrary: the app has no access to the photo library');
             },
+        createAlbum: async (name: string, ids: string[]) => (
+          calls.push(['createAlbum', name, ids]),
+          { id: 'al2', title: name, type: 'album' }
+        ),
         startObserving: () => (calls.push(['startObserving']), granted),
       },
     });
@@ -1027,6 +1031,27 @@ describe('MediaLibrary on macOS', () => {
     const saved = await library.save('file:///tmp/a.jpg', album!);
     assert.equal(saved?.id, 'new-1');
     assert.deepEqual(calls.at(-1), ['createAsset', 'file:///tmp/a.jpg', 'al1']);
+  });
+
+  it("answers an asset's uri with its details, as expo's getInfo does", async () => {
+    photos(true);
+    const { MediaLibrary } = await import('@ng-native/expo/media-library');
+    const [asset] = await injectService(MediaLibrary).assets();
+    const info = await asset!.getInfo();
+    assert.equal(info.uri, 'file:///Photos/IMG_1.HEIC');
+    assert.equal(info.filename, 'IMG_1.HEIC');
+  });
+
+  it('adds the files an album is created with to the library, and puts their assets in it', async () => {
+    const { calls } = photos(true);
+    const { MediaLibrary } = await import('@ng-native/expo/media-library');
+    const library = injectService(MediaLibrary);
+    const album = await library.createAlbum('Trip', ['file:///tmp/a.jpg']);
+    assert.equal(album?.id, 'al2');
+    assert.deepEqual(calls.slice(-2), [
+      ['createAsset', 'file:///tmp/a.jpg', null],
+      ['createAlbum', 'Trip', ['new-1']],
+    ]);
   });
 
   it("reads an album's title each time it is asked, as one renamed in Photos changes", async () => {

@@ -71,7 +71,11 @@ export function desktopMediaLibrary(): NativeMediaLibrary | null {
     static delete(assets: Asset[]): Promise<void> {
       return native.deleteAssets(assets.map(idOf));
     }
-    getInfo = (): Promise<AssetInfo> => info(this.id);
+    // With its uri, as expo's has, which the host answers apart from the details.
+    getInfo = async (): Promise<AssetInfo> => ({
+      ...(await info(this.id)),
+      uri: await this.getUri(),
+    });
     getFilename = async () => (await info(this.id)).filename;
     getMediaType = async () => (await info(this.id)).mediaType;
     getWidth = async () => (await info(this.id)).width;
@@ -117,7 +121,12 @@ export function desktopMediaLibrary(): NativeMediaLibrary | null {
       assets: (Asset | string)[],
       moveAssets = false,
     ): Promise<Album> {
-      const album = await native.createAlbum(name, assets.map(idOf), moveAssets);
+      // A string is a file to add to the library first, as expo's takes it, not an asset's id.
+      const ids: string[] = [];
+      for (const asset of assets) {
+        ids.push(typeof asset === 'string' ? await native.createAsset(asset, null) : asset.id);
+      }
+      const album = await native.createAlbum(name, ids, moveAssets);
       return new Album(album.id);
     }
     static delete(albums: Album[], deleteAssets = false): Promise<void> {
