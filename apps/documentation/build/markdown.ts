@@ -193,33 +193,55 @@ function platforms(_marker: string, services: string): string {
 function outsideFences(text: string, change: (prose: string) => string): string {
   let result = '';
   let prose = '';
-  let fence: { char: string; length: number; indent: number } | null = null;
+  let fence: Fence | null = null;
+  let inList = false;
   for (const line of text.split(/(?<=\n)/)) {
     if (fence) {
       result += line;
-      const close = /^([ \t]*)(`+|~+)[ \t]*\r?\n?$/.exec(line);
-      const indent = close ? width(close[1]!) : -1;
-      if (
-        close?.[2]![0] === fence.char &&
-        close[2]!.length >= fence.length &&
-        indent >= fence.indent &&
-        indent <= fence.indent + 3
-      ) {
-        fence = null;
-      }
+      if (closes(line, fence)) fence = null;
       continue;
     }
-    const open = /^([ \t]*)(`{3,}|~{3,})/.exec(line);
-    if (!open) {
+    inList = stillInList(line, inList);
+    const indent = width(/^[ \t]*/.exec(line)![0]);
+    const open = /^[ \t]*(`{3,}|~{3,})/.exec(line);
+    // Outside a list, a line four columns in is indented code, shown as written and no opener.
+    const code = !inList && indent >= 4 && line.trim() !== '';
+    if (!open && !code) {
       prose += line;
       continue;
     }
     result += change(prose) + line;
     prose = '';
-    const indent = width(open[1]!);
-    fence = { char: open[2]![0]!, length: open[2]!.length, indent: indent <= 3 ? 0 : indent };
+    if (open && !code) {
+      fence = { char: open[1]![0]!, length: open[1]!.length, indent: indent <= 3 ? 0 : indent };
+    }
   }
   return result + change(prose);
+}
+
+interface Fence {
+  char: string;
+  length: number;
+  /** The indentation of the list item it is in, or 0 at the top level. */
+  indent: number;
+}
+
+/** Whether `line` closes `fence`: a run of its character at least as long, at most three past it. */
+function closes(line: string, fence: Fence): boolean {
+  const close = /^([ \t]*)(`+|~+)[ \t]*\r?\n?$/.exec(line);
+  if (!close || close[2]![0] !== fence.char || close[2]!.length < fence.length) return false;
+  const indent = width(close[1]!);
+  return indent >= fence.indent && indent <= fence.indent + 3;
+}
+
+/**
+ * Whether a list goes on through `line`: a list marker starts one, a blank line keeps it, and an
+ * unindented line that is no marker ends it.
+ */
+function stillInList(line: string, inList: boolean): boolean {
+  if (/^[ \t]*([-*+]|\d{1,9}[.)])([ \t]|\r?\n?$)/.test(line)) return true;
+  if (line.trim() === '') return inList;
+  return inList && /^[ \t]/.test(line);
 }
 
 /** How many columns leading whitespace takes, a tab reaching the next multiple of four as in Marked. */
