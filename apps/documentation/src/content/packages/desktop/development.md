@@ -1,0 +1,72 @@
+---
+title: Debugging and launch settings
+summary: DevTools, the red box, input scripts and the settings a desktop run reads at launch.
+---
+
+# Debugging and launch settings
+
+Debugging a dev run, driving it from a script, and the settings a run takes at launch.
+
+## Developer tools
+
+A dev run (a bundle from the dev server) registers with the dev server's inspector proxy, so the
+app is a Hermes target in its `/json/list` under its app id and the Mac's name, and React Native
+DevTools opens on it from `j` in the Expo CLI or Developer > Open DevTools (Command-Option-I): its
+console, sources with source maps, breakpoints and stepping. While the debugger holds the
+JavaScript, "Paused in debugger" shows over the top of the app's window with a Resume button. A
+packaged app (a Release build) has no debugger.
+
+JavaScript's errors show in a red box, a window over the app's: fatal ones, the errors
+`ErrorUtils` and React Native's error pipeline hand on, and soft ones logged with `console.error`
+(Angular's `ErrorHandler` logs every error it catches there). Its stack is symbolicated by the dev
+server to the app's sources. Escape or Dismiss closes it, Command-R or Reload reloads the app, Copy
+copies the error, and with several errors kept the arrows step between them. A reload clears it.
+LogBox draws nothing in an Angular app, so the red box stands in for it. The Developer menu has
+Reload and Open DevTools; React Native's element inspector and performance monitor are React
+features with no React tree to read here, so the menu leaves them out.
+
+## Input scripts
+
+A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
+(`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
+AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
+goes to the key window (a character, `space`, `tab`, `delete`, `escape` or `return`), and a
+character or a space is typed into a focused text field; a `type` step types the rest of its line
+there a character at a time, so smart quotes and capitals follow it. A scroll or gesture
+goes to the view under its point, wherever the real pointer is, so a web view scrolls and a map
+pans and zooms. A `secondary` step is a secondary click. The steps after a `down` go on from a run
+loop timer, so a view that tracks the press in a loop of its own (a source list row) gets its `up`
+from the event queue: put a `wait` between them. A `choose` step names the item the next menu to
+open picks a second after it opens (a picker's, a pop-up button's or a context menu), since a menu
+follows the real pointer.
+
+## Logging
+
+`NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
+ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.
+`NGN_LOG_ROTORS=1` logs each VoiceOver rotor's items in the first window a second after its first
+frame, for checking them without a screen reader. Both, and `NGN_INPUT_SCRIPT`, work only in a dev
+run: a packaged app ignores them, as it ignores the rest of its environment.
+
+## Launch settings
+
+A dev run takes its bundle, module, title, app id and capabilities from the command line, and
+settings such as the updates URL from `NGN_*` environment variables. A packaged app, whose
+`Info.plist` names `NGNBundleFile`, takes all of them from its `Info.plist` and ignores argv and
+the `NGN_*` variables, so nothing that launches the app can make it run another bundle, as another
+app, or take updates from another server.
+
+A dev run with `NGN_TESTS=1` is a test launch, which `vitest --project macos` (`@ng-native/testing`)
+starts with `NGN_STATE_DIR`, `NGN_RUN_ID` and `NGN_TESTS_FAKE_SYSTEM_UI=1`. Its windows show on
+screen without activating the app or taking focus, and it has no Dock icon until a test focuses a
+window through `AppWindows`. Its Application Support, Caches and temporary folders are under
+`NGN_STATE_DIR`, its preferences are in a defaults suite named by the run id, and its Keychain
+services are prefixed `ngn-test-<run id>.`; it removes the suite and its Keychain items as it quits
+or gets SIGTERM, and those a crashed run left when the next test launch starts. With
+`NGN_TESTS_FAKE_SYSTEM_UI=1` (or `NGN_NO_PROMPTS=1`) no system UI is shown: open and save panels
+answer as cancelled, permission prompts as denied, Touch ID and sign-in as cancelled, and an alert
+with its cancel button, or not at all when it has none. A packaged app is never a test launch.
+
+SIGTERM ends any run as a clean quit does, within three seconds: the app is asked to run its
+`willQuit` handlers, though not its `canClose` guards, and the host ends once it has answered or
+after two seconds, whichever is first. With no app listening it ends at once.

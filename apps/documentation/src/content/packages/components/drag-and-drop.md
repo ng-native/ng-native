@@ -79,6 +79,24 @@ app. A mouse drag starts it on macOS and a long press on iPadOS.
 `files` are paths or `file://` urls, and `text` and `url` are strings. Give several and the drop
 target takes the one it understands. Null makes the view not draggable.
 
+## On macOS
+
+A view with `fileDrop` set takes files, text and URLs dragged onto it from Finder or another app. A
+drag goes to the nearest view under it that takes drops: that view gets `dropEnter` when the drag
+comes over it, `dropLeave` when the drag goes off without dropping, and `dropPerform` on a drop,
+which ends the drag without a leave. Enter and perform carry `{ files: [{ uri, name }], text,
+urls }`, a file as its `file://` URL and its name. While a drag is over a view that takes drops the
+pointer shows a copy. Dropped text is kept unless it only repeats a URL or a file's path.
+
+A view with `dragItem` set (`{ files, text, url }`) can be dragged out. A press that moves past
+AppKit's drag threshold on it, or on a view inside it, becomes an NSDraggingSession: Finder takes
+the files, a text field the text and a browser the URL, and a view that takes drops takes any of
+them. The press is cancelled for the views under it, so a drag out is not also a click.
+
+A file from Open With, a drop on the Dock icon or a double click on one of the app's document types
+reaches `Linking` as its `file://` URL: the initial URL when the app is still launching, a `url`
+event after that. Links to the app's scheme arrive the same way.
+
 ## In a test
 
 `userEvent.dropFiles(node, paths)` drags files onto a view and drops them. See

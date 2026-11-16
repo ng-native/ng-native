@@ -56,6 +56,14 @@ Edit > Redo had, as on every Mac app.
 The menu bar's Undo and Redo items stay the OS's own, which the undo manager names and enables, so
 an app writes no `<menu-item>` for them.
 
+## On macOS
+
+`NgNativeUndo` keeps the app's undo history in one NSUndoManager shared by every window, which
+`UndoStack` in `@ng-native/device` registers actions with. Edit > Undo and Edit > Redo name the
+last action and send `{ type: 'undo', id }` or `{ type: 'redo', id }` on `ngNativeUndo`. A focused
+text input or web view keeps its own history, so typing is undone there and the app's actions
+where neither is focused. A reload clears the history.
+
 ## In a test
 
 `provideDesktopFakes()`, and `render(X, { os: 'macos' })`, give `UndoStack` a fake undo manager.

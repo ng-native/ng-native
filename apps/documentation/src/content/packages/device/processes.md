@@ -84,6 +84,23 @@ a Finder window. Each resolves to whether macOS took it, and to `false` on every
 take only a path the app's `FileSystem` can read (its own folders, the user's picks and the declared
 `capabilities.paths`), and resolve to `false` for any other.
 
+## On macOS
+
+`NgNativeProcesses` runs the programs the plugin options' `capabilities` declare, with
+`posix_spawn` and never through a shell. The core checks every call again against those
+capabilities, from `NGNCapabilities` in a packaged app's `Info.plist` or the `--capabilities` that
+`ng-native-desktop run` passes: a program and its arguments must match a `spawn` rule, the program
+gets only the `env` variables declared, and its output and exit arrive as `ngNativeProcesses`
+events. A Mac App Store (`mas`) build spawns nothing. A spawned program gets SIGTERM when the app
+reloads, and every program still running gets SIGKILL when the app quits.
+
+`NgNativeShell` hands a URL, a path or a Finder selection to the OS through NSWorkspace. It refuses
+`file:`, script and `data:` URLs, and paths that are not absolute and normalised. `Linking`
+refuses the same URLs. `openPath` opens a document in its app and refuses a path that is not
+there, a program, an app, a script and a location file, since those would run or follow a link past
+the `spawn` rules. `openPath` and `showItemInFolder` take only a path `FileSystem` could read, and
+answer false for any other before looking at it.
+
 ## Reference
 
 <!-- api: Processes -->

@@ -3,8 +3,8 @@
  * Native version, so an app with no native desktop code of its own compiles nothing.
  *
  * `prebuilt.json` beside this package lists them. It is filled in by hand before the package is
- * packed (the package's README has the steps), so the SHA-256 of each archive travels inside the npm package, not beside the
- * archive it vouches for. An archive holds `appkit/ngn-macos`, `appkit/hermesc` and
+ * packed (`docs/desktop-host.md` has the steps), so the SHA-256 of each archive travels inside the
+ * npm package, not beside the archive it vouches for. An archive holds `appkit/ngn-macos`, `appkit/hermesc` and
  * `appkit/Sparkle.framework`, the files a host build's `appkit` folder has, and unpacks into the
  * per-user cache under its own hash, so a new archive never reuses an old one's files.
  *

@@ -62,8 +62,9 @@ never assumes a setting is on that has not actually been confirmed.
 ## On macOS
 
 VoiceOver reads a view's role, label, hint and value, and its checked, selected and disabled
-state, from the same accessibility inputs as on iOS. A role AppKit has no counterpart for, such as
-a heading, is a group that speaks the role's name.
+state, from the same accessibility inputs as on iOS. A heading is AppKit's heading role, with its
+level, on macOS 26 and later, and a group spoken as a heading before that. A role AppKit has no
+counterpart for is a group that speaks the role's name.
 
 Tab and Shift-Tab move the keyboard focus in the order views appear in the tree, positive
 `tabIndex` first. With the Mac's default keyboard navigation Tab reaches text inputs only, and
@@ -80,8 +81,10 @@ round; a listbox and a grid stop at their ends. In a grid, Control-Home and Cont
 first and last cell. A `tabIndex` of -1 keeps an item out of Tab order while the arrows still reach
 it. The host only moves the focus: select a tab or check a radio from its `(focus)` handler.
 
-The desktop host has no accessibility settings module, so on macOS every value here stays at its
-neutral setting and `announce()` does nothing. `fontScale` is one, since nothing resizes a Mac app.
+`screenReader` and `reduceMotion` follow the system on macOS: whether VoiceOver is running, and the
+reduce motion setting, as they change. macOS has no bold-text setting an app can read, so
+`boldText` is false, and `fontScale` is one, since nothing resizes a Mac app. `announce()` has
+VoiceOver say the text.
 
 ## Off a device and on the web
 
