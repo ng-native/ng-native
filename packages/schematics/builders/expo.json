@@ -19,15 +19,15 @@
     "platform": {
       "type": "string",
       "enum": ["ios", "android", "macos", "web", "all"],
-      "description": "Passed as --platform, for export."
+      "description": "Passed as --platform, for export. Not for macos or package."
     },
     "port": {
       "type": "number",
-      "description": "Passed as --port: the port Metro listens on, or for macos the one the host loads the app from."
+      "description": "Passed as --port: the port Metro listens on, or for macos the one the host loads the app from. Not for package, which has no dev server."
     },
     "clear": {
       "type": "boolean",
-      "description": "Passed as --clear: start Metro with an empty transform cache."
+      "description": "Passed as --clear: start Metro with an empty transform cache. Not for macos or package."
     }
   },
   "required": ["command"]

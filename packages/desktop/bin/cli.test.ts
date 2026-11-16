@@ -176,14 +176,15 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
 }
 
 describe('run', () => {
-  it('builds against the app’s react-native, then opens the bundle in the host it built', async () => {
+  it('builds against the app’s react-native without the core tests, then opens the bundle in the host it built', async () => {
     const { sys, calls } = fakeSystem();
     const status = await run({ bundle: 'dist/main.hbc', module: 'main', universal: true }, sys);
     assert.equal(status, 0);
     assert.deepEqual(calls, [
       {
         command: path.join(packageDir, 'native', 'scripts', 'build.sh'),
-        args: ['/apps/demo/node_modules/react-native', '--universal'],
+        // The published package has no core test sources (published-files.test.ts).
+        args: ['/apps/demo/node_modules/react-native', '--universal', '--no-tests'],
         env: { NGN_DESKTOP_LINK: '/apps/demo/.expo/ng-native-desktop/link.json' },
       },
       {
@@ -297,6 +298,7 @@ describe('run', () => {
       '/apps/demo/node_modules/react-native-svg',
       '--library',
       '/apps/demo/node_modules/react-native-webview',
+      '--no-tests',
     ]);
   });
 
@@ -320,6 +322,7 @@ describe('run', () => {
       '/apps/demo/node_modules/react-native-screens',
       '--library',
       nested,
+      '--no-tests',
     ]);
   });
 
@@ -409,6 +412,7 @@ describe('run', () => {
       '/apps/demo/node_modules/react-native-worklets',
       '--library',
       '/apps/demo/node_modules/react-native-reanimated',
+      '--no-tests',
     ]);
   });
 

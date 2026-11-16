@@ -9,9 +9,10 @@
 const { createBuilder } = require('@angular-devkit/architect');
 const { spawnBin } = require('./spawn-bin.cjs');
 
-/** @param {{ watch?: boolean, filter?: string }} options */
+/** @param {{ watch?: boolean, filter?: string, project?: string }} options */
 function vitestArgs(options) {
   const args = [options.watch ? 'watch' : 'run'];
+  if (options.project) args.push('--project', options.project);
   if (options.filter) args.push(options.filter);
   return args;
 }

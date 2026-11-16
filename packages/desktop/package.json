@@ -64,7 +64,8 @@
     "native/shim",
     "native/core/include",
     "native/core/src",
-    "native/appkit"
+    "native/appkit",
+    "!native/appkit/tests"
   ],
   "publishConfig": {
     "access": "public"

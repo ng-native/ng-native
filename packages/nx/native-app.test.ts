@@ -201,6 +201,24 @@ describe('the generated desktop-only app', () => {
     });
   }
 
+  it("applies the desktop template's Metro config around withNxMetro, as the template's", () => {
+    // The two differ only by Nx's resolver, which the mobile app's config wraps the same way.
+    const withoutNx = native.DESKTOP_METRO_CONFIG.replace(
+      "const { withNxMetro } = require('@nx/expo');\n",
+      '',
+    ).replace('withNxMetro(getDefaultConfig(__dirname))', 'getDefaultConfig(__dirname)');
+    const code = (text: string) =>
+      text.split('\n').filter((line: string) => line && !line.startsWith('//'));
+    assert.deepEqual(code(withoutNx), code(desktopFile('metro.config.js')));
+    assert.deepEqual(
+      code(native.METRO_CONFIG.replace("const { withNxMetro } = require('@nx/expo');\n", '')).map(
+        (line: string) =>
+          line.replace('withNxMetro(getDefaultConfig(__dirname))', 'getDefaultConfig(__dirname)'),
+      ),
+      code(templateFile('metro.config.js')),
+    );
+  });
+
   it("installs the desktop template's dependencies, at its versions", () => {
     const theirs = JSON.parse(desktopFile('package.json')).dependencies;
     assert.deepEqual(

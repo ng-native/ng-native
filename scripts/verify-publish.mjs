@@ -1,5 +1,5 @@
 /**
- * Publish everything to a local registry, generate an app from the template, test it and bundle it.
+ * Publish everything to a local registry, generate an app from each template, test it and bundle it.
  *
  * The thing this checks that nothing else does is *distribution*: that the packages publish at
  * all, that they find each other by version through a registry rather than through workspace
@@ -171,9 +171,12 @@ function publishAll() {
   }
 }
 
-function generateApp(dir = mkdtempSync(path.join(tmpdir(), 'angular-native-probe-'))) {
+function generateApp(
+  dir = mkdtempSync(path.join(tmpdir(), 'angular-native-probe-')),
+  template = '@ng-native/template',
+) {
   const app = path.join(dir, 'app');
-  console.log(`\ngenerating an app in ${app}`);
+  console.log(`\ngenerating an app from ${template} in ${app}`);
   run(
     'npx',
     [
@@ -181,13 +184,53 @@ function generateApp(dir = mkdtempSync(path.join(tmpdir(), 'angular-native-probe
       'create-expo-app@latest',
       app,
       '--template',
-      '@ng-native/template',
+      template,
       '--no-install',
       '--no-agents-md',
     ],
     dir,
   );
   return app;
+}
+
+/**
+ * Installs, tests, typechecks and bundles an app from the desktop template, through its own
+ * scripts. The bundle is the one `npm run package` makes, `expo export:embed` for macOS, without
+ * the host: building that needs Xcode and minutes, and `packages/desktop`'s own tests check that
+ * every source it configures is published.
+ */
+function checkDesktop(app, pm = 'pnpm') {
+  writeFileSync(path.join(app, '.npmrc'), `registry=${REGISTRY}\n`);
+  console.log(`installing the desktop app from the registry with ${pm}`);
+  install(pm, app);
+  assertOneCopy(app, pm);
+  // `test` is the Node project alone: the other opens the app.
+  console.log('testing');
+  run(pm, ['test'], app);
+  console.log('typechecking');
+  run(pm, ['run', 'typecheck'], app);
+  console.log('bundling for macos');
+  const out = path.join(app, 'dist-macos');
+  mkdirSync(out, { recursive: true });
+  run(
+    'npx',
+    [
+      'expo',
+      'export:embed',
+      '--platform',
+      'macos',
+      '--dev',
+      'false',
+      '--bundle-output',
+      path.join(out, 'main.js'),
+      '--assets-dest',
+      out,
+    ],
+    app,
+  );
+  const size = readFileSync(path.join(out, 'main.js'), 'utf8').length;
+  if (!size) throw new Error('expo export:embed wrote an empty macOS bundle');
+  return size;
 }
 
 /**
@@ -1156,6 +1199,7 @@ async function manualApp(dir, { newestSdk = false } = {}) {
 const SCENARIOS = {
   'template-npm': { app: 'app', run: (dir) => templateScenario(dir, 'npm') },
   'template-pnpm': { app: 'app', run: (dir) => templateScenario(dir, 'pnpm') },
+  'template-desktop-pnpm': { app: 'app', run: desktopScenario },
   'angular-cli-npm': {
     app: 'web/projects/native',
     run: (dir) => angularWorkspace(dir, { latest: true }),
@@ -1180,6 +1224,10 @@ const SCENARIOS = {
 
 function templateScenario(dir, pm) {
   return `${check(generateApp(dir), { pm, latest: true })} modules`;
+}
+
+function desktopScenario(dir) {
+  return `a ${checkDesktop(generateApp(dir, '@ng-native/template-desktop'))}-byte macOS bundle`;
 }
 
 /** What a failure most likely moved under us. */
@@ -1275,6 +1323,12 @@ if (scenario) {
     const modules = check(app);
     console.log(`\nok  an app generated from the template bundles ${modules} modules`);
     rmSync(path.dirname(app), { recursive: true, force: true });
+
+    const desktop = mkdtempSync(path.join(tmpdir(), 'angular-native-desktop-'));
+    console.log(
+      `\nok  an app generated from the desktop template bundles ${desktopScenario(desktop)}`,
+    );
+    rmSync(desktop, { recursive: true, force: true });
   }
 
   if (generators) {

@@ -91,6 +91,14 @@ describe('the desktop template', () => {
     assert.match(main, /AppRegistry\.registerRunnable\('main'/);
   });
 
+  it("passes package's flags after --, which npm otherwise takes as its own and drops", () => {
+    for (const file of ['README.md', 'AGENTS.md']) {
+      const text = read(desktop, file).toString('utf8');
+      assert.match(text, /npm run package -- --format dmg/, file);
+      assert.doesNotMatch(text, /npm run package +#[^\n]*--format/, file);
+    }
+  });
+
   it('has an in-app test beside the Node one', () => {
     assert.match(read(desktop, 'src/app/app.device.ts').toString('utf8'), /Platform\.OS/);
   });

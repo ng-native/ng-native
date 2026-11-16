@@ -52,15 +52,28 @@ const TYPECHECK = 'node metro.config.js && ngc -p tsconfig.json --noEmit';
 const SOURCE_FILES = ['src/app/app.ts', 'src/main.ts', 'src/app/app.test.ts'];
 
 /**
- * The desktop template's files that differ from the template's, which a desktop-only app takes in
- * their place, from `files/desktop/`: its starter screen, the screen's test and its `AGENTS.md`.
+ * The desktop template's files that differ from the template's, or that it alone has, which a
+ * desktop-only app takes from `files/desktop/`: its starter screen, the screen's Node test and
+ * in-app test, the entry file that starts the in-app tests, and the Vitest config with a project
+ * for each. Its `AGENTS.md` comes from there too, through `agentsFile`, and its Metro config is
+ * `DESKTOP_METRO_CONFIG`.
  */
 const DESKTOP_SOURCE_FILES = [
   'src/app/app.ts',
   'src/app/app.test.ts',
+  'src/app/app.device.ts',
   'src/main.ts',
   'vitest.config.mts',
 ];
+
+/** The desktop template's files a desktop-only app has and a mobile one does not. */
+const DESKTOP_ONLY_FILES = ['src/app/app.device.ts'];
+
+/**
+ * The desktop template's Vitest project that runs in Node, which `test` runs alone: its other
+ * project opens the app.
+ */
+const DESKTOP_TEST = 'vitest run --project node-macos';
 
 /**
  * @param {string} name
@@ -95,6 +108,27 @@ const { withAngularNative } = require('@ng-native/metro/config.cjs');
 // the polyfills Angular needs before \`@angular/core\` is first evaluated. It goes on the outside,
 // so its resolver can wrap Nx's: a library's \`./lib/ui.js\` import has to find \`ui.ts\`.
 module.exports = withAngularNative(withNxMetro(getDefaultConfig(__dirname)));
+`;
+
+/**
+ * The desktop template's Metro config, around `withNxMetro` as `METRO_CONFIG` is. `withDeviceTests`
+ * resolves the in-app tests' host to nothing unless Metro starts with `EXPO_PUBLIC_DEVICE_TESTS`
+ * set: a development bundle still bundles what a dead branch of `main.ts` requires, and Vitest
+ * with it.
+ */
+const DESKTOP_METRO_CONFIG = `const { withNxMetro } = require('@nx/expo');
+const { getDefaultConfig } = require('expo/metro-config');
+const { withAngularNative } = require('@ng-native/metro/config.cjs');
+const { withDeviceTests } = require('@ng-native/testing/device/metro');
+
+// withNxMetro resolves the workspace's libraries, through its tsconfig path aliases or its package
+// manager's links, and watches them. withAngularNative registers the transformer that compiles
+// Angular ahead of time, compiles each component's CSS into the sheet the engine reads, and adds
+// the polyfills Angular needs before \`@angular/core\` is first evaluated. It goes on the outside,
+// so its resolver can wrap Nx's: a library's \`./lib/ui.js\` import has to find \`ui.ts\`.
+// withDeviceTests does nothing until Metro starts with EXPO_PUBLIC_DEVICE_TESTS set, for the tests
+// that run inside the app.
+module.exports = withDeviceTests(withAngularNative(withNxMetro(getDefaultConfig(__dirname))));
 `;
 
 /**
@@ -233,9 +267,12 @@ module.exports = {
   ...shared,
   SOURCE_FILES,
   DESKTOP_SOURCE_FILES,
+  DESKTOP_ONLY_FILES,
+  DESKTOP_TEST,
   sourceFile,
   agentsFile,
   METRO_CONFIG,
+  DESKTOP_METRO_CONFIG,
   TYPECHECK,
   TYPECHECK_ONE_COPY,
   WITH_ENTRY_POINTS,

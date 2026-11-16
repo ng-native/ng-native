@@ -31,13 +31,14 @@ function expoArgs(options) {
 
 /**
  * `ng-native-desktop`'s arguments for a `macos` or `package` target. The port is the dev server's
- * the host loads the app from.
+ * the host loads the app from, which only `macos` has: `package` bundles the app itself, and
+ * refuses `--port`.
  *
  * @param {{ command: 'macos' | 'package', args?: string[], port?: number }} options
  */
 function desktopArgs(options) {
   const args = [DESKTOP_COMMANDS[options.command], ...(options.args ?? [])];
-  if (options.port) args.push('--port', String(options.port));
+  if (options.port && options.command === 'macos') args.push('--port', String(options.port));
   return args;
 }
 

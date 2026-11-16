@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 const { createTreeWithEmptyWorkspace } = require('@nx/devkit/testing') as {
   createTreeWithEmptyWorkspace: () => Tree;
 };
-const { readJson, readProjectConfiguration, updateJson } =
+const { addProjectConfiguration, readJson, readProjectConfiguration, updateJson } =
   require('@nx/devkit') as typeof import('@nx/devkit');
 const { application } = require('../application/index.cjs');
 const { desktop } = require('./index.cjs');
@@ -55,10 +55,8 @@ describe('the desktop generator', () => {
     const tree = await app();
     await run(tree);
     const { dependencies } = readJson(tree, 'package.json');
-    assert.equal(
-      dependencies['@ng-native/desktop'],
-      native.desktopDependencies['@ng-native/desktop'],
-    );
+    // Released in lockstep with this package, at its version.
+    assert.equal(dependencies['@ng-native/desktop'], require('../package.json').version);
   });
 
   it('adds macos and package targets that run ng-native-desktop in the app', async () => {
@@ -102,6 +100,23 @@ describe('the desktop generator', () => {
       files.map((file) => tree.read(file, 'utf-8')),
       before,
     );
+  });
+
+  it('refuses a project with no app.json, and changes nothing', async () => {
+    const tree = await app();
+    addProjectConfiguration(tree, 'web', { root: 'apps/web', targets: {} });
+    tree.write('apps/web/package.json', '{ "name": "web" }\n');
+    const files = ['package.json', 'apps/web/project.json', 'apps/web/package.json'];
+    const before = files.map((file) => tree.read(file, 'utf-8'));
+    await assert.rejects(
+      run(tree, 'web'),
+      /web is not an Angular Native app: it has no apps\/web\/app\.json/,
+    );
+    assert.deepEqual(
+      files.map((file) => tree.read(file, 'utf-8')),
+      before,
+    );
+    assert.equal(tree.exists('apps/web/.gitignore'), false);
   });
 
   it('refuses a project the workspace does not have', async () => {

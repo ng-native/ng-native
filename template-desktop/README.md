@@ -11,7 +11,8 @@ npm start          # Metro, the dev server the app loads from; leave it running
 npm run macos      # builds the desktop host and opens the app, with Fast Refresh
 npm test           # the example test in src/app/app.test.ts, in Node with no app window
 npm run typecheck
-npm run package    # dist/macos/my-app.app; --format dmg or --format mas to ship it
+npm run package    # dist/macos/my-app.app
+npm run package -- --format dmg   # a signed, notarised .dmg; --format mas for the Mac App Store
 ```
 
 To run tests inside the app, on real AppKit views, start Metro for them and run the `macos` Vitest

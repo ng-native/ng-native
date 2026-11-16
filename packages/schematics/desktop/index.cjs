@@ -11,6 +11,7 @@
  * It only adds, so running it again changes nothing.
  */
 const path = require('node:path').posix;
+const { workspaces } = require('@angular-devkit/core');
 const { SchematicsException } = require('@angular-devkit/schematics');
 const { NodePackageInstallTask } = require('@angular-devkit/schematics/tasks');
 const native = require('../native-app.cjs');
@@ -32,17 +33,22 @@ function desktopTargets() {
   return { macos: desktop('macos'), package: desktop('package') };
 }
 
-function addToAppJson(tree, root, context) {
-  const file = path.join(root, 'app.json');
-  if (!tree.exists(file)) {
-    context.logger.warn(
-      `Could not update ${file}: it does not exist. Add "macos" to expo.platforms, set ` +
-        'expo.experiments.outOfTreePlatforms to true and add "@ng-native/desktop" to expo.plugins.',
-    );
-    return;
-  }
+function addToAppJson(tree, file) {
   const config = readJson(tree, file);
   writeJson(tree, file, { ...config, expo: native.withDesktop(config.expo ?? {}) });
+}
+
+/**
+ * `angular.json` as the Angular CLI reads it, comments and trailing commas allowed, and written
+ * back with them kept: Angular's own workspace reader and writer, over the schematic's tree.
+ */
+function workspaceHost(tree) {
+  return {
+    readFile: async (file) => tree.readText(file),
+    writeFile: async (file, data) => tree.overwrite(file, data),
+    isDirectory: async (dir) => !tree.exists(dir) && tree.getDir(dir).subfiles.length > 0,
+    isFile: async (file) => tree.exists(file),
+  };
 }
 
 function addDependency(tree) {
@@ -74,24 +80,34 @@ function ignorePackages(tree, root) {
  * @param {{ project: string, skipInstall?: boolean }} options
  */
 function desktop(options) {
-  return (tree, context) => {
+  return async (tree, context) => {
     if (!tree.exists('angular.json')) {
       throw new SchematicsException('No angular.json here. Run this in an Angular CLI workspace.');
     }
-    const workspace = readJson(tree, 'angular.json');
-    const project = workspace.projects?.[options.project];
+    const host = workspaceHost(tree);
+    const { workspace } = await workspaces.readWorkspace(
+      'angular.json',
+      host,
+      workspaces.WorkspaceFormat.JSON,
+    );
+    const project = workspace.projects.get(options.project);
     if (!project) {
       throw new SchematicsException(`angular.json has no project called "${options.project}".`);
     }
     const root = project.root ?? '';
-    addToAppJson(tree, root, context);
+    const appJson = path.join(root, 'app.json');
+    if (!tree.exists(appJson)) {
+      throw new SchematicsException(
+        `${options.project} is not an Angular Native app: it has no ${appJson}. Make one with ` +
+          'ng add @ng-native/schematics, or ng generate @ng-native/schematics:application.',
+      );
+    }
+    addToAppJson(tree, appJson);
     addDependency(tree);
     ignorePackages(tree, root);
-    const targets = desktopTargets();
-    const architect = { ...project.architect };
-    for (const [name, target] of Object.entries(targets)) architect[name] ??= target;
-    workspace.projects[options.project] = { ...project, architect };
-    writeJson(tree, 'angular.json', workspace);
+    const missing = Object.entries(desktopTargets()).filter(([name]) => !project.targets.has(name));
+    for (const [name, target] of missing) project.targets.add({ name, ...target });
+    if (missing.length) await workspaces.writeWorkspace(workspace, host);
 
     if (!options.skipInstall) context.addTask(new NodePackageInstallTask());
     context.logger.info(
