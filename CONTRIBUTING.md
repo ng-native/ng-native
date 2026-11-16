@@ -85,6 +85,12 @@ pnpm --filter documentation dev  # the documentation site, on http://localhost:5
   on a simulator: `pnpm --filter @ng-native/components test:ios` with one simulator booted, or the
   one `NGN_IOS_TEST_SIMULATOR` names. It needs Xcode, so neither `pnpm test` nor CI runs it: run it
   by hand after a change to that code.
+- `packages/components/android/src/test` unit-tests the Android code's decisions that need no
+  device (shortcut matching, which view's menu a press opens, the window callback's wrapping and
+  the menu host's reload handling) on the JVM: `pnpm --filter @ng-native/components test:android`
+  runs them with Gradle through the canary's Android project, prebuilding it first if it is not
+  there. It needs JDK 17 and the Android SDK. CI runs them in the native builds' Android job
+  whenever it builds the canary's APK.
 
 `packages/nx` and `packages/schematics` carry `*.test.ts` files next to the source they test, and
 `packages/web-compat` does too, with the Web Platform Tests below. Every package not named here has

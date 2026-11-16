@@ -18,6 +18,9 @@ import android.widget.EditText
  *   a text input's own Ctrl-Z, X, C, V and A take it first. An app shortcut then fires.
  * - The Keyboard Shortcuts helper asks `onProvideKeyboardShortcuts`, which adds the app's.
  * - A press on a view with a `[contextMenu]` goes to `ContextMenuGesture` first.
+ *
+ * Only the activity's window has it: a `<modal>` is a Dialog with a window of its own, where the
+ * app's shortcuts and context menus do not reach yet.
  */
 internal class MenuWindowCallback private constructor(
   activity: Activity,
@@ -57,12 +60,17 @@ internal class MenuWindowCallback private constructor(
     contextMenus.handle(event) || base.dispatchTouchEvent(event)
 
   companion object {
-    /** Put the callback on `activity`'s window, once. On the main thread. */
+    private val windows = WindowWrapper<Window>()
+
+    /**
+     * Put the callback on `activity`'s window, once for each window, however other code has
+     * wrapped the window's callback since. On the main thread.
+     */
     fun install(activity: Activity) {
       val window = activity.window ?: return
-      val current = window.callback ?: return
-      if (current is MenuWindowCallback) return
-      window.callback = MenuWindowCallback(activity, current)
+      windows.wrapOnce(window, window.callback, { MenuWindowCallback(activity, it) }) {
+        window.callback = it
+      }
     }
   }
 }

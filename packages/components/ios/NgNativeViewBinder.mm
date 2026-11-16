@@ -124,6 +124,12 @@ static void collect(UIView *view, NSSet<NSString *> *wanted, NSMutableDictionary
   }
 }
 
+- (id)tokenFor:(NSString *)nativeID
+{
+  id binding = _bindings[nativeID];
+  return [binding isKindOfClass:[NgNativeBinding class]] ? ((NgNativeBinding *)binding).token : nil;
+}
+
 - (void)unbindAll
 {
   for (NSString *nativeID in _bindings.allKeys) {

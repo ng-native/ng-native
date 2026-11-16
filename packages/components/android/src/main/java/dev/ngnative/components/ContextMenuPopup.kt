@@ -1,10 +1,14 @@
 package dev.ngnative.components
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.Menu
 import android.view.View
@@ -20,11 +24,17 @@ import com.facebook.react.uimanager.events.Event
  * A `[contextMenu]` drawn as a PopupMenu at a point in the window, from the entries
  * `serializeMenu` makes: labels, separators (dividers between groups, Android 9 and later),
  * submenus, inline sections, checked, disabled and destructive items, and `icon` as a drawable
- * resource's name. The item chosen goes to the view as `topContextMenuSelect` with its `id`.
+ * resource's name. A PopupMenu row has no second line or tooltip, so `subtitle` is not shown.
+ * The item chosen goes to the view as `topContextMenuSelect` with its `id`.
  */
 internal object ContextMenuPopup {
-  /** Material's error colour, for a destructive item's label. */
-  private const val DESTRUCTIVE = 0xFFB3261E.toInt()
+  /**
+   * A destructive item's label colour on a light menu, or on a dark one: Material's error colour
+   * for each.
+   */
+  fun destructiveColour(light: Boolean): Int = if (light) 0xFFB3261E.toInt() else 0xFFF2B8B5.toInt()
+
+  private val main by lazy { Handler(Looper.getMainLooper()) }
 
   /** The last Android item id given out. On the main thread only. */
   private var lastItemId = 0
@@ -32,19 +42,21 @@ internal object ContextMenuPopup {
   /** Show `entries` for `view` at (`x`, `y`) in `activity`'s window. Whether there was a menu. */
   fun show(activity: Activity, view: View, entries: List<Map<String, Any?>>, x: Float, y: Float): Boolean {
     val content = activity.findViewById<ViewGroup>(android.R.id.content) ?: return false
-    // PopupMenu opens at a view: a one-pixel one at the press point, gone with the menu.
+    // PopupMenu opens at a view: a one-pixel one at the press point, gone with the menu. The point
+    // is physical, so the anchor sits from the left in a right-to-left layout too.
     val at = IntArray(2).also(content::getLocationInWindow)
     val anchor = View(activity)
     content.addView(
       anchor,
       FrameLayout.LayoutParams(1, 1).apply {
+        gravity = Gravity.TOP or Gravity.LEFT
         leftMargin = (x - at[0]).toInt()
         topMargin = (y - at[1]).toInt()
       },
     )
     val popup = PopupMenu(activity, anchor, Gravity.NO_GRAVITY)
     val ids = HashMap<Int, String>()
-    fill(activity, popup.menu, entries, ids)
+    fill(activity, popup.menu, entries, ids, destructiveColour(isLight(activity)))
     if (popup.menu.size() == 0) {
       content.removeView(anchor)
       return false
@@ -55,7 +67,19 @@ internal object ContextMenuPopup {
       select(view, id)
       true
     }
-    popup.setOnDismissListener { content.removeView(anchor) }
+    // The menu goes with its view: when it unmounts, or its activity is recreated or destroyed.
+    val gone = object : View.OnAttachStateChangeListener {
+      override fun onViewAttachedToWindow(v: View) = Unit
+
+      override fun onViewDetachedFromWindow(v: View) = popup.dismiss()
+    }
+    view.addOnAttachStateChangeListener(gone)
+    // Later, not while the view tree may be detaching its children.
+    val done = {
+      view.removeOnAttachStateChangeListener(gone)
+      main.post { content.removeView(anchor) }
+    }
+    popup.setOnDismissListener { done() }
     // The anchor has no place until it is laid out, so the menu waits for that.
     anchor.addOnLayoutChangeListener(
       object : View.OnLayoutChangeListener {
@@ -63,7 +87,7 @@ internal object ContextMenuPopup {
           v: View, l: Int, t: Int, r: Int, b: Int, ol: Int, ot: Int, or: Int, ob: Int,
         ) {
           anchor.removeOnLayoutChangeListener(this)
-          if (anchor.isAttachedToWindow) popup.show()
+          if (anchor.isAttachedToWindow && view.isAttachedToWindow) popup.show() else done()
         }
       },
     )
@@ -79,6 +103,7 @@ internal object ContextMenuPopup {
     menu: Menu,
     entries: List<*>,
     ids: HashMap<Int, String>,
+    destructive: Int,
     startGroup: Int = 0,
   ): Int {
     var group = startGroup
@@ -91,14 +116,14 @@ internal object ContextMenuPopup {
       val label = entry["label"] as? String ?: continue
       val children = entry["items"] as? List<*>
       if (children != null && entry["inline"] == true) {
-        group = fill(activity, menu, children, ids, group + 1) + 1
+        group = fill(activity, menu, children, ids, destructive, group + 1) + 1
         continue
       }
-      val title = title(label, entry["destructive"] == true)
+      val title = if (entry["destructive"] == true) coloured(label, destructive) else label
       val itemId = ++lastItemId
       (entry["id"] as? String)?.let { ids[itemId] = it }
       val item = if (children != null) {
-        menu.addSubMenu(group, itemId, Menu.NONE, title).also { fill(activity, it, children, ids) }.item
+        menu.addSubMenu(group, itemId, Menu.NONE, title).also { fill(activity, it, children, ids, destructive) }.item
       } else {
         menu.add(group, itemId, Menu.NONE, title)
       }
@@ -106,9 +131,6 @@ internal object ContextMenuPopup {
       if (entry["checked"] != null) {
         item.isCheckable = true
         item.isChecked = entry["checked"] == true
-      }
-      (entry["subtitle"] as? String)?.let {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) item.tooltipText = it
       }
       (entry["icon"] as? String)?.let { name ->
         val res = activity.resources.getIdentifier(name, "drawable", activity.packageName)
@@ -119,11 +141,24 @@ internal object ContextMenuPopup {
     return group
   }
 
-  private fun title(label: String, destructive: Boolean): CharSequence {
-    if (!destructive) return label
-    return SpannableString(label).apply {
-      setSpan(ForegroundColorSpan(DESTRUCTIVE), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+  private fun coloured(label: String, colour: Int): CharSequence =
+    SpannableString(label).apply {
+      setSpan(ForegroundColorSpan(colour), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
+
+  /**
+   * Whether `activity`'s menus are light: its theme's `isLightTheme` on Android 10 and later, and
+   * the night mode before that.
+   */
+  private fun isLight(activity: Activity): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      val value = TypedValue()
+      if (activity.theme.resolveAttribute(android.R.attr.isLightTheme, value, true)) {
+        return value.data != 0
+      }
+    }
+    val night = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+    return night != Configuration.UI_MODE_NIGHT_YES
   }
 
   /** Send the chosen item's `id` to `view` as `topContextMenuSelect`. */

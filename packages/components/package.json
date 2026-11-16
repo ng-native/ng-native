@@ -106,6 +106,7 @@
   "scripts": {
     "build": "ngc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:android": "android/run-tests.sh",
     "test:ios": "ios/tests/run-tests.sh"
   },
   "license": "MIT",

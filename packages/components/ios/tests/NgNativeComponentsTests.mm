@@ -107,6 +107,39 @@ static RCTViewComponentView *viewNamed(NSString *nativeID)
   XCTAssertEqualObjects(_calls, (@[ @"attach row", @"detach row token" ]));
 }
 
+- (void)testAnswersTheTokenOfTheBindingNowAndNotOneAViewOfTheSameNameHadBefore
+{
+  __block NSUInteger made = 0;
+  NgNativeViewBinder *binder = [[NgNativeViewBinder alloc]
+      initWithAttach:^id(UIView *view, NSString *nativeID) {
+        return [NSString stringWithFormat:@"%@ %lu", nativeID, (unsigned long)++made];
+      }
+      detach:^(UIView *view, id token){
+      }];
+  UIView *root = _root;
+  binder.roots = ^NSArray<UIView *> * {
+    return @[ root ];
+  };
+  XCTAssertNil([binder tokenFor:@"drop"], @"not bound");
+  RCTViewComponentView *first = viewNamed(@"drop");
+  [_root addSubview:first];
+  [binder bind:@"drop"];
+  [binder refresh];
+  id taken = [binder tokenFor:@"drop"];
+  XCTAssertEqualObjects(taken, @"drop 1");
+  // The view unmounts and another mounts under the same name, as a pending drop loads its files.
+  [first removeFromSuperview];
+  [binder refresh];
+  XCTAssertNil([binder tokenFor:@"drop"], @"detached");
+  [_root addSubview:viewNamed(@"drop")];
+  [binder bind:@"drop"];
+  [binder refresh];
+  XCTAssertEqualObjects([binder tokenFor:@"drop"], @"drop 2");
+  XCTAssertNotEqualObjects([binder tokenFor:@"drop"], taken);
+  [binder unbind:@"drop"];
+  XCTAssertNil([binder tokenFor:@"drop"], @"unbound");
+}
+
 - (void)testLooksLessOftenForAViewThatStaysMissing
 {
   [_binder bind:@"gone"];

@@ -109,7 +109,15 @@ describe('the desktop template', () => {
     assert.equal(ours.version, theirs.version);
     for (const field of ['dependencies', 'devDependencies']) {
       for (const [name, range] of Object.entries(ours[field])) {
-        if (name in theirs[field]) assert.equal(range, theirs[field][name], name);
+        if (!(name in theirs[field])) continue;
+        // A host library is pinned to the exact version the prebuilt desktop host is built with,
+        // inside the mobile template's range.
+        const pinned = name === 'react-native-safe-area-context';
+        assert.equal(
+          range,
+          pinned ? theirs[field][name].replace(/^~/, '') : theirs[field][name],
+          name,
+        );
       }
     }
     assert.equal(ours.dependencies['@ng-native/desktop'], 'workspace:*');

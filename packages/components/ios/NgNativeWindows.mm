@@ -156,6 +156,8 @@ static __weak id<NgNativeReactHost> reactHost;
 
 /** The scene delegate of a window this file opens. */
 @interface NgNativeWindowSceneDelegate : UIResponder <UIWindowSceneDelegate>
+/** Whether the scene is the app's own: a window's scene iPadOS restored before the app launched. */
+- (BOOL)hostsApp;
 @end
 
 #pragma mark - Hooks
@@ -176,11 +178,25 @@ static BOOL isWindowActivity(NSSet<NSUserActivity *> *activities)
   return NO;
 }
 
-/** Whether a scene of the app's own (Expo's scene delegate) is connected: the app has launched. */
+/**
+ Whether `scene` is the app's own: Expo's scene delegate has it, or this file's handed it to one
+ because iPadOS restored it before the app launched.
+ */
+static BOOL isAppScene(UIScene *scene)
+{
+  id<UISceneDelegate> delegate = scene.delegate;
+  if (delegate == nil) {
+    return NO;
+  }
+  return ![delegate isKindOfClass:[NgNativeWindowSceneDelegate class]] ||
+      [(NgNativeWindowSceneDelegate *)delegate hostsApp];
+}
+
+/** Whether a scene of the app's own is connected: the app has launched. */
 static BOOL appSceneConnected(void)
 {
   for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-    if (scene.delegate != nil && ![scene.delegate isKindOfClass:[NgNativeWindowSceneDelegate class]]) {
+    if (isAppScene(scene)) {
       return YES;
     }
   }
@@ -381,7 +397,7 @@ static void hookSceneDiscard(Class delegate)
       window.kept = NO;
       window.scene.title = title;
       resolve(@(window.surface));
-      // After the resolve, so the reloaded app's mount on the surface is there to hear it.
+      // The reloaded app keeps a size heard before its mount on the surface, and hands it over.
       [window.rootView ngn_reportSizeAgain];
       return;
     }
@@ -436,12 +452,11 @@ static void hookSceneDiscard(Class delegate)
 #pragma clang diagnostic pop
 }
 
-/** The scene the app launched in, Expo's, while it is connected. */
+/** The scene the app launched in, the app's own, while it is connected. */
 - (nullable UIWindowScene *)launchScene
 {
   for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-    if ([scene isKindOfClass:[UIWindowScene class]] && scene.delegate != nil &&
-        ![scene.delegate isKindOfClass:[NgNativeWindowSceneDelegate class]] && [self windowForScene:scene] == nil) {
+    if ([scene isKindOfClass:[UIWindowScene class]] && isAppScene(scene) && [self windowForScene:scene] == nil) {
       return (UIWindowScene *)scene;
     }
   }
@@ -601,7 +616,7 @@ static void hookSceneDiscard(Class delegate)
 - (void)sceneEnteringForeground:(NSNotification *)note
 {
   UIScene *scene = note.object;
-  if (![scene isKindOfClass:[UIWindowScene class]] || [scene.delegate isKindOfClass:[NgNativeWindowSceneDelegate class]]) {
+  if (![scene isKindOfClass:[UIWindowScene class]] || !isAppScene(scene)) {
     return;
   }
   NgNativeSceneWindow *window = [self windowForSession:scene.session];
@@ -732,6 +747,11 @@ static Class appSceneDelegateClass(void)
   // The app's own delegate, for a window's scene iPadOS restored before the app had launched: that
   // scene is the app's now, and everything it is told goes to that delegate.
   id<UIWindowSceneDelegate> _app;
+}
+
+- (BOOL)hostsApp
+{
+  return _app != nil;
 }
 
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions

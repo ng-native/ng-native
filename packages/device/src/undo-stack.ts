@@ -60,6 +60,12 @@ function undoSource(): NativeUndo | null {
 
 type Entry = { readonly id: string; readonly action: UndoAction };
 
+/**
+ * Every window's `UndoStack` hears every event from the one undo manager, so action ids come from
+ * one counter, not one per stack.
+ */
+let nextId = 1;
+
 @Service()
 export class UndoStack {
   /** Overridden in a test with a fake host, such as `fakeUndo()` from `@ng-native/testing`. */
@@ -70,7 +76,6 @@ export class UndoStack {
   private readonly native = inject(UndoStack.SOURCE);
   private readonly done = signal<readonly Entry[]>([]);
   private readonly undone = signal<readonly Entry[]>([]);
-  private next = 1;
   private readonly unsubscribe = this.native?.subscribe((event) => this.hostSaid(event)) ?? null;
 
   /** Whether the OS has an undo manager: macOS, iOS and iPadOS. */
@@ -92,7 +97,7 @@ export class UndoStack {
    */
   push(action: UndoAction): void {
     if (!this.native) return;
-    const entry = { id: String(this.next++), action };
+    const entry = { id: String(nextId++), action };
     this.done.update((all) => [...all, entry]);
     this.undone.set([]);
     this.native.register(entry.id, action.label);
