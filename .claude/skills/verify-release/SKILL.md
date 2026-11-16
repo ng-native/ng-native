@@ -113,8 +113,9 @@ Each runs the common checks with `expo export --platform macos` in place of `--p
 
 For each:
 
-- **The dev loop.** The dev server, then the app on a side port: `npm start` and `npm run macos`
-  for the template and the Expo app, `nx start <app>` and `nx run <app>:macos` for Nx, and the
+- **The dev loop.** The dev server, then the app on a side port, the same port given to both:
+  `npm start -- --port <port>` and `npm run macos -- --port <port>` for the template and the Expo
+  app (`npm run macos` loads from 8081 without it), `nx start <app>` and `nx run <app>:macos` for Nx, and the
   targets its page lists for the Angular CLI. The first run gets the desktop host, a download or a
   native build, so one at a time. The app opens with no error in the Metro log, and an edit to a
   template and to a stylesheet reaches the window with its state kept.
@@ -126,8 +127,9 @@ For each:
   release changed packaging.
 
 Then, from this repository on the release tag, `pnpm bench:macos --host <path>` against the
-template's host build, never the newest host in the cache it picks without `--host`: `pgrep -fl
-appkit/ngn-macos` prints the path while the template app's `npm run macos` window is open. Every
+release host the template app's `npm run package` built, `dist/macos/<name>.app/Contents/MacOS/<name>`:
+the budget is a release build's, and `npm run macos` runs the debug host. Never the newest host in
+the cache, which it picks without `--host`. Every
 metric passes or carries a waiver in `scripts/bench-macos-budget.json`. A breach without one
 blocks the release; a metric it could not measure fails it as a breach does.
 
