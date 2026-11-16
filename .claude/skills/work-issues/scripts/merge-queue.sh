@@ -36,12 +36,12 @@ reverted_commit() {
   local head=refs/merge-queue/$1 base m files back r
   base=$(git merge-base origin/main $head 2>/dev/null) || { echo "?"; return; }
   for m in $(git rev-list --max-count=40 $base); do
-    files=(${(f)"$(git diff-tree --no-renames --no-commit-id --name-only -r $m)"})
+    files=(${(f)"$(git -c core.quotePath=false diff-tree --no-renames --no-commit-id --name-only -r $m)"})
     (( ${#files} > 2 )) || continue
     # Of the commit's files, those the PR's head has as they were before it and not as it left them, and
     # changed by the PR itself: a revert main already has is not the PR's.
-    back=(${(f)"$(comm -23 <(git diff --no-renames --name-only $m $head -- $files | sort) <(git diff --no-renames --name-only $m^ $head -- $files | sort) |
-      comm -12 - <(git diff --no-renames --name-only $base $head -- $files | sort))"})
+    back=(${(f)"$(comm -23 <(git --literal-pathspecs -c core.quotePath=false diff --no-renames --name-only $m $head -- $files | sort) <(git --literal-pathspecs -c core.quotePath=false diff --no-renames --name-only $m^ $head -- $files | sort) |
+      comm -12 - <(git --literal-pathspecs -c core.quotePath=false diff --no-renames --name-only $base $head -- $files | sort))"})
     r=${#back}
     (( r > 2 && r * 2 >= ${#files} )) && { git log --format=%s -1 $m; return; }
   done
