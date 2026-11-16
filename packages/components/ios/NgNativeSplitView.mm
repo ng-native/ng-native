@@ -3,6 +3,7 @@
 #import <React/RCTViewComponentView.h>
 #import <UIKit/UIKit.h>
 
+#import "NgNativeSplitViewDelegate.h"
 #import "NgNativeSplitViewShadowNodes.h"
 
 #include <optional>
@@ -19,7 +20,8 @@ using namespace facebook::react;
    size, and a measurement inside it counts the column's offset and its navigation bar.
  - The sidebar's `collapsed` hides or shows the primary column, and `paneMinWidth` and
    `paneMaxWidth` bound its width. The sidebar button, and the swipe that opens or shuts it, send
-   `topSidebarCollapse` to the sidebar.
+   `topSidebarCollapse` to the sidebar; UIKit hiding the sidebar at a narrower width does not, and
+   it shows again at a wider one. `NgNativeSplitViewDelegate` tells the two apart.
  - At a compact width (Slide Over, a narrow Split View) UIKit collapses the columns into a
    navigation stack. Its root is the sidebar, unless the app had shown the content; the command
    `showContent` pushes the content there and `showSidebar` pops it. Both columns stay mounted, so
@@ -44,7 +46,7 @@ using namespace facebook::react;
 - (void)ngn_columnPlaced:(CGRect)frame;
 @end
 
-@interface NgNativeSplitViewComponentView : RCTViewComponentView <UISplitViewControllerDelegate>
+@interface NgNativeSplitViewComponentView : RCTViewComponentView
 - (void)ngn_sidebarChanged;
 @end
 
@@ -98,6 +100,10 @@ using namespace facebook::react;
     placed = [self.view convertRect:area toView:splitView];
   }
   [pane ngn_columnPlaced:placed];
+  id delegate = self.splitViewController.delegate;
+  if ([delegate isKindOfClass:[NgNativeSplitViewDelegate class]]) {
+    [(NgNativeSplitViewDelegate *)delegate columnLaidOut];
+  }
 }
 
 - (void)viewSafeAreaInsetsDidChange
@@ -254,13 +260,8 @@ static void putColumnFrame(
   UISplitViewController *_controller;
   NgNativeSplitColumn *_sidebarColumn;
   NgNativeSplitColumn *_contentColumn;
+  NgNativeSplitViewDelegate *_delegate;
   __weak NgNativeSidebarComponentView *_sidebar;
-  // Whether the app has shown the content: the top of the stack the columns collapse into.
-  BOOL _contentShown;
-  // The collapsed state last applied or reported, so a change is sent once.
-  BOOL _collapsed;
-  // While the columns expand out of the stack: the sidebar showing then is no step back.
-  BOOL _expanding;
 }
 
 + (void)load
@@ -283,7 +284,15 @@ static void putColumnFrame(
   if (self = [super initWithFrame:frame]) {
     _props = NgNativeSplitViewShadowNode::defaultSharedProps();
     _controller = [[UISplitViewController alloc] initWithStyle:UISplitViewControllerStyleDoubleColumn];
-    _controller.delegate = self;
+    _delegate = [[NgNativeSplitViewDelegate alloc] initWithController:_controller];
+    __weak NgNativeSplitViewComponentView *weakSelf = self;
+    _delegate.onCollapse = ^(BOOL collapsed) {
+      NgNativeSplitViewComponentView *strongSelf = weakSelf;
+      if (strongSelf != nil) {
+        [strongSelf->_sidebar ngn_sendCollapsed:collapsed];
+      }
+    };
+    _controller.delegate = _delegate;
     _controller.primaryBackgroundStyle = UISplitViewControllerBackgroundStyleSidebar;
     _controller.preferredSplitBehavior = UISplitViewControllerSplitBehaviorTile;
     _controller.preferredDisplayMode = UISplitViewControllerDisplayModeOneBesideSecondary;
@@ -386,17 +395,7 @@ static void putColumnFrame(
       props.paneMinWidth > 0 ? props.paneMinWidth : UISplitViewControllerAutomaticDimension;
   _controller.maximumPrimaryColumnWidth =
       props.paneMaxWidth > 0 ? props.paneMaxWidth : UISplitViewControllerAutomaticDimension;
-  BOOL collapsed = props.collapsed;
-  if (collapsed == _collapsed) {
-    return;
-  }
-  _collapsed = collapsed;
-  _controller.preferredDisplayMode = collapsed ? UISplitViewControllerDisplayModeSecondaryOnly
-                                               : UISplitViewControllerDisplayModeOneBesideSecondary;
-  if (!_controller.isCollapsed) {
-    collapsed ? [_controller hideColumn:UISplitViewControllerColumnPrimary]
-              : [_controller showColumn:UISplitViewControllerColumnPrimary];
-  }
+  [_delegate setCollapsed:props.collapsed];
 }
 
 #pragma mark Commands
@@ -404,66 +403,9 @@ static void putColumnFrame(
 - (void)handleCommand:(const NSString *)commandName args:(const NSArray *)args
 {
   if ([commandName isEqualToString:@"showContent"]) {
-    _contentShown = YES;
-    if (_controller.isCollapsed || _controller.displayMode == UISplitViewControllerDisplayModeOneOverSecondary) {
-      [_controller showColumn:UISplitViewControllerColumnSecondary];
-    }
+    [_delegate showContent];
   } else if ([commandName isEqualToString:@"showSidebar"]) {
-    _contentShown = NO;
-    if (_controller.isCollapsed) {
-      [_controller showColumn:UISplitViewControllerColumnPrimary];
-    }
-  }
-}
-
-#pragma mark UISplitViewControllerDelegate
-
-- (void)splitViewController:(UISplitViewController *)svc willChangeToDisplayMode:(UISplitViewControllerDisplayMode)displayMode
-{
-  if (svc.isCollapsed || displayMode == UISplitViewControllerDisplayModeAutomatic) {
-    return;
-  }
-  BOOL collapsed = displayMode == UISplitViewControllerDisplayModeSecondaryOnly;
-  if (collapsed == _collapsed) {
-    return;
-  }
-  // The user's choice, kept as the size changes, until the app says otherwise.
-  _collapsed = collapsed;
-  svc.preferredDisplayMode = collapsed ? UISplitViewControllerDisplayModeSecondaryOnly
-                                       : UISplitViewControllerDisplayModeOneBesideSecondary;
-  [_sidebar ngn_sendCollapsed:collapsed];
-}
-
-- (UISplitViewControllerColumn)splitViewController:(UISplitViewController *)svc
-    topColumnForCollapsingToProposedTopColumn:(UISplitViewControllerColumn)proposedTopColumn
-{
-  return _contentShown ? UISplitViewControllerColumnSecondary : UISplitViewControllerColumnPrimary;
-}
-
-- (UISplitViewControllerDisplayMode)splitViewController:(UISplitViewController *)svc
-                displayModeForExpandingToProposedDisplayMode:(UISplitViewControllerDisplayMode)proposedDisplayMode
-{
-  _expanding = YES;
-  return _collapsed ? UISplitViewControllerDisplayModeSecondaryOnly
-                    : UISplitViewControllerDisplayModeOneBesideSecondary;
-}
-
-- (void)splitViewControllerDidExpand:(UISplitViewController *)svc
-{
-  _expanding = NO;
-}
-
-- (void)splitViewControllerDidCollapse:(UISplitViewController *)svc
-{
-  _expanding = NO;
-}
-
-- (void)splitViewController:(UISplitViewController *)svc willShowColumn:(UISplitViewControllerColumn)column
-{
-  // Back from the content, in the stack the columns collapsed into. Expanding shows the sidebar
-  // too, while the controller still says it is collapsed, and keeps what the app had shown.
-  if (svc.isCollapsed && !_expanding && column == UISplitViewControllerColumnPrimary) {
-    _contentShown = NO;
+    [_delegate showSidebar];
   }
 }
 

@@ -33,7 +33,9 @@ and `SidebarItemPath` from `@ng-native/router` for items with a `path`.
 ## The sidebar
 
 - **`[(collapsed)]`** - whether the sidebar is shut. On macOS it follows the title bar's sidebar
-  button, View > Show Sidebar and a drag that shuts it. Drawn, a collapsed sidebar is hidden.
+  button, View > Show Sidebar and a drag that shuts it. On an iPad it follows the sidebar button
+  and the swipe that opens or shuts the sidebar, while a sidebar UIKit hides at a narrower width
+  stays uncollapsed and shows again at a wider one. Drawn, a collapsed sidebar is hidden.
 - **`minWidth`** and **`maxWidth`** - the narrowest and widest a drag of the divider leaves it, in
   points. Drawn, they bound the sidebar's width, which starts at 240.
 - **`autosave`** - macOS: the name the width and collapsed state are kept under across launches.
