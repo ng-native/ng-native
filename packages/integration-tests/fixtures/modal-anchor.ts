@@ -10,7 +10,7 @@ import { View } from '../../components/src/view.ts';
   template: `
     <view testID="target" #target></view>
     <pressable testID="button" #button><text>Open</text></pressable>
-    <modal testID="pop" [anchor]="useButton() ? button : anchored() ? target : null">
+    <modal testID="pop" [anchor]="other() ?? (useButton() ? button : anchored() ? target : null)">
       <text>Popover</text>
     </modal>
     <modal testID="sheet"><text>Sheet</text></modal>
@@ -19,4 +19,6 @@ import { View } from '../../components/src/view.ts';
 export class ModalAnchorFixture {
   readonly anchored = signal(true);
   readonly useButton = signal(false);
+  /** An anchor a test makes itself, such as a node not yet committed. */
+  readonly other = signal<unknown>(null);
 }

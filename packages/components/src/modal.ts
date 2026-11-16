@@ -11,7 +11,7 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { Direction } from '@ng-native/device';
+import { Direction, OS } from '@ng-native/device';
 import { Engine, HostEngine, type EngineNode } from '@ng-native/fabric';
 import { optionalBoolean } from './transforms.ts';
 import { View } from './view.ts';
@@ -104,6 +104,8 @@ export class Modal extends ViewBase {
   readonly anchor = input<ModalAnchor>();
 
   private readonly direction = inject(Direction);
+  /** Only macOS reads the anchor, so only there does the modal wait for it. */
+  private readonly readsAnchor = inject(OS) === 'macos';
   /** For the anchor view tag, which only the engine itself hands out. */
   private readonly views = inject(Engine, { optional: true });
   private readonly injector = inject(Injector);
@@ -111,7 +113,7 @@ export class Modal extends ViewBase {
   /** The anchor's view tag, committed as `anchor`, or undefined with none. */
   protected readonly anchorTag = signal<number | undefined>(undefined);
   /**
-   * Whether the anchor's view has still to commit, which gives it its tag. The modal waits for it:
+   * Whether the anchor's view has still to commit, which gives it its tag. On macOS the modal waits:
    * the host reads the anchor as it presents, and one presented without it stays a sheet.
    */
   protected readonly awaitingAnchor = signal(false);
@@ -165,7 +167,8 @@ export class Modal extends ViewBase {
       this.awaitingAnchor.set(false);
       return;
     }
-    this.awaitingAnchor.set(true);
+    // Elsewhere nothing reads the anchor, and a modal hidden to wait for it would be dismissed.
+    if (this.readsAnchor) this.awaitingAnchor.set(true);
     afterNextRender(
       () => {
         if (anchorNode(this.anchor()) !== node) return;
