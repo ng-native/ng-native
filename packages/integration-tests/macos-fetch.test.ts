@@ -270,10 +270,18 @@ describe('fetch on macOS', () => {
     assert.equal(await blob.text(), 'Adé');
     assert.equal(blob.type, 'text/plain');
 
-    const binary = fetch('https://b/');
-    net.respond(2);
-    net.chunk(2, new Uint8Array([0x89, 0xff, 0x00]));
+    // A byte order mark is part of the body, and stays in the Blob.
+    const marked = fetch('https://c/');
+    net.respond(2, 200, { 'content-type': 'text/plain' });
+    net.chunk(2, new Uint8Array([0xef, 0xbb, 0xbf, 0x41]));
     net.complete(2);
+    const bytes = new Uint8Array(await (await (await marked).blob()).arrayBuffer());
+    assert.deepEqual([...bytes], [0xef, 0xbb, 0xbf, 0x41]);
+
+    const binary = fetch('https://b/');
+    net.respond(3);
+    net.chunk(3, new Uint8Array([0x89, 0xff, 0x00]));
+    net.complete(3);
     await assert.rejects((await binary).blob(), (error: Error) => {
       assert.ok(error instanceof TypeError);
       assert.match(error.message, /arrayBuffer\(\)/);

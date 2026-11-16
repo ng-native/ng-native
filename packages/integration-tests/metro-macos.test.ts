@@ -342,6 +342,15 @@ describe("Expo's out-of-tree platforms flag", () => {
       );
       app({ experiments: { outOfTreePlatforms: true } });
       assert.doesNotThrow(() => checkOutOfTreePlatforms(expoConfig(root), []));
+
+      // A dynamic config's platforms are kept beside the ones app.json declares.
+      app({});
+      writeFileSync(
+        path.join(root, 'app.config.js'),
+        'module.exports = ({ config }) => ({ ...config, platforms: [...(config.platforms ?? []), "web"] });\n',
+      );
+      const platforms = (expoConfig(root) as { platforms?: string[] } | undefined)?.platforms;
+      assert.deepEqual([...(platforms ?? [])].sort(), ['ios', 'macos', 'web']);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

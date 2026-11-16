@@ -246,7 +246,7 @@ class StreamingResponse {
     const bytes = await this._read();
     let text;
     try {
-      text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
     } catch {
       throw new TypeError(
         "Failed to execute 'blob' on 'Response': on macOS a Blob is made from text, and this body " +
