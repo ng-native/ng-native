@@ -1335,6 +1335,43 @@ describe('available-signal in template text, which a template shows rather than 
   });
 });
 
+describe('available-signal on strings inside template expressions', () => {
+  const html = [
+    `<text [label]="'haptics.available'">{{ 'haptics.available' }}</text>`,
+    "{{ '}}' + haptics.available }}",
+    "@let shown = ';' + haptics.available;",
+    '',
+  ].join('\n');
+  const called = [
+    `<text [label]="'haptics.available'">{{ 'haptics.available' }}</text>`,
+    "{{ '}}' + haptics.available() }}",
+    "@let shown = ';' + haptics.available();",
+    '',
+  ].join('\n');
+  const component = (template: string) =>
+    [
+      "import { Component, inject } from '@angular/core';",
+      "import { Haptics } from '@ng-native/expo/haptics';",
+      '',
+      `@Component({ selector: 'app-strings', ${template} })`,
+      'export class Strings {',
+      '  readonly haptics = inject(Haptics);',
+      '}',
+      '',
+    ].join('\n');
+
+  it('leaves a string constant alone, and spans past a }} or ; inside one', async () => {
+    const files = {
+      'src/app/inline.ts': component(`template: \`${html}\``),
+      'src/app/external.ts': component("templateUrl: './external.html'"),
+      'src/app/external.html': html,
+    };
+    const { nx } = await acrossAdapters(files, 'available-signal', '0.22.2');
+    assert.equal(nx.files['src/app/external.html'], called);
+    assert.equal(nx.files['src/app/inline.ts'], component(`template: \`${called}\``));
+  });
+});
+
 describe('available-signal on names that only look like a service', () => {
   const files = {
     'src/app/shadow.ts': [

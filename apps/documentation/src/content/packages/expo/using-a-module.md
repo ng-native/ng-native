@@ -153,9 +153,9 @@ Every service says whether its feature is there as `available`, a `Signal<boolea
 known at once, such as whether the module is in the build, it never changes. Where it is a native
 check, such as whether a face or fingerprint is enrolled for
 [Biometrics](/packages/expo/biometrics), Sign in with Apple, screen capture, the store review
-prompt or a sensor, it is `false` until the
-platform answers, which is a turn after it is first read. [Biometrics](/packages/expo/biometrics)
-asks again each time the app comes back to the front. The hinge of a
+prompt or a sensor, it is `false` until the platform answers, no sooner than a turn after it is
+first read and sometimes later. [Biometrics](/packages/expo/biometrics) asks again each time the
+app comes back to the front. The hinge of a
 [foldable](/packages/expo/foldable) and the on-device language model follow the feature as it comes
 and goes.
 
