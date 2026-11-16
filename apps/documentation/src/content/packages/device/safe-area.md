@@ -40,7 +40,9 @@ has measured. `frame` is the provider's own frame - the area it was handed to la
 Android 15 includes the system bars because the app draws behind them. `Screen.window` reads `frame`
 rather than `Dimensions` for that reason; see the [screen](/packages/device/screen) page. `known()`
 tells you whether a real measurement has arrived yet, for a layout that would rather wait than jump.
-When the provider that reported is destroyed, all three take what another provider still up last
+On macOS, `titlebarLeading` is the width of the window's close, minimise and zoom buttons where
+content runs beside them, and `0` with a sidebar under them and on every other OS.
+When the provider that reported is destroyed, all four take what another provider still up last
 reported, and with none they go back to where they started and the `--safe-area-inset-*` custom
 properties go back to zero, so `Screen.window` follows `Dimensions` again until a provider reports.
 
