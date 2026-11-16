@@ -190,8 +190,8 @@ In this step `<base>` is `origin/main`, or for a stacked PR the remote branch it
   summary: no `feat:`/`fix:` prefix, no co-author trailer. Reset to the commit the branch grew from,
   never to `<base>` itself: once it has moved, that commits the old checkout's files on top of the newer
   base and silently reverts everything merged in between (#1479 undid #1451 this way).
-- When the branch conflicts with `<base>`, or both it and main have changed `pnpm-lock.yaml` since its
-  base, rebase onto it (`git rebase <base>`) and run the affected tests again. Otherwise it needs no
+- `git fetch origin` first. When the branch conflicts with `<base>`, or both it and main have changed
+  `pnpm-lock.yaml` since its base, rebase onto it (`git rebase <base>`) and run the affected tests again. Otherwise it needs no
   rebase, however far main has moved.
 - Before every push, `git fetch origin` and read `git diff <base>...HEAD`: only the files this change
   meant to touch, and in them only its own hunks. Any other file or hunk, above all one deleted or
