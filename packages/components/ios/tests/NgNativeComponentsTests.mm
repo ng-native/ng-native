@@ -127,6 +127,14 @@ static RCTViewComponentView *viewNamed(NSString *nativeID)
   [binder refresh];
   id taken = [binder tokenFor:@"drop"];
   XCTAssertEqualObjects(taken, @"drop 1");
+  // A binding no longer valid answers nothing before the next refresh notices.
+  first.nativeId = @"other";
+  XCTAssertNil([binder tokenFor:@"drop"], @"renamed, not refreshed yet");
+  first.nativeId = @"drop";
+  [first removeFromSuperview];
+  XCTAssertNil([binder tokenFor:@"drop"], @"unmounted, not refreshed yet");
+  [_root addSubview:first];
+  XCTAssertEqualObjects([binder tokenFor:@"drop"], taken, @"mounted again");
   // The view unmounts and another mounts under the same name, as a pending drop loads its files.
   [first removeFromSuperview];
   [binder refresh];
