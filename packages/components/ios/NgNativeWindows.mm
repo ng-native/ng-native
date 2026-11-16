@@ -633,6 +633,12 @@ static void hookSceneDiscard(Class delegate)
     [self put:record.rootView in:record.window];
   } else {
     UIWindow *window = scene.keyWindow ?: scene.windows.firstObject;
+    if (window == nil) {
+      // A scene this file's delegate hosted for the app, connected again after the app launched:
+      // nothing made it a window, so the record makes one and hides it as it closes.
+      window = [[UIWindow alloc] initWithWindowScene:scene];
+      record.window = window;
+    }
     _launchRoot = window.rootViewController;
     [self put:record.rootView in:window];
   }
