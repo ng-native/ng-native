@@ -1440,7 +1440,7 @@ function windowMounter(
 ): WindowMounter {
   let bootstrapped = false;
   return {
-    mount(surface, component, { inputs = {}, providers, main }) {
+    mount(surface, component, { inputs = {}, bindings, providers, main }) {
       // The window's own size, once the host has told it; the app's until then.
       let own: Pick<Conditions, 'width' | 'height' | 'pixelRatio'> | null = null;
       const withoutOwnHairline = (tokens: Readonly<Record<string, TokenValue>>) => {
@@ -1506,42 +1506,61 @@ function windowMounter(
           ...providers,
         ],
       });
-      const componentRef = createComponent(component, {
-        environmentInjector: injector,
-        elementInjector,
-      });
-      const host = componentRef.location.nativeElement as EngineNode;
-      engine.appendChild(engine.root, host);
-      engine.setDefaultStyle(host, ROOT_HOST_STYLE);
-      for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
-
-      const applicationRef = injector.get(ApplicationRef);
-      applicationRef.attachView(componentRef.hostView);
-      // As `mount` does: the template runs, and an outlet in it registers, before the router's
-      // bootstrap listener looks for the root component.
-      applicationRef.tick();
-      if (main) {
-        applicationRef.componentTypes.push(component);
-        applicationRef.components.push(componentRef);
-        // Once: the router's initial navigation runs for the app, not each time the main window
-        // opens again. A main window opened again finds the router where it was.
-        if (!bootstrapped) {
-          bootstrapped = true;
-          for (const listener of injector.get(APP_BOOTSTRAP_LISTENER, [])) listener(componentRef);
-        }
-      }
-      componentRef.onDestroy(() => {
+      const stop = () => {
         stopFollowing();
         stopSharing();
         stopFonts();
         stopSettled();
         (elementInjector as Partial<{ destroy(): void }>).destroy?.();
         engine.leaveEvents();
+      };
+      let componentRef: ComponentRef<unknown>;
+      try {
+        componentRef = createComponent(component, {
+          environmentInjector: injector,
+          elementInjector,
+          ...(bindings && { bindings }),
+        });
+      } catch (error) {
+        stop();
+        throw error;
+      }
+      const applicationRef = injector.get(ApplicationRef);
+      // Before anything that can throw, so a window whose root fails to start leaves nothing
+      // listening or attached: the error is rethrown once the root is destroyed.
+      componentRef.onDestroy(() => {
+        stop();
         const at = applicationRef.components.indexOf(componentRef);
         if (at !== -1) applicationRef.components.splice(at, 1);
         const type = applicationRef.componentTypes.indexOf(component);
         if (main && type !== -1) applicationRef.componentTypes.splice(type, 1);
       });
+      try {
+        const host = componentRef.location.nativeElement as EngineNode;
+        engine.appendChild(engine.root, host);
+        engine.setDefaultStyle(host, ROOT_HOST_STYLE);
+        for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
+
+        applicationRef.attachView(componentRef.hostView);
+        // As `mount` does: the template runs, and an outlet in it registers, before the router's
+        // bootstrap listener looks for the root component.
+        applicationRef.tick();
+        if (main) {
+          applicationRef.componentTypes.push(component);
+          applicationRef.components.push(componentRef);
+          // Once: the router's initial navigation runs for the app, not each time the main window
+          // opens again. A main window opened again finds the router where it was.
+          if (!bootstrapped) {
+            bootstrapped = true;
+            for (const listener of injector.get(APP_BOOTSTRAP_LISTENER, [])) {
+              listener(componentRef);
+            }
+          }
+        }
+      } catch (error) {
+        componentRef.destroy();
+        throw error;
+      }
       return {
         resize({ width, height, scale }) {
           const pixelRatio = scale ?? own?.pixelRatio;
@@ -1670,7 +1689,7 @@ export function mount(
   // the app.
   const windows = injector.get(AppWindows);
   if (windows.available()) {
-    windows.launch(component, inputs);
+    windows.launch(component, inputs, bindings);
     return windowedResult(windows, injector.get(ApplicationRef), factory, engine);
   }
 

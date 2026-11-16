@@ -20,6 +20,7 @@ import {
   inject,
   makeEnvironmentProviders,
   signal,
+  type Binding,
   type EnvironmentProviders,
   type Provider,
   type Signal,
@@ -225,6 +226,8 @@ export interface WindowMounter {
     component: Type<unknown>,
     options: {
       readonly inputs?: Readonly<Record<string, unknown>>;
+      /** The main window's: what `mount` was given for the root component. */
+      readonly bindings?: Binding[];
       readonly providers: Provider[];
       readonly main?: boolean;
     },
@@ -308,18 +311,35 @@ export class AppWindows {
     () => this.windows().find((one) => one.surface === this.focusedSurface()) ?? null,
   );
 
-  private main: { component: Type<unknown>; inputs?: Readonly<Record<string, unknown>> } | null =
-    null;
+  private main: {
+    component: Type<unknown>;
+    inputs?: Readonly<Record<string, unknown>>;
+    bindings?: Binding[];
+  } | null = null;
+
+  /** The open in flight for each key, so a second open of the key waits for it. */
+  private readonly opening = new Map<string, Promise<unknown>>();
+
+  /**
+   * The quit being decided or finished: `finishing` is set once its `willQuit` handlers run, by its
+   * guards agreeing or by a SIGTERM that arrived while they decided.
+   */
+  private quitting: { finishing: Promise<void> | null } | null = null;
 
   private readonly unsubscribe = this.native?.subscribe((event) => this.hostSaid(event)) ?? null;
 
   /**
    * Start the app on an OS with windows: `component` is the app's root, which the main window
    * renders, and which opens now unless `provideMainWindow({ autoOpen: false })`. What
-   * `@ng-native/platform`'s `mount` calls in place of rendering the root on the app's surface.
+   * `@ng-native/platform`'s `mount` calls in place of rendering the root on the app's surface,
+   * with the `inputs` and `bindings` it was given for the root.
    */
-  launch(component: Type<unknown>, inputs?: Readonly<Record<string, unknown>>): void {
-    this.main = { component, ...(inputs && { inputs }) };
+  launch(
+    component: Type<unknown>,
+    inputs?: Readonly<Record<string, unknown>>,
+    bindings?: Binding[],
+  ): void {
+    this.main = { component, ...(inputs && { inputs }), ...(bindings && { bindings }) };
     const restoring = this.store?.read() ?? [];
     const autoOpen = this.mainOptions.autoOpen !== false;
     if (autoOpen) void this.openMain();
@@ -390,18 +410,38 @@ export class AppWindows {
    * Open the main window, or bring it to the front where it is open. Null where the OS has no
    * windows, or before the app has launched.
    */
-  async openMain(): Promise<AppWindow | null> {
-    const existing = this.byKey('main');
-    if (existing) return this.front(existing);
-    if (!this.main) return null;
-    const { autoOpen: _autoOpen, ...options } = this.mainOptions;
-    return this.openWindow(this.main.component, {
-      ...options,
-      key: 'main',
-      inputs: this.main.inputs,
-      main: true,
-      restore: () => ({ kind: 'main' }),
+  openMain(): Promise<AppWindow | null> {
+    return this.reserve('main', async () => {
+      const existing = this.byKey('main');
+      if (existing) return this.front(existing);
+      if (!this.main) return null;
+      const { autoOpen: _autoOpen, ...options } = this.mainOptions;
+      return this.openWindow(this.main.component, {
+        ...options,
+        key: 'main',
+        inputs: this.main.inputs,
+        ...(this.main.bindings && { bindings: this.main.bindings }),
+        main: true,
+        restore: () => ({ kind: 'main' }),
+      });
     });
+  }
+
+  /**
+   * Run `opening` once every open of `key` already in flight has settled, so that it finds the
+   * window they opened rather than opening a second one for the key.
+   */
+  private async reserve<T>(key: string, opening: () => Promise<T>): Promise<T> {
+    for (let pending = this.opening.get(key); pending; pending = this.opening.get(key)) {
+      await pending.catch(() => undefined);
+    }
+    const running = opening();
+    this.opening.set(key, running);
+    try {
+      return await running;
+    } finally {
+      if (this.opening.get(key) === running) this.opening.delete(key);
+    }
   }
 
   /**
@@ -418,15 +458,18 @@ export class AppWindows {
   ): Promise<AppWindow | null> {
     if (typeof target === 'function') {
       const { inputs, restoreKey, ...rest } = options;
-      if (restoreKey !== undefined && this.byKey(restoreKey)) {
-        return this.front(this.byKey(restoreKey)!);
-      }
-      return this.openWindow(target, {
-        ...rest,
-        key: restoreKey ?? null,
-        ...(inputs && { inputs }),
-        restore: () =>
-          restoreKey === undefined ? null : this.restoreFor(target, restoreKey, inputs, rest),
+      const opening = () =>
+        this.openWindow(target, {
+          ...rest,
+          key: restoreKey ?? null,
+          ...(inputs && { inputs }),
+          restore: () =>
+            restoreKey === undefined ? null : this.restoreFor(target, restoreKey, inputs, rest),
+        });
+      if (restoreKey === undefined) return opening();
+      return this.reserve(restoreKey, async () => {
+        const existing = this.byKey(restoreKey);
+        return existing ? this.front(existing) : opening();
       });
     }
     const { outlet, path, ...rest } = target;
@@ -439,24 +482,26 @@ export class AppWindows {
       return null;
     }
     const restore: RestoredWindow = { kind: 'route', outlet, path, options: rest };
-    const existing = this.byKey(outlet);
-    if (existing) {
-      await navigator.navigate(outlet, path);
-      const open = this.find(existing.surface);
-      if (open) open.restore = restore;
-      this.remember();
-      return this.front(existing);
-    }
-    const window = navigator.window(outlet);
-    const opened = await this.openWindow(window.component, {
-      ...rest,
-      key: outlet,
-      outlet,
-      providers: window.providers,
-      restore: () => restore,
+    return this.reserve(outlet, async () => {
+      const existing = this.byKey(outlet);
+      if (existing) {
+        await navigator.navigate(outlet, path);
+        const open = this.find(existing.surface);
+        if (open) open.restore = restore;
+        this.remember();
+        return this.front(existing);
+      }
+      const window = navigator.window(outlet);
+      const opened = await this.openWindow(window.component, {
+        ...rest,
+        key: outlet,
+        outlet,
+        providers: window.providers,
+        restore: () => restore,
+      });
+      if (opened) await navigator.navigate(outlet, path);
+      return opened;
     });
-    if (opened) await navigator.navigate(outlet, path);
-    return opened;
   }
 
   /**
@@ -473,6 +518,7 @@ export class AppWindows {
     options: WindowOptions & {
       key: string | null;
       inputs?: Readonly<Record<string, unknown>> | undefined;
+      bindings?: Binding[];
       outlet?: string;
       providers?: Provider[];
       main?: boolean;
@@ -486,6 +532,7 @@ export class AppWindows {
     const {
       key,
       inputs,
+      bindings,
       outlet,
       providers = [],
       main,
@@ -503,11 +550,18 @@ export class AppWindows {
     const open = this.track(surface, key, outlet ?? null, title);
     open.restore = restore?.() ?? null;
     this.remember();
-    open.mount = mounter.mount(surface, component, {
-      ...(inputs && { inputs }),
-      providers: [{ provide: CURRENT_WINDOW, useValue: open.handle }, ...providers],
-      ...(main && { main }),
-    });
+    try {
+      open.mount = mounter.mount(surface, component, {
+        ...(inputs && { inputs }),
+        ...(bindings && { bindings }),
+        providers: [{ provide: CURRENT_WINDOW, useValue: open.handle }, ...providers],
+        ...(main && { main }),
+      });
+    } catch (error) {
+      // The mounter took down what it had made; the window goes too, and is not opened again.
+      this.closeNow(surface, true);
+      throw error;
+    }
     return open.handle;
   }
 
@@ -630,16 +684,50 @@ export class AppWindows {
   /**
    * The host asks to quit: every window's guards, in the order the windows opened, then the
    * `willQuit` handlers, then the answer. One guard that says no keeps the app, and every window.
-   * A SIGTERM (`terminate`) skips the guards.
+   * A SIGTERM (`terminate`) skips the guards, and one that arrives while a quit's guards decide
+   * finishes that quit, whatever they answer.
    */
-  private async quitAsked(terminate = false): Promise<void> {
-    // A SIGTERM is no one's choice to veto: no guard is asked, so a dialog cannot hold it.
-    for (const open of terminate ? [] : this.open$()) {
-      if (!(await this.guardsAgree(open))) {
+  private async quitAsked(terminate: boolean): Promise<void> {
+    const current = this.quitting;
+    if (current) {
+      // One quit at a time: its answer is the host's. A SIGTERM no longer waits for its guards.
+      if (terminate) current.finishing ??= this.finishQuit();
+      return;
+    }
+    const quit: { finishing: Promise<void> | null } = { finishing: null };
+    this.quitting = quit;
+    try {
+      // A SIGTERM is no one's choice to veto: no guard is asked, so a dialog cannot hold it.
+      const agreed = terminate || (await this.everyWindowAgrees());
+      if (!agreed && !quit.finishing) {
         this.native?.answerQuit(false);
         return;
       }
+      quit.finishing ??= this.finishQuit();
+      await quit.finishing;
+    } finally {
+      this.quitting = null;
     }
+  }
+
+  /**
+   * Ask each window's guards in turn, including a window that opened while an earlier one's guard
+   * decided. False at the first that says no.
+   */
+  private async everyWindowAgrees(): Promise<boolean> {
+    const asked = new Set<Open>();
+    for (let open = this.unasked(asked); open; open = this.unasked(asked)) {
+      asked.add(open);
+      if (!(await this.guardsAgree(open))) return false;
+    }
+    return true;
+  }
+
+  private unasked(asked: ReadonlySet<Open>): Open | undefined {
+    return this.open$().find((open) => !asked.has(open));
+  }
+
+  private async finishQuit(): Promise<void> {
     await this.lifecycle.runWillQuit();
     this.native?.answerQuit(true);
   }
