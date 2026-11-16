@@ -155,6 +155,8 @@ static NSString *nonEmptyString(id value)
   __weak NgNativeDropTarget *target = self;
   dispatch_group_notify(group, dispatch_get_main_queue(), ^{
     if (target == nil || [module dropTargetFor:nativeID] != target) {
+      // Every file is copied by now, and no event will name one: nothing else removes them.
+      [NSFileManager.defaultManager removeItemAtURL:folder error:nil];
       return;
     }
     NSString *text = texts.count > 0 ? [texts componentsJoinedByString:@"\n"] : nil;
