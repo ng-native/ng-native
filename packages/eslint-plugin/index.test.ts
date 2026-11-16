@@ -362,9 +362,63 @@ test('available called, or read as a value rather than a condition, is left alon
   assert.deepEqual(await lint(code, 'a.ts'), []);
 });
 
-test('available read uncalled is fixed to a call', async () => {
+test("available read uncalled is fixed to a call where it is an @ng-native service's", async () => {
+  const code = [
+    "import { inject } from '@angular/core';",
+    "import { Haptics } from '@ng-native/expo/haptics';",
+    "import { splashScreen } from '@ng-native/expo/splash-screen';",
+    'const haptics = inject(Haptics);',
+    'function typed(buzz: Haptics) {',
+    '  return !buzz.available;',
+    '}',
+    'class Panel {',
+    '  private readonly haptics = inject(Haptics);',
+    '  constructor(private readonly typed: Haptics) {}',
+    '  go() {',
+    '    if (this.haptics.available && this.typed.available) go();',
+    '  }',
+    '}',
+    'if (haptics.available && !inject(Haptics).available && splashScreen.available) go();',
+    '',
+  ].join('\n');
+  assert.equal(await fix(code, 'a.ts'), code.replace(/\.available\b/g, '.available()'));
+});
+
+test('available on anything else is reported, and only suggested a call, never fixed', async () => {
+  const code = [
+    "import { inject, InjectionToken } from '@angular/core';",
+    "import { Haptics } from '@ng-native/expo/haptics';",
+    'const item = { available: true };',
+    'if (item.available) go();',
+    'function shadowed(Haptics: InjectionToken<{ available: boolean }>) {',
+    '  const local = inject(Haptics);',
+    '  return !local.available;',
+    '}',
+    'class Other {',
+    '  readonly haptics = { available: true };',
+    '  go() {',
+    '    if (this.haptics.available) go();',
+    '  }',
+    '}',
+    '',
+  ].join('\n');
+  assert.equal(await fix(code, 'a.ts'), code);
+  assert.equal((await lint(code, 'a.ts')).length, 3);
   assert.equal(
-    await fix('if (haptics.available && !x.available) go();\n', 'a.ts'),
-    'if (haptics.available() && !x.available()) go();\n',
+    await suggest('if (item.available) go();\n', 'a.ts'),
+    'if (item.available()) go();\n',
+  );
+});
+
+test('the last operand of && or || is a condition only where the whole is one', async () => {
+  const code = [
+    'const shown = ready && haptics.available;',
+    'const either = ready || haptics.available;',
+    'if (ready && haptics.available) go();',
+    '',
+  ].join('\n');
+  assert.deepEqual(
+    (await lint(code, 'a.ts')).map((problem) => problem.split(' ')[0]),
+    ['3:22'],
   );
 });
