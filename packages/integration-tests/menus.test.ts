@@ -25,7 +25,7 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import { signal, type Type, type WritableSignal } from '@angular/core';
+import { ErrorHandler, signal, type Type, type WritableSignal } from '@angular/core';
 import {
   Menus,
   OS,
@@ -44,6 +44,8 @@ type Fixture = {
   showOpen: WritableSignal<boolean>;
   dirty: WritableSignal<boolean>;
   wrap: WritableSignal<boolean>;
+  renaming: WritableSignal<boolean>;
+  copy: () => { select: { subscribe(listener: () => void): { unsubscribe(): void } } } | undefined;
   said: string[];
 };
 let Fixture: Type<Fixture>;
@@ -107,6 +109,15 @@ async function open(os: 'macos' | 'android' | 'ios', menuBar: boolean, drawsCont
   await settle();
   return { host, app, said: app.instance.said };
 }
+
+/** Menu entries with each item's id as `action`, where it is its handler's (`a12`). */
+const byPlace = (entries: readonly NativeMenuEntry[] | null | undefined) =>
+  entries?.map((entry) =>
+    'id' in entry && /^a\d+$/.test(entry.id) ? { ...entry, id: 'action' } : entry,
+  );
+/** The id of the entry labelled `label`. */
+const idOf = (entries: readonly NativeMenuEntry[] | null | undefined, label: string) =>
+  (entries?.find((entry) => 'label' in entry && entry.label === label) as { id: string }).id;
 
 /** A group's items as labels, a separator as `-`. */
 const labels = (group: Group | undefined) =>
@@ -260,6 +271,57 @@ describe('shortcuts', () => {
   });
 });
 
+describe('a shortcut with no host to send it to', () => {
+  it('is still checked, as it is first given and as it changes', async () => {
+    const errors: unknown[] = [];
+    const key = signal('mod+k');
+    const { Shortcut, View } = await import('@ng-native/components');
+    const app = await render(`<view [shortcut]="key()" (shortcutPress)="0"></view>`, {
+      imports: [Shortcut, View],
+      providers: [
+        { provide: Menus.SOURCE, useValue: null },
+        {
+          provide: ErrorHandler,
+          useValue: { handleError: (error: unknown) => errors.push(error) },
+        },
+      ],
+      componentProperties: { key },
+    });
+    await settle();
+    assert.deepEqual(errors, []);
+    key.set('hyper+k');
+    // Thrown out of change detection, or handed to the ErrorHandler: either way, said.
+    const failure = await app.detectChanges().then(
+      () => settle().then(() => errors[0]),
+      (error: unknown) => error,
+    );
+    assert.match(String(failure), /no modifier 'hyper'/);
+  });
+});
+
+describe('a role item listened to later', () => {
+  after(() => registerPlatformComponents('ios'));
+
+  it("is the app's while something listens to its select, and the OS's again after", async () => {
+    const { host, app, said } = await open('macos', true);
+    const copy = () => item(host.bar()[2], 'Copy Note');
+    assert.equal(copy()?.handled, undefined);
+    const subscription = app.instance.copy()!.select.subscribe(() => said.push('copy'));
+    await app.detectChanges();
+    assert.equal(copy()?.handled, true);
+    await host.send({ type: 'menuSelect', id: copy()!.id });
+    assert.deepEqual(said, ['copy']);
+    const another = app.instance.copy()!.select.subscribe(() => {});
+    subscription.unsubscribe();
+    subscription.unsubscribe();
+    await app.detectChanges();
+    assert.equal(copy()?.handled, true, 'one listener stopped twice leaves the other');
+    another.unsubscribe();
+    await app.detectChanges();
+    assert.equal(copy()?.handled, undefined);
+  });
+});
+
 describe('a context menu', () => {
   after(() => registerPlatformComponents('ios'));
 
@@ -267,13 +329,24 @@ describe('a context menu', () => {
     const { said } = await open('ios', false);
     const row = screen.getByTestId('row');
     const menu = row.props['contextMenu'] as NativeMenuEntry[];
-    assert.deepEqual(menu, [
-      { id: '0', label: 'Rename', sfSymbol: 'pencil', icon: 'ic_edit' },
-      { id: '1', label: 'Delete', destructive: true },
+    assert.deepEqual(byPlace(menu), [
+      { id: 'action', label: 'Rename', sfSymbol: 'pencil', icon: 'ic_edit' },
+      { id: 'action', label: 'Delete', destructive: true },
     ]);
     const { fireEvent } = await import('@ng-native/testing');
-    await fireEvent(row, 'contextMenuSelect', { id: '1' });
+    await fireEvent(row, 'contextMenuSelect', { id: idOf(menu, 'Delete') });
     assert.deepEqual(said, ['delete']);
+  });
+
+  it('runs nothing for a choice from the menu as it was before an item went', async () => {
+    const { app, said } = await open('macos', false);
+    const row = screen.getByTestId('row');
+    const rename = idOf(row.props['contextMenu'] as NativeMenuEntry[], 'Rename');
+    app.instance.renaming.set(false);
+    await app.detectChanges();
+    const { fireEvent } = await import('@ng-native/testing');
+    await fireEvent(row, 'contextMenuSelect', { id: rename });
+    assert.deepEqual(said, [], 'Delete, now first, is not run in its place');
   });
 
   // Android's and iOS's hosts draw the menu on a long press where they have `setContextMenu`, and
@@ -344,9 +417,9 @@ for (const os of ['android', 'ios'] as const) {
       const row = screen.getByTestId('row');
       const id = row.props['nativeID'];
       assert.equal(typeof id, 'string');
-      assert.deepEqual(host.contextMenus.get(id as string), [
-        { id: '0', label: 'Rename', icon: 'ic_edit', sfSymbol: 'pencil' },
-        { id: '1', label: 'Delete', destructive: true },
+      assert.deepEqual(byPlace(host.contextMenus.get(id as string)), [
+        { id: 'action', label: 'Rename', icon: 'ic_edit', sfSymbol: 'pencil' },
+        { id: 'action', label: 'Delete', destructive: true },
       ]);
     });
 
@@ -375,7 +448,7 @@ for (const os of ['android', 'ios'] as const) {
       );
       await settle();
       assert.equal(screen.getByTestId('target').props['nativeID'], 'note-7');
-      assert.deepEqual(host.contextMenus.get('note-7'), [{ id: '0', label: 'Pin' }]);
+      assert.deepEqual(byPlace(host.contextMenus.get('note-7')), [{ id: 'action', label: 'Pin' }]);
       (app.instance as unknown as { shown: WritableSignal<boolean> }).shown.set(false);
       await app.detectChanges();
       assert.equal(host.contextMenus.get('note-7'), null);
@@ -400,7 +473,7 @@ for (const os of ['android', 'ios'] as const) {
       );
       await settle();
       const given = screen.getByTestId('target').props['nativeID'] as string;
-      assert.deepEqual(host.contextMenus.get(given), [{ id: '0', label: 'Pin' }]);
+      assert.deepEqual(byPlace(host.contextMenus.get(given)), [{ id: 'action', label: 'Pin' }]);
       const held = () =>
         [...host.contextMenus].filter(([, entries]) => entries !== null).map(([name]) => name);
 
@@ -498,9 +571,24 @@ describe('a context menu chosen on iOS', () => {
   it("runs the item the host's module says was chosen in the view by that name", async () => {
     const { host, said } = await open('ios', false, true);
     const id = screen.getByTestId('row').props['nativeID'] as string;
-    await host.send({ type: 'contextMenuSelect', nativeID: id, id: '0' });
-    await host.send({ type: 'contextMenuSelect', nativeID: 'someone-else', id: '1' });
+    const menu = host.contextMenus.get(id);
+    await host.send({ type: 'contextMenuSelect', nativeID: id, id: idOf(menu, 'Rename') });
+    await host.send({
+      type: 'contextMenuSelect',
+      nativeID: 'someone-else',
+      id: idOf(menu, 'Delete'),
+    });
     assert.deepEqual(said, ['rename']);
+  });
+
+  it('runs nothing for a choice from the menu as it was before an item went', async () => {
+    const { host, app, said } = await open('ios', false, true);
+    const id = screen.getByTestId('row').props['nativeID'] as string;
+    const rename = idOf(host.contextMenus.get(id), 'Rename');
+    app.instance.renaming.set(false);
+    await app.detectChanges();
+    await host.send({ type: 'contextMenuSelect', nativeID: id, id: rename });
+    assert.deepEqual(said, []);
   });
 });
 

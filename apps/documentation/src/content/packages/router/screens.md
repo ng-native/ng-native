@@ -306,8 +306,8 @@ leaving says.
 ## A popover at an element
 
 `present()` takes an `anchor`: a template reference to an element, or to a component such as a
-`<pressable>`. With one, the screen shows as a popover pointing at that element on macOS and
-iPadOS, with no header, and a click outside it dismisses it. On iPhone and Android the anchor is
+`<pressable>`. With one, the screen shows as a popover pointing at that element on macOS, with no
+header, and a click outside it dismisses it. On iOS, iPadOS included, and on Android the anchor is
 ignored and the screen presents as it would without one.
 
 ```ts

@@ -74,10 +74,25 @@ export interface SerializedMenu {
   readonly actions: ReadonlyMap<string, () => void>;
 }
 
+const actionIds = new WeakMap<() => void, string>();
+let actionsNamed = 0;
+
 /**
- * `entries` as the host takes them: an id for each item by its place (`2.0.1`), its shortcut read
- * for `os`, and the handlers by id. An id names a place, so a host that reports an id from a menu
- * it drew before the menu changed finds whatever is there now, or nothing.
+ * The id a menu item with `select` is sent under: the same for as long as the handler is, and no
+ * other handler's. `<menu-item>` keeps one handler for its life, so a host that reports a choice
+ * from a menu it drew before the items changed still runs that item, or nothing once it has gone,
+ * never the item that has taken its place.
+ */
+export function menuActionId(select: () => void): string {
+  let id = actionIds.get(select);
+  if (id === undefined) actionIds.set(select, (id = `a${++actionsNamed}`));
+  return id;
+}
+
+/**
+ * `entries` as the host takes them: an id for each item, its shortcut read for `os`, and the
+ * handlers by id. An item with a handler is named by it (`menuActionId`); one without, which the
+ * app never runs, by its place (`2.0.1`).
  */
 export function serializeMenu(
   entries: readonly MenuEntry[],
@@ -88,8 +103,9 @@ export function serializeMenu(
   const walk = (list: readonly MenuEntry[], at: string): NativeMenuEntry[] =>
     list.map((entry, index) => {
       if (isSeparator(entry)) return { separator: true };
-      const id = `${at}${index}`;
+      const place = `${at}${index}`;
       const { select, shortcut, items, group: _group, ...rest } = entry;
+      const id = select ? menuActionId(select) : place;
       if (select) actions.set(id, select);
       return {
         id,
@@ -101,7 +117,7 @@ export function serializeMenu(
           : (entry.menuRole === 'back' || entry.menuRole === 'forward') && {
               shortcut: navigationShortcut(entry.menuRole, os),
             }),
-        ...(items && { items: walk(items, `${id}.`) }),
+        ...(items && { items: walk(items, `${place}.`) }),
       };
     });
   return { entries: walk(entries, prefix), actions };
@@ -371,7 +387,12 @@ export class Menus {
 
   constructor() {
     const native = this.native;
-    if (!native) return;
+    if (!native) {
+      // Read for nothing, so a shortcut the app gets wrong throws where there is no host too, and
+      // not first on a device that has one.
+      effect(() => this.sentShortcuts());
+      return;
+    }
     effect(() => {
       if (this.menuBarShown()) native.setMenuBar(this.sentBar().sent);
     });

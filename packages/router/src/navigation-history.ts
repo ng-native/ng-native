@@ -101,15 +101,35 @@ class History implements OutletHistory {
   async go(index: number): Promise<boolean> {
     const path = this.entries()[index];
     if (path === undefined || index === this.index()) return false;
-    this.pending = { path, index };
-    const tree = this.router.parseUrl(path);
-    const group = tree.root.children[PRIMARY_OUTLET];
-    const segments = group ? group.segments.map((segment) => segment.path) : [];
-    const done = await this.router.navigate([{ outlets: { [this.outlet]: segments } }], {
-      queryParams: tree.queryParams,
+    const pending = { path, index };
+    this.pending = pending;
+    // The entry's whole segment group, matrix params and child outlets included, in place of the
+    // outlet's, and every other outlet as it is: the other windows stay where they are.
+    const stored = this.router.parseUrl(path);
+    const children = { ...this.router.parseUrl(this.router.url).root.children };
+    const group = stored.root.children[PRIMARY_OUTLET];
+    if (group) children[this.outlet] = group;
+    else delete children[this.outlet];
+    const tree = new UrlTree(new UrlSegmentGroup([], children), stored.queryParams);
+    // Only this call's: a later back or forward may have replaced it.
+    const forget = () => {
+      if (this.pending === pending) this.pending = null;
+    };
+    try {
+      const done = await this.router.navigateByUrl(tree);
+      if (!done) forget();
+      return done;
+    } catch (error) {
+      forget();
+      throw error;
+    }
+  }
+
+  /** `go`, from an OS input or a menu, where nothing waits for it: a failure is logged. */
+  goFromInput(index: number): void {
+    this.go(index).catch((error: unknown) => {
+      console.error('[angular-native] A back or forward navigation failed:', error);
     });
-    if (!done) this.pending = null;
-    return done;
   }
 
   /** What a finished navigation leaves the outlet showing: `path`, titled `title` where it is. */
@@ -143,7 +163,7 @@ class History implements OutletHistory {
     const items: MenuItemModel[] = [];
     const titles = this.titles();
     for (let at = this.index() + step; at >= 0 && at < titles.length; at += step) {
-      items.push({ label: titles[at]!, select: () => void this.go(at) });
+      items.push({ label: titles[at]!, select: () => this.goFromInput(at) });
     }
     return items;
   }
@@ -191,10 +211,10 @@ export class NavigationHistory {
       // A screen with `gestureEnabled: false` is left only by its own way out.
       const showing = contexts.getContext(outlet)?.outlet as { refusesGesture?(): boolean } | null;
       if (showing?.refusesGesture?.()) return;
-      const history = this.for(outlet);
+      const history = this.for(outlet) as History;
       const last = history.entries().length - 1;
       const to = history.index() + (direction === 'back' ? -steps : steps);
-      void history.go(Math.min(Math.max(to, 0), last));
+      history.goFromInput(Math.min(Math.max(to, 0), last));
     });
     inject(DestroyRef).onDestroy(() => {
       events.unsubscribe();

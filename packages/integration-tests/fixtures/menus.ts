@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, viewChild } from '@angular/core';
 import { ContextMenu } from '../../components/src/context-menu.ts';
 import { MenuBar, MenuGroup, MenuItem, MenuSeparator } from '../../components/src/menu.ts';
 import { Pressable } from '../../components/src/pressable.ts';
@@ -34,7 +34,7 @@ import { View } from '../../components/src/view.ts';
           <menu-item label="Save" shortcut="mod+s" [disabled]="!dirty()" (select)="log('save')" />
         </menu-group>
         <menu-group label="Edit" menuRole="edit">
-          <menu-item menuRole="copy" label="Copy Note" />
+          <menu-item #copy menuRole="copy" label="Copy Note" />
         </menu-group>
         <menu-group label="Format">
           <menu-item label="Wrap Lines" [(checked)]="wrap" />
@@ -52,7 +52,9 @@ import { View } from '../../components/src/view.ts';
       <text>Row</text>
     </pressable>
     <ng-template #rowMenu>
-      <menu-item label="Rename" sfSymbol="pencil" icon="ic_edit" (select)="log('rename')" />
+      @if (renaming()) {
+        <menu-item label="Rename" sfSymbol="pencil" icon="ic_edit" (select)="log('rename')" />
+      }
       <menu-item label="Delete" destructive (select)="log('delete')" />
     </ng-template>
   `,
@@ -62,6 +64,9 @@ export class MenusFixture {
   readonly showOpen = signal(false);
   readonly dirty = signal(false);
   readonly wrap = signal(false);
+  readonly renaming = signal(true);
+  /** The role item with no (select), for a test to listen to as the app would later. */
+  readonly copy = viewChild('copy', { read: MenuItem });
   readonly said: string[] = [];
 
   log(what: string): void {

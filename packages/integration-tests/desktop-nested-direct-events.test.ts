@@ -29,7 +29,9 @@ describe('a context menu inside a context menu on macOS', () => {
       },
     );
     await settle();
-    await fireEvent(screen.getByTestId('inner'), 'contextMenuSelect', { id: '0' });
+    const inner = screen.getByTestId('inner');
+    const [item] = inner.props['contextMenu'] as { id: string }[];
+    await fireEvent(inner, 'contextMenuSelect', { id: item!.id });
     assert.deepEqual(heard, ['inner']);
   });
 });

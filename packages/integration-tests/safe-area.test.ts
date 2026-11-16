@@ -267,6 +267,27 @@ describe('a safe-area provider going away', () => {
     assert.equal(screen.getByTestId('floating').props['marginBottom'], 34);
   });
 
+  it('puts back the window controls width a provider still up reported, as the newer one goes', async () => {
+    const engine = app.componentRef.injector.get(Engine);
+    app.instance.second.set(true);
+    await app.detectChanges();
+    await fireEvent(screen.getByTestId('first'), 'insetsChange', {
+      insets: { top: 52, right: 0, bottom: 0, left: 0 },
+      frame: { x: 0, y: 0, width: 800, height: 600 },
+      titlebarLeading: 78,
+    });
+    await fireEvent(screen.getByTestId('second'), 'insetsChange', {
+      insets: { top: 0, right: 0, bottom: 0, left: 0 },
+      frame: { x: 0, y: 0, width: 400, height: 300 },
+    });
+    assert.equal(engine.token('--safe-area-inset-titlebar-leading'), '0px');
+
+    app.instance.second.set(false);
+    await app.detectChanges();
+
+    assert.equal(engine.token('--safe-area-inset-titlebar-leading'), '78px');
+  });
+
   it('puts back the latest report of the providers still up, never one that went', () => {
     const area = app.componentRef.injector.get(SafeArea);
     const [a, b, c] = [{}, {}, {}];

@@ -40,7 +40,7 @@ import { booleanOr } from './transforms.ts';
  * width of a desktop window's title bar controls where content runs beside them (zero with a
  * sidebar under them, and on every OS that has none).
  */
-function insetTokens(insets: Insets, titlebarLeading = 0): Record<string, { length: number }> {
+function insetTokens(insets: Insets, titlebarLeading: number): Record<string, { length: number }> {
   return {
     '--safe-area-inset-titlebar-leading': { length: titlebarLeading },
     '--safe-area-inset-top': { length: insets.top },
@@ -82,10 +82,10 @@ export class SafeAreaProvider {
       (event: { nativeEvent?: InsetsChange }) => {
         const change = event?.nativeEvent;
         if (!change || !this.reportInsets()) return;
-        area.report(change.insets, change.frame, this);
+        area.report(change.insets, change.frame, this, change.titlebarLeading);
         // Also published to the stylesheet, where a padding that clears the home indicator
         // belongs. `env()` on the web; a seeded custom property here.
-        engine?.updateTokens(insetTokens(change.insets, change.titlebarLeading));
+        engine?.updateTokens(insetTokens(area.insets(), area.titlebarLeading()));
       },
     );
     inject(DestroyRef).onDestroy(() => {
@@ -93,7 +93,9 @@ export class SafeAreaProvider {
       // The whole app going takes `SafeArea` and the stylesheet with it: a restyle and a commit
       // of a tree on its way out would be all this did.
       if (app.injector.destroyed) return;
-      if (area.withdraw(this)) engine?.updateTokens(insetTokens(area.insets()));
+      if (area.withdraw(this)) {
+        engine?.updateTokens(insetTokens(area.insets(), area.titlebarLeading()));
+      }
     });
   }
 }

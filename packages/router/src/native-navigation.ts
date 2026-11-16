@@ -57,8 +57,8 @@ export interface PresentOptions extends NativeNavigationOptions {
   as?: StackPresentation;
   /**
    * The element the screen points at: an element, its `ElementRef`, or a component with a `node`.
-   * With one, the screen shows as a popover at it on macOS and iPadOS; iPhone and Android present
-   * it as they would without one.
+   * With one, the screen shows as a popover at it on macOS; iOS, iPadOS included, and Android
+   * present it as they would without one.
    */
   anchor?: ElementRef | object | null;
 }

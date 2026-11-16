@@ -59,12 +59,19 @@ draw outside the window's own drawing and capturing them would need the Screen R
 permission. It takes an `AppWindow`, from `AppWindows.open()` or `CURRENT_WINDOW`:
 
 ```ts
-import { inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CURRENT_WINDOW } from '@ng-native/device';
 import { Printing } from '@ng-native/expo/printing';
 
-const window = inject(CURRENT_WINDOW);
-if (window) await inject(Printing).print({ window });
+@Component({ selector: 'app-report', template: '' })
+export class Report {
+  private readonly window = inject(CURRENT_WINDOW);
+  private readonly printing = inject(Printing);
+
+  protected async printWindow(): Promise<void> {
+    if (this.window) await this.printing.print({ window: this.window });
+  }
+}
 ```
 
 On iOS, Android and the web a window prints nothing and the call resolves.

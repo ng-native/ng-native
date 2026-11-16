@@ -14,6 +14,7 @@ import {
   input,
   model,
   output,
+  signal,
   type OutputEmitterRef,
   type Signal,
 } from '@angular/core';
@@ -43,21 +44,27 @@ function registerIn(entry: Signal<MenuEntry>, element: string): void {
   inject(DestroyRef).onDestroy(menu.register(entry, node));
 }
 
-/** Count an output's listeners, so an item knows whether the app handles it. */
-function listened(emitter: OutputEmitterRef<void>): () => boolean {
-  let listeners = 0;
+/**
+ * Count an output's listeners, so an item knows whether the app handles it: as a signal, so the
+ * menu follows a listener added or removed after it was first sent.
+ */
+function listened(emitter: OutputEmitterRef<void>): Signal<boolean> {
+  const listeners = signal(0);
   const subscribe = emitter.subscribe.bind(emitter);
   emitter.subscribe = (callback) => {
-    listeners++;
+    listeners.update((count) => count + 1);
     const subscription = subscribe(callback);
+    let stopped = false;
     return {
       unsubscribe: () => {
-        listeners--;
+        if (stopped) return;
+        stopped = true;
+        listeners.update((count) => count - 1);
         subscription.unsubscribe();
       },
     };
   };
-  return () => listeners > 0;
+  return computed(() => listeners() > 0);
 }
 
 /**
@@ -105,19 +112,20 @@ export class MenuItem {
           ...(this.subtitle() && { subtitle: this.subtitle() }),
           ...(this.sfSymbol() && { sfSymbol: this.sfSymbol() }),
           ...(this.icon() && { icon: this.icon() }),
-          ...(own && { select: () => this.chosen() }),
+          ...(own && { select: this.choose }),
         };
       }),
       'menu-item',
     );
   }
 
-  private chosen(): void {
+  /** One handler for the item's life: the id a host reports a choice by. See `menuActionId`. */
+  private readonly choose = (): void => {
     if (this.disabled()) return;
     const checked = this.checked();
     if (checked !== undefined) this.checked.set(!checked);
     this.select.emit();
-  }
+  };
 }
 
 /** A line between items. */

@@ -38,8 +38,12 @@ export class SafeArea {
 
   private readonly current = signal<Insets>(NOTHING);
   private readonly measured = signal<Frame | null>(null);
+  private readonly controls = signal(0);
   /** What each provider still up last reported, the latest last. */
-  private readonly reports = new Map<object, { insets: Insets; frame: Frame }>();
+  private readonly reports = new Map<
+    object,
+    { insets: Insets; frame: Frame; titlebarLeading: number }
+  >();
   private reporter: object | null = null;
 
   /** What the system occupies on each edge, in points. */
@@ -54,6 +58,13 @@ export class SafeArea {
    */
   readonly frame: Signal<Frame | null> = this.measured.asReadonly();
 
+  /**
+   * On macOS, the width of the window's close, minimise and zoom buttons where content runs beside
+   * them: what `--safe-area-inset-titlebar-leading` holds. Zero with a sidebar under them, and on
+   * every other OS.
+   */
+  readonly titlebarLeading: Signal<number> = this.controls.asReadonly();
+
   /** Whether anything has reported yet, for a layout that would rather wait than jump. */
   readonly known = computed(() => this.measured() !== null);
 
@@ -61,13 +72,14 @@ export class SafeArea {
    * Called by `<safe-area-provider>` when native reports. Not for apps: an inset written from
    * anywhere else is a number that stops matching the screen the moment the device rotates.
    */
-  report(insets: Insets, frame: Frame, from?: object): void {
+  report(insets: Insets, frame: Frame, from?: object, titlebarLeading = 0): void {
     this.current.set(insets);
     this.measured.set(frame);
+    this.controls.set(titlebarLeading);
     this.reporter = from ?? null;
     if (!from) return;
     this.reports.delete(from);
-    this.reports.set(from, { insets, frame });
+    this.reports.set(from, { insets, frame, titlebarLeading });
   }
 
   /**
@@ -82,6 +94,7 @@ export class SafeArea {
     this.reporter = previous?.[0] ?? null;
     this.current.set(previous?.[1].insets ?? NOTHING);
     this.measured.set(previous?.[1].frame ?? null);
+    this.controls.set(previous?.[1].titlebarLeading ?? 0);
     return true;
   }
 }

@@ -3,8 +3,9 @@
  *
  * ```ts
  * private readonly printing = inject(Printing);
+ * private readonly window = inject(CURRENT_WINDOW);
  * await this.printing.print({ html: '<h1>Invoice</h1>' });
- * await this.printing.print({ window: inject(CURRENT_WINDOW) }); // macOS: what the window shows
+ * if (this.window) await this.printing.print({ window: this.window }); // macOS: the window's view
  * const pdf = await this.printing.printToPdf(invoiceHtml);
  * ```
  *
