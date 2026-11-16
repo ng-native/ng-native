@@ -252,6 +252,60 @@ describe('a window history', () => {
     assert.equal(router.url, '/notes', 'forward from a screen that allows it');
   });
 
+  it('goes back to an entry with its matrix params, and keeps the other windows', async () => {
+    const { router, history } = await start();
+    await router.navigateByUrl('/notes;sort=title(preferences:general)');
+    await router.navigateByUrl('/settings(preferences:general)');
+    await idle();
+    const main = history.for();
+    assert.deepEqual(main.entries(), ['/', '/notes;sort=title', '/settings']);
+    assert.equal(await main.back(), true);
+    await idle();
+    assert.equal(router.url, '/notes;sort=title(preferences:general)');
+    assert.equal(main.index(), 1, 'the entry gone back to, not a new one');
+    assert.deepEqual(main.entries(), ['/', '/notes;sort=title', '/settings']);
+  });
+
+  it('forgets a back that failed, so a later navigation to that entry is a new one', async () => {
+    const { router, navigation, history } = await start();
+    const main = history.for();
+    await navigation.push('/notes');
+    await navigation.push('/settings');
+    await idle();
+    const navigateByUrl = router.navigateByUrl.bind(router);
+    router.navigateByUrl = () => Promise.reject(new Error('navigation failed'));
+    try {
+      await assert.rejects(main.back(), /navigation failed/);
+    } finally {
+      router.navigateByUrl = navigateByUrl;
+    }
+    await router.navigateByUrl('/notes');
+    await idle();
+    assert.deepEqual(main.entries(), ['/', '/notes', '/settings', '/notes']);
+    assert.equal(main.canGoForward(), false);
+  });
+
+  it('keeps a later back waiting when an earlier one is refused', async () => {
+    const { router, navigation, history } = await start();
+    const main = history.for();
+    await navigation.push('/notes');
+    await navigation.push('/settings');
+    await idle();
+    const navigateByUrl = router.navigateByUrl.bind(router);
+    let refuse!: (done: boolean) => void;
+    router.navigateByUrl = () => new Promise<boolean>((resolve) => (refuse = resolve));
+    const first = main.go(0);
+    router.navigateByUrl = navigateByUrl;
+    const second = main.back();
+    refuse(false);
+    assert.equal(await first, false);
+    assert.equal(await second, true);
+    await idle();
+    assert.equal(router.url, '/notes');
+    assert.equal(main.index(), 1);
+    assert.deepEqual(main.entries(), ['/', '/notes', '/settings']);
+  });
+
   it('keeps a route window history apart, and drops it as the window closes', async () => {
     const { router, history } = await start();
     await router.navigate([{ outlets: { preferences: ['general'] } }]);
