@@ -26,10 +26,18 @@ const { usesWorkspaces } = require('../application/workspaces.cjs');
 /** Expo's own, which `expo start` listens on unless given `--port`. */
 const DEFAULT_PORT = 8081;
 
-/** The port the app's `start` target runs Metro on, which the host loads the app from. */
+/**
+ * The port the app's `start` target runs Metro on, which the host loads the app from: its `expo
+ * start` as `command` or in `commands`, each a string or an object with a `command`, as the
+ * application generator writes and scans them.
+ */
 function metroPort(project) {
-  const command = project.targets?.start?.options?.command;
-  const port = typeof command === 'string' ? /--port[= ](\d+)/.exec(command)?.[1] : undefined;
+  const options = project.targets?.start?.options;
+  const port = [options?.command, ...(options?.commands ?? [])]
+    .map((entry) => (typeof entry === 'string' ? entry : entry?.command))
+    .filter((command) => typeof command === 'string')
+    .map((command) => /--port[= ](\d+)/.exec(command)?.[1])
+    .find(Boolean);
   return port ? Number(port) : DEFAULT_PORT;
 }
 

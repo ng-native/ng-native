@@ -65,6 +65,29 @@ describe('the desktop schematic', () => {
     });
   });
 
+  it("loads from the serve target's port, given as an option or in its args", async () => {
+    for (const serve of [{ port: 8082 }, { args: ['--port', '8082'] }, { args: ['--port=8082'] }]) {
+      const web = await angular.runSchematic('workspace', {
+        name: 'shop',
+        newProjectRoot: 'projects',
+        version: '22.1.5',
+      });
+      let ported = await runner.runSchematic('ng-add', { skipInstall: true }, web);
+      const workspace = json(ported, 'angular.json');
+      Object.assign(workspace.projects.native.architect.serve.options, serve);
+      ported.overwrite('angular.json', JSON.stringify(workspace, null, 2));
+      ported = await runner.runSchematic(
+        'desktop',
+        { project: 'native', skipInstall: true },
+        ported,
+      );
+      assert.deepEqual(json(ported, 'angular.json').projects.native.architect.macos.options, {
+        command: 'macos',
+        port: 8082,
+      });
+    }
+  });
+
   it("ignores the packaged apps in the project's .gitignore, keeping what is there", () => {
     const ignore = tree.readContent('projects/native/.gitignore');
     assert.match(ignore, /^\/dist\/macos$/m);

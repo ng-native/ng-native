@@ -14,8 +14,13 @@ const require = createRequire(import.meta.url);
 const { createTreeWithEmptyWorkspace } = require('@nx/devkit/testing') as {
   createTreeWithEmptyWorkspace: () => Tree;
 };
-const { addProjectConfiguration, readJson, readProjectConfiguration, updateJson } =
-  require('@nx/devkit') as typeof import('@nx/devkit');
+const {
+  addProjectConfiguration,
+  readJson,
+  readProjectConfiguration,
+  updateProjectConfiguration,
+  updateJson,
+} = require('@nx/devkit') as typeof import('@nx/devkit');
 const { application } = require('../application/index.cjs');
 const { desktop } = require('./index.cjs');
 const native = require('../native-app.cjs');
@@ -80,6 +85,18 @@ describe('the desktop generator', () => {
     await run(tree, 'second');
     const { targets } = readProjectConfiguration(tree, 'second');
     assert.equal(targets!['macos'].options.command, 'ng-native-desktop run --port 8082');
+  });
+
+  it('loads from a port its start target names in commands, as a string or an object', async () => {
+    for (const entry of ['expo start --port 8083', { command: 'expo start --port 8083' }]) {
+      const tree = await app();
+      const start = readProjectConfiguration(tree, 'mobile');
+      start.targets!['start'] = { executor: 'nx:run-commands', options: { commands: [entry] } };
+      updateProjectConfiguration(tree, 'mobile', start);
+      await run(tree);
+      const { targets } = readProjectConfiguration(tree, 'mobile');
+      assert.equal(targets!['macos'].options.command, 'ng-native-desktop run --port 8083');
+    }
   });
 
   it("ignores the packaged apps in the app's .gitignore", async () => {

@@ -27,10 +27,30 @@ function writeJson(tree, file, value) {
   else if (tree.readText(file) !== text) tree.overwrite(file, text);
 }
 
-/** The two targets, each on the `expo` builder, which runs `ng-native-desktop` for them. */
-function desktopTargets() {
-  const desktop = (command) => ({ builder: '@ng-native/schematics:expo', options: { command } });
-  return { macos: desktop('macos'), package: desktop('package') };
+/**
+ * The port the project's `serve` target runs Metro on, from its `port` option or a `--port` in its
+ * `args`, or undefined for Expo's default. The `macos` target loads the app from it.
+ */
+function servePort(project) {
+  const options = project?.targets.get('serve')?.options ?? {};
+  if (typeof options.port === 'number') return options.port;
+  const args = Array.isArray(options.args) ? options.args.map(String) : [];
+  const at = args.findIndex((arg) => arg === '--port' || arg.startsWith('--port='));
+  if (at < 0) return undefined;
+  const value = args[at].includes('=') ? args[at].split('=')[1] : args[at + 1];
+  return /^\d+$/.test(value ?? '') ? Number(value) : undefined;
+}
+
+/**
+ * The two targets, each on the `expo` builder, which runs `ng-native-desktop` for them. `macos`
+ * takes the `serve` target's port, so the host loads from the dev server `ng serve` runs.
+ */
+function desktopTargets(port) {
+  const desktop = (command, extra) => ({
+    builder: '@ng-native/schematics:expo',
+    options: { command, ...extra },
+  });
+  return { macos: desktop('macos', port ? { port } : {}), package: desktop('package') };
 }
 
 function addToAppJson(tree, file) {
@@ -105,7 +125,9 @@ function desktop(options) {
     addToAppJson(tree, appJson);
     addDependency(tree);
     ignorePackages(tree, root);
-    const missing = Object.entries(desktopTargets()).filter(([name]) => !project.targets.has(name));
+    const missing = Object.entries(desktopTargets(servePort(project))).filter(
+      ([name]) => !project.targets.has(name),
+    );
     for (const [name, target] of missing) project.targets.add({ name, ...target });
     if (missing.length) await workspaces.writeWorkspace(workspace, host);
 
