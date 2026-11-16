@@ -1,0 +1,152 @@
+name: Make a prebuilt desktop host
+description: >-
+  The universal prebuilt desktop host for one flavour, packed by make-prebuilt.mjs into `out`.
+  Shared by the release and by the Desktop host workflow's warm-up on main, so both read and write
+  the same caches. In order: the last release's archive when it was built from the same inputs
+  (byte for byte, no build), then a host built from the same inputs kept in the Actions cache, then
+  a build through ccache with Hermes and the fetched sources restored. Anything that cannot be
+  checked falls through to the next, and the last builds from scratch.
+
+inputs:
+  flavour:
+    description: debug or release
+    required: true
+  version:
+    description: The release the archive is named for.
+    required: true
+  base-url:
+    description: Where the release serves the archive.
+    required: true
+  out:
+    description: Where the archive and its manifest entry go.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The key of everything the host is built from (make-prebuilt.mjs --print-key). Empty when it
+    # cannot be computed, which skips every shortcut below and builds.
+    - id: key
+      shell: bash
+      env:
+        FLAVOUR: ${{ inputs.flavour }}
+      run: |
+        key=$(node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary --print-key --flavour "$FLAVOUR") || key=''
+        echo "Host inputs key: ${key:-none}"
+        echo "key=$key" >> "$GITHUB_OUTPUT"
+        # Whether the last release's entry, in the checked-out prebuilt.json, has the same key.
+        # make-prebuilt.mjs --reuse checks it again with the download and builds if that fails.
+        reusable=false
+        if [ -n "$key" ]; then
+          reusable=$(node --input-type=module -e "
+            import { readFileSync } from 'node:fs';
+            import { flavourOf, readManifest } from './packages/desktop/bin/prebuilt.mjs';
+            const [key, flavour] = process.argv.slice(1);
+            const hosts = readManifest(readFileSync('packages/desktop/prebuilt.json', 'utf8')).hosts;
+            console.log(hosts.some((host) => flavourOf(host) === flavour && host.inputs === key));
+          " "$key" "$FLAVOUR") || reusable=false
+        fi
+        echo "Last release's host reusable: $reusable"
+        echo "reusable=$reusable" >> "$GITHUB_OUTPUT"
+
+    - id: host
+      if: steps.key.outputs.key != '' && steps.key.outputs.reusable != 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ github.workspace }}/.desktop-cache/prebuilt-host-${{ inputs.flavour }}
+        key: desktop-prebuilt-host-${{ inputs.flavour }}-${{ steps.key.outputs.key }}
+
+    # Everything a build needs, only when there is no host to pack. A cached host that fails its
+    # check below still builds, without these: slower, never stale.
+    - id: build
+      if: steps.key.outputs.reusable != 'true' && steps.host.outputs.cache-hit != 'true'
+      shell: bash
+      run: echo "needed=true" >> "$GITHUB_OUTPUT"
+
+    - if: steps.build.outputs.needed == 'true'
+      id: target
+      shell: bash
+      run: echo "macos=$(packages/desktop/native/scripts/macos-target.sh)" >> "$GITHUB_OUTPUT"
+
+    # ccache handles a universal compile (`-arch arm64 -arch x86_64`) as one, so a hit covers both
+    # architectures. One set per flavour, keyed by the pins; a near miss restores the latest set.
+    - if: steps.build.outputs.needed == 'true'
+      id: ccache
+      uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+      with:
+        key: desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'pnpm-lock.yaml') }}
+        restore-keys: desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-
+        max-size: 1500M
+        # Only what this build compiled is saved, so the set does not grow with every change.
+        evict-old-files: job
+        job-summary: ''
+
+    - if: steps.build.outputs.needed == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ github.workspace }}/.desktop-cache/*/src
+        key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+
+    # The universal Hermes, which build.sh skips when hermes-built.sh finds it built for the macOS
+    # the host targets. The same for both flavours.
+    - if: steps.build.outputs.needed == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ github.workspace }}/.desktop-cache/*/hermes-arm64-x86_64
+        key: desktop-hermes-universal-${{ runner.os }}-${{ steps.target.outputs.macos }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/compiler-launcher.sh', 'pnpm-lock.yaml') }}
+
+    # Whatever the path above, since a cached host that fails its check builds after all.
+    - shell: bash
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+      run: brew install ninja
+
+    - name: Build or reuse, sign ad hoc and pack the host
+      shell: bash
+      env:
+        NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
+        VERSION: ${{ inputs.version }}
+        FLAVOUR: ${{ inputs.flavour }}
+        BASE_URL: ${{ inputs.base-url }}
+        OUT: ${{ inputs.out }}
+        KEY: ${{ steps.key.outputs.key }}
+        NGN_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
+        CCACHE_DIR: ${{ github.workspace }}/.ccache
+        # As in desktop.yml: keys that do not depend on where the runner put the checkout, and
+        # direct mode that survives a fresh checkout's new mtimes.
+        CCACHE_BASEDIR: ${{ github.workspace }}
+        CCACHE_NOHASHDIR: '1'
+        CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
+      run: |
+        start=$(date +%s)
+        args=(--flavour "$FLAVOUR" --version "$VERSION" --base-url "$BASE_URL")
+        # A fixed build folder, so ccache's keys match from one run to the next.
+        args+=(--build-dir "$RUNNER_TEMP/ngn-prebuilt-$FLAVOUR")
+        if [ -n "$KEY" ]; then
+          args+=(--host-cache "$NGN_DESKTOP_CACHE/prebuilt-host-$FLAVOUR" --reuse packages/desktop/prebuilt.json)
+        fi
+        node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary "$OUT" "${args[@]}"
+        echo "Prebuilt $FLAVOUR host made in $(( $(date +%s) - start ))s"
+        ls -l "$OUT"
+
+    # A host built here, kept for the next run with the same inputs. make-prebuilt.mjs writes the
+    # folder only after a build, with its key, so a run that reused or packed writes nothing.
+    - id: built
+      if: steps.key.outputs.key != '' && steps.host.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        RECORD: ${{ github.workspace }}/.desktop-cache/prebuilt-host-${{ inputs.flavour }}/host.json
+        KEY: ${{ steps.key.outputs.key }}
+      run: |
+        if [ -f "$RECORD" ] && [ "$(jq -r .key "$RECORD")" = "$KEY" ]; then
+          echo "save=true" >> "$GITHUB_OUTPUT"
+        fi
+    - if: steps.built.outputs.save == 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ github.workspace }}/.desktop-cache/prebuilt-host-${{ inputs.flavour }}
+        key: desktop-prebuilt-host-${{ inputs.flavour }}-${{ steps.key.outputs.key }}
+
+    - if: always() && steps.ccache.outcome == 'success'
+      shell: bash
+      run: ccache --show-stats

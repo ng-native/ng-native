@@ -35,8 +35,10 @@ export const FLAVOURS = /** @type {const} */ (['debug', 'release']);
 
 /**
  * @typedef {typeof FLAVOURS[number]} Flavour
- * @typedef {{ reactNative: string, flavour?: Flavour, url: string, sha256: string, libraries: Record<string, string> }} PrebuiltHost
- *   `flavour` is `release` when it is left out, as a manifest from before the debug host has it
+ * @typedef {{ reactNative: string, flavour?: Flavour, url: string, sha256: string, libraries: Record<string, string>, inputs?: string }} PrebuiltHost
+ *   `flavour` is `release` when it is left out, as a manifest from before the debug host has it.
+ *   `inputs` is the key of what the host was built from (native/scripts/prebuilt-host-cache.mjs),
+ *   which the next release's make-prebuilt.mjs --reuse compares with its own
  * @typedef {{ version: number, hosts: PrebuiltHost[] }} PrebuiltManifest
  * @typedef {import('./host.mjs').system} System
  */

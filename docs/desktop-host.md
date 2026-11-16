@@ -54,6 +54,25 @@ Release build (`build.sh --universal --release`), which `package` downloads.
    archives. It stops when either is missing.
 3. Both archives go up with the GitHub release.
 
+A host is built only when something it is built from changed. `make-prebuilt.mjs --print-key`
+computes the key of its inputs: the host's native sources and build scripts, React Native's and
+each compiled-in library's version, the flavour, the compiler, the SDK and the signing identity.
+Each entry in `prebuilt.json` records it as `inputs`. The job, through
+`.github/actions/desktop-prebuilt`, then takes the first of these that applies:
+
+- The last release's entry in the checked-out `prebuilt.json` has the same key: `--reuse`
+  downloads its archive, checks it against the entry's SHA-256 and publishes it again, byte for
+  byte, under the new release's name.
+- An Actions cache holds a host built from the same key: `--host-cache` strips, signs and packs it.
+  Every file is checked against the digest saved with it.
+- Otherwise it builds, with ccache, the universal Hermes and the fetched sources restored, and
+  keeps the unsigned host in the Actions cache under its key.
+
+A key that cannot be computed, a failed download, a checksum that does not match or a cached file
+that changed falls through to the next, and the last always builds. The Desktop host workflow's
+`prebuilt-host` job runs the same action on a push to `main` that changed the host's inputs, so a
+release finds those caches warm.
+
 `prebuilt.json` holds one entry per React Native version and flavour:
 
 ```json
@@ -65,7 +84,8 @@ Release build (`build.sh --universal --release`), which `package` downloads.
       "flavour": "debug",
       "url": "https://github.com/ng-native/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal-debug.tar.gz",
       "sha256": "<64 hex digits>",
-      "libraries": { "react-native-screens": "<version>" }
+      "libraries": { "react-native-screens": "<version>" },
+      "inputs": "<64 hex digits>"
     },
     {
       "reactNative": "0.88.0",

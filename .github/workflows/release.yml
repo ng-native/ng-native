@@ -101,32 +101,21 @@ jobs:
     # for both until the build meets the budget.
     timeout-minutes: 75
     env:
-      NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
       NGN_JOBS: '4'
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-      - run: brew install ninja
 
-      - uses: actions/cache@v6
+      # The last release's archive when nothing it is built from changed, else a host kept from a
+      # build with the same inputs, else a build through ccache: see the action.
+      - uses: ./.github/actions/desktop-prebuilt
         with:
-          path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
-          key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
-
-      - name: Build, sign ad hoc and pack the host
-        env:
-          VERSION: ${{ needs.validate.outputs.version }}
-          FLAVOUR: ${{ matrix.flavour }}
-        run: |
-          start=$(date +%s)
-          node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary .prebuilt \
-            --flavour "$FLAVOUR" \
-            --version "$VERSION" \
-            --base-url "https://github.com/${{ github.repository }}/releases/download/v$VERSION"
-          echo "Prebuilt $FLAVOUR host made in $(( $(date +%s) - start ))s"
-          ls -l .prebuilt
+          flavour: ${{ matrix.flavour }}
+          version: ${{ needs.validate.outputs.version }}
+          base-url: https://github.com/${{ github.repository }}/releases/download/v${{ needs.validate.outputs.version }}
+          out: .prebuilt
 
       # .prebuilt is a dot folder, which upload-artifact leaves out unless told otherwise.
       - uses: actions/upload-artifact@v7

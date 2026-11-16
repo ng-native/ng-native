@@ -5,7 +5,11 @@ name: Desktop host
 # builds as an app would build it, and the core tests run there too. A pull request runs it only when
 # the host or the workflow changed, or the lockfile moved the version of a package the host builds
 # from (see `changes`); a push to main and a manual run build it whatever changed. Compiles go
-# through ccache, kept per job.
+# through ccache, kept per job and saved only from main, which every pull request restores: a set
+# saved per pull request run filled the repository's 10 GB of Actions cache and evicted main's.
+#
+# On main, `prebuilt-host` also makes both universal prebuilt hosts the release publishes, when
+# anything they are built from changed, so the release finds their caches warm.
 on:
   push:
     branches: [main]
@@ -37,9 +41,12 @@ env:
   CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
 
 jobs:
-  # Which parts of the tree a pull request touched. A push and a manual run skip it and build.
+  # Which parts of the tree a pull request, or a push to main, touched. The checks below build on
+  # every push and manual run anyway; on a push, `prebuilt-host` reads it.
   changes:
-    if: github.event.pull_request.draft != true && github.event_name == 'pull_request'
+    if: >-
+      github.event.pull_request.draft != true &&
+      (github.event_name == 'pull_request' || github.event_name == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -58,12 +65,13 @@ jobs:
               - 'packages/desktop/**'
               - '.github/workflows/desktop.yml'
               - 'scripts/desktop-host-pins.mjs'
+              - '.github/actions/desktop-prebuilt/**'
 
       # A lockfile edit reaches the host only through the version of a package it builds from.
       - id: pins
         if: steps.filter.outputs.desktop != 'true'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           node scripts/desktop-host-pins.mjs "$BASE_SHA"
@@ -90,6 +98,7 @@ jobs:
           key: desktop-core-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
           restore-keys: desktop-core-${{ runner.os }}-${{ runner.arch }}-
           max-size: 500M
+          save: ${{ github.event_name != 'pull_request' }}
 
       # The fetched sources only, keyed by the pins: a build directory is cheap to remake and
       # large to keep.
@@ -132,6 +141,7 @@ jobs:
           key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'pnpm-lock.yaml') }}
           restore-keys: desktop-host-${{ runner.os }}-${{ runner.arch }}-
           max-size: 1G
+          save: ${{ github.event_name != 'pull_request' }}
 
       - uses: actions/cache@v6
         with:
@@ -159,3 +169,32 @@ jobs:
 
       - if: always()
         run: ccache --show-stats
+
+  # Both universal prebuilt hosts, as the release makes them (the same action and caches), on a push
+  # to main that changed anything they are built from, or by hand. A release on main then finds the
+  # host already built, or at least ccache, Hermes and the sources warm. Nothing is uploaded.
+  prebuilt-host:
+    name: prebuilt-host (${{ matrix.flavour }})
+    needs: changes
+    if: >-
+      always() && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || needs.changes.outputs.desktop == 'true' ||
+      needs.changes.outputs.pins == 'true')
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        flavour: [debug, release]
+    timeout-minutes: 75
+    env:
+      NGN_JOBS: '4'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/desktop-prebuilt
+        with:
+          flavour: ${{ matrix.flavour }}
+          version: 0.0.0-main
+          base-url: https://github.com/${{ github.repository }}/releases/download/main
+          out: ${{ runner.temp }}/prebuilt
