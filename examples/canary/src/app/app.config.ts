@@ -1,5 +1,6 @@
 import { withComponentInputBinding } from '@angular/router';
 import { provideKeyboardController } from '@ng-native/components';
+import { provideRestorableWindows } from '@ng-native/device';
 import { provideNativeKeyboard } from '@ng-native/expo/keyboard';
 import {
   provideNativeRouter,
@@ -7,6 +8,7 @@ import {
   withLinkParent,
   withTabDefaults,
 } from '@ng-native/router';
+import { LibraryWindow } from './desktop/library-window.ts';
 import { projectLinkParent } from './projects/project-links.ts';
 import { routes } from './app.routes.ts';
 import { palette } from './palette.ts';
@@ -19,6 +21,9 @@ export const appConfig = {
     // And on Android, @ng-native/expo's own view of the keyboard's motion: the composer follows
     // the keyboard there too, and a keyboard-avoiding-view moves with it rather than jumping.
     provideNativeKeyboard(),
+    // The desktop page's library window, named so that, opened with a restoreKey, it opens again
+    // after a reload or a relaunch.
+    provideRestorableWindows({ library: LibraryWindow }),
     // `withComponentInputBinding` is what binds a route param to a component input, as on the
     // web: without it both outlets leave a page's inputs alone.
     // The bars are props, so they take the palette from palette.ts and follow the scheme the

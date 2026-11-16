@@ -446,12 +446,23 @@ export class PermissionsPage {
       trigger: { type: 'timeInterval', seconds: 2 } as never,
     });
     this.note(`scheduled ${id}`);
-    await this.until('the notification', () => notifications.latest() !== null, 15000);
-    this.note(`badge after delivery ${await notifications.badge()}`);
-    await this.until('a click on it', () => notifications.response() !== null, 90000);
-    notifications.setBadge(0);
-    await wait(300);
-    this.note(`badge cleared ${await notifications.badge()}`);
-    notifications.dismissAll();
+    try {
+      await this.until(
+        'the notification',
+        () => notifications.latest()?.request.identifier === id,
+        15000,
+      );
+      this.note(`badge after delivery ${await notifications.badge()}`);
+      await this.until(
+        'a click on it',
+        () => notifications.response()?.notification.request.identifier === id,
+        90000,
+      );
+    } finally {
+      notifications.setBadge(0);
+      await wait(300);
+      this.note(`badge cleared ${await notifications.badge()}`);
+      if (id) await notifications.dismiss(id);
+    }
   }
 }

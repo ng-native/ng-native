@@ -1,7 +1,8 @@
 import { UndoStack } from '@ng-native/device';
 import { provideNativeRouter } from '@ng-native/router';
 import { fakeUndo, render, screen, settle, userEvent } from '@ng-native/testing';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+import { appConfig } from '../app.config.ts';
 import { DesktopPage } from './desktop-page.ts';
 
 test('adds a star from the menu bar shortcut and takes it back with Edit > Undo', async () => {
@@ -26,6 +27,19 @@ test('opens the library in a window of its own, with its sidebar', async () => {
   const library = screen.windows().find((window) => window.key === 'library');
   expect(library?.title).toBe('Library');
   expect(library?.getByText('Middlemarch')).toBeTruthy();
+});
+
+test("names the library's window in the app's providers, so it opens again after a reload", async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    await render(DesktopPage, { os: 'macos', providers: appConfig.providers });
+    await userEvent.press(screen.getByTestId('library'));
+    await settle();
+    expect(screen.windows().some((window) => window.key === 'library')).toBe(true);
+    expect(warn.mock.calls.flat().join('\n')).not.toContain('will not open again');
+  } finally {
+    warn.mockRestore();
+  }
 });
 
 test('lists what is dropped on it', async () => {
