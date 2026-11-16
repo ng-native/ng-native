@@ -187,9 +187,11 @@ function platforms(_marker: string, services: string): string {
 /**
  * A fenced code block, from its opening fence to the matching close or the end of the page. As in
  * Marked, the close is a run of the opener's character at least as long as the opener, indented by at
- * most three spaces; four make it content.
+ * most three spaces past the opener's own indentation (a fence in a list item is indented with it);
+ * four more make it content.
  */
-const FENCE = /^[ \t]*(?=([`~]))(\1{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\2\1*[ \t]*$|(?![\s\S]))/gm;
+const FENCE =
+  /^([ \t]*)(?=([`~]))(\2{3,})[^\n]*\n[\s\S]*?(?:^(?:\1)? {0,3}\3\2*[ \t]*$|(?![\s\S]))/gm;
 
 /** `text` with `change` applied to everything but its fenced code blocks, which stay as written. */
 function outsideFences(text: string, change: (prose: string) => string): string {
