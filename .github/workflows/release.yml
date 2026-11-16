@@ -76,21 +76,27 @@ jobs:
         run: pnpm --filter @ng-native/web exec playwright install chromium
       - run: pnpm coverage
 
-  # The prebuilt desktop host for the React Native version the packages support: the universal
-  # Release build, packed with its hermesc and Sparkle, so an app with no native desktop code of
-  # its own compiles nothing (packages/desktop/bin/prebuilt.mjs). Built against the canary, which
-  # has every host library but react-native-webview. Signed ad hoc, so the job needs no secrets: an
-  # app re-signs the host when it packages, and the download is checked by its SHA-256. The archive
-  # goes up with the GitHub release; its SHA-256 goes into packages/desktop/prebuilt.json, inside
-  # the npm package, before it is packed.
+  # The prebuilt desktop hosts for the React Native version the packages support, both universal
+  # and packed with their hermesc and Sparkle, so an app with no native desktop code of its own
+  # compiles nothing (packages/desktop/bin/prebuilt.mjs): the debug host, the dev build `run` uses,
+  # with React Native's debugger, and the release host, the Release build `package` ships. One job
+  # each, side by side. Built against the canary, which has every host library but
+  # react-native-webview. Signed ad hoc, so the job needs no secrets: an app re-signs the host when
+  # it packages, and the download is checked by its SHA-256. The archives go up with the GitHub
+  # release; their SHA-256s go into packages/desktop/prebuilt.json, inside the npm package, before
+  # it is packed.
   desktop-host:
+    name: desktop-host (${{ matrix.flavour }})
     needs: validate
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: macos-latest
+    strategy:
+      matrix:
+        flavour: [debug, release]
     # It builds fetched third-party sources, so it gets no write access and keeps no token.
     permissions:
       contents: read
-    # Budget: a cold universal release build within 15 minutes on this runner (spec).
+    # Budget: a cold universal build within 15 minutes on this runner (spec).
     timeout-minutes: 45
     env:
       NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
@@ -110,18 +116,20 @@ jobs:
       - name: Build, sign ad hoc and pack the host
         env:
           VERSION: ${{ needs.validate.outputs.version }}
+          FLAVOUR: ${{ matrix.flavour }}
         run: |
           start=$(date +%s)
           node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary .prebuilt \
+            --flavour "$FLAVOUR" \
             --version "$VERSION" \
             --base-url "https://github.com/${{ github.repository }}/releases/download/v$VERSION"
-          echo "Prebuilt host made in $(( $(date +%s) - start ))s"
+          echo "Prebuilt $FLAVOUR host made in $(( $(date +%s) - start ))s"
           ls -l .prebuilt
 
       # .prebuilt is a dot folder, which upload-artifact leaves out unless told otherwise.
       - uses: actions/upload-artifact@v7
         with:
-          name: desktop-host
+          name: desktop-host-${{ matrix.flavour }}
           path: .prebuilt
           include-hidden-files: true
           if-no-files-found: error
@@ -217,9 +225,11 @@ jobs:
         with:
           registry-url: https://registry.npmjs.org
 
+      # Both flavours' archives and entries into one folder: their file names differ.
       - uses: actions/download-artifact@v8
         with:
-          name: desktop-host
+          pattern: desktop-host-*
+          merge-multiple: true
           path: .prebuilt
 
       - name: Version
@@ -243,14 +253,19 @@ jobs:
               "$file" > "$file.tmp" && mv "$file.tmp" "$file"
             git add "$file"
           done
-          # The prebuilt desktop host's entry, with its SHA-256, into the manifest @ng-native/desktop
-          # ships, so the package names the archive the GitHub release below serves.
+          # Each prebuilt desktop host's entry, with its SHA-256, into the manifest
+          # @ng-native/desktop ships, so the package names the archives the GitHub release below
+          # serves. A flavour's entry missing fails the step, so no release ships without either.
           node --input-type=module -e "
             import { readFileSync, writeFileSync } from 'node:fs';
-            import { readManifest, withHost } from './packages/desktop/bin/prebuilt.mjs';
+            import { entryName, FLAVOURS, readManifest, withHost } from './packages/desktop/bin/prebuilt.mjs';
             const file = 'packages/desktop/prebuilt.json';
-            const host = JSON.parse(readFileSync('.prebuilt/prebuilt-host.json', 'utf8'));
-            const manifest = withHost(readManifest(readFileSync(file, 'utf8')), host);
+            let manifest = readManifest(readFileSync(file, 'utf8'));
+            for (const flavour of FLAVOURS) {
+              const host = JSON.parse(readFileSync('.prebuilt/' + entryName(flavour), 'utf8'));
+              if (host.flavour !== flavour) throw new Error(entryName(flavour) + ' is not a ' + flavour + ' host.');
+              manifest = withHost(manifest, host);
+            }
             writeFileSync(file, JSON.stringify(manifest, null, 2) + '\\n');
           "
           git add packages/desktop/prebuilt.json
@@ -289,10 +304,10 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '--provenance' }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # A new run builds a new desktop host, whose archive has another SHA-256. When an earlier
+          # A new run builds new desktop hosts, whose archives have other SHA-256s. When an earlier
           # run already published @ng-native/desktop at this version, its prebuilt.json names that
-          # run's archive, and attaching this one would fail every download: stop instead. Re-run
-          # the failed jobs of the earlier run, which keeps its host.
+          # run's archives, and attaching these would fail every download: stop instead. Re-run
+          # the failed jobs of the earlier run, which keeps its hosts.
           if npm view "@ng-native/desktop@$VERSION" version > /dev/null 2>&1; then
             published=$(mktemp -d)
             npm pack "@ng-native/desktop@$VERSION" --pack-destination "$published" > /dev/null
@@ -354,10 +369,14 @@ jobs:
             echo
             for tarball in .release/*.tgz; do echo "- \`$(basename "$tarball")\`"; done
             echo
-            echo 'This prebuilt desktop host would go up with the GitHub release:'
+            echo 'These prebuilt desktop hosts would go up with the GitHub release:'
+            echo
+            for archive in .prebuilt/*.tar.gz; do echo "- \`$(basename "$archive")\`"; done
+            echo
+            echo 'With these entries in packages/desktop/prebuilt.json:'
             echo
             echo '```json'
-            cat .prebuilt/prebuilt-host.json
+            cat packages/desktop/prebuilt.json
             echo '```'
             echo
             echo '### Changelog entry'
