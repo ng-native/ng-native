@@ -2,8 +2,9 @@
  * A Markdown source that grows as it streams in, lexed a chunk at a time: the blocks before the
  * last one are kept, only the last is lexed again, and syntax still open at its end is held back
  * until it closes, so a half-written code span, emphasis, link, image, table row or code fence
- * line never shows as the characters it is written with. A last line of only dashes or `=` waits
- * for its end too, since until then it may make the text above a heading, a list or a table.
+ * line never shows as the characters it is written with. A last line of only dashes, `=` or a
+ * list marker waits for its end too, since until then it may make the text above a heading, a
+ * list or a table.
  *
  * Plain functions and a class with no Angular in them, beside `markdown-blocks.ts`.
  */
@@ -151,10 +152,13 @@ function heldInline(inline: readonly Token[], tail: string, start: number): numb
 }
 
 /**
- * A line of `=`, or of dashes with pipes, colons and spaces, after any quote markers. Until it
- * ends it may be a setext underline, a list item, a table's delimiter row or a thematic break.
+ * A line of `=`, of dashes with pipes, colons and spaces, or of a lone `+`, `*` or number with
+ * `.` or `)`, after any quote markers. Until it ends it may be a setext underline, a list item,
+ * a table's delimiter row or a thematic break, and a marker with no text yet is not a list item,
+ * so it would draw as text in the paragraph above.
  */
-const UNDERLINE = /^(?:[ \t]*>)*(?:[ \t]*=+[ \t]*|[|: \t]*-[-|: \t]*)$/;
+const UNDERLINE =
+  /^(?:[ \t]*>)*(?:[ \t]*=+[ \t]*|[|: \t]*-[-|: \t]*|[ \t]*(?:[+*]|\d{1,9}[.)])[ \t]*)$/;
 
 /** Where `tail` is cut so its last block shows nothing half written, or null to show all of it. */
 function holdBackAt(tail: string, tokens: readonly Token[]): number | null {

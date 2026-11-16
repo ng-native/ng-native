@@ -796,6 +796,21 @@ describe('streaming', () => {
     assert.equal(types.at(-1), JSON.stringify('a | b\n- | -\n1 | 2\n') + ' table');
   });
 
+  it('holds back a lone list marker under a paragraph until its item has text', async () => {
+    for (const marker of ['+', '*', '1.', '1)', '+ ', '* ', '1. ']) {
+      const { blocks, feed } = await stream(`Intro\n${marker}`);
+      assert.deepEqual(texts(blocks()), ['Intro'], JSON.stringify(marker));
+      await feed(marker.endsWith(' ') ? 'one' : ' one');
+      assert.deepEqual(texts(blocks()), ['Intro', /^\d/.test(marker) ? '1.one' : '•one']);
+    }
+    const quoted = await stream('> Intro\n> +');
+    assert.deepEqual(texts(quoted.blocks()), ['Intro'], 'in a quote');
+    const quotedNumber = await stream('> Intro\n> 1.');
+    assert.deepEqual(texts(quotedNumber.blocks()), ['Intro'], 'in a quote');
+    const nested = await stream('- a\n  +');
+    assert.deepEqual(texts(nested.blocks()), ['•a'], 'indented, under a list item');
+  });
+
   it('draws a thematic break once its line ends, or once streaming ends', async () => {
     const { blocks, feed, app, screen } = await stream('Intro\n\n--');
     assert.deepEqual(texts(blocks()), ['Intro'], 'neither a paragraph nor a list item yet');
@@ -952,6 +967,7 @@ describe('streaming', () => {
       '*x\n*x y\n\nEnd *a *b _c [d] [e](f) `g *h* and **i\n\n> *q\n> *q _r\n',
       'Intro\n- `cx` and *em*\n- [l](u)\n\nNext\n> - *a*\n',
       'a | b\n- | :-:\n1 | 2\n\nTitle\n===\n\n> Quoted\n> ---\n\n- item\n  ---\n',
+      'Intro\n+ one\n\nNext\n1. a\n2) b\n\nQuote\n> Para\n> + x\n> 1. y\n\nStars *em* here\n* s\n\n***\n\n**b**\n',
     ];
     for (const document of documents) {
       const markdown = new MarkdownStream();
