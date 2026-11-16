@@ -45,8 +45,9 @@ export class Sensor<T> {
   readonly reading: Signal<T>;
 
   /**
-   * Whether the device has this sensor. False until the platform has answered, which is one turn
-   * away: `isAvailableAsync` is asynchronous even where the answer is a constant.
+   * Whether the device has this sensor. False until the platform has answered, which is at least
+   * a turn after the sensor is created and can take longer: `isAvailableAsync` is asynchronous
+   * even where the answer is a constant.
    *
    * A signal rather than the promise the module offers, because the question is asked in a
    * template - `@if (barometer.available())` - and a promise there is truthy on the first frame
