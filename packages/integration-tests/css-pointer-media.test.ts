@@ -61,4 +61,15 @@ describe('the pointer media features', () => {
   it('refuses a value the feature does not have', () => {
     assert.throws(() => compileCss('@media (hover: fine) { .a { color: red } }'), /hover/);
   });
+
+  it("refuses a feature named for one of Object's own members, as any unknown feature", () => {
+    for (const name of ['constructor', 'toString']) {
+      const warnings: string[] = [];
+      compileCss(`@media (${name}) { .a { color: red } }`, 'app.css', {
+        onUnsupported: (m: string) => warnings.push(m),
+      });
+      assert.equal(warnings.length, 1, name);
+      assert.match(warnings[0]!, new RegExp(name));
+    }
+  });
 });

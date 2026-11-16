@@ -67,6 +67,21 @@ describe(':hover', () => {
     }
   });
 
+  it('keeps both states of a :host() and the compound beside it, in either order', () => {
+    for (const selector of [':host(:hover):focus', ':focus:host(:hover)']) {
+      const [compound] = sheet(`${selector} { color: red }`).rules[0]!.compounds;
+      assert.deepEqual([...(compound!.pseudo ?? [])].sort(), ['focus', 'hover'], selector);
+    }
+    for (const selector of [':host([data-a]):hover[data-b]', '[data-b]:hover:host([data-a])']) {
+      const [compound] = sheet(`${selector} { color: red }`).rules[0]!.compounds;
+      assert.deepEqual(
+        compound!.attributes?.map((a) => a.name).sort(),
+        ['data-a', 'data-b'],
+        selector,
+      );
+    }
+  });
+
   it('follows a mouse in and out', () => {
     const s = scene('.btn:hover { opacity: 0.5 }');
     s.make('view', 'btn');
@@ -211,6 +226,24 @@ describe(':hover', () => {
     assert.equal(s.id('btn').props['opacity'] ?? undefined, undefined);
   });
 
+  it('is not hovered when shown again after it or its parent was hidden hovered', () => {
+    for (const hidden of ['wrap', 'btn']) {
+      const s = scene('.btn:hover { opacity: 0.5 } .gone { display: none }');
+      const wrap = s.make('view', 'wrap');
+      const btn = s.make('view', 'btn', wrap);
+      s.engine.commit();
+      s.pointer('btn', 'Enter');
+      assert.equal(s.id('btn').props['opacity'], 0.5, hidden);
+      const node = hidden === 'wrap' ? wrap : btn;
+      s.engine.setClasses(node, `${hidden} gone`);
+      s.engine.commit();
+      assert.equal(s.id('btn'), undefined, hidden);
+      s.engine.setClasses(node, hidden);
+      s.engine.commit();
+      assert.equal(s.id('btn').props['opacity'] ?? undefined, undefined, hidden);
+    }
+  });
+
   it('is not hovered when put back after being destroyed hovered', () => {
     const s = scene('.btn:hover { opacity: 0.5 }');
     const wrap = s.make('view', 'wrap');
@@ -276,6 +309,21 @@ describe(':focus-within', () => {
     s.fabric.emit(s.id('b'), 'topFocus', {});
     s.engine.commit();
     assert.equal(s.id('form').props['opacity'], null);
+  });
+
+  it('moves with the focused field when the field moves to another parent', () => {
+    const s = scene('.a:focus-within { opacity: 0.5 } .b:focus-within { opacity: 0.7 }');
+    const a = s.make('view', 'a');
+    const b = s.make('view', 'b');
+    const field = s.make('text-input', 'field', a);
+    s.engine.commit();
+    s.fabric.emit(s.id('field'), 'topFocus', {});
+    s.engine.commit();
+    assert.equal(s.id('a').props['opacity'], 0.5);
+    s.engine.appendChild(b, field);
+    s.engine.commit();
+    assert.equal(s.id('a').props['opacity'], null);
+    assert.equal(s.id('b').props['opacity'], 0.7);
   });
 
   it('leaves no ancestor focused-within when the focused field leaves the tree', () => {
