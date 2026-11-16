@@ -1342,14 +1342,19 @@ describe('available-signal on strings inside template expressions', () => {
     `<text [label]="'haptics.available'">{{ 'haptics.available' }}</text>`,
     "{{ '}}' + haptics.available }}",
     "@let shown = ';' + haptics.available;",
+    '{{ `${haptics.available} and haptics.available` }}',
     '',
   ].join('\n');
   const called = [
     `<text [label]="'haptics.available'">{{ 'haptics.available' }}</text>`,
     "{{ '}}' + haptics.available() }}",
     "@let shown = ';' + haptics.available();",
+    '{{ `${haptics.available()} and haptics.available` }}',
     '',
   ].join('\n');
+  /** A template as a TypeScript template literal writes it: a backtick and a `${` escaped. */
+  const literal = (template: string) =>
+    '`' + template.replace(/[`\\]/g, '\\$&').replace(/\$\{/g, '\\${') + '`';
   const component = (template: string) =>
     [
       "import { Component, inject } from '@angular/core';",
@@ -1364,13 +1369,24 @@ describe('available-signal on strings inside template expressions', () => {
 
   it('leaves a string constant alone, and spans past a }} or ; inside one', async () => {
     const files = {
-      'src/app/inline.ts': component(`template: \`${html}\``),
+      'src/app/inline.ts': component(`template: ${literal(html)}`),
       'src/app/external.ts': component("templateUrl: './external.html'"),
       'src/app/external.html': html,
     };
     const { nx } = await acrossAdapters(files, 'available-signal', '0.22.2');
     assert.equal(nx.files['src/app/external.html'], called);
-    assert.equal(nx.files['src/app/inline.ts'], component(`template: \`${called}\``));
+    assert.equal(nx.files['src/app/inline.ts'], component(`template: ${literal(called)}`));
+  });
+
+  it('reads an inline template as its string decodes, past escaped quotes', async () => {
+    const quoted = (template: string) => `template: '${template.replace(/['\\]/g, '\\$&')}'`;
+    const shown = "<text [hint]='haptics.available'>{{ 'a' + haptics.available }}</text>";
+    const files = { 'src/app/quoted.ts': component(quoted(shown)) };
+    const { nx } = await acrossAdapters(files, 'available-signal', '0.22.2');
+    assert.equal(
+      nx.files['src/app/quoted.ts'],
+      component(quoted(shown.replace(/haptics\.available/g, 'haptics.available()'))),
+    );
   });
 });
 
