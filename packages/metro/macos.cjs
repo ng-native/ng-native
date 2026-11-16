@@ -164,8 +164,9 @@ function checkOutOfTreePlatforms(expo, argv = process.argv) {
  * The app's `expo` config, as the Expo CLI reads it, or nothing where it cannot be read: a project
  * with no Expo config, or a config that throws, which the Expo CLI reports itself.
  *
- * Its `platforms` are the ones app.json declares, where it declares any: Expo's own reading drops
- * `macos` from them when `outOfTreePlatforms` is not set, which is the case to say so for.
+ * Its `platforms` are Expo's reading of them with the ones app.json declares added, where it declares
+ * any: Expo's own reading drops `macos` from them when `outOfTreePlatforms` is not set, which is
+ * the case to say so for.
  *
  * @param {string | undefined} projectRoot
  */
@@ -179,7 +180,11 @@ function expoConfig(projectRoot) {
       skipPlugins: true,
     });
     const declared = (rootConfig?.expo ?? rootConfig)?.platforms;
-    return Array.isArray(declared) ? { ...exp, platforms: declared } : exp;
+    if (!Array.isArray(declared)) return exp;
+    // The dynamic config's platforms too, which Expo's reading keeps, beside the declared ones.
+    // ponytail: a dynamic config that removes a platform app.json declares still has it checked.
+    const read = Array.isArray(exp.platforms) ? exp.platforms : [];
+    return { ...exp, platforms: [...new Set([...read, ...declared])] };
   } catch {
     return undefined;
   }
