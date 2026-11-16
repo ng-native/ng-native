@@ -4,6 +4,7 @@
  * has reached JavaScript, for other requests, and with errors.
  */
 import assert from 'node:assert/strict';
+import { getEventListeners } from 'node:events';
 import { createRequire } from 'node:module';
 import { describe, it } from 'node:test';
 import type { Type } from '@angular/core';
@@ -155,6 +156,31 @@ describe('fetch on macOS', () => {
     assert.equal(net.sent[0]!.method, 'PUT');
     assert.equal(net.sent[0]!.url, 'https://api.test/r');
     assert.equal(net.sent[0]!.headers['a'], '1');
+  });
+
+  it('rejects a POST Request whose body text() consumed, and sends nothing', async () => {
+    // React Native's Request is whatwg-fetch's, which keeps what it was given in _bodyInit.
+    const fromReactNative = createRequire(require.resolve('react-native/package.json'));
+    const polyfill = fromReactNative('whatwg-fetch') as { Request: typeof Request };
+    for (const Made of [polyfill.Request, Request]) {
+      const { net, fetch } = setUp();
+      const request = new Made('https://api.test/r', { method: 'POST', body: 'sent once' });
+      assert.equal(await request.text(), 'sent once');
+      const outcome = fetch(request).then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+      assert.equal(net.sent.length, 0);
+      assert.ok((await Promise.race([outcome, settle()])) instanceof TypeError);
+    }
+  });
+
+  it('sends a consumed Request when init gives a body of its own', () => {
+    const { net, fetch } = setUp();
+    const request = new Request('https://api.test/r', { method: 'POST', body: 'old' });
+    void request.text();
+    void fetch(request, { body: 'new' });
+    assert.equal(net.sent[0]!.data, 'new');
   });
 
   it('resolves at the headers, then streams each chunk as it arrives', async () => {
@@ -407,7 +433,7 @@ describe('fetch on macOS, aborted', () => {
     assert.deepEqual(net.aborted, [1]);
   });
 
-  it('does not abort a request that has already completed', async () => {
+  it('errors an unread body, without aborting the request, after the request completed', async () => {
     const { net, fetch } = setUp();
     const controller = new AbortController();
     const pending = fetch('https://a/', { signal: controller.signal });
@@ -418,7 +444,25 @@ describe('fetch on macOS, aborted', () => {
     controller.abort();
     await settle();
     assert.deepEqual(net.aborted, []);
-    assert.equal(await response.text(), 'done');
+    await assert.rejects(response.text(), { name: 'AbortError' });
+  });
+
+  it('keeps a body read to its end after the request completed', async () => {
+    const { net, fetch } = setUp();
+    const controller = new AbortController();
+    const pending = fetch('https://a/', { signal: controller.signal });
+    net.respond(1);
+    net.chunk(1, 'done');
+    net.complete(1);
+    const response = await pending;
+    const reader = response.body!.getReader();
+    assert.equal(new TextDecoder().decode((await reader.read()).value), 'done');
+    assert.equal((await reader.read()).done, true);
+    assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+    controller.abort();
+    await settle();
+    assert.deepEqual(net.aborted, []);
+    assert.equal((await reader.read()).done, true);
   });
 
   it('does not abort a completed request when its body is cancelled', async () => {
@@ -429,6 +473,17 @@ describe('fetch on macOS, aborted', () => {
     net.complete(1);
     await (await pending).body!.cancel();
     assert.deepEqual(net.aborted, []);
+  });
+
+  it('stops listening to the signal once a response with no body completes', async () => {
+    const { net, fetch } = setUp();
+    const controller = new AbortController();
+    const pending = fetch('https://a/', { method: 'HEAD', signal: controller.signal });
+    net.respond(1);
+    assert.equal(getEventListeners(controller.signal, 'abort').length, 1);
+    net.complete(1);
+    await pending;
+    assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
   });
 
   it('aborts the request when the body stream is cancelled', async () => {
