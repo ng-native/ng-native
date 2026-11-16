@@ -9,8 +9,10 @@
  * ```
  *
  * The module is reached through a slice of its own functions written here, so this entry point
- * needs no types from the package. Without the module installed every call is inert: `print()`
- * does nothing, and `printToPdf()` and `selectPrinter()` answer null.
+ * needs no types from the package. Where the service is absent - on the web, and in a test that
+ * provides no module - every call is inert: `print()` does nothing, and `printToPdf()` and
+ * `selectPrinter()` answer null. Where the module is missing from the build, a call throws a
+ * `MissingModuleError`.
  */
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import { OS } from '@ng-native/device';
@@ -22,9 +24,12 @@ export interface Printer {
   readonly url: string;
 }
 
-/** The slice of `expo-print` this calls. The real module is one; a test provides a fake. */
+/**
+ * The slice of `expo-print` this calls. The real module is one; a test provides a fake. Each
+ * function may be absent, as from a desktop host built before it had it.
+ */
 export interface NativePrinting {
-  printAsync(options: {
+  printAsync?(options: {
     html?: string;
     uri?: string;
     /** macOS: the surface of the window whose content prints. */
@@ -32,11 +37,11 @@ export interface NativePrinting {
     printerUrl?: string;
     orientation?: 'portrait' | 'landscape';
   }): Promise<void>;
-  printToFileAsync(options: {
+  printToFileAsync?(options: {
     html: string;
     width?: number;
     height?: number;
-  }): Promise<{ uri: string; numberOfPages: number }>;
+  }): Promise<{ uri: string; numberOfPages: number } | null | undefined>;
   /** iOS only: the system's printer picker. */
   selectPrinterAsync?(): Promise<Printer>;
 }
@@ -80,7 +85,11 @@ export class Printing {
   private readonly native = inject(Printing.SOURCE);
   private readonly os = inject(OS, { optional: true }) ?? currentPlatform();
 
-  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  /**
+   * Whether the module is here. False where the service is absent, on an OS the module is not for,
+   * and every call is inert; false too in a build missing the module, where a call can throw a
+   * `MissingModuleError`.
+   */
   readonly available: Signal<boolean> = presence(this.native);
 
   /**
@@ -92,22 +101,23 @@ export class Printing {
     const { printer, window, ...rest } = options;
     if (window) {
       if (this.os !== 'macos') return;
-      await this.native.printAsync({ ...rest, window: window.surface });
+      await this.native.printAsync?.({ ...rest, window: window.surface });
       return;
     }
-    await this.native.printAsync(printer ? { ...rest, printerUrl: printer.url } : rest);
+    await this.native.printAsync?.(printer ? { ...rest, printerUrl: printer.url } : rest);
   }
 
   /**
    * Renders HTML to a PDF file in the cache and answers its uri, to share or save. `width` and
-   * `height` are the page size in points, US Letter by default. Null without the module.
+   * `height` are the page size in points, US Letter by default. Null where the service is absent,
+   * and where the module made no file.
    */
   async printToPdf(
     html: string,
     page: { width?: number; height?: number } = {},
   ): Promise<string | null> {
     if (!this.native) return null;
-    return (await this.native.printToFileAsync({ html, ...page })).uri;
+    return (await this.native.printToFileAsync?.({ html, ...page }))?.uri ?? null;
   }
 
   /**

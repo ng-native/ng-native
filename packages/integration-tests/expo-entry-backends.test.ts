@@ -33,12 +33,14 @@ const BACKENDS = [
   'expo-secure-store',
   'expo-audio',
   'expo-video',
+  'expo-document-picker',
+  'expo-file-system',
 ];
 
 /** The native modules Metro collects for `entry`, each with whether it is optional. */
 function backendsOf(entry: string): Record<string, 'required' | 'optional'> {
   const source = readFileSync(require.resolve(entry), 'utf8');
-  const ast = parse(source, { sourceType: 'module', plugins: ['typescript'] });
+  const ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'decorators'] });
   const { dependencies } = collectDependencies(ast, {
     asyncRequireModulePath: 'expo-asyncRequire',
     dependencyMapName: null,
@@ -64,6 +66,11 @@ describe('the native module each Expo entry point needs', () => {
     ['@ng-native/expo/player', {}],
     ['@ng-native/expo/audio', { 'expo-audio': 'required' }],
     ['@ng-native/expo/video', { 'expo-video': 'required' }],
+    // The folder picker is expo-file-system's, which an app with only the document picker lacks.
+    [
+      '@ng-native/expo/document-picker',
+      { 'expo-document-picker': 'required', 'expo-file-system': 'optional' },
+    ],
   ] as const) {
     it(`${entry} needs ${Object.keys(needs).join(' and ') || 'none of them'}`, () => {
       assert.deepEqual(backendsOf(entry), needs);

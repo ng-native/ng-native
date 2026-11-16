@@ -90,7 +90,11 @@ export class Brightness {
 
   private readonly native = inject(Brightness.SOURCE);
 
-  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  /**
+   * Whether the module is here. False where the service is absent, on an OS the module is not for,
+   * and every call is inert; false too in a build missing the module, where a call can throw a
+   * `MissingModuleError`.
+   */
   readonly available: Signal<boolean> = presence(this.native);
   /** Every app's levels: the screen is the runtime's, not an app's. */
   private readonly window = sharedBySource(

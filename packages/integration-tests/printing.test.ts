@@ -101,6 +101,16 @@ describe('Printing', () => {
     await assert.rejects(serviceOn(failing.native).selectPrinter(), (error) => error === failure);
   });
 
+  it('does nothing, and answers null, where the module has no such function or no PDF', async () => {
+    const without = platform({ printAsync: undefined, printToFileAsync: undefined });
+    const printing = serviceOn(without.native);
+    assert.equal(await printing.print({ html: '<p />' }), undefined);
+    assert.equal(await printing.print({ uri: 'file:///cache/out.pdf' }), undefined);
+    assert.equal(await printing.printToPdf('<p />'), null);
+    const nothing = platform({ printToFileAsync: async () => undefined as never });
+    assert.equal(await serviceOn(nothing.native).printToPdf('<p />'), null);
+  });
+
   it('is inert without the module', async () => {
     const printing = serviceOn(null);
     assert.equal(printing.available(), false);

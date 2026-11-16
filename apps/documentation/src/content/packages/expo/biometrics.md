@@ -28,13 +28,16 @@ import { Biometrics } from '@ng-native/expo/biometrics';
 @Component({
   selector: 'app-wallet',
   imports: [Pressable, Text],
-  template: '<pressable (press)="unlock()"><text>Unlock</text></pressable>',
+  template: `
+    <pressable [disabled]="!biometrics.available()" (press)="unlock()">
+      <text>Unlock</text>
+    </pressable>
+  `,
 })
 export class Wallet {
-  private readonly biometrics = inject(Biometrics);
+  protected readonly biometrics = inject(Biometrics);
 
   protected async unlock(): Promise<void> {
-    if (!this.biometrics.available()) return;
     const result = await this.biometrics.authenticate('Unlock your wallet');
     if (result.success) this.reveal();
   }
@@ -45,8 +48,9 @@ export class Wallet {
 
 ## Checking and asking
 
-- **`available()`** resolves to whether there is a sensor _and_ something enrolled on it - whether
-  asking can succeed at all. Check it before showing a "Use Face ID" button.
+- **`available()`** is whether there is a sensor _and_ something enrolled on it - whether asking
+  can succeed at all. It is `false` until the platform answers, a moment after it is first read,
+  so read it where the button is drawn, as above, rather than only when it is pressed.
 - **`kinds()`** resolves to the kinds the device has - `'fingerprint'`, `'face'`, `'iris'` - so a
   button can say "Use Face ID" rather than the generic "Use biometrics".
 - **`authenticate(message, options)`** shows the system prompt with `message` as the reason, and
