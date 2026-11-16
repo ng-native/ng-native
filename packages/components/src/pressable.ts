@@ -214,6 +214,8 @@ export abstract class TouchableBase extends ViewBase {
   private pressedAt = 0;
   private pressInTimer: ReturnType<typeof setTimeout> | null = null;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a `[contextMenu]` inside this element took this press's hold, as the press began. */
+  private menuOwnsHold = false;
   private pressOutTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -445,6 +447,9 @@ export abstract class TouchableBase extends ViewBase {
     this.origin = touchPoint(event);
     this.cancelled = false;
     this.longPressed = false;
+    // Decided as the press begins, as the host decides its own: a menu that arrives during a
+    // delayed press-in then opens nothing, and this element keeps the long press.
+    this.menuOwnsHold = this.menuTakesLongPress(event);
     this.clearTimers();
     if (this.androidRipple()) {
       const { x, y } = this.origin;
@@ -464,7 +469,7 @@ export abstract class TouchableBase extends ViewBase {
     this.pressedChanged(true);
     this.pressIn.emit(event);
     if (!this.longPressListeners || this.contextMenu?.takesLongPress()) return;
-    if (this.menuTakesLongPress(event)) return;
+    if (this.menuOwnsHold) return;
     this.longPressTimer = setTimeout(() => {
       this.longPressTimer = null;
       this.longPressed = true;
