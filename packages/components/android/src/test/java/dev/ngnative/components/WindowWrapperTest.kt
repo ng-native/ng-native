@@ -5,7 +5,7 @@ import org.junit.Test
 
 /**
  * A library that wraps the window's callback on resume and unwraps it on pause only while it is on
- * top, as Sentry's user-interaction breadcrumbs do.
+ * top, as some crash and analytics SDKs do.
  */
 class WindowWrapperTest {
   private class FakeWindow(var callback: Any)

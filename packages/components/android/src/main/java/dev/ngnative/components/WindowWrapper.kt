@@ -8,7 +8,7 @@ import java.util.WeakHashMap
  *
  * Whether a window has the wrapper is kept by window, not read from the top of its callback chain:
  * a library that wraps the callback on resume and unwraps it on pause only while it is on top
- * (Sentry's user-interaction breadcrumbs) leaves ours under its own, and a check of the top would
+ * (some crash and analytics SDKs do this) leaves ours under its own, and a check of the top would
  * wrap the window again on every resume.
  */
 internal class WindowWrapper<W : Any> {
