@@ -197,8 +197,8 @@ function outsideFences(text: string, change: (prose: string) => string): string 
   for (const line of text.split(/(?<=\n)/)) {
     if (fence) {
       result += line;
-      const close = /^( *)(`+|~+)[ \t]*\r?\n?$/.exec(line);
-      const indent = close?.[1]!.length ?? -1;
+      const close = /^([ \t]*)(`+|~+)[ \t]*\r?\n?$/.exec(line);
+      const indent = close ? width(close[1]!) : -1;
       if (
         close?.[2]![0] === fence.char &&
         close[2]!.length >= fence.length &&
@@ -209,17 +209,24 @@ function outsideFences(text: string, change: (prose: string) => string): string 
       }
       continue;
     }
-    const open = /^( *)(`{3,}|~{3,})/.exec(line);
+    const open = /^([ \t]*)(`{3,}|~{3,})/.exec(line);
     if (!open) {
       prose += line;
       continue;
     }
     result += change(prose) + line;
     prose = '';
-    const indent = open[1]!.length;
+    const indent = width(open[1]!);
     fence = { char: open[2]![0]!, length: open[2]!.length, indent: indent <= 3 ? 0 : indent };
   }
   return result + change(prose);
+}
+
+/** How many columns leading whitespace takes, a tab reaching the next multiple of four as in Marked. */
+function width(lead: string): number {
+  let columns = 0;
+  for (const char of lead) columns = char === '\t' ? columns + 4 - (columns % 4) : columns + 1;
+  return columns;
 }
 
 async function render(source: string, headings: DocHeading[]): Promise<string> {
