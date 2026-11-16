@@ -12,7 +12,8 @@ from.
 
 `ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
 [--sparkle-key <key>] [--skip-notarize]` builds a
-universal Release host (arm64 and x86_64, without the core tests, dead code stripped), bundles
+universal Release host (arm64 and x86_64, without the core tests, dead code stripped), or takes the
+[prebuilt one](#prebuilt-hosts), bundles
 with `expo export:embed --platform macos` (the assets laid out as React Native's resolver reads
 them beside an embedded bundle), compiles the bundle to Hermes bytecode with the `hermesc` the
 host build puts beside its binary, built from the same Hermes, and assembles
@@ -74,7 +75,8 @@ or its own native desktop code, when a host library it has installed (`react-nat
 `react-native-worklets`, `react-native-reanimated`) is another version than the prebuilt one or
 one the prebuilt host lacks, when the prebuilt host has a library the app denies, when
 `prebuilt.json` has no host for its React Native version, when the download fails (with a
-warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
+warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set. Being a Release build, the prebuilt host
+has no debugger in a dev run either; a host built from source for `run` has one.
 
 The host's `ngn-macos` and `hermesc` are signed ad hoc with the hardened runtime, with no
 Developer ID: `package` signs the app, host included, with the app's own identity, and the download

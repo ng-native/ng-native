@@ -9,8 +9,10 @@ An Angular Native app runs on macOS as a native app: AppKit views drawn by the
 [desktop host](/packages/desktop), React Native's C++ core and Hermes, with no web view.
 
 EAS Build and EAS Update do not build or update macOS apps. You build a Mac app on a Mac, with
-`npm run package`, and ship new versions of it through Sparkle. To build, sign and notarise it on
-every push, see [Package in GitHub Actions](/guide/desktop-github-actions).
+`npm run package`, and ship new versions of it through Sparkle, which only a `dmg` packaged with
+`--feed-url` and a public key carries (see [Packaging](/packages/desktop/packaging#the-build)); the
+`app` that `npm run package` makes has no updater. To build, sign and notarise it on every push,
+see [Package in GitHub Actions](/guide/desktop-github-actions).
 
 ## Start
 

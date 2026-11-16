@@ -114,8 +114,9 @@ error. If `onOpen` throws, the connection is closed and `ready()` rejects with i
 `database()` opens its database through `NgNativeSqlite`. A TurboModule cannot return an object
 with methods, so the host answers a handle, `{id, databasePath, databaseName}`, and each call takes
 the id first; the desktop loader builds `expo-sqlite`'s database on it, with each call also in its
-`Sync` form. A file database lives in `<appData>/SQLite`, uses the WAL journal, and cannot be named
-with a path that leaves that folder; `:memory:` is in memory. `withTransactionAsync` runs `BEGIN`,
+`Sync` form. A file database lives in `<appData>/SQLite`, or in the `directory` given wherever
+`FileSystem` may write, uses the WAL journal, and cannot be named with a path that leaves its
+folder; `:memory:` is in memory. `withTransactionAsync` runs `BEGIN`,
 the task, then `COMMIT`, or `ROLLBACK` when the task throws. Blobs cross as `{base64}` and come
 back as bytes. A reload closes every open database. Calls run on the JavaScript thread, in order.
 

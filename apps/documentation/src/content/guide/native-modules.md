@@ -395,8 +395,9 @@ a `codegenConfig` gets its specs' codegen, so its C++ TurboModule and its Fabric
 for the Mac as they do for Android. See [Native code](/packages/desktop#native-code).
 
 `npm run macos` and `npm run package` list the dependencies with native code for iOS or Android
-and none for the Mac. Their modules are absent on macOS, so a service built on one reports itself
-unavailable.
+and none for the Mac, leaving out `expo-*`, `@expo/*`, `@react-native/*` and `@ng-native/*`
+packages, which the host answers another way, and those the plugin's `deny` option lists. The
+listed modules are absent on macOS, so a service built on one reports itself unavailable.
 
 ## Going further
 

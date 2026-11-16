@@ -14,7 +14,9 @@ app is a Hermes target in its `/json/list` under its app id and the Mac's name, 
 DevTools opens on it from `j` in the Expo CLI or Developer > Open DevTools (Command-Option-I): its
 console, sources with source maps, breakpoints and stepping. While the debugger holds the
 JavaScript, "Paused in debugger" shows over the top of the app's window with a Resume button. A
-packaged app (a Release build) has no debugger.
+packaged app (a Release build) has no debugger, and neither has a dev run on the
+[prebuilt host](/packages/desktop/packaging#prebuilt-hosts), which is a Release build too:
+`NGN_DESKTOP_FROM_SOURCE=1 npm run macos` builds a host with one.
 
 JavaScript's errors show in a red box, a window over the app's: fatal ones, the errors
 `ErrorUtils` and React Native's error pipeline hand on, and soft ones logged with `console.error`
@@ -46,15 +48,16 @@ follows the real pointer.
 ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.
 `NGN_LOG_ROTORS=1` logs each VoiceOver rotor's items in the first window a second after its first
 frame, for checking them without a screen reader. Both, and `NGN_INPUT_SCRIPT`, work only in a dev
-run: a packaged app ignores them, as it ignores the rest of its environment.
+run: a packaged app ignores them, as it ignores the rest of its environment but `NGN_NO_PROMPTS=1`,
+which only takes system prompts away (permission requests and sign-in among them).
 
 ## Launch settings
 
 A dev run takes its bundle, module, title, app id and capabilities from the command line, and
 settings such as the updates URL from `NGN_*` environment variables. A packaged app, whose
 `Info.plist` names `NGNBundleFile`, takes all of them from its `Info.plist` and ignores argv and
-the `NGN_*` variables, so nothing that launches the app can make it run another bundle, as another
-app, or take updates from another server.
+the `NGN_*` variables but `NGN_NO_PROMPTS`, so nothing that launches the app can make it run
+another bundle, as another app, or take updates from another server.
 
 A dev run with `NGN_TESTS=1` is a test launch, which `vitest --project macos` (`@ng-native/testing`)
 starts with `NGN_STATE_DIR`, `NGN_RUN_ID` and `NGN_TESTS_FAKE_SYSTEM_UI=1`. Its windows show on
@@ -62,7 +65,8 @@ screen without activating the app or taking focus, and it has no Dock icon until
 window through `AppWindows`. Its Application Support, Caches and temporary folders are under
 `NGN_STATE_DIR`, its preferences are in a defaults suite named by the run id, and its Keychain
 services are prefixed `ngn-test-<run id>.`; it removes the suite and its Keychain items as it quits
-or gets SIGTERM, and those a crashed run left when the next test launch starts. With
+or gets SIGTERM (unless its main thread is still busy when SIGTERM's wait ends), and those a run
+that crashed or ended that way left when the next test launch starts. With
 `NGN_TESTS_FAKE_SYSTEM_UI=1` (or `NGN_NO_PROMPTS=1`) no system UI is shown: open and save panels
 answer as cancelled, a permission request answers the current status without asking (undetermined
 when never asked), Touch ID and sign-in answer as cancelled, and an alert with its cancel button,

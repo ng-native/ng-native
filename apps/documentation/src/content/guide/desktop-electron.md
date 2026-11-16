@@ -23,7 +23,7 @@ Windows and Linux are planned, with no date.
 | `app.quit()`                                   | `AppWindows.quit()`                                                            |
 | `app.on('activate')`                           | Handled: a Dock click with no window open opens the main window                |
 | `app.on('open-url')`                           | `DeepLinks`, for the app's url schemes                                         |
-| `app.requestSingleInstanceLock()`              | Not needed: macOS runs one instance of an app                                  |
+| `app.requestSingleInstanceLock()`              | None: opening the app brings it forward, though `open -n` starts another       |
 | `Menu.setApplicationMenu()`                    | `<menu-bar>` with `<menu-group>` and `<menu-item>`                             |
 | `Menu.popup()` for a context menu              | `[contextMenu]` with a template of `<menu-item>`s                              |
 | An accelerator on a menu item                  | `shortcut="mod+s"` on `<menu-item>`, or `[shortcut]` on any element            |
