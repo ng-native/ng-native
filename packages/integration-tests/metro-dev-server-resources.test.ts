@@ -525,6 +525,25 @@ describe('a dev server on a Metro without the internals that say what changed', 
     assert.doesNotThrow(() => rereadingResources({}, '/'));
   });
 
+  it('says once a server lacking getDelta or transformFile carries a template edit in its own module alone', () => {
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.join(' '));
+    };
+    try {
+      const noTransform = fakeServer({ getDelta: () => 'delta' }, {});
+      rereadingResources(noTransform, '/');
+      rereadingResources(noTransform, '/');
+      rereadingResources(fakeServer({}, { transformFile: async () => ({}) }), '/');
+      // No Metro server at all, as in an export: nothing to say.
+      rereadingResources(undefined, '/');
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(warnings.filter((line) => line.includes('templateUrl or styleUrl')).length, 2);
+  });
+
   it('hands getDelta on unchanged when the calculator has no set of changed files', () => {
     const graph = { dependencies: new Map() };
     const seen: unknown[][] = [];
