@@ -32,13 +32,18 @@ pnpm --filter @ng-native/desktop test:native   # the core and its tests, no Herm
 pnpm --filter @ng-native/desktop build:host     # the macOS host
 ```
 
+`ng-native-desktop run` builds the host with `--no-tests` and `package` with `--release`: the
+published package has none of the core tests' sources, so only `test:native` and `build:host` in
+this repository build them.
+
 ## Publishing a prebuilt host
 
 The release workflow (`.github/workflows/release.yml`) publishes one with each release, for the
 React Native version the packages support:
 
 1. Its `desktop-host` job builds the universal Release host against `examples/canary`, which has
-   every host library, signs it ad hoc and packs it with
+   every host library but `react-native-webview` (an app with it builds the host from source),
+   signs it ad hoc and packs it with
    `native/scripts/make-prebuilt.mjs examples/canary .prebuilt --version <release> --base-url <url>`,
    where `<url>` is the release's downloads URL.
 2. The release job writes the host's entry, with its SHA-256, into `packages/desktop/prebuilt.json`

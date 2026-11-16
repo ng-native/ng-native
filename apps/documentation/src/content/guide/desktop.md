@@ -21,7 +21,7 @@ start:
 npx create-expo-app@latest my-app --template @ng-native/template-desktop
 cd my-app
 npm start          # the dev server, in one terminal
-npm run macos      # builds the desktop host the first time, then opens the app
+npm run macos      # gets the desktop host the first time, then opens the app
 ```
 
 Expo is the build tool here, not the runtime: its CLI, config, autolinking and Metro build the
@@ -57,3 +57,13 @@ from](/guide/desktop-imports), [what each OS has](/guide/desktop-support), and h
 `render(X, { os: 'macos' })` renders a component as on macOS, in its main window, with recording
 fakes of the windows, menus, Dock and tray. See
 [Testing on another OS](/packages/testing/testing-other-os).
+
+An app from the desktop template, or from the generators' desktop-only option, has two Vitest
+projects. `node-macos` runs in Node, and is what `npm test` (`vitest run --project node-macos`)
+and the app's `test` target run. `macos` runs `src/**/*.device.ts`, such as
+`src/app/app.device.ts`, inside the app on real AppKit views, and opens the app itself:
+
+```sh
+EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start   # in one terminal
+npx vitest --project macos
+```

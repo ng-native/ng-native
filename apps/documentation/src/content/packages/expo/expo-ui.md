@@ -618,7 +618,7 @@ Where macOS differs:
   and reports each change through `textChange`. A `text` given as a plain string is shown instead.
 - **A bottom sheet** is a sheet on the window, without detents.
 - **`ui-view-host`** puts the app's own views in the SwiftUI content at their laid-out size. A
-  pointer event on one of them is not delivered yet.
+  pointer event on one of them is not delivered.
 - **Modifiers** take the common set: layout (`padding`, `frame`, `fixedSize`), colour and type
   (`foregroundStyle`, `background`, `tint`, `font`), shape and effect (`clipShape`, `opacity`,
   `shadow`), the control styles, and accessibility. Any other is skipped.
@@ -636,7 +636,7 @@ sends expo/ui's iOS event with its payload (`selectionChange`, `dateChange`, `is
 on the axes it matches, reported as its state, as `setViewSize` does on iOS. An `RNHostView`
 holds the app's own views in the SwiftUI content at their Yoga size, fitted to them rather than
 stretched across its container with `matchContents`, as iOS measures it (`layoutRoot`, which takes
-SwiftUI's size into Yoga on iOS, is not taken yet). A sheet opens at its smallest
+SwiftUI's size into Yoga on iOS, is not taken). A sheet opens at its smallest
 `presentationDetents` height in the window (`medium` half of it, `large` nine tenths), as a macOS
 sheet has no detents.
 
@@ -644,7 +644,7 @@ Every view whose SwiftUI type exists on macOS is drawn; `EXPO_UI_MACOS` in `@ng-
 names each iOS view's SwiftUI view or the reason it is absent (`AccessoryWidgetBackgroundView`,
 `SyncToggleView` and `ToolbarView`), and a test holds the core's list to it. A modifier with no
 macOS meaning, or one the renderer does not take, is skipped. A pointer event on the app's own
-views inside an `RNHostView` is not delivered yet.
+views inside an `RNHostView` is not delivered.
 
 ## Without the module
 

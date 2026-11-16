@@ -79,14 +79,17 @@ jobs:
   # The prebuilt desktop host for the React Native version the packages support: the universal
   # Release build, packed with its hermesc and Sparkle, so an app with no native desktop code of
   # its own compiles nothing (packages/desktop/bin/prebuilt.mjs). Built against the canary, which
-  # has every host library. Signed ad hoc, so the job needs no secrets: an app re-signs the host
-  # when it packages, and the download is checked by its SHA-256. The archive goes up with the
-  # GitHub release; its SHA-256 goes into packages/desktop/prebuilt.json, inside the npm package,
-  # before it is packed.
+  # has every host library but react-native-webview. Signed ad hoc, so the job needs no secrets: an
+  # app re-signs the host when it packages, and the download is checked by its SHA-256. The archive
+  # goes up with the GitHub release; its SHA-256 goes into packages/desktop/prebuilt.json, inside
+  # the npm package, before it is packed.
   desktop-host:
     needs: validate
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: macos-latest
+    # It builds fetched third-party sources, so it gets no write access and keeps no token.
+    permissions:
+      contents: read
     # Budget: a cold universal release build within 15 minutes on this runner (spec).
     timeout-minutes: 45
     env:
@@ -94,6 +97,8 @@ jobs:
       NGN_JOBS: '4'
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
       - run: brew install ninja
 
@@ -113,10 +118,12 @@ jobs:
           echo "Prebuilt host made in $(( $(date +%s) - start ))s"
           ls -l .prebuilt
 
-      - uses: actions/upload-artifact@v5
+      # .prebuilt is a dot folder, which upload-artifact leaves out unless told otherwise.
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop-host
           path: .prebuilt
+          include-hidden-files: true
           if-no-files-found: error
 
   # One setup route in a fresh project: ng new with ng add, Nx's angular-monorepo preset with
@@ -210,7 +217,7 @@ jobs:
         with:
           registry-url: https://registry.npmjs.org
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: desktop-host
           path: .prebuilt
@@ -280,7 +287,21 @@ jobs:
       - name: Publish
         env:
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '--provenance' }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
+          # A new run builds a new desktop host, whose archive has another SHA-256. When an earlier
+          # run already published @ng-native/desktop at this version, its prebuilt.json names that
+          # run's archive, and attaching this one would fail every download: stop instead. Re-run
+          # the failed jobs of the earlier run, which keeps its host.
+          if npm view "@ng-native/desktop@$VERSION" version > /dev/null 2>&1; then
+            published=$(mktemp -d)
+            npm pack "@ng-native/desktop@$VERSION" --pack-destination "$published" > /dev/null
+            if ! tar -xOzf "$published"/*.tgz package/prebuilt.json | jq -S . |
+              cmp -s - <(jq -S . packages/desktop/prebuilt.json); then
+              echo "::error::@ng-native/desktop@$VERSION is already published with another prebuilt desktop host. Re-run the failed jobs of the run that published it, which keeps its host, instead of starting a new run."
+              exit 1
+            fi
+          fi
           for tarball in .release/*.tgz; do
             name=$(tar -xOzf "$tarball" package/package.json | jq -r .name)
             # Already there means an earlier run got this far: skip it, so running again with the
