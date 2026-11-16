@@ -183,6 +183,18 @@ describe('fetch on macOS', () => {
     assert.equal(net.sent[0]!.data, 'new');
   });
 
+  it('rejects, and stops listening, when Networking throws as the request is sent', async () => {
+    const { net, fetch } = setUp();
+    const refused = new Error('no such scheme');
+    net.sendRequest = () => {
+      throw refused;
+    };
+    const controller = new AbortController();
+    await assert.rejects(fetch('weird://a/', { signal: controller.signal }), refused);
+    assert.equal(net.listening, 0);
+    assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+  });
+
   it('resolves at the headers, then streams each chunk as it arrives', async () => {
     const { net, fetch } = setUp();
     const pending = fetch('https://api.test/stream');
@@ -246,6 +258,27 @@ describe('fetch on macOS', () => {
       read.push(...next.value);
     }
     assert.deepEqual(read, [...bytes]);
+  });
+
+  it('makes a Blob of a text body, and refuses one that is not text', async () => {
+    const { net, fetch } = setUp();
+    const text = fetch('https://a/');
+    net.respond(1, 200, { 'content-type': 'text/plain' });
+    net.chunk(1, 'Adé');
+    net.complete(1);
+    const blob = await (await text).blob();
+    assert.equal(await blob.text(), 'Adé');
+    assert.equal(blob.type, 'text/plain');
+
+    const binary = fetch('https://b/');
+    net.respond(2);
+    net.chunk(2, new Uint8Array([0x89, 0xff, 0x00]));
+    net.complete(2);
+    await assert.rejects((await binary).blob(), (error: Error) => {
+      assert.ok(error instanceof TypeError);
+      assert.match(error.message, /arrayBuffer\(\)/);
+      return true;
+    });
   });
 
   it('decodes text split inside a character', async () => {

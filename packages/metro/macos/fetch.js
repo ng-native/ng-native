@@ -8,7 +8,7 @@
  * decoded here to its bytes, so `body`, `bytes()` and `arrayBuffer()` are byte-exact for any
  * content. A host that sends the body whole in `didReceiveNetworkData` instead, as React Native
  * iOS does, still gives the same bytes, all at the end. `blob()` is made from the body as text,
- * since React Native's `Blob` takes no bytes, so it is exact only for a text body.
+ * since React Native's `Blob` takes no bytes, and refuses a body that is not UTF-8 text.
  *
  * CommonJS, so Node tests can load it as it ships.
  */
@@ -237,10 +237,22 @@ class StreamingResponse {
     return JSON.parse(new TextDecoder().decode(await this._read()));
   }
 
-  /** From the text, which React Native's `Blob` takes where it does not take bytes. */
+  /**
+   * From the text, which React Native's `Blob` takes where it does not take bytes. A body that is
+   * not UTF-8 text is refused rather than changed: decoding it would replace what is not text.
+   */
   async blob() {
     this._take('blob');
-    const text = new TextDecoder().decode(await this._read());
+    const bytes = await this._read();
+    let text;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+      throw new TypeError(
+        "Failed to execute 'blob' on 'Response': on macOS a Blob is made from text, and this body " +
+          'is not UTF-8 text. Read it with arrayBuffer() or bytes() instead.',
+      );
+    }
     return new Blob([text], { type: this.headers.get('content-type') ?? '' });
   }
 
@@ -418,28 +430,37 @@ function createFetch(networking) {
       listen('didCompleteNetworkResponse', 'complete');
       signal?.addEventListener('abort', onAbort);
 
-      networking.sendRequest(
-        method,
-        undefined,
-        url,
-        headerObject(headers),
-        body,
-        'base64',
-        true,
-        0,
-        (requestId) => {
-          id = requestId;
-          if (abortWhenKnown) {
-            networking.abortRequest(id);
-            early = [];
-            return;
-          }
-          for (const [event, args] of early.splice(0)) {
-            if (args[0] === id) dispatch(event, args);
-          }
-        },
-        credentials !== 'omit',
-      );
+      try {
+        networking.sendRequest(
+          method,
+          undefined,
+          url,
+          headerObject(headers),
+          body,
+          'base64',
+          true,
+          0,
+          (requestId) => {
+            id = requestId;
+            if (abortWhenKnown) {
+              networking.abortRequest(id);
+              early = [];
+              return;
+            }
+            for (const [event, args] of early.splice(0)) {
+              if (args[0] === id) dispatch(event, args);
+            }
+          },
+          credentials !== 'omit',
+        );
+      } catch (error) {
+        // Networking refused the request outright: nothing will arrive, so stop listening.
+        finished = true;
+        stop();
+        signal?.removeEventListener('abort', onAbort);
+        settled = true;
+        reject(error);
+      }
     });
   };
 }

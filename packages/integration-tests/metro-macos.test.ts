@@ -4,7 +4,16 @@
  * requests the preset empties, and the error for an app that asks for macOS without Expo's flag.
  */
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -15,9 +24,10 @@ const babel = require('@babel/core') as {
 };
 const plugin = require('@ng-native/metro/macos-babel.cjs');
 const { withAngularNative } = require('@ng-native/metro/config.cjs');
-const { checkOutOfTreePlatforms, requestedPlatforms, withMacosPlugins } =
+const { checkOutOfTreePlatforms, expoConfig, requestedPlatforms, withMacosPlugins } =
   require('@ng-native/metro/macos.cjs') as {
     checkOutOfTreePlatforms(expo: object | undefined, argv?: readonly string[]): void;
+    expoConfig(projectRoot: string | undefined): object | undefined;
     requestedPlatforms(argv: readonly string[]): string[];
     withMacosPlugins<P extends { options?: { platform?: string }; plugins?: unknown[] }>(
       params: P,
@@ -71,20 +81,64 @@ describe("the macOS Babel plugin, on React Native's own files", () => {
 });
 
 describe('the macOS Babel plugin, on Platform.select', () => {
+  const IMPORT = "import { Platform } from 'react-native';\n";
+  /** `code` in an app file that imports React Native's Platform, without the import. */
+  const select = (code: string): string =>
+    transform(IMPORT + code, '/app/a.js').slice(IMPORT.length);
+
   it('answers from macos, then ios, then native, then default', () => {
-    assert.equal(transform('x = Platform.select({ ios: 1, macos: 2 });', '/app/a.js'), 'x = 2;');
-    assert.equal(transform('x = Platform.select({ android: 0, ios: 1 });', '/app/a.js'), 'x = 1;');
-    assert.equal(
-      transform('x = Platform.select({ native: 3, default: 4 });', '/app/a.js'),
-      'x = 3;',
-    );
-    assert.equal(transform('x = Platform.select({ default: 4 });', '/app/a.js'), 'x = 4;');
-    assert.equal(transform('x = Platform.select({ android: 0 });', '/app/a.js'), 'x = undefined;');
+    assert.equal(select('x = Platform.select({ ios: 1, macos: 2 });'), 'x = 2;');
+    assert.equal(select('x = Platform.select({ android: 0, ios: 1 });'), 'x = 1;');
+    assert.equal(select('x = Platform.select({ native: 3, default: 4 });'), 'x = 3;');
+    assert.equal(select('x = Platform.select({ default: 4 });'), 'x = 4;');
+    assert.equal(select('x = Platform.select({ android: 0 });'), 'x = undefined;');
   });
 
   it('leaves a select whose keys are not all written out to run', () => {
     const code = 'x = Platform.select({\n  ...more,\n  ios: 1\n});';
-    assert.equal(transform(code, '/app/a.js'), code);
+    assert.equal(select(code), code);
+  });
+
+  it("answers React Native's Platform however the file binds it", () => {
+    for (const binding of [
+      "import { Platform as P } from 'react-native';",
+      "const { Platform: P } = require('react-native');",
+      "const P = require('react-native').Platform;",
+      "import P from '../Utilities/Platform';",
+      "const P = require('../../Libraries/Utilities/Platform').default;",
+    ]) {
+      assert.match(transform(`${binding}\nx = P.select({ ios: 1 });`), /\nx = 1;$/, binding);
+    }
+  });
+
+  it("leaves a Platform that is not React Native's alone", () => {
+    for (const code of [
+      'const Platform = {\n  select: s => s.default\n};\nx = Platform.select({\n  ios: 1,\n  default: 2\n});',
+      'function f(Platform) {\n  return Platform.select({\n    ios: 1\n  });\n}',
+      "import { Platform } from './platform';\nx = Platform.select({\n  ios: 1\n});",
+      'x = Platform.select({\n  ios: 1\n});',
+    ]) {
+      assert.equal(transform(code, '/app/a.js'), code);
+    }
+    // Shadowed inside a function, while the module imports React Native's.
+    const inner = 'function f(Platform) {\n  return Platform.select({\n    ios: 1\n  });\n}';
+    assert.equal(select(inner), inner);
+  });
+
+  it('drops the options it does not pick only when reading them does nothing', () => {
+    assert.equal(
+      select(
+        'x = Platform.select({ ios: f(), android: { elevation: 2, color: c }, web: () => g() });',
+      ),
+      'x = f();',
+    );
+    for (const code of [
+      'x = Platform.select({\n  ios: 1,\n  android: f()\n});',
+      'x = Platform.select({\n  ios: 1,\n  android: {\n    a: g()\n  }\n});',
+      'x = Platform.select({\n  ios: 1,\n  android: y = 2\n});',
+    ]) {
+      assert.equal(select(code), code);
+    }
   });
 });
 
@@ -267,6 +321,30 @@ describe("Expo's out-of-tree platforms flag", () => {
       'ios',
       'macos',
     ]);
+  });
+
+  it("is asked for when app.json lists macos, which Expo's config drops without the flag", () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'macos-platforms-'));
+    try {
+      const expo = path.dirname(require.resolve('expo/package.json'));
+      mkdirSync(path.join(root, 'node_modules'));
+      symlinkSync(expo, path.join(root, 'node_modules', 'expo'), 'dir');
+      writeFileSync(path.join(root, 'package.json'), '{ "name": "app" }\n');
+      const app = (extra: object) =>
+        writeFileSync(
+          path.join(root, 'app.json'),
+          JSON.stringify({ expo: { name: 'app', platforms: ['ios', 'macos'], ...extra } }),
+        );
+      app({});
+      assert.throws(
+        () => checkOutOfTreePlatforms(expoConfig(root), []),
+        /"outOfTreePlatforms": true/,
+      );
+      app({ experiments: { outOfTreePlatforms: true } });
+      assert.doesNotThrow(() => checkOutOfTreePlatforms(expoConfig(root), []));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('is not asked for by an app that never mentions macos', () => {
