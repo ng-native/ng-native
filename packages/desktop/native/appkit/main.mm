@@ -1291,8 +1291,9 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", fileAccess, noPrompts); });
       // react-native-webview's navigation answers; harmless in a host built without the library.
       ngn::addModule(*modules, "RNCWebViewModule", [] { return ngn::makeWebViewModule(ngn::sharedNavigationLocks()); });
-      // A rating prompt only in a Mac App Store build, the one sandboxed.
-      static auto reviewPrompt = ngn::appkit::makeReviewPrompt(processes.sandboxed);
+      // A rating prompt only in a Mac App Store build: one sandboxed but shipped another way has none.
+      static auto packaged = ngn::appkit::packagedApp();
+      static auto reviewPrompt = ngn::appkit::makeReviewPrompt(packaged && packaged->distribution == "mas");
       ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });
       static auto crypto = ngn::appkit::makeCryptoSource();
       ngn::addModule(*modules, "NgNativeCrypto", [] { return ngn::makeCryptoModule(crypto); });
