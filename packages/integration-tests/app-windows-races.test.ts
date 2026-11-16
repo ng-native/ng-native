@@ -239,6 +239,16 @@ describe('quitting while guards decide', () => {
     );
   });
 
+  it('still refuses a window opened after the quit was approved', async () => {
+    const { host, windows } = start();
+    await flush();
+    host.send({ type: 'quitRequest' });
+    await flush();
+    await flush();
+    assert.deepEqual(host.answers, [true]);
+    await assert.rejects(windows.open(Note), /quitting/);
+  });
+
   it('runs willQuit once when a SIGTERM arrives during a Cmd-Q, and answers once', async () => {
     const { host, windows, lifecycle } = start();
     await flush();

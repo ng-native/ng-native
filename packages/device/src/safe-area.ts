@@ -62,7 +62,8 @@ export class SafeArea {
    * On macOS, how far the window's close, minimise and zoom buttons reach into the reporting
    * pane from its leading edge: what `--safe-area-inset-titlebar-leading` holds. Their width in a
    * window with no sidebar and in the sidebar pane under them; zero in the content pane beside a
-   * sidebar, which they do not reach, and on every other OS.
+   * sidebar, which they do not reach, and on every other OS. One value for the app: the latest
+   * report's, not one per pane.
    */
   readonly titlebarLeading: Signal<number> = this.controls.asReadonly();
 
