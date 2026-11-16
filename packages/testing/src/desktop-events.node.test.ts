@@ -15,7 +15,7 @@ import {
   TextInput,
   View,
 } from '@ng-native/components';
-import { Menus, Processes } from '@ng-native/device';
+import { AppWindows, Menus, Processes } from '@ng-native/device';
 import {
   cleanup,
   fakeMenus,
@@ -23,6 +23,7 @@ import {
   fireEvent,
   render,
   screen,
+  settle,
   userEvent,
 } from '@ng-native/testing';
 
@@ -183,6 +184,47 @@ test('walks focus on from where typing and blur left it', async () => {
   await fireEvent.blur(field);
   await userEvent.keyboard('mod+z');
   assert.deepEqual(instance.heard(), ['undo', 'undo', 'undo'], 'a blur leaves no field focused');
+});
+
+@Component({
+  selector: 'app-lone-field',
+  imports: [TextInput],
+  template: '<text-input testID="lone" />',
+})
+class LoneField {}
+
+@Component({
+  selector: 'app-going-field',
+  imports: [Pressable, Shortcut, Text, TextInput],
+  template: `
+    <pressable testID="undo" shortcut="mod+z" (shortcutPress)="undos.set(undos() + 1)"
+      ><text>Undo</text></pressable
+    >
+    @if (shown()) {
+      <text-input testID="field" />
+    }
+  `,
+})
+class GoingField {
+  readonly shown = signal(true);
+  readonly undos = signal(0);
+  readonly windows = inject(AppWindows);
+}
+
+test('forgets the focused field once it is removed or its window closes, without a blur', async () => {
+  const { instance } = await render(GoingField, { os: 'macos' });
+  await fireEvent.focus(screen.getByTestId('field'));
+  instance.shown.set(false);
+  await settle();
+  await userEvent.keyboard('mod+z');
+  assert.equal(instance.undos(), 1, 'a removed field no longer keeps undo');
+
+  await instance.windows.open(LoneField, { title: 'Second' });
+  await settle();
+  await fireEvent.focus(screen.getByTestId('lone'));
+  assert.equal(await userEvent.closeWindow(screen.windows()[1]), true);
+  await userEvent.keyboard('mod+z');
+  assert.equal(instance.undos(), 2, 'nor does a field in a closed window');
 });
 
 @Component({ selector: 'app-git', template: '' })

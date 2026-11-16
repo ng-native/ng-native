@@ -46,6 +46,18 @@ export function noteFocus(node: FakeFabricNode, type: string): void {
   else if (focused.get(owner)?.reactTag === node.reactTag) focused.set(owner, null);
 }
 
+/**
+ * The view a render's keyboard focus is on, while it is still drawn: a field removed, or one in a
+ * window that closed, sends no blur, so focus is dropped once the view is gone from the commit.
+ */
+function focusOf(owner: Rendered): FakeFabricNode | null {
+  const node = focused.get(owner);
+  if (!node) return null;
+  const current = currentOf(node);
+  if (!current) focused.set(owner, null);
+  return current;
+}
+
 /** `node` and the views it is inside, outermost first, in the current commit. */
 function chain(node: FakeFabricNode): FakeFabricNode[] {
   withParents(ownerOf(node).roots());
@@ -144,23 +156,19 @@ function hostWindows() {
   return { owner, windows: owner.windows };
 }
 
-/** Wait for a window the app opens on the host's word: a few turns, as it opens asynchronously. */
-async function opened(done: () => boolean): Promise<void> {
-  for (let turn = 0; turn < 20 && !done(); turn++) await settle();
-}
-
 /**
- * Wait for the app's answer to a quit, however long its guards and `willQuit` handlers take: an
- * answer that has not come is not a refusal. Past `limit` it throws rather than answer for the app.
+ * Wait for `done`, however long the app takes: the answer to a quit, which its guards and
+ * `willQuit` handlers can delay, or a window it opens asynchronously. An answer that has not come
+ * is not a refusal, so past `limit` it throws with `late` rather than answer for the app.
  */
-async function quitAnswered(done: () => boolean, limit = WILL_QUIT_DEADLINE_MS * 2): Promise<void> {
-  const until = Date.now() + limit;
+async function until(
+  done: () => boolean,
+  late: string,
+  limit = WILL_QUIT_DEADLINE_MS * 2,
+): Promise<void> {
+  const deadline = Date.now() + limit;
   while (!done()) {
-    if (Date.now() > until) {
-      throw new Error(
-        `The app did not answer the quit within ${limit}ms: a guard is still pending.`,
-      );
-    }
+    if (Date.now() > deadline) throw new Error(`${late} within ${limit}ms.`);
     await settle();
   }
 }
@@ -249,13 +257,19 @@ export const desktopUserEvent: DesktopUserEvent = {
     const { windows } = hostWindows();
     const before = windows.quitAnswers.length;
     windows.emit({ type: 'quitRequest' });
-    await quitAnswered(() => windows.quitAnswers.length > before);
+    await until(
+      () => windows.quitAnswers.length > before,
+      'The app did not answer the quit: a guard is still pending',
+    );
     return windows.quitAnswers.at(-1) === true && windows.quitAnswers.length > before;
   },
   async reopen() {
     const { windows } = hostWindows();
     windows.emit({ type: 'reopen' });
-    await opened(() => windows.windows.some((one) => one.open));
+    await until(
+      () => windows.windows.some((one) => one.open),
+      'The app opened no window on the Dock click',
+    );
   },
   async openUrl(url) {
     const links = lastRender().applicationRef.injector.get(
@@ -280,7 +294,7 @@ export const desktopUserEvent: DesktopUserEvent = {
     const os = injector.get(OS);
     const chord = chordOf(shortcut, os);
     const host = injector.get(Menus.SOURCE, null) as Partial<FakeMenus> | null;
-    const focus = focused.get(owner);
+    const focus = focusOf(owner);
     const took = host?.press?.(chord, focus ? isTextInput(focus) : false) ?? false;
     await settle();
     return took;
@@ -289,7 +303,7 @@ export const desktopUserEvent: DesktopUserEvent = {
     const owner = lastRender();
     const order = flatten(tabRoots(owner)).filter(focusable);
     if (order.length === 0) return;
-    const from = focused.get(owner) ?? null;
+    const from = focusOf(owner);
     const at = from ? order.findIndex((node) => node.reactTag === from.reactTag) : -1;
     const step = shift ? -1 : 1;
     const next =
