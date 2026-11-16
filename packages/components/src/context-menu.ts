@@ -13,7 +13,14 @@ import {
   untracked,
   type TemplateRef,
 } from '@angular/core';
-import { Menus, OS, buildMenuTemplate, serializeMenu, type MenuTemplate } from '@ng-native/device';
+import {
+  Menus,
+  OS,
+  buildMenuTemplate,
+  serializeMenu,
+  type MenuTemplate,
+  type NativeMenuEntry,
+} from '@ng-native/device';
 import { HostEngine, type HostNode } from '@ng-native/fabric';
 import { byNativeId } from './native-id.ts';
 
@@ -67,13 +74,16 @@ export class ContextMenu {
   private readonly menu = computed(() =>
     serializeMenu(this.built()?.model.entries() ?? [], this.os),
   );
+  /** The entries to send, or null where they show no item: only separators and empty sections. */
+  private readonly sent = computed(() => {
+    const { entries } = this.menu();
+    return showsAnItem(entries) ? entries : null;
+  });
 
   constructor() {
     effect(() => this.build(this.contextMenu() ?? null));
     effect(() => {
-      const { entries } = this.menu();
-      const sent = entries.length ? entries : null;
-      this.engine.setProp(this.node, 'contextMenu', sent);
+      this.engine.setProp(this.node, 'contextMenu', this.sent());
       this.sender?.();
     });
     const stop = this.engine.setEventListener(this.node, 'topContextMenuSelect', (event) => {
@@ -88,7 +98,7 @@ export class ContextMenu {
 
   /** Whether a long press opens this menu now, so `(longPress)` does not also fire. */
   takesLongPress(): boolean {
-    return this.byNativeId && this.menu().entries.length > 0;
+    return this.byNativeId && this.sent() !== null;
   }
 
   /**
@@ -96,8 +106,7 @@ export class ContextMenu {
    * name, and runs as the view's own `topContextMenuSelect` would.
    */
   private sendByNativeId(nativeID: string): void {
-    const { entries } = untracked(this.menu);
-    this.menus.setContextMenu(nativeID, entries.length ? entries : null, (id) => this.choose(id));
+    this.menus.setContextMenu(nativeID, untracked(this.sent), (id) => this.choose(id));
   }
 
   private choose(id: string): void {
@@ -112,4 +121,11 @@ export class ContextMenu {
       this.built.set(template ? buildMenuTemplate(template, this.injector) : null);
     });
   }
+}
+
+/** Whether `entries` show an item: one that is not a separator, nor a section with none. */
+function showsAnItem(entries: readonly NativeMenuEntry[]): boolean {
+  return entries.some(
+    (entry) => !('separator' in entry) && (!entry.inline || showsAnItem(entry.items ?? [])),
+  );
 }
