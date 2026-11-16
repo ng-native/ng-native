@@ -371,21 +371,29 @@ describe('a context menu', () => {
   }
 });
 
+// Each menu shows no item, from the start or (`dropped`) once its last item goes.
 const itemless = [
-  ['has no items', '@if (false) { <menu-item label="Pin" /> }'],
+  ['has no items', '@if (pinned()) { <menu-item label="Pin" /> }', false],
   [
     'shows only a separator and an empty section',
-    '<menu-separator /><menu-group label="Share" inline>@if (false) { <menu-item label="Pin" /> }</menu-group>',
+    '<menu-separator /><menu-group label="Share" inline>@if (pinned()) { <menu-item label="Pin" /> }</menu-group>',
+    false,
+  ],
+  [
+    'loses the last item of a section that stays',
+    '<menu-group label="Share" inline>@if (pinned()) { <menu-item label="Pin" /> }</menu-group>',
+    true,
   ],
 ] as const;
 
 for (const os of ['android', 'ios'] as const)
-  for (const [what, items] of itemless) {
+  for (const [what, items, dropped] of itemless) {
     it(`leaves the long press to (longPress) where the menu on ${os} ${what}`, async () => {
       registerPlatformComponents(os);
       try {
         const host = fakeHost(false, true);
         const said: string[] = [];
+        const pinned = signal(dropped);
         const { ContextMenu, MenuGroup, MenuItem, MenuSeparator, Pressable } =
           await import('@ng-native/components');
         await render(
@@ -397,12 +405,18 @@ for (const os of ['android', 'ios'] as const)
               { provide: Menus.SOURCE, useValue: host.native },
               { provide: OS, useValue: os },
             ],
-            componentProperties: { said },
+            componentProperties: { said, pinned },
           },
         );
         await settle();
         const row = screen.getByTestId('row');
-        assert.equal(host.contextMenus.get(row.props['nativeID'] as string), null);
+        const sent = () => host.contextMenus.get(row.props['nativeID'] as string);
+        if (dropped) {
+          assert.notEqual(sent(), null, 'the menu while its item is there');
+          pinned.set(false);
+          await settle();
+        }
+        assert.equal(sent(), null);
         const { fireEvent } = await import('@ng-native/testing');
         await fireEvent(row, 'touchStart', { touches: [{}], changedTouches: [{}] });
         await new Promise((resolve) => setTimeout(resolve, 600));
