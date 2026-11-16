@@ -62,13 +62,14 @@ describe('a tray icon', () => {
       title: '25:00',
       sfSymbol: 'timer',
       tooltip: 'Focus timer',
-      menu: [{ id: '0', label: 'Pause' }],
+      menu: [{ id: timer!.menu![0]!.id, label: 'Pause' }],
     });
+    assert.match((timer!.menu![0] as { id: string }).id, /^a\d+$/);
     assert.deepEqual(sync, { id: sync!.id, image: 'sync', menu: null });
     app.instance.time.set('24:59');
     await app.detectChanges();
     assert.equal(tray.icons().find((icon) => icon.sfSymbol)!.title, '24:59');
-    await tray.send({ type: 'menuSelect', icon: timer!.id, id: '0' });
+    await tray.send({ type: 'menuSelect', icon: timer!.id, id: timer!.menu![0]!.id });
     await tray.send({ type: 'press', icon: sync!.id });
     assert.deepEqual(app.instance.said, ['pause', 'sync']);
   });
@@ -124,18 +125,20 @@ describe('the Dock', () => {
     });
     const said: string[] = [];
     dock.setMenu([{ label: 'New Window', shortcut: 'mod+n', select: () => said.push('new') }]);
+    const [entry] = host.menus.at(-1) as { id: string }[];
+    assert.match(entry!.id, /^a\d+$/);
     assert.deepEqual(host.menus.at(-1), [
       {
-        id: '0',
+        id: entry!.id,
         label: 'New Window',
         shortcut: { key: 'n', meta: true, ctrl: false, alt: false, shift: false },
       },
     ]);
-    host.select('0');
+    host.select(entry!.id);
     assert.deepEqual(said, ['new']);
     dock.setMenu(null);
     assert.equal(host.menus.at(-1), null);
-    host.select('0');
+    host.select(entry!.id);
     assert.deepEqual(said, ['new'], 'a menu taken away runs nothing');
   });
 

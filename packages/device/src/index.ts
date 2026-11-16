@@ -139,6 +139,7 @@ export {
 } from './desktop-permissions.ts';
 export {
   Menus,
+  menuActionId,
   menusSource,
   serializeMenu,
   type NativeMenuEntry,

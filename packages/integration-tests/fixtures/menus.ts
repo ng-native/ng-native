@@ -52,7 +52,9 @@ import { View } from '../../components/src/view.ts';
       <text>Row</text>
     </pressable>
     <ng-template #rowMenu>
-      <menu-item label="Rename" sfSymbol="pencil" icon="ic_edit" (select)="log('rename')" />
+      @if (renaming()) {
+        <menu-item label="Rename" sfSymbol="pencil" icon="ic_edit" (select)="log('rename')" />
+      }
       <menu-item label="Delete" destructive (select)="log('delete')" />
     </ng-template>
   `,
@@ -62,6 +64,7 @@ export class MenusFixture {
   readonly showOpen = signal(false);
   readonly dirty = signal(false);
   readonly wrap = signal(false);
+  readonly renaming = signal(true);
   readonly said: string[] = [];
 
   log(what: string): void {

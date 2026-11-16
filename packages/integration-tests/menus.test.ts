@@ -44,6 +44,7 @@ type Fixture = {
   showOpen: WritableSignal<boolean>;
   dirty: WritableSignal<boolean>;
   wrap: WritableSignal<boolean>;
+  renaming: WritableSignal<boolean>;
   said: string[];
 };
 let Fixture: Type<Fixture>;
@@ -107,6 +108,15 @@ async function open(os: 'macos' | 'android' | 'ios', menuBar: boolean, drawsCont
   await settle();
   return { host, app, said: app.instance.said };
 }
+
+/** Menu entries with each item's id as `action`, where it is its handler's (`a12`). */
+const byPlace = (entries: readonly NativeMenuEntry[] | null | undefined) =>
+  entries?.map((entry) =>
+    'id' in entry && /^a\d+$/.test(entry.id) ? { ...entry, id: 'action' } : entry,
+  );
+/** The id of the entry labelled `label`. */
+const idOf = (entries: readonly NativeMenuEntry[] | null | undefined, label: string) =>
+  (entries?.find((entry) => 'label' in entry && entry.label === label) as { id: string }).id;
 
 /** A group's items as labels, a separator as `-`. */
 const labels = (group: Group | undefined) =>
@@ -267,13 +277,24 @@ describe('a context menu', () => {
     const { said } = await open('ios', false);
     const row = screen.getByTestId('row');
     const menu = row.props['contextMenu'] as NativeMenuEntry[];
-    assert.deepEqual(menu, [
-      { id: '0', label: 'Rename', sfSymbol: 'pencil', icon: 'ic_edit' },
-      { id: '1', label: 'Delete', destructive: true },
+    assert.deepEqual(byPlace(menu), [
+      { id: 'action', label: 'Rename', sfSymbol: 'pencil', icon: 'ic_edit' },
+      { id: 'action', label: 'Delete', destructive: true },
     ]);
     const { fireEvent } = await import('@ng-native/testing');
-    await fireEvent(row, 'contextMenuSelect', { id: '1' });
+    await fireEvent(row, 'contextMenuSelect', { id: idOf(menu, 'Delete') });
     assert.deepEqual(said, ['delete']);
+  });
+
+  it('runs nothing for a choice from the menu as it was before an item went', async () => {
+    const { app, said } = await open('macos', false);
+    const row = screen.getByTestId('row');
+    const rename = idOf(row.props['contextMenu'] as NativeMenuEntry[], 'Rename');
+    app.instance.renaming.set(false);
+    await app.detectChanges();
+    const { fireEvent } = await import('@ng-native/testing');
+    await fireEvent(row, 'contextMenuSelect', { id: rename });
+    assert.deepEqual(said, [], 'Delete, now first, is not run in its place');
   });
 
   // Android's and iOS's hosts draw the menu on a long press where they have `setContextMenu`, and
@@ -344,9 +365,9 @@ for (const os of ['android', 'ios'] as const) {
       const row = screen.getByTestId('row');
       const id = row.props['nativeID'];
       assert.equal(typeof id, 'string');
-      assert.deepEqual(host.contextMenus.get(id as string), [
-        { id: '0', label: 'Rename', icon: 'ic_edit', sfSymbol: 'pencil' },
-        { id: '1', label: 'Delete', destructive: true },
+      assert.deepEqual(byPlace(host.contextMenus.get(id as string)), [
+        { id: 'action', label: 'Rename', icon: 'ic_edit', sfSymbol: 'pencil' },
+        { id: 'action', label: 'Delete', destructive: true },
       ]);
     });
 
@@ -375,7 +396,7 @@ for (const os of ['android', 'ios'] as const) {
       );
       await settle();
       assert.equal(screen.getByTestId('target').props['nativeID'], 'note-7');
-      assert.deepEqual(host.contextMenus.get('note-7'), [{ id: '0', label: 'Pin' }]);
+      assert.deepEqual(byPlace(host.contextMenus.get('note-7')), [{ id: 'action', label: 'Pin' }]);
       (app.instance as unknown as { shown: WritableSignal<boolean> }).shown.set(false);
       await app.detectChanges();
       assert.equal(host.contextMenus.get('note-7'), null);
@@ -400,7 +421,7 @@ for (const os of ['android', 'ios'] as const) {
       );
       await settle();
       const given = screen.getByTestId('target').props['nativeID'] as string;
-      assert.deepEqual(host.contextMenus.get(given), [{ id: '0', label: 'Pin' }]);
+      assert.deepEqual(byPlace(host.contextMenus.get(given)), [{ id: 'action', label: 'Pin' }]);
       const held = () =>
         [...host.contextMenus].filter(([, entries]) => entries !== null).map(([name]) => name);
 
@@ -498,9 +519,24 @@ describe('a context menu chosen on iOS', () => {
   it("runs the item the host's module says was chosen in the view by that name", async () => {
     const { host, said } = await open('ios', false, true);
     const id = screen.getByTestId('row').props['nativeID'] as string;
-    await host.send({ type: 'contextMenuSelect', nativeID: id, id: '0' });
-    await host.send({ type: 'contextMenuSelect', nativeID: 'someone-else', id: '1' });
+    const menu = host.contextMenus.get(id);
+    await host.send({ type: 'contextMenuSelect', nativeID: id, id: idOf(menu, 'Rename') });
+    await host.send({
+      type: 'contextMenuSelect',
+      nativeID: 'someone-else',
+      id: idOf(menu, 'Delete'),
+    });
     assert.deepEqual(said, ['rename']);
+  });
+
+  it('runs nothing for a choice from the menu as it was before an item went', async () => {
+    const { host, app, said } = await open('ios', false, true);
+    const id = screen.getByTestId('row').props['nativeID'] as string;
+    const rename = idOf(host.contextMenus.get(id), 'Rename');
+    app.instance.renaming.set(false);
+    await app.detectChanges();
+    await host.send({ type: 'contextMenuSelect', nativeID: id, id: rename });
+    assert.deepEqual(said, []);
   });
 });
 

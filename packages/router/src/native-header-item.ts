@@ -57,7 +57,9 @@ import {
 import {
   buildMenuTemplate,
   isSeparator,
+  menuActionId,
   type MenuEntry,
+  type MenuItemModel,
   type MenuTemplate,
 } from '@ng-native/device';
 import { type Engine, type EngineNode, HostEngine, nativePlatform } from '@ng-native/fabric';
@@ -290,9 +292,21 @@ export class NativeHeaderItem implements AfterContentInit {
       if (!menu) return null;
       if (!(menu instanceof TemplateRef)) return { menu, actions: null };
       const built = this.built();
-      return built ? headerMenuOf(built.model.entries()) : null;
+      return built ? headerMenuOf(built.model.entries(), (item) => this.leftOut(item)) : null;
     },
   );
+
+  /** The labels of role items already warned of, so a menu built again warns once. */
+  private readonly warnedRoles = new Set<string>();
+
+  private leftOut(item: MenuItemModel): void {
+    if (this.warnedRoles.has(item.label)) return;
+    this.warnedRoles.add(item.label);
+    console.warn(
+      `[angular-native] The header menu item '${item.label}' is left out: a header menu has no ` +
+        `OS action for menuRole '${item.menuRole}'. Give it a (select).`,
+    );
+  }
 
   /** Make the template's items, which register with the menu this button opens. */
   private buildMenu(template: TemplateRef<unknown> | null): void {
@@ -330,10 +344,15 @@ function nativeMenu(menu: HeaderMenu, prefix: string): BarButtonConfig {
 }
 
 /**
- * Menu items as a bar button's menu, an id for each action by its place (`1.0`), and what each id
- * does. A separator starts a section: UIKit draws the line between inline submenus.
+ * Menu items as a bar button's menu, an id for each action, and what each id does. An action is
+ * named by its handler (`menuActionId`), so a choice native reports from a menu it drew before the
+ * items changed runs that item or nothing; one without a handler by its place (`1.0`). A separator
+ * starts a section: UIKit draws the line between inline submenus.
  */
-function headerMenuOf(entries: readonly MenuEntry[]): {
+function headerMenuOf(
+  entries: readonly MenuEntry[],
+  leftOut: (item: MenuItemModel) => void,
+): {
   menu: HeaderMenu;
   actions: ReadonlyMap<string, () => void>;
 } {
@@ -345,7 +364,13 @@ function headerMenuOf(entries: readonly MenuEntry[]): {
         if (sections.at(-1)!.length) sections.push([]);
         return;
       }
-      const id = `${at}${index}`;
+      // An item the OS is to do, which a header menu has no way to: it would do nothing.
+      if (entry.menuRole && !entry.select && !entry.items) {
+        leftOut(entry);
+        return;
+      }
+      const place = `${at}${index}`;
+      const id = entry.select && !entry.items ? menuActionId(entry.select) : place;
       const symbol = entry.sfSymbol === undefined ? {} : { systemImageName: entry.sfSymbol };
       const shared = {
         ...symbol,
@@ -355,7 +380,7 @@ function headerMenuOf(entries: readonly MenuEntry[]): {
         ? {
             type: 'submenu',
             title: entry.label,
-            items: walk(entry.items, `${id}.`),
+            items: walk(entry.items, `${place}.`),
             ...(entry.inline && { displayInline: true }),
             ...shared,
           }

@@ -105,19 +105,20 @@ export class MenuItem {
           ...(this.subtitle() && { subtitle: this.subtitle() }),
           ...(this.sfSymbol() && { sfSymbol: this.sfSymbol() }),
           ...(this.icon() && { icon: this.icon() }),
-          ...(own && { select: () => this.chosen() }),
+          ...(own && { select: this.choose }),
         };
       }),
       'menu-item',
     );
   }
 
-  private chosen(): void {
+  /** One handler for the item's life: the id a host reports a choice by. See `menuActionId`. */
+  private readonly choose = (): void => {
     if (this.disabled()) return;
     const checked = this.checked();
     if (checked !== undefined) this.checked.set(!checked);
     this.select.emit();
-  }
+  };
 }
 
 /** A line between items. */

@@ -226,7 +226,9 @@ export class HeaderMenuHost {
       <native-header-item type="right" systemImageName="ellipsis" [menu]="more" />
     </native-header>
     <ng-template #more>
-      <menu-item label="Rename" sfSymbol="pencil" (select)="chosen.push('rename')" />
+      @if (renaming()) {
+        <menu-item label="Rename" sfSymbol="pencil" (select)="chosen.push('rename')" />
+      }
       <menu-item label="Pinned" [(checked)]="pinned" />
       @if (sharing()) {
         <menu-separator />
@@ -244,6 +246,7 @@ export class HeaderMenuHost {
   `,
 })
 export class HeaderTemplateMenuHost {
+  readonly renaming = signal(true);
   readonly pinned = signal(false);
   readonly sharing = signal(true);
   readonly locked = signal(false);
