@@ -600,6 +600,44 @@ for (const os of ['android', 'ios'] as const) {
       assert.deepEqual(said, ['card', 'card', 'card'], 'nor does a menu whose items went');
     });
 
+    it('decides who owns the hold as the press begins, not when a delayed press-in starts', async () => {
+      registerPlatformComponents(os);
+      const host = fakeHost(false, true, true);
+      const said: string[] = [];
+      const pinnable = signal(false);
+      const { ContextMenu, MenuItem, Pressable, View } = await import('@ng-native/components');
+      const app = await render(
+        `<pressable testID="card" [delayPressIn]="80" [delayLongPress]="50" (longPress)="said.push('card')">
+          <view testID="row" [contextMenu]="menu"></view>
+        </pressable>
+        <ng-template #menu>
+          @if (pinnable()) {
+            <menu-item label="Pin" />
+          }
+        </ng-template>`,
+        {
+          imports: [View, ContextMenu, MenuItem, Pressable],
+          providers: [
+            { provide: Menus.SOURCE, useValue: host.native },
+            { provide: OS, useValue: os },
+          ],
+          componentProperties: { said, pinnable },
+        },
+      );
+      await settle();
+      const { fireEvent } = await import('@ng-native/testing');
+      const target = screen.getByTestId('row');
+      await fireEvent(target, 'touchStart', { touches: [{}], changedTouches: [{}] });
+      // The menu arrives while the press-in waits: the host, which decided as the touch began, opens
+      // nothing, so the pressable keeps the long press it had then.
+      pinnable.set(true);
+      await app.detectChanges();
+      await settle();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await fireEvent(target, 'touchEnd', { touches: [], changedTouches: [{}] });
+      assert.deepEqual(said, ['card']);
+    });
+
     it('names nothing for a host that cannot be told, nor where there is no host', async () => {
       await openRow(fakeHost(false, true, false));
       assert.equal(screen.getByTestId('handle').props['nativeID'], undefined);
