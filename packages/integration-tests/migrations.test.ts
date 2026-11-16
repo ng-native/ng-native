@@ -1286,6 +1286,88 @@ describe('available-signal on code that is already migrated, and on bracket read
   });
 });
 
+describe('available-signal on names that only look like a service', () => {
+  const files = {
+    'src/app/shadow.ts': [
+      "import { inject, type InjectionToken } from '@angular/core';",
+      "import { Haptics } from '@ng-native/expo/haptics';",
+      '',
+      'export function read(Haptics: InjectionToken<{ available: boolean }>) {',
+      '  const item = inject(Haptics);',
+      '  return item.available;',
+      '}',
+      'export const real = () => inject(Haptics).available;',
+      '',
+    ].join('\n'),
+    'src/app/nested.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Haptics } from '@ng-native/expo/haptics';",
+      '',
+      '@Component({',
+      "  selector: 'app-nested',",
+      '  template: `@if (model.haptics.available && model?.haptics.available) {} @if (haptics.available) {}`,',
+      '})',
+      'export class Nested {',
+      '  protected readonly haptics = inject(Haptics);',
+      '  protected readonly model = { haptics: { available: true } };',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/buzz.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Haptics } from '@ng-native/expo/haptics';",
+      '',
+      "@Component({ selector: 'app-buzz', templateUrl: './shared.html' })",
+      'export class Buzz {',
+      '  readonly haptics = inject(Haptics);',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/quiet.ts': [
+      "import { Component } from '@angular/core';",
+      '',
+      "@Component({ selector: 'app-quiet', templateUrl: './shared.html' })",
+      'export class Quiet {',
+      '  readonly haptics = { available: false };',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/shared.html': '<text>Top</text>\n@if (haptics.available) { <text>Buzz</text> }\n',
+  };
+
+  it('leaves a shadowing token, a nested receiver and a template another component shares alone', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'available-signal', '0.22.2');
+    const shadow = nx.files['src/app/shadow.ts']!;
+    assert.match(shadow, /return item\.available;/, 'the parameter, not the import');
+    assert.match(shadow, /real = \(\) => inject\(Haptics\)\.available\(\);/, 'the import');
+    assert.match(
+      nx.files['src/app/nested.ts']!,
+      /`@if \(model\.haptics\.available && model\?\.haptics\.available\) \{\} @if \(haptics\.available\(\)\) \{\}`/,
+    );
+    assert.equal(nx.files['src/app/shared.html'], files['src/app/shared.html']);
+    assert.deepEqual(nx.notes, [
+      'src/app/shared.html:2: Not every component that uses this template holds a service as haptics, so it was left as it is. Where it reads the service, call haptics.available().',
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('rewrites a shared template when every component that uses it holds the service', async () => {
+    const both = {
+      ...files,
+      'src/app/quiet.ts': files['src/app/buzz.ts']!.replace(/Buzz/g, 'Quiet').replace(
+        'buzz',
+        'quiet',
+      ),
+    };
+    const { nx } = await acrossAdapters(both, 'available-signal', '0.22.2');
+    assert.equal(
+      nx.files['src/app/shared.html'],
+      '<text>Top</text>\n@if (haptics.available()) { <text>Buzz</text> }\n',
+    );
+  });
+});
+
 describe('os-comparisons-on-macos: inline templates, backticks and template OS_VERSION', () => {
   const ios =
     "is false on macOS, where the OS is now 'macos'. If the branch is for every Apple OS, check for 'macos' too.";

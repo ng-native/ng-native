@@ -12,10 +12,13 @@
  *
  * What a member is read from is followed as `tracking-available-getter` follows it: `inject(X)`
  * itself, `this.` a member of the enclosing class that holds one, or a name whose nearest
- * declaration holds one, where holding one means initialised with `inject(X)` or typed `X`.
- * `splashScreen`, the instance the splash screen entry exports, is one too. A component's
- * template, inline or in the file its `templateUrl` names, reads that component's own members,
- * so a property read there is rewritten for those alone. A namespace import is noted.
+ * declaration holds one, where holding one means initialised with `inject(X)`, `X` being the
+ * import rather than a name that shadows it, or typed `X`. `splashScreen`, the instance the splash
+ * screen entry exports, is one too. A component's template, inline or in the file its
+ * `templateUrl` names, reads that component's own members, so a property read there is rewritten
+ * for those alone, and not where the name is read off something else (`model.haptics`). A template
+ * file the components using it hold different things in is noted instead. A namespace import is
+ * noted.
  */
 const { applied, scriptKind, SOURCE, typescript } = require('./move-imports.cjs');
 const { files } = require('./host.cjs');
@@ -91,14 +94,18 @@ function importedName(element, services, { types, instances }) {
   }
 }
 
-/** Whether `node` is `inject(X)` for an `X` in `types`. */
+/**
+ * Whether `node` is `inject(X)` for an `X` in `types`: the import, not a parameter or variable of
+ * the same name that shadows it.
+ */
 const isInjected = (ts, node, types) =>
   ts.isCallExpression(node) &&
   ts.isIdentifier(node.expression) &&
   node.expression.text === 'inject' &&
   node.arguments.length >= 1 &&
   ts.isIdentifier(node.arguments[0]) &&
-  types.has(node.arguments[0].text);
+  types.has(node.arguments[0].text) &&
+  nearestBinding(ts, node.arguments[0]) === undefined;
 
 /** Whether a variable, property or parameter holds one of `types`. */
 function holds(ts, declaration, types) {
@@ -247,9 +254,15 @@ const declaration = (name) =>
     `@let\\s+${name}\\b|\\blet[\\s-]+${name}\\b|#${name}\\b|\\bas\\s+${name}\\b|@for\\s*\\(\\s*${name}\\s+of\\b`,
   );
 
-/** A property read of `name.available`, not already called. */
+/**
+ * A property read of `name.available`, not already called, where `name` is not itself a member of
+ * something else, as in `model.haptics.available`.
+ */
 const propertyRead = (name) =>
-  new RegExp(`\\b${name}(?:\\.available\\b|\\[\\s*['"]available['"]\\s*\\])(?!\\s*\\()`, 'g');
+  new RegExp(
+    `(?<![\\w$.])(?<!\\.\\s+)${name}(?:\\.available\\b|\\[\\s*['"]available['"]\\s*\\])(?!\\s*\\()`,
+    'g',
+  );
 
 /** A template with each holder's `.available` called, and the names it left as declared there. */
 function inTemplate(text, names) {
@@ -267,6 +280,12 @@ function inTemplate(text, names) {
 
 const declarationLine = (text, name) =>
   text.slice(0, text.search(declaration(name))).split('\n').length;
+
+const readLine = (text, name) => text.slice(0, text.search(propertyRead(name))).split('\n').length;
+
+const sharedNote = (where, name) =>
+  `${where}: Not every component that uses this template holds a service as ${name}, so it was ` +
+  `left as it is. Where it reads the service, call ${name}.available().`;
 
 const localNote = (where, name) =>
   `${where}: The template declares a ${name} of its own, so it was left as it is. ` +
@@ -334,23 +353,24 @@ function templates(ts, source, file, types) {
     const cls = ts.isClassDeclaration(node) || ts.isClassExpression(node);
     const metadata = cls && componentMetadata(ts, node, components);
     // A template reads the instance's members.
-    const names = metadata ? classHolders(ts, node, types).instance : null;
-    if (names?.size) componentTemplate(ts, source, file, metadata, names, dir, found);
+    // Every component is recorded, holding a service or not, so a template file several of them
+    // share is rewritten only when each holds the same.
+    if (metadata) {
+      const names = classHolders(ts, node, types).instance;
+      componentTemplate(ts, source, file, metadata, names, dir, found);
+    }
     ts.forEachChild(node, visit);
   };
   visit(source);
   return found;
 }
 
+const parse = (ts, file, text) =>
+  ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKind(ts, file));
+
 /** Rewrites one source file, and answers the template files it names, each with its holders. */
 function rewriteSource(ts, host, file, text, notes) {
-  const source = ts.createSourceFile(
-    file,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(ts, file),
-  );
+  const source = parse(ts, file, text);
   const found = imported(ts, source);
   for (const [statement, entry] of found.namespaces) {
     const at = source.getLineAndCharacterOfPosition(statement.getStart()).line + 1;
@@ -366,7 +386,7 @@ function rewriteSource(ts, host, file, text, notes) {
     !types.nullable.size &&
     !found.instances.size
   ) {
-    return [];
+    return templates(ts, source, file, new Set()).urls;
   }
   const code = codeEdits(ts, source, file, found);
   const view = templates(ts, source, file, types.property);
@@ -380,22 +400,41 @@ function rewriteSource(ts, host, file, text, notes) {
 function availableSignal(host) {
   const ts = typescript();
   const notes = [];
-  const named = new Map();
+  // Each template file, with the holders of each component that uses it.
+  const users = new Map();
   for (const file of files(host)) {
     const text = SOURCE.test(file) ? host.read(file) : null;
-    if (text === null || ![...ENTRIES].some((entry) => text.includes(entry))) continue;
-    for (const [url, names] of rewriteSource(ts, host, file, text, notes)) {
-      named.set(url, [...(named.get(url) ?? []), ...names]);
-    }
-  }
-  for (const [url, names] of named) {
-    const text = host.read(url);
     if (text === null) continue;
-    const { text: next, left } = inTemplate(text, names);
-    for (const name of left) notes.push(localNote(`${url}:${declarationLine(text, name)}`, name));
-    if (next !== text) host.write(url, next);
+    let urls = [];
+    if ([...ENTRIES].some((entry) => text.includes(entry))) {
+      urls = rewriteSource(ts, host, file, text, notes);
+    } else if (text.includes('templateUrl')) {
+      urls = templates(ts, parse(ts, file, text), file, new Set()).urls;
+    }
+    for (const [url, names] of urls) users.set(url, [...(users.get(url) ?? []), new Set(names)]);
   }
+  for (const [url, held] of users) rewriteTemplate(host, url, held, notes);
   return notes;
+}
+
+/**
+ * Rewrites a template file for the holders of the components that use it, unless they differ on
+ * a name it reads `available` from: one component's service is another's plain object.
+ */
+function rewriteTemplate(host, url, held, notes) {
+  const text = host.read(url);
+  if (text === null) return;
+  const names = new Set(held.flatMap((each) => [...each]));
+  const split = [...names].filter(
+    (name) => held.some((each) => !each.has(name)) && propertyRead(name).test(text),
+  );
+  if (split.length) {
+    for (const name of split) notes.push(sharedNote(`${url}:${readLine(text, name)}`, name));
+    return;
+  }
+  const { text: next, left } = inTemplate(text, names);
+  for (const name of left) notes.push(localNote(`${url}:${declarationLine(text, name)}`, name));
+  if (next !== text) host.write(url, next);
 }
 
 module.exports = { availableSignal };
