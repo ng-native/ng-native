@@ -293,6 +293,34 @@ describe('tokens another surface follows', () => {
     }
   });
 
+  it('hear the value a nested update was given, whatever the caller does to its patch after', () => {
+    const { engine } = scene();
+    engine.commit();
+    const follower = new Engine(createFakeFabric(), 2, {
+      conditions: { width: 400, height: 800, colorScheme: 'light' },
+    });
+    const patch: Record<string, { length: number }> = { '--fresh': { length: 12 } };
+    let nested = false;
+    const stop = engine.watchShared((change) => {
+      if (change.kind !== 'tokens') return;
+      if (!nested) {
+        nested = true;
+        // Queued behind this change: the caller's patch is still its own when this returns.
+        engine.updateTokens(patch);
+        patch['--fresh'] = { length: 13 };
+        return;
+      }
+      follower.updateTokens(change.tokens);
+    });
+    try {
+      engine.updateTokens({ '--other': { length: 1 } });
+      assert.equal(engine.token('--fresh'), '12px');
+      assert.equal(follower.token('--fresh'), '12px');
+    } finally {
+      stop();
+    }
+  });
+
   it('still reach the rest, and the source still commits, when a follower throws', () => {
     const errors: [unknown, string][] = [];
     const { engine } = scene((error, type) => errors.push([error, type]));

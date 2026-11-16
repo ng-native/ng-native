@@ -8044,7 +8044,10 @@ export class Engine implements HostEngine {
     // again) waits its turn: handed out at once, it would reach the followers after it before the
     // change it answered, and they would end on the older one.
     if (this.sharedQueue) {
-      this.sharedQueue.push(change);
+      // A copy of a token record: the caller's patch is still its own once its update returns.
+      this.sharedQueue.push(
+        change.kind === 'tokens' ? { ...change, tokens: { ...change.tokens } } : change,
+      );
       return;
     }
     const queue = (this.sharedQueue = [change]);

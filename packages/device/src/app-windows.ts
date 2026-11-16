@@ -760,8 +760,11 @@ export class AppWindows {
     try {
       await this.lifecycle.runWillQuit();
       this.native?.answerQuit(true);
-    } finally {
+    } catch (error) {
+      // Approved and answered, the app stays closed to new windows until it exits. Only a quit
+      // that did not get that far lets them open again.
       this.closing = false;
+      throw error;
     }
   }
 
