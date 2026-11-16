@@ -156,7 +156,11 @@ function targets(directory, port, oneCopy, lint, desktopOnly) {
       // The Tailwind sheet the command builds, which a cache hit restores rather than rebuilds.
       outputs: ['{projectRoot}/.angular-native'],
     },
-    test: { ...run('vitest run'), cache: true, inputs: ['default', '^production'] },
+    test: {
+      ...run(desktopOnly ? native.DESKTOP_TEST : 'vitest run'),
+      cache: true,
+      inputs: ['default', '^production'],
+    },
     ...(lint && { lint: { ...run('eslint .'), cache: true, inputs: ['default', '^production'] } }),
     start: { ...run(`expo start${own}`), continuous: true },
     serve: { ...run(`expo start${own}`), continuous: true },
@@ -223,11 +227,13 @@ async function writeFiles(tree, resolved) {
   const { directory, projectName, workspaces, bundleIdentifier, lint, desktopOnly } = resolved;
   const file = (name, content) => tree.write(joinPathFragments(directory, name), content);
   for (const name of native.SOURCE_FILES) file(name, native.sourceFile(name, desktopOnly));
+  if (desktopOnly)
+    for (const name of native.DESKTOP_ONLY_FILES) file(name, native.sourceFile(name, true));
   const platforms = desktopOnly ? ['macos'] : undefined;
   file('app.json', native.appJson(projectName, bundleIdentifier, platforms));
   file('AGENTS.md', native.agentsFile(commands(projectName, lint, desktopOnly), desktopOnly));
   file('CLAUDE.md', '@AGENTS.md\n');
-  file('metro.config.js', native.METRO_CONFIG);
+  file('metro.config.js', desktopOnly ? native.DESKTOP_METRO_CONFIG : native.METRO_CONFIG);
   file(
     '.gitignore',
     desktopOnly ? `${native.GITIGNORE}\n${native.DESKTOP_GITIGNORE}` : native.GITIGNORE,

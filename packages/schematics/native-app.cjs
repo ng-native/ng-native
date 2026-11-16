@@ -28,16 +28,29 @@ const SOURCE_FILES = [
 ];
 
 /**
- * The desktop template's files that differ from the template's, which a desktop-only app takes in
- * their place, from `files/desktop/`: its starter screen, the screen's test and its `AGENTS.md`.
+ * The desktop template's files that differ from the template's, or that it alone has, which a
+ * desktop-only app takes from `files/desktop/`: its starter screen, the screen's Node test and
+ * in-app test, the entry file that starts the in-app tests, the Vitest config with a project for
+ * each, and the Metro config that keeps the in-app tests out of an ordinary bundle. Its `AGENTS.md`
+ * comes from there too, through `agentsFile`.
  */
 const DESKTOP_SOURCE_FILES = [
   'src/app/app.ts',
   'src/app/app.test.ts',
+  'src/app/app.device.ts',
   'src/main.ts',
   'vitest.config.mts',
   'metro.config.js',
 ];
+
+/** The desktop template's files a desktop-only app has and a mobile one does not. */
+const DESKTOP_ONLY_FILES = ['src/app/app.device.ts'];
+
+/**
+ * The desktop template's Vitest project that runs in Node, which `ng test` runs alone: its other
+ * project opens the app.
+ */
+const DESKTOP_TEST_PROJECT = 'node-macos';
 
 /**
  * @param {string} name
@@ -85,6 +98,8 @@ module.exports = {
   ...shared,
   SOURCE_FILES,
   DESKTOP_SOURCE_FILES,
+  DESKTOP_ONLY_FILES,
+  DESKTOP_TEST_PROJECT,
   sourceFile,
   agentsFile,
   projectManifest,

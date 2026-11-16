@@ -85,6 +85,44 @@ describe('the desktop schematic', () => {
     );
   });
 
+  it('reads and keeps an angular.json with comments and trailing commas, as the Angular CLI does', async () => {
+    const workspace = tree.readContent('angular.json');
+    // The native project's targets taken out, leaving a trailing comma after its last key.
+    tree.overwrite(
+      'angular.json',
+      workspace
+        .replace('{', '{\n  // The web app and the native one.')
+        .replace(/"architect": \{[\s\S]*?\n {6}\}/, `"architect": {},`),
+    );
+    const again = await runner.runSchematic(
+      'desktop',
+      { project: 'native', skipInstall: true },
+      tree,
+    );
+    const text = again.readContent('angular.json');
+    assert.match(text, /\/\/ The web app and the native one\./);
+    assert.match(text, /"command": "macos"/);
+    assert.match(text, /"command": "package"/);
+  });
+
+  it('refuses a project with no app.json, and changes nothing', async () => {
+    const withWeb = await angular.runSchematic(
+      'application',
+      { name: 'web', skipInstall: true },
+      tree,
+    );
+    const files = ['angular.json', 'package.json'];
+    const before = files.map((file) => withWeb.readContent(file));
+    await assert.rejects(
+      runner.runSchematic('desktop', { project: 'web', skipInstall: true }, withWeb),
+      /web is not an Angular Native app: it has no projects\/web\/app\.json/,
+    );
+    assert.deepEqual(
+      files.map((file) => withWeb.readContent(file)),
+      before,
+    );
+  });
+
   it('refuses a project angular.json does not have', async () => {
     await assert.rejects(
       runner.runSchematic('desktop', { project: 'nope', skipInstall: true }, tree),

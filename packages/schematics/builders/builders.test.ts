@@ -59,27 +59,39 @@ describe('the desktop commands', () => {
     ]);
   });
 
+  it('gives package no --port, which it has no dev server for and refuses', () => {
+    assert.deepEqual(desktopArgs({ command: 'package', port: 8082 }), ['package']);
+  });
+
   it("finds ng-native-desktop in @ng-native/desktop, from the project's directory", async () => {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ng-native-builder-')));
-    const pkg = path.join(root, 'node_modules', '@ng-native', 'desktop');
-    mkdirSync(path.join(pkg, 'bin'), { recursive: true });
-    writeFileSync(
-      path.join(pkg, 'package.json'),
-      JSON.stringify({
-        name: '@ng-native/desktop',
-        bin: { 'ng-native-desktop': './bin/ng-native-desktop.cjs' },
-      }),
-    );
-    writeFileSync(
-      path.join(pkg, 'bin', 'ng-native-desktop.cjs'),
-      "require('node:fs').writeFileSync('ran.json', JSON.stringify(process.argv.slice(2)));",
-    );
-    const ctx = context(root);
-    assert.deepEqual(await runCommand({ command: 'package', args: ['--format', 'app'] }, ctx), {
-      success: true,
-    });
-    assert.deepEqual(require(path.join(root, 'ran.json')), ['package', '--format', 'app']);
-    assert.match(ctx.logged[0]!, /^ng-native-desktop package --format app {2}\(in /);
+    try {
+      const pkg = path.join(root, 'node_modules', '@ng-native', 'desktop');
+      mkdirSync(path.join(pkg, 'bin'), { recursive: true });
+      writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: '@ng-native/desktop',
+          bin: { 'ng-native-desktop': './bin/ng-native-desktop.cjs' },
+        }),
+      );
+      writeFileSync(
+        path.join(pkg, 'bin', 'ng-native-desktop.cjs'),
+        "require('node:fs').writeFileSync('ran.json', JSON.stringify(process.argv.slice(2)));",
+      );
+      const ctx = context(root);
+      assert.deepEqual(await runCommand({ command: 'package', args: ['--format', 'app'] }, ctx), {
+        success: true,
+      });
+      assert.deepEqual(JSON.parse(readFileSync(path.join(root, 'ran.json'), 'utf8')), [
+        'package',
+        '--format',
+        'app',
+      ]);
+      assert.match(ctx.logged[0]!, /^ng-native-desktop package --format app {2}\(in /);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -87,6 +99,10 @@ describe('vitest', () => {
   it('runs once unless asked to watch', () => {
     assert.deepEqual(vitestArgs({}), ['run']);
     assert.deepEqual(vitestArgs({ watch: true, filter: 'settings' }), ['watch', 'settings']);
+  });
+
+  it('runs one Vitest project when the target names it', () => {
+    assert.deepEqual(vitestArgs({ project: 'node-macos' }), ['run', '--project', 'node-macos']);
   });
 });
 

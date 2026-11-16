@@ -3,7 +3,7 @@
 # pinned sources and building Hermes first when they are missing. Prints the build directory.
 #
 #   build.sh [node_modules/react-native] [--backend appkit|none] [--universal] [--debug|--release]
-#            [--test] [--library <node_modules/library>]... [--build-dir <dir>]
+#            [--test | --no-tests] [--library <node_modules/library>]... [--build-dir <dir>]
 #
 # Without a path, react-native is resolved from the current directory.
 #
@@ -12,6 +12,8 @@
 #   --debug         a Debug build (default: RelWithDebInfo)
 #   --release       a Release build without the core tests, as a packaged app ships it
 #   --test          run the core tests after building
+#   --no-tests      leave the core tests out, as an app's build does: the published package has
+#                   none of their sources
 #   --library       a library whose Fabric components the host compiles in (its codegen, by
 #                   scripts/codegen-library.sh); repeatable. A build without one drops them all.
 #   --build-dir     build here instead of the cache's shared build directory, for a build that
@@ -43,6 +45,7 @@ archs="$(uname -m)"
 config=RelWithDebInfo
 run_tests=0
 tests=ON
+no_tests=0
 libraries=()
 build_dir=""
 while [ $# -gt 0 ]; do
@@ -52,6 +55,7 @@ while [ $# -gt 0 ]; do
     --debug) config=Debug ;;
     --release) config=Release; tests=OFF ;;
     --test) run_tests=1 ;;
+    --no-tests) tests=OFF; no_tests=1 ;;
     --library) libraries+=("$2"); shift ;;
     --build-dir) build_dir="$2"; shift ;;
     *) echo "build.sh: unknown option $1" >&2; exit 2 ;;
@@ -59,7 +63,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 if [ "$run_tests" = 1 ] && [ "$tests" = OFF ]; then
-  echo "build.sh: --test needs the core tests, which --release leaves out" >&2
+  if [ "$no_tests" = 1 ]; then left_out=--no-tests; else left_out=--release; fi
+  echo "build.sh: --test needs the core tests, which $left_out leaves out" >&2
   exit 2
 fi
 # CMAKE_OSX_ARCHITECTURES means nothing off macOS.

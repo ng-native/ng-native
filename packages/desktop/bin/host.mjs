@@ -403,7 +403,9 @@ function buildHost(sys, reactNative, libraries, { universal, release }, link) {
   }
   const buildArgs = [reactNative, ...libraries.flatMap((dir) => ['--library', dir])];
   if (universal) buildArgs.push('--universal');
-  if (release) buildArgs.push('--release');
+  // The core tests are the repo's own (`test:native`): the published package has no sources for
+  // them, so an app's build leaves them out.
+  buildArgs.push(release ? '--release' : '--no-tests');
   const build = sys.run(path.join(packageDir, 'native', 'scripts', 'build.sh'), buildArgs, {
     capture: true,
     env: { NGN_DESKTOP_LINK: link },

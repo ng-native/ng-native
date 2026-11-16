@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, ErrorHandler, inject, signal } from '@angular/core';
 import {
   MenuBar,
   MenuGroup,
@@ -133,6 +133,7 @@ const PAGES: readonly Page[] = [
 })
 export class App {
   private readonly clipboard = inject(Clipboard);
+  private readonly errors = inject(ErrorHandler);
 
   protected readonly pages = PAGES;
   private readonly selected = signal(PAGES[0]!.id);
@@ -147,7 +148,12 @@ export class App {
 
   protected async copyTitle(): Promise<void> {
     const title = this.current().label;
-    await this.clipboard.write(title);
-    this.copied.set(title);
+    // A handler's promise goes nowhere, so a refused copy goes to the ErrorHandler.
+    try {
+      await this.clipboard.write(title);
+      this.copied.set(title);
+    } catch (error) {
+      this.errors.handleError(error);
+    }
   }
 }

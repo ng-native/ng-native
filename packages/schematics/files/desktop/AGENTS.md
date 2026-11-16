@@ -21,7 +21,8 @@ npm test            # Vitest, in Node against a fake native layer: no app window
 npx vitest --project macos   # tests in src/**/*.device.ts, inside the running app; needs
                              # EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start in another terminal
 npm run typecheck
-npm run package     # the .app; --format dmg for a signed, notarised download
+npm run package     # the .app
+npm run package -- --format dmg   # a signed, notarised download; --format mas for the Mac App Store
 ```
 
 `src/main.ts` mounts the root component, `src/app/app.ts`. Run `npm test` and `npm run typecheck` after a

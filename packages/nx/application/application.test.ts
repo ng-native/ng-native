@@ -6,7 +6,9 @@
  * since 20 and what the TypeScript and Expo presets make.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import type { Tree } from '@nx/devkit';
 
@@ -1133,6 +1135,45 @@ describe('with --desktopOnly', () => {
     assert.match(agents, /^nx run @proj\/desktop:macos +# /m);
     assert.doesNotMatch(agents, /run-ios|Expo Go/);
     assert.match(tree.read('apps/desktop/.gitignore', 'utf-8')!, /^\/dist\/macos$/m);
+  });
+
+  it("bundles with the desktop template's Metro config, which keeps the in-app tests out", async () => {
+    // Without withDeviceTests a dev bundle follows main.ts's dead branch into the test host, and
+    // Vitest behind it.
+    const tree = pnpmWorkspace();
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    const metro = tree.read('apps/desktop/metro.config.js', 'utf-8');
+    assert.equal(metro, native.DESKTOP_METRO_CONFIG);
+    assert.match(metro!, /withDeviceTests\(withAngularNative\(withNxMetro\(/);
+    const phone = pnpmWorkspace();
+    await generate(phone, { directory: 'apps/mobile' });
+    assert.equal(phone.read('apps/mobile/metro.config.js', 'utf-8'), native.METRO_CONFIG);
+  });
+
+  it("writes the desktop template's in-app test, for the macos Vitest project to run", async () => {
+    const tree = pnpmWorkspace();
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    assert.equal(
+      tree.read('apps/desktop/src/app/app.device.ts', 'utf-8'),
+      native.sourceFile('src/app/app.device.ts', true),
+    );
+    const phone = pnpmWorkspace();
+    await generate(phone, { directory: 'apps/mobile' });
+    assert.equal(phone.exists('apps/mobile/src/app/app.device.ts'), false);
+  });
+
+  it("tests in Node alone, as the desktop template's npm test does", async () => {
+    const tree = pnpmWorkspace();
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    const { targets } = readProjectConfiguration(tree, '@proj/desktop');
+    const template = JSON.parse(
+      readFileSync(
+        path.resolve(import.meta.dirname, '../../../template-desktop/package.json'),
+        'utf8',
+      ),
+    );
+    assert.equal(targets!['test'].options.command, template.scripts.test);
+    assert.equal(targets!['test'].options.command, 'vitest run --project node-macos');
   });
 
   it('is the default for every app once init sets it', async () => {

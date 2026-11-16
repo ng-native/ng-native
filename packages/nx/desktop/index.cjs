@@ -46,22 +46,12 @@ function desktopTargets(root, port) {
   };
 }
 
-/** @returns {boolean} whether `app.json` was there to change */
-function addToAppJson(tree, root) {
-  const file = joinPathFragments(root, 'app.json');
-  const text = tree.read(file, 'utf-8');
-  if (text === null) {
-    logger.warn(
-      `Could not update ${file}: it does not exist. Add "macos" to expo.platforms, set ` +
-        'expo.experiments.outOfTreePlatforms to true and add "@ng-native/desktop" to expo.plugins.',
-    );
-    return false;
-  }
+function addToAppJson(tree, file) {
+  const text = tree.read(file, 'utf-8') ?? '';
   const config = JSON.parse(text);
   const updated = { ...config, expo: native.withDesktop(config.expo ?? {}) };
   const json = `${JSON.stringify(updated, null, 2)}\n`;
   if (json !== text) tree.write(file, json);
-  return true;
 }
 
 /** The lines of `native.DESKTOP_GITIGNORE` the app's `.gitignore` lacks, appended. */
@@ -95,7 +85,14 @@ function addTargets(tree, name) {
 async function desktop(tree, options) {
   const app = getProjects(tree).get(options.project);
   if (!app) throw new Error(`The workspace has no project called "${options.project}".`);
-  addToAppJson(tree, app.root);
+  const appJson = joinPathFragments(app.root, 'app.json');
+  if (!tree.exists(appJson)) {
+    throw new Error(
+      `${options.project} is not an Angular Native app: it has no ${appJson}. ` +
+        'Generate one with nx g @ng-native/nx:app.',
+    );
+  }
+  addToAppJson(tree, appJson);
   addTargets(tree, options.project);
   ignorePackages(tree, app.root);
 
