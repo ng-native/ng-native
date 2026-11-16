@@ -110,6 +110,14 @@ describe('a marker in a fenced example', () => {
     expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
   });
 
+  test('leaves a marker inside a paragraph as a comment, for a service with a row or none', async () => {
+    const html = await render(
+      '# Markers\n\nBefore <!-- platforms: Dock -->\n\nAgain <!-- platforms: Nothing -->\n',
+    );
+    expect(html).not.toContain('Available on macOS');
+    expect(html).toContain('<!-- platforms: Dock -->');
+  });
+
   test('keeps a marker in indented code inside a list item', async () => {
     const html = await render(
       '# Markers\n\n- Item:\n\n      <!-- platforms: Nothing -->\n\n<!-- platforms: Dock -->\n',

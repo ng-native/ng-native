@@ -23,7 +23,7 @@
  * of a re-highlight of every block on the page.
  */
 import fm from 'front-matter';
-import { marked, type TokenizerAndRendererExtension } from 'marked';
+import { Marked, type TokenizerAndRendererExtension } from 'marked';
 import { gfmHeadingId, getHeadingList } from 'marked-gfm-heading-id';
 import { bundledThemes, createHighlighter, type Highlighter } from 'shiki';
 import type { Plugin } from 'vite';
@@ -187,7 +187,11 @@ function platforms(_marker: string, services: string): string {
 const DOC_MARKERS: TokenizerAndRendererExtension = {
   name: 'docMarker',
   level: 'block',
-  start: (source) => /<!--\s*(?:platforms:|os-support)/.exec(source)?.index,
+  // Only where a line starts, so a marker inside a paragraph stays a comment in it.
+  start(source) {
+    const at = /(?:^|\n) {0,3}<!--\s*(?:platforms:|os-support)/.exec(source);
+    return at ? at.index + (at[0].startsWith('\n') ? 1 : 0) : undefined;
+  },
   tokenizer(source) {
     const marker =
       /^ {0,3}<!--\s*(?:platforms:\s*([A-Za-z, ]+?)|os-support)\s*-->[ \t]*(?:\n|$)/.exec(source);
@@ -201,7 +205,8 @@ const DOC_MARKERS: TokenizerAndRendererExtension = {
 };
 
 async function render(source: string, headings: DocHeading[]): Promise<string> {
-  const instance = marked.use(
+  // A Marked of its own for each page: `marked.use` would add to one shared instance every render.
+  const instance = new Marked(
     gfmHeadingId(),
     { extensions: [DOC_MARKERS] },
     {
