@@ -9,12 +9,14 @@
  */
 import { Component, Directive, input } from '@angular/core';
 import type { GestureSpec } from './gesture-backend.ts';
+import { booleanOr } from './transforms.ts';
 
 export { type GestureSpec, type GestureTarget } from './gesture-backend.ts';
 
 @Directive({ selector: '[gesture]' })
 export class NativeGesture {
   readonly gesture = input.required<GestureSpec>();
+  readonly trackGesture = input(true, { transform: booleanOr(true) });
 }
 
 /** A box that fills its parent, as the native root does. `@ng-native/web`'s reset gives it `flex: 1`. */

@@ -94,14 +94,15 @@ export {
 } from './pressable.ts';
 export {
   INTERACTION_OBSERVERS,
+  SWIPE_VELOCITY,
   provideInteractionObserver,
   type InteractionDirection,
   type InteractionEvent,
+  type InteractionGesture,
   type InteractionObserver,
   type InteractionType,
 } from './interaction-observer.ts';
 export { RefreshControl } from './refresh-control.ts';
-export { SWIPE_VELOCITY } from './scroll-view-props.ts';
 export { GradientText } from './gradient-text.ts';
 export { type SafeAreaEdge, type SafeAreaEdges } from './safe-area.ts';
 export { SafeAreaProvider } from './safe-area-provider.ts';

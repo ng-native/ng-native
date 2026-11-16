@@ -22,9 +22,45 @@ export interface GestureTarget {
   readonly tag: number;
 }
 
+/**
+ * A gesture that has just ended successfully, as the backend hands it over on the JavaScript
+ * thread: what the library calls it, and the few numbers of its end event a report is built from.
+ */
+export interface EndedGesture {
+  /** The library's `handlerName`: `PanGestureHandler`, `TapGestureHandler`, ... */
+  readonly handlerName: string;
+  /** A fling's `direction` setting, the library's `Directions` bits, or undefined for its default. */
+  readonly directions?: number;
+  readonly end: GestureEndValues;
+}
+
+/** The numbers copied off a gesture's end event, and where its touch began in the window. */
+export interface GestureEndValues {
+  readonly handlerTag: number;
+  readonly x?: number;
+  readonly y?: number;
+  readonly absoluteX?: number;
+  readonly absoluteY?: number;
+  readonly translationX?: number;
+  readonly translationY?: number;
+  readonly velocityX?: number;
+  readonly velocityY?: number;
+  readonly scale?: number;
+  readonly startX?: number;
+  readonly startY?: number;
+}
+
 export interface GestureBackend {
-  /** Attach `gesture` to `target`, and return the function that detaches it. */
-  attach(target: GestureTarget, gesture: GestureSpec): () => void;
+  /**
+   * Attach `gesture` to `target`, and return the function that detaches it. `report`, when given,
+   * hears each of its gestures that ends successfully, on the JavaScript thread; without it the
+   * backend does no reporting work at all.
+   */
+  attach(
+    target: GestureTarget,
+    gesture: GestureSpec,
+    report?: (ended: EndedGesture) => void,
+  ): () => void;
 }
 
 export const GESTURES = new InjectionToken<GestureBackend>('angular-native.gestures');

@@ -3,6 +3,7 @@ import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Insets } from './events.ts';
 import {
   INTERACTION_OBSERVERS,
+  SWIPE_VELOCITY,
   describeElement,
   notifyInteraction,
   type InteractionDirection,
@@ -10,12 +11,6 @@ import {
 } from './interaction-observer.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
-
-/**
- * How fast, in points per millisecond, a drag has to be moving as the finger lifts to be a swipe
- * rather than a scroll: a flick that leaves the content gliding on, not a drag set down.
- */
-export const SWIPE_VELOCITY = 0.5;
 
 type DragEvent = NativeSyntheticEvent<{
   contentOffset?: { x: number; y: number };

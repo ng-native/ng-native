@@ -14,6 +14,7 @@ import {
   type GestureCallbacks,
   type GestureStateManager,
 } from '../components/src/gesture-dispatch.ts';
+import type { GestureEndValues } from '../components/src/gesture-backend.ts';
 
 const TAG = 7;
 
@@ -142,5 +143,123 @@ describe('gesture dispatch', () => {
     dispatch({ handlerTag: TAG + 1, oldState: GESTURE_STATE.BEGAN, state: GESTURE_STATE.ACTIVE });
 
     assert.deepEqual(calls, [], 'a composition shares one dispatcher across its gestures');
+  });
+});
+
+describe('gesture dispatch, reporting an end', () => {
+  const began = {
+    handlerTag: TAG,
+    oldState: GESTURE_STATE.UNDETERMINED,
+    state: GESTURE_STATE.BEGAN,
+  };
+  const start = (at: object = {}) => ({ ...began, absoluteX: 10, absoluteY: 20, ...at });
+  const activate = change(GESTURE_STATE.BEGAN, GESTURE_STATE.ACTIVE);
+  const ended = (from: number, to: number, values: object = {}) => ({
+    ...change(from, to),
+    ...values,
+  });
+
+  function reported(extra: Partial<GestureCallbacks> = {}) {
+    const reports: GestureEndValues[] = [];
+    const { calls, callbacks } = recording(extra);
+    const dispatch = gestureDispatcher([callbacks], managers, (end) => {
+      calls.push(['report']);
+      reports.push(end);
+    });
+    return { calls, reports, dispatch };
+  }
+
+  it('reports a gesture that ends successfully, once, after its own onEnd', () => {
+    const { calls, reports, dispatch } = reported();
+
+    dispatch(start());
+    dispatch(activate);
+    dispatch({ handlerTag: TAG, translationX: 4 } as never);
+    dispatch(
+      ended(GESTURE_STATE.ACTIVE, GESTURE_STATE.END, {
+        x: 5,
+        y: 6,
+        absoluteX: 70,
+        absoluteY: 26,
+        translationX: 60,
+        translationY: 6,
+        velocityX: 900,
+        velocityY: 10,
+        numberOfPointers: 1,
+        pointerType: 'touch',
+      }),
+    );
+
+    assert.deepEqual(
+      calls.map(([name]) => name),
+      ['begin', 'start', 'update', 'end', 'finalize', 'report'],
+    );
+    assert.deepEqual(reports, [
+      {
+        handlerTag: TAG,
+        x: 5,
+        y: 6,
+        absoluteX: 70,
+        absoluteY: 26,
+        translationX: 60,
+        translationY: 6,
+        velocityX: 900,
+        velocityY: 10,
+        startX: 10,
+        startY: 20,
+      },
+    ]);
+  });
+
+  it('reports nothing for a cancelled, failed or never-active gesture', () => {
+    const { reports, dispatch } = reported();
+
+    dispatch(start());
+    dispatch(activate);
+    dispatch(ended(GESTURE_STATE.ACTIVE, GESTURE_STATE.CANCELLED));
+    dispatch(start());
+    dispatch(activate);
+    dispatch(ended(GESTURE_STATE.ACTIVE, GESTURE_STATE.FAILED));
+    dispatch(start());
+    dispatch(ended(GESTURE_STATE.BEGAN, GESTURE_STATE.FAILED));
+    dispatch(start());
+    dispatch(ended(GESTURE_STATE.BEGAN, GESTURE_STATE.END));
+
+    assert.deepEqual(reports, []);
+  });
+
+  it('forgets where the last gesture started', () => {
+    const { reports, dispatch } = reported();
+
+    dispatch(start());
+    dispatch(ended(GESTURE_STATE.BEGAN, GESTURE_STATE.FAILED));
+    // Native can skip BEGAN: this gesture must not report the failed one's start as its own.
+    dispatch(activate);
+    dispatch(ended(GESTURE_STATE.ACTIVE, GESTURE_STATE.END));
+
+    assert.deepEqual(reports, [{ handlerTag: TAG }]);
+  });
+
+  it('reports only the gesture of a composition that ended', () => {
+    const reports: GestureEndValues[] = [];
+    const other = TAG + 1;
+    const dispatch = gestureDispatcher(
+      [recording().callbacks, { ...recording().callbacks, handlerTag: other }],
+      managers,
+      (end) => reports.push(end),
+    );
+
+    dispatch({
+      handlerTag: other,
+      oldState: GESTURE_STATE.UNDETERMINED,
+      state: GESTURE_STATE.BEGAN,
+    });
+    dispatch(start());
+    dispatch({ handlerTag: other, oldState: GESTURE_STATE.BEGAN, state: GESTURE_STATE.ACTIVE });
+    dispatch(activate);
+    dispatch({ handlerTag: other, oldState: GESTURE_STATE.ACTIVE, state: GESTURE_STATE.CANCELLED });
+    dispatch(ended(GESTURE_STATE.ACTIVE, GESTURE_STATE.END, { scale: 2 }));
+
+    assert.deepEqual(reports, [{ handlerTag: TAG, scale: 2, startX: 10, startY: 20 }]);
   });
 });

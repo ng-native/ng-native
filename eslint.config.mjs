@@ -194,6 +194,7 @@ export default tseslint.config(
       'packages/integration-tests/worklet-style.test.ts',
       'packages/integration-tests/gesture.test.ts',
       'packages/integration-tests/gesture-dispatch.test.ts',
+      'packages/integration-tests/gesture-interaction.test.ts',
       'packages/integration-tests/worklet-scroll.test.ts',
       'packages/integration-tests/css-index.test.ts',
       'packages/integration-tests/height-index.test.ts',

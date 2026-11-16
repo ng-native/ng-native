@@ -12,8 +12,10 @@ import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, render, settle } from '@ng-native/testing';
 import type { FakeFabricNode } from '@ng-native/testing';
+import { provideInteractionObserver, type InteractionEvent } from '@ng-native/components';
 import {
   GESTURES,
+  type EndedGesture,
   type GestureSpec,
   type GestureTarget,
 } from '../components/src/gesture-backend.ts';
@@ -25,6 +27,7 @@ const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
 interface Attached {
   target: GestureTarget;
   gesture: GestureSpec;
+  report: ((ended: EndedGesture) => void) | undefined;
   detached: number;
 }
 
@@ -33,15 +36,20 @@ before(async () => {
   mod = await compileFixture('fixtures/gesture.ts');
 });
 
-async function boot() {
+async function boot(heard?: InteractionEvent[]) {
   const attached: Attached[] = [];
   const rendered = await render(mod['Draggable'] as Type<unknown>, {
     providers: [
+      ...(heard ? [provideInteractionObserver((event) => heard.push(event))] : []),
       {
         provide: GESTURES,
         useValue: {
-          attach: (target: GestureTarget, gesture: GestureSpec) => {
-            const record: Attached = { target, gesture, detached: 0 };
+          attach: (
+            target: GestureTarget,
+            gesture: GestureSpec,
+            report?: (ended: EndedGesture) => void,
+          ) => {
+            const record: Attached = { target, gesture, report, detached: 0 };
             attached.push(record);
             return () => record.detached++;
           },
@@ -83,5 +91,85 @@ describe('native gesture', () => {
     unmount();
     await settle();
     assert.equal(attached[0]!.detached, 1);
+  });
+});
+
+describe('native gesture, reported to interaction observers', () => {
+  const pan: EndedGesture = {
+    handlerName: 'PanGestureHandler',
+    end: { handlerTag: 3, translationX: 90, translationY: 0, velocityX: 1200, velocityY: 0 },
+  };
+  const tap: EndedGesture = {
+    handlerName: 'TapGestureHandler',
+    end: { handlerTag: 3, x: 2, y: 3, absoluteX: 20, absoluteY: 30 },
+  };
+
+  it('asks the backend for no reports when no observer is registered', async () => {
+    const { attached } = await boot();
+    assert.equal(attached[0]!.report, undefined);
+    cleanup();
+  });
+
+  it('reports a gesture that ended as the element it is attached to', async () => {
+    const heard: InteractionEvent[] = [];
+    const { engine, attached, dragged } = await boot(heard);
+
+    attached[0]!.report!(pan);
+
+    assert.equal(heard.length, 1);
+    const { timestamp, ...rest } = heard[0]!;
+    assert.deepEqual(rest, {
+      type: 'swipe',
+      gesture: 'pan',
+      element: 'view',
+      label: 'Draft card',
+      testID: 'card',
+      nativeTag: engine.tagOf(dragged().instanceHandle as never),
+      direction: 'right',
+      distance: 90,
+      source: 'touch',
+    });
+    assert.equal(typeof timestamp, 'number');
+    cleanup();
+  });
+
+  it('gives a tap the text inside the element, as a pressed control has', async () => {
+    const heard: InteractionEvent[] = [];
+    const { attached } = await boot(heard);
+
+    attached[0]!.report!(tap);
+
+    assert.equal(heard[0]!.type, 'click');
+    assert.equal(heard[0]!.text, 'Open draft');
+    assert.equal(heard[0]!.pageX, 20);
+    cleanup();
+  });
+
+  it('reports nothing for a gesture the observers do not hear about', async () => {
+    const heard: InteractionEvent[] = [];
+    const { attached } = await boot(heard);
+
+    attached[0]!.report!({ handlerName: 'HoverGestureHandler', end: { handlerTag: 3 } });
+
+    assert.deepEqual(heard, []);
+    cleanup();
+  });
+
+  it('keeps an element out with trackGesture, and lets it back in when bound to nothing', async () => {
+    const heard: InteractionEvent[] = [];
+    const { instance, attached } = await boot(heard);
+    const typed = instance as { track: { set(value: boolean | undefined): void } };
+
+    typed.track.set(false);
+    await settle();
+    assert.equal(attached.length, 2, 'attached again without reports');
+    assert.equal(attached[0]!.detached, 1, 'and the reporting attach dropped');
+    assert.equal(attached[1]!.report, undefined);
+
+    typed.track.set(undefined as never);
+    await settle();
+    attached[2]!.report!(pan);
+    assert.equal(heard.length, 1, 'unbound to a value, it takes its default of true');
+    cleanup();
   });
 });

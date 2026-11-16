@@ -11,6 +11,7 @@
  * make this package unloadable in Node - and because they are a protocol between native and us,
  * not an API surface: native puts these integers in the event.
  */
+import type { GestureEndValues } from './gesture-backend.ts';
 
 /** `State` in react-native-gesture-handler. */
 export const GESTURE_STATE = {
@@ -63,10 +64,44 @@ export interface GestureEvent {
   eventType?: number;
 }
 
+/** Where a gesture's touch began in the window, for a report: a fling's end has no translation. */
+type Start = { x?: number; y?: number };
+
 /** Per-gesture memory the dispatcher keeps across events. */
 interface Memory {
   previous: Record<number, object | undefined>;
   managers: Record<number, GestureStateManager | undefined>;
+  starts: Record<number, Start | undefined>;
+}
+
+/** Hears a gesture that ended successfully, with the numbers its report needs. */
+export type GestureEndReport = (end: GestureEndValues) => void;
+
+/**
+ * The numbers of an end event a report is built from, copied into a plain object: the event is
+ * native's, and only plain values cross from the UI runtime to the JavaScript one.
+ */
+function endValues(handlerTag: number, event: object, start: Start | undefined): GestureEndValues {
+  'worklet';
+  const values: Record<string, number> = {};
+  const from = event as Record<string, unknown>;
+  for (const key of [
+    'x',
+    'y',
+    'absoluteX',
+    'absoluteY',
+    'translationX',
+    'translationY',
+    'velocityX',
+    'velocityY',
+    'scale',
+  ]) {
+    const value = from[key];
+    if (typeof value === 'number') values[key] = value;
+  }
+  if (start?.x !== undefined) values['startX'] = start.x;
+  if (start?.y !== undefined) values['startY'] = start.y;
+  return { ...values, handlerTag };
 }
 
 function stateChange(gesture: GestureCallbacks, event: GestureEvent, memory: Memory): void {
@@ -90,6 +125,31 @@ function stateChange(gesture: GestureCallbacks, event: GestureEvent, memory: Mem
     if (wasActive) gesture.onEnd?.(event, succeeded);
     gesture.onFinalize?.(event, succeeded);
   }
+}
+
+/**
+ * Report a gesture that ended successfully: an end from active, as `onEnd` with success is. A tap
+ * that failed, or a pan a scroll view took over, did nothing. Run after the gesture's own
+ * callbacks, as an observer hears a press after its handler.
+ */
+function reportEnd(
+  handlerTag: number,
+  event: GestureEvent,
+  memory: Memory,
+  report: GestureEndReport,
+): void {
+  'worklet';
+  const state = event.state;
+  if (state === GESTURE_STATE.BEGAN) {
+    const at = event as { absoluteX?: number; absoluteY?: number };
+    memory.starts[handlerTag] = { x: at.absoluteX, y: at.absoluteY };
+    return;
+  }
+  if (state === GESTURE_STATE.ACTIVE) return;
+  if (state === GESTURE_STATE.END && event.oldState === GESTURE_STATE.ACTIVE) {
+    report(endValues(handlerTag, event, memory.starts[handlerTag]));
+  }
+  memory.starts[handlerTag] = undefined;
 }
 
 function update(gesture: GestureCallbacks, event: GestureEvent, memory: Memory): void {
@@ -128,20 +188,26 @@ function touches(
  * `createManager` is the library's `GestureStateManager.create`, passed in rather than imported
  * for the reason the constants are restated. It has to be a worklet itself: everything this
  * closure holds is serialised onto the UI runtime with it.
+ *
+ * `report`, when given, hears each gesture that ends successfully, once, after its own `onEnd`.
+ * On a device it is a worklet that schedules the report onto the JavaScript thread.
  */
 export function gestureDispatcher(
   callbacks: readonly GestureCallbacks[],
   createManager: (handlerTag: number) => GestureStateManager,
+  report?: GestureEndReport,
 ): (event: GestureEvent) => void {
   // Captured, not passed: a worklet's closure is serialised once and reused, so this is how what
   // one event knew survives to the next. Reanimated's own dispatcher keeps its state the same way.
-  const memory: Memory = { previous: {}, managers: {} };
+  const memory: Memory = { previous: {}, managers: {}, starts: {} };
   return (event: GestureEvent) => {
     'worklet';
     for (const gesture of callbacks) {
       if (event.handlerTag !== gesture.handlerTag) continue;
-      if (event.oldState != null) stateChange(gesture, event, memory);
-      else if (event.eventType != null) touches(gesture, event, memory, createManager);
+      if (event.oldState != null) {
+        stateChange(gesture, event, memory);
+        if (report) reportEnd(gesture.handlerTag, event, memory, report);
+      } else if (event.eventType != null) touches(gesture, event, memory, createManager);
       else update(gesture, event, memory);
     }
   };

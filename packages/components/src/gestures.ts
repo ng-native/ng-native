@@ -50,9 +50,16 @@ import { claimHost, nativePlatform, registerViewName, type HostNode } from '@ng-
 import {
   gestureDispatcher,
   type GestureCallbacks,
+  type GestureEndReport,
+  type GestureEvent,
   type GestureStateManager,
 } from './gesture-dispatch.ts';
-import { GESTURES, type GestureBackend } from './gesture-backend.ts';
+import {
+  GESTURES,
+  type EndedGesture,
+  type GestureBackend,
+  type GestureEndValues,
+} from './gesture-backend.ts';
 import { NativeGestureBase } from './native-gesture.ts';
 
 // For the side effect: evaluating the package's index is what starts its event receiver, which
@@ -116,11 +123,37 @@ const { registerEventHandler, unregisterEventHandler } =
     unregisterEventHandler(id: number): void;
   };
 
+/**
+ * How a report leaves the UI runtime: the call a worklet makes to run a function on the
+ * JavaScript thread. Reanimated depends on the package, so an app with worklet gestures has it.
+ */
+const { scheduleOnRN } = require('react-native-worklets') as {
+  scheduleOnRN<A extends unknown[]>(fn: (...args: A) => unknown, ...args: A): void;
+};
+
+/**
+ * Where native sends the events of a gesture whose callbacks run on the JavaScript thread. The
+ * library's own receiver listens here too; a second listener only observes.
+ */
+const { DeviceEventEmitter } = require('react-native') as {
+  DeviceEventEmitter: {
+    addListener(name: string, listener: (event: GestureEvent) => void): { remove(): void };
+  };
+};
+
+/** One of the gestures a gesture object attaches, as far as this file needs to know it. */
+interface Attached {
+  handlers: GestureCallbacks;
+  handlerName: string;
+  config: { direction?: number };
+  shouldUseReanimated: boolean;
+}
+
 /** The gesture object, as far as this file needs to know it. */
 interface Attachable {
   initialize(): void;
   prepare(): void;
-  toGestureArray(): { handlers: GestureCallbacks; shouldUseReanimated: boolean }[];
+  toGestureArray(): Attached[];
 }
 
 const EVENT_NAMES = ['onGestureHandlerStateChange', 'onGestureHandlerEvent'];
@@ -135,8 +168,43 @@ const createManager = (handlerTag: number): GestureStateManager => {
   return GestureStateManager.create(handlerTag);
 };
 
+/**
+ * Hand each of `gestures` that ends successfully to `report`: worklet gestures from the UI runtime
+ * through `fromUI`, the rest through a listener of ours beside the library's. Both are fed to the
+ * same state machine the callbacks are, so a report means what `onEnd` with success means.
+ */
+function reporting(
+  gestures: readonly Attached[],
+  report: (ended: EndedGesture) => void,
+): { fromUI: GestureEndReport; stop(): void } {
+  const byTag = new Map(gestures.map((g) => [g.handlers.handlerTag, g]));
+  const onJS = (end: GestureEndValues) => {
+    const g = byTag.get(end.handlerTag);
+    if (g) report({ handlerName: g.handlerName, directions: g.config.direction, end });
+  };
+  const fromUI: GestureEndReport = (end) => {
+    'worklet';
+    scheduleOnRN(onJS, end);
+  };
+
+  const onThread = gestures.filter((g) => !g.shouldUseReanimated);
+  if (!onThread.length) return { fromUI, stop: () => {} };
+  const observe = gestureDispatcher(
+    onThread.map((g) => ({ handlerTag: g.handlers.handlerTag })),
+    createManager,
+    onJS,
+  );
+  const listeners = EVENT_NAMES.map((name) =>
+    DeviceEventEmitter.addListener(name, (event) => {
+      // State changes only: the touch callbacks are the library's to run here, not ours.
+      if (event.oldState != null) observe(event);
+    }),
+  );
+  return { fromUI, stop: () => listeners.forEach((listener) => listener.remove()) };
+}
+
 const backend: GestureBackend = {
-  attach: (target, gesture) => {
+  attach: (target, gesture, report) => {
     maybeInitializeFabric();
     const config = gesture as Attachable;
     const gesturesToAttach = config.toGestureArray();
@@ -162,9 +230,11 @@ const backend: GestureBackend = {
     // One dispatcher for both event names, as the library's own event handler is: a gesture's
     // state changes and its updates arrive on different names and share the same state.
     const animated = gesturesToAttach.filter((g) => g.shouldUseReanimated);
+    const reports = report ? reporting(gesturesToAttach, report) : null;
     const dispatch = gestureDispatcher(
       animated.map((g) => g.handlers),
       createManager,
+      reports?.fromUI,
     );
     const registrations = animated.length
       ? EVENT_NAMES.map((name) => registerEventHandler(dispatch, name, target.tag))
@@ -173,6 +243,7 @@ const backend: GestureBackend = {
     return () => {
       prepared.isMounted = false;
       for (const id of registrations) unregisterEventHandler(id);
+      reports?.stop();
       dropHandlers(prepared);
     };
   },

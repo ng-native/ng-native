@@ -1,6 +1,6 @@
 ---
 title: Interaction tracking
-summary: Every tap, long press, scroll and swipe as a plain event, for an analytics tool to record.
+summary: Every tap, long press, scroll, swipe and gesture as a plain event for an analytics tool.
 ---
 
 # Interaction tracking
@@ -46,6 +46,7 @@ drags only when there are observers to tell.
 | `long-press` | A control fires `longPress`, which needs a `(longPress)` listener, as in React Native. That press is not also a `click`. |
 | `scroll`     | The finger lifts after dragging a `<scroll-view>` or `<virtual-list>`.                                                   |
 | `swipe`      | The same, when the content was still moving at `SWIPE_VELOCITY` points per millisecond or faster as the finger lifted.   |
+| `gesture`    | A native gesture that ended and is none of the above: a slower pan, a pinch, a rotation. See [Gestures](#gestures).      |
 
 A `click` is reported whether or not anything listens to `(press)`, since a control that does
 nothing when tapped is what an observer looking for dead taps wants to know about. A press the
@@ -83,9 +84,11 @@ Each event carries:
 - `pageX` and `pageY`, where the touch was in the window, and `locationX` and `locationY`, where it
   was in the view it landed on. Absent for a press that had no touch.
 - `width` and `height`: the control's size, once it has been laid out.
-- `direction`: for a scroll or swipe, `up`, `down`, `left` or `right`, the way the content moved
-  into view, so `down` shows what was below. A diagonal drag goes by the axis it moved further
-  along.
+- `direction`: `up`, `down`, `left` or `right`. For a scroll view's scroll or swipe, the way the
+  content moved into view, so `down` shows what was below. For a native gesture, the way the finger
+  moved, so `down` is towards the bottom of the screen. A diagonal movement goes by the axis it
+  moved further along.
+- `gesture`, `distance` and `scale`: for an event from a native gesture, see [Gestures](#gestures).
 - `source`: `touch`, or `click` for a press with no touch, such as a switch the user flipped.
 - `timestamp`, in milliseconds since the epoch.
 
@@ -95,6 +98,41 @@ nor the app are stopped by it.
 
 On the web host, taps are reported, with a `nativeTag` of `null` and no `component`, and scrolls
 are not, since a browser's scroll has no drag events to report them from.
+
+## Gestures
+
+A native gesture attached with `[gesture]` from `@ng-native/components/gestures` is reported when it
+ends successfully, once, after its own `onEnd`. A gesture that fails or is cancelled, such as a pan
+a scroll view took over, reports nothing, and nothing is reported while it moves.
+
+| Gesture                             | `type`                                                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Gesture.Tap()`                     | `click`, with `pageX`, `pageY`, `locationX`, `locationY` and the `text` inside the element.                                                            |
+| `Gesture.LongPress()`               | `long-press`, with the same.                                                                                                                           |
+| `Gesture.Fling()`                   | `swipe`, with the `direction` it was set to, or the way the finger moved when set to several.                                                          |
+| `Gesture.Pan()`                     | `swipe` when released at `SWIPE_VELOCITY` or faster, otherwise `gesture`. Either way with `direction` and `distance`, in points from where it started. |
+| `Gesture.Pinch()`                   | `gesture`, with the `scale` it ended at.                                                                                                               |
+| `Gesture.Rotation()` and the others | `gesture`.                                                                                                                                             |
+
+Every such event carries `gesture`, the builder's name: `tap`, `long-press`, `fling`, `pan`,
+`pinch`, `rotation`, `manual` and so on, so a tap gesture can be told from a pressed control. The
+element, `label`, `testID`, `nativeID`, `role` and `nativeTag` are the element the gesture is
+attached to. A composed gesture (`Gesture.Race`, `Gesture.Simultaneous`, `Gesture.Exclusive`)
+reports each gesture in it that ended; in a race that is the one that won. `Gesture.Hover()` and
+`Gesture.Native()` report nothing: the first is a pointer passing over, and the second is the
+wrapped view's own touch handling, which a scroll view or a pressable control reports itself.
+
+A gesture whose callbacks are worklets ends on the UI thread, and its report is scheduled onto the
+JavaScript thread, so observers always run there, after the gesture's own `onEnd`.
+Whether to report is decided when the gesture is attached: with no observers, a gesture does no
+reporting work. To keep an element's gestures out of the reports, such as a drawing surface whose
+every stroke is not worth recording, set `trackGesture` to `false`:
+
+```html
+<view [gesture]="draw" [trackGesture]="false"></view>
+```
+
+On the web host, `[gesture]` attaches nothing, so nothing is reported.
 
 ## Privacy
 

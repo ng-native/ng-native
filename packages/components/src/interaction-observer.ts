@@ -14,11 +14,30 @@ import {
   type HostNode,
 } from '@ng-native/fabric';
 
-/** What the user did. */
-export type InteractionType = 'click' | 'long-press' | 'scroll' | 'swipe';
+/**
+ * What the user did. `gesture` is a native gesture that is none of the others: a slow pan, a
+ * pinch, a rotation.
+ */
+export type InteractionType = 'click' | 'long-press' | 'scroll' | 'swipe' | 'gesture';
 
-/** Which way a scroll or swipe moved the content into view: `down` shows what is below. */
+/**
+ * Which way a scroll view's drag moved the content into view (`down` shows what is below), or
+ * which way a native gesture's finger moved (`down` is towards the bottom of the screen).
+ */
 export type InteractionDirection = 'up' | 'down' | 'left' | 'right';
+
+/**
+ * The native gesture an event came from: the builder's name, `Gesture.LongPress()` as
+ * `long-press`. A string, so a gesture added to the library later still has a name.
+ */
+export type InteractionGesture =
+  'tap' | 'long-press' | 'pan' | 'fling' | 'pinch' | 'rotation' | 'manual' | (string & {});
+
+/**
+ * How fast, in points per millisecond, a drag has to be moving as the finger lifts to be a swipe
+ * rather than a scroll: a flick that leaves the content gliding on, not a drag set down.
+ */
+export const SWIPE_VELOCITY = 0.5;
 
 /** One interaction, as an observer receives it. */
 export interface InteractionEvent {
@@ -56,8 +75,14 @@ export interface InteractionEvent {
   /** The control's size from its last layout, once it has had one. */
   readonly width?: number;
   readonly height?: number;
-  /** Scrolls and swipes only. */
+  /** Scrolls, swipes and pans only. */
   readonly direction?: InteractionDirection;
+  /** The native gesture this came from, if it came from one. */
+  readonly gesture?: InteractionGesture;
+  /** A pan's straight-line distance from where it started, in points. */
+  readonly distance?: number;
+  /** A pinch's scale as it ended: above 1 spread apart, below 1 pinched together. */
+  readonly scale?: number;
   /**
    * A touch, or a press with none: Android's click from a keyboard or TalkBack, or a control the
    * platform draws, such as a `<switch>`, which reports no touch point.
