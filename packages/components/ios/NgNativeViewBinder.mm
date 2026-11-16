@@ -19,6 +19,19 @@ static const CFTimeInterval LongestSearchInterval = 2;
 @implementation NgNativeBinding
 @end
 
+/**
+ Whether `binding` is a found view still mounted under `nativeID`: not unmounted (a recycled view is
+ taken out first), and not another element's now.
+ */
+static BOOL isValid(id binding, NSString *nativeID)
+{
+  if (![binding isKindOfClass:[NgNativeBinding class]]) {
+    return NO;
+  }
+  UIView *view = ((NgNativeBinding *)binding).view;
+  return view != nil && view.superview != nil && [NgNativeNativeIdOf(view) isEqualToString:nativeID];
+}
+
 NSString *NgNativeNativeIdOf(UIView *view)
 {
   return [view isKindOfClass:[RCTViewComponentView class]] ? ((RCTViewComponentView *)view).nativeId : nil;
@@ -127,7 +140,7 @@ static void collect(UIView *view, NSSet<NSString *> *wanted, NSMutableDictionary
 - (id)tokenFor:(NSString *)nativeID
 {
   id binding = _bindings[nativeID];
-  return [binding isKindOfClass:[NgNativeBinding class]] ? ((NgNativeBinding *)binding).token : nil;
+  return isValid(binding, nativeID) ? ((NgNativeBinding *)binding).token : nil;
 }
 
 - (void)unbindAll
@@ -181,9 +194,7 @@ static void collect(UIView *view, NSSet<NSString *> *wanted, NSMutableDictionary
   for (NSString *nativeID in _bindings.allKeys) {
     id binding = _bindings[nativeID];
     if ([binding isKindOfClass:[NgNativeBinding class]]) {
-      UIView *view = ((NgNativeBinding *)binding).view;
-      // Unmounted (a recycled view is taken out first), or another element's now.
-      if (view != nil && view.superview != nil && [NgNativeNativeIdOf(view) isEqualToString:nativeID]) {
+      if (isValid(binding, nativeID)) {
         continue;
       }
       [self detach:nativeID];

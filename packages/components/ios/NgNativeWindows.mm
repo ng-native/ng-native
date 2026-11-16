@@ -429,8 +429,12 @@ static void hookSceneDiscard(Class delegate)
   };
   NSUserActivity *activity = [[NSUserActivity alloc] initWithActivityType:WindowActivity];
   activity.userInfo = @{@"request" : requestId, @"key" : key ?: @""};
-  UISceneActivationRequestOptions *options = [UISceneActivationRequestOptions new];
-  options.requestingScene = [self activeScene];
+  // Options from iOS 17, as focus: passes them; nil below, where the system picks the scene.
+  UISceneActivationRequestOptions *options = nil;
+  if (@available(iOS 17.0, *)) {
+    options = [UISceneActivationRequestOptions new];
+    options.requestingScene = [self activeScene];
+  }
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
   [UIApplication.sharedApplication requestSceneSessionActivation:nil
@@ -633,6 +637,12 @@ static void hookSceneDiscard(Class delegate)
     [self put:record.rootView in:record.window];
   } else {
     UIWindow *window = scene.keyWindow ?: scene.windows.firstObject;
+    if (window == nil) {
+      // A scene this file's delegate hosted for the app, connected again after the app launched:
+      // nothing made it a window, so the record makes one and hides it as it closes.
+      window = [[UIWindow alloc] initWithWindowScene:scene];
+      record.window = window;
+    }
     _launchRoot = window.rootViewController;
     [self put:record.rootView in:window];
   }
