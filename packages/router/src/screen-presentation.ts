@@ -50,7 +50,7 @@ export interface ScreenPresentation {
   readonly stackPresentation?: StackPresentation;
   /**
    * The react tag of the view a popover points at, which `present()` writes from its `anchor`. A
-   * host with popovers (macOS, iPadOS) shows the screen in one at that view.
+   * host with popovers (macOS) shows the screen in one at that view.
    */
   readonly anchor?: number;
   readonly stackAnimation?: StackAnimation;

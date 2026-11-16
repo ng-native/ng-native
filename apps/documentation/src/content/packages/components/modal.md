@@ -45,9 +45,9 @@ chooses `'fullScreen'`, `'pageSheet'` or `'formSheet'` on iOS.
 ## A popover at an element
 
 `anchor` points the modal at an element: a template reference to an element, or to a component such
-as a `<pressable>`. With one, the modal shows as a popover at that element on macOS and iPadOS, and
-a click outside it closes it. On iPhone and Android the anchor is ignored and the modal presents as
-it would without one.
+as a `<pressable>`. With one, the modal shows as a popover at that element on macOS, and a click
+outside it closes it. On iOS, iPadOS included, and on Android the anchor is ignored and the modal
+presents as it would without one.
 
 ```angular-html
 <pressable #filter (press)="open.set(true)"><text>Filter</text></pressable>

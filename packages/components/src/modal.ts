@@ -51,7 +51,7 @@ export type ModalOrientation =
   imports: [View],
   template: `<view [style]="containerStyle()" collapsable="false"><ng-content /></view>`,
   host: {
-    '[visible]': 'visible()',
+    '[visible]': 'visible() && !awaitingAnchor()',
     '[transparent]': 'transparent()',
     '[animationType]': 'animationType()',
     '[presentationStyle]': 'resolvedPresentationStyle()',
@@ -97,8 +97,8 @@ export class Modal extends ViewBase {
   readonly hardwareAccelerated = input(undefined, { transform: optionalBoolean });
 
   /**
-   * The element the modal points at. With one, it shows as a popover at the element on macOS and
-   * iPadOS; iPhone and Android present it as they would without one. Committed as the react tag
+   * The element the modal points at. With one, it shows as a popover at the element on macOS; iOS,
+   * iPadOS included, and Android present it as they would without one. Committed as the react tag
    * of the element's view.
    */
   readonly anchor = input<ModalAnchor>();
@@ -110,6 +110,11 @@ export class Modal extends ViewBase {
 
   /** The anchor's view tag, committed as `anchor`, or undefined with none. */
   protected readonly anchorTag = signal<number | undefined>(undefined);
+  /**
+   * Whether the anchor's view has still to commit, which gives it its tag. The modal waits for it:
+   * the host reads the anchor as it presents, and one presented without it stays a sheet.
+   */
+  protected readonly awaitingAnchor = signal(false);
 
   protected readonly resolvedPresentationStyle = computed(
     () => this.presentationStyle() ?? (this.transparent() ? 'overFullScreen' : undefined),
@@ -151,18 +156,22 @@ export class Modal extends ViewBase {
     if (!node) {
       // The engine commits a prop that goes as null, which takes it off the native view.
       this.anchorTag.set(undefined);
+      this.awaitingAnchor.set(false);
       return;
     }
     const tag = this.views?.tagOf(node);
     if (tag != null) {
       this.anchorTag.set(tag);
+      this.awaitingAnchor.set(false);
       return;
     }
+    this.awaitingAnchor.set(true);
     afterNextRender(
       () => {
-        if (anchorNode(this.anchor()) === node) {
-          this.anchorTag.set(this.views?.tagOf(node) ?? undefined);
-        }
+        if (anchorNode(this.anchor()) !== node) return;
+        this.anchorTag.set(this.views?.tagOf(node) ?? undefined);
+        // Once: an anchor that has still not committed is left out, and the modal shows anyway.
+        this.awaitingAnchor.set(false);
       },
       { injector: this.injector },
     );
