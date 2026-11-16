@@ -42,7 +42,9 @@ export function record(real: FabricUIManager) {
   const instances = new WeakMap<RecordedNode, unknown>();
   let dispatch: ((instanceHandle: unknown, type: string, event: unknown) => void) | null = null;
   let nextHandle = 0;
-  let committed: RecordedNode[] = [];
+  /** Each surface's last commit: a desktop app's windows render on one each. */
+  const roots = new Map<number, RecordedNode[]>();
+  const committed = (): RecordedNode[] => [...roots.values()].flat();
   let transitions = 0;
   let transitionAt = 0;
   let screenAt = 0;
@@ -125,7 +127,7 @@ export function record(real: FabricUIManager) {
     },
     completeRoot(rootTag, set) {
       real.completeRoot(rootTag, set);
-      committed = sets.get(set as object) ?? [];
+      roots.set(rootTag, sets.get(set as object) ?? []);
     },
     registerEventHandler(handler) {
       dispatch = handler;
@@ -133,6 +135,8 @@ export function record(real: FabricUIManager) {
         if (type === 'topTouchStart') touches++;
         // A screen's push, pop, presentation or dismissal: native drops a tap made during one.
         if (type === 'topWillAppear' || type === 'topWillDisappear') {
+          // One that never reported its end has stopped counting: it is not owed an end now.
+          if (Date.now() - transitionAt >= TRANSITION_LIMIT_MS) transitions = 0;
           transitions++;
           transitionAt = Date.now();
         } else if (type === 'topAppear' || type === 'topDisappear') {
@@ -164,7 +168,8 @@ export function record(real: FabricUIManager) {
 
   return {
     fabric,
-    committed: (): RecordedNode[] => committed,
+    /** The views every surface last committed, window by window. */
+    committed,
     touches: (): number => touches,
     busy: (): boolean =>
       (transitions > 0 && Date.now() - transitionAt < TRANSITION_LIMIT_MS) ||
@@ -172,7 +177,7 @@ export function record(real: FabricUIManager) {
       Date.now() - endedAt < ENDED_SETTLE_MS,
     /** A committed view's window frame, or null when it is gone or native has not laid it out. */
     measure(reactTag: number): Frame | null {
-      const recorded = find(reactTag, committed);
+      const recorded = find(reactTag, committed());
       const node = recorded && nodes.get(recorded);
       let frame: Frame | null = null;
       if (node)
@@ -184,7 +189,7 @@ export function record(real: FabricUIManager) {
      * unit test's fake Fabric does, on the real engine.
      */
     emit(reactTag: number, type: string, nativeEvent: unknown = {}): void {
-      const recorded = find(reactTag, committed);
+      const recorded = find(reactTag, committed());
       if (!recorded || !dispatch)
         throw new Error(`No committed view ${reactTag} to send ${type} to`);
       dispatch(instances.get(recorded), type, nativeEvent);

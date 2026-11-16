@@ -361,6 +361,22 @@ export function extensionsFor(os) {
 }
 
 /**
+ * Put the platform extensions for `os` ahead of the extensions the config already has, or of Vite's
+ * own where it has none.
+ *
+ * @param {import('vitest/config').UserConfig} config
+ * @param {'ios' | 'android' | 'macos' | 'web'} os
+ */
+function withExtensions(config, os) {
+  const own = config.resolve?.extensions;
+  const platform = extensionsFor(os);
+  const extensions = own
+    ? [...platform.filter((ext) => !EXTENSIONS.includes(ext)), ...own]
+    : platform;
+  config.resolve = { ...config.resolve, extensions: [...new Set(extensions)] };
+}
+
+/**
  * The OS a project's tests run as when its options name none: what `expo.platforms` in its
  * `app.json` lists, so a desktop-only app (`['macos']`) tests as macOS and an Android-only one as
  * Android. iOS for every other project, as before.
@@ -395,13 +411,15 @@ export function ngNative(options = {}) {
       const projectRoot = rootOf(config);
       const os = options.os ?? defaultOs(projectRoot);
       const conditions = withConditions(tsconfigConditions(projectRoot));
+      // An extensionless import resolves a platform file first, as Metro does for the OS. Vite
+      // appends a list a plugin returns to the app's own, which would put the app's first, so the
+      // app's list is changed in place instead.
+      if (config) withExtensions(config, os);
       return {
         // The conditions the project's tsconfig resolves packages with, ahead of Vite's own, so a
         // test takes the same entry tsc does: Nx's TypeScript preset exports a library's source
         // only under one.
         ...conditions,
-        // An extensionless import resolves a platform file first, as Metro does for the OS.
-        resolve: { ...conditions.resolve, extensions: extensionsFor(os) },
         test: {
           setupFiles: [SETUP],
           // What the setup file renders as, and what `OS` answers unprovided.

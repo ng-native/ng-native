@@ -230,7 +230,10 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
 
 /** The row a service's `available()` follows, or undefined where the table has none for it. */
 export function supportRowOf(service: string): OsSupportRow | undefined {
-  return OS_SUPPORT.find((one) => one.services?.[service] || one.inert?.includes(service));
+  // Own keys only: `constructor` is on every object, and names no service.
+  return OS_SUPPORT.find(
+    (one) => (one.services && Object.hasOwn(one.services, service)) || one.inert?.includes(service),
+  );
 }
 
 /**

@@ -75,7 +75,9 @@ export async function placeInlineSnapshots(state: unknown, url: string): Promise
   );
   snapshots.forEach((snapshot, index) => {
     const frame = frames[index];
-    if (!frame?.file || frame.lineNumber === undefined || frame.column === undefined) return;
+    // A frame Metro could not place is still the bundle's: no source file to write into.
+    if (!frame?.file || frame.file === url) return;
+    if (frame.lineNumber === undefined || frame.column === undefined) return;
     snapshot.file = frame.file;
     snapshot.line = frame.lineNumber;
     snapshot.column = frame.column;

@@ -13,6 +13,7 @@ import {
   type KeyChord,
   type NativeMenuEntry,
   type ShortcutOs,
+  WILL_QUIT_DEADLINE_MS,
 } from '@ng-native/device';
 import { currentOf, lastRender, ownerOf, settle, type TestWindow } from './render.ts';
 import { flatten, isTextInput, withParents } from './queries.ts';
@@ -25,6 +26,7 @@ type Rendered = ReturnType<typeof lastRender>;
 const MOUSE = { pointerType: 'mouse', pageX: 0, pageY: 0, locationX: 0, locationY: 0 };
 
 function emit(node: FakeFabricNode, type: string, nativeEvent: Record<string, unknown> = {}): void {
+  noteFocus(node, type);
   ownerOf(node).fabric.emit(node, type, { target: node.reactTag, ...nativeEvent });
 }
 
@@ -32,6 +34,17 @@ function emit(node: FakeFabricNode, type: string, nativeEvent: Record<string, un
 const hovered = new WeakMap<Rendered, FakeFabricNode[]>();
 /** The view each render's keyboard focus is on. */
 const focused = new WeakMap<Rendered, FakeFabricNode | null>();
+
+/**
+ * Follow keyboard focus as an event sends a focus or a blur, whichever event it is: Tab, typing
+ * and `fireEvent.focus` all move the one focus Tab and the editing keys read.
+ */
+export function noteFocus(node: FakeFabricNode, type: string): void {
+  if (type !== 'topFocus' && type !== 'topBlur') return;
+  const owner = ownerOf(node);
+  if (type === 'topFocus') focused.set(owner, node);
+  else if (focused.get(owner)?.reactTag === node.reactTag) focused.set(owner, null);
+}
 
 /** `node` and the views it is inside, outermost first, in the current commit. */
 function chain(node: FakeFabricNode): FakeFabricNode[] {
@@ -72,6 +85,13 @@ function chordOf(shortcut: string, os: ShortcutOs): KeyChord {
 /** Whether a view takes keyboard focus: a text input, or a view that says it is focusable. */
 const focusable = (node: FakeFabricNode): boolean =>
   isTextInput(node) || node.props['focusable'] === true;
+
+/** The views Tab walks: the focused window's where the render has windows, or else all of them. */
+function tabRoots(owner: Rendered): FakeFabricNode[] {
+  if (!owner.windows) return owner.roots();
+  const surface = owner.applicationRef.injector.get(AppWindows).focused()?.surface;
+  return surface === undefined ? owner.roots() : owner.fabric.committedOn(surface);
+}
 
 /** A context menu a right-click opened, as the host draws it from the view's `contextMenu`. */
 export interface FakeContextMenu {
@@ -124,9 +144,25 @@ function hostWindows() {
   return { owner, windows: owner.windows };
 }
 
-/** Wait for the app to answer: its guards and `willQuit` handlers may take a few turns. */
-async function answered(done: () => boolean): Promise<void> {
+/** Wait for a window the app opens on the host's word: a few turns, as it opens asynchronously. */
+async function opened(done: () => boolean): Promise<void> {
   for (let turn = 0; turn < 20 && !done(); turn++) await settle();
+}
+
+/**
+ * Wait for the app's answer to a quit, however long its guards and `willQuit` handlers take: an
+ * answer that has not come is not a refusal. Past `limit` it throws rather than answer for the app.
+ */
+async function quitAnswered(done: () => boolean, limit = WILL_QUIT_DEADLINE_MS * 2): Promise<void> {
+  const until = Date.now() + limit;
+  while (!done()) {
+    if (Date.now() > until) {
+      throw new Error(
+        `The app did not answer the quit within ${limit}ms: a guard is still pending.`,
+      );
+    }
+    await settle();
+  }
 }
 
 export interface DesktopUserEvent {
@@ -197,25 +233,29 @@ export const desktopUserEvent: DesktopUserEvent = {
   async closeWindow(window) {
     const { owner, windows } = hostWindows();
     const open = windows.windows.filter((one) => one.open);
-    const focused = owner.applicationRef.injector.get(AppWindows).focused()?.surface;
+    const appWindows = owner.applicationRef.injector.get(AppWindows);
+    const focused = appWindows.focused()?.surface;
     const surface = window?.surface ?? focused ?? open[0]?.surface;
     const target = open.find((one) => one.surface === surface);
-    if (!target) return false;
-    windows.emit({ type: 'closeRequest', surface: target.surface });
-    await answered(() => !target.open);
-    return !target.open;
+    const handle = appWindows.windows().find((one) => one.surface === surface);
+    if (!target || !handle) return false;
+    // The window's own close takes the path a `closeRequest` does, and resolves with the app's
+    // decision once its guards have answered, however long they take.
+    const closed = await handle.close();
+    await settle();
+    return closed;
   },
   async quit() {
     const { windows } = hostWindows();
     const before = windows.quitAnswers.length;
     windows.emit({ type: 'quitRequest' });
-    await answered(() => windows.quitAnswers.length > before);
+    await quitAnswered(() => windows.quitAnswers.length > before);
     return windows.quitAnswers.at(-1) === true && windows.quitAnswers.length > before;
   },
   async reopen() {
     const { windows } = hostWindows();
     windows.emit({ type: 'reopen' });
-    await answered(() => windows.windows.some((one) => one.open));
+    await opened(() => windows.windows.some((one) => one.open));
   },
   async openUrl(url) {
     const links = lastRender().applicationRef.injector.get(
@@ -247,7 +287,7 @@ export const desktopUserEvent: DesktopUserEvent = {
   },
   async tab({ shift = false } = {}) {
     const owner = lastRender();
-    const order = flatten(owner.roots()).filter(focusable);
+    const order = flatten(tabRoots(owner)).filter(focusable);
     if (order.length === 0) return;
     const from = focused.get(owner) ?? null;
     const at = from ? order.findIndex((node) => node.reactTag === from.reactTag) : -1;
@@ -258,7 +298,6 @@ export const desktopUserEvent: DesktopUserEvent = {
       ]!;
     if (from) emit(from, 'topBlur');
     emit(next, 'topFocus', { focusVisible: true });
-    focused.set(owner, next);
     await settle();
   },
 };

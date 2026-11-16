@@ -158,7 +158,7 @@ export function createFakeFabric(): FakeFabric {
     dismissing.clear();
     queueMicrotask(() => {
       for (const tag of tags) {
-        const host = findByTag(committed, tag);
+        const host = findCommitted(tag);
         if (host && host.props['visible'] === false) fake.emit(host, 'topDismiss');
       }
     });
@@ -170,9 +170,17 @@ export function createFakeFabric(): FakeFabric {
     }
     return undefined;
   };
+  // Every surface's last commit: a modal can close on a window that did not commit last.
+  const findCommitted = (tag: number): FakeFabricNode | undefined => {
+    for (const nodes of roots.values()) {
+      const hit = findByTag(nodes, tag);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
   /** A modal host committed as closing, or that left the tree closing. */
   const closing = (target: FakeFabricNode): boolean =>
-    (findByTag(committed, target.reactTag) ?? target).props['visible'] === false;
+    (findCommitted(target.reactTag) ?? target).props['visible'] === false;
   /** A modal host's props are changing: a close owes one dismissal, and a show resets it. */
   const noteModal = (source: FakeFabricNode, props: Record<string, unknown> | undefined): void => {
     if (source.viewName !== 'ModalHostView' || !props || !('visible' in props)) return;

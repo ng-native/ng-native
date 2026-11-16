@@ -451,11 +451,14 @@ function unmount(target: Mounted): void {
   const at = mounted.indexOf(target);
   if (at === -1) return;
   mounted.splice(at, 1);
+  // A later render as another OS is still on its own: it goes back to this one's platform instead.
+  const later = mounted.slice(at).find((other) => other.platform !== null);
   try {
     target.applicationRef.destroy();
   } finally {
     releaseExpo();
-    if (target.platform !== null) registerPlatformComponents(target.platform);
+    if (later && target.platform !== null) later.platform = target.platform;
+    else if (target.platform !== null) registerPlatformComponents(target.platform);
   }
 }
 

@@ -1,6 +1,6 @@
 ---
 title: Text recognition
-summary: The text in a photo, line by line, read on the phone with no network.
+summary: The text in a photo, line by line, read on the device with no network.
 ---
 
 # Text recognition
@@ -9,7 +9,8 @@ summary: The text in a photo, line by line, read on the phone with no network.
 or picked from their library. It answers the whole text and each line with its confidence and its
 box in the image. It runs on the device, offline, and does not need Apple Intelligence, so it also
 works where the [on-device language model](/packages/expo/language-model) is unavailable. It is
-`@ng-native/expo`'s own native code, on iOS and macOS, and with no Vision on Android or the web.
+`@ng-native/expo`'s own native code on iOS, and the desktop host's on macOS. Android and the web
+have no Vision.
 
 <!-- platforms: TextRecognition -->
 
@@ -111,6 +112,7 @@ if (this.model.available()) {
 ## Platform differences
 
 - **iOS:** Vision's `VNRecognizeTextRequest`, on iOS 16.4 and later.
+- **macOS:** the same Vision request in the desktop host, with the same answers.
 - **Android:** not yet available. `available()` is false and `recognize` rejects.
 
 ## Without the native module

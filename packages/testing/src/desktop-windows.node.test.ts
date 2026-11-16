@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, input, signal } from '@angular/core';
 import {
   ContextMenu,
   FileDrop,
@@ -14,11 +14,26 @@ import {
   MenuGroup,
   MenuItem,
   Text,
+  TextInput,
   View,
   type DroppedFile,
 } from '@ng-native/components';
-import { AppWindows, CURRENT_WINDOW, DeepLinks, provideMainWindow } from '@ng-native/device';
-import { cleanup, fakeMenus, render, screen, settle, userEvent } from '@ng-native/testing';
+import {
+  AppLifecycle,
+  AppWindows,
+  CURRENT_WINDOW,
+  DeepLinks,
+  provideMainWindow,
+} from '@ng-native/device';
+import {
+  cleanup,
+  fakeMenus,
+  render,
+  screen,
+  settle,
+  userEvent,
+  type FakeWindows,
+} from '@ng-native/testing';
 import { Menus } from '@ng-native/device';
 
 afterEach(cleanup);
@@ -66,6 +81,7 @@ class Note {
 })
 class Notes {
   readonly windows = inject(AppWindows);
+  readonly lifecycle = inject(AppLifecycle);
   readonly links = signal<string[]>([]);
   readonly heard = signal<string[]>([]);
 
@@ -118,6 +134,57 @@ test('closes a window through its guards, quits, and opens the main window on a 
   await userEvent.reopen();
   assert.equal(screen.windows()[0]?.key, 'main');
   assert.equal(await userEvent.quit(), true);
+});
+
+test('waits for a slow guard and a slow willQuit handler, not a number of turns', async () => {
+  const { instance } = await render(Notes, { os: 'macos' });
+  const later = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  await instance.windows.open(Note, { title: 'Draft' });
+  await settle();
+  const draft = screen.windows()[1]!;
+  instance.windows.windows()[1]!.canClose(async () => {
+    await later(150);
+    return true;
+  });
+  assert.equal(await userEvent.closeWindow(draft), true, 'the guard agreed, late');
+  instance.lifecycle.willQuit(async () => void (await later(150)));
+  assert.equal(await userEvent.quit(), true, 'the handler finished, late');
+});
+
+@Component({
+  selector: 'app-field',
+  imports: [TextInput],
+  template: '<text-input [testID]="name()" (focus)="focused.push(name())" />',
+})
+class Field {
+  readonly name = input('main');
+  readonly windows = inject(AppWindows);
+  static readonly focused: string[] = [];
+  protected readonly focused = Field.focused;
+}
+
+test('walks Tab through the focused window only', async () => {
+  const { instance } = await render(Field, { os: 'macos' });
+  await instance.windows.open(Field, { title: 'Second', inputs: { name: 'second' } });
+  await settle();
+  instance.windows.windows()[1]!.focus();
+  await settle();
+  Field.focused.length = 0;
+  await userEvent.tab();
+  await userEvent.tab();
+  assert.deepEqual(Field.focused, ['second', 'second'], 'never into the main window');
+});
+
+test('drops a window the host reports closed from the windows it lists', async () => {
+  const { instance, componentRef } = await render(Notes, { os: 'macos' });
+  await instance.windows.open(Note, { title: 'Draft' });
+  await settle();
+  const host = componentRef.injector.get(AppWindows.SOURCE) as FakeWindows;
+  const draft = screen.windows()[1]!;
+  // As the OS closes it on its own, without asking the app.
+  host.emit({ type: 'closed', surface: draft.surface });
+  await settle();
+  assert.deepEqual(screen.windows().length, 1);
 });
 
 test('starts with no window under autoOpen: false', async () => {

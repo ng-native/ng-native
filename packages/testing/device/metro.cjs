@@ -24,7 +24,7 @@ function withDeviceTests(config) {
   if (!process.env.EXPO_PUBLIC_DEVICE_TESTS) {
     // A development bundle still bundles what a dead branch requires: the app's check for this
     // variable is false, but without this the host, and Vitest behind it, would be in the bundle.
-    const disabled = path.join(__dirname, '../src/device/host-disabled.ts');
+    const disabled = path.join(__dirname, 'host-disabled.cjs');
     return {
       ...config,
       resolver: {

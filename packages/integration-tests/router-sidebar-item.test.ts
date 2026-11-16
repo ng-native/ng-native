@@ -95,6 +95,15 @@ describe('a sidebar item with a path', () => {
     assert.deepEqual(selected(), ['inbox']);
   });
 
+  it("goes to the parent route's own url when the item at '' is chosen", async () => {
+    await router.navigateByUrl('/mail/sent');
+    await idle();
+    fabric.emit(getByTestId('home'), 'topSidebarSelect', {});
+    await idle();
+    assert.equal(router.url, '/');
+    assert.deepEqual(selected(), ['home']);
+  });
+
   it('goes back to the route that is showing when a guard refuses the navigation', async () => {
     (mod['refuse'] as { now: boolean }).now = true;
     fabric.emit(getByTestId('locked'), 'topSidebarSelect', {});

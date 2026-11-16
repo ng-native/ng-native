@@ -1,4 +1,4 @@
-import { Component, input, signal } from '@angular/core';
+import { Component, computed, input, signal } from '@angular/core';
 import { nativePlatform, registerViewName } from '@ng-native/fabric';
 import { Pressable } from './pressable.ts';
 import { optionalBoolean } from './transforms.ts';
@@ -34,7 +34,7 @@ registerViewName('sidebar-section', {
         <text>{{ title() }}</text>
       </pressable>
     }
-    @if (!drawn || expanded()) {
+    @if (shown()) {
       <ng-content />
     }
   `,
@@ -59,4 +59,9 @@ export class SidebarSection extends ViewBase {
   readonly title = input<string>();
   /** Whether the title shows and hides the section's items. */
   readonly collapsible = input(false, { transform: optionalBoolean });
+
+  /** Whether the items show: always, unless a title that can show them again hid them. */
+  protected readonly shown = computed(
+    () => !this.drawn || this.expanded() || !(this.collapsible() && this.title()),
+  );
 }

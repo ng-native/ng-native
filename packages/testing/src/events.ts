@@ -13,7 +13,7 @@
  * Both are async where RNTL's `fireEvent` is not. Change detection is zoneless and commits on a
  * later task, so an event has to be awaited before the tree it changed can be read.
  */
-import { desktopUserEvent, type DesktopUserEvent } from './desktop-events.ts';
+import { desktopUserEvent, noteFocus, type DesktopUserEvent } from './desktop-events.ts';
 import { currentOf, ownerOf, settle } from './render.ts';
 import { expoUiButtonDisabled, expoUiButtonPress, isExpoUiButton } from './expo-ui-button.ts';
 import { flatten, isSearchBar, isTextInput, withParents } from './queries.ts';
@@ -29,6 +29,7 @@ const nativeOf = (payload: EventPayload | undefined): Record<string, unknown> =>
   >) ?? {};
 
 function emit(node: FakeFabricNode, type: string, nativeEvent: Record<string, unknown> = {}): void {
+  noteFocus(node, type);
   ownerOf(node).fabric.emit(node, type, { target: node.reactTag, ...nativeEvent });
 }
 

@@ -20,12 +20,19 @@ function instrumented(filename) {
   );
 }
 
-/** The instrumenter Vitest's istanbul provider uses, from the project's own install of it. */
+/**
+ * The instrumenter Vitest's istanbul provider uses, from the project's own install of it: Vitest
+ * 5's depends on `@vitest/istanbul-lib-instrument`, Vitest 4's on `istanbul-lib-instrument`.
+ */
 function instrumenter(projectRoot) {
   const provider = require.resolve('@vitest/coverage-istanbul/package.json', {
     paths: [projectRoot],
   });
-  const entry = require.resolve('@vitest/istanbul-lib-instrument', {
+  const { dependencies = {} } = require(provider);
+  const name = ['@vitest/istanbul-lib-instrument', 'istanbul-lib-instrument'].find(
+    (candidate) => candidate in dependencies,
+  );
+  const entry = require.resolve(name ?? '@vitest/istanbul-lib-instrument', {
     paths: [path.dirname(provider)],
   });
   return require(entry);
