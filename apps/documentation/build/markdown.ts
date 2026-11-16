@@ -23,7 +23,7 @@
  * of a re-highlight of every block on the page.
  */
 import fm from 'front-matter';
-import { marked } from 'marked';
+import { marked, type TokenizerAndRendererExtension } from 'marked';
 import { gfmHeadingId, getHeadingList } from 'marked-gfm-heading-id';
 import { bundledThemes, createHighlighter, type Highlighter } from 'shiki';
 import type { Plugin } from 'vite';
@@ -151,11 +151,8 @@ function segments(body: string): DocBlock[] {
   return blocks;
 }
 
-/** `<!-- os-support -->` on a line of its own: where a page shows the per-OS support table. */
-const OS_SUPPORT_MARKER = /^[ \t]*<!--\s*os-support\s*-->[ \t]*$/m;
-
 /**
- * The per-OS support table as Markdown, drawn from `OS_SUPPORT` in `@ng-native/device`, the data
+ * The per-OS support table, which `<!-- os-support -->` on a line of its own draws, as Markdown, drawn from `OS_SUPPORT` in `@ng-native/device`, the data
  * `os-support.test.ts` holds the code to.
  */
 function osSupportTable(): string {
@@ -173,8 +170,6 @@ function osSupportTable(): string {
  * is on, drawn from the service's row in `OS_SUPPORT`. A service with no row fails the build, so a
  * page cannot carry a line the table does not back.
  */
-const PLATFORMS_MARKER = /^[ \t]*<!--\s*platforms:\s*([A-Za-z, ]+?)\s*-->[ \t]*$/gm;
-
 function platforms(_marker: string, services: string): string {
   const lines = services.split(',').map((name) => {
     const line = platformsLine(name.trim());
@@ -185,85 +180,43 @@ function platforms(_marker: string, services: string): string {
 }
 
 /**
- * `text` with `change` applied to everything but its fenced code blocks, which stay as written. As
- * in Marked, a fence closes on a run of its opener's character at least as long as the opener. An
- * opener indented up to three spaces is at the top level, so its closer is too; one indented further
- * sits in a list item, whose closer may be up to three spaces past it. Four more make the run code.
+ * The two markers as a block extension of Marked's, so Marked's own rules decide what is code: a
+ * marker in a fenced or indented code block, at any depth of a list, stays as written, and one
+ * that is a line of its own anywhere else is drawn from `OS_SUPPORT`.
  */
-function outsideFences(text: string, change: (prose: string) => string): string {
-  let result = '';
-  let prose = '';
-  let fence: Fence | null = null;
-  let inList = false;
-  for (const line of text.split(/(?<=\n)/)) {
-    if (fence) {
-      result += line;
-      if (closes(line, fence)) fence = null;
-      continue;
-    }
-    inList = stillInList(line, inList);
-    const indent = width(/^[ \t]*/.exec(line)![0]);
-    const open = /^[ \t]*(`{3,}|~{3,})/.exec(line);
-    // Outside a list, a line four columns in is indented code, shown as written and no opener.
-    const code = !inList && indent >= 4 && line.trim() !== '';
-    if (!open && !code) {
-      prose += line;
-      continue;
-    }
-    result += change(prose) + line;
-    prose = '';
-    if (open && !code) {
-      fence = { char: open[1]![0]!, length: open[1]!.length, indent: indent <= 3 ? 0 : indent };
-    }
-  }
-  return result + change(prose);
-}
-
-interface Fence {
-  char: string;
-  length: number;
-  /** The indentation of the list item it is in, or 0 at the top level. */
-  indent: number;
-}
-
-/** Whether `line` closes `fence`: a run of its character at least as long, at most three past it. */
-function closes(line: string, fence: Fence): boolean {
-  const close = /^([ \t]*)(`+|~+)[ \t]*\r?\n?$/.exec(line);
-  if (!close || close[2]![0] !== fence.char || close[2]!.length < fence.length) return false;
-  const indent = width(close[1]!);
-  return indent >= fence.indent && indent <= fence.indent + 3;
-}
-
-/**
- * Whether a list goes on through `line`: a list marker starts one, a blank line keeps it, and an
- * unindented line that is no marker ends it.
- */
-function stillInList(line: string, inList: boolean): boolean {
-  if (/^[ \t]*([-*+]|\d{1,9}[.)])([ \t]|\r?\n?$)/.test(line)) return true;
-  if (line.trim() === '') return inList;
-  return inList && /^[ \t]/.test(line);
-}
-
-/** How many columns leading whitespace takes, a tab reaching the next multiple of four as in Marked. */
-function width(lead: string): number {
-  let columns = 0;
-  for (const char of lead) columns = char === '\t' ? columns + 4 - (columns % 4) : columns + 1;
-  return columns;
-}
+const DOC_MARKERS: TokenizerAndRendererExtension = {
+  name: 'docMarker',
+  level: 'block',
+  start: (source) => /<!--\s*(?:platforms:|os-support)/.exec(source)?.index,
+  tokenizer(source) {
+    const marker =
+      /^ {0,3}<!--\s*(?:platforms:\s*([A-Za-z, ]+?)|os-support)\s*-->[ \t]*(?:\n|$)/.exec(source);
+    if (!marker) return undefined;
+    const markdown = marker[1] === undefined ? osSupportTable() : platforms(marker[0], marker[1]);
+    return { type: 'docMarker', raw: marker[0], tokens: this.lexer.blockTokens(markdown, []) };
+  },
+  renderer(token) {
+    return this.parser.parse(token.tokens ?? []);
+  },
+};
 
 async function render(source: string, headings: DocHeading[]): Promise<string> {
-  const instance = marked.use(gfmHeadingId(), {
-    async: true,
-    gfm: true,
-    renderer: {
-      // Shiki owns the whole `<pre>`, so the fenced-code renderer is replaced rather than wrapped:
-      // `marked-highlight` would nest Shiki's `<pre>` inside one of marked's own.
-      code({ text, lang }) {
-        const language = LANGUAGES.includes(lang ?? '') ? (lang as string) : 'text';
-        return highlightSync(text, language);
+  const instance = marked.use(
+    gfmHeadingId(),
+    { extensions: [DOC_MARKERS] },
+    {
+      async: true,
+      gfm: true,
+      renderer: {
+        // Shiki owns the whole `<pre>`, so the fenced-code renderer is replaced rather than wrapped:
+        // `marked-highlight` would nest Shiki's `<pre>` inside one of marked's own.
+        code({ text, lang }) {
+          const language = LANGUAGES.includes(lang ?? '') ? (lang as string) : 'text';
+          return highlightSync(text, language);
+        },
       },
     },
-  });
+  );
   const html = (await instance.parse(source)) as string;
   for (const heading of getHeadingList()) {
     if (heading.level >= 2 && heading.level <= 3) {
@@ -337,11 +290,7 @@ export function markdown(): Plugin {
       const url = pageUrl(id);
       const headings: DocHeading[] = [];
       const blocks: DocBlock[] = [];
-      for (const block of segments(
-        outsideFences(body, (prose) =>
-          prose.replace(OS_SUPPORT_MARKER, osSupportTable).replace(PLATFORMS_MARKER, platforms),
-        ),
-      )) {
+      for (const block of segments(body)) {
         blocks.push(
           block.kind === 'html'
             ? { kind: 'html', html: pageLinks(await render(block.html, headings), url) }
