@@ -356,7 +356,8 @@ export function presence(native: unknown): Signal<boolean> {
 /**
  * The answer to an asynchronous question, as a signal: false until it is answered, and false when
  * asking fails. The question is first asked when the answer is first read, so a service nobody asks
- * calls nothing native, and again each time the returned `ask` is called after that.
+ * calls nothing native, and again each time the returned `ask` is called after that. Only the
+ * latest asking's answer is kept.
  */
 export function asked(question: () => Promise<boolean> | null | undefined): {
   readonly answer: Signal<boolean>;
@@ -364,7 +365,10 @@ export function asked(question: () => Promise<boolean> | null | undefined): {
 } {
   const answer = signal(false);
   let started = false;
+  // Which asking is the latest, so an earlier one that settles after it does not overwrite it.
+  let latest = 0;
   const send = () => {
+    const asking = ++latest;
     let pending: Promise<boolean> | null | undefined;
     try {
       pending = question();
@@ -372,8 +376,12 @@ export function asked(question: () => Promise<boolean> | null | undefined): {
       pending = null;
     }
     void Promise.resolve(pending ?? false).then(
-      (yes) => answer.set(yes === true),
-      () => answer.set(false),
+      (yes) => {
+        if (asking === latest) answer.set(yes === true);
+      },
+      () => {
+        if (asking === latest) answer.set(false);
+      },
     );
   };
   const read = computed(() => {

@@ -20,7 +20,7 @@
  */
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import type { NativeFile, PickedDirectory } from './file-system.ts';
-import { expoModule, optional, presence, present } from './native.ts';
+import { expoModule, presence, present } from './native.ts';
 
 type Expo = typeof import('expo-document-picker');
 
@@ -38,8 +38,11 @@ export interface NativeSaveOptions {
  * platform has them. The real modules are these; a test provides a fake.
  */
 export type NativeDocumentPicker = Pick<Expo, 'getDocumentAsync'> & {
-  /** The system folder picker, `expo-file-system`'s. Rejects with a coded error when dismissed. */
-  pickDirectoryAsync?(): Promise<PickedDirectory>;
+  /**
+   * The system folder picker, `expo-file-system`'s. Rejects with a coded error when dismissed, and
+   * answers null where there is none.
+   */
+  pickDirectoryAsync?(): Promise<PickedDirectory | null>;
   /**
    * A save dialog that writes the file itself and answers where, or null when dismissed: the
    * desktop host's. Without one, `save()` writes into a folder the user picks.
@@ -74,13 +77,13 @@ export class DocumentPicker {
         );
         // Missing from the build, or not on this platform: as it is, to say so or to be inert.
         if (!present(expo)) return expo;
-        const files = optional(
-          () => require('expo-file-system') as typeof import('expo-file-system'),
-        );
-        const folders = files?.Directory?.pickDirectoryAsync;
         return {
           getDocumentAsync: (options) => expo!.getDocumentAsync(options),
-          ...(folders && { pickDirectoryAsync: () => folders() }),
+          // Loaded when a folder is first asked for, so picking files never evaluates it.
+          pickDirectoryAsync: async () => {
+            const folders = fileSystem()?.Directory?.pickDirectoryAsync;
+            return folders ? folders() : null;
+          },
         };
       },
     },
@@ -88,7 +91,11 @@ export class DocumentPicker {
 
   private readonly native = inject(DocumentPicker.SOURCE);
 
-  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  /**
+   * Whether the module is here. False where the service is absent, on an OS the module is not for,
+   * and every call is inert; false too in a build missing the module, where a call can throw a
+   * `MissingModuleError`.
+   */
   readonly available: Signal<boolean> = presence(this.native);
 
   /**
@@ -112,7 +119,7 @@ export class DocumentPicker {
     const pick = this.native?.pickDirectoryAsync;
     if (!pick) return null;
     try {
-      return await pick.call(this.native);
+      return (await pick.call(this.native)) ?? null;
     } catch (error) {
       if (isCancelled(error)) return null;
       throw error;
@@ -139,6 +146,19 @@ export class DocumentPicker {
     if (file.writeSync) file.writeSync(contents);
     else file.write(contents);
     return file.uri;
+  }
+}
+
+/**
+ * `expo-file-system`, or null where it is not installed. Its `require` is directly inside a `try`,
+ * which is what makes Metro, with Expo's `allowOptionalDependencies`, bundle an app without it
+ * rather than fail: the folder picker is its, and an app may have only the document picker.
+ */
+function fileSystem(): typeof import('expo-file-system') | null {
+  try {
+    return require('expo-file-system') as typeof import('expo-file-system');
+  } catch {
+    return null;
   }
 }
 

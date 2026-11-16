@@ -528,30 +528,28 @@ describe('the document picker source', () => {
 
   it("adds expo-file-system's folder picker beside expo-document-picker's", async () => {
     const folder = { uri: 'file:///picked/' };
-    const source = withModules(
-      {
-        'expo-document-picker': {
-          getDocumentAsync: async () => ({ canceled: true, assets: null }),
-        },
-        'expo-file-system': { Directory: { pickDirectoryAsync: async () => folder } },
+    const modules = {
+      'expo-document-picker': {
+        getDocumentAsync: async () => ({ canceled: true, assets: null }),
       },
-      () => defaultSource(DocumentPicker.SOURCE),
-    )!;
+      'expo-file-system': { Directory: { pickDirectoryAsync: async () => folder } },
+    };
+    const source = withModules(modules, () => defaultSource(DocumentPicker.SOURCE))!;
     assert.deepEqual(await source.getDocumentAsync(), { canceled: true, assets: null });
-    assert.equal(await source.pickDirectoryAsync!(), folder);
+    // Loaded as a folder is asked for, not as the source is made.
+    assert.equal(await withModules(modules, () => source.pickDirectoryAsync!()), folder);
   });
 
-  it('has no folder picker without expo-file-system', () => {
-    const source = withModules(
-      {
-        'expo-document-picker': {
-          getDocumentAsync: async () => ({ canceled: true, assets: null }),
-        },
+  it('answers no folder without expo-file-system', async () => {
+    const modules = {
+      'expo-document-picker': {
+        getDocumentAsync: async () => ({ canceled: true, assets: null }),
       },
-      () => defaultSource(DocumentPicker.SOURCE),
-    )!;
-    assert.equal(source.pickDirectoryAsync, undefined);
+    };
+    const source = withModules(modules, () => defaultSource(DocumentPicker.SOURCE))!;
+    assert.equal(await withModules(modules, () => source.pickDirectoryAsync!()), null);
   });
+
   it('is inert with no expo-document-picker installed', () => {
     assert.equal(
       withModules({}, () => defaultSource(DocumentPicker.SOURCE)),

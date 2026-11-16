@@ -65,7 +65,11 @@ export class Battery {
 
   private readonly sources = inject(Battery.SOURCE);
 
-  /** Whether the module is here. False where the service is absent, and every call is inert. */
+  /**
+   * Whether the module is here. False where the service is absent, on an OS the module is not for,
+   * and every call is inert; false too in a build missing the module, where a call can throw a
+   * `MissingModuleError`.
+   */
   readonly available: Signal<boolean> = presence(this.sources.level);
   private readonly reported: Signal<number> = observed(this.sources.level, 1);
 

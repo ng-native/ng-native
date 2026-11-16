@@ -326,6 +326,39 @@ describe('biometrics', () => {
     assert.equal(service.available(), true);
   });
 
+  it('keeps the latest answer when an earlier question settles after it', async () => {
+    const pending: ((enrolled: boolean) => void)[] = [];
+    let changed: (state: string) => void = () => {};
+    const native = {
+      hasHardwareAsync: async () => true,
+      isEnrolledAsync: () => new Promise<boolean>((resolve) => pending.push(resolve)),
+    };
+    const service = servicesWith(
+      [
+        [Biometrics.SOURCE, native],
+        [
+          AppState.SOURCE,
+          {
+            current: () => 'active',
+            subscribe: (listener: never) => ((changed = listener), () => {}),
+          },
+        ],
+      ],
+      () => new Biometrics(),
+    );
+    const settle = () => new Promise((resolve) => setTimeout(resolve));
+    service.available();
+    changed('active' as never);
+    await settle();
+    assert.equal(pending.length, 2);
+    pending[1]!(true);
+    await settle();
+    assert.equal(service.available(), true);
+    pending[0]!(false);
+    await settle();
+    assert.equal(service.available(), true, 'the earlier answer arrived last, and is stale');
+  });
+
   it('names the kinds the device has, rather than numbering them', async () => {
     assert.deepEqual(await biometrics().service.kinds(), ['fingerprint', 'face']);
   });

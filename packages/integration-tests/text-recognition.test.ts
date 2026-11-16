@@ -105,6 +105,24 @@ describe('TextRecognition', () => {
   });
 });
 
+describe('TextRecognition on macOS', () => {
+  it("reads through the desktop host's TurboModule of the same name", async () => {
+    const fake = fakeNative();
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'macos' },
+        TurboModuleRegistry: {
+          get: (name: string) => (name === 'NgNativeTextRecognition' ? fake.native : null),
+        },
+      };
+    };
+    const ocr = injectService(TextRecognition);
+    assert.equal(ocr.available(), true);
+    assert.deepEqual(await ocr.recognize('file:///photo.jpg'), RECEIPT);
+  });
+});
+
 describe('TextRecognition without its native module', () => {
   for (const platform of ['android', 'web']) {
     it(`reads no text on ${platform}, where there is no Vision`, async () => {

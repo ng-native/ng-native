@@ -70,6 +70,12 @@ const NOTHING_READ: RecognizedText = Object.freeze({ text: '', lines: [], width:
  * the same name on macOS.
  */
 function nativeTextRecognition(): NativeTextRecognition | null {
+  if (currentPlatform() === 'macos') {
+    return optional(() => {
+      const { TurboModuleRegistry } = require('react-native') as typeof import('react-native');
+      return TurboModuleRegistry.get(MODULE) as NativeTextRecognition | null;
+    });
+  }
   return optional(
     () =>
       (globalThis as { expo?: { modules?: Record<string, NativeTextRecognition | undefined> } })
@@ -87,7 +93,7 @@ export class TextRecognition {
 
   private readonly native = inject(TextRecognition.SOURCE);
 
-  /** Whether `recognize` can run here: an iOS development or release build. */
+  /** Whether `recognize` can run here: an iOS development or release build, or macOS. */
   readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
 
   /**

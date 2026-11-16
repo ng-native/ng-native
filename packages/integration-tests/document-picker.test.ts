@@ -11,6 +11,7 @@ import {
   type NativeDocumentPicker,
   type PickedDocument,
 } from '@ng-native/expo/document-picker';
+import { cleanup, injectService } from '@ng-native/testing';
 import { serviceWith } from './injected.ts';
 
 const file: PickedDocument = {
@@ -110,6 +111,49 @@ describe('picking a folder', () => {
   it('answers null where there is no folder picker, or no module', async () => {
     assert.equal(await serviceOn(platform({ canceled: true, assets: null })).pickDirectory(), null);
     assert.equal(await serviceOn(null).pickDirectory(), null);
+  });
+});
+
+describe("the default source, over the platform's modules", () => {
+  /** A device with `expo-document-picker`, and `expo-file-system` if `folders` is given. */
+  function onDevice(folders: unknown, run: (loaded: string[]) => Promise<void>) {
+    const global = globalThis as Record<string, unknown>;
+    const loaded: string[] = [];
+    global['require'] = (id: string) => {
+      loaded.push(id);
+      if (id === 'react-native') return { Platform: { OS: 'android' } };
+      if (id === 'expo-document-picker') return platform({ canceled: true, assets: null });
+      if (id === 'expo-file-system' && folders)
+        return { Directory: { pickDirectoryAsync: folders } };
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    return run(loaded).finally(() => {
+      delete global['require'];
+      cleanup();
+    });
+  }
+
+  it('loads expo-file-system only once a folder is asked for', async () => {
+    const picked = folder();
+    await onDevice(
+      async () => picked,
+      async (loaded) => {
+        const documents = injectService(DocumentPicker);
+        assert.deepEqual(await documents.pick(), []);
+        assert.equal(loaded.includes('expo-file-system'), false, 'not to pick files');
+        assert.equal(await documents.pickDirectory(), picked);
+        assert.equal(loaded.includes('expo-file-system'), true);
+      },
+    );
+  });
+
+  it('answers null for a folder, and saves nothing, without expo-file-system', async () => {
+    await onDevice(null, async () => {
+      const documents = injectService(DocumentPicker);
+      assert.equal(documents.available(), true);
+      assert.equal(await documents.pickDirectory(), null);
+      assert.equal(await documents.save({ suggestedName: 'a.txt', contents: 'a' }), null);
+    });
   });
 });
 
