@@ -302,7 +302,9 @@ describe('a segmented control', () => {
   });
 
   it('keeps working when an observer throws', async () => {
+    let calls = 0;
     const { instance, pick } = await bootSegmented(() => {
+      calls++;
       throw new Error('broken observer');
     });
     const warn = console.warn;
@@ -313,6 +315,7 @@ describe('a segmented control', () => {
     } finally {
       console.warn = warn;
     }
+    assert.equal(calls, 2, 'the throwing observer ran for both picks');
     assert.deepEqual(instance.events, ['view', 'view']);
   });
 });

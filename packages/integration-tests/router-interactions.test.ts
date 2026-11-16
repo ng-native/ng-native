@@ -288,9 +288,11 @@ describe('an action of a native header bar menu tapped', () => {
   });
 
   it('keeps working when an observer throws', async () => {
+    let calls = 0;
     const app = await render(ObjectMenu, {
       providers: [
         provideInteractionObserver(() => {
+          calls++;
           throw new Error('broken observer');
         }),
       ],
@@ -306,6 +308,7 @@ describe('an action of a native header bar menu tapped', () => {
     } finally {
       console.warn = warn;
     }
+    assert.equal(calls, 2, 'the throwing observer ran for both actions');
     assert.deepEqual(app.instance.chosen, ['name', 'name']);
   });
 });
