@@ -37,7 +37,7 @@ import { compileFixture } from './compile.ts';
 class Root {}
 class Note {}
 
-function fakeHost() {
+function fakeHost(opening?: (surface: number, send: (event: NativeWindowEvent) => void) => void) {
   let next = 11;
   const listeners = new Set<(event: NativeWindowEvent) => void>();
   const opened: NativeWindowRequest[] = [];
@@ -48,6 +48,7 @@ function fakeHost() {
       opened.push(request);
       const surface = next;
       next += 10;
+      opening?.(surface, send);
       return surface;
     },
     close: (surface) => void closed.push(surface),
@@ -60,7 +61,9 @@ function fakeHost() {
       return () => void listeners.delete(listener);
     },
   };
-  const send = (event: NativeWindowEvent) => listeners.forEach((listener) => listener(event));
+  function send(event: NativeWindowEvent) {
+    listeners.forEach((listener) => listener(event));
+  }
   return { native, send, opened, closed, answers };
 }
 
@@ -68,14 +71,18 @@ function fakeHost() {
 function fakeMounter(failing = new Set<Type<unknown>>()) {
   const mounted: number[] = [];
   const destroyed: number[] = [];
+  const sizes: string[] = [];
   const mounter: WindowMounter = {
     mount: (surface, component) => {
       if (failing.has(component)) throw new Error('mount failed');
       mounted.push(surface);
-      return { resize: () => {}, destroy: () => void destroyed.push(surface) };
+      return {
+        resize: ({ width, height }) => void sizes.push(`${surface} ${width}x${height}`),
+        destroy: () => void destroyed.push(surface),
+      };
     },
   };
-  return { mounter, mounted, destroyed };
+  return { mounter, mounted, destroyed, sizes };
 }
 
 const navigator: WindowNavigator = {
@@ -89,9 +96,10 @@ function start(
     failing?: Set<Type<unknown>>;
     store?: RestoredWindow[][];
     navigator?: WindowNavigator;
+    opening?: Parameters<typeof fakeHost>[0];
   } = {},
 ) {
-  const host = fakeHost();
+  const host = fakeHost(options.opening);
   const mounter = fakeMounter(options.failing);
   const writes = options.store;
   const injector = createEnvironmentInjector(
@@ -404,5 +412,41 @@ describe('the main window on the platform mounter', () => {
     } finally {
       app.applicationRef.destroy();
     }
+  });
+});
+
+describe('a size the host sends before the window is mounted', () => {
+  // iPadOS sends a reclaimed window's size straight after answering `open`, before the app has
+  // mounted anything on the surface.
+  it('reaches the mount once it is made', async () => {
+    const { mounter, windows } = start({
+      opening: (surface, send) => send({ type: 'resize', surface, width: 700, height: 500 }),
+    });
+    await flush();
+    const note = await windows.open(Note);
+    assert.ok(note);
+    assert.ok(mounter.sizes.includes(`${note.surface} 700x500`), mounter.sizes.join(', '));
+  });
+
+  it('is forgotten when the surface closes before a window is made on it', async () => {
+    let early: number | null = null;
+    const { host, mounter, windows } = start({
+      opening: (surface, send) => {
+        if (early !== null) return;
+        early = surface + 10;
+        // A size for a surface the app has not opened, then its close.
+        send({ type: 'resize', surface: early, width: 300, height: 200 });
+        send({ type: 'closed', surface: early });
+      },
+    });
+    await flush();
+    const note = await windows.open(Note);
+    assert.equal(note?.surface, early, 'the surface the size named');
+    assert.deepEqual(
+      mounter.sizes.filter((size) => size.endsWith('300x200')),
+      [],
+      'the closed surface left no size behind',
+    );
+    assert.equal(host.closed.length, 0);
   });
 });

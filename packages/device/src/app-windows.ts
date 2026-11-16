@@ -115,7 +115,8 @@ export interface NativeWindowRequest extends Omit<WindowOptions, 'title' | 'auto
 }
 
 /**
- * What the host tells the app. The host never closes a window or quits on its own: it sends
+ * What the host tells the app. A `resize` for a surface `open` has not resolved to a mounted window
+ * yet is kept for the window made on it. The host never closes a window or quits on its own: it sends
  * `closeRequest` for the close button and Cmd-W, and `quitRequest` for Cmd-Q, a logout or an
  * update's relaunch, and waits for `close` or `answerQuit`. `closed` reports a window the OS
  * closed itself (an iPadOS scene swiped away), which no guard can keep.
@@ -322,6 +323,16 @@ export class AppWindows {
     inputs?: Readonly<Record<string, unknown>>;
     bindings?: Binding[];
   } | null = null;
+
+  /**
+   * The last size the host sent for a surface no window is on yet. iPadOS sends a reclaimed
+   * window's size as it answers `open`, which can be heard before the window is mounted; the mount
+   * takes it once it is made. Gone when the surface closes, or a window is made on it.
+   */
+  private readonly earlySizes = new Map<
+    number,
+    { width: number; height: number; scale?: number | undefined }
+  >();
 
   /** The open in flight for each key, so a second open of the key waits for it. */
   private readonly opening = new Map<string, Promise<unknown>>();
@@ -557,6 +568,8 @@ export class AppWindows {
       title,
     });
     if (surface === null) return null;
+    const early = this.earlySizes.get(surface);
+    this.earlySizes.delete(surface);
     // One the host opened as the quit began goes again.
     if (this.closing) {
       native.close(surface);
@@ -566,6 +579,7 @@ export class AppWindows {
     open.restore = restore?.() ?? null;
     this.remember();
     this.mountIn(open, mounter, component, { inputs, bindings, providers, main });
+    if (early) open.mount?.resize(early);
     return open.handle;
   }
 
@@ -653,13 +667,17 @@ export class AppWindows {
       case 'focus':
         this.focusedSurface.set(event.surface);
         return;
-      case 'resize':
-        this.find(event.surface)?.mount?.resize(event);
+      case 'resize': {
+        const open = this.find(event.surface);
+        if (open) open.mount?.resize(event);
+        else this.earlySizes.set(event.surface, event);
         return;
+      }
       case 'closeRequest':
         void this.closeAsked(event.surface);
         return;
       case 'closed':
+        this.earlySizes.delete(event.surface);
         this.closeNow(event.surface, false);
         return;
       case 'quitRequest':
