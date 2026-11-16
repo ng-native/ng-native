@@ -70,10 +70,10 @@ The same insets are also published as CSS custom properties - `--safe-area-inset
 `env(safe-area-inset-bottom)` and the other three sides compile to the same custom properties, so a
 stylesheet shared with the web can keep its `env()`.
 
-On macOS, `--safe-area-inset-titlebar-leading` is the width of the window's close, minimise and zoom
-buttons where content runs beside them, as in a window with no sidebar, so a toolbar row in the
-content can start clear of them. It is `0px` with a sidebar under the buttons, and on every other
-OS.
+On macOS, `--safe-area-inset-titlebar-leading` is how far the window's close, minimise and zoom
+buttons reach into the pane from its leading edge, so a toolbar row can start clear of them: their
+width in a window with no sidebar and in the sidebar pane they sit over, and `0px` in the content
+pane beside a sidebar, which they do not reach. It is `0px` on every other OS.
 
 Both components need `react-native-safe-area-context` installed; without it they render as
 unimplemented views rather than doing nothing quietly.

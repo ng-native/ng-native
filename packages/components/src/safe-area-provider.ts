@@ -37,8 +37,8 @@ import { booleanOr } from './transforms.ts';
 
 /**
  * The insets, in the form the cascade carries: one custom property per edge, in points, and the
- * width of a desktop window's title bar controls where content runs beside them (zero with a
- * sidebar under them, and on every OS that has none).
+ * extent of a desktop window's title bar controls into the provider's pane (zero in the content
+ * pane beside a sidebar, which they do not reach, and on every OS that has none).
  */
 function insetTokens(insets: Insets, titlebarLeading: number): Record<string, { length: number }> {
   return {
