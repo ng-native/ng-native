@@ -122,6 +122,38 @@ describe('publishPrebuilt', () => {
     }
   });
 
+  it('never replaces an archive a run already published, which a manifest may point to', () => {
+    const { out, archive } = packed();
+    try {
+      const manifest = path.join(out, 'prebuilt.json');
+      writeFileSync(manifest, JSON.stringify({ version: 1, hosts: [] }));
+      publishPrebuilt({ out, archive, name: 'h.tar.gz', host, manifest });
+      // Another build of the same name, published without --manifest.
+      const second = path.join(out, '.second.partial');
+      writeFileSync(second, 'another build');
+      assert.throws(
+        () =>
+          publishPrebuilt({
+            out,
+            archive: second,
+            name: 'h.tar.gz',
+            host: { ...host, sha256: 'b' },
+          }),
+        (error: Error) => error.message.includes(path.join(out, 'h.tar.gz')),
+      );
+      assert.equal(readFileSync(path.join(out, 'h.tar.gz'), 'utf8'), 'archive');
+      assert.equal(
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host.json'), 'utf8')).sha256,
+        'a',
+      );
+      assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host]);
+      assert.ok(!existsSync(second), 'its own packed archive is removed');
+      assert.ok(!existsSync(path.join(out, '.make-prebuilt.lock')), 'its lock let go');
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  });
+
   it('waits while another run publishes into the same folder, then publishes its own pair', () => {
     const { out, archive } = packed();
     const lock = path.join(out, '.make-prebuilt.lock');
