@@ -110,7 +110,8 @@ each window after it. iPadOS places and sizes every scene itself, so the size op
 `titleBar` are ignored, and `setTitle` names the scene in the app switcher. iPadOS closes a scene
 without asking the app, so the `canClose` guards are not asked there, and there is no quitting:
 `quit()` does nothing. A window the user makes from the system, with New Window, opens the main
-window, or where the main window is open already, brings it to the front and closes again.
+window in it. Where the main window is open already, the main window comes to the front and stays
+open, and the window the user made closes.
 
 ## Reference
 
