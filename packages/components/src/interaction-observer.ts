@@ -79,7 +79,7 @@ export interface InteractionEvent {
   readonly direction?: InteractionDirection;
   /** The native gesture this came from, if it came from one. */
   readonly gesture?: InteractionGesture;
-  /** A pan's straight-line distance from where it started, in points. */
+  /** A pan's or fling's straight-line distance from where it started, in points. */
   readonly distance?: number;
   /** A pinch's scale as it ended: above 1 spread apart, below 1 pinched together. */
   readonly scale?: number;

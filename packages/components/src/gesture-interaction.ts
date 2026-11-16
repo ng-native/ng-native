@@ -58,17 +58,25 @@ function fingerDirection(dx: number, dy: number): InteractionDirection | undefin
   return dy > 0 ? 'down' : 'up';
 }
 
+/** How far the finger moved from where it came down, or undefined without both points. */
+function fingerMoved(end: GestureEndValues): { dx: number; dy: number } | undefined {
+  const { absoluteX, absoluteY, startX, startY } = end;
+  if (absoluteX === undefined || absoluteY === undefined) return undefined;
+  if (startX === undefined || startY === undefined) return undefined;
+  return { dx: absoluteX - startX, dy: absoluteY - startY };
+}
+
 /**
  * A fling's direction: the one it was set to recognise, or with several, the way the finger
  * moved from where it came down, since its end event carries no translation.
  */
-function flingDirection(ended: EndedGesture): InteractionDirection | undefined {
+function flingDirection(
+  ended: EndedGesture,
+  moved: { dx: number; dy: number } | undefined,
+): InteractionDirection | undefined {
   const only = DIRECTIONS[ended.directions ?? FLING_DEFAULT];
   if (only) return only;
-  const { absoluteX, absoluteY, startX, startY } = ended.end;
-  if (absoluteX === undefined || absoluteY === undefined) return undefined;
-  if (startX === undefined || startY === undefined) return undefined;
-  return fingerDirection(absoluteX - startX, absoluteY - startY);
+  return moved && fingerDirection(moved.dx, moved.dy);
 }
 
 type Detail = Omit<GestureInteraction, 'gesture'>;
@@ -104,8 +112,13 @@ const DETAIL: Record<string, (ended: EndedGesture) => Detail> = {
   'long-press': ({ end }) => pressed('long-press', end),
   pan: ({ end }) => panned(end),
   fling: (ended) => {
-    const direction = flingDirection(ended);
-    return { type: 'swipe', ...(direction && { direction }) };
+    const moved = fingerMoved(ended.end);
+    const direction = flingDirection(ended, moved);
+    return {
+      type: 'swipe',
+      ...(direction && { direction }),
+      ...(moved && { distance: Math.round(Math.hypot(moved.dx, moved.dy)) }),
+    };
   },
   pinch: ({ end }) => ({ type: 'gesture', ...(end.scale !== undefined && { scale: end.scale }) }),
 };

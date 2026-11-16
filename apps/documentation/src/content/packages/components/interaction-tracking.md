@@ -109,7 +109,7 @@ a scroll view took over, reports nothing, and nothing is reported while it moves
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `Gesture.Tap()`                     | `click`, with `pageX`, `pageY`, `locationX`, `locationY` and the `text` inside the element.                                                            |
 | `Gesture.LongPress()`               | `long-press`, with the same.                                                                                                                           |
-| `Gesture.Fling()`                   | `swipe`, with the `direction` it was set to, or the way the finger moved when set to several.                                                          |
+| `Gesture.Fling()`                   | `swipe`, with the `direction` it was set to, or the way the finger moved when set to several, and the `distance` the finger moved.                     |
 | `Gesture.Pan()`                     | `swipe` when released at `SWIPE_VELOCITY` or faster, otherwise `gesture`. Either way with `direction` and `distance`, in points from where it started. |
 | `Gesture.Pinch()`                   | `gesture`, with the `scale` it ended at.                                                                                                               |
 | `Gesture.Rotation()` and the others | `gesture`.                                                                                                                                             |

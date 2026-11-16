@@ -108,6 +108,14 @@ describe('gesture interaction', () => {
     });
   });
 
+  it('reports how far a fling went, from where the finger came down', () => {
+    assert.deepEqual(
+      ended('FlingGestureHandler', { startX: 10, startY: 50, absoluteX: 70, absoluteY: 130 }),
+      { type: 'swipe', gesture: 'fling', direction: 'right', distance: 100 },
+      'the direction it was set to, and the distance the finger moved',
+    );
+  });
+
   it('reports a fling set to several directions by the way the finger moved', () => {
     const LEFT_OR_UP = 2 | 4;
     assert.deepEqual(
@@ -116,7 +124,15 @@ describe('gesture interaction', () => {
         { startX: 200, startY: 300, absoluteX: 190, absoluteY: 220 },
         LEFT_OR_UP,
       ),
-      { type: 'swipe', gesture: 'fling', direction: 'up' },
+      { type: 'swipe', gesture: 'fling', direction: 'up', distance: 81 },
+    );
+    assert.deepEqual(
+      ended(
+        'FlingGestureHandler',
+        { startX: 200, startY: 300, absoluteX: 120, absoluteY: 290 },
+        LEFT_OR_UP,
+      ),
+      { type: 'swipe', gesture: 'fling', direction: 'left', distance: 81 },
     );
     assert.deepEqual(
       ended('FlingGestureHandler', { absoluteX: 190, absoluteY: 220 }, LEFT_OR_UP),
@@ -127,6 +143,11 @@ describe('gesture interaction', () => {
       ended('FlingGestureHandler', { startX: 200, absoluteX: 190, absoluteY: 220 }, LEFT_OR_UP),
       { type: 'swipe', gesture: 'fling' },
       'nor with half of one',
+    );
+    assert.deepEqual(
+      ended('FlingGestureHandler', { startX: 200, startY: 300, absoluteX: 190 }, LEFT_OR_UP),
+      { type: 'swipe', gesture: 'fling' },
+      'nor with half of an end',
     );
   });
 
