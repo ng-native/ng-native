@@ -1290,6 +1290,7 @@ describe('available-signal on code that is already migrated, and on bracket read
 describe('available-signal in template text, which a template shows rather than reads', () => {
   const html = [
     '<text>Uses haptics.available here</text>',
+    '{{ a <b }} @if (haptics.available) {}',
     '<text label="@if (haptics.available) yes @let x = haptics.available;"></text>',
     "<text label=\"[hint]='haptics.available' (press)='haptics.available'\"></text>",
     '<text label="haptics.available" [hint]="haptics.available ? 1 : 2">{{ haptics.available }}</text>',
@@ -1302,6 +1303,7 @@ describe('available-signal in template text, which a template shows rather than 
   ].join('\n');
   const called = [
     '<text>Uses haptics.available here</text>',
+    '{{ a <b }} @if (haptics.available()) {}',
     '<text label="@if (haptics.available) yes @let x = haptics.available;"></text>',
     "<text label=\"[hint]='haptics.available' (press)='haptics.available'\"></text>",
     '<text label="haptics.available" [hint]="haptics.available() ? 1 : 2">{{ haptics.available() }}</text>',
@@ -1388,6 +1390,16 @@ describe('available-signal on strings inside template expressions', () => {
     assert.equal(
       nx.files['src/app/quoted.ts'],
       component(quoted(shown.replace(/haptics\.available/g, 'haptics.available()'))),
+    );
+  });
+
+  it('keeps its place past an escape that decodes to two UTF-16 units', async () => {
+    const before = "template: '<text>\\u{1F600}</text>@if (haptics.available) {}'";
+    const files = { 'src/app/emoji.ts': component(before) };
+    const { nx } = await acrossAdapters(files, 'available-signal', '0.22.2');
+    assert.equal(
+      nx.files['src/app/emoji.ts'],
+      component(before.replace('haptics.available', 'haptics.available()')),
     );
   });
 });
