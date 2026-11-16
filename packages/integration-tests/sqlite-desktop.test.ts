@@ -13,6 +13,7 @@ type Call = [string, ...unknown[]];
 /** A desktop host whose `NgNativeSqlite` records every call and answers from `answers`. */
 function host(answers: Record<string, (...args: unknown[]) => unknown> = {}) {
   const calls: Call[] = [];
+  let opened = 6;
   const module = new Proxy(
     {},
     {
@@ -22,7 +23,8 @@ function host(answers: Record<string, (...args: unknown[]) => unknown> = {}) {
           assert.ok(hostMethods('NgNativeSqlite')?.has(name), `NgNativeSqlite has no ${name}`);
           calls.push([name, ...args]);
           if (name === 'openDatabaseAsync') {
-            return { id: 7, databasePath: `/data/SQLite/${args[0]}`, databaseName: args[0] };
+            opened += 1;
+            return { id: opened, databasePath: `/data/SQLite/${args[0]}`, databaseName: args[0] };
           }
           return answers[name]?.(...args) ?? null;
         },
@@ -106,6 +108,49 @@ describe('database() on macOS', () => {
     assert.deepEqual(
       calls.slice(1).map((call) => call[2]),
       ['BEGIN', 'ROLLBACK'],
+    );
+  });
+
+  it('rolls back and rethrows when COMMIT fails, as a deferred foreign key makes it', async () => {
+    const calls = host({
+      execAsync: (_id, source) => {
+        if (source === 'COMMIT') throw new Error('FOREIGN KEY constraint failed');
+        if (source === 'ROLLBACK') throw new Error('no transaction is active');
+        return null;
+      },
+    });
+    const db = await database('a.db').ready();
+    await assert.rejects(
+      db.withTransactionAsync(async () => {}),
+      /FOREIGN KEY constraint failed/,
+    );
+    assert.deepEqual(
+      calls.slice(1).map((call) => call[2]),
+      ['BEGIN', 'COMMIT', 'ROLLBACK'],
+    );
+  });
+
+  it('runs an exclusive transaction on a connection of its own, handed to the task', async () => {
+    const calls = host();
+    const db = await database('a.db').ready();
+    await assert.rejects(
+      db.withExclusiveTransactionAsync(async (txn) => {
+        await txn.runAsync('INSERT 1');
+        await db.runAsync('INSERT 2');
+        throw new Error('nope');
+      }),
+      /nope/,
+    );
+    assert.deepEqual(
+      calls.slice(1).map((call) => [call[0], call[1], call[2]]),
+      [
+        ['openDatabaseAsync', 'a.db', undefined],
+        ['execAsync', 8, 'BEGIN EXCLUSIVE'],
+        ['runAsync', 8, 'INSERT 1'],
+        ['runAsync', 7, 'INSERT 2'],
+        ['execAsync', 8, 'ROLLBACK'],
+        ['closeAsync', 8, undefined],
+      ],
     );
   });
 

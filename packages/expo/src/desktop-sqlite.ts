@@ -46,27 +46,40 @@ function rowOf(row: unknown): unknown {
   );
 }
 
-function databaseOver(host: Host, handle: { id: number; databasePath: string }) {
+/**
+ * `task` between `begin` and COMMIT, through `exec`. A COMMIT that fails (a deferred foreign key)
+ * leaves the transaction open, so it rolls back too; the error reported is the one that ended the
+ * transaction, not a failure to roll back after it.
+ */
+async function transaction(
+  exec: (source: string) => Promise<unknown>,
+  begin: string,
+  task: () => Promise<void>,
+): Promise<void> {
+  await exec(begin);
+  try {
+    await task();
+    await exec('COMMIT');
+  } catch (error) {
+    await exec('ROLLBACK').catch(() => {});
+    throw error;
+  }
+}
+
+type Handle = { id: number; databasePath: string };
+
+/** `handle`'s database; `reopen` opens another connection to the same one, for a transaction of its own. */
+function databaseOver(host: Host, handle: Handle, reopen: () => Promise<Handle>) {
   const { id } = handle;
   const call = (name: string, ...args: unknown[]) => host[name]!(id, ...args);
   const query = (name: string, source: string, params: Params) =>
     call(name, source, paramsOf(params));
   const all = (rows: unknown) => ((rows as unknown[] | null) ?? []).map(rowOf);
+  const exec = (source: string) => call('execAsync', source) as Promise<unknown>;
 
-  const transaction = async (begin: string, task: () => Promise<void>) => {
-    await call('execAsync', begin);
-    try {
-      await task();
-    } catch (error) {
-      await call('execAsync', 'ROLLBACK');
-      throw error;
-    }
-    await call('execAsync', 'COMMIT');
-  };
-
-  return {
+  const database = {
     databasePath: handle.databasePath,
-    execAsync: (source: string) => call('execAsync', source),
+    execAsync: exec,
     runAsync: (source: string, ...params: unknown[]) => query('runAsync', source, params),
     getFirstAsync: async (source: string, ...params: unknown[]) =>
       rowOf(await query('getFirstAsync', source, params)),
@@ -77,9 +90,17 @@ function databaseOver(host: Host, handle: { id: number; databasePath: string }) 
     },
     isInTransactionAsync: () => call('isInTransactionAsync'),
     closeAsync: () => call('closeAsync'),
-    withTransactionAsync: (task: () => Promise<void>) => transaction('BEGIN', task),
-    withExclusiveTransactionAsync: (task: () => Promise<void>) =>
-      transaction('BEGIN EXCLUSIVE', task),
+    withTransactionAsync: (task: () => Promise<void>) => transaction(exec, 'BEGIN', task),
+    // On a connection of its own, as expo-sqlite's: a write through this one while the task waits
+    // is not part of the transaction, so a rollback cannot take it back.
+    withExclusiveTransactionAsync: async (task: (txn: unknown) => Promise<void>) => {
+      const txn = databaseOver(host, await reopen(), reopen);
+      try {
+        await transaction(txn.execAsync, 'BEGIN EXCLUSIVE', () => task(txn));
+      } finally {
+        await txn.closeAsync();
+      }
+    },
     execSync: (source: string) => call('execSync', source),
     runSync: (source: string, ...params: unknown[]) => query('runSync', source, params),
     getFirstSync: (source: string, ...params: unknown[]) =>
@@ -93,6 +114,7 @@ function databaseOver(host: Host, handle: { id: number; databasePath: string }) 
     prepareAsync: () => Promise.reject(unsupported('prepareAsync')),
     serializeAsync: () => Promise.reject(unsupported('serializeAsync')),
   };
+  return database;
 }
 
 /**
@@ -106,7 +128,9 @@ export function desktopSqlite(): {
   const host = desktopHost<Host>('NgNativeSqlite')?.module;
   if (!host) return null;
   return {
-    openDatabaseAsync: async (name, ...rest) =>
-      databaseOver(host, (await host['openDatabaseAsync']!(name, ...rest)) as never),
+    openDatabaseAsync: async (name, ...rest) => {
+      const open = async () => (await host['openDatabaseAsync']!(name, ...rest)) as Handle;
+      return databaseOver(host, await open(), open);
+    },
   };
 }
