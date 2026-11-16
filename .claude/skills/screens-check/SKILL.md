@@ -184,8 +184,11 @@ of the screen named, not the home screen, a dialog or a red error screen.
 ## macOS mode
 
 For a change that draws on the desktop host, compare the same screens as a packaged Mac app,
-main beside the change. Steps 1 and 5 are unchanged (`native-output.mjs` is the same on every OS,
-and the comparison reads any PNG). Steps 2 to 4 and 6 become:
+main beside the change. Step 5 is unchanged (the comparison reads any PNG), and so is step 1 but
+for one thing: `native-output.mjs` renders each screen as iOS (the canary's Node project picks iOS
+from `expo.platforms`), so a change that draws only on macOS (a `.platform-macos` rule, an
+`os === 'macos'` branch, `packages/desktop`) leaves `ROUTES` empty. Add the routes such a change
+reaches to `ROUTES` by hand before step 1's empty-route exit. Steps 2 to 4 and 6 become:
 
 **2m. One packaged app per side.** Only a packaged `.app` has its URL scheme registered with
 LaunchServices, so a dev host cannot be opened on a route. Package the canary in each checkout,
@@ -215,7 +218,7 @@ apart that are the same, at most twenty seconds), captures that window alone wit
 
 ```sh
 for side in base change; do
-  node .claude/skills/screens-check/macos.mjs --app "$out/$side-app/Canary.app" --scheme canary \
+  node .claude/skills/screens-check/macos.mjs --app "$out/$side-app/canary.app" --scheme canary \
     --out "$out/shots/$side" $(echo $ROUTES)
 done
 ```
@@ -230,7 +233,7 @@ is looked at by hand and said so in the report. A route that opens a second wind
 largest; say so when the change is about the other.
 
 Step 6 on a Mac: `rm -rf "$out"` after `git worktree remove` is all there is, and make sure no
-`Canary` is left running (`pgrep -fl Canary.app`).
+`canary` is left running (`pgrep -fl canary.app`).
 
 ## 6. Clean up
 

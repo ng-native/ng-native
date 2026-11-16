@@ -16,15 +16,15 @@ interface WindowInfo {
 }
 
 const script = new URL('../../.claude/skills/screens-check/macos.mjs', import.meta.url);
-const { deepLink, hostWindow, openArguments, screenshotName, settled } = (await import(
-  script.href
-)) as {
-  deepLink(scheme: string, route: string): string;
-  hostWindow(windows: WindowInfo[], pid: number): WindowInfo | undefined;
-  openArguments(target: { app: string }, link: string): string[];
-  screenshotName(route: string, labels: string[]): string;
-  settled(previous: string | undefined, current: string): boolean;
-};
+const { deepLink, hostWindow, openArguments, pgrepPattern, screenshotName, settled } =
+  (await import(script.href)) as {
+    deepLink(scheme: string, route: string): string;
+    hostWindow(windows: WindowInfo[], pid: number): WindowInfo | undefined;
+    openArguments(target: { app: string }, link: string): string[];
+    pgrepPattern(executable: string): string;
+    screenshotName(route: string, labels: string[]): string;
+    settled(previous: string | undefined, current: string): boolean;
+  };
 
 const window = (over: Partial<WindowInfo>): WindowInfo => ({
   id: 1,
@@ -70,10 +70,10 @@ describe('opening a route', () => {
   });
 
   it('hands a packaged app the link through LaunchServices, a new instance each time', () => {
-    assert.deepEqual(openArguments({ app: '/x/Canary.app' }, 'canary://a'), [
+    assert.deepEqual(openArguments({ app: '/x/canary.app' }, 'canary://a'), [
       '-n',
       '-a',
-      '/x/Canary.app',
+      '/x/canary.app',
       'canary://a',
     ]);
   });
@@ -87,5 +87,15 @@ describe('screenshot names', () => {
       'overlays-toast-Show-a-toast.png',
     );
     assert.equal(screenshotName('/', []), 'home.png');
+  });
+});
+
+describe("finding the app's process", () => {
+  it("matches its executable's path as written, regular-expression characters and all", () => {
+    const executable = '/tmp/screens (copy)/c++.app/Contents/MacOS/c++';
+    const pattern = new RegExp(pgrepPattern(executable));
+    assert.ok(pattern.test(`${executable} -psn_0_1`));
+    assert.ok(!pattern.test('/tmp/screens Xcopy)/c++.app/Contents/MacOS/c++'));
+    assert.ok(!pattern.test('/tmp/screens copy/c.app/Contents/MacOS/c'));
   });
 });

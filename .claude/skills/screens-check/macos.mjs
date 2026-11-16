@@ -3,7 +3,7 @@
  * The macOS mode of the screens-check skill: opens each route of a desktop app by deep link, waits
  * for the host window to stop changing, and captures that window alone with `screencapture -l`.
  *
- *   node .claude/skills/screens-check/macos.mjs --app /path/Canary.app --scheme canary \
+ *   node .claude/skills/screens-check/macos.mjs --app /path/canary.app --scheme canary \
  *     --out "$out/shots/base" /overlays /forms
  *
  * One launch per route, as the iOS mode terminates and reopens the app: a new instance of the app
@@ -125,9 +125,22 @@ function executableOf(app) {
   return path.join(app, 'Contents/MacOS', run.stdout.trim());
 }
 
+/**
+ * The `pgrep -f` pattern for `executable` itself: pgrep reads an extended regular expression, so a
+ * path with `(`, `.` or `+` in it is escaped to match only as written.
+ *
+ * @param {string} executable
+ */
+export function pgrepPattern(executable) {
+  return executable.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+}
+
 /** Pids of the running process whose executable is `executable`. @param {string} executable */
 function pidsOf(executable) {
-  const run = spawnSync('pgrep', ['-f', executable], { encoding: 'utf8' });
+  const run = spawnSync('pgrep', ['-f', pgrepPattern(executable)], { encoding: 'utf8' });
+  // pgrep exits 1 when nothing matches and above 1 when it could not look.
+  if (run.status === 1) return [];
+  if (run.status !== 0) throw new Error(`pgrep failed: ${run.error?.message ?? run.stderr}`);
   return run.stdout.split('\n').filter(Boolean).map(Number);
 }
 
