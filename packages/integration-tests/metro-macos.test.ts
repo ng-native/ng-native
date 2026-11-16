@@ -139,6 +139,7 @@ describe('the macOS Babel plugin, on Platform.select', () => {
       // A conversion runs the object's valueOf or toString.
       'x = Platform.select({\n  ios: +side,\n  macos: n\n});',
       'x = Platform.select({\n  ios: `${side}`,\n  macos: n\n});',
+      'x = Platform.select({\n  ios: +`${++n}`,\n  macos: n\n});',
       // A computed key runs as the object is made, a method's included.
       'x = Platform.select({\n  ios: {\n    [++n]() {}\n  },\n  macos: n\n});',
     ]) {
