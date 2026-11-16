@@ -412,7 +412,13 @@ for (const os of ['android', 'ios'] as const)
         const row = screen.getByTestId('row');
         const sent = () => host.contextMenus.get(row.props['nativeID'] as string);
         if (dropped) {
-          assert.notEqual(sent(), null, 'the menu while its item is there');
+          assert.deepEqual(
+            sent()?.map((entry) =>
+              'items' in entry ? { ...entry, items: byPlace(entry.items) } : entry,
+            ),
+            [{ id: '0', label: 'Share', inline: true, items: [{ id: 'action', label: 'Pin' }] }],
+            'the menu while its item is there',
+          );
           pinned.set(false);
           await settle();
         }
