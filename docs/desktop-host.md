@@ -34,18 +34,17 @@ pnpm --filter @ng-native/desktop build:host     # the macOS host
 
 ## Publishing a prebuilt host
 
-Publishing one is a manual step; the release workflow does none of it:
+The release workflow (`.github/workflows/release.yml`) publishes one with each release, for the
+React Native version the packages support:
 
-1. Build and pack the host for each React Native version with:
+1. Its `desktop-host` job builds the universal Release host against `examples/canary`, which has
+   every host library, signs it ad hoc and packs it with
+   `native/scripts/make-prebuilt.mjs examples/canary .prebuilt --version <release> --base-url <url>`,
+   where `<url>` is the release's downloads URL.
+2. The release job writes the host's entry, with its SHA-256, into `packages/desktop/prebuilt.json`
+   before the packages are packed, so the npm package names the archive.
+3. The archive goes up with the GitHub release.
 
-   ```sh
-   native/scripts/make-prebuilt.mjs <app> <out> --version <release> --base-url <url> \
-     --manifest prebuilt.json
-   ```
-
-   `<url>` is the absolute URL of the GitHub release's downloads
-   (`https://github.com/ng-native/ng-native/releases/download/<tag>`). It writes the archive to
-   `<out>` and its entry into `prebuilt.json`.
-
-2. Commit the updated `prebuilt.json`, so the npm package carries the entries.
-3. Attach each archive to the GitHub release at that URL.
+To publish a host by hand, for another React Native version or another app, run `make-prebuilt.mjs`
+with `--manifest prebuilt.json` to write its entry, commit `prebuilt.json`, and attach the archive
+to the GitHub release at `<url>`.
