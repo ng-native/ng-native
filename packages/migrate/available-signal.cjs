@@ -5,8 +5,9 @@
  * - a property, read as `x.available`: `DevMenu`, `Haptics`, `SplashScreen`, `Tracking`, `Fonts` and
  *   `Watch`. Each read is rewritten to `x.available()`.
  * - a method that resolved, read as `await x.available()`: `Biometrics`, `AppleSignIn`,
- *   `ScreenCapture` and `StoreReview`. Each `await x.available()` is rewritten to `x.available()`;
- *   any other use of the promise, such as `.then(...)`, is noted.
+ *   `ScreenCapture` and `StoreReview`. Each `await x.available()` is rewritten to `x.available()`
+ *   and noted, since the signal is false until the platform answers, where the await waited for
+ *   it; any other use of the promise, such as `.then(...)`, is noted.
  * - a signal of `boolean | null`, the sensors': a comparison of `x.available()` with `null` or
  *   `undefined`, or a `??` after it, is noted, since it is never null now.
  *
@@ -218,6 +219,11 @@ function codeEdits(ts, source, file, { types, instances }) {
     if (ts.isAwaitExpression(around.parent)) {
       const awaited = around.parent;
       edits.push({ start: awaited.getStart(), end: awaited.expression.getStart(), text: '' });
+      notes.push(
+        `${file}:${line(call)}: available() is a signal now, false until the platform answers, ` +
+          'so without the await this reads false at first. Read it where a change shows, in a ' +
+          'template or a computed(), rather than once.',
+      );
       return;
     }
     // Only a call still used as a promise: one that is read as a signal is already migrated.
@@ -255,25 +261,87 @@ const declaration = (name) =>
   );
 
 /**
- * A property read of `name.available`, not already called, where `name` is not itself a member of
- * something else, as in `model.haptics.available`.
+ * A property read of `name.available`, not already called, where `name` is the component's own:
+ * read bare or as `this.name`, and not as a member of something else, as in
+ * `model.haptics.available`.
  */
 const propertyRead = (name) =>
   new RegExp(
-    `(?<![\\w$.])(?<!\\.\\s+)${name}(?:\\.available\\b|\\[\\s*['"]available['"]\\s*\\])(?!\\s*\\()`,
+    `(?<![\\w$])(?<!(?<!\\bthis\\s*)\\s*\\.\\s*)${name}(?:\\.available\\b|\\[\\s*['"]available['"]\\s*\\])(?!\\s*\\()`,
     'g',
   );
+
+/** A bound attribute, `[x]`, `(x)`, `[(x)]` or `*x`, and where its quoted value starts. */
+const BOUND = /(?:\[\(?[^\s=\]]+\)?\]|\([^\s=)]+\)|\*[\w-]+)\s*=\s*(["'])/g;
+
+/** A block whose parameters are an expression: `@if (`, `@else if (`, `@for (` and the rest. */
+const BLOCK = /@(?:if|else\s+if|for|switch|case|defer)\s*\(/g;
+
+/** Where the parenthesis opened just before `from` closes, past quoted text; the end if never. */
+function closing(text, from) {
+  let depth = 1;
+  let quote = null;
+  for (let at = from; at < text.length; at++) {
+    const char = text[at];
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === "'" || char === '"' || char === '`') quote = char;
+    else if (char === '(') depth++;
+    else if (char === ')' && --depth === 0) return at;
+  }
+  return text.length;
+}
+
+/**
+ * The spans of a template Angular reads as expressions: `{{ }}` interpolations, bound attribute
+ * values, block parameters and `@let` values. Text and plain attribute values are shown as they
+ * are, so a `name.available` there is left alone.
+ */
+function expressions(text) {
+  const spans = [];
+  for (let at = text.indexOf('{{'); at !== -1; at = text.indexOf('{{', at)) {
+    const end = text.indexOf('}}', at + 2);
+    spans.push([at + 2, end === -1 ? text.length : end]);
+    at = end === -1 ? text.length : end + 2;
+  }
+  for (const match of text.matchAll(BOUND)) {
+    const start = match.index + match[0].length;
+    const end = text.indexOf(match[1], start);
+    spans.push([start, end === -1 ? text.length : end]);
+  }
+  for (const match of text.matchAll(BLOCK)) {
+    const start = match.index + match[0].length;
+    spans.push([start, closing(text, start)]);
+  }
+  for (const match of text.matchAll(/@let\s+[\w$]+\s*=/g)) {
+    const start = match.index + match[0].length;
+    const end = text.indexOf(';', start);
+    spans.push([start, end === -1 ? text.length : end]);
+  }
+  return spans;
+}
+
+/** Where in `text` an expression reads `name.available` as a property. */
+function readsOf(text, name) {
+  const spans = expressions(text);
+  return [...text.matchAll(propertyRead(name))]
+    .map((match) => match.index)
+    .filter((index) => spans.some(([start, end]) => index >= start && index < end));
+}
 
 /** A template with each holder's `.available` called, and the names it left as declared there. */
 function inTemplate(text, names) {
   let next = text;
   const left = [];
   for (const name of new Set(names)) {
+    const reads = new Set(readsOf(next, name));
     if (declaration(name).test(text)) {
-      if (propertyRead(name).test(text)) left.push(name);
+      if (reads.size) left.push(name);
       continue;
     }
-    next = next.replace(propertyRead(name), (read) => `${read}()`);
+    next = next.replace(propertyRead(name), (read, index) =>
+      reads.has(index) ? `${read}()` : read,
+    );
   }
   return { text: next, left };
 }
@@ -281,7 +349,7 @@ function inTemplate(text, names) {
 const declarationLine = (text, name) =>
   text.slice(0, text.search(declaration(name))).split('\n').length;
 
-const readLine = (text, name) => text.slice(0, text.search(propertyRead(name))).split('\n').length;
+const readLine = (text, name) => text.slice(0, readsOf(text, name)[0]).split('\n').length;
 
 const sharedNote = (where, name) =>
   `${where}: Not every component that uses this template holds a service as ${name}, so it was ` +
@@ -291,7 +359,10 @@ const localNote = (where, name) =>
   `${where}: The template declares a ${name} of its own, so it was left as it is. ` +
   `Where it reads the component's service, call ${name}.available().`;
 
-/** The names `Component` is imported from `@angular/core` as. */
+/**
+ * The names `Component` is read by when imported from `@angular/core`: by name, under an alias,
+ * or off a namespace import, as `ng.Component`.
+ */
 function componentNames(ts, source) {
   const names = new Set();
   for (const statement of source.statements) {
@@ -299,6 +370,7 @@ function componentNames(ts, source) {
       continue;
     }
     const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings)) names.add(`${bindings.name.text}.Component`);
     for (const element of bindings && ts.isNamedImports(bindings) ? bindings.elements : []) {
       if ((element.propertyName ?? element.name).text === 'Component') names.add(element.name.text);
     }
@@ -426,7 +498,7 @@ function rewriteTemplate(host, url, held, notes) {
   if (text === null) return;
   const names = new Set(held.flatMap((each) => [...each]));
   const split = [...names].filter(
-    (name) => held.some((each) => !each.has(name)) && propertyRead(name).test(text),
+    (name) => held.some((each) => !each.has(name)) && readsOf(text, name).length > 0,
   );
   if (split.length) {
     for (const name of split) notes.push(sharedNote(`${url}:${readLine(text, name)}`, name));
