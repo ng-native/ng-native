@@ -24,7 +24,11 @@ function host(answers: Record<string, (...args: unknown[]) => unknown> = {}) {
           calls.push([name, ...args]);
           if (name === 'openDatabaseAsync') {
             opened += 1;
-            return { id: opened, databasePath: `/data/SQLite/${args[0]}`, databaseName: args[0] };
+            return {
+              id: opened,
+              databasePath: args[0] === ':memory:' ? ':memory:' : `/data/SQLite/${args[0]}`,
+              databaseName: args[0],
+            };
           }
           return answers[name]?.(...args) ?? null;
         },
@@ -150,6 +154,22 @@ describe('database() on macOS', () => {
         ['runAsync', 7, 'INSERT 2'],
         ['execAsync', 8, 'ROLLBACK'],
         ['closeAsync', 8, undefined],
+      ],
+    );
+  });
+
+  it('runs an in-memory exclusive transaction on the same connection, which alone holds the data', async () => {
+    const calls = host();
+    const db = await database(':memory:').ready();
+    await db.withExclusiveTransactionAsync(async (txn) => {
+      await txn.runAsync('INSERT 1');
+    });
+    assert.deepEqual(
+      calls.slice(1).map((call) => [call[0], call[1], call[2]]),
+      [
+        ['execAsync', 7, 'BEGIN EXCLUSIVE'],
+        ['runAsync', 7, 'INSERT 1'],
+        ['execAsync', 7, 'COMMIT'],
       ],
     );
   });

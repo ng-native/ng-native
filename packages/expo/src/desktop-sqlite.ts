@@ -93,7 +93,12 @@ function databaseOver(host: Host, handle: Handle, reopen: () => Promise<Handle>)
     withTransactionAsync: (task: () => Promise<void>) => transaction(exec, 'BEGIN', task),
     // On a connection of its own, as expo-sqlite's: a write through this one while the task waits
     // is not part of the transaction, so a rollback cannot take it back.
+    // An in-memory database is private to its connection, so a second one would be another, empty
+    // database: run on this connection there.
     withExclusiveTransactionAsync: async (task: (txn: unknown) => Promise<void>) => {
+      if (handle.databasePath === ':memory:') {
+        return transaction(exec, 'BEGIN EXCLUSIVE', () => task(database));
+      }
       const txn = databaseOver(host, await reopen(), reopen);
       try {
         await transaction(txn.execAsync, 'BEGIN EXCLUSIVE', () => task(txn));
