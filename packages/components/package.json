@@ -145,6 +145,9 @@
     "dist",
     "ios",
     "!ios/tests",
+    "android/build.gradle",
+    "android/src",
+    "!android/src/test",
     "expo-module.config.json"
   ],
   "devDependencies": {
