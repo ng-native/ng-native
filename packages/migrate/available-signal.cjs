@@ -317,14 +317,26 @@ function closing(text) {
   };
 }
 
+/** Each `{{ }}` interpolation's span. */
+function interpolationsOf(text) {
+  const spans = [];
+  for (let at = text.indexOf('{{'); at !== -1; at = text.indexOf('{{', at + 2)) {
+    spans.push([at, scan(text, at + 2, (here) => text.startsWith('}}', here)).end]);
+  }
+  return spans;
+}
+
 /**
  * Each tag's span, from its `<` to its `>`, past a `>` in a quoted attribute value, and in
  * `values` each quoted attribute value's span.
  */
 function tagsOf(text, values = []) {
   const tags = [];
+  // A `<` in an interpolation is a comparison, `{{ a <b }}`, not a tag.
+  const interpolations = interpolationsOf(text);
   for (const match of text.matchAll(/<[a-zA-Z/]/g)) {
     if (tags.length && match.index < tags[tags.length - 1][1]) continue;
+    if (interpolations.some(([start, end]) => match.index > start && match.index < end)) continue;
     let quote = null;
     let end = match.index + 1;
     for (; end < text.length; end++) {
@@ -433,6 +445,8 @@ function decode(raw) {
     }
     const [char, length] = escaped(raw, index + 1);
     if (char === '') at.pop();
+    // One place for each UTF-16 unit, as an escape past U+FFFF decodes to two.
+    for (let unit = 1; unit < char.length; unit++) at.push(index);
     text += char;
     index += length;
   }
