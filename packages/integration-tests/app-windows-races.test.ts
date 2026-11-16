@@ -8,6 +8,8 @@ import { before, describe, it } from 'node:test';
 import {
   APP_BOOTSTRAP_LISTENER,
   Injector,
+  createEnvironmentInjector,
+  type EnvironmentInjector,
   inputBinding,
   type Type,
   ɵINJECTOR_SCOPE as INJECTOR_SCOPE,
@@ -19,6 +21,7 @@ import {
   WINDOW_NAVIGATOR,
   WINDOW_RESTORE_STORE,
   provideMainWindow,
+  provideRestorableWindows,
   type NativeWindowEvent,
   type NativeWindowRequest,
   type NativeWindows,
@@ -91,9 +94,11 @@ function start(
   const host = fakeHost();
   const mounter = fakeMounter(options.failing);
   const writes = options.store;
-  const injector = Injector.create({
-    providers: [
+  const injector = createEnvironmentInjector(
+    [
       { provide: INJECTOR_SCOPE, useValue: 'root' },
+      // Note is written down to open again, so a window of it leaves a restore entry.
+      provideRestorableWindows({ Note }),
       { provide: AppWindows.SOURCE, useValue: host.native },
       { provide: WINDOW_MOUNTER, useValue: mounter.mounter },
       { provide: WINDOW_NAVIGATOR, useValue: options.navigator ?? navigator },
@@ -104,7 +109,8 @@ function start(
           : null,
       },
     ],
-  });
+    Injector.NULL as EnvironmentInjector,
+  );
   const windows = injector.get(AppWindows);
   windows.launch(Root);
   return { host, mounter, windows, lifecycle: injector.get(AppLifecycle) };
@@ -189,6 +195,9 @@ describe('a window whose mount throws', () => {
       windows.windows().map((window) => window.key),
       ['main'],
     );
+    const noted = (writes: RestoredWindow[]) =>
+      writes.some((entry) => entry.kind === 'component' && entry.key === 'note');
+    assert.ok(store.some(noted), 'the note was written down before its mount threw');
     assert.deepEqual(store.at(-1), [{ kind: 'main' }]);
   });
 });
