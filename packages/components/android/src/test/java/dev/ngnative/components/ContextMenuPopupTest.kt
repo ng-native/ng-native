@@ -32,7 +32,7 @@ class ContextMenuPopupTest {
   }
 
   @Test
-  fun closesEverySubmenuWhichDismissingThePopupLeavesOpen() {
+  fun closesEverySubmenuWhenItsViewDetachesWhichDismissingThePopupLeavesOpen() {
     // On a compact screen a submenu replaces the popup in a window of its own, which the popup's
     // dismiss() does not reach.
     val closed = mutableListOf<String>()
@@ -43,7 +43,7 @@ class ContextMenuPopupTest {
       menu("share", closed, menu("more", closed)),
       menu("move", closed),
     )
-    ContextMenuPopup.closeSubmenus(root)
-    assertEquals(listOf("more", "share", "move"), closed)
+    ContextMenuPopup.closingOnDetach(root) { closed.add("popup") }.onViewDetachedFromWindow(null)
+    assertEquals(listOf("more", "share", "move", "popup"), closed)
   }
 }
