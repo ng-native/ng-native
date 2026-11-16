@@ -216,6 +216,29 @@ describe('quitting while guards decide', () => {
     assert.deepEqual(host.answers, [false]);
   });
 
+  it('refuses a window opened while willQuit runs, so no guard it adds is skipped', async () => {
+    const { host, windows, lifecycle } = start();
+    await flush();
+    let refused: unknown = null;
+    lifecycle.willQuit(async () => {
+      try {
+        const late = await windows.open(Note);
+        late?.canClose(() => false);
+      } catch (error) {
+        refused = error;
+      }
+    });
+    host.send({ type: 'quitRequest' });
+    await flush();
+    await flush();
+    assert.match(String(refused), /quitting/);
+    assert.deepEqual(host.answers, [true]);
+    assert.deepEqual(
+      windows.windows().map((window) => window.key),
+      ['main'],
+    );
+  });
+
   it('runs willQuit once when a SIGTERM arrives during a Cmd-Q, and answers once', async () => {
     const { host, windows, lifecycle } = start();
     await flush();
