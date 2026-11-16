@@ -26,6 +26,7 @@ import {
   type WindowMounter,
   type WindowNavigator,
 } from '@ng-native/device';
+import type { Engine } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric, settle, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -257,6 +258,33 @@ describe('the main window on the platform mounter', () => {
       assert.equal(app.applicationRef.components.length, 0, 'the root is no app component');
       assert.equal(app.applicationRef.viewCount, 0, 'nor a view change detection checks');
       assert.deepEqual(host.closed, [11]);
+    } finally {
+      app.applicationRef.destroy();
+    }
+  });
+
+  it("keeps the app's safe-area insets out of a window, and gives it the app's other tokens", async () => {
+    const { app, windows } = mountWindowed('NoteWindow');
+    const appTokens = (top: number, accent: number) => ({
+      '--safe-area-inset-top': { length: top },
+      '--safe-area-inset-titlebar-leading': { length: 78 },
+      '--accent-gap': { length: accent },
+    });
+    try {
+      await settle();
+      // What the main window's provider reported before the window opened, and after.
+      app.engine.updateTokens(appTokens(52, 4));
+      await windows.open(fixtures['ScreenWindow']!);
+      const made = (fixtures['ScreenWindow'] as unknown as { made: { engine: Engine }[] }).made;
+      const engine = made.at(-1)!.engine;
+      const seen = () => [
+        engine.token('--safe-area-inset-top'),
+        engine.token('--safe-area-inset-titlebar-leading'),
+        engine.token('--accent-gap'),
+      ];
+      assert.deepEqual(seen(), [undefined, undefined, '4px'], 'what the window starts with');
+      app.engine.updateTokens(appTokens(28, 8));
+      assert.deepEqual(seen(), [undefined, undefined, '8px'], 'what the window follows');
     } finally {
       app.applicationRef.destroy();
     }

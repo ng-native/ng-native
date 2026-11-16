@@ -1474,10 +1474,14 @@ function windowMounter(
     mount(surface, component, { inputs = {}, bindings, providers, main }) {
       // The window's own size, once the host has told it; the app's until then.
       let own: Pick<Conditions, 'width' | 'height' | 'pixelRatio'> | null = null;
-      const withoutOwnHairline = (tokens: Readonly<Record<string, TokenValue>>) => {
-        if (!own?.pixelRatio || !('--hairline' in tokens)) return tokens;
+      // The app's tokens without what is the window's own: its safe area, which its own provider
+      // reports, and its hairline once the host has given it a scale.
+      const withoutOwn = (tokens: Readonly<Record<string, TokenValue>>) => {
         const rest = { ...tokens };
-        delete rest['--hairline'];
+        for (const name of Object.keys(rest)) {
+          if (name.startsWith('--safe-area-inset-')) delete rest[name];
+        }
+        if (own?.pixelRatio) delete rest['--hairline'];
         return rest;
       };
       const conditions = (): Conditions | undefined => {
@@ -1485,11 +1489,12 @@ function windowMounter(
         if (!own) return app;
         return { ...(app ?? { colorScheme: 'light' as const }), ...own };
       };
-      // The tokens the app has now, its hairline among them, not only the ones it started with.
+      // The tokens the app has now, its hairline among them, not only the ones it started with, and
+      // not its safe area.
       const engine = engineOn(fabric, surface, {
         ...engineOptions,
         conditions: conditions(),
-        tokens: appEngine.tokens,
+        tokens: withoutOwn(appEngine.tokens),
       });
       // The global sheets the app engine has, and each one it adds, replaces or removes from here
       // on, and the tokens it updates: an app that adds its Tailwind sheet to `app.engine` would
@@ -1499,8 +1504,10 @@ function windowMounter(
       // The app's hairline is for the app's screen. A window the host has given a scale of its own
       // keeps the hairline of the screen it is on.
       const stopSharing = appEngine.watchShared((change) => {
-        if (change.kind === 'tokens') engine.updateTokens(withoutOwnHairline(change.tokens));
-        else if (change.sheet) engine.addGlobalSheet(change.sheet, change.replacing);
+        if (change.kind === 'tokens') {
+          const shared = withoutOwn(change.tokens);
+          if (Object.keys(shared).length > 0) engine.updateTokens(shared);
+        } else if (change.sheet) engine.addGlobalSheet(change.sheet, change.replacing);
         else if (change.replacing) engine.removeGlobalSheet(change.replacing);
       });
       const factory = new NativeRendererFactory(engine);
