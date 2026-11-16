@@ -113,6 +113,10 @@ without asking the app, so the `canClose` guards are not asked there, and there 
 window in it. Where the main window is open already, the main window comes to the front and stays
 open, and the window the user made closes.
 
+A reload keeps each window that has a key (the main window, a route window, or a `restoreKey`
+window whose component `provideRestorableWindows` names) in its scene, and the reloaded app renders
+it there again. A window without a key closes.
+
 ## Reference
 
 <!-- api: AppWindows -->

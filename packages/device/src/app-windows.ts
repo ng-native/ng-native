@@ -59,9 +59,9 @@ export interface ComponentWindowOptions extends WindowOptions {
   /** Set on the component before its first change detection. */
   readonly inputs?: Readonly<Record<string, unknown>>;
   /**
-   * What the window is restored by, after a reload or a relaunch: on macOS it opens again with
-   * the same `inputs`, which must then survive `JSON.stringify`, where `provideRestorableWindows`
-   * names its component. Without one, a reload closes the window. One key is one window: opening
+   * What the window is restored by, after a reload or a relaunch: on macOS and iPadOS it opens
+   * again with the same `inputs`, which must then survive `JSON.stringify`, where
+   * `provideRestorableWindows` names its component. Without one, a reload closes the window. One key is one window: opening
    * a key that is open brings that window to the front.
    */
   readonly restoreKey?: string;

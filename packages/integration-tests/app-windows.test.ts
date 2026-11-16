@@ -28,10 +28,17 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import type { Type } from '@angular/core';
+import {
+  createEnvironmentInjector,
+  Injector,
+  type EnvironmentInjector,
+  type Type,
+  ɵINJECTOR_SCOPE as INJECTOR_SCOPE,
+} from '@angular/core';
 import {
   AppLifecycle,
   AppWindows,
+  OS,
   provideAppLifecycle,
   provideMainWindow,
   type NativeWindowEvent,
@@ -704,6 +711,65 @@ describe('after a reload or a relaunch', () => {
     ]);
     assert.equal(textOn(second.fabric, 21, 'note'), 'Groceries 0');
     assert.equal(second.windows.windows()[1]!.key, 'note-1');
+  });
+
+  /**
+   * The store `AppWindows` gets unprovided, made on a device running `os` whose React Native has
+   * `Settings` backed by `defaults`, which outlives a reload as the app's user defaults do.
+   */
+  function defaultStore(os: 'ios' | 'macos' | 'android', defaults: Map<string, unknown>) {
+    const host = globalThis as Record<string, unknown>;
+    const settings = {
+      get: (key: string) => defaults.get(key),
+      set: (values: Record<string, unknown>) =>
+        Object.entries(values).forEach(([key, value]) => defaults.set(key, value)),
+    };
+    host['require'] = (id: string) =>
+      id === 'react-native' ? { Platform: { OS: os }, Settings: settings } : undefined;
+    host['nativeFabricUIManager'] = {};
+    try {
+      return createEnvironmentInjector(
+        [
+          { provide: INJECTOR_SCOPE, useValue: 'root' },
+          { provide: OS, useValue: os },
+        ],
+        Injector.NULL as EnvironmentInjector,
+      ).get(WINDOW_RESTORE_STORE);
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+    }
+  }
+
+  it("keeps the windows in the app's user defaults on iPadOS as on macOS, so a reload opens a restoreKey window again", async () => {
+    for (const os of ['ios', 'macos'] as const) {
+      const defaults = new Map<string, unknown>();
+      const store = defaultStore(os, defaults);
+      assert.ok(store, `${os} has a store`);
+      const first = launch('MainWindowApp', store);
+      await settle();
+      await first.windows.open(fixtures['NoteWindow']!, {
+        restoreKey: 'library',
+        inputs: { name: 'Library' },
+      });
+      await settle();
+      reload(first.app);
+
+      // The reloaded app makes its store again, from the same user defaults.
+      const second = launch('MainWindowApp', defaultStore(os, defaults)!);
+      await settle();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settle();
+      assert.deepEqual(
+        second.host.opened.map((request) => request.key),
+        ['main', 'library'],
+        `${os} opens the kept key again`,
+      );
+      assert.equal(textOn(second.fabric, 21, 'note'), 'Library 0');
+      reload(second.app);
+    }
+    // Android has no user defaults in React Native, and no windows to keep.
+    assert.equal(defaultStore('android', new Map()), null);
   });
 
   it('does not open a window that was closed, or one whose component is not restorable', async () => {

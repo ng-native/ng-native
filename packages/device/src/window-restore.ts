@@ -1,8 +1,8 @@
 /**
  * Which windows open again after a reload or a relaunch, and what they rendered.
  *
- * The desktop host keeps a window that has a key across a reload, and closes it unless the
- * reloaded app opens that key again within a few seconds. So `AppWindows` writes down each window
+ * The host, on macOS and on iPadOS, keeps a window that has a key across a reload, and closes it
+ * unless the reloaded app opens that key again within a few seconds. So `AppWindows` writes down each window
  * with a key as it opens and forgets it as it closes, and a starting app opens every one it finds:
  * the main window, a route window at the path it was last opened at, and a `restoreKey` component
  * window with its inputs. A relaunch takes the same path, with the frames the host autosaved.
@@ -46,10 +46,14 @@ export interface WindowRestoreStore {
 
 const SETTINGS_KEY = 'ngNative.windows';
 
-/** React Native's `Settings`, the app's user defaults, on macOS; null elsewhere. */
+/**
+ * React Native's `Settings`, the app's user defaults, on macOS and iOS; null elsewhere. On iPadOS
+ * the host keeps a window's scene across a reload, as the desktop host keeps the window, until the
+ * reloaded app opens its key again.
+ */
 function settingsStore(): WindowRestoreStore | null {
-  // iPadOS restores its scenes itself, so only the desktop host is asked to.
-  if (injectOs() !== 'macos') return null;
+  const os = injectOs();
+  if (os !== 'macos' && os !== 'ios') return null;
   const settings = reactNative()?.Settings;
   if (!settings) return null;
   return {
