@@ -75,7 +75,11 @@ describe('a modal with an anchor', () => {
       await settle();
       const shown = commits.filter((props) => props !== null);
       assert.ok(shown.length > 0, 'the modal is committed');
-      assert.equal(typeof shown[0]!['anchor'], 'number', 'its first commit points it at the anchor');
+      assert.equal(
+        typeof shown[0]!['anchor'],
+        'number',
+        'its first commit points it at the anchor',
+      );
     } finally {
       app.applicationRef.destroy();
     }
