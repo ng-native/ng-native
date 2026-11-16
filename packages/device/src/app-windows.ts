@@ -485,10 +485,12 @@ export class AppWindows {
     return this.reserve(outlet, async () => {
       const existing = this.byKey(outlet);
       if (existing) {
-        await navigator.navigate(outlet, path);
-        const open = this.find(existing.surface);
-        if (open) open.restore = restore;
-        this.remember();
+        // A refused navigation leaves the window where it was, and so what it restores to.
+        if (await navigator.navigate(outlet, path)) {
+          const open = this.find(existing.surface);
+          if (open) open.restore = restore;
+          this.remember();
+        }
         return this.front(existing);
       }
       const window = navigator.window(outlet);

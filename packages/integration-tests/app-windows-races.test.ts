@@ -85,6 +85,7 @@ function start(
   options: {
     failing?: Set<Type<unknown>>;
     store?: RestoredWindow[][];
+    navigator?: WindowNavigator;
   } = {},
 ) {
   const host = fakeHost();
@@ -95,7 +96,7 @@ function start(
       { provide: INJECTOR_SCOPE, useValue: 'root' },
       { provide: AppWindows.SOURCE, useValue: host.native },
       { provide: WINDOW_MOUNTER, useValue: mounter.mounter },
-      { provide: WINDOW_NAVIGATOR, useValue: navigator },
+      { provide: WINDOW_NAVIGATOR, useValue: options.navigator ?? navigator },
       {
         provide: WINDOW_RESTORE_STORE,
         useValue: writes
@@ -157,6 +158,23 @@ describe('opening one key twice at once', () => {
     await assert.rejects(windows.open(Note, { restoreKey: 'note' }), /mount failed/);
     await assert.rejects(windows.open(Note, { restoreKey: 'note' }), /mount failed/);
     assert.equal(host.opened.length, 3, 'the second open asked the host again');
+  });
+});
+
+describe('a route window asked for a path it is refused', () => {
+  it('keeps restoring the path it shows', async () => {
+    const store: RestoredWindow[][] = [];
+    const { windows } = start({
+      store,
+      navigator: { ...navigator, navigate: async (_outlet, path) => path !== 'privacy' },
+    });
+    await flush();
+    await windows.open({ outlet: 'prefs', path: 'general' });
+    await windows.open({ outlet: 'prefs', path: 'privacy' });
+    const paths = (writes: RestoredWindow[] | undefined) =>
+      (writes ?? []).flatMap((entry) => (entry.kind === 'route' ? [entry.path] : []));
+    assert.deepEqual(paths(store.at(-1)), ['general']);
+    assert.ok(!store.some((writes) => paths(writes).includes('privacy')), 'never saved');
   });
 });
 
