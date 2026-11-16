@@ -46,19 +46,21 @@ workspace `ng generate @ng-native/schematics:desktop <app>` does. See [Nx](/pack
 
 ```sh
 npm start        # the Expo CLI's dev server, in one terminal
-npm run macos    # builds the host the first time, then opens the app from the dev server
+npm run macos    # gets the host the first time, then opens the app from the dev server
 ```
 
-The first `npm run macos` for a React Native version builds the host from source, React Native and
-Hermes included: about 4 minutes on an Apple silicon Mac, and about 6 for a universal release build.
-Later runs reuse it. Building needs Xcode 16 or its Command Line Tools (Swift 6.0 or later), CMake
-3.25 or later and Ninja 1.10 or later; the command checks for them first and prints the line that
-installs whatever is missing or too old, such as `xcode-select --install` or `brew install ninja`.
-The host runs on macOS 14 and later.
+The first `npm run macos` for a React Native version downloads the prebuilt host, when
+`@ng-native/desktop` has one for that version and the app links no native desktop code of its own
+(see [Prebuilt hosts](/packages/desktop/packaging#prebuilt-hosts)). Otherwise it builds the host
+from source, React Native and Hermes included, against the app's own `react-native` (0.88), into
+`~/Library/Caches/ng-native/desktop/rn-<version>`: about 4 minutes on an Apple silicon Mac, and
+about 6 for a universal release build, which the command says before it starts. `run` builds it
+without the core tests, whose sources the published package leaves out. Later runs reuse it. The
+host runs on macOS 14 and later.
 
 The Expo CLI has no `run:macos`: its `run` commands are a fixed list, so `npm run macos` is
-`ng-native-desktop run`. It takes a bundle path or URL in place of the dev server, `--module`,
-`--port` and `--universal`.
+`ng-native-desktop run`. It takes a bundle path or URL in place of the dev server, and these
+options:
 
 | Option            | What it does                                              |
 | ----------------- | --------------------------------------------------------- |
@@ -75,17 +77,16 @@ given instead. A bundle's images and other assets are read beside it as React Na
 for an embedded bundle, so make it with `npx expo export:embed --platform macos --dev false
 --bundle-output <dir>/main.jsbundle --assets-dest <dir>`; `npx expo export` puts them elsewhere.
 
-The host is built against the app's own `react-native` (0.88), the first time into
-`~/Library/Caches/ng-native/desktop/rn-<version>`, which takes about 4 minutes on an Apple silicon
-Mac (about 6 for a universal release build), and the command says so before it starts. Later runs
-reuse it, and adding or removing one of the
-[libraries it compiles in](/packages/desktop/views#libraries-compiled-in) recompiles only that
-library. The host
-is built for macOS 14 and later (`native/CMakeLists.txt`, which `scripts/macos-target.sh` reads for
-Hermes too; a cached Hermes built for another macOS is built again).
+For a host built from source, adding or removing one of the
+[libraries it compiles in](/packages/desktop/views#libraries-compiled-in) builds it again: in a
+folder of its own for that set of libraries when the app links no native desktop code, reusing the
+Hermes built before, and in the app's own folder, recompiling what changed, when it links some.
+The host is built for macOS 14 and later (`native/CMakeLists.txt`, which `scripts/macos-target.sh`
+reads for Hermes too; a cached Hermes built for another macOS is built again).
 
-Before a from-source build the command checks the toolchain (`bin/toolchain.mjs`) and stops with a
-fix-it line for each problem:
+Building from source needs Xcode 16 or its Command Line Tools (Swift 6.0 or later), CMake 3.25 or
+later and Ninja 1.10 or later. Before it builds, the command checks the toolchain
+(`bin/toolchain.mjs`) and stops with a fix-it line for each problem:
 
 | Tool                            | Minimum                | Fix-it when missing or older                 |
 | ------------------------------- | ---------------------- | -------------------------------------------- |
@@ -210,8 +211,10 @@ code, walking the app's dependencies and theirs:
 `npm run macos` and `npm run package` list the dependencies that have native code for iOS or
 Android and none for the desktop: their native modules are absent on macOS, so a service built on
 one reports itself unavailable. `expo`, the `expo-*` packages and `@ng-native/*` are not listed,
-since the desktop host answers their services itself. `react-native-screens` and
-`react-native-safe-area-context` are compiled into the host when the app has them.
+since the desktop host answers their services itself. `react-native-screens`,
+`react-native-safe-area-context`, `react-native-svg`, `react-native-webview`,
+`react-native-worklets` and `react-native-reanimated` are compiled into the host when the app has
+them.
 
 `run` and `package` write what they found to `.expo/ng-native-desktop/link.json` in the app, which
 the host build reads from `NGN_DESKTOP_LINK`. `deny` keeps a package out; the packages it depends on

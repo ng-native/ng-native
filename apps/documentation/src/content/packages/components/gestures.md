@@ -164,7 +164,7 @@ library's root recogniser does on iOS. A native handler on a scroll view activat
 the wheel or trackpad, since a mouse drag does not scroll it. Worklet gestures' events reach
 Reanimated on the UI runtime; JavaScript ones arrive as `onGestureHandlerStateChange` device events.
 The version 3 detector's shadow node and descriptor compile in through `--library`, but the host
-gives it no view of its own yet. Not there yet: `hitSlop`, the library's own components
+gives it no view of its own. Not on macOS: `hitSlop`, the library's own components
 (`RNGestureHandlerButton`, the version 3 detector's view), the UI runtime's `_setGestureStateSync`
 (a worklet's state manager goes through Reanimated's `setGestureState`), and force touch.
 

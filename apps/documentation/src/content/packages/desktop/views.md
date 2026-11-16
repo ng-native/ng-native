@@ -91,7 +91,8 @@ keyboard, by a click, Tab or `focus()`.
 
 When the app has them installed, the host compiles in the Fabric components of
 `react-native-screens`, `react-native-safe-area-context`, `react-native-svg` and
-`react-native-webview`:
+`react-native-webview`, and the shared C++ of `react-native-worklets` and
+`react-native-reanimated`:
 
 - A native stack keeps every screen mounted, shows the top one and hides those below it, and sends
   `willAppear` and `appear` (which the router waits for) as a screen comes to the top. Push and pop
@@ -156,6 +157,8 @@ When the app has them installed, the host compiles in the Fabric components of
   cannot open an app or a share on its own. `about:` and `data:` pages always pass. `incognito` is
   read when the view is made, and `clearHistory` and `clearFormData` do nothing, as WebKit has no
   way to.
+- Worklets run on the UI thread, and Reanimated's shared values, animations and worklet styles move
+  views at the display's rate, with no frames requested while nothing animates.
 
 ## Expo's views
 

@@ -70,11 +70,13 @@ its `hermesc` and Sparkle, and unpack it into the per-user cache under its hash.
 SHA-256 is in `prebuilt.json`, inside the npm package, and a download that does not match it is
 deleted and stops the command. The host is built from source instead when the app links a library's
 or its own native desktop code, when a host library it has installed (`react-native-screens`,
-`react-native-safe-area-context`, `react-native-svg`, `react-native-webview`) is another version
-than the prebuilt one or denied, when `prebuilt.json` has no host for its React Native version,
-when the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
+`react-native-safe-area-context`, `react-native-svg`, `react-native-webview`,
+`react-native-worklets`, `react-native-reanimated`) is another version than the prebuilt one or
+one the prebuilt host lacks, when the prebuilt host has a library the app denies, when
+`prebuilt.json` has no host for its React Native version, when the download fails (with a
+warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
 
 The host's `ngn-macos` and `hermesc` are signed ad hoc with the hardened runtime, with no
 Developer ID: `package` signs the app, host included, with the app's own identity, and the download
-is checked by the SHA-256 in `prebuilt.json`. Set `NGN_SIGN_IDENTITY` to sign them with an identity
-instead.
+is checked by the SHA-256 in `prebuilt.json`. Each release attaches its prebuilt host to the
+GitHub release.

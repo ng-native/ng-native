@@ -10,7 +10,7 @@ const offline = {
   subscribe: () => () => {},
 };
 
-test('makes a note from File > New Note on macOS', async () => {
+test("makes a note with File > New Note's shortcut on macOS", async () => {
   await render(App, {
     os: 'macos',
     providers: [

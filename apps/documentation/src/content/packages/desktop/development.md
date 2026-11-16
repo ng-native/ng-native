@@ -64,8 +64,9 @@ window through `AppWindows`. Its Application Support, Caches and temporary folde
 services are prefixed `ngn-test-<run id>.`; it removes the suite and its Keychain items as it quits
 or gets SIGTERM, and those a crashed run left when the next test launch starts. With
 `NGN_TESTS_FAKE_SYSTEM_UI=1` (or `NGN_NO_PROMPTS=1`) no system UI is shown: open and save panels
-answer as cancelled, permission prompts as denied, Touch ID and sign-in as cancelled, and an alert
-with its cancel button, or not at all when it has none. A packaged app is never a test launch.
+answer as cancelled, a permission request answers the current status without asking (undetermined
+when never asked), Touch ID and sign-in answer as cancelled, and an alert with its cancel button,
+or not at all when it has none. A packaged app is never a test launch.
 
 SIGTERM ends any run as a clean quit does, within three seconds: the app is asked to run its
 `willQuit` handlers, though not its `canClose` guards, and the host ends once it has answered or

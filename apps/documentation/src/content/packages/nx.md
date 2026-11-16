@@ -323,9 +323,11 @@ and export without it, and says nothing), `@ng-native/desktop` among the config 
 | `nx run mobile:macos`   | `ng-native-desktop run`: builds the desktop host and opens the app in it. |
 | `nx run mobile:package` | `ng-native-desktop package`: the `.app`, `.dmg` or Mac App Store package. |
 
-`macos` loads the app from the dev server `nx start` runs, on the app's own port. Running the
-generator again changes nothing. See [`@ng-native/desktop`](/packages/desktop) for both commands
-and the plugin options.
+`macos` loads the app from the dev server `nx start` runs, on the app's own port. `package` makes
+the `.app`, and passes on what follows it, so `nx run mobile:package --format dmg` makes the
+`.dmg` and `--format mas` the Mac App Store package. Running the generator again changes nothing,
+and it stops with an error on a project with no `app.json`, which is not an Angular Native app.
+See [`@ng-native/desktop`](/packages/desktop) for both commands and the plugin options.
 
 ## Options
 
@@ -339,8 +341,13 @@ which leaves the generated files unformatted. `--linter=eslint` adds an `eslint.
 `macos` alone in `expo.platforms`, its sidebar and menu bar starter screen, `@ng-native/desktop`
 and `@ng-native/expo` in place of the phone's status bar and system UI packages, and `macos` and
 `package` targets (see [macOS](#macos)) where a mobile app has its own `run-ios` and
-`run-android`. `nx g @ng-native/nx:init --desktopOnly`, the generator `nx add` runs, makes it the
-default of every app generated in the workspace, in `nx.json`.
+`run-android`. Its `vitest.config.mts` has two projects: `node-macos`, in Node, which its `test`
+target runs alone (`vitest run --project node-macos`), and `macos`, which runs
+`src/**/*.device.ts` inside the app and opens it. `src/app/app.device.ts` is the example, and its
+`metro.config.js` adds the in-app tests only when Metro starts with `EXPO_PUBLIC_DEVICE_TESTS=1`:
+run `EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start` in the app's folder, then
+`npx vitest --project macos` there. `nx g @ng-native/nx:init --desktopOnly`, the generator
+`nx add` runs, makes it the default of every app generated in the workspace, in `nx.json`.
 
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`; it defaults to
 `com.<scope>.<name>`, from the workspace's npm scope and the app's name with anything but letters
