@@ -998,8 +998,8 @@ const POINTER_FEATURES = {
 
 /** A pointer feature as a condition, or null for any other feature. */
 function pointerCondition(feature, context) {
+  if (!Object.hasOwn(POINTER_FEATURES, feature.name)) return null;
   const values = POINTER_FEATURES[feature.name];
-  if (!values) return null;
   // With no value a feature is true for any value but its "none".
   if (feature.type === 'boolean') {
     const some = values.filter((value) => value !== 'none');
@@ -1224,10 +1224,11 @@ function compound(parts, context) {
           classes++;
           if (part.selectors) {
             const inner = compound(part.selectors, context);
-            Object.assign(out, inner.compound, {
-              host: true,
-              classes: out.classes.concat(inner.compound.classes),
-            });
+            // One compound: a list either side wrote, of classes, states or attributes, is joined.
+            for (const [key, value] of Object.entries(inner.compound)) {
+              out[key] =
+                Array.isArray(value) && Array.isArray(out[key]) ? out[key].concat(value) : value;
+            }
             ids += inner.ids;
             classes += inner.classes;
             types += inner.types;

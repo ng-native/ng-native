@@ -2118,6 +2118,7 @@ const DESKTOP_CURSORS = new Set([
 /**
  * `cursor`: `auto` and `pointer` as React Native's `cursor`, and any other CSS cursor as
  * `desktopCursor` beside `cursor: auto`, which a desktop host draws and iOS and Android leave.
+ * `auto` and `pointer` clear `desktopCursor`, so they beat one a weaker rule set.
  */
 function cursor(property, value, out) {
   if (value.images?.length) {
@@ -2130,6 +2131,7 @@ function cursor(property, value, out) {
   const found = SAME_AS.cursor[word] ?? word;
   if (found === 'auto' || found === 'pointer') {
     out.cursor = found;
+    out.desktopCursor = null;
     return;
   }
   if (!DESKTOP_CURSORS.has(found)) {

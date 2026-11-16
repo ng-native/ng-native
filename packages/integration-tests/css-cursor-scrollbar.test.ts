@@ -20,9 +20,19 @@ const compiled = (css: string) => {
 
 describe('cursor', () => {
   it('keeps auto, default and pointer as React Native reads them', () => {
-    assert.deepEqual(compiled('.a { cursor: pointer }').declarations, { cursor: 'pointer' });
-    assert.deepEqual(compiled('.a { cursor: default }').declarations, { cursor: 'auto' });
-    assert.deepEqual(compiled('.a { cursor: auto }').declarations, { cursor: 'auto' });
+    // `desktopCursor: null` clears one a weaker rule set, so the later cursor wins on a desktop.
+    assert.deepEqual(compiled('.a { cursor: pointer }').declarations, {
+      cursor: 'pointer',
+      desktopCursor: null,
+    });
+    assert.deepEqual(compiled('.a { cursor: default }').declarations, {
+      cursor: 'auto',
+      desktopCursor: null,
+    });
+    assert.deepEqual(compiled('.a { cursor: auto }').declarations, {
+      cursor: 'auto',
+      desktopCursor: null,
+    });
   });
 
   it('hands every other CSS cursor to the desktop host, and auto to the others', () => {
@@ -123,6 +133,14 @@ describe('on the committed view', () => {
     const view = committed('.a { cursor: grab }').find((n) => 'desktopCursor' in n.props);
     assert.equal(view?.props['desktopCursor'], 'grab');
     assert.equal(view?.props['cursor'], 'auto');
+  });
+
+  it('takes a later pointer over an earlier desktop cursor', () => {
+    const view = committed('.a { cursor: grab } .a { cursor: pointer }').find(
+      (n) => n.props['cursor'] === 'pointer',
+    );
+    assert.ok(view);
+    assert.equal(view.props['desktopCursor'] ?? null, null);
   });
 
   it('hides the indicators of a scroll view, on the scroll view', () => {

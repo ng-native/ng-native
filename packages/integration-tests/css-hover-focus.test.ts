@@ -67,6 +67,21 @@ describe(':hover', () => {
     }
   });
 
+  it('keeps both states of a :host() and the compound beside it, in either order', () => {
+    for (const selector of [':host(:hover):focus', ':focus:host(:hover)']) {
+      const [compound] = sheet(`${selector} { color: red }`).rules[0]!.compounds;
+      assert.deepEqual([...(compound!.pseudo ?? [])].sort(), ['focus', 'hover'], selector);
+    }
+    for (const selector of [':host([data-a]):hover[data-b]', '[data-b]:hover:host([data-a])']) {
+      const [compound] = sheet(`${selector} { color: red }`).rules[0]!.compounds;
+      assert.deepEqual(
+        compound!.attributes?.map((a) => a.name).sort(),
+        ['data-a', 'data-b'],
+        selector,
+      );
+    }
+  });
+
   it('follows a mouse in and out', () => {
     const s = scene('.btn:hover { opacity: 0.5 }');
     s.make('view', 'btn');

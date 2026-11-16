@@ -405,8 +405,14 @@ describe('properties React Native supports that we were rejecting', () => {
     assert.deepEqual(declarationsOf('mix-blend-mode: multiply'), { mixBlendMode: 'multiply' });
     assert.deepEqual(declarationsOf('isolation: isolate'), { isolation: 'isolate' });
     assert.deepEqual(declarationsOf('box-sizing: border-box'), { boxSizing: 'border-box' });
-    assert.deepEqual(declarationsOf('cursor: auto'), { cursor: 'auto' });
-    assert.deepEqual(declarationsOf('cursor: pointer'), { cursor: 'pointer' });
+    assert.deepEqual(declarationsOf('cursor: auto'), {
+      cursor: 'auto',
+      desktopCursor: null,
+    });
+    assert.deepEqual(declarationsOf('cursor: pointer'), {
+      cursor: 'pointer',
+      desktopCursor: null,
+    });
   });
 
   it('logical properties, as the Yoga style every native view reads', () => {
@@ -419,8 +425,14 @@ describe('keywords React Native does not take', () => {
   // Fabric drops a keyword it has no reading for without a word, so each of these compiled
   // cleanly and did nothing on device.
   it('takes auto and pointer as a cursor, reads default as auto, and the rest for a desktop', () => {
-    assert.deepEqual(declarationsOf('cursor: pointer'), { cursor: 'pointer' });
-    assert.deepEqual(declarationsOf('cursor: default'), { cursor: 'auto' });
+    assert.deepEqual(declarationsOf('cursor: pointer'), {
+      cursor: 'pointer',
+      desktopCursor: null,
+    });
+    assert.deepEqual(declarationsOf('cursor: default'), {
+      cursor: 'auto',
+      desktopCursor: null,
+    });
     assert.deepEqual(declarationsOf('cursor: alias'), { cursor: 'auto', desktopCursor: 'alias' });
   });
 
