@@ -58,6 +58,31 @@ describe('the device recorder', () => {
       Date.now = now;
     }
   });
+
+  it('ends only the transition a screen started, not a newer one on another screen', () => {
+    const fake = createFakeFabric();
+    const recorder = record(fake);
+    recorder.fabric.registerEventHandler!(() => {});
+    const first = recorder.fabric.createNode(2, 'RCTView', 1, {}, {}) as unknown as FakeFabricNode;
+    const second = recorder.fabric.createNode(4, 'RCTView', 1, {}, {}) as unknown as FakeFabricNode;
+    const now = Date.now;
+    let time = now();
+    Date.now = () => time;
+    try {
+      fake.emit(first, 'topWillAppear', {});
+      time += 3001;
+      fake.emit(second, 'topWillAppear', {});
+      // The first screen's end comes late, after its transition ran out.
+      fake.emit(first, 'topAppear', {});
+      time += 200;
+      assert.equal(recorder.busy(), true, 'the second screen is still in its transition');
+      fake.emit(second, 'topAppear', {});
+      time += 200;
+      assert.equal(recorder.busy(), false);
+    } finally {
+      Date.now = now;
+    }
+  });
 });
 
 describe('inline snapshots on a device', () => {

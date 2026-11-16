@@ -45,8 +45,14 @@ export function record(real: FabricUIManager) {
   /** Each surface's last commit: a desktop app's windows render on one each. */
   const roots = new Map<number, RecordedNode[]>();
   const committed = (): RecordedNode[] => [...roots.values()].flat();
-  let transitions = 0;
-  let transitionAt = 0;
+  /** When each screen in a transition began it, by the screen's instance handle. */
+  const transitions = new Map<unknown, number>();
+  /** Forget a transition that never reported its end: it is not owed one now. */
+  const expire = () => {
+    for (const [screen, at] of transitions) {
+      if (Date.now() - at >= TRANSITION_LIMIT_MS) transitions.delete(screen);
+    }
+  };
   let screenAt = 0;
   let endedAt = 0;
   let touches = 0;
@@ -135,13 +141,11 @@ export function record(real: FabricUIManager) {
         if (type === 'topTouchStart') touches++;
         // A screen's push, pop, presentation or dismissal: native drops a tap made during one.
         if (type === 'topWillAppear' || type === 'topWillDisappear') {
-          // One that never reported its end has stopped counting: it is not owed an end now.
-          if (Date.now() - transitionAt >= TRANSITION_LIMIT_MS) transitions = 0;
-          transitions++;
-          transitionAt = Date.now();
+          expire();
+          transitions.set(instanceHandle, Date.now());
         } else if (type === 'topAppear' || type === 'topDisappear') {
-          if (transitions > 0) transitions--;
-          endedAt = Date.now();
+          // Only the end of a transition still counted: a late one ends nothing a newer one began.
+          if (transitions.delete(instanceHandle)) endedAt = Date.now();
         }
         handler(instanceHandle, type, event);
       });
@@ -171,10 +175,14 @@ export function record(real: FabricUIManager) {
     /** The views every surface last committed, window by window. */
     committed,
     touches: (): number => touches,
-    busy: (): boolean =>
-      (transitions > 0 && Date.now() - transitionAt < TRANSITION_LIMIT_MS) ||
-      Date.now() - screenAt < SCREEN_SETTLE_MS ||
-      Date.now() - endedAt < ENDED_SETTLE_MS,
+    busy(): boolean {
+      expire();
+      return (
+        transitions.size > 0 ||
+        Date.now() - screenAt < SCREEN_SETTLE_MS ||
+        Date.now() - endedAt < ENDED_SETTLE_MS
+      );
+    },
     /** A committed view's window frame, or null when it is gone or native has not laid it out. */
     measure(reactTag: number): Frame | null {
       const recorded = find(reactTag, committed());
