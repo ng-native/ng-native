@@ -27,6 +27,23 @@ open_threads() {
   # whether a thread is resolved, so while GraphQL is limited the PR waits ("?") rather than guess.
   [[ $n == <-> ]] && echo $n || echo "?"
 }
+# The subject of a recent main commit the PR undoes: most of that commit's files are back as they were
+# before it. A commit parented on a newer main but built from an older checkout does this silently
+# (#1479 undid #1451). "?" when the fetch fails, so the PR waits. A PR meant to revert is merged by hand.
+# ponytail: the last 40 main commits before the PR's base; the bug only ever undoes recent ones.
+reverted_commit() {
+  git fetch -q origin main "+pull/$1/head:refs/merge-queue/$1" 2>/dev/null || { echo "?"; return; }
+  local head=refs/merge-queue/$1 base m files back r
+  base=$(git merge-base origin/main $head 2>/dev/null) || { echo "?"; return; }
+  for m in $(git rev-list --max-count=40 $base); do
+    files=(${(f)"$(git diff-tree --no-commit-id --name-only -r $m)"})
+    (( ${#files} > 2 )) || continue
+    # Of the commit's files, those the PR's head has as they were before it and not as it left them.
+    back=(${(f)"$(comm -23 <(git diff --name-only $m $head -- $files | sort) <(git diff --name-only $m^ $head -- $files | sort))"})
+    r=${#back}
+    (( r > 2 && r * 2 >= ${#files} )) && { git log --format=%s -1 $m; return; }
+  done
+}
 # Says something about a PR once per run rather than on every pass.
 typeset -A noted
 note() { [[ -n ${noted[$1:$2]} ]] || { echo "#$1 $2"; noted[$1:$2]=1; }; }
@@ -91,6 +108,9 @@ while (( ${#queue} )); do
         note $n "changes the lockfile and main's lockfile changed since its base; update it from main"; continue
       fi
     fi
+    undone=$(reverted_commit $n)
+    if [[ $undone == "?" ]]; then continue; fi
+    if [[ -n $undone ]]; then echo "#$n undoes main's \"$undone\", skipping"; queue=(${queue:#$n}); continue; fi
     # A merge while a release runs moves main under it and breaks its push.
     [[ -z $(gh api "$R/actions/workflows/release.yml/runs?per_page=3" \
       --jq '.workflow_runs[]|select(.status!="completed")|.id' 2>/dev/null) ]] || continue

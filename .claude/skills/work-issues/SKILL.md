@@ -82,6 +82,9 @@ Run the merge queue for PRs once they are open:
 
 - **What it waits for:** a review bot's review of the current code with every thread resolved, every check
   green, a clean merge into main, and no release running. Then it squash-merges.
+- **A PR that undoes main:** one whose head puts most of a recent main commit's files back as they were
+  before it leaves the queue with that commit named. It is almost always a commit built from an old
+  checkout on top of a newer main; rebuild the branch on main. A PR meant to revert is merged by hand.
 - **Main moving on:** a PR that merges cleanly is merged on its green run, even when main has changed
   since CI ran. Only a conflict, or a lockfile change on both sides, sends it back to be updated. When a
   pair that merged cleanly breaks main between them, fix main forward.
