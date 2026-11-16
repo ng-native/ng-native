@@ -60,3 +60,14 @@ describe('the platforms line', () => {
     await expect(render('# X\n\n<!-- platforms: Nothing -->\n')).rejects.toThrow(/Nothing/);
   });
 });
+
+describe('a marker in a fenced example', () => {
+  test('is shown as written, while one outside the fence is drawn', async () => {
+    const html = await render(
+      '# Markers\n\n```md\n<!-- os-support -->\n<!-- platforms: Nothing -->\n```\n\n<!-- platforms: Dock -->\n',
+    );
+    expect(html).toContain('os-support');
+    expect(html).toContain('platforms: Nothing');
+    expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
+  });
+});

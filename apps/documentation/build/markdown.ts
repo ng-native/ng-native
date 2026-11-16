@@ -184,6 +184,20 @@ function platforms(_marker: string, services: string): string {
   return [...new Set(lines)].join('\n\n');
 }
 
+/** A fenced code block, from its opening fence to the matching close or the end of the page. */
+const FENCE = /^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^\1\2[ \t]*$|(?![\s\S]))/gm;
+
+/** `text` with `change` applied to everything but its fenced code blocks, which stay as written. */
+function outsideFences(text: string, change: (prose: string) => string): string {
+  let result = '';
+  let at = 0;
+  for (const fence of text.matchAll(FENCE)) {
+    result += change(text.slice(at, fence.index)) + fence[0];
+    at = fence.index + fence[0].length;
+  }
+  return result + change(text.slice(at));
+}
+
 async function render(source: string, headings: DocHeading[]): Promise<string> {
   const instance = marked.use(gfmHeadingId(), {
     async: true,
@@ -271,7 +285,9 @@ export function markdown(): Plugin {
       const headings: DocHeading[] = [];
       const blocks: DocBlock[] = [];
       for (const block of segments(
-        body.replace(OS_SUPPORT_MARKER, osSupportTable).replace(PLATFORMS_MARKER, platforms),
+        outsideFences(body, (prose) =>
+          prose.replace(OS_SUPPORT_MARKER, osSupportTable).replace(PLATFORMS_MARKER, platforms),
+        ),
       )) {
         blocks.push(
           block.kind === 'html'
