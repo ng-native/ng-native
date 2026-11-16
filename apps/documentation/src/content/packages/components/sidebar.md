@@ -94,3 +94,21 @@ A tab bar renders as the window's sidebar on macOS, with no change to the app: e
 `<native-tab>` is a sidebar item, its `title` as the label, with its `sfSymbol` and `badge`, and
 its page in the content pane. The tabs own the window's split view, so a `<split-view>` inside a
 tab is a plain split view in the content.
+
+## In the desktop host
+
+`<split-view>` is `NgNativeSplitView`, holding the sidebar pane (`NgNativeSidebar`) and then the
+content pane (`NgNativeSplitContent`). The first split view in a window is the window's
+NSSplitViewController, with the full-height sidebar, the toolbar's sidebar button and tracking
+separator, View > Show Sidebar and an autosaved width; one inside another split view, a modal or
+the tabs is a plain NSSplitView in the content. Each pane is sized by AppKit, and the size goes
+back into layout, at most once a display frame. The sidebar's collapsed state follows the app's
+`collapsed`, and the title bar button, the View menu and a restored autosave report theirs with
+`topSidebarCollapse`.
+
+Neighbouring `<sidebar-section>`s (`NgNativeSidebarSection`) in one parent are one NSOutlineView
+source list, laid out where Yoga put them, and each `<sidebar-item>` (`NgNativeSidebarItem`) is a
+row of it with its label, badge and SF Symbol. A click selects a row and sends
+`topSidebarSelect` to its item. An item with content is a custom row: its views sit in a cell of
+their own, which they fill, and a click on a pressable in it reaches the pressable while other
+clicks select the row.

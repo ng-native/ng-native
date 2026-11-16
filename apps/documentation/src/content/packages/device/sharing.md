@@ -50,6 +50,15 @@ user picked a target app on iOS, or the sheet reported the action on Android. Ne
 confirms that the receiving app actually consumed the content, so treat `true` as "the user chose
 to share", not as delivery confirmation.
 
+## On macOS
+
+`@ng-native/device`'s `Sharing` uses `NgNativeSharing` on macOS, where React Native's `Share` has
+no implementation. It shows AppKit's share picker below the top of the key window's content, with
+the message as text and the url as a link, or as the file itself for a `file:` uri or a path, and
+gives the picked service the title as its subject. A share answers as shared once the service has
+shared, and as dismissed when the picker closes, the service fails, no window is showing, or
+`NGN_NO_PROMPTS=1` is set.
+
 ## Off a device and on the web
 
 Off a device `share()` always resolves to `false`, because there is no `Share` module underneath it.

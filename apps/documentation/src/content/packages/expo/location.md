@@ -95,6 +95,16 @@ const [place] = await this.location.geocode('10 Downing Street, London');
 if (place) this.marker.set(place); // { latitude, longitude }
 ```
 
+## On macOS
+
+`NgNativeLocation` answers `Location`'s permission, `current()` and `start()` over
+CLLocationManager. It asks for the permission only when the app's `Info.plist` explains why
+(`NSLocationUsageDescription` or `NSLocationWhenInUseUsageDescription`), since macOS shows no prompt
+without one, and with `NGN_NO_PROMPTS=1` never. Without the permission it reads nothing, and
+`current()` answers null. `geocode()` and `reverseGeocode()` ask CLGeocoder, which needs no
+permission and answers in `expo-location`'s iOS shapes: an address no place matches is an empty
+list, and a geocoder out of reach (offline or rate limited) rejects.
+
 ## Without the module
 
 On iOS and Android, a missing `expo-location` - never installed, or installed without the app being

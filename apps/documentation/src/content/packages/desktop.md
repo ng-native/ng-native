@@ -9,6 +9,14 @@ summary: The macOS host and the ng-native-desktop command that builds, runs and 
 app's views into AppKit, and the `ng-native-desktop` command that builds the host and runs the app
 in it. You install the package and never import it.
 
+How the host draws an app, and what it does with each part of it, is on the pages under this one:
+[Views and controls](/packages/desktop/views),
+[Windows, menus and the Dock](/packages/desktop/windows-and-menus),
+[Focus and accessibility](/packages/desktop/accessibility),
+[Expo modules on macOS](/packages/desktop/expo-modules),
+[Debugging and launch settings](/packages/desktop/development) and
+[Inside a package](/packages/desktop/packaging).
+
 ## Setup
 
 An app made from the desktop template has it already. To add macOS to an app:
@@ -51,6 +59,42 @@ The host runs on macOS 14 and later.
 The Expo CLI has no `run:macos`: its `run` commands are a fixed list, so `npm run macos` is
 `ng-native-desktop run`. It takes a bundle path or URL in place of the dev server, `--module`,
 `--port` and `--universal`.
+
+| Option            | What it does                                              |
+| ----------------- | --------------------------------------------------------- |
+| `--module <name>` | The registered app to start. Default `main`.              |
+| `--port <port>`   | The dev server's port. Default `8081`.                    |
+| `--url <link>`    | A link to open the app on, as `Linking`'s initial URL.    |
+| `--universal`     | Build for arm64 and x86_64. Default: this Mac's own arch. |
+
+With no bundle, the host loads
+`http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=macos&dev=true` straight from the
+dev server and stays connected to it: an edit Fast Refreshes and keeps state, the dev server's
+reload reloads, and so does Developer > Reload (Command-R). A bundle path or another URL can be
+given instead. A bundle's images and other assets are read beside it as React Native lays them out
+for an embedded bundle, so make it with `npx expo export:embed --platform macos --dev false
+--bundle-output <dir>/main.jsbundle --assets-dest <dir>`; `npx expo export` puts them elsewhere.
+
+The host is built against the app's own `react-native` (0.88), the first time into
+`~/Library/Caches/ng-native/desktop/rn-<version>`, which takes about 4 minutes on an Apple silicon
+Mac (about 6 for a universal release build), and the command says so before it starts. Later runs
+reuse it, and adding or removing one of the
+[libraries it compiles in](/packages/desktop/views#libraries-compiled-in) recompiles only that
+library. The host
+is built for macOS 14 and later (`native/CMakeLists.txt`, which `scripts/macos-target.sh` reads for
+Hermes too; a cached Hermes built for another macOS is built again).
+
+Before a from-source build the command checks the toolchain (`bin/toolchain.mjs`) and stops with a
+fix-it line for each problem:
+
+| Tool                            | Minimum                | Fix-it when missing or older                 |
+| ------------------------------- | ---------------------- | -------------------------------------------- |
+| Xcode or the Command Line Tools | installed and selected | `xcode-select --install`                     |
+| `swiftc`                        | Swift 6.0 (Xcode 16)   | Software Update, or `xcode-select --install` |
+| CMake                           | 3.25                   | `brew install cmake` / `brew upgrade cmake`  |
+| Ninja                           | 1.10                   | `brew install ninja` / `brew upgrade ninja`  |
+
+A prebuilt host needs none of them.
 
 ## Package the app
 
@@ -97,7 +141,11 @@ Sign in with Apple is an entitlement, as on iOS. A `mas` build of an app that us
 with it, so its profile needs the Sign in with Apple capability. A `dmg` is signed with it only
 when `ios.usesAppleSignIn` is `true`, and then needs `NGN_SIGN_IDENTITY`, a Developer ID
 provisioning profile with the capability in `NGN_PROVISIONING_PROFILE`, and its team in
-`APPLE_TEAM_ID`, with `--skip-notarize` too. The command embeds the profile.
+`APPLE_TEAM_ID`, with `--skip-notarize` too. The command embeds the profile, and adds the app's
+identity on the team to its entitlements.
+
+[Inside a package](/packages/desktop/packaging) has the steps the command runs, the `Info.plist`
+keys it writes, updates, and the prebuilt hosts it can package in place of a build from source.
 
 ## Config
 
@@ -136,7 +184,8 @@ The plugin options hold only what has no Expo key:
 - **`deny`** - npm packages whose native code stays out of the desktop build.
 
 Expo runs the plugin whenever it reads the config, so an option that is not valid stops
-`expo start`, `expo export` and `ng-native-desktop` with every problem listed.
+`expo start`, `expo export` and `ng-native-desktop` with every problem listed. The plugin changes
+nothing in the config.
 
 ## Native code
 
@@ -163,3 +212,35 @@ Android and none for the desktop: their native modules are absent on macOS, so a
 one reports itself unavailable. `expo`, the `expo-*` packages and `@ng-native/*` are not listed,
 since the desktop host answers their services itself. `react-native-screens` and
 `react-native-safe-area-context` are compiled into the host when the app has them.
+
+`run` and `package` write what they found to `.expo/ng-native-desktop/link.json` in the app, which
+the host build reads from `NGN_DESKTOP_LINK`. `deny` keeps a package out; the packages it depends on
+are still found.
+
+A library with a `codegenConfig` gets its specs' codegen, as on Android: the `<Name>JSI.h` its C++
+TurboModule implements, and for its Fabric components their props, events and shadow nodes, which
+the host compiles in and registers, so the component lays out and its events reach JavaScript. The
+library draws it with a subclass of `NGNView` from the host's `component-view.h`, registered for
+the component's name as it loads:
+
+```objc
+#import "component-view.h"
+#include <react/renderer/components/MyLibSpec/Props.h>
+
+@interface MyBadgeView : NGNView
+@end
+
+@implementation MyBadgeView
++ (void)load {
+  NGNRegisterComponentView(@"MyBadge", self);
+}
+- (void)updateProps:(const facebook::react::Props::Shared &)props {
+  [super updateProps:props]; // background, border, opacity and accessibility
+  auto badge = std::dynamic_pointer_cast<const facebook::react::MyBadgeProps>(props);
+  // ...
+}
+@end
+```
+
+Events go out through the codegen's `EventEmitter`, cast from `self.eventEmitter`. A component
+with no view registered mounts as a plain view, and the host's own components keep theirs.
