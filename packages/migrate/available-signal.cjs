@@ -320,8 +320,11 @@ function closing(text) {
 /** Each `{{ }}` interpolation's span. */
 function interpolationsOf(text) {
   const spans = [];
-  for (let at = text.indexOf('{{'); at !== -1; at = text.indexOf('{{', at + 2)) {
-    spans.push([at, scan(text, at + 2, (here) => text.startsWith('}}', here)).end]);
+  for (let at = text.indexOf('{{'); at !== -1;) {
+    const { end } = scan(text, at + 2, (here) => text.startsWith('}}', here));
+    spans.push([at, end]);
+    // Past the whole span, so a `{{` in a string inside it starts no second one.
+    at = text.indexOf('{{', end + 2);
   }
   return spans;
 }
