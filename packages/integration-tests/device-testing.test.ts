@@ -548,6 +548,32 @@ describe('the device pool', () => {
     }
   });
 
+  it('touches the normalised snapshot path, not a link followed before a dot-dot', async () => {
+    const run = await setup();
+    const outside = mkdtempSync(join(tmpdir(), 'device-pool-dotdot-'));
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      const first = phone.poll();
+      await starting;
+      worker.send(
+        request('run', { files: [{ filepath: join(run.root, 'src/a.device.ts') }] }) as never,
+      );
+      await first;
+      mkdirSync(join(outside, 'sub'));
+      symlinkSync(join(outside, 'sub'), join(run.root, 'src/link'));
+      // The kernel follows `link` before `..`, so the raw string names a file beside `sub`.
+      const raw = `${join(run.root, 'src/link')}/../victim.snap`;
+      await phone.post('/files', { op: 'write', path: raw, content: 'x' });
+      assert.equal(existsSync(join(outside, 'victim.snap')), false);
+      assert.equal(readFileSync(join(run.root, 'src/victim.snap'), 'utf8'), 'x');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+      await run.done();
+    }
+  });
+
   it('maps a mock to the file Metro resolves, trying each extension in turn', async () => {
     const run = await setup();
     try {

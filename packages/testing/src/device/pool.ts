@@ -886,9 +886,12 @@ function snapshotFile(
   session: Session | undefined,
   message: Record<string, unknown>,
 ): string | null {
-  const file = String(message['path'] ?? '');
+  const requested = String(message['path'] ?? '');
+  // Normalised once: the path checked is the path touched, as the kernel would follow a link
+  // before a `..` that `path.resolve` has already folded away.
+  const file = normalised(requested);
   if (!session?.claimant || !session.root || !path.isAbsolute(file) || !permitted(session, file)) {
-    throw new Error(`Not a snapshot file: ${file}`);
+    throw new Error(`Not a snapshot file: ${requested}`);
   }
   switch (message['op']) {
     case 'read':
@@ -905,12 +908,14 @@ function snapshotFile(
   }
 }
 
+const normalised = (file: string): string => (path.isAbsolute(file) ? path.resolve(file) : file);
+
 /**
  * Whether the app may touch `file`: a test file it was sent, or a `.snap` file in its worker's
  * project and outside its packages, whichever way a symlink on the path points.
  */
 function permitted(session: Session, file: string): boolean {
-  const resolved = path.resolve(file);
+  const resolved = file;
   if (session.files.has(resolved)) return true;
   const target = realPath(resolved);
   return (

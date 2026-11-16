@@ -80,4 +80,12 @@ describe('a marker in a fenced example', () => {
       expect(html, close).toContain('<strong>Platforms.</strong> Available on macOS.');
     }
   });
+
+  test('does not close a fence on a run indented four spaces', async () => {
+    const html = await render(
+      '# Markers\n\n```md\n    ```\n<!-- platforms: Nothing -->\n```\n\n<!-- platforms: Dock -->\n',
+    );
+    expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
+    expect(html).toContain('platforms: Nothing');
+  });
 });
