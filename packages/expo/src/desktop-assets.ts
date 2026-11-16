@@ -24,10 +24,19 @@ interface DesktopAsset {
   readonly downloaded: true;
 }
 
+/** `segment` decoded, or as written where a bare `%` makes it no valid escape. */
+function decoded(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 /** The url's file name and its extension, and the `hash` the dev server's asset urls carry. */
 function describe(uri: string): { name: string; type: string; hash: string | null } {
   const [path = '', query = ''] = uri.split(/[?#]/, 2);
-  const file = decodeURIComponent(path.slice(path.lastIndexOf('/') + 1));
+  const file = decoded(path.slice(path.lastIndexOf('/') + 1));
   const dot = file.lastIndexOf('.');
   const hash = new URLSearchParams(query).get('hash');
   return {

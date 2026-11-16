@@ -241,6 +241,22 @@ describe('Fonts on macOS', () => {
     assert.deepEqual(fonts.families(), ['Inter', 'Mono', 'Serif']);
   });
 
+  it('rejects a face with no file among the loads already started, leaving none unhandled', async () => {
+    host();
+    const { Fonts } = await import('@ng-native/expo/fonts');
+    const fonts = injectService(Fonts);
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => void unhandled.push(reason);
+    process.on('unhandledRejection', record);
+    try {
+      await assert.rejects(fonts.load({ Broken: 'file:///broken.ttf', Nothing: null }));
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    } finally {
+      process.off('unhandledRejection', record);
+    }
+    assert.deepEqual(unhandled, []);
+  });
+
   it('rejects a face the host cannot load, and one with no file', async () => {
     host();
     const { Fonts } = await import('@ng-native/expo/fonts');
@@ -1380,6 +1396,20 @@ describe('assets() on macOS', () => {
     assert.equal(hero?.height, 30);
     assert.equal(logo?.width, null);
     assert.equal((logo as { localUri?: string }).localUri, 'file:///caches/ExponentAsset-x.png');
+  });
+
+  it('downloads an asset whose name has a bare %, named as written', async () => {
+    mac({ NgNativeAsset: { downloadAsync: async () => 'file:///caches/ExponentAsset-x.png' } });
+    const { assets } = await import('@ng-native/expo/assets');
+    const injector = injectService(Injector);
+    const loaded = runInInjectionContext(injector, () =>
+      assets(() => ['https://example.com/100%.png']),
+    );
+    while (loaded.isLoading() || loaded.value() === undefined) {
+      if (loaded.error()) throw loaded.error();
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    assert.equal((loaded.value()![0] as { name?: string }).name, '100%');
   });
 });
 

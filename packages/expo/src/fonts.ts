@@ -215,7 +215,8 @@ function desktopFonts(): typeof import('expo-font') | null {
   const fonts: NativeFonts = {
     loadAsync: async (map) => {
       await Promise.all(
-        Object.entries(map).map(([name, source]) => {
+        // Async, so a source with no file rejects among the loads already started, not before them.
+        Object.entries(map).map(async ([name, source]) => {
           const uri = assetUri(source);
           if (uri === null) throw new Error(`[angular-native] Fonts: ${name} has no file to load.`);
           return host.loadAsync(name, uri);
