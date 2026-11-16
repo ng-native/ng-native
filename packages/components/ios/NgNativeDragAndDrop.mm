@@ -20,6 +20,7 @@
 @interface NgNativeDragAndDrop : NSObject <RCTBridgeModule, RCTInvalidating>
 - (nullable NSDictionary *)dragItemFor:(NSString *)nativeID;
 - (void)send:(NSString *)type nativeID:(NSString *)nativeID drop:(nullable NSDictionary *)drop;
+- (nullable id)dropTargetFor:(NSString *)nativeID;
 @end
 
 static BOOL takesDrags(void)
@@ -149,7 +150,13 @@ static NSString *nonEmptyString(id value)
 
   __weak NgNativeDragAndDrop *module = _module;
   NSString *nativeID = _nativeID;
+  // Each binding of a view has a target of its own. A view that unmounted while the items loaded,
+  // and one bound since under the same `nativeID`, get nothing: the drop was not theirs.
+  __weak NgNativeDropTarget *target = self;
   dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+    if (target == nil || [module dropTargetFor:nativeID] != target) {
+      return;
+    }
     NSString *text = texts.count > 0 ? [texts componentsJoinedByString:@"\n"] : nil;
     [module send:@"dropPerform"
         nativeID:nativeID
@@ -305,6 +312,11 @@ RCT_EXPORT_METHOD(setDragItem : (NSString *)nativeID item : (nullable NSDictiona
     [_dragItems removeObjectForKey:nativeID];
     [_dragViews unbind:nativeID];
   }
+}
+
+- (id)dropTargetFor:(NSString *)nativeID
+{
+  return [_dropViews tokenFor:nativeID];
 }
 
 - (NSDictionary *)dragItemFor:(NSString *)nativeID
