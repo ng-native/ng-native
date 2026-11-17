@@ -4,13 +4,14 @@
 
 namespace ngn {
 
-bool BackSwipe::begin(std::optional<BackSwipeTarget> target, double width) {
+bool BackSwipe::begin(std::optional<BackSwipeTarget> target, double width, bool rightToLeft) {
   if (phase_ != Phase::Idle || !target || width <= 0) {
     return false;
   }
   phase_ = Phase::Tracking;
   target_ = target;
   width_ = width;
+  rightToLeft_ = rightToLeft;
   offset_ = 0;
   lastMove_ = 0;
   return true;
@@ -21,14 +22,14 @@ BackSwipeFrame BackSwipe::frameAt(double progress, bool belowShown) const {
   if (target_ && target_->style == SwipeStyle::Fade) {
     return {.offset = 0, .opacity = 1 - progress, .belowShown = belowShown};
   }
-  return {.offset = progress * width_, .opacity = 1, .belowShown = belowShown};
+  return {.offset = progress * towardsBack(width_, rightToLeft_), .opacity = 1, .belowShown = belowShown};
 }
 
 BackSwipeFrame BackSwipe::moved(double dx) {
   if (phase_ != Phase::Tracking) {
     return rest();
   }
-  // The screen stops at its home edge: a move away from back past it does not drag it left.
+  // The screen stops at its home edge: a move away from back past it does not drag it further.
   offset_ = std::clamp(offset_ + dx, 0.0, width_);
   lastMove_ = dx;
   return frameAt(offset_ / width_, offset_ > 0);
@@ -84,8 +85,14 @@ bool BackSwipe::fingersDown() {
   return true;
 }
 
-SwipeBounds swipeBounds(bool canGoBack, bool canGoForward) {
-  return {.min = canGoForward ? -1.0 : 0.0, .max = canGoBack ? 1.0 : 0.0};
+double towardsBack(double right, bool rightToLeft) {
+  return rightToLeft ? -right : right;
+}
+
+SwipeBounds swipeBounds(bool canGoBack, bool canGoForward, bool rightToLeft) {
+  bool canGoLeft = rightToLeft ? canGoBack : canGoForward;
+  bool canGoRight = rightToLeft ? canGoForward : canGoBack;
+  return {.min = canGoLeft ? -1.0 : 0.0, .max = canGoRight ? 1.0 : 0.0};
 }
 
 } // namespace ngn

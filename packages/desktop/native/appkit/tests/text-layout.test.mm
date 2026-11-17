@@ -127,6 +127,39 @@ TEST_CASE("Natural alignment follows the paragraph's direction") {
   CHECK(leftmostInk(marked, 300, 40) > 150);
 }
 
+TEST_CASE("In a right-to-left layout, alignment follows the layout's direction as React Native iOS has it") {
+  auto laidOut = [](const char *text, std::optional<TextAlignment> alignment, LayoutDirection direction) {
+    auto f = fragment(text);
+    f.textAttributes.alignment = alignment;
+    f.textAttributes.layoutDirection = direction;
+    return ngn::layoutText(stringOf({f}), {}, 300);
+  };
+  constexpr auto rtl = LayoutDirection::RightToLeft;
+  constexpr auto ltr = LayoutDirection::LeftToRight;
+  // Latin text with no alignment, natural or start goes right, though its paragraph runs left to
+  // right; so does Hebrew.
+  for (auto alignment : {std::optional<TextAlignment>{}, std::optional{TextAlignment::Natural}, std::optional{TextAlignment::Start}}) {
+    auto latin = laidOut("Hello", alignment, rtl);
+    CHECK_FALSE(latin.lines[0].rightToLeft);
+    CHECK(leftmostInk(latin, 300, 40) > 150);
+    CHECK(leftmostInk(laidOut("שלום", alignment, rtl), 300, 40) > 150);
+  }
+  // End goes left, and left and right swap.
+  CHECK(leftmostInk(laidOut("Hello", TextAlignment::End, rtl), 300, 40) < 10);
+  CHECK(leftmostInk(laidOut("Hello", TextAlignment::Right, rtl), 300, 40) < 10);
+  CHECK(leftmostInk(laidOut("Hello", TextAlignment::Left, rtl), 300, 40) > 150);
+  int centred = leftmostInk(laidOut("Hello", TextAlignment::Center, rtl), 300, 40);
+  CHECK(centred > 100);
+  CHECK(centred < 150);
+
+  // Left to right: unset stays natural by the paragraph, a natural or start that is set goes left.
+  CHECK(leftmostInk(laidOut("שלום", std::nullopt, ltr), 300, 40) > 150);
+  CHECK(leftmostInk(laidOut("שלום", TextAlignment::Natural, ltr), 300, 40) < 10);
+  CHECK(leftmostInk(laidOut("שלום", TextAlignment::Start, ltr), 300, 40) < 10);
+  CHECK(leftmostInk(laidOut("Hello", TextAlignment::End, ltr), 300, 40) > 150);
+  CHECK(leftmostInk(laidOut("Hello", TextAlignment::Right, ltr), 300, 40) > 150);
+}
+
 TEST_CASE("A paragraph's first strong character sets its direction by bidi class, letter or not") {
   // Strong right to left though not letters: Hebrew's maqaf (R) and Arabic's semicolon (AL); and an
   // Arabic letter after a zero-width space, which has no glyph and no direction.

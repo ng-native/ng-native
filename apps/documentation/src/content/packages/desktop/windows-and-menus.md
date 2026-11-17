@@ -39,7 +39,9 @@ swipe over a native stack with a screen below its front one is interactive (`bac
 front screen follows the fingers with the one below showing, goes back when released past a third
 of the width or flicked, and slides home when released early. It is not offered on a screen with
 `gestureEnabled: false` or `stackAnimation: 'none'`, and a `fade` screen fades instead. A forward
-swipe, or a back one with no screen below (into another sidebar item), goes when it ends.
+swipe, or a back one with no screen below (into another sidebar item), goes when it ends. Swipes go
+back to the right, and in an app that lays out right to left (`I18nManager.isRTL`) to the left, as
+Safari's do.
 
 ## The tray and the Dock
 

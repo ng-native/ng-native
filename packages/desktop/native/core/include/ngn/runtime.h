@@ -88,6 +88,10 @@ class Runtime {
   const std::optional<DevServer> &devServer() const {
     return devServer_;
   }
+  // Whether the running instance's surfaces lay out right to left, as its I18nManager.isRTL says.
+  bool laysOutRightToLeft() const {
+    return direction_.rightToLeft();
+  }
   // Tears the runtime down and starts it again on a fresh download of the bundle, with every
   // running surface restarted. Runs off the calling thread; a second call while one runs is
   // dropped. `done` gets whether the bundle loaded, on the UI thread once the reload's thread has

@@ -338,6 +338,8 @@ struct Swipe {
   NGNView *below;
   NSWindow *window;
   SurfaceId surface = 0;
+  // The direction the swipe began in, which its later moves keep though a reload changes the app's.
+  bool rightToLeft = false;
   // The momentum scrolls after a swipe's fingers lift are the swipe's, not the content's.
   bool swallowMomentum = false;
   // Bumped as a swipe starts or ends, so a late animation step or timeout of an old one stops.
@@ -401,6 +403,11 @@ double fingersMovedRight(NSEvent *event) {
   return event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX;
 }
 
+// Whether the app lays out right to left, which turns the swipes round: left goes back.
+bool swipesRightToLeft() {
+  return gHost.runtime && gHost.runtime->laysOutRightToLeft();
+}
+
 // The fingers lifted from a tracking swipe: it goes back, or slides home.
 void liftSwipe(NSEvent *event) {
   bool back = gSwipe.swipe.lifted(event.phase == NSEventPhaseCancelled);
@@ -450,7 +457,7 @@ NSEvent *swipeScroll(NSEvent *event, NSWindow *window) {
     if (window != gSwipe.window) {
       return event;
     }
-    double dx = fingersMovedRight(event);
+    double dx = ngn::towardsBack(fingersMovedRight(event), gSwipe.rightToLeft);
     if (dx != 0) {
       drawSwipe(gSwipe.swipe.moved(dx));
     }
@@ -474,23 +481,25 @@ NSEvent *swipeScroll(NSEvent *event, NSWindow *window) {
   auto history = gHost.menus->history(*surface);
   bool canGoBack = !history || !history->back.empty();
   bool canGoForward = !history || !history->forward.empty();
-  double dx = fingersMovedRight(event);
+  bool rightToLeft = swipesRightToLeft();
+  double dx = ngn::towardsBack(fingersMovedRight(event), rightToLeft);
   if (dx > 0 && canGoBack && gSwipe.swipe.phase() == ngn::BackSwipe::Phase::Idle) {
     auto target = gHost.mounting->backSwipeTarget(*surface);
     NGNView *top = target ? gHost.backend->view(target->top) : nil;
     NGNView *below = target ? gHost.backend->view(target->below) : nil;
-    if (top != nil && below != nil && gSwipe.swipe.begin(target, NSWidth(top.bounds))) {
+    if (top != nil && below != nil && gSwipe.swipe.begin(target, NSWidth(top.bounds), rightToLeft)) {
       endSwipe();
       gSwipe.top = top;
       gSwipe.below = below;
       gSwipe.window = window;
       gSwipe.surface = *surface;
+      gSwipe.rightToLeft = rightToLeft;
       gSwipe.swallowMomentum = true;
       drawSwipe(gSwipe.swipe.moved(dx));
       return nil;
     }
   }
-  auto bounds = ngn::swipeBounds(canGoBack, canGoForward);
+  auto bounds = ngn::swipeBounds(canGoBack, canGoForward, rightToLeft);
   if (bounds == ngn::SwipeBounds{}) {
     return event;
   }
@@ -500,7 +509,8 @@ NSEvent *swipeScroll(NSEvent *event, NSWindow *window) {
                        usingHandler:^(CGFloat amount, NSEventPhase phase, BOOL complete, BOOL *stop) {
                          if (phase == NSEventPhaseEnded && amount != 0) {
                            navigate(*ngn::navigationFor(
-                                        amount > 0 ? ngn::NavigationInput::SwipeRight : ngn::NavigationInput::SwipeLeft),
+                                        amount > 0 ? ngn::NavigationInput::SwipeRight : ngn::NavigationInput::SwipeLeft,
+                                        rightToLeft),
                                     window);
                          }
                        }];
@@ -1447,7 +1457,7 @@ int main(int argc, const char *argv[]) {
                                             }
                                             auto input = event.deltaX > 0 ? ngn::NavigationInput::SwipeRight
                                                                           : ngn::NavigationInput::SwipeLeft;
-                                            navigate(*ngn::navigationFor(input), event.window);
+                                            navigate(*ngn::navigationFor(input, swipesRightToLeft()), event.window);
                                             return nil;
                                           }];
     // "Swipe between pages" with two fingers (swipeScroll), for real scrolls and replayed ones.

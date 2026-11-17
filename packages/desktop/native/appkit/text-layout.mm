@@ -86,14 +86,24 @@ CTFontRef makeFont(const TextAttributes &a) {
   return (CTFontRef)CFBridgingRetain(font);
 }
 
-CTTextAlignment ctAlignment(std::optional<TextAlignment> alignment) {
+// A fragment's alignment as React Native iOS resolves it (RCTResolveTextAlignment): in a
+// right-to-left layout, natural and start go right, end goes left, and left and right swap; in a
+// left-to-right one, a natural or start alignment that is set goes left. Text with no alignment in
+// a left-to-right layout stays natural, aligned by its paragraph's direction (drawText).
+CTTextAlignment ctAlignment(std::optional<TextAlignment> alignment, std::optional<LayoutDirection> layoutDirection) {
+  bool rightToLeft = layoutDirection == LayoutDirection::RightToLeft;
+  if (!alignment && !rightToLeft) {
+    return kCTTextAlignmentNatural;
+  }
+  CTTextAlignment start = rightToLeft ? kCTTextAlignmentRight : kCTTextAlignmentLeft;
+  CTTextAlignment end = rightToLeft ? kCTTextAlignmentLeft : kCTTextAlignmentRight;
   switch (alignment.value_or(TextAlignment::Natural)) {
-    case TextAlignment::Left: return kCTTextAlignmentLeft;
     case TextAlignment::Center: return kCTTextAlignmentCenter;
-    case TextAlignment::Right: return kCTTextAlignmentRight;
     case TextAlignment::Justified: return kCTTextAlignmentJustified;
-    case TextAlignment::End: return kCTTextAlignmentRight;
-    default: return kCTTextAlignmentNatural;
+    case TextAlignment::Left: return start;
+    case TextAlignment::Right:
+    case TextAlignment::End: return end;
+    default: return start;
   }
 }
 
@@ -312,7 +322,7 @@ CFAttributedStringRef makeAttributedString(const AttributedString &attributedStr
 
     // Paragraph style: alignment, and lineHeight as a fixed line box (as React Native iOS does),
     // with the glyphs centred in it through a baseline offset applied at draw time.
-    CTTextAlignment alignment = ctAlignment(a.alignment);
+    CTTextAlignment alignment = ctAlignment(a.alignment, a.layoutDirection);
     CTWritingDirection direction = ctWritingDirection(a.baseWritingDirection);
     CGFloat lineHeight = 0;
     if (!std::isnan(a.lineHeight) && a.lineHeight > 0) {

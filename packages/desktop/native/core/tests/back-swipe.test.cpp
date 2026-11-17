@@ -213,6 +213,36 @@ TEST_CASE("a fading screen fades in place as the fingers move") {
   CHECK(swipe.settled() == BackSwipeFrame{.offset = 0, .opacity = 0, .belowShown = true});
 }
 
+TEST_CASE("in a right-to-left layout, fingers moving left go back and the screen in front moves left") {
+  // Back is the way a page follows the fingers to the one before it: right in a left-to-right
+  // layout and left in a right-to-left one, as Safari and Finder swipe.
+  CHECK(ngn::towardsBack(30, false) == 30);
+  CHECK(ngn::towardsBack(-30, false) == -30);
+  CHECK(ngn::towardsBack(-30, true) == 30);
+  CHECK(ngn::towardsBack(30, true) == -30);
+
+  BackSwipe swipe;
+  REQUIRE(swipe.begin(BackSwipeTarget{.stack = 2, .top = 20, .below = 10}, 400, true));
+  CHECK(swipe.moved(ngn::towardsBack(-40, true)) == BackSwipeFrame{.offset = -40, .opacity = 1, .belowShown = true});
+  // Fingers moving right go towards forward: the screen stops at its home edge.
+  CHECK(swipe.moved(ngn::towardsBack(200, true)) == BackSwipeFrame{.offset = 0, .opacity = 1, .belowShown = false});
+  swipe.moved(ngn::towardsBack(-150, true));
+  CHECK(swipe.lifted());
+  CHECK(swipe.settled() == BackSwipeFrame{.offset = -400, .opacity = 1, .belowShown = true});
+  CHECK(swipe.mounted(10));
+
+  // A fading screen fades the same either way.
+  swipe.begin(BackSwipeTarget{.stack = 2, .top = 20, .below = 10, .style = SwipeStyle::Fade}, 400, true);
+  CHECK(swipe.moved(100) == BackSwipeFrame{.offset = 0, .opacity = 0.75, .belowShown = true});
+}
+
+TEST_CASE("a swipe tracker in a right-to-left layout goes back to the left and forward to the right") {
+  CHECK(ngn::swipeBounds(true, false, true) == ngn::SwipeBounds{.min = -1, .max = 0});
+  CHECK(ngn::swipeBounds(false, true, true) == ngn::SwipeBounds{.min = 0, .max = 1});
+  CHECK(ngn::swipeBounds(true, true, true) == ngn::SwipeBounds{.min = -1, .max = 1});
+  CHECK(ngn::swipeBounds(false, false, true) == ngn::SwipeBounds{});
+}
+
 TEST_CASE("a swipe tracker opens only the ways the window's history can go") {
   CHECK(ngn::swipeBounds(true, true) == ngn::SwipeBounds{.min = -1, .max = 1});
   CHECK(ngn::swipeBounds(true, false) == ngn::SwipeBounds{.min = 0, .max = 1});

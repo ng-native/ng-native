@@ -169,14 +169,16 @@ std::vector<MenuItem> parseMenuBar(const folly::dynamic &groups, const DefaultMe
   return bar;
 }
 
-std::optional<NavigationDirection> navigationFor(NavigationInput input) {
+std::optional<NavigationDirection> navigationFor(NavigationInput input, bool rightToLeft) {
   switch (input) {
     case NavigationInput::MouseButton4:
-    case NavigationInput::SwipeRight:
       return NavigationDirection::Back;
     case NavigationInput::MouseButton5:
-    case NavigationInput::SwipeLeft:
       return NavigationDirection::Forward;
+    case NavigationInput::SwipeRight:
+      return rightToLeft ? NavigationDirection::Forward : NavigationDirection::Back;
+    case NavigationInput::SwipeLeft:
+      return rightToLeft ? NavigationDirection::Back : NavigationDirection::Forward;
   }
   return std::nullopt;
 }
