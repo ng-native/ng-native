@@ -39,12 +39,14 @@ struct FakeHardware final : ngn::CameraHardware {
 
 struct FakeCapture final : ngn::CameraCapture {
   std::string error;
-  void takePicture(double quality, const std::string &path, std::function<void(int, int, const std::string &)> done) override {
+  std::string format;
+  void takePicture(const ngn::CameraPictureRequest &request, std::function<void(int, int, const std::string &)> done) override {
     if (!error.empty()) {
       done(0, 0, error);
       return;
     }
-    std::ofstream(path, std::ios::binary) << "JPEG@" << quality;
+    format = request.format;
+    std::ofstream(request.path, std::ios::binary) << (request.format == "png" ? "PNG" : "JPEG@") << request.quality;
     done(1280, 720, "");
   }
   // The recording in progress, finished by stopRecording.
@@ -158,6 +160,8 @@ TEST_CASE("NgNativeCamera takes a picture from a running view by its tag, into t
   CHECK((*picture.value)["width"] == 1280);
   CHECK((*picture.value)["height"] == 720);
   CHECK((*picture.value)["format"] == "jpg");
+  CHECK(uri.ends_with(".jpg"));
+  CHECK(capture->format == "jpg");
   CHECK((*picture.value)["base64"] == ngn::base64Encode("JPEG@0.5"));
 
   CHECK(call(*module, "takePicture", dynamic::array(8, dynamic::object())).error == "Camera is not ready yet. Wait for 'onCameraReady' callback");
@@ -166,6 +170,38 @@ TEST_CASE("NgNativeCamera takes a picture from a running view by its tag, into t
   views->attach(7, capture);
   capture->error = "the session stopped";
   CHECK(call(*module, "takePicture", dynamic::array(7, dynamic::object())).error == "Camera.takePicture: the session stopped");
+}
+
+TEST_CASE("NgNativeCamera takes a picture as a PNG or a JPEG, as expo-camera's imageType asks, and refuses another") {
+  Folder folder;
+  auto hardware = std::make_shared<FakeHardware>();
+  hardware->state = Access::Granted;
+  auto views = std::make_shared<ngn::CameraViews>();
+  auto module = ngn::makeCameraModule(hardware, views, folder.path.string(), false);
+  auto capture = std::make_shared<FakeCapture>();
+  views->attach(7, capture);
+
+  auto png = call(*module, "takePicture", dynamic::array(7, dynamic::object("imageType", "png")("quality", 0.3)));
+  REQUIRE(png.value);
+  CHECK((*png.value)["format"] == "png");
+  CHECK((*png.value)["uri"].asString().ends_with(".png"));
+  CHECK(capture->format == "png");
+  CHECK(std::filesystem::exists(ngn::pathOfUri((*png.value)["uri"].asString()).value()));
+
+  auto jpg = call(*module, "takePicture", dynamic::array(7, dynamic::object("imageType", "jpg")));
+  REQUIRE(jpg.value);
+  CHECK((*jpg.value)["format"] == "jpg");
+  CHECK((*jpg.value)["uri"].asString().ends_with(".jpg"));
+  CHECK(capture->format == "jpg");
+
+  // expo-camera's PictureFormat has jpg and png only: iOS refuses any other value as it converts it.
+  capture->format.clear();
+  for (auto other : {"heic", "jpeg", "PNG"}) {
+    CHECK(call(*module, "takePicture", dynamic::array(7, dynamic::object("imageType", other))).error ==
+          "Camera.takePicture: imageType must be 'jpg' or 'png'");
+  }
+  CHECK(call(*module, "takePicture", dynamic::array(7, dynamic::object("imageType", 3))).error);
+  CHECK(capture->format.empty());
 }
 
 TEST_CASE("NgNativeCamera records a movie from a running view until it is stopped, into the same folder") {

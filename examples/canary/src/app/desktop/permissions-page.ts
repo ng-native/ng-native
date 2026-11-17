@@ -173,6 +173,7 @@ export class PermissionsPage {
         location: () => this.checkLocation(),
         photos: () => this.checkPhotos(),
         picker: () => this.checkPicker(),
+        capture: () => this.checkCapture(),
         'photos-cleanup': () => this.cleanUpPhoto(),
         tracking: () => this.checkTracking(),
         notifications: () => this.checkNotifications(),
@@ -207,6 +208,7 @@ export class PermissionsPage {
     await wait(2500);
     const picture = await this.camera()?.takePicture({ quality: 0.7 });
     this.note(`picture ${picture?.uri} ${picture?.width}x${picture?.height}`);
+    await this.takePng();
     await wait(1500);
     this.cameraShown.set('muted');
     await wait(1500);
@@ -420,6 +422,23 @@ export class PermissionsPage {
     );
     const picked = await this.picker.pick({ mediaTypes: ['images'] });
     this.note(`picked ${picked.length} ${picked.map((each) => each.uri).join(', ')}`);
+  }
+
+  private async takePng(): Promise<void> {
+    const png = await this.camera()?.takePicture({ imageType: 'png' });
+    this.note(`picture png ${png?.uri} ${png?.width}x${png?.height} ${png?.format}`);
+  }
+
+  private async checkCapture(): Promise<void> {
+    this.note(`camera permission ask ${await this.picker.cameraPermission.ensure()}`);
+    this.note('camera sheet shown, waiting for a shot');
+    const [photo] = await this.picker.capture({ quality: 0.8, exif: true });
+    this.note(
+      photo
+        ? `captured ${photo.uri} ${photo.width}x${photo.height} ${photo.mimeType} ${photo.fileSize} bytes, fileName ${photo.fileName}, exif ${Object.keys(photo.exif ?? {}).length} keys`
+        : 'captured nothing',
+    );
+    this.note(`videos only ${(await this.picker.capture({ mediaTypes: 'videos' })).length}`);
   }
 
   private async checkTracking(): Promise<void> {

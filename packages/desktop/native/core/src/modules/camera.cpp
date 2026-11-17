@@ -77,14 +77,23 @@ std::string cameraMountError(CameraMount mount) {
   }
 }
 
-namespace {
-
-folly::dynamic permissionOf(CameraHardware::Access access) {
+folly::dynamic cameraPermissionOf(CameraHardware::Access access) {
   using Access = CameraHardware::Access;
   const char *status = access == Access::Granted ? "granted" : access == Access::NotDetermined ? "undetermined" : "denied";
   return folly::dynamic::object("status", status)("granted", access == Access::Granted)("canAskAgain", access == Access::NotDetermined)(
       "expires", "never");
 }
+
+void requestCameraPermission(CameraHardware &hardware, bool noPrompts, JsPromise promise) {
+  auto access = hardware.access();
+  if (noPrompts || access != CameraHardware::Access::NotDetermined) {
+    promise.resolve(cameraPermissionOf(access));
+    return;
+  }
+  hardware.requestAccess([promise](CameraHardware::Access decided) { promise.resolve(cameraPermissionOf(decided)); });
+}
+
+namespace {
 
 // A new file's name: a random UUID with `extension`, as expo names its pictures and videos.
 std::string newFileName(const std::string &extension) {
@@ -105,7 +114,71 @@ std::string contentsOf(const std::string &path) {
   return {std::istreambuf_iterator<char>(in), {}};
 }
 
+// Whether expo-image-picker's mediaTypes (a MediaType, a list of them, or the deprecated
+// MediaTypeOptions) let the camera take a photo; left out, it does.
+bool asksForPhotos(const folly::dynamic &options) {
+  const auto *types = options.isObject() ? options.get_ptr("mediaTypes") : nullptr;
+  if (types == nullptr || types->isNull()) {
+    return true;
+  }
+  auto photo = [](const folly::dynamic &type) {
+    return type.isString() && (type == "images" || type == "livePhotos" || type == "Images" || type == "All");
+  };
+  if (!types->isArray()) {
+    return photo(*types);
+  }
+  return std::any_of(types->begin(), types->end(), photo);
+}
+
 } // namespace
+
+void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly::dynamic &options, JsPromise promise) {
+  folly::dynamic canceled = folly::dynamic::object("canceled", true)("assets", nullptr);
+  if (camera.hardware->access() != CameraHardware::Access::Granted) {
+    promise.reject("ImagePicker: Missing camera or camera roll permission");
+    return;
+  }
+  // The sheet takes photos only, so a request for videos alone has nothing to take.
+  if (noPrompts || !asksForPhotos(options)) {
+    promise.resolve(std::move(canceled));
+    return;
+  }
+  if (!camera.hardware->hasCamera()) {
+    promise.reject("ImagePicker: this Mac has no camera");
+    return;
+  }
+  CameraPictureRequest request;
+  bool base64 = false;
+  bool exif = false;
+  if (options.isObject()) {
+    if (const auto *q = options.get_ptr("quality"); q && q->isNumber()) {
+      request.quality = std::clamp(q->asDouble(), 0.0, 1.0);
+    }
+    base64 = options.getDefault("base64", false) == true;
+    exif = options.getDefault("exif", false) == true;
+  }
+  std::error_code ignored;
+  std::filesystem::create_directories(camera.folder, ignored);
+  request.path = camera.folder + "/" + newFileName(".jpg");
+  auto path = request.path;
+  camera.sheet->shoot(request, [promise, canceled, path, base64, exif](std::optional<CameraShot> shot, const std::string &error) {
+    if (!error.empty()) {
+      promise.reject("ImagePicker: " + error);
+      return;
+    }
+    if (!shot) {
+      promise.resolve(canceled);
+      return;
+    }
+    std::error_code sizeError;
+    auto size = std::filesystem::file_size(path, sizeError);
+    folly::dynamic asset = folly::dynamic::object("uri", fileUri(path))("assetId", nullptr)("width", shot->width)("height", shot->height)(
+        "type", "image")("fileName", nullptr)("fileSize", sizeError ? folly::dynamic(nullptr) : folly::dynamic(static_cast<int64_t>(size)))(
+        "mimeType", "image/jpeg")("duration", nullptr)("exif", exif ? shot->exif : folly::dynamic(nullptr))(
+        "base64", base64 ? folly::dynamic(base64Encode(contentsOf(path))) : folly::dynamic(nullptr));
+    promise.resolve(folly::dynamic::object("canceled", false)("assets", folly::dynamic::array(std::move(asset))));
+  });
+}
 
 std::shared_ptr<NativeModule> makeCameraModule(
     std::shared_ptr<CameraHardware> hardware, std::shared_ptr<CameraViews> views, std::string pictures, bool noPrompts) {
@@ -114,15 +187,10 @@ std::shared_ptr<NativeModule> makeCameraModule(
         : NativeModule("NgNativeCamera") {
       using Access = CameraHardware::Access;
       promise("getCameraPermissionsAsync", [hardware](const folly::dynamic &, JsPromise promise) {
-        promise.resolve(permissionOf(hardware->access()));
+        promise.resolve(cameraPermissionOf(hardware->access()));
       });
       promise("requestCameraPermissionsAsync", [hardware, noPrompts](const folly::dynamic &, JsPromise promise) {
-        auto access = hardware->access();
-        if (noPrompts || access != Access::NotDetermined) {
-          promise.resolve(permissionOf(access));
-          return;
-        }
-        hardware->requestAccess([promise](Access decided) { promise.resolve(permissionOf(decided)); });
+        requestCameraPermission(*hardware, noPrompts, std::move(promise));
       });
       promise("isAvailableAsync", [hardware](const folly::dynamic &, JsPromise promise) { promise.resolve(hardware->hasCamera()); });
       promise("takePicture", [hardware, views, pictures](const folly::dynamic &args, JsPromise promise) {
@@ -137,25 +205,34 @@ std::shared_ptr<NativeModule> makeCameraModule(
           promise.reject("Camera is not ready yet. Wait for 'onCameraReady' callback");
           return;
         }
-        double quality = 1;
+        CameraPictureRequest request;
         bool base64 = false;
         if (options.isObject()) {
           if (const auto *q = options.get_ptr("quality"); q && q->isNumber()) {
-            quality = std::clamp(q->asDouble(), 0.0, 1.0);
+            request.quality = std::clamp(q->asDouble(), 0.0, 1.0);
           }
           if (const auto *b = options.get_ptr("base64"); b && b->isBool()) {
             base64 = b->asBool();
           }
+          if (const auto *t = options.get_ptr("imageType"); t && !t->isNull()) {
+            if (!t->isString() || (t->asString() != "jpg" && t->asString() != "png")) {
+              promise.reject("Camera.takePicture: imageType must be 'jpg' or 'png'");
+              return;
+            }
+            request.format = t->asString();
+          }
         }
         std::error_code ignored;
         std::filesystem::create_directories(pictures, ignored);
-        auto path = pictures + "/" + newFileName(".jpg");
-        capture->takePicture(quality, path, [promise, path, base64](int width, int height, const std::string &error) {
+        request.path = pictures + "/" + newFileName("." + request.format);
+        auto path = request.path;
+        auto format = request.format;
+        capture->takePicture(request, [promise, path, format, base64](int width, int height, const std::string &error) {
           if (!error.empty()) {
             promise.reject("Camera.takePicture: " + error);
             return;
           }
-          folly::dynamic picture = folly::dynamic::object("uri", fileUri(path))("width", width)("height", height)("format", "jpg");
+          folly::dynamic picture = folly::dynamic::object("uri", fileUri(path))("width", width)("height", height)("format", format);
           if (base64) {
             picture["base64"] = base64Encode(contentsOf(path));
           }

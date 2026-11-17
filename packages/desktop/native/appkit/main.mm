@@ -48,6 +48,7 @@
 #import "image-manipulator.h"
 #import "printing.h"
 #import "expo-image-view.h"
+#import "camera-sheet.h"
 #import "camera-view.h"
 #import "camera.h"
 #import "map-view.h"
@@ -1258,7 +1259,11 @@ int main(int argc, const char *argv[]) {
       ngn::addModule(*modules, "NgNativeSplashScreen", [] { return ngn::makeSplashScreenModule(gSplash); });
       static auto photos = ngn::appkit::makePhotoLibrary(caches);
       ngn::addModule(*modules, "NgNativeMediaLibrary", [] { return ngn::makeMediaLibraryModule(photos, noPrompts, fileAccess); });
-      ngn::addModule(*modules, "NgNativeImagePicker", [] { return ngn::makeImagePickerModule(photos, noPrompts); });
+      static auto cameraHardware = ngn::appkit::makeCameraHardware();
+      static auto cameraSheet = ngn::appkit::makeCameraSheet();
+      ngn::addModule(*modules, "NgNativeImagePicker", [] {
+        return ngn::makeImagePickerModule(photos, noPrompts, ngn::PickerCamera{.hardware = cameraHardware, .sheet = cameraSheet, .folder = caches + "/ImagePicker"});
+      });
       static auto tracking = ngn::appkit::makeTrackingAuthority();
       ngn::addModule(*modules, "NgNativeTrackingTransparency", [] { return ngn::makeTrackingModule(tracking, noPrompts); });
       static auto imageHttp = network.http;
@@ -1275,7 +1280,6 @@ int main(int argc, const char *argv[]) {
       });
       // <expo-image>'s bytes: 64 MB of them in memory, the rest on disk in the caches.
       [NGNExpoImageView useHttp:imageHttp cache:std::make_shared<ngn::ImageCache>(caches + "/ExpoImage", 64 << 20)];
-      static auto cameraHardware = ngn::appkit::makeCameraHardware();
       static auto cameraViews = std::make_shared<ngn::CameraViews>();
       [NGNCameraView useHardware:cameraHardware views:cameraViews noPrompts:noPrompts];
       ngn::addModule(*modules, "NgNativeCamera", [] { return ngn::makeCameraModule(cameraHardware, cameraViews, caches + "/Camera", noPrompts); });

@@ -210,7 +210,7 @@ if(NGN_TESTS)
         appkit/web-view.mm appkit/tests/web-view.test.mm
         appkit/expo-image-drawing.mm appkit/tests/expo-image.test.mm
         appkit/expo-ui-renderer.mm appkit/tests/expo-ui.test.mm
-        appkit/camera.mm appkit/tests/camera.test.mm
+        appkit/camera.mm appkit/tests/camera.test.mm appkit/camera-sheet.mm appkit/system-access.mm appkit/tests/camera-sheet.test.mm
         appkit/maps.mm appkit/tests/maps.test.mm
         appkit/apple-authentication.mm appkit/tests/apple-authentication.test.mm
         appkit/video.mm appkit/tests/video.test.mm

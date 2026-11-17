@@ -4,24 +4,18 @@
 
 #include <atomic>
 
-// Answers one photo capture: the JPEG at its quality, written to its path.
+// Answers one photo capture: its image and the camera's metadata, or why there is none.
 @interface NGNPhotoCapture : NSObject <AVCapturePhotoCaptureDelegate>
-- (instancetype)initWithQuality:(double)quality
-                           path:(std::string)path
-                           done:(std::function<void(int, int, const std::string &)>)done;
+- (instancetype)initWithDone:(ngn::appkit::PhotoDone)done;
 @end
 
 @implementation NGNPhotoCapture {
-  double _quality;
-  std::string _path;
-  std::function<void(int, int, const std::string &)> _done;
+  ngn::appkit::PhotoDone _done;
   NGNPhotoCapture *_keep;
 }
 
-- (instancetype)initWithQuality:(double)quality path:(std::string)path done:(std::function<void(int, int, const std::string &)>)done {
+- (instancetype)initWithDone:(ngn::appkit::PhotoDone)done {
   if ((self = [super init])) {
-    _quality = quality;
-    _path = std::move(path);
     _done = std::move(done);
     _keep = self;
   }
@@ -33,23 +27,18 @@
   _keep = nil;
   CGImageRef image = error == nil ? photo.CGImageRepresentation : nullptr;
   if (image == nullptr) {
-    done(0, 0, error != nil ? error.localizedDescription.UTF8String : "the camera gave no picture");
+    done(nullptr, nil, error != nil ? error.localizedDescription.UTF8String : "the camera gave no picture");
     return;
   }
-  NSURL *url = [NSURL fileURLWithPath:@(_path.c_str())];
-  CGImageDestinationRef destination = CGImageDestinationCreateWithURL((__bridge CFURLRef)url, CFSTR("public.jpeg"), 1, nullptr);
-  NSDictionary *properties = @{(__bridge NSString *)kCGImageDestinationLossyCompressionQuality : @(_quality)};
-  bool written = destination != nullptr;
-  if (written) {
-    CGImageDestinationAddImage(destination, image, (__bridge CFDictionaryRef)properties);
-    written = CGImageDestinationFinalize(destination);
-    CFRelease(destination);
+  // macOS has no AVCapturePhoto.metadata: the photo's own file carries it.
+  NSDictionary *metadata = nil;
+  if (NSData *data = photo.fileDataRepresentation) {
+    if (CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, nullptr)) {
+      metadata = CFBridgingRelease(CGImageSourceCopyPropertiesAtIndex(source, 0, nullptr));
+      CFRelease(source);
+    }
   }
-  if (!written) {
-    done(0, 0, "the picture could not be saved");
-    return;
-  }
-  done(static_cast<int>(CGImageGetWidth(image)), static_cast<int>(CGImageGetHeight(image)), "");
+  done(image, metadata, "");
 }
 
 @end
@@ -286,12 +275,12 @@ class AVSessionCapture final : public SessionCapture {
   bool recording() const override {
     return recording_->load();
   }
-  void takePicture(double quality, const std::string &path, std::function<void(int, int, const std::string &)> done) override {
+  void capturePhoto(PhotoDone done) override {
     if (!session_.running) {
-      done(0, 0, "the camera is not running");
+      done(nullptr, nil, "the camera is not running");
       return;
     }
-    NGNPhotoCapture *capture = [[NGNPhotoCapture alloc] initWithQuality:quality path:path done:std::move(done)];
+    NGNPhotoCapture *capture = [[NGNPhotoCapture alloc] initWithDone:std::move(done)];
     [output_ capturePhotoWithSettings:[AVCapturePhotoSettings photoSettings] delegate:capture];
   }
 
@@ -306,6 +295,34 @@ class AVSessionCapture final : public SessionCapture {
 };
 
 } // namespace
+
+void SessionCapture::takePicture(const CameraPictureRequest &request, std::function<void(int, int, const std::string &)> done) {
+  capturePhoto([request, done = std::move(done)](CGImageRef image, NSDictionary *, const std::string &error) {
+    if (image == nullptr) {
+      done(0, 0, error);
+    } else if (!writePicture(image, request)) {
+      done(0, 0, "the picture could not be saved");
+    } else {
+      done(static_cast<int>(CGImageGetWidth(image)), static_cast<int>(CGImageGetHeight(image)), "");
+    }
+  });
+}
+
+bool writePicture(CGImageRef image, const CameraPictureRequest &request) {
+  bool png = request.format == "png";
+  NSURL *url = [NSURL fileURLWithPath:@(request.path.c_str())];
+  CGImageDestinationRef destination =
+      CGImageDestinationCreateWithURL((__bridge CFURLRef)url, png ? CFSTR("public.png") : CFSTR("public.jpeg"), 1, nullptr);
+  if (destination == nullptr) {
+    return false;
+  }
+  // A PNG is lossless, so the quality is a JPEG's only, as on iOS.
+  NSDictionary *properties = png ? @{} : @{(__bridge NSString *)kCGImageDestinationLossyCompressionQuality : @(request.quality)};
+  CGImageDestinationAddImage(destination, image, (__bridge CFDictionaryRef)properties);
+  bool written = CGImageDestinationFinalize(destination);
+  CFRelease(destination);
+  return written;
+}
 
 std::shared_ptr<CameraHardware> makeCameraHardware() {
   return std::make_shared<AVHardware>();

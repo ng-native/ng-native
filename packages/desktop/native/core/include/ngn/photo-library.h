@@ -20,10 +20,12 @@
 //
 // NgNativeImagePicker, expo-image-picker's library half: launchImageLibraryAsync(options) ->
 // {canceled, assets}, the system's photo picker over the key window, which needs no permission;
-// get/requestMediaLibraryPermissionsAsync() as above; launchCameraAsync() answers canceled and
-// the camera permissions denied, since macOS has no system camera to open.
+// get/requestMediaLibraryPermissionsAsync() as above. Its camera half is the host's own camera
+// sheet (camera.h's launchPickerCamera), since macOS has no system camera screen to open:
+// launchCameraAsync(options) and get/requestCameraPermissionsAsync(), the camera's permission.
 #pragma once
 
+#include "ngn/camera.h"
 #include "ngn/file-system.h"
 
 #include "ngn/native-module.h"
@@ -125,6 +127,8 @@ class PhotoLibrary {
 PhotoLibrary::Query photoQueryOf(const folly::dynamic &query);
 
 std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::shared_ptr<FileAccess> files);
-std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts);
+// `camera`: the host's own camera for launchCameraAsync; without it the camera permissions answer
+// denied and launchCameraAsync canceled.
+std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::optional<PickerCamera> camera = std::nullopt);
 
 } // namespace ngn

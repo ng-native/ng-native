@@ -65,6 +65,14 @@ export class Avatar {
   (`'images'`, `'videos'`, `'livePhotos'`), `allowsEditing`, `quality`, `allowsMultipleSelection`
   and the rest.
 
+## On macOS
+
+macOS has no system camera screen, so `capture()` shows the desktop host's own as a sheet on the
+window in front: the camera's preview, mirrored as Photo Booth shows it, with Cancel (Escape) and
+Take Photo (Return). The photo is a JPEG at `quality`, not mirrored, and has no `assetId` or
+`fileName`, as on iOS. The sheet takes photos only, so `capture({ mediaTypes: 'videos' })` resolves
+to an empty list. On a Mac with no camera `capture()` rejects.
+
 ## Permissions
 
 Two separate permissions, each a `Permission` (see [Permissions](/packages/expo/permissions)):

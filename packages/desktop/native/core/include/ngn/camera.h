@@ -7,8 +7,10 @@
 //   an undetermined permission is asked, and only when the app's Info.plist explains why; with
 //   `noPrompts` (NGN_NO_PROMPTS=1) nothing is.
 // - isAvailableAsync(): whether the Mac has a camera.
-// - takePicture(tag, options): expo's picture, {uri, width, height, format: 'jpg', base64?}, a
-//   JPEG at `quality` in `<caches>/Camera`, from the view `tag` once its camera runs.
+// - takePicture(tag, options): expo's picture, {uri, width, height, format, base64?}, in
+//   `<caches>/Camera`, from the view `tag` once its camera runs: a JPEG at `quality`, or with
+//   `imageType: 'png'` a PNG (lossless, so `quality` does nothing), as on iOS. Another imageType
+//   is refused.
 // - record(tag, options): expo's recording, {uri}, a QuickTime movie in `<caches>/Camera` from the
 //   view `tag`, once it stops: stopRecording(tag), `maxDuration` seconds or `maxFileSize` bytes
 //   reached, or the view going. It has sound unless `mute`, and only with the microphone allowed
@@ -32,6 +34,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -68,6 +71,15 @@ class CameraHardware {
   virtual bool microphoneAllowed() = 0;
 };
 
+// What a picture is asked for.
+struct CameraPictureRequest {
+  std::string path;
+  // 0 to 1, for a JPEG.
+  double quality{1};
+  // expo-camera's PictureFormat: "jpg" or "png".
+  std::string format{"jpg"};
+};
+
 // What a recording is asked for.
 struct CameraRecordingRequest {
   std::string path;
@@ -83,8 +95,8 @@ struct CameraRecordingRequest {
 class CameraCapture {
  public:
   virtual ~CameraCapture() = default;
-  // Writes a JPEG at `quality` (0 to 1) to `path`; answers its size, or why not. Any thread.
-  virtual void takePicture(double quality, const std::string &path, std::function<void(int width, int height, const std::string &error)> done) = 0;
+  // Writes the picture `request` asks for; answers its size, or why not. Any thread.
+  virtual void takePicture(const CameraPictureRequest &request, std::function<void(int width, int height, const std::string &error)> done) = 0;
   // Records a movie until stopRecording or a limit; `done` gets why not, or empty once the file
   // is finished. Any thread.
   virtual void startRecording(const CameraRecordingRequest &request, std::function<void(const std::string &error)> done) = 0;
@@ -121,6 +133,45 @@ enum class CameraMount { Ask, Start, NotPermitted, NoCamera };
 CameraMount cameraMount(CameraHardware::Access access, bool hasCamera, bool noPrompts, bool asked = false);
 // expo-camera's mountError message for a mount that cannot start, or empty.
 std::string cameraMountError(CameraMount mount);
+
+// A picture the host's camera sheet took: its size, and the camera's EXIF (an object, or null).
+struct CameraShot {
+  int width{0};
+  int height{0};
+  folly::dynamic exif{nullptr};
+};
+
+// The host's own camera for expo-image-picker's launchCameraAsync: macOS has no system camera
+// screen like iOS's UIImagePickerController, so the host shows the camera's preview and a shutter
+// itself.
+class CameraSheet {
+ public:
+  virtual ~CameraSheet() = default;
+  // Shows the camera; once the user takes a picture, writes it as `request` asks and answers it.
+  // Answers no shot and no error when they cancel or there is no window to show it on, and an
+  // error when the camera fails. Only with the camera allowed and present. Any thread.
+  virtual void shoot(const CameraPictureRequest &request, std::function<void(std::optional<CameraShot>, const std::string &error)> done) = 0;
+};
+
+// What NgNativeImagePicker's camera half needs: the permission and the device, the sheet, and the
+// folder its pictures go in (`<caches>/ImagePicker`, as on iOS).
+struct PickerCamera {
+  std::shared_ptr<CameraHardware> hardware;
+  std::shared_ptr<CameraSheet> sheet;
+  std::string folder;
+};
+
+// expo's camera permission response, asked as NgNativeCamera asks it: only when undetermined, and
+// never with `noPrompts`.
+folly::dynamic cameraPermissionOf(CameraHardware::Access access);
+void requestCameraPermission(CameraHardware &hardware, bool noPrompts, JsPromise promise);
+
+// expo-image-picker's launchCameraAsync(options) over `camera`: {canceled, assets}, with the one
+// photo a JPEG at `quality` (1 by default) shaped as iOS shapes a camera shot (no assetId and no
+// fileName, base64 and exif only when asked). Rejected without the camera permission, as iOS does,
+// or on a Mac with no camera; canceled with `noPrompts`, or `mediaTypes` asking for videos alone
+// (the sheet takes photos only), which show no sheet.
+void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly::dynamic &options, JsPromise promise);
 
 std::shared_ptr<NativeModule> makeCameraModule(
     std::shared_ptr<CameraHardware> hardware, std::shared_ptr<CameraViews> views, std::string pictures, bool noPrompts);

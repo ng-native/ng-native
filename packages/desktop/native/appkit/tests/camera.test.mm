@@ -2,6 +2,8 @@
 // no NSCameraUsageDescription, so asking answers at once, and a session never starts unallowed.
 #include "../camera.h"
 
+#import <ImageIO/ImageIO.h>
+
 #include <doctest/doctest.h>
 
 #include <atomic>
@@ -183,6 +185,48 @@ TEST_CASE("A recording keeps its own copy of the request, which the caller may l
   capture->stop();
   spinUntil([&] { return !capture->recording(); });
   [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+}
+
+TEST_CASE("A picture is written as the PNG or the JPEG its request asks for, a JPEG at its quality") {
+  // A noisy picture, which a JPEG's quality changes the size of.
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+  CGContextRef context = CGBitmapContextCreate(nullptr, 64, 48, 8, 0, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  auto *pixels = static_cast<uint8_t *>(CGBitmapContextGetData(context));
+  for (size_t i = 0; i < CGBitmapContextGetBytesPerRow(context) * 48; i++) {
+    pixels[i] = static_cast<uint8_t>((i * 7919) % 251);
+  }
+  CGImageRef image = CGBitmapContextCreateImage(context);
+  CGContextRelease(context);
+  NSString *folder = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID UUID].UUIDString];
+  [NSFileManager.defaultManager createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
+  auto written = [&](const std::string &name, const std::string &format, double quality) {
+    ngn::CameraPictureRequest request{.path = std::string(folder.UTF8String) + "/" + name, .quality = quality, .format = format};
+    REQUIRE(ngn::appkit::writePicture(image, request));
+    NSURL *url = [NSURL fileURLWithPath:@(request.path.c_str())];
+    CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, nullptr);
+    REQUIRE(source != nullptr);
+    NSString *type = (__bridge NSString *)CGImageSourceGetType(source);
+    NSDictionary *properties = CFBridgingRelease(CGImageSourceCopyPropertiesAtIndex(source, 0, nullptr));
+    CFRelease(source);
+    CHECK([properties[(__bridge NSString *)kCGImagePropertyPixelWidth] intValue] == 64);
+    CHECK([properties[(__bridge NSString *)kCGImagePropertyPixelHeight] intValue] == 48);
+    NSNumber *size = [NSFileManager.defaultManager attributesOfItemAtPath:@(request.path.c_str()) error:nil][NSFileSize];
+    return std::make_pair(std::string(type.UTF8String), size.longLongValue);
+  };
+  auto png = written("a.png", "png", 0.1);
+  CHECK(png.first == "public.png");
+  // Lossless: the quality changes nothing.
+  CHECK(written("b.png", "png", 1).second == png.second);
+  auto low = written("a.jpg", "jpg", 0.1);
+  auto high = written("b.jpg", "jpg", 1);
+  CHECK(low.first == "public.jpeg");
+  CHECK(high.first == "public.jpeg");
+  CHECK(low.second < high.second);
+  // A folder that is not there: nothing is written, and it says so.
+  CHECK_FALSE(ngn::appkit::writePicture(image, {.path = "/nonexistent-ngn-folder/a.png", .format = "png"}));
+  CGImageRelease(image);
+  [NSFileManager.defaultManager removeItemAtPath:folder error:nil];
 }
 
 TEST_CASE("The microphone counts for a recording's sound only when allowed, which is never asked") {

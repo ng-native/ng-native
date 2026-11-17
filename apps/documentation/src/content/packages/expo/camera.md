@@ -104,7 +104,9 @@ automatically by the module's config plugin.
 **`takePicture(options)`** takes `expo-camera`'s own `CameraPictureOptions` (minus
 `onPictureSaved` and `pictureRef`, which do not apply here) and resolves to a
 `CameraCapturedPicture` - `uri`, `width`, `height`, and `base64` or `exif` if asked for. It
-resolves to **null** before the view has reached the screen, or without the module.
+resolves to **null** before the view has reached the screen, or without the module. The picture is
+a JPEG at `quality`, or a PNG with `imageType: 'png'`, which ignores `quality`; on iOS and macOS
+any other `imageType` rejects.
 
 In React, `takePictureAsync` is a method on the camera component's ref. Underneath, it is one of
 the functions Expo defines on the view itself (`AsyncFunction('takePicture')` in the native

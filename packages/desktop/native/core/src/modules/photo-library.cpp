@@ -1,5 +1,7 @@
 #include "ngn/photo-library.h"
 
+#include "ngn/camera.h"
+
 #include <mutex>
 #include <set>
 #include <stdexcept>
@@ -327,9 +329,9 @@ std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrar
   return std::make_shared<MediaLibrary>(std::move(library), noPrompts, std::move(files));
 }
 
-std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts) {
+std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::optional<PickerCamera> camera) {
   struct ImagePicker : NativeModule {
-    ImagePicker(std::shared_ptr<PhotoLibrary> photos, bool noPrompts) : NativeModule("NgNativeImagePicker") {
+    ImagePicker(std::shared_ptr<PhotoLibrary> photos, bool noPrompts, std::optional<PickerCamera> camera) : NativeModule("NgNativeImagePicker") {
       Permissions permissions{photos, noPrompts};
       promise("getMediaLibraryPermissionsAsync", [permissions](const folly::dynamic &args, JsPromise promise) {
         permissions.get(flagArg(args, 0), std::move(promise));
@@ -337,12 +339,24 @@ std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary
       promise("requestMediaLibraryPermissionsAsync", [permissions](const folly::dynamic &args, JsPromise promise) {
         permissions.request(flagArg(args, 0), std::move(promise));
       });
-      // No system camera to open on macOS.
-      auto noCamera = [](const folly::dynamic &, JsPromise promise) { promise.resolve(permissionOf(Access::Denied)); };
-      promise("getCameraPermissionsAsync", noCamera);
-      promise("requestCameraPermissionsAsync", noCamera);
       folly::dynamic canceled = folly::dynamic::object("canceled", true)("assets", nullptr);
-      promise("launchCameraAsync", [canceled](const folly::dynamic &, JsPromise promise) { promise.resolve(canceled); });
+      if (camera) {
+        promise("getCameraPermissionsAsync", [hardware = camera->hardware](const folly::dynamic &, JsPromise promise) {
+          promise.resolve(cameraPermissionOf(hardware->access()));
+        });
+        promise("requestCameraPermissionsAsync", [hardware = camera->hardware, noPrompts](const folly::dynamic &, JsPromise promise) {
+          requestCameraPermission(*hardware, noPrompts, std::move(promise));
+        });
+        promise("launchCameraAsync", [camera = *camera, noPrompts](const folly::dynamic &args, JsPromise promise) {
+          launchPickerCamera(camera, noPrompts, args.empty() ? folly::dynamic(nullptr) : args[0], std::move(promise));
+        });
+      } else {
+        // A host with no camera of its own to show.
+        auto noCamera = [](const folly::dynamic &, JsPromise promise) { promise.resolve(permissionOf(Access::Denied)); };
+        promise("getCameraPermissionsAsync", noCamera);
+        promise("requestCameraPermissionsAsync", noCamera);
+        promise("launchCameraAsync", [canceled](const folly::dynamic &, JsPromise promise) { promise.resolve(canceled); });
+      }
       promise("launchImageLibraryAsync", [photos, noPrompts, canceled](const folly::dynamic &args, JsPromise promise) {
         if (noPrompts) {
           promise.resolve(canceled);
@@ -365,7 +379,7 @@ std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary
       });
     }
   };
-  return std::make_shared<ImagePicker>(std::move(library), noPrompts);
+  return std::make_shared<ImagePicker>(std::move(library), noPrompts, std::move(camera));
 }
 
 } // namespace ngn

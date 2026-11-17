@@ -25,6 +25,7 @@ add_executable(ngn-macos
     expo-ui-renderer.mm
     expo-ui-view.mm
     camera.mm
+    camera-sheet.mm
     camera-view.mm
     maps.mm
     map-view.mm
