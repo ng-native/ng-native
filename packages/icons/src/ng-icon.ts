@@ -36,6 +36,7 @@ import {
   inject,
   input,
   numberAttribute,
+  reflectComponentType,
   runInInjectionContext,
   signal,
   untracked,
@@ -234,10 +235,8 @@ export class NgIcon {
     // Claimed, and stripped of the attributes Angular wrote from static inputs: `name` is one of
     // ours *and* one of react-native-svg's, so leaving it there hands native an element name.
     claimHost(this.host);
-    for (const input of Object.keys(
-      (NgIcon as { ɵcmp?: { inputs?: object } }).ɵcmp?.inputs ?? {},
-    )) {
-      delete this.host.props[input];
+    for (const input of reflectComponentType(NgIcon)?.inputs ?? []) {
+      delete this.host.props[input.templateName];
     }
     // The shapes are created rather than templated: an icon's tree is data, and a template that
     // could express it would be a component per tag with a recursive switch between them.

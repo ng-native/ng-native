@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, ElementRef, signal, viewChild } from '@angular/core';
 import { provideNgIconsConfig } from '@ng-icons/core';
 import { NgIcon } from '../../icons/src/ng-icon.ts';
 import { View } from '../../components/src/view.ts';
@@ -113,4 +113,25 @@ export class IconLoader {
 })
 export class IconSwap {
   readonly name = signal('a-icon');
+}
+
+/** Static attributes written to inputs: the host node is handed back so its props can be read. */
+@Component({
+  selector: 'x-icon-static',
+  imports: [NgIcon],
+  template: `<ng-icon
+    #icon
+    nativeID="static"
+    name="static-icon"
+    [svg]="square"
+    size="12"
+    strokeWidth="2"
+  />`,
+})
+export class IconStatic {
+  readonly square = square;
+  private readonly icon = viewChild.required('icon', { read: ElementRef });
+  hostProps(): Record<string, unknown> {
+    return (this.icon().nativeElement as { props: Record<string, unknown> }).props;
+  }
 }

@@ -301,3 +301,21 @@ describe('an icon whose loader answers out of order', () => {
     }
   });
 });
+
+describe('an icon with static attributes for its inputs', () => {
+  it('leaves its host node none of the props those attributes wrote', async () => {
+    const { instance } = await render(
+      mod['IconStatic'] as Type<{ hostProps(): Record<string, unknown> }>,
+    );
+    try {
+      const props = instance.hostProps();
+      // Every input, not just `name`: the constructor walks the whole list.
+      for (const input of ['name', 'size', 'strokeWidth']) {
+        assert.equal(input in props, false, `${input} is still a host prop`);
+      }
+      assert.equal(props['nativeID'], 'static');
+    } finally {
+      cleanup();
+    }
+  });
+});
