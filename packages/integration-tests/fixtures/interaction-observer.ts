@@ -69,6 +69,30 @@ export class AttributeCard {}
 })
 export class Tile {}
 
+/** Alternatives on one element name: named by the one whose attribute the host has. */
+@Component({
+  selector: 'section[x-primary], section[x-secondary]:not(.x-off)',
+  imports: [Pressable],
+  template: `<pressable testID="panel-action" />`,
+})
+export class Panel {}
+
+/** Alternatives told apart by an attribute's value: named by the one the host's value matches. */
+@Component({
+  selector: 'aside[x-level=info], aside[x-level=warn]',
+  imports: [Pressable],
+  template: `<pressable testID="level-action" />`,
+})
+export class Level {}
+
+/** Alternatives of classes alone: named by the one whose class the host has. */
+@Component({
+  selector: '.x-first-badge, .x-second-badge',
+  imports: [Pressable],
+  template: `<pressable testID="badge-action" />`,
+})
+export class Badge {}
+
 /** A pressable inside an iframe, which web-compat keeps a plain view. */
 @Component({
   selector: 'x-framed-card',
@@ -114,8 +138,11 @@ export class FramedFixture {
   selector: 'x-interaction-observer',
   imports: [
     AttributeCard,
+    Badge,
+    Level,
     ObservedButton,
     ObservedCard,
+    Panel,
     Pressable,
     ScrollView,
     Text,
@@ -159,6 +186,9 @@ export class FramedFixture {
       <x-observed-card><pressable testID="projected" /></x-observed-card>
       <section x-attribute-card></section>
       <article x-tile class="wide"></article>
+      <section x-secondary></section>
+      <aside x-level="warn"></aside>
+      <section class="x-second-badge"></section>
     </scroll-view>
     <x-top-bar />
     <virtual-list testID="rows" [items]="rows" [itemHeight]="20" [style]="{ height: 60 }" />

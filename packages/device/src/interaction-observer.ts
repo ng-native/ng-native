@@ -196,7 +196,7 @@ function componentAround(node: HostNode): string | undefined {
     const definition = (current as EngineNode).componentHost;
     if (typeof definition !== 'object') continue;
     if (nearest !== undefined) return nearest;
-    const name = componentName(definition, elementName(current));
+    const name = componentName(definition, current);
     // A component with no selector of its own, such as a routed page, names nothing around it.
     if (name === null) return undefined;
     if (name !== undefined) nearest = name;
@@ -216,12 +216,14 @@ const NO_SELECTOR = 'ng-component';
 /**
  * A component's name by its selector: the element name a template writes, or for a selector of
  * attributes the selector rebuilt, such as `section[x-card]`, since its element is a plain one.
- * Of several selectors, the one for the element it is mounted on. Undefined for a primitive, whose
- * element is a native view's, and null for a component with no selector.
+ * Of several selectors, the one its host matches, by element name, attributes and classes, or the
+ * first where none does. Undefined for a primitive, whose element is a native view's, and null for
+ * a component with no selector.
  */
-function componentName(definition: NamedDefinition, element: string): string | null | undefined {
+function componentName(definition: NamedDefinition, host: HostNode): string | null | undefined {
   const selectors = definition.selectors ?? [];
-  const selector = selectors.find((each) => each[0] === element) ?? selectors[0];
+  const element = elementName(host);
+  const selector = selectors.find((each) => hostMatches(each, host, element)) ?? selectors[0];
   const tag = typeof selector?.[0] === 'string' ? selector[0] : '';
   if (!selector || tag === NO_SELECTOR) return null;
   if (selector.length > 1) return selectorText(selector, tag);
@@ -231,6 +233,40 @@ function componentName(definition: NamedDefinition, element: string): string | n
 /** Angular's selector flags: what the parts after one are. */
 const NOT = 1;
 const CLASS = 8;
+
+/**
+ * Whether a host matches a compiled selector's element name, attributes and classes, up to any
+ * `:not()`, which it leaves out: Angular matched the whole selector to mount the component there.
+ */
+function hostMatches(selector: readonly unknown[], host: HostNode, element: string): boolean {
+  if (selector[0] && selector[0] !== element) return false;
+  let mode = 0;
+  for (let index = 1; index < selector.length; index++) {
+    const part = selector[index];
+    if (typeof part === 'number') {
+      if (part & NOT) return true;
+      mode = part;
+    } else if (mode & CLASS) {
+      if (!hasClass(host, String(part))) return false;
+    } else if (!hasAttribute(host, String(part), selector[++index])) return false;
+  }
+  return true;
+}
+
+/** Whether a host has an attribute, and with `value` where it is not empty. */
+function hasAttribute(host: HostNode, name: string, value: unknown): boolean {
+  const actual = host.props[name];
+  if (actual === undefined || actual === null || actual === false) return false;
+  return !value || String(actual).toLowerCase() === String(value).toLowerCase();
+}
+
+/** Whether a host has a class: in the engine's own set, or on the web host's real element. */
+function hasClass(host: HostNode, name: string): boolean {
+  const classes = (host as { classes?: ReadonlySet<string> | null }).classes;
+  if (classes) return classes.has(name);
+  const element = (host as { el?: { classList?: { contains(name: string): boolean } } }).el;
+  return element?.classList?.contains(name) ?? false;
+}
 
 /** A compiled selector written out again, up to any `:not()`. */
 function selectorText(selector: readonly unknown[], tag: string): string {

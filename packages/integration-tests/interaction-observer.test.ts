@@ -336,6 +336,18 @@ describe('an interaction observer names the component a control belongs to', () 
   it('names a component of several selectors by the one for its element', async () => {
     assert.equal((await componentOf('tile-action')).component, 'article[x-tile].wide');
   });
+
+  it('names a component by the alternative whose attribute its host has', async () => {
+    assert.equal((await componentOf('panel-action')).component, 'section[x-secondary]');
+  });
+
+  it('names a component by the alternative whose attribute value its host has', async () => {
+    assert.equal((await componentOf('level-action')).component, 'aside[x-level=warn]');
+  });
+
+  it('names a component by the alternative whose class its host has', async () => {
+    assert.equal((await componentOf('badge-action')).component, '.x-second-badge');
+  });
 });
 
 describe('an interaction observer in an app that asked for web-compat', () => {

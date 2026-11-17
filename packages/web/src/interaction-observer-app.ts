@@ -37,14 +37,32 @@ export class Region {}
 })
 export class ObservedCard {}
 
+/** Alternatives on one element name: named by the one whose attribute the host has. */
+@Component({
+  selector: 'section[x-primary], section[x-secondary]',
+  imports: [Pressable, Text],
+  template: `<pressable testID="panel-action"><text>panel-action</text></pressable>`,
+})
+export class Panel {}
+
+/** Alternatives of classes alone: named by the one whose class the host has. */
+@Component({
+  selector: '.x-first-badge, .x-second-badge',
+  imports: [Pressable, Text],
+  template: `<pressable testID="badge-action"><text>badge-action</text></pressable>`,
+})
+export class Badge {}
+
 @Component({
   selector: 'app-root',
-  imports: [ObservedCard, Pressable, Text],
+  imports: [Badge, ObservedCard, Panel, Pressable, Text],
   template: `
     <pressable testID="save"><text>save</text></pressable>
     <x-observed-card>
       <pressable testID="projected"><text>projected</text></pressable>
     </x-observed-card>
+    <section x-secondary></section>
+    <section class="x-second-badge"></section>
   `,
 })
 export class InteractionObserverApp {}

@@ -102,7 +102,8 @@ Each event carries:
   page a `<native-stack-outlet>` or a native tab shows reports that page, and a tap on a native
   tab reports the component whose template declares the tab bar. A component matched by an
   attribute is named by its selector written out, such as `section[x-card]` or
-  `button[app-button=primary]`. Absent for a control in the root component's own template, and
+  `button[app-button=primary]`, and a component of several selectors by the one its host matches.
+  Absent for a control in the root component's own template, and
   in a page with no selector of its own.
 - `label`, `testID`, `nativeID` and `role`: what the element committed, so a label a component
   gave it or a role it implies is the one reported, as a screen reader hears it.
