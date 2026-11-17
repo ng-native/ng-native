@@ -671,9 +671,12 @@ static void hookSceneDiscard(Class delegate)
       @"scale" : @(scale),
     }];
   };
+  // The scene the window has once it runs: one it waited for, or the launch scene that adopted it.
+  __weak NgNativeSceneWindow *weakRecord = record;
   rootView.onRunning = ^{
     resolve(@(surfaceId));
-    if (scene != nil && scene.activationState == UISceneActivationStateForegroundActive) {
+    UIWindowScene *shownIn = weakRecord.scene;
+    if (shownIn != nil && shownIn.activationState == UISceneActivationStateForegroundActive) {
       [weakSelf send:@{@"type" : @"focus", @"surface" : @(surfaceId)}];
     }
   };
@@ -797,6 +800,11 @@ static void hookSceneDiscard(Class delegate)
     _launchRoot = window.rootViewController;
     [self put:record.rootView in:window];
   }
+  // A scene already active, the launch scene adopting a window, sends no activation of its own.
+  // A surface still starting reports focus as it runs.
+  if (record.rootView.onRunning == nil && scene.activationState == UISceneActivationStateForegroundActive) {
+    [self send:@{@"type" : @"focus", @"surface" : @(record.surface)}];
+  }
 }
 
 /** The sessions of the scenes the user closed. */
@@ -857,7 +865,10 @@ static void hookSceneDiscard(Class delegate)
                                                           options:nil
                                                      errorHandler:^(NSError *error) {
                                                        dispatch_async(dispatch_get_main_queue(), ^{
-                                                         [weakSelf keep:session key:nil];
+                                                         // Unless a window opened in it since.
+                                                         if ([weakSelf windowForSession:session] == nil) {
+                                                           [weakSelf keep:session key:nil];
+                                                         }
                                                        });
                                                      }];
 }
