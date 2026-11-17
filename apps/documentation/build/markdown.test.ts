@@ -68,6 +68,12 @@ describe('the platforms line', () => {
     expect(html).toContain(
       '<strong>Platforms of <code>LightSensor</code>.</strong> Available on Android.',
     );
+    const grouped = await render(
+      '# Three\n\n<!-- platforms: AddressSearch, Biometrics, LightSensor -->\n',
+    );
+    expect(grouped).toContain(
+      '<strong>Platforms of <code>AddressSearch</code>, <code>Biometrics</code>.</strong>',
+    );
     const same = await render('# Two\n\n<!-- platforms: Accelerometer, Gyroscope -->\n');
     expect(same).toContain('<strong>Platforms.</strong>');
     expect(same.match(/Platforms/g)).toHaveLength(1);

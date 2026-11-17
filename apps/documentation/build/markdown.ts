@@ -181,11 +181,17 @@ function platforms(_marker: string, services: string): string {
     if (!line) throw new Error(`No row in OS_SUPPORT covers the service ${name.trim()}`);
     return { line, feature: supportRowOf(name.trim())!.feature };
   });
-  const distinct = [...new Map(lines.map((one) => [one.line, one])).values()];
-  // Services that differ get a line each, named by its row, so a reader can tell them apart.
-  if (distinct.length < 2) return distinct.map((one) => one.line).join('');
-  return distinct
-    .map(({ line, feature }) => line.replace('**Platforms.**', `**Platforms of ${feature}.**`))
+  // Services that differ get a line each, named by every row that draws it, so a reader can tell
+  // them apart.
+  const features = new Map<string, Set<string>>();
+  for (const { line, feature } of lines) {
+    features.set(line, (features.get(line) ?? new Set()).add(feature));
+  }
+  if (features.size < 2) return [...features.keys()].join('');
+  return [...features]
+    .map(([line, rows]) =>
+      line.replace('**Platforms.**', `**Platforms of ${[...rows].join(', ')}.**`),
+    )
     .join('\n\n');
 }
 
