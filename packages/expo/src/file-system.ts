@@ -273,9 +273,11 @@ type ExpoFiles = typeof import('expo-file-system');
 function expoFolders(expo: ExpoFiles): Pick<NativeFiles, 'readdir' | 'stat' | 'watch'> {
   /** The file or folder at a uri, as Expo's class for what is there, or null. */
   const at = (uri: string) => {
-    const { exists, isDirectory } = expo.Paths.info(escaped(uri));
+    // Escaped for the constructor too, which would otherwise trim a trailing space off a name.
+    const reachable = escaped(uri);
+    const { exists, isDirectory } = expo.Paths.info(reachable);
     if (!exists) return null;
-    return isDirectory ? new expo.Directory(uri) : new expo.File(uri);
+    return isDirectory ? new expo.Directory(reachable) : new expo.File(reachable);
   };
   return {
     readdir: (uri) => {

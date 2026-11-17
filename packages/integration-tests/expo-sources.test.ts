@@ -798,6 +798,7 @@ describe('the file system source', () => {
     const key = (uri: string) => uri.replace(/\/$/, '');
     const kind = (uri: string) => tree[key(uri)];
     const asked: string[] = [];
+    const made: string[] = [];
     const watched: string[] = [];
     let removed = 0;
     let emit: (event: unknown) => void = () => {};
@@ -805,6 +806,7 @@ describe('the file system source', () => {
       readonly uri: string;
       constructor(uri: string) {
         this.uri = uri;
+        made.push(uri);
       }
       get name() {
         return decodeURIComponent(key(this.uri).split('/').at(-1)!);
@@ -851,6 +853,7 @@ describe('the file system source', () => {
     return {
       files,
       asked,
+      made,
       watched,
       removed: () => removed,
       emit: (event: unknown) => emit(event),
@@ -914,6 +917,14 @@ describe('the file system source', () => {
     assert.equal((await files.stat!('file:///docs/a b.txt'))?.uri, 'file:///docs/a b.txt');
     assert.equal((await files.stat!('file:///docs/a%20b.txt'))?.size, 3);
     assert.deepEqual(asked, ['file:///docs/a%20b.txt', 'file:///docs/a%20b.txt']);
+  });
+
+  it('makes the entry it describes or watches from the escaped uri, keeping a trailing space', async () => {
+    const { files, made, watched } = deviceFiles({ ...tree, 'file:///docs/note%20': 'file' });
+    assert.equal((await files.stat!('file:///docs/note '))?.uri, 'file:///docs/note ');
+    files.watch!('file:///docs/note ', () => {});
+    assert.deepEqual(made, ['file:///docs/note%20', 'file:///docs/note%20']);
+    assert.deepEqual(watched, ['file:///docs/note%20']);
   });
 
   it("watches through expo-file-system, a folder's uri unslashed in what it reports", () => {
