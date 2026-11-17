@@ -199,8 +199,9 @@ In this step `<base>` is `origin/main`, or for a stacked PR the remote branch it
 - Before pushing, check that no release of main is running. A merge while one runs breaks its push,
   and a push starts CI that competes with it for macOS runners. A dry run on another branch doesn't
   count.
-  `gh api 'repos/ng-native/ng-native/actions/workflows/release.yml/runs?branch=main&per_page=1' --jq '.workflow_runs[0].status'`
-  must print `completed`.
+  Each of
+  `for s in queued in_progress waiting requested pending; do gh api "repos/ng-native/ng-native/actions/workflows/release.yml/runs?branch=main&status=$s&per_page=1" --jq .total_count; done`
+  must print `0`; a failed request means wait and check again.
 - Push, then open the PR. `gh pr create` uses GraphQL. When that limit is spent, use REST:
   `gh api repos/ng-native/ng-native/pulls -f title=... -f head=... -f base=<main, or the branch a stacked PR depends on> -f body=...`.
 - The body has these sections, and says `Closes #<n>`. No AI attribution anywhere.
