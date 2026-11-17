@@ -1,5 +1,8 @@
-// Markers, patterns and filters drawn by the Core Graphics canvas (cg-canvas.mm) into bitmaps.
+// Markers, patterns, filters and foreignObjects drawn by the Core Graphics canvas (cg-canvas.mm)
+// into bitmaps.
 #include "../cg-canvas.h"
+
+#import <QuartzCore/QuartzCore.h>
 
 #include <doctest/doctest.h>
 
@@ -235,5 +238,129 @@ TEST_CASE("every canvas waiting for the same image is told when it loads") {
   }
   CHECK(first == 1);
   CHECK(second == 1);
+  CGContextRelease(context);
+}
+
+// A layer that keeps the transform it is given, as the host's views' layers do (host-view.mm).
+@interface FixedTransformLayer : CALayer
+@property (nonatomic) CATransform3D kept;
+@end
+
+@implementation FixedTransformLayer
+- (void)setTransform:(CATransform3D)transform {
+  [super setTransform:_kept];
+}
+- (void)setKept:(CATransform3D)kept {
+  _kept = kept;
+  [super setTransform:kept];
+}
+@end
+
+@interface TransformedView : NSView
+@end
+
+@implementation TransformedView
+- (CALayer *)makeBackingLayer {
+  FixedTransformLayer *layer = [FixedTransformLayer layer];
+  layer.kept = CATransform3DIdentity;
+  return layer;
+}
+@end
+
+namespace {
+
+NSView *layered(NSRect frame, CGColorRef background) {
+  NSView *view = [[NSView alloc] initWithFrame:frame];
+  view.wantsLayer = YES;
+  view.layer.backgroundColor = background;
+  return view;
+}
+
+} // namespace
+
+TEST_CASE("a foreignObject draws its hidden views from their layers, at its corner, cut to its box, under what comes after") {
+  CGColorRef red = CGColorCreateSRGB(1, 0, 0, 1), green = CGColorCreateSRGB(0, 1, 0, 1), blue = CGColorCreateSRGB(0, 0, 1, 1);
+  // The views as the host mounts them: in the svg's view, under an element's hidden view.
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 60, 60)];
+  root.wantsLayer = YES;
+  NSView *object = layered(NSMakeRect(0, 0, 60, 60), nil);
+  object.hidden = YES;
+  NSView *card = layered(NSMakeRect(2, 4, 40, 20), red);
+  [card addSubview:layered(NSMakeRect(10, 10, 4, 4), green)];
+  NSView *faded = layered(NSMakeRect(0, 30, 10, 10), red);
+  faded.alphaValue = 0.5;
+  NSView *gone = layered(NSMakeRect(20, 30, 10, 10), red);
+  gone.hidden = YES;
+  TransformedView *moved = [[TransformedView alloc] initWithFrame:NSMakeRect(0, 26, 4, 4)];
+  moved.wantsLayer = YES;
+  moved.layer.backgroundColor = red;
+  ((FixedTransformLayer *)moved.layer).kept = CATransform3DMakeTranslation(20, 0, 0);
+  for (NSView *v in @[ card, faded, gone, moved ]) {
+    [object addSubview:v];
+  }
+  [root addSubview:object];
+  // In a window, never shown, so the views' layers are in one tree.
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 60, 60)
+                                                 styleMask:NSWindowStyleMaskBorderless
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  window.contentView = root;
+  // AppKit puts the subviews' layers in the tree as the transaction commits, before the window
+  // draws, as the svg view's drawRect does.
+  [CATransaction flush];
+
+  SvgElement foreign{.kind = SvgKind::ForeignObject};
+  foreign.lengths = {{"x", len(10)}, {"y", len(10)}, {"width", len(30)}, {"height", len(40)}};
+  foreign.view = 7;
+  SvgNode drawing{node({.kind = SvgKind::Svg}, {node(foreign), node(rect(30, 10, 10, 10, 0xff0000ff))})};
+  int w = 60, h = 60;
+  std::vector<uint8_t> data(w * h * 4, 0);
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(data.data(), w, h, 8, w * 4, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  CGContextTranslateCTM(context, 0, h);
+  CGContextScaleCTM(context, 1, -1);
+  __block ngn::Tag asked = -1;
+  auto canvas = NGNMakeCGCanvas(context, CGSizeMake(w, h), 1, nil, ^NSView *(ngn::Tag tag) {
+    asked = tag;
+    return object;
+  });
+  ngn::drawSvg({.root = std::move(drawing)}, w, h, *canvas);
+  canvas.reset();
+  CGContextRelease(context);
+  auto at = [&](int x, int y) {
+    const uint8_t *p = &data[(y * w + x) * 4];
+    return show({p[0], p[1], p[2], p[3]});
+  };
+  CHECK(asked == 7);
+  // The card at 10 + 2, 10 + 4, and the layer inside it.
+  CHECK(at(13, 15) == "255,0,0,255");
+  CHECK(at(11, 13) == "0,0,0,0");
+  CHECK(at(23, 25) == "0,255,0,255");
+  // Cut at the box's right edge, 40, though the card reaches 52; the rect after it drawn over it.
+  CHECK(at(45, 20) == "0,0,0,0");
+  CHECK(at(35, 15) == "0,0,255,255");
+  // A view's own transform, from its frame's corner.
+  CHECK(at(32, 38) == "255,0,0,255");
+  CHECK(at(12, 38) == "0,0,0,0");
+  // A view's own opacity, and a hidden view left out.
+  CHECK(at(15, 45) == "128,0,0,128");
+  CHECK(at(35, 45) == "0,0,0,0");
+  CGColorRelease(red);
+  CGColorRelease(green);
+  CGColorRelease(blue);
+}
+
+TEST_CASE("a canvas with no way to find views draws a foreignObject's as nothing") {
+  std::vector<uint8_t> data(4, 0);
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(data.data(), 1, 1, 8, 4, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  auto canvas = NGNMakeCGCanvas(context, CGSizeMake(1, 1), 1, nil);
+  canvas->views(7);
+  canvas.reset();
+  CHECK(data == std::vector<uint8_t>{0, 0, 0, 0});
   CGContextRelease(context);
 }

@@ -913,11 +913,20 @@ class Renderer {
     }
   }
 
+  // A foreignObject's box: all of the viewport where it says nothing, as react-native-svg's
+  // ForeignObject defaults to 0%, 0%, 100% and 100%.
+  SvgRect foreignBox(const SvgElement &e) const {
+    return {length(e, "x", Axis::X), length(e, "y", Axis::Y), length(e, "width", Axis::X, vw_), length(e, "height", Axis::Y, vh_)};
+  }
+
   // What `node` covers in its own user space (before its own transform), for a gradient's or a
   // mask's objectBoundingBox.
   std::optional<SvgRect> bounds(const SvgNode &node) const {
     if (auto p = shape(node.element)) {
       return p->bounds();
+    }
+    if (node.element.kind == SvgKind::ForeignObject) {
+      return foreignBox(node.element);
     }
     if (node.element.kind != SvgKind::Group) {
       return std::nullopt;
@@ -1183,6 +1192,19 @@ class Renderer {
         double w = length(e, "width", Axis::X), h = length(e, "height", Axis::Y);
         if (!e.uri.empty() && w > 0 && h > 0) {
           canvas_->image(e.uri, {length(e, "x", Axis::X), length(e, "y", Axis::Y), w, h}, e.align, e.meetOrSlice, 1);
+        }
+        break;
+      }
+      case SvgKind::ForeignObject: {
+        // Its views, at their frames from its corner, cut to its box, as react-native-svg on iOS
+        // draws them.
+        SvgRect box = foreignBox(e);
+        if (e.view != -1 && box.width > 0 && box.height > 0) {
+          canvas_->save();
+          canvas_->concat(SvgMatrix::translate(box.x, box.y));
+          canvas_->clip(rectPath(0, 0, box.width, box.height), false);
+          canvas_->views(e.view);
+          canvas_->restore();
         }
         break;
       }
@@ -2072,6 +2094,20 @@ std::optional<SvgElement> SvgDrawings::element(const ViewTree &tree, Tag tag) co
 }
 
 void SvgDrawings::changed(const ViewTree &tree, Tag tag) {
+  if (auto e = element(tree, tag); e && e->kind == SvgKind::ForeignObject) {
+    foreign_.insert(tag);
+  }
+  mark(tree, tag, false);
+  repaintAbove(tree, tag);
+}
+
+void SvgDrawings::relaidOut(const ViewTree &tree, Tag tag) {
+  repaintAbove(tree, tag);
+}
+
+// Marks the svg `tag` is an element of, if any, to be drawn again: when its document changed, or
+// always with `repaint`.
+void SvgDrawings::mark(const ViewTree &tree, Tag tag, bool repaint) {
   for (Tag at = tag; at != -1;) {
     auto e = element(tree, at);
     if (!e) {
@@ -2079,6 +2115,9 @@ void SvgDrawings::changed(const ViewTree &tree, Tag tag) {
     }
     if (e->kind == SvgKind::Svg) {
       dirty_.insert(at);
+      if (repaint) {
+        repaint_.insert(at);
+      }
       return;
     }
     const auto *found = tree.find(at);
@@ -2086,9 +2125,23 @@ void SvgDrawings::changed(const ViewTree &tree, Tag tag) {
   }
 }
 
+// A view in a foreignObject, or the foreignObject itself, changed: each svg that draws it draws
+// again, though its document is the same.
+void SvgDrawings::repaintAbove(const ViewTree &tree, Tag tag) {
+  if (foreign_.empty()) {
+    return;
+  }
+  for (const auto *found = tree.find(tag); found != nullptr; found = tree.find(found->parent)) {
+    if (foreign_.contains(found->view.tag)) {
+      mark(tree, found->view.tag, true);
+    }
+  }
+}
+
 void SvgDrawings::deleted(Tag tag) {
   dirty_.erase(tag);
   drawn_.erase(tag);
+  foreign_.erase(tag);
 }
 
 std::optional<SvgNode> SvgDrawings::node(const ViewTree &tree, Tag tag) const {
@@ -2097,6 +2150,9 @@ std::optional<SvgNode> SvgDrawings::node(const ViewTree &tree, Tag tag) const {
     return std::nullopt;
   }
   SvgNode out{.element = std::move(*e)};
+  if (out.element.kind == SvgKind::ForeignObject) {
+    out.element.view = tag;
+  }
   for (Tag child : tree.find(tag)->children) {
     if (auto c = node(tree, child); c && c->element.kind != SvgKind::Svg) {
       out.children.push_back(std::move(*c));
@@ -2108,6 +2164,8 @@ std::optional<SvgNode> SvgDrawings::node(const ViewTree &tree, Tag tag) const {
 std::vector<SvgDrawings::Drawing> SvgDrawings::settle(const ViewTree &tree) {
   std::vector<Tag> dirty(dirty_.begin(), dirty_.end());
   dirty_.clear();
+  auto repaint = std::move(repaint_);
+  repaint_.clear();
   std::sort(dirty.begin(), dirty.end());
   std::vector<Drawing> out;
   for (Tag tag : dirty) {
@@ -2118,6 +2176,9 @@ std::vector<SvgDrawings::Drawing> SvgDrawings::settle(const ViewTree &tree) {
     auto document = std::make_shared<const SvgDocument>(SvgDocument{.root = std::move(*root)});
     auto known = drawn_.find(tag);
     if (known != drawn_.end() && *known->second == *document) {
+      if (repaint.contains(tag)) {
+        out.push_back({.svg = tag, .document = known->second});
+      }
       continue;
     }
     drawn_[tag] = document;

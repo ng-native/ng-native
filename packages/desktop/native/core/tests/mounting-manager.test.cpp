@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
+#include <react/renderer/core/ConcreteState.h>
 #include <react/renderer/mounting/MountingTransaction.h>
 
 using namespace facebook::react;
@@ -306,6 +307,44 @@ TEST_CASE("an svg is drawn when it mounts, when an element in it is made, change
   f.backend->calls.clear();
   f.mount({ShadowViewMutation::RemoveMutation(2, same, 0), ShadowViewMutation::DeleteMutation(same)});
   CHECK(svgCalls(f.backend->calls) == std::vector<std::string>{"svg 2 with 0"});
+}
+
+TEST_CASE("an svg is drawn again when a view in its foreignObject is relaid out or its state changes, and not for one outside it") {
+  SvgGlue glue;
+  Fixture f;
+  auto svg = shadowView(2, "RNSVGSvgView", {{0, 0}, {24, 24}}, svgProps(ngn::SvgKind::Svg));
+  auto object = shadowView(3, "RNSVGForeignObject", {{0, 0}, {24, 24}}, svgProps(ngn::SvgKind::ForeignObject));
+  auto label = shadowView(4, "Paragraph", {{0, 0}, {24, 10}});
+  auto beside = shadowView(5, "View", {{0, 30}, {24, 10}});
+  f.mount({
+      ShadowViewMutation::CreateMutation(svg),
+      ShadowViewMutation::CreateMutation(object),
+      ShadowViewMutation::CreateMutation(label),
+      ShadowViewMutation::CreateMutation(beside),
+      ShadowViewMutation::InsertMutation(3, label, 0),
+      ShadowViewMutation::InsertMutation(2, object, 0),
+      ShadowViewMutation::InsertMutation(1, svg, 0),
+      ShadowViewMutation::InsertMutation(1, beside, 1),
+  });
+  CHECK(svgCalls(f.backend->calls) == std::vector<std::string>{"svg 2 with 1"});
+
+  f.backend->calls.clear();
+  auto moved = label;
+  moved.layoutMetrics.frame.origin.y = 5;
+  f.mount({ShadowViewMutation::UpdateMutation(label, moved, 0)});
+  CHECK(svgCalls(f.backend->calls) == std::vector<std::string>{"svg 2 with 1"});
+
+  f.backend->calls.clear();
+  auto stated = moved;
+  stated.state = std::make_shared<const ConcreteState<int>>(std::make_shared<const int>(1), ShadowNodeFamily::Weak{});
+  f.mount({ShadowViewMutation::UpdateMutation(moved, stated, 0)});
+  CHECK(svgCalls(f.backend->calls) == std::vector<std::string>{"svg 2 with 1"});
+
+  f.backend->calls.clear();
+  auto besideMoved = beside;
+  besideMoved.layoutMetrics.frame.origin.y = 40;
+  f.mount({ShadowViewMutation::UpdateMutation(beside, besideMoved, 1)});
+  CHECK(svgCalls(f.backend->calls).empty());
 }
 
 TEST_CASE("a live region's new text is announced after the transaction that changed it") {

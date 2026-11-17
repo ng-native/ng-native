@@ -179,13 +179,15 @@ struct Recorder : ngn::SvgCanvas {
       const ngn::SvgPaint &fill) override {
     calls.push_back("text '" + text + "' " + n(x) + "," + n(y) + " " + n(fontSize) + " " + paint(fill));
   }
+  void views(facebook::react::Tag view) override { calls.push_back("views " + std::to_string(view)); }
 
   // The calls that draw, without the state around them.
   std::vector<std::string> drawn() const {
     std::vector<std::string> out;
     for (const auto &c : calls) {
       if (c.rfind("fill", 0) == 0 || c.rfind("stroke", 0) == 0 || c.rfind("text", 0) == 0 || c.rfind("glyphs", 0) == 0 ||
-          c.rfind("image", 0) == 0 || c.rfind("clip", 0) == 0) {
+          c.rfind("image", 0) == 0 || c.rfind("clip", 0) == 0 ||
+          c.rfind("views", 0) == 0) {
         out.push_back(c);
       }
     }

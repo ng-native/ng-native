@@ -112,6 +112,8 @@ enum class SvgKind {
   Mask,
   Symbol,
   Image,
+  // A box of native views: what is in it is views, not svg elements, which the canvas draws.
+  ForeignObject,
   Text,
   TSpan,
   TextPath,
@@ -200,6 +202,9 @@ struct SvgElement {
   SvgLength bbWidth, bbHeight;
 
   std::string uri; // an image's source
+
+  // A foreignObject's own view, whose children the canvas draws.
+  Tag view{-1};
 
   // Text: a span's characters, the font, its text-anchor ("start", "middle" or "end"; empty
   // inherits), and the positions written on the element. A textPath's path is `href`, how far
@@ -381,6 +386,8 @@ class SvgCanvas {
       const std::string &fontFamily,
       const std::string &fontWeight,
       const SvgPaint &fill) = 0;
+  // Draws the native views in `view` (a foreignObject's), each at its frame in `view`.
+  virtual void views(Tag view) = 0;
 };
 
 // Draws `document` into a viewport of `width` by `height`, its origin at the canvas's.
@@ -397,21 +404,30 @@ class SvgDrawings {
 
   // A view was made or its props changed, or `parent`'s children changed.
   void changed(const ViewTree &tree, Tag tag);
+  // A view's layout or state changed: what it draws, not what it is.
+  void relaidOut(const ViewTree &tree, Tag tag);
   void deleted(Tag tag);
 
   struct Drawing {
     Tag svg{-1};
     std::shared_ptr<const SvgDocument> document;
   };
-  // The svgs whose documents changed since the last call.
+  // The svgs whose documents changed since the last call, and those whose documents are the same
+  // but draw a view in a foreignObject that changed.
   std::vector<Drawing> settle(const ViewTree &tree);
 
  private:
   std::optional<SvgElement> element(const ViewTree &tree, Tag tag) const;
   std::optional<SvgNode> node(const ViewTree &tree, Tag tag) const;
+  void mark(const ViewTree &tree, Tag tag, bool repaint);
+  void repaintAbove(const ViewTree &tree, Tag tag);
 
   Reader reader_;
   std::unordered_set<Tag> dirty_;
+  // Svgs to draw again though their documents are the same.
+  std::unordered_set<Tag> repaint_;
+  // The foreignObjects mounted, whose views are drawn into their svgs.
+  std::unordered_set<Tag> foreign_;
   std::unordered_map<Tag, std::shared_ptr<const SvgDocument>> drawn_;
 };
 

@@ -83,8 +83,8 @@ NSCache<NSString *, NSImage *> *imageCache() {
 // starts where the drawing is.
 class CGCanvas final : public ngn::SvgCanvas {
  public:
-  CGCanvas(CGContextRef context, CGSize size, CGFloat scale, void (^imageLoaded)(void))
-      : context_(context), size_(size), scale_(scale), imageLoaded_(imageLoaded) {}
+  CGCanvas(CGContextRef context, CGSize size, CGFloat scale, void (^imageLoaded)(void), NSView * (^viewFor)(ngn::Tag))
+      : context_(context), size_(size), scale_(scale), imageLoaded_(imageLoaded), viewFor_(viewFor) {}
 
   void save() override {
     CGContextSaveGState(context_);
@@ -293,7 +293,7 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGContextTranslateCTM(bitmap, 0, height);
     CGContextScaleCTM(bitmap, width / tile.tile.width, -(height / tile.tile.height));
     {
-      CGCanvas inner(bitmap, CGSizeMake(tile.tile.width, tile.tile.height), density, imageLoaded_);
+      CGCanvas inner(bitmap, CGSizeMake(tile.tile.width, tile.tile.height), density, imageLoaded_, viewFor_);
       drawTile(inner);
     }
     CGImageRef image = CGBitmapContextCreateImage(bitmap);
@@ -503,6 +503,21 @@ class CGCanvas final : public ngn::SvgCanvas {
     CFRelease(line);
   }
 
+  // Each child of the view as its layer draws it, as react-native-svg's ForeignObject draws them on
+  // iOS: its frame's corner, its transform (which rendering a layer leaves out), then its layer and
+  // those under it. A layer renders though an ancestor view is hidden, so the views stay hidden and
+  // take no clicks; a hidden one's layer renders nothing.
+  void views(ngn::Tag view) override {
+    NSView *object = viewFor_ != nil ? viewFor_(view) : nil;
+    for (NSView *child in object.subviews) {
+      CGContextSaveGState(context_);
+      CGContextTranslateCTM(context_, child.frame.origin.x, child.frame.origin.y);
+      CGContextConcatCTM(context_, CATransform3DGetAffineTransform(child.layer.transform));
+      [child.layer renderInContext:context_];
+      CGContextRestoreGState(context_);
+    }
+  }
+
  private:
   // A +1 line of `text` in the font, in `fill`'s colour (a gradient's first stop) when given.
   static CTLineRef createLine(
@@ -621,6 +636,7 @@ class CGCanvas final : public ngn::SvgCanvas {
   CGSize size_;
   CGFloat scale_;
   void (^imageLoaded_)(void);
+  NSView * (^viewFor_)(ngn::Tag);
   ngn::SvgMatrix matrix_;
   std::vector<ngn::SvgMatrix> saved_;
   std::vector<Mask> masks_;
@@ -637,6 +653,11 @@ CGPathRef NGNCreatePath(const ngn::SvgPath &path) {
   return createPathImpl(path);
 }
 
-std::unique_ptr<ngn::SvgCanvas> NGNMakeCGCanvas(CGContextRef context, CGSize size, CGFloat scale, void (^imageLoaded)(void)) {
-  return std::make_unique<CGCanvas>(context, size, scale, imageLoaded);
+std::unique_ptr<ngn::SvgCanvas> NGNMakeCGCanvas(
+    CGContextRef context,
+    CGSize size,
+    CGFloat scale,
+    void (^imageLoaded)(void),
+    NSView * (^viewFor)(ngn::Tag)) {
+  return std::make_unique<CGCanvas>(context, size, scale, imageLoaded, viewFor);
 }

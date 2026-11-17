@@ -536,3 +536,151 @@ TEST_CASE("the svgs mounted: a view that is no svg element is skipped, and so is
   REQUIRE(drawn[0].document->root.children.size() == 1);
   CHECK(drawn[0].document->root.children[0].element.d == "M0 0H3");
 }
+
+namespace {
+
+SvgElement foreignObject(Tag view, std::map<std::string, SvgLength> lengths = {}) {
+  SvgElement e{.kind = SvgKind::ForeignObject};
+  e.lengths = std::move(lengths);
+  e.view = view;
+  return e;
+}
+
+} // namespace
+
+TEST_CASE("a foreignObject draws its views at its x and y, cut to its box, in its place among the shapes") {
+  auto object = foreignObject(7, {{"x", len(10)}, {"y", len(20)}, {"width", len(120)}, {"height", len(40)}});
+  auto calls = draw(node(svg(), {node(rect(0, 0, 1, 1)), node(object), node(rect(2, 2, 1, 1))}), 200, 100);
+  auto at = std::find(calls.begin(), calls.end(), "views 7");
+  REQUIRE(at != calls.end());
+  CHECK(std::vector<std::string>(at - 3, at + 2) ==
+        std::vector<std::string>{"save", "concat 1 0 0 1 10 20", "clip M0,0L120,0L120,40L0,40Z", "views 7", "restore"});
+  CHECK(drawn(node(svg(), {node(rect(0, 0, 1, 1)), node(object), node(rect(2, 2, 1, 1))}), 200, 100) ==
+        std::vector<std::string>{
+            "fill M0,0L1,0L1,1L0,1Z #ff000000", "clip M0,0L120,0L120,40L0,40Z", "views 7", "fill M2,2L3,2L3,3L2,3Z #ff000000"});
+}
+
+TEST_CASE("a foreignObject's box: the whole viewport where it says nothing, and percentages of it") {
+  CHECK(drawn(node(svg(), {node(foreignObject(7))}), 200, 100) == std::vector<std::string>{"clip M0,0L200,0L200,100L0,100Z", "views 7"});
+  auto half = foreignObject(7, {{"x", pct(10)}, {"width", pct(50)}, {"height", pct(50)}});
+  auto calls = draw(node(svg(), {node(half)}), 200, 100);
+  CHECK(std::find(calls.begin(), calls.end(), "concat 1 0 0 1 20 0") != calls.end());
+  CHECK(std::find(calls.begin(), calls.end(), "clip M0,0L100,0L100,50L0,50Z") != calls.end());
+}
+
+TEST_CASE("a foreignObject with an empty box, or no view, draws nothing; a transform, an opacity or hidden wraps it as a group") {
+  CHECK(drawn(node(svg(), {node(foreignObject(7, {{"width", len(0)}}))})).empty());
+  CHECK(drawn(node(svg(), {node(foreignObject(7, {{"height", len(-1)}}))})).empty());
+  CHECK(drawn(node(svg(), {node(foreignObject(-1))})).empty());
+  auto hidden = foreignObject(7);
+  hidden.hidden = true;
+  CHECK(drawn(node(svg(), {node(hidden)})).empty());
+
+  auto moved = foreignObject(7, {{"width", len(4)}, {"height", len(4)}});
+  moved.matrix = ngn::SvgMatrix{0, 1, -1, 0, 5, 6};
+  moved.opacity = 0.5;
+  CHECK(draw(node(svg(), {node(moved)})) ==
+        std::vector<std::string>{
+            "save", "save", "concat 0 1 -1 0 5 6", "layer 0.5", "save", "concat 1 0 0 1 0 0", "clip M0,0L4,0L4,4L0,4Z",
+            "views 7", "restore", "end layer", "restore", "restore"});
+}
+
+TEST_CASE("a mask in objectBoundingBox units spans a foreignObject's box") {
+  SvgElement mask{.kind = SvgKind::Mask, .name = "m"};
+  mask.units = 0;
+  auto object = foreignObject(7, {{"x", len(10)}, {"y", len(20)}, {"width", len(100)}, {"height", len(50)}});
+  object.mask = "m";
+  auto calls = draw(node(svg(), {node(mask, {node(rect(0, 0, 1, 1))}), node(object)}), 200, 100);
+  CHECK(std::find(calls.begin(), calls.end(), "clip M0,15L120,15L120,75L0,75Z") != calls.end());
+}
+
+TEST_CASE("the svgs mounted: a foreignObject's document names its view") {
+  Svgs s;
+  s.add(2, -1, props(svg()));
+  s.add(3, 2, props(SvgElement{.kind = SvgKind::ForeignObject}));
+  auto drawn = s.drawings.settle(s.tree);
+  REQUIRE(drawn.size() == 1);
+  CHECK(drawn[0].document->root.children[0].element.view == 3);
+}
+
+TEST_CASE("the svgs mounted: a view in a foreignObject draws its svg again when it is made, changed, relaid out or removed") {
+  Svgs s;
+  s.add(2, -1, props(svg()));
+  s.add(3, 2, props(SvgElement{.kind = SvgKind::Group}));
+  s.add(4, 3, props(SvgElement{.kind = SvgKind::ForeignObject}));
+  s.add(5, 4, std::make_shared<ViewProps>());
+  s.add(6, 5, std::make_shared<ViewProps>());
+  auto first = s.drawings.settle(s.tree);
+  REQUIRE(first.size() == 1);
+  CHECK(s.drawings.settle(s.tree).empty());
+  auto again = [&] {
+    auto drawn = s.drawings.settle(s.tree);
+    // The same document, drawn again for the views in it.
+    return drawn.size() == 1 && drawn[0].svg == 2 && drawn[0].document == first[0].document;
+  };
+
+  // A view deep in it changes its props, its layout, or its state.
+  s.setProps(6, std::make_shared<ViewProps>());
+  CHECK(again());
+  s.drawings.relaidOut(s.tree, 6);
+  CHECK(again());
+  s.drawings.relaidOut(s.tree, 5);
+  CHECK(again());
+
+  // A view is made in it.
+  s.add(7, 4, std::make_shared<ViewProps>());
+  CHECK(again());
+
+  // A view is removed from it, deep and at the top.
+  s.tree.remove(5, 6);
+  s.drawings.changed(s.tree, 5);
+  s.drawings.deleted(6);
+  s.tree.destroy(6);
+  CHECK(again());
+  s.tree.remove(4, 7);
+  s.drawings.changed(s.tree, 4);
+  s.drawings.deleted(7);
+  s.tree.destroy(7);
+  CHECK(again());
+  CHECK(s.drawings.settle(s.tree).empty());
+}
+
+TEST_CASE("the svgs mounted: a view outside any foreignObject, or in one that has gone, draws nothing again") {
+  Svgs s;
+  s.add(1, -1, std::make_shared<ViewProps>());
+  s.add(2, 1, props(svg()));
+  s.add(3, 2, props(SvgElement{.kind = SvgKind::ForeignObject}));
+  s.add(4, 3, std::make_shared<ViewProps>());
+  s.add(8, 1, std::make_shared<ViewProps>());
+  REQUIRE(s.drawings.settle(s.tree).size() == 1);
+
+  // A view beside the svg, and an element of it, relaid out: nothing is drawn again.
+  s.drawings.relaidOut(s.tree, 8);
+  s.drawings.relaidOut(s.tree, 2);
+  CHECK(s.drawings.settle(s.tree).empty());
+
+  // The foreignObject goes, and its view moves beside the svg: a change to it draws nothing.
+  s.tree.remove(3, 4);
+  s.tree.remove(2, 3);
+  s.drawings.changed(s.tree, 2);
+  s.drawings.deleted(3);
+  s.tree.destroy(3);
+  REQUIRE(s.drawings.settle(s.tree).size() == 1);
+  s.tree.insert(1, 4, 2);
+  s.drawings.changed(s.tree, 1);
+  s.drawings.relaidOut(s.tree, 4);
+  s.setProps(4, std::make_shared<ViewProps>());
+  CHECK(s.drawings.settle(s.tree).empty());
+}
+
+TEST_CASE("the svgs mounted: an svg that goes is not drawn again for the views in its foreignObject") {
+  Svgs s;
+  s.add(2, -1, props(svg()));
+  s.add(3, 2, props(SvgElement{.kind = SvgKind::ForeignObject}));
+  s.add(4, 3, std::make_shared<ViewProps>());
+  REQUIRE(s.drawings.settle(s.tree).size() == 1);
+  s.drawings.relaidOut(s.tree, 4);
+  s.drawings.deleted(2);
+  s.tree.destroy(2);
+  CHECK(s.drawings.settle(s.tree).empty());
+}

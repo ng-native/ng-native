@@ -14,4 +14,11 @@ CGPathRef NGNCreatePath(const ngn::SvgPath &path);
 
 // A canvas over `context`, whose coordinates are the view's: top left, y down, in points, `size`
 // big at `scale` pixels a point. `imageLoaded` runs when an image it was asked for has loaded.
-std::unique_ptr<ngn::SvgCanvas> NGNMakeCGCanvas(CGContextRef context, CGSize size, CGFloat scale, void (^imageLoaded)(void));
+// `viewFor` finds a foreignObject's view by its tag, whose children the canvas draws; without it,
+// a foreignObject draws nothing.
+std::unique_ptr<ngn::SvgCanvas> NGNMakeCGCanvas(
+    CGContextRef context,
+    CGSize size,
+    CGFloat scale,
+    void (^imageLoaded)(void),
+    NSView * (^viewFor)(ngn::Tag) = nil);

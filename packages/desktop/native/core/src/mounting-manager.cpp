@@ -222,12 +222,14 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         }
         if (old.state != view.state) {
           backend_->updateState(view);
+          svgs_.relaidOut(tree_, view.tag);
           if (auto sizes = controlSizes()) {
             sizes->relaidOut(view.tag);
           }
         }
         if (old.layoutMetrics != view.layoutMetrics) {
           backend_->updateLayout(view);
+          svgs_.relaidOut(tree_, view.tag);
         }
         break;
       }

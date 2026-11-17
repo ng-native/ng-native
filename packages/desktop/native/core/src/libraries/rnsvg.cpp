@@ -266,6 +266,10 @@ std::optional<SvgElement> svgElement(const Props &props) {
     e.uri = p->src.uri;
     e.align = p->align;
     e.meetOrSlice = p->meetOrSlice;
+  } else if (const auto *p = dynamic_cast<const RNSVGForeignObjectProps *>(&props)) {
+    e.kind = SvgKind::ForeignObject;
+    common(e, *p);
+    lengths(e, {{"x", &p->x}, {"y", &p->y}, {"width", &p->width}, {"height", &p->height}});
   } else if (const auto *p = dynamic_cast<const RNSVGTextProps *>(&props)) {
     e.kind = SvgKind::Text;
     common(e, *p);

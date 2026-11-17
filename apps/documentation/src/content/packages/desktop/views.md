@@ -149,9 +149,14 @@ When the app has them installed, the host compiles in the Fabric components of
   shape it names, each glyph (a grapheme cluster, drawn as its run shaped it, kerning and joined
   forms kept) at the point its middle reaches and turned with it, from `startOffset`, with
   `side="right"` reversing the path; a glyph whose middle is off the path is not drawn. A span's or
-  a `textPath`'s `opacity` applies once to all the text it holds. `feBlend`, the other filter steps
-  and `foreignObject` draw nothing, a `textPath`'s `method` and `spacing` are not read, and text
-  has no letter spacing.
+  a `textPath`'s `opacity` applies once to all the text it holds. A `foreignObject` draws the views
+  in it, as react-native-svg does on iOS: at its `x` and `y`, cut to its `width` and `height`, in
+  its place among the shapes, and under the transforms, opacity, clip paths, masks and filters
+  around it, and draws again when a commit changes one of them. It draws them from their layers,
+  so they take no clicks, and what a layer does not draw into its own contents, such as a video or
+  a visual-effect (glass) view, does not show; an image that loads after the commit shows at the
+  svg's next draw. `feBlend` and the other filter steps draw nothing, a `textPath`'s `method` and
+  `spacing` are not read, and text has no letter spacing.
 - A web view (`RNCWebView`, which `<web-view>` and `@ng-native/web-compat`'s `<iframe>` commit) is
   a WKWebView loading `newSource` (a url with its method, body and headers, a `file:` url, or
   `html` at its `baseUrl`), with the library's iOS events, scripts and commands: the injected

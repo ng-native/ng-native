@@ -120,7 +120,8 @@ endif()
 # The AppKit view tests: views mounted from Fabric mutations into an offscreen window, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  add_executable(ngn_appkit_tests ../core/tests/main.cpp tests/views/accessibility.test.mm tests/views/tab-walk.test.mm)
+  add_executable(ngn_appkit_tests ../core/tests/main.cpp tests/views/accessibility.test.mm tests/views/svg-foreign-object.test.mm
+    tests/views/tab-walk.test.mm)
   target_include_directories(ngn_appkit_tests PRIVATE ../core/tests)
   target_link_libraries(ngn_appkit_tests PRIVATE ngn_appkit doctest ${NGN_APPKIT_FRAMEWORKS})
   ngn_link_swift(ngn_appkit_tests)
