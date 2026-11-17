@@ -1,4 +1,4 @@
-import { type AfterViewInit, Component, viewChild } from '@angular/core';
+import { type AfterViewInit, Component, signal, viewChild } from '@angular/core';
 import { Camera } from '@ng-native/expo/camera';
 
 @Component({
@@ -8,6 +8,16 @@ import { Camera } from '@ng-native/expo/camera';
 })
 export class ExpoCameraFixture {
   readonly camera = viewChild.required(Camera);
+}
+
+/** `mute` bound, and written as a bare attribute. */
+@Component({
+  selector: 'expo-camera-mute-fixture',
+  imports: [Camera],
+  template: `<expo-camera mode="video" [mute]="muted()" /><expo-camera mute />`,
+})
+export class ExpoCameraMuteFixture {
+  readonly muted = signal<boolean | null | undefined>(undefined);
 }
 
 /** Records and stops from `ngAfterViewInit`, before the view's first commit. */

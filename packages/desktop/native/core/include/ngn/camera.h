@@ -13,9 +13,10 @@
 //   is refused.
 // - record(tag, options): expo's recording, {uri}, a QuickTime movie in `<caches>/Camera` from the
 //   view `tag`, once it stops: stopRecording(tag), `maxDuration` seconds or `maxFileSize` bytes
-//   reached, or the view going. It has sound unless `mute`, and only with the microphone allowed
-//   (as on iOS, a recording without the microphone permission has none; nothing is asked). One
-//   recording a view at a time.
+//   reached, or the view going. It has sound unless the view has `mute`, and only with the
+//   microphone allowed (as on iOS, a recording without the microphone permission has none; nothing
+//   is asked). The view's `mute` as the recording starts holds until it stops; like iOS, record()
+//   takes no `mute` of its own. One recording a view at a time.
 //
 // A view starts its camera when it mounts with the camera allowed and present: it sends
 // `cameraReady`, and `mountError` ({message}, expo-camera's words) when the permission is not
@@ -36,6 +37,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -54,6 +56,8 @@ class CameraProps final : public facebook::react::ViewProps, public HasDesktopPr
   std::string facing{"back"};
   bool active{true};
   bool mirror{false};
+  // expo-camera's `mute`: the view records without sound.
+  bool mute{false};
 };
 
 using CameraShadowNode = facebook::react::ConcreteViewShadowNode<CameraComponentName, CameraProps, facebook::react::ViewEventEmitter>;
@@ -108,16 +112,22 @@ class CameraCapture {
   virtual bool recording() const = 0;
 };
 
-// The running cameras by view tag, shared by the views and NgNativeCamera. Any thread.
+// The running cameras by view tag, and the views with `mute`, shared by the views and
+// NgNativeCamera. A view sets its `mute` as its props change; detaching forgets both. Any thread.
 class CameraViews {
  public:
   void attach(int tag, std::shared_ptr<CameraCapture> capture);
   void detach(int tag);
-  std::shared_ptr<CameraCapture> find(int tag) const;
+  // With `muted`, also whether the view has `mute`, read under the same lock, so a view that
+  // detaches meanwhile cannot leave its camera without its mute.
+  std::shared_ptr<CameraCapture> find(int tag, bool *muted = nullptr) const;
+  void mute(int tag, bool muted);
+  bool muted(int tag) const;
 
  private:
   mutable std::mutex mutex_;
   std::map<int, std::shared_ptr<CameraCapture>> captures_;
+  std::set<int> muted_;
 };
 
 // A camera the host could start: the Mac's own, and whether it is suspended (a MacBook's with the

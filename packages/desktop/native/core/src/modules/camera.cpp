@@ -24,7 +24,8 @@ CameraProps::CameraProps(const PropsParserContext &context, const CameraProps &s
       HasDesktopProps{parseDesktopProps(context, sourceProps.desktop, rawProps)},
       facing(convertRawProp(context, rawProps, "facing", sourceProps.facing, std::string{"back"})),
       active(convertRawProp(context, rawProps, "active", sourceProps.active, true)),
-      mirror(convertRawProp(context, rawProps, "mirror", sourceProps.mirror, false)) {}
+      mirror(convertRawProp(context, rawProps, "mirror", sourceProps.mirror, false)),
+      mute(convertRawProp(context, rawProps, "mute", sourceProps.mute, false)) {}
 
 void CameraViews::attach(int tag, std::shared_ptr<CameraCapture> capture) {
   std::lock_guard lock(mutex_);
@@ -34,10 +35,14 @@ void CameraViews::attach(int tag, std::shared_ptr<CameraCapture> capture) {
 void CameraViews::detach(int tag) {
   std::lock_guard lock(mutex_);
   captures_.erase(tag);
+  muted_.erase(tag);
 }
 
-std::shared_ptr<CameraCapture> CameraViews::find(int tag) const {
+std::shared_ptr<CameraCapture> CameraViews::find(int tag, bool *muted) const {
   std::lock_guard lock(mutex_);
+  if (muted) {
+    *muted = muted_.contains(tag);
+  }
   auto found = captures_.find(tag);
   return found == captures_.end() ? nullptr : found->second;
 }
@@ -51,6 +56,20 @@ CameraMount cameraMount(CameraHardware::Access access, bool hasCamera, bool noPr
     return CameraMount::NotPermitted;
   }
   return hasCamera ? CameraMount::Start : CameraMount::NoCamera;
+}
+
+void CameraViews::mute(int tag, bool muted) {
+  std::lock_guard lock(mutex_);
+  if (muted) {
+    muted_.insert(tag);
+  } else {
+    muted_.erase(tag);
+  }
+}
+
+bool CameraViews::muted(int tag) const {
+  std::lock_guard lock(mutex_);
+  return muted_.contains(tag);
 }
 
 int chooseCamera(const std::vector<CameraCandidate> &cameras) {
@@ -332,7 +351,8 @@ std::shared_ptr<NativeModule> makeCameraModule(
           promise.reject("Camera.record: camera permission has not been granted");
           return;
         }
-        auto capture = views->find(tag);
+        bool muted = false;
+        auto capture = views->find(tag, &muted);
         if (!capture) {
           promise.reject("Camera is not ready yet. Wait for 'onCameraReady' callback");
           return;
@@ -342,7 +362,6 @@ std::shared_ptr<NativeModule> makeCameraModule(
           return;
         }
         CameraRecordingRequest request;
-        bool mute = false;
         if (options.isObject()) {
           if (const auto *d = options.get_ptr("maxDuration"); d && d->isNumber()) {
             request.maxDuration = std::max(0.0, d->asDouble());
@@ -350,14 +369,12 @@ std::shared_ptr<NativeModule> makeCameraModule(
           if (const auto *f = options.get_ptr("maxFileSize"); f && f->isNumber()) {
             request.maxFileSize = std::max(0.0, f->asDouble());
           }
-          if (const auto *m = options.get_ptr("mute"); m && m->isBool()) {
-            mute = m->asBool();
-          }
           if (const auto *c = options.get_ptr("codec"); c && c->isString()) {
             request.codec = c->asString();
           }
         }
-        request.sound = !mute && hardware->microphoneAllowed();
+        // The view's `mute` prop, as on iOS, where record() takes no `mute`.
+        request.sound = !muted && hardware->microphoneAllowed();
         std::error_code ignored;
         std::filesystem::create_directories(pictures, ignored);
         request.path = pictures + "/" + newFileName(".mov");

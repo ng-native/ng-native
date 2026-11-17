@@ -493,6 +493,34 @@ describe('the camera view', () => {
     assert.equal(fabric.committed[0]!.children[0]!.viewName, 'ViewManagerAdapter_ExpoCamera');
   });
 
+  it('commits mute as the boolean expo-camera reads, bound or written bare, and unset when unbound', async () => {
+    registerExpoViews('expo-camera');
+    const mod = await compileFixture('fixtures/expo-camera.ts');
+    const fabric = createFakeFabric();
+    const app = mount(1, mod['ExpoCameraMuteFixture'] as Type<unknown>, fabric);
+    const muted = (app.componentRef.instance as { muted: { set(v: unknown): void } }).muted;
+    const props = (index: number) => fabric.committed[0]!.children[index]!.props;
+    // Every platform drops a string for a boolean prop, so a bare `mute` must commit true.
+    assert.equal(props(1)['mute'], true);
+    // Unbound, nothing: the view's own default.
+    assert.equal('mute' in props(0), false);
+    muted.set(true);
+    app.applicationRef.tick();
+    assert.equal(props(0)['mute'], true);
+    muted.set(false);
+    app.applicationRef.tick();
+    assert.equal(props(0)['mute'], false);
+    // Taken off after being on, by null or undefined, the native value goes back to unmuted:
+    // null removes a committed prop, where undefined would leave it muted.
+    for (const off of [null, undefined]) {
+      muted.set(true);
+      app.applicationRef.tick();
+      muted.set(off);
+      app.applicationRef.tick();
+      assert.ok(props(0)['mute'] === null || props(0)['mute'] === false, String(off));
+    }
+  });
+
   it('takes a picture from the view on screen, the way a React ref would', async () => {
     registerExpoViews('expo-camera');
     const calls: { tag: unknown; options: unknown }[] = [];

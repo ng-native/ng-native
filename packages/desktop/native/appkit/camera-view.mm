@@ -51,9 +51,13 @@ bool gNoPrompts = false;
   _preview.frame = self.bounds;
 }
 
-// Starts or stops the camera as `active` and the permission say.
+// Starts or stops the camera as `active` and the permission say, and passes `mute` on for the
+// recordings NgNativeCamera starts. Set first, so the camera is never attached without it.
 - (void)follow {
   auto props = std::dynamic_pointer_cast<const ngn::CameraProps>(self.props);
+  if (props && gViews) {
+    gViews->mute(static_cast<int>(self.reactTag), props->mute);
+  }
   if (!props || !gHardware || !self.eventEmitter) {
     return;
   }

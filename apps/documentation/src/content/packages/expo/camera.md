@@ -148,7 +148,10 @@ protected async toggle(): Promise<void> {
 The view records with `mode="video"`. Without `mute` on the view, `record()` needs the microphone
 permission, **`microphonePermission()`**, a `Permission` like the camera's: without it, Android
 rejects, and iOS and macOS record without sound. With `mute`, it records without sound and needs no
-microphone permission.
+microphone permission. `mute` is an input of `Camera`, so the component imports `Camera` for it:
+`<expo-camera mode="video" mute />` and `[mute]="muted()"` both work, and `null` or `undefined` is
+the default, with sound. `record()` takes no `mute` of its own. On macOS, the view's `mute` as
+`record()` starts holds for the whole recording.
 
 ```ts
 protected readonly microphone = microphonePermission();

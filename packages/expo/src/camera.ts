@@ -31,11 +31,12 @@
  * the tag the engine committed the view under, and no ref is needed. On macOS the functions are
  * the desktop host's `NgNativeCamera`'s, which take the tag as their first argument.
  */
-import { Directive, ElementRef, InjectionToken, inject } from '@angular/core';
+import { Directive, ElementRef, InjectionToken, inject, input } from '@angular/core';
 import { Engine, type EngineNode } from '@ng-native/fabric';
 import { desktopHost } from './desktop-host.ts';
 import { expoModule, optional, present } from './native.ts';
 import { Permission, UNAVAILABLE, type PermissionResponse } from './permissions.ts';
+import { optionalBoolean } from './transforms.ts';
 
 export type PictureOptions = Omit<
   import('expo-camera').CameraPictureOptions,
@@ -56,7 +57,7 @@ export interface CameraViewFunctions {
   stopRecording(this: { nativeTag: number }): Promise<void> | void;
 }
 
-@Directive({ selector: 'expo-camera', exportAs: 'camera' })
+@Directive({ selector: 'expo-camera', exportAs: 'camera', host: { '[mute]': 'mute()' } })
 export class Camera {
   /** Overridden in a test to take pictures without a camera. */
   static readonly SOURCE = new InjectionToken<CameraViewFunctions | null>(
@@ -81,6 +82,12 @@ export class Camera {
       },
     },
   );
+
+  /**
+   * Record without sound, and without the microphone permission. A bare `mute` attribute is true,
+   * and unset (`undefined` or `null`) is expo-camera's default, with sound.
+   */
+  readonly mute = input<boolean>(undefined, { transform: optionalBoolean });
 
   private readonly functions = inject(Camera.SOURCE);
   private readonly engine = inject(Engine);
