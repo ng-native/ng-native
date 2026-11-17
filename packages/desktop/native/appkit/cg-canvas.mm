@@ -47,6 +47,32 @@ CGPathRef createPathImpl(const ngn::SvgPath &path) {
 }
 
 // Images an svg draws, by URI, loaded once for every svg.
+// The glyphs a cluster drew as in its shaped run: per font, each glyph and where it sits from the
+// cluster's start.
+struct ShapedGlyphs {
+  struct Piece {
+    CTFontRef font{nullptr};
+    std::vector<CGGlyph> glyphs;
+    std::vector<CGPoint> positions;
+  };
+  std::vector<Piece> pieces;
+  ShapedGlyphs() = default;
+  ShapedGlyphs(const ShapedGlyphs &) = delete;
+  ShapedGlyphs &operator=(const ShapedGlyphs &) = delete;
+  ~ShapedGlyphs() {
+    for (auto &p : pieces) {
+      CFRelease(p.font);
+    }
+  }
+  void add(CTFontRef font, CGGlyph glyph, CGPoint position) {
+    if (pieces.empty() || pieces.back().font != font) {
+      pieces.push_back({.font = static_cast<CTFontRef>(CFRetain(font))});
+    }
+    pieces.back().glyphs.push_back(glyph);
+    pieces.back().positions.push_back(position);
+  }
+};
+
 NSCache<NSString *, NSImage *> *imageCache() {
   static NSCache<NSString *, NSImage *> *cache = [NSCache new];
   return cache;
@@ -374,9 +400,9 @@ class CGCanvas final : public ngn::SvgCanvas {
     return width;
   }
 
-  // The composed character sequences of `text` (Foundation's grapheme clusters), each where Core
-  // Text's shaped line has its glyphs. A cluster with no glyph of its own, the tail of a ligature,
-  // joins the one before it.
+  // The composed character sequences of `text` (Foundation's grapheme clusters), each with the
+  // glyphs Core Text's shaped line has for it, where it has them. A cluster with no glyph of its
+  // own, the tail of a ligature, joins the one before it.
   std::vector<ngn::SvgGlyphCluster> glyphClusters(
       const std::string &text, double fontSize, const std::string &fontFamily, const std::string &fontWeight) override {
     NSString *string = @(text.c_str());
@@ -392,37 +418,70 @@ class CGCanvas final : public ngn::SvgCanvas {
       i = NSMaxRange(range);
     }
     std::vector<double> left(ranges.size(), INFINITY), right(ranges.size(), -INFINITY);
+    struct Glyph {
+      CTFontRef font;
+      CGGlyph glyph;
+      CGPoint position;
+    };
+    std::vector<std::vector<Glyph>> glyphs(ranges.size());
     CTLineRef line = createLine(text, fontSize, fontFamily, fontWeight, nullptr);
     for (id item in (__bridge NSArray *)CTLineGetGlyphRuns(line)) {
       auto run = (__bridge CTRunRef)item;
+      auto font = (CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(run), kCTFontAttributeName);
       CFIndex count = CTRunGetGlyphCount(run);
+      std::vector<CGGlyph> ids(static_cast<size_t>(count));
       std::vector<CGPoint> positions(static_cast<size_t>(count));
       std::vector<CGSize> advances(static_cast<size_t>(count));
       std::vector<CFIndex> indices(static_cast<size_t>(count));
+      CTRunGetGlyphs(run, CFRangeMake(0, 0), ids.data());
       CTRunGetPositions(run, CFRangeMake(0, 0), positions.data());
       CTRunGetAdvances(run, CFRangeMake(0, 0), advances.data());
       CTRunGetStringIndices(run, CFRangeMake(0, 0), indices.data());
       for (size_t g = 0; g < positions.size(); ++g) {
-        if (indices[g] < 0 || static_cast<size_t>(indices[g]) >= clusterOf.size()) {
+        if (font == nullptr || indices[g] < 0 || static_cast<size_t>(indices[g]) >= clusterOf.size()) {
           continue;
         }
         size_t c = clusterOf[static_cast<size_t>(indices[g])];
         left[c] = std::min(left[c], static_cast<double>(positions[g].x));
         right[c] = std::max(right[c], static_cast<double>(positions[g].x + advances[g].width));
+        glyphs[c].push_back({font, ids[g], positions[g]});
       }
     }
-    CFRelease(line);
     std::vector<ngn::SvgGlyphCluster> out;
     for (size_t c = 0; c < ranges.size(); ++c) {
       std::string part = [string substringWithRange:ranges[c]].UTF8String;
-      bool placed = left[c] <= right[c];
-      if (!placed && !out.empty()) {
+      if (glyphs[c].empty() && !out.empty()) {
         out.back().text += part;
-      } else {
-        out.push_back({.text = std::move(part), .x = placed ? left[c] : 0, .advance = placed ? right[c] - left[c] : 0});
+        continue;
       }
+      auto shaped = std::make_shared<ShapedGlyphs>();
+      for (const auto &g : glyphs[c]) {
+        shaped->add(g.font, g.glyph, CGPointMake(g.position.x - left[c], g.position.y));
+      }
+      bool placed = !glyphs[c].empty();
+      out.push_back({.text = std::move(part), .x = placed ? left[c] : 0, .advance = placed ? right[c] - left[c] : 0, .glyphs = shaped});
     }
+    CFRelease(line);
     return out;
+  }
+
+  void glyphCluster(const ngn::SvgGlyphCluster &cluster, double x, double y, const ngn::SvgPaint &fill) override {
+    auto shaped = std::static_pointer_cast<const ShapedGlyphs>(cluster.glyphs);
+    if (!shaped) {
+      return;
+    }
+    uint32_t argb = fill.gradient && !fill.gradient->stops.empty() ? fill.gradient->stops[0].second : fill.argb;
+    CGColorRef color = createColorImpl(argb, fill.opacity);
+    CGContextSaveGState(context_);
+    CGContextTranslateCTM(context_, x, y);
+    CGContextScaleCTM(context_, 1, -1);
+    CGContextSetTextMatrix(context_, CGAffineTransformIdentity);
+    CGContextSetFillColorWithColor(context_, color);
+    for (const auto &p : shaped->pieces) {
+      CTFontDrawGlyphs(p.font, p.glyphs.data(), p.positions.data(), p.glyphs.size(), context_);
+    }
+    CGContextRestoreGState(context_);
+    CGColorRelease(color);
   }
 
   void text(

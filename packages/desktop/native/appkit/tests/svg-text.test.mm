@@ -4,6 +4,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -28,7 +29,8 @@ struct Ink {
   bool any() const { return right >= 0; }
 };
 
-Ink inkOf(SvgNode root, int w, int h) {
+// The alpha of every pixel `root` draws in a `w` by `h` bitmap, row by row from the top.
+std::vector<uint8_t> alphaOf(SvgNode root, int w, int h) {
   std::vector<uint8_t> data(static_cast<size_t>(w * h * 4), 0);
   CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
   CGContextRef context = CGBitmapContextCreate(data.data(), w, h, 8, w * 4, space, kCGImageAlphaPremultipliedLast);
@@ -39,10 +41,19 @@ Ink inkOf(SvgNode root, int w, int h) {
   ngn::drawSvg({.root = std::move(root)}, w, h, *canvas);
   canvas.reset();
   CGContextRelease(context);
+  std::vector<uint8_t> alpha(static_cast<size_t>(w * h));
+  for (size_t i = 0; i < alpha.size(); ++i) {
+    alpha[i] = data[i * 4 + 3];
+  }
+  return alpha;
+}
+
+Ink inkOf(SvgNode root, int w, int h) {
+  auto alpha = alphaOf(std::move(root), w, h);
   Ink ink;
   for (int y = 0; y < h; ++y) {
     for (int x = 0; x < w; ++x) {
-      uint8_t a = data[static_cast<size_t>((y * w + x) * 4 + 3)];
+      uint8_t a = alpha[static_cast<size_t>(y * w + x)];
       ink.alpha = std::max(ink.alpha, a);
       if (a > 0) {
         ink.left = std::min(ink.left, x);
@@ -170,4 +181,85 @@ TEST_CASE("a textPath's opacity applies to the text on it: none at 0, half at 0.
   REQUIRE(half.any());
   CHECK(half.alpha >= 120);
   CHECK(half.alpha <= 135);
+}
+
+TEST_CASE("text on a path is drawn in its fill") {
+  SvgElement path{.kind = SvgKind::Path, .name = "line", .d = "M10 30 H190"};
+  SvgElement text{.kind = SvgKind::Text};
+  text.fontSize = len(20);
+  text.fill = {.type = ngn::SvgBrush::Type::Color, .argb = 0xffff0000};
+  text.propList = {"fill"};
+  SvgElement along{.kind = SvgKind::TextPath, .href = "line"};
+  int w = 200, h = 40;
+  std::vector<uint8_t> data(static_cast<size_t>(w * h * 4), 0);
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(data.data(), w, h, 8, w * 4, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  auto canvas = NGNMakeCGCanvas(context, CGSizeMake(w, h), 1, nil);
+  ngn::drawSvg(
+      {.root = node({.kind = SvgKind::Svg},
+                    {node({.kind = SvgKind::Defs}, {node(path)}),
+                     node(text, {node(along, {node({.kind = SvgKind::TSpan, .content = "HHHH"})})})})},
+      w,
+      h,
+      *canvas);
+  canvas.reset();
+  CGContextRelease(context);
+  int red = 0, other = 0;
+  for (size_t i = 0; i < data.size(); i += 4) {
+    if (data[i + 3] == 255) {
+      (data[i] == 255 && data[i + 1] == 0 && data[i + 2] == 0 ? red : other) += 1;
+    }
+  }
+  CHECK(red > 50);
+  CHECK(other == 0);
+}
+
+TEST_CASE("spans that overlap under a textPath at opacity 0.5 stay at half where they overlap") {
+  SvgElement path{.kind = SvgKind::Path, .name = "line", .d = "M10 30 H190"};
+  SvgElement text{.kind = SvgKind::Text};
+  text.fontSize = len(20);
+  SvgElement along{.kind = SvgKind::TextPath, .href = "line"};
+  along.opacity = 0.5;
+  SvgElement first{.kind = SvgKind::TSpan, .content = "HHHH"}, second{.kind = SvgKind::TSpan, .content = "HHHH"};
+  first.xs = {len(0)};
+  second.xs = {len(0)};
+  auto ink = inkOf(
+      node({.kind = SvgKind::Svg},
+           {node({.kind = SvgKind::Defs}, {node(path)}), node(text, {node(along, {node(first), node(second)})})}),
+      200,
+      40);
+  REQUIRE(ink.any());
+  CHECK(ink.alpha >= 120);
+  CHECK(ink.alpha <= 135);
+}
+
+TEST_CASE("Arabic on a path keeps the joined forms its run shaped, drawn as the same text off a path") {
+  // Beh twice: an initial form joined to a final one, not two isolated forms.
+  const std::string text = "\xd8\xa8\xd8\xa8";
+  auto drawn = [&](bool onPath) {
+    SvgElement path{.kind = SvgKind::Path, .name = "line", .d = "M20 40 H180"};
+    SvgElement t{.kind = SvgKind::Text};
+    t.fontSize = len(30);
+    if (onPath) {
+      return alphaOf(
+          node({.kind = SvgKind::Svg},
+               {node({.kind = SvgKind::Defs}, {node(path)}),
+                node(t, {node({.kind = SvgKind::TextPath, .href = "line"}, {node({.kind = SvgKind::TSpan, .content = text})})})}),
+          200,
+          60);
+    }
+    t.xs = {len(20)};
+    t.ys = {len(40)};
+    return alphaOf(node({.kind = SvgKind::Svg}, {node(t, {node({.kind = SvgKind::TSpan, .content = text})})}), 200, 60);
+  };
+  auto along = drawn(true), plain = drawn(false);
+  int inked = 0, differ = 0;
+  for (size_t i = 0; i < plain.size(); ++i) {
+    inked += plain[i] > 64 ? 1 : 0;
+    differ += std::abs(int(along[i]) - int(plain[i])) > 64 ? 1 : 0;
+  }
+  REQUIRE(inked > 50);
+  // The same glyphs in the same places, give or take antialiasing at their edges.
+  CHECK(differ < inked / 20);
 }

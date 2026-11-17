@@ -166,6 +166,9 @@ struct Recorder : ngn::SvgCanvas {
     }
     return out;
   }
+  void glyphCluster(const ngn::SvgGlyphCluster &cluster, double x, double y, const ngn::SvgPaint &fill) override {
+    calls.push_back("glyphs '" + cluster.text + "' " + n(x) + "," + n(y) + " " + paint(fill));
+  }
   void text(
       const std::string &text,
       double x,

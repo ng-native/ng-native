@@ -1491,8 +1491,9 @@ class Renderer {
     double fontSize{12};
     std::string fontFamily, fontWeight;
     std::optional<SvgPaint> fill;
-    // The opacity of the spans and textPath it is in, which draw through no drawNode of their own.
-    double opacity{1};
+    // The spans and textPath it is in with an opacity below 1, outermost first, which draw through
+    // no drawNode of their own: each a group, numbered in its layout, and its opacity.
+    std::vector<std::pair<int, double>> groups;
   };
   struct TextChunk {
     std::string anchor;
@@ -1508,7 +1509,8 @@ class Renderer {
     bool chunkStarts{true};
     std::shared_ptr<const TextTrack> track;
     double startOffset{0};
-    double opacity{1};
+    std::vector<std::pair<int, double>> groups;
+    int nextGroup{0};
   };
 
   static double anchorShift(const TextChunk &chunk) {
@@ -1516,11 +1518,35 @@ class Renderer {
     return chunk.anchor == "middle" ? -advance / 2 : chunk.anchor == "end" ? -advance : 0;
   }
 
+  // Runs are drawn in the order they were laid out, so what a group holds is drawn together: each
+  // group is one layer around its runs, its opacity applied once, as drawNode composites an element.
   void drawText(const SvgNode &node, const Style &style) {
     TextLayout layout;
     layoutText(node, style, layout);
+    std::vector<int> open;
     for (const auto &chunk : layout.chunks) {
-      drawChunk(chunk);
+      double shift = anchorShift(chunk);
+      for (const auto &run : chunk.runs) {
+        bool hidden = std::any_of(run.groups.begin(), run.groups.end(), [](const auto &g) { return g.second <= 0; });
+        if (!run.fill || hidden) {
+          continue;
+        }
+        size_t shared = 0;
+        while (shared < open.size() && shared < run.groups.size() && open[shared] == run.groups[shared].first) {
+          ++shared;
+        }
+        for (; open.size() > shared; open.pop_back()) {
+          canvas_->endLayer();
+        }
+        for (size_t i = shared; i < run.groups.size(); ++i) {
+          canvas_->beginLayer(run.groups[i].second);
+          open.push_back(run.groups[i].first);
+        }
+        drawRun(chunk, run, shift);
+      }
+    }
+    for (; !open.empty(); open.pop_back()) {
+      canvas_->endLayer();
     }
   }
 
@@ -1528,10 +1554,14 @@ class Renderer {
     for (const auto &child : node.children) {
       auto kind = child.element.kind;
       if (!child.element.hidden && (kind == SvgKind::TSpan || kind == SvgKind::Text || kind == SvgKind::TextPath)) {
-        double opacity = out.opacity;
-        out.opacity *= std::clamp(child.element.opacity, 0.0, 1.0);
+        bool group = child.element.opacity < 1;
+        if (group) {
+          out.groups.emplace_back(out.nextGroup++, std::max(0.0, child.element.opacity));
+        }
         layoutText(child, merge(style, child.element), out);
-        out.opacity = opacity;
+        if (group) {
+          out.groups.pop_back();
+        }
       }
     }
   }
@@ -1574,7 +1604,7 @@ class Renderer {
            .fontFamily = style.fontFamily,
            .fontWeight = style.fontWeight,
            .fill = paint(style.fill, style.fillOpacity, style, std::nullopt),
-           .opacity = out.opacity});
+           .groups = out.groups});
       out.x += advance;
     }
     layoutChildren(node, style, out);
@@ -1608,30 +1638,13 @@ class Renderer {
     out.chunkStarts = true;
   }
 
-  void drawChunk(const TextChunk &chunk) {
-    double shift = anchorShift(chunk);
-    for (const auto &run : chunk.runs) {
-      if (!run.fill || run.opacity <= 0) {
-        continue;
-      }
-      bool layer = run.opacity < 1;
-      if (layer) {
-        canvas_->beginLayer(run.opacity);
-      }
-      drawRun(chunk, run, shift);
-      if (layer) {
-        canvas_->endLayer();
-      }
-    }
-  }
-
   void drawRun(const TextChunk &chunk, const TextRun &run, double shift) {
     if (!chunk.track) {
       canvas_->text(run.text, run.x + shift, run.y, run.fontSize, run.fontFamily, run.fontWeight, *run.fill);
       return;
     }
     // Each glyph at the point its middle reaches along the path, turned with the path there, from
-    // where the shaped run has it, so a kerned pair keeps its kerning.
+    // where the shaped run has it and as it shaped it, so kerning and joined forms are kept.
     for (const auto &glyph : canvas_->glyphClusters(run.text, run.fontSize, run.fontFamily, run.fontWeight)) {
       auto at = chunk.track->at(chunk.startOffset + shift + run.x + glyph.x + glyph.advance / 2);
       if (!at) {
@@ -1640,7 +1653,7 @@ class Renderer {
       double cos = std::cos((*at)[2]), sin = std::sin((*at)[2]);
       canvas_->save();
       canvas_->concat({cos, sin, -sin, cos, (*at)[0], (*at)[1]});
-      canvas_->text(glyph.text, -glyph.advance / 2, run.y, run.fontSize, run.fontFamily, run.fontWeight, *run.fill);
+      canvas_->glyphCluster(glyph, -glyph.advance / 2, run.y, *run.fill);
       canvas_->restore();
     }
   }

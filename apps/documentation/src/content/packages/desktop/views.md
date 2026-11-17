@@ -144,11 +144,12 @@ When the app has them installed, the host compiles in the Fabric components of
   each step's subregion in either units, so a drop shadow drawn from them works. Text takes
   `text-anchor` per chunk, as Chrome does, where a span's own `x` starts a chunk, and so does its
   own `y` except on a `textPath`, where `y` places nothing. A `textPath` sets its text along the
-  shape it names, each glyph (a grapheme cluster, kerned as in its run) at the point its middle
-  reaches and turned with it, from `startOffset`, with `side="right"` reversing the path; a glyph
-  whose middle is off the path is not drawn. A span's or a `textPath`'s `opacity` applies to its
-  text. `feBlend`, the other filter steps and `foreignObject` draw
-  nothing, a `textPath`'s `method` and `spacing` are not read, and text has no letter spacing.
+  shape it names, each glyph (a grapheme cluster, drawn as its run shaped it, kerning and joined
+  forms kept) at the point its middle reaches and turned with it, from `startOffset`, with
+  `side="right"` reversing the path; a glyph whose middle is off the path is not drawn. A span's or
+  a `textPath`'s `opacity` applies once to all the text it holds. `feBlend`, the other filter steps
+  and `foreignObject` draw nothing, a `textPath`'s `method` and `spacing` are not read, and text
+  has no letter spacing.
 - A web view (`RNCWebView`, which `<web-view>` and `@ng-native/web-compat`'s `<iframe>` commit) is
   a WKWebView loading `newSource` (a url with its method, body and headers, a `file:` url, or
   `html` at its `baseUrl`), with the library's iOS events, scripts and commands: the injected

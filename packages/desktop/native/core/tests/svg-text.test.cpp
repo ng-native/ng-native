@@ -41,13 +41,13 @@ SvgElement span(std::string content) {
   return {.kind = SvgKind::TSpan, .content = std::move(content)};
 }
 
-// The text calls, and on a path the transform each glyph is drawn in before its own.
+// The text calls, and on a path each glyph's and the transform it is drawn in before it.
 std::vector<std::string> texts(SvgNode root) {
   Recorder canvas;
   ngn::drawSvg({.root = std::move(root)}, 200, 200, canvas);
   std::vector<std::string> out;
   for (const auto &c : canvas.calls) {
-    if (c.rfind("text", 0) == 0 || c.rfind("concat", 0) == 0) {
+    if (c.rfind("text", 0) == 0 || c.rfind("glyphs", 0) == 0 || c.rfind("concat", 0) == 0) {
       out.push_back(c);
     }
   }
@@ -129,15 +129,15 @@ TEST_CASE("an unfilled span draws nothing but still takes its place in the chunk
 TEST_CASE("text on a path draws each glyph at its middle's point along the path, turned with it") {
   CHECK(texts(onPath("M10 50 H110", {}, {node(span("ab"))})) ==
         std::vector<std::string>{
-            "concat 1 0 0 1 15 50", "text 'a' -5,0 12 #ff000000", "concat 1 0 0 1 25 50", "text 'b' -5,0 12 #ff000000"});
-  CHECK(texts(onPath("M10 0 V100", {}, {node(span("a"))})) == std::vector<std::string>{"concat 0 1 -1 0 10 5", "text 'a' -5,0 12 #ff000000"});
+            "concat 1 0 0 1 15 50", "glyphs 'a' -5,0 #ff000000", "concat 1 0 0 1 25 50", "glyphs 'b' -5,0 #ff000000"});
+  CHECK(texts(onPath("M10 0 V100", {}, {node(span("a"))})) == std::vector<std::string>{"concat 0 1 -1 0 10 5", "glyphs 'a' -5,0 #ff000000"});
   // Round a corner: the second glyph's middle is past it, on the way down.
   CHECK(texts(onPath("M0 0 H10 V100", {}, {node(span("abc"))}))[2] == "concat 0 1 -1 0 10 5");
   // A glyph whose middle is on the corner turns with the line after it, as in Chrome, here the
   // line that closes the path back to its start.
   SvgElement along{};
   along.lengths = {{"startOffset", len(5)}};
-  CHECK(texts(onPath("M0 50 H10 Z", along, {node(span("a"))})) == std::vector<std::string>{"concat -1 0 0 -1 10 50", "text 'a' -5,0 12 #ff000000"});
+  CHECK(texts(onPath("M0 50 H10 Z", along, {node(span("a"))})) == std::vector<std::string>{"concat -1 0 0 -1 10 50", "glyphs 'a' -5,0 #ff000000"});
 }
 
 TEST_CASE("startOffset moves the text along the path, as a length or a share of the path's") {
@@ -154,29 +154,29 @@ TEST_CASE("text-anchor on a path sets the text back from startOffset along it") 
   along.textAnchor = "middle";
   CHECK(texts(onPath("M10 50 H110", along, {node(span("ab"))})) ==
         std::vector<std::string>{
-            "concat 1 0 0 1 55 50", "text 'a' -5,0 12 #ff000000", "concat 1 0 0 1 65 50", "text 'b' -5,0 12 #ff000000"});
+            "concat 1 0 0 1 55 50", "glyphs 'a' -5,0 #ff000000", "concat 1 0 0 1 65 50", "glyphs 'b' -5,0 #ff000000"});
   along.textAnchor = "end";
   CHECK(texts(onPath("M10 50 H110", along, {node(span("ab"))}))[0] == "concat 1 0 0 1 45 50");
 }
 
 TEST_CASE("a glyph whose middle is off either end of the path, or on its very end, is not drawn, as in Chrome") {
-  CHECK(texts(onPath("M0 50 H15", {}, {node(span("ab"))})) == std::vector<std::string>{"concat 1 0 0 1 5 50", "text 'a' -5,0 12 #ff000000"});
+  CHECK(texts(onPath("M0 50 H15", {}, {node(span("ab"))})) == std::vector<std::string>{"concat 1 0 0 1 5 50", "glyphs 'a' -5,0 #ff000000"});
   SvgElement before{};
   before.lengths = {{"startOffset", len(-8)}};
-  CHECK(texts(onPath("M0 50 H100", before, {node(span("ab"))})) == std::vector<std::string>{"concat 1 0 0 1 7 50", "text 'b' -5,0 12 #ff000000"});
+  CHECK(texts(onPath("M0 50 H100", before, {node(span("ab"))})) == std::vector<std::string>{"concat 1 0 0 1 7 50", "glyphs 'b' -5,0 #ff000000"});
 }
 
 TEST_CASE("side right sets the text along the path reversed") {
   SvgElement right{};
   right.side = "right";
-  CHECK(texts(onPath("M0 50 H100", right, {node(span("a"))})) == std::vector<std::string>{"concat -1 0 0 -1 95 50", "text 'a' -5,0 12 #ff000000"});
+  CHECK(texts(onPath("M0 50 H100", right, {node(span("a"))})) == std::vector<std::string>{"concat -1 0 0 -1 95 50", "glyphs 'a' -5,0 #ff000000"});
 }
 
 TEST_CASE("a span on a path: dx moves it along, dy off the path") {
   SvgElement moved = span("a");
   moved.dxs = {len(10)};
   moved.dys = {len(-4)};
-  CHECK(texts(onPath("M0 50 H100", {}, {node(moved)})) == std::vector<std::string>{"concat 1 0 0 1 15 50", "text 'a' -5,-4 12 #ff000000"});
+  CHECK(texts(onPath("M0 50 H100", {}, {node(moved)})) == std::vector<std::string>{"concat 1 0 0 1 15 50", "glyphs 'a' -5,-4 #ff000000"});
 }
 
 TEST_CASE("a span on a path: x is a new place along it from startOffset, and y places nothing") {
@@ -188,11 +188,11 @@ TEST_CASE("a span on a path: x is a new place along it from startOffset, and y p
   CHECK(texts(onPath("M0 50 H100", along, {node(span("ab")), node(placed)})) ==
         std::vector<std::string>{
             "concat 1 0 0 1 15 50",
-            "text 'a' -5,0 12 #ff000000",
+            "glyphs 'a' -5,0 #ff000000",
             "concat 1 0 0 1 25 50",
-            "text 'b' -5,0 12 #ff000000",
+            "glyphs 'b' -5,0 #ff000000",
             "concat 1 0 0 1 55 50",
-            "text 'c' -5,0 12 #ff000000"});
+            "glyphs 'c' -5,0 #ff000000"});
 }
 
 TEST_CASE("text on a curve: the glyph in the middle of an arch sits on top of it, level") {
@@ -236,16 +236,16 @@ TEST_CASE("a glyph on a path is drawn as the canvas clusters it, a base and its 
   auto calls = texts(onPath("M0 50 H100", {}, {node(span("\xe0\xa4\x95\xe0\xa4\xbf" "x"))}));
   CHECK(calls == std::vector<std::string>{
                      "concat 1 0 0 1 30 50",
-                     "text '\xe0\xa4\x95\xe0\xa4\xbf' -30,0 12 #ff000000",
+                     "glyphs '\xe0\xa4\x95\xe0\xa4\xbf' -30,0 #ff000000",
                      "concat 1 0 0 1 65 50",
-                     "text 'x' -5,0 12 #ff000000"});
+                     "glyphs 'x' -5,0 #ff000000"});
 }
 
 TEST_CASE("a glyph on a path is placed where the shaped run has it, so a kerned pair keeps its kerning") {
   // The recorder kerns A and V together by three points: V starts at 7, not at A's own advance.
   CHECK(texts(onPath("M0 50 H100", {}, {node(span("AV"))})) ==
         std::vector<std::string>{
-            "concat 1 0 0 1 5 50", "text 'A' -5,0 12 #ff000000", "concat 1 0 0 1 12 50", "text 'V' -5,0 12 #ff000000"});
+            "concat 1 0 0 1 5 50", "glyphs 'A' -5,0 #ff000000", "concat 1 0 0 1 12 50", "glyphs 'V' -5,0 #ff000000"});
 }
 
 TEST_CASE("text after a path carries on from the path's end, as Chrome places it") {
@@ -256,7 +256,7 @@ TEST_CASE("text after a path carries on from the path's end, as Chrome places it
             .back() == "text 'c' 10,150 12 #ff000000");
 }
 
-TEST_CASE("a textPath's or a span's opacity composites what it draws, and 0 draws nothing") {
+TEST_CASE("a textPath's or a span's opacity composites all it holds as one, and 0 draws nothing") {
   auto drawn = [](double pathOpacity, double spanOpacity) {
     SvgElement along{};
     along.opacity = pathOpacity;
@@ -266,7 +266,7 @@ TEST_CASE("a textPath's or a span's opacity composites what it draws, and 0 draw
     ngn::drawSvg({.root = onPath("M0 50 H100", along, {node(inner)})}, 200, 200, canvas);
     std::vector<std::string> out;
     for (const auto &c : canvas.calls) {
-      if (c.rfind("text", 0) == 0 || c.rfind("layer", 0) == 0 || c == "end layer") {
+      if (c.rfind("text", 0) == 0 || c.rfind("glyphs", 0) == 0 || c.rfind("layer", 0) == 0 || c == "end layer") {
         out.push_back(c);
       }
     }
@@ -274,9 +274,11 @@ TEST_CASE("a textPath's or a span's opacity composites what it draws, and 0 draw
   };
   CHECK(drawn(0, 1).empty());
   CHECK(drawn(1, 0).empty());
-  CHECK(drawn(0.5, 1) == std::vector<std::string>{"layer 0.5", "text 'a' -5,0 12 #ff000000", "end layer"});
-  CHECK(drawn(0.5, 0.5) == std::vector<std::string>{"layer 0.25", "text 'a' -5,0 12 #ff000000", "end layer"});
-  CHECK(drawn(1, 1) == std::vector<std::string>{"text 'a' -5,0 12 #ff000000"});
+  CHECK(drawn(0.5, 1) == std::vector<std::string>{"layer 0.5", "glyphs 'a' -5,0 #ff000000", "end layer"});
+  // Nested, each composites its own: a layer in a layer.
+  CHECK(drawn(0.5, 0.5) ==
+        std::vector<std::string>{"layer 0.5", "layer 0.5", "glyphs 'a' -5,0 #ff000000", "end layer", "end layer"});
+  CHECK(drawn(1, 1) == std::vector<std::string>{"glyphs 'a' -5,0 #ff000000"});
   // Off a path too: a span's opacity in a text.
   SvgElement faint = span("b");
   faint.opacity = 0.5;
@@ -284,10 +286,41 @@ TEST_CASE("a textPath's or a span's opacity composites what it draws, and 0 draw
   ngn::drawSvg({.root = node(svg(), {node(text(0, 20), {node(faint), node(span("c"))})})}, 200, 200, canvas);
   std::vector<std::string> out;
   for (const auto &c : canvas.calls) {
-    if (c.rfind("text", 0) == 0 || c.rfind("layer", 0) == 0 || c == "end layer") {
+    if (c.rfind("text", 0) == 0 || c.rfind("glyphs", 0) == 0 || c.rfind("layer", 0) == 0 || c == "end layer") {
       out.push_back(c);
     }
   }
   // The span after it is drawn whole again.
   CHECK(out == std::vector<std::string>{"layer 0.5", "text 'b' 0,20 12 #ff000000", "end layer", "text 'c' 10,20 12 #ff000000"});
+}
+
+TEST_CASE("spans that overlap under a textPath at opacity 0.5 are drawn in one layer, so the overlap stays at 0.5") {
+  SvgElement along{};
+  along.opacity = 0.5;
+  SvgElement first = span("a"), second = span("b");
+  first.xs = {len(0)};
+  second.xs = {len(0)};
+  Recorder canvas;
+  ngn::drawSvg({.root = onPath("M0 50 H100", along, {node(first), node(second)})}, 200, 200, canvas);
+  std::vector<std::string> out;
+  for (const auto &c : canvas.calls) {
+    if (c.rfind("glyphs", 0) == 0 || c.rfind("layer", 0) == 0 || c == "end layer") {
+      out.push_back(c);
+    }
+  }
+  CHECK(out == std::vector<std::string>{"layer 0.5", "glyphs 'a' -5,0 #ff000000", "glyphs 'b' -5,0 #ff000000", "end layer"});
+  // Two faint spans side by side are two groups, a layer each.
+  SvgElement faintA = span("a"), faintB = span("b");
+  faintA.opacity = faintB.opacity = 0.5;
+  Recorder siblings;
+  ngn::drawSvg({.root = node(svg(), {node(text(0, 20), {node(faintA), node(faintB)})})}, 200, 200, siblings);
+  std::vector<std::string> drawnSiblings;
+  for (const auto &c : siblings.calls) {
+    if (c.rfind("text", 0) == 0 || c.rfind("layer", 0) == 0 || c == "end layer") {
+      drawnSiblings.push_back(c);
+    }
+  }
+  CHECK(drawnSiblings ==
+        std::vector<std::string>{
+            "layer 0.5", "text 'a' 0,20 12 #ff000000", "end layer", "layer 0.5", "text 'b' 10,20 12 #ff000000", "end layer"});
 }
