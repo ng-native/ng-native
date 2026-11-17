@@ -1,5 +1,6 @@
 #import "modal-host-view.h"
 #import "modal-focus.h"
+#import "presentation-label.h"
 #import "undo.h"
 #import "screen-capture.h"
 
@@ -100,7 +101,7 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
 - (void)takeFocus {
   NSWindow *window = _cover.window;
   [window makeFirstResponder:_cover];
-  _cover.accessibilityLabel = self.axInfo.label.empty() ? nil : @(self.axInfo.label.c_str());
+  [self labelPresentation];
   __weak NGNModalHostView *weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
     NGNModalHostView *modal = weakSelf;
@@ -111,6 +112,22 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
       [modal->_cover.window makeFirstResponder:first];
     }
   });
+}
+
+// Named by the modal's own accessibility label, or its title, again whenever either changes.
+- (void)labelPresentation {
+  if (_cover != nil) {
+    ngn::appkit::labelPresentation(_cover, self.axInfo.label, [self presentationTitle]);
+  }
+}
+
+- (std::string)presentationTitle {
+  return {};
+}
+
+- (void)updateProps:(const Props::Shared &)props {
+  [super updateProps:props];
+  [self labelPresentation];
 }
 
 + (std::function<NSSize(NSInteger, NSInteger, NSSize)>)sheetSizer {

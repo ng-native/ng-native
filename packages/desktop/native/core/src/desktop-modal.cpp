@@ -28,6 +28,10 @@ ModalPresentation modalPresentation(const DesktopModalProps &props) {
   return ModalPresentation::Sheet;
 }
 
+std::string presentationLabel(std::string_view label, std::string_view title) {
+  return std::string(label.empty() ? title : label);
+}
+
 namespace {
 
 std::optional<Float> definite(const ViewProps &props, facebook::yoga::Dimension axis) {

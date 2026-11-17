@@ -226,6 +226,7 @@ if(NGN_TESTS)
         appkit/undo.mm appkit/tests/undo.test.mm
         appkit/input-replay.mm appkit/tests/input-replay.test.mm
         appkit/modal-focus.mm appkit/tests/modal-focus.test.mm
+        appkit/presentation-label.mm appkit/tests/presentation-label.test.mm
         appkit/glass-effect.mm appkit/tests/glass.test.mm
         appkit/menu-bar.mm appkit/tests/menu-bar.test.mm
         appkit/system.mm appkit/tests/system.test.mm

@@ -74,6 +74,10 @@ constexpr CGFloat kMargin = 20;
   return bar ? ngn::sheetChrome(*bar, self.presentedAs) : ngn::SheetChrome{};
 }
 
+- (std::string)presentationTitle {
+  return [self currentChrome].label;
+}
+
 - (NSRect)contentFrameIn:(NSRect)bounds {
   return NSMakeRect(
       NSMinX(bounds), NSMinY(bounds) + _chrome.top(), NSWidth(bounds),
@@ -103,7 +107,7 @@ constexpr CGFloat kMargin = 20;
     return;
   }
   auto chrome = [self currentChrome];
-  container.accessibilityLabel = chrome.label.empty() ? nil : nsString(chrome.label);
+  [self labelPresentation];
   if (chrome == _chrome && (_chromeView != nil || (chrome.heading.empty() && chrome.buttons.empty()))) {
     return;
   }

@@ -54,6 +54,7 @@ add_executable(ngn-macos
     modal-focus.mm
     modal-host-view.mm
     native-controls.mm
+    presentation-label.mm
     presented-screen.mm
     push.mm
     network.mm

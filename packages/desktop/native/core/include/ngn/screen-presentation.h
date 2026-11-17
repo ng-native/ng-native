@@ -65,7 +65,8 @@ struct SheetChrome {
   // Empty for none.
   std::string heading;
   std::vector<SheetButton> buttons;
-  // What the presentation's accessibility label is: the title, in a popover too.
+  // What names the presentation, in a popover too, when the screen has no accessibility label of
+  // its own (presentationLabel, desktop-modal.h): the title.
   std::string label;
   bool operator==(const SheetChrome &) const = default;
 

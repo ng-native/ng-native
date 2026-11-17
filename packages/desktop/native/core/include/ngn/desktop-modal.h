@@ -20,6 +20,9 @@
 #include <react/renderer/components/modal/ModalHostViewState.h>
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
 
+#include <string>
+#include <string_view>
+
 namespace facebook::react {
 extern const char ModalHostViewComponentName[];
 } // namespace facebook::react
@@ -41,6 +44,12 @@ class DesktopModalProps final : public facebook::react::ViewProps {
 };
 
 ModalPresentation modalPresentation(const DesktopModalProps &props);
+
+// The name a sheet, cover or popover is announced by: the presented view's own accessibility
+// label, or without one its title (a presented screen's header title; a <modal> has none). Empty
+// for no name. The host names the presentation's container with it, and again whenever either
+// changes.
+std::string presentationLabel(std::string_view label, std::string_view title);
 
 constexpr facebook::react::Size kMinimumSheetSize{320, 200};
 // A sheet's width when its root has no definite one.

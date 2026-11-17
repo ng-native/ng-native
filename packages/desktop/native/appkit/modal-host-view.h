@@ -10,7 +10,8 @@
 // focus while it is up; the window gets it back when it goes. Whatever the presentation, the focus
 // moves into it when it opens (to the first view in its Tab order, `initialFocus`, else its
 // container), Tab stays inside it, and the focus goes back to the view that held it when it closes
-// (modal-focus.h). Its container is labelled with the modal's accessibility label. A cover sits below the title bar
+// (modal-focus.h). Its container is named by the modal's accessibility label, or a presented
+// screen's title without one, and follows either as it changes. A cover sits below the title bar
 // and the toolbar, and a transparent one leaves the screen under it showing.
 //
 // A modal with an `anchor` (desktop-modal.h) is a popover instead: an NSPopover at the anchor's
@@ -69,4 +70,10 @@
 - (NSSize)chromeSize;
 // Called once presented, before the app hears it.
 - (void)didPresent;
+// What names the presentation when the modal has no accessibility label of its own: nothing by
+// default, a presented screen's header title.
+- (std::string)presentationTitle;
+// Names the presentation's container (presentation-label.h) as it opens, and again whenever its
+// label or title changes.
+- (void)labelPresentation;
 @end
