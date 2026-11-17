@@ -366,14 +366,40 @@ class CGCanvas final : public ngn::SvgCanvas {
     CGContextRestoreGState(context_);
   }
 
-  double text(
+  double measureText(const std::string &text, double fontSize, const std::string &fontFamily, const std::string &fontWeight) override {
+    CTLineRef line = createLine(text, fontSize, fontFamily, fontWeight, nullptr);
+    double width = CTLineGetTypographicBounds(line, nullptr, nullptr, nullptr);
+    CFRelease(line);
+    return width;
+  }
+
+  void text(
       const std::string &text,
       double x,
       double y,
       double fontSize,
       const std::string &fontFamily,
       const std::string &fontWeight,
-      const ngn::SvgPaint *fill) override {
+      const ngn::SvgPaint &fill) override {
+    CTLineRef line = createLine(text, fontSize, fontFamily, fontWeight, &fill);
+    CGContextSaveGState(context_);
+    CGContextTranslateCTM(context_, x, y);
+    CGContextScaleCTM(context_, 1, -1);
+    CGContextSetTextMatrix(context_, CGAffineTransformIdentity);
+    CGContextSetTextPosition(context_, 0, 0);
+    CTLineDraw(line, context_);
+    CGContextRestoreGState(context_);
+    CFRelease(line);
+  }
+
+ private:
+  // A +1 line of `text` in the font, in `fill`'s colour (a gradient's first stop) when given.
+  static CTLineRef createLine(
+      const std::string &text,
+      double fontSize,
+      const std::string &fontFamily,
+      const std::string &fontWeight,
+      const ngn::SvgPaint *fill) {
     NSFont *font = fontFamily.empty() ? nil : [NSFont fontWithName:@(fontFamily.c_str()) size:fontSize];
     if (font == nil) {
       int weight = fontWeight == "bold" ? 700 : std::atoi(fontWeight.c_str());
@@ -385,22 +411,9 @@ class CGCanvas final : public ngn::SvgCanvas {
         initWithString:@(text.c_str())
             attributes:@{NSFontAttributeName : font, (__bridge id)kCTForegroundColorAttributeName : (__bridge id)color}];
     CGColorRelease(color);
-    CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)string);
-    double width = CTLineGetTypographicBounds(line, nullptr, nullptr, nullptr);
-    if (fill != nullptr) {
-      CGContextSaveGState(context_);
-      CGContextTranslateCTM(context_, x, y);
-      CGContextScaleCTM(context_, 1, -1);
-      CGContextSetTextMatrix(context_, CGAffineTransformIdentity);
-      CGContextSetTextPosition(context_, 0, 0);
-      CTLineDraw(line, context_);
-      CGContextRestoreGState(context_);
-    }
-    CFRelease(line);
-    return width;
+    return CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)string);
   }
 
- private:
   struct Mask {
     CGContextRef parent;
     CGContextRef mask;

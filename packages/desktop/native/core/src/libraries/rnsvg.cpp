@@ -137,7 +137,9 @@ void common(SvgElement &e, const P &p) {
     if (font.isObject()) {
       auto family = font.getDefault("fontFamily", "");
       auto weight = font.getDefault("fontWeight", "");
+      auto anchor = font.getDefault("textAnchor", "");
       e.fontFamily = family.isString() ? family.getString() : "";
+      e.textAnchor = anchor.isString() ? anchor.getString() : "";
       e.fontWeight = weight.isString() ? weight.getString() : weight.isNumber() ? std::to_string(weight.asInt()) : "";
     }
   }
@@ -273,6 +275,13 @@ std::optional<SvgElement> svgElement(const Props &props) {
     common(e, *p);
     text(e, *p);
     e.content = p->content;
+  } else if (const auto *p = dynamic_cast<const RNSVGTextPathProps *>(&props)) {
+    e.kind = SvgKind::TextPath;
+    common(e, *p);
+    text(e, *p);
+    e.href = p->href;
+    e.side = p->side;
+    lengths(e, {{"startOffset", &p->startOffset}});
   } else if (const auto *p = dynamic_cast<const RNSVGMarkerProps *>(&props)) {
     e.kind = SvgKind::Marker;
     common(e, *p);

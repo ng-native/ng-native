@@ -138,16 +138,19 @@ struct Recorder : ngn::SvgCanvas {
   void image(const std::string &uri, const ngn::SvgRect &r, const std::string &align, int meetOrSlice, double opacity) override {
     calls.push_back("image " + uri + " " + n(r.x) + "," + n(r.y) + " " + n(r.width) + "x" + n(r.height));
   }
-  double text(
+  // Ten points a byte, so a test reads an advance from a string's length.
+  double measureText(const std::string &text, double fontSize, const std::string &family, const std::string &weight) override {
+    return static_cast<double>(text.size()) * 10;
+  }
+  void text(
       const std::string &text,
       double x,
       double y,
       double fontSize,
       const std::string &family,
       const std::string &weight,
-      const ngn::SvgPaint *fill) override {
-    calls.push_back("text '" + text + "' " + n(x) + "," + n(y) + " " + n(fontSize) + (fill ? " " + paint(*fill) : ""));
-    return static_cast<double>(text.size()) * 10;
+      const ngn::SvgPaint &fill) override {
+    calls.push_back("text '" + text + "' " + n(x) + "," + n(y) + " " + n(fontSize) + " " + paint(fill));
   }
 
   // The calls that draw, without the state around them.

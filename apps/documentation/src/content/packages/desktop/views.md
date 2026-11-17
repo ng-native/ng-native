@@ -141,9 +141,12 @@ When the app has them installed, the host compiles in the Fabric components of
   `patternTransform`. A filter draws its element offscreen and runs its steps over the pixels:
   `feGaussianBlur`, `feOffset`, `feColorMatrix` (all four types), `feFlood`, `feComposite` (every
   operator) and `feMerge`, with named results, `SourceGraphic` and `SourceAlpha`, the region and
-  each step's subregion in either units, so a drop shadow drawn from them works. `feBlend`, the
-  other filter steps, `foreignObject` and `textPath` draw nothing, and text has no anchor, path or
-  letter spacing.
+  each step's subregion in either units, so a drop shadow drawn from them works. Text takes
+  `text-anchor` per chunk, as Chrome does, where a span's own `x` or `y` starts a chunk. A
+  `textPath` sets its text along the shape it names, each glyph at the point its middle reaches
+  and turned with it, from `startOffset`, with `side="right"` reversing the path; a glyph whose
+  middle is off the path is not drawn. `feBlend`, the other filter steps and `foreignObject` draw
+  nothing, a `textPath`'s `method` and `spacing` are not read, and text has no letter spacing.
 - A web view (`RNCWebView`, which `<web-view>` and `@ng-native/web-compat`'s `<iframe>` commit) is
   a WKWebView loading `newSource` (a url with its method, body and headers, a `file:` url, or
   `html` at its `baseUrl`), with the library's iOS events, scripts and commands: the injected

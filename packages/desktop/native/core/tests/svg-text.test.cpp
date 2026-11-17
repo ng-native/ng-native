@@ -1,0 +1,256 @@
+// Text anchors and text along a path in the core's SVG model (svg.h): where drawSvg asks the
+// canvas to draw each run, or each glyph on a path. The recorder measures ten points a byte.
+#include "ngn/svg.h"
+#include "svg-recorder.h"
+
+#include <doctest/doctest.h>
+
+#include <cmath>
+#include <sstream>
+#include <string>
+#include <vector>
+
+using ngn::SvgBrush;
+using ngn::SvgElement;
+using ngn::SvgKind;
+using ngn::SvgLength;
+using ngn::SvgNode;
+
+namespace {
+
+SvgLength len(double v) {
+  return {.value = v, .set = true};
+}
+SvgLength pct(double v) {
+  return {.value = v, .unit = SvgLength::Unit::Percent, .set = true};
+}
+SvgNode node(SvgElement element, std::vector<SvgNode> children = {}) {
+  return {.element = std::move(element), .children = std::move(children)};
+}
+SvgElement svg() {
+  return {.kind = SvgKind::Svg};
+}
+SvgElement text(double x, double y, std::string anchor = "") {
+  SvgElement e{.kind = SvgKind::Text};
+  e.xs = {len(x)};
+  e.ys = {len(y)};
+  e.textAnchor = std::move(anchor);
+  return e;
+}
+SvgElement span(std::string content) {
+  return {.kind = SvgKind::TSpan, .content = std::move(content)};
+}
+
+// The text calls, and on a path the transform each glyph is drawn in before its own.
+std::vector<std::string> texts(SvgNode root) {
+  Recorder canvas;
+  ngn::drawSvg({.root = std::move(root)}, 200, 200, canvas);
+  std::vector<std::string> out;
+  for (const auto &c : canvas.calls) {
+    if (c.rfind("text", 0) == 0 || c.rfind("concat", 0) == 0) {
+      out.push_back(c);
+    }
+  }
+  return out;
+}
+
+// `content` along the path `d`, named "p" in the svg's defs.
+SvgNode onPath(const std::string &d, SvgElement path, std::vector<SvgNode> spans, SvgElement shape = {.kind = SvgKind::Path}) {
+  shape.name = "p";
+  if (shape.kind == SvgKind::Path) {
+    shape.d = d;
+  }
+  path.kind = SvgKind::TextPath;
+  if (path.href.empty()) {
+    path.href = "p";
+  }
+  return node(
+      svg(), {node({.kind = SvgKind::Defs}, {node(shape)}), node({.kind = SvgKind::Text}, {node(path, std::move(spans))})});
+}
+
+} // namespace
+
+TEST_CASE("text-anchor middle and end set a text back by half and all of its advance") {
+  CHECK(texts(node(svg(), {node(text(50, 20), {node(span("abcd"))})})) == std::vector<std::string>{"text 'abcd' 50,20 12 #ff000000"});
+  CHECK(texts(node(svg(), {node(text(50, 20, "start"), {node(span("abcd"))})})) == std::vector<std::string>{"text 'abcd' 50,20 12 #ff000000"});
+  CHECK(texts(node(svg(), {node(text(50, 20, "middle"), {node(span("abcd"))})})) == std::vector<std::string>{"text 'abcd' 30,20 12 #ff000000"});
+  CHECK(texts(node(svg(), {node(text(50, 20, "end"), {node(span("abcd"))})})) == std::vector<std::string>{"text 'abcd' 10,20 12 #ff000000"});
+}
+
+TEST_CASE("an anchor sets back the whole chunk, every span in it, by the anchor of the chunk's first characters") {
+  SvgElement b = span("cd");
+  b.dxs = {len(2)};
+  // The chunk is 42 long with the gap: it starts at 50 - 21.
+  CHECK(texts(node(svg(), {node(text(50, 20, "middle"), {node(span("ab")), node(b)})})) ==
+        std::vector<std::string>{"text 'ab' 29,20 12 #ff000000", "text 'cd' 51,20 12 #ff000000"});
+  // A later span's own anchor does not move a chunk it did not start.
+  SvgElement start = span("cd");
+  start.textAnchor = "start";
+  CHECK(texts(node(svg(), {node(text(50, 20, "end"), {node(span("ab")), node(start)})})) ==
+        std::vector<std::string>{"text 'ab' 10,20 12 #ff000000", "text 'cd' 30,20 12 #ff000000"});
+}
+
+TEST_CASE("a span placed by its own x or y starts a chunk of its own, anchored by its own anchor") {
+  SvgElement second = span("cdef");
+  second.xs = {len(50)};
+  second.ys = {len(40)};
+  second.textAnchor = "end";
+  CHECK(texts(node(svg(), {node(text(50, 20, "middle"), {node(span("ab")), node(second)})})) ==
+        std::vector<std::string>{"text 'ab' 40,20 12 #ff000000", "text 'cdef' 10,40 12 #ff000000"});
+  // A y alone starts one too, from where the last ended before it was anchored.
+  SvgElement lower = span("cd");
+  lower.ys = {len(40)};
+  CHECK(texts(node(svg(), {node(text(50, 20, "middle"), {node(span("ab")), node(lower)})})) ==
+        std::vector<std::string>{"text 'ab' 40,20 12 #ff000000", "text 'cd' 60,40 12 #ff000000"});
+  // And an x alone.
+  SvgElement further = span("cd");
+  further.xs = {len(100)};
+  CHECK(texts(node(svg(), {node(text(50, 20, "middle"), {node(span("ab")), node(further)})})) ==
+        std::vector<std::string>{"text 'ab' 40,20 12 #ff000000", "text 'cd' 90,20 12 #ff000000"});
+}
+
+TEST_CASE("text-anchor is inherited from a group, and the text's own wins over it") {
+  SvgElement group{.kind = SvgKind::Group};
+  group.textAnchor = "end";
+  CHECK(texts(node(svg(), {node(group, {node(text(50, 20), {node(span("ab"))})})})) ==
+        std::vector<std::string>{"text 'ab' 30,20 12 #ff000000"});
+  CHECK(texts(node(svg(), {node(group, {node(text(50, 20, "middle"), {node(span("ab"))})})})) ==
+        std::vector<std::string>{"text 'ab' 40,20 12 #ff000000"});
+}
+
+TEST_CASE("an unfilled span draws nothing but still takes its place in the chunk") {
+  SvgElement hidden = span("ab");
+  hidden.fill = {.type = SvgBrush::Type::None};
+  hidden.propList = {"fill"};
+  CHECK(texts(node(svg(), {node(text(50, 20, "middle"), {node(hidden), node(span("c"))})})) ==
+        std::vector<std::string>{"text 'c' 55,20 12 #ff000000"});
+}
+
+TEST_CASE("text on a path draws each glyph at its middle's point along the path, turned with it") {
+  CHECK(texts(onPath("M10 50 H110", {}, {node(span("ab"))})) ==
+        std::vector<std::string>{
+            "concat 1 0 0 1 15 50", "text 'a' -5,0 12 #ff000000", "concat 1 0 0 1 25 50", "text 'b' -5,0 12 #ff000000"});
+  CHECK(texts(onPath("M10 0 V100", {}, {node(span("a"))})) == std::vector<std::string>{"concat 0 1 -1 0 10 5", "text 'a' -5,0 12 #ff000000"});
+  // Round a corner: the second glyph's middle is past it, on the way down.
+  CHECK(texts(onPath("M0 0 H10 V100", {}, {node(span("abc"))}))[2] == "concat 0 1 -1 0 10 5");
+  // A glyph whose middle is on the corner turns with the line after it, as in Chrome, here the
+  // line that closes the path back to its start.
+  SvgElement along{};
+  along.lengths = {{"startOffset", len(5)}};
+  CHECK(texts(onPath("M0 50 H10 Z", along, {node(span("a"))})) == std::vector<std::string>{"concat -1 0 0 -1 10 50", "text 'a' -5,0 12 #ff000000"});
+}
+
+TEST_CASE("startOffset moves the text along the path, as a length or a share of the path's") {
+  SvgElement along{};
+  along.lengths = {{"startOffset", len(20)}};
+  CHECK(texts(onPath("M10 50 H110", along, {node(span("a"))}))[0] == "concat 1 0 0 1 35 50");
+  along.lengths = {{"startOffset", pct(50)}};
+  CHECK(texts(onPath("M10 50 H110", along, {node(span("a"))}))[0] == "concat 1 0 0 1 65 50");
+}
+
+TEST_CASE("text-anchor on a path sets the text back from startOffset along it") {
+  SvgElement along{};
+  along.lengths = {{"startOffset", pct(50)}};
+  along.textAnchor = "middle";
+  CHECK(texts(onPath("M10 50 H110", along, {node(span("ab"))})) ==
+        std::vector<std::string>{
+            "concat 1 0 0 1 55 50", "text 'a' -5,0 12 #ff000000", "concat 1 0 0 1 65 50", "text 'b' -5,0 12 #ff000000"});
+  along.textAnchor = "end";
+  CHECK(texts(onPath("M10 50 H110", along, {node(span("ab"))}))[0] == "concat 1 0 0 1 45 50");
+}
+
+TEST_CASE("a glyph whose middle is off either end of the path, or on its very end, is not drawn, as in Chrome") {
+  CHECK(texts(onPath("M0 50 H15", {}, {node(span("ab"))})) == std::vector<std::string>{"concat 1 0 0 1 5 50", "text 'a' -5,0 12 #ff000000"});
+  SvgElement before{};
+  before.lengths = {{"startOffset", len(-8)}};
+  CHECK(texts(onPath("M0 50 H100", before, {node(span("ab"))})) == std::vector<std::string>{"concat 1 0 0 1 7 50", "text 'b' -5,0 12 #ff000000"});
+}
+
+TEST_CASE("side right sets the text along the path reversed") {
+  SvgElement right{};
+  right.side = "right";
+  CHECK(texts(onPath("M0 50 H100", right, {node(span("a"))})) == std::vector<std::string>{"concat -1 0 0 -1 95 50", "text 'a' -5,0 12 #ff000000"});
+}
+
+TEST_CASE("a span on a path: dx moves it along, dy off the path") {
+  SvgElement moved = span("a");
+  moved.dxs = {len(10)};
+  moved.dys = {len(-4)};
+  CHECK(texts(onPath("M0 50 H100", {}, {node(moved)})) == std::vector<std::string>{"concat 1 0 0 1 15 50", "text 'a' -5,-4 12 #ff000000"});
+}
+
+TEST_CASE("a span on a path: x is a new place along it from startOffset, and y places nothing") {
+  SvgElement along{};
+  along.lengths = {{"startOffset", len(10)}};
+  SvgElement placed = span("c");
+  placed.xs = {len(40)};
+  placed.ys = {len(20)};
+  CHECK(texts(onPath("M0 50 H100", along, {node(span("ab")), node(placed)})) ==
+        std::vector<std::string>{
+            "concat 1 0 0 1 15 50",
+            "text 'a' -5,0 12 #ff000000",
+            "concat 1 0 0 1 25 50",
+            "text 'b' -5,0 12 #ff000000",
+            "concat 1 0 0 1 55 50",
+            "text 'c' -5,0 12 #ff000000"});
+}
+
+TEST_CASE("text on a curve: the glyph in the middle of an arch sits on top of it, level") {
+  SvgElement along{};
+  along.lengths = {{"startOffset", pct(50)}};
+  along.textAnchor = "middle";
+  auto calls = texts(onPath("M0 50 A50 50 0 0 1 100 50", along, {node(span("a"))}));
+  REQUIRE(calls.size() == 2);
+  std::istringstream concat(calls[0].substr(std::string("concat ").size()));
+  double a, b, c, d, e, f;
+  concat >> a >> b >> c >> d >> e >> f;
+  // Level within a degree: the curve is followed as short lines.
+  CHECK(a == doctest::Approx(1).epsilon(0.001));
+  CHECK(std::abs(b) < 0.02);
+  CHECK(e == doctest::Approx(50).epsilon(0.002));
+  CHECK(std::abs(f) < 0.1);
+  // A quarter of the way round, it leans in at 45 degrees.
+  along.lengths = {{"startOffset", pct(25)}};
+  std::istringstream quarter(texts(onPath("M0 50 A50 50 0 0 1 100 50", along, {node(span("a"))}))[0].substr(7));
+  quarter >> a >> b >> c >> d >> e >> f;
+  CHECK(a == doctest::Approx(std::sqrt(0.5)).epsilon(0.02));
+  CHECK(b == doctest::Approx(-std::sqrt(0.5)).epsilon(0.02));
+  CHECK(e == doctest::Approx(50 - 50 * std::sqrt(0.5)).epsilon(0.01));
+  CHECK(f == doctest::Approx(50 - 50 * std::sqrt(0.5)).epsilon(0.01));
+}
+
+TEST_CASE("the path's own transform places the text, and a missing path or one that is no shape draws nothing") {
+  SvgElement shifted{.kind = SvgKind::Path};
+  shifted.matrix = ngn::SvgMatrix::translate(0, 10);
+  CHECK(texts(onPath("M0 50 H100", {}, {node(span("a"))}, shifted))[0] == "concat 1 0 0 1 5 60");
+  SvgElement missing{};
+  missing.href = "nowhere";
+  CHECK(texts(onPath("M0 50 H100", missing, {node(span("a"))})).empty());
+  CHECK(texts(onPath("", {}, {node(span("a"))}, {.kind = SvgKind::Group})).empty());
+  // Nor does a textPath inside another, as in Chrome.
+  CHECK(texts(onPath("M0 50 H100", {}, {node({.kind = SvgKind::TextPath, .href = "p"}, {node(span("a"))})})).empty());
+}
+
+TEST_CASE("a glyph on a path keeps its combining marks and joined emoji with it") {
+  // e and a combining acute (3 bytes), then x.
+  auto calls = texts(onPath("M0 50 H100", {}, {node(span("e\xcc\x81x"))}));
+  REQUIRE(calls.size() == 4);
+  CHECK(calls[1] == "text 'e\xcc\x81' -15,0 12 #ff000000");
+  CHECK(calls[3] == "text 'x' -5,0 12 #ff000000");
+  // A woman and a laptop joined by a zero-width joiner, as one glyph.
+  auto joined = texts(onPath("M0 50 H100", {}, {node(span("\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb"))}));
+  CHECK(joined.size() == 2);
+  // Two flags, each two regional letters, as two glyphs.
+  auto flags = texts(onPath("M0 50 H200", {}, {node(span("\xf0\x9f\x87\xab\xf0\x9f\x87\xb7\xf0\x9f\x87\xa9\xf0\x9f\x87\xaa"))}));
+  REQUIRE(flags.size() == 4);
+  CHECK(flags[0] == "concat 1 0 0 1 40 50");
+  CHECK(flags[2] == "concat 1 0 0 1 120 50");
+}
+
+TEST_CASE("text after a path carries on from the path's end, as Chrome places it") {
+  CHECK(texts(node(
+            svg(),
+            {node({.kind = SvgKind::Defs}, {node({.kind = SvgKind::Path, .name = "p", .d = "M10 50 V150"})}),
+             node({.kind = SvgKind::Text}, {node({.kind = SvgKind::TextPath, .href = "p"}, {node(span("ab"))}), node(span("c"))})}))
+            .back() == "text 'c' 10,150 12 #ff000000");
+}

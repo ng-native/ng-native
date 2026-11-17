@@ -6,9 +6,9 @@
 // backend's view for the RNSVGSvgView draws it by calling drawSvg with an SvgCanvas over its own
 // graphics context. Everything SVG means (inheritance through `propList`, `currentColor`,
 // lengths and percentages, the viewBox, path data and arcs, gradients and their units, clip
-// paths, masks, `use` and `symbol`, markers, patterns and filters) is decided here; the canvas only
-// draws paths, gradients, images and runs of text, tiles a pattern's tile, and runs a filter's
-// steps over pixels with runSvgFilter.
+// paths, masks, `use` and `symbol`, markers, patterns and filters, text anchors and text along a
+// path) is decided here; the canvas only measures and draws runs of text, draws paths, gradients
+// and images, tiles a pattern's tile, and runs a filter's steps over pixels with runSvgFilter.
 #pragma once
 
 #include "ngn/view-tree.h"
@@ -114,6 +114,7 @@ enum class SvgKind {
   Image,
   Text,
   TSpan,
+  TextPath,
   Marker,
   Pattern,
   Filter,
@@ -200,11 +201,16 @@ struct SvgElement {
 
   std::string uri; // an image's source
 
-  // Text: a span's characters, the font, and the positions written on the element.
+  // Text: a span's characters, the font, its text-anchor ("start", "middle" or "end"; empty
+  // inherits), and the positions written on the element. A textPath's path is `href`, how far
+  // along it the text starts is the length "startOffset", and `side` "right" sets it along the
+  // path reversed.
   std::string content;
   SvgLength fontSize;
   std::string fontFamily;
   std::string fontWeight;
+  std::string textAnchor;
+  std::string side;
   std::vector<SvgLength> xs, ys, dxs, dys;
 
   bool operator==(const SvgElement &) const = default;
@@ -347,15 +353,17 @@ class SvgCanvas {
   virtual void beginFilter(const SvgFilter &filter) = 0;
   virtual void endFilter() = 0;
   virtual void image(const std::string &uri, const SvgRect &rect, const std::string &align, int meetOrSlice, double opacity) = 0;
-  // Draws `text` with its baseline's start at (x, y) and answers its advance.
-  virtual double text(
+  // The advance of `text` in the font, as text() draws it.
+  virtual double measureText(const std::string &text, double fontSize, const std::string &fontFamily, const std::string &fontWeight) = 0;
+  // Draws `text` with its baseline's start at (x, y).
+  virtual void text(
       const std::string &text,
       double x,
       double y,
       double fontSize,
       const std::string &fontFamily,
       const std::string &fontWeight,
-      const SvgPaint *fill) = 0;
+      const SvgPaint &fill) = 0;
 };
 
 // Draws `document` into a viewport of `width` by `height`, its origin at the canvas's.
