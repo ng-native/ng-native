@@ -25,6 +25,7 @@ const {
   logger,
   NX_VERSION,
 } = require('@nx/devkit') as typeof import('@nx/devkit');
+const { minimatch } = require('minimatch') as typeof import('minimatch');
 const { application } = require('./index.cjs');
 const { pnpmGlobs } = require('./workspaces.cjs');
 const native = require('../native-app.cjs');
@@ -1135,6 +1136,86 @@ describe('with --desktopOnly', () => {
     assert.match(agents, /^nx run @proj\/desktop:macos +# /m);
     assert.doesNotMatch(agents, /run-ios|Expo Go/);
     assert.match(tree.read('apps/desktop/.gitignore', 'utf-8')!, /^\/dist\/macos$/m);
+  });
+
+  // Whether Nx runs @nx/expo's plugin on `file`, by the include and exclude globs of each of its
+  // registrations, matched as Nx matches them.
+  const inferredBy = (tree: Tree, file: string) =>
+    (readNxJson(tree)?.plugins ?? [])
+      .map((entry) => (typeof entry === 'string' ? { plugin: entry } : entry))
+      .filter((entry) => entry.plugin === '@nx/expo/plugin')
+      .some((entry) => {
+        const matches = (globs?: string[]) =>
+          (globs ?? []).some((glob) => minimatch(file, glob, { dot: true }));
+        return (!entry.include?.length || matches(entry.include)) && !matches(entry.exclude);
+      });
+
+  for (const [shape, plugins] of [
+    ['as a string', ['@nx/expo/plugin']],
+    ['as an object', [{ plugin: '@nx/expo/plugin', options: { runIosTargetName: 'run-ios' } }]],
+    [
+      'twice, beside another plugin',
+      [
+        { plugin: '@nx/eslint/plugin', options: {} },
+        '@nx/expo/plugin',
+        { plugin: '@nx/expo/plugin', include: ['apps/**'], exclude: ['apps/legacy/**'] },
+      ],
+    ],
+  ] as const) {
+    it(`keeps @nx/expo's plugin, registered ${shape}, from inferring run-ios and run-android`, async () => {
+      const tree = pnpmWorkspace();
+      updateJson(tree, 'nx.json', (nxJson) => ({ ...nxJson, plugins }));
+      await generate(tree, { directory: 'apps/mobile' });
+      await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+      await generate(tree, { directory: 'apps/studio', desktopOnly: true });
+      assert.equal(inferredBy(tree, 'apps/desktop/app.json'), false);
+      assert.equal(inferredBy(tree, 'apps/studio/app.json'), false);
+      assert.equal(inferredBy(tree, 'apps/mobile/app.json'), true, 'a mobile app keeps them');
+      const registered = readNxJson(tree)!.plugins!;
+      assert.equal(registered.length, plugins.length, 'no second registration');
+      assert.deepEqual(
+        registered.filter(
+          (entry) => (typeof entry === 'string' ? entry : entry.plugin) !== '@nx/expo/plugin',
+        ),
+        plugins.filter(
+          (entry) => (typeof entry === 'string' ? entry : entry.plugin) !== '@nx/expo/plugin',
+        ),
+        'the other plugins are left alone',
+      );
+    });
+  }
+
+  it('adds no second copy of an exclusion nx.json already has', async () => {
+    const tree = pnpmWorkspace();
+    const plugin = { plugin: '@nx/expo/plugin', exclude: ['apps/desktop/**'] };
+    updateJson(tree, 'nx.json', (nxJson) => ({ ...nxJson, plugins: [plugin] }));
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    assert.deepEqual(readNxJson(tree)!.plugins, [plugin]);
+  });
+
+  it('writes the inferred targets that still apply on macOS, export and install', async () => {
+    const tree = pnpmWorkspace();
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    const { targets } = readProjectConfiguration(tree, '@proj/desktop');
+    assert.deepEqual(targets!['export'], {
+      executor: 'nx:run-commands',
+      options: { cwd: 'apps/desktop', command: 'expo export --clear' },
+      cache: true,
+      dependsOn: ['^export'],
+      inputs: ['default', '^production', { externalDependencies: ['expo'] }],
+      outputs: ['{projectRoot}/dist'],
+      syncGenerators: ['@ng-native/nx:sync-native-modules'],
+    });
+    assert.equal(targets!['prebuild'], undefined, 'nothing infers the rest of a prebuild target');
+    assert.deepEqual(targets!['install'], {
+      executor: 'nx:run-commands',
+      options: { cwd: 'apps/desktop', command: 'expo install' },
+    });
+    const phone = pnpmWorkspace();
+    await generate(phone, { directory: 'apps/mobile' });
+    const inferred = readProjectConfiguration(phone, '@proj/mobile').targets!;
+    assert.equal(inferred['export'].executor, undefined, "a mobile app's are inferred");
+    assert.equal(inferred['install'], undefined, "a mobile app's are inferred");
   });
 
   it("bundles with the desktop template's Metro config, which keeps the in-app tests out", async () => {

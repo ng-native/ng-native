@@ -215,16 +215,21 @@ async function syncNativeModules(tree) {
 /**
  * Registers the sync generator on the app's `start`, `export` and `prebuild` targets. `export` and
  * `prebuild` are `@nx/expo`'s, inferred, and take the option from `project.json` beside the rest.
+ * A desktop-only app, which the plugin is kept off, has no `prebuild` to take it.
  *
  * @param {import('@nx/devkit').Tree} tree
  * @param {string} projectName
+ * @param {readonly string[]} [names] the targets
  */
-function registerSyncGenerator(tree, projectName) {
+function registerSyncGenerator(tree, projectName, names = ['start', 'export', 'prebuild']) {
   const project = readProjectConfiguration(tree, projectName);
   const targets = { ...project.targets };
-  for (const target of ['start', 'export', 'prebuild']) {
+  const missing = names.filter(
+    (target) => !targets[target]?.syncGenerators?.includes(SYNC_GENERATOR),
+  );
+  if (!missing.length) return;
+  for (const target of missing) {
     const syncGenerators = targets[target]?.syncGenerators ?? [];
-    if (syncGenerators.includes(SYNC_GENERATOR)) continue;
     targets[target] = { ...targets[target], syncGenerators: [...syncGenerators, SYNC_GENERATOR] };
   }
   updateProjectConfiguration(tree, projectName, { ...project, targets });

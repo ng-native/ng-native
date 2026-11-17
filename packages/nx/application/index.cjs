@@ -11,6 +11,11 @@
  * `expo start --web`, which the plugin adds to every Expo app, with `expo start` too: the app has
  * no web platform.
  *
+ * A desktop-only app is left out of the plugin, in `nx.json`: it infers `run-ios` and `run-android`
+ * from every Expo app, whatever platforms its `app.json` lists. Of the rest, the two that apply on
+ * macOS, `export` and `install`, go in its `project.json` as the plugin writes them; `prebuild` and
+ * EAS's `build` and `submit` are for iOS and Android.
+ *
  * Where the dependencies go depends on the workspace. With package-manager workspaces, the Nx
  * default since 20, the app is a workspace package and lists them itself, which pnpm needs in
  * order to link them. In an integrated workspace, with one root `package.json`, they go there.
@@ -29,7 +34,7 @@ const {
   addDependenciesToPackageJson,
 } = require('@nx/devkit');
 const native = require('../native-app.cjs');
-const { init } = require('../init/index.cjs');
+const { init, excludeFromExpoPlugin } = require('../init/index.cjs');
 const { usesWorkspaces, includeInWorkspaces } = require('./workspaces.cjs');
 const { asSaved } = require('../save-exact.cjs');
 const { registerSyncGenerator } = require('../sync/index.cjs');
@@ -136,6 +141,24 @@ function metroPort(tree) {
   return port;
 }
 
+/**
+ * The targets `@nx/expo`'s plugin infers that a desktop-only app, which the plugin is kept off,
+ * still uses, as the plugin writes them.
+ */
+function expoTargets(directory) {
+  const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: directory, command } });
+  return {
+    export: {
+      ...run('expo export --clear'),
+      cache: true,
+      dependsOn: ['^export'],
+      inputs: ['default', '^production', { externalDependencies: ['expo'] }],
+      outputs: ['{projectRoot}/dist'],
+    },
+    install: run('expo install'),
+  };
+}
+
 function targets(directory, port, oneCopy, lint, desktopOnly) {
   const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: directory, command } });
   const own = port === DEFAULT_PORT ? '' : ` --port ${port}`;
@@ -143,7 +166,7 @@ function targets(directory, port, oneCopy, lint, desktopOnly) {
   // its own too. The first app's are @nx/expo's inferred ones, on Expo's default. A desktop-only
   // app runs with `ng-native-desktop` instead.
   const runs = desktopOnly
-    ? desktopTargets(directory, port)
+    ? { ...expoTargets(directory), ...desktopTargets(directory, port) }
     : own && {
         'run-ios': { ...run(`expo run:ios${own}`), continuous: true },
         'run-android': { ...run(`expo run:android${own}`), continuous: true },
@@ -321,7 +344,12 @@ async function application(tree, options) {
   });
 
   ignoreExpo(tree);
-  registerSyncGenerator(tree, projectName);
+  if (desktopOnly) {
+    excludeFromExpoPlugin(tree, directory);
+    registerSyncGenerator(tree, projectName, ['start', 'export']);
+  } else {
+    registerSyncGenerator(tree, projectName);
+  }
 
   if (!options.skipFormat) await formatFiles(tree);
   logger.info(

@@ -80,6 +80,52 @@ function registerExpoPlugin(tree) {
 }
 
 /**
+ * Applies `update` to each registration of `@nx/expo`'s plugin in `nx.json`, given as an object
+ * whether it is written as one or as the plugin's name. A registration `update` returns unchanged
+ * keeps its form, and one left with nothing but the plugin's name is written as the name again.
+ */
+function updateExpoRegistrations(tree, update) {
+  const nxJson = readNxJson(tree);
+  if (!nxJson?.plugins) return;
+  let changed = false;
+  const plugins = nxJson.plugins.map((entry) => {
+    const object = typeof entry === 'string' ? { plugin: entry } : entry;
+    if (object.plugin !== EXPO_PLUGIN.plugin) return entry;
+    const updated = update(object);
+    if (updated === object) return entry;
+    changed = true;
+    return Object.keys(updated).length === 1 ? updated.plugin : updated;
+  });
+  if (changed) updateNxJson(tree, { ...nxJson, plugins });
+}
+
+/** The glob that matches an app's Expo config, which is what `@nx/expo`'s plugin infers from. */
+const appGlob = (root) => `${root}/**`;
+
+/**
+ * Keeps `@nx/expo`'s plugin off the app at `root`, through each registration's `exclude`, the way
+ * Nx documents leaving a project out of a plugin. The plugin infers `run-ios` and `run-android`
+ * from any Expo app, whatever its `expo.platforms`, and a desktop-only app runs on neither.
+ */
+function excludeFromExpoPlugin(tree, root) {
+  const glob = appGlob(root);
+  updateExpoRegistrations(tree, (entry) =>
+    entry.exclude?.includes(glob) ? entry : { ...entry, exclude: [...(entry.exclude ?? []), glob] },
+  );
+}
+
+/** Undoes `excludeFromExpoPlugin`: the plugin infers the app's Expo targets again. */
+function includeInExpoPlugin(tree, root) {
+  const glob = appGlob(root);
+  updateExpoRegistrations(tree, (entry) => {
+    if (!entry.exclude?.includes(glob)) return entry;
+    const { exclude, ...rest } = entry;
+    const kept = exclude.filter((pattern) => pattern !== glob);
+    return kept.length ? { ...rest, exclude: kept } : rest;
+  });
+}
+
+/**
  * What goes beside `@nx/expo` at the root. With package-manager workspaces the app's own
  * `package.json` lists Expo, React and React Native, and the root lists none of them, so pnpm
  * resolves `@nx/expo`'s `expo` peer, and that Expo's own peers, in the root's context at the
@@ -214,4 +260,10 @@ async function init(tree, options = {}) {
   return options.skipInstall ? () => {} : install;
 }
 
-module.exports = { init, workspaceNxVersion, EXPO_PLUGIN };
+module.exports = {
+  init,
+  workspaceNxVersion,
+  excludeFromExpoPlugin,
+  includeInExpoPlugin,
+  EXPO_PLUGIN,
+};
