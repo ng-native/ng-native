@@ -2,10 +2,19 @@
 // same pass, so it draws once more on the next turn of the run loop, and then stops.
 #import "../../svg-view.h"
 
+#import <QuartzCore/QuartzCore.h>
+
 #include "helpers.h"
 
 #include <doctest/doctest.h>
+#include <react/renderer/components/text/ParagraphState.h>
+#include <react/renderer/core/ConcreteState.h>
 
+#include <string>
+#include <utility>
+#include <vector>
+
+using namespace facebook::react;
 using ngn::SvgElement;
 using ngn::SvgKind;
 using ngn::SvgNode;
@@ -27,7 +36,7 @@ namespace {
 std::shared_ptr<const ngn::SvgDocument> document(bool foreign) {
   SvgElement child{.kind = foreign ? SvgKind::ForeignObject : SvgKind::Rect};
   child.view = foreign ? 3 : -1;
-  child.lengths = {{"width", {.value = 10, .set = true}}, {"height", {.value = 10, .set = true}}};
+  child.lengths = {{"width", {.value = 100, .set = true}}, {"height", {.value = 100, .set = true}}};
   return std::make_shared<const ngn::SvgDocument>(
       ngn::SvgDocument{.root = SvgNode{.element = {.kind = SvgKind::Svg}, .children = {SvgNode{.element = child}}}});
 }
@@ -43,6 +52,7 @@ void passes(NSWindow *window, int count = 10) {
 struct Drawing {
   NSWindow *window;
   NGNCountingSvgView *svg;
+  NGNSvgElementView *object;
 
   Drawing() {
     [NSApplication sharedApplication];
@@ -53,7 +63,8 @@ struct Drawing {
     window.releasedWhenClosed = NO;
     svg = [[NGNCountingSvgView alloc] initWithShadowView:shadowView(2, "RNSVGSvgView", {{0, 0}, {100, 100}})];
     svg.frame = NSMakeRect(0, 0, 100, 100);
-    [svg addSubview:[[NGNSvgElementView alloc] initWithShadowView:shadowView(3, "RNSVGForeignObject", {})]];
+    object = [[NGNSvgElementView alloc] initWithShadowView:shadowView(3, "RNSVGForeignObject", {})];
+    [svg addSubview:object];
     window.contentView = svg;
     passes(window);
   }
@@ -101,4 +112,95 @@ TEST_CASE("a change after the draw after a foreignObject's is asked for is follo
   d.svg.drawCount = 0;
   passes(d.window);
   CHECK(d.svg.drawCount == 2);
+}
+
+namespace {
+
+// A Paragraph's state, as text layout commits it: runs of 20-point text, each in its colour.
+State::Shared paragraph(std::vector<std::pair<std::string, SharedColor>> runs) {
+  AttributedString text;
+  for (auto &[string, color] : runs) {
+    AttributedString::Fragment fragment;
+    fragment.string = string;
+    fragment.textAttributes.fontSize = 20;
+    fragment.textAttributes.foregroundColor = color;
+    text.appendFragment(std::move(fragment));
+  }
+  return std::make_shared<const ConcreteState<ParagraphState>>(
+      std::make_shared<const ParagraphState>(ParagraphState{.attributedString = text}), ShadowNodeFamily::Weak{});
+}
+
+// What the svg's layer shows, as the window draws it: its own contents, not its hidden subviews.
+struct Shown {
+  std::vector<uint8_t> rgba = std::vector<uint8_t>(100 * 100 * 4, 0);
+
+  explicit Shown(NSView *svg) {
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef context = CGBitmapContextCreate(rgba.data(), 100, 100, 8, 400, space, kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(space);
+    CGContextTranslateCTM(context, 0, 100);
+    CGContextScaleCTM(context, 1, -1);
+    [svg.layer renderInContext:context];
+    CGContextRelease(context);
+  }
+
+  // The rightmost column with ink, or -1.
+  int rightmostInk() const {
+    for (int x = 99; x >= 0; --x) {
+      for (int y = 0; y < 100; ++y) {
+        if (rgba[(y * 100 + x) * 4 + 3] > 128) {
+          return x;
+        }
+      }
+    }
+    return -1;
+  }
+
+  // Pixels mostly of one channel: 0 red, 2 blue.
+  int inked(int channel) const {
+    int count = 0;
+    for (size_t i = 0; i < rgba.size(); i += 4) {
+      int c = rgba[i + channel], others = rgba[i] + rgba[i + 1] + rgba[i + 2] - c;
+      count += rgba[i + 3] > 128 && c > 150 && others < 120;
+    }
+    return count;
+  }
+};
+
+} // namespace
+
+TEST_CASE("a Paragraph in a foreignObject shows its text in the svg when mounted, and its new text after a state update") {
+  Drawing d;
+  NGNView *text = [[NGNView alloc] initWithShadowView:shadowView(4, "Paragraph", {{0, 0}, {100, 30}})];
+  LayoutMetrics metrics;
+  metrics.frame = {{0, 0}, {100, 30}};
+  [text updateLayout:metrics];
+  auto black = colorFromRGBA(0, 0, 0, 255);
+  // Mounted under the hidden foreignObject, then the svg drawn, as a mount does.
+  [text updateState:paragraph({{"I", black}})];
+  [d.object addSubview:text];
+  [d.svg setDocument:document(true)];
+  passes(d.window);
+  int narrow = Shown(d.svg).rightmostInk();
+  CHECK(narrow >= 0);
+
+  // Only the text changes: no layout, no props.
+  [text updateState:paragraph({{"WWW", black}})];
+  [d.svg setDocument:document(true)];
+  passes(d.window);
+  int wide = Shown(d.svg).rightmostInk();
+  CHECK(wide > narrow + 20);
+
+  [text updateState:paragraph({{"I", black}})];
+  [d.svg setDocument:document(true)];
+  passes(d.window);
+  CHECK(Shown(d.svg).rightmostInk() == narrow);
+
+  // Runs in two colours.
+  [text updateState:paragraph({{"RR", colorFromRGBA(255, 0, 0, 255)}, {"BB", colorFromRGBA(0, 0, 255, 255)}})];
+  [d.svg setDocument:document(true)];
+  passes(d.window);
+  Shown runs(d.svg);
+  CHECK(runs.inked(0) > 10);
+  CHECK(runs.inked(2) > 10);
 }
