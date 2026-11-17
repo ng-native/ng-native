@@ -246,7 +246,8 @@ export class NativeHeader {
   readonly title = input<string>();
   /**
    * Title colour, on iOS and Android. It and the title font inputs are not applied on macOS, where
-   * the title is the window title and the system draws it.
+   * the title is the window title and the system draws it, and a sheet's title is a heading in the
+   * sheet, in the bold system font and the default text colour.
    */
   readonly titleColor = input<string | number>();
   readonly titleFontFamily = input<string>();
