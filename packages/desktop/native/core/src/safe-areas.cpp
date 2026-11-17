@@ -18,7 +18,10 @@ EdgeInsets insetsWithin(const ContainerInsets &container, const Rect &frame) {
 }
 
 double titlebarLeading(double minX, double maxX, double width, bool rightToLeft) {
-  return std::max(0.0, rightToLeft ? width - minX : maxX);
+  if (maxX <= 0 || minX >= width) {
+    return 0;
+  }
+  return rightToLeft ? width - minX : maxX;
 }
 
 void SafeAreas::created(const ShadowView &view) {

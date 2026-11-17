@@ -78,8 +78,8 @@ class Runtime {
   // that resumes it; then that it resumed. On the inspector's thread. Set them before loadBundle.
   std::function<void(std::function<void()> resume)> onDebuggerPaused;
   std::function<void()> onDebuggerResumed;
-  // Whether the app lays out right to left, asked each time a surface starts or resizes, the
-  // restarts of a reload included, so it agrees with what the new instance's I18nManager reads.
+  // Whether the app lays out right to left, asked as each JavaScript instance loads (the first
+  // and each reload's) and kept for its run, as its I18nManager keeps isRTL. Set before loadBundle.
   std::function<bool()> rightToLeft;
 
   // Loads the bundle (JavaScript or Hermes bytecode). False if it could not be read or downloaded.
@@ -152,6 +152,8 @@ class Runtime {
   // Taken before mutex_ when both are, and never held by a reload while it holds mutex_.
   std::mutex surfacesMutex_;
   SurfaceBook<Surface> surfaces_;
+  // The direction the running instance's surfaces lay out from.
+  SurfaceDirection direction_{[this] { return rightToLeft && rightToLeft(); }};
 };
 
 } // namespace ngn

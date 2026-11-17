@@ -5,6 +5,10 @@
 #include <react/renderer/core/LayoutConstraints.h>
 #include <react/renderer/graphics/Size.h>
 
+#include <atomic>
+#include <functional>
+#include <utility>
+
 namespace ngn {
 
 struct SurfaceMetrics {
@@ -25,5 +29,23 @@ inline facebook::react::LayoutConstraints surfaceConstraints(const SurfaceMetric
       .layoutDirection = rightToLeft ? LayoutDirection::RightToLeft : LayoutDirection::LeftToRight,
   };
 }
+
+// The direction a runtime's surfaces lay out from: what `read` answers as each JavaScript instance
+// starts (the first load and each reload), kept for that instance's run as I18nManager's constants
+// are, so a surface started or resized meanwhile agrees with what JavaScript reads.
+class SurfaceDirection {
+ public:
+  explicit SurfaceDirection(std::function<bool()> read) : read_(std::move(read)) {}
+  void instanceStarted() {
+    rightToLeft_ = read_ && read_();
+  }
+  bool rightToLeft() const {
+    return rightToLeft_;
+  }
+
+ private:
+  std::function<bool()> read_;
+  std::atomic<bool> rightToLeft_{false};
+};
 
 } // namespace ngn

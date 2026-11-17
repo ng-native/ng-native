@@ -69,6 +69,12 @@ TEST_CASE("the window controls reach in from the leading edge, the right one rig
   // A content pane beside a sidebar the controls are over: they do not reach it.
   CHECK(ngn::titlebarLeading(-187, -131, 600, false) == 0);
   CHECK(ngn::titlebarLeading(851, 907, 600, true) == 0);
+  // Controls past the far edge of a narrow container, either way, reach nothing either.
+  CHECK(ngn::titlebarLeading(150, 164, 100, false) == 0);
+  CHECK(ngn::titlebarLeading(-64, -50, 100, true) == 0);
+  // Controls overlapping the container still count from its leading edge.
+  CHECK(ngn::titlebarLeading(80, 110, 100, false) == 110);
+  CHECK(ngn::titlebarLeading(-10, 20, 100, true) == 110);
 }
 
 TEST_CASE("a view gets the part of its container's insets it overlaps") {
