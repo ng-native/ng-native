@@ -59,6 +59,25 @@ describe('the platforms line', () => {
     );
     await expect(render('# X\n\n<!-- platforms: Nothing -->\n')).rejects.toThrow(/Nothing/);
   });
+
+  test('names each row when the services in one marker differ, and not when they agree', async () => {
+    const html = await render(
+      '# Sensors\n\n<!-- platforms: Accelerometer, Gyroscope, LightSensor -->\n',
+    );
+    expect(html).toContain('<strong>Platforms of <code>Accelerometer</code>');
+    expect(html).toContain(
+      '<strong>Platforms of <code>LightSensor</code>.</strong> Available on Android.',
+    );
+    const same = await render('# Two\n\n<!-- platforms: Accelerometer, Gyroscope -->\n');
+    expect(same).toContain('<strong>Platforms.</strong>');
+    expect(same.match(/Platforms/g)).toHaveLength(1);
+  });
+
+  test('leaves available() out where the service has none', async () => {
+    const html = await render('# Camera\n\n<!-- platforms: Camera -->\n');
+    expect(html).toContain('Absent on Web host.');
+    expect(html).not.toContain('available()');
+  });
 });
 
 describe('a marker in a fenced example', () => {

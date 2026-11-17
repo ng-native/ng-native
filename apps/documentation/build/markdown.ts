@@ -27,7 +27,12 @@ import { Marked, type TokenizerAndRendererExtension } from 'marked';
 import { gfmHeadingId, getHeadingList } from 'marked-gfm-heading-id';
 import { bundledThemes, createHighlighter, type Highlighter } from 'shiki';
 import type { Plugin } from 'vite';
-import { OS_SUPPORT, SUPPORT_OSES, platformsLine } from '@ng-native/device/os-support';
+import {
+  OS_SUPPORT,
+  SUPPORT_OSES,
+  platformsLine,
+  supportRowOf,
+} from '@ng-native/device/os-support';
 import { pageLinks, pageUrl } from './page-links.ts';
 
 /** One piece of a page: prose already rendered, a named example, or a generated API table. */
@@ -174,9 +179,14 @@ function platforms(_marker: string, services: string): string {
   const lines = services.split(',').map((name) => {
     const line = platformsLine(name.trim());
     if (!line) throw new Error(`No row in OS_SUPPORT covers the service ${name.trim()}`);
-    return line;
+    return { line, feature: supportRowOf(name.trim())!.feature };
   });
-  return [...new Set(lines)].join('\n\n');
+  const distinct = [...new Map(lines.map((one) => [one.line, one])).values()];
+  // Services that differ get a line each, named by its row, so a reader can tell them apart.
+  if (distinct.length < 2) return distinct.map((one) => one.line).join('');
+  return distinct
+    .map(({ line, feature }) => line.replace('**Platforms.**', `**Platforms of ${feature}.**`))
+    .join('\n\n');
 }
 
 /**

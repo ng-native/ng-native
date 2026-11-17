@@ -228,6 +228,15 @@ describe('each service the table lists', () => {
     }
   });
 
+  it('says available() is false only for services that have one', () => {
+    for (const row of OS_SUPPORT) {
+      for (const name of Object.keys(row.services ?? {})) {
+        const has = /\bavailable\b/.test(sourceOf(name));
+        assert.equal(!row.withoutAvailable, has, `${name} has available(): ${has}`);
+      }
+    }
+  });
+
   it('is absent on the web exactly where its Expo module is not written for it', () => {
     for (const row of OS_SUPPORT) {
       for (const name of Object.keys(row.services ?? {})) {

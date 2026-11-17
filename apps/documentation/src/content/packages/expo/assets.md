@@ -11,7 +11,7 @@ having is the reason the hook exists: a screen that shows an image bundled with 
 to wait for it the first time, and a splash screen or a skeleton is only useful if something says
 when the wait is over.
 
-<!-- platforms: assets, assetResource -->
+<!-- platforms: assets -->
 
 ## Install
 
