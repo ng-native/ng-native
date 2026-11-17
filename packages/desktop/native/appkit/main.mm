@@ -68,6 +68,7 @@
 #import "test-launch.h"
 #import "updates.h"
 #import "surface-view.h"
+#import "tab-walk.h"
 #include "text-layout.h"
 
 #include "ngn/app-menus.h"
@@ -211,71 +212,13 @@ void logFirstFrame(NSWindow *window) {
   }
 }
 
-// The container the focus is in, and the view holding it, in `window`. An in-window cover (a modal)
-// is the container while it is up, wherever the first responder is: Tab stays inside it.
-struct FocusContext {
-  NGNSurfaceView *container = nil;
-  NGNView *focused = nil;
-};
-
-FocusContext focusContext(NSWindow *window) {
-  FocusContext context;
-  NSResponder *first = window.firstResponder;
-  // A field editor stands in for its text field, inside the field's view.
-  for (NSView *v = [first isKindOfClass:NSView.class] ? (NSView *)first : nil; v != nil; v = v.superview) {
-    if (context.focused == nil && [v isKindOfClass:NGNView.class]) {
-      context.focused = (NGNView *)v;
-    }
-    if ([v isKindOfClass:NGNSurfaceView.class]) {
-      context.container = (NGNSurfaceView *)v;
-      break;
-    }
-  }
-  if (context.container == nil) {
-    context.container =
-        [window.contentView isKindOfClass:NGNSurfaceView.class] ? (NGNSurfaceView *)window.contentView : nil;
-  }
-  NSView *cover = [NGNModalHostView frontCoverIn:window];
-  if (cover != nil && ![context.container isDescendantOf:cover]) {
-    context.container = (NGNSurfaceView *)cover;
-    context.focused = nil;
-  }
-  return context;
-}
-
-// Tab and Shift-Tab, walked in the core (focus-order.h) over the container the focus is in, in
-// place of AppKit's key-view loop. True when the key is used: the focus moved, or it is inside a
-// sheet, cover or popover, which Tab never leaves.
+// Tab and Shift-Tab (tab-walk.h). True when the key is used.
 bool moveFocus(NSEvent *event) {
-  NSWindow *window = event.window;
-  auto [container, focused] = focusContext(window);
-  if (container == nil) {
-    return false;
-  }
-  bool contained = [NGNModalHostView isPresentationContainer:container];
   // Option-Tab reaches every focusable view, whatever the keyboard navigation setting.
   bool everything = NSApp.isFullKeyboardAccessEnabled || (event.modifierFlags & NSEventModifierFlagOption) != 0;
   auto reach = everything ? ngn::TabReach::All : ngn::TabReach::TextInputs;
   bool backwards = (event.modifierFlags & NSEventModifierFlagShift) != 0;
-  const auto &tree = gHost.mounting->tree();
-  std::optional<Tag> from;
-  if (focused != nil) {
-    from = static_cast<Tag>(focused.reactTag);
-  }
-  auto count = ngn::tabOrder(tree, container.rootTag, reach, from).size();
-  // A control AppKit will not focus (a button, with keyboard navigation off) passes Tab on.
-  for (size_t tries = 0; tries < count; tries++) {
-    auto next = ngn::nextInTabOrder(tree, container.rootTag, from, backwards, reach);
-    if (!next) {
-      return contained;
-    }
-    NGNView *view = gHost.backend->view(*next);
-    if (view != nil && [window makeFirstResponder:view.keyboardResponder]) {
-      return true;
-    }
-    from = next;
-  }
-  return contained;
+  return ngn::appkit::moveFocus(event.window, gHost.mounting->tree(), *gHost.backend, backwards, reach);
 }
 
 // Arrow keys, Home and End inside a composite widget (a tablist, radiogroup, menu, menubar, listbox
@@ -291,7 +234,7 @@ bool moveInComposite(NSEvent *event) {
     return false;
   }
   NSWindow *window = event.window;
-  auto [container, focused] = focusContext(window);
+  auto [container, focused] = ngn::appkit::focusContext(window);
   if (container == nil || focused == nil || window.firstResponder != focused) {
     return false;
   }

@@ -1,6 +1,9 @@
 # The AppKit backend and the ngn-macos binary. Everything links statically: the binary loads
 # nothing from outside itself but the system's frameworks.
-add_executable(ngn-macos
+#
+# Every source but main.mm, compiled once into objects the binary and the AppKit view tests
+# (tests/views) both link whole.
+add_library(ngn_appkit OBJECT
     animation-frames.mm
     app-info.mm
     app-windows.mm
@@ -47,7 +50,6 @@ add_executable(ngn-macos
     symbol-view.mm
     red-box.mm
     share-picker.mm
-    main.mm
     menu-bar.mm
     glass-effect.mm
     glass-view.mm
@@ -72,6 +74,7 @@ add_executable(ngn-macos
     store-review.mm
     system.mm
     system-access.mm
+    tab-walk.mm
     test-launch.mm
     text-input-field.mm
     text-layout.mm
@@ -80,10 +83,16 @@ add_executable(ngn-macos
     updates.mm
     web-browser.mm
     app-updater.mm)
-target_link_libraries(ngn-macos PRIVATE ngn_core_runtime ngn_libraries ${NGN_LINKED}
+target_link_libraries(ngn_appkit PUBLIC ngn_core_runtime ngn_libraries)
+target_compile_options(ngn_appkit PUBLIC -fobjc-arc -Wall -Wno-unused-parameter)
+set(NGN_APPKIT_FRAMEWORKS
     "-framework AppKit" "-framework Foundation" "-framework CoreText" "-framework ImageIO" "-framework QuartzCore" "-framework Security" "-framework IOKit" "-framework UniformTypeIdentifiers" "-framework UserNotifications" "-framework LocalAuthentication" "-framework CoreLocation" "-framework CoreServices" "-framework SystemConfiguration" "-framework Network" "-framework AuthenticationServices" "-framework Vision" "-framework EventKit" "-framework StoreKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AVKit")
+
+add_executable(ngn-macos
+    main.mm)
+# The autolinked code (cmake/linked-modules.cmake), which only a target linking it directly takes whole.
+target_link_libraries(ngn-macos PRIVATE ngn_appkit ${NGN_LINKED} ${NGN_APPKIT_FRAMEWORKS})
 ngn_link_swift(ngn-macos)
-target_compile_options(ngn-macos PRIVATE -fobjc-arc -Wall -Wno-unused-parameter)
 # A Release build is what a packaged app ships: the linker drops the code nothing reaches.
 target_link_options(ngn-macos PRIVATE $<$<CONFIG:Release>:-Wl,-dead_strip>)
 # The React Native the host is built from, which PlatformConstants reports and React Native's
@@ -106,4 +115,14 @@ if(EXISTS ${_sparkle})
       COMMAND rm -rf $<TARGET_FILE_DIR:ngn-macos>/Sparkle.framework
       COMMAND ditto ${_sparkle} $<TARGET_FILE_DIR:ngn-macos>/Sparkle.framework
       VERBATIM)
+endif()
+
+# The AppKit view tests: views mounted from Fabric mutations into an offscreen window, through the
+# backend the binary uses. Built with the core tests, and run beside them.
+if(NGN_TESTS)
+  add_executable(ngn_appkit_tests ../core/tests/main.cpp tests/views/accessibility.test.mm tests/views/tab-walk.test.mm)
+  target_include_directories(ngn_appkit_tests PRIVATE ../core/tests)
+  target_link_libraries(ngn_appkit_tests PRIVATE ngn_appkit doctest ${NGN_APPKIT_FRAMEWORKS})
+  ngn_link_swift(ngn_appkit_tests)
+  add_test(NAME appkit COMMAND ngn_appkit_tests)
 endif()

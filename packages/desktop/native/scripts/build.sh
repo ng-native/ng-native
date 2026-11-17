@@ -12,7 +12,7 @@
 #   --universal     arm64 and x86_64 in one binary (default: this machine's architecture)
 #   --debug         a Debug build (default: RelWithDebInfo)
 #   --release       a Release build without the core tests, as a packaged app ships it
-#   --test          run the core tests after building
+#   --test          run the core tests after building, and the AppKit view tests when it built them
 #   --no-tests      leave the core tests out, as an app's build does: the published package has
 #                   none of their sources
 #   --no-debug-info the default RelWithDebInfo build without its debug info, for a host that is
@@ -167,5 +167,9 @@ cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
 nice -n 10 cmake --build "$BUILD" -j "$JOBS" >&2
 if [ "$run_tests" = 1 ]; then
   "$BUILD/ngn_core_tests" >&2
+  # The AppKit view tests, which a build with the AppKit backend has.
+  if [ -x "$BUILD/appkit/ngn_appkit_tests" ]; then
+    "$BUILD/appkit/ngn_appkit_tests" >&2
+  fi
 fi
 echo "$BUILD"

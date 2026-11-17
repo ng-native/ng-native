@@ -167,6 +167,10 @@ jobs:
       - name: Run the core tests
         run: '"$BUILD_DIR/ngn_core_tests"'
 
+      # Views mounted through the AppKit backend into an offscreen window: accessibility and Tab.
+      - name: Run the AppKit view tests
+        run: '"$BUILD_DIR/appkit/ngn_appkit_tests"'
+
       - if: always()
         run: ccache --show-stats
 

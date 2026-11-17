@@ -1,0 +1,142 @@
+// What VoiceOver reads from a mounted view: the role, label, value and state the core maps from
+// React Native's accessibility props (accessibility.h), as NGNView reports them through AppKit's
+// NSAccessibility properties.
+#include "mounted-views.h"
+
+#include <doctest/doctest.h>
+
+using namespace facebook::react;
+using ngn::testing::MountedViews;
+using ngn::testing::viewProps;
+
+TEST_CASE("a button has its role, label, hint and enabled state") {
+  MountedViews m;
+  auto save = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("accessible", true)("role", "button")(
+      "accessibilityLabel", "Save")("accessibilityHint", "Saves the file")));
+  m.add(save);
+  NGNView *view = m.view(2);
+  REQUIRE((view != nil));
+
+  CHECK(view.isAccessibilityElement);
+  CHECK([view.accessibilityRole isEqualToString:NSAccessibilityButtonRole]);
+  CHECK([view.accessibilityLabel isEqualToString:@"Save"]);
+  CHECK([view.accessibilityHelp isEqualToString:@"Saves the file"]);
+  CHECK([view.accessibilityRoleDescription isEqualToString:NSAccessibilityRoleDescription(NSAccessibilityButtonRole, nil)]);
+  CHECK(view.isAccessibilityEnabled);
+
+  // Disabled, then enabled again, by a later commit.
+  m.update(save, viewProps(folly::dynamic::object("accessible", true)("role", "button")("accessibilityLabel", "Save")(
+      "accessibilityState", folly::dynamic::object("disabled", true))));
+  CHECK_FALSE(view.isAccessibilityEnabled);
+  m.update(save, viewProps(folly::dynamic::object("accessible", true)("role", "button")("accessibilityLabel", "Save")(
+      "accessibilityState", folly::dynamic::object("disabled", false))));
+  CHECK(view.isAccessibilityEnabled);
+}
+
+TEST_CASE("a label and a hint a later commit removes are no longer read") {
+  MountedViews m;
+  auto logo = MountedViews::shadow(
+      2, "View", viewProps(folly::dynamic::object("accessibilityLabel", "Logo")("accessibilityHint", "Goes home")));
+  m.add(logo);
+  NGNView *view = m.view(2);
+  REQUIRE([view.accessibilityLabel isEqualToString:@"Logo"]);
+  m.update(logo, viewProps(folly::dynamic::object("accessibilityLabel", "Brand")));
+  CHECK([view.accessibilityLabel isEqualToString:@"Brand"]);
+  CHECK((view.accessibilityHelp == nil));
+  m.update(logo, viewProps(folly::dynamic::object()));
+  CHECK((view.accessibilityLabel == nil));
+  CHECK_FALSE(view.isAccessibilityElement);
+}
+
+TEST_CASE("a switch is a checkbox with the switch subrole whose value says whether it is on") {
+  MountedViews m;
+  auto toggle = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("accessible", true)("role", "switch")(
+      "accessibilityLabel", "Wi-Fi")("accessibilityState", folly::dynamic::object("checked", true))));
+  m.add(toggle);
+  NGNView *view = m.view(2);
+  CHECK([view.accessibilityRole isEqualToString:NSAccessibilityCheckBoxRole]);
+  CHECK([view.accessibilitySubrole isEqualToString:NSAccessibilitySwitchSubrole]);
+  CHECK([view.accessibilityValue isEqual:@1]);
+
+  m.update(toggle, viewProps(folly::dynamic::object("accessible", true)("role", "switch")(
+      "accessibilityState", folly::dynamic::object("checked", false))));
+  CHECK([view.accessibilityValue isEqual:@0]);
+  // A checkbox in neither state is mixed.
+  m.update(toggle, viewProps(folly::dynamic::object("accessible", true)("role", "checkbox")(
+      "accessibilityState", folly::dynamic::object("checked", "mixed"))));
+  CHECK((view.accessibilitySubrole == nil));
+  CHECK([view.accessibilityValue isEqual:@2]);
+}
+
+TEST_CASE("a value is the text, or else the number now, and none once removed") {
+  MountedViews m;
+  auto progress = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("accessible", true)("role", "progressbar")(
+      "accessibilityValue", folly::dynamic::object("now", 40)("min", 0)("max", 100))));
+  m.add(progress);
+  NGNView *view = m.view(2);
+  CHECK([view.accessibilityRole isEqualToString:NSAccessibilityProgressIndicatorRole]);
+  CHECK([view.accessibilityValue isEqual:@"40"]);
+  m.update(progress, viewProps(folly::dynamic::object("accessible", true)("role", "progressbar")(
+      "accessibilityValue", folly::dynamic::object("text", "Almost done"))));
+  m.update(progress, viewProps(folly::dynamic::object("accessible", true)("role", "progressbar")));
+  CHECK((view.accessibilityValue == nil));
+}
+
+TEST_CASE("selected and expanded are reported from the state") {
+  MountedViews m;
+  auto tab = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("accessible", true)("role", "tab")(
+      "accessibilityLabel", "Inbox")("accessibilityState", folly::dynamic::object("selected", true))));
+  m.add(tab);
+  NGNView *view = m.view(2);
+  CHECK([view.accessibilityRole isEqualToString:NSAccessibilityRadioButtonRole]);
+  CHECK([view.accessibilitySubrole isEqualToString:NSAccessibilityTabButtonSubrole]);
+  CHECK(view.isAccessibilitySelected);
+  CHECK_FALSE(view.isAccessibilityExpanded);
+
+  m.update(tab, viewProps(folly::dynamic::object("accessible", true)("role", "button")(
+      "accessibilityState", folly::dynamic::object("expanded", true))));
+  CHECK_FALSE(view.isAccessibilitySelected);
+  CHECK(view.isAccessibilityExpanded);
+}
+
+TEST_CASE("a role AppKit lacks is a group that says what it is") {
+  MountedViews m;
+  m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("role", "alert")("accessibilityLabel", "Offline"))));
+  NGNView *view = m.view(2);
+  CHECK([view.accessibilityRole isEqualToString:NSAccessibilityGroupRole]);
+  CHECK([view.accessibilityRoleDescription isEqualToString:@"alert"]);
+}
+
+TEST_CASE("a view read as one element is named by the labels inside it, not hidden ones, and has no children") {
+  MountedViews m;
+  m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("accessible", true)("role", "button"))));
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("accessibilityLabel", "Download"))), 2);
+  auto hidden = MountedViews::shadow(4, "View", viewProps(folly::dynamic::object("accessibilityLabel", "Secret")));
+  hidden.layoutMetrics.displayType = DisplayType::None;
+  m.add(hidden, 2);
+  m.add(MountedViews::shadow(5, "View", viewProps(folly::dynamic::object("accessibilityLabel", "2 MB"))), 2);
+  NGNView *view = m.view(2);
+  REQUIRE(m.view(4).hidden);
+  CHECK([view.accessibilityLabel isEqualToString:@"Download 2 MB"]);
+  CHECK(view.accessibilityChildren.count == 0);
+
+  // A container that is not one element leaves its children to be read on their own.
+  m.add(MountedViews::shadow(6, "View", viewProps(folly::dynamic::object())));
+  m.add(MountedViews::shadow(7, "View", viewProps(folly::dynamic::object("accessibilityLabel", "Inside"))), 6);
+  CHECK((m.view(6).accessibilityLabel == nil));
+  CHECK([m.view(6).accessibilityChildren containsObject:m.view(7)]);
+}
+
+TEST_CASE("hidden and presentational views are no elements") {
+  MountedViews m;
+  m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object())));
+  m.add(MountedViews::shadow(
+      3, "View", viewProps(folly::dynamic::object("role", "button")("accessibilityElementsHidden", true))));
+  m.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object("role", "presentation")("accessible", true))));
+  m.add(MountedViews::shadow(
+      5, "View", viewProps(folly::dynamic::object("accessible", true)("importantForAccessibility", "no-hide-descendants"))));
+  for (Tag tag : {2, 3, 4, 5}) {
+    CAPTURE(tag);
+    CHECK_FALSE(m.view(tag).isAccessibilityElement);
+  }
+}
