@@ -104,6 +104,8 @@ When the app has them installed, the host compiles in the Fabric components of
   header too; a press and hold or a secondary click on one lists that way's entries by title, and
   a pick goes that many steps. An app with no router history gets a back chevron while the stack
   has a screen below. `hideBackButton` hides the pair, and the header's own left items replace it.
+  The title is drawn by the system: `titleColor`, `titleFontFamily`, `titleFontSize` and
+  `titleFontWeight` are not applied, since AppKit has no public way to restyle a window's title.
 - A header's `<native-search-bar>` (`RNSSearchBar` in a `searchBar` header item) is an
   NSSearchToolbarItem at the toolbar's trailing end, which collapses to a button in a narrow
   window. It takes `placeholder` (also its label), `autoCapitalize`, `textColor` and `tintColor`

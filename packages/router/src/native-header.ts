@@ -244,7 +244,10 @@ export class NativeHeader {
 
   /** The bar's title. Absent leaves whatever the platform would show, which is nothing. */
   readonly title = input<string>();
-  /** Title colour. */
+  /**
+   * Title colour, on iOS and Android. It and the title font inputs are not applied on macOS, where
+   * the title is the window title and the system draws it.
+   */
   readonly titleColor = input<string | number>();
   readonly titleFontFamily = input<string>();
   readonly titleFontSize = input(undefined, { transform: optionalNumber });

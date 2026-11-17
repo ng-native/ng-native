@@ -404,6 +404,12 @@ providers: [
 Binding `backgroundColor`, `color` or `titleColor` on a particular `<native-header>` still wins
 over the palette - the token only fills in what a call site left unset.
 
+On macOS the header is the window's toolbar and its title is the window title, which the system
+draws in its own font and colour: `titleColor`, `titleFontFamily`, `titleFontSize` and
+`titleFontWeight` are not applied there, because AppKit has no public way to restyle a window's
+title. The heading a sheet draws for its screen's header is the bold system font in the default
+text colour too.
+
 ### Liquid Glass on iOS 26
 
 A bar with a background is opaque: the content stops at it, with a hairline under it. Since iOS 26
