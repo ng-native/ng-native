@@ -226,6 +226,25 @@ TEST_CASE("The shutter stays off while a photo is being taken, even if the camer
   CHECK(answer->shot);
 }
 
+TEST_CASE("A cancel after the photo is written but before it is answered stays a cancel, and leaves no file") {
+  auto capture = std::make_shared<FakeCapture>();
+  auto answer = std::make_shared<Answer>();
+  auto path = temporaryPath(@"jpg");
+  NGNCameraSheet *sheet = sheetFor(capture, path, answer);
+  (void)sheet.view;
+  [sheet cameraRunning];
+  // The fake camera writes the photo at once; its answer waits on the main queue, not drained yet.
+  [sheet takePhoto:nil];
+  CHECK([NSFileManager.defaultManager fileExistsAtPath:@(path.c_str())]);
+  [sheet cancel:nil];
+  CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false);
+  CHECK(answer->calls == 1);
+  CHECK_FALSE(answer->shot);
+  CHECK(answer->error.empty());
+  CHECK_FALSE([NSFileManager.defaultManager fileExistsAtPath:@(path.c_str())]);
+  [NSFileManager.defaultManager removeItemAtPath:@(path.c_str()) error:nil];
+}
+
 TEST_CASE("A photo that cannot be written answers that, and no photo") {
   auto capture = std::make_shared<FakeCapture>();
   auto answer = std::make_shared<Answer>();

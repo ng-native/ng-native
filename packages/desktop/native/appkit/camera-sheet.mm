@@ -97,8 +97,13 @@ constexpr CGFloat kInset = 20;
       }
     }
     NSDictionary *exif = metadata[(__bridge NSString *)kCGImagePropertyExifDictionary];
+    // Decided on the main queue, where a cancel is too: a photo answered after a cancel is not
+    // kept.
+    std::string path = request.path;
     dispatch_async(dispatch_get_main_queue(), ^{
-      [sheet finish:shot exif:exif error:failure];
+      if (![sheet finish:shot exif:exif error:failure] && shot) {
+        [NSFileManager.defaultManager removeItemAtPath:@(path.c_str()) error:nil];
+      }
     });
   });
 }
@@ -113,10 +118,10 @@ constexpr CGFloat kInset = 20;
   [self finish:std::nullopt exif:nil error:""];
 }
 
-// Answers once, stops the camera and lets the sheet go.
-- (void)finish:(std::optional<ngn::CameraShot>)shot exif:(NSDictionary *)exif error:(std::string)error {
+// Answers once, stops the camera and lets the sheet go; NO when it was answered already.
+- (BOOL)finish:(std::optional<ngn::CameraShot>)shot exif:(NSDictionary *)exif error:(std::string)error {
   if (!_done) {
-    return;
+    return NO;
   }
   auto done = std::move(_done);
   _done = nullptr;
@@ -127,6 +132,7 @@ constexpr CGFloat kInset = 20;
     [window.sheetParent endSheet:window];
   }
   done(std::move(shot), exif, error);
+  return YES;
 }
 
 @end
