@@ -113,9 +113,11 @@ while (( ${#queue} )); do
     undone=$(reverted_commit $n)
     if [[ $undone == "?" ]]; then continue; fi
     if [[ -n $undone ]]; then echo "#$n undoes main's \"$undone\", skipping"; queue=(${queue:#$n}); continue; fi
-    # A merge while a release runs moves main under it and breaks its push.
-    [[ -z $(gh api "$R/actions/workflows/release.yml/runs?per_page=3" \
-      --jq '.workflow_runs[]|select(.status!="completed")|.id' 2>/dev/null) ]] || continue
+    # A merge while a release of main runs moves main under it and breaks its push. A dry run on another
+    # branch pushes nothing to main, so it doesn't hold the queue. A failed lookup waits.
+    running=$(gh api "$R/actions/workflows/release.yml/runs?branch=main&per_page=5" \
+      --jq '[.workflow_runs[]|select(.status!="completed")]|length' 2>/dev/null) || continue
+    [[ $running == 0 ]] || continue
     # Merge exactly the head that was checked; if a commit landed since, GitHub refuses and the PR stays
     # queued for the next pass. Any failure shows GitHub's reason.
     if err=$(gh api -X PUT $R/pulls/$n/merge -f merge_method=squash -f sha="$sha" 2>&1 >/dev/null); then

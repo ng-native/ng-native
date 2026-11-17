@@ -196,8 +196,10 @@ In this step `<base>` is `origin/main`, or for a stacked PR the remote branch it
 - Before every push, `git fetch origin` and read `git diff <base>...HEAD`: only the files this change
   meant to touch, and in them only its own hunks. Any other file or hunk, above all one deleted or
   reverted, means the history is wrong: rebuild the branch on `<base>` before pushing.
-- Before pushing, check that no release is running. A merge while a release runs breaks its push.
-  `gh api 'repos/ng-native/ng-native/actions/workflows/release.yml/runs?per_page=1' --jq '.workflow_runs[0].status'`
+- Before pushing, check that no release of main is running. A merge while one runs breaks its push,
+  and a push starts CI that competes with it for macOS runners. A dry run on another branch doesn't
+  count.
+  `gh api 'repos/ng-native/ng-native/actions/workflows/release.yml/runs?branch=main&per_page=1' --jq '.workflow_runs[0].status'`
   must print `completed`.
 - Push, then open the PR. `gh pr create` uses GraphQL. When that limit is spent, use REST:
   `gh api repos/ng-native/ng-native/pulls -f title=... -f head=... -f base=<main, or the branch a stacked PR depends on> -f body=...`.
