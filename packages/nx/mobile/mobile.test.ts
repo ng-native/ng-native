@@ -17,7 +17,11 @@ const { createTreeWithEmptyWorkspace } = require('@nx/devkit/testing') as {
 };
 const { addProjectConfiguration, readJson, readNxJson, readProjectConfiguration, updateJson } =
   require('@nx/devkit') as typeof import('@nx/devkit');
-const { minimatch } = require('minimatch') as typeof import('minimatch');
+// Nx's own reading of a plugin's include and exclude, negations and order included.
+const { findMatchingConfigFiles } =
+  require('nx/src/project-graph/utils/project-configuration-utils.js') as {
+    findMatchingConfigFiles: (files: string[], include?: string[], exclude?: string[]) => string[];
+  };
 const { application } = require('../application/index.cjs');
 const { mobile } = require('./index.cjs');
 const native = require('../native-app.cjs');
@@ -70,11 +74,7 @@ const inferredBy = (tree: Tree, file: string) =>
   (readNxJson(tree)?.plugins ?? [])
     .map((entry) => (typeof entry === 'string' ? { plugin: entry } : entry))
     .filter((entry) => entry.plugin === '@nx/expo/plugin')
-    .some((entry) => {
-      const matches = (globs?: string[]) =>
-        (globs ?? []).some((glob) => minimatch(file, glob, { dot: true }));
-      return (!entry.include?.length || matches(entry.include)) && !matches(entry.exclude);
-    });
+    .some((entry) => findMatchingConfigFiles([file], entry.include, entry.exclude).length === 1);
 
 describe('the mobile generator', () => {
   it("writes the phone settings a mobile app's app.json has, keeping macOS", async () => {
@@ -185,6 +185,26 @@ describe('the mobile generator', () => {
     assert.equal(targets!['run-ios'], undefined);
     assert.equal(targets!['run-android'], undefined);
   });
+
+  for (const [why, plugins] of [
+    ['a broader exclude', [{ plugin: '@nx/expo/plugin', exclude: ['apps/**'] }]],
+    ['an include that leaves the app out', [{ plugin: '@nx/expo/plugin', include: ['libs/**'] }]],
+  ] as const) {
+    it(`writes run-ios and run-android itself where ${why} keeps the plugin off the app`, async () => {
+      const tree = await pnpmWorkspace();
+      updateJson(tree, 'nx.json', (nxJson) => ({ ...nxJson, plugins: [...plugins] }));
+      await run(tree, '@proj/desktop');
+      assert.equal(inferredBy(tree, 'apps/desktop/app.json'), false, 'that registration kept');
+      const { targets } = readProjectConfiguration(tree, '@proj/desktop');
+      for (const os of ['ios', 'android']) {
+        assert.deepEqual(targets![`run-${os}`], {
+          executor: 'nx:run-commands',
+          options: { cwd: 'apps/desktop', command: `expo run:${os}` },
+          continuous: true,
+        });
+      }
+    });
+  }
 
   it('changes nothing run again', async () => {
     const tree = await integrated(['@nx/expo/plugin']);

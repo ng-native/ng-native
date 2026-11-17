@@ -32,7 +32,14 @@ function writeJson(tree, file, value) {
  * `args`, or undefined for Expo's default. The `macos` target loads the app from it.
  */
 function servePort(project) {
-  const options = project?.targets.get('serve')?.options ?? {};
+  const serve = project?.targets.get('serve');
+  // Angular applies the default configuration's options over the target's own.
+  const name = serve?.defaultConfiguration;
+  return portOf(name ? serve.configurations?.[name] : undefined) ?? portOf(serve?.options);
+}
+
+/** The port a set of `serve` options names, as `port` or as `--port` in `args`. */
+function portOf(options = {}) {
   if (typeof options.port === 'number') return options.port;
   const args = Array.isArray(options.args) ? options.args.map(String) : [];
   const at = args.findIndex((arg) => arg === '--port' || arg.startsWith('--port='));

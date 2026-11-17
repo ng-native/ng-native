@@ -34,6 +34,7 @@ const {
   updateNxJson,
   NX_VERSION,
 } = require('@nx/devkit');
+const { minimatch } = require('minimatch');
 const semver = require('semver');
 const native = require('../native-app.cjs');
 const { usesWorkspaces } = require('../application/workspaces.cjs');
@@ -109,9 +110,47 @@ const appGlob = (root) => `${root}/**`;
  */
 function excludeFromExpoPlugin(tree, root) {
   const glob = appGlob(root);
-  updateExpoRegistrations(tree, (entry) =>
-    entry.exclude?.includes(glob) ? entry : { ...entry, exclude: [...(entry.exclude ?? []), glob] },
-  );
+  const config = appConfig(root);
+  updateExpoRegistrations(tree, (entry) => {
+    if (matchesInOrder(entry.exclude, config, false)) return entry;
+    // Last, so no later negation lets the app back in, and once.
+    const others = (entry.exclude ?? []).filter((pattern) => pattern !== glob);
+    return { ...entry, exclude: [...others, glob] };
+  });
+}
+
+/** The Expo config the plugin infers an app's targets from. */
+const appConfig = (root) => `${root}/app.json`;
+
+/**
+ * Whether `file` matches `patterns` the way Nx reads a plugin's `include` and `exclude`: in order,
+ * a later pattern overriding an earlier one, `!` negating, and a list that starts with a negation
+ * starting from a match. `empty` is the answer for no patterns.
+ */
+function matchesInOrder(patterns, file, empty) {
+  if (!patterns?.length) return empty;
+  if (!patterns.some((pattern) => pattern.startsWith('!'))) {
+    return patterns.some((pattern) => minimatch(file, pattern, { dot: true }));
+  }
+  let matched = patterns[0].startsWith('!');
+  for (const pattern of patterns) {
+    const negated = pattern.startsWith('!');
+    if (minimatch(file, negated ? pattern.slice(1) : pattern, { dot: true })) matched = !negated;
+  }
+  return matched;
+}
+
+/** Whether any registration of `@nx/expo`'s plugin infers the Expo targets of the app at `root`. */
+function expoPluginInfers(tree, root) {
+  const config = appConfig(root);
+  return (readNxJson(tree)?.plugins ?? []).some((entry) => {
+    const object = typeof entry === 'string' ? { plugin: entry } : entry;
+    return (
+      object.plugin === EXPO_PLUGIN.plugin &&
+      matchesInOrder(object.include, config, true) &&
+      !matchesInOrder(object.exclude, config, false)
+    );
+  });
 }
 
 /** Undoes `excludeFromExpoPlugin`: the plugin infers the app's Expo targets again. */
@@ -265,5 +304,6 @@ module.exports = {
   workspaceNxVersion,
   excludeFromExpoPlugin,
   includeInExpoPlugin,
+  expoPluginInfers,
   EXPO_PLUGIN,
 };

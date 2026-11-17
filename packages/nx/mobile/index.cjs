@@ -27,19 +27,21 @@ const {
   addMissingTargets,
   DEFAULT_PORT,
 } = require('../desktop/index.cjs');
-const { includeInExpoPlugin } = require('../init/index.cjs');
+const { expoPluginInfers, includeInExpoPlugin } = require('../init/index.cjs');
 const { registerSyncGenerator } = require('../sync/index.cjs');
 
 /**
- * `run-ios` and `run-android` on the app's own port, or none on Expo's default, where `@nx/expo`'s
- * plugin infers them.
+ * `run-ios` and `run-android` on the app's own port, or none on Expo's default where `@nx/expo`'s
+ * plugin infers them. A registration that still keeps the plugin off the app (a broader `exclude`,
+ * an `include` that leaves it out) gets them written in its place.
  */
-function mobileTargets(project) {
+function mobileTargets(project, inferred) {
   const port = metroPort(project);
-  if (port === DEFAULT_PORT) return {};
+  if (port === DEFAULT_PORT && inferred) return {};
+  const flag = port === DEFAULT_PORT ? '' : ` --port ${port}`;
   const run = (os) => ({
     executor: 'nx:run-commands',
-    options: { cwd: project.root, command: `expo run:${os} --port ${port}` },
+    options: { cwd: project.root, command: `expo run:${os}${flag}` },
     continuous: true,
   });
   return { 'run-ios': run('ios'), 'run-android': run('android') };
@@ -61,7 +63,7 @@ async function mobile(tree, options) {
   }
   updateAppJson(tree, appJson, native.withMobile);
   includeInExpoPlugin(tree, app.root);
-  addMissingTargets(tree, options.project, mobileTargets(app));
+  addMissingTargets(tree, options.project, mobileTargets(app, expoPluginInfers(tree, app.root)));
   registerSyncGenerator(tree, options.project);
 
   // With package-manager workspaces the app lists its own dependencies. Otherwise the root does,

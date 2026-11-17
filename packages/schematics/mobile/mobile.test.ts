@@ -109,6 +109,19 @@ describe('the mobile schematic', () => {
     }
   });
 
+  it("takes the port from the serve target's default configuration, over its options", async () => {
+    let ported = await workspace(runner, true);
+    const config = json(ported, 'angular.json');
+    const serve = config.projects.native.architect.serve;
+    serve.options.port = 8081;
+    serve.configurations = { ...serve.configurations, desk: { port: 8083 } };
+    serve.defaultConfiguration = 'desk';
+    ported.overwrite('angular.json', JSON.stringify(config, null, 2));
+    ported = await runner.runSchematic('mobile', { project: 'native', skipInstall: true }, ported);
+    const { architect } = json(ported, 'angular.json').projects.native;
+    assert.deepEqual(architect['run-ios'].options, { command: 'run:ios', port: 8083 });
+  });
+
   it('changes nothing run again', async () => {
     const files = [
       'projects/native/app.json',

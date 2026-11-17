@@ -25,7 +25,11 @@ const {
   logger,
   NX_VERSION,
 } = require('@nx/devkit') as typeof import('@nx/devkit');
-const { minimatch } = require('minimatch') as typeof import('minimatch');
+// Nx's own reading of a plugin's include and exclude, negations and order included.
+const { findMatchingConfigFiles } =
+  require('nx/src/project-graph/utils/project-configuration-utils.js') as {
+    findMatchingConfigFiles: (files: string[], include?: string[], exclude?: string[]) => string[];
+  };
 const { application } = require('./index.cjs');
 const { pnpmGlobs } = require('./workspaces.cjs');
 const native = require('../native-app.cjs');
@@ -1139,16 +1143,12 @@ describe('with --desktopOnly', () => {
   });
 
   // Whether Nx runs @nx/expo's plugin on `file`, by the include and exclude globs of each of its
-  // registrations, matched as Nx matches them.
+  // registrations, matched by Nx itself.
   const inferredBy = (tree: Tree, file: string) =>
     (readNxJson(tree)?.plugins ?? [])
       .map((entry) => (typeof entry === 'string' ? { plugin: entry } : entry))
       .filter((entry) => entry.plugin === '@nx/expo/plugin')
-      .some((entry) => {
-        const matches = (globs?: string[]) =>
-          (globs ?? []).some((glob) => minimatch(file, glob, { dot: true }));
-        return (!entry.include?.length || matches(entry.include)) && !matches(entry.exclude);
-      });
+      .some((entry) => findMatchingConfigFiles([file], entry.include, entry.exclude).length === 1);
 
   for (const [shape, plugins] of [
     ['as a string', ['@nx/expo/plugin']],
@@ -1184,6 +1184,21 @@ describe('with --desktopOnly', () => {
       );
     });
   }
+
+  it('moves the exclusion after a negation that would let the app back in, once', async () => {
+    const tree = pnpmWorkspace();
+    const exclude = ['apps/desktop/**', '!apps/**'];
+    updateJson(tree, 'nx.json', (nxJson) => ({
+      ...nxJson,
+      plugins: [{ plugin: '@nx/expo/plugin', exclude }],
+    }));
+    assert.equal(inferredBy(tree, 'apps/desktop/app.json'), true, 'the negation wins as written');
+    await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
+    assert.deepEqual(readNxJson(tree)!.plugins, [
+      { plugin: '@nx/expo/plugin', exclude: ['!apps/**', 'apps/desktop/**'] },
+    ]);
+    assert.equal(inferredBy(tree, 'apps/desktop/app.json'), false);
+  });
 
   it('adds no second copy of an exclusion nx.json already has', async () => {
     const tree = pnpmWorkspace();
