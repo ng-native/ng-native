@@ -2,7 +2,8 @@ name: Desktop host
 
 # The desktop host in @ng-native/desktop. On ubuntu, the toolkit-free core and its tests build with
 # no backend and no Hermes, which proves AppKit never leaks into the core. On macOS, the AppKit host
-# builds as an app would build it, and the core tests run there too. A pull request runs it only when
+# builds as an app would build it, the core tests run there too, and the built host is launched on an
+# example app's bundle to its first frame. A pull request runs it only when
 # the host or the workflow changed, or the lockfile moved the version of a package the host builds
 # from (see `changes`); a push to main and a manual run build it whatever changed. Compiles go
 # through ccache, kept per job and saved only from main, which every pull request restores: a set
@@ -170,6 +171,18 @@ jobs:
       # Views mounted through the AppKit backend into an offscreen window: accessibility and Tab.
       - name: Run the AppKit view tests
         run: '"$BUILD_DIR/appkit/ngn_appkit_tests"'
+
+      # The host launched on the notes example's release bundle, as a packaged app runs one: it must
+      # commit and draw its first frame without a crash or a JavaScript error (launch-probe.sh).
+      - name: Launch the host on an app
+        shell: bash
+        env:
+          EXPO_NO_TELEMETRY: '1'
+        run: |
+          bundle="$RUNNER_TEMP/notes/main.js"
+          (cd examples/notes && pnpm exec expo export:embed --platform macos --dev false \
+            --bundle-output "$bundle" --assets-dest "$RUNNER_TEMP/notes/assets")
+          packages/desktop/native/scripts/launch-probe.sh "$BUILD_DIR/appkit/ngn-macos" "$bundle"
 
       - if: always()
         run: ccache --show-stats
