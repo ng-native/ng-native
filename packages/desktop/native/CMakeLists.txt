@@ -86,6 +86,7 @@ add_library(ngn_core STATIC
     core/src/desktop-view-props.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp
+    core/src/dom-web-view.cpp
     core/src/focus-order.cpp
     core/src/gestures.cpp
     core/src/glass.cpp

@@ -192,7 +192,8 @@ fails, or a module that throws as it loads.
 
 For anything else, the page is a real web page. In a development build the web view is
 inspectable: open Safari, then **Develop**, then the simulator or device, and pick the page to get
-the DOM, the console and the debugger. On Android, `chrome://inspect` does the same.
+the DOM, the console and the debugger. On macOS the page is under this Mac's name in the same
+menu, and on Android `chrome://inspect` does the same.
 
 Edits to a DOM component show up the next time its screen is opened. There is no hot reload inside
 the web view.
@@ -203,9 +204,13 @@ the web view.
   its DOM components (`/_expo/@dom/...`), and built by the app's own Metro for the web platform.
 - **In a release build**, the native build's bundling step (`expo export:embed`) finds every web
   component the app imports and writes each page into the app: `www.bundle` in the iOS app, the
-  assets folder on Android. The web view loads it from there, with no server.
+  assets folder on Android, and `www.bundle` in the app's `Resources` on macOS, which
+  `ng-native-desktop package` bundles the same way. The web view loads it from there, with no
+  server.
 - **With `eas update`**, the pages go wherever Expo puts DOM components' pages, and the web view
-  looks for them where Expo would. This path has not been tested yet.
+  looks for them where Expo would. This path has not been tested yet. On macOS, an app running an
+  update from its updates server looks for the pages beside the update's bundle, where the
+  desktop host's update client does not write them.
 
 A font or an image a page's stylesheet names in a `url()`, relative to the sheet, ships with the
 page: `@font-face { src: url('./files/inter.woff2') }` from a package's stylesheet, or a
@@ -234,9 +239,11 @@ file directly instead of mounting a React component, and the file mounts itself.
   off, so `localStorage` and `sessionStorage` are `null` there. The page is given one of each, kept
   in memory, before any of its code runs: `getItem`, `setItem`, `removeItem`, `clear`, `key` and
   `length`, and not named properties such as `localStorage.theme`. What a page stores is gone when
-  the page is. On iOS both are the web view's own, and `localStorage` is kept between launches.
-- **Checked on iOS.** Android uses the same Expo web view and the same pages, and has been run in a
-  development build only.
+  the page is. On iOS and macOS both are the web view's own, and on iOS `localStorage` is kept
+  between launches.
+- **Checked on iOS and macOS.** Android uses the same Expo web view and the same pages, and has
+  been run in a development build only. On macOS the desktop host draws the view itself, in
+  WebKit, with the same props, messages and page as Expo's iOS view.
 - **Not in Expo Go on Android.** Expo Go there does not include `@expo/dom-webview`, so a
   `<dom-component>` needs a development build.
 

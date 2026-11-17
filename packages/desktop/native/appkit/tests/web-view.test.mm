@@ -106,6 +106,28 @@ TEST_CASE("NGNWebViewController loads HTML once the app allows the navigation, a
   CHECK(finished["canGoBack"] == false);
 }
 
+TEST_CASE("NGNWebViewController loads Expo's DOM web view's page without asking the app, and bridges it both ways") {
+  Harness harness;
+  // Nothing answers a held navigation: a page that waited for the app would never load.
+  harness.allow = std::nullopt;
+  auto config = page(
+      "<script>window.__ngNative = { receive: function (m) { window.ReactNativeWebView.postMessage('got:' + m.label); } };"
+      "window.ReactNativeWebView.postMessage(window.ReactNativeWebView.injectedObjectJson());</script>");
+  config.asksApp = false;
+  config.injectedJavaScriptObject = R"({"inputs":{"label":"Draft"}})";
+  [harness.controller apply:config];
+  REQUIRE(harness.waitFor("message"));
+  CHECK(harness.messages()[0] == R"({"inputs":{"label":"Draft"}})");
+  CHECK(harness.count("shouldStartLoadWithRequest") == 0);
+  CHECK(harness.locks->pending() == 0);
+  CHECK(harness.count("loadingStart") == 1);
+  CHECK(harness.last("message")["url"] == "about:blank");
+
+  [harness.controller command:"injectJavaScript" args:folly::dynamic::array("window.__ngNative.receive({label: 'Final'}); true;")];
+  REQUIRE(harness.waitFor("message", 2));
+  CHECK(harness.messages()[1] == "got:Final");
+}
+
 TEST_CASE("NGNWebViewController stops a navigation the app refuses, and refuses what it still holds when invalidated") {
   Harness harness;
   harness.allow = false;

@@ -289,6 +289,13 @@ bool sameScripts(const WebViewConfig &a, const WebViewConfig &b) {
     return;
   }
   auto step = _config ? ngn::navigationStep(*_config, url, topFrame, str(type)) : ngn::NavigationStep::AskApp;
+  if (step == ngn::NavigationStep::Allow) {
+    if (topFrame) {
+      [self send:"loadingStart" extra:folly::dynamic::object("url", url)("navigationType", str(type))];
+    }
+    decisionHandler(WKNavigationActionPolicyAllow);
+    return;
+  }
   if (step != ngn::NavigationStep::AskApp) {
     decisionHandler(WKNavigationActionPolicyCancel);
     if (step == ngn::NavigationStep::OpenExternally && _openExternally) {

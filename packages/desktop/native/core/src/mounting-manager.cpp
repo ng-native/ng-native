@@ -6,6 +6,7 @@
 #include <chrono>
 
 #include "ngn/desktop-modal.h"
+#include "ngn/dom-web-view.h"
 #include "ngn/native-controls.h"
 #include "ngn/split-view.h"
 #include "ngn/apple-authentication.h"
@@ -70,6 +71,7 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<AppleButtonComponentDescriptor>(),
       concreteComponentDescriptorProvider<GlassViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<GlassContainerComponentDescriptor>(),
+      concreteComponentDescriptorProvider<DomWebViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };
   for (auto &provider : expoUIComponentProviders()) {

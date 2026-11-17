@@ -43,6 +43,17 @@ TEST_CASE("navigationStep hands a clicked page navigation outside originWhitelis
   CHECK(ngn::navigationStep(config, "http://ads.example.com", false, "other") == ngn::NavigationStep::AskApp);
 }
 
+TEST_CASE("navigationStep lets a navigation go ahead without asking the app when asksApp is off, inside originWhitelist") {
+  ngn::WebViewConfig config;
+  config.asksApp = false;
+  CHECK(ngn::navigationStep(config, "https://example.com", true, "other") == ngn::NavigationStep::Allow);
+  CHECK(ngn::navigationStep(config, "http://ads.example.com", false, "other") == ngn::NavigationStep::Allow);
+  config.originWhitelist = std::vector<std::string>{"https://*"};
+  CHECK(ngn::navigationStep(config, "https://example.com", true, "other") == ngn::NavigationStep::Allow);
+  CHECK(ngn::navigationStep(config, "mailto:me@example.com", true, "click") == ngn::NavigationStep::OpenExternally);
+  CHECK(ngn::navigationStep(config, "smb://attacker/share", true, "other") == ngn::NavigationStep::Cancel);
+}
+
 TEST_CASE("navigationStep cancels a navigation outside originWhitelist that no click made, or that Linking would refuse") {
   ngn::WebViewConfig config;
   config.originWhitelist = std::vector<std::string>{"https://*"};

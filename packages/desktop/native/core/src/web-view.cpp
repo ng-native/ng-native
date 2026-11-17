@@ -43,7 +43,7 @@ NavigationStep navigationStep(const WebViewConfig &config, const std::string &ur
     bool userActivated = navigationType == "click" || navigationType == "formsubmit";
     return userActivated && externalUrlAllowed(url) ? NavigationStep::OpenExternally : NavigationStep::Cancel;
   }
-  return NavigationStep::AskApp;
+  return config.asksApp ? NavigationStep::AskApp : NavigationStep::Allow;
 }
 
 std::string webViewMessagingScript() {

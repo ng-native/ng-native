@@ -13,7 +13,7 @@ import { createContext, runInContext } from 'node:vm';
 import { ErrorHandler, type Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
-import { DomComponent } from '@ng-native/expo/dom-component';
+import { DomComponent, desktopPagesUrl } from '@ng-native/expo/dom-component';
 import { compileFixture } from './compile.ts';
 
 interface Fixture {
@@ -316,5 +316,86 @@ describe('a DOM component in a release build', () => {
   it('ignores any other page', async () => {
     assert.deepEqual(await run('www.bundle', 'https://evil.example/www.bundle/note.ts'), []);
     assert.deepEqual(await run('www.bundle', 'file:///App.app/www.bundle/other.html'), []);
+  });
+});
+
+describe('a DOM component on the desktop host', () => {
+  let Fixture: Type<unknown>;
+
+  before(async () => {
+    const mod = await compileFixture('fixtures/dom-component.ts');
+    Fixture = mod['DomComponentFixture'] as Type<unknown>;
+  });
+
+  /** The host takes `injectJavaScript` as a view command: there are no Expo view functions. */
+  const mountOnDesktop = (baseUrl: string) => {
+    const fabric = createFakeFabric();
+    const app = mount(1, Fixture, fabric, {
+      providers: [
+        { provide: DomComponent.SOURCE, useValue: { baseUrl, functions: null, commands: true } },
+      ],
+    });
+    app.applicationRef.tick();
+    return { fabric, app, fixture: app.componentRef.instance as Fixture };
+  };
+  const scriptsOf = (fabric: FakeFabric) =>
+    fabric.commands.map(({ name, args }) => {
+      assert.equal(name, 'injectJavaScript');
+      return args[0] as string;
+    });
+
+  it("sends the page its inputs as the view's injectJavaScript command", async () => {
+    const base = 'http://localhost:8081/_expo/@dom';
+    const page = `${base}/note.ts?file=file:///app/web/note.ts`;
+    const { fabric, app, fixture } = mountOnDesktop(base);
+    const web = fabric.committed[0]!.children[0]!;
+    assert.deepEqual(web.props['source'], { uri: page });
+    assert.deepEqual(fabric.commands, [], 'nothing before the page is ready');
+
+    fabric.emit(web, 'topMessage', {
+      data: JSON.stringify({ type: 'ready', outputs: ['sent'] }),
+      url: page,
+    });
+    app.applicationRef.tick();
+    assert.deepEqual(received(scriptsOf(fabric), page), [
+      { type: 'inputs', inputs: { label: 'Draft' } },
+    ]);
+
+    fixture.label.set('Changed');
+    app.applicationRef.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(received(scriptsOf(fabric), page).at(-1), {
+      type: 'inputs',
+      inputs: { label: 'Changed' },
+    });
+    assert.deepEqual(received(scriptsOf(fabric), 'https://evil.example/note.ts'), []);
+  });
+});
+
+describe("where the desktop host finds DOM components' pages", () => {
+  it("is Expo's dev server route when the bundle came from a dev server", () => {
+    assert.equal(
+      desktopPagesUrl('http://localhost:8141/index.bundle?platform=macos&dev=true'),
+      'http://localhost:8141/_expo/@dom',
+    );
+    assert.equal(
+      desktopPagesUrl(
+        'https://abc.exp.direct/node_modules/expo-router/entry.bundle?platform=macos',
+      ),
+      'https://abc.exp.direct/_expo/@dom',
+    );
+  });
+
+  it('is the www.bundle beside a bundle on disk, where expo export:embed writes the pages', () => {
+    assert.equal(
+      desktopPagesUrl('file:///Applications/Notes.app/Contents/Resources/main.jsbundle'),
+      'file:///Applications/Notes.app/Contents/Resources/www.bundle',
+    );
+  });
+
+  it('is nowhere for a bundle it cannot place', () => {
+    assert.equal(desktopPagesUrl(''), null);
+    assert.equal(desktopPagesUrl(undefined), null);
+    assert.equal(desktopPagesUrl('main.jsbundle'), null);
   });
 });

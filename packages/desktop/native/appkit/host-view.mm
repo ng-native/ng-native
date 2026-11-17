@@ -16,6 +16,7 @@
 #import "symbol-view.h"
 #import "glass-view.h"
 
+#include "ngn/dom-web-view.h"
 #include "ngn/glass.h"
 #import "web-view-component.h"
 #import "expo-image-view.h"
@@ -1190,7 +1191,7 @@ NGNView *NGNMakeView(const ShadowView &view) {
   if (name == ngn::ExpoImageComponentName) {
     return [[NGNExpoImageView alloc] initWithShadowView:view];
   }
-  if (name == "RNCWebView") {
+  if (name == "RNCWebView" || name == ngn::DomWebViewComponentName) {
     return [[NGNWebView alloc] initWithShadowView:view];
   }
   if (Class library = libraryViews()[@(view.componentName)]) {

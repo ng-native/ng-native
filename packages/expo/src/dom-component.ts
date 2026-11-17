@@ -24,6 +24,9 @@
  * Expo ships its `'use dom'` components: the import is a reference to a page that Expo's dev server
  * serves in development and `expo export:embed` bundles into the app for a release build (see
  * `@ng-native/metro`'s `dom-component.cjs`), and the page is found where Expo finds its own.
+ * On macOS the desktop host draws the same view in WebKit, speaking the same protocol, and the
+ * page is found where the running bundle came from: the dev server, or the `www.bundle` beside a
+ * packaged app's bundle.
  *
  * - **`inputs`** go into the page before it loads, and a changed value is sent to it afterwards
  *   without reloading. Anything sent before the page is ready is sent again once it is.
@@ -46,7 +49,7 @@ import {
   untracked,
 } from '@angular/core';
 import { Engine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
-import { optional } from './native.ts';
+import { currentPlatform, optional } from './native.ts';
 import { registerExpoView } from './register-expo-view.ts';
 
 /** The element is this package's, so it needs no `registerExpoViews` call of its own. */
@@ -65,6 +68,11 @@ export interface DomComponentSource {
   /** Where Expo keeps DOM components' pages: the dev server, `www.bundle`, or an update. */
   readonly baseUrl: string | null;
   readonly functions: WebViewFunctions | null;
+  /**
+   * Whether the view takes `injectJavaScript` as a view command, as the desktop host's does,
+   * rather than as one of the functions Expo defines on it.
+   */
+  readonly commands?: boolean;
 }
 
 /** What native code gets for `import note from './web/note.ts'`. */
@@ -93,6 +101,7 @@ export class DomComponent {
     'angular-native.domComponentSource',
     {
       factory: () => {
+        if (currentPlatform() === 'macos') return desktopSource();
         // Expo's own resolution, so a page is found wherever Expo would look for a DOM
         // component's: the dev server, the app's `www.bundle`, or a downloaded update.
         const base = optional(() => require('expo/src/dom/base') as { getBaseURL(): string });
@@ -193,14 +202,20 @@ export class DomComponent {
   }
 
   private send(inputs: Readonly<Record<string, unknown>>): void {
-    const nativeTag = this.engine.tagOf(this.node);
     const source = this.source();
-    if (!this.native.functions || nativeTag === null || !source) return;
+    if (!source) return;
     const message = JSON.stringify({ type: 'inputs', inputs });
-    void this.native.functions.injectJavaScript.call(
-      { nativeTag },
-      inOwnPage(source.uri, `window.__ngNative && window.__ngNative.receive(${message});`),
+    const script = inOwnPage(
+      source.uri,
+      `window.__ngNative && window.__ngNative.receive(${message});`,
     );
+    if (this.native.commands) {
+      this.engine.dispatchCommand(this.node, 'injectJavaScript', [script]);
+      return;
+    }
+    const nativeTag = this.engine.tagOf(this.node);
+    if (!this.native.functions || nativeTag === null) return;
+    void this.native.functions.injectJavaScript.call({ nativeTag }, script);
   }
 }
 
@@ -252,6 +267,37 @@ function servedFrom(source: string): string | undefined {
 
 function fileName(url: string): string {
   return url.split(/[?#]/)[0]!.split('/').at(-1)!;
+}
+
+/**
+ * The desktop host's source: its own web view, which takes `injectJavaScript` as a view command,
+ * with the pages where the running bundle came from (see `desktopPagesUrl`). Expo's packages are
+ * not in a desktop app, so Expo's own resolution is not there to ask.
+ */
+function desktopSource(): DomComponentSource {
+  const { TurboModuleRegistry } = require('react-native') as typeof import('react-native');
+  const sourceCode = TurboModuleRegistry.get<
+    { getConstants(): { scriptURL?: string } } & import('react-native').TurboModule
+  >('SourceCode');
+  return {
+    baseUrl: desktopPagesUrl(optional(() => sourceCode?.getConstants().scriptURL)),
+    functions: null,
+    commands: true,
+  };
+}
+
+/**
+ * Where the desktop host finds DOM components' pages, from the URL of the bundle it runs: Expo's
+ * dev server route (`/_expo/@dom`) on the server a bundle came from, and the `www.bundle` that
+ * `expo export:embed` writes beside a bundle on disk, as in a packaged app's `Resources`. Null for
+ * a bundle it cannot place.
+ */
+export function desktopPagesUrl(scriptURL: string | null | undefined): string | null {
+  if (!scriptURL) return null;
+  const served = servedFrom(scriptURL);
+  if (served) return `${served}/_expo/@dom`;
+  if (!/^file:/i.test(scriptURL)) return null;
+  return `${scriptURL.slice(0, scriptURL.lastIndexOf('/'))}/www.bundle`;
 }
 
 function parse(data: string): PageMessage | undefined {

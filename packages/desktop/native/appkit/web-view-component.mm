@@ -2,6 +2,7 @@
 
 #import "web-view.h"
 
+#include "ngn/dom-web-view.h"
 #include "ngn/library-glue.h"
 
 @implementation NGNWebView {
@@ -32,8 +33,13 @@
 
 - (void)updateProps:(const facebook::react::Props::Shared &)props {
   [super updateProps:props];
-  auto &glue = ngn::libraryGlue();
-  auto config = glue.webViewConfig && props ? glue.webViewConfig(*props) : std::nullopt;
+  if (!props) {
+    return;
+  }
+  auto config = ngn::domWebViewConfig(*props);
+  if (auto &glue = ngn::libraryGlue(); !config && glue.webViewConfig) {
+    config = glue.webViewConfig(*props);
+  }
   if (!config) {
     return;
   }

@@ -70,6 +70,9 @@ struct WebViewConfig {
   std::string applicationNameForUserAgent;
   // Nothing when the prop is not set, and then no origin is refused.
   std::optional<std::vector<std::string>> originWhitelist;
+  // Whether a navigation waits for the app's answer (shouldStartLoadWithRequest), as
+  // react-native-webview's does. Expo's DOM web view (dom-web-view.h) lets each one go ahead.
+  bool asksApp{true};
   bool operator==(const WebViewConfig &) const = default;
 };
 
@@ -85,8 +88,9 @@ bool passesOriginWhitelist(const std::vector<std::string> &whitelist, const std:
 // What a navigation to `url` waits for: the app's answer, or nothing. A page navigation outside
 // `originWhitelist` is handed to the OS only when the user made it (`navigationType`, the library's
 // name for it, is "click" or "formsubmit") and Linking would open it (externalUrlAllowed); any
-// other is cancelled, so a page's script cannot open a scheme or a file on its own.
-enum class NavigationStep { AskApp, OpenExternally, Cancel };
+// other is cancelled, so a page's script cannot open a scheme or a file on its own. Any other
+// navigation is the app's to answer, or, without `asksApp`, goes ahead.
+enum class NavigationStep { AskApp, Allow, OpenExternally, Cancel };
 NavigationStep navigationStep(const WebViewConfig &config, const std::string &url, bool topFrame, std::string_view navigationType);
 
 // The script, at document start, that gives the page window.ReactNativeWebView.postMessage, sent
