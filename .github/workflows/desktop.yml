@@ -184,6 +184,7 @@ jobs:
     strategy:
       matrix:
         flavour: [debug, release]
+    # As the release's desktop-host: room for a build from scratch.
     timeout-minutes: 75
     env:
       NGN_JOBS: '4'

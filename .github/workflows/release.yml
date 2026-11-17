@@ -96,9 +96,10 @@ jobs:
     # It builds fetched third-party sources, so it gets no write access and keeps no token.
     permissions:
       contents: read
-    # Budget: a cold universal build within 15 minutes on this runner (spec). A cold build measured
-    # 36 minutes for release and 46 for debug (dry run 43954406868), so the limit leaves headroom
-    # for both until the build meets the budget.
+    # Unchanged inputs pack a kept host in under 2 minutes, and a change with ccache warm builds in
+    # about 5 (dry runs 43990876531 and 43991351989). The limit is for the build from scratch that
+    # anything the action cannot check falls back to: 50 minutes for release and 52 for debug, cold
+    # and through ccache (dry run 43979954553).
     timeout-minutes: 75
     env:
       NGN_JOBS: '4'
