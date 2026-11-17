@@ -114,6 +114,17 @@ TEST_CASE("a control enabled, or a view hidden, by a later commit joins or leave
   CHECK(walk(f.m, 5) == Tags{8, 2, 4, 7, 10});
 }
 
+TEST_CASE("a view made unfocusable and focusable again by later commits takes the focus again") {
+  Form f;
+  f.m.update(f.card, viewProps(folly::dynamic::object("focusable", false)));
+  CHECK_FALSE(f.m.view(3).acceptsFirstResponder);
+  CHECK(walk(f.m, 5) == Tags{8, 2, 7, 10, 8});
+  f.m.update(f.card, viewProps(folly::dynamic::object("focusable", true)));
+  CHECK(f.m.view(3).acceptsFirstResponder);
+  [f.m.window makeFirstResponder:nil];
+  CHECK(walk(f.m, 3) == Tags{8, 2, 3});
+}
+
 TEST_CASE("Tab with nothing focusable is not used, and leaves the focus where it was") {
   MountedViews m;
   m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object())));

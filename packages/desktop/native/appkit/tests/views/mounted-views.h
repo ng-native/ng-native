@@ -99,13 +99,14 @@ struct MountedViews {
   // Applies the mutations as a commit does, and waits for the main queue to have mounted them.
   void mount(facebook::react::ShadowViewMutationList mutations) {
     mounting->executeMount(kSurface, facebook::react::MountingTransaction(kSurface, 1, std::move(mutations), {}));
-    bool mounted = false;
-    backend->runOnUiThread([&] { mounted = true; });
+    // Shared, so a mount that gives up leaves the flag alive for the task that still runs later.
+    auto mounted = std::make_shared<bool>(false);
+    backend->runOnUiThread([mounted] { *mounted = true; });
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
-    while (!mounted && [deadline timeIntervalSinceNow] > 0) {
+    while (!*mounted && [deadline timeIntervalSinceNow] > 0) {
       [NSRunLoop.mainRunLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
     }
-    if (!mounted) {
+    if (!*mounted) {
       throw std::runtime_error("MountedViews: the main queue never mounted the transaction");
     }
   }
@@ -117,11 +118,13 @@ struct MountedViews {
            facebook::react::ShadowViewMutation::InsertMutation(parent, view, index)});
   }
 
-  // Commits `props` to the mounted `view`.
+  // Commits `props` to the view mounted with `view`'s tag, from what is mounted now: a snapshot
+  // older than the last commit would hide a change back to an earlier value.
   void update(const facebook::react::ShadowView &view, facebook::react::Props::Shared props) {
-    auto next = view;
+    auto current = mounting->tree().find(view.tag)->view;
+    auto next = current;
     next.props = std::move(props);
-    mount({facebook::react::ShadowViewMutation::UpdateMutation(view, next, kSurface)});
+    mount({facebook::react::ShadowViewMutation::UpdateMutation(current, next, kSurface)});
   }
 
   NGNView *view(facebook::react::Tag tag) const {
