@@ -458,49 +458,65 @@ TEST_CASE("NgNativeImagePicker records a video with the host's camera sheet, ans
   std::filesystem::remove_all(folder);
 }
 
-TEST_CASE("NgNativeImagePicker asks for the microphone for a video as iOS does, and rejects with its words when it is not allowed") {
+TEST_CASE("NgNativeImagePicker asks for the microphone for a video as iOS does: a refused one records with no sound, and only an app that cannot ask is rejected") {
   auto library = std::make_shared<FakeLibrary>();
   auto camera = std::make_shared<FakeCamera>();
   camera->state = FakeCamera::Access::Granted;
   auto sheet = std::make_shared<FakeSheet>();
-  sheet->user = FakeSheet::User::Cancels;
+  sheet->user = FakeSheet::User::Records;
   auto microphone = std::make_shared<FakeMicrophone>();
-  ngn::PickerCamera picker{.hardware = camera, .microphone = microphone, .sheet = sheet, .folder = "/tmp/unused"};
+  auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(rand()));
+  ngn::PickerCamera picker{.hardware = camera, .microphone = microphone, .sheet = sheet, .folder = folder.string()};
   auto module = ngn::makeImagePickerModule(library, false, picker);
   const std::string missing = "ImagePicker: Missing microphone permission. Please enable it with the `expo-image-picker` config plugin";
   auto videos = dynamic::array(dynamic::object("mediaTypes", dynamic::array("images", "videos")));
+  auto recorded = [&](const Answer &answer) {
+    return answer.value && answer.value->at("canceled") == dynamic(false) && answer.value->at("assets")[0]["type"] == dynamic("video");
+  };
 
-  // Allowed: no question.
-  CHECK(ask(*module, "launchCameraAsync", videos).value);
+  // Allowed: no question, and the video has sound.
+  CHECK(recorded(ask(*module, "launchCameraAsync", videos)));
   CHECK(microphone->asked == 0);
   CHECK(sheet->shown == 1);
+  CHECK(sheet->asked->video.sound);
 
-  // Undetermined: asked once, and the sheet shows only once it is allowed.
+  // Undetermined: asked once before the sheet shows, with sound once it is allowed.
   microphone->state = FakeMicrophone::Access::NotDetermined;
-  CHECK(ask(*module, "launchCameraAsync", videos).value);
+  CHECK(recorded(ask(*module, "launchCameraAsync", videos)));
   CHECK(microphone->asked == 1);
   CHECK(sheet->shown == 2);
+  CHECK(sheet->asked->video.sound);
+  // Refused at the prompt: the video is still recorded, with no sound, as iOS's camera records it.
   microphone->state = FakeMicrophone::Access::NotDetermined;
   microphone->decides = FakeMicrophone::Access::Denied;
-  CHECK(ask(*module, "launchCameraAsync", videos).failure == missing);
+  CHECK(recorded(ask(*module, "launchCameraAsync", videos)));
   CHECK(microphone->asked == 2);
-  // An app with no NSMicrophoneUsageDescription, which the OS never asks for: it stays undetermined.
+  CHECK(sheet->shown == 3);
+  CHECK_FALSE(sheet->asked->video.sound);
+
+  // Refused before: not asked again, and recorded with no sound.
+  for (auto refused : {FakeMicrophone::Access::Denied, FakeMicrophone::Access::Restricted}) {
+    microphone->state = refused;
+    sheet->asked.reset();
+    CHECK(recorded(ask(*module, "launchCameraAsync", dynamic::array(dynamic::object("mediaTypes", "videos")))));
+    REQUIRE(sheet->asked);
+    CHECK_FALSE(sheet->asked->video.sound);
+  }
+  CHECK(microphone->asked == 2);
+  CHECK(sheet->shown == 5);
+
+  // An app with no NSMicrophoneUsageDescription, which the OS never asks for, so it stays
+  // undetermined: rejected with iOS's words, and no sheet.
   microphone->state = FakeMicrophone::Access::NotDetermined;
   microphone->decides = FakeMicrophone::Access::NotDetermined;
   CHECK(ask(*module, "launchCameraAsync", videos).failure == missing);
-  CHECK(sheet->shown == 2);
-
-  // Refused: not asked again.
-  for (auto refused : {FakeMicrophone::Access::Denied, FakeMicrophone::Access::Restricted}) {
-    microphone->state = refused;
-    CHECK(ask(*module, "launchCameraAsync", dynamic::array(dynamic::object("mediaTypes", "videos"))).failure == missing);
-  }
   CHECK(microphone->asked == 3);
-  CHECK(sheet->shown == 2);
+  CHECK(sheet->shown == 5);
 
   // A photo needs no microphone.
+  sheet->user = FakeSheet::User::Shoots;
   CHECK(ask(*module, "launchCameraAsync", dynamic::array(dynamic::object("mediaTypes", "images"))).value);
-  CHECK(sheet->shown == 3);
+  CHECK(sheet->shown == 6);
   CHECK(microphone->asked == 3);
 
   // The camera's permission comes first, as on iOS, and no prompts shows nothing and asks nothing.
@@ -511,7 +527,8 @@ TEST_CASE("NgNativeImagePicker asks for the microphone for a video as iOS does, 
   auto quiet = ngn::makeImagePickerModule(library, true, picker);
   CHECK(ask(*quiet, "launchCameraAsync", videos).value->at("canceled") == dynamic(true));
   CHECK(microphone->asked == 3);
-  CHECK(sheet->shown == 3);
+  CHECK(sheet->shown == 6);
+  std::filesystem::remove_all(folder);
 }
 
 TEST_CASE("NgNativeImagePicker shows no camera without the permission, with no prompts, or on a Mac with no camera") {

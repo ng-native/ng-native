@@ -9,6 +9,8 @@
 // Answers one photo capture: its image and the camera's metadata, or why there is none.
 @interface NGNPhotoCapture : NSObject <AVCapturePhotoCaptureDelegate>
 - (instancetype)initWithDone:(ngn::appkit::PhotoDone)done;
+// Answers that no photo is coming, for a capture the output refused.
+- (void)abandon:(const char *)reason;
 @end
 
 @implementation NGNPhotoCapture {
@@ -22,6 +24,14 @@
     _keep = self;
   }
   return self;
+}
+
+- (void)abandon:(const char *)reason {
+  auto done = std::move(_done);
+  _keep = nil;
+  if (done) {
+    done(nullptr, nil, reason);
+  }
 }
 
 - (void)captureOutput:(AVCapturePhotoOutput *)output didFinishProcessingPhoto:(AVCapturePhoto *)photo error:(NSError *)error {
@@ -355,8 +365,25 @@ class AVSessionCapture final : public SessionCapture {
       done(nullptr, nil, "the camera is not running");
       return;
     }
-    NGNPhotoCapture *capture = [[NGNPhotoCapture alloc] initWithDone:std::move(done)];
-    [output_ capturePhotoWithSettings:[AVCapturePhotoSettings photoSettings] delegate:capture];
+    // On the session's queue, after any change to the session queued before it (a recording's setup
+    // coming down), which a still taken mid-change would find with no video to take.
+    auto answer = std::make_shared<PhotoDone>(std::move(done));
+    AVCaptureSession *session = session_;
+    AVCapturePhotoOutput *output = output_;
+    dispatch_async(queue_, ^{
+      if (!session.running) {
+        (*answer)(nullptr, nil, "the camera is not running");
+        return;
+      }
+      NGNPhotoCapture *capture = [[NGNPhotoCapture alloc] initWithDone:*answer];
+      @try {
+        [output capturePhotoWithSettings:[AVCapturePhotoSettings photoSettings] delegate:capture];
+      } @catch (NSException *exception) {
+        // The output refuses with no active video connection; the delegate never hears.
+        const char *reason = exception.reason.UTF8String;
+        [capture abandon:reason != nullptr ? reason : "the camera gave no picture"];
+      }
+    });
   }
 
  private:

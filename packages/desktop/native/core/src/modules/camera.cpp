@@ -161,9 +161,11 @@ std::string videoPresetOf(const folly::dynamic &options) {
   return "High";
 }
 
-// Shows the sheet, once the microphone is settled, and answers what it took.
-void showPickerCamera(const PickerCamera &camera, const folly::dynamic &options, MediaKinds kinds, JsPromise promise) {
+// Shows the sheet, once the microphone is settled, and answers what it took. A video has sound
+// only with the microphone allowed.
+void showPickerCamera(const PickerCamera &camera, const folly::dynamic &options, MediaKinds kinds, bool sound, JsPromise promise) {
   CameraSheetRequest request{.photos = kinds.photos, .videos = kinds.videos};
+  request.video.sound = sound;
   bool base64 = false;
   bool exif = false;
   if (options.isObject()) {
@@ -221,7 +223,7 @@ void showPickerCamera(const PickerCamera &camera, const folly::dynamic &options,
   });
 }
 
-// iOS's words for a request for videos with no microphone to record their sound from.
+// iOS's words for a request for videos from an app that cannot ask for the microphone.
 constexpr const char *kMissingMicrophone =
     "ImagePicker: Missing microphone permission. Please enable it with the `expo-image-picker` config plugin";
 
@@ -242,27 +244,25 @@ void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly:
   }
   auto kinds = mediaKindsOf(options);
   if (!kinds.videos) {
-    showPickerCamera(camera, options, kinds, std::move(promise));
+    showPickerCamera(camera, options, kinds, false, std::move(promise));
     return;
   }
-  // A video's sound. iOS rejects a request for videos when the microphone cannot be asked for, and
-  // its camera asks for it when undetermined.
+  // A video's sound, as iOS's camera has it: asked for when undetermined, and a video recorded with
+  // no sound when the microphone is refused. Only an app that cannot ask (no
+  // NSMicrophoneUsageDescription, so the request leaves it undetermined) is rejected, as iOS
+  // rejects it.
   using Access = AudioInput::Access;
   auto access = camera.microphone ? camera.microphone->access() : Access::Denied;
-  if (access == Access::Granted) {
-    showPickerCamera(camera, options, kinds, std::move(promise));
-    return;
-  }
   if (access != Access::NotDetermined) {
-    promise.reject(kMissingMicrophone);
+    showPickerCamera(camera, options, kinds, access == Access::Granted, std::move(promise));
     return;
   }
   camera.microphone->requestAccess([camera, options, kinds, promise](Access decided) {
-    if (decided != Access::Granted) {
+    if (decided == Access::NotDetermined) {
       promise.reject(kMissingMicrophone);
       return;
     }
-    showPickerCamera(camera, options, kinds, promise);
+    showPickerCamera(camera, options, kinds, decided == Access::Granted, promise);
   });
 }
 

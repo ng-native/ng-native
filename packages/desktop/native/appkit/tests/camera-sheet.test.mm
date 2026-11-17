@@ -533,16 +533,21 @@ TEST_CASE("Cancel while recording answers nothing, stops the camera, and leaves 
 
 TEST_CASE("A recording that fails answers its error and no movie") {
   auto capture = std::make_shared<FakeCapture>();
-  capture->recordingFailure = "the disk is full";
   auto answer = std::make_shared<Answer>();
-  NGNCameraSheet *sheet = sheetFor(capture, videoRequest(temporaryMovie()), answer);
+  auto failedPath = temporaryMovie();
+  NGNCameraSheet *sheet = sheetFor(capture, videoRequest(failedPath), answer);
   (void)sheet.view;
   [sheet cameraRunning];
   [sheet record:nil];
-  [sheet record:nil];
+  // The recording fails part way, with some of the movie written: none of it is kept.
+  auto failed = std::move(capture->recordingDone);
+  capture->recordingDone = nullptr;
+  FakeCapture::writeMovie(failedPath, 32, 24, 0.5);
+  failed("the disk is full");
   REQUIRE(spinUntil([&] { return answer->calls > 0; }));
   CHECK_FALSE(answer->clip);
   CHECK(answer->error == "the disk is full");
+  CHECK_FALSE([NSFileManager.defaultManager fileExistsAtPath:@(failedPath.c_str())]);
 
   // A file with no video in it is no movie either.
   auto unreadable = std::make_shared<FakeCapture>();

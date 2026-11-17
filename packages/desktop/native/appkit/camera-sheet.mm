@@ -237,6 +237,8 @@ NSString *elapsedText(double seconds) {
     return;
   }
   if (!error.empty()) {
+    // Whatever of it was written is no movie.
+    [NSFileManager.defaultManager removeItemAtPath:path error:nil];
     [self finish:{} exif:nil error:error];
     return;
   }

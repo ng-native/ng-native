@@ -77,8 +77,9 @@ With `mediaTypes: 'videos'` the shutter is Record, then Stop, with the time reco
 camera opens. The video is a QuickTime movie (`video/quicktime`, a `.mov`), not mirrored, recorded
 at `videoQuality` and stopped at `videoMaxDuration` seconds when that is set. Its `duration` is in
 milliseconds, as on iOS. A request for videos asks for the microphone when it has not been asked
-yet, and rejects when the microphone is refused or the app's `Info.plist` has no
-`NSMicrophoneUsageDescription`. On a Mac with no camera `capture()` rejects.
+yet. With the microphone refused, the video is recorded with no sound, as on iOS. The request
+rejects only when the app's `Info.plist` has no `NSMicrophoneUsageDescription`, with iOS's message.
+On a Mac with no camera `capture()` rejects.
 
 ## Permissions
 

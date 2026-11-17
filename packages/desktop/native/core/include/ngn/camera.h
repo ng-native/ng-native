@@ -201,9 +201,9 @@ void requestCameraPermission(CameraHardware &hardware, bool noPrompts, JsPromise
 //   `videoMaxDuration` seconds (0, the default, for no limit), with its duration in milliseconds.
 //   Videos alone show a record button; videos and photos, a switch between the two.
 // Rejected without the camera permission, as iOS does, or on a Mac with no camera. A request for
-// videos asks for the microphone when it is undetermined, and is rejected with iOS's message when
-// it is not allowed (or cannot be asked, with no NSMicrophoneUsageDescription). Canceled with
-// `noPrompts`, which shows no sheet.
+// videos asks for the microphone when it is undetermined; refused, the video has no sound, as iOS's
+// camera records it. Only an app that cannot ask (no NSMicrophoneUsageDescription) is rejected,
+// with iOS's message. Canceled with `noPrompts`, which shows no sheet.
 void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly::dynamic &options, JsPromise promise);
 
 std::shared_ptr<NativeModule> makeCameraModule(
