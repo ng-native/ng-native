@@ -85,6 +85,14 @@ export class Panel {}
 })
 export class Level {}
 
+/** Alternatives its host is ruled out of by a :not(): named by the one it matches. */
+@Component({
+  selector: 'header:not(.x-off), header:not(header[x-mute]), header[x-on]',
+  imports: [Pressable],
+  template: `<pressable testID="banner-action" />`,
+})
+export class Banner {}
+
 /** Alternatives of classes alone: named by the one whose class the host has. */
 @Component({
   selector: '.x-first-badge, .x-second-badge',
@@ -139,6 +147,7 @@ export class FramedFixture {
   imports: [
     AttributeCard,
     Badge,
+    Banner,
     Level,
     ObservedButton,
     ObservedCard,
@@ -189,6 +198,7 @@ export class FramedFixture {
       <section x-secondary></section>
       <aside x-level="warn"></aside>
       <section class="x-second-badge"></section>
+      <header class="x-off" x-mute x-on></header>
     </scroll-view>
     <x-top-bar />
     <virtual-list testID="rows" [items]="rows" [itemHeight]="20" [style]="{ height: 60 }" />

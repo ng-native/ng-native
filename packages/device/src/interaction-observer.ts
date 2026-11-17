@@ -232,23 +232,42 @@ function componentName(definition: NamedDefinition, host: HostNode): string | nu
 
 /** Angular's selector flags: what the parts after one are. */
 const NOT = 1;
+const ELEMENT = 4;
 const CLASS = 8;
 
 /**
- * Whether a host matches a compiled selector's element name, attributes and classes, up to any
- * `:not()`, which it leaves out: Angular matched the whole selector to mount the component there.
+ * Whether a host matches a compiled selector: its element name, attributes and classes, and none
+ * of its `:not()` fragments, each of which starts at a flag with `NOT` set and rules the host out
+ * when the host has every part of it, as Angular reads them.
  */
 function hostMatches(selector: readonly unknown[], host: HostNode, element: string): boolean {
-  if (selector[0] && selector[0] !== element) return false;
-  let mode = 0;
-  for (let index = 1; index < selector.length; index++) {
-    const part = selector[index];
-    if (typeof part === 'number') {
-      if (part & NOT) return true;
-      mode = part;
+  let from = 0;
+  let negative = false;
+  for (let index = 1; index <= selector.length; index++) {
+    const flag = selector[index];
+    if (index < selector.length && !(typeof flag === 'number' && flag & NOT)) continue;
+    if (fragmentMatches(selector.slice(from, index), host, element) === negative) return false;
+    from = index;
+    negative = true;
+  }
+  return true;
+}
+
+/**
+ * Whether a host has every part of one fragment of a compiled selector: an element name first,
+ * then attributes as name and value pairs, and classes after a `CLASS` flag.
+ */
+function fragmentMatches(parts: readonly unknown[], host: HostNode, element: string): boolean {
+  let mode = ELEMENT;
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index];
+    if (typeof part === 'number') mode = part;
+    else if (mode & ELEMENT) {
+      if (part && part !== element) return false;
+      mode = 0;
     } else if (mode & CLASS) {
       if (!hasClass(host, String(part))) return false;
-    } else if (!hasAttribute(host, String(part), selector[++index])) return false;
+    } else if (!hasAttribute(host, String(part), parts[++index])) return false;
   }
   return true;
 }

@@ -345,6 +345,10 @@ describe('an interaction observer names the component a control belongs to', () 
     assert.equal((await componentOf('level-action')).component, 'aside[x-level=warn]');
   });
 
+  it('names a component by an alternative whose :not() its host is not ruled out by', async () => {
+    assert.equal((await componentOf('banner-action')).component, 'header[x-on]');
+  });
+
   it('names a component by the alternative whose class its host has', async () => {
     assert.equal((await componentOf('badge-action')).component, '.x-second-badge');
   });

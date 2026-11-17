@@ -62,6 +62,10 @@ describe('an interaction observer on the web host names the component a control 
     assert.equal((await componentOf('panel-action')).component, 'section[x-secondary]');
   });
 
+  it('names a component by an alternative whose :not() its host is not ruled out by', async () => {
+    assert.equal((await componentOf('banner-action')).component, 'header[x-on]');
+  });
+
   it('names a component by the alternative whose class its host has', async () => {
     assert.equal((await componentOf('badge-action')).component, '.x-second-badge');
   });

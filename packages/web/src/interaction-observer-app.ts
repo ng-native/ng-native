@@ -45,6 +45,14 @@ export class ObservedCard {}
 })
 export class Panel {}
 
+/** Alternatives its host is ruled out of by a :not(): named by the one it matches. */
+@Component({
+  selector: 'header:not(.x-off), header:not(header[x-mute]), header[x-on]',
+  imports: [Pressable, Text],
+  template: `<pressable testID="banner-action"><text>banner-action</text></pressable>`,
+})
+export class Banner {}
+
 /** Alternatives of classes alone: named by the one whose class the host has. */
 @Component({
   selector: '.x-first-badge, .x-second-badge',
@@ -55,7 +63,7 @@ export class Badge {}
 
 @Component({
   selector: 'app-root',
-  imports: [Badge, ObservedCard, Panel, Pressable, Text],
+  imports: [Badge, Banner, ObservedCard, Panel, Pressable, Text],
   template: `
     <pressable testID="save"><text>save</text></pressable>
     <x-observed-card>
@@ -63,6 +71,7 @@ export class Badge {}
     </x-observed-card>
     <section x-secondary></section>
     <section class="x-second-badge"></section>
+    <header class="x-off" x-mute x-on></header>
   `,
 })
 export class InteractionObserverApp {}
