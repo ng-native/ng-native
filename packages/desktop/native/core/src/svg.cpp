@@ -1511,6 +1511,10 @@ class Renderer {
     double startOffset{0};
     std::vector<std::pair<int, double>> groups;
     int nextGroup{0};
+    // The x, y, dx and dy for the next character, from the innermost element that sets one and
+    // holds it, and how many characters have been laid out.
+    std::optional<double> pendingX, pendingY, pendingDx, pendingDy;
+    size_t characters{0};
   };
 
   static double anchorShift(const TextChunk &chunk) {
@@ -1575,21 +1579,24 @@ class Renderer {
       layoutTextPath(node, style, out);
       return;
     }
+    // An element's positions are its first character's, wherever among what it holds that is, and
+    // one inside it sets them for the same character instead; one with no characters places nothing.
+    auto saved = std::tuple{out.pendingX, out.pendingY, out.pendingDx, out.pendingDy};
+    size_t before = out.characters;
     if (!e.xs.empty()) {
-      out.x = resolve(e.xs[0], Axis::X, style.fontSize);
-      out.chunkStarts = true;
+      out.pendingX = resolve(e.xs[0], Axis::X, style.fontSize);
     }
-    if (!out.track && !e.ys.empty()) {
-      out.y = resolve(e.ys[0], Axis::Y, style.fontSize);
-      out.chunkStarts = true;
+    if (!e.ys.empty()) {
+      out.pendingY = resolve(e.ys[0], Axis::Y, style.fontSize);
     }
     if (!e.dxs.empty()) {
-      out.x += resolve(e.dxs[0], Axis::X, style.fontSize);
+      out.pendingDx = resolve(e.dxs[0], Axis::X, style.fontSize);
     }
     if (!e.dys.empty()) {
-      out.y += resolve(e.dys[0], Axis::Y, style.fontSize);
+      out.pendingDy = resolve(e.dys[0], Axis::Y, style.fontSize);
     }
     if (!e.content.empty()) {
+      placeNextCharacter(out);
       if (out.chunkStarts) {
         out.chunks.push_back({.anchor = style.textAnchor, .track = out.track, .startOffset = out.startOffset});
         out.chunkStarts = false;
@@ -1606,8 +1613,28 @@ class Renderer {
            .fill = paint(style.fill, style.fillOpacity, style, std::nullopt),
            .groups = out.groups});
       out.x += advance;
+      ++out.characters;
     }
     layoutChildren(node, style, out);
+    if (out.characters == before) {
+      std::tie(out.pendingX, out.pendingY, out.pendingDx, out.pendingDy) = saved;
+    }
+  }
+
+  // The pending positions applied to the next character: an x or a y starts a chunk; on a path x
+  // and dx are along it from startOffset, dy is off it, and y places nothing.
+  static void placeNextCharacter(TextLayout &out) {
+    if (out.pendingX) {
+      out.x = *out.pendingX;
+      out.chunkStarts = true;
+    }
+    if (out.pendingY && !out.track) {
+      out.y = *out.pendingY;
+      out.chunkStarts = true;
+    }
+    out.x += out.pendingDx.value_or(0);
+    out.y += out.pendingDy.value_or(0);
+    out.pendingX = out.pendingY = out.pendingDx = out.pendingDy = std::nullopt;
   }
 
   // A textPath: what it holds along the shape it names, from startOffset, as a chunk of its own;

@@ -184,8 +184,8 @@ struct Recorder : ngn::SvgCanvas {
   std::vector<std::string> drawn() const {
     std::vector<std::string> out;
     for (const auto &c : calls) {
-      if (c.rfind("fill", 0) == 0 || c.rfind("stroke", 0) == 0 || c.rfind("text", 0) == 0 || c.rfind("image", 0) == 0 ||
-          c.rfind("clip", 0) == 0) {
+      if (c.rfind("fill", 0) == 0 || c.rfind("stroke", 0) == 0 || c.rfind("text", 0) == 0 || c.rfind("glyphs", 0) == 0 ||
+          c.rfind("image", 0) == 0 || c.rfind("clip", 0) == 0) {
         out.push_back(c);
       }
     }

@@ -324,3 +324,49 @@ TEST_CASE("spans that overlap under a textPath at opacity 0.5 are drawn in one l
         std::vector<std::string>{
             "layer 0.5", "text 'a' 0,20 12 #ff000000", "end layer", "layer 0.5", "text 'b' 10,20 12 #ff000000", "end layer"});
 }
+
+TEST_CASE("dx and dy on the text before its textPath move the first glyph along and off the path, as Chrome places them") {
+  // As Chrome's getStartPositionOfChar has them for the same SVG.
+  auto onPathFrom = [](SvgElement outer, std::vector<SvgNode> spans) {
+    return node(
+        svg(),
+        {node({.kind = SvgKind::Defs}, {node({.kind = SvgKind::Path, .name = "p", .d = "M0 50 H100"})}),
+         node(outer, {node({.kind = SvgKind::TextPath, .href = "p"}, std::move(spans))})});
+  };
+  SvgElement moved{.kind = SvgKind::Text};
+  moved.dxs = {len(10)};
+  moved.dys = {len(-4)};
+  CHECK(texts(onPathFrom(moved, {node(span("a"))})) == std::vector<std::string>{"concat 1 0 0 1 15 50", "glyphs 'a' -5,-4 #ff000000"});
+  // The text's own x is a place along the path too, and its y places nothing.
+  SvgElement placed = moved;
+  placed.xs = {len(30)};
+  placed.ys = {len(20)};
+  CHECK(texts(onPathFrom(placed, {node(span("a"))})) == std::vector<std::string>{"concat 1 0 0 1 45 50", "glyphs 'a' -5,-4 #ff000000"});
+  // A span's own dx and dy for the same glyph win over the text's.
+  SvgElement inner = span("a");
+  inner.dxs = {len(3)};
+  inner.dys = {len(2)};
+  CHECK(texts(onPathFrom(moved, {node(inner)})) == std::vector<std::string>{"concat 1 0 0 1 8 50", "glyphs 'a' -5,2 #ff000000"});
+}
+
+TEST_CASE("the innermost x, y, dx or dy for a character places it, and one on a span with no characters places nothing") {
+  // As Chrome places them.
+  SvgElement outer = text(0, 100);
+  outer.dxs = {len(10)};
+  outer.dys = {len(5)};
+  SvgElement inner = span("ab");
+  inner.dxs = {len(3)};
+  inner.dys = {len(2)};
+  CHECK(texts(node(svg(), {node(outer, {node(inner)})})) == std::vector<std::string>{"text 'ab' 3,102 12 #ff000000"});
+  SvgElement empty{.kind = SvgKind::TSpan};
+  empty.dxs = {len(3)};
+  empty.xs = {len(50)};
+  empty.ys = {len(7)};
+  CHECK(texts(node(svg(), {node(outer, {node(empty), node(span("ab"))})})) == std::vector<std::string>{"text 'ab' 10,105 12 #ff000000"});
+}
+
+TEST_CASE("the recorder counts glyphs on a path as drawn") {
+  Recorder canvas;
+  ngn::drawSvg({.root = onPath("M0 50 H100", {}, {node(span("a"))})}, 200, 200, canvas);
+  CHECK(canvas.drawn() == std::vector<std::string>{"glyphs 'a' -5,0 #ff000000"});
+}
