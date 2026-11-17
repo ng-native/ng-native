@@ -33,9 +33,11 @@ function writeJson(tree, file, value) {
  */
 function servePort(project) {
   const serve = project?.targets.get('serve');
-  // Angular applies the default configuration's options over the target's own.
-  const name = serve?.defaultConfiguration;
-  return portOf(name ? serve.configurations?.[name] : undefined) ?? portOf(serve?.options);
+  // Angular lays each default configuration's options over the target's own, in order, a later
+  // value replacing an earlier one whole.
+  const names = (serve?.defaultConfiguration ?? '').split(',').map((name) => name.trim());
+  const layers = names.filter(Boolean).map((name) => serve.configurations?.[name] ?? {});
+  return portOf(Object.assign({}, serve?.options, ...layers));
 }
 
 /** The port a set of `serve` options names, as `port` or as `--port` in `args`. */

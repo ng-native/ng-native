@@ -189,12 +189,21 @@ describe('the mobile generator', () => {
   for (const [why, plugins] of [
     ['a broader exclude', [{ plugin: '@nx/expo/plugin', exclude: ['apps/**'] }]],
     ['an include that leaves the app out', [{ plugin: '@nx/expo/plugin', include: ['libs/**'] }]],
+    [
+      'a registration that renames the run targets',
+      [
+        {
+          plugin: '@nx/expo/plugin',
+          options: { runIosTargetName: 'ios', runAndroidTargetName: 'android' },
+        },
+      ],
+    ],
   ] as const) {
     it(`writes run-ios and run-android itself where ${why} keeps the plugin off the app`, async () => {
       const tree = await pnpmWorkspace();
       updateJson(tree, 'nx.json', (nxJson) => ({ ...nxJson, plugins: [...plugins] }));
       await run(tree, '@proj/desktop');
-      assert.equal(inferredBy(tree, 'apps/desktop/app.json'), false, 'that registration kept');
+      assert.deepEqual(readNxJson(tree)!.plugins, plugins, 'that registration kept');
       const { targets } = readProjectConfiguration(tree, '@proj/desktop');
       for (const os of ['ios', 'android']) {
         assert.deepEqual(targets![`run-${os}`], {

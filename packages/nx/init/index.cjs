@@ -145,8 +145,12 @@ function expoPluginInfers(tree, root) {
   const config = appConfig(root);
   return (readNxJson(tree)?.plugins ?? []).some((entry) => {
     const object = typeof entry === 'string' ? { plugin: entry } : entry;
+    const named = object.options ?? {};
     return (
       object.plugin === EXPO_PLUGIN.plugin &&
+      // A registration that renames them infers the app's run targets under other names.
+      (named.runIosTargetName ?? 'run-ios') === 'run-ios' &&
+      (named.runAndroidTargetName ?? 'run-android') === 'run-android' &&
       matchesInOrder(object.include, config, true) &&
       !matchesInOrder(object.exclude, config, false)
     );

@@ -122,6 +122,29 @@ describe('the mobile schematic', () => {
     assert.deepEqual(architect['run-ios'].options, { command: 'run:ios', port: 8083 });
   });
 
+  it('reads the serve options as Angular merges them: configurations in order, arrays replaced', async () => {
+    let ported = await workspace(runner, true);
+    const config = json(ported, 'angular.json');
+    const serve = config.projects.native.architect.serve;
+    serve.options.args = ['--port', '8082'];
+    serve.configurations = { ...serve.configurations, a: { port: 8084 }, b: { args: [] } };
+    serve.defaultConfiguration = 'a, b';
+    ported.overwrite('angular.json', JSON.stringify(config, null, 2));
+    ported = await runner.runSchematic('mobile', { project: 'native', skipInstall: true }, ported);
+    const { architect } = json(ported, 'angular.json').projects.native;
+    assert.deepEqual(architect['run-ios'].options, { command: 'run:ios', port: 8084 });
+    serve.defaultConfiguration = 'b';
+    let replaced = await workspace(runner, true);
+    replaced.overwrite('angular.json', JSON.stringify(config, null, 2));
+    replaced = await runner.runSchematic(
+      'mobile',
+      { project: 'native', skipInstall: true },
+      replaced,
+    );
+    const after = json(replaced, 'angular.json').projects.native.architect;
+    assert.deepEqual(after['run-ios'].options, { command: 'run:ios' }, 'args replaced, no port');
+  });
+
   it('changes nothing run again', async () => {
     const files = [
       'projects/native/app.json',
