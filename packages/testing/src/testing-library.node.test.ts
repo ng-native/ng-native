@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Component, input, output, signal } from '@angular/core';
+import { Component, Directive, input, output, signal } from '@angular/core';
 import { Pressable, ScrollView, Text, TextInput, View } from '@ng-native/components';
 import {
   cleanup,
@@ -647,6 +647,25 @@ class AriaField {
   readonly label = input('', { alias: 'aria-label' });
 }
 
+@Directive()
+abstract class LabelInput {
+  readonly accessibilityLabel = input<string>();
+}
+
+@Component({
+  selector: 'x-inherited-field',
+  imports: [TextInput],
+  template: `<text-input [accessibilityLabel]="accessibilityLabel()" />`,
+})
+class InheritedField extends LabelInput {}
+
+@Component({
+  selector: 'x-inherited-form',
+  imports: [InheritedField],
+  template: `<x-inherited-field accessibilityLabel="Name" nativeID="name" />`,
+})
+class InheritedForm {}
+
 @Component({
   selector: 'x-aria-form',
   imports: [AriaField],
@@ -706,6 +725,12 @@ describe('a static attribute that is an input of the host component', () => {
     await render(AriaForm);
     assert.match(screen.getByLabelText('Phone').viewName, /TextInput/);
     assert.equal(screen.getByTestId('phone').props['accessibilityLabel'], undefined);
+  });
+
+  it('keeps an input the component inherits off the host view too', async () => {
+    await render(InheritedForm);
+    assert.match(screen.getByLabelText('Name').viewName, /TextInput/);
+    assert.equal(screen.getByTestId('name').props['accessibilityLabel'], undefined);
   });
 
   it('still matches a selector that reads the attribute on the host', async () => {

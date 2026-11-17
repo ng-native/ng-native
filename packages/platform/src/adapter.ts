@@ -37,6 +37,7 @@ import {
 import {
   AppWindows,
   hairlineTokens,
+  hostInputNames,
   SafeArea,
   Screen,
   WINDOW_MOUNTER,
@@ -837,8 +838,6 @@ interface ComponentDefLike {
   id?: string;
   type?: unknown;
   encapsulation?: number;
-  /** The component's inputs, keyed by the name a template writes. */
-  inputs?: object;
   tView?: {
     directiveRegistry?:
       readonly { selectors?: readonly (readonly unknown[])[]; inputs?: object }[] | null;
@@ -910,7 +909,7 @@ export class NativeRendererFactory implements RendererFactory2 {
    * input's name is the static attribute, and a host binding that writes it later is committed.
    */
   private keepInputAttributes(host: EngineNode, def: ComponentDefLike | null): void {
-    for (const input of Object.keys(def?.inputs ?? {})) this.engine.keepAsAttribute(host, input);
+    for (const input of hostInputNames(def?.type)) this.engine.keepAsAttribute(host, input);
   }
 
   /**
