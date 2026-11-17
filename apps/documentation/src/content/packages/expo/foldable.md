@@ -9,6 +9,8 @@ summary: The hinge of a foldable phone, its posture, angle and fold, as signals.
 open, the angle, and where the fold crosses the app's window. A layout can then keep content off the
 fold, or split into two panes either side of it.
 
+<!-- platforms: Foldable -->
+
 ## Install
 
 ```sh

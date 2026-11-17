@@ -226,6 +226,72 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   expoRow('SplashScreen', 'NgNativeSplashScreen'),
   expoRow('TextRecognition', 'NgNativeTextRecognition', ['yes', 'yes', 'yes', 'absent', 'absent']),
   expoRow('Updates', 'NgNativeUpdates'),
+  expoRow('AddressSearch', 'NgNativeAddressSearch'),
+  expoRow('AppleSignIn', 'NgNativeAppleAuthentication', [
+    'signed with the Sign in with Apple entitlement',
+    'yes',
+    'yes',
+    'absent',
+    'absent',
+  ]),
+  expoRow('Biometrics', 'NgNativeLocalAuthentication'),
+  expoRow('Camera', 'NgNativeCamera'),
+  expoRow('MapView', 'NgNativeMaps'),
+  expoRow('LanguageModel', 'NgNativeLocalLlm', [
+    'macOS 26 and later',
+    'iPadOS 26 and later',
+    'iOS 26 and later',
+    'Gemini Nano, on the phones that ship it',
+    'absent',
+  ]),
+  expoRow('ScreenCapture', 'NgNativeScreenCapture', [
+    '`prevent` and `allow`, no screenshot count',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('StoreReview', 'NgNativeStoreReview', [
+    'yes',
+    'yes',
+    'yes',
+    'with the Play Store',
+    'absent',
+  ]),
+  expoRow('Tracking', 'NgNativeTrackingTransparency'),
+  expoRow('Watch', 'WatchConnectivity', ['absent', 'no watch to pair', 'yes', 'absent', 'absent']),
+  expoRow('Foldable', 'ExpoHinge', [
+    'absent',
+    'when a hinge is reported',
+    'when a hinge is reported',
+    'when a hinge is reported',
+    'absent',
+  ]),
+  row(
+    '`Accelerometer`, `Gyroscope`, `Magnetometer`, `DeviceMotion`, `Barometer`',
+    [],
+    ['absent', 'yes', 'yes', 'yes', 'absent'],
+    {
+      Accelerometer: 'expo-sensors',
+      Gyroscope: 'expo-sensors',
+      Magnetometer: 'expo-sensors',
+      DeviceMotion: 'expo-sensors',
+      Barometer: 'expo-sensors',
+    },
+  ),
+  row('`LightSensor`', [], ['absent', 'absent', 'absent', 'yes', 'absent'], {
+    LightSensor: 'expo-sensors',
+  }),
+  row('`assets()`, `assetResource()`', [], EXPO_MODULE, {
+    assets: 'NgNativeAsset',
+    assetResource: 'NgNativeAsset',
+  }),
+  row('`database()`', [], ['yes', 'yes', 'yes', 'yes', 'yes'], { database: 'NgNativeSqlite' }),
+  row('`videoPlayer()`', [], ['yes', 'yes', 'yes', 'yes', 'yes'], { videoPlayer: 'NgNativeVideo' }),
+  row('`audioPlayer()`, `audioRecorder()`', [], ['yes', 'yes', 'yes', 'yes', 'yes'], {
+    audioPlayer: 'NgNativeAudio',
+    audioRecorder: 'NgNativeAudio',
+  }),
 ];
 
 /** The row a service's `available()` follows, or undefined where the table has none for it. */

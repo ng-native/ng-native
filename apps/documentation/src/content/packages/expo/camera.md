@@ -10,6 +10,8 @@ over your app. For a camera inside your own screen - a scanner, a custom shutter
 `<expo-camera>` view and import the `Camera` directive, which applies to every `<expo-camera>` in
 the template.
 
+<!-- platforms: Camera -->
+
 ## Install
 
 ```sh

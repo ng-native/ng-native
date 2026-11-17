@@ -12,6 +12,8 @@ What these functions add is the two things a component needs and cannot get othe
 is _released_ when the component is destroyed, and its changing state is _readable_, because the
 player's own properties are plain mutable fields no template can watch.
 
+<!-- platforms: videoPlayer, audioPlayer, audioRecorder -->
+
 ## Install
 
 ```sh

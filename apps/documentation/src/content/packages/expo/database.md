@@ -10,6 +10,8 @@ into `expo-sqlite`, and both React. The database itself is a plain object with `
 the rest already on it, so what this rebuilds is the lifecycle: opened once, migrated before
 anything queries it, closed on request.
 
+<!-- platforms: database -->
+
 ## Install
 
 ```sh

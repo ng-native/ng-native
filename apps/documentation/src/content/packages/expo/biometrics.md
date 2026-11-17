@@ -8,6 +8,8 @@ summary: Face ID, Touch ID and fingerprint unlock through one authenticate() cal
 `Biometrics` wraps `expo-local-authentication`: whether the device can authenticate the person in
 front of it, and the system prompt that does it.
 
+<!-- platforms: Biometrics -->
+
 ## Install
 
 ```sh

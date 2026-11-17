@@ -10,6 +10,8 @@ summary: Talk to a SwiftUI Apple Watch app from Angular, with messages, shared c
 WatchConnectivity, bound to `react-native-watch-connectivity`. The watch app itself is SwiftUI:
 React Native does not run on watchOS, so the phone side is Angular and the watch side is native.
 
+<!-- platforms: Watch -->
+
 Only apps that install `react-native-watch-connectivity` get its native code. On Android and the
 web, `Watch` is inert: `available()` is false, the signals stay at their defaults and sending
 rejects. With no paired watch it is available, and stays unpaired and unreachable. On iOS, a build

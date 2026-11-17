@@ -8,6 +8,8 @@ summary: Accelerometer, gyroscope, magnetometer, device motion, barometer and li
 Six motion and environment sensors, bound to `expo-sensors`: `Accelerometer`, `Gyroscope`,
 `Magnetometer`, `DeviceMotion`, `Barometer` and `LightSensor`.
 
+<!-- platforms: Accelerometer, Gyroscope, Magnetometer, DeviceMotion, Barometer, LightSensor -->
+
 Every one of them is the same object underneath - `addListener`, `setUpdateInterval`,
 `isAvailableAsync` - so this is one `Sensor` class parameterized by the reading, not one per
 sensor. That is also why these are injection tokens rather than six `@Service()` classes: a

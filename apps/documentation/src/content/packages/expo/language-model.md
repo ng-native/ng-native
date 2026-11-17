@@ -11,6 +11,8 @@ language model the operating system already ships, asked from Angular. On iOS th
 Foundation Models, the model behind Apple Intelligence; on Android it is Gemini Nano. Nothing is
 bundled with the app, there is no API key, and the prompt and the answer never leave the device.
 
+<!-- platforms: LanguageModel -->
+
 It answers in three ways: `generate()` for the whole answer at once, `generateObject()` for an
 answer shaped by a schema, and `stream()` for an answer a template shows as it is written. Each of
 those is a conversation of its own; `session()` keeps one going across turns, with tools the model

@@ -8,6 +8,8 @@ summary: Ask for a rating with the platform's own prompt, or link to the store p
 `StoreReview` is the platform's "rate this app" prompt, bound to `expo-store-review`: the App
 Store's review sheet on iOS and the Play Store's in-app review on Android.
 
+<!-- platforms: StoreReview -->
+
 The prompt belongs to the platform, and so does the decision whether it appears. iOS shows it at
 most three times in a year and says nothing when it declines, so `request()` resolving does not
 mean anyone saw a prompt. Ask at a moment of success - a task finished, not an app launched - and

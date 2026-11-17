@@ -245,7 +245,7 @@ function sourceOf(name: string): string {
     for (const file of readdirSync(fileURLToPath(new URL(dir, root)))) {
       if (!file.endsWith('.ts')) continue;
       const source = read(`${dir}/${file}`);
-      if (new RegExp(`^export (class|const) ${name}\\b`, 'm').test(source)) return source;
+      if (new RegExp(`^export (class|const|function) ${name}\\b`, 'm').test(source)) return source;
     }
   }
   assert.fail(`no source exports ${name}`);

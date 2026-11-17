@@ -12,6 +12,8 @@ marker and shape taps and camera moves, and moves the camera from code. It is a 
 `expo-maps`: every input is the prop `expo-maps` reads under the same name, and nothing is added on
 top.
 
+<!-- platforms: MapView -->
+
 ## Install
 
 ```sh

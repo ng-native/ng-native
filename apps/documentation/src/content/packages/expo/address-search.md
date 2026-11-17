@@ -11,6 +11,8 @@ town, postcode and country. It needs no permission and no API key. It is `@ng-na
 native code: MapKit on iOS, the platform's geocoder on Android, and MapKit on macOS through the
 desktop host.
 
+<!-- platforms: AddressSearch -->
+
 ## Install
 
 Nothing to install beyond `@ng-native/expo`. Its native half is in a development build; Expo Go

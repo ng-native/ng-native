@@ -11,6 +11,8 @@ Apple's own button for it. The App Store requires Sign in with Apple of an app t
 social sign-in. It works on iOS, and on macOS in an app signed with the Sign in with Apple
 entitlement; elsewhere `available()` answers false.
 
+<!-- platforms: AppleSignIn -->
+
 ## Install
 
 ```sh

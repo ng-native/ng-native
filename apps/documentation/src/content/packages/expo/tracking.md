@@ -9,6 +9,8 @@ summary: Apple's App Tracking Transparency permission, and the advertising ident
 On iOS 14.5 and later, an app asks before it tracks the user across other companies' apps and
 websites, and the advertising identifier is handed out only once the user has said yes.
 
+<!-- platforms: Tracking -->
+
 The question is asked once. After an answer, iOS shows no dialog again, so `permission.blocked()`
 is how an app knows to point the user at Settings instead. Android has no such permission, and the
 module answers granted there.

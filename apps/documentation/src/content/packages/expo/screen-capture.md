@@ -8,6 +8,8 @@ summary: Keep a screen out of screenshots and recordings, and count the screensh
 `ScreenCapture` keeps sensitive screens out of screenshots and screen recordings, and counts the
 screenshots the user takes, bound to `expo-screen-capture`.
 
+<!-- platforms: ScreenCapture -->
+
 Preventing capture is held by a key, and stays on while any key is held: a payment screen and a
 passwords screen that each prevent it do not undo each other when one of them closes. The
 screenshot count is a signal, and the listener behind it lives as long as the app does and is
