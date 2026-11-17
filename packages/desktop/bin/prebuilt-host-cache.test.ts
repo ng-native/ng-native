@@ -133,6 +133,11 @@ describe('the host cache', () => {
       writeHostCache(cache, 'k1', appkit);
       writeFileSync(path.join(cache, 'host.json'), '{"key":');
       assert.match(readHostCache(cache, 'k1').reason ?? '', /unreadable/);
+
+      for (const record of ['null', '"k1"', '[]', '7']) {
+        writeFileSync(path.join(cache, 'host.json'), record);
+        assert.match(readHostCache(cache, 'k1').reason ?? '', /not a host record/, record);
+      }
     });
   });
 

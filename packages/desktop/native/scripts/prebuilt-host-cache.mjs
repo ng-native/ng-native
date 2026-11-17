@@ -107,6 +107,9 @@ export function readHostCache(dir, key) {
       reason: `${record} is unreadable: ${/** @type {Error} */ (error).message}`,
     };
   }
+  if (saved === null || typeof saved !== 'object' || Array.isArray(saved)) {
+    return { appkit: null, reason: `${record} is not a host record` };
+  }
   if (saved.schema !== SCHEMA || saved.key !== key) {
     return { appkit: null, reason: `the host in ${dir} was built from other inputs` };
   }
