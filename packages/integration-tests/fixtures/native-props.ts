@@ -42,6 +42,7 @@ export class Tooltip {
       (layout)="noop()"
     >
       <text numberOfLines="2" ellipsizeMode="tail" selectable listHeader>words</text>
+      <view interactionName="Card"></view>
       <pressable [disabled]="true" hitSlop="4" (press)="noop()" (longPress)="noop()">
         <text>press</text>
       </pressable>

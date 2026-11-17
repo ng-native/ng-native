@@ -661,6 +661,8 @@ const ENGINE_PROPS = new Set<string>([
   'disabled',
   'intrinsicSize',
   'styleOverride',
+  // A component's name in interaction reports: see `INTERACTION_NAME`.
+  'interactionName',
   // A text field's latest event count, committed as `mostRecentEventCount`: see `echoedEventCount`.
   'latestEventCount',
   ...Object.values(EVENT_OPT_IN_PROPS),

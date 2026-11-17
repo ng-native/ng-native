@@ -45,7 +45,7 @@ describe('a prop the native view does not declare', () => {
     assert.match(reports[2]!, /<switch> has no prop 'iosBackgroundColor'/);
   });
 
-  it('says nothing of style, events, accessibility, pass-through props or directive inputs', async () => {
+  it('says nothing of style, events, accessibility, interactionName, pass-through props or directive inputs', async () => {
     await render(mod['DeclaredProps'] as Type<unknown>, { dev: true });
     assert.deepEqual(said(), []);
   });
