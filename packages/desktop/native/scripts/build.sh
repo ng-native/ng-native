@@ -3,7 +3,8 @@
 # pinned sources and building Hermes first when they are missing. Prints the build directory.
 #
 #   build.sh [node_modules/react-native] [--backend appkit|none] [--universal] [--debug|--release]
-#            [--test | --no-tests] [--library <node_modules/library>]... [--build-dir <dir>]
+#            [--test | --no-tests] [--no-debug-info] [--library <node_modules/library>]...
+#            [--build-dir <dir>]
 #
 # Without a path, react-native is resolved from the current directory.
 #
@@ -14,6 +15,8 @@
 #   --test          run the core tests after building
 #   --no-tests      leave the core tests out, as an app's build does: the published package has
 #                   none of their sources
+#   --no-debug-info the default RelWithDebInfo build without its debug info, for a host that is
+#                   stripped anyway (make-prebuilt.mjs): the same code, compiled and linked faster
 #   --library       a library whose Fabric components the host compiles in (its codegen, by
 #                   scripts/codegen-library.sh); repeatable. A build without one drops them all.
 #   --build-dir     build here instead of the cache's shared build directory, for a build that
@@ -48,6 +51,7 @@ tests=ON
 no_tests=0
 libraries=()
 build_dir=""
+debug_info=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --backend) backend="$2"; shift ;;
@@ -56,6 +60,7 @@ while [ $# -gt 0 ]; do
     --release) config=Release; tests=OFF ;;
     --test) run_tests=1 ;;
     --no-tests) tests=OFF; no_tests=1 ;;
+    --no-debug-info) debug_info=0 ;;
     --library) libraries+=("$2"); shift ;;
     --build-dir) build_dir="$2"; shift ;;
     *) echo "build.sh: unknown option $1" >&2; exit 2 ;;
@@ -121,6 +126,16 @@ while IFS= read -r arg; do
   launcher_args+=("$arg")
 done < <("$here/compiler-launcher.sh" "${NGN_COMPILER_LAUNCHER:-}")
 
+# RelWithDebInfo's own flags without -g. Hermes builds as Release, which has none.
+flags_args=()
+if [ "$debug_info" = 0 ] && [ "$config" = RelWithDebInfo ]; then
+  langs=(C CXX)
+  [ "$(uname -s)" = "Darwin" ] && langs+=(OBJC OBJCXX)
+  for lang in "${langs[@]}"; do
+    flags_args+=("-DCMAKE_${lang}_FLAGS_RELWITHDEBINFO=-O2 -DNDEBUG")
+  done
+fi
+
 arch_key="${archs//;/-}"
 hermes_args=()
 if [ "$backend" != "none" ]; then
@@ -143,6 +158,7 @@ cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   -DNGN_TESTS="$tests" \
   "${link_args[@]}" \
   ${launcher_args[@]+"${launcher_args[@]}"} \
+  ${flags_args[@]+"${flags_args[@]}"} \
   ${hermes_args[@]+"${hermes_args[@]}"} >&2
 nice -n 10 cmake --build "$BUILD" -j "$JOBS" >&2
 if [ "$run_tests" = 1 ]; then

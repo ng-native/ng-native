@@ -299,6 +299,8 @@ try {
           '--universal',
           // The debug host is the dev build an app's `run` makes, with React Native's debugger.
           flavour === 'release' ? '--release' : '--no-tests',
+          // Stripped before it is packed, so debug info would only slow the build.
+          ...(flavour === 'release' ? [] : ['--no-debug-info']),
           ...Object.values(libraries).flatMap((dir) => ['--library', dir]),
           '--build-dir',
           buildRoot,
