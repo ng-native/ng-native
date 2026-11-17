@@ -62,6 +62,15 @@ const ngn::ContainerInsets kWindow{.size = {800, 600}, .insets = {.left = 0, .to
 
 } // namespace
 
+TEST_CASE("the window controls reach in from the leading edge, the right one right to left") {
+  // A 360-point window with the controls 13 to 69 points from its left, or from its right.
+  CHECK(ngn::titlebarLeading(13, 69, 360, false) == 69);
+  CHECK(ngn::titlebarLeading(291, 347, 360, true) == 69);
+  // A content pane beside a sidebar the controls are over: they do not reach it.
+  CHECK(ngn::titlebarLeading(-187, -131, 600, false) == 0);
+  CHECK(ngn::titlebarLeading(851, 907, 600, true) == 0);
+}
+
 TEST_CASE("a view gets the part of its container's insets it overlaps") {
   ngn::ContainerInsets c{.size = {800, 600}, .insets = {.left = 10, .top = 52, .right = 20, .bottom = 30}};
   CHECK(ngn::insetsWithin(c, {{0, 0}, {800, 600}}) == EdgeInsets{.left = 10, .top = 52, .right = 20, .bottom = 30});

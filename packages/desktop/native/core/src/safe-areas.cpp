@@ -17,6 +17,10 @@ EdgeInsets insetsWithin(const ContainerInsets &container, const Rect &frame) {
   };
 }
 
+double titlebarLeading(double minX, double maxX, double width, bool rightToLeft) {
+  return std::max(0.0, rightToLeft ? width - minX : maxX);
+}
+
 void SafeAreas::created(const ShadowView &view) {
   std::string_view name = view.componentName;
   if (name == "RNCSafeAreaProvider") {

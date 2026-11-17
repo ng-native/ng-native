@@ -1349,6 +1349,8 @@ int main(int argc, const char *argv[]) {
         ngn::DebuggerIdentity{
             .appId = appId,
             .deviceName = NSHost.currentHost.localizedName ? NSHost.currentHost.localizedName.UTF8String : "Mac"});
+    // Each surface lays out the way I18nManager.isRTL says, read again as a reload restarts them.
+    gHost.runtime->rightToLeft = [system] { return ngn::appRightToLeft(*system); };
     // The first launch owes its first frame from the instance the runtime just began.
     gHost.launchFrame.loaded(gHost.updates->launchGeneration(), gHost.mounting->instance());
 

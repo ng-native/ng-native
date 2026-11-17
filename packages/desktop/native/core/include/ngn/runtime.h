@@ -10,6 +10,7 @@
 #include "ngn/network.h"
 #include "ngn/reload-thread.h"
 #include "ngn/surface-book.h"
+#include "ngn/surface-metrics.h"
 #include "ngn/native-controls.h"
 #include "ngn/text-measurer.h"
 
@@ -35,14 +36,6 @@ class Runtime;
 } // namespace facebook::jsi
 
 namespace ngn {
-
-struct SurfaceMetrics {
-  facebook::react::Size size{};
-  // Device pixels per point.
-  float pointScale{2};
-  // The text size multiplier.
-  float fontScale{1};
-};
 
 // The OS's HTTP and WebSocket clients, which Networking, WebSocket and the dev server use.
 struct NetworkClients {
@@ -85,6 +78,9 @@ class Runtime {
   // that resumes it; then that it resumed. On the inspector's thread. Set them before loadBundle.
   std::function<void(std::function<void()> resume)> onDebuggerPaused;
   std::function<void()> onDebuggerResumed;
+  // Whether the app lays out right to left, asked each time a surface starts or resizes, the
+  // restarts of a reload included, so it agrees with what the new instance's I18nManager reads.
+  std::function<bool()> rightToLeft;
 
   // Loads the bundle (JavaScript or Hermes bytecode). False if it could not be read or downloaded.
   bool loadBundle();

@@ -226,6 +226,26 @@ TEST_CASE("I18nManager follows the system's direction and persists allowRTL and 
   CHECK(module->call("getConstants")["doLeftAndRightSwapInRTL"] == false);
 }
 
+TEST_CASE("Surfaces lay out right to left exactly when I18nManager says so") {
+  Fixture f;
+  auto agrees = [&] {
+    return ngn::appRightToLeft(*f.system) == ngn::makeI18n(f.services)->call("getConstants")["isRTL"].asBool();
+  };
+  CHECK_FALSE(ngn::appRightToLeft(*f.system));
+  f.system->deviceFacts.rightToLeft = true;
+  CHECK(ngn::appRightToLeft(*f.system));
+  CHECK(agrees());
+  // The app turns right to left off on a right-to-left system.
+  f.system->preferences["RCTI18nUtil_allowRTL"] = false;
+  CHECK_FALSE(ngn::appRightToLeft(*f.system));
+  CHECK(agrees());
+  // And forces it on a left-to-right one.
+  f.system->deviceFacts.rightToLeft = false;
+  f.system->preferences["RCTI18nUtil_forceRTL"] = true;
+  CHECK(ngn::appRightToLeft(*f.system));
+  CHECK(agrees());
+}
+
 TEST_CASE("Clipboard reads and writes the system's text") {
   Fixture f;
   auto module = ngn::makeClipboard(f.services);

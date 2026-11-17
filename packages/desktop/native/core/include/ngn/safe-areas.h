@@ -36,6 +36,11 @@ struct ContainerInsets {
 // The part of a container's insets a view at `frame` (in the container's coordinates) overlaps.
 EdgeInsets insetsWithin(const ContainerInsets &container, const Rect &frame);
 
+// How far window controls spanning `minX` to `maxX` (in a container `width` wide) reach in from
+// its leading edge: the left one, or the right one right to left, where AppKit puts the controls
+// on the right. 0 when they lie outside it.
+double titlebarLeading(double minX, double maxX, double width, bool rightToLeft);
+
 class SafeAreas {
  public:
   virtual ~SafeAreas() = default;

@@ -21,7 +21,9 @@ closes the windows with no key and keeps the rest for five seconds for the reloa
 again. An app that renders on its own surface instead gets that surface in a window. Each window
 tells the app its size and its backing scale as it shows and whenever either changes, as when it
 moves to a display of another density, so its engine keeps its own media query size, pixel ratio
-and `--hairline`.
+and `--hairline`. In a right-to-left language AppKit mirrors each window's chrome (the window
+buttons, the toolbar and its chevrons, the sidebar), and the app's views lay out right to left
+whenever `I18nManager.isRTL` says so, `allowRTL` and `forceRTL` included, as on iOS.
 
 ## The menu bar and navigation
 

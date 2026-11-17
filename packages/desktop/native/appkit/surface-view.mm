@@ -232,7 +232,11 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
   double leading = 0;
   if (NSButton *zoom = [self.window standardWindowButton:NSWindowZoomButton]; zoom != nil && safe.top > 0) {
     NSRect controls = [self convertRect:zoom.bounds fromView:zoom];
-    leading = std::max<double>(0, NSMaxX(controls));
+    leading = ngn::titlebarLeading(
+        NSMinX(controls),
+        NSMaxX(controls),
+        NSWidth(self.bounds),
+        self.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft);
   }
   ngn::ContainerInsets insets{
       .size = {static_cast<facebook::react::Float>(self.bounds.size.width),

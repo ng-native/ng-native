@@ -122,7 +122,10 @@ NSImage *symbol(const std::string &name, NSString *description) {
 @implementation NGNHistoryControl
 - (NSMenu *)menuForEvent:(NSEvent *)event {
   NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
-  NSInteger segment = point.x < NSWidth(self.bounds) / 2 ? 0 : 1;
+  // Segment 0 is back, which AppKit lays out on the right in a right-to-left layout.
+  bool rightToLeft = self.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft;
+  NSInteger segment =
+      ngn::chevronAt(point.x, NSWidth(self.bounds), rightToLeft) == ngn::NavigationDirection::Back ? 0 : 1;
   return [self isEnabledForSegment:segment] ? [self menuForSegment:segment] : nil;
 }
 @end

@@ -304,6 +304,11 @@ std::vector<HistoryMenuItem> historyMenu(const WindowHistory &history, Navigatio
   return items;
 }
 
+NavigationDirection chevronAt(double x, double width, bool rightToLeft) {
+  bool left = x < width / 2;
+  return left != rightToLeft ? NavigationDirection::Back : NavigationDirection::Forward;
+}
+
 std::shared_ptr<void> MenuHost::listen(Listener listener) {
   return listeners_.add(std::move(listener));
 }

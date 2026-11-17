@@ -61,6 +61,9 @@ std::shared_ptr<NativeModule> makeAppearance(const CoreModuleServices &services)
 std::shared_ptr<NativeModule> makeAccessibilityManager(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeLinking(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeI18n(const CoreModuleServices &services);
+// What I18nManager's isRTL answers, and the direction each surface lays out from: the system's,
+// unless the app turned right to left off (allowRTL) or forced it on (forceRTL).
+bool appRightToLeft(System &system);
 std::shared_ptr<NativeModule> makeAlertManager(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeClipboard(const CoreModuleServices &services);
 std::shared_ptr<NativeModule> makeSettingsManager(const CoreModuleServices &services);

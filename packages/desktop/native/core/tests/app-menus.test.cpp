@@ -322,6 +322,17 @@ TEST_CASE("the chevrons show the window's history, or the stack's back for an ap
   CHECK(ngn::historyButtons(WindowHistory{.back = {"Home"}}, true, true) == HistoryButtons{});
 }
 
+TEST_CASE("back is the leading chevron: the left one, and the right one right to left") {
+  using ngn::NavigationDirection;
+  CHECK(ngn::chevronAt(10, 70, false) == NavigationDirection::Back);
+  CHECK(ngn::chevronAt(60, 70, false) == NavigationDirection::Forward);
+  CHECK(ngn::chevronAt(10, 70, true) == NavigationDirection::Forward);
+  CHECK(ngn::chevronAt(60, 70, true) == NavigationDirection::Back);
+  // The middle counts as the right half, either way.
+  CHECK(ngn::chevronAt(35, 70, false) == NavigationDirection::Forward);
+  CHECK(ngn::chevronAt(35, 70, true) == NavigationDirection::Back);
+}
+
 TEST_CASE("a chevron's menu lists that way's entries nearest first, and a pick navigates that many steps") {
   Fixture f;
   ngn::WindowHistory history{.back = {"Notes", "Home"}, .forward = {"Note 4", "Note 5", "Note 6"}};

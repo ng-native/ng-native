@@ -190,28 +190,35 @@ std::shared_ptr<NativeModule> makeLinking(const CoreModuleServices &s) {
   return std::make_shared<Linking>(s);
 }
 
+namespace {
+
+// React Native iOS's keys and defaults: RTL is allowed and left and right swap, until the app
+// says otherwise; the choice persists across launches.
+bool i18nFlag(System &system, const char *key, bool fallback) {
+  auto value = system.preference(key);
+  return value && value->isBool() ? value->asBool() : fallback;
+}
+
+} // namespace
+
+bool appRightToLeft(System &system) {
+  return i18nFlag(system, "RCTI18nUtil_forceRTL", false) ||
+      (i18nFlag(system, "RCTI18nUtil_allowRTL", true) && system.facts().rightToLeft);
+}
+
 std::shared_ptr<NativeModule> makeI18n(const CoreModuleServices &s) {
   struct I18n : NativeModule {
     explicit I18n(const CoreModuleServices &s) : NativeModule("I18nManager") {
       auto system = s.system;
-      // React Native iOS's keys and defaults: RTL is allowed and left and right swap, until the
-      // app says otherwise; the choice persists across launches.
-      auto flag = [system](const char *key, bool fallback) {
-        auto value = system->preference(key);
-        return value && value->isBool() ? value->asBool() : fallback;
-      };
-      constants([system, flag] {
-        auto facts = system->facts();
-        bool forced = flag("RCTI18nUtil_forceRTL", false);
-        bool allowed = flag("RCTI18nUtil_allowRTL", true);
-        std::string locale = facts.locale;
+      constants([system] {
+        std::string locale = system->facts().locale;
         for (auto &c : locale) {
           if (c == '-') {
             c = '_';
           }
         }
-        return folly::dynamic::object("isRTL", forced || (allowed && facts.rightToLeft))(
-            "doLeftAndRightSwapInRTL", flag("RCTI18nUtil_makeRTLFlipLeftAndRightStyles", true))(
+        return folly::dynamic::object("isRTL", appRightToLeft(*system))(
+            "doLeftAndRightSwapInRTL", i18nFlag(*system, "RCTI18nUtil_makeRTLFlipLeftAndRightStyles", true))(
             "localeIdentifier", locale);
       });
       auto setter = [system](const char *key) {

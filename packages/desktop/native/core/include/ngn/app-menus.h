@@ -82,6 +82,10 @@ struct HistoryMenuItem {
 };
 std::vector<HistoryMenuItem> historyMenu(const WindowHistory &history, NavigationDirection direction);
 
+// Which chevron a point `x` across the pair (`width` wide) is on: back leads, so it is the left
+// one, and the right one in a right-to-left layout.
+NavigationDirection chevronAt(double x, double width, bool rightToLeft);
+
 class MenuBackend {
  public:
   virtual ~MenuBackend() = default;
