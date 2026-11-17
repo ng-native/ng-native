@@ -312,9 +312,10 @@ TEST_CASE("A recording set up ahead starts on that setup, and a setup taken down
   // Asked again for the same, nothing changes.
   capture->prepareRecording(request);
   capture->unprepareRecording();
-  REQUIRE(spinUntil([&] { return session.outputs.count == 0; }));
-  CHECK([session.sessionPreset isEqualToString:AVCaptureSessionPresetPhoto]);
-  CHECK(session.presets.count == 2);
+  // The whole take-down: the output off, then the photo preset back, which comes after it.
+  CHECK(spinUntil([&] {
+    return session.outputs.count == 0 && session.presets.count == 2 && [session.sessionPreset isEqualToString:AVCaptureSessionPresetPhoto];
+  }));
 
   capture->prepareRecording(request);
   bool running = false;
