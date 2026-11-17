@@ -177,7 +177,9 @@ export async function shoot(target, route) {
       last = digest;
     }
     if (last === undefined) throw new Error(`No window for ${route}: the app did not show one`);
-    return file; // never settled (a spinner, a looping animation): taken at the limit
+    // Never settled (a spinner, a looping animation): taken at the limit, and said so for the report.
+    console.warn(`${route} never stopped changing: captured at the limit`);
+    return file;
   } finally {
     if (pid !== undefined) {
       try {

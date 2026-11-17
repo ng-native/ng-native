@@ -192,16 +192,17 @@ reaches to `ROUTES` by hand before step 1's empty-route exit. Steps 2 to 4 and 6
 
 **2m. One packaged app per side.** Only a packaged `.app` has its URL scheme registered with
 LaunchServices, so a dev host cannot be opened on a route. Package the canary in each checkout,
-one native build at a time, the host built for this Mac only:
+one native build at a time, under the build lock (fix-issue's devices.md), with `NGN_JOBS=4`:
 
 ```sh
 (cd "$out/base/examples/canary" && pnpm exec ng-native-desktop package --format app --output "$out/base-app")
 (cd examples/canary && pnpm exec ng-native-desktop package --format app --output "$out/change-app")
 ```
 
-The scheme is the app's `scheme` in `app.json`. Both builds share a host unless the change touches
-`packages/desktop/native`: a native change needs the base's host built from the base checkout, as
-step 2 needs a build of its own for iOS.
+The scheme is the app's `scheme` in `app.json`. `package` always builds a universal (arm64 and
+x86_64) Release host, and the build directory is keyed by the checkout's `packages/desktop/native`
+path, so the two checkouts never share one: each side's first package is a cold host build, about
+nine minutes on a 14-core Mac with `NGN_JOBS=4`.
 
 **3m. This Mac, held still.** There is no simulator to make, so the Mac is what makes the
 comparison fair: one sitting, one display and one scale. Close other windows over the area the
