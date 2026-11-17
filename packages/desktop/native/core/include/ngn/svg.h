@@ -275,6 +275,14 @@ std::vector<SvgMarkerVertex> svgMarkerVertices(const SvgPath &path);
 
 // A pattern's tile: what one tile covers in the pattern's own space, and from that space to the
 // user space the pattern fills.
+// A glyph as text along a path draws it: what draws as one (a grapheme cluster, or the clusters a
+// ligature joins), where it starts in its shaped run and its advance there, kerning included.
+struct SvgGlyphCluster {
+  std::string text;
+  double x{0};
+  double advance{0};
+};
+
 struct SvgPatternTile {
   SvgRect tile;
   SvgMatrix transform;
@@ -355,6 +363,10 @@ class SvgCanvas {
   virtual void image(const std::string &uri, const SvgRect &rect, const std::string &align, int meetOrSlice, double opacity) = 0;
   // The advance of `text` in the font, as text() draws it.
   virtual double measureText(const std::string &text, double fontSize, const std::string &fontFamily, const std::string &fontWeight) = 0;
+  // `text` shaped in the font as one run, split into the glyphs text along a path draws one at a
+  // time, in the order of the text.
+  virtual std::vector<SvgGlyphCluster> glyphClusters(
+      const std::string &text, double fontSize, const std::string &fontFamily, const std::string &fontWeight) = 0;
   // Draws `text` with its baseline's start at (x, y).
   virtual void text(
       const std::string &text,

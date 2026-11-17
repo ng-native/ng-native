@@ -4,6 +4,7 @@
 #include "ngn/svg.h"
 
 #include <cmath>
+#include <cstdint>
 #include <functional>
 #include <sstream>
 #include <string>
@@ -138,9 +139,32 @@ struct Recorder : ngn::SvgCanvas {
   void image(const std::string &uri, const ngn::SvgRect &r, const std::string &align, int meetOrSlice, double opacity) override {
     calls.push_back("image " + uri + " " + n(r.x) + "," + n(r.y) + " " + n(r.width) + "x" + n(r.height));
   }
-  // Ten points a byte, so a test reads an advance from a string's length.
+  // Ten points a byte, so a test reads an advance from a string's length, less three for each "AV"
+  // kerned together, so a run's advance is not the sum of its glyphs'.
   double measureText(const std::string &text, double fontSize, const std::string &family, const std::string &weight) override {
-    return static_cast<double>(text.size()) * 10;
+    double kerned = 0;
+    for (size_t at = text.find("AV"); at != std::string::npos; at = text.find("AV", at + 1)) {
+      kerned += 3;
+    }
+    return static_cast<double>(text.size()) * 10 - kerned;
+  }
+  // A crude stand-in for grapheme clusters: an ASCII byte and the bytes of any characters that are
+  // not ASCII after it, each placed where it ends in the run less its own advance.
+  std::vector<ngn::SvgGlyphCluster> glyphClusters(
+      const std::string &text, double fontSize, const std::string &family, const std::string &weight) override {
+    std::vector<ngn::SvgGlyphCluster> out;
+    for (size_t i = 0; i < text.size(); ++i) {
+      if (out.empty() || static_cast<uint8_t>(text[i]) < 0x80) {
+        out.push_back({});
+      }
+      out.back().text += text[i];
+      if (i + 1 == text.size() || static_cast<uint8_t>(text[i + 1]) < 0x80) {
+        auto &c = out.back();
+        c.advance = measureText(c.text, fontSize, family, weight);
+        c.x = measureText(text.substr(0, i + 1), fontSize, family, weight) - c.advance;
+      }
+    }
+    return out;
   }
   void text(
       const std::string &text,

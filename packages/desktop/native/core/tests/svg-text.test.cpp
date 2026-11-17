@@ -231,20 +231,21 @@ TEST_CASE("the path's own transform places the text, and a missing path or one t
   CHECK(texts(onPath("M0 50 H100", {}, {node({.kind = SvgKind::TextPath, .href = "p"}, {node(span("a"))})})).empty());
 }
 
-TEST_CASE("a glyph on a path keeps its combining marks and joined emoji with it") {
-  // e and a combining acute (3 bytes), then x.
-  auto calls = texts(onPath("M0 50 H100", {}, {node(span("e\xcc\x81x"))}));
-  REQUIRE(calls.size() == 4);
-  CHECK(calls[1] == "text 'e\xcc\x81' -15,0 12 #ff000000");
-  CHECK(calls[3] == "text 'x' -5,0 12 #ff000000");
-  // A woman and a laptop joined by a zero-width joiner, as one glyph.
-  auto joined = texts(onPath("M0 50 H100", {}, {node(span("\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb"))}));
-  CHECK(joined.size() == 2);
-  // Two flags, each two regional letters, as two glyphs.
-  auto flags = texts(onPath("M0 50 H200", {}, {node(span("\xf0\x9f\x87\xab\xf0\x9f\x87\xb7\xf0\x9f\x87\xa9\xf0\x9f\x87\xaa"))}));
-  REQUIRE(flags.size() == 4);
-  CHECK(flags[0] == "concat 1 0 0 1 40 50");
-  CHECK(flags[2] == "concat 1 0 0 1 120 50");
+TEST_CASE("a glyph on a path is drawn as the canvas clusters it, a base and its vowel sign in one call") {
+  // Devanagari ka (U+0915) and its dependent vowel sign i (U+093F), one grapheme cluster, then x.
+  auto calls = texts(onPath("M0 50 H100", {}, {node(span("\xe0\xa4\x95\xe0\xa4\xbf" "x"))}));
+  CHECK(calls == std::vector<std::string>{
+                     "concat 1 0 0 1 30 50",
+                     "text '\xe0\xa4\x95\xe0\xa4\xbf' -30,0 12 #ff000000",
+                     "concat 1 0 0 1 65 50",
+                     "text 'x' -5,0 12 #ff000000"});
+}
+
+TEST_CASE("a glyph on a path is placed where the shaped run has it, so a kerned pair keeps its kerning") {
+  // The recorder kerns A and V together by three points: V starts at 7, not at A's own advance.
+  CHECK(texts(onPath("M0 50 H100", {}, {node(span("AV"))})) ==
+        std::vector<std::string>{
+            "concat 1 0 0 1 5 50", "text 'A' -5,0 12 #ff000000", "concat 1 0 0 1 12 50", "text 'V' -5,0 12 #ff000000"});
 }
 
 TEST_CASE("text after a path carries on from the path's end, as Chrome places it") {
@@ -253,4 +254,40 @@ TEST_CASE("text after a path carries on from the path's end, as Chrome places it
             {node({.kind = SvgKind::Defs}, {node({.kind = SvgKind::Path, .name = "p", .d = "M10 50 V150"})}),
              node({.kind = SvgKind::Text}, {node({.kind = SvgKind::TextPath, .href = "p"}, {node(span("ab"))}), node(span("c"))})}))
             .back() == "text 'c' 10,150 12 #ff000000");
+}
+
+TEST_CASE("a textPath's or a span's opacity composites what it draws, and 0 draws nothing") {
+  auto drawn = [](double pathOpacity, double spanOpacity) {
+    SvgElement along{};
+    along.opacity = pathOpacity;
+    SvgElement inner = span("a");
+    inner.opacity = spanOpacity;
+    Recorder canvas;
+    ngn::drawSvg({.root = onPath("M0 50 H100", along, {node(inner)})}, 200, 200, canvas);
+    std::vector<std::string> out;
+    for (const auto &c : canvas.calls) {
+      if (c.rfind("text", 0) == 0 || c.rfind("layer", 0) == 0 || c == "end layer") {
+        out.push_back(c);
+      }
+    }
+    return out;
+  };
+  CHECK(drawn(0, 1).empty());
+  CHECK(drawn(1, 0).empty());
+  CHECK(drawn(0.5, 1) == std::vector<std::string>{"layer 0.5", "text 'a' -5,0 12 #ff000000", "end layer"});
+  CHECK(drawn(0.5, 0.5) == std::vector<std::string>{"layer 0.25", "text 'a' -5,0 12 #ff000000", "end layer"});
+  CHECK(drawn(1, 1) == std::vector<std::string>{"text 'a' -5,0 12 #ff000000"});
+  // Off a path too: a span's opacity in a text.
+  SvgElement faint = span("b");
+  faint.opacity = 0.5;
+  Recorder canvas;
+  ngn::drawSvg({.root = node(svg(), {node(text(0, 20), {node(faint), node(span("c"))})})}, 200, 200, canvas);
+  std::vector<std::string> out;
+  for (const auto &c : canvas.calls) {
+    if (c.rfind("text", 0) == 0 || c.rfind("layer", 0) == 0 || c == "end layer") {
+      out.push_back(c);
+    }
+  }
+  // The span after it is drawn whole again.
+  CHECK(out == std::vector<std::string>{"layer 0.5", "text 'b' 0,20 12 #ff000000", "end layer", "text 'c' 10,20 12 #ff000000"});
 }

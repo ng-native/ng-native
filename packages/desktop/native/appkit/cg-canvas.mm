@@ -2,6 +2,7 @@
 
 #include "ngn/file-system.h"
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -371,6 +372,57 @@ class CGCanvas final : public ngn::SvgCanvas {
     double width = CTLineGetTypographicBounds(line, nullptr, nullptr, nullptr);
     CFRelease(line);
     return width;
+  }
+
+  // The composed character sequences of `text` (Foundation's grapheme clusters), each where Core
+  // Text's shaped line has its glyphs. A cluster with no glyph of its own, the tail of a ligature,
+  // joins the one before it.
+  std::vector<ngn::SvgGlyphCluster> glyphClusters(
+      const std::string &text, double fontSize, const std::string &fontFamily, const std::string &fontWeight) override {
+    NSString *string = @(text.c_str());
+    if (string == nil) {
+      string = @"";
+    }
+    std::vector<NSRange> ranges;
+    std::vector<size_t> clusterOf(string.length);
+    for (NSUInteger i = 0; i < string.length;) {
+      NSRange range = [string rangeOfComposedCharacterSequenceAtIndex:i];
+      std::fill(clusterOf.begin() + static_cast<long>(range.location), clusterOf.begin() + static_cast<long>(NSMaxRange(range)), ranges.size());
+      ranges.push_back(range);
+      i = NSMaxRange(range);
+    }
+    std::vector<double> left(ranges.size(), INFINITY), right(ranges.size(), -INFINITY);
+    CTLineRef line = createLine(text, fontSize, fontFamily, fontWeight, nullptr);
+    for (id item in (__bridge NSArray *)CTLineGetGlyphRuns(line)) {
+      auto run = (__bridge CTRunRef)item;
+      CFIndex count = CTRunGetGlyphCount(run);
+      std::vector<CGPoint> positions(static_cast<size_t>(count));
+      std::vector<CGSize> advances(static_cast<size_t>(count));
+      std::vector<CFIndex> indices(static_cast<size_t>(count));
+      CTRunGetPositions(run, CFRangeMake(0, 0), positions.data());
+      CTRunGetAdvances(run, CFRangeMake(0, 0), advances.data());
+      CTRunGetStringIndices(run, CFRangeMake(0, 0), indices.data());
+      for (size_t g = 0; g < positions.size(); ++g) {
+        if (indices[g] < 0 || static_cast<size_t>(indices[g]) >= clusterOf.size()) {
+          continue;
+        }
+        size_t c = clusterOf[static_cast<size_t>(indices[g])];
+        left[c] = std::min(left[c], static_cast<double>(positions[g].x));
+        right[c] = std::max(right[c], static_cast<double>(positions[g].x + advances[g].width));
+      }
+    }
+    CFRelease(line);
+    std::vector<ngn::SvgGlyphCluster> out;
+    for (size_t c = 0; c < ranges.size(); ++c) {
+      std::string part = [string substringWithRange:ranges[c]].UTF8String;
+      bool placed = left[c] <= right[c];
+      if (!placed && !out.empty()) {
+        out.back().text += part;
+      } else {
+        out.push_back({.text = std::move(part), .x = placed ? left[c] : 0, .advance = placed ? right[c] - left[c] : 0});
+      }
+    }
+    return out;
   }
 
   void text(

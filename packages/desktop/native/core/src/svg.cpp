@@ -721,42 +721,6 @@ TextTrack textTrack(const SvgPath &path, bool reversed) {
   return track;
 }
 
-// Whether the code point `c` belongs with the glyph before it: a combining mark, a variation
-// selector, a zero-width joiner, an emoji modifier or a tag.
-bool joinsBefore(uint32_t c) {
-  return (c >= 0x300 && c <= 0x36f) || (c >= 0x1ab0 && c <= 0x1aff) || (c >= 0x1dc0 && c <= 0x1dff) || (c >= 0x20d0 && c <= 0x20ff) ||
-         (c >= 0xfe00 && c <= 0xfe0f) || (c >= 0xfe20 && c <= 0xfe2f) || c == 0x200d || (c >= 0x1f3fb && c <= 0x1f3ff) ||
-         (c >= 0xe0020 && c <= 0xe007f) || (c >= 0xe0100 && c <= 0xe01ef);
-}
-
-// `text` split into what a glyph on a path draws as one: a character with the marks after it, an
-// emoji with what a zero-width joiner joins to it, a flag's two letters.
-std::vector<std::string> textClusters(const std::string &text) {
-  std::vector<std::string> out;
-  uint32_t last = 0;
-  int indicators = 0;
-  for (size_t i = 0; i < text.size();) {
-    auto lead = static_cast<uint8_t>(text[i]);
-    size_t n = lead < 0x80 ? 1 : (lead >> 5) == 0x6 ? 2 : (lead >> 4) == 0xe ? 3 : (lead >> 3) == 0x1e ? 4 : 1;
-    n = std::min(n, text.size() - i);
-    uint32_t c = n == 1 ? lead : lead & (0xff >> (n + 1));
-    for (size_t k = 1; k < n; ++k) {
-      c = c << 6 | (static_cast<uint8_t>(text[i + k]) & 0x3f);
-    }
-    bool indicator = c >= 0x1f1e6 && c <= 0x1f1ff;
-    if (!out.empty() && (joinsBefore(c) || last == 0x200d || (indicator && indicators == 1))) {
-      out.back() += text.substr(i, n);
-    } else {
-      out.push_back(text.substr(i, n));
-      indicators = 0;
-    }
-    indicators += indicator ? 1 : 0;
-    last = c;
-    i += n;
-  }
-  return out;
-}
-
 // The presentation an element draws with, after inheritance.
 struct Style {
   SvgBrush fill{.type = SvgBrush::Type::Color, .argb = 0xff000000};
@@ -1527,6 +1491,8 @@ class Renderer {
     double fontSize{12};
     std::string fontFamily, fontWeight;
     std::optional<SvgPaint> fill;
+    // The opacity of the spans and textPath it is in, which draw through no drawNode of their own.
+    double opacity{1};
   };
   struct TextChunk {
     std::string anchor;
@@ -1542,6 +1508,7 @@ class Renderer {
     bool chunkStarts{true};
     std::shared_ptr<const TextTrack> track;
     double startOffset{0};
+    double opacity{1};
   };
 
   static double anchorShift(const TextChunk &chunk) {
@@ -1561,7 +1528,10 @@ class Renderer {
     for (const auto &child : node.children) {
       auto kind = child.element.kind;
       if (!child.element.hidden && (kind == SvgKind::TSpan || kind == SvgKind::Text || kind == SvgKind::TextPath)) {
+        double opacity = out.opacity;
+        out.opacity *= std::clamp(child.element.opacity, 0.0, 1.0);
         layoutText(child, merge(style, child.element), out);
+        out.opacity = opacity;
       }
     }
   }
@@ -1603,7 +1573,8 @@ class Renderer {
            .fontSize = style.fontSize,
            .fontFamily = style.fontFamily,
            .fontWeight = style.fontWeight,
-           .fill = paint(style.fill, style.fillOpacity, style, std::nullopt)});
+           .fill = paint(style.fill, style.fillOpacity, style, std::nullopt),
+           .opacity = out.opacity});
       out.x += advance;
     }
     layoutChildren(node, style, out);
@@ -1640,32 +1611,37 @@ class Renderer {
   void drawChunk(const TextChunk &chunk) {
     double shift = anchorShift(chunk);
     for (const auto &run : chunk.runs) {
-      if (!run.fill) {
+      if (!run.fill || run.opacity <= 0) {
         continue;
       }
-      if (!chunk.track) {
-        canvas_->text(run.text, run.x + shift, run.y, run.fontSize, run.fontFamily, run.fontWeight, *run.fill);
+      bool layer = run.opacity < 1;
+      if (layer) {
+        canvas_->beginLayer(run.opacity);
+      }
+      drawRun(chunk, run, shift);
+      if (layer) {
+        canvas_->endLayer();
+      }
+    }
+  }
+
+  void drawRun(const TextChunk &chunk, const TextRun &run, double shift) {
+    if (!chunk.track) {
+      canvas_->text(run.text, run.x + shift, run.y, run.fontSize, run.fontFamily, run.fontWeight, *run.fill);
+      return;
+    }
+    // Each glyph at the point its middle reaches along the path, turned with the path there, from
+    // where the shaped run has it, so a kerned pair keeps its kerning.
+    for (const auto &glyph : canvas_->glyphClusters(run.text, run.fontSize, run.fontFamily, run.fontWeight)) {
+      auto at = chunk.track->at(chunk.startOffset + shift + run.x + glyph.x + glyph.advance / 2);
+      if (!at) {
         continue;
       }
-      // Each glyph at the point its middle reaches along the path, turned with the path there. Its
-      // advance is what it adds to the run so far, so a kerned pair keeps its kerning.
-      std::string through;
-      double before = 0;
-      for (const auto &glyph : textClusters(run.text)) {
-        through += glyph;
-        double after = canvas_->measureText(through, run.fontSize, run.fontFamily, run.fontWeight);
-        double advance = after - before;
-        auto at = chunk.track->at(chunk.startOffset + shift + run.x + before + advance / 2);
-        before = after;
-        if (!at) {
-          continue;
-        }
-        double cos = std::cos((*at)[2]), sin = std::sin((*at)[2]);
-        canvas_->save();
-        canvas_->concat({cos, sin, -sin, cos, (*at)[0], (*at)[1]});
-        canvas_->text(glyph, -advance / 2, run.y, run.fontSize, run.fontFamily, run.fontWeight, *run.fill);
-        canvas_->restore();
-      }
+      double cos = std::cos((*at)[2]), sin = std::sin((*at)[2]);
+      canvas_->save();
+      canvas_->concat({cos, sin, -sin, cos, (*at)[0], (*at)[1]});
+      canvas_->text(glyph.text, -glyph.advance / 2, run.y, run.fontSize, run.fontFamily, run.fontWeight, *run.fill);
+      canvas_->restore();
     }
   }
 
