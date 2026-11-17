@@ -1,5 +1,5 @@
 // Core Text layout (text-layout.mm) as measurement and drawing share it: attributes per fragment,
-// line heights, widths, justification and the direction natural alignment follows.
+// line heights, widths, justification, alignment and the direction a justified last line follows.
 #include "../text-layout.h"
 
 #include <doctest/doctest.h>
@@ -27,10 +27,17 @@ AttributedString stringOf(std::vector<AttributedString::Fragment> fragments) {
   return out;
 }
 
+// A justified fragment, whose one line is its paragraph's last: on the paragraph's side.
+AttributedString::Fragment justified(const std::string &text) {
+  auto f = fragment(text);
+  f.textAttributes.alignment = TextAlignment::Justified;
+  return f;
+}
+
 const char *kWords = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt";
 
-// The leftmost column with ink, drawing the layout into a box `width` wide.
-int leftmostInk(const ngn::TextLayout &layout, int width, int height) {
+// The columns with ink, drawing the layout into a box `width` wide.
+std::vector<bool> inkedColumns(const ngn::TextLayout &layout, int width, int height) {
   std::vector<uint8_t> pixels(static_cast<size_t>(width * height * 4), 0);
   CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
   CGContextRef context = CGBitmapContextCreate(pixels.data(), width, height, 8, width * 4, space, kCGImageAlphaPremultipliedLast);
@@ -39,11 +46,35 @@ int leftmostInk(const ngn::TextLayout &layout, int width, int height) {
   CGContextScaleCTM(context, 1, -1);
   ngn::drawText(layout, context, CGPointZero, width);
   CGContextRelease(context);
+  std::vector<bool> inked(static_cast<size_t>(width), false);
   for (int x = 0; x < width; x++) {
     for (int y = 0; y < height; y++) {
       if (pixels[static_cast<size_t>((y * width + x) * 4 + 3)] > 0) {
-        return x;
+        inked[static_cast<size_t>(x)] = true;
+        break;
       }
+    }
+  }
+  return inked;
+}
+
+// The leftmost column with ink, or -1.
+int leftmostInk(const ngn::TextLayout &layout, int width, int height) {
+  auto inked = inkedColumns(layout, width, height);
+  for (int x = 0; x < width; x++) {
+    if (inked[static_cast<size_t>(x)]) {
+      return x;
+    }
+  }
+  return -1;
+}
+
+// The rightmost column with ink, or -1.
+int rightmostInk(const ngn::TextLayout &layout, int width, int height) {
+  auto inked = inkedColumns(layout, width, height);
+  for (int x = width - 1; x >= 0; x--) {
+    if (inked[static_cast<size_t>(x)]) {
+      return x;
     }
   }
   return -1;
@@ -98,31 +129,31 @@ TEST_CASE("A justified paragraph's lines fill the width, all but its last") {
   CHECK(layout.lines.back().width == doctest::Approx(plain.lines.back().width));
 }
 
-TEST_CASE("Natural alignment follows the paragraph's direction") {
-  auto hebrew = ngn::layoutText(stringOf({fragment("שלום עולם")}), {}, 300);
+TEST_CASE("A justified paragraph's last line follows the paragraph's direction") {
+  auto hebrew = ngn::layoutText(stringOf({justified("שלום עולם")}), {}, 300);
   REQUIRE(hebrew.lines.size() == 1);
   CHECK(hebrew.lines[0].rightToLeft);
   CHECK(leftmostInk(hebrew, 300, 40) > 150);
 
   // Latin first, so left to right, even with Hebrew after it.
-  auto latin = ngn::layoutText(stringOf({fragment("Hello שלום")}), {}, 300);
+  auto latin = ngn::layoutText(stringOf({justified("Hello שלום")}), {}, 300);
   CHECK_FALSE(latin.lines[0].rightToLeft);
   CHECK(leftmostInk(latin, 300, 40) < 10);
 
   // A base writing direction set on the text wins over its first letter.
-  auto forced = fragment("Hello");
+  auto forced = justified("Hello");
   forced.textAttributes.baseWritingDirection = WritingDirection::RightToLeft;
   auto right = ngn::layoutText(stringOf({forced}), {}, 300);
   CHECK(right.lines[0].rightToLeft);
   CHECK(leftmostInk(right, 300, 40) > 150);
 
   // Hebrew inside an isolate does not count: the Latin after it sets the direction (rule P2).
-  auto isolated = ngn::layoutText(stringOf({fragment("\u2067שלום\u2069 Hello")}), {}, 300);
+  auto isolated = ngn::layoutText(stringOf({justified("\u2067שלום\u2069 Hello")}), {}, 300);
   CHECK_FALSE(isolated.lines[0].rightToLeft);
   CHECK(leftmostInk(isolated, 300, 40) < 10);
 
   // A right-to-left mark is a strong right-to-left character.
-  auto marked = ngn::layoutText(stringOf({fragment("\u200FHello")}), {}, 300);
+  auto marked = ngn::layoutText(stringOf({justified("\u200FHello")}), {}, 300);
   CHECK(marked.lines[0].rightToLeft);
   CHECK(leftmostInk(marked, 300, 40) > 150);
 }
@@ -152,12 +183,38 @@ TEST_CASE("In a right-to-left layout, alignment follows the layout's direction a
   CHECK(centred > 100);
   CHECK(centred < 150);
 
-  // Left to right: unset stays natural by the paragraph, a natural or start that is set goes left.
-  CHECK(leftmostInk(laidOut("שלום", std::nullopt, ltr), 300, 40) > 150);
+  // Left to right: unset, natural and start go left, whatever the script.
+  CHECK(leftmostInk(laidOut("שלום", std::nullopt, ltr), 300, 40) < 10);
   CHECK(leftmostInk(laidOut("שלום", TextAlignment::Natural, ltr), 300, 40) < 10);
   CHECK(leftmostInk(laidOut("שלום", TextAlignment::Start, ltr), 300, 40) < 10);
   CHECK(leftmostInk(laidOut("Hello", TextAlignment::End, ltr), 300, 40) > 150);
   CHECK(leftmostInk(laidOut("Hello", TextAlignment::Right, ltr), 300, 40) > 150);
+}
+
+TEST_CASE("With no alignment, text follows the layout's direction, not its script, as on iOS") {
+  // A right-to-left script in a left-to-right layout is on the left, and Latin in a right-to-left
+  // one on the right; text whose fragment has no layout direction lays out left to right.
+  for (const char *text : {"שלום עולם", "مرحبا", "\u200FHello"}) {
+    INFO(text);
+    auto f = fragment(text);
+    f.textAttributes.layoutDirection = LayoutDirection::LeftToRight;
+    auto layout = ngn::layoutText(stringOf({f}), {}, 300);
+    CHECK(layout.lines[0].rightToLeft);
+    CHECK(leftmostInk(layout, 300, 40) < 10);
+    CHECK(leftmostInk(ngn::layoutText(stringOf({fragment(text)}), {}, 300), 300, 40) < 10);
+  }
+  // Every paragraph: each short line of the Hebrew is on the left, each of the Latin on the right.
+  auto hebrew = fragment("שלום\nשלום עולם\nעולם");
+  hebrew.textAttributes.layoutDirection = LayoutDirection::LeftToRight;
+  auto ltr = ngn::layoutText(stringOf({hebrew}), {}, 300);
+  REQUIRE(ltr.lines.size() == 3);
+  CHECK(leftmostInk(ltr, 300, 80) < 10);
+  CHECK(rightmostInk(ltr, 300, 80) < 150);
+  auto latin = fragment("Hello\nHello there\nthere");
+  latin.textAttributes.layoutDirection = LayoutDirection::RightToLeft;
+  auto rtl = ngn::layoutText(stringOf({latin}), {}, 300);
+  REQUIRE(rtl.lines.size() == 3);
+  CHECK(leftmostInk(rtl, 300, 80) > 150);
 }
 
 TEST_CASE("A paragraph's first strong character sets its direction by bidi class, letter or not") {
@@ -165,7 +222,7 @@ TEST_CASE("A paragraph's first strong character sets its direction by bidi class
   // Arabic letter after a zero-width space, which has no glyph and no direction.
   for (const char *text : {"\u05BEHello", "\u061BHello", "\u200B\u0645 Hello"}) {
     INFO(text);
-    auto layout = ngn::layoutText(stringOf({fragment(text)}), {}, 300);
+    auto layout = ngn::layoutText(stringOf({justified(text)}), {}, 300);
     CHECK(layout.lines[0].rightToLeft);
     CHECK(leftmostInk(layout, 300, 40) > 150);
   }
@@ -173,7 +230,7 @@ TEST_CASE("A paragraph's first strong character sets its direction by bidi class
   // Arabic-Indic digits (AN and EN). The Latin after them sets the direction.
   for (const char *text : {"\u05B0Hello", "\u0661 Hello", "\u06F1 Hello"}) {
     INFO(text);
-    auto layout = ngn::layoutText(stringOf({fragment(text)}), {}, 300);
+    auto layout = ngn::layoutText(stringOf({justified(text)}), {}, 300);
     CHECK_FALSE(layout.lines[0].rightToLeft);
     CHECK(leftmostInk(layout, 300, 40) < 10);
   }
@@ -189,10 +246,10 @@ TEST_CASE("The embedding and override controls are not a paragraph's first stron
   // LRE, RLE, PDF, LRO and RLO: rule P2 skips them, and the letter after them sets the direction.
   for (const char *control : {"\u202A", "\u202B", "\u202C", "\u202D", "\u202E"}) {
     INFO(control);
-    auto hebrew = ngn::layoutText(stringOf({fragment(std::string(control) + "שלום Hello")}), {}, 300);
+    auto hebrew = ngn::layoutText(stringOf({justified(std::string(control) + "שלום Hello")}), {}, 300);
     CHECK(hebrew.lines[0].rightToLeft);
     CHECK(leftmostInk(hebrew, 300, 40) > 150);
-    auto latin = ngn::layoutText(stringOf({fragment(std::string(control) + "Hello שלום")}), {}, 300);
+    auto latin = ngn::layoutText(stringOf({justified(std::string(control) + "Hello שלום")}), {}, 300);
     CHECK_FALSE(latin.lines[0].rightToLeft);
     CHECK(leftmostInk(latin, 300, 40) < 10);
   }

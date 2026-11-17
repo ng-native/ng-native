@@ -55,6 +55,30 @@ struct FoundationCharacters final : ngn::TextCharacters {
   mutable std::size_t convertedSize_{0};
 };
 
+// A placeholder in `font` and `color` (nil is the system's placeholder colour), aligned and
+// directed as the text is, the way React Native iOS gives it the text's paragraph style. Nil when
+// there is no placeholder.
+NSAttributedString *placeholderString(
+    NSString *placeholder,
+    NSFont *font,
+    NSColor *color,
+    NSTextAlignment alignment,
+    NSWritingDirection direction) {
+  if (placeholder.length == 0) {
+    return nil;
+  }
+  NSMutableParagraphStyle *style = [NSParagraphStyle.defaultParagraphStyle mutableCopy];
+  style.alignment = alignment;
+  style.baseWritingDirection = direction;
+  return [[NSAttributedString alloc]
+      initWithString:placeholder
+          attributes:@{
+            NSFontAttributeName : font ? font : [NSFont systemFontOfSize:NSFont.systemFontSize],
+            NSForegroundColorAttributeName : color ? color : NSColor.placeholderTextColor,
+            NSParagraphStyleAttributeName : style,
+          }];
+}
+
 } // namespace
 
 NSString *NGNFitReplacement(NSString *current, NSRange range, NSString *replacement, const TextInputOptions &options) {
@@ -113,6 +137,7 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
 
 @interface NGNTextField ()
 - (void)controlDidBecomeFirstResponder;
+- (void)controlDidEndEditing;
 @end
 
 // The two controls a field swaps between. AppKit's secure field editor takes only an
@@ -125,6 +150,10 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
     }                                                                                                      \
     [self.box controlDidBecomeFirstResponder];                                                             \
     return YES;                                                                                            \
+  }                                                                                                        \
+  -(void)textDidEndEditing : (NSNotification *)note {                                                      \
+    [super textDidEndEditing:note];                                                                        \
+    [self.box controlDidEndEditing];                                                                       \
   }                                                                                                        \
   -(BOOL)textView : (NSTextView *)textView shouldChangeTextInRange : (NSRange)range replacementString      \
       : (NSString *)string {                                                                               \
@@ -219,10 +248,16 @@ NGN_FIELD_CELL_METHODS
   TextInputOptions _options;
   NSRange _pendingSelection;
   BOOL _autoFocused;
+  NSString *_placeholder;
+  NSColor *_placeholderColor;
+  NSTextAlignment _alignment;
+  NSWritingDirection _writingDirection;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
+    _alignment = NSTextAlignmentNatural;
+    _writingDirection = NSWritingDirectionNatural;
     _pendingSelection = NSMakeRange(NSNotFound, 0);
     NGNPlainField *control = [[NGNPlainField alloc] initWithFrame:self.bounds];
     control.box = self;
@@ -290,7 +325,8 @@ NGN_FIELD_CELL_METHODS
   control.autoresizingMask = old.autoresizingMask;
   control.font = old.font;
   control.textColor = old.textColor;
-  control.alignment = old.alignment;
+  control.alignment = _alignment;
+  control.baseWritingDirection = _writingDirection;
   control.placeholderAttributedString = old.placeholderAttributedString;
   control.editable = old.editable;
   control.selectable = old.selectable;
@@ -318,17 +354,44 @@ NGN_FIELD_CELL_METHODS
 }
 
 - (void)setPlaceholder:(NSString *)placeholder color:(NSColor *)color {
-  if (placeholder.length == 0) {
-    _control.placeholderAttributedString = nil;
-    return;
+  _placeholder = [placeholder copy];
+  _placeholderColor = color;
+  _control.placeholderAttributedString =
+      placeholderString(placeholder, _control.font, color, _alignment, _writingDirection);
+}
+
+- (void)setTextAlignment:(NSTextAlignment)alignment writingDirection:(NSWritingDirection)direction {
+  BOOL changed = alignment != _alignment || direction != _writingDirection;
+  _alignment = alignment;
+  _writingDirection = direction;
+  // Setting a control's alignment while it edits ends the editing, so the field editor takes it
+  // now, and the control as the editing ends (the field editor takes the control's as it starts).
+  // An editing aborted tells the control nothing, so a control out of step is put right on the
+  // next request, though the request has not changed.
+  if (NSText *editor = _control.currentEditor) {
+    if (changed) {
+      editor.alignment = alignment;
+      editor.baseWritingDirection = direction;
+    }
+  } else {
+    [self alignControl];
   }
-  NSFont *font = _control.font ? _control.font : [NSFont systemFontOfSize:NSFont.systemFontSize];
-  _control.placeholderAttributedString = [[NSAttributedString alloc]
-      initWithString:placeholder
-          attributes:@{
-            NSFontAttributeName : font,
-            NSForegroundColorAttributeName : color ? color : NSColor.placeholderTextColor,
-          }];
+  if (changed) {
+    [self setPlaceholder:_placeholder color:_placeholderColor];
+  }
+}
+
+- (void)alignControl {
+  if (_control.alignment != _alignment) {
+    _control.alignment = _alignment;
+  }
+  if (_control.baseWritingDirection != _writingDirection) {
+    _control.baseWritingDirection = _writingDirection;
+  }
+}
+
+- (void)controlDidEndEditing {
+  [self alignControl];
 }
 
 - (void)selectRange:(NSRange)range {
@@ -369,6 +432,18 @@ NGN_FIELD_CELL_METHODS
   TextInputOptions _options;
   BOOL _autoFocused;
   BOOL _inserting;
+  NSString *_placeholderText;
+  NSColor *_placeholderColor;
+  NSTextAlignment _textAlignment;
+  NSWritingDirection _writingDirection;
+}
+
+- (instancetype)initWithFrame:(NSRect)frame textContainer:(NSTextContainer *)container {
+  if ((self = [super initWithFrame:frame textContainer:container])) {
+    _textAlignment = NSTextAlignmentNatural;
+    _writingDirection = NSWritingDirectionNatural;
+  }
+  return self;
 }
 
 - (void)applyOptions:(const TextInputOptions &)options {
@@ -376,16 +451,22 @@ NGN_FIELD_CELL_METHODS
   NGNApplyTextOptions(self, _options);
 }
 
-- (void)setPlaceholder:(NSString *)placeholder color:(NSColor *)color {
-  NSAttributedString *next = nil;
-  if (placeholder.length > 0) {
-    next = [[NSAttributedString alloc]
-        initWithString:placeholder
-            attributes:@{
-              NSFontAttributeName : self.font ? self.font : [NSFont systemFontOfSize:NSFont.systemFontSize],
-              NSForegroundColorAttributeName : color ? color : NSColor.placeholderTextColor,
-            }];
+- (void)setTextAlignment:(NSTextAlignment)alignment writingDirection:(NSWritingDirection)direction {
+  if (alignment == _textAlignment && direction == _writingDirection) {
+    return;
   }
+  _textAlignment = alignment;
+  _writingDirection = direction;
+  // The text there is now, and what is typed or set later (a plain text view's typing attributes).
+  self.alignment = alignment;
+  self.baseWritingDirection = direction;
+  [self setPlaceholder:_placeholderText color:_placeholderColor];
+}
+
+- (void)setPlaceholder:(NSString *)placeholder color:(NSColor *)color {
+  _placeholderText = [placeholder copy];
+  _placeholderColor = color;
+  NSAttributedString *next = placeholderString(placeholder, self.font, color, _textAlignment, _writingDirection);
   if (![next isEqualToAttributedString:_placeholder] && !(next == nil && _placeholder == nil)) {
     _placeholder = [next copy];
     self.needsDisplay = YES;

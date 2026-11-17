@@ -85,7 +85,12 @@ props map onto AppKit's text checking:
 
 An unset switch follows the user's setting in System Settings. `placeholderTextColor`, the
 `selection` prop and `autoFocus` work as on iOS, and the field sends `(focus)` as it takes the
-keyboard, by a click, Tab or `focus()`.
+keyboard, by a click, Tab or `focus()`. The text and placeholder align as on iOS: with no
+`textAlign`, to the leading side of the layout (the right when `I18nManager.isRTL`), and a
+`textAlign` that is set is not turned round in right to left, so `auto`, `start` and `left` stay on
+the left and `end` and `right` on the right. That differs from `<text>`, where right to left puts
+`auto` and `start` on the right, `end` on the left, and swaps `left` and `right`, as on iOS.
+`writingDirection` sets the base writing direction.
 
 ## Libraries compiled in
 

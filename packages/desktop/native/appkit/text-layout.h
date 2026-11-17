@@ -16,7 +16,7 @@ struct TextLine {
   CTLineRef line; // owned by the layout
   CGPoint origin; // baseline origin, y measured from the top of the text box
   CGFloat width;
-  bool rightToLeft{false}; // its paragraph runs right to left, so natural alignment is to the right
+  bool rightToLeft{false}; // its paragraph runs right to left, so a justified last line is on the right
 };
 
 struct TextLayout {

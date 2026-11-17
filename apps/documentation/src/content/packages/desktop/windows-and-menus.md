@@ -23,7 +23,9 @@ tells the app its size and its backing scale as it shows and whenever either cha
 moves to a display of another density, so its engine keeps its own media query size, pixel ratio
 and `--hairline`. In a right-to-left language AppKit mirrors each window's chrome (the window
 buttons, the toolbar and its chevrons, the sidebar), and the app's views lay out right to left
-whenever `I18nManager.isRTL` says so, `allowRTL` and `forceRTL` included, as on iOS.
+whenever `I18nManager.isRTL` says so, `allowRTL` and `forceRTL` included, as on iOS. Text with no
+`textAlign` aligns to the layout's leading side whatever its script, so a Hebrew paragraph in a
+left-to-right app is on the left, as on iOS.
 
 ## The menu bar and navigation
 

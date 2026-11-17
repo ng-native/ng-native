@@ -82,6 +82,15 @@ struct TextInputOptions {
 // secure entry turns every substitution and check off and never capitalizes.
 TextInputOptions textInputOptions(const DesktopTextInputProps &props);
 
+// Where a field puts its text and placeholder, as React Native iOS has a TextInput's: Left, Right,
+// Center or Justified. A TextInput's text attributes carry no layout direction, so an alignment that
+// is set resolves as RCTResolveTextAlignment resolves a left-to-right fragment's (natural and start
+// left, end right, left and right as they are). With none set, UIKit's natural alignment follows the
+// view's direction, the layout's: right in a right-to-left layout, left otherwise.
+facebook::react::TextAlignment inputAlignment(
+    std::optional<facebook::react::TextAlignment> alignment,
+    facebook::react::LayoutDirection layoutDirection);
+
 // How much of an insertion of `inserted` units, replacing `replaced` of the field's `current`, fits
 // in `maxLength`: all of it, a leading part, or none.
 std::size_t insertionThatFits(

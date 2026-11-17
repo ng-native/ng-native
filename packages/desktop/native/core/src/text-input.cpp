@@ -63,6 +63,19 @@ TextInputOptions textInputOptions(const DesktopTextInputProps &props) {
   return options;
 }
 
+TextAlignment inputAlignment(std::optional<TextAlignment> alignment, LayoutDirection layoutDirection) {
+  if (!alignment) {
+    return layoutDirection == LayoutDirection::RightToLeft ? TextAlignment::Right : TextAlignment::Left;
+  }
+  switch (*alignment) {
+    case TextAlignment::Center:
+    case TextAlignment::Justified: return *alignment;
+    case TextAlignment::Right:
+    case TextAlignment::End: return TextAlignment::Right;
+    default: return TextAlignment::Left;
+  }
+}
+
 std::size_t insertionThatFits(
     std::size_t current,
     std::size_t replaced,

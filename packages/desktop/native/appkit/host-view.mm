@@ -743,6 +743,25 @@ NSFont *inputFont(const DesktopTextInputProps &p) {
   return font;
 }
 
+// How a TextInput aligns its text and placeholder (inputAlignment), in a layout running `direction`,
+// and the base writing direction its `writingDirection` sets, natural when unset.
+void alignInput(id field, const DesktopTextInputProps &p, LayoutDirection direction) {
+  NSTextAlignment alignment = NSTextAlignmentLeft;
+  switch (ngn::inputAlignment(p.textAttributes.alignment, direction)) {
+    case TextAlignment::Right: alignment = NSTextAlignmentRight; break;
+    case TextAlignment::Center: alignment = NSTextAlignmentCenter; break;
+    case TextAlignment::Justified: alignment = NSTextAlignmentJustified; break;
+    default: break;
+  }
+  NSWritingDirection writing = NSWritingDirectionNatural;
+  if (p.textAttributes.baseWritingDirection == WritingDirection::LeftToRight) {
+    writing = NSWritingDirectionLeftToRight;
+  } else if (p.textAttributes.baseWritingDirection == WritingDirection::RightToLeft) {
+    writing = NSWritingDirectionRightToLeft;
+  }
+  [field setTextAlignment:alignment writingDirection:writing];
+}
+
 // The `selection` prop, when it is new in this update: React Native iOS applies it only then.
 std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextInputProps &p) {
   if (!p.selection) {
@@ -811,6 +830,7 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   field.font = inputFont(*p);
   field.textColor = attrs.foregroundColor ? nsColor(attrs.foregroundColor) : NSColor.textColor;
   [_box setPlaceholder:nsString(p->placeholder) color:p->placeholderTextColor ? nsColor(p->placeholderTextColor) : nil];
+  alignInput(_box, *p, self.layoutMetrics.layoutDirection);
   field.editable = p->editable && !p->readOnly;
   [_box applyOptions:ngn::textInputOptions(*p)];
   // The text prop wins only when it is not older than what the field has sent (React Native iOS's
@@ -828,6 +848,9 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
 
 - (void)updateLayout:(const LayoutMetrics &)metrics {
   [super updateLayout:metrics];
+  if (auto p = std::dynamic_pointer_cast<const DesktopTextInputProps>(self.props)) {
+    alignInput(_box, *p, metrics.layoutDirection);
+  }
   const auto &i = metrics.contentInsets;
   NSRect content = NSMakeRect(
       i.left, i.top, metrics.frame.size.width - i.left - i.right, metrics.frame.size.height - i.top - i.bottom);
@@ -994,6 +1017,7 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   _text.font = inputFont(*p);
   _text.textColor = attrs.foregroundColor ? nsColor(attrs.foregroundColor) : NSColor.textColor;
   [_text setPlaceholder:nsString(p->placeholder) color:p->placeholderTextColor ? nsColor(p->placeholderTextColor) : nil];
+  alignInput(_text, *p, self.layoutMetrics.layoutDirection);
   _text.editable = p->editable && !p->readOnly;
   [_text applyOptions:ngn::textInputOptions(*p)];
   if (ngn::controlledTextIsCurrent(p->mostRecentEventCount, _eventCount, _text.hasMarkedText) && !p->text.empty()) {
@@ -1011,6 +1035,9 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
 
 - (void)updateLayout:(const LayoutMetrics &)metrics {
   [super updateLayout:metrics];
+  if (auto p = std::dynamic_pointer_cast<const DesktopTextInputProps>(self.props)) {
+    alignInput(_text, *p, metrics.layoutDirection);
+  }
   const auto &i = metrics.contentInsets;
   _scroll.frame = NSMakeRect(
       i.left, i.top, metrics.frame.size.width - i.left - i.right, metrics.frame.size.height - i.top - i.bottom);

@@ -87,14 +87,12 @@ CTFontRef makeFont(const TextAttributes &a) {
 }
 
 // A fragment's alignment as React Native iOS resolves it (RCTResolveTextAlignment): in a
-// right-to-left layout, natural and start go right, end goes left, and left and right swap; in a
-// left-to-right one, a natural or start alignment that is set goes left. Text with no alignment in
-// a left-to-right layout stays natural, aligned by its paragraph's direction (drawText).
+// right-to-left layout, natural and start go right, end goes left, and left and right swap. Text
+// with no alignment follows the layout's direction too, not its own script, as TextKit's natural
+// alignment follows the app's direction on iOS: a Hebrew paragraph in a left-to-right layout is on
+// the left.
 CTTextAlignment ctAlignment(std::optional<TextAlignment> alignment, std::optional<LayoutDirection> layoutDirection) {
   bool rightToLeft = layoutDirection == LayoutDirection::RightToLeft;
-  if (!alignment && !rightToLeft) {
-    return kCTTextAlignmentNatural;
-  }
   CTTextAlignment start = rightToLeft ? kCTTextAlignmentRight : kCTTextAlignmentLeft;
   CTTextAlignment end = rightToLeft ? kCTTextAlignmentLeft : kCTTextAlignmentRight;
   switch (alignment.value_or(TextAlignment::Natural)) {
@@ -464,8 +462,8 @@ void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CG
       x = (boxWidth - l.width) / 2;
     } else if (alignment == kCTTextAlignmentRight) {
       x = boxWidth - l.width;
-    } else if ((alignment == kCTTextAlignmentNatural || alignment == kCTTextAlignmentJustified) && l.rightToLeft) {
-      // Natural follows the paragraph's direction, as does a justified paragraph's last line.
+    } else if (alignment == kCTTextAlignmentJustified && l.rightToLeft) {
+      // A justified paragraph's last line follows the paragraph's direction.
       x = boxWidth - l.width;
     }
     CGContextSetTextPosition(context, origin.x + x, origin.y + l.origin.y);

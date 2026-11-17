@@ -62,6 +62,8 @@ BOOL NGNControlShouldChangeText(
 - (const ngn::TextInputOptions &)options;
 // Drawn in the field's font; nil colour is the system's placeholder colour.
 - (void)setPlaceholder:(NSString *)placeholder color:(NSColor *)color;
+// The alignment and base writing direction of the text, while editing too, and of the placeholder.
+- (void)setTextAlignment:(NSTextAlignment)alignment writingDirection:(NSWritingDirection)direction;
 // Selects now while editing, or as editing starts.
 - (void)selectRange:(NSRange)range;
 @end
@@ -72,5 +74,8 @@ BOOL NGNControlShouldChangeText(
 @property (nonatomic, copy, readonly) NSAttributedString *placeholder;
 - (void)applyOptions:(const ngn::TextInputOptions &)options;
 - (void)setPlaceholder:(NSString *)placeholder color:(NSColor *)color;
+// The alignment and base writing direction of the text, typed or set later too, and of the
+// placeholder.
+- (void)setTextAlignment:(NSTextAlignment)alignment writingDirection:(NSWritingDirection)direction;
 - (void)selectRange:(NSRange)range;
 @end

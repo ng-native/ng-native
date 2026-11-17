@@ -127,6 +127,29 @@ TEST_CASE("secure entry turns every substitution off, whatever the props ask") {
   CHECK(secure.capitalize == ngn::Capitalize::None);
 }
 
+TEST_CASE("inputAlignment aligns a field as React Native iOS aligns a TextInput") {
+  Parser parser;
+  auto aligned = [&](folly::dynamic raw, LayoutDirection direction) {
+    return ngn::inputAlignment(parser.clone(nullptr, std::move(raw))->textAttributes.alignment, direction);
+  };
+  constexpr auto ltr = LayoutDirection::LeftToRight;
+  constexpr auto rtl = LayoutDirection::RightToLeft;
+  // None set: the layout's direction, so the leading side.
+  CHECK(aligned(folly::dynamic::object(), ltr) == TextAlignment::Left);
+  CHECK(aligned(folly::dynamic::object(), rtl) == TextAlignment::Right);
+  CHECK(aligned(folly::dynamic::object(), LayoutDirection::Undefined) == TextAlignment::Left);
+  // Set: as a left-to-right fragment, in either direction.
+  for (auto direction : {ltr, rtl}) {
+    CHECK(aligned(folly::dynamic::object("textAlign", "auto"), direction) == TextAlignment::Left);
+    CHECK(aligned(folly::dynamic::object("textAlign", "left"), direction) == TextAlignment::Left);
+    CHECK(aligned(folly::dynamic::object("textAlign", "right"), direction) == TextAlignment::Right);
+    CHECK(aligned(folly::dynamic::object("textAlign", "center"), direction) == TextAlignment::Center);
+    CHECK(aligned(folly::dynamic::object("textAlign", "justify"), direction) == TextAlignment::Justified);
+    CHECK(ngn::inputAlignment(TextAlignment::Start, direction) == TextAlignment::Left);
+    CHECK(ngn::inputAlignment(TextAlignment::End, direction) == TextAlignment::Right);
+  }
+}
+
 TEST_CASE("insertionThatFits keeps a field within maxLength") {
   CHECK(ngn::insertionThatFits(3, 0, 10, std::nullopt) == 10);
   CHECK(ngn::insertionThatFits(3, 0, 1, 5) == 1);

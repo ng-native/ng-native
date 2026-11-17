@@ -225,6 +225,89 @@ TEST_CASE("a field draws its placeholder in the colour given, in its font") {
   [window close];
 }
 
+TEST_CASE("a field's alignment and writing direction reach its editor while editing and survive secure entry") {
+  NSWindow *window = offscreenWindow();
+  NGNTextField *field = addField(window);
+  field.stringValue = @"Hello";
+  [field setTextAlignment:NSTextAlignmentRight writingDirection:NSWritingDirectionRightToLeft];
+  REQUIRE([window makeFirstResponder:field.control]);
+  REQUIRE((editor(field) != nil));
+  CHECK(editor(field).alignment == NSTextAlignmentRight);
+  CHECK(editor(field).baseWritingDirection == NSWritingDirectionRightToLeft);
+
+  // Changed while editing, as a relayout in the other direction does: the editing goes on, and
+  // the control has it once the editing ends and when it starts again.
+  [field setTextAlignment:NSTextAlignmentLeft writingDirection:NSWritingDirectionLeftToRight];
+  REQUIRE((editor(field) != nil));
+  CHECK(editor(field).alignment == NSTextAlignmentLeft);
+  CHECK(editor(field).baseWritingDirection == NSWritingDirectionLeftToRight);
+  [window makeFirstResponder:nil];
+  CHECK(field.control.alignment == NSTextAlignmentLeft);
+  CHECK(field.control.baseWritingDirection == NSWritingDirectionLeftToRight);
+  REQUIRE([window makeFirstResponder:field.control]);
+  CHECK(editor(field).alignment == NSTextAlignmentLeft);
+
+  // Editing aborted, which tells the control nothing: the next request, the same one again as each
+  // layout sends, puts it right.
+  [field setTextAlignment:NSTextAlignmentRight writingDirection:NSWritingDirectionRightToLeft];
+  [field.control abortEditing];
+  REQUIRE((field.currentEditor == nil));
+  [field setTextAlignment:NSTextAlignmentRight writingDirection:NSWritingDirectionRightToLeft];
+  CHECK(field.control.alignment == NSTextAlignmentRight);
+  CHECK(field.control.baseWritingDirection == NSWritingDirectionRightToLeft);
+  REQUIRE([window makeFirstResponder:field.control]);
+
+  [field setTextAlignment:NSTextAlignmentCenter writingDirection:NSWritingDirectionRightToLeft];
+  field.secure = YES;
+  CHECK(field.control.alignment == NSTextAlignmentCenter);
+  CHECK(field.control.baseWritingDirection == NSWritingDirectionRightToLeft);
+  REQUIRE((editor(field) != nil));
+  CHECK(editor(field).alignment == NSTextAlignmentCenter);
+  CHECK(editor(field).baseWritingDirection == NSWritingDirectionRightToLeft);
+  [window close];
+}
+
+TEST_CASE("a placeholder takes the text's alignment, set before it or after") {
+  for (bool secure : {false, true}) {
+    INFO("secure ", secure);
+    NSWindow *window = offscreenWindow();
+    NGNTextField *field = addField(window, NSMakeRect(0, 0, 300, 40));
+    field.secure = secure;
+    [field setPlaceholder:@"Name" color:NSColor.redColor];
+    [field setTextAlignment:NSTextAlignmentRight writingDirection:NSWritingDirectionRightToLeft];
+    NSParagraphStyle *style = [field.control.placeholderAttributedString attribute:NSParagraphStyleAttributeName
+                                                                           atIndex:0
+                                                                    effectiveRange:nullptr];
+    CHECK(style.alignment == NSTextAlignmentRight);
+    CHECK(style.baseWritingDirection == NSWritingDirectionRightToLeft);
+    [field setPlaceholder:@"Other" color:NSColor.redColor];
+    style = [field.control.placeholderAttributedString attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:nullptr];
+    CHECK(style.alignment == NSTextAlignmentRight);
+    [window close];
+  }
+
+  NGNTextView *text = [[NGNTextView alloc] initWithFrame:NSMakeRect(0, 0, 300, 60)];
+  [text setPlaceholder:@"Name" color:NSColor.redColor];
+  [text setTextAlignment:NSTextAlignmentRight writingDirection:NSWritingDirectionRightToLeft];
+  NSParagraphStyle *style = [text.placeholder attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:nullptr];
+  CHECK(style.alignment == NSTextAlignmentRight);
+  CHECK(style.baseWritingDirection == NSWritingDirectionRightToLeft);
+  // Text set or typed later takes it.
+  text.string = @"Hello";
+  CHECK([[text.textStorage attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:nullptr] alignment] ==
+        NSTextAlignmentRight);
+  [text setTextAlignment:NSTextAlignmentLeft writingDirection:NSWritingDirectionNatural];
+  CHECK([[text.textStorage attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:nullptr] alignment] ==
+        NSTextAlignmentLeft);
+  // Emptied, then typed into.
+  text.string = @"";
+  [text setTextAlignment:NSTextAlignmentCenter writingDirection:NSWritingDirectionRightToLeft];
+  type(text, @"Typed");
+  NSParagraphStyle *typed = [text.textStorage attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:nullptr];
+  CHECK(typed.alignment == NSTextAlignmentCenter);
+  CHECK(typed.baseWritingDirection == NSWritingDirectionRightToLeft);
+}
+
 TEST_CASE("a field selects a range from the props now while editing, or when editing starts") {
   NSWindow *window = offscreenWindow();
   NGNTextField *field = addField(window);
