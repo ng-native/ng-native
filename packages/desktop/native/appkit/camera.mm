@@ -3,6 +3,8 @@
 #import <ImageIO/ImageIO.h>
 
 #include <atomic>
+#include <cmath>
+#include <optional>
 
 // Answers one photo capture: its image and the camera's metadata, or why there is none.
 @interface NGNPhotoCapture : NSObject <AVCapturePhotoCaptureDelegate>
@@ -144,6 +146,79 @@ AVVideoCodecType codecOf(const std::string &name) {
   return nil;
 }
 
+// The session preset a recording request names (CameraRecordingRequest::preset).
+AVCaptureSessionPreset presetOf(const std::string &name) {
+  if (name == "Medium") return AVCaptureSessionPresetMedium;
+  if (name == "Low") return AVCaptureSessionPresetLow;
+  if (name == "640x480") return AVCaptureSessionPreset640x480;
+  if (name == "iFrame1280x720") return AVCaptureSessionPresetiFrame1280x720;
+  if (name == "iFrame960x540") return AVCaptureSessionPresetiFrame960x540;
+  return AVCaptureSessionPresetHigh;
+}
+
+// A session set up to record: the movie output and microphone added to it, and the preset it had
+// before. Only touched on the session's queue.
+struct RecordingSetup {
+  AVCaptureMovieFileOutput *movie{nil};
+  AVCaptureDeviceInput *microphone{nil};
+  NSString *before{nil};
+  std::string preset;
+  bool sound{false};
+};
+
+// Takes the setup off the session and puts its preset back.
+void takeDown(AVCaptureSession *session, std::optional<RecordingSetup> &setup) {
+  if (!setup) {
+    return;
+  }
+  [session beginConfiguration];
+  if (setup->movie != nil) {
+    [session removeOutput:setup->movie];
+  }
+  if (setup->microphone != nil) {
+    [session removeInput:setup->microphone];
+  }
+  if ([session canSetSessionPreset:setup->before]) {
+    session.sessionPreset = setup->before;
+  }
+  [session commitConfiguration];
+  setup.reset();
+}
+
+// Sets the session up for `request`, unless it already is.
+void setUp(AVCaptureSession *session, const CameraRecordingRequest &request, std::optional<RecordingSetup> &setup) {
+  if (setup && setup->preset == request.preset && setup->sound == request.sound) {
+    return;
+  }
+  takeDown(session, setup);
+  RecordingSetup made{.before = session.sessionPreset, .preset = request.preset, .sound = request.sound};
+  [session beginConfiguration];
+  // The preset asked for, or High when this camera has no such preset.
+  AVCaptureSessionPreset recordAt = presetOf(request.preset);
+  if (![session canSetSessionPreset:recordAt]) {
+    recordAt = AVCaptureSessionPresetHigh;
+  }
+  if ([session canSetSessionPreset:recordAt]) {
+    session.sessionPreset = recordAt;
+  }
+  // Never without the microphone allowed: a microphone input in a session asks for it.
+  if (request.sound && [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized) {
+    AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio];
+    AVCaptureDeviceInput *microphone = device != nil ? [AVCaptureDeviceInput deviceInputWithDevice:device error:nil] : nil;
+    if (microphone != nil && [session canAddInput:microphone]) {
+      [session addInput:microphone];
+      made.microphone = microphone;
+    }
+  }
+  AVCaptureMovieFileOutput *movie = [AVCaptureMovieFileOutput new];
+  if ([session canAddOutput:movie]) {
+    [session addOutput:movie];
+    made.movie = movie;
+  }
+  [session commitConfiguration];
+  setup = made;
+}
+
 class AVSessionCapture final : public SessionCapture {
  public:
   AVSessionCapture(AVCaptureSession *session, AVCapturePhotoOutput *output)
@@ -177,8 +252,33 @@ class AVSessionCapture final : public SessionCapture {
     });
   }
 
-  // The movie output and, with sound, the microphone are added to the session for the recording
-  // and taken off after it, on the session's queue, since configuring a running session blocks.
+  // Reconfiguring a running session restarts the camera's stream, which takes it a moment, so a
+  // recording set up only as it starts begins late.
+  void prepareRecording(const CameraRecordingRequest &asked) override {
+    CameraRecordingRequest request = asked;
+    AVCaptureSession *session = session_;
+    auto setup = setup_;
+    auto recording = recording_;
+    dispatch_async(queue_, ^{
+      if (!recording->load()) {
+        setUp(session, request, *setup);
+      }
+    });
+  }
+  void unprepareRecording() override {
+    AVCaptureSession *session = session_;
+    auto setup = setup_;
+    auto recording = recording_;
+    dispatch_async(queue_, ^{
+      if (!recording->load()) {
+        takeDown(session, *setup);
+      }
+    });
+  }
+
+  // The movie output and, with sound, the microphone are on the session for the recording (added
+  // now unless prepareRecording added them) and taken off after it, on the session's queue, since
+  // configuring a running session blocks.
   void startRecording(const CameraRecordingRequest &asked, std::function<void(const std::string &)> done) override {
     // The block runs later on the session's queue: a reference it captured would be to the
     // caller's request, gone by then.
@@ -194,52 +294,27 @@ class AVSessionCapture final : public SessionCapture {
     AVCaptureSession *session = session_;
     auto recording = recording_;
     auto movieHolder = movie_;
+    auto setup = setup_;
     auto answer = std::make_shared<std::function<void(const std::string &)>>(std::move(done));
     dispatch_queue_t queue = queue_;
     dispatch_async(queue_, ^{
-      [session beginConfiguration];
-      NSString *preset = session.sessionPreset;
-      if ([session canSetSessionPreset:AVCaptureSessionPresetHigh]) {
-        session.sessionPreset = AVCaptureSessionPresetHigh;
-      }
-      AVCaptureDeviceInput *microphone = nil;
-      // Never without the microphone allowed: a microphone input in a session asks for it.
-      if (request.sound &&
-          [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized) {
-        AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeAudio];
-        microphone = device != nil ? [AVCaptureDeviceInput deviceInputWithDevice:device error:nil] : nil;
-        if (microphone != nil && [session canAddInput:microphone]) {
-          [session addInput:microphone];
-        } else {
-          microphone = nil;
-        }
-      }
-      AVCaptureMovieFileOutput *movie = [AVCaptureMovieFileOutput new];
-      bool added = [session canAddOutput:movie];
-      if (added) {
-        [session addOutput:movie];
-      }
-      [session commitConfiguration];
-      void (^takeDown)(void) = ^{
-        [session beginConfiguration];
-        if (added) {
-          [session removeOutput:movie];
-        }
-        if (microphone != nil) {
-          [session removeInput:microphone];
-        }
-        if ([session canSetSessionPreset:preset]) {
-          session.sessionPreset = preset;
-        }
-        [session commitConfiguration];
+      setUp(session, request, *setup);
+      AVCaptureMovieFileOutput *movie = (*setup)->movie;
+      void (^finished)(void) = ^{
+        takeDown(session, *setup);
         *movieHolder = nil;
         recording->store(false);
       };
-      AVCaptureConnection *video = added ? [movie connectionWithMediaType:AVMediaTypeVideo] : nil;
+      AVCaptureConnection *video = movie != nil ? [movie connectionWithMediaType:AVMediaTypeVideo] : nil;
       if (video == nil || !video.active || !video.enabled) {
-        takeDown();
+        finished();
         (*answer)("the camera gives no video to record");
         return;
+      }
+      // The movie is never mirrored, as on iOS, whatever its preview shows.
+      if (video.isVideoMirroringSupported) {
+        video.automaticallyAdjustsVideoMirroring = NO;
+        video.videoMirrored = NO;
       }
       // A codec this Mac cannot write is refused by an exception; the default stays.
       if (AVVideoCodecType codec = codecOf(request.codec)) {
@@ -254,10 +329,10 @@ class AVSessionCapture final : public SessionCapture {
       [NSFileManager.defaultManager removeItemAtURL:url error:nil];
       *movieHolder = movie;
       // The answer follows the take-down, so a recording asked for at once finds none running.
-      NGNMovieRecording *delegate = [[NGNMovieRecording alloc] initWithDone:[answer, takeDown, queue](const std::string &error) {
+      NGNMovieRecording *delegate = [[NGNMovieRecording alloc] initWithDone:[answer, finished, queue](const std::string &error) {
         std::string message = error;
         dispatch_async(queue, ^{
-          takeDown();
+          finished();
           (*answer)(message);
         });
       }];
@@ -292,6 +367,8 @@ class AVSessionCapture final : public SessionCapture {
   // and its output while it does (set and read on the queue).
   std::shared_ptr<std::atomic<bool>> recording_ = std::make_shared<std::atomic<bool>>(false);
   std::shared_ptr<AVCaptureMovieFileOutput *> movie_ = std::make_shared<AVCaptureMovieFileOutput *>(nil);
+  // What the session is set up to record with, prepared or for the recording running.
+  std::shared_ptr<std::optional<RecordingSetup>> setup_ = std::make_shared<std::optional<RecordingSetup>>();
 };
 
 } // namespace
@@ -322,6 +399,19 @@ bool writePicture(CGImageRef image, const CameraPictureRequest &request) {
   bool written = CGImageDestinationFinalize(destination);
   CFRelease(destination);
   return written;
+}
+
+std::optional<CameraClip> movieClip(const std::string &path) {
+  AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:@(path.c_str())] options:nil];
+  AVAssetTrack *track = [asset tracksWithMediaType:AVMediaTypeVideo].firstObject;
+  if (track == nil) {
+    return std::nullopt;
+  }
+  // A track turned a quarter is its size turned too, which the transform's sign would make negative.
+  CGSize size = CGSizeApplyAffineTransform(track.naturalSize, track.preferredTransform);
+  return CameraClip{.width = static_cast<int>(std::lround(std::fabs(size.width))),
+                    .height = static_cast<int>(std::lround(std::fabs(size.height))),
+                    .duration = CMTimeGetSeconds(asset.duration) * 1000};
 }
 
 std::shared_ptr<CameraHardware> makeCameraHardware() {

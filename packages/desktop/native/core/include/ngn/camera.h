@@ -22,6 +22,7 @@
 // granted or the Mac has no camera. It asks for the permission first when it can.
 #pragma once
 
+#include "ngn/audio.h"
 #include "ngn/desktop-props.h"
 #include "ngn/native-module.h"
 
@@ -89,6 +90,9 @@ struct CameraRecordingRequest {
   bool sound{true};
   // expo-camera's VideoCodec ("avc1", "hvc1", "jpeg", "apcn", "ap4h"), or empty for the default.
   std::string codec;
+  // The session preset the movie is recorded at, AVFoundation's name for it without its prefix
+  // (High, Medium, Low, 640x480, iFrame1280x720, iFrame960x540); empty for High.
+  std::string preset;
 };
 
 // A view's running camera.
@@ -141,22 +145,45 @@ struct CameraShot {
   folly::dynamic exif{nullptr};
 };
 
+// A movie the host's camera sheet recorded: its size as it plays, and its length in milliseconds.
+struct CameraClip {
+  int width{0};
+  int height{0};
+  double duration{0};
+};
+
+// What the sheet is asked for: a photo, a video, or either, with a switch between them.
+struct CameraSheetRequest {
+  bool photos{true};
+  bool videos{false};
+  CameraPictureRequest photo;
+  CameraRecordingRequest video;
+};
+
+// What the sheet took: a photo or a video, or neither when the user cancelled.
+struct CameraTake {
+  std::optional<CameraShot> photo;
+  std::optional<CameraClip> video;
+};
+
 // The host's own camera for expo-image-picker's launchCameraAsync: macOS has no system camera
 // screen like iOS's UIImagePickerController, so the host shows the camera's preview and a shutter
 // itself.
 class CameraSheet {
  public:
   virtual ~CameraSheet() = default;
-  // Shows the camera; once the user takes a picture, writes it as `request` asks and answers it.
-  // Answers no shot and no error when they cancel or there is no window to show it on, and an
-  // error when the camera fails. Only with the camera allowed and present. Any thread.
-  virtual void shoot(const CameraPictureRequest &request, std::function<void(std::optional<CameraShot>, const std::string &error)> done) = 0;
+  // Shows the camera; once the user takes a photo or records a video, writes it as `request` asks
+  // and answers it. Answers neither and no error when they cancel or there is no window to show it
+  // on, and an error when the camera fails. Only with the camera allowed and present. Any thread.
+  virtual void shoot(const CameraSheetRequest &request, std::function<void(CameraTake, const std::string &error)> done) = 0;
 };
 
-// What NgNativeImagePicker's camera half needs: the permission and the device, the sheet, and the
-// folder its pictures go in (`<caches>/ImagePicker`, as on iOS).
+// What NgNativeImagePicker's camera half needs: the permission and the device, the microphone a
+// video's sound comes from, the sheet, and the folder its photos and videos go in
+// (`<caches>/ImagePicker`, as on iOS).
 struct PickerCamera {
   std::shared_ptr<CameraHardware> hardware;
+  std::shared_ptr<AudioInput> microphone;
   std::shared_ptr<CameraSheet> sheet;
   std::string folder;
 };
@@ -166,11 +193,17 @@ struct PickerCamera {
 folly::dynamic cameraPermissionOf(CameraHardware::Access access);
 void requestCameraPermission(CameraHardware &hardware, bool noPrompts, JsPromise promise);
 
-// expo-image-picker's launchCameraAsync(options) over `camera`: {canceled, assets}, with the one
-// photo a JPEG at `quality` (1 by default) shaped as iOS shapes a camera shot (no assetId and no
-// fileName, base64 and exif only when asked). Rejected without the camera permission, as iOS does,
-// or on a Mac with no camera; canceled with `noPrompts`, or `mediaTypes` asking for videos alone
-// (the sheet takes photos only), which show no sheet.
+// expo-image-picker's launchCameraAsync(options) over `camera`, shaped as iOS shapes a camera
+// shot (no assetId and no fileName):
+// - a photo, a JPEG at `quality` (1 by default), with base64 and exif only when asked;
+// - with `mediaTypes` asking for videos, a QuickTime movie (`video/quicktime`) recorded at
+//   `videoQuality` (UIImagePickerControllerQualityType, High by default) for at most
+//   `videoMaxDuration` seconds (0, the default, for no limit), with its duration in milliseconds.
+//   Videos alone show a record button; videos and photos, a switch between the two.
+// Rejected without the camera permission, as iOS does, or on a Mac with no camera. A request for
+// videos asks for the microphone when it is undetermined, and is rejected with iOS's message when
+// it is not allowed (or cannot be asked, with no NSMicrophoneUsageDescription). Canceled with
+// `noPrompts`, which shows no sheet.
 void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly::dynamic &options, JsPromise promise);
 
 std::shared_ptr<NativeModule> makeCameraModule(

@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace ngn::appkit {
@@ -17,6 +18,10 @@ std::shared_ptr<CameraHardware> makeCameraHardware();
 
 // Writes `image` to the request's path as its format asks: a JPEG at its quality, or a PNG.
 bool writePicture(CGImageRef image, const CameraPictureRequest &request);
+
+// A movie's size as it plays and its length in milliseconds, read as expo-image-picker reads a
+// video's on iOS; nothing for a file with no video.
+std::optional<CameraClip> movieClip(const std::string &path);
 
 // The camera a view facing `facing` uses: the built-in one, else the first there is; nil on a Mac
 // with none.
@@ -40,6 +45,12 @@ class SessionCapture : public CameraCapture {
   virtual void start(std::function<void()> running) = 0;
   // Stops it, without waiting. Going away stops it too.
   virtual void stop() = 0;
+  // Sets the session up for startRecording(request) ahead of it (its preset, the movie output and,
+  // with sound, the microphone), since the camera takes a moment to reconfigure. Nothing while a
+  // recording runs; a recording takes the setup down when it ends.
+  virtual void prepareRecording(const CameraRecordingRequest &request) = 0;
+  // Takes a prepared setup down, putting the session's preset back. Nothing while a recording runs.
+  virtual void unprepareRecording() = 0;
 };
 // A capture session on `device`, started (`running` is called on the main thread once it is), or
 // null with `error` set: never without the camera allowed, so it never prompts.

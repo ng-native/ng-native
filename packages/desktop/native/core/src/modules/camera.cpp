@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <random>
 
 using namespace facebook::react;
@@ -114,69 +115,154 @@ std::string contentsOf(const std::string &path) {
   return {std::istreambuf_iterator<char>(in), {}};
 }
 
-// Whether expo-image-picker's mediaTypes (a MediaType, a list of them, or the deprecated
-// MediaTypeOptions) let the camera take a photo; left out, it does.
-bool asksForPhotos(const folly::dynamic &options) {
+// What expo-image-picker's mediaTypes (a MediaType, a list of them, or the deprecated
+// MediaTypeOptions) let the camera take. As on iOS, live photos are photos, and a request that
+// names neither photos nor videos (left out, or an empty list) takes photos.
+struct MediaKinds {
+  bool photos{false};
+  bool videos{false};
+};
+
+MediaKinds mediaKindsOf(const folly::dynamic &options) {
+  MediaKinds kinds;
   const auto *types = options.isObject() ? options.get_ptr("mediaTypes") : nullptr;
-  if (types == nullptr || types->isNull()) {
-    return true;
-  }
-  auto photo = [](const folly::dynamic &type) {
-    return type.isString() && (type == "images" || type == "livePhotos" || type == "Images" || type == "All");
+  auto add = [&kinds](const folly::dynamic &type) {
+    if (!type.isString()) {
+      return;
+    }
+    kinds.photos = kinds.photos || type == "images" || type == "livePhotos" || type == "Images" || type == "All";
+    kinds.videos = kinds.videos || type == "videos" || type == "Videos" || type == "All";
   };
-  if (!types->isArray()) {
-    return photo(*types);
+  if (types != nullptr && types->isArray()) {
+    for (const auto &type : *types) {
+      add(type);
+    }
+  } else if (types != nullptr) {
+    add(*types);
   }
-  return std::any_of(types->begin(), types->end(), photo);
+  kinds.photos = kinds.photos || !kinds.videos;
+  return kinds;
 }
+
+// AVFoundation's session preset for expo-image-picker's videoQuality, which on iOS is
+// UIImagePickerController's QualityType; High for any other value.
+std::string videoPresetOf(const folly::dynamic &options) {
+  const auto *quality = options.isObject() ? options.get_ptr("videoQuality") : nullptr;
+  if (quality == nullptr || !quality->isNumber()) {
+    return "High";
+  }
+  static const char *const presets[] = {"High", "Medium", "Low", "640x480", "iFrame1280x720", "iFrame960x540"};
+  auto value = quality->asDouble();
+  for (size_t i = 0; i < std::size(presets); i++) {
+    if (value == static_cast<double>(i)) {
+      return presets[i];
+    }
+  }
+  return "High";
+}
+
+// Shows the sheet, once the microphone is settled, and answers what it took.
+void showPickerCamera(const PickerCamera &camera, const folly::dynamic &options, MediaKinds kinds, JsPromise promise) {
+  CameraSheetRequest request{.photos = kinds.photos, .videos = kinds.videos};
+  bool base64 = false;
+  bool exif = false;
+  if (options.isObject()) {
+    if (const auto *q = options.get_ptr("quality"); q && q->isNumber()) {
+      request.photo.quality = std::clamp(q->asDouble(), 0.0, 1.0);
+    }
+    if (const auto *d = options.get_ptr("videoMaxDuration"); d && d->isNumber()) {
+      request.video.maxDuration = std::max(0.0, d->asDouble());
+    }
+    base64 = options.getDefault("base64", false) == true;
+    exif = options.getDefault("exif", false) == true;
+  }
+  request.video.preset = videoPresetOf(options);
+  std::error_code ignored;
+  std::filesystem::create_directories(camera.folder, ignored);
+  request.photo.path = camera.folder + "/" + newFileName(".jpg");
+  request.video.path = camera.folder + "/" + newFileName(".mov");
+  auto photoPath = request.photo.path;
+  auto videoPath = request.video.path;
+  camera.sheet->shoot(request, [promise, photoPath, videoPath, base64, exif](CameraTake take, const std::string &error) {
+    if (!error.empty()) {
+      promise.reject("ImagePicker: " + error);
+      return;
+    }
+    if (!take.photo && !take.video) {
+      promise.resolve(folly::dynamic::object("canceled", true)("assets", nullptr));
+      return;
+    }
+    const auto &path = take.video ? videoPath : photoPath;
+    std::error_code sizeError;
+    auto size = std::filesystem::file_size(path, sizeError);
+    folly::dynamic asset = folly::dynamic::object("uri", fileUri(path))("assetId", nullptr)("fileName", nullptr)(
+        "fileSize", sizeError ? folly::dynamic(nullptr) : folly::dynamic(static_cast<int64_t>(size)))("exif", nullptr)("base64", nullptr);
+    if (take.video) {
+      // As iOS answers a recorded video: no EXIF and no base64, whatever was asked.
+      asset["type"] = "video";
+      asset["width"] = take.video->width;
+      asset["height"] = take.video->height;
+      asset["mimeType"] = "video/quicktime";
+      asset["duration"] = take.video->duration;
+    } else {
+      asset["type"] = "image";
+      asset["width"] = take.photo->width;
+      asset["height"] = take.photo->height;
+      asset["mimeType"] = "image/jpeg";
+      asset["duration"] = nullptr;
+      if (exif) {
+        asset["exif"] = take.photo->exif;
+      }
+      if (base64) {
+        asset["base64"] = base64Encode(contentsOf(path));
+      }
+    }
+    promise.resolve(folly::dynamic::object("canceled", false)("assets", folly::dynamic::array(std::move(asset))));
+  });
+}
+
+// iOS's words for a request for videos with no microphone to record their sound from.
+constexpr const char *kMissingMicrophone =
+    "ImagePicker: Missing microphone permission. Please enable it with the `expo-image-picker` config plugin";
 
 } // namespace
 
 void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly::dynamic &options, JsPromise promise) {
-  folly::dynamic canceled = folly::dynamic::object("canceled", true)("assets", nullptr);
   if (camera.hardware->access() != CameraHardware::Access::Granted) {
     promise.reject("ImagePicker: Missing camera or camera roll permission");
     return;
   }
-  // The sheet takes photos only, so a request for videos alone has nothing to take.
-  if (noPrompts || !asksForPhotos(options)) {
-    promise.resolve(std::move(canceled));
+  if (noPrompts) {
+    promise.resolve(folly::dynamic::object("canceled", true)("assets", nullptr));
     return;
   }
   if (!camera.hardware->hasCamera()) {
     promise.reject("ImagePicker: this Mac has no camera");
     return;
   }
-  CameraPictureRequest request;
-  bool base64 = false;
-  bool exif = false;
-  if (options.isObject()) {
-    if (const auto *q = options.get_ptr("quality"); q && q->isNumber()) {
-      request.quality = std::clamp(q->asDouble(), 0.0, 1.0);
-    }
-    base64 = options.getDefault("base64", false) == true;
-    exif = options.getDefault("exif", false) == true;
+  auto kinds = mediaKindsOf(options);
+  if (!kinds.videos) {
+    showPickerCamera(camera, options, kinds, std::move(promise));
+    return;
   }
-  std::error_code ignored;
-  std::filesystem::create_directories(camera.folder, ignored);
-  request.path = camera.folder + "/" + newFileName(".jpg");
-  auto path = request.path;
-  camera.sheet->shoot(request, [promise, canceled, path, base64, exif](std::optional<CameraShot> shot, const std::string &error) {
-    if (!error.empty()) {
-      promise.reject("ImagePicker: " + error);
+  // A video's sound. iOS rejects a request for videos when the microphone cannot be asked for, and
+  // its camera asks for it when undetermined.
+  using Access = AudioInput::Access;
+  auto access = camera.microphone ? camera.microphone->access() : Access::Denied;
+  if (access == Access::Granted) {
+    showPickerCamera(camera, options, kinds, std::move(promise));
+    return;
+  }
+  if (access != Access::NotDetermined) {
+    promise.reject(kMissingMicrophone);
+    return;
+  }
+  camera.microphone->requestAccess([camera, options, kinds, promise](Access decided) {
+    if (decided != Access::Granted) {
+      promise.reject(kMissingMicrophone);
       return;
     }
-    if (!shot) {
-      promise.resolve(canceled);
-      return;
-    }
-    std::error_code sizeError;
-    auto size = std::filesystem::file_size(path, sizeError);
-    folly::dynamic asset = folly::dynamic::object("uri", fileUri(path))("assetId", nullptr)("width", shot->width)("height", shot->height)(
-        "type", "image")("fileName", nullptr)("fileSize", sizeError ? folly::dynamic(nullptr) : folly::dynamic(static_cast<int64_t>(size)))(
-        "mimeType", "image/jpeg")("duration", nullptr)("exif", exif ? shot->exif : folly::dynamic(nullptr))(
-        "base64", base64 ? folly::dynamic(base64Encode(contentsOf(path))) : folly::dynamic(nullptr));
-    promise.resolve(folly::dynamic::object("canceled", false)("assets", folly::dynamic::array(std::move(asset))));
+    showPickerCamera(camera, options, kinds, promise);
   });
 }
 

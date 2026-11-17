@@ -174,6 +174,7 @@ export class PermissionsPage {
         photos: () => this.checkPhotos(),
         picker: () => this.checkPicker(),
         capture: () => this.checkCapture(),
+        'capture-video': () => this.checkCaptureVideo(),
         'photos-cleanup': () => this.cleanUpPhoto(),
         tracking: () => this.checkTracking(),
         notifications: () => this.checkNotifications(),
@@ -438,7 +439,28 @@ export class PermissionsPage {
         ? `captured ${photo.uri} ${photo.width}x${photo.height} ${photo.mimeType} ${photo.fileSize} bytes, fileName ${photo.fileName}, exif ${Object.keys(photo.exif ?? {}).length} keys`
         : 'captured nothing',
     );
-    this.note(`videos only ${(await this.picker.capture({ mediaTypes: 'videos' })).length}`);
+  }
+
+  private async checkCaptureVideo(): Promise<void> {
+    this.note(`camera permission ask ${await this.picker.cameraPermission.ensure()}`);
+    this.note('camera sheet shown for a video, stopping at 3 seconds');
+    const [video] = await this.picker.capture({
+      mediaTypes: 'videos',
+      videoMaxDuration: 3,
+      videoQuality: 4,
+    });
+    this.note(
+      video
+        ? `recorded ${video.uri} ${video.type} ${video.width}x${video.height} ${video.duration} ms ${video.mimeType} ${video.fileSize} bytes, fileName ${video.fileName}, base64 ${video.base64}`
+        : 'recorded nothing',
+    );
+    this.note('camera sheet shown for a photo or a video');
+    const [either] = await this.picker.capture({ mediaTypes: ['images', 'videos'] });
+    this.note(
+      either
+        ? `took ${either.type} ${either.uri} ${either.width}x${either.height} ${either.duration} ms ${either.mimeType}`
+        : 'took nothing',
+    );
   }
 
   private async checkTracking(): Promise<void> {

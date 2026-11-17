@@ -1205,7 +1205,7 @@ int main(int argc, const char *argv[]) {
       static auto cameraHardware = ngn::appkit::makeCameraHardware();
       static auto cameraSheet = ngn::appkit::makeCameraSheet();
       ngn::addModule(*modules, "NgNativeImagePicker", [] {
-        return ngn::makeImagePickerModule(photos, noPrompts, ngn::PickerCamera{.hardware = cameraHardware, .sheet = cameraSheet, .folder = caches + "/ImagePicker"});
+        return ngn::makeImagePickerModule(photos, noPrompts, ngn::PickerCamera{.hardware = cameraHardware, .microphone = audioInput, .sheet = cameraSheet, .folder = caches + "/ImagePicker"});
       });
       static auto tracking = ngn::appkit::makeTrackingAuthority();
       ngn::addModule(*modules, "NgNativeTrackingTransparency", [] { return ngn::makeTrackingModule(tracking, noPrompts); });

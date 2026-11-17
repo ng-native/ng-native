@@ -1,5 +1,7 @@
 #include "photo-library.h"
 
+#import "camera.h"
+
 #include <algorithm>
 
 #import <AVFoundation/AVFoundation.h>
@@ -501,12 +503,10 @@ class PhotoKitLibrary final : public ngn::PhotoLibrary {
                                           item[@"assetId"] = result.assetIdentifier;
                                         }
                                         if (video) {
-                                          AVURLAsset *asset = [AVURLAsset URLAssetWithURL:copy options:nil];
-                                          AVAssetTrack *track = [asset tracksWithMediaType:AVMediaTypeVideo].firstObject;
-                                          CGSize size = CGSizeApplyAffineTransform(track.naturalSize, track.preferredTransform);
-                                          item[@"width"] = @(fabs(size.width));
-                                          item[@"height"] = @(fabs(size.height));
-                                          item[@"duration"] = @(CMTimeGetSeconds(asset.duration) * 1000);
+                                          auto clip = ngn::appkit::movieClip(copy.path.UTF8String).value_or(ngn::CameraClip{});
+                                          item[@"width"] = @(clip.width);
+                                          item[@"height"] = @(clip.height);
+                                          item[@"duration"] = @(clip.duration);
                                         } else if (CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)copy, nil)) {
                                           NSDictionary *properties = CFBridgingRelease(CGImageSourceCopyPropertiesAtIndex(source, 0, nil));
                                           CFRelease(source);
