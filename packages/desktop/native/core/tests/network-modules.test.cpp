@@ -4,6 +4,8 @@
 #include "ngn/core-modules.h"
 
 #include <doctest/doctest.h>
+
+#include <unistd.h>
 #include <folly/json.h>
 
 #include <filesystem>
@@ -209,7 +211,7 @@ TEST_CASE("abortRequest cancels the task, and clearCookies empties the cookie st
 
 TEST_CASE("form data goes out as multipart, with the content type and a part per field") {
   ngn::BlobStore blobs;
-  auto dir = std::filesystem::temp_directory_path() / "ngn-form-test";
+  auto dir = std::filesystem::temp_directory_path() / ("ngn-form-test-" + std::to_string(getpid()));
   std::filesystem::create_directories(dir);
   {
     std::ofstream(dir / "photo.jpg") << "JPEG";
@@ -382,7 +384,7 @@ TEST_CASE("ImageLoader measures an image it fetches, with headers, and rejects w
 }
 
 TEST_CASE("a request body reads a file only where FileSystem could, and fails the request otherwise") {
-  auto root = std::filesystem::temp_directory_path() / ("ngn-body-" + std::to_string(rand()));
+  auto root = std::filesystem::temp_directory_path() / ("ngn-body-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   std::filesystem::create_directories(root / "cache");
   std::filesystem::create_directories(root / "home/Desktop");
   std::ofstream(root / "home/Desktop/secret.txt") << "secret";
@@ -419,7 +421,7 @@ TEST_CASE("a request body reads a file only where FileSystem could, and fails th
 }
 
 TEST_CASE("a request's file url and Image.getSize's file source are read only inside the file boundary") {
-  auto root = std::filesystem::temp_directory_path() / ("ngn-url-" + std::to_string(rand()));
+  auto root = std::filesystem::temp_directory_path() / ("ngn-url-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   struct Cleanup {
     std::filesystem::path root;
     ~Cleanup() {

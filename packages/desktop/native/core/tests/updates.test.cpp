@@ -5,6 +5,8 @@
 #include "ngn/updates.h"
 
 #include <doctest/doctest.h>
+
+#include <unistd.h>
 #include <folly/json.h>
 
 #include <fstream>
@@ -52,7 +54,7 @@ struct Fixture {
   std::shared_ptr<FakeCrypto> crypto = std::make_shared<FakeCrypto>();
 
   Fixture() {
-    dir = fs::temp_directory_path() / ("ngn-updates-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
+    dir = fs::temp_directory_path() / ("ngn-updates-" + std::to_string(getpid()) + "-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
     fs::remove_all(dir);
   }
   ~Fixture() {

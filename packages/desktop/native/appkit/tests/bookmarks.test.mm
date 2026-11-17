@@ -5,6 +5,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -17,7 +19,7 @@ struct TempDir {
   fs::path path;
   TempDir() {
     std::random_device random;
-    auto at = fs::temp_directory_path() / ("ngn-bookmarks-" + std::to_string(random()));
+    auto at = fs::temp_directory_path() / ("ngn-bookmarks-" + std::to_string(getpid()) + "-" + std::to_string(random()));
     fs::create_directories(at);
     path = fs::canonical(at);
   }

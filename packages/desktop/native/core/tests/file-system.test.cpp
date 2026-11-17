@@ -44,7 +44,7 @@ struct TempDir {
   fs::path path;
   TempDir() {
     std::random_device random;
-    auto at = fs::temp_directory_path() / ("ngn-files-" + std::to_string(random()));
+    auto at = fs::temp_directory_path() / ("ngn-files-" + std::to_string(getpid()) + "-" + std::to_string(random()));
     fs::create_directories(at);
     path = fs::canonical(at);
   }

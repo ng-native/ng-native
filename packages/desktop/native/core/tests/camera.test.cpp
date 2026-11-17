@@ -4,6 +4,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -87,7 +89,7 @@ Answer call(const ngn::NativeModule &module, const std::string &method, dynamic 
 }
 
 struct Folder {
-  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-camera-" + std::to_string(rand()));
+  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-camera-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   ~Folder() {
     std::filesystem::remove_all(path);
   }

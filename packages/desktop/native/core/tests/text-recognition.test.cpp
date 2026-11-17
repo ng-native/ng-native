@@ -3,6 +3,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <optional>
 
@@ -94,7 +96,7 @@ TEST_CASE("NgNativeTextRecognition refuses a uri that is not a file, and passes 
 }
 
 TEST_CASE("NgNativeTextRecognition reads only images FileSystem could read") {
-  auto root = std::filesystem::temp_directory_path() / ("ngn-text-" + std::to_string(rand()));
+  auto root = std::filesystem::temp_directory_path() / ("ngn-text-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   std::filesystem::create_directories(root / "cache");
   std::filesystem::create_directories(root / "home/Desktop");
   ngn::FileAccess::Folders folders{.cache = (root / "cache").string(), .home = (root / "home").string()};

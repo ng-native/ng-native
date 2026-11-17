@@ -4,6 +4,8 @@
 #include "ngn/photo-library.h"
 
 #include <doctest/doctest.h>
+
+#include <unistd.h>
 #include <folly/json.h>
 
 #include <filesystem>
@@ -311,7 +313,7 @@ TEST_CASE("NgNativeImagePicker takes a photo with the host's camera sheet, answe
   auto camera = std::make_shared<FakeCamera>();
   camera->state = FakeCamera::Access::Granted;
   auto sheet = std::make_shared<FakeSheet>();
-  auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(rand()));
+  auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   auto module = ngn::makeImagePickerModule(
       library, false, ngn::PickerCamera{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = folder.string()});
 
@@ -400,7 +402,7 @@ TEST_CASE("NgNativeImagePicker records a video with the host's camera sheet, ans
   camera->state = FakeCamera::Access::Granted;
   auto sheet = std::make_shared<FakeSheet>();
   sheet->user = FakeSheet::User::Records;
-  auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(rand()));
+  auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   auto module = ngn::makeImagePickerModule(
       library, false, ngn::PickerCamera{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = folder.string()});
 
@@ -465,7 +467,7 @@ TEST_CASE("NgNativeImagePicker asks for the microphone for a video as iOS does: 
   auto sheet = std::make_shared<FakeSheet>();
   sheet->user = FakeSheet::User::Records;
   auto microphone = std::make_shared<FakeMicrophone>();
-  auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(rand()));
+  auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   ngn::PickerCamera picker{.hardware = camera, .microphone = microphone, .sheet = sheet, .folder = folder.string()};
   auto module = ngn::makeImagePickerModule(library, false, picker);
   const std::string missing = "ImagePicker: Missing microphone permission. Please enable it with the `expo-image-picker` config plugin";
@@ -574,7 +576,7 @@ TEST_CASE("NgNativeImagePicker picks from the library without a permission, and 
 TEST_CASE("NgNativeMediaLibrary saves only files FileSystem could read into Photos") {
   auto library = std::make_shared<FakeLibrary>();
   library->read = Access::Granted;
-  auto root = std::filesystem::temp_directory_path() / ("ngn-photos-" + std::to_string(rand()));
+  auto root = std::filesystem::temp_directory_path() / ("ngn-photos-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   std::filesystem::create_directories(root / "cache");
   std::filesystem::create_directories(root / "home/Desktop");
   ngn::FileAccess::Folders folders{.cache = (root / "cache").string(), .home = (root / "home").string()};

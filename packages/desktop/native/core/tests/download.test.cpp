@@ -3,6 +3,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -12,7 +14,7 @@ namespace fs = std::filesystem;
 namespace {
 
 struct Folder {
-  fs::path path = fs::temp_directory_path() / ("ngn-download-" + std::to_string(rand()));
+  fs::path path = fs::temp_directory_path() / ("ngn-download-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   Folder() {
     fs::create_directories(path);
   }

@@ -5,6 +5,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -44,7 +46,7 @@ struct FakePrintSystem final : ngn::PrintSystem {
 };
 
 struct Folder {
-  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-print-" + std::to_string(rand()));
+  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-print-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   ~Folder() {
     std::filesystem::remove_all(path);
   }

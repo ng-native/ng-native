@@ -5,6 +5,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #import <Foundation/Foundation.h>
 
 #include <chrono>
@@ -204,7 +206,7 @@ TEST_CASE("NGNWebViewController hands a page navigation outside originWhitelist 
 }
 
 TEST_CASE("NGNWebViewController loads a local file, and reports one that is not there as a loading error") {
-  auto folder = std::filesystem::temp_directory_path() / ("ngn-web-view-" + std::to_string(rand()));
+  auto folder = std::filesystem::temp_directory_path() / ("ngn-web-view-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   std::filesystem::create_directories(folder);
   std::ofstream(folder / "page.html") << "<title>File</title>";
   ngn::testing::ViewFileAccess files(ngn::testing::readsEverywhere());
@@ -229,7 +231,7 @@ TEST_CASE("NGNWebViewController loads a local file, and reports one that is not 
 }
 
 TEST_CASE("NGNWebViewController loads no file outside the file boundary, reporting it as a loading error") {
-  auto folder = std::filesystem::temp_directory_path() / ("ngn-web-view-" + std::to_string(rand()));
+  auto folder = std::filesystem::temp_directory_path() / ("ngn-web-view-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   std::filesystem::create_directories(folder / "app");
   std::filesystem::create_directories(folder / "outside");
   struct Cleanup {

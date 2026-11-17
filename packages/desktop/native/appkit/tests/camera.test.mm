@@ -6,6 +6,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <atomic>
 #include <optional>
 
@@ -173,7 +175,7 @@ TEST_CASE("A recording keeps its own copy of the request, which the caller may l
     capture->stop();
     return;
   }
-  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"ngn-camera-test-copy.mov"];
+  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"ngn-camera-test-copy-%d.mov", getpid()]];
   [NSFileManager.defaultManager removeItemAtPath:path error:nil];
   // Shared, so a late answer has somewhere to go.
   auto answer = std::make_shared<std::optional<std::string>>();
@@ -265,7 +267,7 @@ TEST_CASE("A recording is made at the preset its request names, or High for anot
       capture->stop();
       return;
     }
-    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"ngn-camera-test-preset.mov"];
+    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"ngn-camera-test-preset-%d.mov", getpid()]];
     auto answer = std::make_shared<std::optional<std::string>>();
     capture->startRecording({.path = path.UTF8String, .maxDuration = 0.3, .sound = false, .preset = preset},
                             answerOnMain(answer));
@@ -303,7 +305,7 @@ TEST_CASE("A recording set up ahead starts on that setup, and a setup taken down
   session.sessionPreset = AVCaptureSessionPresetPhoto;
   session.presets = @[];
   auto capture = ngn::appkit::sessionCapture(session, [AVCapturePhotoOutput new]);
-  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"ngn-camera-test-prepared.mov"];
+  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"ngn-camera-test-prepared-%d.mov", getpid()]];
   ngn::CameraRecordingRequest request{.path = path.UTF8String, .maxDuration = 0.3, .sound = false, .preset = "640x480"};
 
   capture->prepareRecording(request);

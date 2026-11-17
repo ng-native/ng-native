@@ -5,6 +5,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #import <AppKit/AppKit.h>
 
 #include <filesystem>
@@ -15,7 +17,7 @@ namespace {
 struct Copy {
   std::filesystem::path path;
   explicit Copy(const char *from, const char *name) {
-    path = std::filesystem::temp_directory_path() / name;
+    path = std::filesystem::temp_directory_path() / (std::to_string(getpid()) + "-" + name);
     std::filesystem::copy_file(from, path, std::filesystem::copy_options::overwrite_existing);
   }
   ~Copy() {
@@ -115,7 +117,7 @@ std::string resolved(const char *postScriptName) {
 } // namespace
 
 TEST_CASE("CoreTextRegistrar makes a font no one else has available to Core Text by its PostScript name") {
-  auto path = std::filesystem::temp_directory_path() / "ngn-test-unique-font.ttf";
+  auto path = std::filesystem::temp_directory_path() / ("ngn-test-unique-font-" + std::to_string(getpid()) + ".ttf");
   std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char *>(kTestFont), sizeof kTestFont);
   NSURL *url = [NSURL fileURLWithPath:@(path.c_str())];
   auto cleanUp = [&] {
@@ -146,7 +148,7 @@ TEST_CASE("CoreTextRegistrar registers a font file and names its family, again a
 }
 
 TEST_CASE("CoreTextRegistrar refuses a file that is not a font, and one that is not there") {
-  auto path = std::filesystem::temp_directory_path() / "ngn-test-not-a-font.ttf";
+  auto path = std::filesystem::temp_directory_path() / ("ngn-test-not-a-font-" + std::to_string(getpid()) + ".ttf");
   std::ofstream(path) << "plain text";
   auto registrar = ngn::appkit::makeFontRegistrar();
   CHECK_THROWS_WITH(registrar->registerFile(path.string()), "the file is not a font CoreText reads");

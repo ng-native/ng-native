@@ -5,6 +5,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -51,7 +53,7 @@ struct FakeCodec final : ngn::ImageCodec {
 };
 
 struct Folder {
-  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-image-manipulator-" + std::to_string(rand()));
+  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-image-manipulator-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   ~Folder() {
     std::filesystem::remove_all(path);
   }

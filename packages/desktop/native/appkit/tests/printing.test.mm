@@ -5,6 +5,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #import <Foundation/Foundation.h>
 #import <WebKit/WebKit.h>
 
@@ -44,7 +46,7 @@ struct Rendered {
 };
 
 Rendered render(const std::string &html, ngn::PageSetup page) {
-  auto folder = std::filesystem::temp_directory_path() / ("ngn-print-test-" + std::to_string(rand()));
+  auto folder = std::filesystem::temp_directory_path() / ("ngn-print-test-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   std::filesystem::create_directories(folder);
   auto path = (folder / "out.pdf").string();
   // Shared with the callback, which can still answer after a timed-out wait leaves.

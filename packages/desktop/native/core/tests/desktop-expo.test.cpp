@@ -7,6 +7,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <fstream>
 
@@ -251,7 +253,7 @@ struct ScriptedDialogs final : ngn::FileDialogs {
 };
 
 struct TempDir {
-  fs::path path = fs::temp_directory_path() / ("ngn-docs-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
+  fs::path path = fs::temp_directory_path() / ("ngn-docs-" + std::to_string(getpid()) + "-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
   TempDir() {
     fs::remove_all(path);
     fs::create_directories(path);

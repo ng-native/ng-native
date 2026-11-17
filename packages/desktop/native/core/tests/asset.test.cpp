@@ -4,6 +4,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -15,7 +17,7 @@ using folly::dynamic;
 namespace {
 
 struct Folder {
-  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-asset-" + std::to_string(rand()));
+  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-asset-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   Folder() {
     std::filesystem::create_directories(path);
   }

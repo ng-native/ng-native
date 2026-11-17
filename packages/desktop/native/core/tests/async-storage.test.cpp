@@ -2,6 +2,8 @@
 #include "ngn/core-modules.h"
 
 #include <doctest/doctest.h>
+
+#include <unistd.h>
 #include <folly/json.h>
 
 #include <filesystem>
@@ -12,7 +14,7 @@ namespace {
 
 struct TempDir {
   std::filesystem::path path = std::filesystem::temp_directory_path() /
-      ("ngn-kv-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
+      ("ngn-kv-" + std::to_string(getpid()) + "-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
   TempDir() {
     std::filesystem::remove_all(path);
   }

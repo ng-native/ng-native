@@ -4,6 +4,8 @@
 
 #include <doctest/doctest.h>
 
+#include <unistd.h>
+
 #include <filesystem>
 
 using folly::dynamic;
@@ -22,7 +24,7 @@ std::string encode83(int value, int length) {
 }
 
 struct Folder {
-  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-expo-image-" + std::to_string(rand()));
+  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-expo-image-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   ~Folder() {
     std::filesystem::remove_all(path);
   }

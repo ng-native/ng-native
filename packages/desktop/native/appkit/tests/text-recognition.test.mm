@@ -12,12 +12,16 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <filesystem>
+#include <string>
+#include <unistd.h>
 
 namespace {
 
 // Black text on white, 600 by 200 pixels, its baseline 60 pixels from the bottom.
 std::string drawText(NSString *text) {
-  auto path = (std::filesystem::temp_directory_path() / "ngn-text-recognition.png").string();
+  // Named for this process: a suite run beside this one (another checkout's, on the same Mac) draws
+  // and removes its own file, and a shared name made each read the other's, or none.
+  auto path = (std::filesystem::temp_directory_path() / ("ngn-text-recognition-" + std::to_string(getpid()) + ".png")).string();
   CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
   CGContextRef context = CGBitmapContextCreate(nullptr, 600, 200, 8, 0, space, kCGImageAlphaPremultipliedLast);
   CGContextSetRGBFillColor(context, 1, 1, 1, 1);

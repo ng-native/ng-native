@@ -1,6 +1,8 @@
 #include "ngn/sqlite.h"
 
 #include <doctest/doctest.h>
+
+#include <unistd.h>
 #include <sqlite3.h>
 
 #include <filesystem>
@@ -31,7 +33,7 @@ struct TempDir {
   fs::path path;
   TempDir() {
     std::random_device random;
-    path = fs::temp_directory_path() / ("ngn-sqlite-" + std::to_string(random()));
+    path = fs::temp_directory_path() / ("ngn-sqlite-" + std::to_string(getpid()) + "-" + std::to_string(random()));
     fs::remove_all(path);
   }
   ~TempDir() {
