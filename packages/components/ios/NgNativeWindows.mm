@@ -6,6 +6,7 @@
 #import <objc/runtime.h>
 
 #import "NgNativeResponderHooks.h"
+#import "NgNativeSceneKeys.h"
 
 /**
  The `NgNativeWindows` module on an iPad (`NativeWindows` in @ng-native/device): each of the app's
@@ -35,12 +36,19 @@
  - A reload keeps the windows with a key for the reloaded app to open again, for five seconds from
    the latest reload, and closes the rest, as the macOS host does. An `open` still waiting for its
    scene resolves null.
+ - A relaunch: iPadOS keeps the scene sessions and restores the one in front, and the app opens its
+   windows again by key (`AppWindows` keeps them). The key of the window each session had is kept
+   in the app's user defaults, so `open` with a key takes the scene kept for it: the restored one,
+   or a hidden one, where the window shows once iPadOS connects that scene. The scene the app
+   launched in waits five seconds for its own window. A scene connecting after the app has
+   launched comes here even when it was made for the app's scene delegate, so React Native never
+   starts a second time.
  */
 
 static NSString *const WindowActivity = @"dev.ngnative.window";
-// In a window's scene session's `userInfo`, which iPadOS keeps with the session across launches.
-static NSString *const SessionMark = @"dev.ngnative.window";
 static NSString *const WindowRunnable = @"NgNativeWindow";
+// In the app's user defaults: the key of the window each scene session had, by its identifier.
+static NSString *const KeptKeys = @"dev.ngnative.windowKeys";
 static const NSTimeInterval ClaimSeconds = 5;
 
 /** What JavaScript is handed for React Native's host: no header of its own is needed. */
@@ -122,6 +130,7 @@ static __weak id<NgNativeReactHost> reactHost;
 @property (nonatomic, strong, nullable) UIWindow *window;
 @property (nonatomic, strong) NgNativeWindowRootView *rootView;
 @property (nonatomic, copy, nullable) NSString *key;
+@property (nonatomic, copy) NSString *title;
 // A reload kept it for the reloaded app to open again.
 @property (nonatomic) BOOL kept;
 @end
@@ -148,6 +157,7 @@ static __weak id<NgNativeReactHost> reactHost;
 + (instancetype)shared;
 - (void)send:(NSDictionary *)event;
 - (void)discarded:(NSSet<UISceneSession *> *)sessions;
+- (void)connected:(UIWindowScene *)scene options:(UISceneConnectionOptions *)options;
 @end
 
 @interface NgNativeWindows : NSObject <RCTBridgeModule, RCTInvalidating>
@@ -161,6 +171,10 @@ static __weak id<NgNativeReactHost> reactHost;
 @end
 
 #pragma mark - Hooks
+
+static Class appSceneDelegateClass(void);
+// On an app scene delegate that handed its scene to the windows: the scene is a window's, not the app's.
+static char HandedToWindows;
 
 static BOOL multipleWindows(void)
 {
@@ -179,13 +193,13 @@ static BOOL isWindowActivity(NSSet<NSUserActivity *> *activities)
 }
 
 /**
- Whether `scene` is the app's own: Expo's scene delegate has it, or this file's handed it to one
- because iPadOS restored it before the app launched.
+ Whether `scene` is the app's own: Expo's scene delegate has it, unless it handed it to the
+ windows, or this file's handed it to one because iPadOS restored it before the app launched.
  */
 static BOOL isAppScene(UIScene *scene)
 {
   id<UISceneDelegate> delegate = scene.delegate;
-  if (delegate == nil) {
+  if (delegate == nil || objc_getAssociatedObject(delegate, &HandedToWindows) != nil) {
     return NO;
   }
   return ![delegate isKindOfClass:[NgNativeWindowSceneDelegate class]] ||
@@ -223,6 +237,43 @@ static void hookSceneConfiguration(Class delegate)
         return ((UISceneConfiguration * (*)(id, SEL, id, id, id)) previous)(self, selector, app, session, options);
       }
       return session.configuration;
+    };
+  });
+}
+
+/**
+ The app's scene delegate, connecting a scene once React Native runs: iPadOS keeps the delegate a
+ session was made with, so the scene the app launched in, connecting again, or restored after
+ another window's scene launched the app, comes here. It goes to the windows, as this file's
+ scenes do, rather than starting React Native a second time.
+ */
+static void hookAppSceneConnection(void)
+{
+  Class appDelegate = appSceneDelegateClass();
+  if (appDelegate == Nil || appDelegate == [NgNativeWindowSceneDelegate class]) {
+    return;
+  }
+  SEL selector = @selector(scene:willConnectToSession:options:);
+  NgNativeHook(appDelegate, selector, "v@:@@@", ^id(IMP previous) {
+    return ^(id<UIWindowSceneDelegate> self, UIScene *scene, UISceneSession *session, UISceneConnectionOptions *options) {
+      if (!multipleWindows() || reactHost == nil || ![scene isKindOfClass:[UIWindowScene class]]) {
+        if (previous != NULL) {
+          ((void (*)(id, SEL, id, id, id))previous)(self, selector, scene, session, options);
+        }
+        return;
+      }
+      objc_setAssociatedObject(self, &HandedToWindows, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      [[NgNativeWindowHost shared] connected:(UIWindowScene *)scene options:options];
+      // A link that opened this scene, or an activity handed to it, goes where the delegate sends one.
+      if (options.URLContexts.count > 0 && [self respondsToSelector:@selector(scene:openURLContexts:)]) {
+        [self scene:scene openURLContexts:options.URLContexts];
+      }
+      for (NSUserActivity *activity in options.userActivities) {
+        if (![activity.activityType isEqualToString:WindowActivity] &&
+            [self respondsToSelector:@selector(scene:continueUserActivity:)]) {
+          [self scene:scene continueUserActivity:activity];
+        }
+      }
     };
   });
 }
@@ -266,6 +317,7 @@ static void hookSceneDiscard(Class delegate)
         dispatch_once(&once, ^{
           hookSceneConfiguration([delegate class]);
           hookSceneDiscard([delegate class]);
+          hookAppSceneConnection();
         });
       }
       if (previous != NULL) {
@@ -312,10 +364,6 @@ static void hookSceneDiscard(Class delegate)
     [center addObserver:self selector:@selector(sceneActivated:) name:UISceneDidActivateNotification object:nil];
     [center addObserver:self selector:@selector(sceneDeactivating:) name:UISceneWillDeactivateNotification object:nil];
     [center addObserver:self selector:@selector(sceneDisconnected:) name:UISceneDidDisconnectNotification object:nil];
-    [center addObserver:self
-               selector:@selector(sceneEnteringForeground:)
-                   name:UISceneWillEnterForegroundNotification
-                 object:nil];
   }
   return self;
 }
@@ -331,6 +379,7 @@ static void hookSceneDiscard(Class delegate)
   self.module = module;
   if (!_attached) {
     _attached = YES;
+    [self forgetClosedSessions:nil];
     return;
   }
   // The app that asked for these scenes is gone: each resolves null, and its scene waits for the
@@ -359,6 +408,40 @@ static void hookSceneDiscard(Class delegate)
       }
     }
   });
+}
+
+#pragma mark Keys
+
+/** The key of the window each scene session had, by the session's identifier. */
+- (NSDictionary *)kept
+{
+  return [NSUserDefaults.standardUserDefaults dictionaryForKey:KeptKeys] ?: @{};
+}
+
+- (nullable NSString *)keyOf:(UISceneSession *)session
+{
+  return NgNativeSessionKey(self.kept, session.persistentIdentifier);
+}
+
+/** Mark the session's scene as a window's, with `key`. */
+- (void)keep:(UISceneSession *)session key:(nullable NSString *)key
+{
+  NSDictionary *kept = NgNativeKeepSession(self.kept, session.persistentIdentifier, key);
+  [NSUserDefaults.standardUserDefaults setObject:kept forKey:KeptKeys];
+}
+
+/** Forget the sessions iPadOS no longer keeps, and those in `discarded`. */
+- (void)forgetClosedSessions:(nullable NSSet<UISceneSession *> *)discarded
+{
+  NSMutableSet<NSString *> *open = [NSMutableSet set];
+  for (UISceneSession *session in UIApplication.sharedApplication.openSessions) {
+    [open addObject:session.persistentIdentifier];
+  }
+  for (UISceneSession *session in discarded) {
+    [open removeObject:session.persistentIdentifier];
+  }
+  NSDictionary *kept = NgNativeKeepOpenSessions(self.kept, open);
+  [NSUserDefaults.standardUserDefaults setObject:kept forKey:KeptKeys];
 }
 
 - (nullable NgNativeSceneWindow *)windowForScene:(UIScene *)scene
@@ -395,6 +478,7 @@ static void hookSceneDiscard(Class delegate)
   for (NgNativeSceneWindow *window in _windows.allValues) {
     if (key != nil && window.kept && [window.key isEqualToString:key]) {
       window.kept = NO;
+      window.title = title;
       window.scene.title = title;
       resolve(@(window.surface));
       // The reloaded app keeps a size heard before its mount on the surface, and hands it over.
@@ -402,18 +486,42 @@ static void hookSceneDiscard(Class delegate)
       return;
     }
   }
-  // The scene the app launched in, then one waiting for a window, then a new one.
+  // The scene the app launched in or one waiting for a window, the one kept for this key before
+  // the others, then the hidden scene of the window with this key, then a new one.
   UIWindowScene *launch = _launchTaken ? nil : [self launchScene];
+  [_waiting filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NgNativeWaitingScene *waiting, id _) {
+    return waiting.scene != nil;
+  }]];
+  NSMutableArray *keys = [NSMutableArray array];
   if (launch != nil) {
+    [keys addObject:[self keyOf:launch.session] ?: NSNull.null];
+  }
+  for (NgNativeWaitingScene *waiting in _waiting) {
+    [keys addObject:[self keyOf:waiting.scene.session] ?: NSNull.null];
+  }
+  NSUInteger chosen = NgNativeSceneForKey(keys, key);
+  if (launch != nil && chosen == 0) {
     _launchTaken = YES;
     UIWindow *window = launch.keyWindow ?: launch.windows.firstObject;
     _launchRoot = window.rootViewController;
-    [self show:window scene:launch own:NO key:key title:title resolve:resolve];
+    [self show:window scene:launch session:launch.session own:NO key:key title:title resolve:resolve];
     return;
   }
-  NgNativeWaitingScene *waiting = [self takeWaiting];
-  if (waiting != nil) {
-    [self show:waiting.window scene:waiting.scene own:YES key:key title:title resolve:resolve];
+  if (launch != nil && [self keyOf:launch.session] != nil) {
+    // iPadOS restored the app in another window's scene: it waits for that window, as a scene
+    // waiting for one does, and goes if the app does not open it.
+    [self dropLaunchSceneUnlessTaken:launch];
+  }
+  if (chosen != NSNotFound) {
+    NgNativeWaitingScene *waiting = _waiting[chosen - (launch != nil ? 1 : 0)];
+    [_waiting removeObject:waiting];
+    [self show:waiting.window scene:waiting.scene session:waiting.scene.session own:YES key:key title:title resolve:resolve];
+    return;
+  }
+  UISceneSession *hidden = [self hiddenSessionFor:key];
+  if (hidden != nil) {
+    // The window shows once iPadOS connects its scene again, as one it disconnected does.
+    [self show:nil scene:nil session:hidden own:YES key:key title:title resolve:resolve];
     return;
   }
   NSString *requestId = NSUUID.UUID.UUIDString;
@@ -425,7 +533,7 @@ static void hookSceneDiscard(Class delegate)
       return;
     }
     UIWindow *window = [[UIWindow alloc] initWithWindowScene:scene];
-    [host show:window scene:scene own:YES key:key title:title resolve:resolve];
+    [host show:window scene:scene session:scene.session own:YES key:key title:title resolve:resolve];
   };
   NSUserActivity *activity = [[NSUserActivity alloc] initWithActivityType:WindowActivity];
   activity.userInfo = @{@"request" : requestId, @"key" : key ?: @""};
@@ -477,21 +585,56 @@ static void hookSceneDiscard(Class delegate)
   return nil;
 }
 
-- (nullable NgNativeWaitingScene *)takeWaiting
+/** A session iPadOS keeps for the window with `key` with no scene connected: a hidden window. */
+- (nullable UISceneSession *)hiddenSessionFor:(nullable NSString *)key
 {
-  while (_waiting.count > 0) {
-    NgNativeWaitingScene *waiting = _waiting.firstObject;
-    [_waiting removeObjectAtIndex:0];
-    if (waiting.scene != nil) {
-      return waiting;
+  NSMutableArray<UISceneSession *> *sessions = [NSMutableArray array];
+  NSMutableArray<NSString *> *ids = [NSMutableArray array];
+  for (UISceneSession *session in UIApplication.sharedApplication.openSessions) {
+    if (session.scene == nil && [self windowForSession:session] == nil) {
+      [sessions addObject:session];
+      [ids addObject:session.persistentIdentifier];
     }
   }
-  return nil;
+  NSUInteger found = NgNativeSessionForKey(self.kept, ids, key);
+  return found == NSNotFound ? nil : sessions[found];
 }
 
-/** A surface of its own in `window`, resolved with its id once it runs. */
-- (void)show:(UIWindow *)window
-       scene:(UIWindowScene *)scene
+/**
+ Once the claim time is up, a scene the app launched in that no window took shows a window that is
+ waiting for its hidden scene instead; with none waiting, the scene goes.
+ */
+- (void)dropLaunchSceneUnlessTaken:(UIWindowScene *)launch
+{
+  __weak UIWindowScene *weakLaunch = launch;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(ClaimSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    UIWindowScene *scene = weakLaunch;
+    if (scene == nil || self->_launchTaken || [self launchScene] != scene) {
+      return;
+    }
+    for (NgNativeSceneWindow *window in self->_windows.allValues) {
+      if (window.scene == nil) {
+        UISceneSession *hidden = window.session;
+        self->_launchTaken = YES;
+        window.own = NO;
+        window.session = scene.session;
+        [self keep:scene.session key:window.key];
+        [self reattach:window to:scene];
+        [self destroySession:hidden];
+        return;
+      }
+    }
+    [self destroyScene:scene];
+  });
+}
+
+/**
+ A surface of its own in `window`, resolved with its id once it runs. With no window, the surface
+ waits for its session's scene to connect.
+ */
+- (void)show:(nullable UIWindow *)window
+       scene:(nullable UIWindowScene *)scene
+     session:(UISceneSession *)session
          own:(BOOL)own
          key:(nullable NSString *)key
        title:(NSString *)title
@@ -507,12 +650,15 @@ static void hookSceneDiscard(Class delegate)
   NgNativeSceneWindow *record = [NgNativeSceneWindow new];
   record.surface = surface.rootViewTag.integerValue;
   record.scene = scene;
-  record.session = scene.session;
+  record.session = session;
   record.own = own;
   record.window = own ? window : nil;
   record.rootView = rootView;
   record.key = key;
+  record.title = title;
   _windows[@(record.surface)] = record;
+  // A scene iPadOS restores with the session goes back to the same window.
+  [self keep:session key:key];
   scene.title = title;
   __weak NgNativeWindowHost *weakSelf = self;
   NSInteger surfaceId = record.surface;
@@ -527,11 +673,30 @@ static void hookSceneDiscard(Class delegate)
   };
   rootView.onRunning = ^{
     resolve(@(surfaceId));
-    if (scene.activationState == UISceneActivationStateForegroundActive) {
+    if (scene != nil && scene.activationState == UISceneActivationStateForegroundActive) {
       [weakSelf send:@{@"type" : @"focus", @"surface" : @(surfaceId)}];
     }
   };
-  [self put:rootView in:window];
+  if (window != nil) {
+    [self put:rootView in:window];
+    return;
+  }
+  // Laid out the size of a window the app has, until its own scene connects, rather than at none.
+  UIWindowScene *sized = [self activeScene] ?: [self anyWindowScene];
+  if (sized != nil) {
+    rootView.frame = sized.coordinateSpace.bounds;
+    [rootView layoutIfNeeded];
+  }
+}
+
+- (nullable UIWindowScene *)anyWindowScene
+{
+  for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+    if ([scene isKindOfClass:[UIWindowScene class]]) {
+      return (UIWindowScene *)scene;
+    }
+  }
+  return nil;
 }
 
 - (void)put:(NgNativeWindowRootView *)rootView in:(UIWindow *)window
@@ -546,10 +711,8 @@ static void hookSceneDiscard(Class delegate)
 
 - (void)connected:(UIWindowScene *)scene options:(UISceneConnectionOptions *)options
 {
-  BOOL marked = scene.session.userInfo[SessionMark] != nil;
-  NSMutableDictionary *info = [scene.session.userInfo mutableCopy] ?: [NSMutableDictionary dictionary];
-  info[SessionMark] = @YES;
-  scene.session.userInfo = info;
+  BOOL marked = NgNativeSessionHadWindow(self.kept, scene.session.persistentIdentifier);
+  [self keep:scene.session key:[self keyOf:scene.session]];
   // A window whose scene iPadOS disconnected in the background: it shows again as it was.
   NgNativeSceneWindow *detached = [self windowForSession:scene.session];
   if (detached != nil) {
@@ -616,22 +779,10 @@ static void hookSceneDiscard(Class delegate)
   window.window = nil;
 }
 
-/** The app's own scene, connected again: Expo's scene delegate made it a new window. */
-- (void)sceneEnteringForeground:(NSNotification *)note
-{
-  UIScene *scene = note.object;
-  if (![scene isKindOfClass:[UIWindowScene class]] || !isAppScene(scene)) {
-    return;
-  }
-  NgNativeSceneWindow *window = [self windowForSession:scene.session];
-  if (window != nil && window.scene != scene) {
-    [self reattach:window to:(UIWindowScene *)scene];
-  }
-}
-
 - (void)reattach:(NgNativeSceneWindow *)record to:(UIWindowScene *)scene
 {
   record.scene = scene;
+  scene.title = record.title;
   if (record.own) {
     record.window = [[UIWindow alloc] initWithWindowScene:scene];
     [self put:record.rootView in:record.window];
@@ -651,6 +802,7 @@ static void hookSceneDiscard(Class delegate)
 /** The sessions of the scenes the user closed. */
 - (void)discarded:(NSSet<UISceneSession *> *)sessions
 {
+  [self forgetClosedSessions:sessions];
   for (UISceneSession *session in sessions) {
     NgNativeSceneWindow *window = [self windowForSession:session];
     if (window != nil) {
@@ -698,7 +850,16 @@ static void hookSceneDiscard(Class delegate)
   if (session == nil) {
     return;
   }
-  [UIApplication.sharedApplication requestSceneSessionDestruction:session options:nil errorHandler:nil];
+  // iPadOS destroys no session whose scene has not connected since the app launched: that one is
+  // kept for no window, so once it connects it waits for one as a restored scene does, and goes.
+  __weak NgNativeWindowHost *weakSelf = self;
+  [UIApplication.sharedApplication requestSceneSessionDestruction:session
+                                                          options:nil
+                                                     errorHandler:^(NSError *error) {
+                                                       dispatch_async(dispatch_get_main_queue(), ^{
+                                                         [weakSelf keep:session key:nil];
+                                                       });
+                                                     }];
 }
 
 /** The app answered a window the user made with one it has open: the scenes the user made go. */
@@ -730,7 +891,9 @@ static void hookSceneDiscard(Class delegate)
 
 - (void)setTitle:(NSString *)title of:(NSInteger)surface
 {
-  _windows[@(surface)].scene.title = title;
+  NgNativeSceneWindow *window = _windows[@(surface)];
+  window.title = title;
+  window.scene.title = title;
 }
 
 @end

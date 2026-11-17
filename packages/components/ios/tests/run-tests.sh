@@ -34,6 +34,7 @@ xcrun --sdk iphonesimulator clang++ -std=c++20 -fobjc-arc -fmodules -bundle \
   "$here/NgNativeComponentsTests.mm" "$ios/NgNativeViewBinder.mm" "$ios/NgNativeMenuBuilding.mm" \
   "$ios/NgNativeResponderHooks.mm" "$ios/NgNativeUndoSteps.mm" "$ios/NgNativeDropItems.mm" \
   "$ios/NgNativeSplitViewDelegate.mm" \
+  "$ios/NgNativeSceneKeys.mm" \
   -o "$bundle/NgNativeComponentsTests"
 
 xcrun simctl spawn "$udid" "$platform/Developer/Library/Xcode/Agents/xctest" "$bundle"

@@ -117,6 +117,11 @@ A reload keeps each window that has a key (the main window, a route window, or a
 window whose component `provideRestorableWindows` names) in its scene, and the reloaded app renders
 it there again. A window without a key closes.
 
+After a relaunch, iPadOS restores the app in the scene it had in front and keeps its other scenes,
+which it can list as hidden windows. The app opens the same keyed windows again, and each one goes
+back to the scene it had: a restored scene shows its own window, and a hidden window shows its own
+once the user opens it.
+
 ## Reference
 
 <!-- api: AppWindows -->

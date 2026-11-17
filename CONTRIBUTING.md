@@ -81,10 +81,10 @@ pnpm --filter documentation dev  # the documentation site, on http://localhost:5
 - `packages/testing` has tests of its own, for the fake Fabric and the Testing Library layer it
   ships to everyone else.
 - `packages/components/ios/tests` unit-tests the iOS code that runs without React Native (the view
-  binder, menu building, the responder hooks' helpers, undo steps and dropped items) under XCTest
-  on a simulator: `pnpm --filter @ng-native/components test:ios` with one simulator booted, or the
-  one `NGN_IOS_TEST_SIMULATOR` names. It needs Xcode, so neither `pnpm test` nor CI runs it: run it
-  by hand after a change to that code.
+  binder, menu building, the responder hooks' helpers, undo steps, dropped items and which scene a
+  window opens in) under XCTest on a simulator: `pnpm --filter @ng-native/components test:ios` with
+  one simulator booted, or the one `NGN_IOS_TEST_SIMULATOR` names. It needs Xcode, so neither
+  `pnpm test` nor CI runs it: run it by hand after a change to that code.
 - `packages/components/android/src/test` unit-tests the Android code's decisions that need no
   device (shortcut matching, which view's menu a press opens, the window callback's wrapping and
   the menu host's reload handling) on the JVM: `pnpm --filter @ng-native/components test:android`

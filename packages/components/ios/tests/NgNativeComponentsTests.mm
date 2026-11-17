@@ -1,9 +1,10 @@
 // Unit tests for the iOS code of @ng-native/components that runs without React Native: the view
 // binder, the menu building (the iPad menu bar's duplicate keys among it), the long press a view
 // inside a context menu takes, `NgNativeHook`'s call-through, which first responders answer the
-// shared undo manager, the undo steps, what a dropped item is, and the split view's delegate. The
-// hooks installed on UIApplication and the app delegate, and the modules themselves, need React
-// Native and are not here. Run by `run-tests.sh` on a simulator, through XCTest's own runner; no CI job runs them.
+// shared undo manager, the undo steps, what a dropped item is, the split view's delegate, and which
+// scene a window opens in. The hooks installed on UIApplication and the app delegate, and the
+// modules themselves, need React Native and are not here. Run by `run-tests.sh` on a simulator,
+// through XCTest's own runner; no CI job runs them.
 #import <React/RCTViewComponentView.h>
 #import <XCTest/XCTest.h>
 #import <objc/runtime.h>
@@ -13,6 +14,7 @@
 #import "../NgNativeUndoSteps.h"
 #import "../NgNativeDropItems.h"
 #import "../NgNativeSplitViewDelegate.h"
+#import "../NgNativeSceneKeys.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "../NgNativeViewBinder.h"
 
@@ -542,6 +544,70 @@ static RCTViewComponentView *viewNamed(NSString *nativeID)
   XCTAssertEqualObjects(_reported, @[]);
   XCTAssertEqual(_controller.preferredDisplayMode, UISplitViewControllerDisplayModeSecondaryOnly);
   XCTAssertEqual([self expand], UISplitViewControllerDisplayModeSecondaryOnly);
+}
+
+@end
+
+#pragma mark - Scene keys
+
+@interface NgNativeSceneKeysTests : XCTestCase
+@end
+
+@implementation NgNativeSceneKeysTests
+
+- (void)testKeepsTheKeyOfTheWindowEachSessionHad
+{
+  NSDictionary *kept = NgNativeKeepSession(nil, @"a", @"library");
+  kept = NgNativeKeepSession(kept, @"b", nil);
+  XCTAssertTrue(NgNativeSessionHadWindow(kept, @"a"));
+  XCTAssertEqualObjects(NgNativeSessionKey(kept, @"a"), @"library");
+  XCTAssertTrue(NgNativeSessionHadWindow(kept, @"b"), @"a window with no key");
+  XCTAssertNil(NgNativeSessionKey(kept, @"b"));
+  XCTAssertFalse(NgNativeSessionHadWindow(kept, @"c"), @"a scene the user made");
+  XCTAssertNil(NgNativeSessionKey(kept, @"c"));
+  XCTAssertFalse(NgNativeSessionHadWindow(nil, @"a"));
+  kept = NgNativeKeepSession(kept, @"a", @"main");
+  XCTAssertEqualObjects(NgNativeSessionKey(kept, @"a"), @"main", @"a session whose window changed");
+  kept = NgNativeKeepSession(kept, @"a", nil);
+  XCTAssertNil(NgNativeSessionKey(kept, @"a"), @"a window with no key leaves none behind");
+  XCTAssertNil(NgNativeSessionKey(@{@"a" : @3}, @"a"));
+  XCTAssertFalse(NgNativeSessionHadWindow(@{@"a" : @3}, @"a"), @"a value written outside the app");
+}
+
+- (void)testForgetsTheSessionsIPadOSNoLongerKeeps
+{
+  NSDictionary *kept = @{@"a" : @"main", @"b" : @"library", @"c" : @""};
+  NSDictionary *open = NgNativeKeepOpenSessions(kept, [NSSet setWithObjects:@"a", @"c", @"d", nil]);
+  XCTAssertEqualObjects(open, (@{@"a" : @"main", @"c" : @""}));
+  XCTAssertEqualObjects(NgNativeKeepOpenSessions(kept, [NSSet set]), @{});
+  XCTAssertEqualObjects(NgNativeKeepOpenSessions(nil, [NSSet setWithObject:@"a"]), @{});
+}
+
+- (void)testOpensAWindowInTheSceneKeptForItsKey
+{
+  NSArray *scenes = @[ @"library", NSNull.null, @"main" ];
+  XCTAssertEqual(NgNativeSceneForKey(scenes, @"main"), 2u);
+  XCTAssertEqual(NgNativeSceneForKey(scenes, @"library"), 0u);
+  XCTAssertEqual(NgNativeSceneForKey(scenes, @"settings"), 1u, @"else the first scene kept for no key");
+  XCTAssertEqual(NgNativeSceneForKey(scenes, nil), 1u);
+  XCTAssertEqual(NgNativeSceneForKey((@[ NSNull.null, NSNull.null ]), @"main"), 0u);
+}
+
+- (void)testLeavesASceneKeptForAnotherKeyToThatKey
+{
+  XCTAssertEqual(NgNativeSceneForKey(@[ @"library" ], @"main"), (NSUInteger)NSNotFound);
+  XCTAssertEqual(NgNativeSceneForKey(@[ @"library" ], nil), (NSUInteger)NSNotFound);
+  XCTAssertEqual(NgNativeSceneForKey(@[], @"main"), (NSUInteger)NSNotFound);
+}
+
+- (void)testFindsTheHiddenSessionOfAWindowOnlyByItsKey
+{
+  NSDictionary *kept = @{@"b" : @"", @"c" : @"main"};
+  NSArray *sessions = @[ @"a", @"b", @"c" ];
+  XCTAssertEqual(NgNativeSessionForKey(kept, sessions, @"main"), 2u);
+  XCTAssertEqual(NgNativeSessionForKey(kept, sessions, @"library"), (NSUInteger)NSNotFound);
+  XCTAssertEqual(NgNativeSessionForKey(kept, sessions, nil), (NSUInteger)NSNotFound, @"not a session kept for no key");
+  XCTAssertEqual(NgNativeSessionForKey(kept, @[ @"a", @"b" ], @"main"), (NSUInteger)NSNotFound, @"only among those given");
 }
 
 @end
