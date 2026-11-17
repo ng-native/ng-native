@@ -126,13 +126,17 @@ while IFS= read -r arg; do
   launcher_args+=("$arg")
 done < <("$here/compiler-launcher.sh" "${NGN_COMPILER_LAUNCHER:-}")
 
-# RelWithDebInfo's own flags without -g. Hermes builds as Release, which has none.
+# RelWithDebInfo's flags, with or without -g, set either way: CMake keeps a -D in the build
+# directory's cache, so a build with debug info after one without would otherwise go without too.
+# Hermes builds as Release, which has none.
 flags_args=()
-if [ "$debug_info" = 0 ] && [ "$config" = RelWithDebInfo ]; then
+if [ "$config" = RelWithDebInfo ]; then
+  flags="-O2 -g -DNDEBUG"
+  [ "$debug_info" = 0 ] && flags="-O2 -DNDEBUG"
   langs=(C CXX)
   [ "$(uname -s)" = "Darwin" ] && langs+=(OBJC OBJCXX)
   for lang in "${langs[@]}"; do
-    flags_args+=("-DCMAKE_${lang}_FLAGS_RELWITHDEBINFO=-O2 -DNDEBUG")
+    flags_args+=("-DCMAKE_${lang}_FLAGS_RELWITHDEBINFO=$flags")
   done
 fi
 
