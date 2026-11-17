@@ -329,10 +329,60 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
         assert.match(miss.stderr, /not reusing it/);
         assert.ok(!existsSync(path.join(missOut, 'prebuilt-host-release.json')), String(why));
       }
+
+      // With --reuse-only, each of those is a miss that builds nothing and says so.
+      for (const [host, body] of [
+        [{ ...entry, inputs: 'another' }, archive],
+        [entry, Buffer.from('not the archive')],
+        [entry, null],
+      ] as const) {
+        writeManifest(host);
+        served = body;
+        const missOut = path.join(dir, 'reuse-only-miss');
+        const miss = await makePrebuiltAsync([
+          appDir,
+          missOut,
+          '--reuse',
+          manifest,
+          '--reuse-only',
+          '--version',
+          '1.0.2',
+          '--base-url',
+          base,
+        ]);
+        assert.equal(miss.status, 3, miss.stderr);
+        assert.match(miss.stderr, /--reuse-only: nothing to reuse, so nothing is built/);
+        assert.doesNotMatch(miss.stderr, /build\.sh/);
+        assert.ok(!existsSync(path.join(missOut, 'prebuilt-host-release.json')));
+      }
+      writeManifest(entry);
+      served = archive;
+      const only = await makePrebuiltAsync([
+        appDir,
+        path.join(dir, 'reuse-only-hit'),
+        '--reuse',
+        manifest,
+        '--reuse-only',
+        '--version',
+        '1.0.3',
+        '--base-url',
+        base,
+      ]);
+      assert.equal(only.status, 0, only.stderr);
+      assert.match(only.stderr, /reusing the host/);
     } finally {
       server.close();
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('takes --reuse-only only with --reuse', () => {
+    inTemp((dir) => {
+      const result = makePrebuilt([app(dir), path.join(dir, 'out'), '--reuse-only']);
+      assert.equal(result.status, 2, result.stderr);
+      assert.match(result.stderr, /--reuse-only needs --reuse/);
+      assert.ok(!existsSync(path.join(dir, 'out')));
+    });
   });
 
   it('takes only a missing or empty --build-dir, before it builds', () => {

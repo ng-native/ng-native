@@ -34,23 +34,30 @@ runs:
         key=$(node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary --print-key --flavour "$FLAVOUR") || key=''
         echo "Host inputs key: ${key:-none}"
         echo "key=$key" >> "$GITHUB_OUTPUT"
-        # Whether the last release's entry, in the checked-out prebuilt.json, has the same key.
-        # make-prebuilt.mjs --reuse checks it again with the download and builds if that fails.
-        reusable=false
-        if [ -n "$key" ]; then
-          reusable=$(node --input-type=module -e "
-            import { readFileSync } from 'node:fs';
-            import { flavourOf, readManifest } from './packages/desktop/bin/prebuilt.mjs';
-            const [key, flavour] = process.argv.slice(1);
-            const hosts = readManifest(readFileSync('packages/desktop/prebuilt.json', 'utf8')).hosts;
-            console.log(hosts.some((host) => flavourOf(host) === flavour && host.inputs === key));
-          " "$key" "$FLAVOUR") || reusable=false
+
+    # The last release's archive, when its entry in the checked-out prebuilt.json has the same key
+    # and the download has its SHA-256. --reuse-only builds nothing when it cannot, so a miss or any
+    # failure here goes on to the steps below with a build's caches restored.
+    - id: reuse
+      if: steps.key.outputs.key != ''
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        FLAVOUR: ${{ inputs.flavour }}
+        BASE_URL: ${{ inputs.base-url }}
+        OUT: ${{ inputs.out }}
+      run: |
+        if node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary "$OUT" \
+          --flavour "$FLAVOUR" --version "$VERSION" --base-url "$BASE_URL" \
+          --reuse packages/desktop/prebuilt.json --reuse-only; then
+          echo "done=true" >> "$GITHUB_OUTPUT"
+          ls -l "$OUT"
+        else
+          echo "Not reusing the last release's host (exit $?)."
         fi
-        echo "Last release's host reusable: $reusable"
-        echo "reusable=$reusable" >> "$GITHUB_OUTPUT"
 
     - id: host
-      if: steps.key.outputs.key != '' && steps.key.outputs.reusable != 'true'
+      if: steps.key.outputs.key != '' && steps.reuse.outputs.done != 'true'
       uses: actions/cache/restore@v6
       with:
         path: ${{ github.workspace }}/.desktop-cache/prebuilt-host-${{ inputs.flavour }}
@@ -59,7 +66,7 @@ runs:
     # Everything a build needs, only when there is no host to pack. A cached host that fails its
     # check below still builds, without these: slower, never stale.
     - id: build
-      if: steps.key.outputs.reusable != 'true' && steps.host.outputs.cache-hit != 'true'
+      if: steps.reuse.outputs.done != 'true' && steps.host.outputs.cache-hit != 'true'
       shell: bash
       run: echo "needed=true" >> "$GITHUB_OUTPUT"
 
@@ -95,13 +102,15 @@ runs:
         path: ${{ github.workspace }}/.desktop-cache/*/hermes-arm64-x86_64
         key: desktop-hermes-universal-${{ runner.os }}-${{ steps.target.outputs.macos }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/compiler-launcher.sh', 'pnpm-lock.yaml') }}
 
-    # Whatever the path above, since a cached host that fails its check builds after all.
-    - shell: bash
+    # Whether or not a host was restored, since a cached host that fails its check builds after all.
+    - if: steps.reuse.outputs.done != 'true'
+      shell: bash
       env:
         HOMEBREW_NO_AUTO_UPDATE: '1'
       run: brew install ninja
 
-    - name: Build or reuse, sign ad hoc and pack the host
+    - name: Build or pack a cached host, sign it ad hoc and pack it
+      if: steps.reuse.outputs.done != 'true'
       shell: bash
       env:
         NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
@@ -123,16 +132,16 @@ runs:
         # A fixed build folder, so ccache's keys match from one run to the next.
         args+=(--build-dir "$RUNNER_TEMP/ngn-prebuilt-$FLAVOUR")
         if [ -n "$KEY" ]; then
-          args+=(--host-cache "$NGN_DESKTOP_CACHE/prebuilt-host-$FLAVOUR" --reuse packages/desktop/prebuilt.json)
+          args+=(--host-cache "$NGN_DESKTOP_CACHE/prebuilt-host-$FLAVOUR")
         fi
         node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary "$OUT" "${args[@]}"
         echo "Prebuilt $FLAVOUR host made in $(( $(date +%s) - start ))s"
         ls -l "$OUT"
 
     # A host built here, kept for the next run with the same inputs. make-prebuilt.mjs writes the
-    # folder only after a build, with its key, so a run that reused or packed writes nothing.
+    # folder only after a build, with its key, so a run that packed a cached host writes nothing.
     - id: built
-      if: steps.key.outputs.key != '' && steps.host.outputs.cache-hit != 'true'
+      if: steps.key.outputs.key != '' && steps.reuse.outputs.done != 'true' && steps.host.outputs.cache-hit != 'true'
       shell: bash
       env:
         RECORD: ${{ github.workspace }}/.desktop-cache/prebuilt-host-${{ inputs.flavour }}/host.json

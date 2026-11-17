@@ -5,7 +5,7 @@
  *
  *   make-prebuilt.mjs <app> <out> [--flavour debug|release] [--version <v>] [--base-url <url>]
  *                     [--manifest <prebuilt.json>] [--host-cache <dir>] [--reuse <prebuilt.json>]
- *                     [--build-dir <dir>]
+ *                     [--reuse-only] [--build-dir <dir>]
  *   make-prebuilt.mjs <app> --print-key [--flavour debug|release]
  *
  * - <app>: the app whose react-native and host libraries (react-native-screens,
@@ -31,6 +31,8 @@
  *   and flavour records the same inputs key, its archive is downloaded, checked against the entry's
  *   SHA-256 and published again under this release's name, byte for byte. A different key, a failed
  *   download or a checksum that does not match falls back to --host-cache or a build.
+ * - --reuse-only: with --reuse, stop there when the archive cannot be reused, exiting with 3 and
+ *   writing nothing, so a caller can prepare a build's caches before it builds.
  * - --build-dir: build here, a folder that must be missing or empty, instead of a fresh temp folder:
  *   a fixed path lets a compiler cache such as ccache hit from one run to the next.
  * - --print-key: print the inputs key --host-cache checks against, and nothing else.
@@ -96,6 +98,7 @@ const { values, positionals } = parseArgs({
     'host-cache': { type: 'string' },
     'build-dir': { type: 'string' },
     reuse: { type: 'string' },
+    'reuse-only': { type: 'boolean', default: false },
     'print-key': { type: 'boolean', default: false },
   },
 });
@@ -103,8 +106,12 @@ const [appArg, outArg] = positionals;
 const printKey = values['print-key'];
 if (!appArg || (!outArg && !printKey)) {
   console.error(
-    'Usage: make-prebuilt.mjs <app> <out> [--flavour debug|release] [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>] [--reuse <prebuilt.json>] [--build-dir <dir>]\n       make-prebuilt.mjs <app> --print-key [--flavour debug|release]',
+    'Usage: make-prebuilt.mjs <app> <out> [--flavour debug|release] [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>] [--reuse <prebuilt.json> [--reuse-only]] [--build-dir <dir>]\n       make-prebuilt.mjs <app> --print-key [--flavour debug|release]',
   );
+  process.exit(2);
+}
+if (values['reuse-only'] && !values.reuse) {
+  console.error('--reuse-only needs --reuse, the prebuilt.json whose archive to reuse.');
   process.exit(2);
 }
 const flavour = /** @type {import('../../bin/prebuilt.mjs').Flavour} */ (values.flavour);
@@ -260,6 +267,12 @@ try {
     } else {
       console.error(`make-prebuilt: ${why}; not reusing it.`);
     }
+  }
+  if (!reused && values['reuse-only']) {
+    // Nothing was written to <out>, and process.exit skips the finally below.
+    rmSync(staging, { recursive: true, force: true });
+    console.error('make-prebuilt: --reuse-only: nothing to reuse, so nothing is built.');
+    process.exit(3);
   }
   /** @type {string | null} */
   let built = null;
