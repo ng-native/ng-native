@@ -329,6 +329,24 @@ the `.app`, and passes on what follows it, so `nx run mobile:package --format dm
 and it stops with an error on a project with no `app.json`, which is not an Angular Native app.
 See [`@ng-native/desktop`](/packages/desktop) for both commands and the plugin options.
 
+## iOS and Android
+
+```sh
+nx g @ng-native/nx:mobile desktop
+```
+
+This adds iOS and Android to a desktop-only app (see [Options](#options)), undoing what
+`--desktopOnly` left out: `ios` and `android` in `expo.platforms` beside `macos`, the phone
+settings a mobile app's `app.json` has (portrait orientation, `ios.supportsTablet`, and
+`android.package`, which is the iOS bundle identifier), and `expo-status-bar` and `expo-system-ui`
+where the app's dependencies go. It removes the app from the `exclude` list of `@nx/expo`'s plugin
+in `nx.json`, so the plugin infers `run-ios`, `run-android`, `prebuild` and the EAS targets for it
+again. An app whose Metro is not on Expo's default port gets its own `run-ios` and `run-android`
+with that port, as the application generator writes them. A setting the app already has stays as it
+is, and running the generator again changes nothing. It leaves the app's screens, its Vitest
+projects and its `test` target, which runs `node-macos`, as they are. It stops with an error on a
+project with no `app.json`, which is not an Angular Native app.
+
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),
@@ -341,9 +359,16 @@ which leaves the generated files unformatted. `--linter=eslint` adds an `eslint.
 `macos` alone in `expo.platforms`, its sidebar and menu bar starter screen, `@ng-native/desktop`
 and `@ng-native/expo` in place of the phone's status bar and system UI packages, and `macos` and
 `package` targets (see [macOS](#macos)) where a mobile app has its own `run-ios` and
-`run-android`. Its `vitest.config.mts` has two projects: `node-macos`, in Node, which its `test`
-target runs alone (`vitest run --project node-macos`), and `macos`, which runs
-`src/**/*.device.ts` inside the app and opens it. `src/app/app.device.ts` is the example, and its
+`run-android`. `@nx/expo`'s plugin infers `run-ios` and `run-android` for every Expo app, whatever
+platforms its `app.json` lists, so the generator adds the app's directory (`apps/desktop/**`) to the
+`exclude` list of each of the plugin's registrations in `nx.json`, and writes the two inferred
+targets that still apply on macOS, `export` and `install`, in its `project.json`. `prebuild` and the
+EAS targets, which build for iOS and Android, are left out too, until
+[`nx g @ng-native/nx:mobile`](#ios-and-android) adds iOS and Android back.
+
+Its `vitest.config.mts` has two projects: `node-macos`, in Node, which its `test` target runs alone
+(`vitest run --project node-macos`), and `macos`, which runs `src/**/*.device.ts` inside the app
+and opens it. `src/app/app.device.ts` is the example, and its
 `metro.config.js` adds the in-app tests only when Metro starts with `EXPO_PUBLIC_DEVICE_TESTS=1`:
 run `EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start` in the app's folder, then
 `npx vitest --project macos` there. `nx g @ng-native/nx:init --desktopOnly`, the generator

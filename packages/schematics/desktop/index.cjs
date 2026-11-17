@@ -53,9 +53,10 @@ function desktopTargets(port) {
   return { macos: desktop('macos', port ? { port } : {}), package: desktop('package') };
 }
 
-function addToAppJson(tree, file) {
+/** The project's `app.json` with `withOs` applied to its Expo config. */
+function updateAppJson(tree, file, withOs) {
   const config = readJson(tree, file);
-  writeJson(tree, file, { ...config, expo: native.withDesktop(config.expo ?? {}) });
+  writeJson(tree, file, { ...config, expo: withOs(config.expo ?? {}) });
 }
 
 /**
@@ -71,15 +72,17 @@ function workspaceHost(tree) {
   };
 }
 
-function addDependency(tree) {
-  const manifest = readJson(tree, 'package.json');
+/** Each of `wanted` the manifest at `file` lacks, added to its dependencies. */
+function addDependencies(tree, file, wanted) {
+  if (!tree.exists(file)) return;
+  const manifest = readJson(tree, file);
   const existing = { ...manifest.dependencies, ...manifest.devDependencies };
-  const added = Object.entries(native.desktopDependencies).filter(([name]) => !(name in existing));
+  const added = Object.entries(wanted).filter(([name]) => !(name in existing));
   if (!added.length) return;
   manifest.dependencies = Object.fromEntries(
     [...Object.entries(manifest.dependencies ?? {}), ...added].sort(([a], [b]) => (a < b ? -1 : 1)),
   );
-  writeJson(tree, 'package.json', manifest);
+  writeJson(tree, file, manifest);
 }
 
 /** The lines of `native.DESKTOP_GITIGNORE` the project's `.gitignore` lacks, appended. */
@@ -122,8 +125,8 @@ function desktop(options) {
           'ng add @ng-native/schematics, or ng generate @ng-native/schematics:application.',
       );
     }
-    addToAppJson(tree, appJson);
-    addDependency(tree);
+    updateAppJson(tree, appJson, native.withDesktop);
+    addDependencies(tree, 'package.json', native.desktopDependencies);
     ignorePackages(tree, root);
     const missing = Object.entries(desktopTargets(servePort(project))).filter(
       ([name]) => !project.targets.has(name),
@@ -139,4 +142,11 @@ function desktop(options) {
   };
 }
 
-module.exports = { desktop, desktopTargets };
+module.exports = {
+  desktop,
+  desktopTargets,
+  servePort,
+  workspaceHost,
+  updateAppJson,
+  addDependencies,
+};

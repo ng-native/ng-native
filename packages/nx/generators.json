@@ -45,6 +45,11 @@
       "factory": "./desktop/index.cjs#desktop",
       "schema": "./desktop/schema.json",
       "description": "Adds macOS to an Angular Native app: @ng-native/desktop, macos in expo.platforms with Expo's out-of-tree platforms flag, the config plugin, and macos and package targets."
+    },
+    "mobile": {
+      "factory": "./mobile/index.cjs#mobile",
+      "schema": "./mobile/schema.json",
+      "description": "Adds iOS and Android to a desktop-only Angular Native app: ios and android in expo.platforms with the phone settings, expo-status-bar and expo-system-ui, and the run-ios and run-android targets @nx/expo infers."
     }
   }
 }

@@ -181,6 +181,16 @@ const desktopOnlyDependencies = Object.fromEntries(
 );
 
 /**
+ * What a desktop-only app lacks of a mobile app's dependencies, which adding iOS and Android back
+ * adds: the phone's status bar and system UI packages.
+ *
+ * @type {Record<string, string>}
+ */
+const mobileDependencies = Object.fromEntries(
+  Object.entries(dependencies).filter(([name]) => !(name in desktopOnlyDependencies)),
+);
+
+/**
  * The scripts a desktop app adds: `npm run macos` builds the host and opens the app from the dev
  * server `npm start` runs, and `npm run package` makes the `.app`, `.dmg` or Mac App Store package.
  * The Expo CLI has no `run:macos`: its `run` commands are a fixed list.
@@ -209,6 +219,32 @@ function withDesktop(expo) {
     plugins: plugins.some((plugin) => named(plugin) === DESKTOP_PACKAGE)
       ? plugins
       : [...plugins, DESKTOP_PACKAGE],
+  };
+}
+
+/**
+ * An Expo config with iOS and Android added to a desktop-only one: `ios` and `android` in
+ * `platforms`, ahead of what it lists, and the phone settings the desktop template's `app.json`
+ * leaves out, as `appJson` writes them: portrait orientation, tablets on iOS, and the Android
+ * package, which is the iOS bundle identifier. A setting the config has is kept, and a config with
+ * no `platforms` has Expo's default, iOS and Android, already. Adding twice changes nothing.
+ *
+ * @param {Record<string, any>} expo
+ */
+function withMobile(expo) {
+  const platforms = expo.platforms;
+  const missing = ['ios', 'android'].filter((os) => platforms && !platforms.includes(os));
+  const bundle = expo.ios?.bundleIdentifier;
+  return {
+    ...expo,
+    ...(missing.length && { platforms: [...missing, ...platforms] }),
+    orientation: expo.orientation ?? 'portrait',
+    ios: { supportsTablet: true, ...expo.ios },
+    android: {
+      ...(bundle && { package: bundle }),
+      predictiveBackGestureEnabled: false,
+      ...expo.android,
+    },
   };
 }
 
@@ -343,7 +379,9 @@ module.exports = {
   DESKTOP_GITIGNORE,
   desktopDependencies,
   desktopOnlyDependencies,
+  mobileDependencies,
   withDesktop,
+  withMobile,
   appJson,
   bundleIdentifier,
   isBundleIdentifier,

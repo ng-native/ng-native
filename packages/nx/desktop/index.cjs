@@ -54,10 +54,11 @@ function desktopTargets(root, port) {
   };
 }
 
-function addToAppJson(tree, file) {
+/** The app's `app.json` with `withOs` applied to its Expo config, written only where it changed. */
+function updateAppJson(tree, file, withOs) {
   const text = tree.read(file, 'utf-8') ?? '';
   const config = JSON.parse(text);
-  const updated = { ...config, expo: native.withDesktop(config.expo ?? {}) };
+  const updated = { ...config, expo: withOs(config.expo ?? {}) };
   const json = `${JSON.stringify(updated, null, 2)}\n`;
   if (json !== text) tree.write(file, json);
 }
@@ -74,12 +75,9 @@ function ignorePackages(tree, root) {
   tree.write(file, `${ignore}${separator}${native.DESKTOP_GITIGNORE}`);
 }
 
-/**
- * The app's targets with `macos` and `package` added, where it has neither already.
- */
-function addTargets(tree, name) {
+/** The app's targets with each of `wanted` added that it does not have already. */
+function addMissingTargets(tree, name, wanted) {
   const project = readProjectConfiguration(tree, name);
-  const wanted = desktopTargets(project.root, metroPort(project));
   const missing = Object.entries(wanted).filter(([target]) => !project.targets?.[target]);
   if (!missing.length) return;
   const targets = { ...project.targets, ...Object.fromEntries(missing) };
@@ -100,8 +98,8 @@ async function desktop(tree, options) {
         'Generate one with nx g @ng-native/nx:app.',
     );
   }
-  addToAppJson(tree, appJson);
-  addTargets(tree, options.project);
+  updateAppJson(tree, appJson, native.withDesktop);
+  addMissingTargets(tree, options.project, desktopTargets(app.root, metroPort(app)));
   ignorePackages(tree, app.root);
 
   const own = joinPathFragments(app.root, 'package.json');
@@ -115,4 +113,12 @@ async function desktop(tree, options) {
   return options.skipInstall ? () => {} : () => (install(), installPackagesTask(tree));
 }
 
-module.exports = { desktop, desktopTargets, default: desktop };
+module.exports = {
+  desktop,
+  desktopTargets,
+  metroPort,
+  updateAppJson,
+  addMissingTargets,
+  DEFAULT_PORT,
+  default: desktop,
+};

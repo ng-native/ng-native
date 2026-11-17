@@ -68,7 +68,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test \"*.test.ts\" \"{init,application,sync,library,component,migrations,tailwind,nativescript,desktop}/*.test.ts\""
+    "test": "node --test \"*.test.ts\" \"{init,application,sync,library,component,migrations,tailwind,nativescript,desktop,mobile}/*.test.ts\""
   },
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/nx",

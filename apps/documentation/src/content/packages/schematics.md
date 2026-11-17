@@ -103,6 +103,29 @@ that `ng run native:package:dmg` runs:
 Running the schematic again changes nothing, and it stops with an error on a project with no
 `app.json`, which is not an Angular Native app.
 
+## iOS and Android
+
+```sh
+ng generate @ng-native/schematics:mobile native
+```
+
+This adds iOS and Android to a desktop-only app (see [Options](#options)), undoing what
+`--desktop-only` left out: `ios` and `android` in `expo.platforms` beside `macos`, the phone
+settings a mobile app's `app.json` has (portrait orientation, `ios.supportsTablet`, and
+`android.package`, which is the iOS bundle identifier), `expo-status-bar` and `expo-system-ui` in
+the root `package.json` and the project's own, whose native modules Expo autolinks, and two targets
+on the `expo` builder:
+
+| Command                     | What runs                                    |
+| --------------------------- | -------------------------------------------- |
+| `ng run native:run-ios`     | `expo run:ios`: the app on the iOS simulator |
+| `ng run native:run-android` | `expo run:android`: the Android emulator     |
+
+Both take the `serve` target's port, which `expo run:ios` builds into the app. A setting the app
+already has stays as it is, and running the schematic again changes nothing. It leaves the app's
+screens, its Vitest projects and its `test` target, which runs `node-macos`, as they are. It stops
+with an error on a project with no `app.json`, which is not an Angular Native app.
+
 ## ng generate
 
 ```sh

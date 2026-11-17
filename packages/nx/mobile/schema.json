@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "NgNativeNxMobile",
+  "title": "iOS and Android in a desktop-only Angular Native app",
+  "description": "Adds iOS and Android to a desktop-only Angular Native app: ios and android in expo.platforms with the phone settings, expo-status-bar and expo-system-ui, and the run-ios and run-android targets @nx/expo infers.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "The Angular Native app.",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "Which app should run on iOS and Android?",
+      "x-dropdown": "projects"
+    },
+    "skipInstall": {
+      "type": "boolean",
+      "description": "Write the files without installing.",
+      "default": false
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Leave the generated files unformatted.",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["project"]
+}
