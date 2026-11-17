@@ -80,11 +80,12 @@ this.files.write(this.files.cache('thumb.jpg'), imageBytes);
 
 Each takes a uri, or anything with one: a file, a folder from `paths`, a folder the user picked.
 
-- **`readdir(folder)`** resolves to the folder's entries, each with its `name`, `uri` and whether
-  it is a `directory`.
-- **`stat(path)`** resolves to what is there, `uri`, `directory`, `size` and the `modified` and
-  `created` times in milliseconds (null where the platform does not say), or `null` where nothing
-  is.
+- **`readdir(folder)`** resolves to the folder's entries sorted by name, each with its `name`,
+  `uri` (a folder's without a trailing slash) and whether it is a `directory`. It rejects where
+  the folder is not there, or is a file.
+- **`stat(path)`** resolves to what is there, `uri` as given, `directory`, `size` (0 for a
+  folder) and the `modified` and `created` times in milliseconds (null where the platform does not
+  say), or `null` where nothing is.
 - **`watch(path, listener)`** calls the listener with each change to a file, or to what is in a
   folder: its `type` (`created`, `modified`, `deleted` or `renamed`), its `uri`, and for a rename
   the `newUri`. It answers the function that stops watching. On iOS a folder's watch reports a

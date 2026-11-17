@@ -265,29 +265,43 @@ function pathsOf(native: NativeFiles | null): FileSystemPaths {
 
 type ExpoFiles = typeof import('expo-file-system');
 
-/** The listing, description and watching `expo-file-system` has, as the slice. */
+/**
+ * The listing, description and watching `expo-file-system` has, as the slice, answering as the
+ * desktop host does: a listing sorted by name and refused for a folder that is not there, a
+ * folder's uri without the trailing slash Expo gives it, and a folder's size as 0.
+ */
 function expoFolders(expo: ExpoFiles): Pick<NativeFiles, 'readdir' | 'stat' | 'watch'> {
   /** The file or folder at a uri, as Expo's class for what is there, or null. */
   const at = (uri: string) => {
-    const { exists, isDirectory } = expo.Paths.info(uri);
+    const { exists, isDirectory } = expo.Paths.info(escaped(uri));
     if (!exists) return null;
     return isDirectory ? new expo.Directory(uri) : new expo.File(uri);
   };
   return {
-    readdir: (uri) =>
-      new expo.Directory(uri).list().map((entry) => ({
-        name: entry.name,
-        uri: entry.uri,
-        directory: entry instanceof expo.Directory,
-      })),
+    readdir: (uri) => {
+      const folder = new expo.Directory(uri);
+      const entries = folder.list();
+      // Android lists a folder that is not there as empty; iOS and the desktop host refuse it.
+      // `info()`, unlike `exists`, opens a picked folder's security scope on iOS.
+      if (entries.length === 0 && !folder.info().exists) throw new Error(`Not a folder: ${uri}`);
+      return entries
+        .map((entry) => ({
+          name: entry.name,
+          uri: unslashed(entry.uri),
+          directory: entry instanceof expo.Directory,
+        }))
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    },
     stat: (uri) => {
       const entry = at(uri);
       if (!entry) return null;
       const info = entry.info();
+      const directory = entry instanceof expo.Directory;
       return {
         uri,
-        directory: entry instanceof expo.Directory,
-        size: info.size ?? 0,
+        directory,
+        // Expo adds up a folder's contents, which walks all of it.
+        size: directory ? 0 : (info.size ?? 0),
         modified: info.modificationTime ?? null,
         created: info.creationTime ?? null,
       };
@@ -298,14 +312,21 @@ function expoFolders(expo: ExpoFiles): Pick<NativeFiles, 'readdir' | 'stat' | 'w
       const subscription = (entry as InstanceType<ExpoFiles['Directory']>).watch((event) =>
         listener({
           type: event.type,
-          uri: event.target.uri,
-          ...(event.newTarget && { newUri: event.newTarget.uri }),
+          uri: unslashed(event.target.uri),
+          ...(event.newTarget && { newUri: unslashed(event.newTarget.uri) }),
         }),
       );
       return () => subscription.remove();
     },
   };
 }
+
+/** A folder's uri as the desktop host gives it, without a trailing slash. */
+const unslashed = (uri: string): string => uri.replace(/\/$/, '');
+
+/** A uri with what one cannot hold, such as a space, percent-encoded: Android's parser refuses it. */
+const escaped = (uri: string): string =>
+  uri.replace(/[^\w\-.~:/?#[\]@!$&'()*+,;=%]/gu, encodeURIComponent);
 
 /**
  * A file that is not there, which is what `FileSystem` hands back where it is absent: it never

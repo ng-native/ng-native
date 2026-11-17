@@ -789,35 +789,58 @@ describe('the file system source', () => {
     return files.pickDirectoryAsync!().then((picked) => assert.equal(picked, document));
   });
 
-  it("lists, describes and watches through expo-file-system's Directory, File and Paths", async () => {
-    class Entry {
-      readonly uri: string;
-      readonly name: string;
-      constructor(uri: string) {
-        this.uri = uri;
-        this.name = uri.split('/').filter(Boolean).at(-1)!;
-      }
-    }
+  /**
+   * expo-file-system as it behaves on a device: a folder's uri ends in a slash, `list()` answers in
+   * the OS's order, Android's `list()` answers nothing for a folder or file that is not one, a folder's
+   * `info().size` adds up what is in it, and Android's `Paths.info` throws on a space in a uri.
+   */
+  function deviceFiles(tree: Record<string, 'file' | 'folder'>) {
+    const key = (uri: string) => uri.replace(/\/$/, '');
+    const kind = (uri: string) => tree[key(uri)];
+    const asked: string[] = [];
     const watched: string[] = [];
     let removed = 0;
-    class FakeDirectory extends Entry {
-      list = () => [new FakeDirectory('file:///docs/notes/'), new FakeFile('file:///docs/a.txt')];
-      info = () => ({ exists: true, size: 10, modificationTime: 5 });
+    let emit: (event: unknown) => void = () => {};
+    class Entry {
+      readonly uri: string;
+      constructor(uri: string) {
+        this.uri = uri;
+      }
+      get name() {
+        return decodeURIComponent(key(this.uri).split('/').at(-1)!);
+      }
       watch = (listener: (event: unknown) => void) => {
         watched.push(this.uri);
-        listener({ type: 'created', target: new FakeFile('file:///docs/b.txt') });
+        emit = listener;
         return { remove: () => removed++ };
       };
+    }
+    class FakeDirectory extends Entry {
+      constructor(uri: string) {
+        super(uri.endsWith('/') ? uri : `${uri}/`);
+      }
+      list = () =>
+        Object.keys(tree)
+          .filter((uri) => uri.slice(0, uri.lastIndexOf('/')) === key(this.uri))
+          .map((uri) => (tree[uri] === 'folder' ? new FakeDirectory(uri) : new FakeFile(uri)));
+      info = () =>
+        kind(this.uri) === 'folder'
+          ? { exists: true, size: 10, modificationTime: 5 }
+          : { exists: false };
     }
     class FakeFile extends Entry {
       info = () => ({ exists: true, size: 3, modificationTime: 7, creationTime: 6 });
     }
-    const exists = new Set(['file:///docs/', 'file:///docs/a.txt']);
     const expoFileSystem = {
       Paths: {
         cache: { uri: 'file:///cache/' },
         document: { uri: 'file:///docs/' },
-        info: (uri: string) => ({ exists: exists.has(uri), isDirectory: uri.endsWith('/') }),
+        info: (uri: string) => {
+          if (uri.includes(' ')) throw new Error(`Illegal character in path: ${uri}`);
+          asked.push(uri);
+          const found = kind(uri);
+          return { exists: found !== undefined, isDirectory: found ? found === 'folder' : null };
+        },
       },
       File: FakeFile,
       Directory: FakeDirectory,
@@ -825,29 +848,93 @@ describe('the file system source', () => {
     const files = withModules({ 'expo-file-system': expoFileSystem }, () =>
       defaultSource(FileSystem.SOURCE),
     )!;
-    assert.deepEqual(await files.readdir!('file:///docs/'), [
-      { name: 'notes', uri: 'file:///docs/notes/', directory: true },
-      { name: 'a.txt', uri: 'file:///docs/a.txt', directory: false },
+    return {
+      files,
+      asked,
+      watched,
+      removed: () => removed,
+      emit: (event: unknown) => emit(event),
+      entry: (uri: string) => (kind(uri) === 'folder' ? new FakeDirectory(uri) : new FakeFile(uri)),
+    };
+  }
+
+  const tree = {
+    'file:///docs': 'folder',
+    'file:///docs/b.txt': 'file',
+    'file:///docs/a%20b.txt': 'file',
+    'file:///docs/Zed': 'folder',
+    'file:///docs/Zed/inner.txt': 'file',
+  } as const;
+
+  it("lists a folder by name, as the desktop host does, with a folder's uri unslashed", async () => {
+    const { files } = deviceFiles(tree);
+    const listing = [
+      { name: 'Zed', uri: 'file:///docs/Zed', directory: true },
+      { name: 'a b.txt', uri: 'file:///docs/a%20b.txt', directory: false },
+      { name: 'b.txt', uri: 'file:///docs/b.txt', directory: false },
+    ];
+    assert.deepEqual(await files.readdir!('file:///docs/'), listing);
+    assert.deepEqual(await files.readdir!('file:///docs'), listing);
+    assert.deepEqual(await files.readdir!('file:///docs/Zed'), [
+      { name: 'inner.txt', uri: 'file:///docs/Zed/inner.txt', directory: false },
     ]);
-    assert.deepEqual(await files.stat!('file:///docs/a.txt'), {
-      uri: 'file:///docs/a.txt',
+  });
+
+  it('lists an empty folder, and rejects one that is not there or a file, as iOS and the desktop host do', async () => {
+    const { files } = deviceFiles({ ...tree, 'file:///empty': 'folder' });
+    assert.deepEqual(await files.readdir!('file:///empty/'), []);
+    await assert.rejects(
+      async () => files.readdir!('file:///docs/gone/'),
+      /^Error: Not a folder: file:\/\/\/docs\/gone\/$/,
+    );
+    await assert.rejects(async () => files.readdir!('file:///docs/b.txt'), /Not a folder/);
+  });
+
+  it('describes a file, and a folder with no size of its own, as the desktop host does', async () => {
+    const { files } = deviceFiles(tree);
+    assert.deepEqual(await files.stat!('file:///docs/b.txt'), {
+      uri: 'file:///docs/b.txt',
       directory: false,
       size: 3,
       modified: 7,
       created: 6,
     });
-    assert.deepEqual(await files.stat!('file:///docs/'), {
-      uri: 'file:///docs/',
+    assert.deepEqual(await files.stat!('file:///docs/Zed/'), {
+      uri: 'file:///docs/Zed/',
       directory: true,
-      size: 10,
+      size: 0,
       modified: 5,
       created: null,
     });
     assert.equal(await files.stat!('file:///docs/gone.txt'), null);
+  });
+
+  it('reaches a path written with a space, which Android will not parse, and answers it as given', async () => {
+    const { files, asked } = deviceFiles(tree);
+    assert.equal((await files.stat!('file:///docs/a b.txt'))?.uri, 'file:///docs/a b.txt');
+    assert.equal((await files.stat!('file:///docs/a%20b.txt'))?.size, 3);
+    assert.deepEqual(asked, ['file:///docs/a%20b.txt', 'file:///docs/a%20b.txt']);
+  });
+
+  it("watches through expo-file-system, a folder's uri unslashed in what it reports", () => {
+    const fake = deviceFiles(tree);
     const changes: unknown[] = [];
-    files.watch!('file:///docs/', (change) => changes.push(change))();
-    assert.deepEqual(changes, [{ type: 'created', uri: 'file:///docs/b.txt' }]);
-    assert.deepEqual([watched, removed], [['file:///docs/'], 1]);
+    const stop = fake.files.watch!('file:///docs', (change) => changes.push(change));
+    fake.emit({ type: 'created', target: fake.entry('file:///docs/b.txt') });
+    fake.emit({ type: 'modified', target: fake.entry('file:///docs/Zed') });
+    fake.emit({
+      type: 'renamed',
+      target: fake.entry('file:///docs/Zed'),
+      newTarget: fake.entry('file:///docs/Zed'),
+    });
+    stop();
+    assert.deepEqual(changes, [
+      { type: 'created', uri: 'file:///docs/b.txt' },
+      { type: 'modified', uri: 'file:///docs/Zed' },
+      { type: 'renamed', uri: 'file:///docs/Zed', newUri: 'file:///docs/Zed' },
+    ]);
+    assert.deepEqual([fake.watched, fake.removed()], [['file:///docs/'], 1]);
+    assert.doesNotThrow(() => fake.files.watch!('file:///docs/gone', () => {})());
   });
 
   it('is inert with no expo-file-system installed', () => {
