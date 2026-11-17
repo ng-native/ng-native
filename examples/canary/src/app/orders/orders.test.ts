@@ -14,25 +14,44 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const realSleep = globalThis.setTimeout;
 
+/** Most fake milliseconds a wait may take before it gives up, so a regression fails, not hangs. */
+const FAKE_WAIT_LIMIT_MS = 3000;
+
+interface FakeClock {
+  /** Move the clock on until `done` holds, or fail naming `what` once the limit passes. */
+  until(done: () => boolean, what: string): Promise<void>;
+  /** Move the clock on until `pending` settles, and resolve to what it resolved to. */
+  drive<R>(pending: Promise<R>, what: string): Promise<R>;
+}
+
 /**
  * Run `work` under a fake clock that only moves when this moves it: one millisecond at a time,
  * with a real pause between steps so work that is not a timer (the lazy screen's import) can
- * finish. Nothing depends on how fast the machine is, only on how much fake time has passed.
+ * finish. Nothing depends on how fast the machine is, only on how much fake time has passed, and
+ * no wait outlasts FAKE_WAIT_LIMIT_MS of it, so the real clock is always restored.
  */
-async function onFakeClock<T>(work: (drive: <R>(pending: Promise<R>) => Promise<R>) => Promise<T>) {
+async function onFakeClock<T>(work: (clock: FakeClock) => Promise<T>) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
   try {
-    const drive = async <R>(pending: Promise<R>): Promise<R> => {
-      let done = false;
-      const result = pending.finally(() => (done = true));
-      result.catch(() => undefined);
-      while (!done) {
+    const until = async (done: () => boolean, what: string) => {
+      for (let elapsed = 0; !done(); elapsed++) {
+        if (elapsed >= FAKE_WAIT_LIMIT_MS) {
+          throw new Error(
+            `Gave up after ${FAKE_WAIT_LIMIT_MS} ms of fake time waiting for ${what}`,
+          );
+        }
         await new Promise((resolve) => realSleep(resolve, 2));
         await vi.advanceTimersByTimeAsync(1);
       }
+    };
+    const drive = async <R>(pending: Promise<R>, what: string): Promise<R> => {
+      let settled = false;
+      const result = pending.finally(() => (settled = true));
+      result.catch(() => undefined);
+      await until(() => settled, what);
       return result;
     };
-    return await work(drive);
+    return await work({ until, drive });
   } finally {
     vi.useRealTimers();
   }
@@ -153,25 +172,22 @@ describe('orders', () => {
 
   test('cancels once however often tapped, and a poll already on its way cannot undo it', async () => {
     const { nav, api } = await boot();
-    await onFakeClock(async (drive) => {
-      const until = (condition: () => boolean) =>
-        drive(
-          (async () => {
-            while (!condition()) await new Promise((resolve) => realSleep(resolve, 2));
-          })(),
-        );
-      await drive(nav.push('/orders/o7'));
-      await until(() => screen.queryByText('Status: placed') !== null);
+    await onFakeClock(async ({ until, drive }) => {
+      await drive(nav.push('/orders/o7'), 'the screen to open');
+      await until(() => screen.queryByText('Status: placed') !== null, 'the order to show');
       // A slow poll leaves before the cancel and lands after it, with the status it was asked for.
       api.slow.set('o7', 250);
       const requests = api.requests;
-      await until(() => api.requests > requests);
+      await until(() => api.requests > requests, 'a poll to leave');
       const button = screen.getByRole('button', { name: 'Cancel order' });
       const aborted = api.aborted;
-      await drive(userEvent.press(button));
-      await drive(userEvent.press(button));
+      await drive(userEvent.press(button), 'the tap to finish');
+      await drive(userEvent.press(button), 'the tap to finish');
       // The cancel's own answer, 20 ms away, not the poll's, 270 ms away.
-      await until(() => screen.queryByText('Status: cancelled') !== null);
+      await until(
+        () => screen.queryByText('Status: cancelled') !== null,
+        'the order to show cancelled',
+      );
       expect(api.cancels).toBe(1);
       expect(api.aborted, 'setting the order dropped the poll on its way').toBe(aborted + 1);
       // Well past when the poll would have landed.
