@@ -178,7 +178,7 @@ instead, or no `component` when there is none. When the component around it has 
 `interactionName`, such as a routed page, they report no `component` either, even inside a named
 component farther out. Nothing changes for a component that sets neither.
 The attribute is read only when an interaction is reported, and is never committed to the native
-view.
+view, or on the web host to the DOM element.
 
 ## Gestures
 

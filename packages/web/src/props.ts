@@ -33,6 +33,7 @@
  * reason `host.ts` gives for its own exclusions: a divergence that is not written down is the
  * failure this project cares about.
  */
+import { INTERACTION_NAME } from '@ng-native/fabric';
 import type { BrowserNode } from './dom-node.ts';
 import { cssValue, dashCase } from './css-units.ts';
 import { writeStyleKey } from './native-style.ts';
@@ -293,6 +294,9 @@ const VIEW_BASE_HANDLERS: Record<string, Handler> = {
   accessibilityLargeContentTitle: noop,
   accessibilityShowsLargeContentViewer: noop,
   accessibilityRespondsToUserInteraction: noop,
+  // Read off `node.props` when an interaction is reported, as on a device, and kept off the
+  // element so a name an app gives its reports is not in the page's markup.
+  [INTERACTION_NAME]: noop,
 };
 
 /**
