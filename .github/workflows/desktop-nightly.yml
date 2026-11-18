@@ -6,8 +6,9 @@ name: Desktop host nightly
 # x86_64 and arm64. Each installs what the host links from its own packages and launches the host on
 # the notes example's release bundle to its first frame under Xvfb and headless Weston
 # (launch-cell.sh). Fedora 45 also runs GNOME's mutter headless, and on x86_64 GTK's Vulkan
-# renderer over lavapipe, Mesa's software Vulkan. A pull request runs it only when this workflow or the cell script changed; it runs every
-# night on main and by hand on any branch.
+# renderer over lavapipe, Mesa's software Vulkan. The build job also runs `pnpm bench:linux`, the
+# timed budget, in the image. A pull request runs it only when this workflow, the cell script or
+# the bench changed; it runs every night on main and by hand on any branch.
 on:
   schedule:
     - cron: '23 3 * * *'
@@ -15,6 +16,8 @@ on:
     paths:
       - '.github/workflows/desktop-nightly.yml'
       - 'packages/desktop/native/scripts/launch-cell.sh'
+      - 'scripts/bench-linux.mjs'
+      - 'scripts/bench-linux-budget.json'
   workflow_dispatch:
 
 permissions:
@@ -92,6 +95,13 @@ jobs:
           pnpm exec expo export:embed --platform linux --dev false \
             --bundle-output "$GITHUB_WORKSPACE/.linux-nightly/main.js" \
             --assets-dest "$GITHUB_WORKSPACE/.linux-nightly/assets"
+
+      # The timed budget, in the setting it is gated in: this image at runner class, Xvfb, cairo.
+      - name: Measure the host against the Linux budget
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
+            node scripts/bench-linux.mjs --host .linux-nightly/ngn-linux --bundle .linux-nightly/main.js
 
       - uses: actions/upload-artifact@v7
         with:

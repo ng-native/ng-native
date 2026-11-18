@@ -1,0 +1,160 @@
+/**
+ * `scripts/bench-linux.mjs` (`pnpm bench:linux`): the timed checks of the desktop performance budget
+ * on the GTK host, read from the host's own output and from /proc, judged against
+ * `scripts/bench-linux-budget.json` with `bench:macos`'s rules. And `scripts/linux-image.mjs`, which
+ * runs it in the AlmaLinux 9 image from a Mac.
+ */
+import assert from 'node:assert/strict';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { describe, it } from 'node:test';
+
+const bench = (await import(new URL('../../scripts/bench-linux.mjs', import.meta.url).href)) as {
+  cpuSeconds(stat: string, ticksPerSecond: number): number | null;
+  contextSwitches(status: string): number | null;
+  pssMb(rollup: string): number | null;
+  benchEnv(env: Record<string, string | undefined>): Record<string, string | undefined>;
+  measure(
+    host: string,
+    bundle: string,
+    timing?: { settleMs?: number; idleMs?: number; ticksPerSecond?: number },
+  ): Promise<Record<string, number | null>>;
+};
+const image = (await import(new URL('../../scripts/linux-image.mjs', import.meta.url).href)) as {
+  imageArguments(
+    script: string,
+    args: readonly string[],
+    options?: {
+      mounts?: readonly string[];
+      home?: string;
+      uid?: number;
+      gid?: number;
+      cwd?: string;
+    },
+  ): string[];
+};
+const macos = (await import(new URL('../../scripts/bench-macos.mjs', import.meta.url).href)) as {
+  judge(
+    measured: Record<string, number | null>,
+    budget: { ceilings: Record<string, number> },
+  ): { ok: boolean; results: { metric: string; status: string }[] };
+};
+
+describe('reading /proc', () => {
+  it('reads CPU time from stat, after a command name with spaces and parentheses', () => {
+    const fields = Array.from({ length: 40 }, (_, at) => String(at + 3));
+    fields[11] = '250';
+    fields[12] = '50';
+    const stat = `4242 (ngn (gtk) host) S ${fields.slice(1).join(' ')}`;
+    assert.equal(bench.cpuSeconds(stat, 100), 3);
+    assert.equal(
+      bench.cpuSeconds('4242 (ngn) S 1', 100),
+      null,
+      'a truncated stat reads as nothing',
+    );
+  });
+
+  it('adds voluntary and involuntary context switches, and reads nothing without both', () => {
+    const status =
+      'Name:\tngn-linux\nvoluntary_ctxt_switches:\t120\nnonvoluntary_ctxt_switches:\t7\n';
+    assert.equal(bench.contextSwitches(status), 127);
+    assert.equal(bench.contextSwitches('voluntary_ctxt_switches:\t120\n'), null);
+  });
+
+  it('reads the proportional set size, not the resident one', () => {
+    const rollup = '55d0-7fff ---p 0 00:00 0 [rollup]\nRss:  204800 kB\nPss:  102400 kB\n';
+    assert.equal(bench.pssMb(rollup), 100);
+    assert.equal(bench.pssMb('Rss: 204800 kB\n'), null);
+  });
+
+  it('measures on the cairo renderer, logging commits, with no accessibility bus', () => {
+    const env = bench.benchEnv({ PATH: '/bin', GSK_RENDERER: 'vulkan' });
+    assert.equal(env['GSK_RENDERER'], 'cairo');
+    assert.equal(env['NGN_LOG_COMMITS'], '1');
+    assert.equal(env['GTK_A11Y'], 'none');
+    assert.equal(env['PATH'], '/bin');
+  });
+});
+
+describe('the Linux budget', () => {
+  const budget = JSON.parse(
+    readFileSync(new URL('../../scripts/bench-linux-budget.json', import.meta.url), 'utf8'),
+  ) as { ceilings: Record<string, number> };
+
+  it("holds the spec's provisional ceilings, and fails a run that measured nothing", () => {
+    assert.deepEqual(budget.ceilings, {
+      launchMs: 800,
+      idleCpu: 0.1,
+      idleWakeups: 5,
+      memoryMb: 110,
+      hostMb: 30,
+    });
+    const { ok, results } = macos.judge({}, budget);
+    assert.equal(ok, false);
+    assert.ok(results.every((result) => result.status === 'missing'));
+  });
+});
+
+// /proc is Linux's: the measurement runs against a stand-in host on Linux only.
+describe('measuring a host', { skip: process.platform !== 'linux' }, () => {
+  it('reads the first frame, idle CPU and wakeups, and memory of a running host', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-'));
+    try {
+      const host = path.join(dir, 'ngn-linux');
+      writeFileSync(
+        host,
+        [
+          '#!/usr/bin/env bash',
+          '[ "$GSK_RENDERER" = cairo ] && [ "$NGN_TESTS" = 1 ] || exit 3',
+          "echo '[ngn] commit 2.5 ms' >&2",
+          "echo '[ngn] first frame 120 ms after launch' >&2",
+          'exec sleep 30',
+        ].join('\n'),
+      );
+      chmodSync(host, 0o755);
+      const measured = await bench.measure(host, path.join(dir, 'main.js'), {
+        settleMs: 100,
+        idleMs: 1000,
+      });
+      assert.equal(measured['launchMs'], 120);
+      assert.equal(measured['commitMs'], 2.5);
+      assert.ok(
+        measured['idleCpu'] !== null && measured['idleCpu']! < 5,
+        String(measured['idleCpu']),
+      );
+      assert.ok(measured['idleWakeups'] !== null && measured['idleWakeups']! < 5);
+      assert.ok(measured['memoryMb'] !== null && measured['memoryMb']! > 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('running in the AlmaLinux 9 image', () => {
+  it('mounts the checkout and each folder at its own path, as the caller', () => {
+    const args = image.imageArguments('/home/me/repo/scripts/bench-linux.mjs', ['--runs', '1'], {
+      home: path.resolve(process.cwd(), '../../..'),
+      mounts: [process.cwd()],
+      uid: 501,
+      gid: 20,
+      cwd: '/x',
+    });
+    assert.deepEqual(args.slice(0, 5), ['run', '--rm', '--init', '--user', '501:20']);
+    assert.ok(args.includes(`${process.cwd()}:${process.cwd()}`));
+    assert.deepEqual(args.slice(-5), [
+      'ngn-el9',
+      'node',
+      '/home/me/repo/scripts/bench-linux.mjs',
+      '--runs',
+      '1',
+    ]);
+  });
+
+  it('refuses a folder the container cannot see, rather than running on an empty mount', () => {
+    assert.throws(
+      () => image.imageArguments('/s.mjs', [], { home: '/nowhere-home', mounts: ['/tmp/out'] }),
+      /sees only folders under \/nowhere-home/,
+    );
+  });
+});

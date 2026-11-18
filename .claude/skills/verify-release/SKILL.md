@@ -139,6 +139,13 @@ cache, which the bench picks without `--host`, is a valid input. Every metric pa
 waiver in `scripts/bench-macos-budget.json`. A breach without one blocks the release; a metric it
 could not measure fails it as a breach does.
 
+When the release changes `packages/desktop` or the Linux host, also run `pnpm bench:linux --host
+<build>/gtk/ngn-linux` against a release GTK host built in the `ngn-el9` image (on a Mac it runs in
+that image itself), judged against `scripts/bench-linux-budget.json` the same way, and the Linux
+manual pass in [docs/linux-manual-pass.md](../../../docs/linux-manual-pass.md): the whole checklist,
+in the GNOME and the KDE Plasma session of the UTM VM. Report the VM's own numbers from
+`bench:linux` beside the gated ones, ungated.
+
 Upgrades of a desktop app (step 4) start from the second release that has `@ng-native/desktop`.
 
 ## 4. Upgrades
