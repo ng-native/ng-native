@@ -136,4 +136,17 @@ bool controlledTextIsCurrent(int mostRecentEventCount, int fieldEventCount, bool
   return mostRecentEventCount >= fieldEventCount && !composing;
 }
 
+std::optional<std::pair<int, int>> newSelection(const DesktopTextInputProps *before, const DesktopTextInputProps &now) {
+  if (!now.selection) {
+    return std::nullopt;
+  }
+  if (before && before->selection && before->selection->start == now.selection->start &&
+      before->selection->end == now.selection->end) {
+    return std::nullopt;
+  }
+  int start = std::max(0, std::min(now.selection->start, now.selection->end));
+  int end = std::max(now.selection->start, now.selection->end);
+  return std::make_pair(start, end);
+}
+
 } // namespace ngn

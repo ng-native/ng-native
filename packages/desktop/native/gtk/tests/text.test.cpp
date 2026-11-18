@@ -108,6 +108,122 @@ TEST_CASE("setTextAndSelection selects by UTF-16 units") {
   CHECK(end == 3);
 }
 
+TEST_CASE("a multiline text input is a GtkTextView whose lines, changes and controlled value cross as a field's") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto input = MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", true)), {{10, 10}, {150, 80}});
+  views.add(input);
+  auto *field = ngn::gtk::viewData(views.view(2))->field;
+  REQUIRE(field);
+  REQUIRE(GTK_IS_TEXT_VIEW(field->text));
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text));
+  gtk_text_buffer_insert_at_cursor(buffer, "one\ntwo", -1);
+  CHECK(ngn::gtk::fieldText(*field) == "one\ntwo");
+  CHECK(field->eventCount == 1);
+  // The scrolled window fills the content box.
+  graphene_rect_t bounds;
+  REQUIRE(gtk_widget_compute_bounds(ngn::gtk::fieldWidget(*field), views.view(2), &bounds));
+  CHECK(bounds.size.height == doctest::Approx(80));
+
+  views.update(input, textInputProps(dynamic::object("multiline", true)("text", "old")("mostRecentEventCount", 0)));
+  CHECK(ngn::gtk::fieldText(*field) == "one\ntwo");
+  views.update(input, textInputProps(dynamic::object("multiline", true)("text", "new")("mostRecentEventCount", 1)));
+  CHECK(ngn::gtk::fieldText(*field) == "new");
+  CHECK(field->eventCount == 1);
+}
+
+TEST_CASE("a multiline text input keeps to maxLength in UTF-16 units, never splitting a character") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", true)("maxLength", 3)), {{10, 10}, {150, 80}}));
+  auto *field = ngn::gtk::viewData(views.view(2))->field;
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text));
+  gtk_text_buffer_insert_at_cursor(buffer, "a\xF0\x9F\x98\x80\xF0\x9F\x98\x80", -1);
+  // One unit, then two: the second emoji does not fit.
+  CHECK(ngn::gtk::fieldText(*field) == "a\xF0\x9F\x98\x80");
+  gtk_text_buffer_insert_at_cursor(buffer, "b", -1);
+  CHECK(ngn::gtk::fieldText(*field) == "a\xF0\x9F\x98\x80");
+}
+
+TEST_CASE("a selection prop is applied when it is new, and an unchanged one leaves the user's selection") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto props = [multiline](dynamic extra) {
+      extra["multiline"] = multiline;
+      extra["text"] = "a\xF0\x9F\x98\x80" "bcd";
+      return textInputProps(std::move(extra));
+    };
+    auto input = MountedViews::shadow(2, "TextInput", props(dynamic::object("selection", dynamic::object("start", 3)("end", 5))), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    auto selection = [field, multiline] {
+      int start = 0, end = 0;
+      if (multiline) {
+        GtkTextIter a, b;
+        gtk_text_buffer_get_selection_bounds(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), &a, &b);
+        start = gtk_text_iter_get_offset(&a);
+        end = gtk_text_iter_get_offset(&b);
+      } else {
+        gtk_editable_get_selection_bounds(GTK_EDITABLE(field->text), &start, &end);
+      }
+      return std::make_pair(std::min(start, end), std::max(start, end));
+    };
+    // UTF-16 units 3 to 5 are characters 2 to 4.
+    CHECK(selection() == std::make_pair(2, 4));
+    // The user moves it; the same prop again leaves it there.
+    views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0, nullptr, 0, 1));
+    views.update(input, props(dynamic::object("selection", dynamic::object("start", 3)("end", 5))("placeholder", "x")));
+    CHECK(selection() == std::make_pair(0, 1));
+    views.update(input, props(dynamic::object("selection", dynamic::object("start", 5)("end", 4))));
+    CHECK(selection() == std::make_pair(3, 4));
+  }
+}
+
+TEST_CASE("while an input method composes, a controlled value and setTextAndSelection's text wait") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto input = MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("text", "a")), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    g_signal_emit_by_name(field->text, "preedit-changed", "ka");
+    CHECK(field->composing);
+    views.update(input, textInputProps(dynamic::object("multiline", multiline)("text", "b")));
+    views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0, "c", 1, 1));
+    CHECK(ngn::gtk::fieldText(*field) == "a");
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    CHECK_FALSE(field->composing);
+    views.update(input, textInputProps(dynamic::object("multiline", multiline)("text", "d")));
+    CHECK(ngn::gtk::fieldText(*field) == "d");
+  }
+}
+
+TEST_CASE("a multiline text input shows its placeholder while it is empty") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  dynamic props = dynamic::object("multiline", true)("placeholder", "MMMMMMMM")("placeholderTextColor", 0xffff0000)("fontSize", 30);
+  auto input = MountedViews::shadow(2, "TextInput", textInputProps(props), {{0, 0}, {200, 80}});
+  views.add(input);
+  auto redPixels = [&views] {
+    int red = 0;
+    for (int x = 2; x < 150; x += 6) {
+      for (int y = 8; y < 30; y += 4) {
+        auto p = views.pixel(x, y);
+        red += p.a > 100 && p.r > 150 && p.g < 100;
+      }
+    }
+    return red;
+  };
+  CHECK(redPixels() > 5);
+  auto *field = ngn::gtk::viewData(views.view(2))->field;
+  gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "x", -1);
+  views.settle();
+  CHECK(redPixels() == 0);
+}
+
 TEST_CASE("a text input's border and background are its view's, painted under the field") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;
