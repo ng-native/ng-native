@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <signal.h>
 #include <unistd.h>
@@ -19,6 +20,13 @@ namespace {
   std::stringstream text;
   text << in.rdbuf();
   return text.str();
+}
+
+// In a forked child about to die of a signal: no core file, which would land in the working
+// directory (the package's, under the build script).
+[[maybe_unused]] void noCoreFile() {
+  struct rlimit none{0, 0};
+  setrlimit(RLIMIT_CORE, &none);
 }
 
 } // namespace
@@ -56,6 +64,7 @@ TEST_CASE("a fatal signal writes the crash report, names the signal and the stac
     pid_t child = fork();
     REQUIRE(child >= 0);
     if (child == 0) {
+      noCoreFile();
       ngn::installCrashReport(path.string(), "ngn-test-host");
       raise(signal);
       _exit(0);
@@ -86,6 +95,7 @@ TEST_CASE("a fatal signal still kills the process when a handler installed later
   pid_t child = fork();
   REQUIRE(child >= 0);
   if (child == 0) {
+    noCoreFile();
     auto dir = std::filesystem::temp_directory_path() / ("ngn-crash-chain-" + std::to_string(getpid()));
     ngn::installCrashReport((dir / "crash.txt").string(), "ngn-test-host");
     // A library's handler, as glog's is: it calls the one before it once, then returns.

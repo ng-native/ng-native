@@ -45,9 +45,15 @@ const XTest &xtest() {
 }
 
 struct Replay {
-  GtkWidget *window;
+  // Cleared if the window goes before the script ends.
+  GtkWidget *window{nullptr};
   InputScript script;
   size_t at{0};
+  ~Replay() {
+    if (window) {
+      g_object_remove_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&window));
+    }
+  }
 };
 
 Display *displayOf(GtkWidget *window) {
@@ -144,6 +150,10 @@ void play(GtkWidget *window, const InputStep &step) {
 // Plays from `replay->at`: a wait waits, and every other step leaves the loop a moment to take
 // the event before the next, as a person's input arrives.
 void playNext(std::shared_ptr<Replay> replay) {
+  if (!replay->window) {
+    fprintf(stderr, "[ngn] input script: the window closed before the script ended\n");
+    return;
+  }
   if (replay->at >= replay->script.steps.size()) {
     fprintf(stderr, "[ngn] input script done\n");
     return;
@@ -195,7 +205,11 @@ bool replayInputScript(GtkWidget *window, InputScript script) {
     return false;
   }
 #ifdef GDK_WINDOWING_X11
-  playNext(std::make_shared<Replay>(Replay{.window = window, .script = std::move(script)}));
+  auto replay = std::make_shared<Replay>();
+  replay->window = window;
+  replay->script = std::move(script);
+  g_object_add_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&replay->window));
+  playNext(std::move(replay));
   return true;
 #else
   return false;

@@ -63,3 +63,19 @@ TEST_CASE("an input script with AppKit's gestures or a bad line is refused befor
   REQUIRE(bad.error);
   CHECK(ngn::gtk::inputReplayProblem(nullptr, bad) == *bad.error);
 }
+
+TEST_CASE("an input script whose window closes stops there") {
+  REQUIRE(ngn::testing::gtkReady());
+  if (!onX11()) {
+    return;
+  }
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 200, 100);
+  gtk_window_present(GTK_WINDOW(window));
+  ngn::testing::runUntil([window] { return gtk_widget_get_mapped(window); });
+  REQUIRE(ngn::gtk::replayInputScript(window, ngn::parseInputScript("wait 100\nmove 10 10\ndown 10 10\nup 10 10\n")));
+  gtk_window_destroy(GTK_WINDOW(window));
+  // The steps after the wait would go to a window that is gone.
+  gint64 until = g_get_monotonic_time() + 400 * 1000;
+  ngn::testing::runUntil([until] { return g_get_monotonic_time() > until; });
+}
