@@ -5,6 +5,7 @@
 #include <react/renderer/components/textinput/TextInputEventEmitter.h>
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 
 using namespace facebook::react;
@@ -13,9 +14,26 @@ namespace ngn::gtk {
 
 namespace {
 
-std::string fieldText(const TextField &field) {
-  const char *text = gtk_editable_get_text(GTK_EDITABLE(field.text));
-  return text ? text : "";
+bool multiline(const TextField &field) {
+  return field.scroll != nullptr;
+}
+
+GtkTextBuffer *bufferOf(const TextField &field) {
+  return gtk_text_view_get_buffer(GTK_TEXT_VIEW(field.text));
+}
+
+// The selection in characters, the cursor alone as an empty one.
+std::pair<int, int> selectionOf(const TextField &field) {
+  int start = 0, end = 0;
+  if (multiline(field)) {
+    GtkTextIter a, b;
+    gtk_text_buffer_get_selection_bounds(bufferOf(field), &a, &b);
+    start = gtk_text_iter_get_offset(&a);
+    end = gtk_text_iter_get_offset(&b);
+  } else if (!gtk_editable_get_selection_bounds(GTK_EDITABLE(field.text), &start, &end)) {
+    start = end = gtk_editable_get_position(GTK_EDITABLE(field.text));
+  }
+  return {std::min(start, end), std::max(start, end)};
 }
 
 // Null once the field's view has gone.
@@ -25,10 +43,7 @@ std::shared_ptr<const TextInputEventEmitter> emitterOf(const TextField &field) {
 
 TextInputEventEmitter::Metrics metricsOf(const TextField &field) {
   std::string text = fieldText(field);
-  int start = 0, end = 0;
-  if (!gtk_editable_get_selection_bounds(GTK_EDITABLE(field.text), &start, &end)) {
-    start = end = gtk_editable_get_position(GTK_EDITABLE(field.text));
-  }
+  auto [start, end] = selectionOf(field);
   int from = utf16Units(text, start);
   int to = utf16Units(text, end);
   TextInputEventEmitter::Metrics m{};
@@ -41,12 +56,35 @@ TextInputEventEmitter::Metrics metricsOf(const TextField &field) {
 
 void setText(TextField &field, const std::string &text) {
   field.settingText = true;
-  gtk_editable_set_text(GTK_EDITABLE(field.text), text.c_str());
+  if (multiline(field)) {
+    gtk_text_buffer_set_text(bufferOf(field), text.c_str(), static_cast<int>(text.size()));
+  } else {
+    gtk_editable_set_text(GTK_EDITABLE(field.text), text.c_str());
+  }
   field.settingText = false;
 }
 
-void changed(GtkEditable *, gpointer user) {
-  auto *field = static_cast<TextField *>(user);
+// Selects characters `start` to `end`, the cursor at the end.
+void select(TextField &field, int start, int end) {
+  field.settingText = true;
+  if (multiline(field)) {
+    GtkTextIter a, b;
+    gtk_text_buffer_get_iter_at_offset(bufferOf(field), &a, start);
+    gtk_text_buffer_get_iter_at_offset(bufferOf(field), &b, end);
+    gtk_text_buffer_select_range(bufferOf(field), &b, &a);
+  } else {
+    gtk_editable_select_region(GTK_EDITABLE(field.text), start, end);
+  }
+  field.settingText = false;
+}
+
+// Selects UTF-16 units `start` to `end` of the field's text.
+void selectUnits(TextField &field, int start, int end) {
+  std::string text = fieldText(field);
+  select(field, charactersIn(text, start), charactersIn(text, end));
+}
+
+void changed(TextField *field) {
   if (field->settingText || !field->view) {
     return;
   }
@@ -56,14 +94,26 @@ void changed(GtkEditable *, gpointer user) {
   }
 }
 
-void selectionMoved(GObject *, GParamSpec *, gpointer user) {
-  auto *field = static_cast<TextField *>(user);
-  if (field->settingText) {
+void selectionMoved(TextField *field) {
+  if (field->settingText || !field->view) {
     return;
   }
   if (auto emitter = emitterOf(*field)) {
     emitter->onSelectionChange(metricsOf(*field));
   }
+}
+
+// A multiline field's placeholder shows or goes with its text and its composition.
+void redrawPlaceholder(const TextField &field) {
+  if (field.scroll && field.view && field.view->widget) {
+    gtk_widget_queue_draw(field.view->widget);
+  }
+}
+
+void preeditChanged(GtkWidget *, const char *preedit, gpointer user) {
+  auto *field = static_cast<TextField *>(user);
+  field->composing = preedit && *preedit;
+  redrawPlaceholder(*field);
 }
 
 void activated(GtkText *, gpointer user) {
@@ -117,6 +167,102 @@ std::shared_ptr<const DesktopTextInputProps> propsOf(const ViewData &view) {
   return std::dynamic_pointer_cast<const DesktopTextInputProps>(view.props);
 }
 
+// A multiline field keeps to `maxLength` in UTF-16 units, as a single line's GtkText keeps to its
+// own: what does not fit of an insertion is left out, never inside a character.
+void insertingText(GtkTextBuffer *buffer, GtkTextIter *at, const char *text, int length, gpointer user) {
+  auto *field = static_cast<TextField *>(user);
+  auto props = field->view ? propsOf(*field->view) : nullptr;
+  if (field->settingText || !props || props->maxLength == std::numeric_limits<int>::max()) {
+    return;
+  }
+  std::string inserted(text, length < 0 ? strlen(text) : static_cast<size_t>(length));
+  std::string current = fieldText(*field);
+  auto units = [](const std::string &s) { return static_cast<size_t>(utf16Units(s, static_cast<int>(g_utf8_strlen(s.c_str(), -1)))); };
+  size_t fits = insertionThatFits(units(current), 0, units(inserted), static_cast<size_t>(std::max(0, props->maxLength)));
+  if (fits >= units(inserted)) {
+    return;
+  }
+  g_signal_stop_emission_by_name(buffer, "insert-text");
+  std::string part = inserted.substr(0, g_utf8_offset_to_pointer(inserted.c_str(), charactersIn(inserted, static_cast<int>(fits))) - inserted.c_str());
+  if (!part.empty()) {
+    g_signal_handlers_block_by_func(buffer, reinterpret_cast<gpointer>(insertingText), user);
+    gtk_text_buffer_insert(buffer, at, part.c_str(), static_cast<int>(part.size()));
+    g_signal_handlers_unblock_by_func(buffer, reinterpret_cast<gpointer>(insertingText), user);
+  }
+}
+
+// The run of text attributes a TextInput's text takes: its font and colour.
+PangoAttrList *textAttributes(const DesktopTextInputProps &props) {
+  auto attributes = props.getEffectiveTextAttributes(1);
+  PangoAttrList *list = pango_attr_list_new();
+  PangoFontDescription *font = fontOf(attributes);
+  pango_attr_list_insert(list, pango_attr_font_desc_new(font));
+  pango_font_description_free(font);
+  if (attributes.foregroundColor) {
+    auto c = colorComponentsFromColor(attributes.foregroundColor);
+    auto channel = [](float v) { return static_cast<guint16>(std::clamp(v, 0.0f, 1.0f) * 65535); };
+    pango_attr_list_insert(list, pango_attr_foreground_new(channel(c.red), channel(c.green), channel(c.blue)));
+    pango_attr_list_insert(list, pango_attr_foreground_alpha_new(channel(c.alpha)));
+  }
+  return list;
+}
+
+// A multiline field's font and colour, on a tag over all of its text.
+void styleTextView(TextField &field, const DesktopTextInputProps &props) {
+  GtkTextBuffer *buffer = bufferOf(field);
+  GtkTextTag *tag = gtk_text_tag_table_lookup(gtk_text_buffer_get_tag_table(buffer), "ngn-text");
+  if (!tag) {
+    tag = gtk_text_buffer_create_tag(buffer, "ngn-text", nullptr);
+  }
+  auto attributes = props.getEffectiveTextAttributes(1);
+  PangoFontDescription *font = fontOf(attributes);
+  g_object_set(tag, "font-desc", font, nullptr);
+  pango_font_description_free(font);
+  if (attributes.foregroundColor) {
+    auto c = colorComponentsFromColor(attributes.foregroundColor);
+    GdkRGBA rgba{c.red, c.green, c.blue, c.alpha};
+    g_object_set(tag, "foreground-rgba", &rgba, nullptr);
+  }
+  GtkTextIter start, end;
+  gtk_text_buffer_get_bounds(buffer, &start, &end);
+  gtk_text_buffer_apply_tag(buffer, tag, &start, &end);
+}
+
+void restyle(GtkTextBuffer *, gpointer user) {
+  auto *field = static_cast<TextField *>(user);
+  if (auto props = field->view ? propsOf(*field->view) : nullptr) {
+    styleTextView(*field, *props);
+  }
+  redrawPlaceholder(*field);
+}
+
+// A multiline field's text view and scrolled window draw no background of their own: the view
+// paints the field's.
+void plainTextViews() {
+  static bool installed = false;
+  if (installed || !gdk_display_get_default()) {
+    return;
+  }
+  installed = true;
+  GtkCssProvider *css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(css, "textview.ngn-plain, textview.ngn-plain > text { background: none; }", -1);
+  gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(css);
+}
+
+void watch(TextField *field, GtkWidget *editor) {
+  g_object_set_data(G_OBJECT(editor), "ngn-text-field", field);
+  g_signal_connect(editor, "preedit-changed", G_CALLBACK(preeditChanged), field);
+  GtkEventController *focus = gtk_event_controller_focus_new();
+  g_signal_connect(focus, "enter", G_CALLBACK(focused), field);
+  g_signal_connect(focus, "leave", G_CALLBACK(unfocused), field);
+  gtk_widget_add_controller(editor, focus);
+  GtkEventController *keys = gtk_event_controller_key_new();
+  gtk_event_controller_set_propagation_phase(keys, GTK_PHASE_CAPTURE);
+  g_signal_connect(keys, "key-pressed", G_CALLBACK(keyPressed), field);
+  gtk_widget_add_controller(editor, keys);
+}
+
 } // namespace
 
 int utf16Units(const std::string &utf8, int characters) {
@@ -148,27 +294,58 @@ int charactersIn(const std::string &utf8, int units) {
   return characters;
 }
 
+std::string fieldText(const TextField &field) {
+  if (multiline(field)) {
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(bufferOf(field), &start, &end);
+    gchar *text = gtk_text_buffer_get_text(bufferOf(field), &start, &end, FALSE);
+    std::string out = text ? text : "";
+    g_free(text);
+    return out;
+  }
+  const char *text = gtk_editable_get_text(GTK_EDITABLE(field.text));
+  return text ? text : "";
+}
+
+GtkWidget *fieldWidget(const TextField &field) {
+  return field.scroll ? field.scroll : field.text;
+}
+
 void makeTextField(GtkWidget *widget, ViewData &view) {
   auto *field = new TextField();
   field->view = &view;
-  field->text = gtk_text_new();
-  // Freed with the GtkText, after its last signal.
-  g_object_set_data_full(G_OBJECT(field->text), "ngn-text-field", field, [](gpointer p) { delete static_cast<TextField *>(p); });
+  auto props = propsOf(view);
+  if (props && props->multiline) {
+    field->text = gtk_text_view_new();
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(field->text), GTK_WRAP_WORD_CHAR);
+    // The view's border and background are the field's: the text view draws neither.
+    plainTextViews();
+    gtk_widget_add_css_class(field->text, "ngn-plain");
+    field->scroll = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(field->scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(field->scroll), field->text);
+    GtkTextBuffer *buffer = bufferOf(*field);
+    g_signal_connect_swapped(buffer, "changed", G_CALLBACK(changed), field);
+    g_signal_connect_after(buffer, "changed", G_CALLBACK(restyle), field);
+    g_signal_connect(buffer, "insert-text", G_CALLBACK(insertingText), field);
+    g_signal_connect(buffer, "mark-set", G_CALLBACK(+[](GtkTextBuffer *buffer, GtkTextIter *, GtkTextMark *mark, gpointer user) {
+      if (mark == gtk_text_buffer_get_insert(buffer) || mark == gtk_text_buffer_get_selection_bound(buffer)) {
+        selectionMoved(static_cast<TextField *>(user));
+      }
+    }), field);
+  } else {
+    field->text = gtk_text_new();
+    g_signal_connect_swapped(field->text, "changed", G_CALLBACK(changed), field);
+    g_signal_connect_swapped(field->text, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
+    g_signal_connect_swapped(field->text, "notify::selection-bound", G_CALLBACK(selectionMoved), field);
+    g_signal_connect(field->text, "activate", G_CALLBACK(activated), field);
+  }
+  watch(field, field->text);
+  // Freed with the field's widget, after its last signal.
+  g_object_set_data_full(G_OBJECT(fieldWidget(*field)), "ngn-text-field-owner", field, [](gpointer p) { delete static_cast<TextField *>(p); });
   view.field = field;
-  gtk_widget_set_parent(field->text, widget);
-  g_signal_connect(field->text, "changed", G_CALLBACK(changed), field);
-  g_signal_connect(field->text, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
-  g_signal_connect(field->text, "notify::selection-bound", G_CALLBACK(selectionMoved), field);
-  g_signal_connect(field->text, "activate", G_CALLBACK(activated), field);
-  GtkEventController *focus = gtk_event_controller_focus_new();
-  g_signal_connect(focus, "enter", G_CALLBACK(focused), field);
-  g_signal_connect(focus, "leave", G_CALLBACK(unfocused), field);
-  gtk_widget_add_controller(field->text, focus);
-  GtkEventController *keys = gtk_event_controller_key_new();
-  gtk_event_controller_set_propagation_phase(keys, GTK_PHASE_CAPTURE);
-  g_signal_connect(keys, "key-pressed", G_CALLBACK(keyPressed), field);
-  gtk_widget_add_controller(field->text, keys);
-  if (auto props = propsOf(view); props && props->text.empty() && !props->defaultValue.empty()) {
+  gtk_widget_set_parent(fieldWidget(*field), widget);
+  if (props && props->text.empty() && !props->defaultValue.empty()) {
     setText(*field, props->defaultValue);
   }
   applyTextFieldProps(view);
@@ -180,7 +357,7 @@ TextField *textFieldOf(GtkWidget *widget) {
 
 void destroyTextField(ViewData &view) {
   if (view.field) {
-    // The GtkText may still signal as it goes (its focus leaving): the field hears nothing more.
+    // The editor may still signal as it goes (its focus leaving): the field hears nothing more.
     view.field->view = nullptr;
     view.field = nullptr;
   }
@@ -192,53 +369,96 @@ void applyTextFieldProps(ViewData &view) {
     return;
   }
   TextField &field = *view.field;
-  GtkText *text = GTK_TEXT(field.text);
-  gtk_text_set_placeholder_text(text, props->placeholder.c_str());
   auto attributes = props->getEffectiveTextAttributes(1);
-  PangoAttrList *list = pango_attr_list_new();
-  PangoFontDescription *font = fontOf(attributes);
-  pango_attr_list_insert(list, pango_attr_font_desc_new(font));
-  pango_font_description_free(font);
-  if (attributes.foregroundColor) {
-    auto c = colorComponentsFromColor(attributes.foregroundColor);
-    auto channel = [](float v) { return static_cast<guint16>(std::clamp(v, 0.0f, 1.0f) * 65535); };
-    pango_attr_list_insert(list, pango_attr_foreground_new(channel(c.red), channel(c.green), channel(c.blue)));
-    pango_attr_list_insert(list, pango_attr_foreground_alpha_new(channel(c.alpha)));
-  }
-  gtk_text_set_attributes(text, list);
-  pango_attr_list_unref(list);
-  gtk_editable_set_editable(GTK_EDITABLE(text), props->traits.editable && props->editable && !props->readOnly);
-  gtk_text_set_visibility(text, !props->traits.secureTextEntry);
-  gtk_text_set_max_length(text, props->maxLength == std::numeric_limits<int>::max() ? 0 : std::max(0, props->maxLength));
-  float xalign = 0;
+  bool editable = props->traits.editable && props->editable && !props->readOnly;
   bool rightToLeft = view.layout.layoutDirection == LayoutDirection::RightToLeft;
+  float xalign = 0;
   switch (attributes.alignment.value_or(TextAlignment::Natural)) {
     case TextAlignment::Center: xalign = 0.5f; break;
     case TextAlignment::Right: xalign = 1; break;
     case TextAlignment::Left: xalign = 0; break;
     default: xalign = rightToLeft ? 1 : 0; break;
   }
-  gtk_editable_set_alignment(GTK_EDITABLE(text), xalign);
   gtk_widget_set_direction(field.text, rightToLeft ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
-  // A controlled value JavaScript set, when it has seen every change the user made.
-  if (props->mostRecentEventCount >= field.eventCount && props->text != fieldText(field) &&
+  if (multiline(field)) {
+    GtkTextView *text = GTK_TEXT_VIEW(field.text);
+    styleTextView(field, *props);
+    gtk_text_view_set_editable(text, editable);
+    gtk_text_view_set_cursor_visible(text, editable);
+    // Left in a right-to-left field is its start, so the natural alignment is GTK's left.
+    gtk_text_view_set_justification(
+        text, xalign == 0.5f ? GTK_JUSTIFY_CENTER : (xalign == 1) != rightToLeft ? GTK_JUSTIFY_RIGHT : GTK_JUSTIFY_LEFT);
+  } else {
+    GtkText *text = GTK_TEXT(field.text);
+    gtk_text_set_placeholder_text(text, props->placeholder.c_str());
+    PangoAttrList *list = textAttributes(*props);
+    gtk_text_set_attributes(text, list);
+    pango_attr_list_unref(list);
+    gtk_editable_set_editable(GTK_EDITABLE(text), editable);
+    gtk_text_set_visibility(text, !props->traits.secureTextEntry);
+    gtk_text_set_max_length(text, props->maxLength == std::numeric_limits<int>::max() ? 0 : std::max(0, props->maxLength));
+    gtk_editable_set_alignment(GTK_EDITABLE(text), xalign);
+  }
+  // A controlled value JavaScript set, when it has seen every change the user made and no input
+  // method is composing.
+  if (controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, field.composing) && props->text != fieldText(field) &&
       (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
     setText(field, props->text);
   }
+  auto before = std::dynamic_pointer_cast<const DesktopTextInputProps>(field.applied);
+  if (auto range = newSelection(before.get(), *props)) {
+    selectUnits(field, range->first, range->second);
+  }
+  field.applied = view.props;
+  redrawPlaceholder(field);
 }
 
 void allocateTextField(ViewData &view, int width, int height) {
-  GtkWidget *text = view.field->text;
+  GtkWidget *child = fieldWidget(*view.field);
   const auto &insets = view.layout.contentInsets;
   int cw = std::max(0, static_cast<int>(width - insets.left - insets.right));
   int ch = std::max(0, static_cast<int>(height - insets.top - insets.bottom));
+  if (multiline(*view.field)) {
+    GtkAllocation all{static_cast<int>(insets.left), static_cast<int>(insets.top), cw, ch};
+    gtk_widget_size_allocate(child, &all, -1);
+    return;
+  }
   int minH = 0, natH = 0;
-  gtk_widget_measure(text, GTK_ORIENTATION_VERTICAL, cw, &minH, &natH, nullptr, nullptr);
+  gtk_widget_measure(child, GTK_ORIENTATION_VERTICAL, cw, &minH, &natH, nullptr, nullptr);
   int h = std::min(ch, std::max(minH, natH));
   int minW = 0;
-  gtk_widget_measure(text, GTK_ORIENTATION_HORIZONTAL, h, &minW, nullptr, nullptr, nullptr);
+  gtk_widget_measure(child, GTK_ORIENTATION_HORIZONTAL, h, &minW, nullptr, nullptr, nullptr);
   GtkAllocation all{static_cast<int>(insets.left), static_cast<int>(insets.top) + (ch - h) / 2, std::max(cw, minW), h};
-  gtk_widget_size_allocate(text, &all, -1);
+  gtk_widget_size_allocate(child, &all, -1);
+}
+
+void snapshotPlaceholder(const ViewData &view, GtkSnapshot *snapshot) {
+  const TextField *field = view.field;
+  auto props = propsOf(view);
+  if (!field || !multiline(*field) || !props || props->placeholder.empty() || field->composing ||
+      gtk_text_buffer_get_char_count(bufferOf(*field)) > 0) {
+    return;
+  }
+  PangoLayout *layout = gtk_widget_create_pango_layout(field->text, props->placeholder.c_str());
+  PangoFontDescription *font = fontOf(props->getEffectiveTextAttributes(1));
+  pango_layout_set_font_description(layout, font);
+  pango_font_description_free(font);
+  const auto &insets = view.layout.contentInsets;
+  pango_layout_set_width(layout, static_cast<int>(std::max<Float>(0, view.layout.frame.size.width - insets.left - insets.right) * PANGO_SCALE));
+  pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+  // The placeholder colour, or GTK's own dimmed text.
+  GdkRGBA color{0, 0, 0, 0.5f};
+  if (props->placeholderTextColor) {
+    auto c = colorComponentsFromColor(props->placeholderTextColor);
+    color = {c.red, c.green, c.blue, c.alpha};
+  }
+  gtk_snapshot_save(snapshot);
+  graphene_point_t at;
+  graphene_point_init(&at, static_cast<float>(insets.left), static_cast<float>(insets.top));
+  gtk_snapshot_translate(snapshot, &at);
+  gtk_snapshot_append_layout(snapshot, layout, &color);
+  gtk_snapshot_restore(snapshot);
+  g_object_unref(layout);
 }
 
 void textFieldCommand(ViewData &view, const std::string &name, const folly::dynamic &args) {
@@ -253,20 +473,16 @@ void textFieldCommand(ViewData &view, const std::string &name, const folly::dyna
       gtk_root_set_focus(root, nullptr);
     }
   } else if (name == "setTextAndSelection" && args.isArray() && args.size() >= 4) {
-    // [mostRecentEventCount, value, start, end]: a value only when JavaScript has seen every change.
+    // [mostRecentEventCount, value, start, end]: a value only when JavaScript has seen every change,
+    // and never over an input method's composition.
     if (args[0].isInt() && args[0].asInt() < field.eventCount) {
       return;
     }
-    if (args[1].isString()) {
+    if (args[1].isString() && !field.composing) {
       setText(field, args[1].getString());
     }
     if (args[2].isNumber() && args[3].isNumber()) {
-      std::string text = fieldText(field);
-      int start = charactersIn(text, static_cast<int>(args[2].asDouble()));
-      int end = charactersIn(text, static_cast<int>(args[3].asDouble()));
-      field.settingText = true;
-      gtk_editable_select_region(GTK_EDITABLE(field.text), start, end);
-      field.settingText = false;
+      selectUnits(field, static_cast<int>(args[2].asDouble()), static_cast<int>(args[3].asDouble()));
     }
   }
 }

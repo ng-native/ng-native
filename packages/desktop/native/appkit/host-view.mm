@@ -762,19 +762,14 @@ void alignInput(id field, const DesktopTextInputProps &p, LayoutDirection direct
   [field setTextAlignment:alignment writingDirection:writing];
 }
 
-// The `selection` prop, when it is new in this update: React Native iOS applies it only then.
+// The `selection` prop, when it is new in this update (ngn::newSelection).
 std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextInputProps &p) {
-  if (!p.selection) {
-    return std::nullopt;
-  }
   auto before = std::dynamic_pointer_cast<const DesktopTextInputProps>(old);
-  if (before && before->selection && before->selection->start == p.selection->start &&
-      before->selection->end == p.selection->end) {
+  auto range = ngn::newSelection(before.get(), p);
+  if (!range) {
     return std::nullopt;
   }
-  int start = std::max(0, std::min(p.selection->start, p.selection->end));
-  int end = std::max(p.selection->start, p.selection->end);
-  return NSMakeRange(start, end - start);
+  return NSMakeRange(range->first, range->second - range->first);
 }
 
 } // namespace
