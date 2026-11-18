@@ -89,9 +89,9 @@ struct Control {
 };
 
 // A layout off the UI thread, as the JS thread's.
-Size measure(const ShadowNode &node, Size max = {1000, 1000}) {
+Size measure(const ShadowNode &node, Size max = {1000, 1000}, float fontScale = 1) {
   const auto &layoutable = dynamic_cast<const LayoutableShadowNode &>(node);
-  return layoutable.measureContent({}, {.minimumSize = {0, 0}, .maximumSize = max});
+  return layoutable.measureContent({.fontSizeMultiplier = fontScale}, {.minimumSize = {0, 0}, .maximumSize = max});
 }
 
 template <class Descriptor>
@@ -231,6 +231,22 @@ TEST_CASE("a control's size is measured again when a measured input changes, and
         Size{140, 22});
   CHECK(c.measurer->kinds.size() == 3);
   CHECK(c.backend->pending() == 0);
+}
+
+TEST_CASE("a control is measured again when the desktop's text scaling changes") {
+  Control<ngn::NativeButtonComponentDescriptor> c;
+  auto save = c.node(folly::dynamic::object("title", "Save"));
+  CHECK(c.measureOnUiThread(*save) == Size{120, 22});
+  // The same props laid out at a new text size multiplier miss the size held for the old one.
+  CHECK(measure(*save, {1000, 1000}, 1.25) == Size{120, 22});
+  c.backend->drain();
+  CHECK(c.measurer->titles == std::vector<std::string>{"Save", "Save"});
+  CHECK(*c.relaidOut == std::vector<Tag>{9});
+  // And back: measured again, the size for 1.25 let go.
+  measure(*save);
+  c.backend->drain();
+  CHECK(c.measurer->titles.size() == 3);
+  CHECK(c.sizes->held() == 1);
 }
 
 TEST_CASE("a measurement a control no longer wants is not made") {
