@@ -65,7 +65,9 @@
     "native/core/include",
     "native/core/src",
     "native/appkit",
-    "!native/appkit/tests"
+    "!native/appkit/tests",
+    "native/gtk",
+    "!native/gtk/tests"
   ],
   "publishConfig": {
     "access": "public"

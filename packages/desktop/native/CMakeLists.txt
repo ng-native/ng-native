@@ -3,6 +3,8 @@
 #   core/    toolkit-free C++: mounting, the view tree and hit testing, input and hover, text
 #            measurement, the module registry and desktop view props. No AppKit, no Objective-C.
 #   appkit/  the macOS backend and the ngn-macos binary.
+#   gtk/     the Linux backend over GTK 4 and the ngn-linux binary; it also builds on a Mac against
+#            Homebrew's GTK, as a dev loop.
 #
 # scripts/build.sh is the way in: it fetches the pinned sources into the per-user cache and passes
 # their paths here. NGN_BACKEND=none builds only the core and its tests (any OS, no Hermes), which
@@ -16,8 +18,8 @@ if(APPLE)
 else()
   set(_default_backend none)
 endif()
-set(NGN_BACKEND ${_default_backend} CACHE STRING "appkit or none")
-set_property(CACHE NGN_BACKEND PROPERTY STRINGS appkit none)
+set(NGN_BACKEND ${_default_backend} CACHE STRING "appkit, gtk or none")
+set_property(CACHE NGN_BACKEND PROPERTY STRINGS appkit gtk none)
 option(NGN_TESTS "Build the core tests" ON)
 option(NGN_RUNTIME "With NGN_BACKEND=none, build the runtime half over Hermes too" OFF)
 
@@ -50,12 +52,12 @@ if(APPLE)
   # The AppKit backend, and on macOS the core tests of its window-free parts.
   enable_language(OBJC OBJCXX)
 endif()
-if(NGN_BACKEND STREQUAL "appkit")
+if(NGN_BACKEND STREQUAL "appkit" OR NGN_BACKEND STREQUAL "gtk")
   set(NGN_WITH_RUNTIME ON)
 elseif(NGN_BACKEND STREQUAL "none")
   set(NGN_WITH_RUNTIME ${NGN_RUNTIME})
 else()
-  message(FATAL_ERROR "NGN_BACKEND must be appkit or none, not ${NGN_BACKEND}")
+  message(FATAL_ERROR "NGN_BACKEND must be appkit, gtk or none, not ${NGN_BACKEND}")
 endif()
 
 # A dev build carries React Native's debugger: Hermes's CDP agents and the inspector targets that
@@ -203,8 +205,9 @@ if(NGN_TESTS)
       set_source_files_properties(${core_test_SRC} PROPERTIES COMPILE_OPTIONS -Wno-c2y-extensions)
     endif()
   endif()
-  # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks.
-  if(APPLE)
+  # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks,
+  # and not in a GTK build on a Mac, which tests the GTK backend instead.
+  if(APPLE AND NOT NGN_BACKEND STREQUAL "gtk")
     ngn_link_swift(ngn_core_tests)
     target_sources(ngn_core_tests PRIVATE
         appkit/updates.mm appkit/tests/update-crypto.test.mm
@@ -311,4 +314,6 @@ endif()
 # --- backends -------------------------------------------------------------------------------------
 if(NGN_BACKEND STREQUAL "appkit")
   add_subdirectory(appkit)
+elseif(NGN_BACKEND STREQUAL "gtk")
+  add_subdirectory(gtk)
 endif()

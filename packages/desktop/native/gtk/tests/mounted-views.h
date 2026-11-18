@@ -1,0 +1,181 @@
+// Views mounted the way the host mounts them: Fabric mutations through the core's MountingManager
+// into the GTK backend, in a surface widget filling a window that GTK draws, read back as pixels
+// through the window's own renderer (capture.h). Input is in-process only: GDK takes no event
+// from another process on a Mac, and has no public way to make one.
+#pragma once
+
+#include "../capture.h"
+#include "../gtk-backend.h"
+#include "../view-widget.h"
+
+#include "helpers.h"
+#include "ngn/desktop-view-props.h"
+#include "ngn/mounting-manager.h"
+#include "ngn/text-input.h"
+
+#include <react/renderer/mounting/MountingTransaction.h>
+
+#include <gtk/gtk.h>
+
+#include <cstdint>
+#include <memory>
+#include <stdexcept>
+
+namespace ngn::testing {
+
+// Props as a component's descriptor parses them from what the app commits.
+template <typename Descriptor>
+facebook::react::Props::Shared parsedProps(folly::dynamic raw) {
+  static auto context = std::make_shared<const facebook::react::ContextContainer>();
+  static Descriptor descriptor{{{}, context, nullptr}};
+  facebook::react::PropsParserContext parserContext{1, *context};
+  return descriptor.cloneProps(parserContext, nullptr, facebook::react::RawProps(std::move(raw)));
+}
+
+inline facebook::react::Props::Shared desktopViewProps(folly::dynamic raw) {
+  return parsedProps<DesktopViewComponentDescriptor>(std::move(raw));
+}
+
+inline facebook::react::Props::Shared textInputProps(folly::dynamic raw) {
+  return parsedProps<DesktopTextInputComponentDescriptor>(std::move(raw));
+}
+
+// GTK, once for the process. False where there is no display to open.
+inline bool gtkReady() {
+  static bool ready = gtk_init_check();
+  return ready;
+}
+
+// Runs GLib's loop until `done`, or throws after five seconds.
+template <typename Done>
+void runUntil(Done done) {
+  gint64 deadline = g_get_monotonic_time() + 5 * G_USEC_PER_SEC;
+  while (!done()) {
+    if (g_get_monotonic_time() > deadline) {
+      throw std::runtime_error("the GTK main loop never got there");
+    }
+    g_main_context_iteration(nullptr, FALSE);
+    g_usleep(1000);
+  }
+}
+
+// An RGBA pixel, unpremultiplied.
+struct Pixel {
+  int r{0}, g{0}, b{0}, a{0};
+};
+
+struct MountedViews {
+  static constexpr facebook::react::SurfaceId kSurface = 1;
+
+  std::shared_ptr<gtk::GtkBackend> backend = std::make_shared<gtk::GtkBackend>();
+  std::shared_ptr<MountingManager> mounting = std::make_shared<MountingManager>(backend, backend);
+  GtkWidget *window = nullptr;
+  GtkWidget *surface = nullptr;
+  int frames = 0;
+
+  MountedViews() {
+    window = gtk_window_new();
+    gtk_window_set_default_size(GTK_WINDOW(window), 200, 200);
+    gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
+    surface = gtk::makeSurfaceWidget(kSurface, nullptr);
+    gtk_window_set_child(GTK_WINDOW(window), surface);
+    backend->addSurface(kSurface, surface);
+    mount({facebook::react::ShadowViewMutation::CreateMutation(shadow(kSurface, "RootView", desktopViewProps(folly::dynamic::object()), {{0, 0}, {200, 200}}))});
+    gtk_window_present(GTK_WINDOW(window));
+    runUntil([this] { return gtk_widget_get_mapped(surface) && gtk_widget_get_frame_clock(surface); });
+    g_signal_connect(gtk_widget_get_frame_clock(surface), "after-paint", G_CALLBACK(+[](GdkFrameClock *, gpointer self) {
+      static_cast<MountedViews *>(self)->frames++;
+    }), this);
+  }
+
+  ~MountedViews() {
+    g_signal_handlers_disconnect_by_data(gtk_widget_get_frame_clock(surface), this);
+    backend->removeSurface(kSurface);
+    gtk_window_destroy(GTK_WINDOW(window));
+  }
+
+  MountedViews(const MountedViews &) = delete;
+  MountedViews &operator=(const MountedViews &) = delete;
+
+  static facebook::react::ShadowView shadow(
+      facebook::react::Tag tag,
+      const char *componentName,
+      facebook::react::Props::Shared props,
+      facebook::react::Rect frame) {
+    auto view = shadowView(tag, componentName, frame, std::move(props));
+    view.surfaceId = kSurface;
+    return view;
+  }
+
+  // Applies the mutations as a commit does, then waits for GTK to have laid them out and drawn them.
+  void mount(facebook::react::ShadowViewMutationList mutations) {
+    mounting->executeMount(kSurface, facebook::react::MountingTransaction(kSurface, 1, std::move(mutations), {}));
+    auto mounted = std::make_shared<bool>(false);
+    backend->runOnUiThread([mounted] { *mounted = true; });
+    runUntil([mounted] { return *mounted; });
+    settle();
+  }
+
+  // Waits for a frame drawn after now.
+  void settle() {
+    if (!window || !gtk_widget_get_mapped(surface)) {
+      return;
+    }
+    gtk_widget_queue_draw(surface);
+    int seen = frames;
+    runUntil([this, seen] { return frames > seen; });
+  }
+
+  // Creates `view` and inserts it as the last child of `parent`, or at `index`.
+  void add(const facebook::react::ShadowView &view, facebook::react::Tag parent = kSurface, int index = -1) {
+    if (index < 0) {
+      index = static_cast<int>(mounting->tree().find(parent)->children.size());
+    }
+    mount({facebook::react::ShadowViewMutation::CreateMutation(view),
+           facebook::react::ShadowViewMutation::InsertMutation(parent, view, index)});
+  }
+
+  void update(const facebook::react::ShadowView &view, facebook::react::Props::Shared props) {
+    auto current = mounting->tree().find(view.tag)->view;
+    auto next = current;
+    next.props = std::move(props);
+    mount({facebook::react::ShadowViewMutation::UpdateMutation(current, next, kSurface)});
+  }
+
+  GtkWidget *view(facebook::react::Tag tag) const {
+    return backend->view(tag);
+  }
+
+  // The surface's pixel at (x, y) in its points, as GTK draws it now.
+  Pixel pixel(int x, int y) const {
+    GdkTexture *texture = gtk::renderWidget(surface);
+    if (!texture) {
+      throw std::runtime_error("the surface did not render");
+    }
+    int width = gdk_texture_get_width(texture);
+    int height = gdk_texture_get_height(texture);
+    int scale = width / std::max(1, gtk_widget_get_width(surface));
+    std::vector<guchar> data(static_cast<size_t>(width) * height * 4);
+    gdk_texture_download(texture, data.data(), static_cast<size_t>(width) * 4);
+    g_object_unref(texture);
+    int px = std::clamp(x * scale + scale / 2, 0, width - 1);
+    int py = std::clamp(y * scale + scale / 2, 0, height - 1);
+    // GDK_MEMORY_DEFAULT: B, G, R, A, premultiplied.
+    const guchar *p = &data[(static_cast<size_t>(py) * width + px) * 4];
+    int a = p[3];
+    auto un = [a](int c) { return a == 0 ? 0 : std::min(255, c * 255 / a); };
+    return {un(p[2]), un(p[1]), un(p[0]), a};
+  }
+};
+
+inline bool reddish(const Pixel &p) {
+  return p.a > 200 && p.r > 200 && p.g < 60 && p.b < 60;
+}
+inline bool bluish(const Pixel &p) {
+  return p.a > 200 && p.b > 200 && p.r < 60 && p.g < 60;
+}
+inline bool greenish(const Pixel &p) {
+  return p.a > 200 && p.g > 200 && p.r < 60 && p.b < 60;
+}
+
+} // namespace ngn::testing

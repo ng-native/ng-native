@@ -11,7 +11,9 @@
 # one unreadable fail.
 FROM almalinux:9
 
-# CRB has ninja; EPEL has ccache. python3 builds ICU's filtered data.
+# CRB has ninja and the GTK and libadwaita headers; EPEL has ccache and Weston. python3 builds ICU's
+# filtered data. Xvfb, Weston, Mesa's software drivers, D-Bus and the fonts are for launching the
+# GTK host headless, under X11 and Wayland.
 RUN dnf -y install dnf-plugins-core epel-release \
  && dnf config-manager --set-enabled crb \
  && dnf -y module enable nodejs:24 \
@@ -21,6 +23,9 @@ RUN dnf -y install dnf-plugins-core epel-release \
       binutils diffutils file findutils procps-ng which \
       bzip2 tar unzip xz \
       libatomic sqlite-devel \
+      gtk4-devel libadwaita-devel pango-devel cairo-devel \
+      xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon dbus-tools \
+      dejavu-sans-fonts google-noto-sans-fonts \
  && dnf clean all
 
 ENV CC=clang CXX=clang++

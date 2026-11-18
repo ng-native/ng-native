@@ -94,6 +94,9 @@ struct DefaultMenuOptions {
 std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options);
 // macOS's bar (HostOs's menuBar for macOS).
 std::vector<MenuItem> macOSMenuBar(const DefaultMenuOptions &options);
+// Linux's (HostOs's menuBar for Linux): the app's groups, then a menu named for the app with About
+// and Quit. None of macOS's Hide, Services, Minimize, Zoom or window list.
+std::vector<MenuItem> linuxMenuBar(const DefaultMenuOptions &options);
 
 // The item with this command anywhere in `menus`, or null.
 const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, MenuCommand command);

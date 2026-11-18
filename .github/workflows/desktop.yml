@@ -2,8 +2,9 @@ name: Desktop host
 
 # The desktop host in @ng-native/desktop. On ubuntu, the toolkit-free core and its tests build with
 # no backend and no Hermes, which proves AppKit never leaks into the core. In the AlmaLinux 9 image
-# (native/docker), on x86_64 and arm64, the core, Hermes over a static ICU and the runtime half
-# build and their tests run, still with no backend, and what they link needs glibc 2.34 at most.
+# (native/docker), on x86_64 and arm64, the GTK host builds over Hermes with a static ICU, its tests
+# run (the GTK view tests under Xvfb), what it links needs glibc 2.34 at most, and it is launched on
+# an example app's bundle to its first frame under Xvfb and headless Weston.
 # On macOS, the AppKit host
 # builds as an app would build it, the core tests run there too, and the built host is launched on an
 # example app's bundle to its first frame. A pull request runs it only when
@@ -120,7 +121,7 @@ jobs:
       - if: always()
         run: ccache --show-stats
 
-  # The Linux build below the backend, in the AlmaLinux 9 image so its glibc is the floor. The image
+  # The Linux build with the GTK backend, in the AlmaLinux 9 image so its glibc is the floor. The image
   # is built on each run from native/docker: a few minutes of dnf, against a 2 GB image per
   # architecture that would take much of the repository's 10 GB of Actions cache. The workspace,
   # installed on the runner, is mounted at its own path, and the build runs as the runner's user,
@@ -172,22 +173,72 @@ jobs:
           path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
           key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
 
-      - name: Build the core, Hermes and the runtime half, and run their tests
+      # The GTK host and its tests: the core and runtime tests as they are, the GTK view tests under
+      # Xvfb, which needs no window manager and draws with Mesa's software GL.
+      - name: Build the GTK host and run its tests
         run: |
-          mkdir -p "$CCACHE_DIR" "$NGN_DESKTOP_CACHE"
+          mkdir -p "$CCACHE_DIR" "$NGN_DESKTOP_CACHE" "$GITHUB_WORKSPACE/.linux-probe"
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER \
+            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER -e GITHUB_WORKSPACE \
             -e CCACHE_DIR -e CCACHE_BASEDIR -e CCACHE_NOHASHDIR -e CCACHE_SLOPPINESS -e CCACHE_MAXSIZE \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
             bash -euo pipefail -c '
               ccache --zero-stats > /dev/null
               start=$(date +%s)
-              build=$(native/scripts/build.sh --backend none --runtime --test --no-debug-info | tail -n 1)
-              echo "Built and tested in $(( $(date +%s) - start ))s"
+              build=$(native/scripts/build.sh --backend gtk --no-debug-info | tail -n 1)
+              echo "Built in $(( $(date +%s) - start ))s"
               ccache --show-stats
-              native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" \
+              echo "$build" > "$GITHUB_WORKSPACE/.linux-probe/build-dir"
+              "$build/ngn_core_tests"
+              "$build/ngn_runtime_tests"
+              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              xvfb=$!
+              trap "kill $xvfb" EXIT
+              DISPLAY=:99 GDK_BACKEND=x11 GTK_A11Y=none "$build/gtk/ngn_gtk_tests"
+              native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" "$build/gtk/ngn-linux" \
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
             '
+
+      # The host launched on the notes example's release bundle to its first frame, under Xvfb (X11)
+      # and headless Weston (Wayland), as launch-probe.sh checks it: a commit, a first frame, no crash
+      # and no JavaScript error. The bundle is the macOS one until Linux is an OS Metro knows. Each
+      # launch saves its window, drawn in-process, for the artifact below.
+      - name: Launch the GTK host on an app
+        env:
+          EXPO_NO_TELEMETRY: '1'
+        run: |
+          probe="$GITHUB_WORKSPACE/.linux-probe"
+          (cd examples/notes && pnpm exec expo export:embed --platform macos --dev false \
+            --bundle-output "$probe/notes/main.js" --assets-dest "$probe/notes/assets")
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e NGN_DESKTOP_CACHE -e GITHUB_WORKSPACE \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
+            bash -euo pipefail -c '
+              probe="$GITHUB_WORKSPACE/.linux-probe"
+              host="$(cat "$probe/build-dir")/gtk/ngn-linux"
+              export GTK_A11Y=none
+              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              xvfb=$!
+              DISPLAY=:99 GDK_BACKEND=x11 NGN_CAPTURE="$probe/x11.png" \
+                native/scripts/launch-probe.sh "$host" "$probe/notes/main.js"
+              kill $xvfb
+              export XDG_RUNTIME_DIR="$(mktemp -d)"
+              weston --backend=headless-backend.so --use-pixman --socket=ngn-wayland --width=1280 --height=800 \
+                > "$probe/weston.log" 2>&1 &
+              weston=$!
+              for _ in $(seq 50); do [ -S "$XDG_RUNTIME_DIR/ngn-wayland" ] && break; sleep 0.2; done
+              WAYLAND_DISPLAY=ngn-wayland GDK_BACKEND=wayland NGN_CAPTURE="$probe/wayland.png" \
+                native/scripts/launch-probe.sh "$host" "$probe/notes/main.js"
+              kill $weston
+            '
+
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-first-frame-${{ matrix.arch }}
+          path: |
+            .linux-probe/*.png
+            .linux-probe/weston.log
+          if-no-files-found: ignore
 
       - if: github.event_name != 'pull_request'
         uses: actions/cache/save@v6

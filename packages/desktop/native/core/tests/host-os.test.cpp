@@ -130,3 +130,19 @@ TEST_CASE("Device's OS name and a push token's type are the OS's") {
   REQUIRE(heard.size() == 1);
   CHECK(heard[0]["token"]["type"] == "otheros");
 }
+
+TEST_CASE("Linux's profile: Ctrl for shortcuts, Alt and the arrows for back and forward, no Homebrew") {
+  auto os = ngn::linuxOs();
+  CHECK(os.id == "linux");
+  CHECK(os.name == "Linux");
+  CHECK(os.program == "ngn-linux");
+  CHECK(os.primaryModifier == ngn::Control);
+  CHECK(ngn::navigationFor(ngn::KeyChord{.key = "ArrowLeft", .modifiers = ngn::Option}, os) == ngn::NavigationDirection::Back);
+  CHECK(ngn::navigationFor(ngn::KeyChord{.key = "ArrowRight", .modifiers = ngn::Option}, os) == ngn::NavigationDirection::Forward);
+  CHECK_FALSE(ngn::navigationFor(ngn::KeyChord{.key = "[", .modifiers = ngn::Command}, os));
+  ngn::ProgramLookup lookup{
+      .isExecutable = [](const std::string &path) { return path == "/opt/homebrew/bin/ffmpeg" || path == "/usr/bin/ffmpeg"; },
+      .searchPath = os.searchPath,
+  };
+  CHECK(ngn::resolveProgram("ffmpeg", lookup) == "/usr/bin/ffmpeg");
+}
