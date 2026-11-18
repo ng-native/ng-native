@@ -9,8 +9,10 @@ namespace ngn::gtk {
 
 void onMainContext(std::function<void()> task) {
   auto *heap = new std::function<void()>(std::move(task));
-  g_main_context_invoke_full(
-      nullptr, G_PRIORITY_DEFAULT,
+  // Queued for the loop to dispatch, always: g_main_context_invoke runs the task on the calling
+  // thread when it can take the context, which another thread can between two of the loop's turns.
+  g_idle_add_full(
+      G_PRIORITY_DEFAULT,
       [](gpointer data) -> gboolean {
         (*static_cast<std::function<void()> *>(data))();
         return G_SOURCE_REMOVE;
@@ -83,6 +85,11 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
         // The app decides, when it listens; otherwise the window closes as the OS would close it.
         if (!host || host->closeRequested(r->surface)) {
           r->windows->close(r->surface);
+          // Linux's convention: the app quits when the user closes its last window. Only here, not
+          // in close: a reload closes the app's windows too, before it opens their replacements.
+          if (r->windows->windows_.empty() && r->windows->hooks_.lastWindowClosed) {
+            r->windows->hooks_.lastWindowClosed();
+          }
         }
         return TRUE;
       }),
@@ -124,10 +131,6 @@ void GtkWindows::close(SurfaceId surface) {
     hooks_.stopSurface(surface);
   }
   gtk_window_destroy(GTK_WINDOW(window));
-  // Linux's convention: the app quits with its last window.
-  if (windows_.empty() && hooks_.quit) {
-    hooks_.quit();
-  }
 }
 
 void GtkWindows::focusWindow(SurfaceId surface) {

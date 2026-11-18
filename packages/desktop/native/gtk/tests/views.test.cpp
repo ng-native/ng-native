@@ -3,7 +3,12 @@
 // window's renderer draws.
 #include "mounted-views.h"
 
+#include "../app-windows.h"
+
 #include <doctest/doctest.h>
+
+#include <atomic>
+#include <thread>
 
 using namespace facebook::react;
 using folly::dynamic;
@@ -145,4 +150,40 @@ TEST_CASE("a covered screen is hidden without being unmounted, and shows again")
   views.backend->setCovered(MountedViews::kSurface, 2, false);
   views.settle();
   CHECK(reddish(views.pixel(50, 50)));
+}
+
+TEST_CASE("work queued for the UI thread runs on it, never on the thread that queued it") {
+  REQUIRE(ngn::testing::gtkReady());
+  std::atomic<bool> ran{false};
+  std::thread::id ranOn;
+  // Nothing iterates the default context while the worker queues: it could take it and run there.
+  std::thread worker([&] {
+    ngn::gtk::onMainContext([&] {
+      ranOn = std::this_thread::get_id();
+      ran = true;
+    });
+  });
+  worker.join();
+  ngn::testing::runUntil([&] { return ran.load(); });
+  CHECK(ranOn == std::this_thread::get_id());
+}
+
+TEST_CASE("the user closing the last window is the host's to act on; the app or a reload closing it is not") {
+  REQUIRE(ngn::testing::gtkReady());
+  int quits = 0, lastClosed = 0;
+  ngn::gtk::GtkWindows windows({.quit = [&] { quits++; }, .lastWindowClosed = [&] { lastClosed++; }});
+  windows.openWindow(10, ngn::WindowRequest{.title = "First"}, ngn::WindowPlacement{}, nullptr);
+  ngn::testing::runUntil([&] { return windows.window(10) != nullptr; });
+  // As WindowHost::reloading closes an unkeyed window.
+  windows.closeWindow(10);
+  ngn::testing::runUntil([&] { return windows.window(10) == nullptr; });
+  CHECK(lastClosed == 0);
+  CHECK(quits == 0);
+
+  windows.openWindow(11, ngn::WindowRequest{.title = "Second"}, ngn::WindowPlacement{}, nullptr);
+  ngn::testing::runUntil([&] { return windows.window(11) != nullptr; });
+  gtk_window_close(GTK_WINDOW(windows.window(11)));
+  ngn::testing::runUntil([&] { return windows.window(11) == nullptr; });
+  CHECK(lastClosed == 1);
+  CHECK(quits == 0);
 }
