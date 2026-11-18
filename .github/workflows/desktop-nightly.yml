@@ -98,6 +98,7 @@ jobs:
           name: linux-host-${{ matrix.arch }}
           path: .linux-nightly
           retention-days: 3
+          include-hidden-files: true
           if-no-files-found: error
 
   # The built host on each distribution, as a person installs and runs it there.
@@ -162,4 +163,5 @@ jobs:
         with:
           name: linux-nightly-${{ matrix.distro }}-${{ matrix.arch }}
           path: .linux-nightly/out
+          include-hidden-files: true
           if-no-files-found: ignore
