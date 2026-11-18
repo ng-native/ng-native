@@ -105,8 +105,16 @@ target_compile_definitions(ngn-macos PRIVATE NGN_REACT_NATIVE_VERSION="${_rn_ver
 # The hermesc built with the Hermes the binary links, beside it, where `package` takes it from to
 # compile the bundle to bytecode of the version this Hermes runs.
 add_custom_command(TARGET ngn-macos POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGN_HERMES_BUILD}/bin/hermesc $<TARGET_FILE_DIR:ngn-macos>/hermesc
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGN_HERMESC} $<TARGET_FILE_DIR:ngn-macos>/hermesc
     VERBATIM)
+# React Native's prebuilt Hermes beside the binary, which loads it from there in a build and
+# `package` embeds in Contents/Frameworks.
+if(NGN_HERMES_FRAMEWORK)
+  add_custom_command(TARGET ngn-macos POST_BUILD
+      COMMAND rm -rf $<TARGET_FILE_DIR:ngn-macos>/hermesvm.framework
+      COMMAND ditto ${NGN_HERMES_FRAMEWORK} $<TARGET_FILE_DIR:ngn-macos>/hermesvm.framework
+      VERBATIM)
+endif()
 
 # Sparkle's framework beside the binary, where `package --format dmg` takes it from to embed it.
 # The binary never links it: it loads it at runtime in a dmg build only (app-updater.mm).
@@ -125,6 +133,9 @@ if(NGN_TESTS)
     tests/views/tab-walk.test.mm tests/views/camera-view.test.mm tests/views/text-input-alignment.test.mm)
   target_include_directories(ngn_appkit_tests PRIVATE ../core/tests)
   target_link_libraries(ngn_appkit_tests PRIVATE ngn_appkit doctest ${NGN_APPKIT_FRAMEWORKS})
+  if(NGN_HERMES_TEST_RPATH)
+    target_link_options(ngn_appkit_tests PRIVATE ${NGN_HERMES_TEST_RPATH})
+  endif()
   ngn_link_swift(ngn_appkit_tests)
   add_test(NAME appkit COMMAND ngn_appkit_tests)
 endif()
