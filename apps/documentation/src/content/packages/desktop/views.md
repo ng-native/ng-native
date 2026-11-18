@@ -76,7 +76,8 @@ an `AdwToggleGroup` on libadwaita 1.7 and later and a linked row of toggle butto
 `<search-field>` a `GtkSearchEntry`, which sends each change as it is typed. `<date-time-picker>`
 is a button showing the date that opens a `GtkCalendar`, keeping the time of day and the picker's
 bounds. A `datetime` picker picks its day the same way and shows its time, and the `time` and
-`countdown` modes show the time and pick nothing yet. `controlSize`, `sfSymbol` and the search field's font props do nothing there.
+`countdown` modes show the time and pick nothing yet. `controlSize`, `sfSymbol` and the search
+field's font props do nothing there.
 
 ## Text inputs
 
