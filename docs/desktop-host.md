@@ -26,7 +26,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   the content through `scrollers.h`. An Image reads its source through the core's
   `loadImageSource` (`image-source.h`), which keeps what a GET fetched over http(s) in memory for
   the process in place of macOS's URL cache, and GDK decodes it off the UI thread. Linking opens
-  a url with `GtkUriLauncher`, which goes through the desktop portal inside a sandbox.
+  a url with `GtkUriLauncher`, which goes through the desktop portal inside a sandbox. An svg
+  draws the core's document of react-native-svg's elements (`svg.h`) with `cairo-canvas.h`, a
+  cairo node in the view's snapshot, since GSK fills and strokes paths only from GTK 4.14; text in
+  an svg is Pango's, and a `foreignObject`'s views are not drawn.
   Accessibility is GTK's own: each widget is made with the GTK role for the view's ARIA role,
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
