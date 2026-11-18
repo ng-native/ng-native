@@ -1,8 +1,8 @@
 /**
- * `@ng-native/template-desktop`, the starter for a macOS-only app, is the mobile template with the
- * phone left out. The files they share stay identical, so a fix to one reaches both, and its
- * config is what `ng-native-desktop` needs: macOS listed, with Expo's out-of-tree platforms flag,
- * and the desktop config plugin.
+ * `@ng-native/template-desktop`, the starter for a macOS and Linux app, is the mobile template with
+ * the phone left out. The files they share stay identical, so a fix to one reaches both, and its
+ * config is what `ng-native-desktop` needs: macOS and Linux listed, with Expo's out-of-tree
+ * platforms flag, and the desktop config plugin.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -38,11 +38,12 @@ describe('the desktop template', () => {
     const agents = (root: string) => read(root, 'AGENTS.md').toString('utf8');
     assert.deepEqual(outside(agents(desktop)), outside(agents(mobile)));
     assert.match(agents(desktop), /^npm run macos /m);
+    assert.match(agents(desktop), /^npm run linux /m);
   });
 
-  it('lists macOS alone, with the out-of-tree platforms flag and the desktop plugin', () => {
+  it('lists macOS and Linux alone, with the out-of-tree platforms flag and the desktop plugin', () => {
     const { expo } = json(desktop, 'app.json');
-    assert.deepEqual(expo.platforms, ['macos']);
+    assert.deepEqual(expo.platforms, ['macos', 'linux']);
     assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
     assert.deepEqual(expo.plugins, ['@ng-native/metro', '@ng-native/desktop']);
     for (const key of ['ios', 'android', 'orientation']) assert.equal(expo[key], undefined, key);
@@ -56,6 +57,7 @@ describe('the desktop template', () => {
     const { scripts } = json(desktop, 'package.json');
     const theirs = json(mobile, 'package.json').scripts;
     assert.deepEqual(Object.keys(scripts).sort(), [
+      'linux',
       'macos',
       'package',
       'start',
@@ -63,19 +65,27 @@ describe('the desktop template', () => {
       'typecheck',
     ]);
     assert.equal(scripts.macos, 'ng-native-desktop run');
+    assert.equal(scripts.linux, 'ng-native-desktop run');
     assert.equal(scripts.package, 'ng-native-desktop package');
     for (const name of ['start', 'typecheck']) assert.equal(scripts[name], theirs[name]);
-    // Its Vitest config has a project that opens the app, so `npm test` names the Node one.
-    assert.equal(scripts.test, 'vitest run --project node-macos');
+    // Its Vitest config has projects that open the app, so `npm test` names the Node ones.
+    assert.equal(scripts.test, 'vitest run --project node-macos --project node-linux');
   });
 
-  it('tests in Node as macOS, and inside the app with `vitest --project macos`', () => {
+  it('tests in Node as each OS, and inside the app with `vitest --project macos`', () => {
     const config = read(desktop, 'vitest.config.mts').toString('utf8');
-    assert.match(config, /ngNative\(\{ os: 'macos' \}\)\], test: \{ name: 'node-macos' \}/);
+    for (const os of ['macos', 'linux']) {
+      assert.match(
+        config,
+        new RegExp(`ngNative\\(\\{ os: '${os}' \\}\\)\\], test: \\{ name: 'node-${os}' \\}`),
+        os,
+      );
+    }
     assert.match(config, /deviceTests\(\{ platform: 'macos' \}\)/);
     const readme = read(desktop, 'README.md').toString('utf8');
     assert.match(readme, /vitest --project macos/);
-    assert.match(readme, /`node-macos`/);
+    assert.match(readme, /npm run linux/);
+    assert.match(readme, /`node-macos` and `node-linux`/);
     assert.match(readme, /EXPO_PUBLIC_DEVICE_TESTS=1/);
   });
 
@@ -101,6 +111,13 @@ describe('the desktop template', () => {
 
   it('has an in-app test beside the Node one', () => {
     assert.match(read(desktop, 'src/app/app.device.ts').toString('utf8'), /Platform\.OS/);
+  });
+
+  it('sizes its starter screen for a desktop on Linux as on macOS', () => {
+    const app = read(desktop, 'src/app/app.ts').toString('utf8');
+    for (const part of ['content', 'title', 'hint']) {
+      assert.match(app, new RegExp(`:host-context\\(\\.platform-linux\\) \\.${part}`), part);
+    }
   });
 
   it("takes the mobile template's version of every dependency they share", () => {

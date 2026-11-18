@@ -44,7 +44,7 @@
     "desktop": {
       "factory": "./desktop/index.cjs#desktop",
       "schema": "./desktop/schema.json",
-      "description": "Adds macOS to an Angular Native app: @ng-native/desktop, macos in expo.platforms with Expo's out-of-tree platforms flag, the config plugin, and macos and package targets."
+      "description": "Adds macOS and Linux to an Angular Native app: @ng-native/desktop, macos and linux in expo.platforms with Expo's out-of-tree platforms flag, the config plugin, and macos, linux and package targets."
     },
     "mobile": {
       "factory": "./mobile/index.cjs#mobile",

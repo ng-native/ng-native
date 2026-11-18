@@ -1095,11 +1095,11 @@ describe('generators.json', () => {
 });
 
 describe('with --desktopOnly', () => {
-  it("writes the desktop template's app: macOS alone, with its starter screen", async () => {
+  it("writes the desktop template's app: macOS and Linux alone, with its starter screen", async () => {
     const tree = pnpmWorkspace();
     await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
     const { expo } = JSON.parse(tree.read('apps/desktop/app.json', 'utf-8')!);
-    assert.deepEqual(expo.platforms, ['macos']);
+    assert.deepEqual(expo.platforms, ['macos', 'linux']);
     assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
     assert.ok(expo.plugins.includes('@ng-native/desktop'));
     assert.equal(expo.android, undefined);
@@ -1129,17 +1129,21 @@ describe('with --desktopOnly', () => {
     assert.ok(readJson(integratedTree, 'package.json').dependencies['@ng-native/desktop']);
   });
 
-  it('runs on macOS with macos and package targets, and names them in AGENTS.md', async () => {
+  it('runs on macOS and Linux with macos, linux and package targets, and names them in AGENTS.md', async () => {
     const tree = pnpmWorkspace();
     await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
     const { targets } = readProjectConfiguration(tree, '@proj/desktop');
     assert.equal(targets!['macos'].options.command, 'ng-native-desktop run');
+    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run');
     assert.equal(targets!['package'].options.command, 'ng-native-desktop package');
     assert.equal(targets!['run-ios'], undefined);
     const agents = tree.read('apps/desktop/AGENTS.md', 'utf-8')!;
     assert.match(agents, /^nx run @proj\/desktop:macos +# /m);
+    assert.match(agents, /^nx run @proj\/desktop:linux +# /m);
     assert.doesNotMatch(agents, /run-ios|Expo Go/);
-    assert.match(tree.read('apps/desktop/.gitignore', 'utf-8')!, /^\/dist\/macos$/m);
+    const ignore = tree.read('apps/desktop/.gitignore', 'utf-8')!;
+    assert.match(ignore, /^\/dist\/macos$/m);
+    assert.match(ignore, /^\/dist\/linux$/m);
   });
 
   // Whether Nx runs @nx/expo's plugin on `file`, by the include and exclude globs of each of its
@@ -1269,7 +1273,10 @@ describe('with --desktopOnly', () => {
       ),
     );
     assert.equal(targets!['test'].options.command, template.scripts.test);
-    assert.equal(targets!['test'].options.command, 'vitest run --project node-macos');
+    assert.equal(
+      targets!['test'].options.command,
+      'vitest run --project node-macos --project node-linux',
+    );
   });
 
   it('is the default for every app once init sets it', async () => {
