@@ -20,8 +20,8 @@ smaller type and denser rows than a phone, so an app gives the Mac its own sizes
 
 ## Giving the Mac its own
 
-The `macos:` and `desktop:` Tailwind variants, and the `platform-macos` class on the root, match on
-a Mac only:
+The `macos:` Tailwind variant and the `platform-macos` class on the root match on a Mac only, and
+`desktop:` on a Mac and on Linux:
 
 ```html
 <text class="text-base macos:text-[13px]">Inbox</text> <view class="h-11 macos:h-7">...</view>
