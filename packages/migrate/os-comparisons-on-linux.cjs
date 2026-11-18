@@ -33,7 +33,7 @@ function why(operator, literal) {
   }
   if (literal === 'macos') {
     return negated
-      ? "is true on Linux, where the OS is 'linux'. If the branch is for every OS but a desktop one, inject DESKTOP instead."
+      ? "is true on Linux, where the OS is 'linux'. If the branch is for every OS but a desktop one, check !inject(DESKTOP) instead."
       : "is false on Linux, where the OS is 'linux'. If the branch is for every desktop OS, inject DESKTOP instead.";
   }
   if (literal === 'android' && negated) {
