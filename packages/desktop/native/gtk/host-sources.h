@@ -11,6 +11,7 @@
 #include "ngn/system.h"
 #include "ngn/tray-and-dock.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -20,6 +21,10 @@ namespace ngn::gtk {
 // the clipboard in memory (GDK's is asynchronous, which System's is not), alerts logged and
 // cancelled until the dialogs come.
 std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory);
+
+// Whether Linking can open `uri`: one with a scheme the desktop has an app for. Inside a sandbox the
+// desktop portal decides as it opens it, so any scheme can be tried there.
+bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool(const std::string &scheme)> &hasHandler);
 
 // Strings in a key file at `path`, written on each change.
 std::shared_ptr<StringStore> makeKeyFileStore(const std::string &path);

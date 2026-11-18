@@ -3,11 +3,16 @@
 #include "app-windows.h"
 
 #include <adwaita.h>
+#if __has_include(<gio/gdesktopappinfo.h>)
+#include <gio/gdesktopappinfo.h>
+#define NGN_DESKTOP_APP_INFO 1
+#endif
 #include <gtk/gtk.h>
 
 #include <sys/utsname.h>
 
 #include <atomic>
+#include <memory>
 #include <cstdio>
 #include <mutex>
 
@@ -67,6 +72,63 @@ void sizePrepared(GdkPixbufLoader *, int width, int height, gpointer out) {
   *static_cast<ImageSize *>(out) = std::make_pair<double, double>(width, height);
 }
 
+// Inside a Flatpak or a Snap, where the desktop portal opens a uri and no handler is visible.
+bool sandboxed() {
+  return g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS) || g_getenv("SNAP") != nullptr;
+}
+
+// The window the app is in front with, which a launched app is placed against and takes its
+// activation token from.
+GtkWindow *frontWindow() {
+  GtkWindow *front = nullptr;
+  GListModel *windows = gtk_window_get_toplevels();
+  for (guint i = 0, n = g_list_model_get_n_items(windows); i < n; ++i) {
+    auto *window = GTK_WINDOW(g_list_model_get_item(windows, i));
+    g_object_unref(window);
+    if (gtk_widget_get_visible(GTK_WIDGET(window)) && (!front || gtk_window_is_active(window))) {
+      front = window;
+    }
+  }
+  return front;
+}
+
+// Opens `uri` in the app the desktop chose for it, through the OpenURI portal when the app is
+// sandboxed, answering once it has launched or failed.
+void launchUri(const std::string &uri, std::function<void(bool)> done) {
+  GtkUriLauncher *launcher = gtk_uri_launcher_new(uri.c_str());
+  auto *heap = new std::function<void(bool)>(std::move(done));
+  gtk_uri_launcher_launch(launcher, frontWindow(), nullptr, +[](GObject *source, GAsyncResult *result, gpointer data) {
+    std::unique_ptr<std::function<void(bool)>> done(static_cast<std::function<void(bool)> *>(data));
+    GError *error = nullptr;
+    bool launched = gtk_uri_launcher_launch_finish(GTK_URI_LAUNCHER(source), result, &error);
+    if (error) {
+      fprintf(stderr, "[ngn] could not open a url: %s\n", error->message);
+      g_error_free(error);
+    }
+    (*done)(launched);
+  }, heap);
+  g_object_unref(launcher);
+}
+
+// The desktop's own settings app, GNOME's or KDE Plasma's. None in the dev loop on a Mac, whose
+// GLib has no desktop files.
+bool launchSettingsApp() {
+#ifndef NGN_DESKTOP_APP_INFO
+  return false;
+#else
+  for (const char *id : {"org.gnome.Settings.desktop", "gnome-control-center.desktop", "systemsettings.desktop", "org.kde.systemsettings.desktop"}) {
+    if (GDesktopAppInfo *app = g_desktop_app_info_new(id)) {
+      bool launched = g_app_info_launch(G_APP_INFO(app), nullptr, nullptr, nullptr);
+      g_object_unref(app);
+      if (launched) {
+        return true;
+      }
+    }
+  }
+  return false;
+#endif
+}
+
 std::string systemScheme() {
   return adw_style_manager_get_dark(adw_style_manager_get_default()) ? "dark" : "light";
 }
@@ -80,6 +142,9 @@ class GtkSystem final : public System {
     g_signal_connect(adw_style_manager_get_default(), "notify::dark", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer self) {
       static_cast<GtkSystem *>(self)->scheme_.systemChanged(systemScheme());
     }), this);
+  }
+  ~GtkSystem() override {
+    g_signal_handlers_disconnect_by_data(adw_style_manager_get_default(), this);
   }
 
   DeviceFacts facts() override {
@@ -98,22 +163,21 @@ class GtkSystem final : public System {
     return {.osVersion = name.release, .systemName = "Linux", .locale = locale, .rightToLeft = gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL};
   }
   void openUrl(const std::string &url, std::function<void(bool)> done) override {
-    onMainContext([url, done = std::move(done)] { done(g_app_info_launch_default_for_uri(url.c_str(), nullptr, nullptr)); });
+    onMainContext([url, done = std::move(done)]() mutable { launchUri(url, std::move(done)); });
   }
   bool canOpenUrl(const std::string &url) override {
-    gchar *scheme = g_uri_parse_scheme(url.c_str());
-    if (!scheme) {
-      return false;
-    }
-    GAppInfo *app = g_app_info_get_default_for_uri_scheme(scheme);
-    g_free(scheme);
-    if (app) {
-      g_object_unref(app);
-    }
-    return app != nullptr;
+    return canOpenUri(url, sandboxed(), [](const std::string &scheme) {
+      GAppInfo *app = g_app_info_get_default_for_uri_scheme(scheme.c_str());
+      if (app) {
+        g_object_unref(app);
+      }
+      return app != nullptr;
+    });
   }
   void openSettings(std::function<void(bool)> done) override {
-    done(false);
+    // A Linux app has no page of its own in the desktop's settings: this opens them, as macOS opens
+    // System Settings.
+    onMainContext([done = std::move(done)] { done(launchSettingsApp()); });
   }
   std::string colorScheme() override {
     return scheme_.current();
@@ -220,6 +284,16 @@ class FixedControls final : public ControlMeasurer {
 };
 
 } // namespace
+
+bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool(const std::string &scheme)> &hasHandler) {
+  gchar *scheme = g_uri_parse_scheme(uri.c_str());
+  if (!scheme) {
+    return false;
+  }
+  std::string name = scheme;
+  g_free(scheme);
+  return sandboxed || hasHandler(name);
+}
 
 std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory) {
   return std::make_shared<GtkSystem>(appId, appDataDirectory);

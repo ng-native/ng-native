@@ -9,6 +9,8 @@
 
 #include "pango-text.h"
 
+#include "ngn/desktop-props.h"
+
 #include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/core/LayoutMetrics.h>
 #include <react/renderer/core/Props.h>
@@ -17,6 +19,7 @@
 #include <gtk/gtk.h>
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -27,19 +30,30 @@ G_END_DECLS
 
 namespace ngn::gtk {
 
+struct ImageLoad;
+struct ScrollBox;
 struct TextField;
 
 struct ViewData {
+  // The widget holding this data, which a view whose role changes trades for another.
+  GtkWidget *widget{nullptr};
   facebook::react::Tag tag{-1};
   std::string component;
   facebook::react::Props::Shared props;
   facebook::react::State::Shared state;
   facebook::react::SharedEventEmitter emitter;
   facebook::react::LayoutMetrics layout{};
+  DesktopProps desktop;
   // A Paragraph's text, laid out on the first draw after its state or frame changed.
   std::optional<TextLayout> text;
   // A TextInput's field: the editable child it holds.
   TextField *field{nullptr};
+  // An Image's source and the image it loaded.
+  std::shared_ptr<ImageLoad> image;
+  // A ScrollView's scrolled window, which holds the document its content mounts into.
+  ScrollBox *scroll{nullptr};
+  // A scroll view's document: as large as the content it scrolls, which GTK reads from its measure.
+  ScrollBox *documentOf{nullptr};
 
   // A surface's widget: its root view fills it, and it reports its size as it changes.
   bool surface{false};

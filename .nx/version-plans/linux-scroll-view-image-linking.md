@@ -1,0 +1,5 @@
+---
+__default__: patch
+---
+
+The GTK desktop host on Linux draws `<scroll-view>` and `<image>`, and `Linking` opens urls there. A scroll view scrolls with the wheel, the touchpad and its scroll bars, which follow the desktop's overlay scrolling setting; it reports `(scroll)`, starts at its `contentOffset`, answers `scrollTo` and `scrollToEnd`, and stops scrolling with `scrollEnabled` false. An image loads a bundled, local, `data:` or remote source with its method, headers and body, draws it by `resizeMode` as the macOS host does, and reports `(loadStart)`, `(load)` with its size, `(error)` and `(loadEnd)`. Unlike macOS, an image fetched over http(s) is kept in memory for as long as the app runs rather than in the system's URL cache. `Linking.openURL` opens a url in the app the desktop chose for it, through the desktop portal inside a Flatpak or Snap, and `Linking.openSettings` opens GNOME's or KDE Plasma's settings app, whichever is installed.

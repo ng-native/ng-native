@@ -20,7 +20,13 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
 - `native/appkit`: the AppKit backend and the `ngn-macos` binary.
 - `native/gtk`: the GTK 4 backend and the `ngn-linux` binary: a `GtkWidget` per view, painted as
   GSK render nodes in its `snapshot`, Pango text, a `GtkText` per single-line text input, and the
-  pointer fed to the core's input dispatcher from a capture-phase controller on each surface.
+  pointer fed to the core's input dispatcher from a capture-phase controller on each surface. A
+  ScrollView is a `GtkScrolledWindow` whose document holds the content, telling the core's hit
+  test each offset, with classic scroll bars (`gtk-overlay-scrolling` off) taking their gutter from
+  the content through `scrollers.h`. An Image reads its source through the core's
+  `loadImageSource` (`image-source.h`), which keeps what a GET fetched over http(s) in memory for
+  the process in place of macOS's URL cache, and GDK decodes it off the UI thread. Linking opens
+  a url with `GtkUriLauncher`, which goes through the desktop portal inside a sandbox.
   Accessibility is GTK's own: each widget is made with the GTK role for the view's ARIA role,
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
@@ -33,8 +39,8 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   timeouts (the longest silence), decoded bodies and `file:` and `data:` urls. Unlike macOS, its
   cookies last only as long as the process, and it takes a proxy only from the `http_proxy`,
   `https_proxy` and `no_proxy` environment variables, not the desktop's settings. Linux is
-  not yet an app target: the bundle it runs is exported for `macos`, and scroll views, images,
-  menus and the libadwaita chrome come in later steps.
+  not yet an app target: the bundle it runs is exported for `macos`, and menus and the
+  libadwaita chrome come in later steps.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android
