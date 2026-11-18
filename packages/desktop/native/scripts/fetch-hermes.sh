@@ -41,23 +41,32 @@ if [ ! -d "$framework" ] || [ ! -x "$OUT/destroot/bin/hermesc" ]; then
   # The lock holds its owner's process ID. One whose owner has exited (killed before its trap ran)
   # is taken over; one held by a running build is waited on, for at most ten minutes.
   lock="$OUT.lock"
-  for waited in $(seq 0 600); do
+  acquired=0
+  absent=0
+  for _ in $(seq 600); do
     if mkdir "$lock" 2>/dev/null; then
       echo $$ > "$lock/pid"
+      acquired=1
       break
     fi
-    [ -d "$lock" ] || { echo "fetch-hermes.sh: cannot create $lock" >&2; exit 1; }
+    # No lock, yet mkdir failed: its holder may have just released it, so retry, a few times.
+    if [ ! -d "$lock" ]; then
+      absent=$((absent + 1))
+      [ "$absent" -lt 5 ] && continue
+      echo "fetch-hermes.sh: cannot create $lock" >&2
+      exit 1
+    fi
     owner="$(cat "$lock/pid" 2>/dev/null || true)"
     if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
       rm -rf "$lock"
       continue
     fi
-    if [ "$waited" = 600 ]; then
-      echo "fetch-hermes.sh: $lock is still held after ten minutes; delete it if no build is running" >&2
-      exit 1
-    fi
     sleep 1
   done
+  if [ "$acquired" != 1 ]; then
+    echo "fetch-hermes.sh: $lock is still held after ten minutes; delete it if no build is running" >&2
+    exit 1
+  fi
   trap 'rm -rf "$tmp" "$lock"' EXIT
   if [ ! -d "$framework" ] || [ ! -x "$OUT/destroot/bin/hermesc" ]; then
     rm -rf "$OUT"
