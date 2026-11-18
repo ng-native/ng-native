@@ -336,14 +336,19 @@ export function prepareHost(sys, options) {
     const dir = found.get(name) ?? sys.resolvePackage(cwd, name);
     return dir === null ? [] : [{ name, dir }];
   });
+  // prebuilt.json lists macOS hosts only, so a Linux host is built from source.
+  const prebuilt =
+    os === 'macos'
+      ? prebuiltHost(sys, reactNative, {
+          // A packaged app ships the Release host; a dev run gets the one with the debugger.
+          flavour: options.release ? 'release' : 'debug',
+          deny,
+          linked: libraries.length + appModules.length,
+          hostLibraries,
+        })
+      : null;
   const buildDir =
-    prebuiltHost(sys, reactNative, {
-      // A packaged app ships the Release host; a dev run gets the one with the debugger.
-      flavour: options.release ? 'release' : 'debug',
-      deny,
-      linked: libraries.length + appModules.length,
-      hostLibraries,
-    }) ??
+    prebuilt ??
     buildHost(
       sys,
       reactNative,
