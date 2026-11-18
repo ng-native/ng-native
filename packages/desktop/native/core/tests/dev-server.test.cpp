@@ -1,6 +1,7 @@
 #include "ngn/dev-server.h"
 
 #include <doctest/doctest.h>
+#include <stdexcept>
 
 TEST_CASE("a Metro bundle URL names the dev server, the entry and the OS") {
   auto server = ngn::DevServer::fromBundleUrl(
@@ -67,4 +68,13 @@ TEST_CASE("an IPv6 dev server keeps its brackets and its port") {
   CHECK(unported->port == 443);
   CHECK_FALSE(ngn::DevServer::fromBundleUrl("http://[::1]x/index.bundle"));
   CHECK_FALSE(ngn::DevServer::fromBundleUrl("http://[::1/index.bundle"));
+}
+
+TEST_CASE("the dev server's OS is the host's, and an empty one is refused") {
+  ngn::setDevServerOs("linux");
+  CHECK(ngn::devServerOs() == "linux");
+  CHECK_THROWS_AS(ngn::setDevServerOs(""), std::invalid_argument);
+  CHECK(ngn::devServerOs() == "linux");
+  ngn::setDevServerOs("macos");
+  CHECK(ngn::devServerOs() == "macos");
 }
