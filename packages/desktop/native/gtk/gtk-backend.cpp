@@ -122,6 +122,10 @@ void GtkBackend::createView(const ShadowView &view) {
     applyScrollViewState(*d);
   } else if (d->component == "Image") {
     applyImageProps(*d, gtk_widget_get_scale_factor(widget));
+  } else if (d->component.starts_with("RNSVG") && d->component != "RNSVGSvgView") {
+    // react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
+    // views stay hidden with them.
+    gtk_widget_set_child_visible(widget, FALSE);
   }
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
@@ -303,6 +307,13 @@ void GtkBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &prop
     ViewData *d = viewData(it->second);
     d->desktop = props;
     updateScrollers(*d);
+  }
+}
+
+void GtkBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {
+  if (auto it = views_.find(svg); it != views_.end() && viewData(it->second)->component == "RNSVGSvgView") {
+    viewData(it->second)->svg = std::move(document);
+    gtk_widget_queue_draw(it->second);
   }
 }
 
