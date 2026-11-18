@@ -90,7 +90,27 @@ TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the e
     CHECK(settings.appId == "com.example.notes");
     CHECK(settings.capabilitiesJson.empty());
     CHECK(settings.initialUrl.empty());
+    CHECK_FALSE(settings.dbusService);
   }
+}
+
+TEST_CASE("A packaged app takes the links and files a Linux launcher opens it on, and the bus's service switch") {
+  auto result = launch(
+      {.args = {"--gapplication-service", "notes://note/7", "/home/ada/a.md", "file:///home/ada/b.md", "--title", "Evil", "evil",
+                "{\"x\":1}"},
+       .env = from({}),
+       .plist = from(kPackagedPlist),
+       .resourcePath = "/usr/lib/notes"});
+  REQUIRE(std::holds_alternative<ngn::LaunchSettings>(result));
+  auto settings = std::get<ngn::LaunchSettings>(result);
+  CHECK(settings.dbusService);
+  CHECK(settings.openArgs == std::vector<std::string>{"notes://note/7", "/home/ada/a.md", "file:///home/ada/b.md"});
+  CHECK(settings.title == "Notes");
+  CHECK(settings.initialUrl.empty());
+  // A dev run takes the switch too, beside its bundle.
+  auto dev = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js", "--gapplication-service"}, .env = from({}), .plist = from({})}));
+  CHECK(dev.dbusService);
+  CHECK(dev.bundle == "/tmp/b.js");
 }
 
 TEST_CASE("The dev switches (input script, rotor and commit logs) work in a dev run and never in a packaged app") {

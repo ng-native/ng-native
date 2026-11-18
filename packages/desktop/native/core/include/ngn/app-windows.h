@@ -8,7 +8,9 @@
 // (a bundle that failed to load), they do what the OS would.
 //
 // Window frames autosave under the window's key (`main`, a route outlet, a `restoreKey`) in the
-// app's preferences, and a window opened again with that key comes back where it was. A reload
+// app's preferences, and a window opened again with that key comes back where it was: at its place
+// and size on macOS, and at its size, maximised or full screen, on Linux, where an app does not
+// place its windows. A reload
 // keeps the windows with a key for the reloaded app to claim, and closes the rest.
 #pragma once
 
@@ -31,12 +33,16 @@ using facebook::react::SurfaceId;
 
 enum class TitleBar { Default, Transparent, Hidden };
 
-// A window's content rectangle in the OS's screen coordinates, in points.
+// A window's content rectangle in the OS's screen coordinates, in points, and whether it fills
+// the screen. A maximised or full-screen window's width and height are its size when it is
+// neither, which it goes back to.
 struct WindowFrame {
   double x{0};
   double y{0};
   double width{0};
   double height{0};
+  bool maximized{false};
+  bool fullScreen{false};
   bool operator==(const WindowFrame &) const = default;
 };
 
@@ -129,9 +135,15 @@ class WindowHost {
   // The key window, or none when the app has none.
   void focused(std::optional<SurfaceId> surface);
   void resized(SurfaceId surface, const WindowFrame &frame, double scale);
+  // As above, where the frame to restore differs from the one on screen: a maximised or
+  // full-screen window on Linux saves the size it goes back to, and the app hears its size now.
+  void resized(SurfaceId surface, const WindowFrame &frame, double scale, const WindowFrame &saved);
   void moved(SurfaceId surface, const WindowFrame &frame);
   // The app was opened again, or its Dock icon clicked.
   void reopen(bool hasVisibleWindows);
+  // The OS closed the app's last window. True when the app should quit now, as Linux apps do with
+  // their last window: no app is listening to decide (`quitWhenLastWindowCloses`).
+  bool lastWindowClosed();
 
   // --- reloads ---
   // A runtime's module starts listening. After the first, the app has reloaded (from the menu or

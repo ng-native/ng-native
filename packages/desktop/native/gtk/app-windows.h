@@ -12,6 +12,8 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace ngn::gtk {
 
@@ -20,9 +22,19 @@ namespace ngn::gtk {
 // and a field's focus is the app's to give (autoFocus). A focus set before it shows stays.
 void presentWithoutInitialFocus(GtkWindow *window);
 
-// The app's AdwApplication, registered, which every window belongs to. Named by `appId` when that
-// is a valid application id, and not unique: single instance comes with the window lifecycle.
-GtkApplication *startApplication(const std::string &appId);
+// The app's AdwApplication, registered, which every window belongs to, named by `appId` when that
+// is a valid application id. It handles open (links and files). A `unique` one is the app's single
+// instance: a second launch finds the first registered (g_application_get_is_remote) and hands it
+// its links (forwardLaunch). `service` starts it as the app's D-Bus service, as the session bus
+// does for a DBusActivatable desktop entry.
+GtkApplication *startApplication(const std::string &appId, bool unique = false, bool service = false);
+
+// A second launch's work, in the instance already running: its links and files (as a launcher's
+// %U gives them) to open, or nothing to raise the app's window. Sent over the session bus.
+void forwardLaunch(GtkApplication *application, const std::vector<std::string> &openArgs);
+
+// A launch's links and files as the URLs the app's DeepLinks hears: a path becomes a file:// URL.
+std::vector<std::string> openUrls(const std::vector<std::string> &openArgs);
 
 // Calls `laidOut` each time GTK has laid out the realized `window` and is about to draw it (its
 // frame clock's paint phase), for what moves with its chrome.
@@ -45,11 +57,16 @@ class GtkWindows final : public WindowBackend {
 
   // Windows of `application`, with the app's menus where `menus` says.
   GtkWindows(Hooks hooks, GtkApplication *application, MenuPlacement menus);
+  // Destroys the windows still open, whose signals reach this.
+  ~GtkWindows() override;
 
   // The host the close button asks first. Set once, before any window opens.
   void setHost(std::weak_ptr<WindowHost> host);
   // The surface's first frame mounted: its window shows. The UI thread.
   void didMount(SurfaceId surface);
+  // The app was launched again (GApplication's activate or open): the window last active comes
+  // to the front, or the app hears `reopen` when it has none shown. The UI thread.
+  void raise();
   GtkWidget *window(SurfaceId surface) const;
   GtkWidget *surfaceWidget(SurfaceId surface) const;
 
@@ -69,6 +86,10 @@ class GtkWindows final : public WindowBackend {
   };
   void open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened);
   void close(SurfaceId surface);
+  // The window's size, maximised and full-screen state changed: the app hears its size now, and
+  // its frame autosaves with the size it goes back to (never a place: GTK has none to give).
+  void reportFrame(SurfaceId surface);
+  void reportFocus(SurfaceId surface, bool active);
 
   Hooks hooks_;
   GtkApplication *application_;

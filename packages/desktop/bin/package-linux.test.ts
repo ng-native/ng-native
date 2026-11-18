@@ -21,6 +21,7 @@ import { ar, tar, tarGz, withFolders } from './archive.mjs';
 import { main, system } from './cli.mjs';
 import {
   categoryList,
+  dbusService,
   debControl,
   desktopEntry,
   finishArgs,
@@ -331,8 +332,22 @@ describe('the files every Linux format installs', () => {
       ].join('\n'),
     );
     const plain = desktopEntry({ ...APP, icon: false, schemes: [], name: 'A\nB' });
-    assert.doesNotMatch(plain, /Icon=|MimeType=/);
+    assert.doesNotMatch(plain, /Icon=|MimeType=|DBusActivatable/);
     assert.match(plain, /^Name=A B$/m);
+  });
+
+  it("lists the document types' MIME types before the schemes, and is D-Bus activatable with a service", () => {
+    const entry = desktopEntry(
+      { ...APP, mimeTypes: ['text/markdown', 'text/x-markdown'] },
+      { dbusActivatable: true },
+    );
+    assert.match(entry, /^MimeType=text\/markdown;text\/x-markdown;x-scheme-handler\/notes;$/m);
+    assert.match(entry, /^DBusActivatable=true$/m);
+    assert.match(entry, /^Exec=notes %U$/m);
+    assert.equal(
+      dbusService(APP, '/usr'),
+      '[D-BUS Service]\nName=com.example.notes\nExec=/usr/bin/notes --gapplication-service\n',
+    );
   });
 
   it("writes metainfo from the Expo keys and package's flags, escaped", () => {
@@ -440,6 +455,7 @@ describe('the package formats', () => {
     assert.match(spec, /^cp -a '\/work\/arm64\/tree\/\.' %\{buildroot\}\/usr\/$/m);
     assert.match(spec, /^chmod -R u\+rwX,go\+rX,go-w %\{buildroot\}\/usr$/m);
     assert.match(spec, /^\/usr\/share\/icons\/hicolor\/\*\/apps\/com\.example\.notes\.png$/m);
+    assert.match(spec, /^\/usr\/share\/dbus-1\/services\/com\.example\.notes\.service$/m);
     assert.doesNotMatch(rpmSpec({ ...APP, icon: false }, { tree: '/t' }), /hicolor/);
     // A % anywhere rpm reads, and a quote in the folder's path, kept literal.
     const odd = rpmSpec(
@@ -676,6 +692,14 @@ describe('ng-native-desktop package --os linux', () => {
       assert.equal(entries['notes-2.0.0-aarch64/bin/notes']!.link, '../lib/notes/notes');
       assert.equal(entries['notes-2.0.0-aarch64/lib/notes/notes']!.mode, 0o755);
       assert.ok(entries['notes-2.0.0-aarch64/share/applications/com.example.notes.desktop']);
+      // A folder runs from wherever it is unpacked, so the bus has no path to start it by.
+      assert.doesNotMatch(
+        entries[
+          'notes-2.0.0-aarch64/share/applications/com.example.notes.desktop'
+        ]!.data.toString(),
+        /DBusActivatable/,
+      );
+      assert.ok(!entries['notes-2.0.0-aarch64/share/dbus-1/services/com.example.notes.service']);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -713,6 +737,14 @@ describe('ng-native-desktop package --os linux', () => {
       assert.equal(data['./usr/bin/notes']!.link, '../lib/notes/notes');
       assert.equal(data['./usr/lib/notes/notes']!.mode, 0o755);
       assert.ok(data['./usr/share/metainfo/com.example.notes.metainfo.xml']);
+      assert.match(
+        data['./usr/share/applications/com.example.notes.desktop']!.data.toString(),
+        /^DBusActivatable=true$/m,
+      );
+      assert.match(
+        data['./usr/share/dbus-1/services/com.example.notes.service']!.data.toString(),
+        /^Exec=\/usr\/bin\/notes --gapplication-service$/m,
+      );
       assert.equal(Object.keys(data)[0], './');
       for (const entry of Object.values(data)) assert.equal(entry.owner, 'root:root 0:0');
     } finally {

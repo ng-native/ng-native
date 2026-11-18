@@ -180,7 +180,8 @@ The plugin options hold only what has no Expo key:
 ]
 ```
 
-- **`documentTypes`** - the files the app opens from Finder, by extension.
+- **`documentTypes`** - the files the app opens from Finder, by extension, and on Linux by the MIME
+  types in `mimeTypes`, which its desktop entry lists.
 - **`capabilities`** - the programs [`Processes.spawn`](/packages/device/processes) may run, the
   environment variables it may read, and paths outside the app's own folders.
 - **`deny`** - npm packages whose native code stays out of the desktop build.

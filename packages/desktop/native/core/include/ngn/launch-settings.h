@@ -17,6 +17,9 @@
 
 namespace ngn {
 
+// The switch the session bus starts a D-Bus activatable app with (GApplication's own).
+inline constexpr const char *kDBusServiceArg = "--gapplication-service";
+
 struct LaunchSources {
   // argv without the program's own name.
   std::vector<std::string> args;
@@ -73,6 +76,12 @@ struct LaunchSettings {
   // A dev run's --url: the link the app opens as it launches (Linking's initial URL), as a click on
   // a link to the app's scheme would. Empty when none; a packaged app is opened on a link by the OS.
   std::string initialUrl;
+  // What a packaged Linux app was opened on: the links and files its desktop entry's `%U` passes,
+  // as given (a URL, or a file's path).
+  std::vector<std::string> openArgs;
+  // `--gapplication-service`: started by the session bus as the app's D-Bus service, which a
+  // desktop entry with DBusActivatable=true asks for.
+  bool dbusService{false};
   // Set for a test launch.
   std::optional<TestLaunch> test;
   // No system prompt is ever shown (NGN_NO_PROMPTS=1, or a test launch's fake system UI): a
