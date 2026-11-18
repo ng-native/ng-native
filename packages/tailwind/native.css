@@ -87,3 +87,6 @@
 .platform-macos {
   --platform-font-mono: Menlo;
 }
+.platform-linux {
+  --platform-font-mono: monospace;
+}

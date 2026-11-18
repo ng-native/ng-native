@@ -109,11 +109,13 @@ function presetPlugin(
   addVariant('android', beneath(platform, 'platform-android'));
   addVariant('web', beneath(platform, 'platform-web'));
   addVariant('macos', beneath(platform, 'platform-macos'));
-  addVariant('desktop', beneath(platform, 'platform-macos'));
+  addVariant('linux', beneath(platform, 'platform-linux'));
+  addVariant('desktop', [beneath(platform, 'platform-macos'), beneath(platform, 'platform-linux')]);
   addVariant('native', [
     beneath(platform, 'platform-ios'),
     beneath(platform, 'platform-android'),
     beneath(platform, 'platform-macos'),
+    beneath(platform, 'platform-linux'),
   ]);
   if (platform === 'web') addBase(WEB_BASE);
   else if (config('prefix')) {
@@ -178,6 +180,7 @@ function presetPlugin(
       '.platform-ios .font-mono': { 'font-family': 'Menlo' },
       '.platform-android .font-mono': { 'font-family': 'monospace' },
       '.platform-macos .font-mono': { 'font-family': 'Menlo' },
+      '.platform-linux .font-mono': { 'font-family': 'monospace' },
     });
   }
 }

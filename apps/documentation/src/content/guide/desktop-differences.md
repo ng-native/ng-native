@@ -12,6 +12,13 @@ on macOS, and `APPLE` on iOS and macOS, so a check for an Apple OS does not have
 `OS === 'ios'`. The `macos:` and `desktop:` Tailwind variants and the `platform-macos` class match
 on a Mac.
 
+Linux is an OS too: `OS` answers `'linux'` there, `DESKTOP` is true and `APPLE` false, and the
+`linux:` and `desktop:` variants match. A Linux build takes `.linux`, then `.ios`, then `.native`
+files, React Native's iOS code, and `Platform.select` from `linux`, then `ios`, as a Mac build does
+for `macos`; a `macos` key does not answer on Linux. React Native's types have no `'linux'`, so
+check `OS` from `@ng-native/device` rather than `Platform.OS`. There is no Linux desktop host yet,
+so a Linux app does not run; the packages, the Metro preset and tests know the OS ahead of it.
+
 ## Which files a Mac build takes
 
 An import without an extension resolves `.macos` first, then `.ios`, then `.native`, then the

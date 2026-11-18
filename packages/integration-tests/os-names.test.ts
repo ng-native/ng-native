@@ -23,7 +23,10 @@ describe('the OS the host reports', () => {
 
   it("is an error naming an OS not in OS_NAMES, where it used to read as 'ios'", () => {
     registerPlatformComponents('windows');
-    assert.throws(() => root().get(OS), /reports the OS 'windows'.*ios, android, macos, web/);
+    assert.throws(
+      () => root().get(OS),
+      /reports the OS 'windows'.*ios, android, macos, linux, web/,
+    );
   });
 
   it('is an error for the shortcuts too, which read an unknown OS as iOS, with Cmd', () => {

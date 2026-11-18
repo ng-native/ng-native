@@ -45,7 +45,11 @@ export const isApple = (platform: ModulePlatform | null): boolean =>
   platform === 'ios' || platform === 'macos';
 
 /** The OSes whose modules are the desktop host's TurboModules, never an Expo module. */
-const DESKTOP_PLATFORMS: ReadonlySet<ModulePlatform> = new Set(['macos']);
+const DESKTOP_PLATFORMS: ReadonlySet<ModulePlatform> = new Set(['macos', 'linux']);
+
+/** Whether `platform` is a desktop OS, where the desktop host's modules stand in for Expo's. */
+export const isDesktopPlatform = (platform: ModulePlatform | null): boolean =>
+  platform !== null && DESKTOP_PLATFORMS.has(platform);
 
 /**
  * The Expo modules whose services have a desktop source in v1, and the desktop host's TurboModule
@@ -132,7 +136,7 @@ export class MissingModuleError extends Error {
         (platform === 'web'
           ? `${module} is not installed. Install it with "npx expo install ${module}", then restart the dev server.`
           : DESKTOP_PLATFORMS.has(platform)
-            ? `${module} has no module in this build of the desktop host. Rebuild it with "npm run macos": ` +
+            ? `${module} has no module in this build of the desktop host. Rebuild it with "npm run ${platform}": ` +
               `the desktop host contains only the native modules it was built with.`
             : `${module} is not in this build of the app. Install it with "npx expo install ${module}", ` +
               `then rebuild the app ("npx expo run:${platform}", or a new EAS build): a development ` +

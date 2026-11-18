@@ -11,6 +11,7 @@
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
 import type { MenuEntry } from './menu-model.ts';
 import { serializeMenu, type NativeMenuEntry } from './menus.ts';
+import { injectOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 
 export interface NativeDock {
@@ -52,6 +53,8 @@ export class Dock {
   });
 
   private readonly native = inject(Dock.SOURCE);
+  /** The desktop OS whose shortcuts the menu shows: Linux's own, else a Mac's. */
+  private readonly menuOs = injectOs() === 'linux' ? 'linux' : 'macos';
   private actions: ReadonlyMap<string, () => void> = new Map();
   private readonly unsubscribe =
     this.native?.subscribe((event) => this.actions.get(event.id)?.()) ?? null;
@@ -65,7 +68,7 @@ export class Dock {
    * `<menu-item>` registers them.
    */
   setMenu(entries: readonly MenuEntry[] | null): void {
-    const menu = serializeMenu(entries ?? [], 'macos');
+    const menu = serializeMenu(entries ?? [], this.menuOs);
     this.actions = menu.actions;
     this.native?.setMenu(menu.entries.length ? menu.entries : null);
   }

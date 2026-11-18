@@ -20,6 +20,7 @@ code { font-family: Courier New }
 .platform-ios code { font-family: Menlo }
 .platform-android code { font-family: monospace }
 .platform-macos code { font-family: Menlo }
+.platform-linux code { font-family: monospace }
 mark { background-color: rgb(255, 255, 0); color: rgb(0, 0, 0) }
 `;
 
@@ -93,7 +94,7 @@ export const ELEMENT_STYLES = {
       compounds: [{ classes: [], type: 'mark' }],
       combinators: [],
       specificity: 1,
-      order: 12,
+      order: 13,
       declarations: { backgroundColor: 'rgb(255, 255, 0)', color: 'rgb(0, 0, 0)' },
     },
     {
@@ -116,6 +117,13 @@ export const ELEMENT_STYLES = {
       specificity: 1001,
       order: 11,
       declarations: { fontFamily: 'Menlo' },
+    },
+    {
+      compounds: [{ classes: ['platform-linux'] }, { classes: [], type: 'code' }],
+      combinators: ['descendant'],
+      specificity: 1001,
+      order: 12,
+      declarations: { fontFamily: 'monospace' },
     },
   ],
 } as unknown as StyleSheet;

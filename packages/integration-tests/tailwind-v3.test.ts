@@ -450,7 +450,7 @@ describe('Tailwind 3', () => {
 describe('the Tailwind 3 preset', () => {
   // Tailwind 3 reads no brace expansion in raw content, so each variant is written out.
   const VARIANTS =
-    'hover press hovered focus focus-visible disabled ios android web native macos desktop dark';
+    'hover press hovered focus focus-visible disabled ios android web native macos linux desktop dark';
   const PRESET =
     VARIANTS.split(' ')
       .map((variant) => `${variant}:bg-red-500`)
@@ -512,6 +512,11 @@ describe('the Tailwind 3 preset', () => {
     assert.equal(on('platform-macos', 'macos:bg-red-500'), red);
     assert.equal(on('platform-macos', 'desktop:bg-red-500'), red);
     assert.equal(on('platform-ios', 'desktop:bg-red-500'), undefined);
+    assert.equal(on('platform-linux', 'native:bg-red-500'), red);
+    assert.equal(on('platform-linux', 'linux:bg-red-500'), red);
+    assert.equal(on('platform-linux', 'desktop:bg-red-500'), red);
+    assert.equal(on('platform-linux', 'macos:bg-red-500'), undefined);
+    assert.equal(on('platform-macos', 'linux:bg-red-500'), undefined);
     assert.equal(on('platform-web', 'web:bg-red-500'), red);
     assert.equal(on('dark', 'dark:bg-red-500'), red);
     assert.equal(on('', 'dark:bg-red-500'), undefined);
@@ -662,6 +667,7 @@ describe('the Tailwind 3 preset', () => {
     assert.equal(font('platform-ios'), 'Menlo');
     assert.equal(font('platform-android'), 'monospace');
     assert.equal(font('platform-macos'), 'Menlo');
+    assert.equal(font('platform-linux'), 'monospace');
     assert.equal(font(''), 'Courier New');
   });
 
