@@ -5,11 +5,14 @@ import type { system } from './host.mjs';
 import {
   choosePrebuilt,
   entryName,
+  findHost,
   fetchPrebuilt,
   prebuiltName,
   readManifest,
+  RELEASE_HOSTS,
   signPrebuiltFiles,
   withHost,
+  withReleaseHosts,
   type PrebuiltHost,
 } from './prebuilt.mjs';
 
@@ -55,6 +58,66 @@ describe('the prebuilt manifest', () => {
   it("names each flavour's entry file apart, so both builds can share a folder", () => {
     assert.equal(entryName('debug'), 'prebuilt-host-debug.json');
     assert.equal(entryName('release'), 'prebuilt-host-release.json');
+  });
+
+  it('names a Linux archive and entry by its architecture, apart from the macOS ones', () => {
+    assert.equal(
+      prebuiltName('0.23.0', '0.88.0', 'release', { os: 'linux', arch: 'arm64' }),
+      'ng-native-desktop-host-0.23.0-rn-0.88.0-linux-arm64.tar.gz',
+    );
+    assert.equal(
+      prebuiltName('0.23.0', '0.88.0', 'debug', { os: 'linux', arch: 'x64' }),
+      'ng-native-desktop-host-0.23.0-rn-0.88.0-linux-x64-debug.tar.gz',
+    );
+    assert.equal(
+      entryName('debug', { os: 'linux', arch: 'x64' }),
+      'prebuilt-host-linux-x64-debug.json',
+    );
+    assert.equal(entryName('release', { os: 'macos' }), 'prebuilt-host-release.json');
+    assert.throws(() => entryName('debug', { os: 'linux' }), /x64 or arm64/);
+    // Every host a release publishes has an entry file of its own.
+    const names = RELEASE_HOSTS.map((slot) => entryName(slot.flavour, slot));
+    assert.equal(new Set(names).size, 6);
+  });
+
+  it('puts every release host’s entry in the manifest, and stops on one missing or mislabelled', () => {
+    const entries: Record<string, object> = Object.fromEntries(
+      RELEASE_HOSTS.map((slot) => [
+        entryName(slot.flavour, slot),
+        {
+          ...HOST,
+          flavour: slot.flavour,
+          ...(slot.os === 'linux' && slot),
+          url: entryName(slot.flavour, slot),
+        },
+      ]),
+    );
+    const read = (name: string) => {
+      if (!(name in entries)) throw new Error(`ENOENT ${name}`);
+      return JSON.stringify(entries[name]);
+    };
+    const manifest = withReleaseHosts({ version: 1, hosts: [] }, read);
+    assert.equal(manifest.hosts.length, 6);
+    assert.equal(
+      findHost(manifest, { reactNative: '0.88.0', flavour: 'debug', os: 'linux', arch: 'arm64' })
+        ?.url,
+      'prebuilt-host-linux-arm64-debug.json',
+    );
+    // A Linux host never answers for the macOS one.
+    assert.equal(
+      findHost(manifest, { reactNative: '0.88.0', flavour: 'debug' })?.url,
+      'prebuilt-host-debug.json',
+    );
+    delete entries['prebuilt-host-linux-arm64-release.json'];
+    assert.throws(
+      () => withReleaseHosts({ version: 1, hosts: [] }, read),
+      /ENOENT prebuilt-host-linux-arm64-release/,
+    );
+    entries['prebuilt-host-linux-arm64-release.json'] = { ...HOST, os: 'linux', arch: 'x64' };
+    assert.throws(
+      () => withReleaseHosts({ version: 1, hosts: [] }, read),
+      /prebuilt-host-linux-arm64-release.json is not the linux-arm64 release host/,
+    );
   });
 
   it('reads a manifest, and anything else as none', () => {
