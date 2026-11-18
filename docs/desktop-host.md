@@ -26,9 +26,12 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   widget, so a role that changes later is not followed yet, and Orca's structural navigation
   finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
-  Homebrew's (`brew install gtk4 libadwaita`) as a dev loop. Linux is not yet an app target: the
-  bundle it runs is exported for `macos`, and networking, scroll views, images, menus and the
-  libadwaita chrome come in later steps.
+  Homebrew's (`brew install gtk4 libadwaita`) as a dev loop. Its HTTP and WebSocket client is the
+  core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
+  drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
+  timeouts (the longest silence), decoded bodies, cookies and `file:` and `data:` urls. Linux is
+  not yet an app target: the bundle it runs is exported for `macos`, and scroll views, images,
+  menus and the libadwaita chrome come in later steps.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android
@@ -47,10 +50,17 @@ On Linux, `build.sh --backend gtk` builds `ngn-linux` over the core, Hermes and 
 and `--test` runs the core, runtime and GTK view tests (`ngn_gtk_tests`, which need a display:
 Xvfb on a machine without one). `build.sh --backend none --runtime --test` still builds the
 toolkit-free half alone. Off macOS, Hermes links ICU 77.1, which `fetch.sh` pins and `build-icu.sh`
-builds statically, with only English data (`icu-filter.json`). The build runs in
+builds statically, with only English data (`icu-filter.json`). The GTK host links libcurl 8.23.0,
+which `fetch.sh` also pins and `cmake/curl.cmake` builds statically with HTTP/1.1, HTTP/2,
+WebSockets and nothing else, over the system's OpenSSL 3, nghttp2 and zlib. The CA certificates
+are found when the host starts: `SSL_CERT_FILE` or `SSL_CERT_DIR` when set, else the bundle or
+directory the distribution keeps. On a Mac the GTK build takes Homebrew's OpenSSL through
+`PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig"`. The build runs in
 `native/docker/Dockerfile`, an AlmaLinux 9 image with clang and lld from `llvm-toolset`, GTK 4.12
 and libadwaita 1.4, and Xvfb and Weston for launching the host headless. Building against el9
-keeps the glibc it needs at 2.34, which `native/docker/glibc-floor.sh` checks. CI's `host-linux`
+keeps the glibc it needs at 2.34, and the OpenSSL at 3.0, which `native/docker/glibc-floor.sh`
+checks. The libcurl client's tests run against a local server, `core/tests/curl/test-server.py`,
+so they need `python3`. CI's `host-linux`
 job builds the GTK host on x86_64 and arm64, runs its tests, and launches it on the notes example
 to its first frame under Xvfb and headless Weston, keeping each window's in-process capture
 (`NGN_CAPTURE`) as an artifact. On a Mac, run the same image with Docker, as a user other than

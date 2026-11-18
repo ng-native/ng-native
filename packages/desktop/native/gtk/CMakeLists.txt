@@ -18,7 +18,7 @@ add_library(ngn_gtk OBJECT
     surface-input.cpp
     text-field.cpp
     view-widget.cpp)
-target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_libraries PkgConfig::NGN_GTK)
+target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_libraries PkgConfig::NGN_GTK)
 target_compile_options(ngn_gtk PUBLIC -Wall -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
 target_compile_definitions(ngn_gtk PUBLIC
     GDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_10 GDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_10

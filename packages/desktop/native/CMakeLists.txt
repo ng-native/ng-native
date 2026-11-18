@@ -263,6 +263,29 @@ if(NGN_TESTS)
   add_test(NAME core COMMAND ngn_core_tests)
 endif()
 
+# --- the HTTP and WebSocket client over libcurl, for a backend whose OS has none (gtk) -------------
+if(NGN_BACKEND STREQUAL "gtk")
+  set(_default_curl ON)
+else()
+  set(_default_curl OFF)
+endif()
+option(NGN_CURL "Build the libcurl client (core/src/curl-network.cpp) and its tests" ${_default_curl})
+if(NGN_CURL)
+  include(cmake/curl.cmake)
+  add_library(ngn_curl STATIC core/src/curl-network.cpp)
+  target_link_libraries(ngn_curl PUBLIC ngn_core PRIVATE ngn_libcurl)
+  target_compile_options(ngn_curl PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
+  if(NGN_TESTS)
+    # Against a local server, test-server.py, which needs python3.
+    set(_curl_tests core/tests/curl/network.test.cpp)
+    target_sources(ngn_core_tests PRIVATE ${_curl_tests})
+    target_link_libraries(ngn_core_tests PRIVATE ngn_curl)
+    set_source_files_properties(${_curl_tests} PROPERTIES
+        COMPILE_DEFINITIONS NGN_CURL_TEST_SERVER="${CMAKE_CURRENT_SOURCE_DIR}/core/tests/curl/test-server.py"
+        COMPILE_OPTIONS "${NGN_DOCTEST_SOURCE_OPTIONS}")
+  endif()
+endif()
+
 # --- the core's runtime half: ReactHost over Hermes ----------------------------------------------
 if(NGN_WITH_RUNTIME)
   add_library(ngn_core_runtime STATIC

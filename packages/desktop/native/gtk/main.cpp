@@ -16,6 +16,7 @@
 #include "view-widget.h"
 
 #include "ngn/core-modules.h"
+#include "ngn/curl-network.h"
 #include "ngn/desktop-modules.h"
 #include "ngn/dev-server.h"
 #include "ngn/file-system.h"
@@ -236,7 +237,8 @@ int main(int argc, char *argv[]) {
   if (!settings.initialUrl.empty()) {
     gHost.state->setInitialUrl(settings.initialUrl);
   }
-  ngn::NetworkClients network{ngn::gtk::makeNoHttp(), ngn::gtk::makeNoWebSockets()};
+  auto curl = ngn::makeCurlNetwork();
+  ngn::NetworkClients network{curl.http, curl.webSockets};
 
   static ngn::ProcessesSetup processes;
   for (char **e = environ; e && *e; ++e) {
@@ -310,9 +312,11 @@ int main(int argc, char *argv[]) {
       ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
   auto tray = std::make_shared<ngn::TrayHost>(ngn::gtk::makeNoTray());
   auto dock = std::make_shared<ngn::DockHost>(ngn::gtk::makeNoDock());
-  // The Expo Updates client, over no HTTP until the libcurl client comes, so it never fetches an
-  // update, and with no crypto, which only a fetched update needs. The bundle runs as given.
-  auto updates = std::make_shared<ngn::UpdatesClient>(ngn::updatesConfigFrom(settings, os, appData, bundle), network.http, nullptr);
+  // The Expo Updates client, off: this backend has no crypto yet, which a fetched update needs
+  // to be checked, so it never fetches one. The bundle runs as given.
+  auto updatesConfig = ngn::updatesConfigFrom(settings, os, appData, bundle);
+  updatesConfig.url.clear();
+  auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module answers that it is unavailable.
   ngn::addDesktopModules(

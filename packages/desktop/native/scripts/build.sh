@@ -88,7 +88,9 @@ JOBS="${NGN_JOBS:-8}"
 RN_VERSION="$(node -p 'require(process.argv[1] + "/package.json").version' "$RN_PKG")"
 CACHE="$("$here/cache-dir.sh" "$RN_VERSION")"
 
-"$here/fetch.sh" "$RN_PKG" >&2
+fetch_args=()
+[ "$backend" = "gtk" ] && fetch_args=(--curl)
+"$here/fetch.sh" "$RN_PKG" ${fetch_args[@]+"${fetch_args[@]}"} >&2
 
 library_dirs=""
 for lib in ${libraries[@]+"${libraries[@]}"}; do
