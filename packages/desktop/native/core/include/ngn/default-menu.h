@@ -1,8 +1,12 @@
-// The menu bar every desktop app gets at launch, before any JavaScript runs: the app menu with
-// Quit, File's Close Window and Print... (which prints the key window), the standard text editing commands, View's Back, Forward and Show Sidebar, the window commands and, for
-// a bundle from a dev server, the developer commands. A backend draws it and maps each command to
-// the toolkit's own. The app's own bar replaces it once the app sets one (app-menus.h).
+// The menu bar every desktop app gets at launch, before any JavaScript runs: its OS's (HostOs's
+// menuBar). On macOS, the app menu with Quit, File's Close Window and Print... (which prints the
+// key window), the standard text editing commands, View's Back, Forward and Show Sidebar, the
+// window commands and, for a bundle from a dev server, the developer commands. A backend draws it
+// and maps each command to the toolkit's own. The app's own bar replaces it once the app sets one
+// (app-menus.h).
 #pragma once
+
+#include "ngn/host-os.h"
 
 #include <string>
 #include <vector>
@@ -42,8 +46,8 @@ enum class MenuCommand {
   AppItem,
 };
 
-// The key equivalent's modifiers, as a bitmask. Command is the platform's primary modifier
-// (Control off macOS).
+// The key equivalent's modifiers, as a bitmask: Command is the web's `meta` key and Option its
+// `alt`. Which one is the OS's primary modifier is HostOs's primaryModifier.
 enum MenuModifier : unsigned {
   Command = 1 << 0,
   Shift = 1 << 1,
@@ -81,9 +85,15 @@ struct DefaultMenuOptions {
   std::string appName;
   // Adds the Developer menu (Reload) for a bundle from a dev server.
   bool developer{false};
+  // The OS whose menu bar it is, and whose primary modifier and back and forward keys the app's
+  // menus and shortcuts follow.
+  HostOs os;
 };
 
+// The OS's bar: `options.os.menuBar`.
 std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options);
+// macOS's bar (HostOs's menuBar for macOS).
+std::vector<MenuItem> macOSMenuBar(const DefaultMenuOptions &options);
 
 // The item with this command anywhere in `menus`, or null.
 const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, MenuCommand command);

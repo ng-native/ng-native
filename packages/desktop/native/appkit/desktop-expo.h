@@ -7,9 +7,15 @@
 #include "ngn/launch-settings.h"
 
 #include <memory>
+#include <set>
 #include <string>
 
 namespace ngn::appkit {
+
+// Whether the app can use the Data Protection keychain: its signature has a Team ID, and an
+// entitlement that gives it a keychain access group (an application identifier, as a Mac App Store
+// build has, or keychain-access-groups). Without one the keychain refuses it (errSecMissingEntitlement).
+bool usesDataProtectionKeychain(const std::string &teamId, const std::set<std::string> &entitlements);
 
 std::shared_ptr<SecretStore> makeKeychain();
 // Removes the file keychain items another test launch left when it ended without removing them.

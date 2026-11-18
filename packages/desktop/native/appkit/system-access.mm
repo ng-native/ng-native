@@ -1,5 +1,7 @@
 #import "system-access.h"
 
+#include "ngn/host-os.h"
+
 #import <AppKit/AppKit.h>
 #import <Security/Security.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -109,6 +111,7 @@ ProcessesSetup processesSetup(const std::string &capabilitiesJson) {
   setup.lookup = {
       .isExecutable = [](const std::string &path) { return access(path.c_str(), X_OK) == 0; },
       .isStub = isDeveloperStub,
+      .searchPath = macOS().searchPath,
   };
   NSDictionary *info = NSBundle.mainBundle.infoDictionary;
   if (auto packaged = packagedApp()) {

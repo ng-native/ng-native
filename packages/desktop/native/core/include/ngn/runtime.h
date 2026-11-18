@@ -48,6 +48,9 @@ struct NetworkClients {
 struct DebuggerIdentity {
   std::string appId{"ngn-desktop"};
   std::string deviceName{"desktop"};
+  // The host OS's id (HostOs): the platform the HMR client is set up for when the bundle URL
+  // names none.
+  std::string os;
 };
 
 class Runtime {

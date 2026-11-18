@@ -6,9 +6,6 @@
 
 namespace ngn {
 
-const std::vector<std::string> kSearchPath{
-    "/usr/bin", "/bin", "/usr/sbin", "/sbin", "/opt/homebrew/bin", "/usr/local/bin"};
-
 namespace {
 
 const std::set<std::string> kRefusedPrograms{
@@ -260,7 +257,7 @@ std::optional<std::string> resolveProgram(const std::string &program, const Prog
   if (program[0] == '/') {
     candidates.push_back(program);
   } else {
-    for (const auto &dir : kSearchPath) {
+    for (const auto &dir : lookup.searchPath) {
       candidates.push_back(dir + "/" + program);
     }
   }

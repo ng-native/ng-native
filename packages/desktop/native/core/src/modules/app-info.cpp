@@ -38,9 +38,9 @@ std::shared_ptr<NativeModule> makeApplicationModule(BundleFacts bundle, std::str
   return std::make_shared<Application>(std::move(bundle), std::move(appId), std::move(appName));
 }
 
-std::shared_ptr<NativeModule> makeDeviceModule(MachineFacts machine) {
+std::shared_ptr<NativeModule> makeDeviceModule(MachineFacts machine, std::string osName) {
   struct Device : NativeModule {
-    explicit Device(const MachineFacts &machine) : NativeModule("NgNativeDevice") {
+    Device(const MachineFacts &machine, const std::string &osName) : NativeModule("NgNativeDevice") {
       folly::dynamic architectures = folly::dynamic::array();
       for (const auto &architecture : machine.architectures) {
         architectures.push_back(architecture);
@@ -53,7 +53,7 @@ std::shared_ptr<NativeModule> makeDeviceModule(MachineFacts machine) {
           {"designName", nullptr},
           {"productName", nullptr},
           {"deviceYearClass", nullptr},
-          {"osName", "macOS"},
+          {"osName", osName},
           {"osVersion", orNull(machine.osVersion)},
           {"osBuildId", orNull(machine.osBuildId)},
           {"osInternalBuildId", orNull(machine.osBuildId)},
@@ -68,7 +68,7 @@ std::shared_ptr<NativeModule> makeDeviceModule(MachineFacts machine) {
       }
     }
   };
-  return std::make_shared<Device>(machine);
+  return std::make_shared<Device>(machine, osName);
 }
 
 } // namespace ngn

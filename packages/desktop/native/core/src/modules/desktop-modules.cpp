@@ -10,7 +10,7 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
   // One launcher for the process: a reload gets a new module over it.
   DesktopModules made{
       .launcher = makePosixLauncher(),
-      .notificationEvents = std::make_shared<NotificationEvents>(),
+      .notificationEvents = std::make_shared<NotificationEvents>(s.os.id),
       // The fonts loaded stay registered for the process, so their names outlast a reload too.
       .fonts = std::make_shared<FontLibrary>(),
       .cameraViews = std::make_shared<CameraViews>(),
@@ -61,7 +61,7 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
   addModule(registry, "NgNativeApplication", [bundle = s.bundle, appId = s.appId, appName = s.appName] {
     return makeApplicationModule(bundle, appId, appName);
   });
-  addModule(registry, "NgNativeDevice", [machine = s.machine] { return makeDeviceModule(machine); });
+  addModule(registry, "NgNativeDevice", [machine = s.machine, os = s.os.name] { return makeDeviceModule(machine, os); });
   addModule(registry, "NgNativeNetwork", [monitor = s.pathMonitor] { return makeNetworkModule(monitor); });
   addModule(registry, "NgNativeBattery", [power = s.power] { return makeBatteryModule(power); });
   addModule(registry, "NgNativeFont", [registrar = s.fontRegistrar, fonts = made.fonts, http = s.http, caches = s.caches, files = s.files] {

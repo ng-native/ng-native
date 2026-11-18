@@ -7,8 +7,10 @@ namespace ngn {
 
 namespace {
 
-const char *kUsage =
-    "usage: ngn-macos <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>] [--url <link>]";
+std::string usage(const HostOs &os) {
+  return "usage: " + os.program +
+      " <bundle> [--module <name>] [--title <title>] [--app-id <id>] [--capabilities <json>] [--url <link>]";
+}
 
 bool is(const LaunchSources &sources, const char *name, const char *value) {
   auto found = sources.env ? sources.env(name) : std::nullopt;
@@ -57,7 +59,7 @@ std::string LaunchSettings::setting(const std::string &plistKey, const std::stri
   return "";
 }
 
-std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources) {
+std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, const HostOs &os) {
   LaunchSettings settings;
   settings.env = sources.env;
   settings.plist = sources.plist;
@@ -112,19 +114,21 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources) 
     } else if (settings.bundle.empty() && !arg.starts_with("--")) {
       settings.bundle = arg;
     } else {
-      return std::string(kUsage);
+      return usage(os);
     }
   }
   if (settings.bundle.empty()) {
-    return std::string(kUsage);
+    return usage(os);
   }
   return settings;
 }
 
-UpdatesConfig updatesConfigFrom(const LaunchSettings &settings, const std::string &appData, const std::string &embeddedBundle) {
+UpdatesConfig updatesConfigFrom(
+    const LaunchSettings &settings, const HostOs &os, const std::string &appData, const std::string &embeddedBundle) {
   UpdatesConfig config{
       .url = settings.setting("NGNUpdatesURL", "NGN_UPDATES_URL"),
       .runtimeVersion = settings.setting("NGNRuntimeVersion", "NGN_RUNTIME_VERSION"),
+      .platform = os.id,
       .certificatePem = settings.setting("NGNUpdatesCodeSigningCertificate", "NGN_UPDATES_CODE_SIGNING_CERTIFICATE"),
       .directory = std::filesystem::path(appData) / "updates",
       .embeddedBundle = embeddedBundle,

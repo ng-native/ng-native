@@ -1,4 +1,5 @@
 #include "ngn/app-info.h"
+#include "ngn/host-os.h"
 
 #include <doctest/doctest.h>
 
@@ -36,7 +37,7 @@ TEST_CASE("NgNativeDevice is a physical desktop Mac") {
       .deviceName = "Studio",
       .totalMemory = 17179869184ull,
       .architectures = {"arm64"},
-  });
+  }, ngn::macOS().name);
   CHECK(module->property("brand") == dynamic("Apple"));
   CHECK(module->property("modelName") == dynamic("MacBook Pro (14-inch, Nov 2023)"));
   CHECK(module->property("modelId") == dynamic("Mac15,3"));
@@ -51,7 +52,7 @@ TEST_CASE("NgNativeDevice is a physical desktop Mac") {
 }
 
 TEST_CASE("NgNativeDevice names the model by its identifier when the Mac gives no marketing name") {
-  auto module = ngn::makeDeviceModule({.modelId = "Mac14,2", .osVersion = "15.0"});
+  auto module = ngn::makeDeviceModule({.modelId = "Mac14,2", .osVersion = "15.0"}, "macOS");
   CHECK(module->property("modelName") == dynamic("Mac14,2"));
   CHECK(module->property("deviceName") == dynamic(nullptr));
   CHECK(module->property("totalMemory") == dynamic(nullptr));

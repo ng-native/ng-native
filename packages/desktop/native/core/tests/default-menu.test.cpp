@@ -17,7 +17,7 @@ std::vector<std::string> titles(const std::vector<ngn::MenuItem> &menus) {
 } // namespace
 
 TEST_CASE("the default menu bar has the app, File, Edit, View, Window and Help menus") {
-  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()});
   CHECK(titles(bar) == std::vector<std::string>{"Notes", "File", "Edit", "View", "Window", "Help"});
   CHECK(bar[0].role == ngn::MenuRole::App);
   CHECK(bar[4].role == ngn::MenuRole::Window);
@@ -25,7 +25,7 @@ TEST_CASE("the default menu bar has the app, File, Edit, View, Window and Help m
 }
 
 TEST_CASE("Quit is Command-Q in the app menu, named for the app") {
-  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()});
   auto quit = ngn::findMenuItem(bar, MenuCommand::Quit);
   REQUIRE(quit);
   CHECK(quit->title == "Quit Notes");
@@ -35,7 +35,7 @@ TEST_CASE("Quit is Command-Q in the app menu, named for the app") {
 }
 
 TEST_CASE("the Edit menu has the standard text commands with their keys") {
-  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()});
   struct Expected {
     MenuCommand command;
     const char *key;
@@ -59,7 +59,7 @@ TEST_CASE("the Edit menu has the standard text commands with their keys") {
 }
 
 TEST_CASE("the window commands close, minimise and zoom") {
-  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()});
   CHECK(ngn::findMenuItem(bar, MenuCommand::CloseWindow)->key == "w");
   CHECK(ngn::findMenuItem(bar[4].items, MenuCommand::Minimize)->key == "m");
   CHECK(ngn::findMenuItem(bar[4].items, MenuCommand::Zoom));
@@ -67,7 +67,7 @@ TEST_CASE("the window commands close, minimise and zoom") {
 }
 
 TEST_CASE("View has Back and Forward on Command-[ and Command-] before the app sets its own bar") {
-  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()});
   auto back = ngn::findMenuItem(bar[3].items, MenuCommand::Back);
   auto forward = ngn::findMenuItem(bar[3].items, MenuCommand::Forward);
   REQUIRE(back);
@@ -78,7 +78,7 @@ TEST_CASE("View has Back and Forward on Command-[ and Command-] before the app s
 }
 
 TEST_CASE("View has Show Sidebar on Control-Command-S, which a window's split view answers") {
-  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()});
   auto sidebar = ngn::findMenuItem(bar[3].items, MenuCommand::ToggleSidebar);
   REQUIRE(sidebar);
   CHECK(sidebar->title == "Show Sidebar");
@@ -87,8 +87,8 @@ TEST_CASE("View has Show Sidebar on Control-Command-S, which a window's split vi
 }
 
 TEST_CASE("a bundle from a dev server adds the Developer menu with Reload on Command-R") {
-  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes"}), MenuCommand::Reload));
-  auto bar = ngn::defaultMenuBar({.appName = "Notes", .developer = true});
+  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()}), MenuCommand::Reload));
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .developer = true, .os = ngn::macOS()});
   CHECK(titles(bar) == std::vector<std::string>{"Notes", "File", "Edit", "View", "Window", "Developer", "Help"});
   auto reload = ngn::findMenuItem(bar, MenuCommand::Reload);
   REQUIRE(reload);
@@ -100,11 +100,11 @@ TEST_CASE("a bundle from a dev server adds the Developer menu with Reload on Com
   CHECK(devTools->title == "Open DevTools");
   CHECK(devTools->key == "i");
   CHECK(devTools->modifiers == (ngn::Command | ngn::Option));
-  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes"}), MenuCommand::OpenDevTools));
+  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()}), MenuCommand::OpenDevTools));
 }
 
 TEST_CASE("File has Print... on Command-P, after Close Window") {
-  auto bar = ngn::defaultMenuBar({.appName = "Notes"});
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()});
   const auto &file = bar[1].items;
   REQUIRE(file.size() == 3);
   CHECK(file[0].command == MenuCommand::CloseWindow);

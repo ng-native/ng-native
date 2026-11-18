@@ -85,9 +85,6 @@ std::optional<DevServer> DevServer::fromBundleUrl(const std::string &url) {
   }
   server.entry = path;
   server.platform = queryValue(query, "platform");
-  if (server.platform.empty()) {
-    server.platform = "macos";
-  }
   server.bundleUrl = url;
   return server;
 }
@@ -96,8 +93,13 @@ std::string DevServer::packagerConnectionUrl() const {
   return (scheme == "https" ? "wss://" : "ws://") + host + ":" + std::to_string(port) + "/message";
 }
 
-folly::dynamic DevServer::hmrSetupArgs() const {
-  return folly::dynamic::array(platform, entry, host, port, true, scheme);
+folly::dynamic DevServer::hmrSetupArgs(const std::string &os) const {
+  return folly::dynamic::array(platform.empty() ? os : platform, entry, host, port, true, scheme);
+}
+
+std::string &devServerOs() {
+  static std::string os;
+  return os;
 }
 
 } // namespace ngn

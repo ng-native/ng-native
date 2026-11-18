@@ -19,7 +19,7 @@ TEST_CASE("A notification's content carries its badge, 0 included, so the OS set
 
 TEST_CASE("The badge reads back the last count set, whatever an earlier count's Dock drawing does") {
   [NSApplication sharedApplication];
-  auto center = ngn::appkit::makeNotificationCenter(std::make_shared<ngn::NotificationEvents>());
+  auto center = ngn::appkit::makeNotificationCenter(std::make_shared<ngn::NotificationEvents>("macos"));
   REQUIRE_FALSE(center->canPost());
   center->setBadge(1);
   // Runs after the first count's drawing and before the second's.

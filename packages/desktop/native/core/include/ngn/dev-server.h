@@ -21,13 +21,19 @@ struct DevServer {
   uint32_t port{0};
   // The bundle's path without its leading slash and `.bundle`, as HMRClient.setup takes it.
   std::string entry;
-  // The `platform` query parameter; `macos` when the URL has none.
+  // The `platform` query parameter; empty when the URL has none.
   std::string platform;
 
   // Where Metro sends reload and dev menu messages.
   std::string packagerConnectionUrl() const;
-  // HMRClient.setup(platform, bundleEntry, host, port, isEnabled, scheme).
-  folly::dynamic hmrSetupArgs() const;
+  // HMRClient.setup(platform, bundleEntry, host, port, isEnabled, scheme), the platform `os` (the
+  // host OS's id, HostOs) when the URL names none.
+  folly::dynamic hmrSetupArgs(const std::string &os) const;
 };
+
+// The OS id the HMR client is set up for when the bundle URL names none. ReactHost makes React
+// Native's DevServerHelper (dev-server-helper.cpp) with no way to pass it one, so the runtime sets
+// it for the process before it makes its ReactHost.
+std::string &devServerOs();
 
 } // namespace ngn
