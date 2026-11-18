@@ -168,14 +168,20 @@ export class Settings {
   }));
 
   constructor() {
-    effect(() => {
+    // Once, when it is read back. A read that failed leaves the scheme the app started in.
+    const restore = effect(() => {
       if (!this.store.ready()) return;
-      const appearance = this.appearance();
-      untracked(() => this.scheme.set(appearance === 'automatic' ? null : appearance));
+      restore.destroy();
+      if (!this.store.error()) this.apply(untracked(this.appearance));
     });
   }
 
   setAppearance(appearance: Appearance): void {
     this.appearance.set(appearance);
+    this.apply(appearance);
+  }
+
+  private apply(appearance: Appearance): void {
+    this.scheme.set(appearance === 'automatic' ? null : appearance);
   }
 }

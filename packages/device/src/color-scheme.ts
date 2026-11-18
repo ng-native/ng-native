@@ -91,8 +91,9 @@ export class ColorScheme {
    * Put the whole app in `scheme`, whatever the system says, or back in the system's with null:
    * an in-app theme switch. The native chrome follows as well as the CSS, since it is the window's
    * own appearance that changes, and `current` and `prefers-color-scheme` follow the change.
-   * On Android 12 and later the system keeps the scheme across launches, until it is set again or
-   * handed back with null; on iOS and earlier Android each launch starts in the system's.
+   * In an Android 12+ build with `@ng-native/components`' native module, the system keeps the
+   * scheme across launches until it is set again or handed back with null. On iOS, on earlier
+   * Android and in Expo Go each launch starts in the system's.
    */
   set(scheme: Scheme | null): void {
     this.source.set?.(scheme);

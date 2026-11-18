@@ -3,7 +3,7 @@ import { ColorScheme } from '@ng-native/device';
 import { Storage } from '@ng-native/expo/async-storage';
 import { Store } from '@ng-native/expo/store';
 import { NativeNavigation, provideNativeRouter } from '@ng-native/router';
-import { fireEvent, render, screen, userEvent, waitFor } from '@ng-native/testing';
+import { cleanup, fireEvent, render, screen, userEvent, waitFor } from '@ng-native/testing';
 import { describe, expect, test } from 'vitest';
 import { App } from '../app.ts';
 import { routes } from '../app.routes.ts';
@@ -20,11 +20,13 @@ describe('the settings search', () => {
   });
 });
 
-/** A store holding `stored`, and what was written to it. */
-function disk(stored: Record<string, string> = {}) {
-  const data = new Map(Object.entries(stored));
+/** A store over `data`, as the disk a relaunched app reads again. A read fails with `broken`. */
+function disk(data = new Map<string, string>(), broken = false) {
   return new Store({
-    get: async (key) => data.get(key) ?? null,
+    get: async (key) => {
+      if (broken) throw new Error('unreadable');
+      return data.get(key) ?? null;
+    },
     set: async (key, value) => void data.set(key, value),
     remove: async (key) => void data.delete(key),
   });
@@ -72,16 +74,35 @@ describe('settings', () => {
     await waitFor(() => expect(asked).toEqual(['dark', null]));
   });
 
-  test('the appearance chosen is kept, and applied when the app starts', async () => {
+  test('the appearance chosen is kept, and applied when the app next starts', async () => {
+    const data = new Map<string, string>();
+    const first = disk(data);
+    await boot('/settings/display', [], first);
+    await userEvent.press(await screen.findByRole('radio', { name: 'Dark' }, asyncWait));
+    await first.flush();
+    cleanup();
+    // A screen that does not use the settings: the shell applies the choice as the app starts.
     const asked: (string | null)[] = [];
-    const store = disk({ appearance: JSON.stringify('dark') });
-    // A screen that does not use the settings: the shell applies it as the app starts.
-    const app = await boot('/notes', asked, store);
+    const second = disk(data);
+    const app = await boot('/notes', asked, second);
     await waitFor(() => expect(asked).toEqual(['dark']));
-    store.signal('appearance', 'automatic').set('light');
-    await waitFor(() => expect(asked).toEqual(['dark', 'light']));
+    // Another key read later, as another screen does, applies nothing again.
+    second.signal('elsewhere', 0);
+    await waitFor(() => expect(second.ready()).toBe(true));
+    expect(asked).toEqual(['dark']);
     await app.componentRef.injector.get(NativeNavigation).push('/settings');
-    await screen.findByLabelText('Display & Brightness, Light', undefined, asyncWait);
+    await screen.findByLabelText('Display & Brightness, Dark', undefined, asyncWait);
+  });
+
+  test('a choice that cannot be read back leaves the scheme alone, and a new one applies', async () => {
+    const asked: (string | null)[] = [];
+    const store = disk(new Map([['appearance', JSON.stringify('dark')]]), true);
+    await boot('/settings/display', asked, store);
+    await waitFor(() => expect(store.error()).not.toBeNull());
+    await screen.findByRole('radio', { name: 'Light' }, asyncWait);
+    expect(asked).toEqual([]);
+    await fireEvent(screen.getByRole('switch', { name: 'Automatic' }), 'change', { value: false });
+    await waitFor(() => expect(asked).toEqual(['light']));
   });
 
   test('Wi-Fi joins the network pressed', async () => {

@@ -746,7 +746,7 @@ describe('the colour scheme and app state sources', () => {
     });
   });
 
-  it("sets Android's per-app night mode too, which the activity's resources do not revert", () => {
+  it("forwards each scheme to Android's night-mode module too, after React Native's", () => {
     // React Native's `setColorScheme` sets AppCompat's default night mode, which an activity
     // handling `uiMode` itself loses to the system's scheme within a second of launch (#1563).
     const asked: string[] = [];
