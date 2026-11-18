@@ -160,6 +160,13 @@ beside `macos`. The Linux half has two parts, one from the Mac and one on Linux.
 
 Signing keys (`NGN_GPG_KEY`) are checked only when the release changed packaging.
 
+When the release changes `packages/desktop` or the Linux host, also run `pnpm bench:linux --host
+<build>/gtk/ngn-linux` against a release GTK host built in the `ngn-el9` image (on a Mac it runs in
+that image itself), judged against `scripts/bench-linux-budget.json` the same way, and the Linux
+manual pass in [docs/linux-manual-pass.md](../../../docs/linux-manual-pass.md): the whole checklist,
+in the GNOME and the KDE Plasma session of the UTM VM. Report the VM's own numbers from
+`bench:linux` beside the gated ones, ungated.
+
 Upgrades of a desktop app (step 4) start from the second release that has `@ng-native/desktop`.
 
 ## 4. Upgrades

@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 
 namespace ngn {
 
@@ -159,9 +160,19 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, 
 
 std::variant<LaunchSources::Lookup, std::string> packagedMetadata(const std::string &folder) {
   auto path = std::filesystem::path(folder) / "metadata.json";
+  // Only a file that is not there makes a dev run: one that is there and cannot be read is a broken
+  // package, which must not fall back to argv and the environment.
+  std::error_code error;
+  bool there = std::filesystem::exists(path, error);
+  if (error) {
+    return path.string() + " cannot be read: " + error.message();
+  }
+  if (!there) {
+    return LaunchSources::Lookup();
+  }
   std::ifstream file(path);
   if (!file) {
-    return LaunchSources::Lookup();
+    return path.string() + " cannot be read";
   }
   std::stringstream text;
   text << file.rdbuf();

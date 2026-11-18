@@ -313,4 +313,12 @@ TEST_CASE("A host with no metadata.json beside it is a dev run, and a broken one
     folder.write(text);
     CHECK(std::holds_alternative<std::string>(ngn::packagedMetadata(folder.path.string())));
   }
+
+  // One that is there but cannot be opened (a link to itself, which root cannot open either) does
+  // not start, rather than run as a dev build from argv.
+  std::filesystem::remove(folder.path / "metadata.json");
+  std::filesystem::create_symlink("metadata.json", folder.path / "metadata.json");
+  auto unreadable = ngn::packagedMetadata(folder.path.string());
+  REQUIRE(std::holds_alternative<std::string>(unreadable));
+  CHECK(std::get<std::string>(unreadable).find("cannot be read") != std::string::npos);
 }

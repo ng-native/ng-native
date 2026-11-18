@@ -4,7 +4,8 @@ name: Desktop host
 # no backend and no Hermes, which proves AppKit never leaks into the core. In the AlmaLinux 9 image
 # (native/docker), on x86_64 and arm64, the GTK host builds over Hermes with a static ICU, its tests
 # run (the GTK view tests under Xvfb), what it links needs glibc 2.34 at most, and it is launched on
-# an example app's bundle to its first frame under Xvfb and headless Weston.
+# an example app's bundle to its first frame under Xvfb and headless Weston, and the example's
+# in-app tests run on it (`vitest --project linux`).
 # On macOS, the AppKit host
 # builds as an app would build it, the core tests run there too, and the built host is launched on an
 # example app's bundle to its first frame. A pull request runs it only when
@@ -257,6 +258,28 @@ jobs:
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label
             '
 
+      # The notes example's in-app tests on the GTK host, as `vitest --project linux` runs them
+      # anywhere: Metro on the runner serves the dev bundle with the test host, and Vitest, in the
+      # image beside the host on the runner's network, starts the host on a headless Weston of its
+      # own for each launch (linuxLauncher). The first bundle is fetched once here, so the host's
+      # first load is not the cold one.
+      - name: Run the in-app tests on the GTK host
+        env:
+          EXPO_NO_TELEMETRY: '1'
+          EXPO_PUBLIC_DEVICE_TESTS: '1'
+        run: |
+          probe="$GITHUB_WORKSPACE/.linux-probe"
+          (cd examples/notes && exec pnpm exec expo start --port 8081 > "$probe/metro.log" 2>&1) &
+          metro=$!
+          trap "kill $metro" EXIT
+          for _ in $(seq 120); do curl -fs -o /dev/null http://127.0.0.1:8081/status && break; sleep 1; done
+          curl -fs -o /dev/null --max-time 600 \
+            'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true'
+          docker run --rm --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
+            -e NGN_DESKTOP_HOST="$(cat "$probe/build-dir")/gtk/ngn-linux" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/examples/notes" ngn-el9 \
+            node_modules/.bin/vitest run --project linux
+
       - if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -265,6 +288,7 @@ jobs:
             .linux-probe/*.png
             .linux-probe/gtk-tests/*.png
             .linux-probe/weston.log
+            .linux-probe/metro.log
           if-no-files-found: ignore
 
       - if: github.event_name != 'pull_request'
