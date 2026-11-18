@@ -38,14 +38,13 @@ if [ ! -d "$framework" ] || [ ! -x "$OUT/destroot/bin/hermesc" ]; then
   # Another build may fetch the same Hermes at once: publish under a lock, and keep a complete
   # copy it published rather than remove a folder it is reading.
   mkdir -p "$(dirname "$OUT")"
-  # The lock holds its owner's process ID. One whose owner has exited (killed before its trap ran)
-  # is taken over; one held by a running build is waited on, for at most ten minutes.
+  # A held lock is waited on for at most ten minutes. One left by a build killed before its trap ran
+  # is not taken over, since two builds taking it over at once could each remove the other's.
   lock="$OUT.lock"
   acquired=0
   absent=0
   for _ in $(seq 600); do
     if mkdir "$lock" 2>/dev/null; then
-      echo $$ > "$lock/pid"
       acquired=1
       break
     fi
@@ -55,11 +54,6 @@ if [ ! -d "$framework" ] || [ ! -x "$OUT/destroot/bin/hermesc" ]; then
       [ "$absent" -lt 5 ] && continue
       echo "fetch-hermes.sh: cannot create $lock" >&2
       exit 1
-    fi
-    owner="$(cat "$lock/pid" 2>/dev/null || true)"
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
-      rm -rf "$lock"
-      continue
     fi
     sleep 1
   done
