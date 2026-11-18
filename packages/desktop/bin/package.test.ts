@@ -64,6 +64,7 @@ function fakeMac(
       return { status: 0 };
     },
     links: () => ({
+      os: 'macos' as const,
       libraries: [],
       appModules: [],
       hostLibraries: [],

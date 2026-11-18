@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-import { desktopLinks, linkWarnings } from './autolink.mjs';
+import { DESKTOP_OSES, desktopLinks, linkWarnings } from './autolink.mjs';
 
 const made: string[] = [];
 afterEach(() => {
@@ -41,6 +42,13 @@ const desktopConfig = (macos: object = { cmakeTarget: 'haptics_desktop' }) => ({
   macos,
 });
 
+/** A library's config for Linux, or for both desktops when `macos` is given as well. */
+const linuxConfig = (linux: object = { cmakeTarget: 'haptics_desktop' }, macos?: object) => ({
+  platforms: ['apple', 'android', ...(macos ? ['macos'] : []), 'linux'],
+  ...(macos && { macos }),
+  linux,
+});
+
 describe('desktopLinks', () => {
   it('links a library whose expo-module.config.json lists macos, with its CMake target', () => {
     const root = app({
@@ -51,6 +59,7 @@ describe('desktopLinks', () => {
       }),
     });
     assert.deepEqual(desktopLinks(root), {
+      os: 'macos',
       libraries: [
         {
           name: 'rn-haptics',
@@ -285,9 +294,160 @@ describe('desktopLinks', () => {
   });
 });
 
+describe('DESKTOP_OSES', () => {
+  it("is the desktop OSes of the device package's one OS list", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('../../device/src/os.ts', import.meta.url)),
+      'utf8',
+    );
+    const list = /OS_NAMES = \[(.*?)\] as const/.exec(source)?.[1] ?? '';
+    const names = [...list.matchAll(/'(\w+)'/g)].map((match) => match[1]);
+    const desktop = /isDesktopOs = [^\n]*\n?[^\n;]*;/.exec(source)?.[0] ?? '';
+    const desktopNames = names.filter((name) => desktop.includes(`'${name}'`));
+    assert.deepEqual([...DESKTOP_OSES], desktopNames);
+  });
+});
+
+describe('desktopLinks on Linux', () => {
+  it('links a library whose expo-module.config.json lists linux, with its CMake target', () => {
+    const root = app({
+      'package.json': { dependencies: { 'rn-haptics': '1.0.0' } },
+      ...pkg('rn-haptics', {
+        'expo-module.config.json': linuxConfig({ cmakeTarget: 'haptics_linux', cmakeDir: 'gtk' }),
+        'gtk/CMakeLists.txt': '',
+      }),
+    });
+    const links = desktopLinks(root, { os: 'linux' });
+    assert.equal(links.os, 'linux');
+    assert.deepEqual(links.libraries, [
+      {
+        name: 'rn-haptics',
+        dir: path.join(root, 'node_modules/rn-haptics'),
+        cmakeTarget: 'haptics_linux',
+        cmakeDir: path.join(root, 'node_modules/rn-haptics/gtk'),
+      },
+    ]);
+    assert.deepEqual(links.withoutDesktop, []);
+  });
+
+  it("reads each OS's own entry from a library that lists both", () => {
+    const root = app({
+      'package.json': { dependencies: { 'rn-haptics': '1.0.0' } },
+      ...pkg('rn-haptics', {
+        'expo-module.config.json': linuxConfig(
+          { cmakeTarget: 'haptics_linux', cmakeDir: 'linux' },
+          { cmakeTarget: 'haptics_macos' },
+        ),
+        'linux/CMakeLists.txt': '',
+        'desktop/CMakeLists.txt': '',
+      }),
+    });
+    const targets = (os: 'macos' | 'linux') =>
+      desktopLinks(root, { os }).libraries.map(({ cmakeTarget }) => cmakeTarget);
+    assert.deepEqual(targets('macos'), ['haptics_macos']);
+    assert.deepEqual(targets('linux'), ['haptics_linux']);
+  });
+
+  it('leaves a library with desktop code for the other OS out, and says it has none here', () => {
+    const root = app({
+      'package.json': { dependencies: { 'mac-only': '1.0.0', 'linux-only': '1.0.0' } },
+      ...pkg('mac-only', {
+        'expo-module.config.json': desktopConfig(),
+        'desktop/CMakeLists.txt': '',
+        'ios/Module.swift': '',
+      }),
+      ...pkg('linux-only', {
+        'expo-module.config.json': linuxConfig(),
+        'desktop/CMakeLists.txt': '',
+        'ios/Module.swift': '',
+      }),
+    });
+    const onLinux = desktopLinks(root, { os: 'linux' });
+    assert.deepEqual(
+      onLinux.libraries.map(({ name }) => name),
+      ['linux-only'],
+    );
+    assert.deepEqual(onLinux.withoutDesktop, ['mac-only']);
+    const onMac = desktopLinks(root);
+    assert.deepEqual(
+      onMac.libraries.map(({ name }) => name),
+      ['mac-only'],
+    );
+    assert.deepEqual(onMac.withoutDesktop, ['linux-only']);
+  });
+
+  it("compiles in the app's own modules/<name>/linux folders, not its macos ones", () => {
+    const root = app({
+      'package.json': {},
+      'modules/clock/linux/CMakeLists.txt': '',
+      'modules/clock/expo-module.config.json': {
+        macos: { cmakeTarget: 'clock_macos' },
+        linux: { cmakeTarget: 'clock_linux' },
+      },
+      'modules/ledger/linux/ledger.cpp': '',
+      'modules/mac-only/macos/mac.mm': '',
+    });
+    assert.deepEqual(desktopLinks(root, { os: 'linux' }).appModules, [
+      { name: 'clock', dir: path.join(root, 'modules/clock/linux'), cmakeTarget: 'clock_linux' },
+      { name: 'ledger', dir: path.join(root, 'modules/ledger/linux'), cmakeTarget: null },
+    ]);
+    assert.deepEqual(
+      desktopLinks(root).appModules.map(({ name }) => name),
+      ['mac-only'],
+    );
+  });
+
+  it('keeps a denied package out and the packages it depends on in', () => {
+    const root = app({
+      'package.json': { dependencies: { denied: '1.0.0' } },
+      ...pkg('denied', { 'expo-module.config.json': linuxConfig() }, { inner: '1.0.0' }),
+      ...pkg('inner', {
+        'expo-module.config.json': linuxConfig({ cmakeTarget: 'inner' }),
+        'desktop/CMakeLists.txt': '',
+      }),
+    });
+    const links = desktopLinks(root, { os: 'linux', deny: ['denied'] });
+    assert.deepEqual(
+      links.libraries.map(({ name }) => name),
+      ['inner'],
+    );
+  });
+
+  it('names linux in why a library is left out', () => {
+    const root = app({
+      'package.json': { dependencies: { 'no-target': '1.0.0', 'no-cmake': '1.0.0' } },
+      ...pkg('no-target', { 'expo-module.config.json': linuxConfig({}) }),
+      ...pkg('no-cmake', { 'expo-module.config.json': linuxConfig() }),
+    });
+    const problems = desktopLinks(root, { os: 'linux' }).problems.join('\n');
+    assert.match(problems, /no-target lists linux .* without a linux\.cmakeTarget/);
+    assert.match(problems, /no-cmake names desktop\/CMakeLists\.txt for linux/);
+  });
+
+  it('refuses an OS it does not link for', () => {
+    assert.throws(
+      () => desktopLinks(app({ 'package.json': {} }), { os: 'ios' as never }),
+      /Autolinking is for macos and linux, not 'ios'/,
+    );
+  });
+});
+
 describe('linkWarnings', () => {
+  it('says Linux where the links are for it', () => {
+    const [line] = linkWarnings({
+      os: 'linux',
+      libraries: [],
+      appModules: [],
+      hostLibraries: [],
+      withoutDesktop: ['a'],
+      problems: [],
+    });
+    assert.match(line!, /^No desktop code in a: their native modules are absent on Linux\./);
+  });
+
   it('names the packages without desktop code and how to silence them', () => {
     const lines = linkWarnings({
+      os: 'macos',
       libraries: [],
       appModules: [],
       hostLibraries: [],
@@ -299,6 +459,7 @@ describe('linkWarnings', () => {
     assert.match(lines[1]!, /deny option of the @ng-native\/desktop plugin/);
     assert.deepEqual(
       linkWarnings({
+        os: 'macos',
         libraries: [],
         appModules: [],
         hostLibraries: [],

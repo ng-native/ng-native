@@ -1,13 +1,15 @@
 # Autolinked native code: the libraries and app modules bin/autolink.mjs lists in the app's
-# link.json, which scripts/build.sh passes as NGN_DESKTOP_LINK.
+# link.json, which scripts/build.sh passes as NGN_DESKTOP_LINK. The link.json is for one desktop OS
+# (its `os`: macos for the appkit backend, linux for the gtk one), and the build refuses one made
+# for another, since its modules' sources are that OS's.
 #
-# - A library's CMake fragment (its `macos.cmakeDir`, `desktop` by default) declares the target its
-#   `macos.cmakeTarget` names. The build gives that target React Native's headers, JSI and folly,
+# - A library's CMake fragment (its `<os>.cmakeDir`, `desktop` by default) declares the target its
+#   `<os>.cmakeTarget` names. The build gives that target React Native's headers, JSI and folly,
 #   the host's appkit/component-view.h, and the codegen of the library's specs when its
 #   package.json has a codegenConfig: the `<Name>JSI.h` its C++ module implements, and its Fabric
 #   components' props, events and shadow nodes, which scripts/build.sh also compiles in and
 #   registers through cmake/libraries.cmake, as on Android.
-# - An app module's `modules/<name>/macos/` folder either has a CMakeLists.txt declaring the target
+# - An app module's `modules/<name>/<os>/` folder either has a CMakeLists.txt declaring the target
 #   its expo-module.config.json names, or is compiled whole: every .cpp, .mm, .m and .c in it.
 #
 # Either way the code registers its TurboModules itself as it loads, the way React Native's iOS
@@ -26,6 +28,8 @@ target_link_libraries(ngn_module_api INTERFACE react_native)
 # A library's views include appkit/component-view.h, and through it the core's headers.
 if(NGN_BACKEND STREQUAL "appkit")
   target_include_directories(ngn_module_api INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/appkit ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
+elseif(NGN_BACKEND STREQUAL "gtk")
+  target_include_directories(ngn_module_api INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
 endif()
 
 set(NGN_LINKED "")
@@ -49,6 +53,18 @@ if(NGN_DESKTOP_LINK)
   string(JSON _version GET "${_link}" version)
   if(NOT _version EQUAL 1)
     message(FATAL_ERROR "${NGN_DESKTOP_LINK} is version ${_version}; this host reads version 1")
+  endif()
+  if(NGN_BACKEND STREQUAL "gtk")
+    set(_os linux)
+  else()
+    set(_os macos)
+  endif()
+  string(JSON _link_os ERROR_VARIABLE _no_os GET "${_link}" os)
+  if(_no_os)
+    set(_link_os macos) # written before link.json named its OS
+  endif()
+  if(NOT _link_os STREQUAL _os)
+    message(FATAL_ERROR "${NGN_DESKTOP_LINK} links native code for ${_link_os}, and the ${NGN_BACKEND} backend is built for ${_os}")
   endif()
 
   string(JSON _count LENGTH "${_link}" libraries)

@@ -214,21 +214,22 @@ export const system = {
 /** @typedef {import('./app-config.mjs').ExpoConfig} ExpoConfig */
 
 /**
- * Throws a usage error naming the fix when the app's Expo config cannot run on macOS: without
- * `macos` in `expo.platforms`, Metro does not bundle for it, and without the experiment Expo drops
- * `macos` from the list without a word.
+ * Throws a usage error naming the fix when the app's Expo config cannot run on a desktop OS:
+ * without the OS in `expo.platforms`, Metro does not bundle for it, and without the experiment Expo
+ * drops it from the list without a word.
  *
  * @param {ExpoConfig} config
+ * @param {import('./autolink.mjs').DesktopOs} [os]
  */
-export function checkExpoConfig(config) {
-  if (!config.platforms?.includes('macos')) {
+export function checkExpoConfig(config, os = 'macos') {
+  if (!config.platforms?.includes(os)) {
     throw new UsageError(
-      'The app\'s Expo config does not list macos. Add "macos" to expo.platforms in app.json and set expo.experiments.outOfTreePlatforms to true.',
+      `The app's Expo config does not list ${os}. Add "${os}" to expo.platforms in app.json and set expo.experiments.outOfTreePlatforms to true.`,
     );
   }
   if (!config.experiments?.outOfTreePlatforms) {
     throw new UsageError(
-      "The app's Expo config lists macos without expo.experiments.outOfTreePlatforms, so Expo ignores it. Set expo.experiments.outOfTreePlatforms to true in app.json.",
+      `The app's Expo config lists ${os} without expo.experiments.outOfTreePlatforms, so Expo ignores it. Set expo.experiments.outOfTreePlatforms to true in app.json.`,
     );
   }
 }
@@ -248,12 +249,13 @@ function resolveReactNative(sys, cwd) {
 }
 
 /**
- * The app's Expo config, checked for macos.
+ * The app's Expo config, checked for a desktop OS.
  *
  * @param {typeof system} sys
  * @param {string} cwd
+ * @param {import('./autolink.mjs').DesktopOs} [os]
  */
-export function readExpoConfig(sys, cwd) {
+export function readExpoConfig(sys, cwd, os = 'macos') {
   /** @type {ExpoConfig} */
   let config;
   try {
@@ -263,7 +265,7 @@ export function readExpoConfig(sys, cwd) {
       `Could not read the app's Expo config in ${cwd}: ${error instanceof Error ? error.message : error}`,
     );
   }
-  checkExpoConfig(config);
+  checkExpoConfig(config, os);
   return config;
 }
 
@@ -278,23 +280,40 @@ export function linkFile(appDir) {
 }
 
 /**
+ * Throws a usage error when the host for `os` cannot be built on this machine: a Mac builds
+ * macOS's, a Linux machine Linux's.
+ *
+ * @param {typeof system} sys
+ * @param {import('./autolink.mjs').DesktopOs} os
+ */
+function checkHostMachine(sys, os) {
+  if (os === 'linux' && sys.platform !== 'linux') {
+    throw new UsageError('The Linux desktop host builds on Linux only for now.');
+  }
+  if (os === 'macos' && sys.platform !== 'darwin') {
+    throw new UsageError('The desktop host runs on macOS only for now.');
+  }
+}
+
+/**
  * Everything a command needs before it uses the host: the app's checked config, its links written
  * for the build, a warning for each dependency the build leaves without its native code, and the
  * host built (a no-op when nothing changed).
  *
  * @param {typeof system} sys
- * @param {{ universal: boolean, release?: boolean, expo?: ExpoConfig }} options `release` builds
+ * @param {{ universal: boolean, release?: boolean, expo?: ExpoConfig, os?: import('./autolink.mjs').DesktopOs }} options
+ *   `os` is the desktop OS the host is for (macos unless said), which picks the native code the app
+ *   links (`autolink.mjs`); `release` builds
  *   the host as a packaged app ships it, without the core tests or the debugger, and takes the
  *   release prebuilt host where one fits (the debug one otherwise); `expo` is the app's config
  *   when the caller has read it already
  */
 export function prepareHost(sys, options) {
-  if (sys.platform !== 'darwin') {
-    throw new UsageError('The desktop host runs on macOS only for now.');
-  }
+  const os = options.os ?? 'macos';
+  checkHostMachine(sys, os);
   const cwd = sys.cwd();
   const reactNative = resolveReactNative(sys, cwd);
-  const expo = options.expo ?? readExpoConfig(sys, cwd);
+  const expo = options.expo ?? readExpoConfig(sys, cwd, os);
   const config = desktopAppConfig(expo);
   if (/[/\\]/.test(config.name) || config.name === '.' || config.name === '..') {
     throw new UsageError(
@@ -303,12 +322,12 @@ export function prepareHost(sys, options) {
     );
   }
   const deny = config.options.deny ?? [];
-  const links = sys.links(cwd, { deny, builtIn: HOST_LIBRARIES });
+  const links = sys.links(cwd, { os, deny, builtIn: HOST_LIBRARIES });
   for (const line of linkWarnings(links)) sys.warn(line);
   // Written every time, so a library removed or denied leaves the build with the rest.
   const file = linkFile(cwd);
   const { libraries, appModules } = links;
-  sys.writeFile(file, `${JSON.stringify({ version: 1, libraries, appModules }, null, 2)}\n`);
+  sys.writeFile(file, `${JSON.stringify({ version: 1, os, libraries, appModules }, null, 2)}\n`);
   // Where autolinking found each host library, under a dependency's node_modules too, else where
   // it resolves from the app (a peer dependency the package manager installed, which the walk
   // does not follow).
