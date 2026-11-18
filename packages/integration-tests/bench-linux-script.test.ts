@@ -131,7 +131,14 @@ describe('the Linux budget', () => {
     });
     const { ok, results } = macos.judge({}, budget);
     assert.equal(ok, false);
-    assert.ok(results.every((result) => result.status === 'missing'));
+    // Each waiver names its pull request and why; only a waived metric is let through.
+    const waived =
+      (budget as { waivers?: { metric: string; pr: string; reason: string }[] }).waivers ?? [];
+    for (const waiver of waived) assert.ok(waiver.pr && waiver.reason, waiver.metric);
+    for (const result of results) {
+      const expected = waived.some((one) => one.metric === result.metric) ? 'waived' : 'missing';
+      assert.equal(result.status, expected, result.metric);
+    }
   });
 });
 

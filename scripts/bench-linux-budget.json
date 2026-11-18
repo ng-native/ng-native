@@ -7,5 +7,11 @@
     "memoryMb": 110,
     "hostMb": 30
   },
-  "waivers": []
+  "waivers": [
+    {
+      "metric": "memoryMb",
+      "reason": "The first nightly runs (2026-11-18) measured 133.9 MB PSS on x86_64 and 132.6 MB on arm64 against the provisional 110 MB. Waived until enough nightly runs give the stable median that, plus 20 to 30%, replaces the provisional ceiling.",
+      "pr": "https://github.com/ng-native/ng-native/pull/1574"
+    }
+  ]
 }
