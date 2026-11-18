@@ -13,9 +13,10 @@ and the web it is absent: `available()` is `false`, `env` is empty and `spawn` r
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Processes } from '@ng-native/device';
 
-@Component({ selector: 'app-about', template: `<text>{{ home }}</text>` })
+@Component({ selector: 'app-about', imports: [Text], template: `<text>{{ home }}</text>` })
 export class About {
   private readonly processes = inject(Processes);
   protected readonly home = this.processes.env['HOME'] ?? '';

@@ -70,12 +70,33 @@ component name for `expo-camera`'s view. `expo-camera` registers as the module's
 (the Fabric name is `ViewManagerAdapter_ExpoCamera`, with no view name suffix), because the camera
 is the only view the module renders.
 
+## View props
+
+`Camera`'s inputs are `expo-camera`'s view props, typed from its own `CameraViewProps`, so a
+template that imports `Camera` is checked against them: `facing`, `flash`, `zoom`, `mode`, `mute`,
+`mirror`, `autofocus`, `active`, `videoQuality`, `videoBitrate`, `animateShutter`, `pictureSize`,
+`selectedLens`, `enableTorch`, `videoStabilizationMode`, `barcodeScannerSettings`,
+`responsiveOrientationWhenOrientationLocked` and `ratio`. `flash` and `autofocus` are committed as
+`flashMode` and `autoFocus`, the names the native view reads, as `expo-camera`'s `CameraView`
+renames them. Those two names work as inputs too, and `flash` or `autofocus` wins when both are
+set. `barcodeScannerEnabled` is the native prop `CameraView` sets when it is given
+`onBarcodeScanned`: set it to scan, and `(barcodeScanned)` has each barcode.
+
+```html
+<expo-camera facing="front" flash="auto" zoom="0.2" enableTorch mirror class="flex-1" />
+```
+
+A boolean prop works bound, `[enableTorch]="torch()"`, or written bare, `enableTorch`: the bare
+attribute is true, and `null` or `undefined` leaves the prop to `expo-camera`'s default. An input
+left unset commits nothing, so the native view keeps its own default, but for `flash`, which is
+`off` unless set, as `expo-camera`'s `CameraView` sends it: the iOS view's own default is `auto`.
+
 ## The camera permission
 
 The view needs the camera permission before it shows anything. Nothing in `Camera` asks for it -
-the directive only takes pictures - so ask yourself, with **`cameraPermission()`**. It returns a
-[`Permission`](/packages/expo/permissions): `status()`, `granted()` and `blocked()` as signals, and
-`check()`, `request()` and `ensure()` to read or ask.
+the directive takes pictures and passes the view its props - so ask yourself, with
+**`cameraPermission()`**. It returns a [`Permission`](/packages/expo/permissions): `status()`,
+`granted()` and `blocked()` as signals, and `check()`, `request()` and `ensure()` to read or ask.
 
 ```ts
 protected readonly permission = cameraPermission();

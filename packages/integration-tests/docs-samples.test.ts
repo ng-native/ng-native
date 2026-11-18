@@ -287,10 +287,12 @@ describe('docs code samples typecheck against the real packages', () => {
       if (d.category !== ts.DiagnosticCategory.Error) return [];
       // A styleUrl or templateUrl the page does not show, as a relative import is to the pass above.
       if (/^Could not find (stylesheet|template) file/.test(String(d.messageText))) return [];
-      const sample = d.file && samples.get(d.file.fileName);
-      if (!sample) return [];
-      const { line } = d.file!.getLineAndCharacterOfPosition(d.start ?? 0);
       const text = ts.flattenDiagnosticMessageText(d.messageText, '\n').split('\n')[0];
+      const sample = d.file && samples.get(d.file.fileName);
+      // An error in a type-check file Angular generates, such as a component it cannot import,
+      // stops the template checks of every sample, so it is a failure, not one to set aside.
+      if (!sample) return [`${d.file?.fileName ?? 'the program'} - ${text}`];
+      const { line } = d.file!.getLineAndCharacterOfPosition(d.start ?? 0);
       return [`${sample.file}:${sample.line + line} - ${text}`];
     });
     assert.ok(components.length > 50, `only ${components.length} component samples were checked`);

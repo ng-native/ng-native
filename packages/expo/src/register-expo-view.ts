@@ -93,10 +93,13 @@ export function registerExpoView(
 /**
  * The views worth knowing the names of, so an app does not have to look each one up.
  *
- * Deliberately names and defaults, not components. An Angular component per Expo view, prop for
- * prop, is a maintenance burden with no end and a second place for every prop to be wrong; the
- * element plus the module's own documentation covers the common case, and an app that wants a
- * nicer surface writes the one component it actually needs.
+ * Names and defaults. Each view here also has a typed component or directive in this package
+ * (`ExpoImage`, `ExpoBlur`, `ExpoVideo`, `Camera`, `AppleSignInButton`, `ExpoSymbol`, `ExpoGL`,
+ * `ExpoGlass`, `ExpoGlassContainer`, `ExpoMeshGradient`, `ExpoLivePhoto`, and `MapView` for both
+ * maps), whose inputs are the module's props: a template is checked against them, and a boolean
+ * written as a bare attribute commits as true. Without it the element still commits, and takes
+ * whatever it is given, so a bare boolean attribute reaches native as an empty string, which iOS,
+ * Android and macOS each drop for a boolean prop.
  *
  * A module still has to be installed for its element to commit as anything: this is the
  * JavaScript half. An element whose native side is missing commits as `UnimplementedNativeView`.

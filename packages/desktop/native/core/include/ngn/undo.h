@@ -14,7 +14,9 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -30,6 +32,31 @@ class UndoManager {
   virtual void undo() = 0;
   virtual void redo() = 0;
   virtual void clear() = 0;
+};
+
+// Those rules over two stacks, for a toolkit with no undo manager of its own (macOS keeps
+// NSUndoManager, which its Edit menu and text inputs share). Each action is a step of its own.
+// Called on the toolkit's main thread, as the toolkit's undo manager is.
+class UndoStacks final : public UndoManager {
+ public:
+  void registerAction(const std::string &label, std::function<void()> action) override;
+  bool undoing() const override;
+  void undo() override;
+  void redo() override;
+  void clear() override;
+  // The label of the action undo or redo would run, for Edit > Undo and Edit > Redo, or none.
+  std::optional<std::string> undoLabel() const;
+  std::optional<std::string> redoLabel() const;
+
+ private:
+  struct Action {
+    std::string label;
+    std::function<void()> run;
+  };
+  std::vector<Action> undos_;
+  std::vector<Action> redos_;
+  bool undoing_{false};
+  bool redoing_{false};
 };
 
 std::shared_ptr<NativeModule> makeUndoModule(std::shared_ptr<UndoManager> manager);

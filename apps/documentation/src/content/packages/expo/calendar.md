@@ -33,10 +33,12 @@ The module's object API needs a development build: Expo Go does not have it.
 ```ts
 import { Component, inject, signal } from '@angular/core';
 import type { ExpoCalendarEvent } from 'expo-calendar';
+import { Text } from '@ng-native/components';
 import { Calendar } from '@ng-native/expo/calendar';
 
 @Component({
   selector: 'app-this-week',
+  imports: [Text],
   template: `
     @for (event of events(); track $index) {
       <text>{{ event.title }}</text>
