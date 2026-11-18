@@ -70,10 +70,13 @@ const DESKTOP_SOURCE_FILES = [
 const DESKTOP_ONLY_FILES = ['src/app/app.device.ts'];
 
 /**
- * The desktop template's Vitest project that runs in Node, which `test` runs alone: its other
- * project opens the app.
+ * The desktop template's Vitest projects that run in Node, one for each OS, which `test` runs
+ * alone: its others open the app.
  */
-const DESKTOP_TEST = 'vitest run --project node-macos';
+const DESKTOP_TEST = shared.DESKTOP_OSES.reduce(
+  (command, os) => `${command} --project node-${os}`,
+  'vitest run',
+);
 
 /**
  * @param {string} name
@@ -223,9 +226,9 @@ function vitestConfig(withPaths, desktopOnly = false) {
         "import { defineConfig } from 'vitest/config';",
     )
     .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],')
-    .replace(
-      "plugins: [ngNative({ os: 'macos' })]",
-      "plugins: [tsconfigPaths(), ngNative({ os: 'macos' })]",
+    .replaceAll(
+      /plugins: \[ngNative\(\{ os: '(\w+)' \}\)\]/g,
+      "plugins: [tsconfigPaths(), ngNative({ os: '$1' })]",
     );
 }
 

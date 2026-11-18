@@ -155,7 +155,10 @@ function bundleIdentifier(name, scope) {
   return ['com', ...(valid(org) ? [org] : []), valid(app) ? app : `app${app}`].join('.');
 }
 
-/** The package that builds and packages the macOS app, and its config plugin's name. */
+/** The OSes a desktop app runs on, in the order its `platforms` lists them. */
+const DESKTOP_OSES = ['macos', 'linux'];
+
+/** The package that builds and packages the desktop app, and its config plugin's name. */
 const DESKTOP_PACKAGE = '@ng-native/desktop';
 
 /** What a desktop app adds to its dependencies: the host and the `ng-native-desktop` command. */
@@ -191,30 +194,40 @@ const mobileDependencies = Object.fromEntries(
 );
 
 /**
- * The scripts a desktop app adds: `npm run macos` builds the host and opens the app from the dev
- * server `npm start` runs, and `npm run package` makes the `.app`, `.dmg` or Mac App Store package.
- * The Expo CLI has no `run:macos`: its `run` commands are a fixed list.
+ * The scripts a desktop app adds: `npm run macos` and `npm run linux` build the host and open the
+ * app from the dev server `npm start` runs, and `npm run package` makes the `.app`, `.dmg` or Mac
+ * App Store package, or on Linux the `app`, `deb`, `rpm` or `flatpak` one. The Expo CLI has no
+ * `run:macos` or `run:linux`: its `run` commands are a fixed list.
  */
-const DESKTOP_SCRIPTS = { macos: 'ng-native-desktop run', package: 'ng-native-desktop package' };
+const DESKTOP_SCRIPTS = {
+  macos: 'ng-native-desktop run',
+  linux: 'ng-native-desktop run',
+  package: 'ng-native-desktop package',
+};
 
 /** What `ng-native-desktop package` writes into the app's directory, for its `.gitignore`. */
-const DESKTOP_GITIGNORE = ['# Built by ng-native-desktop package', '/dist/macos', ''].join('\n');
+const DESKTOP_GITIGNORE = [
+  '# Built by ng-native-desktop package',
+  ...DESKTOP_OSES.map((os) => `/dist/${os}`),
+  '',
+].join('\n');
 
 /**
- * An Expo config with macOS added: `macos` in `platforms` (with iOS and Android when the config
- * named none, which is Expo's default), Expo's `experiments.outOfTreePlatforms`, without which Expo
- * drops `macos` from every bundle and export without a word, and the desktop config plugin. Adding
- * twice changes nothing.
+ * An Expo config with desktop OSes added: each of `oses` in `platforms` (with iOS and Android when
+ * the config named none, which is Expo's default), Expo's `experiments.outOfTreePlatforms`, without
+ * which Expo drops `macos` and `linux` from every bundle and export without a word, and the desktop
+ * config plugin. Adding twice changes nothing.
  *
  * @param {Record<string, any>} expo
+ * @param {readonly string[]} [oses] the desktop OSes to add, every one by default
  */
-function withDesktop(expo) {
+function withDesktop(expo, oses = DESKTOP_OSES) {
   const platforms = expo.platforms ?? ['ios', 'android'];
   const plugins = expo.plugins ?? [];
   const named = (plugin) => (Array.isArray(plugin) ? plugin[0] : plugin);
   return {
     ...expo,
-    platforms: platforms.includes('macos') ? platforms : [...platforms, 'macos'],
+    platforms: [...platforms, ...oses.filter((os) => !platforms.includes(os))],
     experiments: { ...expo.experiments, outOfTreePlatforms: true },
     plugins: plugins.some((plugin) => named(plugin) === DESKTOP_PACKAGE)
       ? plugins
@@ -255,14 +268,16 @@ function withMobile(expo) {
  * @param {string} name the project name, which is also the Expo slug once any scope is removed
  * @param {string} [id] the iOS bundle identifier and Android package, by default one from `name`
  * @param {readonly string[]} [platforms] the OSes the app runs on, iOS and Android by default. With
- *   `macos`, Expo's `experiments.outOfTreePlatforms` is set too: without it Expo drops `macos` from
- *   every bundle and export without a word.
+ *   a desktop OS, Expo's `experiments.outOfTreePlatforms` is set too: without it Expo drops `macos`
+ *   and `linux` from every bundle and export without a word. Only desktop OSes make the desktop
+ *   template's app, with no phone settings.
  */
 function appJson(name, id, platforms = ['ios', 'android']) {
   const slug = name.replace(/^@[^/]+\//, '');
   const bundle = id ?? bundleIdentifier(slug, name.match(/^@[^/]+/)?.[0]);
-  if (platforms.length === 1 && platforms[0] === 'macos') {
-    return JSON.stringify({ expo: desktopOnlyExpo(slug, bundle) }, null, 2) + '\n';
+  const desktop = platforms.some((os) => DESKTOP_OSES.includes(os));
+  if (desktop && platforms.every((os) => DESKTOP_OSES.includes(os))) {
+    return JSON.stringify({ expo: desktopOnlyExpo(slug, bundle, platforms) }, null, 2) + '\n';
   }
   const expo = {
     name: slug,
@@ -270,7 +285,7 @@ function appJson(name, id, platforms = ['ios', 'android']) {
     version: '1.0.0',
     // Not left to Expo, which adds `web` whenever `react-dom` resolves, and @nx/react puts one there.
     platforms: [...platforms],
-    ...(platforms.includes('macos') ? { experiments: { outOfTreePlatforms: true } } : {}),
+    ...(desktop ? { experiments: { outOfTreePlatforms: true } } : {}),
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
     ios: { supportsTablet: true, bundleIdentifier: bundle },
@@ -278,25 +293,26 @@ function appJson(name, id, platforms = ['ios', 'android']) {
     scheme: slug.replace(/[^a-z0-9]/gi, '').toLowerCase(),
     // The template's: Expo otherwise guesses a router root from src/app and says so on every start.
     extra: { router: { root: 'src/app' } },
-    plugins: ['@ng-native/metro', ...(platforms.includes('macos') ? [DESKTOP_PACKAGE] : [])],
+    plugins: ['@ng-native/metro', ...(desktop ? [DESKTOP_PACKAGE] : [])],
   };
   return JSON.stringify({ expo }, null, 2) + '\n';
 }
 
 /**
- * The desktop template's `app.json`, named for this app: macOS alone, with no phone settings. The
- * bundle identifier stays in `ios.bundleIdentifier`, the key a Mac app's is read from, since Apple
- * shares one identifier across its OSes.
+ * The desktop template's `app.json`, named for this app: the desktop OSes alone, with no phone
+ * settings. The bundle identifier stays in `ios.bundleIdentifier`, the key a desktop app's is read
+ * from, since Apple shares one identifier across its OSes and a Linux app takes its id from it.
  *
  * @param {string} slug
  * @param {string} bundle
+ * @param {readonly string[]} [platforms] the desktop OSes, every one by default
  */
-function desktopOnlyExpo(slug, bundle) {
+function desktopOnlyExpo(slug, bundle, platforms = DESKTOP_OSES) {
   return {
     name: slug,
     slug,
     version: '1.0.0',
-    platforms: ['macos'],
+    platforms: [...platforms],
     experiments: { outOfTreePlatforms: true },
     userInterfaceStyle: 'automatic',
     ios: { bundleIdentifier: bundle },
@@ -374,6 +390,7 @@ module.exports = {
   lintDevDependencies,
   ESLINT_CONFIG,
   GITIGNORE,
+  DESKTOP_OSES,
   DESKTOP_PACKAGE,
   DESKTOP_SCRIPTS,
   DESKTOP_GITIGNORE,

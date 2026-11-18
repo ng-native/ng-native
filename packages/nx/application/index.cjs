@@ -196,7 +196,8 @@ function commands(name, lint, desktopOnly) {
   const runs = desktopOnly
     ? [
         [`nx start ${name}`, 'Metro, the dev server the app loads from'],
-        [`nx run ${name}:macos`, 'builds the desktop host and opens the app from Metro'],
+        [`nx run ${name}:macos`, 'on a Mac: builds the desktop host and opens the app from Metro'],
+        [`nx run ${name}:linux`, 'on Linux: the same, in GTK'],
       ]
     : [
         [
@@ -212,7 +213,12 @@ function commands(name, lint, desktopOnly) {
     [`nx typecheck ${name}`, 'TypeScript, without emitting'],
     ...(lint ? [[`nx lint ${name}`, 'ESLint: what compiles but does nothing on a device']] : []),
     ...(desktopOnly
-      ? [[`nx run ${name}:package`, 'the .app; --format dmg or mas to ship it']]
+      ? [
+          [
+            `nx run ${name}:package`,
+            'the .app, or the app folder on Linux; --format dmg, mas, deb, rpm or flatpak to ship it',
+          ],
+        ]
       : []),
   ];
   const width = Math.max(...rows.map(([command]) => command.length)) + 2;
@@ -252,7 +258,7 @@ async function writeFiles(tree, resolved) {
   for (const name of native.SOURCE_FILES) file(name, native.sourceFile(name, desktopOnly));
   if (desktopOnly)
     for (const name of native.DESKTOP_ONLY_FILES) file(name, native.sourceFile(name, true));
-  const platforms = desktopOnly ? ['macos'] : undefined;
+  const platforms = desktopOnly ? native.DESKTOP_OSES : undefined;
   file('app.json', native.appJson(projectName, bundleIdentifier, platforms));
   file('AGENTS.md', native.agentsFile(commands(projectName, lint, desktopOnly), desktopOnly));
   file('CLAUDE.md', '@AGENTS.md\n');
@@ -354,7 +360,7 @@ async function application(tree, options) {
   if (!options.skipFormat) await formatFiles(tree);
   logger.info(
     `Created ${directory}. nx start ${projectName} runs Metro; ` +
-      `nx run ${projectName}:${desktopOnly ? 'macos' : 'run-ios'}, ` +
+      `nx run ${projectName}:${desktopOnly ? 'macos or nx run ' + projectName + ':linux' : 'run-ios'}, ` +
       `nx test ${projectName}, nx typecheck ${projectName}, ` +
       (lint ? `nx lint ${projectName}, ` : '') +
       `nx export ${projectName}.`,

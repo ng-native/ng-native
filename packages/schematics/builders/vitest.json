@@ -14,8 +14,9 @@
       "description": "Only test files whose path contains this."
     },
     "project": {
-      "type": "string",
-      "description": "Only this Vitest project, by its name in vitest.config.mts. A desktop-only app's test target runs node-macos, since its macos project opens the app."
+      "type": ["string", "array"],
+      "items": { "type": "string" },
+      "description": "Only this Vitest project, or these, by name in vitest.config.mts. A desktop-only app's test target runs node-macos and node-linux, since its other projects open the app."
     }
   }
 }

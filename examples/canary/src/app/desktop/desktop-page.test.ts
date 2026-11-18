@@ -48,6 +48,21 @@ test('lists what is dropped on it', async () => {
   expect(screen.getByText('File notes.md')).toBeTruthy();
 });
 
+test.each([
+  ['macos', 'On macOS. The menu bar has a Canary menu while this screen is open'],
+  ['linux', 'On Linux. The Canary menu is a menu bar under the header bar on KDE Plasma'],
+  ['ios', 'On iOS. On an iPad the menu bar has a Canary menu'],
+  ['android', 'On Android. No menu bar is drawn'],
+] as const)('names %s and says where its menu and shortcuts are', async (os, start) => {
+  await render(DesktopPage, { os, providers: [provideNativeRouter([])] });
+  expect(screen.getByText(new RegExp('^' + start))).toBeTruthy();
+});
+
+test('claims shortcuts only on the OSes that have them', async () => {
+  await render(DesktopPage, { os: 'linux', providers: [provideNativeRouter([])] });
+  expect(screen.getByText(/^On Linux\.(?!.*(iPad|iPhone|Android))/s)).toBeTruthy();
+});
+
 test('says there is one window on iOS', async () => {
   await render(DesktopPage, { providers: [provideNativeRouter([])] });
   await userEvent.press(screen.getByTestId('library'));

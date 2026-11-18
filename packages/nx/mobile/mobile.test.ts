@@ -82,10 +82,12 @@ describe('the mobile generator', () => {
     await run(tree);
     const { expo } = readJson(tree, 'apps/desktop/app.json');
     const bundle = expo.ios.bundleIdentifier;
-    // What an app generated for iOS and Android, then given macOS, has.
-    const expected = JSON.parse(native.appJson('desktop', bundle, ['ios', 'android', 'macos']));
+    // What an app generated for iOS and Android, then given the desktop OSes, has.
+    const expected = JSON.parse(
+      native.appJson('desktop', bundle, ['ios', 'android', 'macos', 'linux']),
+    );
     assert.deepEqual(expo, expected.expo);
-    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos']);
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos', 'linux']);
     assert.equal(expo.android.package, bundle);
   });
 

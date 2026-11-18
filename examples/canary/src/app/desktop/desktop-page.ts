@@ -14,14 +14,39 @@ import {
   View,
   type FileDropEvent,
 } from '@ng-native/components';
-import { AppWindows, OS, UndoStack } from '@ng-native/device';
+import { AppWindows, OS, UndoStack, type OsName } from '@ng-native/device';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
 import { LibraryWindow } from './library-window.ts';
 import { TitleBarWindow } from './title-bar-window.ts';
 
+/** What each OS is called in the screen's text: `OS` answers `'macos'` and `'linux'`. */
+const OS_LABELS: Record<OsName, string> = {
+  ios: 'iOS',
+  android: 'Android',
+  macos: 'macOS',
+  linux: 'Linux',
+  web: 'the web host',
+};
+
 /**
- * What a Mac app has that a phone app does not: a menu bar of the app's own, keyboard shortcuts,
+ * Where the Canary menu is on each OS and where its shortcuts work, from the support matrix
+ * (`OS_SUPPORT`): a menu bar on macOS and iPadOS, GTK's on Linux, nothing drawn on iPhone and
+ * Android, and `mod` is Ctrl on Linux and Android.
+ */
+const MENU_NOTES: Record<OsName, string> = {
+  macos:
+    'The menu bar has a Canary menu while this screen is open, and its shortcuts work from the keyboard.',
+  linux:
+    "The Canary menu is a menu bar under the header bar on KDE Plasma and in the header bar's main menu elsewhere while this screen is open, and its shortcuts work with Ctrl.",
+  ios: 'On an iPad the menu bar has a Canary menu while this screen is open, and its shortcuts work from a hardware keyboard on an iPad or an iPhone.',
+  android:
+    "No menu bar is drawn, and the Canary menu's shortcuts work from a hardware keyboard with Ctrl, Alt, Shift or Meta held.",
+  web: "The web host draws no menu bar, and the Canary menu's shortcuts work from the keyboard.",
+};
+
+/**
+ * What a desktop app has that a phone app does not: a menu bar of the app's own, keyboard shortcuts,
  * context menus, windows, drag and drop, and undo. Each section says what it does on the OS the
  * app is on, so the screen is worth opening on iOS and Android too.
  */
@@ -51,10 +76,7 @@ import { TitleBarWindow } from './title-bar-window.ts';
       </menu-group>
     </menu-bar>
     <scroll-view class="screen" [contentContainerStyle]="page.content">
-      <text class="hint">
-        On {{ os }}. The menu bar has a Canary menu while this screen is open, and its shortcuts
-        work from a hardware keyboard on iPad, iPhone and Android.
-      </text>
+      <text class="hint"> On {{ osLabel }}. {{ menuNote }} </text>
 
       <text class="heading">Stars and undo</text>
       <text class="body">{{ stars() }} stars</text>
@@ -124,7 +146,7 @@ import { TitleBarWindow } from './title-bar-window.ts';
         <text class="body">Drag this card into another app.</text>
       </view>
       <text class="hint"
-        >On macOS and iPadOS. Nothing fires on iPhone, Android or the web host.</text
+        >On macOS, Linux and iPadOS. Nothing fires on iPhone, Android or the web host.</text
       >
     </scroll-view>
   `,
@@ -132,7 +154,9 @@ import { TitleBarWindow } from './title-bar-window.ts';
 export class DesktopPage {
   protected readonly undo = inject(UndoStack);
   private readonly windows = inject(AppWindows);
-  protected readonly os = inject(OS);
+  private readonly os = inject(OS);
+  protected readonly osLabel = OS_LABELS[this.os];
+  protected readonly menuNote = MENU_NOTES[this.os];
   protected readonly page = page;
 
   protected readonly stars = signal(0);

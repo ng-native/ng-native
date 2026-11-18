@@ -1,14 +1,17 @@
 /**
- * `ng generate @ng-native/schematics:desktop native`: an Angular Native app that runs on macOS too.
+ * `ng generate @ng-native/schematics:desktop native`: an Angular Native app that runs on macOS and
+ * Linux too.
  *
- * The project's `app.json` lists `macos` with Expo's `experiments.outOfTreePlatforms` (without it
- * Expo drops `macos` from every bundle and export, and says nothing) and the `@ng-native/desktop`
- * config plugin. The workspace depends on `@ng-native/desktop`, and the project gains two targets on
- * the `expo` builder: `ng run native:macos` builds the desktop host and opens the app from the dev
- * server `ng serve native` runs, and `ng run native:package` makes the `.app`, `.dmg` or Mac App
- * Store package.
+ * The project's `app.json` lists `macos` and `linux` with Expo's `experiments.outOfTreePlatforms`
+ * (without it Expo drops them from every bundle and export, and says nothing) and the
+ * `@ng-native/desktop` config plugin. The workspace depends on `@ng-native/desktop`, and the
+ * project gains targets on the `expo` builder: `ng run native:macos` and `ng run native:linux`
+ * build the desktop host and open the app from the dev server `ng serve native` runs, and
+ * `ng run native:package` makes the `.app`, `.dmg` or Mac App Store package, or on Linux the app
+ * folder, `.deb`, `.rpm` or Flatpak.
  *
- * It only adds, so running it again changes nothing.
+ * It only adds, so running it again changes nothing, and a project that has `macos` alone gains
+ * `linux`.
  */
 const path = require('node:path').posix;
 const { workspaces } = require('@angular-devkit/core');
@@ -29,7 +32,7 @@ function writeJson(tree, file, value) {
 
 /**
  * The port the project's `serve` target runs Metro on, from its `port` option or a `--port` in its
- * `args`, or undefined for Expo's default. The `macos` target loads the app from it.
+ * `args`, or undefined for Expo's default. The `macos` and `linux` targets load the app from it.
  */
 function servePort(project) {
   const serve = project?.targets.get('serve');
@@ -51,15 +54,18 @@ function portOf(options = {}) {
 }
 
 /**
- * The two targets, each on the `expo` builder, which runs `ng-native-desktop` for them. `macos`
- * takes the `serve` target's port, so the host loads from the dev server `ng serve` runs.
+ * The targets, each on the `expo` builder, which runs `ng-native-desktop` for them. `macos` and
+ * `linux` take the `serve` target's port, so the host loads from the dev server `ng serve` runs.
  */
 function desktopTargets(port) {
   const desktop = (command, extra) => ({
     builder: '@ng-native/schematics:expo',
     options: { command, ...extra },
   });
-  return { macos: desktop('macos', port ? { port } : {}), package: desktop('package') };
+  return {
+    ...Object.fromEntries(native.DESKTOP_OSES.map((os) => [os, desktop(os, port ? { port } : {})])),
+    package: desktop('package'),
+  };
 }
 
 /** The project's `app.json` with `withOs` applied to its Expo config. */
@@ -145,8 +151,9 @@ function desktop(options) {
 
     if (!options.skipInstall) context.addTask(new NodePackageInstallTask());
     context.logger.info(
-      `${options.project} runs on macOS: ng serve ${options.project}, then ` +
-        `ng run ${options.project}:macos. ng run ${options.project}:package makes the app.`,
+      `${options.project} runs on macOS and Linux: ng serve ${options.project}, then ` +
+        `ng run ${options.project}:macos or ng run ${options.project}:linux. ` +
+        `ng run ${options.project}:package makes the app.`,
     );
   };
 }

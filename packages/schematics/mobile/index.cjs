@@ -2,7 +2,7 @@
  * `ng generate @ng-native/schematics:mobile native`: a desktop-only Angular Native app that runs on
  * iOS and Android too, undoing what `--desktop-only` left out.
  *
- * The project's `app.json` lists `ios` and `android` beside `macos`, with the phone settings a
+ * The project's `app.json` lists `ios` and `android` beside `macos` and `linux`, with the phone settings a
  * mobile app's has. The workspace and the project's own `package.json`, whose native modules Expo
  * autolinks, depend on the phone's status bar and system UI packages again. And the project gains
  * `run-ios` and `run-android` on the `expo` builder, on the `serve` target's port.

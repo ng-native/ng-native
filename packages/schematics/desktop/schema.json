@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema",
   "$id": "NgNativeDesktop",
-  "title": "macOS in an Angular Native app",
+  "title": "macOS and Linux in an Angular Native app",
   "type": "object",
   "properties": {
     "project": {
@@ -11,7 +11,7 @@
         "$source": "argv",
         "index": 0
       },
-      "x-prompt": "Which native app should run on macOS?"
+      "x-prompt": "Which native app should run on macOS and Linux?"
     },
     "skipInstall": {
       "type": "boolean",
