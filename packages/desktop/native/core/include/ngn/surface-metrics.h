@@ -19,6 +19,13 @@ struct SurfaceMetrics {
   float fontScale{1};
 };
 
+// The text size multiplier a Linux desktop asks for, from GTK's `gtk-xft-dpi`: the text scaling
+// factor times 96 dots per inch, in 1024ths of one, so 98304 is 1. Unset (-1, or 0) is 1. macOS's
+// is always 1.
+inline float xftFontScale(int xftDpi) {
+  return xftDpi > 0 ? static_cast<float>(xftDpi) / (96.0f * 1024.0f) : 1.0f;
+}
+
 // The surface's root constraints: its size, and the direction its layout starts from, which React
 // Native's iOS surfaces take from I18nManager.
 inline facebook::react::LayoutConstraints surfaceConstraints(const SurfaceMetrics &metrics, bool rightToLeft) {

@@ -38,3 +38,11 @@ TEST_CASE("a runtime with no direction to ask lays out left to right") {
   direction.instanceStarted();
   CHECK_FALSE(direction.rightToLeft());
 }
+
+TEST_CASE("a Linux desktop's text scaling is the text size multiplier, and unset is 1") {
+  CHECK(ngn::xftFontScale(96 * 1024) == doctest::Approx(1));
+  CHECK(ngn::xftFontScale(120 * 1024) == doctest::Approx(1.25));
+  CHECK(ngn::xftFontScale(80 * 1024) == doctest::Approx(0.8333).epsilon(0.001));
+  CHECK(ngn::xftFontScale(-1) == 1);
+  CHECK(ngn::xftFontScale(0) == 1);
+}
