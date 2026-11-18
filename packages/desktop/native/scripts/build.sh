@@ -160,7 +160,17 @@ if [ "$runtime" = 1 ]; then
   hermes="$CACHE/hermes-$arch_key"
   # Built again when missing, or built for another macOS than the host's.
   if ! "$here/hermes-built.sh" "$hermes"; then
-    "$here/build-hermes.sh" "$RN_PKG" "$archs" >&2
+    # One Hermes build at a time for this cache and architecture: build-hermes.sh (and, off macOS,
+    # build-icu.sh) clears and refills one output directory, which a second build would delete from
+    # under the first. Locked as fetch.sh locks (the kernel's flock through this shell's descriptor
+    # 8, taken by Perl since macOS has no flock command), and checked again once held, so a build
+    # that waited uses the Hermes the first one finished.
+    exec 8>> "$CACHE/.hermes-$arch_key-lock"
+    perl -MFcntl=:flock -e 'open(my $fd, ">&=", 8) or die "build.sh: $!\n"; flock($fd, LOCK_EX) or die "build.sh: $!\n"'
+    if ! "$here/hermes-built.sh" "$hermes"; then
+      "$here/build-hermes.sh" "$RN_PKG" "$archs" >&2
+    fi
+    exec 8>&-
   fi
   hermes_args=(-DNGN_HERMES_BUILD="$hermes")
 fi
