@@ -234,7 +234,7 @@ export function linuxNames(expo, config, format) {
 
 /**
  * @typedef {{ appId: string, packageName: string, version: string }} LinuxNames
- * @typedef {LinuxNames & { name: string, summary: string, description: string, categories: string[], schemes: string[], icon: boolean, license?: string, homepage?: string, maintainer?: string, released: string }} LinuxApp
+ * @typedef {LinuxNames & { name: string, summary: string, description: string, categories: string[], schemes: string[], mimeTypes?: string[], icon: boolean, license?: string, homepage?: string, maintainer?: string, released: string }} LinuxApp
  */
 
 /**
@@ -247,13 +247,28 @@ function entryValue(value) {
 }
 
 /**
- * The app's desktop entry, `<app id>.desktop`, which launchers list it by. Its URL schemes are
- * `x-scheme-handler` types, so a link opens the app with the link in `%U`. Wayland matches the
- * window to the entry by its name, the host's app id.
+ * Where each installed format puts the app's tree; the `app` folder runs from wherever it is
+ * unpacked, so it has none.
+ *
+ * @type {Partial<Record<LinuxFormat, string>>}
+ */
+export const LINUX_PREFIX = { deb: '/usr', rpm: '/usr', flatpak: '/app' };
+
+/**
+ * The app's desktop entry, `<app id>.desktop`, which launchers list it by. Its document types'
+ * MIME types and its URL schemes, as `x-scheme-handler` types, are what it opens: with the files
+ * or the link in `%U`, or, where it is installed with its D-Bus service (`dbusActivatable`), through
+ * the session bus, which starts it if it is not running and hands a running one the files or
+ * the link. Wayland matches the window to the entry by its name, the host's app id.
  *
  * @param {LinuxApp} app
+ * @param {{ dbusActivatable?: boolean }} [options]
  */
-export function desktopEntry(app) {
+export function desktopEntry(app, { dbusActivatable = false } = {}) {
+  const types = [
+    ...(app.mimeTypes ?? []),
+    ...app.schemes.map((scheme) => `x-scheme-handler/${scheme}`),
+  ];
   const lines = [
     '[Desktop Entry]',
     'Type=Application',
@@ -262,13 +277,29 @@ export function desktopEntry(app) {
     `Exec=${app.packageName} %U`,
     ...(app.icon ? [`Icon=${app.appId}`] : []),
     'Terminal=false',
+    ...(dbusActivatable ? ['DBusActivatable=true'] : []),
     `Categories=${app.categories.join(';')};`,
-    ...(app.schemes.length > 0
-      ? [`MimeType=${app.schemes.map((scheme) => `x-scheme-handler/${scheme};`).join('')}`]
-      : []),
+    ...(types.length > 0 ? [`MimeType=${types.map((type) => `${type};`).join('')}`] : []),
     `StartupWMClass=${app.appId}`,
   ];
   return `${lines.join('\n')}\n`;
+}
+
+/**
+ * The app's D-Bus service, `<app id>.service`, which lets the session bus start it by its id for
+ * a desktop entry with `DBusActivatable=true`. The host takes `--gapplication-service` to start as
+ * that service.
+ *
+ * @param {LinuxApp} app
+ * @param {string} prefix where the format installs the tree (LINUX_PREFIX)
+ */
+export function dbusService(app, prefix) {
+  return [
+    '[D-BUS Service]',
+    `Name=${app.appId}`,
+    `Exec=${prefix}/bin/${app.packageName} --gapplication-service`,
+    '',
+  ].join('\n');
 }
 
 /**
@@ -432,6 +463,7 @@ export function rpmSpec(app, { tree }) {
     `/usr/bin/${app.packageName}`,
     `/usr/lib/${app.packageName}`,
     `/usr/share/applications/${app.appId}.desktop`,
+    `/usr/share/dbus-1/services/${app.appId}.service`,
     `/usr/share/metainfo/${app.appId}.metainfo.xml`,
     ...(app.icon ? [`/usr/share/icons/hicolor/*/apps/${app.appId}.png`] : []),
   ];
@@ -786,6 +818,9 @@ function planLinuxPackage(options, sys) {
     description,
     categories: categoryList(options.categories),
     schemes: config.schemes,
+    mimeTypes: [
+      ...new Set((config.options.documentTypes ?? []).flatMap((type) => type.mimeTypes ?? [])),
+    ],
     icon: icons.length > 0,
     // The day it is packaged, which AppStream asks of a release.
     released: new Date().toISOString().slice(0, 10),
@@ -879,7 +914,17 @@ function assembleTree(sys, { config, app, format, staging, icons }, built, { arc
     linuxMetadata(config, { format, appId: app.appId, updatesCertificate: built.certificate }),
   );
   const share = path.join(tree, 'share');
-  sys.writeFile(path.join(share, 'applications', `${app.appId}.desktop`), desktopEntry(app));
+  const prefix = LINUX_PREFIX[format];
+  sys.writeFile(
+    path.join(share, 'applications', `${app.appId}.desktop`),
+    desktopEntry(app, { dbusActivatable: prefix !== undefined }),
+  );
+  if (prefix !== undefined) {
+    sys.writeFile(
+      path.join(share, 'dbus-1', 'services', `${app.appId}.service`),
+      dbusService(app, prefix),
+    );
+  }
   sys.writeFile(path.join(share, 'metainfo', `${app.appId}.metainfo.xml`), metainfo(app));
   for (const { size, png } of icons) {
     sys.writeFile(

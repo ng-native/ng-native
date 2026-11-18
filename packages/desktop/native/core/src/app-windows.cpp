@@ -31,7 +31,12 @@ std::optional<WindowFrame> savedFrame(const std::optional<folly::dynamic> &value
   if (!x || !y || !width || !height || *width <= 0 || *height <= 0) {
     return std::nullopt;
   }
-  return WindowFrame{.x = *x, .y = *y, .width = *width, .height = *height};
+  auto flag = [&value](const char *name) {
+    auto it = value->find(name);
+    return it != value->items().end() && it->second.isBool() && it->second.asBool();
+  };
+  return WindowFrame{
+      .x = *x, .y = *y, .width = *width, .height = *height, .maximized = flag("maximized"), .fullScreen = flag("fullScreen")};
 }
 
 double clamp(double value, std::optional<double> min, std::optional<double> max) {
@@ -281,13 +286,17 @@ void WindowHost::focused(std::optional<SurfaceId> surface) {
 }
 
 void WindowHost::resized(SurfaceId surface, const WindowFrame &frame, double scale) {
+  resized(surface, frame, scale, frame);
+}
+
+void WindowHost::resized(SurfaceId surface, const WindowFrame &frame, double scale, const WindowFrame &saved) {
   {
     std::lock_guard lock(mutex_);
     if (!windows_.contains(surface)) {
       return;
     }
   }
-  autosave(surface, frame);
+  autosave(surface, saved);
   send(folly::dynamic::object("type", "resize")("surface", surface)("width", frame.width)("height", frame.height)(
       "scale", scale));
 }
@@ -304,11 +313,23 @@ void WindowHost::autosave(SurfaceId surface, const WindowFrame &frame) {
       key = it->second.key;
     }
   }
-  if (key) {
-    system_->setPreference(
-        frameKey(*key),
-        folly::dynamic::object("x", frame.x)("y", frame.y)("width", frame.width)("height", frame.height));
+  if (!key) {
+    return;
   }
+  folly::dynamic saved = folly::dynamic::object("x", frame.x)("y", frame.y)("width", frame.width)("height", frame.height);
+  // Only a window filling the screen says so, so a frame saved before reads the same.
+  if (frame.maximized) {
+    saved["maximized"] = true;
+  }
+  if (frame.fullScreen) {
+    saved["fullScreen"] = true;
+  }
+  system_->setPreference(frameKey(*key), std::move(saved));
+}
+
+bool WindowHost::lastWindowClosed() {
+  std::lock_guard lock(mutex_);
+  return listeners_.empty();
 }
 
 void WindowHost::reopen(bool hasVisibleWindows) {

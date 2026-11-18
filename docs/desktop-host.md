@@ -57,7 +57,14 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   front screen's header goes into the header bar as macOS puts it into the toolbar, in the core's
   `headerLayout` order, with the header's subviews moved into slots of their own, each a container
   for input, a bar button's menu as a `GtkMenuButton`, the header's tint, title and background
-  colours as CSS classes, and a search bar as a `GtkSearchEntry`. A window shows with nothing
+  colours as CSS classes, and a search bar as a `GtkSearchEntry`. The `AdwApplication` is unique
+  by the app id, except in a test launch, and handles open: a second launch finds the first on the
+  session bus and hands it its links and files (`forwardLaunch`), then exits, and the first raises
+  its last active window, or sends `reopen` when it has none shown. `--gapplication-service` starts
+  it as the D-Bus service a packaged app's `DBusActivatable` desktop entry names. A window reports
+  its size, maximised and full-screen state and focus to the core's `WindowHost`, which saves the
+  size and state but no place, and the host quits with the last window only when no app listens
+  (`WindowHost::lastWindowClosed`). A window shows with nothing
   focused, as on macOS, so a header's search field does not take the focus at launch. A `<modal>`
   sheet, and a screen presented with `present()`, is an `AdwDialog` in the window on libadwaita
   1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4; a cover fills the
