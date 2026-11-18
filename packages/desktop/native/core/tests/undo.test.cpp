@@ -4,6 +4,7 @@
 #include <doctest/doctest.h>
 #include <folly/json.h>
 
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -98,4 +99,30 @@ TEST_CASE("redoing one of several undone actions keeps the rest to redo") {
   CHECK(undoTitle(*f.manager) == "Undo Rename to b");
   CHECK(redoTitle(*f.manager) == "Redo Rename to c");
   CHECK_FALSE(f.manager->undoing());
+}
+
+TEST_CASE("an undo that throws leaves later actions going to the undo stack") {
+  ngn::UndoStacks stacks;
+  stacks.registerAction("Fail", [] { throw std::runtime_error("undo failed"); });
+  CHECK_THROWS(stacks.undo());
+  CHECK_FALSE(stacks.undoing());
+  stacks.registerAction("Rename", [] {});
+  CHECK(undoTitle(stacks) == "Undo Rename");
+  CHECK(redoTitle(stacks) == "Redo");
+}
+
+TEST_CASE("a redo that throws leaves a new action clearing the redo history") {
+  ngn::UndoStacks stacks;
+  // Each undo registers its redo, as an app's undo handler does.
+  stacks.registerAction("Throws on redo", [&stacks] {
+    stacks.registerAction("Throws on redo", [] { throw std::runtime_error("redo failed"); });
+  });
+  stacks.registerAction("Fine", [&stacks] { stacks.registerAction("Fine", [] {}); });
+  stacks.undo();
+  stacks.undo();
+  CHECK(redoTitle(stacks) == "Redo Throws on redo");
+  CHECK_THROWS(stacks.redo());
+  CHECK(redoTitle(stacks) == "Redo Fine");
+  stacks.registerAction("New", [] {});
+  CHECK(redoTitle(stacks) == "Redo");
 }

@@ -2,6 +2,22 @@
 
 namespace ngn {
 
+namespace {
+
+// Sets a flag for one action's run and clears it however the run ends, so an action that throws
+// does not leave later registrations going to the wrong stack.
+struct Running {
+  bool &flag;
+  explicit Running(bool &flag) : flag(flag) {
+    flag = true;
+  }
+  ~Running() {
+    flag = false;
+  }
+};
+
+} // namespace
+
 void UndoStacks::registerAction(const std::string &label, std::function<void()> action) {
   if (undoing_) {
     redos_.push_back({label, std::move(action)});
@@ -23,9 +39,8 @@ void UndoStacks::undo() {
   }
   auto action = std::move(undos_.back());
   undos_.pop_back();
-  undoing_ = true;
+  Running running(undoing_);
   action.run();
-  undoing_ = false;
 }
 
 void UndoStacks::redo() {
@@ -34,9 +49,8 @@ void UndoStacks::redo() {
   }
   auto action = std::move(redos_.back());
   redos_.pop_back();
-  redoing_ = true;
+  Running running(redoing_);
   action.run();
-  redoing_ = false;
 }
 
 void UndoStacks::clear() {
