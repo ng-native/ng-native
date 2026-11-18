@@ -11,6 +11,7 @@ import {
   checkExpoConfig,
   devServerBundleUrl,
   HOST_LIBRARIES,
+  hostExecutable,
   linkFile,
   main,
   parseCommand,
@@ -291,6 +292,63 @@ describe('run --os linux', () => {
     }));
     await run({ os: 'linux', module: 'main', universal: false }, sys);
     assert.deepEqual(warnings, [LINUX_FIRST_BUILD_NOTE]);
+  });
+
+  it('prints the debug host’s executable with host, taking a prebuilt Linux host on a Mac', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      hosts: [
+        {
+          reactNative: '0.88.0',
+          flavour: 'debug',
+          os: 'linux',
+          arch: 'arm64',
+          url: 'https://e.com/a.tar.gz',
+          sha256: 'a'.repeat(64),
+          libraries: {},
+        },
+      ],
+    });
+    const prebuilt = '/cache/rn-0.88.0/prebuilt/aaaaaaaaaaaaaaaa/gtk/ngn-linux';
+    const files = (file: string) =>
+      file === path.join(packageDir, 'prebuilt.json')
+        ? manifest
+        : file.endsWith('react-native/package.json')
+          ? '{"version":"0.88.0"}'
+          : '';
+    const mac = fakeSystem({
+      expoConfig: listsLinux,
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: files,
+      exists: (file) => file === prebuilt,
+    });
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => void printed.push(line);
+    try {
+      assert.equal(await main(['host', '--os', 'linux'], mac.sys), 0);
+    } finally {
+      console.log = log;
+    }
+    assert.deepEqual(printed, [prebuilt]);
+    assert.deepEqual(mac.calls, [], 'nothing built or launched');
+    assert.deepEqual(parseCommand(['host'], 'linux'), { command: 'host', os: 'linux' });
+
+    // With no prebuilt host for it, a Mac cannot build one, and says so.
+    assert.throws(
+      () =>
+        hostExecutable(
+          { os: 'linux' },
+          fakeSystem({ expoConfig: listsLinux, env: { NGN_DESKTOP_CACHE: '/cache' } }).sys,
+        ),
+      /builds on Linux only for now/,
+    );
+    // On Linux it builds as run does.
+    const { sys } = linuxBuild();
+    assert.equal(
+      hostExecutable({ os: 'linux' }, sys),
+      '/cache/rn-0.88.0/host/gtk-x86_64-RelWithDebInfo/gtk/ngn-linux',
+    );
   });
 
   it('refuses to run the Linux host off Linux before fetching or building anything', async () => {

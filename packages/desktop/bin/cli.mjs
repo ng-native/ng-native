@@ -41,11 +41,17 @@ it with npm start) unless a bundle path or URL is given. The macOS host runs on 
   --url <link>      a link to open the app on, as Linking's initial URL (myapp://settings)
   --universal       with --os macos, build for arm64 and x86_64 (default: this Mac's architecture)
 
+Usage: ng-native-desktop host [--os macos|linux]
+
+Gets the debug host run uses, as run gets it, and prints its executable's path. A Linux host comes
+prebuilt on any machine, and builds only on Linux. The in-app test pool's Linux launcher runs it.
+
 ${PACKAGE_USAGE}`;
 
 /**
  * @typedef {import('./autolink.mjs').DesktopOs} DesktopOs
  * @typedef {{ command: 'run', os: DesktopOs, bundle: string | undefined, module: string, port: number, universal: boolean, url?: string }} RunCommand
+ * @typedef {{ command: 'host', os: DesktopOs }} HostCommand
  */
 
 /**
@@ -62,7 +68,7 @@ export function devServerBundleUrl(port, os = 'macos') {
 /**
  * @param {string[]} argv the arguments after the command name
  * @param {string} [platform] this machine's, which `run --os` and `package --os` default to
- * @returns {{ command: 'help' } | RunCommand | import('./package.mjs').PackageCommand}
+ * @returns {{ command: 'help' } | RunCommand | HostCommand | import('./package.mjs').PackageCommand}
  */
 export function parseCommand(argv, platform = process.platform) {
   const [command, ...rest] = argv;
@@ -70,10 +76,58 @@ export function parseCommand(argv, platform = process.platform) {
     return { command: 'help' };
   }
   if (command === 'package') return parsePackage(rest, platform);
+  if (command === 'host') return parseHost(rest, platform);
   if (command !== 'run') {
     throw new UsageError(`Unknown command "${command}".`);
   }
   return parseRun(rest, platform);
+}
+
+/**
+ * @param {string[]} args the arguments after `host`
+ * @param {string} platform
+ * @returns {HostCommand}
+ */
+function parseHost(args, platform) {
+  const { values } = parseArgs({ args, options: { os: { type: 'string' } } });
+  return { command: 'host', os: parseOs(values.os, platform) };
+}
+
+/**
+ * The OS `--os` names, this machine's when it names none.
+ *
+ * @param {string | undefined} value
+ * @param {string} platform
+ * @returns {DesktopOs}
+ */
+function parseOs(value, platform) {
+  const os = value ?? (platform === 'linux' ? 'linux' : 'macos');
+  if (os !== 'macos' && os !== 'linux') {
+    throw new UsageError(`--os takes macos or linux, not "${os}".`);
+  }
+  return os;
+}
+
+/**
+ * Gets the debug host `run` uses for `os`, as `run` gets it, and returns its executable. Unlike
+ * `run`, it takes a prebuilt Linux host off Linux, where a container runs it.
+ *
+ * @param {{ os: DesktopOs }} options
+ * @param {typeof system} [sys]
+ */
+export function hostExecutable({ os }, sys = system) {
+  const { buildDir } = prepareHost(sys, { os, universal: false });
+  return executableIn(buildDir, os);
+}
+
+/**
+ * @param {string} buildDir
+ * @param {DesktopOs} os
+ */
+function executableIn(buildDir, os) {
+  return os === 'linux'
+    ? path.join(buildDir, 'gtk', 'ngn-linux')
+    : path.join(buildDir, 'appkit', 'ngn-macos');
 }
 
 /**
@@ -96,10 +150,7 @@ function parseRun(args, platform) {
   if (positionals.length > 1) {
     throw new UsageError('run takes at most one bundle path or URL.');
   }
-  const os = values.os ?? (platform === 'linux' ? 'linux' : 'macos');
-  if (os !== 'macos' && os !== 'linux') {
-    throw new UsageError(`--os takes macos or linux, not "${os}".`);
-  }
+  const os = parseOs(values.os, platform);
   if (os === 'linux' && values.universal) {
     throw new UsageError(
       '--universal is for --os macos only: a Linux host is built for this machine.',
@@ -149,11 +200,7 @@ export async function run(options, sys = system) {
       : (config.bundleIdentifier ?? expo.slug ?? config.name);
   // What Processes may run and read, as a packaged app's Info.plist or embedded metadata gives it.
   const capabilities = hostCapabilities(config.options);
-  const executable =
-    os === 'linux'
-      ? path.join(buildDir, 'gtk', 'ngn-linux')
-      : path.join(buildDir, 'appkit', 'ngn-macos');
-  return sys.host(executable, [
+  return sys.host(executableIn(buildDir, os), [
     bundleArgument(options, os, cwd),
     '--module',
     options.module,
@@ -191,6 +238,11 @@ export async function main(argv, sys = system) {
       return 0;
     }
     if (command.command === 'package') return await packageApp(command, sys);
+    if (command.command === 'host') {
+      // Alone on stdout, which the launcher reads: the build's own output goes to stderr.
+      console.log(hostExecutable(command, sys));
+      return 0;
+    }
     return await run(command, sys);
   } catch (error) {
     if (

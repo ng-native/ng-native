@@ -72,7 +72,7 @@ describe('the desktop template', () => {
     assert.equal(scripts.test, 'vitest run --project node-macos --project node-linux');
   });
 
-  it('tests in Node as each OS, and inside the app with `vitest --project macos`', () => {
+  it('tests in Node as each OS, and inside the app with `vitest --project macos` and `linux`', () => {
     const config = read(desktop, 'vitest.config.mts').toString('utf8');
     for (const os of ['macos', 'linux']) {
       assert.match(
@@ -82,8 +82,11 @@ describe('the desktop template', () => {
       );
     }
     assert.match(config, /deviceTests\(\{ platform: 'macos' \}\)/);
+    assert.match(config, /deviceTests\(\{ platform: 'linux' \}\)/);
     const readme = read(desktop, 'README.md').toString('utf8');
     assert.match(readme, /vitest --project macos/);
+    assert.match(readme, /vitest --project linux/);
+    assert.match(read(desktop, 'AGENTS.md').toString('utf8'), /vitest --project linux/);
     assert.match(readme, /npm run linux/);
     assert.match(readme, /`node-macos` and `node-linux`/);
     assert.match(readme, /EXPO_PUBLIC_DEVICE_TESTS=1/);
@@ -110,7 +113,9 @@ describe('the desktop template', () => {
   });
 
   it('has an in-app test beside the Node one', () => {
-    assert.match(read(desktop, 'src/app/app.device.ts').toString('utf8'), /Platform\.OS/);
+    const test = read(desktop, 'src/app/app.device.ts').toString('utf8');
+    // Passes on either desktop host, since both projects run it.
+    assert.match(test, /\['macos', 'linux'\]\)\.toContain\(Platform\.OS\)/);
   });
 
   it('sizes its starter screen for a desktop on Linux as on macOS', () => {

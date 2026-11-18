@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
+  desktopCliHost,
   linuxBundleUrl,
   linuxLaunchCommand,
   linuxLauncher,
@@ -242,6 +243,49 @@ describe('the Linux launcher', () => {
     );
   });
 
+  it('asks the project’s desktop CLI for the host, as npm run linux gets it, and fails closed', () => {
+    const asked: unknown[] = [];
+    const answer =
+      (result: object) =>
+      (...args: unknown[]) => {
+        asked.push(args);
+        return { status: 0, stdout: '', stderr: '', ...result } as never;
+      };
+    assert.equal(
+      desktopCliHost(
+        '/app',
+        'ng-native-desktop',
+        answer({ stdout: '/cache/rn-0.88.0/prebuilt/abc/gtk/ngn-linux\n' }),
+      ),
+      '/cache/rn-0.88.0/prebuilt/abc/gtk/ngn-linux',
+    );
+    assert.deepEqual((asked[0] as unknown[]).slice(0, 2), [
+      'ng-native-desktop',
+      ['host', '--os', 'linux'],
+    ]);
+    assert.equal((asked[0] as [unknown, unknown, { cwd: string }])[2].cwd, '/app');
+    assert.throws(
+      () =>
+        desktopCliHost(
+          '/app',
+          'ng-native-desktop',
+          answer({ status: 2, stderr: 'no prebuilt Linux arm64 host fits' }),
+        ),
+      /could not get the Linux desktop host from ng-native-desktop host --os linux: no prebuilt Linux arm64 host fits/,
+    );
+    // A command that printed nothing gives no host, whatever its status.
+    assert.throws(() => desktopCliHost('/app', 'ng-native-desktop', answer({})), /could not get/);
+    assert.throws(
+      () =>
+        desktopCliHost(
+          '/app',
+          'ng-native-desktop',
+          answer({ status: null, error: new Error('spawn ENOENT') }),
+        ),
+      /spawn ENOENT/,
+    );
+  });
+
   it('gives each launch an app id GApplication accepts', () => {
     const id = testApplicationId('6f1c2a3b-0d4e-4f5a-9b6c-7d8e9f0a1b2c');
     assert.equal(id, 'dev.ngnative.tests.run_6f1c2a3b_0d4e_4f5a_9b6c_7d8e9f0a1b2c');
@@ -355,8 +399,9 @@ describe('the linux Vitest project', () => {
         ) => { test: { pool: ReturnType<typeof devicePool> } }
       )({ root: dir }).test;
       const worker = pool.createPoolWorker({ project: { config: { root: dir } } } as never);
-      // The launcher asks for the host, where a pool with none would wait for an app to connect.
-      await assert.rejects(worker.start(), /needs the Linux desktop host/);
+      // The launcher asks the desktop CLI for the host, which has none for an empty folder, where a
+      // pool with no launcher would wait for an app to connect.
+      await assert.rejects(worker.start(), /could not get the Linux desktop host/);
       await worker.stop();
     } finally {
       if (saved === undefined) delete process.env['NGN_DESKTOP_HOST'];
