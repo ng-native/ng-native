@@ -45,6 +45,18 @@ swipe, or a back one with no screen below (into another sidebar item), goes when
 back to the right, and in an app that lays out right to left (`I18nManager.isRTL`) to the left, as
 Safari's do.
 
+On Linux the same bar is GTK's. Under KDE Plasma (`XDG_CURRENT_DESKTOP` naming KDE) it is a menu
+bar under each window's header bar; everywhere else it is the header bar's main menu, as GNOME's
+apps have it. Linux's default bar is File (Close Window on Ctrl+W, Print...), Edit, View (Back,
+Forward, Show Sidebar on F9, Full Screen on F11), the app's own menus, then a menu named for the app
+with Preferences (Ctrl+comma, shown only when the app handles `settings`), About and Quit (Ctrl+Q).
+`mod` is Ctrl. A key press goes to the app's `[shortcut]` first, then the back and forward keys
+(Alt+Left and Alt+Right, a keyboard's Back and Forward keys, and mouse buttons 8 and 9), then the
+menus' keys, and a focused text input keeps Ctrl+Z, X, C, V and A. A press nothing in the window
+used then reaches its buttons: Return presses a `default` `<native-button>` and Escape a `cancel`
+one, while a focused text input or button keeps Return for itself. A view's `[contextMenu]` shows as
+a GTK popover menu at the secondary click.
+
 ## The tray and the Dock
 
 Each `<tray-icon>` is an NSStatusItem (`NgNativeTray`): an SF Symbol as a template image or a named
