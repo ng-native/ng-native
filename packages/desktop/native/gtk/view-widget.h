@@ -48,8 +48,9 @@ struct ViewData {
   int width{-1}, height{-1};
 };
 
-// A view's widget, floating: the caller sinks it.
-GtkWidget *makeViewWidget();
+// A view's widget with its accessible role, which GTK fixes as it makes it, floating: the caller
+// sinks it.
+GtkWidget *makeViewWidget(GtkAccessibleRole role = GTK_ACCESSIBLE_ROLE_GENERIC);
 // The widget a surface's views mount into. It fills its parent and calls `resized` with its size.
 GtkWidget *makeSurfaceWidget(facebook::react::SurfaceId surfaceId, std::function<void(int, int)> resized);
 

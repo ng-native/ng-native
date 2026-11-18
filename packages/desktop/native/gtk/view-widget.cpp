@@ -151,8 +151,8 @@ static void ngn_view_init(NgnView *self) {
 
 namespace ngn::gtk {
 
-GtkWidget *makeViewWidget() {
-  return GTK_WIDGET(g_object_new(NGN_TYPE_VIEW, nullptr));
+GtkWidget *makeViewWidget(GtkAccessibleRole role) {
+  return GTK_WIDGET(g_object_new(NGN_TYPE_VIEW, "accessible-role", role, nullptr));
 }
 
 GtkWidget *makeSurfaceWidget(SurfaceId surfaceId, std::function<void(int, int)> resized) {

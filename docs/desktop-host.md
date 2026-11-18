@@ -20,7 +20,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
 - `native/appkit`: the AppKit backend and the `ngn-macos` binary.
 - `native/gtk`: the GTK 4 backend and the `ngn-linux` binary: a `GtkWidget` per view, painted as
   GSK render nodes in its `snapshot`, Pango text, a `GtkText` per single-line text input, and the
-  pointer fed to the core's input dispatcher from a capture-phase controller on each surface. It
+  pointer fed to the core's input dispatcher from a capture-phase controller on each surface.
+  Accessibility is GTK's own: each widget is made with the GTK role for the view's `role`, and
+  its label, description, level and states follow the props. GTK fixes a role when it makes the
+  widget, so a role that changes later is not followed yet, and Orca's structural navigation
+  finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
   Homebrew's (`brew install gtk4 libadwaita`) as a dev loop. Linux is not yet an app target: the
   bundle it runs is exported for `macos`, and networking, scroll views, images, menus and the

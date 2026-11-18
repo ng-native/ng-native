@@ -195,7 +195,7 @@ jobs:
               xvfb=$!
               trap "kill $xvfb" EXIT
               mkdir -p "$GITHUB_WORKSPACE/.linux-probe/gtk-tests"
-              DISPLAY=:99 GDK_BACKEND=x11 GTK_A11Y=none NGN_GTK_TEST_SHOTS="$GITHUB_WORKSPACE/.linux-probe/gtk-tests" \
+              DISPLAY=:99 GDK_BACKEND=x11 NGN_GTK_TEST_SHOTS="$GITHUB_WORKSPACE/.linux-probe/gtk-tests" \
                 "$build/gtk/ngn_gtk_tests"
               native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" "$build/gtk/ngn-linux" \
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc

@@ -8,6 +8,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(NGN_GTK REQUIRED IMPORTED_TARGET gtk4>=4.10 libadwaita-1>=1.4 pangocairo)
 
 add_library(ngn_gtk OBJECT
+    accessible.cpp
     app-windows.cpp
     box-paint.cpp
     capture.cpp
@@ -38,11 +39,11 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  add_executable(ngn_gtk_tests ../core/tests/main.cpp tests/input.test.cpp tests/text.test.cpp tests/views.test.cpp)
+  add_executable(ngn_gtk_tests ../core/tests/main.cpp tests/accessible.test.cpp tests/input.test.cpp tests/text.test.cpp tests/views.test.cpp)
   target_include_directories(ngn_gtk_tests PRIVATE ../core/tests)
   target_link_libraries(ngn_gtk_tests PRIVATE ngn_gtk doctest)
   if(NGN_DOCTEST_SOURCE_OPTIONS)
-    set_source_files_properties(../core/tests/main.cpp tests/input.test.cpp tests/text.test.cpp tests/views.test.cpp
+    set_source_files_properties(../core/tests/main.cpp tests/accessible.test.cpp tests/input.test.cpp tests/text.test.cpp tests/views.test.cpp
         PROPERTIES COMPILE_OPTIONS "${NGN_DOCTEST_SOURCE_OPTIONS}")
   endif()
   if(NOT APPLE)

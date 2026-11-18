@@ -5,8 +5,12 @@ namespace ngn::gtk {
 GdkTexture *renderWidget(GtkWidget *widget) {
   int width = gtk_widget_get_width(widget);
   int height = gtk_widget_get_height(widget);
-  GtkNative *native = gtk_widget_get_native(widget);
-  GskRenderer *renderer = native ? gtk_native_get_renderer(native) : nullptr;
+  // GSK's cairo renderer, on no surface: the GL renderer of GTK 4.12 on Mesa's software GL hands
+  // back the texture of its first render before it has finished drawing it.
+  static GskRenderer *renderer = [] {
+    GskRenderer *cairo = gsk_cairo_renderer_new();
+    return gsk_renderer_realize(cairo, nullptr, nullptr) ? cairo : nullptr;
+  }();
   if (width <= 0 || height <= 0 || !renderer) {
     return nullptr;
   }

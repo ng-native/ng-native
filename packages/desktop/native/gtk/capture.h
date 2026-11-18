@@ -1,4 +1,4 @@
-// A widget drawn into a texture in-process, through its window's own GSK renderer: what the host's
+// A widget drawn into a texture in-process, through GSK's cairo renderer: what the host's
 // NGN_CAPTURE screenshot and the GTK view tests read. A compositor screenshot is no use where
 // there is none to ask (mutter alone, Xvfb) and cannot see an offscreen window.
 #pragma once
@@ -9,8 +9,8 @@
 
 namespace ngn::gtk {
 
-// The widget as it draws now, at its window's scale. Null before it has a size or a renderer. The
-// caller unrefs it.
+// The widget as it draws now, at its window's scale. Null before it has a size. The caller unrefs
+// it.
 GdkTexture *renderWidget(GtkWidget *widget);
 
 // renderWidget, saved as a PNG at `path`.

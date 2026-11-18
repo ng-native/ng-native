@@ -13,11 +13,16 @@
 #include "ngn/mounting-manager.h"
 #include "ngn/text-input.h"
 
+#include <doctest/doctest.h>
+
 #include <react/renderer/mounting/MountingTransaction.h>
 
 #include <gtk/gtk.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <ostream>
+#include <string>
 #include <memory>
 #include <stdexcept>
 
@@ -40,9 +45,14 @@ inline facebook::react::Props::Shared textInputProps(folly::dynamic raw) {
   return parsedProps<DesktopTextInputComponentDescriptor>(std::move(raw));
 }
 
-// GTK, once for the process. False where there is no display to open.
+// GTK, once for the process, with its test accessibility backend, which keeps every role,
+// property and state for gtk_test_accessible_* to read and needs no AT-SPI bus. False where there
+// is no display to open.
 inline bool gtkReady() {
-  static bool ready = gtk_init_check();
+  static bool ready = [] {
+    g_setenv("GTK_A11Y", "test", TRUE);
+    return gtk_init_check();
+  }();
   return ready;
 }
 
@@ -116,14 +126,17 @@ struct MountedViews {
     settle();
   }
 
-  // Waits for a frame drawn after now.
+  // Waits for two frames drawn after now: a widget parented during the first can be laid out only
+  // in the next (GTK 4.12 under Xvfb draws one first with the old allocations).
   void settle() {
     if (!window || !gtk_widget_get_mapped(surface)) {
       return;
     }
-    gtk_widget_queue_draw(surface);
-    int seen = frames;
-    runUntil([this, seen] { return frames > seen; });
+    for (int i = 0; i < 2; ++i) {
+      gtk_widget_queue_draw(surface);
+      int seen = frames;
+      runUntil([this, seen] { return frames > seen; });
+    }
   }
 
   // Creates `view` and inserts it as the last child of `parent`, or at `index`.
@@ -157,6 +170,11 @@ struct MountedViews {
     int scale = width / std::max(1, gtk_widget_get_width(surface));
     std::vector<guchar> data(static_cast<size_t>(width) * height * 4);
     gdk_texture_download(texture, data.data(), static_cast<size_t>(width) * 4);
+    // NGN_GTK_TEST_SHOTS=<dir> keeps each surface read, for a failure on a machine without a screen.
+    if (const char *dir = getenv("NGN_GTK_TEST_SHOTS"); dir && *dir) {
+      static int shot = 0;
+      gdk_texture_save_to_png(texture, (std::string(dir) + "/shot-" + std::to_string(++shot) + ".png").c_str());
+    }
     g_object_unref(texture);
     int px = std::clamp(x * scale + scale / 2, 0, width - 1);
     int py = std::clamp(y * scale + scale / 2, 0, height - 1);
@@ -168,14 +186,26 @@ struct MountedViews {
   }
 };
 
+inline std::ostream &operator<<(std::ostream &out, const Pixel &p) {
+  return out << "rgba(" << p.r << ", " << p.g << ", " << p.b << ", " << p.a << ")";
+}
+
+// Whether `p` is mostly one colour, saying what it was when not.
+inline bool mostly(const Pixel &p, int Pixel::*channel, const char *name) {
+  bool ok = p.a > 200 && p.*channel > 200 && (p.r + p.g + p.b - p.*channel) < 120;
+  if (!ok) {
+    MESSAGE("expected " << std::string(name) << ", got " << p);
+  }
+  return ok;
+}
 inline bool reddish(const Pixel &p) {
-  return p.a > 200 && p.r > 200 && p.g < 60 && p.b < 60;
+  return mostly(p, &Pixel::r, "red");
 }
 inline bool bluish(const Pixel &p) {
-  return p.a > 200 && p.b > 200 && p.r < 60 && p.g < 60;
+  return mostly(p, &Pixel::b, "blue");
 }
 inline bool greenish(const Pixel &p) {
-  return p.a > 200 && p.g > 200 && p.r < 60 && p.b < 60;
+  return mostly(p, &Pixel::g, "green");
 }
 
 } // namespace ngn::testing

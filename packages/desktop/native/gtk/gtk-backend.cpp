@@ -1,5 +1,6 @@
 #include "gtk-backend.h"
 
+#include "accessible.h"
 #include "text-field.h"
 #include "view-widget.h"
 
@@ -97,7 +98,11 @@ void GtkBackend::serviceUiThread() {
 }
 
 void GtkBackend::createView(const ShadowView &view) {
-  GtkWidget *widget = makeViewWidget();
+  auto accessibility = accessibilityOf(view);
+  GtkWidget *widget = makeViewWidget(accessibility ? accessibleRole(*accessibility) : GTK_ACCESSIBLE_ROLE_GENERIC);
+  if (accessibility) {
+    applyAccessibility(widget, *accessibility);
+  }
   g_object_ref_sink(widget);
   ViewData *d = viewData(widget);
   d->tag = view.tag;
@@ -164,6 +169,9 @@ void GtkBackend::updateProps(const ShadowView &view) {
   d->props = view.props;
   forgetText(*d);
   applyViewProps(it->second, *d);
+  if (auto accessibility = accessibilityOf(view)) {
+    applyAccessibility(it->second, *accessibility);
+  }
   applyTextFieldProps(*d);
   relayout(it->second);
 }
@@ -173,6 +181,10 @@ void GtkBackend::updateState(const ShadowView &view) {
     ViewData *d = viewData(it->second);
     d->state = view.state;
     forgetText(*d);
+    // A Paragraph's label is its text, which is in its state.
+    if (auto accessibility = accessibilityOf(view)) {
+      applyAccessibility(it->second, *accessibility);
+    }
     gtk_widget_queue_draw(it->second);
   }
 }
@@ -203,6 +215,8 @@ void GtkBackend::dispatchCommand(Tag tag, const std::string &name, const folly::
 void GtkBackend::setCovered(SurfaceId, Tag tag, bool covered) {
   if (auto it = views_.find(tag); it != views_.end()) {
     gtk_widget_set_child_visible(it->second, !covered);
+    // A child shown again has no allocation until its parent allocates it.
+    relayout(it->second);
   }
 }
 
