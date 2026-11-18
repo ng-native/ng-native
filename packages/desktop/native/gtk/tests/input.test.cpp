@@ -39,3 +39,14 @@ TEST_CASE("cursors go to GTK by their CSS names, the default as none") {
   CHECK(std::strcmp(ngn::gtk::cursorName(Cursor::NWSEResize), "nwse-resize") == 0);
   CHECK(std::strcmp(ngn::gtk::cursorName(Cursor::Url), "pointer") == 0);
 }
+
+TEST_CASE("a cursor the theme may not have falls back to the default one") {
+  GdkCursor *pointer = ngn::gtk::makeCursor(Cursor::Pointer);
+  REQUIRE(pointer);
+  CHECK(std::strcmp(gdk_cursor_get_name(pointer), "pointer") == 0);
+  GdkCursor *fallback = gdk_cursor_get_fallback(pointer);
+  REQUIRE(fallback);
+  CHECK(std::strcmp(gdk_cursor_get_name(fallback), "default") == 0);
+  g_object_unref(pointer);
+  CHECK(ngn::gtk::makeCursor(Cursor::Auto) == nullptr);
+}
