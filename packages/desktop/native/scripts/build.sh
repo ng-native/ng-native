@@ -2,13 +2,15 @@
 # Builds the desktop host (or only the core and its tests) in the per-user cache, fetching the
 # pinned sources and building Hermes first when they are missing. Prints the build directory.
 #
-#   build.sh [node_modules/react-native] [--backend appkit|none] [--universal] [--debug|--release]
-#            [--test | --no-tests] [--no-debug-info] [--library <node_modules/library>]...
-#            [--build-dir <dir>]
+#   build.sh [node_modules/react-native] [--backend appkit|none] [--runtime] [--universal]
+#            [--debug|--release] [--test | --no-tests] [--no-debug-info]
+#            [--library <node_modules/library>]... [--build-dir <dir>]
 #
 # Without a path, react-native is resolved from the current directory.
 #
 #   --backend none  the toolkit-free core and its tests only: any OS, no Hermes
+#   --runtime       with --backend none, the core's runtime half too: Hermes, ReactHost and the
+#                   runtime tests, still with no toolkit (what Linux builds until it has a backend)
 #   --universal     arm64 and x86_64 in one binary (default: this machine's architecture)
 #   --debug         a Debug build (default: RelWithDebInfo)
 #   --release       a Release build without the core tests, as a packaged app ships it
@@ -49,12 +51,14 @@ config=RelWithDebInfo
 run_tests=0
 tests=ON
 no_tests=0
+runtime=0
 libraries=()
 build_dir=""
 debug_info=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --backend) backend="$2"; shift ;;
+    --runtime) runtime=1 ;;
     --universal) archs="arm64;x86_64" ;;
     --debug) config=Debug ;;
     --release) config=Release; tests=OFF ;;
@@ -72,6 +76,8 @@ if [ "$run_tests" = 1 ] && [ "$tests" = OFF ]; then
   echo "build.sh: --test needs the core tests, which $left_out leaves out" >&2
   exit 2
 fi
+# A backend always has the runtime half.
+[ "$backend" = "none" ] || runtime=1
 # CMAKE_OSX_ARCHITECTURES means nothing off macOS.
 [ "$(uname -s)" = "Darwin" ] || archs=""
 
@@ -140,22 +146,38 @@ if [ "$config" = RelWithDebInfo ]; then
   done
 fi
 
+# Off macOS archs is blank, and Hermes is built for this machine's architecture, under the same
+# name as on macOS.
 arch_key="${archs//;/-}"
+[ -n "$arch_key" ] || arch_key="$(uname -m)"
 hermes_args=()
-if [ "$backend" != "none" ]; then
+if [ "$runtime" = 1 ]; then
   hermes="$CACHE/hermes-$arch_key"
   # Built again when missing, or built for another macOS than the host's.
   if ! "$here/hermes-built.sh" "$hermes"; then
-    "$here/build-hermes.sh" "$RN_PKG" "$archs" >&2
+    # One Hermes build at a time for this cache and architecture: build-hermes.sh (and, off macOS,
+    # build-icu.sh) clears and refills one output directory, which a second build would delete from
+    # under the first. Locked as fetch.sh locks (the kernel's flock through this shell's descriptor
+    # 8, taken by Perl since macOS has no flock command), and checked again once held, so a build
+    # that waited uses the Hermes the first one finished.
+    exec 8>> "$CACHE/.hermes-$arch_key-lock"
+    perl -MFcntl=:flock -e 'open(my $fd, ">&=", 8) or die "build.sh: $!\n"; flock($fd, LOCK_EX) or die "build.sh: $!\n"'
+    if ! "$here/hermes-built.sh" "$hermes"; then
+      "$here/build-hermes.sh" "$RN_PKG" "$archs" >&2
+    fi
+    exec 8>&-
   fi
   hermes_args=(-DNGN_HERMES_BUILD="$hermes")
 fi
 
-BUILD="${build_dir:-$host_dir/$backend-${arch_key:-native}-$config}"
+variant="$backend"
+[ "$backend" = "none" ] && [ "$runtime" = 1 ] && variant=none-runtime
+BUILD="${build_dir:-$host_dir/$variant-$arch_key-$config}"
 cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE="$config" \
   -DCMAKE_OSX_ARCHITECTURES="$archs" \
   -DNGN_BACKEND="$backend" \
+  -DNGN_RUNTIME="$([ "$runtime" = 1 ] && echo ON || echo OFF)" \
   -DRN_DIR="$RN_PKG" \
   -DNGN_SOURCES="$CACHE/src" \
   -DNGN_LIBRARIES="$library_dirs" \
@@ -167,6 +189,10 @@ cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
 nice -n 10 cmake --build "$BUILD" -j "$JOBS" >&2
 if [ "$run_tests" = 1 ]; then
   "$BUILD/ngn_core_tests" >&2
+  # Hermes and the runtime half, which a build with the runtime has.
+  if [ -x "$BUILD/ngn_runtime_tests" ]; then
+    "$BUILD/ngn_runtime_tests" >&2
+  fi
   # The AppKit view tests, which a build with the AppKit backend has.
   if [ -x "$BUILD/appkit/ngn_appkit_tests" ]; then
     "$BUILD/appkit/ngn_appkit_tests" >&2
