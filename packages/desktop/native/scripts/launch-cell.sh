@@ -52,8 +52,10 @@ case "$ID" in
     apt-get install -y -q --no-install-recommends "${packages[@]}"
     ;;
   fedora | almalinux | rhel)
-    packages=(gtk4 libadwaita libsecret gstreamer1 gstreamer1-plugins-base openssl-libs libnghttp2
-      sqlite-libs libatomic libstdc++ xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon
+    # OpenSSL by the soname the host links, as an rpm's own requirements name it: Fedora 45 moved
+    # openssl-libs to OpenSSL 4, and keeps libssl.so.3 in openssl3-libs.
+    packages=(gtk4 libadwaita libsecret gstreamer1 gstreamer1-plugins-base
+      'libssl.so.3()(64bit)' 'libcrypto.so.3()(64bit)' libnghttp2 sqlite-libs libatomic libstdc++ xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon
       dejavu-sans-fonts)
     has_cell vulkan && packages+=(mesa-vulkan-drivers)
     has_cell mutter && packages+=(mutter)
