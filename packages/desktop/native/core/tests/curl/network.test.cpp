@@ -563,6 +563,14 @@ TEST_CASE("a WebSocket over libcurl reports the server's close, and fails when i
   REQUIRE(unreachable.waitFor(1));
   CHECK(unreachable.seen() == std::vector<std::string>{"error Could not connect to the server."});
 
+  // https is wss: its TLS handshake fails on this plain server, where a scheme curl refuses would be
+  // an unsupported URL.
+  SocketRecorder https;
+  auto h = network.webSockets->connect("https" + server.url("/ws").substr(4), {}, {}, https.callbacks());
+  REQUIRE(https.waitFor(1));
+  CHECK(https.seen() ==
+        std::vector<std::string>{"error An SSL error has occurred and a secure connection to the server cannot be made."});
+
   // Only http and https become a WebSocket's schemes.
   SocketRecorder ftp;
   auto f = network.webSockets->connect("ftp" + server.url("/ws").substr(4), {}, {}, ftp.callbacks());
