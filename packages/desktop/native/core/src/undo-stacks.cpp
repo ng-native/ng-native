@@ -4,15 +4,17 @@ namespace ngn {
 
 namespace {
 
-// Sets a flag for one action's run and clears it however the run ends, so an action that throws
-// does not leave later registrations going to the wrong stack.
+// Sets a flag for one action's run and puts back its earlier value however the run ends, so an
+// action that throws does not leave later registrations going to the wrong stack, and an undo run
+// inside another undo's action leaves the outer one still undoing.
 struct Running {
   bool &flag;
-  explicit Running(bool &flag) : flag(flag) {
+  bool before;
+  explicit Running(bool &flag) : flag(flag), before(flag) {
     flag = true;
   }
   ~Running() {
-    flag = false;
+    flag = before;
   }
 };
 

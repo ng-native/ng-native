@@ -126,3 +126,16 @@ TEST_CASE("a redo that throws leaves a new action clearing the redo history") {
   stacks.registerAction("New", [] {});
   CHECK(redoTitle(stacks) == "Redo");
 }
+
+TEST_CASE("an undo run inside another undo's action leaves the outer one still undoing") {
+  ngn::UndoStacks stacks;
+  stacks.registerAction("Inner", [] {});
+  stacks.registerAction("Outer", [&stacks] {
+    stacks.undo();
+    stacks.registerAction("Outer", [] {});
+  });
+  stacks.undo();
+  // The outer action's inverse is a redo, not a new action that clears the redo history.
+  CHECK(redoTitle(stacks) == "Redo Outer");
+  CHECK(undoTitle(stacks) == "Undo");
+}
