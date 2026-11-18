@@ -12,6 +12,9 @@ here="$(cd "$(dirname "$0")" && pwd)"
 CACHE="${1:?usage: build-icu.sh <cache> <out-prefix>}"
 OUT="${2:?usage: build-icu.sh <cache> <out-prefix>}"
 JOBS="${NGN_JOBS:-8}"
+# Absolute, since the build runs from its work directory.
+case "$CACHE" in /*) ;; *) CACHE="$PWD/$CACHE" ;; esac
+case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 [ -x "$CACHE/src/icu/source/configure" ] || { echo "build-icu.sh: run fetch.sh first" >&2; exit 1; }
 
 work="$OUT.build"
