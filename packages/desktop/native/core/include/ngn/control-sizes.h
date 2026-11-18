@@ -54,12 +54,15 @@ class ControlSizes : public std::enable_shared_from_this<ControlSizes> {
       std::function<bool()> onUiThread,
       Relayout relayout = nullptr);
 
-  // Layout, any thread: the size of the control `tag` with `props`. `state` is the node's.
+  // Layout, any thread: the size of the control `tag` with `props`. `state` is the node's. A
+  // toolkit sizes its controls' text by the desktop's text scaling, so each `fontScale` (the
+  // layout's text size multiplier) has sizes of its own.
   facebook::react::Size layoutSize(
       Tag tag,
       ControlKind kind,
       std::shared_ptr<const NativeControlProps> props,
-      const facebook::react::State::Shared &state);
+      const facebook::react::State::Shared &state,
+      float fontScale = 1);
 
   // UI thread: measures every control layout queued, and asks each for a layout again.
   void settle();
@@ -79,6 +82,8 @@ class ControlSizes : public std::enable_shared_from_this<ControlSizes> {
     facebook::react::Size size{};
   };
   struct Queued {
+    // Its size key, the text size multiplier included.
+    std::string key;
     ControlKind kind;
     std::shared_ptr<const NativeControlProps> props;
     facebook::react::State::Shared state;

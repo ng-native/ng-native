@@ -16,6 +16,7 @@
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 #include <react/renderer/core/LayoutConstraints.h>
+#include <react/renderer/core/LayoutContext.h>
 #include <react/renderer/graphics/Color.h>
 #include <react/utils/ContextContainer.h>
 
@@ -100,11 +101,13 @@ struct NativeControlState {
   int measured{0};
 };
 
-// The size layout gives a control: the one ControlSizes holds for its inputs (control-sizes.cpp).
+// The size layout gives a control: the one ControlSizes holds for its inputs (control-sizes.cpp),
+// at the text size multiplier the layout runs with.
 facebook::react::Size measureControl(
     const facebook::react::ShadowNode &node,
     ControlKind kind,
-    const facebook::react::ContextContainer *context);
+    const facebook::react::ContextContainer *context,
+    float fontScale);
 
 // The control a Fabric component name is, if it is one.
 std::optional<ControlKind> controlKind(std::string_view componentName);
@@ -139,7 +142,7 @@ class NativeControlShadowNode final : public facebook::react::ConcreteViewShadow
       const facebook::react::LayoutContext &layoutContext,
       const facebook::react::LayoutConstraints &layoutConstraints) const override {
     const auto &context = this->getContextContainer();
-    return layoutConstraints.clamp(measureControl(*this, Kind, context.get()));
+    return layoutConstraints.clamp(measureControl(*this, Kind, context.get(), layoutContext.fontSizeMultiplier));
   }
 };
 
