@@ -7,17 +7,24 @@
 // AppKit host puts it into the window's toolbar: the back button, the header's subviews moved into
 // slots of their own, its bar buttons and its search fields, with the title between.
 //
-// A <modal> sheet is an AdwDialog inside the window on libadwaita 1.5 and later, found at run time
-// since the build targets 1.4's API, and a drawn overlay on 1.4: a dimmed backdrop with the sheet
-// on a card in the middle. A cover is an overlay filling the window below the header bar. Either
-// way the modal's view moves into a slot of its own, a container of its own for input, and the
-// sheet takes the size the core works out from its content (sheetSize). Escape asks the app to
-// close it (onRequestClose), as on macOS.
+// A <modal>, and a react-native-screens screen presented with `present()` (screen-presentation.h),
+// shows the way the macOS host shows it. A sheet is an AdwDialog inside the window on libadwaita
+// 1.5 and later, found at run time since the build targets 1.4's API, and a drawn overlay on 1.4: a
+// dimmed backdrop with the sheet on a card in the middle. A cover is an overlay filling the window
+// below the header bar. One with an anchor on screen is a GtkPopover pointing at the anchor. Each
+// way the view moves into a slot of its own, a container of its own for input, and takes the size
+// the core works out from its content (sheetSize, popoverSize).
+//
+// A presented screen's header becomes the sheet's own header bar: its title in the middle, its left
+// items (Cancel) at the start and its right ones at the end, the last the default on Return. Escape
+// presses Cancel, or without one asks the app to close the sheet: onRequestClose for a <modal>,
+// `dismissed` for a screen, which the router follows. A click outside a popover asks the same.
 #pragma once
 
 #include "ngn/desktop-modal.h"
 #include "ngn/header-bar.h"
 #include "ngn/mounting-backend.h"
+#include "ngn/screen-presentation.h"
 #include "ngn/screen-stacks.h"
 
 #include <gtk/gtk.h>
@@ -58,6 +65,11 @@ void runSearchBarCommand(GtkWidget *entry, const std::string &name, const folly:
 // Whether AdwDialog is there to present a sheet with: libadwaita 1.5 or later at run time.
 bool haveAdwDialog();
 
+// A CSS class setting `property` ("color" or "background-color") to `color`, added to the display's
+// sheet the first time it is asked for; empty for no colour. The class names its colour, so its rule
+// never goes stale.
+std::string colorClass(const char *property, const facebook::react::SharedColor &color);
+
 // The header the window of each surface shows.
 class Headers {
  public:
@@ -81,6 +93,8 @@ class Headers {
     std::vector<GtkWidget *> packed;
     std::vector<Tag> hosted;
     GtkWidget *back{nullptr};
+    // The bar's background colour class.
+    std::string background;
   };
   void layOut(SurfaceId surfaceId, Shown &shown);
   void clear(SurfaceId surfaceId, Shown &shown);
@@ -106,29 +120,50 @@ class Modals {
   void mounted(SurfaceId surfaceId, Tag tag);
   // A modal left the tree, or went: it is dismissed.
   void unmounted(Tag tag);
+  // The core presents a screen over its stack, or takes it back (ScreenStacks::takePresented): it
+  // presents once the transaction has mounted, as a modal does.
+  void setPresented(SurfaceId surfaceId, Tag screen, bool presented);
   // After a transaction: presents the modals mounted in it, and fits each sheet to its content.
   // Also as a window changes size, which a sheet stays within and a cover fills.
   void settle();
   // The presentation a modal shows in, for tests: its slot, and whether it is an AdwDialog.
   GtkWidget *slotOf(Tag tag) const;
   bool inDialog(Tag tag) const;
-  // What Escape does: asks the app to close the modal in front.
+  // Its GtkPopover, and the header bar a presented screen's sheet draws, for tests; null for none.
+  GtkWidget *popoverOf(Tag tag) const;
+  GtkWidget *sheetHeaderOf(Tag tag) const;
+  // What Escape does: presses a sheet's Cancel, or asks the app to close the presentation.
   void requestClose(Tag tag);
+  // What Return does: presses a sheet's default button. Whether there was one to press.
+  bool pressDefault(Tag tag);
 
  private:
   struct Presented {
     SurfaceId surfaceId;
     ModalPresentation presentation{ModalPresentation::Sheet};
+    // A presented RNSScreen, not a <modal>.
+    bool screen{false};
     GtkWidget *slot{nullptr};
-    // The AdwDialog, or the overlay's backdrop or cover.
+    // The AdwDialog, the overlay's backdrop or cover, or the popover.
     GtkWidget *dialog{nullptr};
     GtkWidget *layer{nullptr};
+    GtkWidget *popover{nullptr};
+    // A sheet's box of its header and the slot, and the header, when the screen has one.
+    GtkWidget *card{nullptr};
+    GtkWidget *header{nullptr};
+    SheetChrome chrome;
+    // The name it was last given (presentationLabel).
+    std::string label;
+    bool labelled{false};
     std::pair<int, int> size{0, 0};
     // Where the focus was, to go back to.
     GtkWidget *opener{nullptr};
   };
   void present(SurfaceId surfaceId, Tag tag);
   void fit(Tag tag, Presented &presented);
+  // Brings a presented screen's sheet header and the presentation's label in step with its props.
+  void dress(Tag tag, Presented &presented);
+  void press(Tag tag, const std::string &buttonId);
   void dismiss(Tag tag);
 
   GtkBackend &backend_;

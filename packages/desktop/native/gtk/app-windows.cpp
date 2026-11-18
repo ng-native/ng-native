@@ -103,13 +103,27 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
 }
 
+void presentWithoutInitialFocus(GtkWindow *window) {
+  // GTK focuses the first widget it can as it shows a window with no focus, and the widget hears
+  // of it at once, active window or not: so for that moment nothing in it can take the focus.
+  GtkWidget *content = gtk_window_get_child(window);
+  bool hold = !gtk_root_get_focus(GTK_ROOT(window)) && content && gtk_widget_get_can_focus(content);
+  if (hold) {
+    gtk_widget_set_can_focus(content, FALSE);
+  }
+  gtk_window_present(window);
+  if (hold) {
+    gtk_widget_set_can_focus(content, TRUE);
+  }
+}
+
 void GtkWindows::didMount(SurfaceId surface) {
   auto it = windows_.find(surface);
   if (it == windows_.end() || it->second.shown) {
     return;
   }
   it->second.shown = true;
-  gtk_window_present(GTK_WINDOW(it->second.window));
+  presentWithoutInitialFocus(GTK_WINDOW(it->second.window));
 }
 
 void GtkWindows::closeWindow(SurfaceId surface) {

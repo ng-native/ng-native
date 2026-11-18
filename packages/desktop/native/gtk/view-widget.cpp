@@ -62,7 +62,10 @@ void viewSizeAllocate(GtkWidget *widget, int width, int height, int) {
   ViewData *d = NGN_VIEW(widget)->data;
   for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
     if (!NGN_IS_VIEW(child)) {
-      if (d->field && child == ngn::gtk::fieldWidget(*d->field)) {
+      if (GTK_IS_POPOVER(child)) {
+        // A popover anchored to the view (screens.h), which its parent places as it allocates.
+        gtk_popover_present(GTK_POPOVER(child));
+      } else if (d->field && child == ngn::gtk::fieldWidget(*d->field)) {
         ngn::gtk::allocateTextField(*d, width, height);
       } else if (d->scroll && child == d->scroll->scrolled) {
         ngn::gtk::allocateScrollView(*d, width, height);
@@ -152,6 +155,10 @@ void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
     clipped = ngn::gtk::pushOverflowClip(snapshot, box);
   }
   for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_NATIVE(child)) {
+      // A popover is a surface of its own.
+      continue;
+    }
     gtk_widget_snapshot_child(widget, child, snapshot);
   }
   if (clipped) {

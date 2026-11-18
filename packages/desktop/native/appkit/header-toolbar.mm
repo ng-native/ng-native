@@ -263,24 +263,27 @@ NSImage *symbol(const std::string &name, NSString *description) {
   // A hosted item's own content changed: its size follows its layout.
 }
 
-- (NSArray<NGNHeaderSubviewView *> *)itemsOfType:(const std::string &)type {
-  NSMutableArray *items = [NSMutableArray array];
+// The config's header subviews, with where each sits, and each by its tag in `views`.
+- (std::vector<ngn::HeaderSubview>)headerSubviews:(NSMutableDictionary<NSNumber *, NGNHeaderSubviewView *> *)views {
+  std::vector<ngn::HeaderSubview> subviews;
+  auto add = [&](NGNHeaderSubviewView *v) {
+    if (auto type = v.props ? ngn::headerItemType(*v.props) : std::nullopt) {
+      subviews.push_back({static_cast<facebook::react::Tag>(v.reactTag), *type});
+      views[@(v.reactTag)] = v;
+    }
+  };
   for (NSView *v in _config.subviews) {
-    if ([v isKindOfClass:NGNHeaderSubviewView.class] && ((NGNView *)v).props &&
-        ngn::headerItemType(*((NGNView *)v).props) == type) {
-      [items addObject:v];
+    if ([v isKindOfClass:NGNHeaderSubviewView.class]) {
+      add((NGNHeaderSubviewView *)v);
     }
   }
   // Those already in the toolbar are no longer the config's subviews.
   for (NGNHeaderSubviewView *v in _hosted.allValues) {
-    if ([_homes objectForKey:v] == _config && v.props && ngn::headerItemType(*v.props) == type) {
-      [items addObject:v];
+    if ([_homes objectForKey:v] == _config) {
+      add(v);
     }
   }
-  [items sortUsingComparator:^NSComparisonResult(NGNView *a, NGNView *b) {
-    return a.reactTag < b.reactTag ? NSOrderedAscending : a.reactTag > b.reactTag ? NSOrderedDescending : NSOrderedSame;
-  }];
-  return items;
+  return subviews;
 }
 
 - (void)returnHostedViews {
@@ -340,35 +343,35 @@ NSImage *symbol(const std::string &name, NSString *description) {
     }
   }
   if (bar) {
-    NSArray *left = [self itemsOfType:"left"];
-    NSArray *center = [self itemsOfType:"center"];
-    NSArray *right = [self itemsOfType:"right"];
-    BOOL replacesBack = left.count > 0 || !_bar.left.empty();
-    _buttons = ngn::historyButtons(_history, _canGoBack, _bar.hideBackButton || replacesBack);
+    // The core's order, which the GTK host's header bar follows too. Whether the chevrons show is
+    // the history's to say as well, so the layout is asked as though the screen could go back.
+    NSMutableDictionary<NSNumber *, NGNHeaderSubviewView *> *views = [NSMutableDictionary dictionary];
+    auto layout = ngn::headerLayout(_bar, [self headerSubviews:views], true);
+    _buttons = ngn::historyButtons(_history, _canGoBack, !layout.back);
     if (_buttons.shown) {
       [ids addObject:kHistory];
     }
-    for (NGNHeaderSubviewView *v in left) {
-      [ids addObject:[self host:v]];
+    for (auto tag : layout.left) {
+      [ids addObject:[self host:views[@(tag)]]];
     }
     for (size_t i = 0; i < _bar.left.size(); i++) {
       [ids addObject:[NSString stringWithFormat:@"ngn.button.left.%zu", i]];
     }
     [ids addObject:NSToolbarFlexibleSpaceItemIdentifier];
-    for (NGNHeaderSubviewView *v in center) {
-      [ids addObject:[self host:v]];
+    for (auto tag : layout.center) {
+      [ids addObject:[self host:views[@(tag)]]];
     }
-    if (center.count > 0) {
+    if (!layout.center.empty()) {
       [ids addObject:NSToolbarFlexibleSpaceItemIdentifier];
     }
     for (size_t i = 0; i < _bar.right.size(); i++) {
       [ids addObject:[NSString stringWithFormat:@"ngn.button.right.%zu", i]];
     }
-    for (NGNHeaderSubviewView *v in right) {
-      [ids addObject:[self host:v]];
+    for (auto tag : layout.right) {
+      [ids addObject:[self host:views[@(tag)]]];
     }
-    for (NGNHeaderSubviewView *v in [self itemsOfType:"searchBar"]) {
-      for (NSView *child in v.subviews) {
+    for (auto tag : layout.searchBars) {
+      for (NSView *child in views[@(tag)].subviews) {
         if ([child isKindOfClass:NGNSearchBarView.class]) {
           NGNSearchToolbarItem *item = ((NGNSearchBarView *)child).item;
           _searchItems[item.itemIdentifier] = item;
