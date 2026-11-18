@@ -24,7 +24,8 @@
  * commit on the fake backend, which this does not measure yet.
  *
  * As `bench:macos`, the first launch is a warm-up that is reported and not judged, each metric is
- * the median of `--runs` launches (default 3), and it fails closed: no host, no bundle, or a metric
+ * the median of `--runs` launches (default 3). A JavaScript bundle is compiled to bytecode first,
+ * with the `hermesc` beside the host, as a package ships it. It fails closed: no host, no bundle, or a metric
  * it could not read fails the run, as a breach does, unless the budget file waives it with the
  * reason and the pull request.
  */
@@ -79,20 +80,33 @@ const read = (file) => {
   }
 };
 
-/** The host's CPU seconds and context switches now, or nulls where /proc had none. */
+/**
+ * Context switches over a window, from each thread's count at its start and end: a thread that
+ * started in the window counts from zero, and one that ended in it drops out, so threads coming and
+ * going never make the count go down.
+ *
+ * @param {Map<string, number>} before
+ * @param {Map<string, number>} after
+ */
+export function switchesBetween(before, after) {
+  let total = 0;
+  for (const [tid, count] of after) total += count - (before.get(tid) ?? 0);
+  return total;
+}
+
+/** The host's CPU seconds and each thread's context switches now, or nulls where /proc had none. */
 function sample(pid, ticksPerSecond) {
   const stat = read(`/proc/${pid}/stat`);
-  let switches = 0;
-  let tasks = [];
+  /** @type {Map<string, number> | null} */
+  let switches = new Map();
   try {
-    tasks = readdirSync(`/proc/${pid}/task`);
+    for (const tid of readdirSync(`/proc/${pid}/task`)) {
+      const count = contextSwitches(read(`/proc/${pid}/task/${tid}/status`) ?? '');
+      // A thread that ended between the listing and the read is left out.
+      if (count !== null) switches.set(tid, count);
+    }
   } catch {
     switches = null;
-  }
-  for (const tid of tasks) {
-    const count = contextSwitches(read(`/proc/${pid}/task/${tid}/status`) ?? '');
-    if (count === null || switches === null) switches = null;
-    else switches += count;
   }
   return { cpu: stat === null ? null : cpuSeconds(stat, ticksPerSecond), switches };
 }
@@ -135,7 +149,8 @@ export async function measure(
     const seconds = idleMs / 1000;
     const delta = (a, b) => (a === null || b === null ? null : b - a);
     const cpu = delta(before.cpu, after.cpu);
-    const switches = delta(before.switches, after.switches);
+    const switches =
+      before.switches && after.switches ? switchesBetween(before.switches, after.switches) : null;
     return {
       launchMs: firstFrameMs(log),
       idleCpu: cpu === null ? null : (cpu / seconds) * 100,
@@ -161,6 +176,32 @@ function strippedMb(host) {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * The bundle as Hermes bytecode, as a package ships it: a `.hbc` as it is, and a JavaScript bundle
+ * compiled into `dir` with the `hermesc` beside the host, which is the Hermes the host runs. Parsing
+ * the source at launch would measure what no installed app does.
+ *
+ * @param {string} host
+ * @param {string} bundle
+ * @param {string} dir
+ */
+export function bytecode(host, bundle, dir) {
+  if (bundle.endsWith('.hbc')) return bundle;
+  const hermesc = path.join(path.dirname(host), 'hermesc');
+  if (!existsSync(hermesc)) {
+    throw new Error(
+      `${bundle} is JavaScript, and there is no hermesc beside the host to compile it: pass a .hbc ` +
+        'or a host from a build folder, which has its hermesc in gtk/.',
+    );
+  }
+  const out = path.join(dir, `${path.basename(bundle, path.extname(bundle))}.hbc`);
+  const compiled = spawnSync(hermesc, ['-emit-binary', '-O', '-w', '-out', out, bundle], {
+    stdio: 'inherit',
+  });
+  if (compiled.status !== 0) throw new Error(`hermesc could not compile ${bundle}.`);
+  return out;
 }
 
 /** A release bundle of the notes example for Linux: `--bundle`, or one exported now. */
@@ -242,7 +283,14 @@ async function main(argv) {
   const budget = JSON.parse(
     readFileSync(path.join(root, 'scripts', 'bench-linux-budget.json'), 'utf8'),
   );
-  const { cold, judged } = summarize(await launches(host, bundle, runs), 1);
+  const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-hbc-'));
+  let all;
+  try {
+    all = await launches(host, bytecode(host, bundle, dir), runs);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const { cold, judged } = summarize(all, 1);
   judged.hostMb = strippedMb(host);
   console.log(
     `setting   ${process.arch}, GSK_RENDERER=cairo, ${process.env.GDK_BACKEND ?? 'default'} display`,

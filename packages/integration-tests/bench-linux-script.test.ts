@@ -14,6 +14,8 @@ const bench = (await import(new URL('../../scripts/bench-linux.mjs', import.meta
   cpuSeconds(stat: string, ticksPerSecond: number): number | null;
   contextSwitches(status: string): number | null;
   pssMb(rollup: string): number | null;
+  switchesBetween(before: Map<string, number>, after: Map<string, number>): number;
+  bytecode(host: string, bundle: string, dir: string): string;
   benchEnv(env: Record<string, string | undefined>): Record<string, string | undefined>;
   measure(
     host: string,
@@ -62,6 +64,19 @@ describe('reading /proc', () => {
     assert.equal(bench.contextSwitches('voluntary_ctxt_switches:\t120\n'), null);
   });
 
+  it('counts switches per thread, so a thread that ends or starts in the window takes none away', () => {
+    const before = new Map([
+      ['1', 100],
+      ['2', 50],
+    ]);
+    // Thread 2 ended, thread 3 started.
+    const after = new Map([
+      ['1', 103],
+      ['3', 2],
+    ]);
+    assert.equal(bench.switchesBetween(before, after), 5);
+  });
+
   it('reads the proportional set size, not the resident one', () => {
     const rollup = '55d0-7fff ---p 0 00:00 0 [rollup]\nRss:  204800 kB\nPss:  102400 kB\n';
     assert.equal(bench.pssMb(rollup), 100);
@@ -74,6 +89,30 @@ describe('reading /proc', () => {
     assert.equal(env['NGN_LOG_COMMITS'], '1');
     assert.equal(env['GTK_A11Y'], 'none');
     assert.equal(env['PATH'], '/bin');
+  });
+});
+
+describe('the bundle measured', () => {
+  it('compiles a JavaScript bundle with the hermesc beside the host, and keeps bytecode as it is', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-hbc-'));
+    try {
+      writeFileSync(
+        path.join(dir, 'hermesc'),
+        '#!/usr/bin/env bash\nwhile [ "$1" != -out ]; do shift; done\necho "$@" > "$2"\n',
+      );
+      chmodSync(path.join(dir, 'hermesc'), 0o755);
+      const host = path.join(dir, 'ngn-linux');
+      const out = bench.bytecode(host, '/b/main.js', dir);
+      assert.equal(out, path.join(dir, 'main.hbc'));
+      assert.equal(readFileSync(out, 'utf8').trim(), `-out ${out} /b/main.js`);
+      assert.equal(bench.bytecode(host, '/b/main.hbc', dir), '/b/main.hbc');
+      assert.throws(
+        () => bench.bytecode('/nowhere/ngn-linux', '/b/main.js', dir),
+        /no hermesc beside the host/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -85,6 +85,7 @@ jobs:
             bash -euo pipefail -c '
               build=$(native/scripts/build.sh --backend gtk --no-debug-info --no-tests | tail -n 1)
               cp "$build/gtk/ngn-linux" "$GITHUB_WORKSPACE/.linux-nightly/ngn-linux"
+              cp "$build/gtk/hermesc" "$GITHUB_WORKSPACE/.linux-nightly/hermesc"
             '
 
       - name: Export the notes example's Linux bundle
