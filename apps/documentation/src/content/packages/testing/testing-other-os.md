@@ -32,7 +32,9 @@ for their platform: `vitest --project macos` runs the in-app tests on a Mac.
 
 An extensionless import resolves a platform file first, as Metro does: on macOS `./storage` is
 `storage.macos.ts`, then `storage.ios.ts`, then `storage.native.ts`, then `storage.ts`. On Android
-it is `.android`, then `.native`.
+it is `.android`, then `.native`. An `os` of `'linux'` resolves `.linux`, then `.ios`, then
+`.native`, and renders as Linux, a desktop OS, though Linux has no desktop host to run the app on
+yet.
 
 ## One render as another OS
 

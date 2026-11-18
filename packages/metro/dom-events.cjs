@@ -52,7 +52,7 @@ const DOM_EVENTS = new Map(
 );
 
 /** The OSes in `expo.platforms` that are desktops, where an event with `desktop` set fires. */
-const DESKTOP_PLATFORMS = new Set(['macos']);
+const DESKTOP_PLATFORMS = new Set(['macos', 'linux']);
 
 /**
  * The elements from @ng-native/components whose names have a hyphen. An element without one is

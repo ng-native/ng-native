@@ -3175,14 +3175,14 @@ const KEPT_BY_LIGHTNINGCSS = new Set(['UnsupportedPseudoClass', 'UnsupportedPseu
 const NATIVE = ['ios', 'android'];
 
 /** The platforms a build can name, each of which a sheet is then built for alone. */
-const BUILDS = [...NATIVE, 'macos'];
+const BUILDS = [...NATIVE, 'macos', 'linux'];
 
 /**
- * The platforms refused a filter iOS does not draw: iOS, and macOS, whose host draws no more of them
- * than iOS does. The macOS host hands AppKit the whole transform matrix, skews included, so a skew
- * is refused on Android alone.
+ * The platforms refused a filter iOS does not draw: iOS, and the desktop OSes, whose host draws no
+ * more of them than iOS does. The desktop host hands the toolkit the whole transform matrix, skews
+ * included, so a skew is refused on Android alone.
  */
-const IOS_FILTERS = new Set(['ios', 'macos']);
+const IOS_FILTERS = new Set(['ios', 'macos', 'linux']);
 const drawsIosFilters = (platforms) => platforms.some((platform) => IOS_FILTERS.has(platform));
 
 /** The class `mount` puts on the root for each platform, which is how a rule is scoped to one. */
@@ -3190,6 +3190,7 @@ const PLATFORM_CLASS = {
   'platform-ios': 'ios',
   'platform-android': 'android',
   'platform-macos': 'macos',
+  'platform-linux': 'linux',
 };
 
 /**

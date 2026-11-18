@@ -18,6 +18,7 @@ export const PLUGIN_NAME = '@ng-native/desktop';
  *
  * @typedef {{
  *   name?: string,
+ *   description?: string,
  *   slug?: string,
  *   version?: string,
  *   scheme?: string | string[],

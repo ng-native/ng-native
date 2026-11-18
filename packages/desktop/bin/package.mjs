@@ -19,6 +19,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { hostCapabilities } from './app-config.mjs';
+import { checkLinuxFlags, LINUX_FORMATS, packageLinux } from './package-linux.mjs';
 import { plist } from './plist.mjs';
 import { prepareHost, readExpoConfig, UsageError } from './host.mjs';
 
@@ -28,67 +29,166 @@ export const MINIMUM_MACOS = '14.0';
 /** Where the packages go, in the app's directory, unless `--output` says otherwise. */
 export const DEFAULT_OUTPUT = 'dist/macos';
 
-const FORMATS = ['app', 'dmg', 'mas'];
+/**
+ * What `package` makes for each OS, `app` first as the default, and where by default.
+ *
+ * @type {Record<'macos' | 'linux', { formats: readonly string[], output: string }>}
+ */
+export const PACKAGE_OSES = {
+  macos: { formats: ['app', 'dmg', 'mas'], output: DEFAULT_OUTPUT },
+  linux: { formats: [...LINUX_FORMATS], output: 'dist/linux' },
+};
 
-export const PACKAGE_USAGE = `Usage: ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url> [--sparkle-key <key>]] [--skip-notarize]
+/** @type {readonly string[]} */
+const ARCHES = ['x64', 'arm64', 'all'];
 
-Builds the app for release, universal for arm64 and x86_64, into dist/macos. Needs full Xcode.
+/** The flags only a Linux package takes. */
+const LINUX_FLAGS = /** @type {const} */ (['license', 'homepage', 'categories', 'maintainer']);
 
+export const PACKAGE_USAGE = `Usage: ng-native-desktop package [--os macos|linux] [--arch x64|arm64|all] [--format <format>] [--output <dir>]
+                              [--feed-url <url> [--sparkle-key <key>]] [--skip-notarize]
+                              [--license <spdx>] [--homepage <url>] [--categories <list>] [--maintainer <name and email>]
+
+Builds the app for release into dist/<os>: for macOS universal for arm64 and x86_64 (needs full
+Xcode), for Linux one package for each architecture.
+
+  --os <os>         the OS to package for: macos or linux (default: this machine's)
+  --arch <arch>     x64, arm64 or all (default): macOS keeps only the one asked for of its
+                    universal build; Linux makes a package for each
+  --output <dir>    where the packages go (default: dist/<os>)
+
+macOS formats:
   --format app      an ad-hoc signed .app (default)
   --format dmg      a Developer ID signed, notarised and stapled .dmg
   --format mas      a sandboxed Mac App Store .pkg
-  --output <dir>    where the packages go (default: dist/macos)
   --feed-url <url>  dmg only: the Sparkle appcast the app updates from, embedding Sparkle
   --sparkle-key <key>  with --feed-url: Sparkle's public EdDSA key, which updates are checked
                     against (or NGN_SPARKLE_PUBLIC_KEY)
   --skip-notarize   dmg only, for testing on this Mac: no notarisation, and signed ad hoc
                     unless NGN_SIGN_IDENTITY is set. Gatekeeper refuses it on any other Mac.
 
+Linux formats, each with a desktop entry, hicolor icons and AppStream metainfo:
+  --format app      a runnable folder and its .tar.gz (default)
+  --format deb      a .deb for Debian 13 and Ubuntu 24.04 or later
+  --format rpm      an .rpm for Fedora and the RHEL family 9 or later (rpmbuild, or a container)
+  --format flatpak  a .flatpak on the GNOME runtime, its OSTree repo and manifest (flatpak-builder,
+                    or a container)
+  --license <spdx>  the app's license: rpm and flatpak need it
+  --homepage <url>  the app's web page
+  --categories <list>  freedesktop categories, with a main one (default: Utility)
+  --maintainer <name and email>  "Ada Lovelace <ada@example.com>": deb needs it
+  rpm and flatpak run in a container (AlmaLinux 9, Fedora 44) through Docker or Podman where the
+  tool is not installed, which is how a Mac makes them.
+
 Signing and notarising read the environment:
   NGN_SIGN_IDENTITY             the codesign identity (dmg: Developer ID Application, mas: Apple Distribution)
   NGN_NOTARY_PROFILE            a notarytool keychain profile (xcrun notarytool store-credentials), or
   APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER        an App Store Connect API key
   mas: NGN_INSTALLER_IDENTITY, NGN_PROVISIONING_PROFILE and APPLE_TEAM_ID
-  dmg with ios.usesAppleSignIn: NGN_PROVISIONING_PROFILE (Developer ID) and APPLE_TEAM_ID`;
+  dmg with ios.usesAppleSignIn: NGN_PROVISIONING_PROFILE (Developer ID) and APPLE_TEAM_ID
+  NGN_GPG_KEY                   Linux: the GPG key that signs an app's .tar.gz, an rpm and a
+                                Flatpak repo, in the agent or GNUPGHOME`;
 
 /**
- * @typedef {{ command: 'package', format: 'app' | 'dmg' | 'mas', output: string, feedUrl: string | undefined, sparkleKey: string | undefined, skipNotarize: boolean }} PackageCommand
+ * @typedef {{ command: 'package', os: 'macos', arch: 'x64' | 'arm64' | 'all', format: 'app' | 'dmg' | 'mas', output: string, feedUrl: string | undefined, sparkleKey: string | undefined, skipNotarize: boolean }} MacPackageCommand
+ * @typedef {{ command: 'package', os: 'linux' } & import('./package-linux.mjs').LinuxPackageCommand} LinuxCommand
+ * @typedef {MacPackageCommand | LinuxCommand} PackageCommand
  * @typedef {import('./host.mjs').system} System
  * @typedef {import('./app-config.mjs').DesktopAppConfig} DesktopAppConfig
  */
 
 /**
+ * @typedef {{ os?: string, arch: string, format: string, output?: string, 'feed-url'?: string, 'sparkle-key'?: string, 'skip-notarize': boolean, license?: string, homepage?: string, categories?: string, maintainer?: string }} PackageFlags
+ */
+
+/**
  * @param {string[]} args the arguments after `package`
+ * @param {string} [platform] this machine's, which `--os` defaults to
  * @returns {PackageCommand}
  */
-export function parsePackage(args) {
+export function parsePackage(args, platform = process.platform) {
   const { values } = parseArgs({
     args,
     options: {
+      os: { type: 'string' },
+      arch: { type: 'string', default: 'all' },
       format: { type: 'string', default: 'app' },
-      output: { type: 'string', default: DEFAULT_OUTPUT },
+      output: { type: 'string' },
       'feed-url': { type: 'string' },
       'sparkle-key': { type: 'string' },
       'skip-notarize': { type: 'boolean', default: false },
+      license: { type: 'string' },
+      homepage: { type: 'string' },
+      categories: { type: 'string' },
+      maintainer: { type: 'string' },
     },
   });
+  const os = values.os ?? (platform === 'linux' ? 'linux' : 'macos');
+  if (os !== 'macos' && os !== 'linux') {
+    throw new UsageError(`--os takes macos or linux, not "${os}".`);
+  }
+  const arch = /** @type {'x64' | 'arm64' | 'all'} */ (values.arch);
+  if (!ARCHES.includes(arch)) {
+    throw new UsageError(`--arch takes x64, arm64 or all, not "${arch}".`);
+  }
+  const { formats, output: defaultOutput } = PACKAGE_OSES[os];
   const format = values.format;
-  if (!FORMATS.includes(format)) {
-    throw new UsageError(`--format takes app, dmg or mas, not "${format}".`);
+  if (!formats.includes(format)) {
+    throw new UsageError(
+      `--format takes ${formats.slice(0, -1).join(', ')} or ${formats.at(-1)} for ${os}, not "${format}".`,
+    );
+  }
+  const common = {
+    command: /** @type {const} */ ('package'),
+    arch,
+    output: values.output ?? defaultOutput,
+  };
+  return os === 'linux' ? parseLinuxFlags(values, common) : parseMacFlags(values, common);
+}
+
+/**
+ * The flags of a Linux package, refusing macOS's.
+ *
+ * @param {PackageFlags} values
+ * @param {{ command: 'package', arch: 'x64' | 'arm64' | 'all', output: string }} common
+ * @returns {LinuxCommand}
+ */
+function parseLinuxFlags(values, common) {
+  const macOnly = /** @type {const} */ (['feed-url', 'sparkle-key', 'skip-notarize']).find(
+    (flag) => values[flag],
+  );
+  if (macOnly) {
+    throw new UsageError(
+      `--${macOnly} is for --os macos only: Linux packages have no Sparkle or notarisation.`,
+    );
+  }
+  checkLinuxFlags(values);
+  const given = LINUX_FLAGS.filter((flag) => values[flag] !== undefined);
+  return {
+    ...common,
+    os: 'linux',
+    format: /** @type {import('./package-linux.mjs').LinuxFormat} */ (values.format),
+    ...Object.fromEntries(given.map((flag) => [flag, values[flag]])),
+  };
+}
+
+/**
+ * The flags of a macOS package, refusing Linux's.
+ *
+ * @param {PackageFlags} values
+ * @param {{ command: 'package', arch: 'x64' | 'arm64' | 'all', output: string }} common
+ * @returns {MacPackageCommand}
+ */
+function parseMacFlags(values, common) {
+  const format = /** @type {'app' | 'dmg' | 'mas'} */ (values.format);
+  const linuxOnly = LINUX_FLAGS.find((flag) => values[flag] !== undefined);
+  if (linuxOnly) {
+    throw new UsageError(
+      `--${linuxOnly} is for --os linux only: a macOS app takes its details from app.json.`,
+    );
   }
   const feedUrl = values['feed-url'];
-  if (feedUrl !== undefined) {
-    if (format !== 'dmg') {
-      throw new UsageError(
-        `--feed-url is for --format dmg only: ${format === 'mas' ? 'the Mac App Store updates a mas build itself' : 'an app build has no updater'}.`,
-      );
-    }
-    if (!/^https:\/\/[^\s/]+/.test(feedUrl)) {
-      throw new UsageError(
-        `--feed-url takes the https URL of a Sparkle appcast, not "${feedUrl}".`,
-      );
-    }
-  }
+  if (feedUrl !== undefined) checkFeedUrl(feedUrl, format);
   const sparkleKey = values['sparkle-key'];
   if (sparkleKey !== undefined && feedUrl === undefined) {
     throw new UsageError(
@@ -101,14 +201,22 @@ export function parsePackage(args) {
       `--skip-notarize is for --format dmg only: ${format === 'mas' ? 'the Mac App Store notarises a mas build itself' : 'an app build is never notarised'}.`,
     );
   }
-  return {
-    command: 'package',
-    format: /** @type {'app' | 'dmg' | 'mas'} */ (format),
-    output: values.output,
-    feedUrl,
-    sparkleKey,
-    skipNotarize,
-  };
+  return { ...common, os: 'macos', format, feedUrl, sparkleKey, skipNotarize };
+}
+
+/**
+ * @param {string} feedUrl
+ * @param {'app' | 'dmg' | 'mas'} format
+ */
+function checkFeedUrl(feedUrl, format) {
+  if (format !== 'dmg') {
+    throw new UsageError(
+      `--feed-url is for --format dmg only: ${format === 'mas' ? 'the Mac App Store updates a mas build itself' : 'an app build has no updater'}.`,
+    );
+  }
+  if (!/^https:\/\/[^\s/]+/.test(feedUrl)) {
+    throw new UsageError(`--feed-url takes the https URL of a Sparkle appcast, not "${feedUrl}".`);
+  }
 }
 
 /**
@@ -210,7 +318,7 @@ const DMG_SIGN_IN = ['NGN_SIGN_IDENTITY', 'NGN_PROVISIONING_PROFILE', 'APPLE_TEA
  * `dmg` with `--skip-notarize` needs none: it signs with `NGN_SIGN_IDENTITY` when that is set and
  * ad hoc (`-`) when not, and never asks Apple.
  *
- * @param {PackageCommand} options
+ * @param {MacPackageCommand} options
  * @param {Record<string, string | undefined>} env
  */
 function credentials({ format, skipNotarize, feedUrl }, env) {
@@ -593,7 +701,7 @@ function notarise(sys, file, notary, staple = file) {
  * Sparkle's public EdDSA key for a package with a feed: `--sparkle-key`, else
  * `NGN_SPARKLE_PUBLIC_KEY`. Without one Sparkle would refuse every update, so it stops first.
  *
- * @param {PackageCommand} options
+ * @param {MacPackageCommand} options
  * @param {Record<string, string | undefined>} env
  */
 function sparkleKeyFor(options, env) {
@@ -673,12 +781,41 @@ function copyDocumentIcons(sys, cwd, config, resources) {
 }
 
 /**
+ * Strips the executable's local symbols, which nothing resolves at run time (the exported ones
+ * stay), then keeps only the architecture `--arch` asks for of the universal build.
+ *
+ * @param {System} sys
+ * @param {string} executable
+ * @param {{ arch: 'x64' | 'arm64' | 'all', staging: string }} options
+ */
+function stripExecutable(sys, executable, { arch, staging }) {
+  expectSuccess(sys.run('strip', ['-x', executable]), `strip could not strip ${executable}.`);
+  if (arch === 'all') return;
+  const thin = path.join(staging, 'thin');
+  expectSuccess(
+    sys.run('lipo', [executable, '-thin', arch === 'x64' ? 'x86_64' : 'arm64', '-output', thin]),
+    `lipo could not take ${arch} out of ${executable}.`,
+  );
+  sys.copy(thin, executable);
+}
+
+/**
  * Builds the app and makes the package `options.format` asks for. Returns the exit status.
  *
  * @param {PackageCommand} options
  * @param {System} sys
  */
 export async function packageApp(options, sys) {
+  return options.os === 'linux' ? packageLinux(options, sys) : packageMac(options, sys);
+}
+
+/**
+ * Builds the macOS app and makes the package `options.format` asks for. Returns the exit status.
+ *
+ * @param {MacPackageCommand} options
+ * @param {System} sys
+ */
+async function packageMac(options, sys) {
   if (sys.platform !== 'darwin') {
     throw new UsageError('Packaging for macOS runs on macOS only.');
   }
@@ -719,8 +856,7 @@ export async function packageApp(options, sys) {
   compileBytecode(sys, hermesc, javascript, path.join(resources, 'main.jsbundle'));
   const executable = path.join(contents, 'MacOS', config.name);
   sys.copy(path.join(buildDir, 'appkit', 'ngn-macos'), executable);
-  // Local symbols only, which nothing resolves at run time; the exported ones stay.
-  expectSuccess(sys.run('strip', ['-x', executable]), `strip could not strip ${executable}.`);
+  stripExecutable(sys, executable, { arch: options.arch, staging });
   const iconName = config.icon
     ? compileIcon(sys, path.resolve(cwd, config.icon), resources, staging)
     : null;
@@ -807,7 +943,7 @@ function embedSparkle(sys, buildDir, contents) {
  * only a real identity can get.
  *
  * @param {System} sys
- * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: PackageCommand, signIn: boolean, push: boolean }} build
+ * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: MacPackageCommand, signIn: boolean, push: boolean }} build
  * @returns {string[]} the files made beside the app
  */
 function shipDmg(

@@ -62,7 +62,11 @@ function value(item, indent) {
   throw new Error(`plist: cannot write ${String(item)}`);
 }
 
-/** @param {string} text */
-function escape(text) {
+/**
+ * `text` as XML character data.
+ *
+ * @param {string} text
+ */
+export function escape(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

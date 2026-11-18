@@ -16,7 +16,7 @@ it('ELEMENT_STYLES is ELEMENT_STYLES_CSS, compiled', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(ELEMENT_STYLES.rules)), compiled.rules);
 });
 
-it('draws code in Menlo on a Mac, as on iOS', () => {
+it('draws code in Menlo on a Mac, as on iOS, and in monospace on Linux, as on Android', () => {
   const font = (platform: string) => {
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1);
@@ -32,4 +32,5 @@ it('draws code in Menlo on a Mac, as on iOS', () => {
   assert.equal(font('ios'), 'Menlo');
   assert.equal(font('macos'), 'Menlo');
   assert.equal(font('android'), 'monospace');
+  assert.equal(font('linux'), 'monospace');
 });

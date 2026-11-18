@@ -7,6 +7,7 @@
  */
 
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
+import { isDesktopOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 
 export interface ShareRequest {
@@ -24,9 +25,9 @@ export interface NativeSharing {
 export function sharingSource(): NativeSharing | null {
   const native = reactNative();
   if (!native) return null;
-  // React Native's Share has no macOS implementation: the desktop host's NgNativeSharing is the
-  // share picker there, and without it sharing is absent.
-  if (native.Platform.OS === 'macos') {
+  // React Native's Share has no desktop implementation: the desktop host's NgNativeSharing is the
+  // share picker on macOS and Linux, and without it sharing is absent.
+  if (isDesktopOs(native.Platform.OS)) {
     return (native.TurboModuleRegistry?.get('NgNativeSharing') as NativeSharing | null) ?? null;
   }
   const android = native.Platform.OS === 'android';

@@ -10,8 +10,8 @@ from.
 
 ## The build
 
-`ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
-[--sparkle-key <key>] [--skip-notarize]` builds a
+`ng-native-desktop package [--format app|dmg|mas] [--arch x64|arm64|all] [--output <dir>]
+[--feed-url <url>] [--sparkle-key <key>] [--skip-notarize]` builds a
 universal Release host (arm64 and x86_64, without the core tests, dead code stripped), or takes the
 [prebuilt one](#prebuilt-hosts), bundles
 with `expo export:embed --platform macos` (the assets laid out as React Native's resolver reads
@@ -23,6 +23,9 @@ from the Expo keys. Then `app` is
 signed ad hoc, `dmg` is signed with the hardened runtime, notarised and stapled (app and disk
 image), and `mas` is signed in the App Sandbox and wrapped by `productbuild`. `codesign`,
 `notarytool`, `stapler`, `hdiutil`, `ditto`, `sips`, `actool` and `productbuild` are Xcode's.
+
+`--arch x64` or `--arch arm64` keeps that one architecture of the universal host, taken out with
+`lipo` after it is stripped; `--arch all`, the default, keeps both.
 
 A `dmg` stops before anything builds when its signing identity or notary credentials are missing,
 naming them. `--skip-notarize`, for testing a `dmg` on this Mac only, makes it without them: signed

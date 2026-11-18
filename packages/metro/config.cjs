@@ -24,8 +24,10 @@ const {
   expoConfig,
   macosOverride,
   macosRequest,
+  requestedPlatforms,
   runtimeContext,
 } = require('./macos.cjs');
+const { asksForLinux, registerLinux } = require('./linux.cjs');
 
 const SOURCE_EXTS = ['html', 'css', 'scss', 'md'];
 const WEB_FONT_EXTS = ['woff', 'woff2'];
@@ -317,6 +319,38 @@ function nativeAnimatedHelper(resolve, context, name, platform) {
 const WRAPPED = Symbol.for('ng-native.resolveRequest');
 
 /**
+ * Checks the app's config for a desktop OS Expo would leave out without its out-of-tree flag,
+ * which it does without a word, and registers `linux` where the app asks for it.
+ *
+ * @param {Parameters<typeof withLinux>[0]} config
+ */
+function withDesktopPlatforms(config) {
+  const expo = expoConfig(config.projectRoot);
+  checkOutOfTreePlatforms(expo);
+  if (config.projectRoot && asksForLinux(expo, requestedPlatforms(process.argv))) {
+    withLinux(config);
+  }
+}
+
+/**
+ * Registers `linux` with Expo's tooling (`linux.cjs`), and adds it to the lists Expo's
+ * `getDefaultConfig` built before it was there: the platforms Metro serves, and the conditions a
+ * `linux` bundle resolves packages with, React Native's own as on every other native platform.
+ *
+ * @param {{ projectRoot: string, resolver: { platforms?: string[], unstable_conditionsByPlatform?: Record<string, string[]> } }} config
+ */
+function withLinux(config) {
+  registerLinux(config.projectRoot);
+  const resolver = config.resolver;
+  const platforms = resolver.platforms ?? [];
+  if (!platforms.includes('linux')) resolver.platforms = [...platforms, 'linux'];
+  resolver.unstable_conditionsByPlatform = {
+    ...resolver.unstable_conditionsByPlatform,
+    linux: ['react-native'],
+  };
+}
+
+/**
  * A relative `./lib/ui.js` that names `./lib/ui.ts`, resolved as TypeScript resolves it.
  *
  * TypeScript's `NodeNext` resolution wants the extension the file will have once compiled, so a
@@ -331,7 +365,7 @@ const WRAPPED = Symbol.for('ng-native.resolveRequest');
  * pnpm those files find `node_modules/.pnpm/node_modules` before the project's copy, and an install
  * from before the app's pin can leave Babel 8's runtime there, which has no `regenerator`.
  *
- * In a `macos` bundle, Expo's packages and React Native's `Platform` resolve as `macos.cjs` says.
+ * In a desktop bundle, Expo's packages and React Native's `Platform` resolve as `macos.cjs` says.
  *
  * @param {Function | undefined} next
  * @param {string | undefined} projectRoot
@@ -810,8 +844,7 @@ function withAngularNative(config, options = {}) {
 
   listWebFonts(config);
 
-  // Expo bundles macOS only with its out-of-tree flag, and leaves it out without a word otherwise.
-  checkOutOfTreePlatforms(expoConfig(config.projectRoot));
+  withDesktopPlatforms(config);
   config.resolver.resolveRequest = withTypeScriptJsImports(
     config.resolver.resolveRequest,
     projectRoot,
