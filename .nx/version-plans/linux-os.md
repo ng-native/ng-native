@@ -2,7 +2,9 @@
 __default__: minor
 ---
 
-Linux is an OS: `OS_NAMES`, the `OS` token, `TestOs` and `ModulePlatform` gain `'linux'`, so a `switch` or `Record` that covers every OS needs a `linux` entry. The `os-comparisons-on-linux` migration notes each `=== 'ios'`, `!== 'ios'`, `=== 'macos'`, `!== 'macos'` and `!== 'android'` comparison in an app, with its file and line, and rewrites nothing; see [Updating an app](https://ng-native.com/guide/updating). There is no Linux desktop host yet, so a Linux app does not run; this is what the packages, the Metro preset and tests know of the OS ahead of it.
+Linux is an OS that the packages, the Metro preset and tests know of, ahead of the Linux desktop host.
+
+`OS_NAMES`, the `OS` token, `TestOs` and `ModulePlatform` gain `'linux'`, so a `switch` or `Record` that covers every OS needs a `linux` entry. The `os-comparisons-on-linux` migration notes each `=== 'ios'`, `!== 'ios'`, `=== 'macos'`, `!== 'macos'` and `!== 'android'` comparison in an app, with its file and line, and rewrites nothing; see [Updating an app](https://ng-native.com/guide/updating). There is no Linux desktop host yet, so a Linux app does not run.
 
 On Linux, `DESKTOP` is true and `APPLE` false, the `linux:` and `desktop:` Tailwind variants match `platform-linux`, and `<code>` and `font-mono` use `monospace`. The CSS compiler builds a sheet for `linux` alone, with the filters iOS does not draw refused as on macOS. `expoModule()` answers the desktop host's modules there and never calls an Expo loader, and a missing one says to run `npm run linux`. Vibration is absent, sharing uses the desktop host's module, windows restore from React Native's `Settings` as on macOS, `Alert.prompt` is available, and the Dock and tray menus read `mod` as Ctrl.
 
