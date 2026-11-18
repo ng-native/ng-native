@@ -13,7 +13,9 @@
 #include "capture.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
+#include "image-view.h"
 #include "pango-text.h"
+#include "scroll-view.h"
 #include "surface-input.h"
 #include "view-widget.h"
 
@@ -252,6 +254,11 @@ int main(int argc, char *argv[]) {
   }
   auto curl = ngn::makeCurlNetwork();
   ngn::NetworkClients network{curl.http, curl.webSockets};
+  // Images load through the same client, and are kept in memory for the process.
+  ngn::gtk::useImageLoading(network.http, std::make_shared<ngn::ImageCache>("", 64 << 20));
+  ngn::gtk::onScrollOffset([](facebook::react::Tag tag, facebook::react::Point offset) {
+    gHost.mounting->tree().setScrollOffset(tag, offset);
+  });
 
   static ngn::ProcessesSetup processes;
   for (char **e = environ; e && *e; ++e) {

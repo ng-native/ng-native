@@ -5,7 +5,7 @@
 #
 # Every source but main.cpp, compiled once into objects the binary and the GTK view tests both link.
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(NGN_GTK REQUIRED IMPORTED_TARGET gtk4>=4.10 libadwaita-1>=1.4 pangocairo)
+pkg_check_modules(NGN_GTK REQUIRED IMPORTED_TARGET gtk4>=4.10 libadwaita-1>=1.4 pangocairo gio-unix-2.0)
 
 add_library(ngn_gtk OBJECT
     accessible.cpp
@@ -14,7 +14,9 @@ add_library(ngn_gtk OBJECT
     capture.cpp
     gtk-backend.cpp
     host-sources.cpp
+    image-view.cpp
     pango-text.cpp
+    scroll-view.cpp
     surface-input.cpp
     text-field.cpp
     view-widget.cpp)
@@ -39,11 +41,13 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  add_executable(ngn_gtk_tests ../core/tests/main.cpp tests/accessible.test.cpp tests/input.test.cpp tests/text.test.cpp tests/views.test.cpp)
-  target_include_directories(ngn_gtk_tests PRIVATE ../core/tests)
+  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/linking.test.cpp
+      tests/scroll-view.test.cpp tests/text.test.cpp tests/views.test.cpp)
+  add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp)
+  target_include_directories(ngn_gtk_tests PRIVATE ../core/tests ../core/testing)
   target_link_libraries(ngn_gtk_tests PRIVATE ngn_gtk doctest)
   if(NGN_DOCTEST_SOURCE_OPTIONS)
-    set_source_files_properties(../core/tests/main.cpp tests/accessible.test.cpp tests/input.test.cpp tests/text.test.cpp tests/views.test.cpp
+    set_source_files_properties(${ngn_gtk_test_SRC}
         PROPERTIES COMPILE_OPTIONS "${NGN_DOCTEST_SOURCE_OPTIONS}")
   endif()
   if(NOT APPLE)

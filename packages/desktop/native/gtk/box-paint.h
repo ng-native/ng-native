@@ -10,6 +10,8 @@
 
 #include <gtk/gtk.h>
 
+#include <functional>
+
 namespace ngn::gtk {
 
 GdkRGBA rgbaOf(uint32_t argb);
@@ -18,7 +20,9 @@ GdkRGBA rgbaOf(uint32_t argb);
 // CSS does.
 GskRoundedRect gskRoundedRect(const SvgRect &rect, const CornerRadii &radii);
 
-void appendBox(GtkSnapshot *snapshot, const BoxDescription &box);
+// `content`, when given, draws between the inset shadows and the border, as a layer's contents
+// draw under its border.
+void appendBox(GtkSnapshot *snapshot, const BoxDescription &box, const std::function<void()> &content = nullptr);
 
 // Cuts what follows to the box's shape when it clips its overflow: true when it pushed a clip,
 // which the caller pops.

@@ -46,7 +46,7 @@ GskRoundedRect gskRoundedRect(const SvgRect &rect, const CornerRadii &radii) {
   return out;
 }
 
-void appendBox(GtkSnapshot *snapshot, const BoxDescription &box) {
+void appendBox(GtkSnapshot *snapshot, const BoxDescription &box, const std::function<void()> &content) {
   if (box.bounds.width <= 0 || box.bounds.height <= 0) {
     return;
   }
@@ -91,6 +91,10 @@ void appendBox(GtkSnapshot *snapshot, const BoxDescription &box) {
     gtk_snapshot_append_inset_shadow(
         snapshot, &padding, &color, static_cast<float>(it->offsetX), static_cast<float>(it->offsetY),
         static_cast<float>(it->spreadDistance), static_cast<float>(it->blurRadius));
+  }
+
+  if (content) {
+    content();
   }
 
   const auto &w = box.borderWidths;

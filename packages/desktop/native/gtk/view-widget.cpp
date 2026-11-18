@@ -1,6 +1,8 @@
 #include "view-widget.h"
 
 #include "box-paint.h"
+#include "image-view.h"
+#include "scroll-view.h"
 #include "text-field.h"
 
 #include "ngn/view-box.h"
@@ -26,10 +28,13 @@ namespace {
 
 using ngn::gtk::ViewData;
 
-void viewMeasure(GtkWidget *, GtkOrientation, int, int *minimum, int *natural, int *, int *) {
-  // Yoga sizes every view; GTK asks for nothing.
-  *minimum = 0;
-  *natural = 0;
+void viewMeasure(GtkWidget *widget, GtkOrientation orientation, int, int *minimum, int *natural, int *, int *) {
+  // Yoga sizes every view; GTK asks for nothing. A scroll view's document asks for the content's
+  // size, which its viewport scrolls over.
+  ngn::gtk::ScrollBox *box = NGN_VIEW(widget)->data->documentOf;
+  Float size = !box ? 0 : orientation == GTK_ORIENTATION_HORIZONTAL ? box->content.width : box->content.height;
+  *minimum = static_cast<int>(std::ceil(size));
+  *natural = *minimum;
 }
 
 // Where a child goes in its parent: its frame's origin, then its transform about its top left.
@@ -58,6 +63,8 @@ void viewSizeAllocate(GtkWidget *widget, int width, int height, int) {
     if (!NGN_IS_VIEW(child)) {
       if (d->field && child == d->field->text) {
         ngn::gtk::allocateTextField(*d, width, height);
+      } else if (d->scroll && child == d->scroll->scrolled) {
+        ngn::gtk::allocateScrollView(*d, width, height);
       }
       continue;
     }
@@ -106,7 +113,8 @@ void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   bool clipped = false;
   if (auto props = std::dynamic_pointer_cast<const ViewProps>(d->props)) {
     auto box = ngn::describeBox(*props, d->layout);
-    ngn::gtk::appendBox(snapshot, box);
+    // An Image's picture fills its bounds under its border, as a layer's contents do on macOS.
+    ngn::gtk::appendBox(snapshot, box, d->image ? std::function<void()>([&] { ngn::gtk::snapshotImage(*d, snapshot, box); }) : nullptr);
     if (d->component == "Paragraph" && d->state) {
       snapshotText(d, snapshot);
     }
@@ -122,7 +130,10 @@ void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
 
 void viewDispose(GObject *object) {
   GtkWidget *widget = GTK_WIDGET(object);
-  ngn::gtk::destroyTextField(*NGN_VIEW(object)->data);
+  ngn::gtk::ViewData *d = NGN_VIEW(object)->data;
+  ngn::gtk::destroyTextField(*d);
+  ngn::gtk::destroyImage(*d);
+  ngn::gtk::destroyScrollView(*d);
   while (GtkWidget *child = gtk_widget_get_first_child(widget)) {
     gtk_widget_unparent(child);
   }
@@ -148,6 +159,7 @@ static void ngn_view_class_init(NgnViewClass *klass) {
 
 static void ngn_view_init(NgnView *self) {
   self->data = new ViewData();
+  self->data->widget = GTK_WIDGET(self);
 }
 
 namespace ngn::gtk {
@@ -174,6 +186,8 @@ ViewData *viewData(GtkWidget *widget) {
 
 void swapViewData(GtkWidget *a, GtkWidget *b) {
   std::swap(NGN_VIEW(a)->data, NGN_VIEW(b)->data);
+  NGN_VIEW(a)->data->widget = a;
+  NGN_VIEW(b)->data->widget = b;
 }
 
 void forgetText(ViewData &data) {
