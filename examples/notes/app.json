@@ -4,7 +4,7 @@
     "slug": "notes-example",
     "scheme": "notes",
     "newArchEnabled": true,
-    "platforms": ["ios", "android", "macos"],
+    "platforms": ["ios", "android", "macos", "linux"],
     "experiments": {
       "outOfTreePlatforms": true
     },

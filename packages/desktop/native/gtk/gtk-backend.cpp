@@ -8,6 +8,8 @@
 
 #include <react/renderer/components/view/ViewProps.h>
 
+#include <utility>
+
 namespace ngn::gtk {
 
 namespace {
@@ -99,7 +101,7 @@ void GtkBackend::serviceUiThread() {
 
 void GtkBackend::createView(const ShadowView &view) {
   auto accessibility = accessibilityOf(view);
-  GtkWidget *widget = makeViewWidget(accessibility ? accessibleRole(*accessibility) : GTK_ACCESSIBLE_ROLE_GENERIC);
+  GtkWidget *widget = makeViewWidget(accessibleRole(view));
   if (accessibility) {
     applyAccessibility(widget, *accessibility);
   }
@@ -168,6 +170,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
   ViewData *d = viewData(it->second);
   d->props = view.props;
   forgetText(*d);
+  followRole(view);
   applyViewProps(it->second, *d);
   if (auto accessibility = accessibilityOf(view)) {
     applyAccessibility(it->second, *accessibility);
@@ -181,12 +184,65 @@ void GtkBackend::updateState(const ShadowView &view) {
     ViewData *d = viewData(it->second);
     d->state = view.state;
     forgetText(*d);
-    // A Paragraph's label is its text, which is in its state.
+    // A Paragraph's label is its text, which is in its state, and so is whether it is static text
+    // or no element at all.
+    followRole(view);
     if (auto accessibility = accessibilityOf(view)) {
       applyAccessibility(it->second, *accessibility);
     }
     gtk_widget_queue_draw(it->second);
   }
+}
+
+void GtkBackend::followRole(const ShadowView &view) {
+  auto it = views_.find(view.tag);
+  GtkAccessibleRole role = accessibleRole(view);
+  if (it == views_.end() || gtk_accessible_get_accessible_role(GTK_ACCESSIBLE(it->second)) == role) {
+    return;
+  }
+  GtkWidget *old = it->second;
+  GtkWidget *next = makeViewWidget(role);
+  g_object_ref_sink(next);
+  // What the backend set on the old widget that the view's props and state do not set again below.
+  gtk_widget_set_child_visible(next, gtk_widget_get_child_visible(old));
+  gtk_widget_set_focusable(next, gtk_widget_get_focusable(old));
+  gtk_widget_set_focus_on_click(next, gtk_widget_get_focus_on_click(old));
+  gtk_widget_set_can_target(next, gtk_widget_get_can_target(old));
+  if (GdkCursor *cursor = gtk_widget_get_cursor(old)) {
+    gtk_widget_set_cursor(next, cursor);
+  }
+  // The focus, wherever in the subtree it is: moving a widget out from under its parent takes it.
+  GtkRoot *root = gtk_widget_get_root(old);
+  GtkWidget *focus = root ? gtk_root_get_focus(root) : nullptr;
+  if (focus && focus != old && !gtk_widget_is_ancestor(focus, old)) {
+    focus = nullptr;
+  }
+  // The view's data (its props, state, layout and text field) goes with it; the old widget keeps
+  // the new one's empty data to free.
+  swapViewData(old, next);
+  // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
+  // neither.
+  TextField *field = focus ? textFieldOf(focus) : nullptr;
+  ViewData *fieldView = field ? std::exchange(field->view, nullptr) : nullptr;
+  // In the old one's place among its siblings, with its children in their order.
+  if (GtkWidget *parent = gtk_widget_get_parent(old)) {
+    gtk_widget_insert_after(next, parent, old);
+    gtk_widget_unparent(old);
+  }
+  while (GtkWidget *child = gtk_widget_get_first_child(old)) {
+    g_object_ref(child);
+    gtk_widget_unparent(child);
+    gtk_widget_insert_before(child, next, nullptr);
+    g_object_unref(child);
+  }
+  it->second = next;
+  if (focus) {
+    gtk_widget_grab_focus(focus == old ? next : focus);
+  }
+  if (fieldView) {
+    field->view = fieldView;
+  }
+  g_object_unref(old);
 }
 
 void GtkBackend::updateLayout(const ShadowView &view) {

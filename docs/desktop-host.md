@@ -21,10 +21,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
 - `native/gtk`: the GTK 4 backend and the `ngn-linux` binary: a `GtkWidget` per view, painted as
   GSK render nodes in its `snapshot`, Pango text, a `GtkText` per single-line text input, and the
   pointer fed to the core's input dispatcher from a capture-phase controller on each surface.
-  Accessibility is GTK's own: each widget is made with the GTK role for the view's `role`, and
-  its label, description, level and states follow the props. GTK fixes a role when it makes the
-  widget, so a role that changes later is not followed yet, and Orca's structural navigation
-  finds no headings or landmarks in a GTK 4 app. It
+  Accessibility is GTK's own: each widget is made with the GTK role for the view's ARIA role,
+  which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
+  description, level and states follow the props. GTK fixes a role when it makes the widget, so
+  a view whose role changes gets a new widget in its place, with its children and the focus.
+  Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
   Homebrew's (`brew install gtk4 libadwaita`) as a dev loop. Its HTTP and WebSocket client is the
   core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
@@ -65,7 +66,10 @@ checks. The libcurl client's tests run against a local server, `core/tests/curl/
 so they need `python3`. CI's `host-linux`
 job builds the GTK host on x86_64 and arm64, runs its tests, and launches it on the notes example
 to its first frame under Xvfb and headless Weston, keeping each window's in-process capture
-(`NGN_CAPTURE`) as an artifact. On a Mac, run the same image with Docker, as a user other than
+(`NGN_CAPTURE`) as an artifact. It then reads the same app's accessibility tree over AT-SPI, as a
+screen reader would, with pyatspi and no screen reader (`native/scripts/atspi-check.py`). A
+packaged Linux app's host takes its settings from the `metadata.json` that `package` writes
+beside it, as a macOS app's take them from its `Info.plist`. On a Mac, run the same image with Docker, as a user other than
 root, since root reads a file whatever its mode and so fails the core tests that make one
 unreadable. The commands are in the Dockerfile's header.
 

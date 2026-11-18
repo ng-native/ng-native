@@ -15,44 +15,84 @@ std::optional<AxInfo> accessibilityOf(const facebook::react::ShadowView &view) {
   return accessibilityInfo(*props);
 }
 
-GtkAccessibleRole accessibleRole(const AxInfo &info) {
-  if (!info.element) {
+GtkAccessibleRole accessibleRole(const facebook::react::ShadowView &view) {
+  auto props = std::dynamic_pointer_cast<const facebook::react::ViewProps>(view.props);
+  auto info = accessibilityOf(view);
+  if (!props || !info) {
     return GTK_ACCESSIBLE_ROLE_GENERIC;
   }
-  switch (info.role) {
-    case AxRole::Group: return GTK_ACCESSIBLE_ROLE_GROUP;
-    case AxRole::Button:
-      if (info.subrole == AxSubrole::Switch) {
-        return GTK_ACCESSIBLE_ROLE_SWITCH;
-      }
-      return info.subrole == AxSubrole::Tab ? GTK_ACCESSIBLE_ROLE_TAB : GTK_ACCESSIBLE_ROLE_BUTTON;
-    case AxRole::Link: return GTK_ACCESSIBLE_ROLE_LINK;
-    case AxRole::Image: return GTK_ACCESSIBLE_ROLE_IMG;
-    case AxRole::StaticText: return GTK_ACCESSIBLE_ROLE_LABEL;
-    case AxRole::CheckBox: return info.subrole == AxSubrole::Switch ? GTK_ACCESSIBLE_ROLE_SWITCH : GTK_ACCESSIBLE_ROLE_CHECKBOX;
-    case AxRole::RadioButton: return info.subrole == AxSubrole::Tab ? GTK_ACCESSIBLE_ROLE_TAB : GTK_ACCESSIBLE_ROLE_RADIO;
-    case AxRole::RadioGroup: return GTK_ACCESSIBLE_ROLE_RADIO_GROUP;
-    case AxRole::Slider: return GTK_ACCESSIBLE_ROLE_SLIDER;
-    case AxRole::TextField: return info.subrole == AxSubrole::SearchField ? GTK_ACCESSIBLE_ROLE_SEARCH_BOX : GTK_ACCESSIBLE_ROLE_TEXT_BOX;
-    case AxRole::List: return GTK_ACCESSIBLE_ROLE_LIST;
-    case AxRole::Menu: return GTK_ACCESSIBLE_ROLE_MENU;
-    case AxRole::MenuItem: return GTK_ACCESSIBLE_ROLE_MENU_ITEM;
-    case AxRole::MenuBar: return GTK_ACCESSIBLE_ROLE_MENU_BAR;
-    case AxRole::ProgressIndicator: return GTK_ACCESSIBLE_ROLE_PROGRESS_BAR;
-    case AxRole::ComboBox: return GTK_ACCESSIBLE_ROLE_COMBO_BOX;
-    case AxRole::TabGroup: return GTK_ACCESSIBLE_ROLE_TAB_LIST;
-    case AxRole::Toolbar: return GTK_ACCESSIBLE_ROLE_TOOLBAR;
-    case AxRole::ScrollBar: return GTK_ACCESSIBLE_ROLE_SCROLLBAR;
-    case AxRole::Table: return GTK_ACCESSIBLE_ROLE_GRID;
-    case AxRole::Row: return GTK_ACCESSIBLE_ROLE_ROW;
-    case AxRole::Cell: return GTK_ACCESSIBLE_ROLE_GRID_CELL;
-    case AxRole::Incrementor: return GTK_ACCESSIBLE_ROLE_SPIN_BUTTON;
-    case AxRole::Heading: return GTK_ACCESSIBLE_ROLE_HEADING;
-    case AxRole::LevelIndicator: return GTK_ACCESSIBLE_ROLE_METER;
-    case AxRole::Outline: return GTK_ACCESSIBLE_ROLE_TREE_GRID;
-    case AxRole::ScrollArea: return GTK_ACCESSIBLE_ROLE_GROUP;
+  return gtkRole(ariaRole(roleName(*props), *info));
+}
+
+GtkAccessibleRole gtkRole(AriaRole role) {
+  switch (role) {
+    case AriaRole::Generic: return GTK_ACCESSIBLE_ROLE_GENERIC;
+    case AriaRole::None: return GTK_ACCESSIBLE_ROLE_NONE;
+    case AriaRole::Presentation: return GTK_ACCESSIBLE_ROLE_PRESENTATION;
+    case AriaRole::Alert: return GTK_ACCESSIBLE_ROLE_ALERT;
+    case AriaRole::AlertDialog: return GTK_ACCESSIBLE_ROLE_ALERT_DIALOG;
+    case AriaRole::Banner: return GTK_ACCESSIBLE_ROLE_BANNER;
+    case AriaRole::Button: return GTK_ACCESSIBLE_ROLE_BUTTON;
+    case AriaRole::Cell: return GTK_ACCESSIBLE_ROLE_CELL;
+    case AriaRole::Checkbox: return GTK_ACCESSIBLE_ROLE_CHECKBOX;
+    case AriaRole::ColumnHeader: return GTK_ACCESSIBLE_ROLE_COLUMN_HEADER;
+    case AriaRole::ComboBox: return GTK_ACCESSIBLE_ROLE_COMBO_BOX;
+    case AriaRole::Dialog: return GTK_ACCESSIBLE_ROLE_DIALOG;
+    case AriaRole::Document: return GTK_ACCESSIBLE_ROLE_DOCUMENT;
+    case AriaRole::Feed: return GTK_ACCESSIBLE_ROLE_FEED;
+    case AriaRole::Form: return GTK_ACCESSIBLE_ROLE_FORM;
+    case AriaRole::Grid: return GTK_ACCESSIBLE_ROLE_GRID;
+    case AriaRole::GridCell: return GTK_ACCESSIBLE_ROLE_GRID_CELL;
+    case AriaRole::Group: return GTK_ACCESSIBLE_ROLE_GROUP;
+    case AriaRole::Heading: return GTK_ACCESSIBLE_ROLE_HEADING;
+    case AriaRole::Img: return GTK_ACCESSIBLE_ROLE_IMG;
+    case AriaRole::Label: return GTK_ACCESSIBLE_ROLE_LABEL;
+    case AriaRole::Link: return GTK_ACCESSIBLE_ROLE_LINK;
+    case AriaRole::List: return GTK_ACCESSIBLE_ROLE_LIST;
+    case AriaRole::ListBox: return GTK_ACCESSIBLE_ROLE_LIST_BOX;
+    case AriaRole::ListItem: return GTK_ACCESSIBLE_ROLE_LIST_ITEM;
+    case AriaRole::Log: return GTK_ACCESSIBLE_ROLE_LOG;
+    case AriaRole::Main: return GTK_ACCESSIBLE_ROLE_MAIN;
+    case AriaRole::Marquee: return GTK_ACCESSIBLE_ROLE_MARQUEE;
+    case AriaRole::Math: return GTK_ACCESSIBLE_ROLE_MATH;
+    case AriaRole::Menu: return GTK_ACCESSIBLE_ROLE_MENU;
+    case AriaRole::MenuBar: return GTK_ACCESSIBLE_ROLE_MENU_BAR;
+    case AriaRole::MenuItem: return GTK_ACCESSIBLE_ROLE_MENU_ITEM;
+    case AriaRole::MenuItemCheckbox: return GTK_ACCESSIBLE_ROLE_MENU_ITEM_CHECKBOX;
+    case AriaRole::MenuItemRadio: return GTK_ACCESSIBLE_ROLE_MENU_ITEM_RADIO;
+    case AriaRole::Meter: return GTK_ACCESSIBLE_ROLE_METER;
+    case AriaRole::Navigation: return GTK_ACCESSIBLE_ROLE_NAVIGATION;
+    case AriaRole::Note: return GTK_ACCESSIBLE_ROLE_NOTE;
+    case AriaRole::Option: return GTK_ACCESSIBLE_ROLE_OPTION;
+    case AriaRole::ProgressBar: return GTK_ACCESSIBLE_ROLE_PROGRESS_BAR;
+    case AriaRole::Radio: return GTK_ACCESSIBLE_ROLE_RADIO;
+    case AriaRole::RadioGroup: return GTK_ACCESSIBLE_ROLE_RADIO_GROUP;
+    case AriaRole::Region: return GTK_ACCESSIBLE_ROLE_REGION;
+    case AriaRole::Row: return GTK_ACCESSIBLE_ROLE_ROW;
+    case AriaRole::RowGroup: return GTK_ACCESSIBLE_ROLE_ROW_GROUP;
+    case AriaRole::RowHeader: return GTK_ACCESSIBLE_ROLE_ROW_HEADER;
+    case AriaRole::Scrollbar: return GTK_ACCESSIBLE_ROLE_SCROLLBAR;
+    case AriaRole::SearchBox: return GTK_ACCESSIBLE_ROLE_SEARCH_BOX;
+    case AriaRole::Separator: return GTK_ACCESSIBLE_ROLE_SEPARATOR;
+    case AriaRole::Slider: return GTK_ACCESSIBLE_ROLE_SLIDER;
+    case AriaRole::SpinButton: return GTK_ACCESSIBLE_ROLE_SPIN_BUTTON;
+    case AriaRole::Status: return GTK_ACCESSIBLE_ROLE_STATUS;
+    case AriaRole::Switch: return GTK_ACCESSIBLE_ROLE_SWITCH;
+    case AriaRole::Tab: return GTK_ACCESSIBLE_ROLE_TAB;
+    case AriaRole::TabList: return GTK_ACCESSIBLE_ROLE_TAB_LIST;
+    case AriaRole::TabPanel: return GTK_ACCESSIBLE_ROLE_TAB_PANEL;
+    case AriaRole::Table: return GTK_ACCESSIBLE_ROLE_TABLE;
+    case AriaRole::Timer: return GTK_ACCESSIBLE_ROLE_TIMER;
+    case AriaRole::ToggleButton: return GTK_ACCESSIBLE_ROLE_TOGGLE_BUTTON;
+    case AriaRole::Toolbar: return GTK_ACCESSIBLE_ROLE_TOOLBAR;
+    case AriaRole::Tooltip: return GTK_ACCESSIBLE_ROLE_TOOLTIP;
+    case AriaRole::Tree: return GTK_ACCESSIBLE_ROLE_TREE;
+    case AriaRole::TreeGrid: return GTK_ACCESSIBLE_ROLE_TREE_GRID;
+    case AriaRole::TreeItem: return GTK_ACCESSIBLE_ROLE_TREE_ITEM;
+    // GTK 4.14's ARTICLE is past the 4.10 floor the host builds against.
+    case AriaRole::Article: return GTK_ACCESSIBLE_ROLE_GROUP;
   }
-  return GTK_ACCESSIBLE_ROLE_GROUP;
+  return GTK_ACCESSIBLE_ROLE_GENERIC;
 }
 
 void applyAccessibility(GtkWidget *widget, const AxInfo &info) {
@@ -64,9 +104,12 @@ void applyAccessibility(GtkWidget *widget, const AxInfo &info) {
       gtk_accessible_update_property(accessible, property, value.c_str(), -1);
     }
   };
-  text(GTK_ACCESSIBLE_PROPERTY_LABEL, info.label);
+  // Static text is named by what it says, which the core reads as its value (as VoiceOver reads a
+  // text's): AT-SPI's name is what Orca speaks, and a label has no value.
+  bool namedByValue = info.role == AxRole::StaticText && info.label.empty();
+  text(GTK_ACCESSIBLE_PROPERTY_LABEL, namedByValue ? info.value : info.label);
   text(GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, info.hint);
-  text(GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT, info.value);
+  text(GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT, namedByValue ? std::string() : info.value);
   text(GTK_ACCESSIBLE_PROPERTY_ROLE_DESCRIPTION, info.roleDescription);
   if (info.level) {
     gtk_accessible_update_property(accessible, GTK_ACCESSIBLE_PROPERTY_LEVEL, *info.level, -1);

@@ -30,6 +30,8 @@ int charactersIn(const std::string &utf8, int units);
 // Makes `view`'s field, child of `widget`, from its props.
 void makeTextField(GtkWidget *widget, ViewData &view);
 void destroyTextField(ViewData &view);
+// The field whose GtkText `widget` is, or null.
+TextField *textFieldOf(GtkWidget *widget);
 // Applies `view.props` to its field.
 void applyTextFieldProps(ViewData &view);
 // Places the field in the view's content box, centred down it.

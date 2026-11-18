@@ -4,6 +4,8 @@
 // window only when the app renders into it.
 //
 //   ngn-linux <bundle> [--module <name>] [--title <title>] [--app-id <id>]
+//   ngn-linux             (a packaged app: what the metadata.json beside it names; argv and env
+//                          are ignored)
 //
 // NGN_CAPTURE=<file.png> saves the first window's content a second after its first frame, drawn
 // in-process (capture.h).
@@ -142,7 +144,18 @@ int main(int argc, char *argv[]) {
   gHost.launched = g_get_monotonic_time();
   const ngn::HostOs os = ngn::linuxOs();
   std::vector<std::string> args(argv + 1, argv + argc);
-  auto none = [](const std::string &) -> std::optional<std::string> { return std::nullopt; };
+  // A package (bin/package-linux.mjs) puts metadata.json beside the host, which links from bin/ to
+  // lib/<name>/: the folder of the executable itself, not of the link.
+  std::string folder;
+  if (gchar *self = g_file_read_link("/proc/self/exe", nullptr)) {
+    folder = directoryOf(self);
+    g_free(self);
+  }
+  auto metadata = folder.empty() ? std::variant<ngn::LaunchSources::Lookup, std::string>() : ngn::packagedMetadata(folder);
+  if (auto *problem = std::get_if<std::string>(&metadata)) {
+    fprintf(stderr, "ngn-linux: %s\n", problem->c_str());
+    return 2;
+  }
   auto launch = ngn::launchSettings(
       {
           .args = args,
@@ -150,8 +163,8 @@ int main(int argc, char *argv[]) {
             const char *value = getenv(name.c_str());
             return value ? std::optional<std::string>(value) : std::nullopt;
           },
-          // A packaged app's embedded settings come with packaging.
-          .plist = none,
+          .plist = std::get<ngn::LaunchSources::Lookup>(metadata),
+          .resourcePath = folder,
       },
       os);
   if (auto *usage = std::get_if<std::string>(&launch)) {

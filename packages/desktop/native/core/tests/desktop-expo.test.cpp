@@ -225,6 +225,20 @@ TEST_CASE("Localization answers expo-localization's locales and calendars") {
   CHECK(fallback[0]["languageTag"] == "en-DE");
 }
 
+TEST_CASE("Localization with no locale source, as on a backend without one, answers English and the Gregorian calendar") {
+  auto module = ngn::makeLocalizationModule(nullptr, "DE");
+  auto locales = module->call("getLocales");
+  REQUIRE(locales.size() == 1);
+  CHECK(locales[0]["languageTag"] == "en-DE");
+  CHECK(locales[0]["regionCode"] == "DE");
+  CHECK(module->call("getCalendars") == dynamic::array(dynamic::object("calendar", "gregorian")("timeZone", nullptr)(
+                                            "uses24hourClock", false)("firstWeekday", 1)));
+  // A system with no region: a bare language, and no region code.
+  auto bare = ngn::makeLocalizationModule(nullptr, "")->call("getLocales");
+  CHECK(bare[0]["languageTag"] == "en");
+  CHECK(bare[0]["regionCode"] == nullptr);
+}
+
 namespace {
 
 namespace fs = std::filesystem;

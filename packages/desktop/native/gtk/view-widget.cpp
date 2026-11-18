@@ -11,6 +11,7 @@
 #include <react/renderer/core/ConcreteState.h>
 
 #include <cmath>
+#include <utility>
 
 using namespace facebook::react;
 
@@ -169,6 +170,10 @@ GtkWidget *makeSurfaceWidget(SurfaceId surfaceId, std::function<void(int, int)> 
 
 ViewData *viewData(GtkWidget *widget) {
   return widget && NGN_IS_VIEW(widget) ? NGN_VIEW(widget)->data : nullptr;
+}
+
+void swapViewData(GtkWidget *a, GtkWidget *b) {
+  std::swap(NGN_VIEW(a)->data, NGN_VIEW(b)->data);
 }
 
 void forgetText(ViewData &data) {

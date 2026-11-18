@@ -2,7 +2,8 @@
 // bundle, module, title, app id and capabilities from argv, and settings such as the updates URL
 // from the environment. A packaged app (its Info.plist names NGNBundleFile) takes all of them from
 // its Info.plist only: argv and the environment are ignored, so nothing launching the app can make
-// it run another bundle, as another app, or take updates from another server.
+// it run another bundle, as another app, or take updates from another server. A Linux package has
+// no Info.plist: the same keys are in the metadata.json beside its host (packagedMetadata).
 #pragma once
 
 #include "ngn/host-os.h"
@@ -22,11 +23,18 @@ struct LaunchSources {
   using Lookup = std::function<std::optional<std::string>(const std::string &)>;
   // An environment variable.
   Lookup env;
-  // A string in the app's Info.plist.
+  // A string in the app's Info.plist, or its Linux package's metadata.json.
   Lookup plist;
-  // The app bundle's Resources folder, where NGNBundleFile is.
+  // The app bundle's Resources folder, where NGNBundleFile is: on Linux, the folder holding the
+  // host, the bundle and metadata.json.
   std::string resourcePath;
 };
+
+// The metadata.json in `folder`, the folder of a Linux package's host (bin/package-linux.mjs), as a
+// lookup for LaunchSources::plist: a string value as it is, any other (NGNCapabilities' object) as
+// its JSON. An empty lookup when there is no such file, as in a dev run; why, when the file is there
+// but is not a JSON object, so a broken package says so rather than running as a dev build.
+std::variant<LaunchSources::Lookup, std::string> packagedMetadata(const std::string &folder);
 
 // A test launch: `vitest --project macos` through @ng-native/testing starts a dev run with
 // NGN_TESTS=1, NGN_STATE_DIR (a new empty directory), NGN_RUN_ID (unique to the launch) and
@@ -58,8 +66,9 @@ struct LaunchSettings {
   std::string module{"main"};
   std::string title{"ng-native"};
   std::string appId;
-  // A dev run's --capabilities (or NGN_DESKTOP_CAPABILITIES) JSON; a packaged app's are in its
-  // Info.plist as NGNCapabilities.
+  // A dev run's --capabilities (or NGN_DESKTOP_CAPABILITIES) JSON. A packaged app's are its
+  // NGNCapabilities: here when its lookup gives them as JSON (metadata.json); a macOS app reads its
+  // Info.plist's dictionary itself.
   std::string capabilitiesJson;
   // A dev run's --url: the link the app opens as it launches (Linking's initial URL), as a click on
   // a link to the app's scheme would. Empty when none; a packaged app is opened on a link by the OS.

@@ -1,7 +1,11 @@
 #include "ngn/launch-settings.h"
 
+#include <folly/json.h>
+
 #include <cctype>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 
 namespace ngn {
 
@@ -82,6 +86,7 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, 
     settings.module = plist("NGNModuleName").value_or("main");
     settings.title = plist("CFBundleName").value_or(settings.title);
     settings.appId = plist("CFBundleIdentifier").value_or("");
+    settings.capabilitiesJson = plist("NGNCapabilities").value_or("");
     return settings;
   }
 
@@ -121,6 +126,32 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, 
     return usage(os);
   }
   return settings;
+}
+
+std::variant<LaunchSources::Lookup, std::string> packagedMetadata(const std::string &folder) {
+  auto path = std::filesystem::path(folder) / "metadata.json";
+  std::ifstream file(path);
+  if (!file) {
+    return LaunchSources::Lookup();
+  }
+  std::stringstream text;
+  text << file.rdbuf();
+  folly::dynamic metadata;
+  try {
+    metadata = folly::parseJson(text.str());
+  } catch (const std::exception &error) {
+    return path.string() + " is not JSON: " + error.what();
+  }
+  if (!metadata.isObject()) {
+    return path.string() + " is not a JSON object";
+  }
+  return LaunchSources::Lookup([metadata = std::move(metadata)](const std::string &key) -> std::optional<std::string> {
+    auto it = metadata.find(key);
+    if (it == metadata.items().end() || it->second.isNull()) {
+      return std::nullopt;
+    }
+    return it->second.isString() ? it->second.getString() : folly::toJson(it->second);
+  });
 }
 
 UpdatesConfig updatesConfigFrom(
