@@ -413,3 +413,9 @@ TEST_CASE("a search field parses what <search-field> commits, its type included"
   CHECK(c.measurer->kinds == std::vector<ngn::ControlKind>{ngn::ControlKind::SearchField});
   CHECK(c.measurer->sizes == std::vector<ngn::ControlSize>{ngn::ControlSize::Large});
 }
+
+TEST_CASE("a button's kind is empty until the element sets one") {
+  Control<ngn::NativeButtonComponentDescriptor> c;
+  CHECK(c.props(folly::dynamic::object("title", "Save"))->kind.empty());
+  CHECK(c.props(folly::dynamic::object("kind", "default"))->kind == "default");
+}

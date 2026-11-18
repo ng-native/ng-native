@@ -2,6 +2,7 @@
 
 #include "accessible.h"
 #include "image-view.h"
+#include "native-controls.h"
 #include "scroll-view.h"
 #include "text-field.h"
 #include "view-widget.h"
@@ -206,6 +207,7 @@ void GtkBackend::createView(const ShadowView &view) {
       applySearchBar(entry, *view.props);
     }
   }
+  makeControl(widget, *d);
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
   if (view.tag == view.surfaceId) {
@@ -287,6 +289,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
   }
   applyTextFieldProps(*d);
   applyScrollViewProps(*d);
+  applyControlProps(*d);
   if (d->image) {
     applyImageProps(*d, gtk_widget_get_scale_factor(it->second));
   }
@@ -389,6 +392,7 @@ void GtkBackend::dispatchCommand(Tag tag, const std::string &name, const folly::
       runSearchBarCommand(entry, name, args);
     }
     scrollViewCommand(*viewData(it->second), name, args);
+    controlCommand(*viewData(it->second), name, args);
   }
 }
 

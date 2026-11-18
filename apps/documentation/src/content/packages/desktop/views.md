@@ -67,6 +67,17 @@ than what has been typed since is skipped, Return sends `(search)`, the clear bu
 empty the field and send `(cancel)` (keeping the keyboard), and `focus()` and `blur()` are its view
 commands. Its type is its CSS's, and `tintColor` colours the cursor.
 
+On Linux the controls are GTK's and libadwaita's, sized for Yoga as GTK lays them out:
+`<native-button>` is a `GtkButton` (a `default` one is the window's suggested action, a
+`destructive` one a destructive action, a `plain` one flat, and one with no `kind` a plain push
+button), `<switch>` a `GtkSwitch`, `<activity-indicator>` an `AdwSpinner` on libadwaita 1.6 and
+later and a `GtkSpinner` before it (or whenever it stays shown while stopped), `<segmented-control>`
+an `AdwToggleGroup` on libadwaita 1.7 and later and a linked row of toggle buttons before it, and
+`<search-field>` a `GtkSearchEntry`, which sends each change as it is typed. `<date-time-picker>`
+is a button showing the date that opens a `GtkCalendar`, keeping the time of day and the picker's
+bounds. A `datetime` picker picks its day the same way and shows its time, and the `time` and
+`countdown` modes show the time and pick nothing yet. `controlSize`, `sfSymbol` and the search field's font props do nothing there.
+
 ## Text inputs
 
 A `<text-input>` is an NSTextField, or an NSSecureTextField for `secureTextEntry` (swapped in place

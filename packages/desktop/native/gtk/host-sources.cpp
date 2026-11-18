@@ -1,6 +1,7 @@
 #include "host-sources.h"
 
 #include "app-windows.h"
+#include "native-controls.h"
 
 #include <adwaita.h>
 #if __has_include(<gio/gdesktopappinfo.h>)
@@ -276,13 +277,6 @@ class GioPathMonitor final : public PathMonitor {
   }
 };
 
-class FixedControls final : public ControlMeasurer {
- public:
-  facebook::react::Size measure(ControlKind, const NativeControlProps &) const override {
-    return {80, 24};
-  }
-};
-
 } // namespace
 
 bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool(const std::string &scheme)> &hasHandler) {
@@ -320,7 +314,7 @@ std::shared_ptr<PathMonitor> makePathMonitor() {
 }
 
 std::shared_ptr<ControlMeasurer> makeControlMeasurer() {
-  return std::make_shared<FixedControls>();
+  return std::make_shared<GtkControlMeasurer>();
 }
 
 } // namespace ngn::gtk
