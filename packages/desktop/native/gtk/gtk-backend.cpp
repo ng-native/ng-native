@@ -233,6 +233,8 @@ void GtkBackend::followRole(const ShadowView &view) {
   // The view's data (its props, state, layout and text field) goes with it; the old widget keeps
   // the new one's empty data to free.
   swapViewData(old, next);
+  // A state update replaces a Paragraph's widget with no props update to follow.
+  applyViewProps(next, *viewData(next));
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
   // neither.
   TextField *field = focus ? textFieldOf(focus) : nullptr;
