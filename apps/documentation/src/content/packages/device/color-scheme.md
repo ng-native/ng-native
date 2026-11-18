@@ -59,10 +59,11 @@ export class ThemeToggle {
 ```
 
 On a device this calls React Native's `Appearance.setColorScheme`, with `null` sent as
-`'unspecified'`. That changes the window's own appearance rather than a class on the root, so the
-native chrome follows along with the app's CSS: `@media (prefers-color-scheme: dark)`,
-`light-dark()` and the root's `dark` class from `watchConditions` all switch, and so does
-`current()`.
+`'unspecified'`, and on Android 12 and later it also sets the app's night mode with
+`UiModeManager.setApplicationNightMode`. That changes the window's own appearance rather than a
+class on the root, so the native chrome follows along with the app's CSS:
+`@media (prefers-color-scheme: dark)`, `light-dark()` and the root's `dark` class from
+`watchConditions` all switch, and so does `current()`.
 
 A few things to know:
 
@@ -78,8 +79,11 @@ A few things to know:
 - `current()` reports what the app is showing, not what the user chose. Once the app is forced
   into a scheme it no longer tells you what the system is set to, and it cannot tell "forced dark"
   from "following a dark system." Keep the choice in a signal of your own, as `choice` does above.
-- Nothing is saved. The next launch follows the system until the app calls `set()` again, so store
-  the choice (for example with [Storage](/packages/expo/storage)) and apply it at startup.
+- On iOS and on Android before 12 nothing is saved: the next launch follows the system until the
+  app calls `set()` again, so store the choice (for example with [Storage](/packages/expo/storage))
+  and apply it at startup. On Android 12 and later the system keeps the app's night mode, so the
+  next launch starts in the scheme last set, until `set()` or `set(null)` changes it. Applying a
+  stored choice at startup works the same on both.
 - If the installed React Native has no `Appearance.setColorScheme`, `set()` does nothing.
 
 ## Off a device and on the web

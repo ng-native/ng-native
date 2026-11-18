@@ -1,6 +1,6 @@
 {
   "platforms": ["apple", "android"],
   "android": {
-    "modules": ["dev.ngnative.components.MenusModule"]
+    "modules": ["dev.ngnative.components.MenusModule", "dev.ngnative.components.ColorSchemeModule"]
   }
 }

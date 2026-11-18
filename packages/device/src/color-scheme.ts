@@ -25,6 +25,17 @@ export interface ColorSchemeSource {
  */
 const setListeners = new Set<() => void>();
 
+/**
+ * Android's `NgNativeColorScheme`, from `@ng-native/components`: on Android 12 and later it sets the
+ * per-app night mode. React Native sets only AppCompat's default night mode, which an activity
+ * that handles `uiMode` itself (Expo's does) loses to the system's scheme shortly after launch,
+ * and native views would draw in the system's scheme under the app's CSS.
+ */
+function nightModeModule(): { setColorScheme?(scheme: string): void } | undefined {
+  const modules = (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo?.modules;
+  return modules?.['NgNativeColorScheme'] as { setColorScheme?(scheme: string): void } | undefined;
+}
+
 export function colorSchemeSource(): ColorSchemeSource {
   const native = reactNative();
   if (!native) return { current: () => 'light', subscribe: () => () => {} };
@@ -52,6 +63,7 @@ export function colorSchemeSource(): ColorSchemeSource {
     },
     set: (scheme) => {
       native.Appearance.setColorScheme?.(scheme ?? 'unspecified');
+      nightModeModule()?.setColorScheme?.(scheme ?? 'unspecified');
       // Back to the system's waits for the platform's report: React Native resolves it from a
       // native cache that a full-screen modal on iOS can leave stale.
       if (scheme !== null) for (const listener of [...setListeners]) listener();
@@ -79,6 +91,8 @@ export class ColorScheme {
    * Put the whole app in `scheme`, whatever the system says, or back in the system's with null:
    * an in-app theme switch. The native chrome follows as well as the CSS, since it is the window's
    * own appearance that changes, and `current` and `prefers-color-scheme` follow the change.
+   * On Android 12 and later the system keeps the scheme across launches, until it is set again or
+   * handed back with null; on iOS and earlier Android each launch starts in the system's.
    */
   set(scheme: Scheme | null): void {
     this.source.set?.(scheme);
