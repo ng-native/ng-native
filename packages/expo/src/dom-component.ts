@@ -49,7 +49,7 @@ import {
   untracked,
 } from '@angular/core';
 import { Engine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
-import { currentPlatform, optional } from './native.ts';
+import { currentPlatform, isDesktopPlatform, optional } from './native.ts';
 import { registerExpoView } from './register-expo-view.ts';
 
 /** The element is this package's, so it needs no `registerExpoViews` call of its own. */
@@ -101,7 +101,7 @@ export class DomComponent {
     'angular-native.domComponentSource',
     {
       factory: () => {
-        if (currentPlatform() === 'macos') return desktopSource();
+        if (isDesktopPlatform(currentPlatform())) return desktopSource();
         // Expo's own resolution, so a page is found wherever Expo would look for a DOM
         // component's: the dev server, the app's `www.bundle`, or a downloaded update.
         const base = optional(() => require('expo/src/dom/base') as { getBaseURL(): string });

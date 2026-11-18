@@ -75,6 +75,29 @@ describe('expoModule on macOS', () => {
   });
 });
 
+describe('expoModule on Linux', () => {
+  it("never calls the Expo loader, and answers the desktop host's TurboModule, as on macOS", () => {
+    const desktop = { from: 'desktop' };
+    on('linux', { NgNativeHaptics: desktop });
+    const { calls, load } = loader();
+    assert.equal(expoModule('expo-haptics', load, { desktop: 'NgNativeHaptics' }), desktop);
+    assert.equal(expoModule('expo-brightness', load), null);
+    assert.deepEqual(calls, []);
+  });
+
+  it('says to rebuild the desktop host with npm run linux when the module is not in it', () => {
+    on('linux');
+    const found = expoModule('expo-haptics', loader().load, { desktop: 'NgNativeHaptics' });
+    assert.throws(
+      () => (found as Record<string, unknown>)['impactAsync'],
+      (error: unknown) =>
+        error instanceof MissingModuleError &&
+        /npm run linux/.test(error.message) &&
+        !/npm run macos/.test(error.message),
+    );
+  });
+});
+
 describe('expoModule with an options object', () => {
   it('takes platforms as the array form does', () => {
     on('android');

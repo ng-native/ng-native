@@ -209,6 +209,11 @@ code, walking the app's dependencies and theirs:
   module's `expo-module.config.json` can name its CMake target the same way.
 - **`deny`** in the plugin options keeps a package out, whatever it ships.
 
+Linux is the same with `linux` for `macos`: a library lists `linux` among its `platforms` with a
+`linux` entry beside `macos`, and the app's modules are `modules/<name>/linux/`. A library that
+builds for both lists both, with one `cmakeDir` for both or one each, and each OS reads only its own
+entry. A dependency with desktop code for one OS only is listed on the other.
+
 `npm run macos` and `npm run package` list the dependencies that have native code for iOS or
 Android and none for the desktop: their native modules are absent on macOS, so a service built on
 one reports itself unavailable. `expo`, the `expo-*` packages and `@ng-native/*` are not listed,
@@ -218,7 +223,8 @@ since the desktop host answers their services itself. `react-native-screens`,
 them.
 
 `run` and `package` write what they found to `.expo/ng-native-desktop/link.json` in the app, which
-the host build reads from `NGN_DESKTOP_LINK`. `deny` keeps a package out; the packages it depends on
+the host build reads from `NGN_DESKTOP_LINK`. The file names its OS, and a build refuses one made
+for another OS than its own. `deny` keeps a package out; the packages it depends on
 are still found.
 
 A library with a `codegenConfig` gets its specs' codegen, as on Android: the `<Name>JSI.h` its C++

@@ -234,7 +234,7 @@ describe('the transformer on macOS', () => {
     assert.equal(withMacosPlugins(ios), ios);
     assert.deepEqual(withMacosPlugins({ options: { platform: 'macos' }, plugins: ['a'] }).plugins, [
       'a',
-      plugin,
+      [plugin, { platform: 'macos' }],
     ]);
   });
 });

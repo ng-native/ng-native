@@ -431,3 +431,18 @@ describe('reading the platform off React Native', () => {
     });
   });
 });
+
+describe("the desktop host's dialogs", () => {
+  it("prompt with React Native's iOS Alert.prompt on macOS and Linux, and not on Android", () => {
+    const native = (os: string) => ({
+      Platform: { OS: os },
+      Alert: { alert: () => {}, prompt: () => {} },
+      ActionSheetIOS: { showActionSheetWithOptions: () => {} },
+      ToastAndroid: { show: () => {}, SHORT: 0, LONG: 1 },
+    });
+    for (const os of ['macos', 'linux']) {
+      assert.equal(typeof dialogSource(native(os) as never)?.prompt, 'function', os);
+    }
+    assert.equal(dialogSource(native('android') as never)?.prompt, undefined);
+  });
+});

@@ -1,3 +1,4 @@
+import type { OsName } from '@ng-native/device';
 import type { Plugin } from 'vitest/config';
 
 export interface NgNativeOptions {
@@ -25,19 +26,17 @@ export interface NgNativeOptions {
    * Android and macOS projects can sit in one Vitest config. `render(X, { os })` changes the OS for
    * one render, but not which files were resolved.
    */
-  os?: 'ios' | 'android' | 'macos' | 'web';
+  os?: OsName;
 }
 
 /** The extensions each OS resolves ahead of the plain ones, in order. */
-export declare const PLATFORM_EXTENSIONS: Readonly<
-  Record<'ios' | 'android' | 'macos' | 'web', readonly string[]>
->;
+export declare const PLATFORM_EXTENSIONS: Readonly<Record<OsName, readonly string[]>>;
 
 /** What an extensionless import tries, in order, for `os`. */
-export declare function extensionsFor(os: 'ios' | 'android' | 'macos' | 'web'): string[];
+export declare function extensionsFor(os: OsName): string[];
 
 /** The OS a project's tests run as when its options name none, from `expo.platforms`. */
-export declare function defaultOs(root: string): 'ios' | 'android' | 'macos' | 'web';
+export declare function defaultOs(root: string): OsName;
 
 /** Compile Angular for Vitest: AOT for decorated sources, the linker for partial-compiled packages. */
 export declare function ngNative(options?: NgNativeOptions): Plugin;

@@ -92,6 +92,22 @@ describe('choosePrebuilt', () => {
     assert.deepEqual(choosePrebuilt(MANIFEST, APP), { host: HOST });
   });
 
+  it('takes a host for the OS asked, and a Linux host for the architecture asked', () => {
+    const x64: PrebuiltHost = { ...HOST, os: 'linux', arch: 'x64', sha256: 'b'.repeat(64) };
+    const arm64: PrebuiltHost = { ...HOST, os: 'linux', arch: 'arm64', sha256: 'c'.repeat(64) };
+    const all = { version: 1, hosts: [x64, arm64, HOST] };
+    // An entry that names no OS is a macOS one, whatever comes before it.
+    assert.deepEqual(choosePrebuilt(all, APP), { host: HOST });
+    assert.deepEqual(choosePrebuilt(all, { ...APP, os: 'linux', arch: 'arm64' }), { host: arm64 });
+    assert.deepEqual(choosePrebuilt(all, { ...APP, os: 'linux', arch: 'x64' }), { host: x64 });
+    assert.deepEqual(choosePrebuilt(MANIFEST, { ...APP, os: 'linux', arch: 'x64' }), {
+      reason: 'no prebuilt release Linux x64 host for React Native 0.88.0',
+    });
+    // One Linux entry per architecture: a new arm64 host replaces only the arm64 one.
+    const newer = { ...arm64, sha256: 'e'.repeat(64) };
+    assert.deepEqual(withHost(all, newer).hosts, [x64, HOST, newer]);
+  });
+
   it('takes the debug host for a dev run and the release host for a packaged app', () => {
     const release = { ...HOST, flavour: 'release' as const };
     const both = { version: 1, hosts: [release, DEBUG] };

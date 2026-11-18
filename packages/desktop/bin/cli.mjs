@@ -51,19 +51,28 @@ export function devServerBundleUrl(port) {
 
 /**
  * @param {string[]} argv the arguments after the command name
+ * @param {string} [platform] this machine's, which `package --os` defaults to
  * @returns {{ command: 'help' } | { command: 'run', bundle: string | undefined, module: string, port: number, universal: boolean, url?: string } | import('./package.mjs').PackageCommand}
  */
-export function parseCommand(argv) {
+export function parseCommand(argv, platform = process.platform) {
   const [command, ...rest] = argv;
   if (command === undefined || command === 'help' || command === '--help' || command === '-h') {
     return { command: 'help' };
   }
-  if (command === 'package') return parsePackage(rest);
+  if (command === 'package') return parsePackage(rest, platform);
   if (command !== 'run') {
     throw new UsageError(`Unknown command "${command}".`);
   }
+  return parseRun(rest);
+}
+
+/**
+ * @param {string[]} args the arguments after `run`
+ * @returns {{ command: 'run', bundle: string | undefined, module: string, port: number, universal: boolean, url?: string }}
+ */
+function parseRun(args) {
   const { values, positionals } = parseArgs({
-    args: rest,
+    args,
     allowPositionals: true,
     options: {
       module: { type: 'string', default: 'main' },
@@ -137,7 +146,7 @@ function bundleArgument(options, cwd) {
  */
 export async function main(argv, sys = system) {
   try {
-    const command = parseCommand(argv);
+    const command = parseCommand(argv, sys.platform);
     if (command.command === 'help') {
       console.log(USAGE);
       return 0;

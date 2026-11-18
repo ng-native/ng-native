@@ -7,12 +7,17 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -72,6 +77,8 @@ export const HOST_LIBRARIES = [
  */
 export const system = {
   platform: process.platform,
+  /** This machine's architecture, as Node names it (`x64`, `arm64`). */
+  arch: process.arch,
   env: /** @type {Record<string, string | undefined>} */ (process.env),
   cwd: () => process.cwd(),
   /** @param {string} from */
@@ -188,6 +195,37 @@ export const system = {
   },
   /** @param {string} file */
   readFile: (file) => readFileSync(file, 'utf8'),
+  /** @param {string} file */
+  readBytes: (file) => new Uint8Array(readFileSync(file)),
+  /**
+   * Every file and symbolic link under `dir`, by its path from there with `/` between parts, in
+   * order: a file with its permissions, a link with what it points to.
+   *
+   * @param {string} dir
+   * @returns {{ path: string, mode: number, link?: string }[]}
+   */
+  files(dir) {
+    return readdirSync(dir, { recursive: true, encoding: 'utf8' })
+      .sort()
+      .flatMap((name) => {
+        const file = path.join(dir, name);
+        const stat = lstatSync(file);
+        const at = name.split(path.sep).join('/');
+        if (stat.isSymbolicLink()) return [{ path: at, mode: 0o777, link: readlinkSync(file) }];
+        return stat.isFile() ? [{ path: at, mode: stat.mode & 0o7777 }] : [];
+      });
+  },
+  /**
+   * Makes `file` a symbolic link to `target`, making the folder it goes in.
+   *
+   * @param {string} target
+   * @param {string} file
+   */
+  symlink(target, file) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    rmSync(file, { force: true });
+    symlinkSync(target, file);
+  },
   /** @param {string} file the file's SHA-256, in hex */
   sha256: (file) => createHash('sha256').update(readFileSync(file)).digest('hex'),
   /**
@@ -199,7 +237,7 @@ export const system = {
   },
   /**
    * @param {string} file
-   * @param {string} text
+   * @param {string | Uint8Array} text
    */
   writeFile(file, text) {
     mkdirSync(path.dirname(file), { recursive: true });
@@ -211,24 +249,27 @@ export const system = {
   },
 };
 
-/** @typedef {import('./app-config.mjs').ExpoConfig} ExpoConfig */
+/**
+ * @typedef {import('./app-config.mjs').ExpoConfig} ExpoConfig
+ */
 
 /**
- * Throws a usage error naming the fix when the app's Expo config cannot run on macOS: without
- * `macos` in `expo.platforms`, Metro does not bundle for it, and without the experiment Expo drops
- * `macos` from the list without a word.
+ * Throws a usage error naming the fix when the app's Expo config cannot run on a desktop OS:
+ * without the OS in `expo.platforms`, Metro does not bundle for it, and without the experiment Expo
+ * drops it from the list without a word.
  *
  * @param {ExpoConfig} config
+ * @param {import('./autolink.mjs').DesktopOs} [os]
  */
-export function checkExpoConfig(config) {
-  if (!config.platforms?.includes('macos')) {
+export function checkExpoConfig(config, os = 'macos') {
+  if (!config.platforms?.includes(os)) {
     throw new UsageError(
-      'The app\'s Expo config does not list macos. Add "macos" to expo.platforms in app.json and set expo.experiments.outOfTreePlatforms to true.',
+      `The app's Expo config does not list ${os}. Add "${os}" to expo.platforms in app.json and set expo.experiments.outOfTreePlatforms to true.`,
     );
   }
   if (!config.experiments?.outOfTreePlatforms) {
     throw new UsageError(
-      "The app's Expo config lists macos without expo.experiments.outOfTreePlatforms, so Expo ignores it. Set expo.experiments.outOfTreePlatforms to true in app.json.",
+      `The app's Expo config lists ${os} without expo.experiments.outOfTreePlatforms, so Expo ignores it. Set expo.experiments.outOfTreePlatforms to true in app.json.`,
     );
   }
 }
@@ -237,7 +278,7 @@ export function checkExpoConfig(config) {
  * @param {typeof system} sys
  * @param {string} cwd
  */
-function resolveReactNative(sys, cwd) {
+export function resolveReactNative(sys, cwd) {
   try {
     return sys.resolveReactNative(cwd);
   } catch {
@@ -248,12 +289,13 @@ function resolveReactNative(sys, cwd) {
 }
 
 /**
- * The app's Expo config, checked for macos.
+ * The app's Expo config, checked for a desktop OS.
  *
  * @param {typeof system} sys
  * @param {string} cwd
+ * @param {import('./autolink.mjs').DesktopOs} [os]
  */
-export function readExpoConfig(sys, cwd) {
+export function readExpoConfig(sys, cwd, os = 'macos') {
   /** @type {ExpoConfig} */
   let config;
   try {
@@ -263,7 +305,7 @@ export function readExpoConfig(sys, cwd) {
       `Could not read the app's Expo config in ${cwd}: ${error instanceof Error ? error.message : error}`,
     );
   }
-  checkExpoConfig(config);
+  checkExpoConfig(config, os);
   return config;
 }
 
@@ -282,19 +324,25 @@ export function linkFile(appDir) {
  * for the build, a warning for each dependency the build leaves without its native code, and the
  * host built (a no-op when nothing changed).
  *
+ * The macOS host builds on a Mac. A Linux host comes prebuilt for its architecture, or builds on
+ * Linux of that architecture.
+ *
  * @param {typeof system} sys
- * @param {{ universal: boolean, release?: boolean, expo?: ExpoConfig }} options `release` builds
- *   the host as a packaged app ships it, without the core tests or the debugger, and takes the
- *   release prebuilt host where one fits (the debug one otherwise); `expo` is the app's config
- *   when the caller has read it already
+ * @param {{ universal: boolean, release?: boolean, expo?: ExpoConfig, os?: import('./autolink.mjs').DesktopOs, arch?: LinuxArch }} options
+ *   `os` is the desktop OS the host is for (macos unless said), which picks the native code the app
+ *   links (`autolink.mjs`); `arch` a Linux host's architecture, this machine's unless said;
+ *   `release` builds the host as a packaged app ships it, without the core tests or the debugger,
+ *   and takes the release prebuilt host where one fits (the debug one otherwise); `expo` is the
+ *   app's config when the caller has read it already
  */
 export function prepareHost(sys, options) {
-  if (sys.platform !== 'darwin') {
+  const os = options.os ?? 'macos';
+  if (os === 'macos' && sys.platform !== 'darwin') {
     throw new UsageError('The desktop host runs on macOS only for now.');
   }
   const cwd = sys.cwd();
   const reactNative = resolveReactNative(sys, cwd);
-  const expo = options.expo ?? readExpoConfig(sys, cwd);
+  const expo = options.expo ?? readExpoConfig(sys, cwd, os);
   const config = desktopAppConfig(expo);
   if (/[/\\]/.test(config.name) || config.name === '.' || config.name === '..') {
     throw new UsageError(
@@ -303,12 +351,33 @@ export function prepareHost(sys, options) {
     );
   }
   const deny = config.options.deny ?? [];
-  const links = sys.links(cwd, { deny, builtIn: HOST_LIBRARIES });
+  const { file, linked, hostLibraries } = writeLinks(sys, { cwd, os, deny });
+  const buildDir = hostBuildDir(sys, reactNative, {
+    ...options,
+    os,
+    arch: options.arch ?? linuxArch(sys),
+    deny,
+    linked,
+    hostLibraries,
+    link: file,
+  });
+  return { cwd, expo, config, buildDir, reactNative };
+}
+
+/**
+ * Finds the native code the app links for `os`, warns about each dependency the build leaves
+ * without its own, and writes the links for the build (`linkFile`), every time, so a library
+ * removed or denied leaves the build with the rest.
+ *
+ * @param {typeof system} sys
+ * @param {{ cwd: string, os: import('./autolink.mjs').DesktopOs, deny: readonly string[] }} app
+ */
+function writeLinks(sys, { cwd, os, deny }) {
+  const links = sys.links(cwd, { os, deny: [...deny], builtIn: HOST_LIBRARIES });
   for (const line of linkWarnings(links)) sys.warn(line);
-  // Written every time, so a library removed or denied leaves the build with the rest.
   const file = linkFile(cwd);
   const { libraries, appModules } = links;
-  sys.writeFile(file, `${JSON.stringify({ version: 1, libraries, appModules }, null, 2)}\n`);
+  sys.writeFile(file, `${JSON.stringify({ version: 1, os, libraries, appModules }, null, 2)}\n`);
   // Where autolinking found each host library, under a dependency's node_modules too, else where
   // it resolves from the app (a peer dependency the package manager installed, which the walk
   // does not follow).
@@ -317,22 +386,127 @@ export function prepareHost(sys, options) {
     const dir = found.get(name) ?? sys.resolvePackage(cwd, name);
     return dir === null ? [] : [{ name, dir }];
   });
-  const buildDir =
-    prebuiltHost(sys, reactNative, {
-      // A packaged app ships the Release host; a dev run gets the one with the debugger.
-      flavour: options.release ? 'release' : 'debug',
-      deny,
-      linked: libraries.length + appModules.length,
-      hostLibraries,
-    }) ??
-    buildHost(
-      sys,
-      reactNative,
-      hostLibraries.map(({ dir }) => dir),
-      options,
-      file,
+  return { file, linked: libraries.length + appModules.length, hostLibraries };
+}
+
+/**
+ * The prebuilt host that fits, or the one built from source. A Linux host builds only on Linux of
+ * its own architecture, so it throws for another.
+ *
+ * @param {typeof system} sys
+ * @param {string} reactNative
+ * @param {{ universal: boolean, release?: boolean, os: import('./autolink.mjs').DesktopOs, arch: LinuxArch, deny: readonly string[], linked: number, hostLibraries: { name: string, dir: string }[], link: string }} build
+ */
+function hostBuildDir(sys, reactNative, build) {
+  const { os, arch, hostLibraries } = build;
+  const prebuilt = prebuiltHost(sys, reactNative, {
+    // A packaged app ships the Release host; a dev run gets the one with the debugger.
+    flavour: build.release ? 'release' : 'debug',
+    deny: build.deny,
+    linked: build.linked,
+    hostLibraries,
+    os,
+    arch,
+  });
+  if (prebuilt.dir) return prebuilt.dir;
+  if (os === 'linux' && (sys.platform !== 'linux' || arch !== linuxArch(sys))) {
+    throw new UsageError(
+      `The Linux desktop host builds on Linux only for now, on the architecture it is for, and no ` +
+        `prebuilt Linux ${arch} host fits this app (${prebuilt.reason}). Package on Linux on ${arch}.`,
     );
-  return { cwd, expo, config, buildDir, reactNative };
+  }
+  return buildHost(
+    sys,
+    reactNative,
+    hostLibraries.map(({ dir }) => dir),
+    build,
+    build.link,
+  );
+}
+
+/**
+ * @typedef {'x64' | 'arm64'} LinuxArch
+ */
+
+/**
+ * This machine's architecture as a Linux host is built for it.
+ *
+ * @param {typeof system} sys
+ * @returns {LinuxArch}
+ */
+export function linuxArch(sys) {
+  return sys.arch === 'arm64' ? 'arm64' : 'x64';
+}
+
+/**
+ * The `hermesc` that compiles a Linux app's bundle, which runs on this machine: on Linux the one
+ * beside the host built for this machine's architecture, and on a Mac the one in the prebuilt macOS
+ * release host. Both are built from the Hermes the Linux host links, and Hermes bytecode does not
+ * depend on the architecture, so one compile serves every package.
+ *
+ * @param {typeof system} sys
+ * @param {{ reactNative: string, hosts: { arch: LinuxArch, buildDir: string }[], expo: ExpoConfig }} build
+ *   `hosts` are the Linux hosts already prepared for the packages
+ */
+export function linuxHermesCompiler(sys, { reactNative, hosts, expo }) {
+  if (sys.platform === 'linux') {
+    const native = linuxArch(sys);
+    const buildDir =
+      hosts.find((host) => host.arch === native)?.buildDir ??
+      prepareHost(sys, { os: 'linux', arch: native, release: true, universal: false, expo })
+        .buildDir;
+    const hermesc = path.join(buildDir, 'gtk', 'hermesc');
+    if (!sys.exists(hermesc)) {
+      throw new Error(
+        `The desktop host in ${buildDir} has no hermesc beside it, so the bundle cannot be ` +
+          'compiled to Hermes bytecode. Delete that folder and package again to rebuild it.',
+      );
+    }
+    return hermesc;
+  }
+  const version = versionIn(sys, reactNative);
+  const manifest = readManifest(readPrebuiltManifest(sys));
+  const choice = version
+    ? choosePrebuilt(manifest, {
+        reactNative: version,
+        flavour: 'release',
+        // hermesc is the same whatever the host links.
+        linked: 0,
+        libraries: {},
+        deny: [],
+        env: {},
+        os: 'macos',
+      })
+    : { reason: 'react-native has no version' };
+  const dir =
+    'host' in choice
+      ? fetchPrebuilt(
+          sys,
+          choice.host,
+          cacheDir(String(version), { env: sys.env, platform: sys.platform }),
+        )
+      : null;
+  if (!dir) {
+    throw new UsageError(
+      `Packaging for Linux on a Mac compiles the bundle with the prebuilt macOS host's hermesc, ` +
+        `and there is none to use (${'reason' in choice ? choice.reason : 'it did not download'}). ` +
+        'Package on Linux instead.',
+    );
+  }
+  return path.join(dir, 'appkit', 'hermesc');
+}
+
+/**
+ * `prebuilt.json`'s text, or nothing when the package has none.
+ *
+ * @param {typeof system} sys
+ */
+function readPrebuiltManifest(sys) {
+  try {
+    return sys.readFile(path.join(packageDir, 'prebuilt.json'));
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -351,23 +525,21 @@ function versionIn(sys, dir) {
 }
 
 /**
- * The prebuilt host's build folder when `prebuilt.json` has one this app can run on (see
- * `choosePrebuilt`), downloaded into the cache once; null when the host is built from source.
+ * The prebuilt host's build folder when `prebuilt.json` has one for this OS and architecture that
+ * this app can run on (see `choosePrebuilt`), downloaded into the cache once; otherwise why there
+ * is none, and the host is built from source.
  *
  * @param {typeof system} sys
  * @param {string} reactNative
- * @param {{ flavour: import('./prebuilt.mjs').Flavour, deny: readonly string[], linked: number, hostLibraries: { name: string, dir: string }[] }} app
+ * @param {{ flavour: import('./prebuilt.mjs').Flavour, deny: readonly string[], linked: number, hostLibraries: { name: string, dir: string }[], os: import('./autolink.mjs').DesktopOs, arch: LinuxArch }} app
  *   `hostLibraries`: where each host library the app has is installed
+ * @returns {{ dir: string, reason?: undefined } | { dir: null, reason: string }}
  */
-function prebuiltHost(sys, reactNative, { flavour, deny, linked, hostLibraries }) {
-  let text = '';
-  try {
-    text = sys.readFile(path.join(packageDir, 'prebuilt.json'));
-  } catch {
-    return null;
-  }
+function prebuiltHost(sys, reactNative, { flavour, deny, linked, hostLibraries, os, arch }) {
+  const text = readPrebuiltManifest(sys);
+  if (!text) return { dir: null, reason: 'this package lists no prebuilt hosts' };
   const version = versionIn(sys, reactNative);
-  if (!version) return null;
+  if (!version) return { dir: null, reason: 'react-native has no version' };
   const libraries = Object.fromEntries(
     hostLibraries.map(({ name, dir }) => [name, versionIn(sys, dir)]),
   );
@@ -378,26 +550,30 @@ function prebuiltHost(sys, reactNative, { flavour, deny, linked, hostLibraries }
     libraries,
     deny,
     env: sys.env,
+    os,
+    arch,
   });
-  if (!('host' in choice)) return null;
-  return fetchPrebuilt(
+  if (!('host' in choice)) return { dir: null, reason: choice.reason };
+  const dir = fetchPrebuilt(
     sys,
     choice.host,
     cacheDir(version, { env: sys.env, platform: sys.platform }),
   );
+  return dir ? { dir } : { dir: null, reason: 'it did not download' };
 }
 
 /**
- * Builds the host (a no-op when nothing changed) and returns its build directory.
+ * Builds the host (a no-op when nothing changed) and returns its build directory: the AppKit host
+ * on a Mac, the GTK one on Linux.
  *
  * @param {typeof system} sys
  * @param {string} reactNative
  * @param {string[]} libraries
- * @param {{ universal: boolean, release?: boolean }} options
+ * @param {{ universal: boolean, release?: boolean, os: import('./autolink.mjs').DesktopOs }} options
  * @param {string} link the file `linkFile` names
  */
-function buildHost(sys, reactNative, libraries, { universal, release }, link) {
-  checkToolchain(sys);
+function buildHost(sys, reactNative, libraries, { universal, release, os }, link) {
+  if (os === 'macos') checkToolchain(sys);
   const version = versionIn(sys, reactNative);
   if (
     version &&
@@ -406,7 +582,8 @@ function buildHost(sys, reactNative, libraries, { universal, release }, link) {
     sys.warn(FIRST_BUILD_NOTE);
   }
   const buildArgs = [reactNative, ...libraries.flatMap((dir) => ['--library', dir])];
-  if (universal) buildArgs.push('--universal');
+  if (os === 'linux') buildArgs.push('--backend', 'gtk');
+  if (universal && os === 'macos') buildArgs.push('--universal');
   // The core tests are the repo's own (`test:native`): the published package has no sources for
   // them, so an app's build leaves them out.
   buildArgs.push(release ? '--release' : '--no-tests');
