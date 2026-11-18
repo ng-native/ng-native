@@ -45,6 +45,12 @@ struct ScrollBox {
   guint pendingSource{0};
   // An offset the backend set, which the state already has.
   bool settingOffset{false};
+  // The frame clock handler measuring the gutter again once a new scroll bar style applies.
+  gulong remeasure{0};
+  GdkFrameClock *remeasureClock{nullptr};
+  int remeasureFrames{0};
+  int steadyFrames{0};
+  float measuredWidth{-1};
 };
 
 // Told on the UI thread as a scroll view's content moves: its tag and its offset.

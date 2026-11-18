@@ -73,6 +73,17 @@ const char *cursorName(Cursor cursor) {
   return nullptr;
 }
 
+GdkCursor *makeCursor(Cursor cursor) {
+  const char *name = cursorName(cursor);
+  if (!name) {
+    return nullptr;
+  }
+  GdkCursor *fallback = gdk_cursor_new_from_name("default", nullptr);
+  GdkCursor *out = gdk_cursor_new_from_name(name, fallback);
+  g_clear_object(&fallback);
+  return out;
+}
+
 namespace {
 
 struct PointerState {

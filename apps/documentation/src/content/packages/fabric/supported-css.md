@@ -476,7 +476,9 @@ of the text it underlines, because its text has no decoration colour.
 
 Scroll bars are the system's. `scrollbar-width: none` hides a scroll view's indicators on every
 OS, and on macOS `thin` draws the small scroll bar and `scrollbar-gutter: stable` keeps room for
-one when nothing overflows. `::-webkit-scrollbar` is dropped with a warning.
+one when nothing overflows. On Linux `thin` narrows a classic scroll bar and the room it takes, and
+a scroll view follows the desktop switching between overlay and classic scroll bars while the app
+runs. `::-webkit-scrollbar` is dropped with a warning.
 
 `pointer-events` is inherited, as on the web, and `none` is about the element alone: it and whatever
 inherits the value take no touches, and a descendant that sets `pointer-events: auto` takes them
