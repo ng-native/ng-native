@@ -77,7 +77,13 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4; a cover fills the
   overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
-  Escape and the last right item the default on Return.
+  Escape and the last right item the default on Return. Close Window asks the presentation in
+  front of the window to close (`Modals::front`) before the window. Each tray icon is a
+  StatusNotifierItem on a session-bus connection of its own (`status-notifier.h`), its menu laid
+  out for `com.canonical.dbusmenu` by the core (`dbus-menu.h`); the tray module is left out when no
+  StatusNotifierWatcher runs at launch, and the Dock's always is. The badge count goes out as the
+  `com.canonical.Unity.LauncherEntry` `Update` signal (`launcher-badge.h`), from a notification
+  centre that cannot post yet.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android
@@ -94,7 +100,8 @@ pnpm --filter @ng-native/desktop build:host     # the macOS host
 
 On Linux, `build.sh --backend gtk` builds `ngn-linux` over the core, Hermes and the runtime half,
 and `--test` runs the core, runtime and GTK view tests (`ngn_gtk_tests`, which need a display:
-Xvfb on a machine without one). `build.sh --backend none --runtime --test` still builds the
+Xvfb on a machine without one). The tray tests also need a session bus, under `dbus-run-session`:
+without one they are skipped, and in CI they fail. `build.sh --backend none --runtime --test` still builds the
 toolkit-free half alone. Off macOS, Hermes links ICU 77.1, which `fetch.sh` pins and `build-icu.sh`
 builds statically, with only English data (`icu-filter.json`). The GTK host links libcurl 8.23.0,
 which `fetch.sh` also pins and `cmake/curl.cmake` builds statically with HTTP/1.1, HTTP/2,

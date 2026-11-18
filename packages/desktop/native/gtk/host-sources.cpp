@@ -243,16 +243,29 @@ class NoMenus final : public MenuBackend {
   void setMenuBar(std::vector<MenuItem>) override {}
 };
 
-class NoTray final : public TrayBackend {
+class GtkUndo final : public UndoManager {
  public:
-  void setIcons(std::vector<TrayIcon>) override {}
-};
+  void registerAction(const std::string &label, std::function<void()> action) override {
+    // Inline on the UI thread: an undo registers its redo while it runs.
+    onMainContext([stacks = stacks_, label, action = std::move(action)]() mutable {
+      stacks->registerAction(label, std::move(action));
+    });
+  }
+  bool undoing() const override {
+    return stacks_->undoing();
+  }
+  void undo() override {
+    onMainContext([stacks = stacks_] { stacks->undo(); });
+  }
+  void redo() override {
+    onMainContext([stacks = stacks_] { stacks->redo(); });
+  }
+  void clear() override {
+    onMainContext([stacks = stacks_] { stacks->clear(); });
+  }
 
-class NoDock final : public DockBackend {
- public:
-  void setMenu(std::optional<std::vector<MenuItem>>) override {}
-  void bounce(int, bool) override {}
-  void cancelBounce(int) override {}
+ private:
+  std::shared_ptr<UndoStacks> stacks_ = std::make_shared<UndoStacks>();
 };
 
 // GLib's network monitor: whether a route exists, its interface types unknown (`other`).
@@ -301,12 +314,8 @@ std::shared_ptr<MenuBackend> makeNoMenus() {
   return std::make_shared<NoMenus>();
 }
 
-std::shared_ptr<TrayBackend> makeNoTray() {
-  return std::make_shared<NoTray>();
-}
-
-std::shared_ptr<DockBackend> makeNoDock() {
-  return std::make_shared<NoDock>();
+std::shared_ptr<UndoManager> makeUndoManager() {
+  return std::make_shared<GtkUndo>();
 }
 
 std::shared_ptr<PathMonitor> makePathMonitor() {

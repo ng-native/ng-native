@@ -740,6 +740,19 @@ void Modals::requestClose(Tag tag) {
   }
 }
 
+std::optional<Tag> Modals::front(GtkWindow *window) const {
+  std::optional<Tag> front;
+  uint64_t latest = 0;
+  for (const auto &[tag, presented] : presented_) {
+    GtkWidget *surface = backend_.surfaceWidget(presented.surfaceId);
+    if (surface && gtk_widget_get_root(surface) == GTK_ROOT(window) && presented.order > latest) {
+      latest = presented.order;
+      front = tag;
+    }
+  }
+  return front;
+}
+
 bool Modals::pressDefault(Tag tag) {
   auto it = presented_.find(tag);
   if (it == presented_.end()) {
@@ -851,6 +864,7 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   }
   backend_.hooks.containerRoot(tag, true);
   backend_.hooks.attachInput(p.slot, surfaceId, tag);
+  p.order = ++presentations_;
   auto &presented = presented_[tag] = p;
   dress(tag, presented);
   fit(tag, presented);

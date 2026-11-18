@@ -24,7 +24,7 @@ bool onX11() {
 
 } // namespace
 
-TEST_CASE("an input script clicks a GTK button and types into a field, at the window's own points") {
+TEST_CASE("an input script clicks a GTK button, types into a field and moves its cursor, at the window's own points, then says it is done") {
   REQUIRE(ngn::testing::gtkReady());
   if (!onX11()) {
     MESSAGE("not X11: the script is refused");
@@ -46,10 +46,16 @@ TEST_CASE("an input script clicks a GTK button and types into a field, at the wi
   gtk_window_present(GTK_WINDOW(window));
   ngn::testing::runUntil([window] { return gtk_widget_get_mapped(window) && gtk_widget_get_width(window) > 0; });
 
-  auto script = ngn::parseInputScript("wait 200\nmove 150 30\ndown 150 30\nup 150 30\ndown 150 90\nup 150 90\ntype Hi there\n");
+  auto script = ngn::parseInputScript(
+      "wait 200\nmove 150 30\ndown 150 30\nup 150 30\ndown 150 90\nup 150 90\ntype Hi there\nkey left\nkey left\nkey right\n");
   REQUIRE_FALSE(ngn::gtk::inputReplayProblem(window, script));
-  REQUIRE(ngn::gtk::replayInputScript(window, std::move(script)));
-  ngn::testing::runUntil([entry] { return std::string(gtk_editable_get_text(GTK_EDITABLE(entry))) == "Hi there"; });
+  bool done = false;
+  REQUIRE(ngn::gtk::replayInputScript(window, std::move(script), [&done] { done = true; }));
+  ngn::testing::runUntil([&done] { return done; });
+  CHECK(done);
+  CHECK(std::string(gtk_editable_get_text(GTK_EDITABLE(entry))) == "Hi there");
+  // Two to the left and one back to the right, from the end.
+  CHECK(gtk_editable_get_position(GTK_EDITABLE(entry)) == 7);
   CHECK(clicks == 1);
   gtk_window_destroy(GTK_WINDOW(window));
 }
@@ -73,9 +79,11 @@ TEST_CASE("an input script whose window closes stops there") {
   gtk_window_set_default_size(GTK_WINDOW(window), 200, 100);
   gtk_window_present(GTK_WINDOW(window));
   ngn::testing::runUntil([window] { return gtk_widget_get_mapped(window); });
-  REQUIRE(ngn::gtk::replayInputScript(window, ngn::parseInputScript("wait 100\nmove 10 10\ndown 10 10\nup 10 10\n")));
+  bool done = false;
+  REQUIRE(ngn::gtk::replayInputScript(window, ngn::parseInputScript("wait 100\nmove 10 10\ndown 10 10\nup 10 10\n"), [&done] { done = true; }));
   gtk_window_destroy(GTK_WINDOW(window));
   // The steps after the wait would go to a window that is gone.
   gint64 until = g_get_monotonic_time() + 400 * 1000;
   ngn::testing::runUntil([until] { return g_get_monotonic_time() > until; });
+  CHECK_FALSE(done);
 }

@@ -201,6 +201,33 @@ TEST_CASE("a modal is presented over the window as a sheet at its content's size
   views.mount({ShadowViewMutation::DeleteMutation(modal)});
 }
 
+TEST_CASE("the presentation in front of a window is the one shown last, which Ctrl+W closes before the window") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views(true, 800, 600);
+  auto *window = GTK_WINDOW(gtk_widget_get_root(views.surface));
+  auto &modals = views.backend->modals();
+  CHECK_FALSE(modals.front(window));
+  // Presented in the other order from their tags.
+  auto first = shadow(6, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{first, MountedViews::kSurface}});
+  modals.settle();
+  CHECK(modals.front(window) == 6);
+  auto second = shadow(3, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{second, MountedViews::kSurface}});
+  modals.settle();
+  CHECK(modals.front(window) == 3);
+  // Another window has none in front of it.
+  GtkWidget *other = gtk_window_new();
+  CHECK_FALSE(modals.front(GTK_WINDOW(other)));
+  gtk_window_destroy(GTK_WINDOW(other));
+
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, second, 1)});
+  CHECK(modals.front(window) == 6);
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, first, 0)});
+  CHECK_FALSE(modals.front(window));
+  views.mount({ShadowViewMutation::DeleteMutation(first), ShadowViewMutation::DeleteMutation(second)});
+}
+
 namespace {
 
 Props::Shared presented(const std::string &how, Tag anchor = 0) {

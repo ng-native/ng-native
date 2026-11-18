@@ -179,9 +179,13 @@ jobs:
       - name: Build the GTK host and run its tests
         run: |
           mkdir -p "$CCACHE_DIR" "$NGN_DESKTOP_CACHE" "$GITHUB_WORKSPACE/.linux-probe"
+          # The runner's user in the image's passwd, which dbus-daemon looks itself up in.
+          docker run --rm ngn-el9 cat /etc/passwd > "$RUNNER_TEMP/passwd"
+          echo "runner:x:$(id -u):$(id -g)::/tmp:/bin/bash" >> "$RUNNER_TEMP/passwd"
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER -e GITHUB_WORKSPACE \
+            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER -e GITHUB_WORKSPACE -e CI \
             -e CCACHE_DIR -e CCACHE_BASEDIR -e CCACHE_NOHASHDIR -e CCACHE_SLOPPINESS -e CCACHE_MAXSIZE \
+            -v "$RUNNER_TEMP/passwd:/etc/passwd:ro" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
             bash -euo pipefail -c '
               ccache --zero-stats > /dev/null
@@ -196,8 +200,9 @@ jobs:
               xvfb=$!
               trap "kill $xvfb" EXIT
               mkdir -p "$GITHUB_WORKSPACE/.linux-probe/gtk-tests"
+              # A session bus of their own, for the tray and the launcher badge (status-notifier.test.cpp).
               DISPLAY=:99 GDK_BACKEND=x11 NGN_GTK_TEST_SHOTS="$GITHUB_WORKSPACE/.linux-probe/gtk-tests" \
-                "$build/gtk/ngn_gtk_tests"
+                dbus-run-session -- "$build/gtk/ngn_gtk_tests"
               native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" "$build/gtk/ngn-linux" \
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
             '
