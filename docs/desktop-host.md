@@ -32,6 +32,16 @@ pnpm --filter @ng-native/desktop test:native   # the core and its tests, no Herm
 pnpm --filter @ng-native/desktop build:host     # the macOS host
 ```
 
+Linux has no backend yet. There `build.sh --backend none --runtime --test` builds the core, Hermes
+and the runtime half and runs the core and runtime tests. Off macOS, Hermes links ICU 77.1, which
+`fetch.sh` pins and `build-icu.sh` builds statically, with only English data
+(`icu-filter.json`). The build runs in `native/docker/Dockerfile`, an AlmaLinux 9 image with clang
+and lld from `llvm-toolset`. Building against el9 keeps the glibc it needs at 2.34, which
+`native/docker/glibc-floor.sh` checks. CI's `host-linux` job runs this on x86_64 and arm64. On a
+Mac, run the same image with Docker, as a user other than root, since root reads a file whatever
+its mode and so fails the core tests that make one unreadable. The commands are in the
+Dockerfile's header.
+
 `ng-native-desktop run` builds the host with `--no-tests` and `package` with `--release`: the
 published package has none of the core tests' sources, so only `test:native` and `build:host` in
 this repository build them.

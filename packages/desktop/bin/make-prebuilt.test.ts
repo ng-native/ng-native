@@ -111,7 +111,7 @@ describe('make-prebuilt.mjs', () => {
     assert.match(source, /'--build-dir',\s*buildRoot/);
     const build = readFileSync(path.join(scripts, 'build.sh'), 'utf8');
     assert.match(build, /--build-dir\) build_dir="\$2"; shift ;;/);
-    assert.match(build, /BUILD="\$\{build_dir:-\$host_dir\/\$backend-/);
+    assert.match(build, /BUILD="\$\{build_dir:-\$host_dir\/\$variant-/);
   });
 
   it('publishes through publishPrebuilt, so runs into the same folder never mix their files', () => {

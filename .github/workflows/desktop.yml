@@ -1,7 +1,10 @@
 name: Desktop host
 
 # The desktop host in @ng-native/desktop. On ubuntu, the toolkit-free core and its tests build with
-# no backend and no Hermes, which proves AppKit never leaks into the core. On macOS, the AppKit host
+# no backend and no Hermes, which proves AppKit never leaks into the core. In the AlmaLinux 9 image
+# (native/docker), on x86_64 and arm64, the core, Hermes over a static ICU and the runtime half
+# build and their tests run, still with no backend, and what they link needs glibc 2.34 at most.
+# On macOS, the AppKit host
 # builds as an app would build it, the core tests run there too, and the built host is launched on an
 # example app's bundle to its first frame. A pull request runs it only when
 # the host or the workflow changed, or the lockfile moved the version of a package the host builds
@@ -117,6 +120,78 @@ jobs:
       - if: always()
         run: ccache --show-stats
 
+  # The Linux build below the backend, in the AlmaLinux 9 image so its glibc is the floor. The image
+  # is built on each run from native/docker: a few minutes of dnf, against a 2 GB image per
+  # architecture that would take much of the repository's 10 GB of Actions cache. The workspace,
+  # installed on the runner, is mounted at its own path, and the build runs as the runner's user,
+  # not root, since root reads the files the core tests make unreadable.
+  host-linux:
+    name: host-linux (${{ matrix.arch }})
+    needs: changes
+    if: >-
+      always() && github.event.pull_request.draft != true &&
+      (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true' ||
+      needs.changes.outputs.pins == 'true')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      CCACHE_MAXSIZE: 1G
+      # Keyed by what the compiles read: the pins, how Hermes and ICU build, and the image.
+      CCACHE_KEY: desktop-linux-${{ matrix.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/build-icu.sh', 'packages/desktop/native/docker/Dockerfile', 'pnpm-lock.yaml') }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - name: Build the AlmaLinux 9 image
+        run: docker build -t ngn-el9 packages/desktop/native/docker
+
+      # Restored on every run and saved only from main, under a new key each time, as ccache-action
+      # does on the other jobs (it installs ccache on the runner, not in the image). A near miss
+      # restores the latest set.
+      - uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ env.CCACHE_KEY }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ env.CCACHE_KEY }}-
+            desktop-linux-${{ matrix.arch }}-
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
+          key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+
+      - name: Build the core, Hermes and the runtime half, and run their tests
+        run: |
+          mkdir -p "$CCACHE_DIR" "$NGN_DESKTOP_CACHE"
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER \
+            -e CCACHE_DIR -e CCACHE_BASEDIR -e CCACHE_NOHASHDIR -e CCACHE_SLOPPINESS -e CCACHE_MAXSIZE \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
+            bash -euo pipefail -c '
+              ccache --zero-stats > /dev/null
+              start=$(date +%s)
+              build=$(native/scripts/build.sh --backend none --runtime --test --no-debug-info | tail -n 1)
+              echo "Built and tested in $(( $(date +%s) - start ))s"
+              ccache --show-stats
+              native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" \
+                "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
+            '
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ env.CCACHE_KEY }}-${{ github.run_id }}
+
   host-macos:
     needs: changes
     if: >-
@@ -167,6 +242,10 @@ jobs:
 
       - name: Run the core tests
         run: '"$BUILD_DIR/ngn_core_tests"'
+
+      # Hermes and the runtime half, linked as the host links them.
+      - name: Run the runtime tests
+        run: '"$BUILD_DIR/ngn_runtime_tests"'
 
       # Views mounted through the AppKit backend into an offscreen window: accessibility and Tab.
       - name: Run the AppKit view tests
