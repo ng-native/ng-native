@@ -316,7 +316,7 @@ class Engine {
 
   // --- HTTP ---------------------------------------------------------------------------------
 
-  void start(uint64_t id, const HttpRequest &request, std::shared_ptr<HttpState> state) {
+  void start(uint64_t id, HttpRequest request, std::shared_ptr<HttpState> state) {
     {
       std::lock_guard lock(state->mutex);
       if (state->done) {
@@ -365,7 +365,7 @@ class Engine {
       // empty one with its length. OBEYCODE above turns a POST into a GET on a 301, 302 or 303,
       // as NSURLSession does.
       if (!request.body.empty() || method == "POST" || method == "PUT" || method == "PATCH") {
-        t->body = request.body;
+        t->body = std::move(request.body);
         curl_easy_setopt(e, CURLOPT_POST, 1L);
         curl_easy_setopt(e, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(t->body.size()));
         curl_easy_setopt(e, CURLOPT_POSTFIELDS, t->body.data());
@@ -491,6 +491,11 @@ class Engine {
  private:
   void common(CURL *e) {
     curl_easy_setopt(e, CURLOPT_NOSIGNAL, 1L);
+    // A proxy's answer to CONNECT is not the response.
+    curl_easy_setopt(e, CURLOPT_SUPPRESS_CONNECT_HEADERS, 1L);
+    // NSURLSession always names itself, and some servers refuse a request that does not. A
+    // User-Agent header of the request's own replaces it.
+    curl_easy_setopt(e, CURLOPT_USERAGENT, "ng-native libcurl/" LIBCURL_VERSION);
     if (!ca_.file.empty()) {
       curl_easy_setopt(e, CURLOPT_CAINFO, ca_.file.c_str());
     }
@@ -980,7 +985,9 @@ class CurlHttp final : public Http {
     }
     auto &engine = client_->engine();
     uint64_t id = engine->nextId();
-    engine->post([raw = engine.get(), id, request = std::move(request), state] { raw->start(id, request, state); });
+    engine->post([raw = engine.get(), id, request = std::move(request), state]() mutable {
+      raw->start(id, std::move(request), state);
+    });
     return std::make_unique<Task>(engine, id, std::move(state));
   }
 

@@ -5,9 +5,10 @@
 // its caller, and each request's or connection's callbacks run on that thread, in order. As
 // NSURLSession does on macOS: redirects are followed, a request's timeout is the longest it may go
 // without a byte in either direction, compressed bodies arrive decoded, `file:` and `data:` urls
-// answer 200 with no headers, and requests with credentials share one cookie store, kept in
-// memory for the process. TLS is the system's OpenSSL, verifying against the certificates
-// findCaCertificates() locates.
+// answer 200 with no headers, and requests with credentials share one cookie store. Unlike macOS's,
+// that store is kept in memory for the process only, and a proxy comes only from the environment
+// (`http_proxy`, `https_proxy`, `no_proxy`). TLS is the system's OpenSSL, verifying against the
+// certificates findCaCertificates() locates.
 #pragma once
 
 #include "ngn/network.h"

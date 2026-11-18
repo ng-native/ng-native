@@ -263,6 +263,12 @@ TEST_CASE("a POST over libcurl sends its body and headers, reports the upload, a
   CHECK(echoedHeader(echo, "content-type") == "<none>");
   REQUIRE_FALSE(r.uploads.empty());
   CHECK(r.uploads.back() == std::pair<int64_t, int64_t>{7, 7});
+  // A User-Agent, as NSURLSession always sends one, unless the request names its own.
+  CHECK(echoedHeader(echo, "user-agent").starts_with("ng-native libcurl/"));
+  Recorder named;
+  network.http->send({.url = server.url("/echo"), .headers = {{"User-Agent", "notes/1.0"}}}, named.callbacks());
+  REQUIRE(named.waitForComplete());
+  CHECK(echoedHeader(echoed(named), "user-agent") == "notes/1.0");
 
   // A body over curl's 1 MB threshold goes without its Expect: 100-continue wait.
   Recorder big;
@@ -302,11 +308,12 @@ TEST_CASE("a request over libcurl that goes quiet for its timeout fails as timed
 
   // As NSURLSession's, the timeout is the longest silence, not the whole request.
   Recorder drip;
-  network.http->send({.url = server.url("/drip?n=6&ms=120"), .timeoutMs = 400}, drip.callbacks());
+  // Ten bytes 150 ms apart: 1.5 s in all, three times the timeout, with no gap near it.
+  network.http->send({.url = server.url("/drip?n=10&ms=150"), .timeoutMs = 500}, drip.callbacks());
   REQUIRE(drip.waitForComplete());
   CHECK_FALSE(drip.timedOut);
   CHECK(drip.error.empty());
-  CHECK(drip.body == "xxxxxx");
+  CHECK(drip.body == "xxxxxxxxxx");
 }
 
 TEST_CASE("a cancelled request over libcurl calls back nothing after cancel returns") {
