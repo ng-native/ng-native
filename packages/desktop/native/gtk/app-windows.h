@@ -14,6 +14,11 @@
 
 namespace ngn::gtk {
 
+// Shows `window` without the focus GTK gives the first focusable widget of a window shown with
+// none, which would be a header bar's search field: macOS gives a new window no field the focus,
+// and a field's focus is the app's to give (autoFocus). A focus set before it shows stays.
+void presentWithoutInitialFocus(GtkWindow *window);
+
 class GtkWindows final : public WindowBackend {
  public:
   struct Hooks {

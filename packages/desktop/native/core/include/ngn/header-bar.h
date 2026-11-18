@@ -112,11 +112,11 @@ struct HeaderSubview {
   std::string type;
 };
 
-// Where a front header's pieces go in a window's bar, the order AppKit's toolbar puts them in and
-// GTK's header bar follows: the back button first, then the left subviews and the left bar
-// buttons; the title or the center subviews; then the right bar buttons, the right subviews and
-// the search fields. Subviews of a side keep the order they were made in (their tags). A left
-// subview or bar button replaces the back button, as on iOS.
+// Where a front header's pieces go in a window's bar, for AppKit's toolbar and GTK's header bar
+// alike: the back button first, then the left subviews and the left bar buttons; the title or the
+// center subviews; then the right bar buttons, the right subviews and the search fields. Subviews
+// of a side keep the order they were made in (their tags). A left subview or bar button replaces
+// the back button, as on iOS.
 struct HeaderLayout {
   bool back{false};
   std::vector<facebook::react::Tag> left;
