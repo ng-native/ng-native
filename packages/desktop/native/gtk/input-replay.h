@@ -1,0 +1,25 @@
+// A dev or test run's input script (ngn/input-script.h) on GTK. GDK has no public way to make an
+// event, so under X11 each step is posted to the X server through the XTest extension, at the
+// window's own points: it reaches GTK as a person's input would, native controls included.
+// libXtst is opened at run time, so a host without it, or one under Wayland, plays nothing and
+// says why. The pointer steps (move, down, drag, up, secondary), key and type play; scroll,
+// magnify, rotate and choose are AppKit's and are refused when the script is read.
+#pragma once
+
+#include "ngn/input-script.h"
+
+#include <gtk/gtk.h>
+
+#include <optional>
+#include <string>
+
+namespace ngn::gtk {
+
+// Why the script cannot play here, or nothing when it can.
+std::optional<std::string> inputReplayProblem(GtkWidget *window, const InputScript &script);
+
+// Plays the script into `window` from now, a step at a time on the main loop, and logs
+// "[ngn] input script done" after the last. False, having logged why, when it cannot play.
+bool replayInputScript(GtkWidget *window, InputScript script);
+
+} // namespace ngn::gtk
