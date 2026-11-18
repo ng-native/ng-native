@@ -78,8 +78,14 @@ not one per pane: it holds what the most recent provider reported, so a content 
 after the sidebar sets it to `0px` until the sidebar reports again. It is `0px` on every other OS.
 
 `--safe-area-inset-titlebar-trailing` is the same measure from the pane's trailing edge, for window
-controls on that side. It is `0px` on macOS, whose controls are on the leading side, on Linux, whose
-content stays below the header bar, and on every other OS.
+controls on that side. It is `0px` on macOS, whose controls are on the leading side, and on every
+other OS but Linux.
+
+On Linux, both are set in a window whose content runs under its header bar (`titleBar:
+'transparent'` or `'hidden'`): how far the controls before and after the colon of the desktop's
+`gtk-decoration-layout` reach in, so GNOME's close button is a trailing inset and a layout with the
+buttons on the left is a leading one. `--safe-area-inset-top` is the header bar's height there. In a
+window with the default title bar the content sits below the header bar, and all of them are `0px`.
 
 Both components need `react-native-safe-area-context` installed; without it they render as
 unimplemented views rather than doing nothing quietly.

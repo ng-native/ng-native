@@ -32,7 +32,7 @@ struct ContainerInsets {
   double titlebarLeading{0};
   // How far window controls reach in from the trailing edge, for
   // --safe-area-inset-titlebar-trailing: 0 on macOS, whose controls are on the leading side, and
-  // on the GTK host while its content stays below the header bar.
+  // on the GTK host but in a window whose content runs under its header bar.
   double titlebarTrailing{0};
   bool operator==(const ContainerInsets &) const = default;
 };
@@ -44,6 +44,8 @@ EdgeInsets insetsWithin(const ContainerInsets &container, const Rect &frame);
 // its leading edge: the left one, or the right one right to left, where AppKit puts the controls
 // on the right. 0 when they lie outside it.
 double titlebarLeading(double minX, double maxX, double width, bool rightToLeft);
+// The same from its trailing edge: the right one, or the left one right to left.
+double titlebarTrailing(double minX, double maxX, double width, bool rightToLeft);
 
 class SafeAreas {
  public:

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace ngn::gtk {
 
@@ -32,6 +33,27 @@ void runAfter(double seconds, std::function<void()> task) {
       heap, [](gpointer data) { delete static_cast<std::function<void()> *>(data); });
 }
 
+GtkApplication *startApplication(const std::string &appId) {
+  AdwApplication *app = adw_application_new(g_application_id_is_valid(appId.c_str()) ? appId.c_str() : nullptr, G_APPLICATION_NON_UNIQUE);
+  GError *error = nullptr;
+  if (!g_application_register(G_APPLICATION(app), nullptr, &error)) {
+    fprintf(stderr, "[ngn] could not register the application: %s\n", error ? error->message : "unknown");
+    g_clear_error(&error);
+  }
+  return GTK_APPLICATION(app);
+}
+
+void afterLayout(GtkWidget *window, std::function<void()> laidOut) {
+  GdkFrameClock *clock = gtk_widget_get_frame_clock(window);
+  if (!clock) {
+    return;
+  }
+  g_signal_connect_data(
+      clock, "paint", G_CALLBACK(+[](GdkFrameClock *, gpointer data) { (*static_cast<std::function<void()> *>(data))(); }),
+      new std::function<void()>(std::move(laidOut)), [](gpointer data, GClosure *) { delete static_cast<std::function<void()> *>(data); },
+      GConnectFlags(0));
+}
+
 namespace {
 
 struct CloseRequest {
@@ -41,7 +63,8 @@ struct CloseRequest {
 
 } // namespace
 
-GtkWindows::GtkWindows(Hooks hooks) : hooks_(std::move(hooks)) {}
+GtkWindows::GtkWindows(Hooks hooks, GtkApplication *application, MenuPlacement menus)
+    : hooks_(std::move(hooks)), application_(application), menus_(menus) {}
 
 void GtkWindows::setHost(std::weak_ptr<WindowHost> host) {
   host_ = std::move(host);
@@ -64,7 +87,7 @@ void GtkWindows::openWindow(SurfaceId surface, const WindowRequest &request, con
 void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened) {
   int width = static_cast<int>(std::lround(placement.frame.width > 0 ? placement.frame.width : request.width.value_or(kDefaultWindowWidth)));
   int height = static_cast<int>(std::lround(placement.frame.height > 0 ? placement.frame.height : request.height.value_or(kDefaultWindowHeight)));
-  GtkWidget *window = adw_window_new();
+  GtkWidget *window = adw_application_window_new(application_);
   gtk_window_set_title(GTK_WINDOW(window), request.title.c_str());
   gtk_window_set_default_size(GTK_WINDOW(window), width, height);
   gtk_window_set_resizable(GTK_WINDOW(window), request.resizable);
@@ -76,7 +99,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   if (request.minWidth || request.minHeight) {
     gtk_widget_set_size_request(widget, static_cast<int>(request.minWidth.value_or(-1)), static_cast<int>(request.minHeight.value_or(-1)));
   }
-  adw_window_set_content(ADW_WINDOW(window), wrapInChrome(widget));
+  adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), wrapInChrome(widget, {.titleBar = request.titleBar, .menus = menus_}));
   windows_[surface] = {.window = window, .surface = widget};
   auto *request_ = new CloseRequest{this, surface};
   g_signal_connect_data(
@@ -95,6 +118,11 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   // Realized, so the surface knows its scale, but not shown until its first frame mounts.
   gtk_widget_realize(window);
+  afterLayout(window, [this, surface] {
+    if (hooks_.laidOut) {
+      hooks_.laidOut(surface);
+    }
+  });
   if (hooks_.startSurface) {
     hooks_.startSurface(surface, width, height, gtk_widget_get_scale_factor(window));
   }
