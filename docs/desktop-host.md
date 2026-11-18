@@ -33,7 +33,9 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   through the OpenURI portal, falling back to `GtkUriLauncher` and `GtkFileLauncher`, and KeepAwake
   holds the session idle through the Inhibit portal (`system-access.h`). FileSystem's `watch` is a
   `GFileMonitor` (inotify), and its desktop and downloads folders come from the XDG user-dirs file,
-  absent when it names none (`file-system.h`). An svg
+  absent when it names none (`file-system.h`). A `GtkDropTarget` on each surface hands a drag's
+  file list or text to the core's input dispatcher, and a drag out the dispatcher starts from a
+  `[dragItem]` view is a GDK drag of a file list, a uri list and text (`drag-and-drop.h`). An svg
   draws the core's document of react-native-svg's elements (`svg.h`) with `cairo-canvas.h`, a
   cairo node in the view's snapshot, since GSK fills and strokes paths only from GTK 4.14; text in
   an svg is Pango's, and a `foreignObject`'s views are not drawn.

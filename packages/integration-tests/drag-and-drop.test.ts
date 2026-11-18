@@ -128,6 +128,20 @@ it('commits a drag item as file urls, text and a url, and takes it away with nul
   assert.equal(source(), null);
 });
 
+it('commits both props on Linux, whose host takes drags as macOS does', async () => {
+  const { componentRef } = await render(Fixture, {
+    providers: [{ provide: OS, useValue: 'linux' }],
+  });
+  componentRef.instance.item.set({ text: 'Hello' });
+  await settle();
+  assert.equal(screen.getByTestId('target').props['fileDrop'], true);
+  assert.deepEqual(screen.getByTestId('source').props['dragItem'], {
+    files: [],
+    text: 'Hello',
+    url: null,
+  });
+});
+
 it('commits neither prop on Android, where drag and drop is absent', async () => {
   const { componentRef } = await render(Fixture, {
     providers: [{ provide: OS, useValue: 'android' }],

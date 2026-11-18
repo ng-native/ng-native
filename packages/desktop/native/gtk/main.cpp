@@ -455,6 +455,11 @@ int main(int argc, char *argv[]) {
       }
     }
   };
+  // A press that became a drag out of a `[dragItem]` view: the move that crossed the threshold
+  // starts the drag, which has the pointer from there.
+  gHost.input->onDragOut = [](facebook::react::Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) {
+    ngn::gtk::dragOutOfPointer(gHost.backend->view(tag), item);
+  };
 
   int width = static_cast<int>(ngn::kDefaultWindowWidth), height = static_cast<int>(ngn::kDefaultWindowHeight);
   gHost.appWindow = adw_application_window_new(gHost.application);
