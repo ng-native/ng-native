@@ -1,5 +1,6 @@
-import { Service, computed, inject, signal } from '@angular/core';
+import { Service, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ColorScheme } from '@ng-native/device';
+import { Storage } from '@ng-native/expo/async-storage';
 
 export type Appearance = 'light' | 'dark' | 'automatic';
 
@@ -140,11 +141,16 @@ export function search(query: string): SettingRow[] {
 @Service()
 export class Settings {
   private readonly scheme = inject(ColorScheme);
+  private readonly store = inject(Storage);
   readonly airplane = signal(false);
   readonly wifi = signal(true);
   readonly network = signal<string | null>('Morgan Home');
   readonly bluetooth = signal(true);
-  readonly appearance = signal<Appearance>('automatic');
+  /**
+   * Kept across launches and applied once it is read back: iOS starts each launch in the system's
+   * scheme, and Android 12 and later in the one last set, so neither can say what was chosen.
+   */
+  readonly appearance = this.store.signal<Appearance>('appearance', 'automatic');
   readonly textSize = signal(3);
   readonly bold = signal(false);
   readonly previews = signal<'always' | 'unlocked' | 'never'>('unlocked');
@@ -161,8 +167,15 @@ export class Settings {
           : 'Light',
   }));
 
+  constructor() {
+    effect(() => {
+      if (!this.store.ready()) return;
+      const appearance = this.appearance();
+      untracked(() => this.scheme.set(appearance === 'automatic' ? null : appearance));
+    });
+  }
+
   setAppearance(appearance: Appearance): void {
     this.appearance.set(appearance);
-    this.scheme.set(appearance === 'automatic' ? null : appearance);
   }
 }
