@@ -90,6 +90,8 @@ Runtime::Runtime(
       runLoop_(std::make_shared<RunLoopObserverManager>()),
       // The mounting manager, not this runtime: the reload thread's tasks may run after it is gone.
       reloader_([mounting = mounting_](std::function<void()> task) { mounting->runOnUiThread(std::move(task)); }) {
+  // First, so an empty OS id throws before the mounting manager holds a callback into this runtime.
+  setDevServerOs(identity_.os);
   // As React Native iOS's surface presenter does after each mount: the UIManager's mount hooks
   // (Reanimated's, which holds its own commits while React's are unmounted, and the observers')
   // learn the views are there. UI thread; skipped while a reload holds the host.
@@ -104,7 +106,6 @@ Runtime::Runtime(
     ReactNativeFeatureFlags::override(std::make_unique<FeatureFlags>());
     flagsSet = true;
   }
-  devServerOs() = identity_.os;
   createHost();
 }
 

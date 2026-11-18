@@ -376,6 +376,25 @@ describe('desktopLinks on Linux', () => {
     assert.deepEqual(onMac.withoutDesktop, ['linux-only']);
   });
 
+  it('says a desktop-only library for the other OS has none here, with no mobile code to go by', () => {
+    const root = app({
+      'package.json': { dependencies: { 'mac-desktop': '1.0.0', 'linux-desktop': '1.0.0' } },
+      ...pkg('mac-desktop', {
+        'expo-module.config.json': { platforms: ['macos'], macos: { cmakeTarget: 'mac_desktop' } },
+        'desktop/CMakeLists.txt': '',
+      }),
+      ...pkg('linux-desktop', {
+        'expo-module.config.json': {
+          platforms: ['linux'],
+          linux: { cmakeTarget: 'linux_desktop' },
+        },
+        'desktop/CMakeLists.txt': '',
+      }),
+    });
+    assert.deepEqual(desktopLinks(root, { os: 'linux' }).withoutDesktop, ['mac-desktop']);
+    assert.deepEqual(desktopLinks(root).withoutDesktop, ['linux-desktop']);
+  });
+
   it("compiles in the app's own modules/<name>/linux folders, not its macos ones", () => {
     const root = app({
       'package.json': {},

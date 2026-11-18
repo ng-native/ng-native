@@ -335,7 +335,8 @@ function withDesktopPlatforms(config) {
 /**
  * Registers `linux` with Expo's tooling (`linux.cjs`), and adds it to the lists Expo's
  * `getDefaultConfig` built before it was there: the platforms Metro serves, and the conditions a
- * `linux` bundle resolves packages with, React Native's own as on every other native platform.
+ * `linux` bundle resolves packages with, React Native's own as on every other native platform,
+ * after any the app's config already names.
  *
  * @param {{ projectRoot: string, resolver: { platforms?: string[], unstable_conditionsByPlatform?: Record<string, string[]> } }} config
  */
@@ -344,9 +345,10 @@ function withLinux(config) {
   const resolver = config.resolver;
   const platforms = resolver.platforms ?? [];
   if (!platforms.includes('linux')) resolver.platforms = [...platforms, 'linux'];
+  const conditions = resolver.unstable_conditionsByPlatform?.linux ?? [];
   resolver.unstable_conditionsByPlatform = {
     ...resolver.unstable_conditionsByPlatform,
-    linux: ['react-native'],
+    linux: conditions.includes('react-native') ? conditions : [...conditions, 'react-native'],
   };
 }
 
