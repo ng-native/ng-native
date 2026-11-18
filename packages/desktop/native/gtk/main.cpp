@@ -19,6 +19,7 @@
 #include "menus.h"
 #include "pango-text.h"
 #include "scroll-view.h"
+#include "secret-store.h"
 #include "surface-input.h"
 #include "system-access.h"
 #include "view-widget.h"
@@ -611,6 +612,7 @@ int main(int argc, char *argv[]) {
        .dock = dock,
        .processes = processes,
        .shell = ngn::gtk::makeShellOpener(),
+       .secrets = ngn::gtk::makeSecretStore(appId, ngn::gtk::insideFlatpak()),
        .sleep = ngn::gtk::makeSleepPreventer(gHost.application),
        .notifications = [](std::shared_ptr<ngn::NotificationEvents>) { return std::shared_ptr<ngn::NotificationCenter>(); },
        .fileWatcher = ngn::gtk::makeFileWatcher(),

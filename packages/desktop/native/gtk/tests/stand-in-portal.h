@@ -14,9 +14,41 @@
 #include <unistd.h>
 
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ngn::testing {
+
+// Two D-Bus connections joined to each other over a socket pair, a server's and a client's, with
+// no bus between them. The caller owns both.
+inline std::pair<GDBusConnection *, GDBusConnection *> peerToPeer() {
+  REQUIRE(ngn::testing::gtkReady());
+  int fds[2];
+  REQUIRE(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
+  auto stream = [](int fd) {
+    GSocket *socket = g_socket_new_from_fd(fd, nullptr);
+    auto *connection = G_IO_STREAM(g_socket_connection_factory_create_connection(socket));
+    g_object_unref(socket);
+    return connection;
+  };
+  GIOStream *serverStream = stream(fds[0]);
+  GIOStream *clientStream = stream(fds[1]);
+  gchar *guid = g_dbus_generate_guid();
+  auto made = +[](GObject *, GAsyncResult *result, gpointer out) {
+    *static_cast<GDBusConnection **>(out) = g_dbus_connection_new_finish(result, nullptr);
+  };
+  GDBusConnection *server = nullptr, *client = nullptr;
+  g_dbus_connection_new(serverStream, guid,
+                        GDBusConnectionFlags(G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER | G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_ALLOW_ANONYMOUS),
+                        nullptr, nullptr, made, &server);
+  g_dbus_connection_new(clientStream, nullptr, G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT, nullptr, nullptr, made, &client);
+  ngn::testing::runUntil([&] { return server && client; });
+  g_free(guid);
+  g_object_unref(serverStream);
+  g_object_unref(clientStream);
+  return {server, client};
+}
 
 inline const char *kPortalIntrospection = R"(<node>
   <interface name="org.freedesktop.portal.OpenURI">
@@ -54,29 +86,7 @@ struct StandInPortal {
   bool offersOpenUri{true};
 
   StandInPortal() {
-    REQUIRE(ngn::testing::gtkReady());
-    int fds[2];
-    REQUIRE(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
-    auto stream = [](int fd) {
-      GSocket *socket = g_socket_new_from_fd(fd, nullptr);
-      auto *connection = G_IO_STREAM(g_socket_connection_factory_create_connection(socket));
-      g_object_unref(socket);
-      return connection;
-    };
-    GIOStream *serverStream = stream(fds[0]);
-    GIOStream *clientStream = stream(fds[1]);
-    gchar *guid = g_dbus_generate_guid();
-    auto made = +[](GObject *, GAsyncResult *result, gpointer out) {
-      *static_cast<GDBusConnection **>(out) = g_dbus_connection_new_finish(result, nullptr);
-    };
-    g_dbus_connection_new(serverStream, guid,
-                          GDBusConnectionFlags(G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_SERVER | G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_ALLOW_ANONYMOUS),
-                          nullptr, nullptr, made, &server);
-    g_dbus_connection_new(clientStream, nullptr, G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT, nullptr, nullptr, made, &client);
-    ngn::testing::runUntil([this] { return server && client; });
-    g_free(guid);
-    g_object_unref(serverStream);
-    g_object_unref(clientStream);
+    std::tie(server, client) = peerToPeer();
     node = g_dbus_node_info_new_for_xml(kPortalIntrospection, nullptr);
     add("org.freedesktop.portal.OpenURI", "/org/freedesktop/portal/desktop");
     add("org.freedesktop.portal.Inhibit", "/org/freedesktop/portal/desktop");
