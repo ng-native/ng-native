@@ -1,6 +1,6 @@
 ---
 title: Sizing for the Mac
-summary: The sizes a Mac app uses, how to give a Mac its own with the macos variant, and sizing for GNOME on Linux.
+summary: The sizes a Mac app uses, the macos variant that gives a Mac its own, and sizing for GNOME.
 ---
 
 # Sizing for the Mac
