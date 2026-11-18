@@ -34,10 +34,6 @@ void send(NGNView *view, const std::string &name, folly::dynamic payload) {
   }
 }
 
-// The narrowest and widest a sidebar is dragged to when the app sets no bound.
-constexpr CGFloat kSidebarMinimum = 150;
-constexpr CGFloat kSidebarMaximum = 400;
-
 } // namespace
 
 #pragma mark - Sizes back into layout
@@ -312,17 +308,15 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 }
 
 - (CGFloat)minimumWidth {
-  const auto *p = [_sidebar paneProps];
-  return p && p->paneMinWidth > 0 ? p->paneMinWidth : kSidebarMinimum;
+  return ngn::sidebarWidths([_sidebar paneProps]).minimum;
 }
 
 - (CGFloat)maximumWidth {
-  const auto *p = [_sidebar paneProps];
-  return std::max([self minimumWidth], p && p->paneMaxWidth > 0 ? (CGFloat)p->paneMaxWidth : kSidebarMaximum);
+  return ngn::sidebarWidths([_sidebar paneProps]).maximum;
 }
 
 - (CGFloat)startingWidth {
-  return std::min(std::max<CGFloat>(ngn::kSidebarDefaultWidth, [self minimumWidth]), [self maximumWidth]);
+  return ngn::sidebarWidths([_sidebar paneProps]).starting;
 }
 
 // Whether the split view's autosave already holds its divider, which it then restores.

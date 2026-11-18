@@ -4,10 +4,7 @@
 #import <AppKit/AppKit.h>
 #import <ImageIO/ImageIO.h>
 
-#include <folly/json.h>
-
-#include <atomic>
-#include <mutex>
+#include <memory>
 
 namespace {
 
@@ -51,13 +48,28 @@ void postAnnouncement(const Announcement &announcement) {
   });
 }
 
+// The app's defaults, which a test launch keeps in a suite of its own.
+class DefaultsStore final : public StringStore {
+ public:
+  std::optional<std::string> get(const std::string &key) override {
+    NSString *value = [appDefaults() stringForKey:ns(key)];
+    return value != nil ? std::optional(str(value)) : std::nullopt;
+  }
+  void set(const std::string &key, const std::string &value) override {
+    [appDefaults() setObject:ns(value) forKey:ns(key)];
+  }
+  void remove(const std::string &key) override {
+    [appDefaults() removeObjectForKey:ns(key)];
+  }
+};
+
 class AppKitSystem final : public System {
  public:
-  explicit AppKitSystem(std::string appId) : appId_(std::move(appId)) {
-    // Read once here on the main thread; JavaScript asks from its own.
-    systemScheme_ = schemeOf(NSApp.effectiveAppearance);
-    rightToLeft_ = NSApp.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft;
-  }
+  // The system's scheme is read once here on the main thread; JavaScript asks from its own.
+  explicit AppKitSystem(std::string appId)
+      : appId_(std::move(appId)),
+        scheme_(schemeOf(NSApp.effectiveAppearance)),
+        rightToLeft_(NSApp.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft) {}
 
   DeviceFacts facts() override {
     NSOperatingSystemVersion v = NSProcessInfo.processInfo.operatingSystemVersion;
@@ -99,15 +111,11 @@ class AppKitSystem final : public System {
   }
 
   std::string colorScheme() override {
-    std::lock_guard lock(mutex_);
-    return override_.value_or(systemScheme_);
+    return scheme_.current();
   }
 
   void setColorScheme(std::optional<std::string> scheme, std::function<void(std::string)> applied) override {
-    {
-      std::lock_guard lock(mutex_);
-      override_ = scheme;
-    }
+    scheme_.set(scheme);
     auto told = std::make_shared<std::function<void(std::string)>>(std::move(applied));
     onMain(^{
       NSApp.appearance = !scheme ? nil
@@ -119,22 +127,16 @@ class AppKitSystem final : public System {
         systemSchemeChanged(schemeOf(NSApp.effectiveAppearance));
       }
       // The scheme this change applied, not the latest override: a later change queued behind
-      // this one has set override_ already, and tells its own scheme when it applies.
+      // this one has set the override already, and tells its own scheme when it applies.
       if (*told) {
-        std::string applied;
-        {
-          std::lock_guard lock(mutex_);
-          applied = scheme.value_or(systemScheme_);
-        }
-        (*told)(applied);
+        (*told)(scheme_.applied(scheme));
       }
     });
   }
 
   // The system's own scheme, with no override. Main thread.
   void systemSchemeChanged(std::string scheme) {
-    std::lock_guard lock(mutex_);
-    systemScheme_ = std::move(scheme);
+    scheme_.systemChanged(std::move(scheme));
   }
 
   void showAlert(const AlertRequest &request, std::function<void(int, std::string, std::string)> done) override {
@@ -209,24 +211,11 @@ class AppKitSystem final : public System {
   }
 
   std::optional<folly::dynamic> preference(const std::string &key) override {
-    NSString *json = [appDefaults() stringForKey:ns(prefixed(key))];
-    if (json == nil) {
-      return std::nullopt;
-    }
-    try {
-      return folly::parseJson(str(json));
-    } catch (...) {
-      return std::nullopt;
-    }
+    return preferences_.get(key);
   }
 
   void setPreference(const std::string &key, std::optional<folly::dynamic> value) override {
-    NSUserDefaults *defaults = appDefaults();
-    if (value) {
-      [defaults setObject:ns(folly::toJson(*value)) forKey:ns(prefixed(key))];
-    } else {
-      [defaults removeObjectForKey:ns(prefixed(key))];
-    }
+    preferences_.set(key, value);
   }
 
   void announce(const Announcement &announcement) override {
@@ -264,16 +253,12 @@ class AppKitSystem final : public System {
   }
 
  private:
-  // A bare host binary has no bundle identifier, so every app run with it would share one
-  // defaults domain: the app's id keeps them apart.
-  std::string prefixed(const std::string &key) const {
-    return NSBundle.mainBundle.bundleIdentifier ? key : appId_ + "." + key;
-  }
-
   std::string appId_;
-  std::mutex mutex_;
-  std::string systemScheme_;
-  std::optional<std::string> override_;
+  ColorSchemeOverride scheme_;
+  // A bare host binary has no bundle identifier, so every app run with it shares one defaults
+  // domain: the app's id keeps them apart.
+  JsonPreferences preferences_{
+      std::make_shared<DefaultsStore>(), appId_, NSBundle.mainBundle.bundleIdentifier == nil};
   bool rightToLeft_{false};
 };
 

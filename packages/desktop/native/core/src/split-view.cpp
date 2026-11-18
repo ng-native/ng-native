@@ -25,6 +25,16 @@ SplitPaneProps::SplitPaneProps(const PropsParserContext &context, const SplitPan
       paneMaxWidth(convertRawProp(context, rawProps, "paneMaxWidth", sourceProps.paneMaxWidth, Float{0})),
       autosaveName(convertRawProp(context, rawProps, "autosaveName", sourceProps.autosaveName, std::string{})) {}
 
+SidebarWidths sidebarWidths(const SplitPaneProps *props) {
+  constexpr Float minimum = 150;
+  constexpr Float maximum = 400;
+  SidebarWidths widths;
+  widths.minimum = props && props->paneMinWidth > 0 ? props->paneMinWidth : minimum;
+  widths.maximum = std::max(widths.minimum, props && props->paneMaxWidth > 0 ? props->paneMaxWidth : maximum);
+  widths.starting = std::min(std::max(kSidebarDefaultWidth, widths.minimum), widths.maximum);
+  return widths;
+}
+
 SidebarSectionProps::SidebarSectionProps(
     const PropsParserContext &context,
     const SidebarSectionProps &sourceProps,
