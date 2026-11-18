@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
   // The Expo Updates client, off: this backend has no crypto yet, which a fetched update needs
   // to be checked, so it never fetches one. The bundle runs as given.
   auto updatesConfig = ngn::updatesConfigFrom(settings, os, appData, bundle);
-  updatesConfig.url.clear();
+  updatesConfig.off = "Updates are off: the Linux host has no update checks yet.";
   auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module answers that it is unavailable.
