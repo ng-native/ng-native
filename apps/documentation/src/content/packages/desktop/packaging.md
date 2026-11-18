@@ -28,7 +28,7 @@ A `dmg` stops before anything builds when its signing identity or notary credent
 naming them. `--skip-notarize`, for testing a `dmg` on this Mac only, makes it without them: signed
 with `NGN_SIGN_IDENTITY` when that is set and ad hoc when not, with the hardened runtime, and never
 sent to Apple. An ad hoc signature has no Team ID for library validation to check
-`hermesvm.framework` against, so it is signed with
+`hermesvm.framework` against, so the app, not the framework, is signed with
 `com.apple.security.cs.disable-library-validation`. Gatekeeper refuses such a disk image on any
 other Mac. Sparkle (`--feed-url`) still needs `NGN_SIGN_IDENTITY` there, since it loads only into an
 app signed with a Team ID.

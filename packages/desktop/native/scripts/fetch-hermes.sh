@@ -35,8 +35,14 @@ if [ ! -d "$framework" ] || [ ! -x "$OUT/destroot/bin/hermesc" ]; then
   tar -xzf "$tmp/hermes.tar.gz" -C "$tmp/x"
   [ -d "$tmp/x/destroot/Library/Frameworks/macosx/hermesvm.framework" ] ||
     { echo "fetch-hermes.sh: $url has no macOS hermesvm.framework" >&2; exit 1; }
-  rm -rf "$OUT"
+  # Another build may fetch the same Hermes at once: publish under a lock, and keep a complete
+  # copy it published rather than remove a folder it is reading.
   mkdir -p "$(dirname "$OUT")"
-  mv "$tmp/x" "$OUT"
+  until mkdir "$OUT.lock" 2>/dev/null; do sleep 1; done
+  trap 'rm -rf "$tmp" "$OUT.lock"' EXIT
+  if [ ! -d "$framework" ] || [ ! -x "$OUT/destroot/bin/hermesc" ]; then
+    rm -rf "$OUT"
+    mv "$tmp/x" "$OUT"
+  fi
 fi
 echo "$OUT/destroot"
