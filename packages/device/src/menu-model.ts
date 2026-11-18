@@ -9,6 +9,7 @@
  * Emoji) is left to the desktop host.
  */
 import { InjectionToken, computed, signal, type Signal } from '@angular/core';
+import type { OsName } from './os.ts';
 
 /** A standard menu a `<menu-group menuRole>` adds its items to. */
 export type MenuGroupRole = 'app' | 'file' | 'edit' | 'view' | 'window' | 'help';
@@ -87,15 +88,74 @@ const SEPARATOR: MenuSeparator = { separator: true };
 
 export const isSeparator = (entry: MenuEntry): entry is MenuSeparator => 'separator' in entry;
 
+const item = (label: string, menuRole: MenuRole, shortcut?: string): MenuItemModel =>
+  shortcut ? { label, menuRole, shortcut } : { label, menuRole };
+
 /**
- * The menu bar every desktop app gets: App, File, Edit, View, Window and Help, each item with its
- * role and standard shortcut. `Settings...` is in it until the merge, which keeps it only when the
- * app gives it a handler. File holds Print... (`mod+p`), which prints the key window unless the app
- * gives a `print` item a handler.
+ * Linux's bar, as GNOME's and KDE's apps have theirs: File (Close Window, Print...), Edit, View
+ * (Back, Forward, Show Sidebar on F9, Full Screen on F11), the app's own groups after View, and a
+ * menu named for the app last, with Preferences (kept only with the app's handler), About and
+ * Quit. None of macOS's Services, Hide, Minimize, Zoom or window list.
  */
-export function defaultMenuBar(appName: string): MenuGroupModel[] {
-  const item = (label: string, menuRole: MenuRole, shortcut?: string): MenuItemModel =>
-    shortcut ? { label, menuRole, shortcut } : { label, menuRole };
+function linuxMenuBar(appName: string): MenuGroupModel[] {
+  return [
+    {
+      label: 'File',
+      menuRole: 'file',
+      items: [
+        item('Close Window', 'close', 'mod+w'),
+        SEPARATOR,
+        item('Print...', 'print', 'mod+p'),
+      ],
+    },
+    {
+      label: 'Edit',
+      menuRole: 'edit',
+      items: [
+        item('Undo', 'undo', 'mod+z'),
+        item('Redo', 'redo', 'mod+shift+z'),
+        SEPARATOR,
+        item('Cut', 'cut', 'mod+x'),
+        item('Copy', 'copy', 'mod+c'),
+        item('Paste', 'paste', 'mod+v'),
+        item('Select All', 'selectAll', 'mod+a'),
+        SEPARATOR,
+        item('Find', 'find', 'mod+f'),
+      ],
+    },
+    {
+      label: 'View',
+      menuRole: 'view',
+      items: [
+        item('Back', 'back'),
+        item('Forward', 'forward'),
+        SEPARATOR,
+        item('Show Sidebar', 'toggleSidebar', 'F9'),
+        item('Full Screen', 'toggleFullScreen', 'F11'),
+      ],
+    },
+    {
+      label: appName,
+      menuRole: 'app',
+      items: [
+        item('Preferences', 'settings', 'mod+,'),
+        SEPARATOR,
+        item(`About ${appName}`, 'about'),
+        SEPARATOR,
+        item('Quit', 'quit', 'mod+q'),
+      ],
+    },
+  ];
+}
+
+/**
+ * The menu bar every desktop app gets on `os`. On macOS: App, File, Edit, View, Window and Help,
+ * each item with its role and standard shortcut. `Settings...` is in it until the merge, which
+ * keeps it only when the app gives it a handler. File holds Print... (`mod+p`), which prints the
+ * key window unless the app gives a `print` item a handler. On Linux: linuxMenuBar's.
+ */
+export function defaultMenuBar(appName: string, os: OsName = 'macos'): MenuGroupModel[] {
+  if (os === 'linux') return linuxMenuBar(appName);
   return [
     {
       label: appName,

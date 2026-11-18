@@ -356,7 +356,7 @@ export class Menus {
 
   /** The menu bar as it is drawn: the OS's defaults with the app's merged in. */
   readonly menuBar: Signal<MenuGroupModel[]> = computed(() =>
-    mergeMenuBar(defaultMenuBar(this.native?.appName || 'App'), this.appGroups()),
+    mergeMenuBar(defaultMenuBar(this.native?.appName || 'App', this.os), this.appGroups()),
   );
 
   private readonly sentBar = computed(() => {

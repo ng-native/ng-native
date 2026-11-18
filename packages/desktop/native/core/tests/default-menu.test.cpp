@@ -159,3 +159,28 @@ TEST_CASE("Linux puts the menus in a menu bar on KDE Plasma and in the header ba
   CHECK(ngn::linuxMenuPlacement("") == MenuPlacement::PrimaryMenu);
   CHECK(ngn::linuxMenuPlacement("::") == MenuPlacement::PrimaryMenu);
 }
+
+TEST_CASE("a key press finds the enabled item it chooses, by its key and exactly its modifiers") {
+  auto bar = ngn::linuxMenuBar({.appName = "Notes", .developer = true, .os = ngn::linuxOs()});
+  bar.insert(bar.begin(), ngn::MenuItem{
+                              .title = "Note",
+                              .items = {ngn::MenuItem{.title = "New", .command = ngn::MenuCommand::AppItem, .key = "n", .modifiers = ngn::Control, .id = "new"},
+                                        ngn::MenuItem{.title = "Off", .command = ngn::MenuCommand::AppItem, .key = "o", .modifiers = ngn::Control, .id = "off", .disabled = true}},
+                          });
+  auto find = [&bar](std::string key, unsigned modifiers) { return ngn::findMenuItem(bar, ngn::KeyChord{.key = std::move(key), .modifiers = modifiers}); };
+  REQUIRE(find("q", ngn::Control));
+  CHECK(find("q", ngn::Control)->command == ngn::MenuCommand::Quit);
+  // Shift+Ctrl+Z comes as a capital Z.
+  REQUIRE(find("Z", ngn::Control | ngn::Shift));
+  CHECK(find("Z", ngn::Control | ngn::Shift)->command == ngn::MenuCommand::Redo);
+  CHECK(find("z", ngn::Control)->command == ngn::MenuCommand::Undo);
+  CHECK(find("ArrowLeft", ngn::Option)->command == ngn::MenuCommand::Back);
+  CHECK(find("F11", 0)->command == ngn::MenuCommand::ToggleFullScreen);
+  CHECK(find("n", ngn::Control)->id == "new");
+  // A disabled item, a key with other modifiers, and a menu's title choose nothing.
+  CHECK_FALSE(find("o", ngn::Control));
+  CHECK_FALSE(find("q", ngn::Control | ngn::Shift));
+  CHECK_FALSE(find("q", 0));
+  CHECK(ngn::isEditingCommand(ngn::MenuCommand::Paste));
+  CHECK_FALSE(ngn::isEditingCommand(ngn::MenuCommand::Quit));
+}

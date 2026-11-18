@@ -15,6 +15,7 @@
 #include "host-sources.h"
 #include "image-view.h"
 #include "input-replay.h"
+#include "menus.h"
 #include "pango-text.h"
 #include "scroll-view.h"
 #include "surface-input.h"
@@ -61,6 +62,10 @@ struct Host {
   std::unique_ptr<ngn::Runtime> runtime;
   std::shared_ptr<ngn::HostState> state;
   std::shared_ptr<ngn::gtk::GtkWindows> windows;
+  std::shared_ptr<ngn::MenuHost> menus;
+  std::shared_ptr<ngn::gtk::GtkMenus> gtkMenus;
+  ngn::HostOs os;
+  std::string bundle;
   // The app's own surface and the window it gets once the app renders into it.
   GtkWidget *appWindow{nullptr};
   GtkWidget *appSurface{nullptr};
@@ -169,11 +174,112 @@ void reportContainer(SurfaceId surface) {
 }
 
 // A surface's widget joins the backend and the input dispatcher.
+// The surface whose window `window` is, if any.
+std::optional<SurfaceId> surfaceOfWindow(GtkWindow *window) {
+  for (SurfaceId surface : gHost.surfaces) {
+    if (GtkWidget *widget = surfaceWidgetOf(surface); widget && gtk_widget_get_root(widget) == GTK_ROOT(window)) {
+      return surface;
+    }
+  }
+  return std::nullopt;
+}
+
+void navigate(ngn::NavigationDirection direction, GtkWindow *window) {
+  gHost.menus->navigate(direction, window ? surfaceOfWindow(window) : std::nullopt);
+}
+
+// What a text input does itself, by GTK's action for it on the focused widget.
+const char *textAction(ngn::MenuCommand command) {
+  switch (command) {
+    case ngn::MenuCommand::Undo: return "text.undo";
+    case ngn::MenuCommand::Redo: return "text.redo";
+    case ngn::MenuCommand::Cut: return "clipboard.cut";
+    case ngn::MenuCommand::Copy: return "clipboard.copy";
+    case ngn::MenuCommand::Paste:
+    case ngn::MenuCommand::PasteAndMatchStyle: return "clipboard.paste";
+    case ngn::MenuCommand::Delete: return "selection.delete";
+    case ngn::MenuCommand::SelectAll: return "selection.select-all";
+    default: return nullptr;
+  }
+}
+
+// A menu item chosen, from a menu or by its key, in `window` (the active one when null). The host
+// runs the OS's commands; the rest go to the core (MenuHost::choose), which sends the app's.
+void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
+  if (!window) {
+    window = gtk_application_get_active_window(gHost.application);
+  }
+  switch (item.command) {
+    case ngn::MenuCommand::Reload:
+      gHost.runtime->reload();
+      return;
+    case ngn::MenuCommand::OpenDevTools:
+      gHost.runtime->openDebugger();
+      return;
+    case ngn::MenuCommand::Quit:
+      gHost.windows->beginQuit();
+      return;
+    case ngn::MenuCommand::CloseWindow:
+      // As the close button does: the app decides (close-request).
+      if (window) {
+        gtk_window_close(window);
+      }
+      return;
+    case ngn::MenuCommand::ToggleFullScreen:
+      if (window) {
+        gtk_window_is_fullscreen(window) ? gtk_window_unfullscreen(window) : gtk_window_fullscreen(window);
+      }
+      return;
+    case ngn::MenuCommand::About: {
+      GtkWidget *about = adw_about_window_new();
+      adw_about_window_set_application_name(ADW_ABOUT_WINDOW(about), gHost.menus->options().appName.c_str());
+      if (const char *id = g_application_get_application_id(G_APPLICATION(gHost.application))) {
+        adw_about_window_set_application_icon(ADW_ABOUT_WINDOW(about), id);
+      }
+      if (window) {
+        gtk_window_set_transient_for(GTK_WINDOW(about), window);
+      }
+      gtk_window_present(GTK_WINDOW(about));
+      return;
+    }
+    default:
+      break;
+  }
+  if (const char *action = textAction(item.command)) {
+    if (GtkWidget *focus = window ? gtk_root_get_focus(GTK_ROOT(window)) : nullptr) {
+      gtk_widget_activate_action(focus, action, nullptr);
+    }
+    return;
+  }
+  gHost.menus->choose(item, window ? surfaceOfWindow(window) : std::nullopt);
+}
+
+// A window holding the app's surfaces: its menus, and its keys and side buttons routed as
+// menus.h's KeyRouting orders them.
+void routeWindow(GtkWidget *surfaceWidget) {
+  auto *window = GTK_WINDOW(gtk_widget_get_root(surfaceWidget));
+  if (!window || g_object_get_data(G_OBJECT(window), "ngn-keys")) {
+    return;
+  }
+  g_object_set_data(G_OBJECT(window), "ngn-keys", GINT_TO_POINTER(1));
+  gHost.gtkMenus->attach(surfaceWidget);
+  ngn::gtk::routeKeys(window, std::make_shared<ngn::gtk::KeyRouting>(ngn::gtk::KeyRouting{
+      .shortcut = [](const ngn::KeyChord &chord, bool text) { return gHost.menus->keyDown(chord, text); },
+      .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, gHost.os); },
+      .navigate = navigate,
+      .menuKey = [](const ngn::KeyChord &chord) { return ngn::findMenuItem(gHost.gtkMenus->bar(), chord); },
+      .choose = runMenuItem,
+  }));
+}
+
 void addSurface(SurfaceId surface, GtkWidget *widget) {
   gHost.backend->addSurface(surface, widget);
   ngn::gtk::attachPointerInput(widget, surface, surface, gHost.input.get());
   gHost.input->addContainer(surface, surface, surface);
   gHost.surfaces.insert(surface);
+  if (gHost.gtkMenus) {
+    routeWindow(widget);
+  }
 }
 
 // The app's own surface gets its window once the app renders into it.
@@ -245,6 +351,8 @@ int main(int argc, char *argv[]) {
   }
   static const auto settings = std::get<ngn::LaunchSettings>(launch);
   std::string bundle = settings.bundle;
+  gHost.bundle = bundle;
+  gHost.os = os;
   std::string appId = settings.appId.empty() ? settings.title : settings.appId;
   ngn::installCrashReport(
       ngn::crashReportPath(
@@ -472,9 +580,27 @@ int main(int argc, char *argv[]) {
     }
     raiseApp();
   }), nullptr);
+  gHost.gtkMenus = std::make_shared<ngn::gtk::GtkMenus>([](const ngn::MenuItem &item) { runMenuItem(item, nullptr); });
   auto menus = std::make_shared<ngn::MenuHost>(
-      ngn::gtk::makeNoMenus(),
-      ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
+      gHost.gtkMenus, ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
+  gHost.menus = menus;
+  routeWindow(gHost.appSurface);
+  // A view's context menu (its `contextMenu` prop), drawn where the secondary click was.
+  ngn::gtk::setContextMenuShower([](GtkWidget *widget, const ngn::PointerInput &input) {
+    auto target = gHost.input->contextMenuAt(input);
+    if (!target) {
+      return false;
+    }
+    auto tag = target->tag;
+    auto *window = GTK_WINDOW(gtk_widget_get_root(widget));
+    return ngn::gtk::popUpContextMenu(widget, input.point, target->items, [tag, window](const ngn::MenuItem &item) {
+      if (item.command == ngn::MenuCommand::Back || item.command == ngn::MenuCommand::Forward) {
+        navigate(item.command == ngn::MenuCommand::Back ? ngn::NavigationDirection::Back : ngn::NavigationDirection::Forward, window);
+      } else {
+        gHost.input->contextMenuSelect(tag, item.id);
+      }
+    });
+  });
   auto tray = std::make_shared<ngn::TrayHost>(ngn::gtk::makeNoTray());
   auto dock = std::make_shared<ngn::DockHost>(ngn::gtk::makeNoDock());
   // The Expo Updates client, off: this backend has no crypto yet, which a fetched update needs

@@ -74,6 +74,8 @@ void configureButton(GtkWidget *button, const NativeControlProps &p) {
   setClass(button, "suggested-action", p.kind == "default");
   setClass(button, "destructive-action", p.kind == "destructive");
   setClass(button, "flat", p.kind == "plain");
+  // The window's Return and Escape find it by this (menus.h's keyButton).
+  g_object_set_data(G_OBJECT(button), "ngn-key-role", const_cast<char *>(p.kind == "default" ? "default" : p.kind == "cancel" ? "cancel" : nullptr));
 }
 
 // --- Activity indicator -----------------------------------------------------------------------
